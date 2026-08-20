@@ -6,22 +6,25 @@ from typing import Any
 from collections.abc import Sequence
 from app.tools.canvas.application.commands import ConnectionCommand
 
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies import ConnectionStrategyRegistry
 from app.tools.canvas.infrastructure.connections import ConnectionOperationLedger
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 
 
-class ConnectionService(CanvasApplicationSupport):
+class ConnectionService:
     """Canvas ConnectionService 用例服务。"""
 
-    def __init__(self, dependencies):
-        """绑定共享依赖。"""
-        super().__init__(dependencies)
+    def __init__(self, unit_of_work: CanvasUnitOfWork, connection_strategies: ConnectionStrategyRegistry):
+        """显式绑定连线用例所需的事务和连线策略。"""
+        self.unit_of_work = unit_of_work
+        self.connection_strategies = connection_strategies
 
     async def connections(self, project_path: str, items: Sequence[ConnectionCommand]) -> dict[str, Any]:
         """新增、按 ID 删除或原子替换 Connection。"""
-        self.validate_unique_item_refs(items)
+        CanvasApplicationOperations.validate_unique_item_refs(items)
         current_item_ref: str | None = None
         def mutate(project: CanvasProject, metadata: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             nonlocal current_item_ref
@@ -37,7 +40,7 @@ class ConnectionService(CanvasApplicationSupport):
                     raise CanvasDomainError("CONNECTION_REPLACEMENT_INVALID", "Replacement requires new source and target Elements.")
                 if remove_ids and not replace and source and target:
                     raise CanvasDomainError("CONNECTION_REPLACEMENT_INVALID", "Set replace_existing_connections=true when removing old lines before adding a new one.")
-                old_connections = [self.get_connection(project, connection_id) for connection_id in remove_ids]
+                old_connections = [CanvasApplicationOperations.get_connection(project, connection_id) for connection_id in remove_ids]
                 existing_old_connections = [connection for connection in old_connections if connection is not None]
                 missing_ids = [connection_id for connection_id, connection in zip(remove_ids, old_connections, strict=True) if connection is None]
                 existing_new = None
@@ -84,7 +87,7 @@ class ConnectionService(CanvasApplicationSupport):
                     if replace:
                         for old in existing_old_connections:
                             project.canvas.connections.remove(old)
-                    connection = self.add_connection(project, source, target)
+                    connection = CanvasApplicationOperations.add_connection(self.connection_strategies, project, source, target)
                     if replace:
                         for old_id in remove_ids:
                             ledger.mark_replaced(old_id, connection.connection_id, source, target)
@@ -112,4 +115,4 @@ class ConnectionService(CanvasApplicationSupport):
                 filename=".canvas-connection-ledger.json",
             )
         except CanvasDomainError as error:
-            raise self.batch_error(items, current_item_ref, error) from error
+            raise CanvasApplicationOperations.batch_error(list(items), current_item_ref, error) from error

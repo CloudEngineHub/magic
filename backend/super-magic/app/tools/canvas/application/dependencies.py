@@ -1,11 +1,7 @@
 """Canvas Application 依赖组装模型。"""
 
-from __future__ import annotations
-
-import uuid
 from dataclasses import dataclass
 
-from app.tools.canvas.infrastructure.assets import AssetGateway, WorkspaceAssetGateway
 from app.tools.canvas.domain.services.element_reference_resolver import ElementReferenceResolver
 from app.tools.canvas.generation import (
     CanvasGenerationResultApplier,
@@ -16,18 +12,20 @@ from app.tools.canvas.generation import (
     InMemoryGenerationTaskRepository,
 )
 from app.tools.canvas.hierarchy import HierarchyStrategyRegistry
-from app.tools.canvas.queries import CanvasQueryService
+from app.tools.canvas.infrastructure.assets import AssetGateway, WorkspaceAssetGateway
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
-from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
+from app.tools.canvas.queries import CanvasQueryService
+from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrategyRegistry, LayoutStrategyRegistry
+from app.tools.canvas.strategies.hierarchy.interface import HierarchyStrategyInterface
 
 _default_generation_tasks = InMemoryGenerationTaskRepository()
 
 
 @dataclass
 class CanvasApplicationDependencies:
-    """保存所有 Application Service 共享的端口和策略。"""
+    """保存 Composition Root 明确组装后的共享端口和策略。"""
 
     repository: CanvasRepositoryInterface
     unit_of_work: CanvasUnitOfWork
@@ -40,7 +38,7 @@ class CanvasApplicationDependencies:
     generation_tasks: GenerationTaskRepository
     asset_gateway: AssetGateway
     hierarchy_strategies: HierarchyStrategyRegistry
-    frame_selection: object
+    frame_selection: HierarchyStrategyInterface
     element_references: ElementReferenceResolver
     generation_execution: GenerationExecutionStrategyRegistry
     generation_poller: GenerationTaskPoller
@@ -58,7 +56,7 @@ class CanvasApplicationDependencies:
         generation_tasks: GenerationTaskRepository | None = None,
         asset_gateway: AssetGateway | None = None,
     ) -> "CanvasApplicationDependencies":
-        """在 Composition Root 外不隐式创建业务依赖。"""
+        """在 Composition Root 显式创建默认端口和策略。"""
         hierarchy_strategies = HierarchyStrategyRegistry()
         sidecar_adapter = ElementDetailsAdapter()
         return cls(
@@ -79,8 +77,3 @@ class CanvasApplicationDependencies:
             generation_poller=GenerationTaskPoller(),
             generation_result_applier=CanvasGenerationResultApplier(),
         )
-
-
-def new_canvas_id(prefix: str) -> str:
-    """生成不依赖模型输入的稳定对象 ID。"""
-    return f"{prefix}-{uuid.uuid4().hex[:16]}"

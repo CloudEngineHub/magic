@@ -7,21 +7,31 @@ from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 
-from app.tools.canvas.application.dependencies import new_canvas_id
-from app.tools.canvas.application.commands import AddElementCommand
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.canvas_id import new_canvas_id
+from app.tools.canvas.application.commands import AddElementCommand, GenerationParameters, GenerationSubmissionCommand, LayoutCommand
+from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.domain.services.element_reference_resolver import ElementReferenceResolver
+from app.tools.canvas.generation import GenerationCapabilityRegistry
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
 from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
 
 
-class AddElementsService(CanvasApplicationSupport):
+class AddElementsService:
     """Canvas AddElementsService 用例服务。"""
 
-    def __init__(self, dependencies, generation_submission_service):
-        """绑定共享依赖和生成提交服务。"""
-        super().__init__(dependencies)
+    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service):
+        """显式绑定新增 Element 所需的端口、策略和生成提交服务。"""
+        self.unit_of_work = unit_of_work
+        self.layout_strategies = layout_strategies
+        self.connection_strategies = connection_strategies
+        self.generation_capabilities = generation_capabilities
+        self.element_references = element_references
+        self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
 
     async def add_elements(
@@ -31,16 +41,16 @@ class AddElementsService(CanvasApplicationSupport):
         tool_context: ToolContext | None = None,
     ) -> dict[str, Any]:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
-        generated: list[dict[str, object]] = []
+        generated: list[GenerationSubmissionCommand] = []
         item_list = tuple(items)
-        self.validate_unique_item_refs(item_list)
+        CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
 
         async def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
             nonlocal current_item_ref
             created: dict[str, str] = {}
             results: list[dict[str, object]] = []
-            layout_requests: list[tuple[CanvasElement, object]] = []
+            layout_requests: list[tuple[CanvasElement, LayoutCommand | None]] = []
             for item in item_list:
                 item_ref = item.item_ref
                 current_item_ref = item_ref
@@ -78,8 +88,8 @@ class AddElementsService(CanvasApplicationSupport):
                             generation_parameters=content.generation_parameters,
                             content_id=new_canvas_id("content"),
                         )
-                    await self.prepare_imported_content(project, content)
-                    element.contents.append(self.build_content(content, element.element_type))
+                    await self.content_preparation.prepare_imported(project, content)
+                    element.contents.append(self.content_preparation.build(content, element.element_type))
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
                     if content.is_generated:
@@ -88,17 +98,18 @@ class AddElementsService(CanvasApplicationSupport):
                             content.generation_parameters.model_id if content.generation_parameters else None,
                         )
                         generated_content_id = element.contents[0].content_id
-                        generated.append({
-                            "element_id": element.element_id,
-                            "content_id": element.contents[0].content_id,
-                            "element_type": element.element_type,
-                            "parameters": content.generation_parameters,
-                        })
-                    self.set_content_detail(
+                        generated.append(GenerationSubmissionCommand(
+                            element_id=element.element_id,
+                            content_id=element.contents[0].content_id,
+                            element_type=element.element_type,
+                            parameters=content.generation_parameters or GenerationParameters(),
+                            item_ref=item.item_ref,
+                        ))
+                    CanvasApplicationOperations.set_content_detail(
                         metadata,
                         element.element_id,
                         element.contents[0].content_id,
-                        self.new_content_detail(element.element_id, content.to_metadata()),
+                        CanvasApplicationOperations.new_content_detail(element.element_id, content.to_metadata()),
                     )
                 project.canvas.elements.append(element)
                 layout_requests.append((element, item.layout))
@@ -122,14 +133,15 @@ class AddElementsService(CanvasApplicationSupport):
                         source_id = current_element_id
                     if not source_id or not target_id:
                         raise CanvasDomainError("INVALID_CONNECTION", "Connection reference could not be resolved.")
-                    self.add_connection(project, source_id, target_id)
+                    CanvasApplicationOperations.add_connection(self.connection_strategies, project, source_id, target_id)
             for index, (element, layout) in enumerate(layout_requests):
                 current_item_ref = item_list[index].item_ref
-                self.apply_layout(project, element, layout, index)
+                request = layout or LayoutCommand(strategy="row_incremental")
+                self.layout_strategies.get(request.strategy).apply(project.canvas, element, request, index)
             return {"items": results, "created_element_ids": list(created.values())}, metadata
 
         try:
             result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
-            raise self.batch_error(list(item_list), current_item_ref, error) from error
+            raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)

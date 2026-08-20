@@ -19,7 +19,17 @@ class LayoutMutationPlan:
         if element is None:
             raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {self.element_id} does not exist.")
         current = element.properties
-        for field_name in ("x", "y", "width", "height", "scale_x", "scale_y", "z_index"):
-            value = getattr(self.properties, field_name)
-            if value is not None:
-                setattr(current, field_name, value)
+        if self.properties.x is not None:
+            current.x = self.properties.x
+        if self.properties.y is not None:
+            current.y = self.properties.y
+        if self.properties.width is not None:
+            current.width = self.properties.width
+        if self.properties.height is not None:
+            current.height = self.properties.height
+        if self.properties.scale_x is not None:
+            current.scale_x = self.properties.scale_x
+        if self.properties.scale_y is not None:
+            current.scale_y = self.properties.scale_y
+        if self.properties.z_index is not None:
+            current.z_index = self.properties.z_index

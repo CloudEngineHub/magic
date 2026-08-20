@@ -106,7 +106,7 @@ class ContentInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
-    extensions: dict[str, object] = Field(default_factory=dict)
+    extensions: JsonObject = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_source_fields(self) -> "ContentInput":

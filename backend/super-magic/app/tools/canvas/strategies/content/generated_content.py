@@ -1,6 +1,7 @@
 """生成内容策略。"""
 
 from app.tools.canvas.domain.errors import CanvasDomainError
+from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
 from app.tools.canvas.strategies.content.base_content import BaseContentStrategy
 from app.tools.canvas.strategies.content.plan import ContentMutationPlan
 from app.tools.canvas.strategies.content.request import ContentStrategyRequest
@@ -18,7 +19,7 @@ class GeneratedContentStrategy(BaseContentStrategy):
         if content_type not in {"image", "video"}:
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Generated Content requires content_type=image or video.")
         content = self._build_base_content(request).content
-        if not hasattr(content.fields, "mark_pending"):
+        if not isinstance(content.fields, GeneratedMediaContentFields):
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Generated Content requires generated media fields.")
         content.fields.mark_pending()
         request_fields = command.generation_parameters.to_dict() if command.generation_parameters else {}

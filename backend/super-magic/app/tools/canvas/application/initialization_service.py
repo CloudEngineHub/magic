@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 
 
-class InitializationService(CanvasApplicationSupport):
+class InitializationService:
     """创建或复用 Canvas 项目，不处理 Element 业务。"""
+
+    def __init__(self, repository: CanvasRepositoryInterface):
+        """显式注入项目仓储。"""
+        self.repository = repository
 
     async def initialize(self, project_path: str) -> dict[str, Any]:
         """创建或复用一个 Canvas 项目。"""

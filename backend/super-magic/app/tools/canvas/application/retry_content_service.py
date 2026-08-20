@@ -7,25 +7,31 @@ from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 
-from app.tools.canvas.application.commands import RetryContentCommand
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.commands import GenerationParameters, GenerationSubmissionCommand, RetryContentCommand
+from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.generation import GenerationCapabilityRegistry
+from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 
 
-class RetryContentService(CanvasApplicationSupport):
+class RetryContentService:
     """Canvas RetryContentService 用例服务。"""
 
-    def __init__(self, dependencies, generation_submission_service):
-        """绑定共享依赖和生成提交服务。"""
-        super().__init__(dependencies)
+    def __init__(self, repository: CanvasRepositoryInterface, unit_of_work: CanvasUnitOfWork, generation_capabilities: GenerationCapabilityRegistry, generation_submission_service):
+        """显式绑定重试用例所需的仓储、事务、生成能力和提交服务。"""
+        self.repository = repository
+        self.unit_of_work = unit_of_work
+        self.generation_capabilities = generation_capabilities
         self.generation_submission_service = generation_submission_service
 
     async def retry_content(self, project_path: str, items: Sequence[RetryContentCommand], tool_context: ToolContext | None = None) -> dict[str, Any]:
         """校验失败 Content 的受控重试边界，并复用原 Content ID。"""
         item_list = tuple(items)
-        self.validate_unique_item_refs(item_list)
+        CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
         retry_requests: list[dict[str, Any]] = []
 
@@ -40,10 +46,10 @@ class RetryContentService(CanvasApplicationSupport):
                     raise CanvasDomainError("CONTENT_NOT_FOUND", "The requested Content does not exist.")
                 if element.element_type in {"frame", "group"}:
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Frame and Group Elements do not have generated Content.")
-                detail = self.get_content_detail(metadata, element.element_id, item.content_id)
+                detail = CanvasApplicationOperations.get_content_detail(metadata, element.element_id, item.content_id)
                 original_parameters = detail.get("generationParameters", {})
                 override = item.generation_override.to_dict() if item.generation_override else None
-                parameters = self.merge_generation_override(element.element_type, original_parameters, override)
+                parameters = CanvasApplicationOperations.merge_generation_override(element.element_type, original_parameters, override)
                 idempotency_key = ContentMetadataService.retry_idempotency_key(item.item_ref, element.element_id, content.content_id, parameters)
                 if detail.get("retryIdempotencyKey") == idempotency_key:
                     previous_result = detail.get("retryResult")
@@ -62,10 +68,10 @@ class RetryContentService(CanvasApplicationSupport):
                     raise CanvasDomainError("CONTENT_RETRY_LIMIT_REACHED", "This Content has reached the retry limit.")
                 self.generation_capabilities.get(element.element_type, parameters.get("model_id"))
                 previous_status = content.fields.generation_status
-                if not hasattr(content.fields, "mark_pending"):
+                if not isinstance(content.fields, GeneratedMediaContentFields):
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only generated media Content can be retried.")
                 content.fields.mark_pending()
-                self.set_content_detail(metadata, element.element_id, item.content_id, self.start_retry_detail(element.element_id, detail, retry_count + 1, parameters, idempotency_key))
+                CanvasApplicationOperations.set_content_detail(metadata, element.element_id, item.content_id, CanvasApplicationOperations.start_retry_detail(element.element_id, detail, retry_count + 1, parameters, idempotency_key))
                 results.append({"item_ref": item.item_ref, "element_id": element.element_id, "content_id": content.content_id, "status": "pending", "previous_status": previous_status, "retry_count": retry_count + 1, "main_content_id": element.main_content_id})
                 retry_requests.append({"item_ref": item.item_ref, "element_id": element.element_id, "content_id": content.content_id, "element_type": element.element_type, "retry_count": retry_count + 1, "parameters": parameters, "retry_idempotency_key": idempotency_key})
             return {"items": results}, metadata
@@ -73,10 +79,18 @@ class RetryContentService(CanvasApplicationSupport):
         try:
             result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
-            raise self.batch_error(list(item_list), current_item_ref, error) from error
+            raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         project = await self.repository.read(project_path)
-        generated = []
+        generated: list[GenerationSubmissionCommand] = []
         for item in retry_requests:
             element = project.canvas.get_element(item["element_id"])
-            generated.append({**item, "element_type": element.element_type if element else "image"})
+            generated.append(GenerationSubmissionCommand(
+                item_ref=item["item_ref"],
+                element_id=item["element_id"],
+                content_id=item["content_id"],
+                element_type=element.element_type if element else "image",
+                parameters=GenerationParameters.from_dict(item["parameters"]),
+                retry_count=item["retry_count"],
+                retry_idempotency_key=item["retry_idempotency_key"],
+            ))
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)

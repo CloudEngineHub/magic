@@ -1,14 +1,16 @@
 """生成结果 Canvas 回写器。"""
 
-from typing import Any
-
 from app.tools.canvas.domain.errors import CanvasDomainError
+from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.domain.models import CanvasProject
+
+
 class CanvasGenerationResultApplier:
     """校验任务目标并把生成结果写回 Canvas Content。"""
 
     @staticmethod
     def apply(
-        project: Any,
+        project: CanvasProject,
         element_id: str,
         content_id: str,
         status: str,
@@ -20,6 +22,6 @@ class CanvasGenerationResultApplier:
         content = element.get_content(content_id) if element else None
         if content is None:
             raise CanvasDomainError("CONTENT_NOT_FOUND", "Generated Content no longer exists.")
-        if not hasattr(content.fields, "update_generation_result"):
+        if not isinstance(content.fields, GeneratedMediaContentFields):
             raise CanvasDomainError("CONTENT_GENERATION_UNSUPPORTED", "The target Content does not support generation results.")
         content.fields.update_generation_result(status, output_uri, error_message)

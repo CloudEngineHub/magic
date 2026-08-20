@@ -8,19 +8,27 @@ from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.generation import CanvasGenerationResultApplier, GenerationCapabilityRegistry, GenerationTaskPoller, GenerationTaskRepository
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import GenerationQueryRequest, GenerationTask
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 
-class WaitGenerationService(CanvasApplicationSupport):
+class WaitGenerationService:
     """Canvas WaitGenerationService 用例服务。"""
 
-    def __init__(self, dependencies):
-        """绑定共享依赖。"""
-        super().__init__(dependencies)
+    def __init__(self, repository: CanvasRepositoryInterface, unit_of_work: CanvasUnitOfWork, generation_capabilities: GenerationCapabilityRegistry, generation_tasks: GenerationTaskRepository, generation_poller: GenerationTaskPoller, generation_result_applier: CanvasGenerationResultApplier):
+        """显式绑定等待用例所需的仓储、事务、能力、任务和结果端口。"""
+        self.repository = repository
+        self.unit_of_work = unit_of_work
+        self.generation_capabilities = generation_capabilities
+        self.generation_result_applier = generation_result_applier
+        self.generation_tasks = generation_tasks
+        self.generation_poller = generation_poller
 
     async def wait(
         self,
@@ -148,8 +156,8 @@ class WaitGenerationService(CanvasApplicationSupport):
                 query_result.output_uri,
                 query_result.error_message,
             )
-            detail = self.get_content_detail(metadata, record.element_id, record.content_id)
-            self.set_content_detail(metadata, record.element_id, record.content_id, {
+            detail = CanvasApplicationOperations.get_content_detail(metadata, record.element_id, record.content_id)
+            CanvasApplicationOperations.set_content_detail(metadata, record.element_id, record.content_id, {
                 **detail,
                 "generationStatus": final_status,
                 "outputUri": query_result.output_uri,
@@ -180,7 +188,7 @@ class WaitGenerationService(CanvasApplicationSupport):
         project = await self.repository.read(project_path)
         for element in project.canvas.iter_elements():
             for content in element.contents:
-                detail = self.get_content_detail(metadata, element.element_id, content.content_id)
+                detail = CanvasApplicationOperations.get_content_detail(metadata, element.element_id, content.content_id)
                 if detail.get("generationTaskId") != generation_task_id:
                     continue
                 provider_task_id = detail.get("providerTaskId")

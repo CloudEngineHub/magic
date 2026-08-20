@@ -7,19 +7,30 @@ from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 
-from app.tools.canvas.application.dependencies import new_canvas_id
-from app.tools.canvas.application.commands import AddContentCommand, SelectMainContentCommand
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.canvas_id import new_canvas_id
+from app.tools.canvas.application.commands import AddContentCommand, GenerationParameters, GenerationSubmissionCommand, SelectMainContentCommand
+from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.generation import GenerationCapabilityRegistry
+from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 
 
-class ContentService(CanvasApplicationSupport):
+class ContentService:
     """Canvas ContentService 用例服务。"""
 
-    def __init__(self, dependencies, generation_submission_service):
-        """绑定共享依赖和生成提交服务。"""
-        super().__init__(dependencies)
+    def __init__(
+        self,
+        unit_of_work: CanvasUnitOfWork,
+        generation_capabilities: GenerationCapabilityRegistry,
+        content_preparation: ContentPreparationService,
+        generation_submission_service,
+    ):
+        """显式绑定追加 Content 所需的事务、内容准备和生成提交服务。"""
+        self.unit_of_work = unit_of_work
+        self.generation_capabilities = generation_capabilities
+        self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
 
     async def add_contents(
@@ -29,9 +40,9 @@ class ContentService(CanvasApplicationSupport):
         tool_context: ToolContext | None = None,
     ) -> dict[str, Any]:
         """向已有 Element 追加 Content 版本。"""
-        generated: list[dict[str, Any]] = []
+        generated: list[GenerationSubmissionCommand] = []
         item_list = tuple(items)
-        self.validate_unique_item_refs(item_list)
+        CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
 
         async def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
@@ -54,8 +65,8 @@ class ContentService(CanvasApplicationSupport):
                         generation_parameters=command.generation_parameters,
                         content_id=new_canvas_id("content"),
                     )
-                await self.prepare_imported_content(project, command)
-                content = self.build_content(command, element.element_type)
+                await self.content_preparation.prepare_imported(project, command)
+                content = self.content_preparation.build(command, element.element_type)
                 if element.get_content(content.content_id) is not None:
                     raise CanvasDomainError("CONTENT_ALREADY_EXISTS", f"Content {content.content_id} already exists.")
                 element.contents.append(content)
@@ -70,31 +81,31 @@ class ContentService(CanvasApplicationSupport):
                     )
                 results.append({"item_ref": item.item_ref, "element_id": element.element_id, "content_id": content.content_id, "status": status})
                 if command.is_generated:
-                    generated.append({
-                        "item_ref": item.item_ref,
-                        "element_id": element.element_id,
-                        "content_id": content.content_id,
-                        "element_type": element.element_type,
-                        "parameters": command.generation_parameters,
-                    })
-                self.set_content_detail(
+                    generated.append(GenerationSubmissionCommand(
+                        item_ref=item.item_ref,
+                        element_id=element.element_id,
+                        content_id=content.content_id,
+                        element_type=element.element_type,
+                        parameters=command.generation_parameters or GenerationParameters(),
+                    ))
+                CanvasApplicationOperations.set_content_detail(
                     metadata,
                     element.element_id,
                     content.content_id,
-                    self.new_content_detail(element.element_id, command.to_metadata()),
+                    CanvasApplicationOperations.new_content_detail(element.element_id, command.to_metadata()),
                 )
             return {"items": results}, metadata
 
         try:
             result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
-            raise self.batch_error(list(item_list), current_item_ref, error) from error
+            raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
 
     async def select_main(self, project_path: str, items: Sequence[SelectMainContentCommand]) -> dict[str, Any]:
         """只修改用户明确选择的 main Content 指针。"""
         item_list = tuple(items)
-        self.validate_unique_item_refs(item_list)
+        CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
         def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
             nonlocal current_item_ref
@@ -126,4 +137,4 @@ class ContentService(CanvasApplicationSupport):
         try:
             return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
-            raise self.batch_error(list(item_list), current_item_ref, error) from error
+            raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error

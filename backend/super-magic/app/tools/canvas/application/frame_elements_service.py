@@ -6,18 +6,21 @@ from typing import Any
 from collections.abc import Sequence
 from app.tools.canvas.application.commands import FrameElementsCommand
 
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies.hierarchy.interface import HierarchyStrategyInterface
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.hierarchy import FrameSelectionRequest, HierarchyMutationPlan
 
 
-class FrameElementsService(CanvasApplicationSupport):
+class FrameElementsService:
     """Canvas FrameElementsService 用例服务。"""
 
-    def __init__(self, dependencies):
-        """绑定共享依赖。"""
-        super().__init__(dependencies)
+    def __init__(self, unit_of_work: CanvasUnitOfWork, frame_selection: HierarchyStrategyInterface):
+        """显式绑定框选用例所需的事务和层级选择策略。"""
+        self.unit_of_work = unit_of_work
+        self.frame_selection = frame_selection
 
     async def frame_elements(
         self,
@@ -25,7 +28,7 @@ class FrameElementsService(CanvasApplicationSupport):
         items: Sequence[FrameElementsCommand],
     ) -> dict[str, Any]:
         """将根级普通兄弟节点框选为新 Frame，并完成局部坐标转换。"""
-        self.validate_unique_item_refs(items)
+        CanvasApplicationOperations.validate_unique_item_refs(items)
         current_item_ref: str | None = None
 
         def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
@@ -66,4 +69,4 @@ class FrameElementsService(CanvasApplicationSupport):
         try:
             return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
-            raise self.batch_error(items, current_item_ref, error) from error
+            raise CanvasApplicationOperations.batch_error(list(items), current_item_ref, error) from error

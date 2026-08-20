@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal, cast
+from typing import cast
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -32,7 +32,7 @@ class GenerationOverrideInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
-    extensions: dict[str, object] | None = None
+    extensions: JsonObject | None = None
 
     def to_command(self) -> GenerationParameters:
         """转换为重试使用的生成参数覆盖命令。"""

@@ -16,7 +16,8 @@ from app.tools.canvas.application.generation_submission_service import Generatio
 from app.tools.canvas.application.initialization_service import InitializationService
 from app.tools.canvas.application.layout_service import LayoutService
 from app.tools.canvas.application.retry_content_service import RetryContentService
-from app.tools.canvas.application.support import CanvasApplicationSupport
+from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.queries import CanvasQueryService
 from app.tools.canvas.application.wait_generation_service import WaitGenerationService
 from app.tools.canvas.infrastructure.assets import AssetGateway
 from app.tools.canvas.generation import GenerationCapabilityRegistry, GenerationTaskRepository
@@ -24,7 +25,7 @@ from app.tools.canvas.infrastructure.persistence.canvas_repository_interface imp
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrategyRegistry, LayoutStrategyRegistry
 
 
-class CanvasApplication(CanvasApplicationSupport):
+class CanvasApplication:
     """Canvas 公开用例门面，只负责依赖组装和方法委托。"""
 
     def __init__(
@@ -48,16 +49,63 @@ class CanvasApplication(CanvasApplicationSupport):
             generation_tasks=generation_tasks,
             asset_gateway=asset_gateway,
         )
-        super().__init__(dependencies)
-        self.generation_submission_service = GenerationSubmissionService(dependencies)
-        self.initialization_service = InitializationService(dependencies)
-        self.add_elements_service = AddElementsService(dependencies, self.generation_submission_service)
-        self.frame_elements_service = FrameElementsService(dependencies)
-        self.content_service = ContentService(dependencies, self.generation_submission_service)
-        self.retry_content_service = RetryContentService(dependencies, self.generation_submission_service)
-        self.layout_service = LayoutService(dependencies)
-        self.connection_service = ConnectionService(dependencies)
-        self.wait_generation_service = WaitGenerationService(dependencies)
+        self.repository = dependencies.repository
+        self.query_service: CanvasQueryService = dependencies.query_service
+        content_preparation = ContentPreparationService(
+            content_strategies=dependencies.content_strategies,
+            asset_gateway=dependencies.asset_gateway,
+        )
+        self.generation_submission_service = GenerationSubmissionService(
+            unit_of_work=dependencies.unit_of_work,
+            generation_capabilities=dependencies.generation_capabilities,
+            generation_tasks=dependencies.generation_tasks,
+            generation_execution=dependencies.generation_execution,
+            generation_result_applier=dependencies.generation_result_applier,
+        )
+        self.initialization_service = InitializationService(
+            repository=dependencies.repository,
+        )
+        self.add_elements_service = AddElementsService(
+            unit_of_work=dependencies.unit_of_work,
+            layout_strategies=dependencies.layout_strategies,
+            connection_strategies=dependencies.connection_strategies,
+            generation_capabilities=dependencies.generation_capabilities,
+            element_references=dependencies.element_references,
+            content_preparation=content_preparation,
+            generation_submission_service=self.generation_submission_service,
+        )
+        self.frame_elements_service = FrameElementsService(
+            unit_of_work=dependencies.unit_of_work,
+            frame_selection=dependencies.frame_selection,
+        )
+        self.content_service = ContentService(
+            unit_of_work=dependencies.unit_of_work,
+            generation_capabilities=dependencies.generation_capabilities,
+            content_preparation=content_preparation,
+            generation_submission_service=self.generation_submission_service,
+        )
+        self.retry_content_service = RetryContentService(
+            repository=dependencies.repository,
+            unit_of_work=dependencies.unit_of_work,
+            generation_capabilities=dependencies.generation_capabilities,
+            generation_submission_service=self.generation_submission_service,
+        )
+        self.layout_service = LayoutService(
+            unit_of_work=dependencies.unit_of_work,
+            layout_strategies=dependencies.layout_strategies,
+        )
+        self.connection_service = ConnectionService(
+            unit_of_work=dependencies.unit_of_work,
+            connection_strategies=dependencies.connection_strategies,
+        )
+        self.wait_generation_service = WaitGenerationService(
+            repository=dependencies.repository,
+            unit_of_work=dependencies.unit_of_work,
+            generation_capabilities=dependencies.generation_capabilities,
+            generation_tasks=dependencies.generation_tasks,
+            generation_poller=dependencies.generation_poller,
+            generation_result_applier=dependencies.generation_result_applier,
+        )
 
     async def initialize(self, project_path: str) -> dict[str, Any]:
         """创建或复用一个 Canvas 项目。"""

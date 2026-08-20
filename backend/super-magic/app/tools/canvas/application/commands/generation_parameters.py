@@ -56,3 +56,34 @@ class GenerationParameters:
         }
         values.update({key: value for key, value in optional.items() if value is not None})
         return values  # type: ignore[return-value]
+
+    @classmethod
+    def from_dict(cls, values: JsonObject) -> "GenerationParameters":
+        """从 sidecar 中的稳定 JSON 字段恢复生成参数对象。"""
+        tuple_fields = {
+            "reference_images",
+            "reference_image_paths",
+            "reference_video_paths",
+            "reference_audio_paths",
+        }
+        kwargs: dict[str, object] = {}
+        for field_name in tuple_fields:
+            raw = values.get(field_name, [])
+            kwargs[field_name] = tuple(value for value in raw if isinstance(value, str)) if isinstance(raw, list) else ()
+        for field_name in (
+            "prompt", "model_id", "name", "output_path", "size", "frame_start_path",
+            "frame_end_path", "aspect_ratio", "resolution",
+        ):
+            raw = values.get(field_name)
+            if raw is None or isinstance(raw, str):
+                kwargs[field_name] = raw
+        for field_name in ("duration_seconds", "fps", "seed"):
+            raw = values.get(field_name)
+            if raw is None or isinstance(raw, int):
+                kwargs[field_name] = raw
+        watermark = values.get("watermark")
+        if watermark is None or isinstance(watermark, bool):
+            kwargs["watermark"] = watermark
+        extensions = values.get("extensions", {})
+        kwargs["extensions"] = extensions if isinstance(extensions, dict) else {}
+        return cls(**kwargs)
