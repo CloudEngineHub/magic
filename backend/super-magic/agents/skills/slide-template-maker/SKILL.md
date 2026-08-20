@@ -11,18 +11,39 @@ Create reusable slide template projects through semantic authoring and visual re
 
 Own every workflow that creates or changes a template:
 
-- Reconstruct a template from PPTX, PPT, POTX, POT, PPSX, or another presentation file.
+- Reconstruct a template from PPTX, PPT, POTX, POT, PPSX, or another OOXML presentation file.
 - Create a template from images, screenshots, HTML, or a written style brief.
 - Extract a template from an existing Super Magic slide project.
 - Update an existing template when the user explicitly requests an update.
 
 Do not use this skill to browse, install, select, or apply an existing platform template. Load `slide-template` for those tasks.
 
+## Source vs pipeline
+
+The source is evidence. It never changes the output contract, and it never disables create, authoring, or finalize.
+
+Every source type still queries taxonomy, calls `create_slide_template_project`, authors `visual-spec.md` / `theme.css` / `slides/`, then calls `finalize_slide_template` and confirms `previews/`. `finalize_slide_template` renders the authored HTML. It does not need PPTX, OOXML, or `source-analysis.json`. Missing prepare is a hard block only when `source.method` is `visual-reconstruction`.
+
+Do not report that finalization is impossible because the source is a Super Magic HTML project, an image, a text brief, or anything other than PPTX. That is a false blocker. Skipping prepare for those sources is correct; skipping finalize is not. `previews/` comes from authored slides, not from source analysis.
+
+Read the matching evidence reference, then return here for create, authoring, and finalize:
+
+| Source | Evidence reference | `source.method` | Prepare / review / select |
+| --- | --- | --- | --- |
+| PPTX, PPT after conversion, POTX, PPSX | `references/ppt-visual-reconstruction.md` | `visual-reconstruction` | Required |
+| Super Magic slide project (`magic.project.js`) | `references/project-template-workflow.md` | `project-extract` | Do not call |
+| Images or screenshots | `references/input-workflows.md` | `image-rebuild` | Optional `page_images` only |
+| HTML pages that are not a Super Magic project | `references/input-workflows.md` | `html-import` | Do not call |
+| Text style brief | `references/input-workflows.md` | `brief-generator` | Do not call |
+| Existing template folder | `references/input-workflows.md` | keep existing | Do not call |
+
+Also read `references/scene-routing.md`, `references/template-taxonomy.md`, `references/template-json-spec.md`, and `references/quality-guidelines.md`.
+
 ## Non-Negotiable PPT Rule
 
 Never call `convert_pptx_to_slide_template`, `pptx-to-html`, or any legacy PPTX-to-template script. Never refine converter-generated HTML into a final template.
 
-For presentation sources, render pages only to obtain visual evidence. Analyze those images, then author new semantic HTML and CSS from scratch. The final template must not contain full-slide screenshots, converter DOM, renderer wrappers, `slide-001.html`, `Converted Slide`, or source-tracing attributes.
+For OOXML presentation files, render pages only to obtain visual evidence. Analyze those images, then author new semantic HTML and CSS from scratch. The final template must not contain full-slide screenshots, converter DOM, renderer wrappers, `slide-001.html`, `Converted Slide`, or source-tracing attributes.
 
 ## Output Contract
 
@@ -48,13 +69,13 @@ Later tools only need `template_dir`. Do not write `source-analysis.json`, do no
 
 ## Tool ownership
 
-`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Category and tag codes must come from `query_slide_template_taxonomy` by matching this template's audience, purpose, and visuals. Source review and asset selection must go through `review_slide_template_source` and `select_slide_template_source_assets`. If a dedicated tool fails, retry that same tool. Do not emulate it.
+`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Category and tag codes must come from `query_slide_template_taxonomy` by matching this template's audience, purpose, and visuals. When `source.method` is `visual-reconstruction`, source review and asset selection must go through `review_slide_template_source` and `select_slide_template_source_assets`. If a dedicated tool fails, retry that same tool. Do not emulate it.
 
 The template is not complete when authoring finishes. Call `finalize_slide_template` with the returned `template_directory`, inspect `result.ok` and `result.content`, and confirm `previews/thumbnail.png`, `previews/collage.png`, and one preview per indexed slide exist. Report completion only after finalization succeeds and those preview files are present. If any required step fails or is skipped, tell the user it is blocked: name the blocker and the remaining steps. Do not say the template is complete. HTML/CSS in the folder is not enough.
 
 ## Intake Checkpoint
 
-**CHECKPOINT:** After a quick source look and before `create_slide_template_project`, call `ask_user` once for missing direction. Do not convert the deck first. Do not put `ask_user` inside `run_sdk_snippet` or Code Mode.
+**CHECKPOINT:** Before `create_slide_template_project`, call `ask_user` once for missing direction. These questions are about the target template, not the source, so ask them from the user's request alone: do not open, convert, or render the deck first. Do not put `ask_user` inside `run_sdk_snippet` or Code Mode.
 
 Ask only what the user did not already answer, and only when the answer would change the finished template. Write questions in the user's language. Prefer `select`. Set `default` on every question and `timeout` to `900`. If the user skips, times out, or says to decide, continue with those defaults. If `ask_user` is blocked, use the same defaults without asking.
 
@@ -68,9 +89,11 @@ Drop a question when the user already specified it:
 
 When shape is missing, recommend reusable 8–15 pages unless the user asked to restore the source page by page. High-fidelity still means new semantic HTML. Never use converter HTML or full-slide screenshots as finished pages.
 
+Translate the question and every option into the user's language before sending them. The shape below is the meaning to convey, not literal text to paste:
+
 ```text
 <question type="select" default="Reusable 8-15 pages">
-This deck has about N pages. What should the template be?
+What should the template be?
 <option>Reusable 8-15 pages — extract color, type, and components into a reusable template</option>
 <option>Keep source pages — rewrite each useful page in semantic HTML, drop ads and copyright pages</option>
 </question>
@@ -86,20 +109,20 @@ Add a situational question only when it would change the result, such as a non-1
 
 ## Workflow
 
-The main path is three beats. Taxonomy, canvas, and asset policy live in the references.
+The main path is three beats for every source type: create, author, finalize. Source-specific evidence gathering sits between create and authoring and never replaces finalize.
 
-1. Inspect the source without modifying it. Note file type, approximate page count, and obvious asset risks. Read the matching workflow reference, then `references/scene-routing.md`, `references/template-taxonomy.md`, `references/template-json-spec.md`, and `references/quality-guidelines.md`.
+1. Note the source type from the Source vs pipeline table and load that evidence reference. A Super Magic slide project, HTML folder, screenshot set, or text brief is not an OOXML presentation file. Do not convert or export those sources, and do not plan to call `prepare_slide_template_source` on them later.
 2. Run the Intake Checkpoint. Do not call `create_slide_template_project` until missing shape and asset questions are asked or safely defaulted.
-3. Inspect the source's audience, use case, visible style, palette, layouts, mood, and language. Query the live catalog through `query_slide_template_taxonomy`. From `result.data`, list only the groups this template needs, then pick one exact `category_code` and 4–10 exact `tag_codes` by meaning. Do not substring-search names, guess codes, or add `featured` automatically.
+3. Query the live catalog through `query_slide_template_taxonomy` exactly once, then pick one exact `category_code` and 4–10 exact `tag_codes` by meaning from the source's audience, use case, visible style, palette, layouts, mood, and language. Do not substring-search names, guess codes, or add `featured` automatically.
 4. Determine a backend-compatible semantic base ID: `SLIDE-` plus lowercase kebab-case words. `create_slide_template_project` appends a short six-character uppercase hexadecimal suffix to the backend `template_id`, but the local directory name contains no random suffix. Use the returned `created.data["template_directory"]` for every later call.
-5. Call `create_slide_template_project` with the selected category, tags, bilingual labels, and source canvas. Do not create the template directory manually.
-6. If the source is a presentation with extractable assets, render pages with `document-converter` using `created.data["converter_output_dir"]` as `output_dir`. Do not create `document-converter-output/` in the workspace. Then:
-   - `prepare_slide_template_source` with the page images and source OOXML. Pass `high-fidelity` after a page-by-page intake, otherwise `hybrid`. Read the reported background map; it names every measured background scheme and the pages that use it.
-   - `review_slide_template_source` for every index in `recommended_review_indexes` (1–3 pages per call). That list already covers one page per background scheme, so skipping entries loses a whole light or dark section. Also include cover, dense, data, closing, and any mascot or brand-illustration pages.
+5. Call `create_slide_template_project` with the selected category, tags, bilingual labels, source canvas, and the `source.method` from the table. Do not create the template directory manually.
+6. If and only if the source is an OOXML presentation file (PPTX, or PPT after conversion to PPTX), run these three tools in order. Nothing else touches that file.
+   - `prepare_slide_template_source` with `template_dir` and `source_presentation`. It renders every page itself into the runtime directory, so leave `page_images` out and never pre-convert the deck. A legacy `.ppt` is the one exception: convert it to `.pptx` through `document-converter` first, because the structure reader needs OOXML. Pass `high-fidelity` after a page-by-page intake, otherwise `hybrid`. Read the reported background map; it names every measured background scheme and the pages that use it.
+   - `review_slide_template_source` for every index in `recommended_review_indexes`, up to 6 per call. Pages in one call are reviewed in parallel, so send full batches rather than one page at a time. Every skipped index is a page whose margins, type scale, and background you will be inventing.
    - `select_slide_template_source_assets` with 1–8 complete decision objects per call. Use public ids such as `asset-01`. Repeat until `pending_count` is `0`. Never pass converter filenames, catalog rows, id-only objects, or a list of ids. `target_name` is a semantic stem; the tool keeps the original file extension.
-7. Text briefs, screenshots, or HTML with no extractable assets skip beat 6.
+7. Super Magic projects, HTML pages, text briefs, and screenshot rebuilds skip beat 6. When the source is loose images rather than an OOXML file, you may pass them as `page_images` instead of `source_presentation`; that is still optional evidence, not a substitute for finalize.
 8. Author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files in `template_dir`, following the Source Fidelity Rules below. For reusable/hybrid templates, keep 8–15 useful slides and fuse repeated source pages. For high-fidelity, keep the source page count minus ads, watermarks, and copyright pages.
-9. Call `finalize_slide_template`. It still hard-blocks missing prepare (for visual-reconstruction), incomplete asset decisions, unused selected assets, converter residue, canvas/taxonomy errors, and missing previews. Unreviewed source pages become warnings, not a hard stop.
+9. Always call `finalize_slide_template`. It renders authored HTML into `previews/`. It hard-blocks missing prepare only when `source.method` is `visual-reconstruction`. It also hard-blocks incomplete asset decisions, unused selected assets, converter residue, canvas/taxonomy errors, and missing previews. Unreviewed source pages become warnings, not a hard stop.
 10. Compare `previews/slides/` with the source. If `result.data["warnings"]` lists unreviewed pages, inspect those previews first. Fix and finalize again if needed.
 11. If every Completion Gate item passed, report the project directory, inventory, selected/discarded assets, preview paths, warnings, and remaining limits. If any item failed or was skipped, use the Blocked Report instead. Never delete the user-provided source file or any final file listed by `template.json` or `template-assets.json`.
 
@@ -109,9 +132,9 @@ Sanitize sensitive content and ask the user before keeping ambiguous logos, real
 
 A reconstruction that keeps the source's page structure but loses its background rhythm, margins, or type scale is a failed reconstruction. These four rules produce most of the visual gap between a template and its source. `references/ppt-visual-reconstruction.md` carries the measurement protocol.
 
-- Rebuild each page on the background of the source page it derives from. A deck that opens dark and turns light in later sections must keep that alternation. Never sample one page and apply its background to the whole template. `prepare_slide_template_source` reports a measured hex and light/dark tone per page, and `review_slide_template_source` repeats it per reviewed page; treat both as ground truth over your own impression.
+- Rebuild each page on the background of the source page it derives from. A deck that opens dark and turns light in later sections must keep that alternation. Never sample one page and apply its background to the whole template. For OOXML reconstructions, `prepare_slide_template_source` reports a measured hex and light/dark tone per page, and `review_slide_template_source` repeats it per reviewed page; treat both as ground truth over your own impression. For Super Magic projects, HTML, images, and text briefs, measure those schemes yourself from the source.
 - Give `theme.css` one surface class per background scheme, each pairing a background with its own foreground, muted-text, border, and accent-on-surface values. A single hard-coded `body` background makes mixed-tone decks impossible, because slide markup then has no way to switch text color with the surface.
-- Use the measured margins, alignment axis, column count, and block proportions from the review output. Do not fall back to a centered title with an even card grid; that is the most common way a reconstruction stops resembling its source.
+- Use the measured margins, alignment axis, column count, and block proportions. For OOXML reconstructions, take them from `review_slide_template_source`. For other sources, measure them from the source pages yourself. Do not fall back to a centered title with an even card grid; that is the most common way a reconstruction stops resembling its source.
 - Derive type sizes from the reported percentage of canvas height rather than browser defaults. Keep body text at or above 1.8% of canvas height, about `20px` on a 1080-tall canvas, and scale every other role from the same base.
 
 ## Authoring Rules
@@ -135,32 +158,30 @@ A reconstruction that keeps the source's page structure but loses its background
 
 Call the tools through Code Mode:
 
+Each snippet runs in a fresh process, so nothing you compute survives into the next one. Print the whole catalog in the taxonomy snippet; there is no way to look up a group you skipped without paying for the call again.
+
 ```python
 from sdk.tool import tool
 
 catalog = tool.call("query_slide_template_taxonomy")
 if not catalog.ok:
     raise SystemExit(catalog.content)
-print(catalog.content)
+print(catalog.content)  # Already lists every active category code.
 
-needed = {
-    "purpose_group",
-    "style_group",
-    "color_group",
-    "layout_group",
-    "mood_group",
-    "language_group",
-}
 for group in catalog.data["groups"]:
-    if group["code"] not in needed:
-        continue
     print(f"\n{group['code']}\t{group['zh']}")
     for tag in group["tags"]:
         print(f"{tag['code']}\t{tag['zh']}")
+```
+
+Then create the project in a second snippet. The example uses a PPTX reconstruction. For other sources, change `source.method` to `project-extract`, `html-import`, `image-rebuild`, or `brief-generator`, skip the prepare/review/select snippet, and still call `finalize_slide_template` after authoring. Every literal below is placeholder text from an unrelated deck: replace `category_code` and `tag_codes` with codes you actually read from the catalog above, and replace the labels, canvas, and slide plan with this source's values. If the tool rejects your `category_code`, the error lists the codes that are currently active; retry with the closest one instead of querying the catalog again.
+
+```python
+from sdk.tool import tool
 
 created = tool.call("create_slide_template_project", {
     "template_id": "SLIDE-navy-quarterly-review",
-    "category_code": "PPT-CATE-business-report",
+    "category_code": "<one exact code printed under categories>",
     "tag_codes": [
         "purpose-quarterly-review",
         "style-business",
@@ -184,18 +205,20 @@ created = tool.call("create_slide_template_project", {
 if not created.ok:
     raise SystemExit(created.content)
 
-template_dir = created.data["template_directory"]
-converter_output_dir = created.data["converter_output_dir"]
+print(created.data["template_directory"])
 ```
 
-For a presentation source only, render pages with `document-converter` into `converter_output_dir` before prepare. Do not create `document-converter-output/` in the workspace. Other document-converter tasks keep their normal workspace output.
-
-For a presentation source, the required Code Mode sequence between project creation and authoring is:
+For an OOXML presentation file only, the required Code Mode sequence between project creation and authoring is:
 
 ```python
+from sdk.tool import tool
+
+template_dir = "<created.data['template_directory']>"
+
+# Renders every page itself. Do not call convert_document_format first,
+# and do not pass page_images for an OOXML presentation file.
 prepared = tool.call("prepare_slide_template_source", {
     "template_dir": template_dir,
-    "page_images": rendered_page_paths,
     "source_presentation": source_pptx_path,
     "reconstruction_mode": "hybrid"  # Use high-fidelity after a page-by-page intake.
 })
@@ -203,10 +226,12 @@ if not prepared.ok:
     raise SystemExit(prepared.content)
 print(prepared.content)
 
-for source_index in prepared.data["recommended_review_indexes"]:
+# Up to 6 pages per call, reviewed in parallel. Do not review one page at a time.
+pending = prepared.data["recommended_review_indexes"]
+for start in range(0, len(pending), 6):
     reviewed = tool.call("review_slide_template_source", {
         "template_dir": template_dir,
-        "source_indexes": [source_index]
+        "source_indexes": pending[start:start + 6]
     })
     if not reviewed.ok:
         raise SystemExit(reviewed.content)
@@ -251,9 +276,9 @@ if not finalized.ok:
 print(finalized.content)
 ```
 
-If that call fails or `previews/` is missing, the task is blocked. Tell the user the blocker and remaining steps. Do not say the template is complete.
+If that call fails or `previews/` is missing, the task is blocked. Tell the user the blocker and remaining steps. Do not say the template is complete. Do not skip this call because the source is not PPTX.
 
-`prepare_slide_template_source` inspects the source without modifying it. It never generates HTML. Read `prepared.data["canvas"]`, `prepared.data["recommended_review_indexes"]`, and `asset-01` style catalog ids. Do not read or write the hidden working directory.
+`prepare_slide_template_source` is only for OOXML files or optional `page_images`. It reads that source without modifying it and writes every render into the runtime directory. It never generates HTML. Read `prepared.data["canvas"]`, `prepared.data["recommended_review_indexes"]`, and `asset-01` style catalog ids. Do not read or write the hidden working directory. Do not call it on a Super Magic project, HTML folder, or text brief.
 
 If a dedicated source tool fails, print `result.content`, fix the arguments, and retry the same tool. Do not copy converter images into the template directory and do not hand-write a replacement manifest.
 
@@ -261,9 +286,9 @@ If a dedicated source tool fails, print `result.content`, fix the arguments, and
 
 ## Tool Guidance
 
-- Call `query_slide_template_taxonomy` once. Print `content` plus only the tag groups this template needs from `result.data`. Pick exact codes by the source's audience, purpose, and visuals. Do not substring-search names such as 封面 or AI. Then call `create_slide_template_project`.
-- Use the `document-converter` skill through `run_sdk_snippet` to render presentation pages. In this template-making workflow only, set `output_dir` to `created.data["converter_output_dir"]`. Leave other document-converter tasks on their normal workspace output.
-- Do not replace `review_slide_template_source` with hand-written `source-analysis.json` or ad-hoc `visual_understanding` against converter filenames.
+- Call `query_slide_template_taxonomy` once and print every group's tags in that same snippet. Pick exact codes by the source's audience, purpose, and visuals. Do not substring-search names such as 封面 or AI. Then call `create_slide_template_project`.
+- Do not convert, export, or render an OOXML presentation file yourself. `prepare_slide_template_source` renders those pages into the runtime directory, so `convert_document_format`, `export_document_markdown`, and `document-converter-output/` have no place in this workflow. Other document-converter tasks outside template making keep their normal workspace output.
+- Do not replace `review_slide_template_source` with hand-written `source-analysis.json`, and do not run `visual_understanding` over the source pages yourself. The review tool already sends the full page plus detail crops with the measured background as ground truth, so a separate pass costs the same tokens and produces weaker, unrecorded results.
 - Use `visual_understanding` for standalone images, screenshots, and generated `previews/slides/` files.
 - Call `visual_understanding_webpage` and `analysis_slide_webpage` only through `run_sdk_snippet` with `sdk.tool.call(...)`; they are not directly mounted on the slide agent.
 - Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML before finalization. Pass the declared canvas as `viewport_width` and `viewport_height`, with `device_scale_factor: 1`.
@@ -334,12 +359,12 @@ Do not report completion until every item below is true. Authored HTML/CSS, a `t
 - `finalize_slide_template` was called and returned `result.ok`.
 - `template.json` validates against `references/template-json.schema.json`.
 - `category_code` and every `tag_codes` value exist in the live taxonomy catalog, describe this template semantically, and `tag_codes` is non-empty.
-- When a source PPTX was supplied, every extracted source asset has a completed `reuse` or `discard` decision. Only selected assets that are actually referenced by final HTML/CSS may remain under `images/source-assets/`.
+- When `source.method` is `visual-reconstruction`, every extracted source asset has a completed `reuse` or `discard` decision. Only selected assets that are actually referenced by final HTML/CSS may remain under `images/source-assets/`.
 - Every indexed slide exists, loads `../theme.css`, and resolves local assets.
 - Every indexed slide has exactly one `main.slide-container` root, and its `data-width`/`data-height` values match `template.json.source.canvas`.
 - No legacy conversion residue or forbidden output file remains.
 - `previews/` exists with `thumbnail.png`, `collage.png`, and one `previews/slides/` image per indexed slide. Spot-check cover, dense-content, data/process, and closing pages against the source. If warnings list unreviewed source pages or unreviewed background variants, inspect those previews first.
-- Every background scheme reported by `prepare_slide_template_source` appears in the finished template, each on the pages that correspond to the source. A deck whose previews are all one tone while the source mixed tones fails this gate.
+- When `source.method` is `visual-reconstruction`, every background scheme reported by `prepare_slide_template_source` appears in the finished template, each on the pages that correspond to the source. A deck whose previews are all one tone while the source mixed tones fails this gate. Other source types still need a recorded surface inventory, measured from the source you actually have.
 - `theme.css` defines a surface class per background scheme, and every slide root carries one.
 - Body text measures at least 1.8% of canvas height, and page margins match the reviewed source geometry rather than a default centered layout.
 - The template has a coherent design system and meaningful layout diversity, not only structurally valid files.
@@ -356,3 +381,5 @@ Write the report in the user's language and include:
 - What already exists so the user can continue
 
 Example: `finalize_slide_template` was not called or failed, so `previews/` was never captured. Say that screenshots, thumbnail, and collage were not generated, and that finalization is still required. Do not present the authored slides as a finished template.
+
+False blocker: the source is a Super Magic HTML project, an image, or a text brief, so finalize cannot run and previews cannot be generated. That is wrong. Call `finalize_slide_template` after authoring. It renders the authored HTML and does not require PPTX or source analysis.

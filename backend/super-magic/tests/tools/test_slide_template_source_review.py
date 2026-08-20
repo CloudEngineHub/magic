@@ -60,13 +60,13 @@ def test_recommended_review_indexes_covers_cover_middle_and_close():
     assert recommended_review_indexes(15) == [1, 5, 10, 15]
 
 
-def test_review_params_accept_more_than_three_indexes():
+def test_review_params_defer_indexes_beyond_one_batch():
     params = ReviewSlideTemplateSourceParams(
         template_dir="navy-review",
-        source_indexes=[3, 6, 9, 10, 11],
+        source_indexes=[1, 2, 3, 4, 5, 6, 7, 8],
     )
-    assert params.source_indexes == [3, 6, 9, 10, 11]
-    assert split_review_indexes(params.source_indexes) == ([3, 6, 9], [10, 11])
+    assert params.source_indexes == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert split_review_indexes(params.source_indexes) == ([1, 2, 3, 4, 5, 6], [7, 8])
 
 
 def test_parse_source_review_payload_reads_json_block():

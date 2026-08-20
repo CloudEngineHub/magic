@@ -10,6 +10,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.util import Inches, Pt
+from pydantic import ValidationError
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.slide_template_builder import (
@@ -19,6 +20,7 @@ from app.tools.slide_template_builder import (
     SelectSlideTemplateSourceAssets,
 )
 from app.tools.slide_template_builder.common import (
+    MAX_TAG_CODES,
     WORK_DIR_NAME,
     background_variants,
     cleanup_template_intermediates,
@@ -134,8 +136,12 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     converter_output_dir.resolve().relative_to((tmp_path / ".runtime").resolve())
     with pytest.raises(ValueError):
         converter_output_dir.resolve().relative_to(template_dir.parent.resolve())
-    assert str(converter_output_dir) in result.content
-    assert "Do not write PDF, page images, or converter dumps into the workspace" in result.content
+    # 渲染已经收进 prepare，这里不再把转换目录当成 Agent 要用的参数推给它
+    assert str(converter_output_dir) not in result.content
+    assert "call prepare_slide_template_source with source_presentation" in result.content
+    assert "do not write PDF, page images, or converter dumps into the workspace" in result.content
+    assert "Finalize hard-blocks missing prepare" in result.content
+    assert "always call finalize_slide_template" in result.content
     assert result.data["canvas_contract"] == {
         "selector": ".slide-container",
         "width_attribute": "data-width",
@@ -163,6 +169,21 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
         "mood-professional",
         "language-english",
     ]
+
+
+@pytest.mark.asyncio
+async def test_create_project_tells_non_pptx_sources_to_skip_prepare_and_still_finalize(tmp_path):
+    params = _params()
+    params.source = TemplateSourceParams(kind="derived", method="project-extract", file="magic.project.js")
+    tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
+    result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
+
+    assert result.ok, result.content
+    assert "Do not call prepare_slide_template_source" in result.content
+    assert "Finalize does not need PPTX" in result.content
+    assert "always call finalize_slide_template" in result.content
+    assert "the template is not complete until finalization succeeds" in result.content
+    assert "call prepare_slide_template_source with source_presentation" not in result.content
 
 
 def test_generate_semantic_directory_name_uses_english_label_and_sanitizes_punctuation():
@@ -216,12 +237,21 @@ async def test_create_project_rejects_unknown_taxonomy_codes(tmp_path):
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
     assert not result.ok
     assert "active PPT category" in result.content
+    # 目录漂移时要直接给出可选值，模型才能一次改对而不是重查目录再重发整个请求
+    assert "PPT-CATE-business-report" in result.content
 
     params = _params()
     params.tag_codes = ["purpose-quarterly-review", "tag-does-not-exist"]
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
     assert not result.ok
     assert "unknown codes" in result.content
+
+
+def test_tag_codes_are_capped_before_the_request_is_built():
+    # 上限放在 schema 里，模型在调用前就能看到，超限不必等到执行期再失败重发
+    payload = {**_params().model_dump(), "tag_codes": [f"tag-{index:02d}" for index in range(MAX_TAG_CODES + 1)]}
+    with pytest.raises(ValidationError):
+        CreateSlideTemplateProjectParams(**payload)
 
 
 @pytest.mark.asyncio
@@ -276,6 +306,66 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     assert result.data["extracted_asset_count"] == 2
     assert len(result.data["asset_analysis_batches"]) == 1
 
+@pytest.mark.asyncio
+async def test_prepare_source_renders_pages_itself_from_the_presentation(tmp_path, monkeypatch):
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
+    create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
+    assert create_result.ok
+    source_pptx = tmp_path / "source.pptx"
+    embedded_image = tmp_path / "embedded.png"
+    Image.new("RGB", (120, 80), "#e6b566").save(embedded_image)
+    _write_source_pptx(source_pptx, embedded_image)
+
+    class _StubConverter:
+        async def convert(self, input_path, output_dir, target_format, ranges):
+            destination = Path(output_dir)
+            destination.mkdir(parents=True, exist_ok=True)
+            if target_format == "pdf":
+                pdf_path = destination / "source.pdf"
+                pdf_path.write_bytes(b"%PDF-1.4 stub")
+                return [pdf_path]
+            # 页码是两位而文件按字符串排序会把 page_10 排到 page_2 前面，这里刻意覆盖到
+            pages = []
+            for number in (1, 2, 10):
+                page_path = destination / f"source_page_{number}.png"
+                Image.new("RGB", (1920, 1080), "#102a43").save(page_path)
+                pages.append(page_path)
+            return [pages[2], pages[0], pages[1]]
+
+    monkeypatch.setattr(
+        "app.tools.slide_template_builder.source_analysis.DocumentFormatConverter",
+        _StubConverter,
+    )
+
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
+    result = await prepare_tool.execute(
+        ToolContext(tool_name=prepare_tool.name, arguments={}),
+        PrepareSlideTemplateSourceParams(
+            template_dir=create_result.data["template_id"],
+            source_presentation=str(source_pptx),
+        ),
+    )
+
+    assert result.ok, result.content
+    assert result.data["pages_rendered_by_tool"] is True
+    assert result.data["slide_count"] == 3
+    converter_dir = Path(create_result.data["converter_output_dir"])
+    assert converter_dir.exists()
+    # 渲染产物只落在运行时目录，工作区里不能出现 PDF 或页图
+    assert not list(_workspace(tmp_path).rglob("*.pdf"))
+    manifest = json.loads((Path(create_result.data["working_directory"]) / "source-analysis.json").read_text())
+    assert [slide["source_image"] for slide in manifest["slides"]] == [
+        "source_page_1.png",
+        "source_page_2.png",
+        "source_page_10.png",
+    ]
+
+
+def test_prepare_source_requires_a_presentation_or_page_images():
+    with pytest.raises(ValidationError):
+        PrepareSlideTemplateSourceParams(template_dir="navy-review")
+
+
 def test_background_probe_reads_flat_and_image_backed_pages():
     flat = probe_page_background(Image.new("RGB", (1920, 1080), "#102a43"))
     assert flat.color == "#102a43"
@@ -316,6 +406,12 @@ def test_background_variants_group_pages_and_drive_review_sampling():
     assert unreviewed_background_variants(slides) == variants
 
 
+def test_high_fidelity_reviews_every_page_instead_of_sampling():
+    # 高保真是逐页重建，抽样会让未回顾的页只能靠猜
+    assert recommended_review_indexes(12, None, "high-fidelity") == list(range(1, 13))
+    assert recommended_review_indexes(12, None, "template-abstraction") == [1, 4, 8, 12]
+
+
 def test_review_digest_exposes_measured_background_and_geometry():
     payload = parse_source_review_payload(
         json.dumps({
@@ -345,6 +441,43 @@ def test_review_digest_exposes_measured_background_and_geometry():
     assert "title block x6% y10% w55% left" in digest
     assert "page-title 6.5% of height weight 700" in digest
     assert "accent #e6b566 (step numbers)" in digest
+
+
+@pytest.mark.asyncio
+async def test_non_pptx_methods_validate_without_source_analysis(tmp_path):
+    from app.tools.slide_template_builder.common import validate_template_project
+
+    authored_slide = (
+        '<!doctype html><html><head><link rel="stylesheet" href="../theme.css"></head>'
+        '<body><main class="slide"><h1 data-slot="title">Business Review</h1>'
+        '<p data-slot="subtitle">Q4</p><span data-slot="meta">Strategy Team</span></main></body></html>'
+    )
+    cases = [
+        ("project-extract", "derived", "magic.project.js"),
+        ("html-import", "derived", "source.html"),
+        ("image-rebuild", "derived", "cover.png"),
+        ("brief-generator", "original", ""),
+    ]
+    for method, kind, source_file in cases:
+        params = _params()
+        params.source = TemplateSourceParams(kind=kind, method=method, file=source_file)
+        case_dir = tmp_path / method
+        case_dir.mkdir()
+        create_tool = CreateSlideTemplateProject(base_dir=_workspace(case_dir))
+        create_result = await create_tool.execute(
+            ToolContext(tool_name=create_tool.name, arguments={}),
+            params,
+        )
+        assert create_result.ok, create_result.content
+        template_dir = Path(create_result.data["template_directory"])
+        await async_write_text(template_dir / "visual-spec.md", "# Visual Specification\n\nNavy report system.\n")
+        await async_write_text(
+            template_dir / "theme.css",
+            "html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }\n",
+        )
+        await async_write_text(template_dir / "slides/cover.html", authored_slide)
+        validated = await validate_template_project(template_dir)
+        assert validated.source_analysis_summary is None
 
 
 @pytest.mark.asyncio

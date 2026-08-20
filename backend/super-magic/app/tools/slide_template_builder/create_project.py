@@ -11,6 +11,7 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.common import (
+    MAX_TAG_CODES,
     SCAFFOLD_MARKER,
     SlideTemplateBuilderError,
     ensure_template_working_directory,
@@ -53,8 +54,9 @@ Exact active category code from query_slide_template_taxonomy result.data. Pick 
     tag_codes: list[str] = Field(
         ...,
         min_length=1,
-        description="""<!--zh: 当前有效标签目录中的准确标签 code，至少一个，不重复。按本模板可见的用途、风格、配色、版式、氛围和语言从 result.data 语义挑选，不要关键词匹配，不要自动添加 featured。-->
-Exact tag codes from query_slide_template_taxonomy result.data. Pick them by this template's visible purpose, style, color, layout, mood, and language. Never keyword-match names or add featured automatically.""",
+        max_length=MAX_TAG_CODES,
+        description="""<!--zh: 当前有效标签目录中的准确标签 code，4-10 个，不重复。按本模板可见的用途、风格、配色、版式、氛围和语言从 result.data 语义挑选，不要关键词匹配，不要自动添加 featured。-->
+Exact tag codes from query_slide_template_taxonomy result.data, 4-10 of them. Pick them by this template's visible purpose, style, color, layout, mood, and language. Never keyword-match names or add featured automatically.""",
     )
     source: TemplateSourceParams = Field(..., description="Template source classification and source basename.")
     slides: list[TemplateSlideParams] = Field(
@@ -176,19 +178,32 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                     "height": params.source.canvas.height,
                 },
             }
+            if params.source.method == "visual-reconstruction":
+                source_next = (
+                    "For this OOXML reconstruction, call prepare_slide_template_source with source_presentation and "
+                    "let it render the pages; do not convert the deck yourself and do not write PDF, page images, "
+                    "or converter dumps into the workspace. "
+                    "Finalize hard-blocks missing prepare for this method. "
+                )
+            else:
+                source_next = (
+                    "This source is not an OOXML presentation file. Do not call prepare_slide_template_source, "
+                    "review_slide_template_source, or select_slide_template_source_assets. "
+                    "Finalize does not need PPTX, OOXML, or source analysis. "
+                    "Do not skip it because the source is HTML, images, or text. "
+                )
             return ToolResult(
                 content=(
                     f"Slide template project created at `{template_dir}` with {len(params.slides)} planned slides. "
                     "Later source tools only need this template_dir. "
-                    f"For presentation conversion, pass `{converter_output_dir}` to document-converter as output_dir. "
-                    "Do not write PDF, page images, or converter dumps into the workspace. "
-                    "Each slide scaffold contains a required `main.slide-container` canvas root with `data-width` and "
+                    + source_next
+                    + "Each slide scaffold contains a required `main.slide-container` canvas root with `data-width` and "
                     "`data-height` matching `template.json.source.canvas`; preserve this contract when authoring. "
                     "Only author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. "
                     "Do not replace `template.json`, invent `source-analysis.json`, or create `.template-work/` "
                     "inside the template directory. "
-                    "Replace every scaffold file, then call finalize_slide_template and check `result.ok`; "
-                    "the template is not complete until finalization succeeds."
+                    "Replace every scaffold file, then always call finalize_slide_template and check `result.ok`; "
+                    "it renders authored HTML into previews/, and the template is not complete until finalization succeeds."
                 ),
                 data=data,
                 extra_info=data,

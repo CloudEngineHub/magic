@@ -106,7 +106,7 @@ Before reporting completion, check the tone sequence directly. Read the backgrou
 
 ## Completion Report
 
-Use `status: complete` only when every Completion Gate item in the skill passed, including generated `previews/thumbnail.png`, `previews/collage.png`, and one preview per indexed slide.
+Use `status: complete` only when every Completion Gate item in the skill passed, including generated `previews/thumbnail.png`, `previews/collage.png`, and one preview per indexed slide. This report is required for every source type. Missing previews is never explained away as "the source was not PPTX".
 
 ```text
 status: complete

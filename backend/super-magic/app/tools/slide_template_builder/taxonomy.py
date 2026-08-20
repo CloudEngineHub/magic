@@ -95,9 +95,10 @@ def format_index_content(catalog: dict[str, Any]) -> str:
         *[f"{item['code']}\t{item.get('en', '')}\t{item.get('zh', '')}" for item in categories],
         "",
         (
-            f"Tag groups ({len(groups)}). From result.data, list the groups this template "
-            "needs, then pick tags by visible purpose, style, color, layout, mood, and language. "
-            "Do not substring-search names. Never print the full catalog."
+            f"Tag groups ({len(groups)}). Print every group's tags from result.data in this one "
+            "snippet, because result.data does not survive into your next snippet and a second "
+            "lookup costs another call. Then pick tags by visible purpose, style, color, layout, "
+            "mood, and language. Do not substring-search names."
         ),
         *[
             f"{item['code']}\t{item.get('en', '')}\t{item.get('zh', '')}\t{len(item.get('tags') or [])} tags"
