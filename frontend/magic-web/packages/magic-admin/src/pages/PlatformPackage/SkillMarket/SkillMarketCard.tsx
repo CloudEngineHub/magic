@@ -110,7 +110,7 @@ function SkillMarketCard({
 							size="small"
 							checked={Boolean(data.is_featured)}
 							loading={featuredSavingIds.has(data.id)}
-							disabled={featuredSavingIds.has(data.id)}
+							disabled={featuredSavingIds.has(data.id) || !hasEditRight}
 							onChange={(next) => {
 								if (next === Boolean(data.is_featured)) return
 								handleChangeFeatured(data, next)
@@ -123,7 +123,7 @@ function SkillMarketCard({
 							size="small"
 							checked={Boolean(data.is_hidden)}
 							loading={hiddenSavingIds.has(data.id)}
-							disabled={hiddenSavingIds.has(data.id)}
+							disabled={hiddenSavingIds.has(data.id) || !hasEditRight}
 							onChange={(next) => {
 								if (next === Boolean(data.is_hidden)) return
 								handleChangeHidden(data, next)
@@ -138,7 +138,7 @@ function SkillMarketCard({
 						precision={0}
 						style={{ width: 100 }}
 						value={getSortOrderInputValue(data)}
-						disabled={sortSavingIds.has(data.id)}
+						disabled={sortSavingIds.has(data.id) || !hasEditRight}
 						onChange={(value) => {
 							updateSortOrderDraft(data.id, value)
 							if (typeof value !== "number" || Number.isNaN(value)) return

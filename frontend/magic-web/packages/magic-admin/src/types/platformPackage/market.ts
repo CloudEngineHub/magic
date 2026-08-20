@@ -80,7 +80,6 @@ export interface SkillMarketItem {
 	logo?: string | null
 	publisher_id?: string
 	publisher_type?: SkillPublisherType
-	category_id?: string | null
 	category_ids?: string[]
 	publish_status: string
 	install_count?: number
@@ -164,10 +163,9 @@ export interface SkillMarketCategoryOperator {
 	nickname: string
 }
 
-/** Skill 市场分类 - 分类树节点 */
+/** Skill 市场分类 */
 export interface SkillMarketCategoryItem {
 	id: string
-	parent_id?: string
 	organization_code?: string
 	name?: string
 	name_i18n?: NameI18N
@@ -181,12 +179,10 @@ export interface SkillMarketCategoryItem {
 	modifier?: SkillMarketCategoryOperator
 	created_at?: string
 	updated_at?: string
-	children?: SkillMarketCategoryItem[]
 }
 
 /** Skill 市场分类 - 创建/更新参数 */
 export interface SaveSkillMarketCategoryParams {
-	parent_id?: string | number
 	name_i18n?: NameI18N
 	logo?: string | null
 	sort_order?: number

@@ -21,7 +21,7 @@ import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import { SkillMarketCategoryModal } from "./components/SkillMarketCategoryModal"
 import OfficialSkillImportDialog from "./components/OfficialSkillImportDialog"
-import { flattenSkillCategoryTree, resolveSkillCategoryName } from "./utils"
+import { resolveSkillCategoryName } from "./utils"
 
 const SkillMarketCard = lazy(() => import("./SkillMarketCard"))
 
@@ -31,10 +31,7 @@ const MAX_VISIBLE_CATEGORY_TAGS = 2
 const CATEGORY_SELECT_WIDTH = 220
 
 function getSkillMarketCategoryIds(record: DataType) {
-	if (Array.isArray(record.category_ids)) {
-		return Array.from(new Set(record.category_ids.filter(Boolean)))
-	}
-	return record.category_id ? [record.category_id] : []
+	return Array.from(new Set((record.category_ids ?? []).filter(Boolean)))
 }
 
 const useStyles = createStyles(({ token }) => ({
@@ -123,6 +120,10 @@ function SkillMarketPage() {
 		}, 500),
 	).current
 
+	useEffect(() => {
+		return () => debouncedSearch.cancel()
+	}, [debouncedSearch])
+
 	const publishStatusMap = useMemo(
 		() => ({
 			UNPUBLISHED: { text: t("unpublished"), color: "default" },
@@ -162,21 +163,18 @@ function SkillMarketPage() {
 		return value.zh_CN || value.en_US || value.default || "-"
 	})
 
-	// The market API returns category IDs; resolve them against the admin tree for read-only labels.
+	// The market API returns category IDs; resolve them against the flat admin category list.
 	const categoryMap = useMemo(
 		() =>
 			new Map(
-				flattenSkillCategoryTree(categories).map((category) => [
-					category.id,
-					resolveSkillCategoryName(category),
-				]),
+				categories.map((category) => [category.id, resolveSkillCategoryName(category)]),
 			),
 		[categories],
 	)
 
 	const categoryOptions = useMemo(
 		() =>
-			flattenSkillCategoryTree(categories).map((category) => ({
+			categories.map((category) => ({
 				label: resolveSkillCategoryName(category),
 				value: category.id,
 			})),
@@ -259,7 +257,6 @@ function SkillMarketPage() {
 							? {
 									...item,
 									category_ids: categoryIds,
-									category_id: categoryIds[0] ?? null,
 								}
 							: item,
 					),
@@ -699,14 +696,11 @@ function SkillMarketPage() {
 	})
 
 	const handleOfficialImportSuccess = useMemoizedFn(
-		(
-			_result: PlatformPackage.ImportOfficialSkillResponse,
-			context: { publishStatus: "OFFLINE" | "PUBLISHED" },
-		) => {
+		(_result: PlatformPackage.ImportOfficialSkillResponse) => {
 			const nextParams: ParamsType = {
 				...params,
 				page: 1,
-				publish_status: context.publishStatus,
+				publish_status: "PUBLISHED",
 			}
 			setParams(nextParams)
 			run(nextParams)

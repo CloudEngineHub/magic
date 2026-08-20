@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react"
-import { Flex, Form, InputNumber, Select, Switch, message } from "antd"
+import { Flex, Form, InputNumber, Switch, message } from "antd"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import {
@@ -14,12 +14,10 @@ import {
 import { useApis } from "@admin/apis"
 import type { PlatformPackage } from "@admin/types/platformPackage"
 import { SkillMarketCategoryStatusMap } from "@admin/types/platformPackage/market"
-import { buildSkillCategorySaveParams, flattenSkillCategoryTree } from "../utils"
+import { buildSkillCategorySaveParams } from "../utils"
 
 interface SkillMarketCategoryFormModalProps extends MagicModalProps {
 	info?: PlatformPackage.SkillMarketCategoryItem | null
-	categories: PlatformPackage.SkillMarketCategoryItem[]
-	initialParentId?: string | null
 	onSuccess?: () => void
 }
 
@@ -47,15 +45,7 @@ const getLangErrors = (
 })
 
 export const SkillMarketCategoryFormModal = memo(
-	({
-		info,
-		categories,
-		initialParentId,
-		onCancel,
-		onOk,
-		onSuccess,
-		...rest
-	}: SkillMarketCategoryFormModalProps) => {
+	({ info, onCancel, onOk, onSuccess, ...rest }: SkillMarketCategoryFormModalProps) => {
 		const { t } = useTranslation("admin/platform/skillMarket")
 		const { t: tCommon } = useTranslation("admin/common")
 		const { PlatformPackageApi } = useApis()
@@ -63,42 +53,8 @@ export const SkillMarketCategoryFormModal = memo(
 		const [loading, setLoading] = useState(false)
 		const [langErrors, setLangErrors] = useState<CategoryLangErrorState>(DEFAULT_LANG_ERRORS)
 		const name = Form.useWatch(["name_i18n"], form)
-		const hasChildren = Boolean(info?.children?.length)
-		// Keep existing top-level nodes at the root so their children cannot become
-		// a third level when the category tree is edited.
-		const parentLocked = hasChildren || Boolean(info && String(info.parent_id ?? "0") === "0")
-
-		const parentOptions = useMemo(() => {
-			if (parentLocked) return [{ label: t("category.root"), value: "0" }]
-
-			const excludedIds = new Set<string>()
-			if (info) {
-				excludedIds.add(info.id)
-				flattenSkillCategoryTree(info.children ?? []).forEach((category) =>
-					excludedIds.add(category.id),
-				)
-			}
-
-			return [
-				{ label: t("category.root"), value: "0" },
-				...categories
-					.filter(
-						(category) =>
-							String(category.parent_id ?? "0") === "0" &&
-							!excludedIds.has(category.id),
-					)
-					.map((category) => ({
-						label: category.name_i18n?.zh_CN || category.name || category.id,
-						value: category.id,
-					})),
-			]
-		}, [categories, info, parentLocked, t])
-
 		const initialValues = useMemo(
 			() => ({
-				// Category IDs are serialized as strings by the admin API. Normalize the
-				// legacy numeric value here so the Select can resolve the current parent.
-				parent_id: String(info?.parent_id ?? initialParentId ?? "0"),
 				name_i18n: {
 					zh_CN: info?.name_i18n?.zh_CN ?? "",
 					en_US: info?.name_i18n?.en_US ?? "",
@@ -106,7 +62,7 @@ export const SkillMarketCategoryFormModal = memo(
 				status: info ? info.status === SkillMarketCategoryStatusMap.visible : true,
 				sort_order: info?.sort_order ?? 0,
 			}),
-			[info, initialParentId],
+			[info],
 		)
 
 		useEffect(() => {
@@ -152,6 +108,8 @@ export const SkillMarketCategoryFormModal = memo(
 				setLangErrors(nextLangErrors)
 				if (nextLangErrors.name_i18n) {
 					message.error(tCommon("message.pleaseInputRequiredFields"))
+				} else {
+					message.error(tCommon("message.saveFailed"))
 				}
 			} finally {
 				setLoading(false)
@@ -198,9 +156,6 @@ export const SkillMarketCategoryFormModal = memo(
 								onSave={updateLangField}
 							/>
 						</Flex>
-					</Form.Item>
-					<Form.Item label={t("category.fields.parent")} name="parent_id">
-						<Select disabled={parentLocked} options={parentOptions} />
 					</Form.Item>
 					<Form.Item label={t("sortOrder")} name="sort_order">
 						<InputNumber min={0} precision={0} style={{ width: "100%" }} />

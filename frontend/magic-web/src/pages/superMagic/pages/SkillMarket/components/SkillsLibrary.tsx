@@ -55,6 +55,8 @@ function SkillsLibrary({
 	const [searchQuery, setSearchQuery] = useState("")
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
 	const lastSubmittedSearchRef = useRef<string | null>(null)
+	const lastSearchEffectKeywordRef = useRef<string | null>(null)
+	const initialLoadLifecycleRef = useRef({ initialized: false, generation: 0 })
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
 	const debouncedSearchQuery = useDebounce(searchQuery, { wait: SKILLS_SEARCH_DEBOUNCE_MS })
 	const throttledSearchQuery = useThrottle(debouncedSearchQuery, {
@@ -67,11 +69,21 @@ function SkillsLibrary({
 		skillsStore.categoryIds.length > 0 ||
 		skillsStore.publisherType != null ||
 		skillsStore.isFeatured != null
-	useEffect(() => () => skillsStore.reset(), [skillsStore])
-
 	useEffect(() => {
-		void skillsStore.fetchFeaturedSkills()
-		void skillsStore.fetchCategories()
+		const lifecycle = initialLoadLifecycleRef.current
+		const effectGeneration = ++lifecycle.generation
+
+		if (!lifecycle.initialized) {
+			lifecycle.initialized = true
+			void skillsStore.fetchFeaturedSkills()
+			void skillsStore.fetchCategories()
+		}
+
+		return () => {
+			queueMicrotask(() => {
+				if (lifecycle.generation === effectGeneration) skillsStore.reset()
+			})
+		}
 	}, [skillsStore])
 
 	useEffect(() => {
@@ -91,11 +103,15 @@ function SkillsLibrary({
 			lastSubmittedSearchRef.current = null
 			return
 		}
-		void skillsStore.fetchSkills({ keyword: keyword || undefined, page: 1 })
+		if (lastSearchEffectKeywordRef.current === keyword) return
+		lastSearchEffectKeywordRef.current = keyword
+		void skillsStore
+			.fetchSkills({ keyword: keyword || undefined, page: 1 })
+			.catch(() => undefined)
 	}, [skillsStore, throttledSearchQuery, isSearchComposing])
 
 	const handleAutoLoadMore = useCallback(() => {
-		void skillsStore.loadMore()
+		void skillsStore.loadMore().catch(() => undefined)
 	}, [skillsStore])
 	const sentinelRef = useAutoLoadMoreSentinel({
 		rootRef: scrollViewportRef,
@@ -119,6 +135,17 @@ function SkillsLibrary({
 		void skillsStore.fetchNextFeaturedSkills()
 	}, [skillsStore])
 
+	const handleRetrySkills = useCallback(() => {
+		void skillsStore.retrySkills().catch(() => undefined)
+	}, [skillsStore])
+
+	const handleCategoryChange = useCallback(
+		(categoryIds: string[]) => {
+			void skillsStore.setCategoryIds(categoryIds).catch(() => undefined)
+		},
+		[skillsStore],
+	)
+
 	const handleOpenDetail = useCallback((skill: StoreSkillView) => {
 		setSelectedSkill(skill)
 	}, [])
@@ -132,7 +159,9 @@ function SkillsLibrary({
 			if (isSearchComposing) return
 			const keyword = (query ?? searchQuery).trim()
 			lastSubmittedSearchRef.current = keyword
-			void skillsStore.fetchSkills({ keyword: keyword || undefined, page: 1 })
+			void skillsStore
+				.fetchSkills({ keyword: keyword || undefined, page: 1 })
+				.catch(() => undefined)
 		},
 		[isSearchComposing, searchQuery, skillsStore],
 	)
@@ -345,10 +374,20 @@ function SkillsLibrary({
 					selectedCategoryIds={skillsStore.categoryIds}
 					loading={skillsStore.categoriesLoading}
 					error={skillsStore.categoriesError}
-					onChange={skillsStore.setCategoryIds}
+					onChange={handleCategoryChange}
 				/>
 
-				{skillsStore.loading && skillsStore.list.length === 0 ? (
+				{skillsStore.listError ? (
+					<div
+						className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
+						data-testid="skills-library-error"
+					>
+						<span>{t("skillsLibrary.loadFailed")}</span>
+						<Button variant="outline" size="sm" onClick={handleRetrySkills}>
+							{t("skillsLibrary.retrySkills")}
+						</Button>
+					</div>
+				) : skillsStore.loading && skillsStore.list.length === 0 ? (
 					<div
 						className="flex items-center justify-center py-16"
 						data-testid="skills-library-loading"
@@ -383,7 +422,19 @@ function SkillsLibrary({
 				data-testid="skills-library-scroll-sentinel"
 			/>
 
-			{shouldShowLoadingMoreIndicator ? (
+			{skillsStore.loadingMoreError ? (
+				<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
+					<span>{t("skillsLibrary.loadFailed")}</span>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 px-2"
+						onClick={handleAutoLoadMore}
+					>
+						{t("skillsLibrary.retrySkills")}
+					</Button>
+				</div>
+			) : shouldShowLoadingMoreIndicator ? (
 				<div
 					className="flex items-center justify-center py-2"
 					data-testid="skills-library-loading-more"

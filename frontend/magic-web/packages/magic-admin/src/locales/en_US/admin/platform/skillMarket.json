@@ -5,7 +5,6 @@
 			"search": "Search"
 		},
 		"addButton": "Add Category",
-		"addChildButton": "Add Subcategory",
 		"addTitle": "Add Skill Category",
 		"columns": {
 			"name": "Category Name",
@@ -15,7 +14,6 @@
 		"editTitle": "Edit Skill Category",
 		"fields": {
 			"name": "Category Name",
-			"parent": "Parent Category",
 			"status": "Status"
 		},
 		"filters": {
@@ -25,7 +23,6 @@
 		"label": "Category",
 		"manageButton": "Categories",
 		"manageTitle": "Skill Category Management",
-		"root": "Top-level Category",
 		"status": {
 			"hidden": "Hidden",
 			"visible": "Visible"
@@ -43,7 +40,6 @@
 		"buttons": {
 			"confirm": "Import"
 		},
-		"createNew": "Create skill",
 		"defaultSource": "Official source",
 		"description": "Upload a .skill file, .zip archive, or Skill folder, complete the market information, and publish it. This entry is for manual admin imports only.",
 		"errors": {
@@ -67,12 +63,9 @@
 			"name": "Skill name",
 			"namePlaceholder": "Enter a skill name",
 			"notFeatured": "Not featured",
-			"offline": "Offline",
-			"published": "Published",
 			"sortOrder": "Sort order",
 			"source": "Source",
 			"sourcePlaceholder": "Enter a source (optional)",
-			"status": "Publish status",
 			"version": "Version",
 			"visible": "Visible"
 		},
@@ -82,7 +75,6 @@
 			"updated": "Official Skill updated"
 		},
 		"title": "Upload Official Skill",
-		"updateExisting": "Update existing skill",
 		"upload": {
 			"chooseFile": "Choose file",
 			"chooseFolder": "Choose folder",

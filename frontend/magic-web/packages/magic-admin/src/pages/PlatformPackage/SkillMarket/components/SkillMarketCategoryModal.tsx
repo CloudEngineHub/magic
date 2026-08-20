@@ -45,7 +45,6 @@ export const SkillMarketCategoryModal = memo(
 		})
 		const [formOpen, setFormOpen] = useState(false)
 		const [selectedRow, setSelectedRow] = useState<CategoryItem | null>(null)
-		const [initialParentId, setInitialParentId] = useState("0")
 		const [statusLoadingIds, setStatusLoadingIds] = useState<Set<string>>(new Set())
 		const [sortLoadingIds, setSortLoadingIds] = useState<Set<string>>(new Set())
 
@@ -104,6 +103,9 @@ export const SkillMarketCategoryModal = memo(
 					message.success(tCommon("message.updateSuccess"))
 					refresh()
 				})
+				.catch(() => {
+					message.error(tCommon("message.updateFailed"))
+				})
 				.finally(() => {
 					setStatusLoadingIds((prev) => {
 						const next = new Set(prev)
@@ -122,6 +124,9 @@ export const SkillMarketCategoryModal = memo(
 					message.success(tCommon("message.updateSuccess"))
 					refresh()
 				})
+				.catch(() => {
+					message.error(tCommon("message.updateFailed"))
+				})
 				.finally(() => {
 					setSortLoadingIds((prev) => {
 						const next = new Set(prev)
@@ -136,17 +141,20 @@ export const SkillMarketCategoryModal = memo(
 				open: true,
 				content: resolveSkillCategoryName(record),
 				onOk: () => {
-					PlatformPackageApi.deleteSkillMarketCategory(record.id).then(() => {
-						message.success(tCommon("message.deleteSuccess"))
-						refresh()
-					})
+					PlatformPackageApi.deleteSkillMarketCategory(record.id)
+						.then(() => {
+							message.success(tCommon("message.deleteSuccess"))
+							refresh()
+						})
+						.catch(() => {
+							message.error(tCommon("message.updateFailed"))
+						})
 				},
 			})
 		})
 
-		const openCreateForm = useMemoizedFn((parentId = "0") => {
+		const openCreateForm = useMemoizedFn(() => {
 			setSelectedRow(null)
-			setInitialParentId(parentId)
 			setFormOpen(true)
 		})
 
@@ -221,27 +229,16 @@ export const SkillMarketCategoryModal = memo(
 				{
 					title: tCommon("operate"),
 					key: "action",
-					width: 210,
+					width: 120,
 					fixed: "right",
 					render: (_, record) => (
 						<Flex align="center" gap={8}>
-							{String(record.parent_id ?? "0") === "0" ? (
-								<Button
-									type="link"
-									style={{ padding: 0 }}
-									disabled={!hasEditRight}
-									onClick={() => openCreateForm(record.id)}
-								>
-									{t("category.addChildButton")}
-								</Button>
-							) : null}
 							<Button
 								type="link"
 								style={{ padding: 0 }}
 								disabled={!hasEditRight}
 								onClick={() => {
 									setSelectedRow(record)
-									setInitialParentId(String(record.parent_id ?? "0"))
 									setFormOpen(true)
 								}}
 							>
@@ -341,7 +338,6 @@ export const SkillMarketCategoryModal = memo(
 						dataSource={data}
 						rowKey="id"
 						loading={loading}
-						expandable={{ defaultExpandAllRows: true }}
 						scroll={{ x: "max-content", y: 420 }}
 						pagination={false}
 					/>
@@ -350,8 +346,6 @@ export const SkillMarketCategoryModal = memo(
 					<SkillMarketCategoryFormModal
 						open={formOpen}
 						info={selectedRow}
-						categories={data}
-						initialParentId={initialParentId}
 						onCancel={() => setFormOpen(false)}
 						onOk={() => setFormOpen(false)}
 						onSuccess={() => refresh()}

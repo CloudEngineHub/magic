@@ -46,6 +46,8 @@ export class StoreSkillsStore {
 	isFeatured?: FeaturedFilter
 	loading = false
 	loadingMore = false
+	listError = false
+	loadingMoreError = false
 	featuredLoading = false
 	featuredError = false
 	categoriesLoading = false
@@ -94,6 +96,16 @@ export class StoreSkillsStore {
 		return this.fetchSkills({ page: 1, category_ids: categoryIds })
 	}
 
+	retrySkills() {
+		return this.fetchSkills({
+			page: 1,
+			keyword: toOptionalKeyword(this.keyword),
+			category_ids: this.categoryIds,
+			publisher_type: this.publisherType,
+			is_featured: this.isFeatured,
+		})
+	}
+
 	isAddingSkill(id: string) {
 		return this.addingSkillIds.has(id)
 	}
@@ -120,11 +132,13 @@ export class StoreSkillsStore {
 
 		this.fetchRequestId = requestId
 		this.loading = true
+		if (page === 1) this.listError = false
 
 		if (page === 1) {
 			this.list = []
 			this.page = 1
 			this.hasMore = true
+			this.loadingMoreError = false
 			// Align loadMore with in-flight search before response returns
 			this.keyword = keyword
 			this.categoryIds = categoryIds
@@ -153,11 +167,13 @@ export class StoreSkillsStore {
 				this.publisherType = publisherType
 				this.isFeatured = isFeatured
 				this.loading = false
+				this.listError = false
 			})
 		} catch (error) {
 			if (!isLatestPageRequest({ requestId, currentRequestId: this.fetchRequestId })) return
 			runInAction(() => {
 				this.loading = false
+				if (page === 1) this.listError = true
 			})
 			throw error
 		}
@@ -231,6 +247,7 @@ export class StoreSkillsStore {
 	async loadMore() {
 		if (this.loading || this.loadingMore || !this.hasMore) return
 		this.loadingMore = true
+		this.loadingMoreError = false
 		const nextPage = this.page + 1
 		const requestId = this.fetchRequestId
 
@@ -250,11 +267,13 @@ export class StoreSkillsStore {
 				this.pageSize = data.pageSize
 				this.hasMore = data.list.length >= data.pageSize
 				this.loadingMore = false
+				this.loadingMoreError = false
 			})
 		} catch (error) {
 			if (!isLatestPageRequest({ requestId, currentRequestId: this.fetchRequestId })) return
 			runInAction(() => {
 				this.loadingMore = false
+				this.loadingMoreError = true
 			})
 			throw error
 		}
@@ -323,6 +342,8 @@ export class StoreSkillsStore {
 		this.isFeatured = undefined
 		this.loading = false
 		this.loadingMore = false
+		this.listError = false
+		this.loadingMoreError = false
 		this.featuredLoading = false
 		this.featuredError = false
 		this.categoriesLoading = false

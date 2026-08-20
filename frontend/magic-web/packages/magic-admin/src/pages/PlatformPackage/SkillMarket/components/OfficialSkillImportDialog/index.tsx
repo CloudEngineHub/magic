@@ -9,7 +9,6 @@ import {
 	Select,
 	Spin,
 	Switch,
-	Tag,
 	Typography,
 	message,
 } from "antd"
@@ -54,10 +53,7 @@ type Category = PlatformPackage.SkillMarketCategoryItem
 
 export interface OfficialSkillImportDialogProps extends Omit<MagicModalProps, "onOk" | "onCancel"> {
 	onCancel?: () => void
-	onSuccess?: (
-		result: PlatformPackage.ImportOfficialSkillResponse,
-		context: { publishStatus: "OFFLINE" | "PUBLISHED" },
-	) => void | Promise<void>
+	onSuccess?: (result: PlatformPackage.ImportOfficialSkillResponse) => void | Promise<void>
 }
 
 type LocalizedFieldProps = {
@@ -86,17 +82,11 @@ function ensureLocalizedDefault(
 	return { ...value, default: defaultValue }
 }
 
-function flattenCategories(
-	categories: Category[],
-	depth = 0,
-): Array<{ label: string; value: string }> {
-	return categories.flatMap((category) => [
-		{
-			label: `${depth ? `${"　".repeat(depth)}└ ` : ""}${category.name_i18n?.zh_CN || category.name || category.id}`,
-			value: String(category.id),
-		},
-		...flattenCategories(category.children ?? [], depth + 1),
-	])
+function getCategoryOptions(categories: Category[]) {
+	return categories.map((category) => ({
+		label: category.name_i18n?.zh_CN || category.name || category.id,
+		value: String(category.id),
+	}))
 }
 
 function LocalizedField({
@@ -180,7 +170,7 @@ const OfficialSkillImportDialog = memo(
 			onProgress: (_, nextProgress) => setProgress(nextProgress),
 		})
 
-		const categoryOptions = useMemo(() => flattenCategories(categories), [categories])
+		const categoryOptions = useMemo(() => getCategoryOptions(categories), [categories])
 
 		const clearSelectedFile = useMemoizedFn(() => {
 			setFile(null)
@@ -244,7 +234,6 @@ const OfficialSkillImportDialog = memo(
 					),
 					logo: parsedResult.logo || "",
 					category_ids: [],
-					publish_status: "OFFLINE",
 					is_hidden: false,
 					is_featured: false,
 					sort_order: 0,
@@ -315,7 +304,7 @@ const OfficialSkillImportDialog = memo(
 					),
 					logo: values.logo?.trim() || undefined,
 					category_ids: (values.category_ids ?? []).map(String),
-					publish_status: values.publish_status,
+					publish_status: "PUBLISHED",
 					is_hidden: Boolean(values.is_hidden),
 					is_featured: Boolean(values.is_featured),
 					sort_order: Number(values.sort_order) || 0,
@@ -325,7 +314,7 @@ const OfficialSkillImportDialog = memo(
 						? t("officialSkillImport.success.updated")
 						: t("officialSkillImport.success.created"),
 				)
-				await onSuccess?.(result, { publishStatus: values.publish_status })
+				await onSuccess?.(result)
 				onCancel?.()
 			} catch (error) {
 				if ((error as { errorFields?: unknown })?.errorFields) {
@@ -470,11 +459,6 @@ const OfficialSkillImportDialog = memo(
 										{parsed.code}
 									</Typography.Paragraph>
 								</div>
-								<Tag color={parsed.is_update ? "gold" : "green"}>
-									{parsed.is_update
-										? t("officialSkillImport.updateExisting")
-										: t("officialSkillImport.createNew")}
-								</Tag>
 							</Flex>
 							<MagicForm form={form} layout="vertical" afterRequiredMask>
 								<LocalizedField
@@ -509,26 +493,6 @@ const OfficialSkillImportDialog = memo(
 									>
 										<MagicInput placeholder="1.0.0" maxLength={32} />
 									</Form.Item>
-									<Form.Item
-										label={t("officialSkillImport.fields.status")}
-										name="publish_status"
-										style={{ flex: 1 }}
-									>
-										<Select
-											options={[
-												{
-													label: t("officialSkillImport.fields.offline"),
-													value: "OFFLINE",
-												},
-												{
-													label: t(
-														"officialSkillImport.fields.published",
-													),
-													value: "PUBLISHED",
-												},
-											]}
-										/>
-									</Form.Item>
 								</Flex>
 								<Form.Item
 									label={t("officialSkillImport.fields.category")}
@@ -552,7 +516,7 @@ const OfficialSkillImportDialog = memo(
 										)}
 									/>
 								</Form.Item>
-								<Flex gap={12} wrap="wrap">
+								<Flex align="end" gap={12} wrap="wrap">
 									<Form.Item
 										name="is_hidden"
 										valuePropName="checked"
@@ -582,9 +546,9 @@ const OfficialSkillImportDialog = memo(
 									<Form.Item
 										label={t("officialSkillImport.fields.sortOrder")}
 										name="sort_order"
-										style={{ marginBottom: 0 }}
+										style={{ width: 220, marginBottom: 0 }}
 									>
-										<Input type="number" min={0} />
+										<Input type="number" min={0} style={{ width: "100%" }} />
 									</Form.Item>
 								</Flex>
 							</MagicForm>

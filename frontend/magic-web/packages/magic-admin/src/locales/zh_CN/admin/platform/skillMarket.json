@@ -5,7 +5,6 @@
 			"search": "搜索"
 		},
 		"addButton": "新增分类",
-		"addChildButton": "新增子分类",
 		"addTitle": "新增技能分类",
 		"columns": {
 			"name": "分类名称",
@@ -15,7 +14,6 @@
 		"editTitle": "编辑技能分类",
 		"fields": {
 			"name": "分类名称",
-			"parent": "上级分类",
 			"status": "显示状态"
 		},
 		"filters": {
@@ -25,7 +23,6 @@
 		"label": "所属分类",
 		"manageButton": "分类管理",
 		"manageTitle": "技能分类管理",
-		"root": "一级分类",
 		"status": {
 			"hidden": "隐藏",
 			"visible": "显示"
@@ -43,7 +40,6 @@
 		"buttons": {
 			"confirm": "确认导入"
 		},
-		"createNew": "新建技能",
 		"defaultSource": "官方来源",
 		"description": "上传 .skill、.zip 或 Skill 文件夹，解析后填写市场信息并发布，此入口仅用于后台手动导入",
 		"errors": {
@@ -67,12 +63,9 @@
 			"name": "技能名称",
 			"namePlaceholder": "请输入技能名称",
 			"notFeatured": "非精选",
-			"offline": "下线",
-			"published": "发布",
 			"sortOrder": "排序",
 			"source": "来源",
 			"sourcePlaceholder": "请输入来源（可选）",
-			"status": "发布状态",
 			"version": "版本号",
 			"visible": "显示"
 		},
@@ -82,7 +75,6 @@
 			"updated": "官方 Skill 更新成功"
 		},
 		"title": "上传官方 Skill",
-		"updateExisting": "更新已有技能",
 		"upload": {
 			"chooseFile": "选择文件",
 			"chooseFolder": "选择文件夹",
