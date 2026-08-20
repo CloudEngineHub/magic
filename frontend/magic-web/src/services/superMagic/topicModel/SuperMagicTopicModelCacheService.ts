@@ -526,7 +526,7 @@ class SuperMagicTopicModelCacheService {
 				// Clear all cache for current user
 				const key = this.genUserCacheKey()
 				await this.storageAdapter.removeItem(key)
-				logger.log("Cleared all cache for user")
+				logger.report("[Cache] Cleared all cache for user")
 				return
 			}
 
@@ -541,7 +541,7 @@ class SuperMagicTopicModelCacheService {
 				delete userCache.default
 				userCache.lastUpdated = Date.now()
 				await this.saveUserCache(userCache)
-				logger.log("Cleared default model cache")
+				logger.report("[Cache] Cleared default model cache")
 				return
 			}
 
@@ -566,13 +566,13 @@ class SuperMagicTopicModelCacheService {
 			// Clear specific scope
 			if (type === "topic") {
 				delete userCache.topics[id]
-				logger.log("Cleared topic cache", { topicId: id })
+				logger.report("[Cache] Cleared topic cache", { topicId: id })
 			} else if (type === "project") {
 				delete userCache.projects[id]
-				logger.log("Cleared project cache", { projectId: id })
+				logger.report("[Cache] Cleared project cache", { projectId: id })
 			} else if (type === "modeDefault") {
 				delete userCache.modeDefaults[id]
-				logger.log("Cleared mode default cache", { modeDefaultKey: id })
+				logger.report("[Cache] Cleared mode default cache", { modeDefaultKey: id })
 			} else {
 				logger.warn("Unknown scope type", { type, scope })
 				return
