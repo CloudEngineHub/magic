@@ -10,10 +10,9 @@ from typing import Any, Dict, Iterable, Optional, Union
 
 from loguru import logger
 
-
 MANIFEST_FILE_NAME = "template-assets.json"
-MAX_FILE_COUNT = 100
-MAX_DIRECTORY_SIZE_BYTES = 20 * 1024 * 1024
+MAX_FILE_COUNT = 500
+MAX_DIRECTORY_SIZE_BYTES = 200 * 1024 * 1024
 MAX_PREVIEW_IMAGE_COUNT = 50
 EXCLUDED_ARCHIVE_DIRECTORIES = {"previews", ".template-work"}
 EXCLUDED_ARCHIVE_FILES = {MANIFEST_FILE_NAME}
@@ -74,7 +73,7 @@ def _validate_directory_limits(template_dir: Path) -> tuple[int, int]:
 
     total_size = sum(path.stat().st_size for path in files)
     if total_size > MAX_DIRECTORY_SIZE_BYTES:
-        raise ValueError("Slide template directory may be at most 20 MB.")
+        raise ValueError("Slide template directory may be at most 200 MB.")
     return len(files), total_size
 
 

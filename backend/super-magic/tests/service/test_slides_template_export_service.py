@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from app.service.slides_template_export_service import export_slides_template
+from app.service.slides_template_export_service import (
+    MAX_DIRECTORY_SIZE_BYTES,
+    MAX_FILE_COUNT,
+    MAX_PREVIEW_IMAGE_COUNT,
+    _preview_paths,
+    _validate_directory_limits,
+    export_slides_template,
+)
 
 
 def _write_manifest(template_dir: Path, thumbnail: str = "previews/thumbnail.png") -> None:
@@ -52,6 +59,51 @@ def _create_template(tmp_path: Path) -> Path:
     _write_manifest(template_dir)
     (template_dir / "template-assets.js").write_text("window.assets = {};", encoding="utf-8")
     return template_dir
+
+
+def test_template_directory_size_limit_is_200_mb(tmp_path):
+    template_dir = tmp_path / "SLIDE-large-template"
+    template_dir.mkdir()
+    payload = template_dir / "payload.bin"
+
+    with payload.open("wb") as file:
+        file.truncate(200 * 1024 * 1024)
+    assert MAX_DIRECTORY_SIZE_BYTES == 200 * 1024 * 1024
+    assert _validate_directory_limits(template_dir) == (1, 200 * 1024 * 1024)
+
+    with payload.open("r+b") as file:
+        file.truncate(200 * 1024 * 1024 + 1)
+    with pytest.raises(ValueError, match="at most 200 MB"):
+        _validate_directory_limits(template_dir)
+
+
+def test_template_directory_file_count_limit_is_500(tmp_path):
+    template_dir = tmp_path / "SLIDE-many-files"
+    template_dir.mkdir()
+    for index in range(500):
+        (template_dir / f"asset-{index}.bin").touch()
+
+    assert MAX_FILE_COUNT == 500
+    assert _validate_directory_limits(template_dir) == (500, 0)
+
+    (template_dir / "asset-500.bin").touch()
+    with pytest.raises(ValueError, match="at most 500 files"):
+        _validate_directory_limits(template_dir)
+
+
+def test_preview_image_limit_remains_50():
+    manifest = {
+        "local_files": {
+            "preview_images": [f"previews/slide-{index}.png" for index in range(50)],
+        },
+    }
+
+    assert MAX_PREVIEW_IMAGE_COUNT == 50
+    assert len(_preview_paths(manifest)) == 50
+
+    manifest["local_files"]["preview_images"].append("previews/slide-50.png")
+    with pytest.raises(ValueError, match="at most 50 preview images"):
+        _preview_paths(manifest)
 
 
 @pytest.mark.asyncio

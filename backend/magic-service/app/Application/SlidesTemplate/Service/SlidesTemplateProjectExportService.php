@@ -24,6 +24,7 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
 use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
@@ -155,9 +156,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                     'code' => $code,
                     'message' => $response->getMessage(),
                 ]);
-                ExceptionBuilder::throw(
-                    SlidesTemplateErrorCode::PROJECT_TEMPLATE_EXPORT_FAILED,
-                );
+                $this->throwSandboxFailure($response->getMessage());
             }
 
             // 将导出器返回的文件 key 和元数据转换成模板发布接口统一的结果结构。
@@ -193,6 +192,9 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
+            if ($throwable instanceof SandboxOperationException) {
+                $this->throwSandboxFailure($throwable->getMessage(), $throwable);
+            }
             throw $throwable;
         }
     }
@@ -329,6 +331,18 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
         $this->topicDomainService->updateTopicStatusAndSandboxId($topic->getId(), $task->getId(), TaskStatus::FINISHED, $sandboxId);
         $this->taskDomainService->updateTaskStatus(TaskStatus::FINISHED, $task->getId(), (string) $task->getId(), $sandboxId);
         return $sandboxId;
+    }
+
+    /**
+     * 将 Sandbox 错误统一转换为模板导出业务错误，同时保留原始消息和异常链。
+     */
+    private function throwSandboxFailure(string $message, ?Throwable $throwable = null): never
+    {
+        ExceptionBuilder::throw(
+            SlidesTemplateErrorCode::PROJECT_TEMPLATE_EXPORT_FAILED,
+            trim($message),
+            throwable: $throwable,
+        );
     }
 
     /**
