@@ -345,4 +345,39 @@ describe("useContextMenu slide template actions", () => {
 		expect(keys).not.toContain("saveSlidesTemplate")
 		expect(keys).not.toContain("convertToSlidesTemplate")
 	})
+
+	it.each(["ppt", "pptx", "potx"])("shows convert for a %s file", (extension) => {
+		const handleConvertToSlidesTemplate = vi.fn()
+		const file: AttachmentItem = {
+			file_id: `deck.${extension}`,
+			name: `deck.${extension}`,
+			file_extension: extension,
+			is_directory: false,
+		}
+		const { result } = renderHook(() =>
+			useContextMenu(createOptions({ handleConvertToSlidesTemplate })),
+		)
+
+		const items = result.current.getMenuItems(file)
+		expect(getMenuKeys(items)).toContain("convertToSlidesTemplate")
+		expect(getMenuGroups(items)).toContainEqual(["convertToSlidesTemplate"])
+		items.find((item) => item?.key === "convertToSlidesTemplate")?.onClick?.({} as never)
+		expect(handleConvertToSlidesTemplate).toHaveBeenCalledWith(file)
+	})
+
+	it("does not show convert for a non-presentation file", () => {
+		const { result } = renderHook(() =>
+			useContextMenu(createOptions({ handleConvertToSlidesTemplate: vi.fn() })),
+		)
+
+		const keys = getMenuKeys(
+			result.current.getMenuItems({
+				file_id: "notes-1",
+				name: "notes.txt",
+				file_extension: "txt",
+				is_directory: false,
+			}),
+		)
+		expect(keys).not.toContain("convertToSlidesTemplate")
+	})
 })

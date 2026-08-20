@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "../../hooks/types"
-import { isSlidesTemplateFolder } from "../slides-template-folder"
+import { isConvertiblePresentationFile, isSlidesTemplateFolder } from "../slides-template-folder"
 
 function createStandardTemplate(overrides: Partial<AttachmentItem> = {}): AttachmentItem {
 	return {
@@ -68,5 +68,50 @@ describe("isSlidesTemplateFolder", () => {
 
 		expect(item.children).toBe(originalChildren)
 		expect(item.children?.map((child) => child.name)).toEqual(originalNames)
+	})
+})
+
+describe("isConvertiblePresentationFile", () => {
+	it.each(["ppt", "pptx", "potx", ".PPTX"])("recognizes %s via file_extension", (extension) => {
+		expect(
+			isConvertiblePresentationFile({
+				file_id: "deck-1",
+				name: "deck",
+				file_extension: extension,
+				is_directory: false,
+			}),
+		).toBe(true)
+	})
+
+	it.each(["deck.ppt", "deck.pptx", "templates/brand.potx"])(
+		"recognizes %s via file name when extension is missing",
+		(name) => {
+			expect(
+				isConvertiblePresentationFile({
+					file_id: "deck-1",
+					name,
+					is_directory: false,
+				}),
+			).toBe(true)
+		},
+	)
+
+	it("rejects directories and other file types", () => {
+		expect(
+			isConvertiblePresentationFile({
+				file_id: "folder-1",
+				name: "deck.pptx",
+				is_directory: true,
+			}),
+		).toBe(false)
+		expect(
+			isConvertiblePresentationFile({
+				file_id: "notes-1",
+				name: "notes.txt",
+				file_extension: "txt",
+				is_directory: false,
+			}),
+		).toBe(false)
+		expect(isConvertiblePresentationFile(undefined)).toBe(false)
 	})
 })

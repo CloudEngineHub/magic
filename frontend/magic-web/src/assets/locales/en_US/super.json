@@ -4055,6 +4055,7 @@
 		"selectMode": "Select Mode"
 	},
 	"mySlidesTemplates": {
+		"convertFilePrompt": "Please convert this file into a reusable slide template.",
 		"convertPrompt": "Please convert this folder into a reusable slide template.",
 		"empty": {
 			"created": {

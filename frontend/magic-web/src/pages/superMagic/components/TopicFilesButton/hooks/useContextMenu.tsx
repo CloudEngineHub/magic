@@ -50,7 +50,10 @@ import {
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 } from "../utils/canvasProjectOperationRisk"
-import { isSlidesTemplateFolder } from "../utils/slides-template-folder"
+import {
+	isConvertiblePresentationFile,
+	isSlidesTemplateFolder,
+} from "../utils/slides-template-folder"
 
 type MenuItem = TopicFilesMenuItem
 
@@ -113,7 +116,7 @@ interface UseContextMenuOptions {
 	attachments?: AttachmentItem[]
 	/** Desktop-only action for a recognized standard slide template folder. */
 	handleSaveSlidesTemplate?: (item: AttachmentItem) => void
-	/** Desktop-only action for converting an existing slide project folder. */
+	/** Desktop-only action for converting a slide folder or PPT/PPTX/POTX file. */
 	handleConvertToSlidesTemplate?: (item: AttachmentItem) => void
 }
 
@@ -148,6 +151,19 @@ function mapDownloadMenuToContextItems(
 			? mapDownloadMenuToContextItems(entry.children, options)
 			: undefined,
 	}))
+}
+
+function createConvertToSlidesTemplateMenuItem(
+	item: AttachmentItem,
+	onConvert: (item: AttachmentItem) => void,
+	label: string,
+): MenuItem {
+	return {
+		key: "convertToSlidesTemplate",
+		label,
+		icon: <Presentation className="size-4" aria-hidden="true" data-testid="ppt-menu-icon" />,
+		onClick: () => onConvert(item),
+	}
 }
 
 /** Append download entries from the shared builder onto a context menu list. */
@@ -504,18 +520,11 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							onClick: () => handleSaveSlidesTemplate(item),
 						}
 					: item.display_config?.type === "slide" && handleConvertToSlidesTemplate
-						? {
-								key: "convertToSlidesTemplate",
-								label: t("topicFiles.contextMenu.convertToSlidesTemplate"),
-								icon: (
-									<Presentation
-										className="size-4"
-										aria-hidden="true"
-										data-testid="ppt-menu-icon"
-									/>
-								),
-								onClick: () => handleConvertToSlidesTemplate(item),
-							}
+						? createConvertToSlidesTemplateMenuItem(
+								item,
+								handleConvertToSlidesTemplate,
+								t("topicFiles.contextMenu.convertToSlidesTemplate"),
+							)
 						: undefined
 				: undefined
 			const folderEntry =
@@ -819,6 +828,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 
 			return normalizeMenuItems(filterMenuItems?.(menuItems, item) || menuItems)
 		} else {
+			const convertPresentationMenuItem: MenuItem | undefined =
+				!isMobile && handleConvertToSlidesTemplate && isConvertiblePresentationFile(item)
+					? createConvertToSlidesTemplateMenuItem(
+							item,
+							handleConvertToSlidesTemplate,
+							t("topicFiles.contextMenu.convertToSlidesTemplate"),
+						)
+					: undefined
 			// 文件菜单
 			menuItems.push(
 				{
@@ -827,6 +844,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					icon: <MagicIcon component={IconOpenWindow} stroke={2} size={18} />,
 					onClick: () => handleOpenFile(item),
 				},
+				...(convertPresentationMenuItem
+					? [{ type: "divider" as const }, convertPresentationMenuItem]
+					: []),
 				{ type: "divider" as const },
 				{
 					key: "rename",

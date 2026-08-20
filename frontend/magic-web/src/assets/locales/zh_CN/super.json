@@ -4055,6 +4055,7 @@
 		"selectMode": "选择模式"
 	},
 	"mySlidesTemplates": {
+		"convertFilePrompt": "请将这个文件转化为可复用的 PPT 模板。",
 		"convertPrompt": "请将这个文件夹转化为可复用的 PPT 模板。",
 		"empty": {
 			"created": {

@@ -5,7 +5,11 @@ import { buildConvertToSlidesTemplatePayload } from "../slidesTemplateActions"
 
 vi.mock("i18next", () => ({
 	default: {
-		t: vi.fn(() => "请将这个文件夹转化为可复用的 PPT 模板。"),
+		t: vi.fn((key: string) =>
+			key === "mySlidesTemplates.convertFilePrompt"
+				? "请将这个文件转化为可复用的 PPT 模板。"
+				: "请将这个文件夹转化为可复用的 PPT 模板。",
+		),
 	},
 }))
 
@@ -40,6 +44,41 @@ describe("buildConvertToSlidesTemplatePayload", () => {
 		expect(paragraph?.content?.[1]).toMatchObject({
 			type: "text",
 			text: " 请将这个文件夹转化为可复用的 PPT 模板。",
+		})
+	})
+
+	it("creates a PPT topic and sends a file mention for PPTX/POTX sources", () => {
+		const payload = buildConvertToSlidesTemplatePayload({
+			file_id: "file-1",
+			file_name: "Brand.potx",
+			file_extension: "potx",
+			is_directory: false,
+			relative_file_path: "/Brand.potx",
+		})
+
+		expect(payload.topicMode).toBe(TopicMode.PPT)
+		expect(payload.afterCreate?.mentionItems).toEqual([
+			{
+				type: "mention",
+				attrs: expect.objectContaining({
+					type: MentionItemType.PROJECT_FILE,
+					data: expect.objectContaining({
+						file_id: "file-1",
+						file_name: "Brand.potx",
+						file_extension: "potx",
+					}),
+				}),
+			},
+		])
+
+		const paragraph = payload.afterCreate?.content.content?.[0]
+		expect(paragraph?.content?.[0]).toMatchObject({
+			type: "mention",
+			attrs: { type: MentionItemType.PROJECT_FILE },
+		})
+		expect(paragraph?.content?.[1]).toMatchObject({
+			type: "text",
+			text: " 请将这个文件转化为可复用的 PPT 模板。",
 		})
 	})
 })
