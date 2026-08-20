@@ -568,6 +568,7 @@ export class FrameManager {
 
 		// 收集所有需要释放的子元素
 		const elementsToRelease: Array<{ element: FrameElement; children: LayerElement[] }> = []
+		const emptyFrameElements: FrameElement[] = []
 
 		frameElements.forEach((frameElement) => {
 			if (frameElement.children && frameElement.children.length > 0) {
@@ -575,10 +576,12 @@ export class FrameManager {
 					element: frameElement,
 					children: frameElement.children,
 				})
+			} else {
+				emptyFrameElements.push(frameElement)
 			}
 		})
 
-		if (elementsToRelease.length === 0) {
+		if (elementsToRelease.length === 0 && emptyFrameElements.length === 0) {
 			return []
 		}
 
@@ -595,6 +598,14 @@ export class FrameManager {
 		}> = []
 
 		try {
+			emptyFrameElements.forEach((frameElement) => {
+				this.canvas.elementManager.delete(frameElement.id)
+				this.canvas.eventEmitter.emit({
+					type: "frame:removed",
+					data: { frameId: frameElement.id },
+				})
+			})
+
 			elementsToRelease.forEach(({ element: frameElement, children }) => {
 				const frameX = frameElement.x ?? 0
 				const frameY = frameElement.y ?? 0

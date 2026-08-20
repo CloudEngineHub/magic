@@ -139,6 +139,173 @@ describe("FrameManager frame creation", () => {
 	})
 })
 
+describe("FrameManager frame removal", () => {
+	it("deletes an empty frame when removing its frame wrapper", () => {
+		const frame: LayerElement = {
+			id: "empty-frame",
+			type: "frame",
+			x: 100,
+			y: 200,
+			width: 300,
+			height: 200,
+			children: [],
+			activeContentId: "empty-frame-content",
+			mainContentId: "empty-frame-content",
+			contents: [{ contentId: "empty-frame-content" }],
+		}
+		const deleteElement = vi.fn()
+		const emit = vi.fn()
+		const canvas = {
+			readonly: false,
+			eventEmitter: {
+				on: vi.fn(() => vi.fn()),
+				emit,
+			},
+			selectionManager: {
+				getSelectedIds: vi.fn(() => ["empty-frame"]),
+			},
+			permissionManager: {
+				canRemoveFrame: vi.fn(() => true),
+			},
+			historyManager: {
+				disable: vi.fn(),
+				enable: vi.fn(),
+				recordHistoryImmediate: vi.fn(),
+			},
+			elementManager: {
+				getElementData: vi.fn(() => frame),
+				delete: deleteElement,
+			},
+		} as unknown as Canvas
+		const manager = new FrameManager({ canvas })
+
+		expect(manager.removeFrame()).toEqual([])
+		expect(deleteElement).toHaveBeenCalledWith("empty-frame")
+		expect(emit).toHaveBeenCalledWith({
+			type: "frame:removed",
+			data: { frameId: "empty-frame" },
+		})
+		expect(canvas.historyManager.disable).toHaveBeenCalledOnce()
+		expect(canvas.historyManager.recordHistoryImmediate).toHaveBeenCalledOnce()
+	})
+})
+
+describe("FrameManager frame creation", () => {
+	it("expands the created frame bounds without moving selected content", () => {
+		const elements = new Map<string, LayerElement>([
+			[
+				"first",
+				{
+					id: "first",
+					type: "rectangle",
+					x: 100,
+					y: 200,
+					width: 100,
+					height: 50,
+					zIndex: 1,
+					activeContentId: "first-content",
+					mainContentId: "first-content",
+					contents: [{ contentId: "first-content" }],
+				},
+			],
+			[
+				"second",
+				{
+					id: "second",
+					type: "rectangle",
+					x: 250,
+					y: 260,
+					width: 80,
+					height: 40,
+					zIndex: 2,
+					activeContentId: "second-content",
+					mainContentId: "second-content",
+					contents: [{ contentId: "second-content" }],
+				},
+			],
+		])
+		const contentLayer = new Konva.Group()
+		const nodes = new Map<string, Konva.Group>([
+			["first", new Konva.Group({ id: "first", x: 100, y: 200 })],
+			["second", new Konva.Group({ id: "second", x: 250, y: 260 })],
+		])
+		contentLayer.add(nodes.get("first")!, nodes.get("second")!)
+
+		let createdFrameData: LayerElement | undefined
+		const update = vi.fn()
+		const emit = vi.fn()
+		const frameLayer = { batchDraw: vi.fn() } as unknown as Konva.Layer
+		const canvas = {
+			contentLayer,
+			readonly: false,
+			eventEmitter: {
+				on: vi.fn(() => vi.fn()),
+				emit,
+			},
+			transformManager: { rebaseActiveDragNodePositions: vi.fn() },
+			selectionManager: {
+				getSelectedIds: vi.fn(() => ["first", "second"]),
+				select: vi.fn(),
+			},
+			permissionManager: {
+				canAddToFrame: vi.fn(() => true),
+			},
+			historyManager: {
+				disable: vi.fn(),
+				enable: vi.fn(),
+				recordHistoryImmediate: vi.fn(),
+			},
+			elementManager: {
+				getElementData: vi.fn((id: string) => elements.get(id)),
+				create: vi.fn((elementData: LayerElement) => {
+					createdFrameData = elementData
+					const frameNode = new Konva.Group({
+						id: elementData.id,
+						x: elementData.x,
+						y: elementData.y,
+					})
+					vi.spyOn(frameNode, "getLayer").mockReturnValue(frameLayer)
+					nodes.set(elementData.id, frameNode)
+					contentLayer.add(frameNode)
+				}),
+				delete: vi.fn(),
+				update,
+				getElementInstance: vi.fn(() => undefined),
+				getNodeAdapter: vi.fn(() => ({
+					getNodeForParenting: vi.fn((id: string) => nodes.get(id) ?? null),
+				})),
+			},
+		} as unknown as Canvas
+		const manager = new FrameManager({ canvas })
+
+		const frameId = manager.createFrame(24)
+
+		expect(createdFrameData).toEqual(
+			expect.objectContaining({
+				id: frameId,
+				type: "frame",
+				x: 76,
+				y: 176,
+				width: 278,
+				height: 148,
+				children: [],
+			}),
+		)
+		expect(nodes.get("first")?.position()).toEqual({ x: 24, y: 24 })
+		expect(nodes.get("second")?.position()).toEqual({ x: 174, y: 84 })
+		expect(update).toHaveBeenCalledWith(
+			frameId,
+			expect.objectContaining({
+				children: [
+					expect.objectContaining({ id: "second", x: 174, y: 84 }),
+					expect.objectContaining({ id: "first", x: 24, y: 24 }),
+				],
+			}),
+		)
+		expect(emit).toHaveBeenCalledWith({ type: "frame:created", data: { frameId } })
+	})
+})
+
 describe("FrameManager drag stacking", () => {
 	it("temporarily raises a root element above higher-level frames while dragging", () => {
 		const element: LayerElement = {
