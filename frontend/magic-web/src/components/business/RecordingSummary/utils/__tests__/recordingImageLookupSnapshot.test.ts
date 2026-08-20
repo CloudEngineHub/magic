@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
+	findRecordingImagesFolderId,
 	getVisibleRecordingAttachmentTree,
 	selectRecordingImageLookupTree,
 	shouldMarkRecordingAttachmentsReady,
@@ -121,5 +122,46 @@ describe("getVisibleRecordingAttachmentTree", () => {
 		expect(visibleTree).toHaveLength(1)
 		expect(visibleTree[0].file_id).toBe("docs")
 		expect(visibleTree[0].children?.map((item) => item.file_id)).toEqual(["readme"])
+	})
+})
+
+describe("findRecordingImagesFolderId", () => {
+	it("matches the folder by parent id and name", () => {
+		const tree = [
+			attachment({
+				file_id: "session",
+				file_name: "session",
+				is_hidden: true,
+				children: [
+					attachment({
+						file_id: "wrong-images",
+						file_name: "images",
+						is_directory: true,
+						parent_id: "other-session",
+					}),
+					attachment({
+						file_id: "recording-images",
+						file_name: "images",
+						is_directory: true,
+						parent_id: "session",
+					}),
+				],
+			}),
+		]
+
+		expect(findRecordingImagesFolderId(tree, "session", "images")).toBe("recording-images")
+	})
+
+	it("does not fall back to a same-named folder under another parent", () => {
+		const tree = [
+			attachment({
+				file_id: "wrong-images",
+				file_name: "images",
+				is_directory: true,
+				parent_id: "other-session",
+			}),
+		]
+
+		expect(findRecordingImagesFolderId(tree, "session", "images")).toBeUndefined()
 	})
 })

@@ -1,5 +1,9 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import { removeHiddenAttachmentItems } from "@/pages/superMagic/utils/projectAttachments/treeUtils"
+import {
+	getAttachmentName,
+	normalizeAttachmentId,
+	removeHiddenAttachmentItems,
+} from "@/pages/superMagic/utils/projectAttachments/treeUtils"
 
 interface RecordingAttachmentsReadyInput {
 	treeLength: number
@@ -46,6 +50,34 @@ export function shouldMarkRecordingAttachmentsReady(
  */
 export function getVisibleRecordingAttachmentTree(tree: AttachmentItem[]): AttachmentItem[] {
 	return removeHiddenAttachmentItems(tree)
+}
+
+/** Finds the images directory by both its parent directory and its name. */
+export function findRecordingImagesFolderId(
+	tree: AttachmentItem[],
+	parentId: string,
+	folderName: string,
+): string | undefined {
+	const expectedParentId = normalizeAttachmentId(parentId)
+	const stack = [...tree]
+
+	while (stack.length > 0) {
+		const item = stack.pop()
+		if (!item) continue
+
+		if (
+			item.is_directory &&
+			normalizeAttachmentId(item.parent_id) === expectedParentId &&
+			getAttachmentName(item) === folderName &&
+			item.file_id
+		) {
+			return item.file_id
+		}
+
+		if (item.children?.length) stack.push(...item.children)
+	}
+
+	return undefined
 }
 
 /**
