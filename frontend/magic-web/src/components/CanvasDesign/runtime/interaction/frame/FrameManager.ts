@@ -374,7 +374,7 @@ export class FrameManager {
 	/**
 	 * 创建画框
 	 * 将选中的元素组合成一个画框
-	 * @param boundsExpansion - 显式覆盖默认边距；省略时边距为新画框长边的 5%
+	 * @param boundsExpansion - 显式覆盖默认边距；省略时边距为内容短边的 5%
 	 * @returns 创建的画框 ID，如果创建失败返回 null
 	 */
 	public createFrame(boundsExpansion?: number): string | null {

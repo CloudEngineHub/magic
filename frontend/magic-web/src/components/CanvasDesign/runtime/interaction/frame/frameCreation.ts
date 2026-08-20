@@ -24,22 +24,15 @@ interface CreateContentFrameDataOptions extends ContentFrameSize {
 	padding?: number
 }
 
-/**
- * 画框四周 padding 默认占最终画框长边的 5%。
- * 设内容长边为 L、padding 为 P，则 L + 2P 为画框长边，P = 5% * (L + 2P)，因此 P = L / 18。
- */
+/** 画框四周 padding 默认取内容短边的 5%。 */
 export function resolveFrameContentLayout(
 	size: ContentFrameSize,
 	options: { padding?: number } = {},
 ): FrameContentLayout {
 	const contentWidth = Math.max(0, size.width)
 	const contentHeight = Math.max(0, size.height)
-	const contentLongEdge = Math.max(contentWidth, contentHeight)
-	const padding = Math.max(
-		0,
-		options.padding ??
-			(contentLongEdge * FRAME_CONTENT_PADDING_RATIO) / (1 - FRAME_CONTENT_PADDING_RATIO * 2),
-	)
+	const contentShortEdge = Math.min(contentWidth, contentHeight)
+	const padding = Math.max(0, options.padding ?? contentShortEdge * FRAME_CONTENT_PADDING_RATIO)
 
 	return {
 		padding,

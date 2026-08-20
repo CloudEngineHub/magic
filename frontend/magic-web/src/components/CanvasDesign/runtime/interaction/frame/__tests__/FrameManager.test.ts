@@ -6,7 +6,7 @@ import { FrameManager } from "../FrameManager"
 import { resolveFrameContentLayout } from "../frameCreation"
 
 describe("FrameManager frame creation", () => {
-	it("uses 5% of the final frame long edge as the default padding", () => {
+	it("uses 5% of the content short edge as the default padding", () => {
 		const elements = new Map<string, LayerElement>([
 			[
 				"first",
@@ -102,27 +102,27 @@ describe("FrameManager frame creation", () => {
 				children: [],
 			}),
 		)
-		expect(createdFrameData?.x).toBeCloseTo(87.2222222)
-		expect(createdFrameData?.y).toBeCloseTo(187.2222222)
-		expect(createdFrameData?.width).toBeCloseTo(255.5555556)
-		expect(createdFrameData?.height).toBeCloseTo(125.5555556)
-		expect(nodes.get("first")?.position().x).toBeCloseTo(12.7777778)
-		expect(nodes.get("first")?.position().y).toBeCloseTo(12.7777778)
-		expect(nodes.get("second")?.position().x).toBeCloseTo(162.7777778)
-		expect(nodes.get("second")?.position().y).toBeCloseTo(72.7777778)
+		expect(createdFrameData?.x).toBeCloseTo(95)
+		expect(createdFrameData?.y).toBeCloseTo(195)
+		expect(createdFrameData?.width).toBeCloseTo(240)
+		expect(createdFrameData?.height).toBeCloseTo(110)
+		expect(nodes.get("first")?.position().x).toBeCloseTo(5)
+		expect(nodes.get("first")?.position().y).toBeCloseTo(5)
+		expect(nodes.get("second")?.position().x).toBeCloseTo(155)
+		expect(nodes.get("second")?.position().y).toBeCloseTo(65)
 		expect(update).toHaveBeenCalledWith(
 			frameId,
 			expect.objectContaining({
 				children: [
 					expect.objectContaining({
 						id: "second",
-						x: expect.closeTo(162.7777778),
-						y: expect.closeTo(72.7777778),
+						x: expect.closeTo(155),
+						y: expect.closeTo(65),
 					}),
 					expect.objectContaining({
 						id: "first",
-						x: expect.closeTo(12.7777778),
-						y: expect.closeTo(12.7777778),
+						x: expect.closeTo(5),
+						y: expect.closeTo(5),
 					}),
 				],
 			}),
@@ -132,9 +132,9 @@ describe("FrameManager frame creation", () => {
 
 	it("uses the content height when it is the long edge", () => {
 		expect(resolveFrameContentLayout({ width: 100, height: 200 })).toEqual({
-			padding: 200 / 18,
-			width: 100 + (200 / 18) * 2,
-			height: 200 + (200 / 18) * 2,
+			padding: 5,
+			width: 110,
+			height: 210,
 		})
 	})
 })
