@@ -489,10 +489,17 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		(item: ReferenceResourcePanelItem, context?: ReferenceResourcePanelSelectContext) => {
 			const selectedSlot = config.selectedResourceSlot
 			if (!selectedSlot) return
+			const selectedReferenceAssetType =
+				selectedSlot.inputTab === "reference"
+					? selectedSlot.referenceAssetKinds?.length === 1
+						? selectedSlot.referenceAssetKinds[0]
+						: selectedSlot.referenceAssetKind
+					: undefined
 			const nextFileInfo = {
 				path: item.data.file_path,
 				src: item.data.file_path,
 				fileName: item.data.file_name,
+				...(selectedReferenceAssetType ? { assetType: selectedReferenceAssetType } : {}),
 			}
 			const targetSlotIndex =
 				selectedSlot.path || !context?.batch

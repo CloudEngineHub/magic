@@ -10,6 +10,7 @@ import {
 	resolveInitialLinkedEditorAssociation,
 	type LinkedEditorMediaPolicyStatus,
 } from "./resolveInitialLinkedEditorAssociation"
+import type { ReferenceResourceMetadataCandidate } from "../message/reference-assets/referenceResourceDescriptor"
 
 interface UseLinkedMediaAssociationControllerOptions {
 	targetElementId: string
@@ -21,6 +22,7 @@ interface UseLinkedMediaAssociationControllerOptions {
 		paths: string[],
 		currentPrompt: string,
 		context: MessageEditorMentionChangeContext,
+		metadataCandidates?: readonly ReferenceResourceMetadataCandidate[],
 	) => void
 	resolveResourceReference?: ResolveCanvasResourceReference
 }
@@ -55,6 +57,7 @@ export function useLinkedMediaAssociationController(
 	const {
 		connectedSourceElementIds,
 		mediaItems,
+		activeMediaReferences = [],
 		setTextConnectionSelected,
 		textConnections,
 		canSelectMediaConnection,
@@ -103,12 +106,21 @@ export function useLinkedMediaAssociationController(
 			// A: sync 不得驱动 protected/参考图生命周期（空 mention 被 reconcile 补齐后会误 unprotect）。
 			// B: 即便后续扩展 sync 回调，也只能传编辑器真实 mention paths，不能传 reconcile 补齐结果。
 			if (context.source === "user") {
-				onReadyMentionChange?.(paths, currentPrompt, context)
+				const metadataCandidates = activeMediaReferences.map((reference) => ({
+					path: reference.path,
+					assetType: reference.kind,
+				}))
+				if (metadataCandidates.length > 0) {
+					onReadyMentionChange?.(paths, currentPrompt, context, metadataCandidates)
+				} else {
+					onReadyMentionChange?.(paths, currentPrompt, context)
+				}
 			}
 			return true
 		},
 		[
 			mediaPolicy?.manualReferences,
+			activeMediaReferences,
 			onReadyMentionChange,
 			resolveResourceReference,
 			targetElementId,

@@ -10,7 +10,7 @@ import {
 } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MessageEditorMentionChangeContext } from "./MessageEditor"
 import { reconcileMentionPathsWithPersistedReferences } from "./mentionPathReconciliation"
-import { reconcileOpaqueAssetProtectedReferencePaths } from "./reference-assets/referenceBinding"
+import { reconcileProtectedReferencePaths } from "./reference-assets/referenceBinding"
 
 interface UseMentionSyncOptions {
 	canvas: Canvas | null
@@ -82,7 +82,7 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
-			const effectiveProtectedReferencePaths = reconcileOpaqueAssetProtectedReferencePaths({
+			const effectiveProtectedReferencePaths = reconcileProtectedReferencePaths({
 				referenceFileInfos: currentInfos,
 				protectedReferencePaths,
 				currentPrompt,

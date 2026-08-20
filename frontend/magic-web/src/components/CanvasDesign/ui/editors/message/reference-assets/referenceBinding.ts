@@ -6,10 +6,10 @@ import {
 import {
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
-	isOpaqueAssetReference,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import { getMatchablePathsFromValue, promptContainsMentionForFile } from "../tiptap/contentUtils"
+import { createReferenceResourceDescriptor } from "./referenceResourceDescriptor"
 
 export type ReferenceBindingMode = "prompt-linked" | "detached-legacy" | "mixed"
 
@@ -25,8 +25,11 @@ export interface ReferenceBindingState {
 	protectedReferencePaths: string[]
 }
 
-function resolveAssetType(info: ReferenceBindingResourceInfo): PromptPlaceholderTokenKind {
-	return info.assetType ?? "image"
+function resolveAssetType(
+	info: ReferenceBindingResourceInfo,
+	defaultAssetType?: PromptPlaceholderTokenKind,
+): PromptPlaceholderTokenKind | undefined {
+	return info.assetType ?? defaultAssetType
 }
 
 function buildPromptMatchableItems(referenceFileInfos: ReferenceBindingResourceInfo[]) {
@@ -64,14 +67,13 @@ function promptContainsReferenceMention(
 }
 
 /**
- * Preserve opaque assets during prompt reconciliation without masking explicit user deletion.
+ * Preserve detached references during prompt reconciliation without masking explicit user deletion.
  *
  * Existing protected references remain detached unless a user edit removes a mention that was
- * present in the previous prompt. An opaque asset that is not yet protected is added only when
- * it is currently mentioned or has not previously been mentioned, which covers legacy data and
- * parser re-syncs without turning every missing path into a permanent resource.
+ * present in the previous prompt. Opaque resources are identified by the shared resource
+ * descriptor rather than by filename/extension assumptions.
  */
-export function reconcileOpaqueAssetProtectedReferencePaths(params: {
+export function reconcileProtectedReferencePaths(params: {
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	protectedReferencePaths: string[]
 	currentPrompt?: string
@@ -113,8 +115,14 @@ export function reconcileOpaqueAssetProtectedReferencePaths(params: {
 	}
 
 	for (const info of referenceFileInfos) {
-		if (!isOpaqueAssetReference(info.path)) continue
-		const identity = getCanvasResourceReferenceIdentity(info.path, resolveResourceReference)
+		const descriptor = createReferenceResourceDescriptor({
+			path: info.path,
+			fileName: info.fileName,
+			assetType: info.assetType,
+			resolveResourceReference,
+		})
+		if (!descriptor || descriptor.resourceKind !== "opaque-asset") continue
+		const identity = descriptor.identity
 		if (!identity || protectedIdentities.has(identity)) continue
 		const wasMentioned = Boolean(
 			previousPrompt && promptContainsReferenceMention(previousPrompt, info),
@@ -142,16 +150,18 @@ export function resolveExplicitPromptReferencePaths(params: {
 	prompt: string
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	tokenConfig: PromptPlaceholderTokenConfig
+	defaultAssetType?: PromptPlaceholderTokenKind
 	resolveResourceReference?: ResolveCanvasResourceReference
 }): string[] {
-	const { prompt, referenceFileInfos, tokenConfig, resolveResourceReference } = params
+	const { prompt, referenceFileInfos, tokenConfig, defaultAssetType, resolveResourceReference } =
+		params
 	if (!prompt || referenceFileInfos.length === 0) return []
 
 	const explicitPathIdentities = new Set<string>()
 	const placeholderMatches = parsePromptPlaceholderTokenMatches(prompt, tokenConfig)
 	for (const match of placeholderMatches) {
 		const matchingResources = referenceFileInfos.filter(
-			(info) => resolveAssetType(info) === match.kind,
+			(info) => resolveAssetType(info, defaultAssetType) === match.kind,
 		)
 		const referencedInfo = matchingResources[match.index - 1]
 		if (referencedInfo?.path) {
@@ -186,13 +196,16 @@ export function resolveReferenceBindingState(params: {
 	prompt: string
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	tokenConfig: PromptPlaceholderTokenConfig
+	defaultAssetType?: PromptPlaceholderTokenKind
 	resolveResourceReference?: ResolveCanvasResourceReference
 }): ReferenceBindingState {
-	const { prompt, referenceFileInfos, tokenConfig, resolveResourceReference } = params
+	const { prompt, referenceFileInfos, tokenConfig, defaultAssetType, resolveResourceReference } =
+		params
 	const explicitPromptReferencePaths = resolveExplicitPromptReferencePaths({
 		prompt,
 		referenceFileInfos,
 		tokenConfig,
+		defaultAssetType,
 		resolveResourceReference,
 	})
 	const explicitPathIdentities = new Set(

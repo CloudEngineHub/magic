@@ -13,9 +13,12 @@ import type {
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
+	ReferenceResourceAssetType,
 	ReferenceResourceType,
 } from "../message/reference-assets/reference-resource.types"
 import type { ReferenceBindingMode } from "../message/reference-assets/referenceBinding"
+import type { ReferenceResourceMetadataCandidate } from "../message/reference-assets/referenceResourceDescriptor"
+import type { MatchableMentionItem } from "../message/tiptap/contentUtils"
 
 /** useVideoEditorConfig 的入参 */
 export interface UseVideoEditorConfigOptions {
@@ -56,7 +59,7 @@ export interface VideoInputSlotInfo {
 	path?: string
 }
 
-export type VideoReferenceAssetKind = "image" | "video" | "audio"
+export type VideoReferenceAssetKind = ReferenceResourceAssetType
 
 export interface VideoReferenceAssetInfo extends UploadFileResponse {
 	assetType: VideoReferenceAssetKind
@@ -107,7 +110,7 @@ export interface VideoEditorConfig {
 		path: string
 		assetType: VideoReferenceAssetKind
 	}>
-	matchableItems: Array<{ name: string; path?: string; disabled?: boolean }>
+	matchableItems: MatchableMentionItem[]
 	modelOptions: VideoModelOption[]
 	modelOptionGroups: VideoModelOptionGroup[]
 	selectedModelOption: VideoModelOption | undefined
@@ -216,6 +219,7 @@ export interface VideoEditorConfig {
 			paths: string[],
 			currentPrompt?: string,
 			context?: MessageEditorMentionChangeContext,
+			metadataCandidates?: readonly ReferenceResourceMetadataCandidate[],
 		) => void
 		prepareResourceSlotSelection: (
 			inputTab: "frame" | "reference",
@@ -234,7 +238,7 @@ export interface VideoEditorConfig {
 		) => void
 		replaceReferenceImageAt: (
 			slotIndex: number,
-			fileInfo: UploadFileResponse,
+			fileInfo: UploadFileResponse & { assetType?: VideoReferenceAssetKind },
 			options?: {
 				retainResourceSlot?: boolean
 				mentionPlacement?: "cursor" | "documentEnd"

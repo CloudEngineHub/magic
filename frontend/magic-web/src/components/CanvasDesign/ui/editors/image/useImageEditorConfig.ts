@@ -436,6 +436,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				prompt: nextPrompt,
 				referenceFileInfos: nextReferenceFileInfos,
 				tokenConfig: promptPlaceholderTokenConfig,
+				defaultAssetType: "image",
 				resolveResourceReference,
 			})
 			updateProtectedReferencePaths(bindingState.protectedReferencePaths)

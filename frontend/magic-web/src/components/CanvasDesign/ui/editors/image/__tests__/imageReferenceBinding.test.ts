@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	pruneProtectedReferencePaths,
-	reconcileOpaqueAssetProtectedReferencePaths,
+	reconcileProtectedReferencePaths,
 	resolveExplicitPromptReferencePaths,
 	resolveReferenceBindingState,
 	unprotectPromptBoundReferencePaths,
@@ -19,8 +19,18 @@ const tokenConfig = resolvePromptPlaceholderTokenConfig((key, defaultValue) =>
 )
 
 const referenceFileInfos = [
-	{ path: "/design/images/a.png", fileName: "a.png", src: "/design/images/a.png" },
-	{ path: "/design/images/b.png", fileName: "b.png", src: "/design/images/b.png" },
+	{
+		path: "/design/images/a.png",
+		fileName: "a.png",
+		src: "/design/images/a.png",
+		assetType: "image" as const,
+	},
+	{
+		path: "/design/images/b.png",
+		fileName: "b.png",
+		src: "/design/images/b.png",
+		assetType: "image" as const,
+	},
 ]
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver()
@@ -137,7 +147,7 @@ describe("imageReferenceBinding", () => {
 
 	it("protects opaque assets during sync without masking explicit mention removal", () => {
 		expect(
-			reconcileOpaqueAssetProtectedReferencePaths({
+			reconcileProtectedReferencePaths({
 				referenceFileInfos: [
 					{ path: "asset://virtual-human-asset-id" },
 					{ path: "./images/reference.png" },
@@ -150,7 +160,7 @@ describe("imageReferenceBinding", () => {
 		).toEqual(["asset://virtual-human-asset-id"])
 
 		expect(
-			reconcileOpaqueAssetProtectedReferencePaths({
+			reconcileProtectedReferencePaths({
 				referenceFileInfos: [{ path: "asset://virtual-human-asset-id" }],
 				protectedReferencePaths: ["asset://virtual-human-asset-id"],
 				currentPrompt: "继续编辑",
@@ -160,7 +170,7 @@ describe("imageReferenceBinding", () => {
 		).toEqual([])
 
 		expect(
-			reconcileOpaqueAssetProtectedReferencePaths({
+			reconcileProtectedReferencePaths({
 				referenceFileInfos: [{ path: "asset://virtual-human-asset-id" }],
 				protectedReferencePaths: ["asset://virtual-human-asset-id"],
 				currentPrompt: "继续编辑",
@@ -168,6 +178,26 @@ describe("imageReferenceBinding", () => {
 				source: "user",
 			}),
 		).toEqual(["asset://virtual-human-asset-id"])
+	})
+
+	it("requires explicit editor context before treating an untyped opaque URI as an image", () => {
+		const opaqueInfo = [{ path: "asset://image-id", fileName: "asset://image-id" }]
+
+		expect(
+			resolveExplicitPromptReferencePaths({
+				prompt: "请参考[图片1]",
+				referenceFileInfos: opaqueInfo,
+				tokenConfig,
+			}),
+		).toEqual([])
+		expect(
+			resolveExplicitPromptReferencePaths({
+				prompt: "请参考[图片1]",
+				referenceFileInfos: opaqueInfo,
+				tokenConfig,
+				defaultAssetType: "image",
+			}),
+		).toEqual(["asset://image-id"])
 	})
 
 	it("keeps unresolved path spellings separate when no host context exists", () => {

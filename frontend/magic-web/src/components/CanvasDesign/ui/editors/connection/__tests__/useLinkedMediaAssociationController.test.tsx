@@ -567,4 +567,41 @@ describe("useLinkedMediaAssociationController", () => {
 			revision: 2,
 		})
 	})
+
+	it("passes linked opaque asset types to the ready mention callback", () => {
+		const onReadyMentionChange = vi.fn()
+		mocks.useLinkedEditorInputs.mockReturnValue({
+			connectedSourceElementIds: ["video-source"],
+			textConnections: [],
+			mediaItems: [],
+			activeMediaReferences: [{ kind: "video", path: "asset://linked-video" }],
+			canSelectMediaConnection: vi.fn(() => true),
+			setTextConnectionSelected: vi.fn(),
+		})
+		const { result } = renderHook(() =>
+			useLinkedMediaAssociationController({
+				targetElementId: "target-video",
+				targetKind: "video",
+				mediaPolicy: { supportedKinds: ["video"] },
+				mediaPolicyStatus: "ready",
+				editorRef: createRef<MessageEditorRef>(),
+				onReadyMentionChange,
+			}),
+		)
+
+		act(() => {
+			result.current.handleMentionChange(["asset://linked-video"], "@asset://linked-video", {
+				source: "user",
+				status: "ready",
+				revision: 1,
+			})
+		})
+
+		expect(onReadyMentionChange).toHaveBeenCalledWith(
+			["asset://linked-video"],
+			"@asset://linked-video",
+			{ source: "user", status: "ready", revision: 1 },
+			[{ path: "asset://linked-video", assetType: "video" }],
+		)
+	})
 })

@@ -27,13 +27,14 @@ import {
 import {
 	areOrderedPathsEqual,
 	pruneProtectedReferencePaths,
-	reconcileOpaqueAssetProtectedReferencePaths,
+	reconcileProtectedReferencePaths,
 	resolveReferenceBindingState,
 	unprotectPromptBoundReferencePaths,
 	type ReferenceBindingMode,
 } from "../message/reference-assets/referenceBinding"
 import { createReferenceResourcePanelItemFromPath } from "../message/reference-assets/createReferenceResourcePanelItem"
 import type { ReferenceResourceType } from "../message/reference-assets/reference-resource.types"
+import type { ReferenceResourceMetadataCandidate } from "../message/reference-assets/referenceResourceDescriptor"
 import {
 	cloneFrameSlotInfos,
 	cloneLinkedFrameBindings,
@@ -71,7 +72,7 @@ import {
 	resolveInputModeFromRequest,
 	resolveSelectableInputModeForAvailableModes,
 	resolveInputSubTabForAvailableTabs,
-	resolveReferenceAssetType,
+	resolveVideoReferenceAssetInfo,
 	resolveVideoReferenceVideoModel,
 } from "./model-config/video-editor-config.model"
 import type {
@@ -549,6 +550,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		return referenceImageInfos.map((info) => ({
 			name: info.fileName,
 			path: info.path,
+			assetType: info.assetType,
 		}))
 	}, [referenceImageInfos])
 	const isReferenceImageLimitReached = useMemo(() => {
@@ -833,15 +835,23 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const replaceReferenceImageAt = useCallback(
 		(
 			slotIndex: number,
-			fileInfo: UploadFileResponse,
+			fileInfo: UploadFileResponse & { assetType?: VideoReferenceAssetKind },
 			options?: {
 				retainResourceSlot?: boolean
 				/** 默认 cursor；仅少数场景（如需文末追加）可传 documentEnd */
 				mentionPlacement?: "cursor" | "documentEnd"
 			},
 		) => {
-			const assetType = resolveReferenceAssetType(fileInfo.path)
-			if (!assetType) return
+			const normalizedFileInfo = resolveVideoReferenceAssetInfo({
+				path: fileInfo.path,
+				src: fileInfo.src,
+				fileName: fileInfo.fileName,
+				explicitAssetType: fileInfo.assetType,
+				metadataCandidates: referenceImageInfos,
+				resolveResourceReference,
+			})
+			if (!normalizedFileInfo) return
+			const { assetType } = normalizedFileInfo
 			if (!isReferenceAssetTypeAllowed(assetType, currentInputModeConfig)) return
 			const selectedSlot = selectedResourceSlotRef.current
 			const expectedAssetTypes =
@@ -877,13 +887,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					resetSelectedResourceSlot()
 				}
 				return
-			}
-			const normalizedFileInfo: VideoReferenceAssetInfo = {
-				path: fileInfo.path,
-				src: fileInfo.src || fileInfo.path,
-				fileName:
-					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
-				assetType,
 			}
 			const deduped = referenceImageInfos.filter(
 				(info) =>
@@ -1345,7 +1348,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 
 	const handleReferenceMentionPathsChange = useCallback(
-		(paths: string[], currentPrompt?: string, context?: MessageEditorMentionChangeContext) => {
+		(
+			paths: string[],
+			currentPrompt?: string,
+			context?: MessageEditorMentionChangeContext,
+			metadataCandidates: readonly ReferenceResourceMetadataCandidate[] = [],
+		) => {
 			if (!supportsReferenceAssets) return
 			const previousPrompt = previousReferenceMentionPromptRef.current ?? undefined
 			previousReferenceMentionPromptRef.current = currentPrompt ?? null
@@ -1357,7 +1365,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				}
 			})
 			const uniquePaths = Array.from(uniquePathByIdentity.values())
-			const effectiveProtectedPaths = reconcileOpaqueAssetProtectedReferencePaths({
+			const effectiveProtectedPaths = reconcileProtectedReferencePaths({
 				referenceFileInfos: referenceImageInfos,
 				protectedReferencePaths,
 				currentPrompt,
@@ -1385,6 +1393,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 						),
 				),
 			]
+			const typeMetadataCandidates: ReferenceResourceMetadataCandidate[] = [
+				...referenceImageInfos,
+				...metadataCandidates,
+				...matchableItems.flatMap((item) =>
+					item.path ? [{ path: item.path, assetType: item.assetType }] : [],
+				),
+			]
 			const nextInfos = sourcePaths
 				.map((path) => {
 					const existingInfo = referenceImageInfos.find((info) =>
@@ -1396,9 +1411,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					) {
 						return existingInfo
 					}
-					const assetType = resolveReferenceAssetType(path)
-					if (!assetType) return null
-					if (!isReferenceAssetTypeAllowed(assetType, currentInputModeConfig)) return null
 					const matchedItem = matchableItems.find((item) =>
 						Boolean(
 							item.path &&
@@ -1409,12 +1421,21 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							),
 						),
 					)
-					return {
+					const normalizedInfo = resolveVideoReferenceAssetInfo({
 						path,
-						src: path,
-						fileName: matchedItem?.name || getCanvasResourceFileName(path) || path,
-						assetType,
-					} satisfies VideoReferenceAssetInfo
+						fileName: matchedItem?.name,
+						metadataCandidates: typeMetadataCandidates,
+						resolveResourceReference,
+					})
+					if (!normalizedInfo) return null
+					if (
+						!isReferenceAssetTypeAllowed(
+							normalizedInfo.assetType,
+							currentInputModeConfig,
+						)
+					)
+						return null
+					return normalizedInfo
 				})
 				.filter((item): item is VideoReferenceAssetInfo => Boolean(item))
 			const normalizedInfos =
