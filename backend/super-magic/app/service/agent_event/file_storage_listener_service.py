@@ -36,9 +36,11 @@ from agentlang.logger import get_logger
 from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import Attachment, AttachmentTag
-from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType
+from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType, VirtualCheckpoint
 from app.core.entity.event.file_event import FileEventData  # 从业务层导入 FileEventData
 from app.core.entity.project_archive import ArchiveDetail, ProjectArchiveInfo
+from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
+from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
 from app.infrastructure.storage.base import BaseFileProcessor
 from app.infrastructure.storage.factory import StorageFactory
 from app.infrastructure.storage.types import StorageResponse
@@ -46,7 +48,7 @@ from app.path_manager import PathManager
 from app.service.agent_event.base_listener_service import BaseListenerService
 from app.service.topic_persistence import should_upload_component
 from app.utils.init_client_message_util import InitClientMessageUtil
-from app.utils.path_utils import get_workspace_dir, get_storage_dir, get_storage_dir_with_fallback
+from app.utils.path_utils import get_workspace_dir, get_storage_dir_with_fallback
 
 logger = get_logger(__name__)
 
@@ -541,11 +543,8 @@ class FileStorageListenerService:
             else:
                 logger.info("聊天历史已由持久卷持久化，跳过归档上传")
 
-            # Process and upload checkpoints archive
-            checkpoints_dir = PathManager.get_checkpoints_dir()
-            await FileStorageListenerService._process_checkpoints_archive(
-                str(checkpoints_dir), topic_id, storage_service
-            )
+            # 每轮只上传本轮 checkpoint 归档与 manifest（不再整目录打包全量上传）
+            await FileStorageListenerService._sync_checkpoints_archive(topic_id, storage_service)
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)
@@ -728,72 +727,32 @@ class FileStorageListenerService:
             logger.error(f"处理聊天历史归档时出错: {e}", exc_info=True)
 
     @staticmethod
-    async def _process_checkpoints_archive(
-        checkpoints_dir: str,
-        topic_id: str,
-        storage_service
-    ) -> None:
+    async def _sync_checkpoints_archive(topic_id: str, storage_service) -> None:
         """
-        Process checkpoints archive: compress if changed and upload
+        每轮只上传本轮 checkpoint 归档与 checkpoint manifest。
 
-        Args:
-            checkpoints_dir: Path to checkpoints directory
-            topic_id: Topic ID for naming the archive
-            storage_service: Storage service instance
+        只上传 manifest.current_checkpoint_id（本轮创建的 checkpoint），
+        随后同步 manifest 并按差异删除已被本地清理的远端归档。
         """
-        if not os.path.isdir(checkpoints_dir) or not os.listdir(checkpoints_dir):
-            logger.info("checkpoints目录为空或不存在，跳过处理")
+        if not topic_id or storage_service is None:
+            logger.warning("缺少 topic_id 或 storage_service，跳过 checkpoint 归档同步")
             return
 
-        await FileStorageListenerService._archive_and_upload_single_checkpoints(checkpoints_dir, topic_id, storage_service)
-
-    @staticmethod
-    async def _archive_and_upload_single_checkpoints(checkpoints_dir: str, topic_id: str, storage_service) -> None:
-        """
-        Compress and upload a single checkpoints archive.
-
-        Args:
-            checkpoints_dir: Path to the checkpoints directory.
-            topic_id: The topic ID for this checkpoints.
-            storage_service: The storage service instance.
-        """
         try:
-            # Always archive and upload checkpoints for the current topic
-            logger.info(f"为话题 {topic_id} 处理checkpoints归档")
+            sync = CheckpointRemoteSync(storage_service, topic_id)
 
-            # Create archive in a temporary directory
-            with tempfile.TemporaryDirectory() as temp_dir:
-                archive_name = f"checkpoints_{topic_id}"
-                archive_path = os.path.join(temp_dir, archive_name)
-                zip_path = shutil.make_archive(archive_path, 'zip', checkpoints_dir)
-                logger.info(f"checkpoints已压缩到: {zip_path}")
+            # 本轮 checkpoint 即 manifest 的当前位
+            metadata_manager = CheckpointMetadataManager()
+            current_checkpoint_id = await metadata_manager.get_current_checkpoint()
+            if current_checkpoint_id and current_checkpoint_id != VirtualCheckpoint.INITIAL:
+                await sync.upload_checkpoint(current_checkpoint_id)
+            else:
+                logger.info("当前没有可上传的新 checkpoint，仅同步 manifest")
 
-                # Get work_dir as base path
-                base_path = get_storage_dir(storage_service.credentials)
-
-                # Get checkpoints dir name
-                checkpoints_dir_name = InitClientMessageUtil.get_checkpoints_dir()
-
-                # Combine paths
-                dir_path = BaseFileProcessor.combine_path(base_path, checkpoints_dir_name)
-
-                # Define object key
-                object_key = BaseFileProcessor.combine_path(
-                    dir_path,
-                    os.path.basename(zip_path)
-                )
-
-                # Upload archive
-                logger.info(f"上传checkpoints归档到: {object_key}")
-                await storage_service.upload(
-                    file=zip_path,
-                    key=object_key,
-                    options=None
-                )
-                logger.info(f"checkpoints归档上传成功: {object_key}")
-
+            await sync.sync_manifest_and_evicted()
+            logger.info(f"话题 {topic_id} 的 checkpoint 归档同步完成")
         except Exception as e:
-            logger.error(f"处理checkpoints归档时出错: {e}", exc_info=True)
+            logger.error(f"同步 checkpoints 归档时出错: {e}", exc_info=True)
 
     @staticmethod
     def _calculate_file_md5(file_path: str) -> str:

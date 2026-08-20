@@ -14,11 +14,13 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from app.service.checkpoint_service import CheckpointService
 from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor
+from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
 from app.core.entity.checkpoint import CheckpointInfo, FileOperation, VirtualCheckpoint
 from app.service.file_version_service import FileVersionService
 from app.infrastructure.magic_service.constants import FileEditType
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfigLoader, ConfigurationError
+from app.infrastructure.storage.factory import StorageFactory
 from app.path_manager import PathManager
 from app.utils.async_file_utils import async_exists, get_s3_key_from_xattr
 from agentlang.logger import get_logger
@@ -95,6 +97,80 @@ class RollbackService:
             logger.error(f"获取前一个checkpoint失败: {e}")
             return None
 
+    async def _build_remote_sync_context(self):
+        """从主 Agent 上下文构造 (storage_service, topic_id)。
+
+        沙箱重启后本地可能只有 manifest，回滚前需要按需拉取远端 checkpoint 归档，
+        提交/撤回回滚后需要同步远端 manifest。主 Agent 未创建或缺少 topic_id 时
+        返回 (None, None)，调用方应跳过远端操作。
+
+        Returns:
+            Tuple[Optional[Any], Optional[str]]: (storage_service, topic_id)
+        """
+        try:
+            from app.service.agent_dispatcher import AgentDispatcher
+
+            dispatcher = AgentDispatcher.get_instance()
+            agent_context = dispatcher.agent_context
+            if agent_context is None:
+                logger.debug("主 Agent 尚未创建，跳过远端 checkpoint 同步")
+                return None, None
+
+            metadata = agent_context.get_metadata()
+            topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
+            if not topic_id:
+                logger.warning("无法获取 topic_id，跳过远端 checkpoint 同步")
+                return None, None
+
+            sts_token_refresh = agent_context.get_init_client_message_sts_token_refresh()
+            platform_type = agent_context.get_init_client_message_platform_type()
+            storage_service = await StorageFactory.get_storage(
+                sts_token_refresh=sts_token_refresh,
+                metadata=metadata,
+                platform=platform_type,
+            )
+            return storage_service, topic_id
+        except Exception as e:
+            logger.error(f"构造远端 checkpoint 同步上下文失败: {e}")
+            return None, None
+
+    async def _sync_remote_manifest(self) -> None:
+        """提交/撤回回滚后同步远端 manifest，让被丢弃的未来分支立即从远端移除。
+
+        回滚本身只改本地磁盘与本地 manifest；不主动同步的话，远端会停留在
+        「回滚未提交」的状态，直到下一次消息轮次上传才被纠正。
+        """
+        try:
+            storage_service, topic_id = await self._build_remote_sync_context()
+            if storage_service is None or not topic_id:
+                return
+            await CheckpointRemoteSync(storage_service, topic_id).sync_manifest_and_evicted()
+        except Exception as e:
+            logger.error(f"同步远端 checkpoint manifest 失败: {e}")
+
+    async def _ensure_rollback_checkpoints_available(
+        self,
+        storage_service,
+        topic_id: Optional[str],
+        current_checkpoint_id: Optional[str],
+        target_checkpoint_id: str,
+    ) -> None:
+        """回滚前确保「当前位与目标之间」的 checkpoint 在本地可用。
+
+        沙箱重启后本地可能只有 manifest，checkpoint 数据在需要回滚时按需
+        从远端拉取对应归档。topic_id 是回滚定位远端归档的必需字段，只在
+        上下文缺失（主 Agent 未创建）时跳过拉取。
+        """
+        if storage_service is None or not topic_id:
+            return
+        _, checkpoints_to_process = await self.checkpoint_service.metadata_manager.get_checkpoints_between_in_checkpoint_manifest(
+            current_checkpoint_id, target_checkpoint_id
+        )
+        if checkpoints_to_process:
+            await CheckpointRemoteSync(storage_service, topic_id).ensure_checkpoints_available(
+                checkpoints_to_process
+            )
+
     async def start_rollback(self, target_message_id: str) -> List[Dict[str, str]]:
         """开始回滚到指定消息的执行前状态
 
@@ -125,6 +201,12 @@ class RollbackService:
 
             # 获取当前checkpoint状态（用于版本创建）
             current_checkpoint_id = await self.checkpoint_service.metadata_manager.get_current_checkpoint()
+
+            # 沙箱重启后本地可能只有 manifest，回滚前按需拉取范围内缺失的 checkpoint 数据
+            storage_service, topic_id = await self._build_remote_sync_context()
+            await self._ensure_rollback_checkpoints_available(
+                storage_service, topic_id, current_checkpoint_id, actual_target_checkpoint_id
+            )
 
             # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
             await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
@@ -178,6 +260,9 @@ class RollbackService:
             # 因此只需要在 commit 这一个点 reload。
             await self._reload_main_agent_persistent_state()
 
+            # 同步远端 manifest，让被丢弃的未来分支立即从远端移除
+            await self._sync_remote_manifest()
+
         except RollbackException:
             raise
         except Exception as e:
@@ -223,6 +308,11 @@ class RollbackService:
 
             # 4. 执行撤回回滚到最新 checkpoint
             logger.info(f"开始撤回回滚到最新checkpoint: {latest_checkpoint_id}")
+            # 沙箱重启后本地可能只有 manifest，回滚前按需拉取范围内缺失的 checkpoint 数据
+            storage_service, topic_id = await self._build_remote_sync_context()
+            await self._ensure_rollback_checkpoints_available(
+                storage_service, topic_id, current_checkpoint_id, latest_checkpoint_id
+            )
             # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
             await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
             try:
@@ -243,6 +333,9 @@ class RollbackService:
             except Exception as version_error:
                 # 版本创建失败不应该影响回滚操作
                 logger.error(f"文件版本创建失败，但撤回回滚操作已成功: {version_error}")
+
+            # 同步远端 manifest，让被丢弃的未来分支立即从远端移除
+            await self._sync_remote_manifest()
 
             logger.info(f"撤回回滚成功完成，当前checkpoint: {latest_checkpoint_id}")
             return affected_files

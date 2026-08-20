@@ -53,6 +53,7 @@ db.sqlite3-journal
 # IDE 相关
 .idea/
 .vscode/
+.zcode/
 *.swp
 *.swo
 *~

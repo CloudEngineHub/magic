@@ -4,7 +4,6 @@ import os
 import re
 import tempfile
 import uuid
-import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +15,7 @@ from app.core.context.agent_context import AgentContext
 from app.core.stream.base import Stream
 from app.infrastructure.storage.base import BaseFileProcessor
 from app.infrastructure.storage.factory import StorageFactory
+from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
 from agentlang.logger import get_logger
 from app.magic.agent import Agent
 from app.path_manager import PathManager
@@ -24,7 +24,6 @@ from app.service.attachment_service import AttachmentService
 from app.core.entity.project_archive import ProjectArchiveInfo
 from app.utils.init_client_message_util import InitClientMessageUtil
 from app.utils.path_utils import get_workspace_dir
-from app.utils.path_utils import get_storage_dir
 from app.service.asr.asr_context_diff_service import AsrContextDiffService
 from app.service.channel_context_service import ChannelContextService
 from app.core.client_context import ClientContextService
@@ -166,7 +165,8 @@ class AgentService(Base):
         if chat_ready:
             agent_context.mark_chat_history_persisted()
             logger.info("检测到已恢复的持久化聊天历史，跳过 zip 下载")
-        # checkpoint 继续使用原有的 zip 恢复链路，不纳入 .topic 持久卷。
+        # checkpoint 不纳入 .topic 持久卷：重启后只拉小体积 manifest，
+        # checkpoint 数据在需要回滚时按需从远端拉取对应归档。
         sts_token_refresh = agent_context.get_init_client_message_sts_token_refresh()
         platform_type = agent_context.get_init_client_message_platform_type()
         storage_service = await StorageFactory.get_storage(
@@ -397,65 +397,21 @@ class AgentService(Base):
 
     async def _download_and_extract_checkpoints_archive(self, storage_service, agent_context: AgentContext) -> None:
         """
-        Download and extract checkpoints archive
+        Download and restore checkpoint manifest only.
 
-        Args:
-            storage_service: Storage service instance
-            agent_context: Agent context
+        沙箱重启后只拉取小体积的 checkpoint manifest；checkpoint 数据
+        （文件快照、聊天历史快照）在需要回滚时再按需从远端拉取对应归档。
         """
         try:
-            # Get topic_id from agent_context. If not present, skip download.
             topic_id = agent_context.get_metadata().get("topic_id")
             if not topic_id:
                 logger.info("No topic_id in agent_context, skipping checkpoints download")
                 return
 
-            # Construct the object key using the topic_id
-            checkpoints_object_name = f"checkpoints_{topic_id}.zip"
-            base_path = get_storage_dir(storage_service.credentials)
-            checkpoints_dir_name = InitClientMessageUtil.get_checkpoints_dir()
-            dir_path = BaseFileProcessor.combine_path(base_path, checkpoints_dir_name)
-            checkpoints_object_key = BaseFileProcessor.combine_path(dir_path, checkpoints_object_name)
-
-            # Check if object exists
-            if not await storage_service.exists(checkpoints_object_key):
-                logger.info(f"Checkpoints archive not found: {checkpoints_object_key}")
-                return
-
-            logger.info(f"Downloading checkpoints archive: {checkpoints_object_key}")
-
-            # Stream archive directly to a temporary file to avoid loading
-            # a multi-GB object into memory (otherwise the agent container
-            # easily hits its 2Gi memory limit and gets OOMKilled).
-            temp_file = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-            temp_file_path = temp_file.name
-            temp_file.close()
-
-            await storage_service.download_file_by_stream(
-                key=checkpoints_object_key,
-                dest_path=temp_file_path,
-            )
-            file_size = os.path.getsize(temp_file_path)
-
-            checkpoints_dir = PathManager.get_checkpoints_dir()
-            with zipfile.ZipFile(temp_file_path, "r") as zip_ref:
-                infos = zip_ref.infolist()
-                total_uncompressed = sum(info.file_size for info in infos)
-                total_compressed = sum(info.compress_size for info in infos)
-
-                os.makedirs(checkpoints_dir, exist_ok=True)
-                zip_ref.extractall(checkpoints_dir)
-                logger.info(
-                    f"Checkpoints restored to {checkpoints_dir}: "
-                    f"{len(infos)} files, {file_size / (1024 * 1024):.2f} MiB compressed "
-                    f"-> {total_uncompressed / (1024 * 1024):.2f} MiB uncompressed"
-                )
+            sync = CheckpointRemoteSync(storage_service, topic_id)
+            await sync.download_manifest()
         except Exception as e:
-            logger.error(f"Failed to download and extract checkpoints: {e}")
-        finally:
-            # Clean up temporary file
-            if "temp_file_path" in locals() and os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
+            logger.error(f"Failed to download checkpoint manifest: {e}")
 
     async def init_workspace(
         self,
