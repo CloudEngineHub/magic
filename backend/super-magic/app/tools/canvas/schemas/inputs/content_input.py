@@ -103,6 +103,8 @@ class ContentInput(BaseToolParams):
     reference_audio_paths: list[str] = Field(default_factory=list)
     frame_start_path: str | None = None
     frame_end_path: str | None = None
+    input_mode: str | None = None
+    task: str | None = None
     size: str | None = None
     duration_seconds: int | None = Field(None, gt=0)
     aspect_ratio: str | None = None
@@ -218,6 +220,8 @@ class ContentInput(BaseToolParams):
             reference_audio_paths=tuple(self.reference_audio_paths),
             frame_start_path=self.frame_start_path,
             frame_end_path=self.frame_end_path,
+            input_mode=self.input_mode,
+            task=self.task,
             duration_seconds=self.duration_seconds,
             aspect_ratio=self.aspect_ratio,
             resolution=self.resolution,

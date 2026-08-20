@@ -23,6 +23,8 @@ class GenerationParameters:
     reference_audio_paths: tuple[str, ...] = ()
     frame_start_path: str | None = None
     frame_end_path: str | None = None
+    input_mode: str | None = None
+    task: str | None = None
     duration_seconds: int | None = None
     aspect_ratio: str | None = None
     resolution: str | None = None
@@ -49,6 +51,8 @@ class GenerationParameters:
             "size": self.size,
             "frame_start_path": self.frame_start_path,
             "frame_end_path": self.frame_end_path,
+            "input_mode": self.input_mode,
+            "task": self.task,
             "duration_seconds": self.duration_seconds,
             "aspect_ratio": self.aspect_ratio,
             "resolution": self.resolution,
@@ -75,6 +79,8 @@ class GenerationParameters:
             reference_audio_paths=_string_tuple(values, "reference_audio_paths"),
             frame_start_path=_optional_string(values, "frame_start_path"),
             frame_end_path=_optional_string(values, "frame_end_path"),
+            input_mode=_optional_string(values, "input_mode"),
+            task=_optional_string(values, "task"),
             duration_seconds=_optional_integer(values, "duration_seconds"),
             aspect_ratio=_optional_string(values, "aspect_ratio"),
             resolution=_optional_string(values, "resolution"),

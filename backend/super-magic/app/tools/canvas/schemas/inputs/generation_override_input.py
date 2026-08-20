@@ -24,6 +24,8 @@ class GenerationOverrideInput(BaseToolParams):
     reference_audio_paths: list[str] | None = None
     frame_start_path: str | None = None
     frame_end_path: str | None = None
+    input_mode: str | None = None
+    task: str | None = None
     duration_seconds: int | None = Field(None, gt=0)
     aspect_ratio: str | None = None
     resolution: str | None = None
@@ -51,6 +53,8 @@ class GenerationOverrideInput(BaseToolParams):
             reference_audio_paths=values.get("reference_audio_paths"),
             frame_start_path=values.get("frame_start_path"),
             frame_end_path=values.get("frame_end_path"),
+            input_mode=values.get("input_mode"),
+            task=values.get("task"),
             duration_seconds=values.get("duration_seconds"),
             aspect_ratio=values.get("aspect_ratio"),
             resolution=values.get("resolution"),

@@ -42,6 +42,8 @@ class GenericVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             reference_audio_paths=list(parameters.reference_audio_paths),
             frame_start_path=str(parameters.frame_start_path or ""),
             frame_end_path=str(parameters.frame_end_path or ""),
+            input_mode=str(parameters.input_mode or ""),
+            task=str(parameters.task or "generate"),
             size=str(parameters.size or ""),
             duration_seconds=parameters.duration_seconds,
             aspect_ratio=str(parameters.aspect_ratio or ""),

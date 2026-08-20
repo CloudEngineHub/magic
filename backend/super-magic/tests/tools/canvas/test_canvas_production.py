@@ -30,7 +30,12 @@ async def test_generic_video_point_estimate_calls_magic_service_endpoint_directl
     request = VideoProductionRequestNormalizer().normalize(
         "mock-project",
         "shot-1",
-        GenerationParameters(prompt="mock video", model_id="mock-model"),
+        GenerationParameters(
+            prompt="mock video",
+            model_id="mock-model",
+            input_mode="video_edit",
+            task="edit",
+        ),
     )
     calls: dict[str, object] = {}
 
@@ -57,6 +62,8 @@ async def test_generic_video_point_estimate_calls_magic_service_endpoint_directl
 
     assert points == 12
     assert calls["payload"] == {"model_id": "mock-model", "prompt": "mock video"}
+    assert calls["params"].input_mode == "video_edit"
+    assert calls["params"].task == "edit"
     assert isinstance(calls["request_id"], str) and calls["request_id"]
 
 

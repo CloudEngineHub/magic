@@ -76,6 +76,8 @@ class ContentMetadataService:
                 "reference_audio_paths",
                 "frame_start_path",
                 "frame_end_path",
+                "input_mode",
+                "task",
                 "size",
                 "duration_seconds",
                 "aspect_ratio",

@@ -23,6 +23,7 @@ from app.tools.canvas.generation import (
 from app.tools.canvas.presentation import error_result as _error_result
 from app.tools.canvas.presentation.model_content import elements_content, items_content
 from app.tools.canvas.repository import CanvasRepository
+from app.tools.canvas.schemas.inputs import GenerationOverrideInput, VideoPointEstimateItemInput
 from app.tools.canvas.tools import (
     AddCanvasConnections,
     AddCanvasContents,
@@ -36,6 +37,7 @@ from app.tools.canvas.tools import (
     QueryCanvasElementDetails,
     QueryCanvasOverview,
     RetryCanvasContentGeneration,
+    SearchCanvasImagePrompts,
     SearchCanvasImages,
     SelectCanvasMainContent,
     WaitCanvasGeneration,
@@ -72,6 +74,7 @@ def test_each_canvas_tool_owns_feedback_hooks() -> None:
         WaitCanvasGeneration,
         EstimateCanvasContentPoints,
         ComposeCanvasVideo,
+        SearchCanvasImagePrompts,
         SearchCanvasImages,
     ]
     hooks = {
@@ -90,6 +93,39 @@ def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
 
     with pytest.raises(ValidationError, match="source=generated requires prompt"):
         ContentInput(source="generated", content_type="image")
+
+
+def test_video_generation_mode_and_task_survive_input_conversions() -> None:
+    """视频 input_mode 和 task 应贯穿公开输入、命令和重试覆盖。"""
+    content = ContentInput(
+        source="generated",
+        content_type="video",
+        prompt="mock video",
+        input_mode="video_edit",
+        task="edit",
+    )
+    parameters = content.to_command().generation_parameters
+
+    assert parameters is not None
+    assert parameters.input_mode == "video_edit"
+    assert parameters.task == "edit"
+
+    override = GenerationOverrideInput(input_mode="keyframe_guided", task="generate")
+    override_command = override.to_command()
+    assert override_command.to_dict() == {
+        "input_mode": "keyframe_guided",
+        "task": "generate",
+    }
+
+    estimate_item = VideoPointEstimateItemInput(
+        item_ref="shot-1",
+        prompt="mock video",
+        input_mode="image_reference",
+        task="generate",
+    )
+    estimate_parameters = estimate_item.to_parameters()
+    assert estimate_parameters.input_mode == "image_reference"
+    assert estimate_parameters.task == "generate"
 
 
 def test_video_edit_content_uses_element_id_sequence() -> None:
