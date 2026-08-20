@@ -960,6 +960,7 @@ class MessageScheduleAppService extends AbstractAppService
             }
             // Build based on $oldWorkDir
             $fileEntity = new TaskFileEntity();
+            $fileEntity->setFileId((int) $fileData['file_id']);
             $fileEntity->setFileKey($filePath);
             $fileEntity->setFileName($fileData['file_name']);
             $fileEntity->setFileSize($fileData['file_size']);

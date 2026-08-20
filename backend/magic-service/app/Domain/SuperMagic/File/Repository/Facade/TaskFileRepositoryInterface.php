@@ -52,6 +52,13 @@ interface TaskFileRepositoryInterface
     public function getByFileKey(string $fileKey, ?int $topicId = 0, bool $withTrash = false): ?TaskFileEntity;
 
     /**
+     * 获取由指定文件直接复制产生的目标文件。
+     *
+     * @return TaskFileEntity[]
+     */
+    public function getCopiesBySourceFileId(int $sourceFileId): array;
+
+    /**
      * 根据fileKey数组批量获取文件.
      *
      * @param array $fileKeys 文件Key数组

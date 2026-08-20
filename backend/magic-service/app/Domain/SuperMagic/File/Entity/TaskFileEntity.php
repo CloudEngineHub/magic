@@ -16,6 +16,12 @@ class TaskFileEntity extends AbstractEntity
 {
     protected int $fileId = 0;
 
+    /**
+     * Immediate source file ID for a copied TaskFile. Null means the file was
+     * not created by copying an existing TaskFile (or the source is unknown).
+     */
+    protected ?int $sourceFileId = null;
+
     protected string $userId = '';
 
     protected string $organizationCode = '';
@@ -73,6 +79,16 @@ class TaskFileEntity extends AbstractEntity
     public function getFileId(): int
     {
         return $this->fileId;
+    }
+
+    public function getSourceFileId(): ?int
+    {
+        return $this->sourceFileId;
+    }
+
+    public function setSourceFileId(?int $sourceFileId): void
+    {
+        $this->sourceFileId = $sourceFileId;
     }
 
     public function setFileId(int $fileId): void
@@ -390,6 +406,7 @@ class TaskFileEntity extends AbstractEntity
     {
         return [
             'file_id' => $this->fileId,
+            'source_file_id' => $this->sourceFileId,
             'user_id' => $this->userId,
             'organization_code' => $this->organizationCode,
             'project_id' => $this->projectId,

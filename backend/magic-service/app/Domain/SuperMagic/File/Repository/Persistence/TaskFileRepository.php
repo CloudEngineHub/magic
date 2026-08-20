@@ -153,6 +153,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return new TaskFileEntity($model->toArray());
     }
 
+    public function getCopiesBySourceFileId(int $sourceFileId): array
+    {
+        if ($sourceFileId <= 0) {
+            return [];
+        }
+
+        return $this->model::query()
+            ->where('source_file_id', $sourceFileId)
+            ->whereNull('deleted_at')
+            ->orderBy('file_id')
+            ->get()
+            ->map(static fn ($model): TaskFileEntity => new TaskFileEntity($model->toArray()))
+            ->all();
+    }
+
     /**
      * 根据fileKey数组批量获取文件.
      */
@@ -778,6 +793,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 'user_id' => $dataIsolation->getCurrentUserId(),
                 'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                 'project_id' => $projectId,
+                'source_file_id' => null,
                 'topic_id' => 0,
                 'task_id' => 0,
                 'file_key' => $fileKey,
@@ -1826,6 +1842,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 'user_id' => $dataIsolation->getCurrentUserId(),
                 'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                 'project_id' => $projectId,
+                'source_file_id' => null,
                 'topic_id' => 0,
                 'task_id' => 0,
                 'parent_id' => $parentId,

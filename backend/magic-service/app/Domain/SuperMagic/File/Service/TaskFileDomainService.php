@@ -114,6 +114,14 @@ class TaskFileDomainService
         return $this->taskFileRepository->getById($id);
     }
 
+    /**
+     * @return TaskFileEntity[]
+     */
+    public function getCopiesBySourceFileId(int $sourceFileId): array
+    {
+        return $this->taskFileRepository->getCopiesBySourceFileId($sourceFileId);
+    }
+
     public function isProjectSpaceFile(TaskFileEntity $fileEntity): bool
     {
         return $fileEntity->getSpaceType() === FileSpaceType::PROJECT->value;
@@ -1776,6 +1784,7 @@ class TaskFileDomainService
             $newFileEntity->setCreatedAt(date('Y-m-d H:i:s'));
             $newFileEntity->setUpdatedAt(date('Y-m-d H:i:s'));
             $newFileEntity->setStorageType($fileEntity->getStorageType());
+            $newFileEntity->setSourceFileId($fileEntity->getFileId());
             $newFileEntity->setIsHidden($this->determineIsHidden($targetFileName, $targetParentId, $targetProject->getId()));
             $newFileEntity->setIsDirectory($fileEntity->getIsDirectory());
             $newFileEntity->setParentId($targetParentId);
@@ -1908,6 +1917,7 @@ class TaskFileDomainService
             $targetFileEntity->setFileKey($targetPath);
             $targetFileEntity->setCreatedAt(date('Y-m-d H:i:s'));
             $targetFileEntity->setStorageType($fileEntity->getStorageType());
+            $targetFileEntity->setSourceFileId($fileEntity->getFileId());
             $targetFileEntity->setIsHidden($this->determineIsHidden(basename($targetPath), $targetParentId, $fileEntity->getProjectId()));
             $targetFileEntity->setIsDirectory($fileEntity->getIsDirectory());
             $targetFileEntity->setParentId($targetParentId);
@@ -2964,6 +2974,7 @@ class TaskFileDomainService
         $dirEntity->setFileId(IdGenerator::getSnowId());
         $dirEntity->setFileName($oldFileEntity->getFileName());
         $dirEntity->setFileKey($newFileKey);
+        $dirEntity->setSourceFileId($oldFileEntity->getFileId());
 
         // Set current timestamp for created_at and updated_at
         $now = date('Y-m-d H:i:s');
@@ -4040,6 +4051,7 @@ class TaskFileDomainService
         $newFileEntity->setParentId($targetParentIdInt);
         $newFileEntity->setIsHidden($this->determineIsHidden($targetFileName, $targetParentIdInt, $targetProjectId));
         $newFileEntity->setStorageType($sourceFile->getStorageType());
+        $newFileEntity->setSourceFileId($sourceFile->getFileId());
         $newFileEntity->setSource(TaskFileSource::COPY);
         $newFileEntity->setLatestVersion(1);
         $newFileEntity->setMetadataVersion(1);
@@ -4661,6 +4673,11 @@ class TaskFileDomainService
         $newTaskFile->setParentId($parentId);
 
         $newTaskFile->setSort($sourceFile->getSort());
+        $newTaskFile->setSourceFileId($sourceFile->getFileId());
+        // Keep the logical MagicFS space aligned with the source tree. The
+        // entity default is `project`, which would make copied Topic files
+        // invisible to queries constrained by space_type = topic.
+        $newTaskFile->setSpaceType($sourceFile->getSpaceType());
         $newTaskFile->setStorageType($sourceFile->getStorageType());
         $newTaskFile->setMetadata($sourceFile->getMetadata());
         $newTaskFile->setDisplayConfig($sourceFile->getDisplayConfig());
