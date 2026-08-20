@@ -49,6 +49,7 @@
 		"test:watch": "pnpm exec vitest --config ./vitest.config.ts",
 		"typecheck": "tsc -p ./tsconfig.json --noEmit && tsc -p ./benchmarks/tsconfig.json --noEmit",
 		"verify:browser-capabilities": "pnpm exec vitest run --config ./vitest.config.ts tests/browser-capability-matrix.test.ts",
+		"verify:built-runtime-chain": "node ./scripts/verify-built-runtime-chain.mjs",
 		"verify:runtime": "node ./scripts/verify-runtime-entries.mjs",
 		"verify:streaming-only": "node ./scripts/verify-streaming-only.mjs"
 	},

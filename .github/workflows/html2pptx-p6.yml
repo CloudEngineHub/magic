@@ -95,5 +95,11 @@ jobs:
       # Package typecheck is enforced in package-streaming. The repository-wide
       # tsconfig.eslint check currently contains pre-existing baseline errors
       # outside this migration and is intentionally not a P6 release gate.
+      - name: Build html2pptx package runtime
+        run: pnpm --filter @magic/html2pptx run build
+
       - name: Build complete open-source app
         run: pnpm build
+
+      - name: Verify final open-source Worker runtime chain
+        run: pnpm --filter @magic/html2pptx run verify:built-runtime-chain
