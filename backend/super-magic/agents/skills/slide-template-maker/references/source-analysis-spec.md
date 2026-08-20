@@ -1,5 +1,7 @@
 # Source Analysis Specification
 
+This spec applies only when reconstructing from an OOXML presentation file or a `page_images` list. Super Magic projects, HTML pages, and text briefs skip this file entirely and still call `finalize_slide_template`.
+
 `prepare_slide_template_source` creates an internal `source-analysis.json`. This is tool-owned authoring state, not a file the Agent should read, write, or recreate. `finalize_slide_template` removes it after success and keeps a summary in `template-assets.json`.
 
 ## Required catalog fields
@@ -49,7 +51,7 @@ These are measurements, not opinions. Prefer them over your own reading of the p
 
 ## Visual review
 
-Call `review_slide_template_source` with `template_dir` and 1–3 `source_indexes`. The tool attaches official full-page images and representative crops, then writes `visual_analysis` itself. Use every index in `prepared.data["recommended_review_indexes"]`; that list already covers one page per background scheme, so a skipped entry means a scheme gets reconstructed from guesswork. Include mascot or brand-illustration pages when they exist.
+Call `review_slide_template_source` with `template_dir` and up to 6 `source_indexes`. Pages inside one call are reviewed in parallel, so send full batches instead of one page per call. The tool attaches official full-page images and representative crops, then writes `visual_analysis` itself. Use every index in `prepared.data["recommended_review_indexes"]`: in `hybrid` and `template-abstraction` that list covers one page per background scheme, and in `high-fidelity` it covers every page because every page ships. A skipped entry gets reconstructed from guesswork.
 
 Its `content` reports, per reviewed page: the measured background with the body text color, the palette roles, the composition geometry as percentages, the type scale as percentages of canvas height, and the `must_preserve` details. Read those values and carry them into `visual-spec.md`, `theme.css`, and the slide HTML. The model-reported `base_color` and `tone` are overwritten with the measured values, so the background reported here is always authoritative.
 

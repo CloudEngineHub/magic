@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from PIL import Image
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -18,6 +19,7 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.canvas import PixelSize, detect_source_canvas
 from app.tools.slide_template_builder.common import (
     ANALYSIS_DIR_NAME,
+    MAX_REVIEW_INDEXES_PER_CALL,
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
     background_variants,
@@ -26,6 +28,7 @@ from app.tools.slide_template_builder.common import (
     ensure_template_working_directory,
     public_asset_id,
     recommended_review_indexes,
+    resolve_template_converter_output_dir,
     resolve_template_working_directory,
     resolve_workspace_template_dir,
     validate_template_directory,
@@ -35,6 +38,7 @@ from app.tools.slide_template_builder.models import ReconstructionMode, Template
 from app.tools.slide_template_builder.pptx_structure import extract_pptx_structure
 from app.tools.slide_template_builder.source_images import build_page_artifacts, create_contact_sheet
 from app.tools.workspace_tool import WorkspaceTool
+from app.utils.document_parse.service.document_format_converter import DocumentFormatConverter
 from app.utils.async_file_utils import (
     async_exists,
     async_is_file,
@@ -47,6 +51,41 @@ from app.utils.async_file_utils import (
 )
 
 SUPPORTED_PRESENTATION_STRUCTURE_SUFFIXES = {".pptx", ".pptm", ".potx", ".potm", ".ppsx", ".ppsm"}
+PAGE_RENDER_FORMAT = "png"
+PAGE_NUMBER_RE = re.compile(r"(\d+)")
+
+
+def _page_order_key(path: Path) -> tuple[int, str]:
+    """Order converter page renders by their trailing page number, not by string sort."""
+    numbers = PAGE_NUMBER_RE.findall(path.stem)
+    return (int(numbers[-1]) if numbers else 0, path.name)
+
+
+async def _render_presentation_pages(presentation_path: Path, output_dir: Path) -> list[Path]:
+    """Render every source page to PNG inside the template runtime dir.
+
+    走工具内部渲染，Agent 就不需要先调两次 convert_document_format，
+    也就不会再把 PDF 和页图写进 MagicFS 工作区。
+    """
+    converter = DocumentFormatConverter()
+    try:
+        pdf_outputs = await converter.convert(presentation_path, output_dir, "pdf", None)
+    except Exception as exc:
+        raise SlideTemplateBuilderError(f"Failed to render the source presentation to PDF: {exc}") from exc
+    pdf_path = next((Path(item) for item in pdf_outputs if str(item).lower().endswith(".pdf")), None)
+    if pdf_path is None:
+        raise SlideTemplateBuilderError("Source presentation did not produce a PDF render.")
+    try:
+        page_outputs = await converter.convert(pdf_path, output_dir, PAGE_RENDER_FORMAT, None)
+    except Exception as exc:
+        raise SlideTemplateBuilderError(f"Failed to render source pages to images: {exc}") from exc
+    pages = sorted(
+        (Path(item) for item in page_outputs if str(item).lower().endswith(f".{PAGE_RENDER_FORMAT}")),
+        key=_page_order_key,
+    )
+    if not pages:
+        raise SlideTemplateBuilderError("Source presentation did not produce any page image.")
+    return pages
 
 
 class PrepareSlideTemplateSourceParams(BaseToolParams):
@@ -55,17 +94,16 @@ class PrepareSlideTemplateSourceParams(BaseToolParams):
         description="""<!--zh: 已由 create_slide_template_project 创建的模板目录。-->
 Template directory previously created by create_slide_template_project.""",
     )
-    page_images: list[str] = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        description="""<!--zh: 按源页面顺序排列的高分辨率整页图片路径。图片应来自文档转换工具，不要传 contact sheet 或缩略图。-->
-High-resolution full-page image paths in source order. Use page renders returned by the document converter, not contact sheets or thumbnails.""",
-    )
     source_presentation: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选的 OOXML 演示文件路径，用于只读提取文本框、字体、形状、图片、裁切和图层信息。支持 PPTX/PPTM/POTX/POTM/PPSX/PPSM；旧 PPT 应先通过 document-converter 转为 PPTX。-->
-Optional OOXML presentation path for read-only extraction of text boxes, fonts, shapes, images, crops, and layer order. Supports PPTX/PPTM/POTX/POTM/PPSX/PPSM. Convert legacy PPT to PPTX through document-converter first.""",
+        description="""<!--zh: OOXML 演示文件路径。给了它就不用再自己渲染页图，本工具会直接渲染全部页面并只读提取文本框、字体、形状、图片、裁切和图层信息。支持 PPTX/PPTM/POTX/POTM/PPSX/PPSM；旧 PPT 应先通过 document-converter 转为 PPTX。-->
+OOXML presentation path. Pass it and this tool renders every page itself, so no separate conversion step is needed, and it also extracts text boxes, fonts, shapes, images, crops, and layer order read-only. Supports PPTX/PPTM/POTX/POTM/PPSX/PPSM. Convert legacy PPT to PPTX through document-converter first.""",
+    )
+    page_images: Optional[list[str]] = Field(
+        None,
+        max_length=100,
+        description="""<!--zh: 仅当源不是演示文件（例如截图、图片素材）时才需要传：按源顺序排列的高分辨率整页图片路径。传了 source_presentation 时留空，本工具会自行渲染。不要传 contact sheet 或缩略图。-->
+Only needed when the source is not a presentation, for example screenshots or image references: high-resolution full-page image paths in source order. Leave empty when source_presentation is set, because this tool renders the pages itself. Never pass contact sheets or thumbnails.""",
     )
     reconstruction_mode: ReconstructionMode = Field(
         "hybrid",
@@ -85,11 +123,22 @@ Reconstruction mode. high-fidelity preserves representative page details, templa
 
     @field_validator("page_images")
     @classmethod
-    def normalize_page_images(cls, values: list[str]) -> list[str]:
+    def normalize_page_images(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
         normalized = [value.strip() for value in values]
         if any(not value for value in normalized):
             raise ValueError("page image paths cannot be empty")
         return normalized
+
+    @model_validator(mode="after")
+    def require_a_source(self) -> "PrepareSlideTemplateSourceParams":
+        if not self.page_images and not self.source_presentation:
+            raise ValueError(
+                "Pass source_presentation so the pages can be rendered here, "
+                "or page_images when the source is not a presentation file."
+            )
+        return self
 
 
 def _source_asset_slide_indices(structure: dict[str, Any]) -> dict[str, list[int]]:
@@ -150,9 +199,9 @@ def _source_asset_metadata(data: bytes) -> dict[str, Any]:
 @tool(name="prepare_slide_template_source", code_mode_only=True)
 class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]):
     """<!--zh
-    为模板视觉重建准备高分辨率整页图、重叠局部裁剪、联系表和可选的 PPTX 只读结构数据。不会生成 HTML。
+    为模板视觉重建准备素材：传入 source_presentation 即可，本工具自行渲染全部页面，产出高分辨率整页图、重叠局部裁剪、联系表和 PPTX 只读结构数据。不需要先调 convert_document_format，也不会生成 HTML。
     -->
-    Prepare high-resolution full pages, overlapping detail crops, a contact sheet, and optional read-only PPTX structure for template reconstruction. This tool does not generate HTML.
+    Prepare reconstruction evidence. Pass source_presentation and this tool renders every page itself, producing high-resolution full pages, overlapping detail crops, a contact sheet, and read-only PPTX structure. No separate convert_document_format step is needed. This tool does not generate HTML.
     """
 
     name = "prepare_slide_template_source"
@@ -170,14 +219,11 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             )
             analysis_root = work_dir / ANALYSIS_DIR_NAME
             analysis_file = work_dir / SOURCE_ANALYSIS_FILE
-            page_paths = [self.resolve_path(value).resolve(strict=False) for value in params.page_images]
-            for page_path in page_paths:
-                if not await async_is_file(page_path):
-                    raise SlideTemplateBuilderError(f"Source page image does not exist: {page_path}")
 
             structure = None
             presentation_canvas = None
             structure_warning = None
+            presentation_path = None
             if params.source_presentation:
                 presentation_path = self.resolve_path(params.source_presentation).resolve(strict=False)
                 if not await async_is_file(presentation_path):
@@ -194,6 +240,20 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                         "PPTX structure extraction failed; continue from rendered page images. "
                         f"Details: {exc}"
                     )
+
+            rendered_pages_here = False
+            if params.page_images:
+                page_paths = [self.resolve_path(value).resolve(strict=False) for value in params.page_images]
+                for page_path in page_paths:
+                    if not await async_is_file(page_path):
+                        raise SlideTemplateBuilderError(f"Source page image does not exist: {page_path}")
+            else:
+                assert presentation_path is not None
+                page_paths = await _render_presentation_pages(
+                    presentation_path,
+                    resolve_template_converter_output_dir(work_dir),
+                )
+                rendered_pages_here = True
 
             if await async_exists(analysis_root):
                 await async_rmtree(analysis_root)
@@ -359,7 +419,9 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             }
             await async_write_json(analysis_file, manifest, ensure_ascii=False, indent=2)
 
-            review_indexes = recommended_review_indexes(len(slide_records), page_backgrounds)
+            review_indexes = recommended_review_indexes(
+                len(slide_records), page_backgrounds, params.reconstruction_mode
+            )
             public_ids = [str(item.get("id") or "") for item in asset_catalog if item.get("id")]
             data = {
                 "template_directory": str(template_dir),
@@ -370,6 +432,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "reconstruction_mode": params.reconstruction_mode,
                 "canvas": detected_canvas.model_dump(),
                 "slide_count": len(slide_records),
+                "pages_rendered_by_tool": rendered_pages_here,
                 "background_variants": page_backgrounds,
                 "page_backgrounds": [
                     {"source_index": record["source_index"], **record["background_probe"]}
@@ -399,10 +462,16 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     f"The source mixes {len(page_backgrounds)} background schemes, so theme.css needs one "
                     "surface class per scheme with its own foreground colors instead of a single body background. "
                 )
+            review_reason = (
+                "high-fidelity rebuilds every page, so every page needs measured geometry"
+                if params.reconstruction_mode == "high-fidelity"
+                else "that list already covers every measured background scheme"
+            )
             review_note = (
                 f"Recommended review pages: {', '.join(str(index) for index in review_indexes)}. "
-                "That list already covers every measured background scheme; review all of them so no scheme "
-                "is reconstructed from guesswork. Call review_slide_template_source with 1-3 source_indexes per call. "
+                f"Review all of them because {review_reason}; every page you skip is a page you invent. "
+                f"Call review_slide_template_source with up to {MAX_REVIEW_INDEXES_PER_CALL} source_indexes per call; "
+                "pages inside one call are reviewed in parallel, so send full batches instead of one page at a time. "
             )
             select_note = (
                 "Then call select_slide_template_source_assets with complete decision objects for those catalog ids. "
@@ -411,9 +480,15 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 if extracted_asset_count
                 else "No extracted assets to select. "
             )
+            render_note = (
+                f"Rendered {len(slide_records)} page(s) from the source presentation. "
+                if rendered_pages_here
+                else ""
+            )
             return ToolResult(
                 content=(
-                    f"Slide template source prepared for {len(slide_records)} page(s) in {params.reconstruction_mode} mode. "
+                    render_note
+                    + f"Slide template source prepared for {len(slide_records)} page(s) in {params.reconstruction_mode} mode. "
                     f"Canvas: {detected_canvas.width}x{detected_canvas.height}. "
                     f"Extracted {extracted_asset_count} source asset candidate(s)."
                     + catalog_note

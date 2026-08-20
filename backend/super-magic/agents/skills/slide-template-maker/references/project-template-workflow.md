@@ -1,6 +1,8 @@
 # Super Magic Project To Template
 
-Use this workflow when the user provides an existing Super Magic slide project and asks to extract a reusable template.
+Use this workflow when the user provides an existing Super Magic slide project and asks to extract a reusable template. The source is HTML evidence. It does not change the output contract: create a standalone template project, author semantic pages, then always call `finalize_slide_template`.
+
+Do not call `prepare_slide_template_source`, `review_slide_template_source`, or `select_slide_template_source_assets`. Those tools accept OOXML presentation files or page-image lists, not a Super Magic project. Skipping them is correct. Skipping finalize is not. `finalize_slide_template` renders the authored HTML into `previews/` and does not need PPTX, OOXML, or source analysis.
 
 ## 1. Inspect Without Modifying
 
@@ -35,7 +37,7 @@ Plan the extracted page inventory, then call `create_slide_template_project` to 
 - Preserve the generated `main.slide-container` canvas root on every extracted slide. Its `data-width` and `data-height` values must remain equal to `template.json.source.canvas`.
 - Use `source.kind: "derived"` and `source.method: "project-extract"`.
 - Set `source.canvas` to the source project's fixed canvas. Do not replace a square source with the default `1920x1080` canvas.
-- After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed. If that call fails or `previews/` is missing, report the blocker instead of completion.
+- After authoring, always call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed. If that call fails or `previews/` is missing, report the blocker instead of completion. Do not tell the user finalization is impossible because the source is HTML.
 
 ## 4. Sensitive Content
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -15,6 +17,7 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.common import (
+    MAX_REVIEW_INDEXES_PER_CALL,
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
     display_template_name,
@@ -25,8 +28,6 @@ from app.tools.slide_template_builder.common import (
 )
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_is_file, async_read_json, async_write_json
-
-MAX_REVIEW_INDEXES_PER_CALL = 3
 
 SOURCE_REVIEW_QUERY_TEMPLATE = """Analyze this source slide so it can be rebuilt as fixed-canvas HTML and CSS.
 The first image is the full page. Remaining images are representative detail crops.
@@ -78,6 +79,16 @@ CONTENT_BLOCK_DIGEST_LIMIT = 5
 MUST_PRESERVE_DIGEST_LIMIT = 6
 
 
+@dataclass
+class SourceReviewRequest:
+    """One page queued for visual review, with everything the batch needs to run concurrently."""
+
+    source_index: int
+    slide: dict[str, Any]
+    probe: dict[str, Any] | None
+    images: list[str] = field(default_factory=list)
+
+
 def build_source_review_query(probe: dict[str, Any] | None) -> str:
     measured_note = ""
     if isinstance(probe, dict) and probe.get("color"):
@@ -99,8 +110,8 @@ Template directory previously prepared by prepare_slide_template_source.""",
     source_indexes: list[int] = Field(
         ...,
         min_length=1,
-        description="""<!--zh: 本次回顾的源页序号，从 1 开始，每批 1-3 页。优先使用 prepare 返回的 recommended_review_indexes。-->
-1-based source page indexes to review in this call. Send 1-3 pages per call. Prefer prepare's recommended_review_indexes.""",
+        description="""<!--zh: 本次回顾的源页序号，从 1 开始，每批最多 6 页。同一批内并发回顾，所以按满批发送，不要一页一页调。取值用 prepare 返回的 recommended_review_indexes。-->
+1-based source page indexes to review in this call, at most 6 per call. Pages inside one call are reviewed in parallel, so send full batches instead of one page at a time. Take the values from prepare's recommended_review_indexes.""",
     )
 
     @field_validator("template_dir")
@@ -385,9 +396,7 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                     + f". Valid range is 1-{len(slides)}."
                 )
 
-            digests: list[str] = []
-            preserve_notes: list[str] = []
-            page_backgrounds: list[dict[str, Any]] = []
+            requests: list[SourceReviewRequest] = []
             for index in batch_indexes:
                 slide = slides_by_index[index]
                 full_image = str(slide.get("full_image") or "")
@@ -396,24 +405,39 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                 crop_files = representative_crop_files(
                     slide.get("detail_crops") if isinstance(slide.get("detail_crops"), list) else []
                 )
-                image_paths = [str(work_dir / full_image), *[str(work_dir / path) for path in crop_files]]
                 probe = slide.get("background_probe") if isinstance(slide.get("background_probe"), dict) else None
-                result = await inspect_source_images(image_paths, build_source_review_query(probe))
+                requests.append(SourceReviewRequest(
+                    source_index=index,
+                    slide=slide,
+                    probe=probe,
+                    images=[str(work_dir / full_image), *[str(work_dir / path) for path in crop_files]],
+                ))
+
+            # 一批内的页面互不依赖，并发送审把回顾耗时从「页数 x 单页」压回「约等于单页」。
+            results = await asyncio.gather(*(
+                inspect_source_images(request.images, build_source_review_query(request.probe))
+                for request in requests
+            ))
+
+            digests: list[str] = []
+            preserve_notes: list[str] = []
+            page_backgrounds: list[dict[str, Any]] = []
+            for request, result in zip(requests, results):
                 if not result.ok:
                     raise SlideTemplateBuilderError(
-                        f"Visual review failed for source page {index}: {result.content}"
+                        f"Visual review failed for source page {request.source_index}: {result.content}"
                     )
-                payload = parse_source_review_payload(str(result.content or ""), probe)
-                visual = slide.get("visual_analysis")
+                payload = parse_source_review_payload(str(result.content or ""), request.probe)
+                visual = request.slide.get("visual_analysis")
                 if not isinstance(visual, dict):
                     visual = {}
-                    slide["visual_analysis"] = visual
+                    request.slide["visual_analysis"] = visual
                 visual.update({"status": "complete", **payload})
-                digests.append(render_page_digest(index, payload))
+                digests.append(render_page_digest(request.source_index, payload))
                 preserve_notes.extend(
                     str(item) for item in payload["must_preserve"][:MUST_PRESERVE_DIGEST_LIMIT]
                 )
-                page_backgrounds.append({"source_index": index, **payload["background"]})
+                page_backgrounds.append({"source_index": request.source_index, **payload["background"]})
 
             await async_write_json(analysis_file, analysis, ensure_ascii=False, indent=2)
             remaining = unreviewed_source_indexes(slides)

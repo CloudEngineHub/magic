@@ -4,17 +4,17 @@
     {
       "id": 1,
       "prompt": "我上传了一个 brand-template.pptx，帮我转成可复用的 PPT 模板。",
-      "expected_output": "Load slide-template-maker. Skip the shape intake because reusable is already specified. If the source has images and the user did not specify asset strategy, call ask_user once before create_slide_template_project with a recommended keep-usable-images default. Do not call convert_pptx_to_slide_template, pptx-to-html, or any legacy template converter. Call query_slide_template_taxonomy, list the groups this template needs from result.data, and pick exact category_code and tag_codes by the source's audience, purpose, and visuals rather than keyword search, then call create_slide_template_project with a semantic SLIDE- base ID and bilingual labels, and use the returned unique template_id/template_directory for all later calls. The generated folder name should use the Chinese or English localized label selected by the language tag, contain no random ID suffix, and not change template.json. Then use document-converter to render every reference page into created.data[\"converter_output_dir\"] outside the workspace, not document-converter-output in the workspace. Call prepare_slide_template_source with the page images and source OOXML when available. Call review_slide_template_source for recommended_review_indexes, then select_slide_template_source_assets with complete decision objects using public ids such as asset-01. Author a clean semantic template directory with visual-spec.md, theme.css, images/, and semantic slides/*.html. Finally call finalize_slide_template to create previews/ and template-assets.json in the same directory, then compare previews with the source. Create no ZIP or slide-templates/ prefix."
+      "expected_output": "Load slide-template-maker. Skip the shape intake because reusable is already specified. If the source has images and the user did not specify asset strategy, call ask_user once before create_slide_template_project with a recommended keep-usable-images default. Do not call convert_pptx_to_slide_template, pptx-to-html, or any legacy template converter. Call query_slide_template_taxonomy once, print every group's tags from result.data in that same snippet, and pick exact category_code and tag_codes by the source's audience, purpose, and visuals rather than keyword search, then call create_slide_template_project with a semantic SLIDE- base ID and bilingual labels, and use the returned unique template_id/template_directory for all later calls. The generated folder name should use the Chinese or English localized label selected by the language tag, contain no random ID suffix, and not change template.json. Then call prepare_slide_template_source with template_dir and source_presentation only; it renders the pages itself, so do not call convert_document_format or write document-converter-output in the workspace. Call review_slide_template_source for recommended_review_indexes in batches of up to 6, then select_slide_template_source_assets with complete decision objects using public ids such as asset-01. Author a clean semantic template directory with visual-spec.md, theme.css, images/, and semantic slides/*.html. Finally call finalize_slide_template to create previews/ and template-assets.json in the same directory, then compare previews with the source. Create no ZIP or slide-templates/ prefix."
     },
     {
       "id": 2,
       "prompt": "把这个旧版 .ppt 文件做成模板，尽量保留它的水墨风格。",
-      "expected_output": "Load slide-template-maker. Skip the shape intake because keeping the ink style already implies visual-system reconstruction, not page-by-page copying. If asset strategy is missing, call ask_user once before create with a recommended keep-usable-images default. Create the project first, then convert the legacy presentation only into renderable visual references through document-converter using created.data[\"converter_output_dir\"], call prepare_slide_template_source with the rendered pages, call review_slide_template_source for recommended pages, reconstruct the ink visual system from scratch, set source.kind=derived and source.method=visual-reconstruction, and avoid converter HTML or full-slide screenshots."
+      "expected_output": "Load slide-template-maker. Skip the shape intake because keeping the ink style already implies visual-system reconstruction, not page-by-page copying. If asset strategy is missing, call ask_user once before create with a recommended keep-usable-images default. Create the project first, then convert the legacy PPT to PPTX through document-converter so it can be read as OOXML, call prepare_slide_template_source with that presentation and let it render the pages, call review_slide_template_source for recommended pages in batches, reconstruct the ink visual system from scratch, set source.kind=derived and source.method=visual-reconstruction, and avoid converter HTML or full-slide screenshots."
     },
     {
       "id": 3,
       "prompt": "参考这三张截图，制作一套医疗培训 PPT 模板。",
-      "expected_output": "Load slide-template-maker and the image workflow. Analyze palette, typography, layout language, components, density, and image treatment with visual_understanding, classify as healthcare when appropriate, and create an original semantic template without treating screenshots as reusable slide images."
+      "expected_output": "Load slide-template-maker and the image workflow. Analyze palette, typography, layout language, components, density, and image treatment with visual_understanding, classify as healthcare when appropriate, and create an original semantic template without treating screenshots as reusable slide images. Set source.method=image-rebuild. After authoring, always call finalize_slide_template so previews/ and template-assets.json exist. Do not skip finalize because the source is not PPTX."
     },
     {
       "id": 4,
@@ -24,12 +24,12 @@
     {
       "id": 5,
       "prompt": "把这个 HTML 演示页面整理成可复用的模板。",
-      "expected_output": "Load slide-template-maker and the HTML workflow. Inspect source HTML/CSS/assets, source canvas dimensions, and representative rendered pages; preserve the source aspect ratio while rebuilding independent fixed-canvas semantic template pages."
+      "expected_output": "Load slide-template-maker and the HTML workflow. Inspect source HTML/CSS/assets, source canvas dimensions, and representative rendered pages; preserve the source aspect ratio while rebuilding independent fixed-canvas semantic template pages. Set source.method=html-import. Do not call prepare_slide_template_source. After authoring, always call finalize_slide_template so previews/ and template-assets.json exist."
     },
     {
       "id": 6,
       "prompt": "从这个包含 magic.project.js 的幻灯片项目中提取模板。",
-      "expected_output": "Load slide-template-maker and project-template-workflow. Do not modify the source project. Group repeated layouts, select reusable representatives, sanitize content, and create a standalone <semantic-template-name>/ directory without magic.project.js, index.html, slide-bridge.js, or ZIP."
+      "expected_output": "Load slide-template-maker and project-template-workflow. Treat the Super Magic HTML project as a source, not a blocked format. Do not modify the source project. Do not call prepare_slide_template_source, review_slide_template_source, or select_slide_template_source_assets. Create with source.method=project-extract, group repeated layouts, sanitize content, author the standalone template, then always call finalize_slide_template. Finalize renders authored HTML into previews/ and does not require PPTX, OOXML, or source analysis. Output <semantic-template-name>/ with previews/ and template-assets.json, without magic.project.js, index.html, slide-bridge.js, or ZIP. Do not tell the user finalization is impossible because the source is HTML."
     },
     {
       "id": 7,
@@ -64,7 +64,7 @@
     {
       "id": 13,
       "prompt": "把这个 PPT 做成模板。",
-      "expected_output": "Load slide-template-maker. After a quick source look and before create_slide_template_project, call ask_user once for missing shape and asset strategy. Recommend reusable 8-15 pages plus keep-usable-source-images, with defaults so skip or timeout can continue. Do not convert first, do not put ask_user inside Code Mode, and do not use converter HTML or full-slide screenshots as finished pages. After intake, create the project, render into created.data[\"converter_output_dir\"], prepare, review, select complete decision objects, author semantic HTML, and finalize."
+      "expected_output": "Load slide-template-maker. Before create_slide_template_project, call ask_user once for missing shape and asset strategy, in the user's language. Recommend reusable 8-15 pages plus keep-usable-source-images, with defaults so skip or timeout can continue. Do not open, convert, or render the deck before asking, do not put ask_user inside Code Mode, and do not use converter HTML or full-slide screenshots as finished pages. After intake, create the project, then prepare with source_presentation so the tool renders the pages, review, select complete decision objects, author semantic HTML, and finalize."
     },
     {
       "id": 14,
@@ -80,6 +80,11 @@
       "id": 16,
       "prompt": "页面 HTML 已经写好了，但 finalize 失败，previews 文件夹也没有生成。这套模板算做完了吗？",
       "expected_output": "Load slide-template-maker. Treat the task as blocked, not complete. Do not tell the user the template is finished. Name the blocker as finalize_slide_template failure or missing previews/, list remaining steps including capturing thumbnail, collage, and one preview per slide, and report what already exists so the user can continue."
+    },
+    {
+      "id": 17,
+      "prompt": "从这个 Super Magic PPT 项目提取模板。原始文件是 HTML 项目不是 PPTX，finalize_slide_template 是不是没法跑？预览图是不是也做不了？",
+      "expected_output": "Load slide-template-maker and project-template-workflow. Treat the Super Magic project as a source, not a blocked format. Do not call prepare_slide_template_source. Set source.method=project-extract, author the standalone template, then always call finalize_slide_template. Finalize renders authored HTML into previews/ and does not require PPTX, OOXML, or source analysis. Do not tell the user finalization or preview generation is impossible because the source is HTML."
     }
   ]
 }

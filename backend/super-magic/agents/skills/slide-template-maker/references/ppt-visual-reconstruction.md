@@ -1,22 +1,18 @@
 # Presentation Visual Reconstruction
 
-Use this workflow for PPTX, PPT, POTX, POT, PPSX, WPS presentation files, and presentation-template URLs.
+Use this workflow only for PPTX, PPT, POTX, POT, PPSX, WPS presentation files, and presentation-template URLs. Do not use it for Super Magic HTML projects, HTML pages, screenshots, or text briefs. Those sources still create and finalize the same template project; they gather evidence through `project-template-workflow.md` or `input-workflows.md` instead.
 
 ## 1. Prepare Visual Evidence
 
 Never call `convert_pptx_to_slide_template`, `pptx-to-html`, or a repository-specific PPTX template converter.
 
-Use `document-converter` through `run_sdk_snippet` after `create_slide_template_project`. Pass `created.data["converter_output_dir"]` as `output_dir` so PDF, page images, and extraction dumps stay outside the workspace. Do not create `document-converter-output/` in the workspace. Other document-converter tasks keep their normal workspace output.
+Do not render, convert, or export the deck yourself. `prepare_slide_template_source` renders every page and extracts embedded images in one call, writing all of it outside the workspace. Calling `convert_document_format` or `export_document_markdown` on the source duplicates that work and leaves intermediate files where they do not belong.
 
-1. Convert the presentation to PDF when necessary, writing into `converter_output_dir`.
-2. Convert the PDF pages to PNG or JPEG files in the same `converter_output_dir`.
-3. When reusable embedded images are needed, extract document content with image extraction enabled and inspect only the standalone candidates returned by the tool. Keep that extraction under `converter_output_dir`. Do not use converter HTML or renderer DOM.
-4. Visual review of official page images is owned by `review_slide_template_source` after prepare.
-5. Follow the document-converter large-document confirmation rule when the deck requires multiple visual batches.
-6. Call `prepare_slide_template_source` with every rendered page image and the source OOXML file. Later tools only need `template_dir`. Keep reference material out of `images/`, `slides/`, and `previews/` until `select_slide_template_source_assets` copies approved files.
-7. `prepare_slide_template_source` creates official full-page PNGs, overlapping crops, a contact sheet, optional PPTX structure, and public catalog ids such as `asset-01`.
-8. Call `review_slide_template_source` for every index in `recommended_review_indexes` (1–3 pages per call). Include cover, dense, data, closing, and mascot or brand-illustration pages. Then call `select_slide_template_source_assets` with complete decision objects (asset, decision, asset_type, quality, rationale) until `pending_count` is `0`. Do not write `source-analysis.json` yourself and do not pass converter filenames, catalog rows, or id-only lists.
-9. If conversion, extraction, or visual reading fails, report the exact failing tool call and stop instead of inventing the deck's appearance. If `prepare_slide_template_source` fails, retry it. Do not emulate source analysis with converter-extracted filenames or a hand-written manifest.
+1. Call `prepare_slide_template_source` with `template_dir` and `source_presentation` after `create_slide_template_project`. Leave `page_images` out; it exists only for sources that are loose images rather than a presentation. Later tools only need `template_dir`.
+2. It renders every page, then produces official full-page PNGs, overlapping crops, a contact sheet, PPTX structure, and public catalog ids such as `asset-01`. Keep this reference material out of `images/`, `slides/`, and `previews/` until `select_slide_template_source_assets` copies approved files.
+3. Call `review_slide_template_source` for every index in `recommended_review_indexes`, up to 6 per call. Pages inside one call are reviewed in parallel, so send full batches. In `high-fidelity` the list is every page, because every page ships.
+4. Call `select_slide_template_source_assets` with complete decision objects (asset, decision, asset_type, quality, rationale) until `pending_count` is `0`. Do not write `source-analysis.json` yourself and do not pass converter filenames, catalog rows, or id-only lists.
+5. If rendering, extraction, or visual reading fails, report the exact failing tool call and stop instead of inventing the deck's appearance. If `prepare_slide_template_source` fails, retry it. Do not emulate source analysis with converter-extracted filenames or a hand-written manifest.
 
 Rendering is allowed only to inspect the source. Rendered page images must never become final slide pages.
 
@@ -39,7 +35,7 @@ Do not infer the template direction from the source filename alone. If the user 
 `prepare_slide_template_source` measures the dominant background of every rendered page and returns a background map: one entry per scheme, with a hex value, a light or dark tone, whether the fill is flat or image-backed, and the pages that use it. Read it before deciding the page inventory.
 
 - Treat the map as the deck's tonal structure. A cover and section dividers on a dark field with light content pages between them is a design decision, not noise, and the template must reproduce that alternation.
-- `recommended_review_indexes` already includes one page per scheme. Review all of them. Every scheme you skip becomes a scheme you invent.
+- `recommended_review_indexes` covers every scheme in `hybrid` and `template-abstraction`, and every page in `high-fidelity`. Review all of them. Every entry you skip becomes a page or a scheme you invent.
 - When a scheme is reported as textured or image-backed, the border samples were not uniform: expect a gradient, a split field, a photo, or a full-bleed pattern. Read the reviewed page for how it is constructed, then rebuild it with CSS gradients, a split container, or a retained source asset.
 - Record the map in `visual-spec.md` as the surface inventory, naming each surface and listing the layouts that use it. This is what keeps the template from collapsing to one background later.
 

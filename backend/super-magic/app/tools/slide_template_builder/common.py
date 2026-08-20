@@ -43,6 +43,10 @@ TEMPLATE_WORK_MAX_ENTRIES = 16
 # 底色分组容差：同一设计里的同类底色允许存在渲染噪声
 BACKGROUND_VARIANT_STEP = 24
 REVIEW_INDEX_LIMIT = 12
+HIGH_FIDELITY_REVIEW_INDEX_LIMIT = 40
+MAX_TAG_CODES = 10
+# 单次回顾的页数上限。同一批内的页面并发送审，批量越大总耗时越低。
+MAX_REVIEW_INDEXES_PER_CALL = 6
 
 
 def public_asset_id(index: int) -> str:
@@ -135,10 +139,17 @@ def describe_background_variants(variants: list[dict[str, Any]]) -> str:
 def recommended_review_indexes(
     slide_count: int,
     variants: list[dict[str, Any]] | None = None,
+    reconstruction_mode: str = "hybrid",
 ) -> list[int]:
-    """Sample pages for deep review, covering every measured background variant."""
+    """Sample pages for deep review, covering every measured background variant.
+
+    高保真是逐页重建，每一页都会成为最终页，抽样会让未回顾页的版心和字号只能靠猜，
+    所以这里返回全部页；其它模式只做代表页抽样。
+    """
     if slide_count <= 0:
         return []
+    if reconstruction_mode == "high-fidelity":
+        return list(range(1, min(slide_count, HIGH_FIDELITY_REVIEW_INDEX_LIMIT) + 1))
     if slide_count <= 4:
         return list(range(1, slide_count + 1))
     indexes = {1, slide_count // 3, (2 * slide_count) // 3, slide_count}
@@ -366,10 +377,12 @@ def validate_taxonomy_selection(
     taxonomy: dict[str, Any] | None = None,
 ) -> tuple[str, list[str]]:
     category = str(category_code or "").strip()
-    if category not in active_category_codes(taxonomy):
+    active_categories = sorted(active_category_codes(taxonomy))
+    if category not in active_categories:
+        # 目录会随后端调整而漂移，直接把当前可用值回给模型，避免它再查一次目录后重发整个请求。
         raise SlideTemplateBuilderError(
             f"category_code is not an active PPT category: {category or '<empty>'}. "
-            "Call query_slide_template_taxonomy and copy an exact code from result.data."
+            f"Retry with the closest match from the currently active codes: {', '.join(active_categories)}."
         )
     if not isinstance(tag_codes, list) or not tag_codes:
         raise SlideTemplateBuilderError("tag_codes must contain at least one active tag code.")
@@ -378,6 +391,11 @@ def validate_taxonomy_selection(
         raise SlideTemplateBuilderError("tag_codes cannot contain empty values.")
     if len(normalized) != len(set(normalized)):
         raise SlideTemplateBuilderError("tag_codes cannot contain duplicates.")
+    if len(normalized) > MAX_TAG_CODES:
+        raise SlideTemplateBuilderError(
+            f"tag_codes accepts at most {MAX_TAG_CODES} codes, received {len(normalized)}. "
+            "Keep the codes that describe this template best and drop the rest."
+        )
     records = tag_records_by_code(taxonomy)
     unknown = [code for code in normalized if code not in records]
     if unknown:

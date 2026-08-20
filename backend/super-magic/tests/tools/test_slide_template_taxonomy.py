@@ -37,7 +37,8 @@ async def test_query_returns_index_in_content_and_full_catalog_in_data():
     assert "Education" in result.content
     assert "purpose_group" in result.content
     assert "purpose-training-course" not in result.content
-    assert "Never print the full catalog" in result.content
+    # 片段之间不共享状态，第二次查目录比一次全量打印更贵
+    assert "does not survive into your next snippet" in result.content
     assert "Do not substring-search names" in result.content
     assert "audience, use case, and decision" in result.content
 
