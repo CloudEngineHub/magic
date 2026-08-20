@@ -27,6 +27,7 @@ from app.tools.canvas.tools.layout_canvas_elements import LayoutCanvasElements
 from app.tools.canvas.tools.query_canvas_element_details import QueryCanvasElementDetails
 from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
 from app.tools.canvas.tools.retry_canvas_content_generation import RetryCanvasContentGeneration
+from app.tools.canvas.tools.search_canvas_image_prompts import SearchCanvasImagePrompts
 from app.tools.canvas.tools.search_canvas_images import SearchCanvasImages
 from app.tools.canvas.tools.select_canvas_main_content import SelectCanvasMainContent
 from app.tools.canvas.tools.wait_canvas_generation import WaitCanvasGeneration
@@ -56,6 +57,7 @@ __all__ = [
     "QueryCanvasOverview",
     "RetryCanvasContentGeneration",
     "RetryContentInput",
+    "SearchCanvasImagePrompts",
     "SearchCanvasImages",
     "SelectCanvasMainContent",
     "WaitCanvasGeneration",

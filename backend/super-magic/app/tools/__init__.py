@@ -186,6 +186,7 @@ from app.tools.canvas import (
     EstimateCanvasContentPoints,
     ComposeCanvasVideo as CanvasComposeCanvasVideo,
     SearchCanvasImages as CanvasSearchCanvasImages,
+    SearchCanvasImagePrompts,
 )
 
 # 用户信息工具
@@ -448,6 +449,7 @@ __all__ = [
     "EstimateCanvasContentPoints",
     "CanvasComposeCanvasVideo",
     "CanvasSearchCanvasImages",
+    "SearchCanvasImagePrompts",
 
     # MCP 工具集
     "McpAddServer",
