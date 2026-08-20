@@ -12,6 +12,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Support\ImagePayloadLogSanitizerTrait;
 use App\Infrastructure\Util\File\ImageBase64DataUriParser;
 use App\Infrastructure\Util\Http\GuzzleClientFactory;
+use Exception;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
@@ -223,10 +224,7 @@ class AzureOpenAIAPI
         }
 
         if (isset($data['error'])) {
-            ExceptionBuilder::throw(
-                ImageGenerateErrorCode::GENERAL_ERROR,
-                $data['error']['message']
-            );
+            $this->throwProviderError($data);
         }
 
         return $data;
@@ -237,19 +235,76 @@ class AzureOpenAIAPI
      */
     private function handleException(RequestException $e): void
     {
-        $message = 'image_generate.general_error';
+        $result = [
+            'error' => [
+                'message' => $e->getMessage(),
+            ],
+        ];
 
         if ($e->hasResponse()) {
             $response = $e->getResponse();
-            if (in_array($response->getStatusCode(), [400, 413, 422], true)) {
-                $body = $response->getBody()->getContents();
-                $data = json_decode($body, true);
-                if (is_array($data) && is_string($data['error']['message'] ?? null) && $data['error']['message'] !== '') {
-                    $message = $data['error']['message'];
+            $bodyStream = $response->getBody();
+            $body = (string) $bodyStream;
+            if ($bodyStream->isSeekable()) {
+                $bodyStream->rewind();
+            }
+            $data = json_decode($body, true);
+            if (is_array($data)) {
+                $result = $data;
+            } elseif ($body !== '') {
+                $result = ['error' => ['message' => $body]];
+            }
+        }
+
+        $this->throwProviderError($result);
+    }
+
+    private function throwProviderError(array $result): never
+    {
+        $providerError = is_array($result['error'] ?? null) ? $result['error'] : [];
+        $providerErrorCode = (string) ($providerError['code'] ?? '');
+        $providerErrorMessage = (string) ($providerError['message'] ?? '');
+        $errorCode = $this->resolveProviderErrorCode($providerErrorCode, $providerErrorMessage);
+
+        ExceptionBuilder::throw(
+            $errorCode,
+            throwable: new Exception(
+                json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR)
+                    ?: 'Invalid Azure OpenAI response.'
+            )
+        );
+    }
+
+    private function resolveProviderErrorCode(string $providerErrorCode, string $providerErrorMessage): ImageGenerateErrorCode
+    {
+        $normalizedMessage = strtolower($providerErrorMessage);
+        $errorRules = [
+            ImageGenerateErrorCode::OUTPUT_IMAGE_AUDIT_FAILED->value => [
+                'provider_codes' => ['contentFilter', 'content_filter', 'content_policy_violation'],
+                'keywords' => ['safety', '安全'],
+            ],
+            ImageGenerateErrorCode::INVALID_ASPECT_RATIO->value => [
+                'provider_codes' => [],
+                'keywords' => ['aspect ratio', '宽高比', '尺寸比例'],
+            ],
+            ImageGenerateErrorCode::UNSUPPORTED_IMAGE_SIZE->value => [
+                'provider_codes' => [],
+                'keywords' => ['invalid size', 'unsupported size', '尺寸'],
+            ],
+        ];
+
+        foreach ($errorRules as $errorCode => $rule) {
+            if (in_array($providerErrorCode, $rule['provider_codes'], true)) {
+                return ImageGenerateErrorCode::from($errorCode);
+            }
+
+            foreach ($rule['keywords'] as $keyword) {
+                if (str_contains($normalizedMessage, strtolower($keyword))) {
+                    return ImageGenerateErrorCode::from($errorCode);
                 }
             }
         }
 
-        ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, $message, [], null, $e);
+        return ImageGenerateErrorCode::GENERAL_ERROR;
     }
 }
