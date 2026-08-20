@@ -1,6 +1,0 @@
-{
-  "id": "v3-only",
-  "prompt": "The project cannot be read by the Canvas tools.",
-  "expected_behavior": "Report that the current Canvas project format is unsupported and suggest checking the project with the application owner.",
-  "forbidden_behavior": ["Read or modify the project file directly.", "Attempt a silent migration."]
-}

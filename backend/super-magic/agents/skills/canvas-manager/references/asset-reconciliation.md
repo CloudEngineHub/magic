@@ -1,13 +1,13 @@
-# Asset reconciliation reference
+# Asset reconciliation
 
-只有用户主动提到 Canvas 与本地 `images` 或 `videos` 目录存在差异，或明确要求从本地素材恢复时，才加载本 reference。普通生成失败、单个文件不存在或模糊的“修复画布”请求都不能触发它。
+Load this reference only when the user reports a mismatch between the Canvas and local `images`/`videos` folders, or explicitly asks to restore canvas layers from local media. Ordinary generation failures, a single missing file, or a vague "fix the canvas" request do not trigger it.
 
-## 受控流程
+## Controlled flow
 
-1. 先只读核对 Canvas 详情和用户明确指出的本地素材范围。
-2. 向用户说明明确缺失、已存在、路径冲突和无法判断的项目。
-3. 只有用户明确要求修复后，才对无歧义且未注册的素材使用 `add_canvas_elements`，`source=imported`，并传入真实工作区相对 `asset_path`。
-4. 不删除、不覆盖、不自动处理同名冲突，不修改已有 Content。
-5. 导入后查询新增 Element，确认实际状态。
+1. Read-only comparison: reconcile Canvas details against the local media scope the user named.
+2. Report clearly: what is missing, present, conflicting, or undecidable.
+3. Only after the user explicitly asks to repair, import the unambiguous unregistered assets with `add_canvas_elements` using `source=imported` and the real workspace-relative `asset_path`.
+4. Do not delete, overwrite, auto-resolve name conflicts, or modify existing Content.
+5. After import, query the new Elements to confirm actual state.
 
-素材恢复不是独立的 dry-run/confirm 工具；模型必须把只读核对、用户确认和明确导入分成不同阶段。
+This is not a dry-run/confirm tool; keep the read-only comparison, user confirmation, and explicit import as separate stages.
