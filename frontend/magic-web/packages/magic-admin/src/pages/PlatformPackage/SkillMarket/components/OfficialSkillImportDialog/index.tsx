@@ -13,7 +13,7 @@ import {
 	Typography,
 	message,
 } from "antd"
-import { useMemoizedFn } from "ahooks"
+import { useMemoizedFn, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
 import {
 	IconCheck,
@@ -160,8 +160,19 @@ const OfficialSkillImportDialog = memo(
 		const [parsing, setParsing] = useState(false)
 		const [submitting, setSubmitting] = useState(false)
 		const [categories, setCategories] = useState<Category[]>([])
-		const [categoriesLoading, setCategoriesLoading] = useState(false)
 		const submittingRef = useRef(false)
+
+		const { run: fetchCategories, loading: categoriesLoading } = useRequest(
+			() =>
+				PlatformPackageApi.getSkillMarketCategoryList({
+					status: SkillMarketCategoryStatusMap.visible,
+				}),
+			{
+				manual: true,
+				onSuccess: (response) => setCategories(response.list ?? []),
+				onError: () => message.error(t("officialSkillImport.errors.categoriesFailed")),
+			},
+		)
 
 		const { upload, uploading } = useUpload<Upload.FileData>({
 			storageType: "private",
@@ -187,21 +198,14 @@ const OfficialSkillImportDialog = memo(
 			setParsing(false)
 			setSubmitting(false)
 			setCategories([])
-			setCategoriesLoading(false)
 			submittingRef.current = false
 		})
 
 		useEffect(() => {
 			if (!rest.open) return
 			reset()
-			setCategoriesLoading(true)
-			void PlatformPackageApi.getSkillMarketCategoryList({
-				status: SkillMarketCategoryStatusMap.visible,
-			})
-				.then((response) => setCategories(response.list ?? []))
-				.catch(() => message.error(t("officialSkillImport.errors.categoriesFailed")))
-				.finally(() => setCategoriesLoading(false))
-		}, [PlatformPackageApi, reset, rest.open, t])
+			fetchCategories()
+		}, [reset, rest.open])
 
 		const processSelectedFile = useMemoizedFn(async (selected?: File) => {
 			if (!selected) return

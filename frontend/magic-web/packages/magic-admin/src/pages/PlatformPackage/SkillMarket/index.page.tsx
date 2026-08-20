@@ -11,7 +11,7 @@ import {
 import type { SearchItem, TableButton, TimeRangeValue } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { Flex, InputNumber, Switch, Tag, Tooltip, message, type TableProps } from "antd"
+import { Flex, InputNumber, Select, Switch, Tag, Tooltip, message, type TableProps } from "antd"
 import { IconCategory, IconUpload } from "@tabler/icons-react"
 import { usePagination } from "@admin/hooks/usePagination"
 import { useApis } from "@admin/apis"
@@ -28,9 +28,13 @@ const SkillMarketCard = lazy(() => import("./SkillMarketCard"))
 type DataType = PlatformPackage.SkillMarketItem
 type ParamsType = PlatformPackage.GetSkillMarketListParams
 const MAX_VISIBLE_CATEGORY_TAGS = 2
+const CATEGORY_SELECT_WIDTH = 220
 
 function getSkillMarketCategoryIds(record: DataType) {
-	return Array.from(new Set((record.category_ids ?? []).filter(Boolean)))
+	if (Array.isArray(record.category_ids)) {
+		return Array.from(new Set(record.category_ids.filter(Boolean)))
+	}
+	return record.category_id ? [record.category_id] : []
 }
 
 const useStyles = createStyles(({ token }) => ({
@@ -57,6 +61,7 @@ function SkillMarketPage() {
 	const [sortSavingIds, setSortSavingIds] = useState<Set<string>>(new Set())
 	const [featuredSavingIds, setFeaturedSavingIds] = useState<Set<string>>(new Set())
 	const [hiddenSavingIds, setHiddenSavingIds] = useState<Set<string>>(new Set())
+	const [categorySavingIds, setCategorySavingIds] = useState<Set<string>>(new Set())
 	const [categoryOpen, setCategoryOpen] = useState(false)
 	const [categories, setCategories] = useState<PlatformPackage.SkillMarketCategoryItem[]>([])
 	const [officialImportOpen, setOfficialImportOpen] = useState(false)
@@ -85,7 +90,7 @@ function SkillMarketPage() {
 			manual: true,
 		},
 	)
-	const { run: runCategories } = useRequest(
+	const { run: runCategories, loading: categoriesLoading } = useRequest(
 		() => PlatformPackageApi.getSkillMarketCategoryList({}),
 		{
 			manual: true,
@@ -169,6 +174,15 @@ function SkillMarketPage() {
 		[categories],
 	)
 
+	const categoryOptions = useMemo(
+		() =>
+			flattenSkillCategoryTree(categories).map((category) => ({
+				label: resolveSkillCategoryName(category),
+				value: category.id,
+			})),
+		[categories],
+	)
+
 	const getCategoryNames = useMemoizedFn((record: DataType) => {
 		const categoryIds = getSkillMarketCategoryIds(record)
 		if (!categoryIds.length) return []
@@ -225,6 +239,42 @@ function SkillMarketPage() {
 			</Tooltip>
 		)
 	})
+
+	const handleChangeCategory = useMemoizedFn(
+		async (record: DataType, nextCategoryIds?: string[]) => {
+			const categoryIds = Array.from(new Set((nextCategoryIds ?? []).filter(Boolean)))
+			const currentCategoryIds = getSkillMarketCategoryIds(record)
+			if (
+				currentCategoryIds.length === categoryIds.length &&
+				currentCategoryIds.every((id) => categoryIds.includes(id))
+			)
+				return
+
+			setCategorySavingIds((prev) => new Set([...prev, record.id]))
+			try {
+				await PlatformPackageApi.updateSkillMarketCategoryRelation(record.id, categoryIds)
+				setData((prev) =>
+					prev.map((item) =>
+						item.id === record.id
+							? {
+									...item,
+									category_ids: categoryIds,
+									category_id: categoryIds[0] ?? null,
+								}
+							: item,
+					),
+				)
+			} catch {
+				message.error(tCommon("message.updateFailed"))
+			} finally {
+				setCategorySavingIds((prev) => {
+					const next = new Set(prev)
+					next.delete(record.id)
+					return next
+				})
+			}
+		},
+	)
 
 	const getSortOrderInputValue = useMemoizedFn((record: DataType) => {
 		if (Object.prototype.hasOwnProperty.call(sortOrderDraftMap, record.id)) {
@@ -376,7 +426,29 @@ function SkillMarketPage() {
 				dataIndex: "category_ids",
 				key: "category_ids",
 				width: 240,
-				render: (_, record) => renderCategoryNames(record),
+				render: (_, record) => {
+					const saving = categorySavingIds.has(record.id)
+					if (!categories.length) return renderCategoryNames(record)
+					const categoryIds = getSkillMarketCategoryIds(record)
+
+					return (
+						<Select
+							allowClear
+							showSearch
+							mode="multiple"
+							maxTagCount="responsive"
+							optionFilterProp="label"
+							style={{ width: CATEGORY_SELECT_WIDTH }}
+							value={categoryIds.length ? categoryIds : undefined}
+							placeholder={t("category.uncategorized")}
+							options={categoryOptions}
+							loading={categoriesLoading}
+							disabled={saving || !hasEditRight}
+							dropdownStyle={{ maxHeight: 320, overflowY: "auto" }}
+							onChange={(value) => handleChangeCategory(record, value)}
+						/>
+					)
+				},
 			},
 			{
 				title: t("isFeatured"),
@@ -476,6 +548,11 @@ function SkillMarketPage() {
 			getLocalizedText,
 			renderDescriptionText,
 			renderCategoryNames,
+			categoryOptions,
+			categories,
+			categoriesLoading,
+			categorySavingIds,
+			handleChangeCategory,
 			styles.desc,
 			publisherTypeMap,
 			renderStatus,
@@ -670,6 +747,10 @@ function SkillMarketPage() {
 							handleChangeHidden={handleChangeHidden}
 							getLocalizedText={getLocalizedText}
 							renderCategoryNames={renderCategoryNames}
+							categoryOptions={categoryOptions}
+							categorySavingIds={categorySavingIds}
+							handleChangeCategory={handleChangeCategory}
+							hasEditRight={hasEditRight}
 						/>
 					}
 					paginationConfig={paginationConfig}
