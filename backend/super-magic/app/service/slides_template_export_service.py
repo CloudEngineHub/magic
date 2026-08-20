@@ -43,7 +43,7 @@ def _resolve_template_file(template_dir: Path, relative_path: str) -> Path:
         raise ValueError("Template asset path must stay inside the template directory.") from exc
 
     if not resolved.is_file():
-        raise ValueError(f"Template asset does not exist: {relative_path}")
+        raise ValueError(f"Template asset was not found: {relative_path}")
     return resolved
 
 
@@ -69,11 +69,11 @@ def _load_manifest(template_dir: Path) -> Dict[str, Any]:
 def _validate_directory_limits(template_dir: Path) -> tuple[int, int]:
     files = [path for path in template_dir.rglob("*") if path.is_file()]
     if len(files) > MAX_FILE_COUNT:
-        raise ValueError(f"Slide template directory may contain at most {MAX_FILE_COUNT} files.")
+        raise ValueError(f"Slide template directory contains more than {MAX_FILE_COUNT} files.")
 
     total_size = sum(path.stat().st_size for path in files)
     if total_size > MAX_DIRECTORY_SIZE_BYTES:
-        raise ValueError("Slide template directory may be at most 200 MB.")
+        raise ValueError("Slide template directory size exceeds the 200 MB limit.")
     return len(files), total_size
 
 
@@ -83,7 +83,7 @@ def _preview_paths(manifest: Dict[str, Any]) -> list[str]:
         raise ValueError("local_files.preview_images must be an array.")
     paths = [str(path).strip() for path in preview_images if str(path).strip()]
     if len(paths) > MAX_PREVIEW_IMAGE_COUNT:
-        raise ValueError(f"Slide template may contain at most {MAX_PREVIEW_IMAGE_COUNT} preview images.")
+        raise ValueError(f"Slide template contains more than {MAX_PREVIEW_IMAGE_COUNT} preview images.")
     return paths
 
 
