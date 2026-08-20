@@ -17,6 +17,7 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.common import (
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
+    display_template_name,
     resolve_template_working_directory,
     resolve_workspace_template_dir,
     unreviewed_source_indexes,
@@ -24,6 +25,8 @@ from app.tools.slide_template_builder.common import (
 )
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_is_file, async_read_json, async_write_json
+
+MAX_REVIEW_INDEXES_PER_CALL = 3
 
 SOURCE_REVIEW_QUERY_TEMPLATE = """Analyze this source slide so it can be rebuilt as fixed-canvas HTML and CSS.
 The first image is the full page. Remaining images are representative detail crops.
@@ -96,7 +99,6 @@ Template directory previously prepared by prepare_slide_template_source.""",
     source_indexes: list[int] = Field(
         ...,
         min_length=1,
-        max_length=3,
         description="""<!--zh: 本次回顾的源页序号，从 1 开始，每批 1-3 页。优先使用 prepare 返回的 recommended_review_indexes。-->
 1-based source page indexes to review in this call. Send 1-3 pages per call. Prefer prepare's recommended_review_indexes.""",
     )
@@ -121,6 +123,13 @@ Template directory previously prepared by prepare_slide_template_source.""",
         if not unique:
             raise ValueError("source_indexes is required")
         return unique
+
+
+def split_review_indexes(
+    indexes: list[int],
+    limit: int = MAX_REVIEW_INDEXES_PER_CALL,
+) -> tuple[list[int], list[int]]:
+    return indexes[:limit], indexes[limit:]
 
 
 def parse_source_review_payload(raw: str, probe: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -367,7 +376,8 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                 for slide in slides
                 if isinstance(slide, dict) and isinstance(slide.get("source_index"), int)
             }
-            missing = [index for index in params.source_indexes if index not in slides_by_index]
+            batch_indexes, deferred_indexes = split_review_indexes(params.source_indexes)
+            missing = [index for index in batch_indexes if index not in slides_by_index]
             if missing:
                 raise SlideTemplateBuilderError(
                     "Unknown source_indexes: "
@@ -378,7 +388,7 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
             digests: list[str] = []
             preserve_notes: list[str] = []
             page_backgrounds: list[dict[str, Any]] = []
-            for index in params.source_indexes:
+            for index in batch_indexes:
                 slide = slides_by_index[index]
                 full_image = str(slide.get("full_image") or "")
                 if not full_image:
@@ -412,9 +422,15 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                 if remaining
                 else "All prepared source pages have been reviewed."
             )
+            if deferred_indexes:
+                remaining_note += (
+                    f" This call reviews at most {MAX_REVIEW_INDEXES_PER_CALL} pages; call again for: "
+                    + ", ".join(str(index) for index in deferred_indexes)
+                    + "."
+                )
             data = {
                 "template_directory": str(template_dir),
-                "reviewed_source_indexes": list(params.source_indexes),
+                "reviewed_source_indexes": batch_indexes,
                 "unreviewed_source_indexes": remaining,
                 "page_backgrounds": page_backgrounds,
                 "must_preserve": preserve_notes,
@@ -440,7 +456,7 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] | None = None
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        template_dir = display_template_name((arguments or {}).get("template_dir"))
         return {
             "tool_name": tool_name,
             "action": i18n.translate("review_slide_template_source", category="tool.actions"),
@@ -459,7 +475,10 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
         execution_time: float,
         arguments: Dict[str, Any] | None = None,
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        data = result.data if isinstance(result.data, dict) else {}
+        template_dir = display_template_name(
+            data.get("template_directory") or (arguments or {}).get("template_dir")
+        )
         key = (
             "review_slide_template_source.after_success"
             if result.ok

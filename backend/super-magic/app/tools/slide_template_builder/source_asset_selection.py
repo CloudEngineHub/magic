@@ -1,4 +1,7 @@
-"""Review source asset candidates and copy only selected assets into the final template."""
+"""Review source asset candidates and copy only selected assets into the final template.
+
+Skill: agents/skills/slide-template-maker/SKILL.md
+"""
 
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ from app.tools.slide_template_builder.common import (
     ANALYSIS_DIR_NAME,
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
+    display_template_name,
     resolve_template_working_directory,
     resolve_workspace_template_dir,
     validate_template_directory,
@@ -45,6 +49,70 @@ AssetType = Literal[
     "diagram",
     "other",
 ]
+DECISION_OBJECT_EXAMPLE = (
+    '{"asset": "asset-01", "decision": "discard", "asset_type": "photo", '
+    '"quality": "poor", "rationale": "Unused low-resolution crop."}'
+)
+DECISIONS_USAGE_ERROR = (
+    "Each decisions item must be a complete object with asset and decision. "
+    f"Example: {DECISION_OBJECT_EXAMPLE} "
+    "quality must be high, acceptable, or poor. "
+    "asset_type must be illustration, photo, texture, icon, logo, screenshot, diagram, or other. "
+    "Send 1-8 items per call and repeat until pending_count is 0."
+)
+_DECISION_ALIASES = {
+    "keep": "reuse",
+    "use": "reuse",
+    "select": "reuse",
+    "drop": "discard",
+    "skip": "discard",
+    "reject": "discard",
+    "remove": "discard",
+}
+_QUALITY_ALIASES = {
+    "low": "poor",
+    "bad": "poor",
+    "medium": "acceptable",
+    "ok": "acceptable",
+    "okay": "acceptable",
+    "good": "high",
+    "unknown": "acceptable",
+}
+_TYPE_ALIASES = {
+    "photograph": "photo",
+    "image": "photo",
+    "picture": "photo",
+    "graphic": "illustration",
+    "artwork": "illustration",
+    "svg": "illustration",
+    "mascot": "illustration",
+    "vector": "illustration",
+    "unknown": "other",
+}
+
+
+def _first_text(data: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _normalize_choice(value: str | None, aliases: dict[str, str]) -> str | None:
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    return aliases.get(lowered, lowered)
+
+
+def _semantic_target_name(raw: str | None, asset_id: str, extension: str) -> str:
+    stem = Path(raw or "").stem if raw else ""
+    if not stem:
+        stem = asset_id
+    stem = re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-") or "asset"
+    ext = extension if extension.startswith(".") else f".{extension}"
+    return f"{stem}{ext.lower()}"
 
 
 class SourceAssetDecisionParams(BaseModel):
@@ -55,6 +123,34 @@ class SourceAssetDecisionParams(BaseModel):
     rationale: str = Field(..., min_length=3, max_length=1000)
     target_name: Optional[str] = Field(None, description="Semantic output filename for a reused asset.")
     intended_role: Optional[str] = Field(None, max_length=500)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_decision_payload(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            raise ValueError(DECISIONS_USAGE_ERROR)
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        asset = _first_text(value, ("asset", "id"))
+        if asset:
+            normalized["asset"] = asset
+        decision = _normalize_choice(_first_text(value, ("decision", "action")), _DECISION_ALIASES)
+        if decision:
+            normalized["decision"] = decision
+        asset_type = _normalize_choice(_first_text(value, ("asset_type", "type")), _TYPE_ALIASES)
+        if asset_type:
+            normalized["asset_type"] = asset_type
+        quality = _normalize_choice(_first_text(value, ("quality",)), _QUALITY_ALIASES)
+        if quality:
+            normalized["quality"] = quality
+        rationale = _first_text(value, ("rationale", "note", "reason"))
+        if rationale:
+            normalized["rationale"] = rationale
+        intended_role = _first_text(value, ("intended_role", "role"))
+        if intended_role:
+            normalized["intended_role"] = intended_role
+        return normalized
 
     @field_validator("asset", "rationale")
     @classmethod
@@ -77,12 +173,10 @@ class SourceAssetDecisionParams(BaseModel):
         if self.decision == "reuse":
             if self.quality == "poor":
                 raise ValueError("poor-quality assets cannot be reused")
-            if not self.target_name or not re.fullmatch(ASSET_TARGET_PATTERN, self.target_name):
-                raise ValueError("reused assets require a semantic lowercase target_name with an extension")
             if not self.intended_role:
-                raise ValueError("reused assets require intended_role")
-        elif self.target_name:
-            raise ValueError("discarded assets cannot define target_name")
+                self.intended_role = self.rationale
+        else:
+            self.target_name = None
         return self
 
 
@@ -96,8 +190,21 @@ Template directory previously prepared by prepare_slide_template_source.""",
         ...,
         min_length=1,
         description="""<!--zh: 本次要写入的素材审核决策。可分批调用，asset 必须使用 asset_catalog[].id（如 asset-01）。-->
-One batch of review decisions. Repeat the call until every catalog asset is decided. Use exact asset_catalog[].id values such as asset-01, not document-converter filenames.""",
+One batch of complete review objects. Repeat until every catalog asset is decided. Use exact asset_catalog[].id values such as asset-01, not document-converter filenames.""",
     )
+
+    @classmethod
+    def get_custom_error_message(cls, field_name: str, error_type: str) -> Optional[str]:
+        if field_name == "decisions":
+            return DECISIONS_USAGE_ERROR
+        return None
+
+    @field_validator("decisions", mode="before")
+    @classmethod
+    def reject_decision_mapping(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            raise ValueError(DECISIONS_USAGE_ERROR)
+        return value
 
     @field_validator("template_dir")
     @classmethod
@@ -231,18 +338,29 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
                     + _format_asset_ids(expected_ids)
                 )
 
-            for asset_name, decision in resolved_decisions.items():
+            for asset_name, decision in list(resolved_decisions.items()):
                 catalog_item = catalog_by_asset[asset_name]
                 source_file = str(catalog_item.get("source_file") or "")
                 source_path = _resolve_source_asset(work_dir, source_file)
                 if not await async_is_file(source_path):
                     raise SlideTemplateBuilderError(f"Extracted source asset is missing: {source_file}")
+                if decision.decision != "reuse":
+                    continue
                 source_extension = Path(str(catalog_item.get("asset") or asset_name)).suffix.lower()
-                target_extension = Path(decision.target_name or "").suffix.lower()
-                if decision.decision == "reuse" and source_extension != target_extension:
+                if not source_extension:
                     raise SlideTemplateBuilderError(
-                        f"target_name must keep the original extension for {_catalog_ref(catalog_item)}: {source_extension}"
+                        f"Extracted source asset is missing a file extension: {_catalog_ref(catalog_item)}"
                     )
+                target_name = _semantic_target_name(
+                    decision.target_name,
+                    str(catalog_item.get("id") or asset_name),
+                    source_extension,
+                )
+                if not re.fullmatch(ASSET_TARGET_PATTERN, target_name):
+                    raise SlideTemplateBuilderError(
+                        f"Could not build a semantic target_name for {_catalog_ref(catalog_item)}"
+                    )
+                resolved_decisions[asset_name] = decision.model_copy(update={"target_name": target_name})
 
             selected_names = [
                 item.target_name
@@ -330,7 +448,7 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] | None = None
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        template_dir = display_template_name((arguments or {}).get("template_dir"))
         return {
             "tool_name": tool_name,
             "action": i18n.translate("select_slide_template_source_assets", category="tool.actions"),
@@ -349,7 +467,10 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
         execution_time: float,
         arguments: Dict[str, Any] | None = None,
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        data = result.data if isinstance(result.data, dict) else {}
+        template_dir = display_template_name(
+            data.get("template_directory") or (arguments or {}).get("template_dir")
+        )
         key = (
             "select_slide_template_source_assets.after_success"
             if result.ok

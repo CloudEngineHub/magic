@@ -96,7 +96,7 @@ The main path is three beats. Taxonomy, canvas, and asset policy live in the ref
 6. If the source is a presentation with extractable assets, render pages with `document-converter` using `created.data["converter_output_dir"]` as `output_dir`. Do not create `document-converter-output/` in the workspace. Then:
    - `prepare_slide_template_source` with the page images and source OOXML. Pass `high-fidelity` after a page-by-page intake, otherwise `hybrid`. Read the reported background map; it names every measured background scheme and the pages that use it.
    - `review_slide_template_source` for every index in `recommended_review_indexes` (1–3 pages per call). That list already covers one page per background scheme, so skipping entries loses a whole light or dark section. Also include cover, dense, data, closing, and any mascot or brand-illustration pages.
-   - `select_slide_template_source_assets` with public ids such as `asset-01`. Batch until `pending_count` is `0`. Never pass converter filenames such as `<source>_image_0001.webp`.
+   - `select_slide_template_source_assets` with 1–8 complete decision objects per call. Use public ids such as `asset-01`. Repeat until `pending_count` is `0`. Never pass converter filenames, catalog rows, id-only objects, or a list of ids. `target_name` is a semantic stem; the tool keeps the original file extension.
 7. Text briefs, screenshots, or HTML with no extractable assets skip beat 6.
 8. Author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files in `template_dir`, following the Source Fidelity Rules below. For reusable/hybrid templates, keep 8–15 useful slides and fuse repeated source pages. For high-fidelity, keep the source page count minus ads, watermarks, and copyright pages.
 9. Call `finalize_slide_template`. It still hard-blocks missing prepare (for visual-reconstruction), incomplete asset decisions, unused selected assets, converter residue, canvas/taxonomy errors, and missing previews. Unreviewed source pages become warnings, not a hard stop.
@@ -212,10 +212,28 @@ for source_index in prepared.data["recommended_review_indexes"]:
         raise SystemExit(reviewed.content)
     print(reviewed.content)
 
-# Use exact public ids such as asset-01. Repeat until pending_count == 0.
+# Send 1-8 complete objects per call. Repeat until pending_count == 0.
+# Do not pass catalog ids, catalog rows, or empty dicts.
 selected = tool.call("select_slide_template_source_assets", {
     "template_dir": template_dir,
-    "decisions": asset_decisions
+    "decisions": [
+        {
+            "asset": "asset-01",
+            "decision": "reuse",
+            "asset_type": "illustration",
+            "quality": "high",
+            "rationale": "Brand mascot used on cover and section dividers.",
+            "target_name": "mascot.webp",
+            "intended_role": "Cover visual anchor.",
+        },
+        {
+            "asset": "asset-02",
+            "decision": "discard",
+            "asset_type": "photo",
+            "quality": "poor",
+            "rationale": "Low-resolution crop unused by the reconstructed layout.",
+        },
+    ],
 })
 if not selected.ok:
     raise SystemExit(selected.content)

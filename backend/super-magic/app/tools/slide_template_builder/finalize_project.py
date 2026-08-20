@@ -14,6 +14,7 @@ from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_
 from app.tools.slide_template_builder.common import (
     SlideTemplateBuilderError,
     cleanup_template_intermediates,
+    display_template_name,
     resolve_workspace_template_dir,
     validate_template_project,
 )
@@ -203,7 +204,7 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] | None = None
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        template_dir = display_template_name((arguments or {}).get("template_dir"))
         return {
             "tool_name": tool_name,
             "action": i18n.translate("finalize_slide_template", category="tool.actions"),
@@ -222,7 +223,10 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
         execution_time: float,
         arguments: Dict[str, Any] | None = None,
     ) -> Dict:
-        template_id = str((result.data or {}).get("template_id") or (arguments or {}).get("template_dir") or "-")
+        data = result.data if isinstance(result.data, dict) else {}
+        template_id = str(
+            data.get("template_id") or display_template_name((arguments or {}).get("template_dir"))
+        )
         key = "finalize_slide_template.after_success" if result.ok else "finalize_slide_template.after_failed"
         return {
             "tool_name": tool_name,

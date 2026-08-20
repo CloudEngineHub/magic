@@ -49,6 +49,14 @@ def public_asset_id(index: int) -> str:
     return f"asset-{index:02d}"
 
 
+def display_template_name(template_dir: str | None) -> str:
+    """Return the folder name users should see, never a sandbox path."""
+    value = str(template_dir or "").strip().rstrip("/\\")
+    if not value or value == "-":
+        return "-"
+    return Path(value).name or "-"
+
+
 def _background_variant_key(probe: dict[str, Any]) -> str | None:
     color = str(probe.get("color") or "").lower()
     if not re.fullmatch(r"#[0-9a-f]{6}", color):

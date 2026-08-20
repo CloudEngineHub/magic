@@ -96,7 +96,7 @@ def detect_source_canvas(
         )
     rendered_canvas = normalize_canvas_size(first_source_size.width, first_source_size.height)
     if presentation_canvas is not None:
-        if not canvas_aspect_matches(presentation_canvas, rendered_canvas):
+        if not canvas_aspect_matches(presentation_canvas, first_source_size):
             raise ValueError(
                 f"Rendered page aspect ratio {first_source_size.width}x{first_source_size.height} "
                 f"does not match the PPTX canvas {presentation_canvas.width}x{presentation_canvas.height}. "

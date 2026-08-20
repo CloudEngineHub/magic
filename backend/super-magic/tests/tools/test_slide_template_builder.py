@@ -23,6 +23,7 @@ from app.tools.slide_template_builder.common import (
     background_variants,
     cleanup_template_intermediates,
     describe_background_variants,
+    display_template_name,
     evict_stale_template_working_directories,
     generate_semantic_directory_name,
     recommended_review_indexes,
@@ -664,6 +665,14 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
     assert manifest["backend_fields"]["tag_codes"] == _params().tag_codes
     assert str(work_dir) in manifest["cleanup"]["removed_temporary_paths"]
     assert manifest["not_generated"]["template_file_key"]
+
+
+def test_display_template_name_strips_sandbox_path():
+    assert display_template_name("/mnt/agfs/magicfs/project/SLIDE-奥运体育赛事") == "SLIDE-奥运体育赛事"
+    assert display_template_name("SLIDE-奥运体育赛事/") == "SLIDE-奥运体育赛事"
+    assert display_template_name("SLIDE-奥运体育赛事") == "SLIDE-奥运体育赛事"
+    assert display_template_name("") == "-"
+    assert display_template_name(None) == "-"
 
 
 def test_resolve_template_working_directory_uses_sibling_runtime_for_workspace(tmp_path):

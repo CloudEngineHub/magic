@@ -11,6 +11,10 @@ from pptx.util import Inches
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.slide_template_builder import CreateSlideTemplateProject, PrepareSlideTemplateSource
+from app.tools.slide_template_builder.canvas import (
+    PixelSize,
+    detect_source_canvas,
+)
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
 from app.tools.slide_template_builder.models import (
     TemplateCanvas,
@@ -218,6 +222,16 @@ async def test_prepare_source_rejects_rendered_ratio_that_differs_from_pptx(tmp_
 
     assert not result.ok
     assert "does not match the PPTX canvas 1920x1920" in result.content
+
+
+def test_detect_source_canvas_accepts_near_16x9_renderer_padding():
+    detected = detect_source_canvas(
+        declared_canvas=TemplateCanvas(width=1920, height=1080),
+        source_page_sizes=[PixelSize(width=2001, height=1125)],
+        presentation_canvas=TemplateCanvas(width=1920, height=1080),
+    )
+    assert detected.canvas == TemplateCanvas(width=1920, height=1080)
+    assert detected.warning is None
 
 
 def test_pptx_structure_preserves_square_slide_ratio(tmp_path):

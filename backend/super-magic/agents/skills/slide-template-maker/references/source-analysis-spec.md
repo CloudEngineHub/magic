@@ -15,7 +15,19 @@ Each extracted asset has a public id the Agent must use:
 }
 ```
 
-Call `select_slide_template_source_assets` with `asset-01`, `asset-02`, and so on. Do not pass document-converter filenames such as `<source>_image_0001.webp`. Legacy `asset_catalog[].asset` paths still work, but public ids are the contract.
+Call `select_slide_template_source_assets` with complete decision objects, 1–8 per call:
+
+```json
+{
+  "asset": "asset-01",
+  "decision": "discard",
+  "asset_type": "photo",
+  "quality": "poor",
+  "rationale": "Unused low-resolution crop."
+}
+```
+
+Reuse also needs a semantic `target_name` stem; the tool keeps the original extension. Repeat until `pending_count` is `0`. Do not pass document-converter filenames such as `<source>_image_0001.webp`, catalog rows, id-only objects, or a list of ids. Legacy `asset_catalog[].asset` paths still work, but public ids are the contract.
 
 ## Background measurement
 

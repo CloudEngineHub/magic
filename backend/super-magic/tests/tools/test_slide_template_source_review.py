@@ -24,6 +24,7 @@ from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplat
 from app.tools.slide_template_builder.source_review import (
     ReviewSlideTemplateSourceParams,
     parse_source_review_payload,
+    split_review_indexes,
 )
 from app.utils.async_file_utils import async_read_json
 
@@ -57,6 +58,15 @@ def test_recommended_review_indexes_covers_cover_middle_and_close():
     assert recommended_review_indexes(1) == [1]
     assert recommended_review_indexes(4) == [1, 2, 3, 4]
     assert recommended_review_indexes(15) == [1, 5, 10, 15]
+
+
+def test_review_params_accept_more_than_three_indexes():
+    params = ReviewSlideTemplateSourceParams(
+        template_dir="navy-review",
+        source_indexes=[3, 6, 9, 10, 11],
+    )
+    assert params.source_indexes == [3, 6, 9, 10, 11]
+    assert split_review_indexes(params.source_indexes) == ([3, 6, 9], [10, 11])
 
 
 def test_parse_source_review_payload_reads_json_block():

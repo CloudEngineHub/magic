@@ -22,6 +22,7 @@ from app.tools.slide_template_builder.common import (
     SlideTemplateBuilderError,
     background_variants,
     describe_background_variants,
+    display_template_name,
     ensure_template_working_directory,
     public_asset_id,
     recommended_review_indexes,
@@ -404,7 +405,9 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "is reconstructed from guesswork. Call review_slide_template_source with 1-3 source_indexes per call. "
             )
             select_note = (
-                "Then call select_slide_template_source_assets with those catalog ids, not converter filenames. "
+                "Then call select_slide_template_source_assets with complete decision objects for those catalog ids. "
+                "Each item needs asset, decision, asset_type, quality, and rationale. "
+                "Do not pass converter filenames, catalog rows, or id-only lists. "
                 if extracted_asset_count
                 else "No extracted assets to select. "
             )
@@ -432,7 +435,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] | None = None
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        template_dir = display_template_name((arguments or {}).get("template_dir"))
         return {
             "tool_name": tool_name,
             "action": i18n.translate("prepare_slide_template_source", category="tool.actions"),
@@ -451,7 +454,10 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
         execution_time: float,
         arguments: Dict[str, Any] | None = None,
     ) -> Dict:
-        template_dir = str((arguments or {}).get("template_dir") or "-")
+        data = result.data if isinstance(result.data, dict) else {}
+        template_dir = display_template_name(
+            data.get("template_directory") or (arguments or {}).get("template_dir")
+        )
         key = "prepare_slide_template_source.after_success" if result.ok else "prepare_slide_template_source.after_failed"
         return {
             "tool_name": tool_name,

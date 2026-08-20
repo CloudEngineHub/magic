@@ -9,6 +9,7 @@ from pptx.dml.color import RGBColor
 from pptx.util import Inches, Pt
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.tools.tool_result import ToolResult
 from app.tools.slide_template_builder import CreateSlideTemplateProject, PrepareSlideTemplateSource, SelectSlideTemplateSourceAssets
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
 from app.tools.slide_template_builder.models import (
@@ -276,3 +277,204 @@ def test_source_asset_decision_rejects_poor_reuse():
             target_name="asset.png",
             intended_role="Cover artwork.",
         )
+
+
+def test_source_asset_decision_accepts_catalog_id_alias():
+    decision = SourceAssetDecisionParams.model_validate({
+        "id": "asset-01",
+        "decision": "discard",
+        "asset_type": "photo",
+        "quality": "poor",
+        "rationale": "Unused low-resolution crop.",
+    })
+    assert decision.asset == "asset-01"
+    assert decision.decision == "discard"
+
+
+def test_select_source_assets_params_reject_catalog_id_strings():
+    with pytest.raises(ValueError, match="complete object"):
+        SelectSlideTemplateSourceAssetsParams.model_validate({
+            "template_dir": "navy-review",
+            "decisions": ["asset-01", "asset-02"],
+        })
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_explains_incomplete_decision_objects(tmp_path):
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
+    result = await select_tool(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        template_dir="navy-review",
+        decisions=[{"id": f"asset-{index:02d}"} for index in range(1, 13)],
+    )
+
+    assert not result.ok
+    assert "complete object" in result.content
+    assert '"asset": "asset-01"' in result.content
+    assert "decisions.0.asset" not in result.content
+    assert "decisions.0.decision" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_accepts_public_id_alias_through_tool_call(tmp_path):
+    template_dir, work_dir, _manifest = await _prepare_with_assets(tmp_path)
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
+    result = await select_tool(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        template_dir=template_dir.name,
+        decisions=[
+            {
+                "id": "asset-01",
+                "decision": "reuse",
+                "asset_type": "illustration",
+                "quality": "high",
+                "rationale": "Keep the public-id artwork as the cover visual anchor.",
+                "target_name": "cover-illustration.png",
+                "intended_role": "Cover visual anchor.",
+            },
+            {
+                "id": "asset-02",
+                "decision": "discard",
+                "asset_type": "other",
+                "quality": "poor",
+                "rationale": "The unused package image should not enter the template.",
+            },
+        ],
+    )
+
+    assert result.ok, result.content
+    updated = await async_read_json(work_dir / "source-analysis.json")
+    selected = next(item for item in updated["asset_catalog"] if item["id"] == "asset-01")
+    assert selected["final_file"] == "images/source-assets/cover-illustration.png"
+
+
+def test_source_asset_decision_normalizes_natural_aliases():
+    discarded = SourceAssetDecisionParams.model_validate({
+        "id": "asset-15",
+        "action": "discard",
+        "type": "logo",
+        "quality": "low",
+        "note": "iSlide promotional watermark.",
+    })
+    assert discarded.asset == "asset-15"
+    assert discarded.decision == "discard"
+    assert discarded.quality == "poor"
+    assert discarded.rationale == "iSlide promotional watermark."
+
+    reused = SourceAssetDecisionParams.model_validate({
+        "asset": "asset-01",
+        "decision": "reuse",
+        "asset_type": "photograph",
+        "quality": "high",
+        "rationale": "Eiffel Tower background photo for cover page.",
+        "target_name": "eiffel-tower-sky.jpg",
+    })
+    assert reused.asset_type == "photo"
+    assert reused.intended_role == "Eiffel Tower background photo for cover page."
+
+
+def test_source_asset_decision_defaults_reuse_role_and_keeps_missing_target_name():
+    decision = SourceAssetDecisionParams.model_validate({
+        "asset": "asset-02",
+        "decision": "reuse",
+        "asset_type": "illustration",
+        "quality": "high",
+        "rationale": "Gold trophy for the agenda page.",
+    })
+    assert decision.intended_role == "Gold trophy for the agenda page."
+    assert decision.target_name is None
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_rewrites_wrong_target_extension(tmp_path):
+    template_dir, work_dir, _manifest = await _prepare_with_assets(tmp_path)
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
+    result = await select_tool(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        template_dir=template_dir.name,
+        decisions=[
+            {
+                "asset": "asset-01",
+                "decision": "reuse",
+                "asset_type": "photo",
+                "quality": "high",
+                "rationale": "Keep the cover photo.",
+                "target_name": "eiffel-tower-sky.jpg",
+                "intended_role": "Cover background.",
+            },
+            {
+                "asset": "asset-02",
+                "decision": "discard",
+                "asset_type": "other",
+                "quality": "poor",
+                "rationale": "Unused package image.",
+            },
+        ],
+    )
+
+    assert result.ok, result.content
+    updated = await async_read_json(work_dir / "source-analysis.json")
+    selected = next(item for item in updated["asset_catalog"] if item["id"] == "asset-01")
+    assert selected["target_name"] == "eiffel-tower-sky.png"
+    assert selected["final_file"] == "images/source-assets/eiffel-tower-sky.png"
+    assert (template_dir / "images/source-assets/eiffel-tower-sky.png").exists()
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_fills_missing_reuse_filename(tmp_path):
+    template_dir, work_dir, _manifest = await _prepare_with_assets(tmp_path)
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
+    result = await select_tool(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        template_dir=template_dir.name,
+        decisions=[
+            {
+                "asset": "asset-01",
+                "decision": "reuse",
+                "asset_type": "illustration",
+                "quality": "high",
+                "rationale": "Keep the source artwork as the cover visual anchor.",
+            },
+            {
+                "asset": "asset-02",
+                "decision": "discard",
+                "asset_type": "other",
+                "quality": "low",
+                "rationale": "Unused package image.",
+            },
+        ],
+    )
+
+    assert result.ok, result.content
+    updated = await async_read_json(work_dir / "source-analysis.json")
+    selected = next(item for item in updated["asset_catalog"] if item["id"] == "asset-01")
+    assert selected["target_name"] == "asset-01.png"
+    assert selected["final_file"] == "images/source-assets/asset-01.png"
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_remark_shows_template_name_not_path():
+    select_tool = SelectSlideTemplateSourceAssets(base_dir="/tmp")
+    arguments = {"template_dir": "/mnt/agfs/magicfs/project/SLIDE-奥运体育赛事"}
+    before = await select_tool.get_before_tool_call_friendly_action_and_remark(
+        select_tool.name,
+        ToolContext(tool_name=select_tool.name, arguments=arguments),
+        arguments,
+    )
+    after = await select_tool.get_after_tool_call_friendly_action_and_remark(
+        select_tool.name,
+        ToolContext(tool_name=select_tool.name, arguments=arguments),
+        ToolResult(
+            content="ok",
+            data={"template_directory": "/mnt/agfs/magicfs/project/SLIDE-奥运体育赛事"},
+        ),
+        0.1,
+        arguments,
+    )
+
+    assert "SLIDE-奥运体育赛事" in before["remark"]
+    assert "SLIDE-奥运体育赛事" in after["remark"]
+    assert "/mnt/" not in before["remark"]
+    assert "/mnt/" not in after["remark"]
+    assert "magicfs" not in before["remark"]
+    assert "magicfs" not in after["remark"]
