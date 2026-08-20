@@ -1,6 +1,6 @@
 ---
 name: canvas-manager
-description: Manage a Canvas through its business tools — initialize and query projects, create Elements and Content candidates, frame Elements, and wait on generation. Load for any Canvas task. Layout strategies, Connections, video point estimation, video composition, image search, and asset reconciliation live in the references.
+description: Manage a Canvas through its business tools — initialize and query projects, create Elements and Content candidates, frame Elements, and wait on generation. Load for any Canvas task. Processes design markers inline; layout strategies, Connections, video point estimation, video composition, image search, asset reconciliation, and prompt inspiration live in the references.
 ---
 
 # Canvas Manager
@@ -14,6 +14,8 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Act only on a concrete Canvas task from the user.
 - Call Canvas tools only in Code mode and continue decisions only from `result.content`.
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
+- If the user message contains `[@design_canvas_project:path]`, the text after the colon is the exact `project_path`. Use it verbatim in every Canvas tool call; never truncate, rename, or create a new project instead.
+- If the user message contains `[@design_marker:name]`, follow the Design marker processing section below.
 - Never use file, directory, or shell tools to inspect, modify, or infer Canvas state.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
@@ -30,8 +32,10 @@ You can:
 - Append Content candidates, retry failed Content, and select a main Content after user confirmation.
 - Frame sibling Elements.
 - Wait on async generation tasks.
+- Process `[@design_marker:...]` annotations into image revisions.
+- Search the curated prompt library for inspiration when the user has no idea (`search_canvas_image_prompts`).
 
-Layout strategies, Connections, video point estimation, final video composition, image search, and asset reconciliation are covered in the references below.
+Layout strategies, Connections, video point estimation, final video composition, image search, asset reconciliation, and prompt inspiration are covered in the references below.
 
 You cannot:
 
@@ -66,6 +70,18 @@ print(result.content)
 - Read only `result.content`; never index the result object or read `result.data`.
 - `item_ref` is a batch-local label linking a request to its result, not a persisted Canvas ID.
 
+## Confirmation and asking the user
+
+Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. Tool success is not user approval — do not continue past a gate until the user confirms or supplies a revision.
+
+Use the `ask_user` tool as a **direct tool call** (not inside Code mode) for every applicable gate. Prefer:
+
+- `confirm` for yes / revise decisions.
+- `select` for mutually exclusive directions (the system auto-appends an "Other" free-text option).
+- `multi_select` only for independent choices.
+
+Put long-form content (creative targets, shot plans, prompt collections) in the assistant message as readable Markdown, then ask one concise question that does not repeat the displayed content. Ask only about unresolved decisions that materially affect the result.
+
 ## Tool map
 
 ```
@@ -82,6 +98,8 @@ Billed video generation, before generating?  → estimate_canvas_content_points 
 Change layout / wire dependencies?           → layout_canvas_elements, add_canvas_connections  (see video-production.md)
 Final MP4 from a video-edit?                 → compose_canvas_video  (see video-production.md)
 Search and import web images?                → search_canvas_images  (see image-search.md)
+Design marker ([@design_marker:...])?        → visual_understanding + add_canvas_elements  (see Design marker processing)
+User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (see prompt-library.md)
 ```
 
 ## Tool reference
@@ -260,6 +278,61 @@ tool.call("wait_canvas_generation", {
 
 On `completed`, query details as needed. On `pending`, `processing`, or `timed_out=true`, keep waiting with the same task ID; do not resubmit. Only `failed` enters the controlled retry flow.
 
+## Design marker processing
+
+A `[@design_marker:name]` mention is the user annotating a region of a Canvas image they want changed. It encodes the target image, the marked region, and the intent.
+
+```
+[@design_marker:red-ear]
+- Image location: Canvas/Product Launch/images/dog.jpg
+- Marked area: Small area at top-right of the image
+- Coordinates: Top-left (64.0%, 7.0%)
+```
+
+### Core principles
+
+1. **Image-to-image only** — the original image is a reference; the change produces a new image.
+2. **Original stays untouched** — generate a new Element; never modify or delete the original.
+3. **No independent overlays** — "add X to image" means image-to-image generation, not placing a separate Element on the Canvas.
+
+### Processing steps
+
+1. **Parse** — extract the marker name (the intent), the image path, and the marked area / coordinates.
+2. **Understand** — call `visual_understanding` on the image to get its content description and dimensions. You need to know what the image contains to describe what should change and what must stay.
+3. **Build the prompt** — `[full scene from visual_understanding] + [the change, at the marked location] + [preserve everything else]`. Fold the marker coordinates directly into the prompt, combined with the object name from `visual_understanding`.
+4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, `reference_images=[original path]`, and `size` set to the original image's dimensions.
+
+```python
+from sdk.tool import tool
+
+# visual_understanding was already called and returned the scene description
+# and the original dimensions (e.g. 1920x1080).
+
+result = tool.call("add_canvas_elements", {
+    "project_path": "Canvas/Product Launch",
+    "items": [{
+        "item_ref": "dog-red-ear",
+        "element_type": "image",
+        "name": "dog with red ear",
+        "content": {
+            "source": "generated",
+            "content_type": "image",
+            "prompt": (
+                "A golden retriever sitting on grass, looking at the camera, warm afternoon "
+                "sunlight from the left. Change only the ear at approximately (64%, 7%) to bright "
+                "red — same fur texture, same lighting, just the color changed. Preserve the dog's "
+                "face, body, pose, the grass, and the entire background exactly as they appear."
+            ),
+            "reference_images": ["Canvas/Product Launch/images/dog.jpg"],
+            "size": "1920x1080",
+        },
+    }],
+})
+print(result.content)
+```
+
+Key points: always pass the original image path in `reference_images`; always set `size` to the original dimensions; describe the full scene, not just the change, and explicitly state what is preserved; the new image is a separate Element — the original Element and file remain unchanged.
+
 ## Reference routing
 
 Load references only when the matching task appears:
@@ -268,6 +341,7 @@ Load references only when the matching task appears:
 - `references/video-production-ordinary.md` — ordinary (direct, one-shot) video generation, video recovery, and the `estimate_canvas_content_points` gate.
 - `references/video-production.md` — detailed (staged) multi-shot production, storyboards, first frames, shot dependencies, layout strategies, Connections, and final `compose_canvas_video`.
 - `references/image-search.md` — the user asks to search and import web images (`search_canvas_images`).
+- `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.
 
 No reference may widen the deletion, retry, or direct file-operation boundaries.

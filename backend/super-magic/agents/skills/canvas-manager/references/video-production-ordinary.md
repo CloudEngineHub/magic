@@ -32,7 +32,7 @@ Run a side-effect-free point estimate before billed video generation.
 |---|---|---|
 | `project_path` | Yes | Project path |
 | `production_rule` | No | Default `video_generation` |
-| `items` | Yes | Each item: `item_ref` and `prompt` required, plus the same model/duration/ratio/resolution/reference fields as the real generation |
+| `items` | Yes | Each item: `item_ref` and `prompt` required, plus the same model/duration/ratio/resolution/reference fields as the real generation (including `task`/`input_mode` when used) |
 
 ```python
 tool.call("estimate_canvas_content_points", {
@@ -50,7 +50,80 @@ Show the full parameters and per-item points, then end the turn and wait for con
 
 ## Reference inputs
 
-Use `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, and `frame_end_path` per the request. These control generation input only; only an explicit business predecessor becomes a Canvas Connection.
+For a video Content (`source=generated`, `content_type=video`), the generation fields are `prompt`, `model_id`, `estimate_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
+
+These control generation input only; only an explicit business predecessor becomes a Canvas Connection.
+
+### Reference token binding
+
+Bind reference assets inside `prompt` by array order:
+
+- `reference_image_paths[0]` → `[image1]`, `reference_image_paths[1]` → `[image2]`
+- `reference_video_paths[0]` → `[video1]`, `reference_video_paths[1]` → `[video2]`
+- `reference_audio_paths[0]` → `[audio1]`, `reference_audio_paths[1]` → `[audio2]`
+
+Place each token next to the subject, action, or source media it controls. Do not put file paths in `prompt`; paths belong in the reference arrays.
+
+### Mode and task
+
+`task` selects the video task type: `generate` (default) or `edit`. `input_mode` selects the model input mode (`standard`, `image_reference`, `omni_reference`, `keyframe_guided`, `video_edit`, or another exact `<mode name="...">` from `<media_model_info>`).
+
+When you omit both, the tool infers the mode from the reference arrays you populate:
+
+| Situation | Populate | Bind in prompt |
+|---|---|---|
+| Prompt-only generation | no reference arrays | — |
+| One or more image references | `reference_image_paths` | `[image1]`, `[image2]` in order |
+| Mixed image / video / audio references | the corresponding arrays | `[image1]`, `[video1]`, `[audio1]` in order |
+| Start/end frame transition | `frame_start_path` and optional `frame_end_path`; do not duplicate them as reference images | describe the transition in the prompt |
+
+Only set `task`/`input_mode` explicitly when you must override the inference (for example `task="edit"` for video editing) or when the current model rules require a specific value. If a mode is not listed in the current `<media_model_info>`, do not use it.
+
+### Video-to-video (single-video edit)
+
+To transform or edit an existing video (for example, restyle it into a watercolor animation), set `task="edit"` (optionally `input_mode="video_edit"`), put its workspace-relative path in `reference_video_paths`, cite `[video1]` in the prompt, and describe the transformation while preserving the original motion.
+
+Video Content is billable. Estimate the exact request first, show the returned points, and wait for user confirmation. Pass the returned `estimate_id` unchanged to the real `add_canvas_elements` call.
+
+```python
+estimate = tool.call("estimate_canvas_content_points", {
+    "project_path": "Canvas/Product Launch",
+    "production_rule": "video_generation",
+    "items": [{
+        "item_ref": "watercolor-edit",
+        "prompt": "Turn the reference video [video1] into a watercolor animation while keeping the original motion and timing.",
+        "task": "edit",
+        "input_mode": "video_edit",
+        "reference_video_paths": ["Canvas/Product Launch/videos/source.mp4"],
+    }],
+})
+print(estimate.content)
+# After the user confirms the estimate, copy the exact estimate_id shown in estimate.content.
+confirmed_estimate_id = "estimate-id-from-result-content"
+
+result = tool.call("add_canvas_elements", {
+    "project_path": "Canvas/Product Launch",
+    "items": [{
+        "item_ref": "watercolor-edit",
+        "element_type": "video",
+        "name": "watercolor restyle",
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "prompt": "Turn the reference video [video1] into a watercolor animation while keeping the original motion and timing.",
+            "task": "edit",
+            "input_mode": "video_edit",
+            "estimate_id": confirmed_estimate_id,
+            "reference_video_paths": ["Canvas/Product Launch/videos/source.mp4"],
+        },
+    }],
+})
+print(result.content)
+```
+
+### Provider-managed assets
+
+Only Seedance-series video models support provider-managed asset URIs such as `asset://virtual-human-asset-id`. A provider asset URI is a generation reference only: keep it in the appropriate reference array (for example `reference_image_paths`), bind it in the prompt (for example `[image1]`), and do not read it as a workspace file, import it into the Canvas, or add a synthetic Element for it. For other video models, use a workspace-relative media path.
 
 ## Prompt
 

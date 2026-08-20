@@ -13,6 +13,13 @@ This reference covers the detailed (staged) workflow. If the user explicitly ask
 - Every confirmation is a hard gate: tool success is not user approval. Do not continue past a gate until the user confirms or requests a revision.
 - Infer established facts and reasonable defaults before asking. Ask only about unresolved decisions that materially affect the result.
 - Use the user's language for plans, names, descriptions, prompts, and confirmations. Keep tool names, IDs, and paths unchanged.
+- In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
+- Keep each task bound to its current Canvas project. If a tool fails, do not call `initialize_canvas`, invent a new project suffix, or change `project_path` to bypass the error. Recover in the current project: read the failure from `result.content`, inspect the referenced Element or Content, repair it with the available tools, and retry only after the repair is complete. If safe recovery is impossible, tell the user the blocking reason and stop.
+- Do not repeat a paid image or video generation call speculatively. After a failure, first inspect and repair the current Canvas state or correct the referenced workspace path; regenerate only when the user has approved the revised generation or the retry is an exact, safe retry of the failed task.
+
+## Asking the user
+
+Use the `ask_user` tool as a direct tool call for every applicable confirmation gate. Prefer `confirm` for yes-or-revise decisions, `select` for mutually exclusive directions, and `multi_select` only for independent choices. Put long-form content (directions, shot plans, prompt collections) in the assistant message as readable Markdown, then ask one concise question that does not repeat the displayed content.
 
 ## Task plan and recovery
 

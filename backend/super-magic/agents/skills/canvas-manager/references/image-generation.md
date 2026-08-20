@@ -19,6 +19,33 @@ Load this reference for image generation, image revision, reference images, or i
 - In-place retry: `retry_canvas_content_generation` with the exact Element ID and failed Content ID.
 - After the user confirms: `select_canvas_main_content`.
 
+## Generation inputs
+
+For an image Content (`source=generated`, `content_type=image`), the generation fields are `prompt`, `size`, `model_id`, `name`, and `reference_images`.
+
+- Text-to-image: `size` is required when `reference_images` is empty.
+- Image-to-image: pass the reference path(s) in `reference_images`. When `size` is omitted, the tool auto-reads dimensions from the largest reference image; set `size` explicitly only for a different output size.
+- All paths are workspace-relative. Images inside the current project use project-relative paths (e.g. `images/cat.jpg`); images outside use workspace-relative paths (e.g. `other-project/images/style.jpg`). Never guess a path — use one you already know or obtained from a query result.
+- Before image-to-image, call `visual_understanding` on the reference image to get its content description and dimensions; use the description to write the prompt.
+
+```python
+result = tool.call("add_canvas_elements", {
+    "project_path": "Canvas/Product Launch",
+    "items": [{
+        "item_ref": "cat-red-ear",
+        "element_type": "image",
+        "name": "cat with red ear",
+        "content": {
+            "source": "generated",
+            "content_type": "image",
+            "prompt": "Based on the reference image, change only the ear in the upper-right area to bright red. Preserve the cat's face, body, pose, background, and every other detail exactly as they appear.",
+            "reference_images": ["Canvas/Product Launch/images/cat.jpg"],
+        },
+    }],
+})
+print(result.content)
+```
+
 ## Version rules
 
 - Ordinary Content is never overwritten; create a new candidate for a revision.
@@ -126,4 +153,39 @@ Use only the labels that carry real information; not every prompt needs all five
 
 **Either way**, the user's own words — their specific nouns, adjectives, and descriptive phrases — must survive into the final prompt so their intent reaches the model unfiltered.
 
-The prompt, `name`, and any new `project_path` follow the user's language.
+## Multi-view consistency (anchor-then-expand)
+
+When the user wants multiple views of the same subject — fashion multi-view sheets, character design sheets, product 360° views — do not generate all views in one call. Tasks in one call run concurrently and share no output; each independently interprets the original reference, so results diverge.
+
+Use two sequential calls:
+
+1. **Establish the anchor image** — generate a single clean front-facing view from the original reference. This fixes the model's interpretation of the design before any other view is produced. The anchor is more reliable than the original reference because it is already in the target presentation style with no occlusion or angle distortion.
+2. **Expand from the anchor** — pass the anchor image as `reference_images[0]` for every remaining view. All tasks in this call can run concurrently because they share the same anchor. Do not chain views off each other (side referencing back referencing front) — drift accumulates.
+
+Key rules:
+
+- Always anchor from the front view — it exposes the most design information with no occlusion.
+- All non-anchor views must reference the anchor image, not each other.
+- The anchor path comes from the earlier `add_canvas_elements` result; do not guess or hardcode it.
+- This pattern applies to any multi-view task: fashion, characters, products, architecture.
+
+## Image sizes
+
+Select from the model's available sizes listed in the runtime context. Common fallbacks:
+
+| Size | Ratio |
+|---|---|
+| `2048x2048` | 1:1 (default) |
+| `2560x1440` | 16:9 |
+| `1440x2560` | 9:16 |
+| `2304x1728` | 4:3 |
+| `1728x2304` | 3:4 |
+| `2496x1664` | 3:2 |
+| `1664x2496` | 2:3 |
+| `3024x1296` | 21:9 |
+
+Image-to-image: use the reference image's original dimensions unless the user specifies otherwise.
+
+## Language and naming
+
+The `prompt`, `name`, and any new `project_path` follow the user's language — no exceptions. Beyond language, the `name` must describe the **specific content** of that image — who or what is actually in it — not a generic category, a task slot number, or a theme-level label. When generating multiple images in one call, each task's `name` should capture what makes that task unique, not just its position in the batch.
