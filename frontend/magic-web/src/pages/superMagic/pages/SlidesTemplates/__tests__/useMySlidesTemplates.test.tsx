@@ -49,6 +49,7 @@ function createAdapter(overrides: Partial<MySlidesTemplateAdapter> = {}): MySlid
 		loadDetail: vi.fn(async (code) => template(code)),
 		favorite: vi.fn(async () => undefined),
 		unfavorite: vi.fn(async () => undefined),
+		remove: vi.fn(async () => undefined),
 		saveFromFolder: vi.fn(async () => template("saved")),
 		...overrides,
 	}

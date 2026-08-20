@@ -284,6 +284,24 @@ describe("SlidesPresetGrid", () => {
 		expect(handleTemplateClick).not.toHaveBeenCalled()
 	})
 
+	it("removes a template without selecting it", () => {
+		const handleTemplateClick = vi.fn()
+		const handleRemove = vi.fn()
+
+		render(
+			<SlidesPresetGrid
+				templates={[mockTemplates[0]]}
+				onTemplateClick={handleTemplateClick}
+				onRemove={handleRemove}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-preset-card-remove-button"))
+
+		expect(handleRemove).toHaveBeenCalledWith(mockTemplates[0])
+		expect(handleTemplateClick).not.toHaveBeenCalled()
+	})
+
 	it("restores the selection button and shows selected state", () => {
 		const handleTemplateClick = vi.fn()
 		render(

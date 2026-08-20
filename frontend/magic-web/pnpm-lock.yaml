@@ -2435,13 +2435,13 @@ packages:
       react: '>=16.0.0'
 
   '@dtyq/es6-template-strings@0.0.5':
-    resolution: {integrity: sha512-6PgrK4LvmD8bez3kW4RPjKM5lg7n8wR+GiAq/D0MZQstRnFEPdSYwzfl4l5z/lVgbXKDAs+9jSsEvWwl34txQw==}
+    resolution: {integrity: sha512-dAJ9+zV28evjzJCRaPVA2zqOGnWBlNT/+0M5oGeCXLM9ZKoATmOHwGkDVg0lAvZZjfHTD+odztbS0Pf2tpvGkw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
 
   '@dtyq/eslint-config@0.0.11':
-    resolution: {integrity: sha512-GK6Ky9ToFfsGaMvSe7TZNTlSd7cveb1Y4AeKFnVbh3lT3ur+3gXWKXm20cJine6hEQFW8rqxq5TAX8wBsYPTvw==}
+    resolution: {integrity: sha512-QFsMh5KAmLpfhL16i1ul9HyGPPW/eNEfzPRiPJK8WiLzX9uuScO6EadmRFH9wP8V3zOjuhWHJm7wq2JBS+b0PQ==}
     engines: {node: '>=14.0.0'}
     hasBin: true
     peerDependencies:
@@ -2452,7 +2452,7 @@ packages:
         optional: true
 
   '@dtyq/magic-flow@0.0.16':
-    resolution: {integrity: sha512-TJuu4gL3zjybGmAcxFHZTJqZrNywMwFaVb7P19Q1zUGiYaKQGI4DdL11FZ5dFbXZCQjRQzkg69916te0m7oKDw==}
+    resolution: {integrity: sha512-CdXswQFONTk+n3GbN77xTNMuay7HNzFZU9F53Ka/kOHd1xzYJCGuRyjkbhoPVci5i35chuCWbonNdwH46hrrDA==}
     peerDependencies:
       '@tabler/icons-react': 3.46.0
       lodash-es: ^4.17.21
@@ -2464,17 +2464,17 @@ packages:
       dayjs: ^1.11.12
 
   '@dtyq/upload-sdk@0.0.11':
-    resolution: {integrity: sha512-IvRnZj9ofVCmBu+Dq+SDnnyEgGfHgh0gdhqbJd8ZcIYeDNjVo2V03aJYCNW85pvr2Zkmorw5agrMzQKydnrpBw==}
+    resolution: {integrity: sha512-uVO+4euGoDBQn5YRQ+1m1CUH8g8AvOmMipf4RV+LefqQ4ySqnj/uYnviIK6oHHNN4Tcu3R5GCjox/cZTw3vTvw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
 
   '@dtyq/upload-sdk@0.0.9':
-    resolution: {integrity: sha512-gXw3+2xSxOp9QDlejND1EV1sjxmoSSWEexSwt8qQuX4pOFpFP8e5ABwb3oaCM9rHRGEHuZLK8Z3RAE+iPcIfdQ==}
+    resolution: {integrity: sha512-g5VefkfwGi+C5lhAggDWiipARO0rAYi/UrJTks7zUz9B9qIe88ZKsEf2O2bayUMC6gwXHHrwpsFbo2ORPYBqEA==}
     engines: {node: '>=18.0.0'}
 
   '@dtyq/user-selector@0.1.15':
-    resolution: {integrity: sha512-dDYmrFeQTHHJVfDNGgR749XRByokha3aqffeg3wyTw+fua1jffExgct0NxmBf6BFffxH1znvO+15whGuzvG0fw==}
+    resolution: {integrity: sha512-gmDSRNt5m4UN8cfXKukZNn5g+Sx/4tiAAsRsQhAhWkAVSJYJ4GgWj0LV3JH93xt0g1gvx5l1zYoGbhYggFZw+Q==}
     engines: {node: '>=18.18.0', pnpm: '>=9'}
     peerDependencies:
       '@radix-ui/react-avatar': '>=1 <2'

@@ -4101,6 +4101,12 @@
 		"loading": "正在加载我的模板",
 		"openProject": "打开源项目",
 		"openProjectFailed": "打开源项目失败，请稍后重试",
+		"remove": "移除模板",
+		"removeConfirm": "确认移除",
+		"removeConfirmDescription": "移除「{{name}}」后，它将从我创建的模板中删除，且无法恢复。",
+		"removeConfirmTitle": "确认移除这个模板？",
+		"removeFailed": "模板移除失败，请稍后重试",
+		"removeSuccess": "模板已移除",
 		"retry": "重试",
 		"saveDialog": {
 			"create": "保存为新的模板",

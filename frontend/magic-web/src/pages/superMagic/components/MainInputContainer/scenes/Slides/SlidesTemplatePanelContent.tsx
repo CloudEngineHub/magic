@@ -9,6 +9,7 @@ import GroupIcon from "../../panels/GroupIcon"
 import TemplateGroupSelector from "../../panels/TemplateGroupSelector"
 import SlidesPresetGrid from "../../panels/slides-preset/SlidesPresetGrid"
 import type { OptionItem } from "../../panels/types"
+import { localeTextToDisplayString } from "../../panels/utils"
 import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "./slidesTemplateState"
 import {
 	SlidesTemplatePrimaryFiltersSkeleton,
@@ -23,11 +24,13 @@ import MySlidesTemplatesTabIcon from "./MySlidesTemplatesTabIcon"
 import MySlidesTemplatesGroupTabs from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesGroupTabs"
 import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
+import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 
 interface SlidesTemplatePanelContentProps {
 	slidesState: SlidesTemplatePanelState
 	selectedTemplate?: OptionItem | null
 	onTemplateClick: (template: OptionItem) => void
+	onTemplateClear?: () => void
 	className?: string
 	toolbarClassName?: string
 	gridClassName?: string
@@ -36,12 +39,14 @@ interface SlidesTemplatePanelContentProps {
 	disableEntryAnimation?: boolean
 	onPreviewOpenChange?: (open: boolean) => void
 	showMyTemplates?: boolean
+	enableMyTemplateRemoval?: boolean
 }
 
 function SlidesTemplatePanelContent({
 	slidesState,
 	selectedTemplate,
 	onTemplateClick,
+	onTemplateClear,
 	className,
 	toolbarClassName,
 	gridClassName,
@@ -50,16 +55,20 @@ function SlidesTemplatePanelContent({
 	disableEntryAnimation = false,
 	onPreviewOpenChange,
 	showMyTemplates = false,
+	enableMyTemplateRemoval = false,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
 	const { t: tSuper } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
+	const [removePendingCodes, setRemovePendingCodes] = useState<Set<string>>(() => new Set())
+	const { confirm, dialog: removeConfirmDialog } = useConfirmDialog()
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
 	const selectedGroupKey = slidesState.selectedGroupKey
 	const isMyTemplatesSelected = selectedGroupKey === MY_SLIDES_TEMPLATES_GROUP_KEY
+	const shouldHideTagFilters = showMyTemplates && isMyTemplatesSelected
 	const shouldShowSourceProjectEntry =
 		isMyTemplatesSelected && slidesState.myTemplatesActiveSection === "created"
 	const selectorGroups = showMyTemplates
@@ -120,6 +129,39 @@ function SlidesTemplatePanelContent({
 			})
 		},
 		[tSuper],
+	)
+	const handleRemoveTemplate = useCallback(
+		(template: OptionItem) => {
+			const code = typeof template.value === "string" ? template.value : ""
+			if (!code || slidesState.myTemplatesActiveSection !== "created") return
+			const label = typeof template.label === "string" ? template.label : code
+			confirm({
+				title: tSuper("mySlidesTemplates.removeConfirmTitle"),
+				description: tSuper("mySlidesTemplates.removeConfirmDescription", { name: label }),
+				confirmText: tSuper("mySlidesTemplates.removeConfirm"),
+				variant: "destructive",
+				onConfirm: () => {
+					setRemovePendingCodes((current) => new Set(current).add(code))
+					void slidesState
+						.removeTemplate(code)
+						.then(() => {
+							if (localeTextToDisplayString(selectedTemplate?.value) === code) {
+								onTemplateClear?.()
+							}
+							magicToast.success(tSuper("mySlidesTemplates.removeSuccess"))
+						})
+						.catch(() => magicToast.error(tSuper("mySlidesTemplates.removeFailed")))
+						.finally(() => {
+							setRemovePendingCodes((current) => {
+								const next = new Set(current)
+								next.delete(code)
+								return next
+							})
+						})
+				},
+			})
+		},
+		[confirm, onTemplateClear, selectedTemplate, slidesState, tSuper],
 	)
 	const handlePrimaryGroupChange = useCallback(
 		(groupKey: string) => {
@@ -241,7 +283,7 @@ function SlidesTemplatePanelContent({
 						{isSearchOpen ? <X className="size-4" /> : <Search className="size-4" />}
 					</Button>
 				</div>
-				{slidesState.isTagFilterLoading ? (
+				{shouldHideTagFilters ? null : slidesState.isTagFilterLoading ? (
 					<SlidesTemplateTagFiltersSkeleton isMobile={isMobile} />
 				) : slidesState.tagGroups.length > 0 ? (
 					<div data-testid="slides-template-category-tag-filters">
@@ -331,6 +373,14 @@ function SlidesTemplatePanelContent({
 					onTemplateClick={onTemplateClick}
 					onFavoriteToggle={handleFavoriteToggle}
 					onOpenProject={shouldShowSourceProjectEntry ? handleOpenProject : undefined}
+					onRemove={
+						enableMyTemplateRemoval &&
+						isMyTemplatesSelected &&
+						slidesState.myTemplatesActiveSection === "created"
+							? handleRemoveTemplate
+							: undefined
+					}
+					removePendingCodes={removePendingCodes}
 					favoritePendingCodes={slidesState.favoritePendingCodes}
 					isLoading={slidesState.isLoading}
 					isRefreshing={slidesState.isRefreshing}
@@ -348,6 +398,7 @@ function SlidesTemplatePanelContent({
 					disableContentVisibility={isMobile}
 				/>
 			)}
+			{removeConfirmDialog}
 		</div>
 	)
 }

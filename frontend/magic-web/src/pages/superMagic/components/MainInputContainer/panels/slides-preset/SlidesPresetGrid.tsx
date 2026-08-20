@@ -27,6 +27,8 @@ interface SlidesPresetGridProps {
 	onPreviewOpenChange?: (open: boolean) => void
 	onPreviewDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
 	onOpenProject?: (template: OptionItem) => void
+	onRemove?: (template: OptionItem) => void
+	removePendingCodes?: ReadonlySet<string>
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
 	disableEntryAnimation?: boolean
@@ -86,6 +88,8 @@ const SlidesPresetGrid = observer(
 		onPreviewOpenChange,
 		onPreviewDetailLoad,
 		onOpenProject,
+		onRemove,
+		removePendingCodes,
 		showHoverDetails = true,
 		hoverDetailsContainer,
 		disableEntryAnimation = false,
@@ -322,6 +326,8 @@ const SlidesPresetGrid = observer(
 									onClick={onTemplateClick}
 									onFavoriteToggle={onFavoriteToggle}
 									onOpenProject={onOpenProject}
+									onRemove={onRemove}
+									removePending={removePendingCodes?.has(value)}
 									favoritePending={favoritePendingCodes?.has(value)}
 									onPreviewClick={handlePreviewClick}
 									onPreviewPreload={handlePreviewPreload}

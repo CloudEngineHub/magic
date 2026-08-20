@@ -389,6 +389,7 @@ function createMyTemplatesAdapter(
 		})),
 		favorite: vi.fn(async () => undefined),
 		unfavorite: vi.fn(async () => undefined),
+		remove: vi.fn(async () => undefined),
 		saveFromFolder: vi.fn(async () => ({
 			code: "saved",
 			label: { zh_CN: "Saved", en_US: "Saved" },

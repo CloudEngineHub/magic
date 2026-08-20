@@ -32,6 +32,7 @@ export interface MySlidesTemplateAdapter {
 	loadDetail(code: string): Promise<SlidesTemplateItem>
 	favorite(code: string): Promise<void>
 	unfavorite(code: string): Promise<void>
+	remove(code: string): Promise<void>
 	saveFromFolder(input: {
 		projectId: string
 		directoryId: string
@@ -136,6 +137,11 @@ export const mySlidesTemplateAdapter: MySlidesTemplateAdapter = {
 
 	async unfavorite(code) {
 		await SuperMagicApi.unfavoriteSlidesTemplate(code)
+	},
+
+	async remove(code) {
+		await SuperMagicApi.deleteSlidesTemplate(code)
+		notifyMySlidesTemplatesChanged()
 	},
 
 	async saveFromFolder(input) {
