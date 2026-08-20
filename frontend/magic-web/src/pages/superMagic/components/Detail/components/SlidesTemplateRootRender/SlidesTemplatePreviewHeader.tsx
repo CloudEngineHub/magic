@@ -4,15 +4,13 @@ import { Button } from "@/components/shadcn-ui/button"
 import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface SlidesTemplatePreviewHeaderProps {
-	allowEdit: boolean
 	isSaving: boolean
-	onOpenSettings: () => void
-	onSaveToMyTemplates: () => void
+	onOpenSettings?: () => void
+	onSaveToMyTemplates?: () => void
 	title: string
 }
 
 export default function SlidesTemplatePreviewHeader({
-	allowEdit,
 	isSaving,
 	onOpenSettings,
 	onSaveToMyTemplates,
@@ -34,7 +32,7 @@ export default function SlidesTemplatePreviewHeader({
 				>
 					{title}
 				</h1>
-				{allowEdit ? (
+				{onOpenSettings ? (
 					<Button
 						type="button"
 						variant="ghost"
@@ -49,26 +47,28 @@ export default function SlidesTemplatePreviewHeader({
 				) : null}
 			</div>
 
-			<Button
-				type="button"
-				size="sm"
-				className="h-8 shrink-0 gap-1.5 rounded-lg px-3 transition-transform active:scale-[0.96] sm:h-9 sm:px-3.5"
-				aria-label={t("slidesTemplatePreview.save.fullLabel")}
-				disabled={isSaving}
-				onClick={onSaveToMyTemplates}
-				data-testid="slides-template-preview-save-button"
-			>
-				{isSaving ? (
-					<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-				) : (
-					<Save className="size-4" aria-hidden="true" />
-				)}
-				<span>
-					{isMobile
-						? t("slidesTemplatePreview.save.mobileLabel")
-						: t("slidesTemplatePreview.save.fullLabel")}
-				</span>
-			</Button>
+			{onSaveToMyTemplates ? (
+				<Button
+					type="button"
+					size="sm"
+					className="h-8 shrink-0 gap-1.5 rounded-lg px-3 transition-transform active:scale-[0.96] sm:h-9 sm:px-3.5"
+					aria-label={t("slidesTemplatePreview.save.fullLabel")}
+					disabled={isSaving}
+					onClick={onSaveToMyTemplates}
+					data-testid="slides-template-preview-save-button"
+				>
+					{isSaving ? (
+						<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+					) : (
+						<Save className="size-4" aria-hidden="true" />
+					)}
+					<span>
+						{isMobile
+							? t("slidesTemplatePreview.save.mobileLabel")
+							: t("slidesTemplatePreview.save.fullLabel")}
+					</span>
+				</Button>
+			) : null}
 		</header>
 	)
 }

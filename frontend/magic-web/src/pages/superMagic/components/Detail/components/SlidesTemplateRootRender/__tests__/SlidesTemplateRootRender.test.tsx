@@ -49,6 +49,7 @@ function createTemplateData(
 const mocks = vi.hoisted(() => ({
 	getFileContentById: vi.fn(),
 	rootProps: vi.fn(),
+	isShareRoute: false,
 }))
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
@@ -66,6 +67,10 @@ vi.mock("@/components/base/MagicSpin", () => ({
 	default: () => <div data-testid="loading" />,
 }))
 
+vi.mock("@/pages/superMagic/hooks/useShareRoute", () => ({
+	default: () => ({ isShareRoute: mocks.isShareRoute }),
+}))
+
 vi.mock("react-i18next", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react-i18next")>()),
 	useTranslation: () => ({
@@ -77,6 +82,7 @@ vi.mock("react-i18next", async (importOriginal) => ({
 describe("SlidesTemplateRootRender", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.isShareRoute = false
 	})
 
 	it("loads template.json and passes a slide model to PPTRootRender", async () => {
@@ -195,5 +201,42 @@ describe("SlidesTemplateRootRender", () => {
 		expect(screen.queryByTestId("loading")).not.toBeInTheDocument()
 		expect(screen.getByTestId("ppt-root-render")).toBeInTheDocument()
 		expect(mocks.getFileContentById).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides template settings and save actions on share routes", async () => {
+		mocks.isShareRoute = true
+		mocks.getFileContentById.mockResolvedValue(MANIFEST)
+
+		render(
+			<SlidesTemplateRootRender
+				data={
+					{
+						file_id: "root",
+						file_name: "PPT-template",
+						is_directory: true,
+						relative_file_path: "PPT-template",
+						children: [
+							{ file_id: "manifest", file_name: "template.json" },
+							{ file_id: "spec", file_name: "visual-spec.md" },
+							{ file_id: "theme", file_name: "theme.css" },
+							{
+								file_id: "slides-dir",
+								file_name: "slides",
+								is_directory: true,
+								children: [{ file_id: "slide-1", file_name: "slide-1.html" }],
+							},
+						],
+					} as never
+				}
+				projectId="project-1"
+			/>,
+		)
+
+		expect(await screen.findByTestId("ppt-root-render")).toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-preview-header")).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("slides-template-preview-settings-button"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("slides-template-preview-save-button")).not.toBeInTheDocument()
 	})
 })

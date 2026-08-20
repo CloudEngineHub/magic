@@ -23,7 +23,6 @@ describe("SlidesTemplatePreviewHeader", () => {
 		const onSave = vi.fn()
 		render(
 			<SlidesTemplatePreviewHeader
-				allowEdit
 				isSaving={false}
 				onOpenSettings={onOpenSettings}
 				onSaveToMyTemplates={onSave}
@@ -44,9 +43,7 @@ describe("SlidesTemplatePreviewHeader", () => {
 	it("hides settings for read-only users", () => {
 		render(
 			<SlidesTemplatePreviewHeader
-				allowEdit={false}
 				isSaving={false}
-				onOpenSettings={vi.fn()}
 				onSaveToMyTemplates={vi.fn()}
 				title="Template"
 			/>,
@@ -55,5 +52,18 @@ describe("SlidesTemplatePreviewHeader", () => {
 		expect(
 			screen.queryByTestId("slides-template-preview-settings-button"),
 		).not.toBeInTheDocument()
+		expect(screen.getByTestId("slides-template-preview-save-button")).toBeInTheDocument()
+	})
+
+	it("hides settings and save actions in share preview", () => {
+		render(<SlidesTemplatePreviewHeader isSaving={false} title="Shared template" />)
+
+		expect(screen.getByTestId("slides-template-preview-title")).toHaveTextContent(
+			"Shared template",
+		)
+		expect(
+			screen.queryByTestId("slides-template-preview-settings-button"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("slides-template-preview-save-button")).not.toBeInTheDocument()
 	})
 })

@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react"
 import { SuperMagicApi } from "@/apis"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
+import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { createSlidesTemplateStructureAdapter } from "./templateStructureAdapter"
 import { loadSlidesTemplateProject, stringifySlidesTemplateManifest } from "./templateProject"
 import {
@@ -52,10 +53,12 @@ interface SlidesTemplateReadyProps {
 
 function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 	const { i18n } = useTranslation("super")
+	const { isShareRoute } = useShareRoute()
 	const [manifest, setManifest] = useState(project.manifest)
 	const [settingsOpen, setSettingsOpen] = useState(false)
 	const manifestRef = useRef(project.manifest)
 	const projectId = props.selectedProject?.id || props.projectId
+	const allowEdit = props.allowEdit !== false && !isShareRoute
 
 	useEffect(() => {
 		manifestRef.current = project.manifest
@@ -109,10 +112,9 @@ function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 		<div className="flex h-full min-h-0 w-full flex-col bg-background">
 			{!props.isFullscreen ? (
 				<SlidesTemplatePreviewHeader
-					allowEdit={props.allowEdit !== false}
 					isSaving={isSaving}
-					onOpenSettings={() => setSettingsOpen(true)}
-					onSaveToMyTemplates={() => void startSave()}
+					onOpenSettings={allowEdit ? () => setSettingsOpen(true) : undefined}
+					onSaveToMyTemplates={isShareRoute ? undefined : () => void startSave()}
 					title={title}
 				/>
 			) : null}
@@ -130,7 +132,7 @@ function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 					disableMagicProjectLookup
 				/>
 			</div>
-			{props.allowEdit !== false ? (
+			{allowEdit ? (
 				<SlidesTemplateSettingsDialog
 					manifest={manifest}
 					open={settingsOpen}
