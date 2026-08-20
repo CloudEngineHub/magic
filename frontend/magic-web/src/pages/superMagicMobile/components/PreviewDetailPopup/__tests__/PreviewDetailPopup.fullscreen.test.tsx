@@ -118,11 +118,17 @@ vi.mock("@/pages/superMagic/components/Detail/Render", () => ({
 	default: ({
 		isFullscreen,
 		onFullscreen,
+		attachmentList,
 	}: {
 		isFullscreen?: boolean
 		onFullscreen?: () => void
+		attachmentList?: unknown[]
 	}) => (
-		<div data-testid="preview-render" data-fullscreen={String(isFullscreen)}>
+		<div
+			data-testid="preview-render"
+			data-fullscreen={String(isFullscreen)}
+			data-attachment-count={String(attachmentList?.length ?? 0)}
+		>
 			<button data-testid="preview-fullscreen" onClick={onFullscreen} />
 		</div>
 	),
@@ -222,5 +228,28 @@ describe("PreviewDetailPopup fullscreen", () => {
 		await openPreview(popupRef)
 		expect(screen.getByTestId("magic-modal").className).not.toContain("!h-[100dvh]")
 		expect(screen.getByTestId("preview-render")).toHaveAttribute("data-fullscreen", "false")
+	})
+
+	it("updates attachment context after a preview has already opened", async () => {
+		const popupRef = createRef<PreviewDetailPopupRef>()
+		render(<PreviewDetailPopup ref={popupRef} setUserSelectDetail={vi.fn()} />)
+		await openPreview(popupRef)
+
+		expect(screen.getByTestId("preview-render")).toHaveAttribute("data-attachment-count", "0")
+
+		await act(async () => {
+			popupRef.current?.updateAttachments(
+				[],
+				[
+					{
+						file_id: "mock-file-context",
+						file_name: "mock-file-context.ts",
+						file_extension: "ts",
+					},
+				],
+			)
+		})
+
+		expect(screen.getByTestId("preview-render")).toHaveAttribute("data-attachment-count", "1")
 	})
 })
