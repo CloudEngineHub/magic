@@ -36,10 +36,9 @@ from agentlang.logger import get_logger
 from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import Attachment, AttachmentTag
-from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType, VirtualCheckpoint
+from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType
 from app.core.entity.event.file_event import FileEventData  # 从业务层导入 FileEventData
 from app.core.entity.project_archive import ArchiveDetail, ProjectArchiveInfo
-from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
 from app.infrastructure.storage.base import BaseFileProcessor
 from app.infrastructure.storage.factory import StorageFactory
@@ -729,27 +728,18 @@ class FileStorageListenerService:
     @staticmethod
     async def _sync_checkpoints_archive(topic_id: str, storage_service) -> None:
         """
-        每轮只上传本轮 checkpoint 归档与 checkpoint manifest。
+        每轮同步 checkpoint 归档与 manifest。
 
-        只上传 manifest.current_checkpoint_id（本轮创建的 checkpoint），
-        随后同步 manifest 并按差异删除已被本地清理的远端归档。
+        归档补齐、一致发布与差异删除的逻辑都在 CheckpointRemoteSync 内部：
+        未上传成功的归档每轮自动重试，且只有 manifest 引用的所有归档都确认
+        上传后才发布 manifest，保证远端不出现指向空归档的 checkpoint。
         """
         if not topic_id or storage_service is None:
             logger.warning("缺少 topic_id 或 storage_service，跳过 checkpoint 归档同步")
             return
 
         try:
-            sync = CheckpointRemoteSync(storage_service, topic_id)
-
-            # 本轮 checkpoint 即 manifest 的当前位
-            metadata_manager = CheckpointMetadataManager()
-            current_checkpoint_id = await metadata_manager.get_current_checkpoint()
-            if current_checkpoint_id and current_checkpoint_id != VirtualCheckpoint.INITIAL:
-                await sync.upload_checkpoint(current_checkpoint_id)
-            else:
-                logger.info("当前没有可上传的新 checkpoint，仅同步 manifest")
-
-            await sync.sync_manifest_and_evicted()
+            await CheckpointRemoteSync(storage_service, topic_id).sync_manifest_and_evicted()
             logger.info(f"话题 {topic_id} 的 checkpoint 归档同步完成")
         except Exception as e:
             logger.error(f"同步 checkpoints 归档时出错: {e}", exc_info=True)

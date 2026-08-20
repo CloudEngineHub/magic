@@ -120,7 +120,12 @@ class CheckpointRemoteSync:
     # ---------- 下载 ----------
 
     async def download_manifest(self) -> bool:
-        """拉取远端 manifest 写入本地，作为沙箱重启后 checkpoint 系统的唯一恢复内容。"""
+        """拉取远端 manifest 写入本地，作为沙箱重启后 checkpoint 系统的唯一恢复内容。
+
+        远端 manifest 只在所有引用的归档都确认上传后才发布，因此恢复后可以直接
+        用它初始化本地同步状态（哪些归档已在远端），避免重启后第一轮把已有的
+        归档误判为未上传。
+        """
         key = self.manifest_key()
         try:
             if not await self.storage_service.exists(key):
@@ -129,11 +134,20 @@ class CheckpointRemoteSync:
             stream = await self.storage_service.download(key=key, options=None)
             manifest_file = self.storage.get_checkpoint_manifest_file_path()
             await async_write_bytes(manifest_file, stream.read())
+            await self._seed_sync_state_from_manifest()
             logger.info(f"已恢复 checkpoint manifest: {manifest_file}")
             return True
         except Exception as e:
             logger.error(f"下载 checkpoint manifest 失败: {key}: {e}")
             return False
+
+    async def _seed_sync_state_from_manifest(self) -> None:
+        """把刚恢复的 manifest 中的 checkpoint 集合初始化进本地同步状态。"""
+        manifest = await self.metadata_manager.load_checkpoint_manifest()
+        if manifest is None:
+            return
+        ids = [cp_id for cp_id in manifest.checkpoints if cp_id != VirtualCheckpoint.INITIAL]
+        await self._save_sync_state(ids)
 
     async def ensure_checkpoints_available(self, checkpoint_ids: List[str]) -> None:
         """确保给定 checkpoint 在本地可用，缺失的从远端下载并解压。
@@ -180,7 +194,13 @@ class CheckpointRemoteSync:
     # ---------- manifest 同步与差异删除 ----------
 
     async def sync_manifest_and_evicted(self) -> None:
-        """上传本地 manifest，并删除「已上传但已不在 manifest」的远端归档。
+        """补齐上传缺失归档、发布 manifest，并删除被清理的远端归档。
+
+        - 补齐：本地 manifest 里尚未确认上传成功的 checkpoint 归档每轮都会重试，
+          一次上传失败不会造成永久缺口，下一轮自动补传。
+        - 一致发布：只有 manifest 引用的所有归档都确认上传成功后才发布 manifest，
+          保证远端 manifest 不会指向不存在的归档（否则重启后的回滚会静默降级）。
+        - 清理：已上传但已被本地清理（cleanup/commit）移除出 manifest 的归档会被删除。
 
         全程 best-effort：任何一步失败只记日志，不阻断后续步骤。
         """
@@ -196,15 +216,31 @@ class CheckpointRemoteSync:
             cp_id for cp_id in manifest.checkpoints if cp_id != VirtualCheckpoint.INITIAL
         ]
 
-        prev_ids = await self._load_sync_state() or []
+        uploaded_ids = await self._load_sync_state() or []
 
-        await self.upload_manifest()
-
-        evicted_ids = [cp_id for cp_id in prev_ids if cp_id not in current_ids]
+        # 1) 删除已确认上传但已不在 manifest 中的归档（本地清理/回滚提交导致）
+        evicted_ids = [cp_id for cp_id in uploaded_ids if cp_id not in current_ids]
         for checkpoint_id in evicted_ids:
             await self.delete_checkpoint(checkpoint_id)
+        uploaded_ids = [cp_id for cp_id in uploaded_ids if cp_id in current_ids]
 
-        await self._save_sync_state(current_ids)
+        # 2) 补齐：重试所有尚未确认上传的归档，成功后记入已上传集合
+        for checkpoint_id in current_ids:
+            if checkpoint_id in uploaded_ids:
+                continue
+            if await self.upload_checkpoint(checkpoint_id):
+                uploaded_ids.append(checkpoint_id)
+
+        # 3) 只有在所有引用的归档都确认上传后才发布 manifest
+        if all(cp_id in uploaded_ids for cp_id in current_ids):
+            await self.upload_manifest()
+        else:
+            missing = [cp_id for cp_id in current_ids if cp_id not in uploaded_ids]
+            logger.warning(
+                f"以下 checkpoint 归档尚未上传成功，本轮暂不发布 manifest（下轮重试）: {missing}"
+            )
+
+        await self._save_sync_state(uploaded_ids)
 
     async def delete_checkpoint(self, checkpoint_id: str) -> bool:
         """删除远端单个 checkpoint 归档。"""

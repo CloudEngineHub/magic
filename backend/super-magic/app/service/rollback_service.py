@@ -219,6 +219,10 @@ class RollbackService:
                 raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "回滚执行失败")
             logger.info(f"开始回滚成功完成: {target_message_id}")
 
+            # 回滚位置必须同步到远端，否则沙箱重启后恢复的是过期 manifest，
+            # 会让后续「撤回回滚」被误判为已是最新状态而空转。
+            await self._sync_remote_manifest()
+
             # 注意：这里不需要 reload 主 Agent 的内存 chat_history。
             # start_rollback 之后产品上必然走 commit_rollback 或 undo_rollback，
             # 中间不会触发 agent.run 把陈旧内存写回磁盘；commit 里统一 reload 即可。
