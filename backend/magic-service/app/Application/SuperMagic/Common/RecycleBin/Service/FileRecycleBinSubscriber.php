@@ -65,6 +65,24 @@ class FileRecycleBinSubscriber implements ListenerInterface
     public function process(object $event): void
     {
         try {
+            $source = match (true) {
+                $event instanceof FileDeletedEvent => $event->getSource(),
+                $event instanceof DirectoryDeletedEvent => $event->getSource(),
+                $event instanceof FilesBatchDeletedEvent => $event->getSource(),
+                default => null,
+            };
+
+            if ($source === null || ! $this->shouldRecordSource($source)) {
+                return;
+            }
+
+            if ($event instanceof FileDeletedEvent && ! $event->getFileEntity()->isProjectFile()) {
+                return;
+            }
+            if ($event instanceof DirectoryDeletedEvent && ! $event->getDirectoryEntity()->isProjectFile()) {
+                return;
+            }
+
             match (true) {
                 $event instanceof FileDeletedEvent => $this->handleFileDeleted($event),
                 $event instanceof DirectoryDeletedEvent => $this->handleDirectoryDeleted($event),
@@ -127,7 +145,14 @@ class FileRecycleBinSubscriber implements ListenerInterface
 
     private function handleFilesBatchDeleted(FilesBatchDeletedEvent $event): void
     {
-        $fileEntities = $event->getAllEntities();
+        $fileEntities = array_values(array_filter(
+            $event->getAllEntities(),
+            static fn (TaskFileEntity $entity): bool => $entity->isProjectFile()
+        ));
+        if ($fileEntities === []) {
+            return;
+        }
+
         $context = $this->buildPolicyContext($fileEntities, $event->getSource());
         $relativePathMap = $this->buildRelativePathMap($fileEntities, $event->getProjectId());
 
@@ -161,6 +186,11 @@ class FileRecycleBinSubscriber implements ListenerInterface
                 ]);
             }
         }
+    }
+
+    private function shouldRecordSource(DeleteEventSource $source): bool
+    {
+        return in_array($source, [DeleteEventSource::User, DeleteEventSource::Agent], true);
     }
 
     /** @param TaskFileEntity[] $entities */
