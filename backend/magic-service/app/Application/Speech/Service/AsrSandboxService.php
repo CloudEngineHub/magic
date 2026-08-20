@@ -11,11 +11,12 @@ use App\Application\Speech\Assembler\AsrAssembler;
 use App\Application\Speech\DTO\AsrSandboxMergeResultDTO;
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
 use App\Application\Speech\Enum\AsrTaskStatusEnum;
+use App\Application\Speech\Enum\AsrTopicModeEnum;
 use App\Application\Speech\Enum\SandboxAsrStatusEnum;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Asr\Constants\AsrConfig;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Asr\Service\AsrTaskDomainService;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\InitializationMetadataDTO;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
@@ -783,7 +784,11 @@ class AsrSandboxService extends AbstractAppService
         // 1) 任务状态里已有 sandbox_topic_id，且存在则复用
         if (! empty($taskStatus->sandboxTopicId)) {
             $existing = $this->topicDomainService->getTopicById((int) $taskStatus->sandboxTopicId);
-            if ($existing) {
+            if ($existing
+                && $existing->isHidden()
+                && $existing->getProjectId() === $projectId
+                && $existing->getUserId() === $userId
+                && $existing->getTopicMode() === AsrTopicModeEnum::AUDIO_MERGE->value) {
                 return (int) $taskStatus->sandboxTopicId;
             }
 
@@ -795,7 +800,11 @@ class AsrSandboxService extends AbstractAppService
         }
 
         // 2) 查找当前用户+项目的隐藏话题，存在则复用
-        $hidden = $this->topicDomainService->findHiddenTopicByProjectAndUser($projectId, $userId);
+        $hidden = $this->topicDomainService->findHiddenTopicByProjectUserAndMode(
+            $projectId,
+            $userId,
+            AsrTopicModeEnum::AUDIO_MERGE->value
+        );
         if ($hidden) {
             return $hidden->getId();
         }

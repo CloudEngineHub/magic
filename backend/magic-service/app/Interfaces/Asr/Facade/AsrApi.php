@@ -16,12 +16,16 @@ use App\Application\Speech\DTO\SummaryRequestDTO;
 use App\Application\Speech\Enum\AsrRecordingStatusEnum;
 use App\Application\Speech\Enum\AsrRecordingTypeEnum;
 use App\Application\Speech\Enum\AsrTaskStatusEnum;
+use App\Application\Speech\Enum\AsrTopicModeEnum;
 use App\Application\Speech\Service\AsrDirectoryService;
 use App\Application\Speech\Service\AsrFileAppService;
 use App\Application\Speech\Service\AsrPresetFileService;
 use App\Application\Speech\Service\AsrTitleGeneratorService;
 use App\Application\SuperMagic\Topic\Service\TopicAppService;
 use App\Domain\Asr\ValueObject\AsrDirectoryRoleEnum;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\SuperMagic\Task\Service\TaskDomainService;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\AsrErrorCode;
 use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -56,6 +60,8 @@ class AsrApi extends AbstractApi
         protected AsrDirectoryService $directoryService,
         protected AsrPresetFileService $presetFileService,
         protected TopicAppService $topicAppService,
+        protected TopicDomainService $topicDomainService,
+        protected TaskDomainService $taskDomainService,
         protected LockerInterface $locker,
         LoggerFactory $loggerFactory,
         RequestInterface $request,
@@ -280,6 +286,19 @@ class AsrApi extends AbstractApi
             // 6.1 确保沙箱隐藏话题（与上传/总结用话题区分）
             $sandboxTopicId = $this->ensureSandboxHiddenTopic($userAuthorization, $projectId, $taskStatus->sandboxTopicId);
             $taskStatus->sandboxTopicId = $sandboxTopicId;
+
+            $sandboxTopic = $this->topicDomainService->getTopicById($sandboxTopicId);
+            if ($sandboxTopic !== null) {
+                $dataIsolation = new DataIsolation();
+                $dataIsolation->setCurrentUserId($userId);
+                $dataIsolation->setCurrentOrganizationCode($organizationCode);
+                $sandboxTask = $this->taskDomainService->initAsrTask(
+                    $dataIsolation,
+                    $sandboxTopic,
+                    (string) $projectId
+                );
+                $taskStatus->sandboxTaskId = $sandboxTask->getId();
+            }
 
             // 确保 generatedTitle 被设置到 taskStatus 中
             if (! empty($generatedTitle) && empty($taskStatus->uploadGeneratedTitle)) {
@@ -1103,7 +1122,8 @@ class AsrApi extends AbstractApi
             'task_key' => $taskKey,
             'expires_in' => 60 * 60,
             'directories' => $directories,
-            'sandbox_topic_id' => $taskStatus->sandboxTopicId,
+            'sandbox_topic_id' => $taskStatus->sandboxTopicId === null ? null : (string) $taskStatus->sandboxTopicId,
+            'sandbox_task_id' => $taskStatus->sandboxTaskId === null ? null : (string) $taskStatus->sandboxTaskId,
         ];
 
         // 只有当预设文件存在时才添加到返回中
@@ -1198,11 +1218,22 @@ class AsrApi extends AbstractApi
     {
         // 已有记录直接使用
         if ($existingSandboxTopicId !== null) {
-            return $existingSandboxTopicId;
+            $existingTopic = $this->topicDomainService->getTopicById($existingSandboxTopicId);
+            if ($existingTopic !== null
+                && $existingTopic->isHidden()
+                && $existingTopic->getProjectId() === (int) $projectId
+                && $existingTopic->getUserId() === $userAuthorization->getId()
+                && $existingTopic->getTopicMode() === AsrTopicModeEnum::AUDIO_MERGE->value) {
+                return $existingSandboxTopicId;
+            }
         }
 
         // 查询已有隐藏话题
-        $hiddenTopic = $this->topicAppService->findHiddenTopicByProjectAndUser((int) $projectId, $userAuthorization->getId());
+        $hiddenTopic = $this->topicDomainService->findHiddenTopicByProjectUserAndMode(
+            (int) $projectId,
+            $userAuthorization->getId(),
+            AsrTopicModeEnum::AUDIO_MERGE->value
+        );
         if ($hiddenTopic !== null) {
             return $hiddenTopic->getId();
         }
@@ -1214,7 +1245,7 @@ class AsrApi extends AbstractApi
         $requestDto->setWorkspaceId((string) $projectEntity->getWorkspaceId());
         $requestDto->setProjectId((string) $projectEntity->getId());
         $requestDto->setTopicName('');
-        $requestDto->setTopicMode('');
+        $requestDto->setTopicMode(AsrTopicModeEnum::AUDIO_MERGE->value);
         $requestDto->setIsHidden(true);
 
         $requestContext = new RequestContext();

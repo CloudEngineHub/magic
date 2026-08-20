@@ -72,6 +72,7 @@ class ImageProxyApi extends AbstractOpenApi
 
         return $response->toArray();
     }
+
     /**
      * 橡皮擦接口.
      */

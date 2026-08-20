@@ -1237,6 +1237,11 @@ class TopicDomainService
         return $this->topicRepository->findHiddenTopicByProjectAndUser($projectId, $userId);
     }
 
+    public function findHiddenTopicByProjectUserAndMode(int $projectId, string $userId, string $topicMode): ?TopicEntity
+    {
+        return $this->topicRepository->findHiddenTopicByProjectUserAndMode($projectId, $userId, $topicMode);
+    }
+
     /**
      * 查找用户在指定项目下的隐藏话题（根据隐藏类型）.
      *

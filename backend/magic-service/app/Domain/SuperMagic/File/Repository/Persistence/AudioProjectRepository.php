@@ -315,7 +315,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
     /**
      * Set the audio format once, while allowing idempotent writes of the same value.
      *
-     * @return int Number of affected rows (may be zero for an idempotent DB update).
+     * @return int number of affected rows (may be zero for an idempotent DB update)
      */
     public function setAudioFormatIfUnset(int $projectId, string $audioFormat): int
     {

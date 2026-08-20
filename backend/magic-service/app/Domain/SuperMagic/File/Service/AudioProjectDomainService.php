@@ -10,6 +10,7 @@ namespace App\Domain\SuperMagic\File\Service;
 use App\Domain\SuperMagic\File\Entity\AudioProjectEntity;
 use App\Domain\SuperMagic\File\Repository\Facade\AudioProjectRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
+use InvalidArgumentException;
 
 /**
  * Audio Project Domain Service (Business Logic Only).
@@ -241,7 +242,7 @@ class AudioProjectDomainService
     {
         $format = strtolower(ltrim(trim($audioFormat), '.'));
         if ($format === '' || ! preg_match('/^[a-z0-9]{1,16}$/', $format)) {
-            throw new \InvalidArgumentException('Invalid audio format');
+            throw new InvalidArgumentException('Invalid audio format');
         }
 
         $audioProject = $this->getAudioProjectByProjectId($projectId);
@@ -251,7 +252,7 @@ class AudioProjectDomainService
 
         $existing = $audioProject->getAudioFormat();
         if ($existing !== null && strtolower($existing) !== $format) {
-            throw new \InvalidArgumentException(sprintf(
+            throw new InvalidArgumentException(sprintf(
                 'Audio format conflict: existing=%s, requested=%s',
                 $existing,
                 $format

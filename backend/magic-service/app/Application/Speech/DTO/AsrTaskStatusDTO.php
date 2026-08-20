@@ -73,6 +73,9 @@ class AsrTaskStatusDTO
     // ASR 沙箱专用隐藏话题ID（与总结用 topicId 区分）
     public ?int $sandboxTopicId = null;
 
+    // ASR 沙箱对应的 magic_super_agent_task 主键
+    public ?int $sandboxTaskId = null;
+
     // 录音目录信息
     public ?string $tempHiddenDirectory = null; // 隐藏目录路径（存放分片文件）
 
@@ -160,6 +163,7 @@ class AsrTaskStatusDTO
         $this->projectId = self::getStringValue($data, ['project_id', 'projectId']);
         $this->topicId = self::getStringValue($data, ['topic_id', 'topicId']);
         $this->sandboxTopicId = self::getIntValue($data, ['sandbox_topic_id', 'sandboxTopicId']);
+        $this->sandboxTaskId = self::getIntValue($data, ['sandbox_task_id', 'sandboxTaskId']);
 
         // 录音目录信息（自动清洗为相对路径）
         $this->tempHiddenDirectory = self::extractRelativePath(
@@ -241,6 +245,7 @@ class AsrTaskStatusDTO
             'project_id' => $this->projectId,
             'topic_id' => $this->topicId,
             'sandbox_topic_id' => $this->sandboxTopicId,
+            'sandbox_task_id' => $this->sandboxTaskId,
             'temp_hidden_directory' => $this->tempHiddenDirectory,
             'display_directory' => $this->displayDirectory,
             'temp_hidden_directory_id' => $this->tempHiddenDirectoryId,

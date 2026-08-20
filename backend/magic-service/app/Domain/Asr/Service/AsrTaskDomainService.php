@@ -18,7 +18,9 @@ use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 use function sprintf;
@@ -144,11 +146,11 @@ readonly class AsrTaskDomainService
     {
         $format = strtolower(ltrim(trim($audioFormat), '.'));
         if (! in_array($format, ['wav', 'opus'], true)) {
-            throw new \InvalidArgumentException(sprintf('Unsupported ASR audio format: %s', $audioFormat));
+            throw new InvalidArgumentException(sprintf('Unsupported ASR audio format: %s', $audioFormat));
         }
 
         if (! empty($taskStatus->audioFormat) && $taskStatus->audioFormat !== $format) {
-            throw new \InvalidArgumentException(sprintf(
+            throw new InvalidArgumentException(sprintf(
                 'ASR task audio format conflict: existing=%s, requested=%s',
                 $taskStatus->audioFormat,
                 $format
@@ -159,11 +161,11 @@ readonly class AsrTaskDomainService
             $this->audioProjectRepository->setAudioFormatIfUnset((int) $taskStatus->projectId, $format);
             $audioProject = $this->audioProjectRepository->findByProjectId((int) $taskStatus->projectId);
             if ($audioProject === null) {
-                throw new \RuntimeException('Audio project not found while persisting audio format');
+                throw new RuntimeException('Audio project not found while persisting audio format');
             }
             $persisted = $audioProject->getAudioFormat();
             if ($persisted !== null && $persisted !== $format) {
-                throw new \InvalidArgumentException(sprintf(
+                throw new InvalidArgumentException(sprintf(
                     'Persisted ASR audio format conflict: existing=%s, requested=%s',
                     $persisted,
                     $format
