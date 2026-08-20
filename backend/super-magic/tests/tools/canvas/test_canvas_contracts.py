@@ -19,14 +19,21 @@ from app.tools.canvas.generation import (
     InMemoryGenerationTaskRepository,
 )
 from app.tools.canvas.presentation.model_content import elements_content, items_content
+from app.tools.canvas.presentation import error_result as _error_result
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.tools import (
+    AddCanvasConnections,
+    AddCanvasContents,
     AddCanvasElements,
+    FrameCanvasElements,
+    InitializeCanvas,
+    LayoutCanvasElements,
     ContentInput,
     QueryCanvasElementDetails,
     QueryCanvasOverview,
+    RetryCanvasContentGeneration,
+    SelectCanvasMainContent,
     WaitCanvasGeneration,
-    _error_result,
 )
 from agentlang.tools.tool_result import ToolResult
 
@@ -43,6 +50,30 @@ def test_content_input_exposes_one_stable_model_schema() -> None:
         "content_type": "text",
         "content": "标题文本",
     }
+
+
+def test_each_canvas_tool_owns_feedback_hooks() -> None:
+    """每个 Canvas 工具都必须独立实现三类用户反馈钩子。"""
+    tools = [
+        InitializeCanvas,
+        QueryCanvasOverview,
+        QueryCanvasElementDetails,
+        AddCanvasElements,
+        FrameCanvasElements,
+        AddCanvasContents,
+        RetryCanvasContentGeneration,
+        SelectCanvasMainContent,
+        LayoutCanvasElements,
+        AddCanvasConnections,
+        WaitCanvasGeneration,
+    ]
+    hooks = {
+        "get_before_tool_call_friendly_action_and_remark",
+        "get_after_tool_call_friendly_action_and_remark",
+        "get_tool_detail",
+    }
+    for tool_class in tools:
+        assert hooks <= tool_class.__dict__.keys(), tool_class.__name__
 
 
 def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:

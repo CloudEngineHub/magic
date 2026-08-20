@@ -1,4 +1,4 @@
-"""Canvas Code mode 工具兼容导出。"""
+"""Canvas Code mode 工具导出。"""
 
 from app.tools.canvas.tools.add_canvas_connections import AddCanvasConnections
 from app.tools.canvas.tools.add_canvas_contents import AddCanvasContents
@@ -11,7 +11,6 @@ from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
 from app.tools.canvas.tools.retry_canvas_content_generation import RetryCanvasContentGeneration
 from app.tools.canvas.tools.select_canvas_main_content import SelectCanvasMainContent
 from app.tools.canvas.tools.wait_canvas_generation import WaitCanvasGeneration
-from app.tools.canvas.tools.support import _elements_content, _error_result, _items_content, _overview_content
 from app.tools.canvas.schemas import (
     AddContentInput,
     ConnectionInput,
