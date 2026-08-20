@@ -96,8 +96,8 @@ Group sibling elements?                      → frame_canvas_elements
 Async task returned?                         → wait_canvas_generation
 Billed video generation, before generating?  → estimate_canvas_content_points  (see video-production-ordinary.md)
 Change layout / wire dependencies?           → layout_canvas_elements, add_canvas_connections  (see video-production.md)
-Final MP4 from a video-edit?                 → compose_canvas_video  (see video-production.md)
-Search and import web images?                → search_canvas_images  (see image-search.md)
+Final MP4 from a video-edit?                 → compose_canvas_final_video  (see video-production.md)
+Search and import web images?                → search_canvas_image_candidates  (see image-search.md)
 Design marker ([@design_marker:...])?        → visual_understanding + add_canvas_elements  (see Design marker processing)
 User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (see prompt-library.md)
 ```
@@ -339,8 +339,8 @@ Load references only when the matching task appears:
 
 - `references/image-generation.md` — image generation, revision, reference images, or image retry.
 - `references/video-production-ordinary.md` — ordinary (direct, one-shot) video generation, video recovery, and the `estimate_canvas_content_points` gate.
-- `references/video-production.md` — detailed (staged) multi-shot production, storyboards, first frames, shot dependencies, layout strategies, Connections, and final `compose_canvas_video`.
-- `references/image-search.md` — the user asks to search and import web images (`search_canvas_images`).
+- `references/video-production.md` — detailed (staged) multi-shot production, storyboards, first frames, shot dependencies, layout strategies, Connections, and final `compose_canvas_final_video`.
+- `references/image-search.md` — the user asks to search and import web images (`search_canvas_image_candidates`).
 - `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.
 

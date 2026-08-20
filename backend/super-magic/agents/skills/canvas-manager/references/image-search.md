@@ -2,7 +2,7 @@
 
 Load this reference only when the user asks to search for external image candidates and import them into the Canvas.
 
-## search_canvas_images
+## search_canvas_image_candidates
 
 Search, download, validate, and import image candidates as imported Image Content.
 
@@ -13,7 +13,7 @@ Search, download, validate, and import image candidates as imported Image Conten
 | `tasks` | Yes | Each item: `item_ref`, `name`, `query` required; `requirement_explanation`, `expected_aspect_ratio`, `count` optional |
 
 ```python
-tool.call("search_canvas_images", {
+tool.call("search_canvas_image_candidates", {
     "project_path": "Canvas/Product Launch",
     "topic_id": "product-hero",
     "tasks": [{

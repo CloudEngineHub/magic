@@ -123,7 +123,7 @@ An empty `audioSequence` preserves audio already present in the source videos wh
 
 ### 9. Compose and deliver
 
-Call `compose_canvas_video` with the confirmed Video Edit Element, then verify with `query_canvas_element_details` and present the MP4 path, duration, dimensions, and audio status.
+Call `compose_canvas_final_video` with the confirmed Video Edit Element, then verify with `query_canvas_element_details` and present the MP4 path, duration, dimensions, and audio status.
 
 ## Direct upstream relations
 
@@ -192,7 +192,7 @@ tool.call("add_canvas_connections", {
 
 Query and obtain the exact Connection ID before removing or replacing; never guess it from names, positions, or endpoints. Remove or replace only with explicit user intent.
 
-## compose_canvas_video
+## compose_canvas_final_video
 
 Synchronously compose the final MP4 from a Video Edit Element's main Content.
 
@@ -204,7 +204,7 @@ Synchronously compose the final MP4 from a Video Edit Element's main Content.
 | `result_element_id` | No | Only an explicit target Video Element |
 
 ```python
-tool.call("compose_canvas_video", {
+tool.call("compose_canvas_final_video", {
     "project_path": "Canvas/Product Launch",
     "video_edit_element_id": "element-740000000000000020",
     "result_name": "Product launch final cut",
