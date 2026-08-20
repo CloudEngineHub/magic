@@ -1,8 +1,6 @@
 import { useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
-import { Ellipsis, GripVertical } from "lucide-react"
-import { useSortable } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+import { Ellipsis } from "lucide-react"
 import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import projectStore from "@/pages/superMagic/stores/core/project"
@@ -20,7 +18,6 @@ import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import { preloadProjectPage } from "@/pages/superMagic/pages/ProjectPage/utils"
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
-import { getProjectDragId } from "./types"
 
 function ProjectItem({
 	project,
@@ -49,20 +46,6 @@ function ProjectItem({
 		!dndDisabled &&
 		!isWorkspaceShortcut &&
 		(!isCollaborationProjectStatus || canManageProject(project.user_role) || !project.user_role)
-	const {
-		attributes: sortableAttributes,
-		listeners: sortableListeners,
-		setNodeRef: setSortableNodeRef,
-		setActivatorNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({
-		id: getProjectDragId(project.id),
-		data: { type: "project", projectId: project.id, workspaceId: project.workspace_id },
-		disabled: !canDrag,
-	})
-
 	const {
 		isEditing,
 		setIsEditing,
@@ -193,115 +176,109 @@ function ProjectItem({
 			rootClassName="w-full"
 		>
 			{({ open, triggerContextMenu }) => (
-				<SidebarMenuSubButton
-					ref={setSortableNodeRef}
-					asChild
-					size="md"
-					isActive={isSelected}
-					className={cn(
-						"h-7 px-2",
-						isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
-						isDragging && "opacity-50",
-					)}
-					style={{
-						transform: CSS.Transform.toString(transform),
-						transition,
+				<div
+					className="w-full"
+					draggable={canDrag}
+					data-sidebar-dnd-source={canDrag ? "project" : undefined}
+					data-sidebar-dnd-workspace-id={canDrag ? project.workspace_id : undefined}
+					data-sidebar-dnd-project-id={canDrag ? project.id : undefined}
+					data-sidebar-dnd-label={
+						canDrag ? project.project_name || t("project.unnamedProject") : undefined
+					}
+					data-sidebar-drop-type="project"
+					data-sidebar-drop-workspace-id={project.workspace_id}
+					data-sidebar-drop-project-id={project.id}
+					onDragStart={() => {
+						suppressItemClickRef.current = true
+					}}
+					onDragEnd={() => {
+						window.setTimeout(() => {
+							suppressItemClickRef.current = false
+						}, 0)
 					}}
 				>
-					<a
-						href={getWorkspaceProjectRouteUrl(project.workspace_id, project.id)}
-						onClick={handleClick}
-						data-testid={`sidebar-project-item-${project.id}`}
-						onMouseEnter={() => {
-							setIsHovered(true)
-							handlePreloadPage()
-						}}
-						onFocus={handlePreloadPage}
-						onMouseLeave={() => setIsHovered(false)}
-						className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
+					<SidebarMenuSubButton
+						asChild
+						size="md"
+						isActive={isSelected}
+						className={cn(
+							"relative h-7 px-2",
+							isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
+						)}
 					>
-						<div className="flex w-full min-w-0 items-center">
-							<div className="min-w-0 flex-1">
-								<div className="flex min-w-0 max-w-full items-center gap-1.5">
-									<NavigationStatusIcon
-										itemType="project"
-										status={project.project_status}
-										showDefaultIcon={false}
-										className={
-											isSelected
-												? "text-sidebar-accent-foreground"
-												: "text-sidebar-foreground"
-										}
-									/>
-									<span
-										className={cn(
-											"min-w-0 max-w-full truncate text-left text-sm leading-5",
-											isSelected
-												? "text-sidebar-accent-foreground"
-												: "text-sidebar-foreground",
-										)}
-									>
-										{project.project_name || t("project.unnamedProject")}
-									</span>
-									{project.is_pinned && <PinnedTag />}
-									{showCollaborationTag && (
-										<CollaborationProjectTag
-											visible={showCollaborationTag}
-											project={project}
-											showText={false}
+						<a
+							href={getWorkspaceProjectRouteUrl(project.workspace_id, project.id)}
+							onClick={handleClick}
+							draggable={false}
+							data-testid={`sidebar-project-item-${project.id}`}
+							onMouseEnter={() => {
+								setIsHovered(true)
+								handlePreloadPage()
+							}}
+							onFocus={handlePreloadPage}
+							onMouseLeave={() => setIsHovered(false)}
+							className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
+						>
+							<div className="flex w-full min-w-0 items-center">
+								<div className="min-w-0 flex-1">
+									<div className="flex min-w-0 max-w-full items-center gap-1.5">
+										<NavigationStatusIcon
+											itemType="project"
+											status={project.project_status}
+											showDefaultIcon={false}
+											className={
+												isSelected
+													? "text-sidebar-accent-foreground"
+													: "text-sidebar-foreground"
+											}
 										/>
-									)}
+										<span
+											className={cn(
+												"min-w-0 max-w-full truncate text-left text-sm leading-5",
+												isSelected
+													? "text-sidebar-accent-foreground"
+													: "text-sidebar-foreground",
+											)}
+										>
+											{project.project_name || t("project.unnamedProject")}
+										</span>
+										{project.is_pinned && <PinnedTag />}
+										{showCollaborationTag && (
+											<CollaborationProjectTag
+												visible={showCollaborationTag}
+												project={project}
+												showText={false}
+											/>
+										)}
+									</div>
 								</div>
-							</div>
-							{canDrag && (
+								{/* The menu trigger must stay tappable on coarse pointer desktop layouts. */}
 								<div
-									ref={setActivatorNodeRef}
-									{...sortableAttributes}
-									{...sortableListeners}
+									data-project-more-trigger="true"
 									className={cn(
-										"ml-1 flex h-4 w-4 shrink-0 cursor-grab items-center justify-center rounded text-sidebar-foreground transition-opacity hover:bg-sidebar-accent active:cursor-grabbing",
-										isHovered || isDragging
+										"ml-1 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+										isHovered || open
 											? "opacity-100"
-											: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:ml-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
+											: "pointer-events-none opacity-0",
 										"no-hover:pointer-events-auto no-hover:opacity-100",
 									)}
-									aria-label={t("sidebar:project.dragToReorder", {
-										defaultValue: "拖动排序项目",
-									})}
 									onClick={(e) => {
+										blockItemClickTemporarily()
 										e.preventDefault()
+										e.stopPropagation()
+										triggerContextMenu(e)
+									}}
+									onMouseDown={(e) => {
+										blockItemClickTemporarily()
 										e.stopPropagation()
 									}}
 								>
-									<GripVertical className="h-3 w-3" />
+									<Ellipsis className="h-4 w-4" />
 								</div>
-							)}
-							{/* The menu trigger must stay tappable on coarse pointer desktop layouts. */}
-							<div
-								data-project-more-trigger="true"
-								className={cn(
-									"ml-1 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-									isHovered || open
-										? "opacity-100"
-										: "pointer-events-none opacity-0",
-									"no-hover:pointer-events-auto no-hover:opacity-100",
-								)}
-								onClick={(e) => {
-									blockItemClickTemporarily()
-									e.preventDefault()
-									e.stopPropagation()
-									triggerContextMenu(e)
-								}}
-								onMouseDown={(e) => {
-									blockItemClickTemporarily()
-									e.stopPropagation()
-								}}
-							>
-								<Ellipsis className="h-4 w-4" />
 							</div>
-						</div>
-					</a>
-				</SidebarMenuSubButton>
+						</a>
+					</SidebarMenuSubButton>
+				</div>
 			)}
 		</ProjectActionsDropdown>
 	)

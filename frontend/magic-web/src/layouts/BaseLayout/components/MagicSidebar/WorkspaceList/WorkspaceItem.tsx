@@ -1,14 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
-import { ChevronRight, GripVertical, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
-import { useSortable } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+import { ChevronRight, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
 import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 import ProjectList from "./ProjectList"
 import type { WorkspaceItemProps } from "./types"
-import { getWorkspaceDragId } from "./types"
 import { useTranslation } from "react-i18next"
 import { workspaceStore } from "@/pages/superMagic/stores/core"
 import superMagicService from "@/pages/superMagic/services"
@@ -32,25 +29,12 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const suppressItemClickRef = useRef(false)
 	const isExpanded =
 		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
 	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
 	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
-	const {
-		attributes: sortableAttributes,
-		listeners: sortableListeners,
-		setNodeRef: setSortableNodeRef,
-		setActivatorNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({
-		id: getWorkspaceDragId(workspace.id),
-		data: { type: "workspace", workspaceId: workspace.id },
-		disabled: dndDisabled,
-	})
-
 	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
 		getFallbackWorkspaceName: () => t("workspace.unnamedWorkspace"),
@@ -113,6 +97,11 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 	}
 
 	function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+		if (suppressItemClickRef.current) {
+			e.preventDefault()
+			e.stopPropagation()
+			return
+		}
 		if (!shouldHandleAnchorClick(event)) return
 		if (isMenuOpen) {
 			event.preventDefault()
@@ -161,20 +150,17 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 
 	return (
 		<SidebarMenuItem
-			ref={setSortableNodeRef}
+			data-sidebar-drop-type="workspace"
+			data-sidebar-drop-workspace-id={workspace.id}
+			data-sidebar-workspace-root="true"
 			className={cn(
-				"flex w-full max-w-full shrink-0 flex-col items-center",
+				"relative flex w-full max-w-full shrink-0 flex-col items-center",
 				// Selecting a workspace scrolls this item to the top. Reserve the sticky
 				// "工作区" header height so the workspace title does not stick downward
 				// over the first project.
 				"scroll-mt-[var(--workspace-list-sticky-top)]",
 				className,
 			)}
-			style={{
-				transform: CSS.Transform.toString(transform),
-				transition,
-				opacity: isDragging ? 0.45 : undefined,
-			}}
 			data-testid={`sidebar-workspace-item-${workspace.id}`}
 			data-workspace-id-segment={workspaceIdSegment}
 			data-workspace-name={workspace.name || t("super:workspace.unnamedWorkspace")}
@@ -183,7 +169,23 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 			<div className="flex w-full min-w-0 flex-col">
 				<div
 					ref={workspaceHeaderRef}
-					className="sticky top-[var(--workspace-list-sticky-top)] z-10 w-full bg-sidebar"
+					draggable={!dndDisabled}
+					data-sidebar-dnd-source="workspace"
+					data-sidebar-dnd-workspace-id={workspace.id}
+					data-sidebar-dnd-label={workspace.name || t("super:workspace.unnamedWorkspace")}
+					data-sidebar-workspace-header="true"
+					onDragStart={() => {
+						suppressItemClickRef.current = true
+					}}
+					onDragEnd={() => {
+						window.setTimeout(() => {
+							suppressItemClickRef.current = false
+						}, 0)
+					}}
+					className={cn(
+						"sticky top-[var(--workspace-list-sticky-top)] z-10 w-full",
+						"bg-sidebar",
+					)}
 				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
@@ -202,6 +204,8 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 							<a
 								href={getWorkspaceRouteUrl(workspace.id)}
 								onClick={handleClick}
+								draggable={false}
+								data-sidebar-workspace-link="true"
 								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 							>
 								<div
@@ -251,27 +255,6 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 									data-testid="workspace-item-create-project"
 								>
 									<Plus className="h-4 w-4" />
-								</div>
-								<div
-									ref={setActivatorNodeRef}
-									{...sortableAttributes}
-									{...sortableListeners}
-									className={cn(
-										"flex h-4 w-4 shrink-0 cursor-grab items-center justify-center rounded text-sidebar-foreground transition-opacity hover:bg-sidebar-accent active:cursor-grabbing",
-										isHovered || isDragging
-											? "opacity-100"
-											: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
-										"no-hover:pointer-events-auto no-hover:opacity-100",
-									)}
-									aria-label={t("sidebar:workspace.dragToReorder", {
-										defaultValue: "拖动排序工作区",
-									})}
-									onClick={(e) => {
-										e.preventDefault()
-										e.stopPropagation()
-									}}
-								>
-									<GripVertical className="h-3.5 w-3.5" />
 								</div>
 								<MagicDropdown
 									menu={{ items: menuProps.items }}

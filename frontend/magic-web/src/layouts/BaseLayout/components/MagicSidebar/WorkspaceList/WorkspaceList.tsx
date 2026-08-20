@@ -15,7 +15,6 @@ import { Loader2, Plus, RefreshCw, Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { sidebarStore } from "@/stores/layout"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
-import projectStore from "@/pages/superMagic/stores/core/project"
 import superMagicService from "@/pages/superMagic/services"
 import { SuperMagicApi } from "@/apis"
 import {
@@ -35,18 +34,7 @@ import {
 	SidebarGroupLabel,
 	SidebarMenu,
 } from "@/components/shadcn-ui/sidebar"
-import {
-	DndContext,
-	DragOverlay,
-	PointerSensor,
-	closestCenter,
-	useSensor,
-	useSensors,
-	type DragEndEvent,
-} from "@dnd-kit/core"
-import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
-import type { SidebarDragData } from "./types"
-import { message } from "antd"
+import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -126,79 +114,16 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 				).values(),
 			)
 		: workspaces
-	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
-	const [activeDrag, setActiveDrag] = useState<SidebarDragData | null>(null)
-
-	const handleDragEnd = useCallback(
-		async ({ active, over }: DragEndEvent) => {
-			setActiveDrag(null)
-			if (!over || isSearchMode) return
-			const activeData = active.data.current as SidebarDragData | undefined
-			const overData = over.data.current as SidebarDragData | undefined
-			if (!activeData || !overData) return
-
-			try {
-				if (activeData.type === "workspace" && overData.type === "workspace") {
-					const oldIndex = workspaces.findIndex(
-						(item) => item.id === activeData.workspaceId,
-					)
-					const newIndex = workspaces.findIndex(
-						(item) => item.id === overData.workspaceId,
-					)
-					if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-						const next = arrayMove(workspaces, oldIndex, newIndex)
-						await superMagicService.workspace.reorderWorkspaces(
-							next.map((item) => item.id),
-						)
-					}
-					return
-				}
-
-				if (activeData.type !== "project") return
-				const sourceWorkspaceId = activeData.workspaceId
-				const sourceProjects = projectStore.getProjectsByWorkspace(sourceWorkspaceId)
-				const project = sourceProjects.find((item) => item.id === activeData.projectId)
-				if (!project) return
-
-				if (overData.type === "project" && overData.workspaceId === sourceWorkspaceId) {
-					const oldIndex = sourceProjects.findIndex(
-						(item) => item.id === activeData.projectId,
-					)
-					const newIndex = sourceProjects.findIndex(
-						(item) => item.id === overData.projectId,
-					)
-					if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-						const next = arrayMove(sourceProjects, oldIndex, newIndex)
-						await superMagicService.project.reorderProjects(
-							sourceWorkspaceId,
-							next.map((item) => item.id),
-						)
-					}
-					return
-				}
-
-				const targetWorkspaceId =
-					overData.type === "project" ? overData.workspaceId : overData.workspaceId
-				if (!targetWorkspaceId || targetWorkspaceId === sourceWorkspaceId) return
-				const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
-				const targetIndex =
-					overData.type === "project"
-						? targetProjects.findIndex((item) => item.id === overData.projectId)
-						: targetProjects.length
-				const targetWorkspace = workspaceStore.getWorkspaceById(targetWorkspaceId)
-				await superMagicService.project.moveProjectFromSidebar({
-					project,
-					targetWorkspaceId,
-					targetWorkspaceName: targetWorkspace?.name,
-					targetIndex,
-				})
-			} catch (error) {
-				console.error("Failed to persist sidebar drag result:", error)
-				message.error(t("common.operationFailed", { defaultValue: "操作失败，请稍后重试" }))
-			}
-		},
-		[isSearchMode, t, workspaces],
-	)
+	const {
+		rootRef: dndRootRef,
+		dropIndicatorRef,
+		handleDragStart,
+		handleDragMove,
+		handleDragOver,
+		handleDragLeave,
+		handleDrop,
+		handleDragEnd,
+	} = useWorkspaceListDnd({ workspaces, disabled: isSearchMode })
 
 	function handleStartCreateWorkspace() {
 		setIsCreatingWorkspace(true)
@@ -442,12 +367,15 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	}, [selectedWorkspaceId])
 
 	return (
-		<DndContext
-			sensors={sensors}
-			collisionDetection={closestCenter}
-			onDragStart={({ active }) => setActiveDrag(active.data.current as SidebarDragData)}
-			onDragCancel={() => setActiveDrag(null)}
+		<div
+			ref={dndRootRef}
+			onDragStart={handleDragStart}
+			onDrag={handleDragMove}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
+			className="relative"
 		>
 			<SidebarGroup
 				className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
@@ -563,30 +491,22 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 										/>
 									</div>
 								)}
-								<SortableContext
-									items={displayedWorkspaces.map(
-										(workspace) => `workspace:${workspace.id}`,
-									)}
-									strategy={verticalListSortingStrategy}
-								>
-									{displayedWorkspaces.map((workspace, index) => (
-										<WorkspaceItem
-											key={workspace.id}
-											workspace={workspace}
-											dndDisabled={isSearchMode}
-											searchProjects={
-												isSearchMode &&
-												projectsByWorkspaceId.has(workspace.id)
-													? projectsByWorkspaceId.get(workspace.id)
-													: undefined
-											}
-											className={cn(
-												"mb-[2px]",
-												index === displayedWorkspaces.length - 1 && "mb-0",
-											)}
-										/>
-									))}
-								</SortableContext>
+								{displayedWorkspaces.map((workspace, index) => (
+									<WorkspaceItem
+										key={workspace.id}
+										workspace={workspace}
+										dndDisabled={isSearchMode}
+										searchProjects={
+											isSearchMode && projectsByWorkspaceId.has(workspace.id)
+												? projectsByWorkspaceId.get(workspace.id)
+												: undefined
+										}
+										className={cn(
+											"mb-[2px]",
+											index === displayedWorkspaces.length - 1 && "mb-0",
+										)}
+									/>
+								))}
 								{isSearchLoading && (
 									<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
 										<Loader2 className="size-4 animate-spin" />
@@ -607,23 +527,16 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup>
-			<DragOverlay>
-				{activeDrag?.type === "workspace" && (
-					<div className="rounded-md bg-sidebar-accent px-2 py-1 text-sm shadow-md">
-						{workspaceStore.getWorkspaceById(activeDrag.workspaceId)?.name ||
-							t("super:workspace.unnamedWorkspace")}
-					</div>
-				)}
-				{activeDrag?.type === "project" && (
-					<div className="rounded-md bg-sidebar-accent px-2 py-1 text-sm shadow-md">
-						{projectStore
-							.getProjectsByWorkspace(activeDrag.workspaceId)
-							.find((project) => project.id === activeDrag.projectId)?.project_name ||
-							t("super:project.unnamedProject")}
-					</div>
-				)}
-			</DragOverlay>
-		</DndContext>
+			<svg
+				ref={dropIndicatorRef}
+				aria-hidden="true"
+				className="pointer-events-none absolute left-0 top-0 z-50 hidden overflow-visible text-[#b9dcff]"
+				style={{ height: 8 }}
+			>
+				<line x1="4" y1="4" x2="100%" y2="4" stroke="currentColor" strokeWidth="2" />
+				<circle cx="4" cy="4" r="4" fill="currentColor" />
+			</svg>
+		</div>
 	)
 }
 

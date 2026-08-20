@@ -6,9 +6,6 @@ import type { ProjectListProps } from "./types"
 import { SidebarMenuSub, SidebarMenuSubItem } from "@/components/shadcn-ui/sidebar"
 import useProjectItemActionProps from "@/pages/superMagic/components/EmptyWorkspacePanel/hooks/useProjectItemActionProps"
 import { openProjectInNewTab } from "@/pages/superMagic/utils/project"
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
-import { useDroppable } from "@dnd-kit/core"
-import { getProjectDragId, getProjectListDropId } from "./types"
 
 function ProjectList({
 	workspace,
@@ -21,12 +18,6 @@ function ProjectList({
 	dndDisabled,
 }: ProjectListProps) {
 	const { t } = useTranslation(["super", "sidebar"])
-	const { setNodeRef: setDroppableNodeRef, isOver } = useDroppable({
-		id: getProjectListDropId(workspaceId),
-		data: { type: "project-list", workspaceId },
-		disabled: dndDisabled,
-	})
-
 	const {
 		projectModals,
 		handleMoveProject,
@@ -44,9 +35,10 @@ function ProjectList({
 	return (
 		<>
 			<div
-				ref={setDroppableNodeRef}
 				className="relative flex w-full shrink-0 flex-col items-start gap-1 py-0.5 pl-6 pr-0"
-				data-dnd-over={isOver ? "true" : undefined}
+				data-sidebar-drop-type="project-list"
+				data-sidebar-drop-workspace-id={workspaceId}
+				data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}
 				data-testid={`sidebar-project-list-${workspaceId}`}
 			>
 				{isCreatingProject && onCancelCreate && onProjectCreated && (
@@ -69,15 +61,12 @@ function ProjectList({
 						{t("sidebar:project.empty")}
 					</div>
 				) : (
-					<SortableContext
-						items={projects.map((project) => getProjectDragId(project.id))}
-						strategy={verticalListSortingStrategy}
-					>
-						<SidebarMenuSub className="mx-0 w-full translate-x-0 border-0 px-0 py-0">
-							{projects.map((project, index) => (
+					<SidebarMenuSub className="mx-0 w-full translate-x-0 border-0 px-0 py-0">
+						{projects.map((project, index) => {
+							return (
 								<SidebarMenuSubItem
 									key={project.id}
-									className="w-full duration-150 animate-in fade-in slide-in-from-top-2"
+									className="relative w-full duration-150 animate-in fade-in slide-in-from-top-2"
 									style={{
 										animationDelay: `${index * 30}ms`,
 										animationFillMode: "backwards",
@@ -99,9 +88,9 @@ function ProjectList({
 										onRenameProject={handleRenameProject}
 									/>
 								</SidebarMenuSubItem>
-							))}
-						</SidebarMenuSub>
-					</SortableContext>
+							)
+						})}
+					</SidebarMenuSub>
 				)}
 				{/* Border line with fade-in animation */}
 				<div className="absolute bottom-0 left-4 top-0 w-0 border-l border-[#e5e5e5] duration-300 animate-in fade-in dark:border-[#404040]" />

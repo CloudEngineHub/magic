@@ -539,6 +539,25 @@ class ProjectService {
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
 				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
 			])
+			if (targetIndex !== undefined) {
+				const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
+				const movedIndex = targetProjects.findIndex((item) => item.id === project.id)
+				if (movedIndex !== -1 && movedIndex !== targetIndex) {
+					const orderedProjects = [...targetProjects]
+					const [movedProject] = orderedProjects.splice(movedIndex, 1)
+					if (!movedProject) return
+					orderedProjects.splice(
+						Math.max(0, Math.min(targetIndex, orderedProjects.length)),
+						0,
+						movedProject,
+					)
+					await SuperMagicApi.reorderProjects({
+						workspace_id: targetWorkspaceId,
+						project_ids: orderedProjects.map((item) => item.id),
+					})
+					projectStore.setProjectsForWorkspace(targetWorkspaceId, orderedProjects)
+				}
+			}
 		} catch (error) {
 			// A forced refresh is the safest rollback because either side may have
 			// been changed by another tab while the move was in flight.

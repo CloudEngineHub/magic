@@ -41,6 +41,8 @@ export type SidebarDragData =
 	| { type: "project"; projectId: string; workspaceId: string }
 	| { type: "project-list"; workspaceId: string }
 
+export type SidebarDropPosition = "before" | "after"
+
 export const getWorkspaceDragId = (workspaceId: string) => `workspace:${workspaceId}`
 export const getProjectDragId = (projectId: string) => `project:${projectId}`
 export const getProjectListDropId = (workspaceId: string) => `project-list:${workspaceId}`
