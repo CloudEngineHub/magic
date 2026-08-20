@@ -28,7 +28,7 @@ Router::addGroup('/api/v1/slides-template/tags', static function () {
 
 // 幻灯片模板使用侧
 Router::addGroup('/api/v1/slides-templates', static function () {
-    Router::post('', [SlidesTemplateApi::class, 'save']);
+    //    Router::post('', [SlidesTemplateApi::class, 'save']);
     Router::post('/from-project', [SlidesTemplateApi::class, 'publishFromProject']);
     Router::get('', [SlidesTemplateApi::class, 'queries']);
     Router::get('/count', [SlidesTemplateApi::class, 'count']);
@@ -37,5 +37,6 @@ Router::addGroup('/api/v1/slides-templates', static function () {
     Router::get('/{code}/availability', [SlidesTemplateApi::class, 'availability']);
     Router::post('/{code}/favorite', [SlidesTemplateApi::class, 'favorite']);
     Router::delete('/{code}/favorite', [SlidesTemplateApi::class, 'unfavorite']);
+    Router::delete('/{code}', [SlidesTemplateApi::class, 'delete']);
     Router::get('/{code}', [SlidesTemplateApi::class, 'detail']);
 }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
