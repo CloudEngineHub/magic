@@ -2,6 +2,7 @@ import { MousePointerClick, Palette, Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
 import TemplateGroupSelector from "@/pages/superMagic/components/MainInputContainer/panels/TemplateGroupSelector"
 import GroupIcon from "@/pages/superMagic/components/MainInputContainer/panels/GroupIcon"
@@ -63,6 +64,7 @@ export default function SlidesTemplatesToolbar({
 	showSimilarColors,
 }: SlidesTemplatesToolbarProps) {
 	const { t } = useTranslation("crew/create")
+	const isMobile = useIsMobile()
 
 	return (
 		<>
@@ -166,12 +168,16 @@ export default function SlidesTemplatesToolbar({
 								onGroupClick={() => onGroupChange(MY_SLIDES_TEMPLATES_GROUP_KEY)}
 								onSectionChange={onMyTemplatesSectionChange}
 								optionProps={optionProps}
+								flat={isMobile}
 								variant="dark"
 							/>
 						) : null
 					}
 					showEmptyGroups
-					optionClassName={GROUP_OPTION_CLASS_NAME}
+					optionClassName={cn(
+						GROUP_OPTION_CLASS_NAME,
+						isMobile && "h-8 px-2.5 py-1.5 text-xs [&>span]:text-xs",
+					)}
 					className="mt-2.5"
 					controlBackground="transparent"
 					leftControlClassName={GROUP_SCROLL_CONTROL_CLASS_NAME}

@@ -1,5 +1,15 @@
-import { useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react"
+import {
+	useCallback,
+	Fragment,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+	type FocusEvent,
+	type KeyboardEvent,
+} from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import type { TemplateGroupSelectorOptionProps } from "@/pages/superMagic/components/MainInputContainer/panels/TemplateGroupSelector"
 import type { MySlidesTemplateSection } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
@@ -11,6 +21,7 @@ interface MySlidesTemplatesGroupTabsProps {
 	onSectionChange: (section: MySlidesTemplateSection) => void
 	optionProps: Omit<TemplateGroupSelectorOptionProps, "onClick">
 	variant?: "default" | "dark"
+	flat?: boolean
 }
 
 const SECTIONS = [{ key: "created" }, { key: "favorites" }, { key: "used" }] as const
@@ -22,6 +33,7 @@ export default function MySlidesTemplatesGroupTabs({
 	onSectionChange,
 	optionProps,
 	variant = "default",
+	flat = false,
 }: MySlidesTemplatesGroupTabsProps) {
 	const { t } = useTranslation("super")
 	const tabListId = useId()
@@ -49,6 +61,7 @@ export default function MySlidesTemplatesGroupTabs({
 
 		event.preventDefault()
 		const nextSection = SECTIONS[nextIndex].key
+		if (!isSelected) onGroupClick()
 		onSectionChange(nextSection)
 		tabRefs.current[nextIndex]?.focus()
 	}
@@ -58,11 +71,84 @@ export default function MySlidesTemplatesGroupTabs({
 		setIsFocusExpanded(false)
 	}
 
+	const scrollGroupIntoView = useCallback(() => {
+		const shell = shellRef.current
+		if (typeof shell?.scrollIntoView !== "function") return
+
+		shell.scrollIntoView({
+			behavior: "smooth",
+			inline: "center",
+			block: "nearest",
+		})
+	}, [])
+
+	useEffect(() => {
+		if (!flat) return
+		const frameId = window.requestAnimationFrame(() => {
+			tabRefs.current[0]?.scrollIntoView({
+				behavior: "auto",
+				inline: "start",
+				block: "nearest",
+			})
+		})
+		return () => window.cancelAnimationFrame(frameId)
+	}, [flat])
+
+	if (flat) {
+		return (
+			<Fragment>
+				{SECTIONS.map(({ key }, index) => {
+					const isActive = isSelected && activeSection === key
+					const isTabStop = (isSelected ? activeSection : "created") === key
+
+					return (
+						<Button
+							ref={(node) => {
+								tabRefs.current[index] = node
+							}}
+							key={key}
+							type="button"
+							variant={isActive ? "outline" : "secondary"}
+							aria-pressed={isActive}
+							tabIndex={isTabStop ? 0 : -1}
+							className={cn(
+								"h-9 shrink-0 gap-2 rounded-full border-2 border-transparent px-4 py-2 font-normal shadow-xs active:scale-[0.96]",
+								variant === "default" &&
+									isActive &&
+									"border-primary bg-background text-primary shadow-xs hover:bg-background",
+								optionProps.className,
+								variant === "dark" &&
+									isActive &&
+									"border-white/40 bg-white/20 text-white shadow-sm hover:bg-white/20",
+							)}
+							data-selected={isActive}
+							data-testid={
+								index === 0
+									? optionProps["data-testid"]
+									: `my-slides-templates-section-${key}`
+							}
+							onClick={() => {
+								if (!isSelected) onGroupClick()
+								onSectionChange(key)
+							}}
+							onKeyDown={(event) => handleTabKeyDown(event, index)}
+						>
+							<span className="whitespace-nowrap text-sm leading-5">
+								{getSectionLabel(key)}
+							</span>
+						</Button>
+					)
+				})}
+			</Fragment>
+		)
+	}
+
 	return (
 		<div
 			ref={shellRef}
 			className={cn(
-				"flex h-9 max-w-full shrink-0 items-center overflow-hidden rounded-full border-2 border-transparent p-1 shadow-xs transition-[background-color,border-color,box-shadow] duration-150",
+				"flex h-9 shrink-0 items-center overflow-hidden rounded-full border-2 border-transparent p-1 shadow-xs transition-[background-color,border-color,box-shadow] duration-150",
+				"max-w-full",
 				variant === "default" &&
 					"bg-secondary text-secondary-foreground hover:bg-secondary/80",
 				variant === "dark" && optionProps.className,
@@ -86,15 +172,7 @@ export default function MySlidesTemplatesGroupTabs({
 				data-testid={optionProps["data-testid"]}
 				onClick={() => {
 					onGroupClick()
-					window.requestAnimationFrame(() => {
-						const shell = shellRef.current
-						if (typeof shell?.scrollIntoView !== "function") return
-						shell.scrollIntoView({
-							behavior: "smooth",
-							inline: "center",
-							block: "nearest",
-						})
-					})
+					window.requestAnimationFrame(scrollGroupIntoView)
 				}}
 			>
 				{optionProps.icon}
@@ -104,7 +182,9 @@ export default function MySlidesTemplatesGroupTabs({
 			<div
 				className={cn(
 					"shrink-0 overflow-hidden transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
-					isExpanded ? "max-w-72 opacity-100" : "pointer-events-none max-w-0 opacity-0",
+					isExpanded
+						? "max-w-[min(32rem,calc(100vw-1rem))] opacity-100"
+						: "pointer-events-none max-w-0 opacity-0",
 				)}
 				aria-hidden={!isExpanded}
 				data-expanded={isExpanded}
@@ -115,7 +195,7 @@ export default function MySlidesTemplatesGroupTabs({
 					role="tablist"
 					aria-label={t("mySlidesTemplates.sections.label")}
 					className={cn(
-						"flex h-7 w-max items-center rounded-full bg-background/70 p-0.5",
+						"no-scrollbar flex h-7 max-w-full items-center overflow-x-auto rounded-full bg-background/70 p-0.5",
 						variant === "dark" && "bg-black/20",
 					)}
 					data-testid="my-slides-templates-section-tabs"
@@ -147,7 +227,13 @@ export default function MySlidesTemplatesGroupTabs({
 										"border-white/40 bg-white/20 text-white shadow-sm hover:bg-white/20",
 								)}
 								data-testid={`my-slides-templates-section-${key}`}
-								onClick={() => onSectionChange(key)}
+								onClick={() => {
+									if (!isSelected) {
+										onGroupClick()
+										window.requestAnimationFrame(scrollGroupIntoView)
+									}
+									onSectionChange(key)
+								}}
 								onKeyDown={(event) => handleTabKeyDown(event, index)}
 							>
 								<span className="whitespace-nowrap">{getSectionLabel(key)}</span>

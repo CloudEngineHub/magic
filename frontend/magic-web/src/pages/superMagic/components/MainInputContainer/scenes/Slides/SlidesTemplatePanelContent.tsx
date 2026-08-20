@@ -83,7 +83,7 @@ function SlidesTemplatePanelContent({
 	)
 	const loadTemplateDetail = slidesState.loadTemplateDetail
 	const handlePreviewDetailLoad = useCallback(
-		(template: OptionItem) => {
+		(template: OptionItem): Promise<OptionItem | null> => {
 			const code = typeof template.value === "string" ? template.value : ""
 			return code ? loadTemplateDetail(code) : Promise.resolve(template)
 		},
@@ -255,11 +255,15 @@ function SlidesTemplatePanelContent({
 										}
 										onSectionChange={slidesState.setMyTemplatesActiveSection}
 										optionProps={optionProps}
+										flat={isMobile}
 									/>
 								) : null
 							}
 							showEmptyGroups
-							className="flex-1"
+							optionClassName={
+								isMobile ? "h-8 px-2.5 py-1.5 text-xs [&>span]:text-xs" : undefined
+							}
+							className="min-w-0 flex-1"
 						/>
 					) : (
 						<div className="min-w-0 flex-1" />
