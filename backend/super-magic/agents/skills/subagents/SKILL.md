@@ -268,7 +268,7 @@ Never let multiple sub-agents write to the same file concurrently.
 
 Sub-agents may include output file paths in their results. When reporting to the user, convert workspace paths to Markdown links using `./workspace-relative-path` destinations.
 
-Example: Research report is ready: `[market-research.md](<./reports/market-research.md>)`
+Example: Research report is ready: `[market-research.md](./reports/market-research.md)`
 
 ## Sync Example
 

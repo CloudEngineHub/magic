@@ -31,9 +31,10 @@ export function getMentionClipboardRepresentation(
 	const href = createCanonicalWorkspaceHref(data.relative_file_path || data.file_path || "")
 	const label = data.file_name?.trim()
 	if (!href || !label) return null
+	const markdownDestination = href.includes(" ") ? `<${href}>` : href
 
 	return {
-		plainText: `[${escapeMarkdownLinkLabel(label)}](<${href}>)`,
+		plainText: `[${escapeMarkdownLinkLabel(label)}](${markdownDestination})`,
 		htmlContent: `<a href="${escapeHtmlText(href)}">${escapeHtmlText(label)}</a>`,
 	}
 }

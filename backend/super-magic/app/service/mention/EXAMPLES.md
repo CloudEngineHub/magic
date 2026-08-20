@@ -22,7 +22,7 @@
 ### 输出示例
 
 ```
-1. [main.py](<./src/main.py>)
+1. [main.py](./src/main.py)
    - 访问地址: http://example.com/main.py
 ```
 
@@ -380,7 +380,7 @@ window.magicProjectConfig = {
 ```
 <mentions>
 Referenced files and resources:
-1. [main.py](<./src/main.py>)
+1. [main.py](./src/main.py)
 2. [search_tool](mcp://search_tool)
 3. [code_reviewer](agent://agent-code-reviewer)
 4. [@design_marker:调整logo]

@@ -111,7 +111,10 @@ def _canonical_file_link(file_path: str, file_name: str) -> Optional[str]:
         return None
 
     label = _markdown_label(file_name or Path(relative_path).name)
-    return f"[{label}](<./{encoded_path}>)"
+    destination = f"./{encoded_path}"
+    if " " in destination:
+        return f"[{label}](<{destination}>)"
+    return f"[{label}]({destination})"
 
 
 class FileHandler(BaseMentionHandler):

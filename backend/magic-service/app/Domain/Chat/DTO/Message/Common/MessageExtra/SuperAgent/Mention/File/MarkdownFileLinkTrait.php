@@ -51,6 +51,9 @@ trait MarkdownFileLinkTrait
         $label = trim($label);
         $label = str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $label);
 
-        return sprintf('[%s](<./%s>)', $label, $encodedPath);
+        $destination = './' . $encodedPath;
+        return str_contains($destination, ' ')
+            ? sprintf('[%s](<%s>)', $label, $destination)
+            : sprintf('[%s](%s)', $label, $destination);
     }
 }
