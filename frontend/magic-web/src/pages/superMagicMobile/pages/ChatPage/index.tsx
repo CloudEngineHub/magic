@@ -62,6 +62,9 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	const hierarchicalWorkspacePopupRef = useRef<HierarchicalWorkspacePopupRef>(null)
 	const mobileInputContainerRef = useRef<MobileInputContainerRef>(null)
 	const wasHomepageEmptyRef = useRef(false)
+	// Track the account context used for the last homepage mode refresh so an organization switch
+	// cannot reuse the previous organization's runtime fallback while the homepage stays empty.
+	const homepageRefreshContextRef = useRef<string | null>(null)
 	const activeTab = new URLSearchParams(location.search).get("tab") ?? MobileTabParam.Super
 	const isMobileHomeRoute = routesPathMatch(RouteName.MobileHome, location.pathname)
 	// MobileTabs（/mobile-tabs?tab=super）和 MobileHome（/mobile-home）都应视为首页，
@@ -139,7 +142,10 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	// editor state
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
+	const organizationCode = userStore.user.organizationCode
+	const userId = userStore.user.userInfo?.user_id
 	const isHomepageEmpty = isOnHomepage && !selectedProject && !selectedTopic
+	const homepageContextKey = `${organizationCode ?? ""}:${userId ?? ""}`
 
 	const {
 		topicMode,
@@ -191,12 +197,15 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 		// 运行时 roleStore 可能被话题恢复流程临时修改；首页应以用户持久化选择为准。
 		const savedHomepageMode = ProjectTopicService.getRawGlobalTopicMode()
 		const defaultMode = getFallbackTopicModeIdentifier()
+		// Skip hidden employees so the homepage never falls back to an unavailable mode.
+		const firstAvailableMode = nextModeList.find((item) => item.agent?.is_visible !== false)
+			?.mode?.identifier as TopicMode | undefined
 		const resolvedHomepageMode =
 			savedHomepageMode && superMagicModeService.isModeValid(savedHomepageMode)
 				? savedHomepageMode
 				: superMagicModeService.isModeValid(defaultMode)
 					? defaultMode
-					: (nextModeList[0]?.mode?.identifier as TopicMode | undefined)
+					: firstAvailableMode
 		if (!resolvedHomepageMode || resolvedHomepageMode === displayTopicMode) return
 
 		recoverTopicMode(resolvedHomepageMode)
@@ -204,6 +213,8 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 
 	useEffect(() => {
 		const wasHomepageEmpty = wasHomepageEmptyRef.current
+		const previousRefreshContext = homepageRefreshContextRef.current
+		const hasContextChanged = previousRefreshContext !== homepageContextKey
 		// When agentCode is present, we must refresh even if already on homepage.
 		// Without this, wasHomepageEmpty=true short-circuits the refresh, leaving fetchPromise=null.
 		// useAgentCodeModeFromSearch then sees no pending fetch and prematurely clears the URL
@@ -211,10 +222,11 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 		const hasAgentCode = new URLSearchParams(location.search).has("agentCode")
 
 		wasHomepageEmptyRef.current = isHomepageEmpty
-		if (!isHomepageEmpty || (wasHomepageEmpty && !hasAgentCode)) return
+		homepageRefreshContextRef.current = homepageContextKey
+		if (!isHomepageEmpty || (wasHomepageEmpty && !hasAgentCode && !hasContextChanged)) return
 
 		void refreshHomepageModeList()
-	}, [isHomepageEmpty, location.search, refreshHomepageModeList])
+	}, [homepageContextKey, isHomepageEmpty, location.search, refreshHomepageModeList])
 
 	useAgentCodeModeFromSearch({
 		// /mobile-home 需要把 agentCode 留在 URL 里，刷新后才能再次还原首页选中的数字员工。
@@ -229,7 +241,6 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	const chatTopicId = selectedTopic?.chat_topic_id
 	const threadMessageCount =
 		chatTopicId != null ? (superMagicStore.messages?.get(chatTopicId) ?? []).length : 0
-	const userId = userStore.user.userInfo?.user_id
 	const isTaskRunning = selectedTopic?.task_status === TaskStatus.RUNNING
 
 	const { handleInterrupt } = useTaskInterrupt({
