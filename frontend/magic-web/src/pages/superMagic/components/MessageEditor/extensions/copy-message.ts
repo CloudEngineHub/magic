@@ -5,6 +5,7 @@ import type {
 	MentionListItem,
 	TiptapMentionAttributes,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
+import { getMentionUniqueId } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { DataService } from "@/components/business/MentionPanel/types"
 import {
 	extractClipboardMetadata,
@@ -77,6 +78,58 @@ function buildPlainTextPasteParts(text: string, attachments: AttachmentItem[]): 
 	appendText(parts, text.slice(lastIndex))
 
 	return matchedCount > 0 ? parts : null
+}
+
+function replaceWorkspaceLinksInRichText(
+	content: JSONContent,
+	attachments: AttachmentItem[],
+): { content: JSONContent; mentions: TiptapMentionAttributes[] } {
+	const mentions: TiptapMentionAttributes[] = []
+
+	const visit = (node: JSONContent): JSONContent[] => {
+		if (
+			node.type === "codeBlock" ||
+			node.type === "code" ||
+			node.marks?.some((mark) => mark.type === "code")
+		) {
+			return [node]
+		}
+
+		if (node.type === "text" && node.text) {
+			const parts = buildPlainTextPasteParts(node.text, attachments)
+			if (!parts) return [node]
+
+			const replacementContent: JSONContent[] = []
+			for (const part of parts) {
+				if (part.type === "mention") {
+					mentions.push(part.attrs)
+					replacementContent.push({ type: "mention", attrs: part.attrs })
+					continue
+				}
+
+				if (part.text) replacementContent.push({ ...node, text: part.text })
+			}
+			return replacementContent
+		}
+
+		if (!node.content) return [node]
+
+		return [{ ...node, content: node.content.flatMap(visit) }]
+	}
+
+	return { content: visit(content)[0] ?? content, mentions }
+}
+
+function deduplicateMentions(items: TiptapMentionAttributes[]): TiptapMentionAttributes[] {
+	const uniqueIds = new Set<string>()
+
+	return items.filter((item) => {
+		const uniqueId = getMentionUniqueId(item)
+		if (uniqueIds.has(uniqueId)) return false
+
+		uniqueIds.add(uniqueId)
+		return true
+	})
 }
 
 function buildHtmlPasteParts(html: string, attachments: AttachmentItem[]): PastePart[] | null {
@@ -247,8 +300,8 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 						if (!clipboardData) return false
 
 						const isMagic = isMagicClipboard(clipboardData)
+						const attachments = this.options.getWorkspaceFilesList?.() ?? []
 						if (!isMagic) {
-							const attachments = this.options.getWorkspaceFilesList?.() ?? []
 							const htmlParts = buildHtmlPasteParts(
 								clipboardData.getData("text/html"),
 								attachments,
@@ -292,8 +345,14 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 									this.options.dataService ?? null,
 								)
 							: []
-						const syncMentions = () => {
-							if (mentions) this.options.onMentionsInsert?.(mentionItems)
+						const syncMentions = (
+							additionalMentions: TiptapMentionAttributes[] = [],
+						) => {
+							const allMentions = deduplicateMentions([
+								...mentionItems,
+								...additionalMentions,
+							])
+							if (allMentions.length > 0) this.options.onMentionsInsert?.(allMentions)
 						}
 
 						// 处理富文本内容
@@ -304,14 +363,18 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 									metadata,
 									this.options.dataService ?? null,
 								)
-								const editorContent = transformInspectorContent(content)
+								const converted = replaceWorkspaceLinksInRichText(
+									content,
+									attachments,
+								)
+								const editorContent = transformInspectorContent(converted.content)
 								return (
 									runActiveEditor(
 										this.editor,
 										(editor) => {
 											if (!editor.commands.insertContent(editorContent))
 												return false
-											syncMentions()
+											syncMentions(converted.mentions)
 											return true
 										},
 										false,
