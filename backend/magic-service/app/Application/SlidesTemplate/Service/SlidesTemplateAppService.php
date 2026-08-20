@@ -30,6 +30,7 @@ use App\Interfaces\SlidesTemplate\DTO\Request\QueryFavoriteSlidesTemplateRequest
 use App\Interfaces\SlidesTemplate\DTO\Request\QueryUsedSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveUserSlidesTemplateRequest;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
+use Hyperf\DbConnection\Db;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
@@ -244,6 +245,20 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
     {
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->slidesTemplateFavoriteDomainService->unfavorite($dataIsolation, $code);
+    }
+
+    public function deleteUserTemplate(Authenticatable|BaseDataIsolation $authorization, string $code): void
+    {
+        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+
+        Db::transaction(function () use ($dataIsolation, $code): void {
+            $template = $this->slidesTemplateDomainService->findByCodeOrFail($dataIsolation, $code);
+            $this->slidesTemplateDomainService->assertOwnedByUser($dataIsolation, $template);
+            $this->slidesTemplateTagDomainService->deleteTemplateTags($dataIsolation, (int) $template->getId());
+            $this->slidesTemplateFavoriteDomainService->deleteBySlideTemplateCode($template->getCode());
+            $this->slidesTemplateDomainService->delete($dataIsolation, (int) $template->getId());
+        });
     }
 
     private function createPublicQuery(PublicQuerySlidesTemplateRequest $request): SlidesTemplateQuery

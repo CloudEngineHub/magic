@@ -114,4 +114,10 @@ class SlidesTemplateApi extends AbstractApi
         $this->slidesTemplateAppService->unfavorite($this->getAuthorization(), $code);
         return [];
     }
+
+    public function delete(string $code): array
+    {
+        $this->slidesTemplateAppService->deleteUserTemplate($this->getAuthorization(), $code);
+        return [];
+    }
 }
