@@ -86,6 +86,7 @@ export function VersionHistorySelector({
 						<Button
 							variant="outline"
 							size="sm"
+							data-testid="ppt-version-history-trigger"
 							onClick={() => {
 								fetchFileVersions(fileId)
 							}}
