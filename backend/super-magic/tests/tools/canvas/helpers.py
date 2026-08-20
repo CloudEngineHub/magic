@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import ValidationError
+
 from app.tools.canvas.application import CanvasApplication
-from app.tools.canvas.application.commands import GenerationParametersOverride, RetryContentCommand
+from app.tools.canvas.application.commands import AddElementCommand, GenerationParametersOverride, RetryContentCommand
 from app.tools.canvas.bootstrap import CanvasApplicationFactory
-from app.tools.canvas.schemas.inputs import (
+from app.tools.canvas.tools import (
     AddContentInput,
     ConnectionInput,
     ElementInput,
@@ -30,7 +32,21 @@ class TypedCanvasApplication:
 
     async def add_elements(self, project_path: str, items: list[dict[str, Any]], *args: Any, **kwargs: Any) -> Any:
         """将测试字典转换为 AddElementCommand。"""
-        return await self._application.add_elements(project_path, [ElementInput.model_validate(_normalize_content(item)).to_command() for item in items], *args, **kwargs)
+        commands = []
+        for item in items:
+            normalized = _normalize_content(item)
+            try:
+                commands.append(ElementInput.model_validate(normalized).to_command())
+            except ValidationError:
+                # 领域层负向测试需要保留非法 element_type，让业务码由 Application 负责判定。
+                commands.append(
+                    AddElementCommand(
+                        item_ref=str(normalized.get("item_ref", "")),
+                        element_type=str(normalized.get("element_type", "")),
+                        name=normalized.get("name"),
+                    )
+                )
+        return await self._application.add_elements(project_path, commands, *args, **kwargs)
 
     async def add_contents(self, project_path: str, items: list[dict[str, Any]], *args: Any, **kwargs: Any) -> Any:
         """将测试字典转换为 AddContentCommand。"""

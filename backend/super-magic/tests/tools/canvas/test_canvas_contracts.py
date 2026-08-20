@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 
 import pytest
 from pydantic import ValidationError
@@ -23,7 +24,6 @@ from app.tools.canvas.generation import (
 from app.tools.canvas.presentation import error_result as _error_result
 from app.tools.canvas.presentation.model_content import elements_content, items_content
 from app.tools.canvas.repository import CanvasRepository
-from app.tools.canvas.schemas.inputs import GenerationOverrideInput, VideoPointEstimateItemInput
 from app.tools.canvas.tools import (
     AddCanvasConnections,
     AddCanvasContents,
@@ -37,11 +37,15 @@ from app.tools.canvas.tools import (
     QueryCanvasElementDetails,
     QueryCanvasOverview,
     RetryCanvasContentGeneration,
+    GenerationOverrideInput,
     SearchCanvasImagePrompts,
     SearchCanvasImages,
     SelectCanvasMainContent,
     WaitCanvasGeneration,
+    VideoPointEstimateItemInput,
 )
+import app.tools.canvas.tools as canvas_tools
+import app.tools.design.tools as design_tools
 
 
 def test_content_input_exposes_one_stable_model_schema() -> None:
@@ -84,6 +88,24 @@ def test_each_canvas_tool_owns_feedback_hooks() -> None:
     }
     for tool_class in tools:
         assert hooks <= tool_class.__dict__.keys(), tool_class.__name__
+
+
+def test_canvas_tools_do_not_conflict_with_legacy_tool_names() -> None:
+    """Canvas 工具在并行迁移期间必须避免覆盖旧 Design 工具。"""
+    canvas_names = {
+        getattr(tool_class, "_tool_name")
+        for _, tool_class in inspect.getmembers(canvas_tools, inspect.isclass)
+        if getattr(tool_class, "_is_tool", False)
+    }
+    design_names = {
+        getattr(tool_class, "_tool_name")
+        for _, tool_class in inspect.getmembers(design_tools, inspect.isclass)
+        if getattr(tool_class, "_is_tool", False)
+    }
+
+    assert canvas_names.isdisjoint(design_names)
+    assert SearchCanvasImages._tool_name == "search_canvas_image_candidates"
+    assert ComposeCanvasVideo._tool_name == "compose_canvas_final_video"
 
 
 def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
