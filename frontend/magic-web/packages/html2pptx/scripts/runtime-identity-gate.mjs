@@ -18,7 +18,7 @@ export const RUNTIME_IDENTITY_FIELDS = [
  */
 export function extractRuntimeIdentity(source, file = "built runtime") {
 	const match = source.match(
-		/protocolVersion\s*:\s*2\s*,\s*edition\s*:\s*["'](open|enterprise)["']\s*,\s*html2pptxVersion\s*:\s*["']([^"']+)["']\s*,\s*buildId\s*:\s*["']([^"']+)["']\s*,\s*pptxgenjsVersion\s*:\s*["']([^"']+)["']\s*,\s*sourceCommit\s*:\s*["']([^"']+)["']\s*,\s*artifactHash\s*:\s*["'](sha256:[0-9a-f]{64})["']/s,
+		/protocolVersion\s*:\s*2\s*,\s*edition\s*:\s*["'`](open|enterprise)["'`]\s*,\s*html2pptxVersion\s*:\s*["'`]([^"'`]+)["'`]\s*,\s*buildId\s*:\s*["'`]([^"'`]+)["'`]\s*,\s*pptxgenjsVersion\s*:\s*["'`]([^"'`]+)["'`]\s*,\s*sourceCommit\s*:\s*["'`]([^"'`]+)["'`]\s*,\s*artifactHash\s*:\s*["'`](sha256:[0-9a-f]{64})["'`]/s,
 	)
 	if (!match) throw new Error(`${file}: injected Packaging runtime identity is missing or malformed`)
 
