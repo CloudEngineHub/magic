@@ -27,7 +27,6 @@ use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\UserSkillEntity;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\BuiltinSkill;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
@@ -1178,7 +1177,7 @@ class SkillAppService extends AbstractSkillAppService
      */
     protected function mergeBuiltinSkillCodes(array $skillCodes, ?array $resourceCode = null): array
     {
-        $builtinSkillCodes = BuiltinSkill::values();
+        $builtinSkillCodes = $this->skillMarketDomainService->getOfficialBuiltinSkillCodes();
         if ($resourceCode !== null) {
             $builtinSkillCodes = array_values(array_intersect($builtinSkillCodes, $resourceCode));
         }
@@ -2252,7 +2251,7 @@ class SkillAppService extends AbstractSkillAppService
             );
         } catch (Throwable $throwable) {
             // 内置资源等少数场景不走 op/visibility 判定，这里允许调用方透传白名单跳过。
-            if (BuiltinSkill::tryFrom($skillCode) !== null) {
+            if (in_array($skillCode, $this->skillMarketDomainService->getOfficialBuiltinSkillCodes(), true)) {
                 return null;
             }
             throw $throwable;

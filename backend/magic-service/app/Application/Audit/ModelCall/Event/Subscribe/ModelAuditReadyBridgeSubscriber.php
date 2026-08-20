@@ -203,10 +203,6 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
 
     private function buildImageGeneratedUsage(ImageGeneratedEvent $event, AuditStatus $status, array $businessParams): array
     {
-        if ($status->isFail()) {
-            return [];
-        }
-
         $usage = [
             'count' => (int) ($businessParams['image_count'] ?? 0),
             'image_count' => (int) ($businessParams['image_count'] ?? $event->getImageCount()),

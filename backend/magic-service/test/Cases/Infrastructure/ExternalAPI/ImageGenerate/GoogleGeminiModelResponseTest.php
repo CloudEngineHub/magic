@@ -103,6 +103,51 @@ class GoogleGeminiModelResponseTest extends TestCase
             'thoughts_tokens' => 56,
         ], $response->getUsage()->toArray());
     }
+
+    public function testImageSafetyResponseKeepsUsageAndReturnsProviderError(): void
+    {
+        $finishMessage = 'Unable to show the generated image because it violated safety policies.';
+        $result = [
+            'candidates' => [
+                [
+                    'content' => [
+                        'role' => 'model',
+                    ],
+                    'finishMessage' => $finishMessage,
+                    'finishReason' => 'IMAGE_SAFETY',
+                ],
+            ],
+            'usageMetadata' => [
+                'promptTokenCount' => 965,
+                'thoughtsTokenCount' => 457,
+                'totalTokenCount' => 1422,
+            ],
+        ];
+
+        $model = new TestableGoogleGeminiModel();
+        $request = new GoogleGeminiRequest('1024', '1024', 'test prompt', '', 'gemini-image');
+        $response = new OpenAIFormatResponse([
+            'created' => time(),
+            'provider' => 'google',
+            'data' => [],
+        ]);
+
+        $reflection = new ReflectionClass(GoogleGeminiModel::class);
+        $method = $reflection->getMethod('addImageDataToResponseGemini');
+        $method->setAccessible(true);
+        $method->invoke($model, $response, $result, $request);
+
+        self::assertSame([], $response->getData());
+        self::assertSame(44002, $response->getProviderErrorCode());
+        self::assertSame($finishMessage, $response->getProviderErrorMessage());
+        self::assertSame([
+            'prompt_tokens' => 965,
+            'completion_tokens' => 0,
+            'total_tokens' => 1422,
+            'generated_images' => 0,
+            'thoughts_tokens' => 457,
+        ], $response->getUsage()?->toArray());
+    }
 }
 
 final class TestableGoogleGeminiModel extends GoogleGeminiModel

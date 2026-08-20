@@ -225,7 +225,7 @@ class AzureOpenAIAPI
         if (isset($data['error'])) {
             ExceptionBuilder::throw(
                 ImageGenerateErrorCode::GENERAL_ERROR,
-                'Azure OpenAI API Error: ' . $data['error']['message']
+                $data['error']['message']
             );
         }
 
@@ -237,16 +237,19 @@ class AzureOpenAIAPI
      */
     private function handleException(RequestException $e): void
     {
-        $message = 'Azure OpenAI API request failed: ' . $e->getMessage();
+        $message = 'image_generate.general_error';
 
         if ($e->hasResponse()) {
-            $body = $e->getResponse()->getBody()->getContents();
-            $data = json_decode($body, true);
-            if (isset($data['error']['message'])) {
-                $message = 'Azure OpenAI API Error: ' . $data['error']['message'];
+            $response = $e->getResponse();
+            if (in_array($response->getStatusCode(), [400, 413, 422], true)) {
+                $body = $response->getBody()->getContents();
+                $data = json_decode($body, true);
+                if (is_array($data) && is_string($data['error']['message'] ?? null) && $data['error']['message'] !== '') {
+                    $message = $data['error']['message'];
+                }
             }
         }
 
-        ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, $message);
+        ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, $message, [], null, $e);
     }
 }

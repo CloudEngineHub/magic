@@ -1592,15 +1592,16 @@ class LLMAppService extends AbstractLLMAppService
             // 记录日志
             $this->recordImageGenerateMessageLog($modelVersion, $creator, $organizationCode);
 
+            // 服务商返回业务错误时，按失败流程处理，但保留已返回的 usage 用于计费。
+            if ($generateImageOpenAIFormat->hasError()) {
+                throw new BusinessException($generateImageOpenAIFormat->getProviderErrorMessage() ?? '', $generateImageOpenAIFormat->getProviderErrorCode() ?? 0);
+            }
+
             // 获取图片生成次数
             $imageCount = $generateImageOpenAIFormat->getUsage()?->getGeneratedImages();
             // 图片生成次数为空时，尝试获取图片数量
             if (is_null($imageCount) && $generateImageOpenAIFormat->getData()) {
                 $imageCount = count($generateImageOpenAIFormat->getData());
-            }
-            // 图片生成次数为空时，尝试获取错误信息
-            if (is_null($imageCount) && ! empty($generateImageOpenAIFormat->getProviderErrorMessage())) {
-                throw new BusinessException($generateImageOpenAIFormat->getProviderErrorMessage(), $generateImageOpenAIFormat->getProviderErrorCode());
             }
             $imageCount ??= 0;
 
@@ -1642,7 +1643,7 @@ class LLMAppService extends AbstractLLMAppService
                     'status' => self::AUDIT_STATUS_FAIL,
                     'failure_reason' => $errorMessage,
                 ],
-                null,
+                $this->resolveImageTokenUsage($generateImageOpenAIFormat->getUsage()),
                 $imageGenerateRequest->getResolution(),
                 $imageGenerateRequest->getSize()
             );
