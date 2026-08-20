@@ -210,15 +210,23 @@ class VideoCompositionService:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Video Edit input is not connected: {source_id} -> {target_id}.")
 
     def _resolve_media(self, project_path: str, source: str | None) -> Path:
-        """解析并限制工作区相对媒体路径。"""
+        """解析项目相对或工作区相对媒体路径，并限制在当前项目内。"""
         if not source:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Media source is empty.")
         normalized = source.replace("\\", "/")
         while normalized.startswith("./"):
             normalized = normalized[2:]
-        relative = PurePosixPath(normalized)
+        project_relative = PurePosixPath(project_path.replace("\\", "/"))
+        source_path = PurePosixPath(normalized)
+        project_parts = project_relative.parts
+        if source_path.parts[: len(project_parts)] == project_parts:
+            relative = PurePosixPath(*source_path.parts[len(project_parts) :])
+        else:
+            relative = source_path
         if relative.is_absolute() or ".." in relative.parts:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Media source must stay inside the project.")
+        if not relative.parts:
+            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Media source is empty.")
         return self._workspace / project_path / relative
 
     @classmethod
