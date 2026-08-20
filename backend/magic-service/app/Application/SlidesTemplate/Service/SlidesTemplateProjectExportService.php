@@ -91,7 +91,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             ]);
 
             // 项目和目录必须先完成权限及类型校验，避免导出其他项目或非工作区目录。
-            $project = $this->getAccessibleProjectWithManager($projectId, $authorization->getId(), $authorization->getOrganizationCode());
+            $project = $this->getAccessibleProjectWithEditor($projectId, $authorization->getId(), $authorization->getOrganizationCode());
             $directory = $this->assertTemplateDirectory($projectId, $directoryId);
 
             // 优先使用工作区目录自身的 file_key 计算相对路径；必要时再通过父目录链回退解析。
