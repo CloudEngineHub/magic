@@ -1,6 +1,8 @@
 import { observer } from "mobx-react-lite"
 import { useCurrentSceneConfig } from "@/pages/superMagic/components/MainInputContainer/hooks/useCurrentSceneConfig"
 import ScenePanelContainer from "@/pages/superMagic/components/MainInputContainer/components/ScenePanelContainer"
+import { SkillPanelType } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { isMobileScenePanelRenderable } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { cn } from "@/utils/cn"
 
@@ -16,8 +18,13 @@ function MobileScenePanelsComponent({ editorContext, compact = false }: MobileSc
 
 	const handleTemplateSelect = () => undefined
 	const handleFilterChange = () => undefined
+	// Mirror each mobile renderer's visibility rules so empty child panels do not leave
+	// the mobile composer padding and separator visible.
+	const hasRenderablePanels = panels.some(
+		(panel) => panel.type === SkillPanelType.FIELD && isMobileScenePanelRenderable(panel),
+	)
 
-	if (!isLoading && panels.length === 0) return null
+	if (!isLoading && !hasRenderablePanels) return null
 
 	return (
 		<div
