@@ -409,7 +409,7 @@ Reference the following template to create slide pages. Each page is an independ
 模板来源规则：
 - slide-template 不再包含可复制的本地模板资源；禁止读取或复制技能目录中的旧模板资源文件。
 - 创建、转换、视觉重建、提取或更新模板时，必须加载 slide-template-maker；不得在 slide-template 内执行模板制作。
-- 模板目录、`template.json` 和初始页面必须由 `create_slide_template_project` 创建；禁止用 `shell_exec`、`run_python_snippet`、`write_file` 或其它通用文件工具手写或覆盖这些受工具管理的文件。工具创建失败时必须停止，不能自行模拟目录和清单。
+- 模板目录、`template.json` 和初始页面必须由 `create_slide_template_project` 创建；禁止用 `shell_exec`、`run_python_snippet`、`write_file` 或其它通用文件工具手写或覆盖这些受工具管理的文件。分类和标签必须通过 `query_slide_template_taxonomy` 查询和核对，禁止用执行命令或直接读取 taxonomy JSON 猜测 code。工具创建失败时必须停止，不能自行模拟目录和清单。
 - 模板制作只能修改 `visual-spec.md`、`theme.css`、`images/` 和清单中声明的 `slides/*.html`。源页回顾和素材筛选必须通过 `review_slide_template_source` 与 `select_slide_template_source_assets`，禁止手写 `source-analysis.json` 或在模板目录内创建 `.template-work/`。制作完成后必须调用 `finalize_slide_template`，检查 `result.ok` 并对照 `previews/` 后才能报告任务完成。
 - PPT/PPTX/POTX/POT/PPSX 转模板时禁止调用 convert_pptx_to_slide_template、pptx-to-html 或旧 PPTX 转模板脚本；只能把演示文件渲染为视觉参考，再从零编写语义 HTML/CSS 模板。
 - 平台模板必须通过明确 template code 使用；code 必须来自平台模板列表、用户选择、用户输入或上游上下文，不得编造、改写大小写或把旧模板目录名映射为 code。
@@ -450,7 +450,7 @@ Before any new full slide project (you will call create_slide_project for a new 
 Template source rules:
 - slide-template no longer contains copyable local template resources. Never read or copy files from legacy local template resource directories.
 - Load slide-template-maker for every template creation, conversion, visual reconstruction, extraction, or update request. Do not make templates inside slide-template.
-- The template directory, `template.json`, and initial slide scaffolds MUST be created by `create_slide_template_project`. Do not hand-write or overwrite these tool-owned files with `shell_exec`, `run_python_snippet`, `write_file`, or any other generic file tool. If project creation fails, stop instead of emulating the directory or manifest.
+- The template directory, `template.json`, and initial slide scaffolds MUST be created by `create_slide_template_project`. Do not hand-write or overwrite these tool-owned files with `shell_exec`, `run_python_snippet`, `write_file`, or any other generic file tool. Category and tag codes must come from `query_slide_template_taxonomy`; do not guess them with shell commands or by reading the taxonomy JSON. If project creation fails, stop instead of emulating the directory or manifest.
 - During authoring, only modify `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Source review and asset selection must use `review_slide_template_source` and `select_slide_template_source_assets`. Do not hand-write `source-analysis.json` or create `.template-work/` inside the template directory. Always call `finalize_slide_template`, inspect `result.ok`, compare `previews/` with the source, and report completion only after finalization succeeds.
 - When turning PPT/PPTX/POTX/POT/PPSX into a template, never call convert_pptx_to_slide_template, pptx-to-html, or a legacy PPTX template converter. Render the presentation only as visual evidence, then author semantic HTML/CSS from scratch.
 - Platform templates must be used by exact template code. The code must come from a platform template list, user choice, user input, or upstream context. Do not invent codes, change casing, or map old local template directory names to codes.

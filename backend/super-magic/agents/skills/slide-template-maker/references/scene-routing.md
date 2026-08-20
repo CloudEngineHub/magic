@@ -2,7 +2,7 @@
 
 Choose exactly one primary scene based on audience and use case.
 
-This table is a common-scene routing aid, not the complete category registry. Confirm the selected code with `scripts/template_taxonomy.py categories`; `template-taxonomy.json` is authoritative.
+This table is a common-scene routing aid, not the complete category registry. Confirm the selected code with `query_slide_template_taxonomy`; `template-taxonomy.json` is authoritative.
 
 | Scene | Category code | Typical use |
 | --- | --- | --- |

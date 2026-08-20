@@ -250,7 +250,7 @@ def validate_taxonomy_selection(category_code: Any, tag_codes: Any) -> tuple[str
     if category not in active_category_codes():
         raise SlideTemplateBuilderError(
             f"category_code is not an active bundled PPT category: {category or '<empty>'}. "
-            "Use the taxonomy query script to select an exact code."
+            "Call query_slide_template_taxonomy to select an exact code."
         )
     if not isinstance(tag_codes, list) or not tag_codes:
         raise SlideTemplateBuilderError("tag_codes must contain at least one bundled tag code.")
@@ -264,7 +264,7 @@ def validate_taxonomy_selection(category_code: Any, tag_codes: Any) -> tuple[str
     if unknown:
         raise SlideTemplateBuilderError(
             f"tag_codes contain unknown bundled codes: {', '.join(unknown)}. "
-            "Use the taxonomy query script to select exact codes."
+            "Call query_slide_template_taxonomy to select exact codes."
         )
     return category, normalized
 

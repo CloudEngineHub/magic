@@ -48,7 +48,7 @@ Later tools only need `template_dir`. Do not write `source-analysis.json`, do no
 
 ## Tool ownership
 
-`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Source review and asset selection must go through `review_slide_template_source` and `select_slide_template_source_assets`. If a dedicated tool fails, retry that same tool. Do not emulate it.
+`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Taxonomy lookup must go through `query_slide_template_taxonomy`. Source review and asset selection must go through `review_slide_template_source` and `select_slide_template_source_assets`. If a dedicated tool fails, retry that same tool. Do not emulate it.
 
 The template is not complete when authoring finishes. Call `finalize_slide_template` with the returned `template_directory`, inspect `result.ok` and `result.content`, compare `previews/` with the source, and report completion only after finalization succeeds. A failed finalization is a failed template task, even when the source files exist.
 
@@ -90,7 +90,7 @@ The main path is three beats. Taxonomy, canvas, and asset policy live in the ref
 
 1. Inspect the source without modifying it. Note file type, approximate page count, and obvious asset risks. Read the matching workflow reference, then `references/scene-routing.md`, `references/template-taxonomy.md`, `references/template-json-spec.md`, and `references/quality-guidelines.md`.
 2. Run the Intake Checkpoint. Do not call `create_slide_template_project` until missing shape and asset questions are asked or safely defaulted.
-3. Query the bundled taxonomy through `scripts/template_taxonomy.py`. Select one exact active `category_code` and 4–10 exact `tag_codes`, then run the script's `validate` command. Never invent taxonomy codes or add `featured` automatically.
+3. Query the bundled taxonomy through `query_slide_template_taxonomy`. Do not use `shell_exec`, `run_python_snippet`, or read `template-taxonomy.json` to guess codes. Select one exact active `category_code` and 4–10 exact `tag_codes`, then call the same tool with `action: "validate"`. Never invent taxonomy codes or add `featured` automatically.
 4. Determine a backend-compatible semantic base ID: `SLIDE-` plus lowercase kebab-case words. `create_slide_template_project` appends a short six-character uppercase hexadecimal suffix to the backend `template_id`, but the local directory name contains no random suffix. Use the returned `created.data["template_directory"]` for every later call.
 5. Call `create_slide_template_project` with the validated category, tags, bilingual labels, and source canvas. Do not create the template directory manually.
 6. If the source is a presentation with extractable assets, render pages with `document-converter` using `created.data["converter_output_dir"]` as `output_dir`. Do not create `document-converter-output/` in the workspace. Then:
@@ -127,6 +127,37 @@ Call the tools through Code Mode:
 
 ```python
 from sdk.tool import tool
+
+catalog = tool.call("query_slide_template_taxonomy", {
+    "groups": [
+        "purpose_group",
+        "style_group",
+        "color_group",
+        "layout_group",
+        "mood_group",
+        "language_group"
+    ],
+    "queries": ["training", "navy", "dashboard"]
+})
+if not catalog.ok:
+    raise SystemExit(catalog.content)
+print(catalog.content)
+
+checked = tool.call("query_slide_template_taxonomy", {
+    "action": "validate",
+    "category_code": "PPT-CATE-business-report",
+    "tag_codes": [
+        "purpose-quarterly-review",
+        "style-business",
+        "color-navy",
+        "layout-dashboard",
+        "mood-professional",
+        "language-english"
+    ]
+})
+if not checked.ok:
+    raise SystemExit(checked.content)
+print(checked.content)
 
 created = tool.call("create_slide_template_project", {
     "template_id": "SLIDE-navy-quarterly-review",
@@ -211,6 +242,7 @@ If a dedicated source tool fails, print `result.content`, fix the arguments, and
 
 ## Tool Guidance
 
+- Call `query_slide_template_taxonomy` once to list needed groups and search several keywords together. A miss does not abort the other keywords. Empty lookup returns categories and groups only; pass `groups` to list exact tag codes. Then call the same tool with `action: "validate"` before `create_slide_template_project`.
 - Use the `document-converter` skill through `run_sdk_snippet` to render presentation pages. In this template-making workflow only, set `output_dir` to `created.data["converter_output_dir"]`. Leave other document-converter tasks on their normal workspace output.
 - Do not replace `review_slide_template_source` with hand-written `source-analysis.json` or ad-hoc `visual_understanding` against converter filenames.
 - Use `visual_understanding` for standalone images, screenshots, and generated `previews/slides/` files.

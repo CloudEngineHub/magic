@@ -251,6 +251,26 @@
         "zh_CN": "模板原始素材筛选失败 {{template_dir}}",
         "en_US": "Failed to select source assets for {{template_dir}}"
     },
+    "query_slide_template_taxonomy.lookup_before": {
+        "zh_CN": "正在查询可用的模板分类和标签",
+        "en_US": "Looking up available template categories and tags"
+    },
+    "query_slide_template_taxonomy.lookup_after_success": {
+        "zh_CN": "已列出可用的模板分类和标签",
+        "en_US": "Listed available template categories and tags"
+    },
+    "query_slide_template_taxonomy.validate_before": {
+        "zh_CN": "正在核对模板分类和标签",
+        "en_US": "Checking template category and tags"
+    },
+    "query_slide_template_taxonomy.validate_after_success": {
+        "zh_CN": "已确认模板分类和标签可用",
+        "en_US": "Confirmed the template category and tags"
+    },
+    "query_slide_template_taxonomy.after_failed": {
+        "zh_CN": "模板分类或标签不可用",
+        "en_US": "Template category or tags are not available"
+    },
     "review_slide_template_source.before": {
         "zh_CN": "正在回顾模板源页视觉 {{template_dir}}",
         "en_US": "Reviewing source pages for {{template_dir}}"

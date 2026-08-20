@@ -22,6 +22,7 @@ from app.tools.slide_template_builder import (
     CreateSlideTemplateProject,
     FinalizeSlideTemplate,
     PrepareSlideTemplateSource,
+    QuerySlideTemplateTaxonomy,
     ReviewSlideTemplateSource,
     SelectSlideTemplateSourceAssets,
 )
@@ -287,6 +288,7 @@ __all__ = [
     "CreateSlideTemplateProject",
     "FinalizeSlideTemplate",
     "PrepareSlideTemplateSource",
+    "QuerySlideTemplateTaxonomy",
     "ReviewSlideTemplateSource",
     "SelectSlideTemplateSourceAssets",
     "DeepWrite",
