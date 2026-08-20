@@ -59,7 +59,7 @@ const sourceExtensions = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"])
 const expectedPptxGenJs = {
 	name: "pptxgenjs",
 	version: "5.0.0",
-	sourceCommit: "5d7193c0b7f7e39afead1657f9dbbe73548050ea",
+	sourceCommit: "137cd01cab5c3e5f65951f7f9fb49496318273aa",
 }
 const violations = []
 let scannedFiles = 0

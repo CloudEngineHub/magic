@@ -13169,7 +13169,7 @@ packages:
     resolution: {integrity: sha512-YByocJuyxAR4YB4Q3+VAxdLfEvA5LojG1gAJsx2Mw0QU5FJPps/2fkJOupJ6oBbA+KdWRpuAk6G6T34rKCHVxw==}
 
   pptxgenjs@file:vendor/pptxgenjs-5.0.0.tgz:
-    resolution: {integrity: sha512-K/6/+900w9p1O15w3FZLz5oldiDqnk5zE8ciVqpiGwjDs7QNIc4mGjin1gRWIbRPzIH7BWg3oyhen90Bsnpw2w==, tarball: file:vendor/pptxgenjs-5.0.0.tgz}
+    resolution: {integrity: sha512-9IgDz9xCgLKDwy2jir8VwBcXM040gvQwPnR9kAx5DF+8w8z+KqBc+1ypYzOCVXZb/DZr2fAe5macqC7B9BaP/g==, tarball: file:vendor/pptxgenjs-5.0.0.tgz}
     version: 5.0.0
     engines: {node: '>=18'}
 
