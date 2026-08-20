@@ -4,6 +4,27 @@ import type { FileItem } from "../../types"
 import { detectContentTypeRender } from "../preview"
 
 describe("detectContentTypeRender", () => {
+	it("routes project template folders to the template PPT renderer", () => {
+		const item: FileItem = {
+			file_id: "template-folder",
+			file_name: "产品发布模板",
+			is_directory: true,
+			children: [],
+			display_config: {
+				type: "slide-template",
+			},
+		}
+
+		const config = detectContentTypeRender(item)
+
+		expect(config?.detailType).toBe(DetailType.SlidesTemplate)
+		expect(config?.dataTransformer?.(item)).toMatchObject({
+			file_name: "产品发布模板",
+			is_directory: true,
+			display_config: { type: "slide-template" },
+		})
+	})
+
 	it("treats slide project folders as PPT render entries", () => {
 		const item: FileItem = {
 			file_id: "deck-folder",

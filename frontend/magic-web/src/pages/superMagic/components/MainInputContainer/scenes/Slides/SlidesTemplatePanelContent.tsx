@@ -5,6 +5,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
+import GroupIcon from "../../panels/GroupIcon"
 import TemplateGroupSelector from "../../panels/TemplateGroupSelector"
 import SlidesPresetGrid from "../../panels/slides-preset/SlidesPresetGrid"
 import type { OptionItem } from "../../panels/types"
@@ -16,6 +17,12 @@ import {
 import SlidesTemplateTagGroupSelect from "./SlidesTemplateTagGroupSelect"
 import SlidesTemplateMobileTagFilters from "./SlidesTemplateMobileTagFilters"
 import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
+import { MY_SLIDES_TEMPLATES_GROUP_KEY } from "@/pages/superMagic/pages/SlidesTemplates/useMySlidesTemplates"
+import MySlidesTemplatesEmptyState from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesEmptyState"
+import MySlidesTemplatesTabIcon from "./MySlidesTemplatesTabIcon"
+import MySlidesTemplatesGroupTabs from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesGroupTabs"
+import magicToast from "@/components/base/MagicToaster/utils"
+import SuperMagicService from "@/pages/superMagic/services"
 
 interface SlidesTemplatePanelContentProps {
 	slidesState: SlidesTemplatePanelState
@@ -28,6 +35,7 @@ interface SlidesTemplatePanelContentProps {
 	hoverDetailsContainer?: HTMLElement | null
 	disableEntryAnimation?: boolean
 	onPreviewOpenChange?: (open: boolean) => void
+	showMyTemplates?: boolean
 }
 
 function SlidesTemplatePanelContent({
@@ -41,15 +49,22 @@ function SlidesTemplatePanelContent({
 	hoverDetailsContainer,
 	disableEntryAnimation = false,
 	onPreviewOpenChange,
+	showMyTemplates = false,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
+	const { t: tSuper } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
-	const selectorGroups = slidesState.groups
 	const selectedGroupKey = slidesState.selectedGroupKey
+	const isMyTemplatesSelected = selectedGroupKey === MY_SLIDES_TEMPLATES_GROUP_KEY
+	const shouldShowSourceProjectEntry =
+		isMyTemplatesSelected && slidesState.myTemplatesActiveSection === "created"
+	const selectorGroups = showMyTemplates
+		? slidesState.groups
+		: slidesState.groups.filter((group) => group.group_key !== MY_SLIDES_TEMPLATES_GROUP_KEY)
 	const setSelectedGroupKey = slidesState.setSelectedGroupKey
 	const hasGroups = selectorGroups.length > 1
 	const hasSelectedChildTags = slidesState.selectedChildTagCodes.length > 0
@@ -71,8 +86,45 @@ function SlidesTemplatePanelContent({
 		},
 		[onPreviewOpenChange],
 	)
+	const handleFavoriteToggle = useCallback(
+		(template: OptionItem) => {
+			void slidesState
+				.toggleTemplateFavorite(template)
+				.then((isFavorite) => {
+					if (isFavorite === undefined) return
+					magicToast.success(
+						tSuper(
+							isFavorite
+								? "mySlidesTemplates.favoriteSuccess"
+								: "mySlidesTemplates.unfavoriteSuccess",
+						),
+					)
+				})
+				.catch(() => {
+					magicToast.error(tSuper("mySlidesTemplates.favoriteFailed"))
+				})
+		},
+		[slidesState, tSuper],
+	)
+	const handleOpenProject = useCallback(
+		(template: OptionItem) => {
+			const project = template.project
+			if (!project?.id || !project.directory_id) return
+
+			void SuperMagicService.switchProjectById(project.id, undefined, undefined, {
+				slidesTemplateProjectId: project.id,
+				slidesTemplateDirectoryId: project.directory_id,
+			}).catch((error) => {
+				console.error("Failed to open slides template source project", error)
+				magicToast.error(tSuper("mySlidesTemplates.openProjectFailed"))
+			})
+		},
+		[tSuper],
+	)
 	const handlePrimaryGroupChange = useCallback(
 		(groupKey: string) => {
+			if (groupKey === MY_SLIDES_TEMPLATES_GROUP_KEY && groupKey === selectedGroupKey) return
+
 			setSelectedGroupKey(
 				groupKey === selectedGroupKey ? ALL_SLIDES_TEMPLATE_GROUP_KEY : groupKey,
 			)
@@ -140,6 +192,30 @@ function SlidesTemplatePanelContent({
 							groups={selectorGroups}
 							selectedGroupKey={slidesState.selectedGroupKey}
 							onGroupChange={handlePrimaryGroupChange}
+							renderGroupIcon={(group) => {
+								if (group.group_key === MY_SLIDES_TEMPLATES_GROUP_KEY) {
+									return <MySlidesTemplatesTabIcon />
+								}
+								return group.group_icon ? (
+									<GroupIcon
+										icon={group.group_icon}
+										className="size-4 shrink-0"
+									/>
+								) : null
+							}}
+							renderGroupOption={(group, optionProps) =>
+								group.group_key === MY_SLIDES_TEMPLATES_GROUP_KEY ? (
+									<MySlidesTemplatesGroupTabs
+										activeSection={slidesState.myTemplatesActiveSection}
+										isSelected={isMyTemplatesSelected}
+										onGroupClick={() =>
+											handlePrimaryGroupChange(group.group_key)
+										}
+										onSectionChange={slidesState.setMyTemplatesActiveSection}
+										optionProps={optionProps}
+									/>
+								) : null
+							}
 							showEmptyGroups
 							className="flex-1"
 						/>
@@ -241,25 +317,37 @@ function SlidesTemplatePanelContent({
 					/>
 				) : null}
 			</div>
-			<SlidesPresetGrid
-				templates={slidesState.templateOptions}
-				selectedTemplate={selectedTemplate ?? undefined}
-				onTemplateClick={onTemplateClick}
-				isLoading={slidesState.isLoading}
-				isRefreshing={slidesState.isRefreshing}
-				hasMore={slidesState.hasMore}
-				isLoadingMore={slidesState.isLoadingMore}
-				isLoadMoreFailed={slidesState.isLoadMoreFailed}
-				onLoadMore={slidesState.loadMore}
-				onRetryLoadMore={slidesState.retryLoadMore}
-				onPreviewOpenChange={handlePreviewOpenChange}
-				onPreviewDetailLoad={handlePreviewDetailLoad}
-				className={gridClassName}
-				showHoverDetails={showHoverDetails}
-				hoverDetailsContainer={hoverDetailsContainer}
-				disableEntryAnimation={disableEntryAnimation}
-				disableContentVisibility={isMobile}
-			/>
+			{slidesState.myTemplatesEmptyStatus ? (
+				<MySlidesTemplatesEmptyState
+					status={slidesState.myTemplatesEmptyStatus}
+					onRetry={slidesState.retryMyTemplates}
+					variant="inline"
+					section={slidesState.myTemplatesActiveSection}
+				/>
+			) : (
+				<SlidesPresetGrid
+					templates={slidesState.templateOptions}
+					selectedTemplate={selectedTemplate ?? undefined}
+					onTemplateClick={onTemplateClick}
+					onFavoriteToggle={handleFavoriteToggle}
+					onOpenProject={shouldShowSourceProjectEntry ? handleOpenProject : undefined}
+					favoritePendingCodes={slidesState.favoritePendingCodes}
+					isLoading={slidesState.isLoading}
+					isRefreshing={slidesState.isRefreshing}
+					hasMore={slidesState.hasMore}
+					isLoadingMore={slidesState.isLoadingMore}
+					isLoadMoreFailed={slidesState.isLoadMoreFailed}
+					onLoadMore={slidesState.loadMore}
+					onRetryLoadMore={slidesState.retryLoadMore}
+					onPreviewOpenChange={handlePreviewOpenChange}
+					onPreviewDetailLoad={handlePreviewDetailLoad}
+					className={gridClassName}
+					showHoverDetails={showHoverDetails}
+					hoverDetailsContainer={hoverDetailsContainer}
+					disableEntryAnimation={disableEntryAnimation}
+					disableContentVisibility={isMobile}
+				/>
+			)}
 		</div>
 	)
 }

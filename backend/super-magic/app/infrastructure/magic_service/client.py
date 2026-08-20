@@ -288,6 +288,18 @@ class MagicServiceClient:
             params=self._filter_query_params(access_context),
         )
 
+    async def get_slides_template_taxonomy(
+        self,
+        access_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Fetch enabled official slide template categories, groups, and tags."""
+        return await self._request_json(
+            "GET",
+            "/api/v1/open-api/slides-templates/taxonomy",
+            operation_name="幻灯片模板分类标签获取",
+            params=self._filter_query_params(access_context),
+        )
+
     async def _request_json(
         self,
         method: str,

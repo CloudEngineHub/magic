@@ -10,6 +10,10 @@ namespace App\Domain\SlidesTemplate\Service;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateCodeAvailability;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateOwnerType;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Service\UsageCount\SlidesTemplateUsageCountPolicyInterface;
@@ -17,6 +21,7 @@ use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Database\Exception\QueryException;
+use Hyperf\DbConnection\Db;
 use Throwable;
 
 class SlidesTemplateDomainService
@@ -24,13 +29,14 @@ class SlidesTemplateDomainService
     public function __construct(
         private readonly SlidesTemplateRepositoryInterface $slidesTemplateRepository,
         private readonly SlidesTemplateUsageCountPolicyInterface $usageCountPolicy,
+        private readonly SlidesTemplateTagDomainService $slidesTemplateTagDomainService,
     ) {
     }
 
     public function findByIdOrFail(SlidesTemplateDataIsolation $dataIsolation, int|string $id): SlidesTemplateEntity
     {
         $entity = $this->slidesTemplateRepository->findById($dataIsolation, $id);
-        if (! $entity) {
+        if (! $entity || ! $this->isOfficialTemplate($dataIsolation, $entity)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
         }
         return $entity;
@@ -38,8 +44,47 @@ class SlidesTemplateDomainService
 
     public function findEnabledByCodeOrFail(SlidesTemplateDataIsolation $dataIsolation, string $code): SlidesTemplateEntity
     {
+        $entity = $this->findByCodeOrFail($dataIsolation, $code);
+        $this->assertUserAccessible($dataIsolation, $entity);
+        if (! $entity->getStatus()->isEnabled()) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
+        }
+        return $entity;
+    }
+
+    public function findGloballyByCode(string $code): ?SlidesTemplateEntity
+    {
+        return $this->slidesTemplateRepository->findGloballyByCodeWithTrashed($code);
+    }
+
+    public function findByCodeOrFail(SlidesTemplateDataIsolation $dataIsolation, string $code): SlidesTemplateEntity
+    {
         $entity = $this->slidesTemplateRepository->findByCode($dataIsolation, $code);
-        if (! $entity || ! $entity->getStatus()->isEnabled()) {
+        if (! $entity) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
+        }
+        return $entity;
+    }
+
+    /** @return SlidesTemplateEntity[] */
+    public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
+    {
+        return $this->slidesTemplateRepository->findByCodes($dataIsolation, $codes);
+    }
+
+    public function assertUserAccessible(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): void
+    {
+        $isAccessibleOfficial = $this->isOfficialTemplate($dataIsolation, $entity)
+            && $entity->getStatus()->isEnabled();
+        if (! $isAccessibleOfficial && ! $this->isOwnedByUser($dataIsolation, $entity)) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
+        }
+    }
+
+    public function findOfficialByCodeOrFail(SlidesTemplateDataIsolation $dataIsolation, string $code): SlidesTemplateEntity
+    {
+        $entity = $this->slidesTemplateRepository->findOfficialByCode($dataIsolation, $code);
+        if (! $entity || ! $this->isOfficialTemplate($dataIsolation, $entity)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
         }
         return $entity;
@@ -54,6 +99,15 @@ class SlidesTemplateDomainService
     }
 
     /**
+     * @return array{total: int, list: SlidesTemplateEntity[]}
+     */
+    public function queriesFavorites(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
+    {
+        $query->setScope(SlidesTemplateQueryScope::All);
+        return $this->slidesTemplateRepository->queriesFavorites($dataIsolation, $query, $page);
+    }
+
+    /**
      * @return array{total: int, total_usage_count: int, template_count_today_growth: int}
      */
     public function getCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array
@@ -63,7 +117,15 @@ class SlidesTemplateDomainService
 
     public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
-        $this->prepareRestoreDeletedTemplate($dataIsolation, $entity);
+        if (! $dataIsolation->isOfficialOrganization()) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
+        }
+        if ($this->findGloballyByCode($entity->getCode()) !== null) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
+        }
+        $entity->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
+            ->setOwnerType(SlidesTemplateOwnerType::Official)
+            ->setOwnerId($dataIsolation->getCurrentOrganizationCode());
 
         $this->refreshSearchText($entity);
         $totalUsageCount = max(0, $entity->getBaseUsageCount()) + max(0, $entity->getActualUsageCount());
@@ -81,11 +143,100 @@ class SlidesTemplateDomainService
 
     public function update(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
     {
-        $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
+        $existing = $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
+        $entity->setOrganizationCode($existing->getOrganizationCode())
+            ->setOwnerType($existing->getOwnerType())
+            ->setOwnerId($existing->getOwnerId());
         $this->refreshSearchText($entity);
         $totalUsageCount = max(0, $entity->getBaseUsageCount()) + max(0, $entity->getActualUsageCount());
         $entity->setTotalUsageCount($totalUsageCount);
         return $this->slidesTemplateRepository->save($dataIsolation, $entity);
+    }
+
+    public function saveUserTemplate(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateEntity $entity,
+        ?SlidesTemplateStatus $status = null,
+        ?array $tagCodes = null,
+    ): SlidesTemplateEntity {
+        try {
+            return $this->transaction(function () use ($dataIsolation, $entity, $status, $tagCodes): SlidesTemplateEntity {
+                if ($entity->getCode() === '') {
+                    $entity->setCode($this->generateAvailableCode());
+                }
+
+                $existing = $this->findGloballyByCode($entity->getCode());
+                $isCreate = $existing === null;
+                if (! $isCreate) {
+                    if ($existing->getDeletedAt() !== null || ! $this->isOwnedByUser($dataIsolation, $existing)) {
+                        ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
+                    }
+                    $this->copyUserTemplateImmutableFields($entity, $existing);
+                } else {
+                    $entity->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
+                        ->setOwnerType(SlidesTemplateOwnerType::User)
+                        ->setOwnerId($dataIsolation->getCurrentUserId())
+                        ->setSourceType(SlidesTemplateSourceType::Custom)
+                        ->setStatus($status ?? SlidesTemplateStatus::Enabled)
+                        ->setSort(0)
+                        ->setCreatedUid($dataIsolation->getCurrentUserId());
+                }
+
+                if (! $isCreate && $status !== null) {
+                    $entity->setStatus($status);
+                }
+                $entity->setUpdatedUid($dataIsolation->getCurrentUserId());
+                $this->refreshSearchText($entity);
+                $entity->recalculateTotalUsageCount();
+                $saved = $this->slidesTemplateRepository->save($dataIsolation, $entity);
+                if ($tagCodes !== null) {
+                    $this->slidesTemplateTagDomainService->syncTemplateTagsByCodes(
+                        $dataIsolation,
+                        (int) $saved->getId(),
+                        $tagCodes,
+                        $dataIsolation->getCurrentUserId()
+                    );
+                }
+                return $saved;
+            });
+        } catch (Throwable $throwable) {
+            if ($this->isDuplicateCodeException($throwable)) {
+                ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
+            }
+            throw $throwable;
+        }
+    }
+
+    public function getCodeAvailabilityForUser(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $code
+    ): SlidesTemplateCodeAvailability {
+        $existing = $this->findGloballyByCode($code);
+        if (! $existing) {
+            return SlidesTemplateCodeAvailability::Unused;
+        }
+        if ($existing->getDeletedAt() !== null) {
+            return SlidesTemplateCodeAvailability::Occupied;
+        }
+        return $this->isOwnedByUser($dataIsolation, $existing)
+            ? SlidesTemplateCodeAvailability::OwnedByMe
+            : SlidesTemplateCodeAvailability::Occupied;
+    }
+
+    public function assertOwnedByUser(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): void
+    {
+        if (! $this->isOwnedByUser($dataIsolation, $entity)) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::USER_TEMPLATE_ACCESS_DENIED);
+        }
+    }
+
+    public function assertOfficialTemplate(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateEntity $entity
+    ): void {
+        if (! $this->isOfficialTemplate($dataIsolation, $entity)) {
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
+        }
     }
 
     public function updateStatus(SlidesTemplateDataIsolation $dataIsolation, int|string $id, SlidesTemplateStatus $status, string $updatedUid): void
@@ -118,24 +269,56 @@ class SlidesTemplateDomainService
         }
     }
 
+    protected function transaction(callable $callback): mixed
+    {
+        return Db::transaction($callback);
+    }
+
     private function refreshSearchText(SlidesTemplateEntity $entity): void
     {
         $entity->setSearchText(SlidesTemplateSearchTextBuilder::build($entity));
     }
 
-    private function prepareRestoreDeletedTemplate(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): void
+    private function isOwnedByUser(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): bool
     {
-        $existing = $this->slidesTemplateRepository->findByCodeWithTrashed($dataIsolation, $entity->getCode());
-        if (! $existing) {
-            return;
-        }
+        return $entity->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
+            && $entity->getOwnerType()->isUser()
+            && $entity->getOwnerId() === $dataIsolation->getCurrentUserId();
+    }
 
-        if ($existing->getDeletedAt() === null) {
-            ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_ALREADY_EXISTS);
-        }
+    private function isOfficialTemplate(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateEntity $entity
+    ): bool {
+        return in_array($entity->getOrganizationCode(), $dataIsolation->getOfficialOrganizationCodes(), true)
+            && $entity->getOwnerType()->isOfficial()
+            && $entity->getOwnerId() === $entity->getOrganizationCode();
+    }
 
-        $entity->setId($existing->getId());
-        $entity->setActualUsageCount($existing->getActualUsageCount());
+    private function copyUserTemplateImmutableFields(SlidesTemplateEntity $entity, SlidesTemplateEntity $existing): void
+    {
+        $entity->setId($existing->getId())
+            ->setOrganizationCode($existing->getOrganizationCode())
+            ->setOwnerType($existing->getOwnerType())
+            ->setOwnerId($existing->getOwnerId())
+            ->setSourceType($existing->getSourceType())
+            ->setStatus($existing->getStatus())
+            ->setSort($existing->getSort())
+            ->setBaseUsageCount($existing->getBaseUsageCount())
+            ->setActualUsageCount($existing->getActualUsageCount())
+            ->setCreatedUid($existing->getCreatedUid())
+            ->setCreatedAt($existing->getCreatedAt());
+    }
+
+    private function generateAvailableCode(): string
+    {
+        for ($attempt = 0; $attempt < 5; ++$attempt) {
+            $code = SlidesTemplateEntity::generateNewCode();
+            if ($this->findGloballyByCode($code) === null) {
+                return $code;
+            }
+        }
+        ExceptionBuilder::throw(SlidesTemplateErrorCode::CODE_GENERATE_FAILED);
     }
 
     private function isDuplicateCodeException(Throwable $throwable): bool

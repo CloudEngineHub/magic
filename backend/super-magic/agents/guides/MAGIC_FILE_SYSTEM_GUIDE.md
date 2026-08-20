@@ -47,7 +47,8 @@ project_root/
 │   ├── background_compact/                后台压缩临时上下文
 │   ├── llm_request/                       LLM 调试日志
 │   ├── bg_shell/                          后台 shell 日志
-│   └── mcp_outputs/                       MCP 自动保存的大结果
+│   ├── mcp_outputs/                       MCP 自动保存的大结果
+│   └── slide-template-maker/              幻灯片模板作者过程的中间文件
 │
 ├── .workspace/                            用户文件
 │   ├── .magic/                            工作区级 Agent、Skill、cron 配置

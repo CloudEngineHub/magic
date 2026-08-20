@@ -70,7 +70,7 @@ export interface FileItem {
 	resource_version?: string | null
 	version?: string | null
 	display_config?: {
-		type?: "slide" | "design" | "dashboard" | "audio" | "video" | string
+		type?: "slide" | "slide-template" | "design" | "dashboard" | "audio" | "video" | string
 		name?: string
 		description?: string
 		previewPolicy?: FilePreviewPolicy

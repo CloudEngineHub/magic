@@ -25,6 +25,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	canvasScale: number
 	contentRef: RefObject<HTMLDivElement | null>
+	favoritePendingCodes?: ReadonlySet<string>
 	focusedAnchorTileId: string
 	isCanvasFocusSettling: boolean
 	isDragging: boolean
@@ -41,6 +42,8 @@ interface SlidesTemplateCanvasSurfaceProps {
 	onCanvasPointerLeave: () => void
 	onControlMove: ComponentProps<typeof SlidesTemplateCanvasControls>["onMove"]
 	onFindSimilarColors?: (template: OptionItem) => void
+	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPointerCancel: PointerEventHandler<HTMLDivElement>
 	onPointerDown: PointerEventHandler<HTMLDivElement>
 	onPointerLeave: PointerEventHandler<HTMLDivElement>
@@ -68,6 +71,7 @@ export default function SlidesTemplateCanvasSurface({
 	canvasItems,
 	canvasScale,
 	contentRef,
+	favoritePendingCodes,
 	focusedAnchorTileId,
 	isCanvasFocusSettling,
 	isDragging,
@@ -84,6 +88,8 @@ export default function SlidesTemplateCanvasSurface({
 	onCanvasPointerLeave,
 	onControlMove,
 	onFindSimilarColors,
+	onFavoriteToggle,
+	onOpenProject,
 	onPointerCancel,
 	onPointerDown,
 	onPointerLeave,
@@ -175,6 +181,7 @@ export default function SlidesTemplateCanvasSurface({
 			<SlidesTemplateCanvasItemsLayer
 				canvasItems={canvasItems}
 				contentRef={contentRef}
+				favoritePendingCodes={favoritePendingCodes}
 				isCanvasFocusSettling={isCanvasFocusSettling}
 				isCanvasMoving={isCanvasMoving}
 				enableIdleLoops={enableIdleLoops}
@@ -185,6 +192,8 @@ export default function SlidesTemplateCanvasSurface({
 				focusedAnchorTileId={focusedAnchorTileId}
 				selectedTemplateValue={selectedTemplateValue}
 				onFindSimilarColors={onFindSimilarColors}
+				onFavoriteToggle={onFavoriteToggle}
+				onOpenProject={onOpenProject}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={onPreviewToggle}

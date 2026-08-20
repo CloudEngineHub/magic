@@ -72,7 +72,8 @@ function AskUser(props: NodeProps) {
 			? "askUser.answersTitle"
 			: "askUser.title"
 	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		{ tool?: { action?: string } } | undefined
+		| { tool?: { action?: string } }
+		| undefined
 	const askUserAction = messageNode?.tool?.action
 	const askUserLocale = useMemo(
 		() => resolveAskUserLocaleFromAction(askUserAction),
