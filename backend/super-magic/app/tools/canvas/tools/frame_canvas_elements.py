@@ -2,29 +2,52 @@
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import FrameElementsCommand
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import FrameSelectionInput, ProjectPathParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class FrameSelectionInput(BaseToolParams):
+    """单个 Frame 框选参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    element_ids: list[str] = Field(..., min_length=1, max_length=100)
+    name: str | None = None
+    padding: float | None = Field(None, ge=0)
+
+    def to_command(self) -> FrameElementsCommand:
+        """转换为应用层 Frame 命令。"""
+        return FrameElementsCommand(
+            item_ref=self.item_ref,
+            element_ids=tuple(self.element_ids),
+            name=self.name,
+            padding=self.padding,
+        )
+
+
 @tool(name="frame_canvas_elements", code_mode_only=True)
-class FrameCanvasElements(BaseTool[ProjectPathParams]):
+class FrameCanvasElements(BaseTool[BaseToolParams]):
     """<!--zh: 将已有同层级节点框选为新的 Frame。-->Frame existing sibling Elements."""
 
     name = "frame_canvas_elements"
     feedback_action_key = "canvas.frame_elements"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量框选参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         items: list[FrameSelectionInput] = Field(..., min_length=1)
 
     params_class = Params

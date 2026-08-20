@@ -1,30 +1,110 @@
 """重试 Canvas Content 生成工具。"""
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import GenerationParametersOverride, RetryContentCommand
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import ProjectPathParams, RetryContentInput
+from app.tools.canvas.tools.add_canvas_elements import VideoInputMode
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class GenerationOverrideInput(BaseToolParams):
+    """失败生成重试允许覆盖的确定参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str | None = Field(None, min_length=1)
+    model_id: str | None = None
+    estimate_id: str | None = None
+    name: str | None = None
+    size: str | None = None
+    reference_images: list[str] | None = None
+    reference_image_paths: list[str] | None = None
+    reference_video_paths: list[str] | None = None
+    reference_audio_paths: list[str] | None = None
+    frame_start_path: str | None = None
+    frame_end_path: str | None = None
+    input_mode: VideoInputMode | None = None
+    task: Literal["generate", "edit"] | None = None
+    duration_seconds: int | None = Field(None, gt=0)
+    aspect_ratio: str | None = None
+    resolution: str | None = None
+    fps: int | None = Field(None, gt=0)
+    seed: int | None = None
+    watermark: bool | None = None
+
+    def to_command(self) -> GenerationParametersOverride:
+        """只转换本次明确填写的覆盖字段。"""
+        values = self.model_dump(exclude_none=True)
+        provided_fields = frozenset(values)
+        for field_name in ("reference_images", "reference_image_paths", "reference_video_paths", "reference_audio_paths"):
+            if field_name in values:
+                values[field_name] = tuple(values[field_name])
+        return GenerationParametersOverride(
+            prompt=values.get("prompt"),
+            model_id=values.get("model_id"),
+            estimate_id=values.get("estimate_id"),
+            name=values.get("name"),
+            size=values.get("size"),
+            reference_images=values.get("reference_images"),
+            reference_image_paths=values.get("reference_image_paths"),
+            reference_video_paths=values.get("reference_video_paths"),
+            reference_audio_paths=values.get("reference_audio_paths"),
+            frame_start_path=values.get("frame_start_path"),
+            frame_end_path=values.get("frame_end_path"),
+            input_mode=values.get("input_mode"),
+            task=values.get("task"),
+            duration_seconds=values.get("duration_seconds"),
+            aspect_ratio=values.get("aspect_ratio"),
+            resolution=values.get("resolution"),
+            fps=values.get("fps"),
+            seed=values.get("seed"),
+            watermark=values.get("watermark"),
+            _provided_fields=provided_fields,
+        )
+
+
+class RetryContentInput(BaseToolParams):
+    """单个失败 Content 重试参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    element_id: str = Field(..., min_length=1)
+    content_id: str = Field(..., min_length=1)
+    generation_override: GenerationOverrideInput | None = None
+
+    def to_command(self) -> RetryContentCommand:
+        """转换为应用层失败 Content 重试命令。"""
+        return RetryContentCommand(
+            item_ref=self.item_ref,
+            element_id=self.element_id,
+            content_id=self.content_id,
+            generation_override=self.generation_override.to_command() if self.generation_override else None,
+        )
+
+
 @tool(name="retry_canvas_content_generation", code_mode_only=True)
-class RetryCanvasContentGeneration(BaseTool[ProjectPathParams]):
+class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
     """<!--zh: 重试失败的 generated Content。-->Retry failed generated Content."""
 
     name = "retry_canvas_content_generation"
     feedback_action_key = "canvas.retry_generation"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量生成重试参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         items: list[RetryContentInput] = Field(..., min_length=1)
 
     params_class = Params

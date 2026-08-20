@@ -1,32 +1,85 @@
 """预估 Canvas 内容产出积分工具。"""
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.presentation import error_result
 from app.tools.canvas.production.contracts import VideoPointEstimateItem
-from app.tools.canvas.schemas import ProjectPathParams, VideoPointEstimateItemInput
+from app.tools.canvas.tools.add_canvas_elements import VideoInputMode
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class VideoPointEstimateItemInput(BaseToolParams):
+    """单个视频积分预估项。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1)
+    model_id: str | None = None
+    name: str | None = None
+    size: str | None = None
+    reference_images: list[str] = Field(default_factory=list)
+    reference_image_paths: list[str] = Field(default_factory=list)
+    reference_video_paths: list[str] = Field(default_factory=list)
+    reference_audio_paths: list[str] = Field(default_factory=list)
+    frame_start_path: str | None = None
+    frame_end_path: str | None = None
+    input_mode: VideoInputMode | None = None
+    task: Literal["generate", "edit"] | None = None
+    duration_seconds: int | None = Field(None, gt=0)
+    aspect_ratio: str | None = None
+    resolution: str | None = None
+    fps: int | None = Field(None, gt=0)
+    seed: int | None = None
+    watermark: bool | None = None
+
+    def to_parameters(self) -> GenerationParameters:
+        """转换为不包含开放扩展字典的生成参数。"""
+        return GenerationParameters(
+            prompt=self.prompt,
+            model_id=self.model_id,
+            name=self.name,
+            size=self.size,
+            reference_images=tuple(self.reference_images),
+            reference_image_paths=tuple(self.reference_image_paths),
+            reference_video_paths=tuple(self.reference_video_paths),
+            reference_audio_paths=tuple(self.reference_audio_paths),
+            frame_start_path=self.frame_start_path,
+            frame_end_path=self.frame_end_path,
+            input_mode=self.input_mode,
+            task=self.task,
+            duration_seconds=self.duration_seconds,
+            aspect_ratio=self.aspect_ratio,
+            resolution=self.resolution,
+            fps=self.fps,
+            seed=self.seed,
+            watermark=self.watermark,
+        )
+
+
 @tool(name="estimate_canvas_content_points", code_mode_only=True)
-class EstimateCanvasContentPoints(BaseTool[ProjectPathParams]):
+class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
     """对支持计费的内容产出规则执行无副作用积分预估。"""
 
     name = "estimate_canvas_content_points"
     feedback_action_key = "canvas.estimate_content_points"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量积分预估参数。"""
 
-        production_rule: str = Field("video_generation", min_length=1)
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
+        production_rule: Literal["video_generation"] = "video_generation"
         items: list[VideoPointEstimateItemInput] = Field(..., min_length=1)
 
     params_class = Params

@@ -2,29 +2,68 @@
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import ConnectionCommand
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import ConnectionInput, ProjectPathParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class ConnectionInput(BaseToolParams):
+    """单个 Connection 新增、移除或替换参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    source_element_id: str | None = None
+    target_element_id: str | None = None
+    replace_existing_connections: bool = False
+    remove_connection_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_operation(self) -> "ConnectionInput":
+        """保证每个 item 只表达一个明确 Connection 操作。"""
+        has_endpoints = self.source_element_id is not None or self.target_element_id is not None
+        if has_endpoints and (not self.source_element_id or not self.target_element_id):
+            raise ValueError("source_element_id and target_element_id must be provided together")
+        if self.replace_existing_connections and (not has_endpoints or not self.remove_connection_ids):
+            raise ValueError("replacement requires endpoints and remove_connection_ids")
+        if self.remove_connection_ids and has_endpoints and not self.replace_existing_connections:
+            raise ValueError("set replace_existing_connections=true when replacing an existing Connection")
+        if not has_endpoints and not self.remove_connection_ids:
+            raise ValueError("connection item must add, remove, or replace a Connection")
+        return self
+
+    def to_command(self) -> ConnectionCommand:
+        """转换为应用层 Connection 命令。"""
+        return ConnectionCommand(
+            item_ref=self.item_ref,
+            source_element_id=self.source_element_id,
+            target_element_id=self.target_element_id,
+            replace_existing_connections=self.replace_existing_connections,
+            remove_connection_ids=tuple(self.remove_connection_ids),
+        )
+
+
 @tool(name="add_canvas_connections", code_mode_only=True)
-class AddCanvasConnections(BaseTool[ProjectPathParams]):
+class AddCanvasConnections(BaseTool[BaseToolParams]):
     """<!--zh: 新增、删除或替换明确的 Connection。-->Manage explicit Canvas Connections."""
 
     name = "add_canvas_connections"
     feedback_action_key = "add_canvas_connections"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量 Connection 操作参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         items: list[ConnectionInput] = Field(..., min_length=1)
 
     params_class = Params

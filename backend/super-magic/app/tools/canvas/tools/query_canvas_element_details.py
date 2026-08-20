@@ -2,23 +2,39 @@
 
 from typing import Any
 
+from pydantic import ConfigDict, Field
+
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.presentation import elements_content, error_result
-from app.tools.canvas.schemas import ElementIdParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
 @tool(name="query_canvas_element_details", code_mode_only=True)
-class QueryCanvasElementDetails(BaseTool[ElementIdParams]):
+class QueryCanvasElementDetails(BaseTool[BaseToolParams]):
     """<!--zh: 查询精确 Canvas Element 详情。-->Query exact Canvas Element details."""
 
     name = "query_canvas_element_details"
     feedback_action_key = "canvas.query_elements"
+
+    class Params(BaseToolParams):
+        """精确 Element 详情查询参数。"""
+
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
+        element_ids: list[str] = Field(
+            ...,
+            min_length=1,
+            max_length=10,
+            description="Exact Element IDs obtained from a Canvas result.",
+        )
+
+    params_class = Params
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None
@@ -78,7 +94,7 @@ class QueryCanvasElementDetails(BaseTool[ElementIdParams]):
             data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
         )
 
-    async def execute(self, tool_context: ToolContext, params: ElementIdParams) -> ToolResult:
+    async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """读取指定 Element 和关联 Connection。"""
         try:
             result = await _application(tool_context).elements(params.project_path, params.element_ids)

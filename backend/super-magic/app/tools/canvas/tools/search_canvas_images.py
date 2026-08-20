@@ -2,29 +2,47 @@
 
 from typing import Any
 
+from pydantic import ConfigDict, Field
+
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.presentation import error_result
 from app.tools.canvas.production.contracts import ImageSearchTask
-from app.tools.canvas.schemas import ProjectPathParams, SearchImagesInput
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
-@tool(name="search_canvas_images", code_mode_only=True)
-class SearchCanvasImages(BaseTool[ProjectPathParams]):
+class SearchImageTaskInput(BaseToolParams):
+    """单个 Canvas 图片搜索任务。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    query: str = Field(..., min_length=1)
+    requirement_explanation: str | None = None
+    expected_aspect_ratio: str | None = None
+    count: int = Field(3, ge=1, le=20)
+
+
+@tool(name="search_canvas_image_candidates", code_mode_only=True)
+class SearchCanvasImages(BaseTool[BaseToolParams]):
     """搜索、下载并物化 imported Image Content。"""
 
-    name = "search_canvas_images"
+    name = "search_canvas_image_candidates"
     feedback_action_key = "canvas.search_images"
 
-    class Params(ProjectPathParams, SearchImagesInput):
+    class Params(BaseToolParams):
         """图片搜索参数。"""
 
-        pass
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
+        topic_id: str = Field(..., min_length=1)
+        tasks: list[SearchImageTaskInput] = Field(..., min_length=1)
 
     params_class = Params
 

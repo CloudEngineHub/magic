@@ -2,29 +2,39 @@
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import ProjectPathParams, WaitTask
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class WaitTask(BaseToolParams):
+    """单个异步生成任务参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    generation_task_id: str = Field(..., min_length=1)
+
+
 @tool(name="wait_canvas_generation", code_mode_only=True)
-class WaitCanvasGeneration(BaseTool[ProjectPathParams]):
+class WaitCanvasGeneration(BaseTool[BaseToolParams]):
     """<!--zh: 等待异步生成任务。-->Wait for Canvas generation tasks."""
 
     name = "wait_canvas_generation"
     feedback_action_key = "canvas.wait_generation"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量等待参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         tasks: list[WaitTask] = Field(..., min_length=1)
         max_wait_seconds: int = Field(60, ge=1, le=600)
 

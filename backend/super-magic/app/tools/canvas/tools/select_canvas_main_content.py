@@ -2,29 +2,46 @@
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import SelectMainContentCommand
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import MainContentInput, ProjectPathParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class MainContentInput(BaseToolParams):
+    """单个主 Content 选择参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    element_id: str = Field(..., min_length=1)
+    content_id: str = Field(..., min_length=1)
+
+    def to_command(self) -> SelectMainContentCommand:
+        """转换为应用层主 Content 选择命令。"""
+        return SelectMainContentCommand(self.item_ref, self.element_id, self.content_id)
+
+
 @tool(name="select_canvas_main_content", code_mode_only=True)
-class SelectCanvasMainContent(BaseTool[ProjectPathParams]):
+class SelectCanvasMainContent(BaseTool[BaseToolParams]):
     """<!--zh: 显式选择 Element 的主 Content。-->Select the main Content for Elements."""
 
     name = "select_canvas_main_content"
     feedback_action_key = "canvas.select_main"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量选择主 Content 参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         items: list[MainContentInput] = Field(..., min_length=1)
 
     params_class = Params

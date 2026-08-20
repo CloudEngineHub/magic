@@ -2,23 +2,33 @@
 
 from typing import Any
 
+from pydantic import ConfigDict, Field
+
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.presentation import error_result
-from app.tools.canvas.schemas import ProjectPathParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
 @tool(name="initialize_canvas", code_mode_only=True)
-class InitializeCanvas(BaseTool[ProjectPathParams]):
+class InitializeCanvas(BaseTool[BaseToolParams]):
     """<!--zh: 初始化 Canvas 项目。-->Initialize a Canvas project."""
 
     name = "initialize_canvas"
     feedback_action_key = "canvas.initialize"
+
+    class Params(BaseToolParams):
+        """Canvas 项目初始化参数。"""
+
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
+
+    params_class = Params
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None
@@ -69,7 +79,7 @@ class InitializeCanvas(BaseTool[ProjectPathParams]):
             data=FileContent(file_name=f"{self.name}.md", content=content),
         )
 
-    async def execute(self, tool_context: ToolContext, params: ProjectPathParams) -> ToolResult:
+    async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """初始化项目并返回工作区相对路径。"""
         try:
             result = await _application(tool_context).initialize(params.project_path)

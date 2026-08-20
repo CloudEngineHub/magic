@@ -2,29 +2,35 @@
 
 from typing import Any
 
+from pydantic import ConfigDict, Field
+
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.presentation import error_result
 from app.tools.canvas.production.contracts import VideoCompositionCommand
-from app.tools.canvas.schemas import ComposeVideoInput, ProjectPathParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
-@tool(name="compose_canvas_video", code_mode_only=True)
-class ComposeCanvasVideo(BaseTool[ProjectPathParams]):
+@tool(name="compose_canvas_final_video", code_mode_only=True)
+class ComposeCanvasVideo(BaseTool[BaseToolParams]):
     """按 Video Edit 的主 Content 同步合成最终 Video Content。"""
 
-    name = "compose_canvas_video"
+    name = "compose_canvas_final_video"
     feedback_action_key = "canvas.compose_video"
 
-    class Params(ProjectPathParams, ComposeVideoInput):
+    class Params(BaseToolParams):
         """视频合成参数。"""
 
-        pass
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
+        video_edit_element_id: str = Field(..., min_length=1)
+        result_name: str = Field(..., min_length=1, max_length=200)
+        result_element_id: str | None = None
 
     params_class = Params
 

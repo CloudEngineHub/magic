@@ -2,29 +2,31 @@
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.presentation import error_result, overview_content
-from app.tools.canvas.schemas import ProjectPathParams
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
 @tool(name="query_canvas_overview", code_mode_only=True)
-class QueryCanvasOverview(BaseTool[ProjectPathParams]):
+class QueryCanvasOverview(BaseTool[BaseToolParams]):
     """<!--zh: 查询 Canvas 轻量概览。-->Query a lightweight Canvas overview."""
 
     name = "query_canvas_overview"
     feedback_action_key = "canvas.query_overview"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """概览分页参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         page: int = Field(1, ge=1, description="One-based page number.")
         limit: int = Field(50, ge=1, le=100, description="Maximum Elements returned on this page.")
 

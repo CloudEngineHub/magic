@@ -2,29 +2,51 @@
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import AddContentCommand
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import AddContentInput, ProjectPathParams
+from app.tools.canvas.tools.add_canvas_elements import ContentInput
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class AddContentInput(BaseToolParams):
+    """单个追加 Content 参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    element_id: str = Field(..., min_length=1)
+    content: ContentInput
+
+    def to_command(self) -> AddContentCommand:
+        """转换为应用层追加 Content 命令。"""
+        return AddContentCommand(
+            item_ref=self.item_ref,
+            element_id=self.element_id,
+            content=self.content.to_command(),
+        )
+
+
 @tool(name="add_canvas_contents", code_mode_only=True)
-class AddCanvasContents(BaseTool[ProjectPathParams]):
+class AddCanvasContents(BaseTool[BaseToolParams]):
     """<!--zh: 向已有 Element 追加 Content。-->Add Content versions to existing Elements."""
 
     name = "add_canvas_contents"
     feedback_action_key = "add_canvas_contents"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量追加 Content 参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         items: list[AddContentInput] = Field(..., min_length=1)
 
     params_class = Params

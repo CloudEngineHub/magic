@@ -1,30 +1,71 @@
 """Canvas 布局工具。"""
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.application.commands import LayoutCommand, LayoutElementCommand
 from app.tools.canvas.presentation import error_result, items_content
-from app.tools.canvas.schemas import LayoutElementInput, ProjectPathParams
+from app.tools.canvas.tools.add_canvas_elements import CanvasPositionInput
 from app.tools.canvas.tools.support import _application
-from app.tools.core import tool
+from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
 
+class LayoutInput(BaseToolParams):
+    """布局工具公开的确定布局参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: Literal["row_incremental", "dependency_flow", "explicit_position"]
+    position: CanvasPositionInput | None = None
+
+    @model_validator(mode="after")
+    def validate_position(self) -> "LayoutInput":
+        """限制显式坐标只用于 explicit_position。"""
+        if self.strategy == "explicit_position" and self.position is None:
+            raise ValueError("explicit_position requires position")
+        if self.strategy != "explicit_position" and self.position is not None:
+            raise ValueError("position is only allowed for explicit_position")
+        return self
+
+    def to_command(self) -> LayoutCommand:
+        """转换为应用层布局命令。"""
+        position = (self.position.x, self.position.y) if self.position is not None else None
+        return LayoutCommand(strategy=self.strategy, position=position)
+
+
+class LayoutElementInput(BaseToolParams):
+    """单个 Element 布局参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_ref: str = Field(..., min_length=1)
+    element_id: str = Field(..., min_length=1)
+    layout: LayoutInput
+
+    def to_command(self) -> LayoutElementCommand:
+        """转换为应用层 Element 布局命令。"""
+        return LayoutElementCommand(self.item_ref, self.element_id, self.layout.to_command())
+
+
 @tool(name="layout_canvas_elements", code_mode_only=True)
-class LayoutCanvasElements(BaseTool[ProjectPathParams]):
+class LayoutCanvasElements(BaseTool[BaseToolParams]):
     """<!--zh: 使用布局策略调整 Element。-->Apply named layout strategies to Elements."""
 
     name = "layout_canvas_elements"
     feedback_action_key = "canvas.layout"
 
-    class Params(ProjectPathParams):
+    class Params(BaseToolParams):
         """批量布局参数。"""
 
+        model_config = ConfigDict(extra="forbid")
+
+        project_path: str = Field(..., min_length=1, description="Workspace-relative Canvas project path.")
         items: list[LayoutElementInput] = Field(..., min_length=1)
 
     params_class = Params
