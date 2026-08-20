@@ -25,7 +25,7 @@ final class McpMention extends AbstractMention
             return '';
         }
 
-        $label = str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $name);
+        $label = str_replace(['\\', '[', ']'], ['\\\\', '\[', '\]'], $name);
         return sprintf('[%s](mcp://%s)', $label, rawurlencode($name));
     }
 

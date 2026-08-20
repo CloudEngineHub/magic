@@ -26,7 +26,7 @@ final class AgentMention extends AbstractMention
             return '';
         }
 
-        $label = str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $agentName);
+        $label = str_replace(['\\', '[', ']'], ['\\\\', '\[', '\]'], $agentName);
         return sprintf('[%s](agent://%s)', $label, rawurlencode($agentId));
     }
 

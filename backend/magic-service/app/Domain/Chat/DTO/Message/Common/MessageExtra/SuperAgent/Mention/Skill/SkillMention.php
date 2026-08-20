@@ -26,7 +26,7 @@ final class SkillMention extends AbstractMention
             return '';
         }
 
-        $label = str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $skillName);
+        $label = str_replace(['\\', '[', ']'], ['\\\\', '\[', '\]'], $skillName);
         return sprintf('[%s](skill://%s)', $label, rawurlencode($packageName));
     }
 

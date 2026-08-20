@@ -49,7 +49,7 @@ trait MarkdownFileLinkTrait
         $label = $fileName !== '' ? $fileName : (string) end($segments);
         $label = preg_replace('/\s+/u', ' ', $label) ?? $label;
         $label = trim($label);
-        $label = str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $label);
+        $label = str_replace(['\\', '[', ']'], ['\\\\', '\[', '\]'], $label);
 
         $destination = './' . $encodedPath;
         return str_contains($destination, ' ')
