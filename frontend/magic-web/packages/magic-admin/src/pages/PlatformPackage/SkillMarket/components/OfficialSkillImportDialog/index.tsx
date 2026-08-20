@@ -70,12 +70,20 @@ type LocalizedFieldProps = {
 }
 
 function getLocalizedValue(value?: PlatformPackage.NameI18N | null, fallback = "") {
-	if (!value) return { zh_CN: fallback, en_US: fallback }
-	const defaultValue = value.zh_CN || value.en_US || value.default || fallback
+	const defaultValue = value?.default || value?.zh_CN || value?.en_US || fallback
 	return {
-		zh_CN: value.zh_CN || defaultValue,
-		en_US: value.en_US || defaultValue,
+		default: defaultValue,
+		zh_CN: value?.zh_CN || defaultValue,
+		en_US: value?.en_US || defaultValue,
 	}
+}
+
+function ensureLocalizedDefault(
+	value?: PlatformPackage.NameI18N | null,
+	fallback = "",
+): PlatformPackage.NameI18N {
+	const defaultValue = value?.default || value?.zh_CN || value?.en_US || fallback
+	return { ...value, default: defaultValue }
 }
 
 function flattenCategories(
@@ -295,9 +303,12 @@ const OfficialSkillImportDialog = memo(
 				const result = await PlatformPackageApi.importOfficialSkill({
 					import_token: parsed.import_token,
 					version: String(values.version).trim(),
-					name_i18n: values.name_i18n,
-					description_i18n: values.description_i18n,
-					source_i18n: values.source_i18n,
+					name_i18n: ensureLocalizedDefault(values.name_i18n),
+					description_i18n: ensureLocalizedDefault(values.description_i18n),
+					source_i18n: ensureLocalizedDefault(
+						values.source_i18n,
+						t("officialSkillImport.defaultSource"),
+					),
 					logo: values.logo?.trim() || undefined,
 					category_ids: (values.category_ids ?? []).map(String),
 					publish_status: values.publish_status,
