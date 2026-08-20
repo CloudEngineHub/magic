@@ -16,6 +16,7 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateColorExtractor;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateFavoriteDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
@@ -25,6 +26,7 @@ use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateTagsRequest;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
+use Hyperf\DbConnection\Db;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
@@ -37,6 +39,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         private readonly SlidesTemplateCategoryDomainService $slidesTemplateCategoryDomainService,
         private readonly SlidesTemplateTagDomainService $slidesTemplateTagDomainService,
         private readonly SlidesTemplateColorExtractor $slidesTemplateColorExtractor,
+        private readonly SlidesTemplateFavoriteDomainService $slidesTemplateFavoriteDomainService,
     ) {
         parent::__construct($slidesTemplateDomainService);
     }
@@ -73,7 +76,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertOfficialOrganization($dataIsolation);
 
         $template = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
-        $this->resolveAssetUrls([$template], includeTemplateFileUrl: true);
+        $this->resolveAssetUrls([$template], includeTemplateFileUrl: false);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$template]);
 
         return $template;
@@ -88,7 +91,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         $this->assertTemplateFileKeyHasPrivateUrl($dataIsolation->getCurrentOrganizationCode(), $request->getTemplateFileKey());
         $this->assertThumbnailFileKeyHasPublicUrl($dataIsolation->getCurrentOrganizationCode(), $request->getThumbnailFileKey());
-        $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
+        $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $request->getTagCodes());
         $template = $this->buildEntityFromRequest($request);
         $template->setCode($request->getCode() ?? SlidesTemplateEntity::generateNewCode());
         $template->setSourceType(SlidesTemplateSourceType::Custom);
@@ -106,7 +109,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
                 $dataIsolation->getCurrentUserId()
             );
         }
-        $this->resolveAssetUrls([$template], includeTemplateFileUrl: true);
+        $this->resolveAssetUrls([$template], includeTemplateFileUrl: false);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$template]);
 
         return $template;
@@ -120,7 +123,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         if ($request->hasTagCodes()) {
-            $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
+            $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $request->getTagCodes());
         }
         $existing = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
         $this->assertTemplateFileKeyHasPrivateUrl($existing->getOrganizationCode(), $request->getTemplateFileKey());
@@ -145,7 +148,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
                 $dataIsolation->getCurrentUserId()
             );
         }
-        $this->resolveAssetUrls([$template], includeTemplateFileUrl: true);
+        $this->resolveAssetUrls([$template], includeTemplateFileUrl: false);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$template]);
 
         return $template;
@@ -166,7 +169,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $request->getTagCodes(),
             $dataIsolation->getCurrentUserId()
         );
-        $this->resolveAssetUrls([$template], includeTemplateFileUrl: true);
+        $this->resolveAssetUrls([$template], includeTemplateFileUrl: false);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$template]);
 
         return $template;
@@ -198,9 +201,12 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
-        $template = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
-        $this->slidesTemplateTagDomainService->deleteTemplateTags($dataIsolation, (int) $template->getId());
-        $this->slidesTemplateDomainService->delete($dataIsolation, $id);
+        Db::transaction(function () use ($dataIsolation, $id): void {
+            $template = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
+            $this->slidesTemplateTagDomainService->deleteTemplateTags($dataIsolation, (int) $template->getId());
+            $this->slidesTemplateFavoriteDomainService->deleteBySlideTemplateCode($template->getCode());
+            $this->slidesTemplateDomainService->delete($dataIsolation, $id);
+        });
     }
 
     private function assertOfficialOrganization(SlidesTemplateDataIsolation $dataIsolation): void

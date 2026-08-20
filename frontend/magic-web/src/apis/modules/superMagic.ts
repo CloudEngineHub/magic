@@ -48,12 +48,17 @@ import type {
 import type {
 	SlidesTemplateCategoryListResponse,
 	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateCodeAvailabilityResponse,
 	SlidesTemplateCountResponse,
 	SlidesTemplateDetail,
+	SaveSlidesTemplatePayload,
+	SlidesTemplateTagListResponse,
 	SlidesTemplateTagGroupItem,
-	SlidesTemplateListResponse,
+	SlidesTemplateTagQueryParams,
+	SlidesTemplateRawListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { normalizeSlidesTemplateResponse } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 
 /** 保存文件内容的响应 */
 export interface SaveFileContentResponse {
@@ -84,6 +89,23 @@ export interface SaveFileContentResponse {
 		duration_ms: number
 	}>
 	completed_at: string
+}
+
+export interface SuperMagicTopicModelExtra {
+	transcription_enabled?: boolean
+	auto_summary_enabled?: boolean
+	model?: Partial<ModelItem>
+}
+
+export interface SuperMagicTopicModelResponse {
+	model?: Partial<ModelItem>
+	image_model?: Partial<ModelItem>
+	video_model?: Partial<ModelItem>
+	extra?: SuperMagicTopicModelExtra
+	/** Compatibility with endpoints that resolve business rejection responses. */
+	success?: boolean
+	code?: string | number
+	message?: string
 }
 
 /** LLM model capabilities */
@@ -791,21 +813,87 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		params: SlidesTemplateQueryParams,
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
-		return fetch.get<SlidesTemplateListResponse>(
-			genRequestUrl("/api/v1/slides-templates", {}, params),
-			{
-				headers: {
-					...(options?.xMagicImageProcess && {
-						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
-					}),
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates", {}, { scope: "official", ...params }),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
 				},
-			},
+			)
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getFavoriteSlidesTemplates(
+		params: Omit<SlidesTemplateQueryParams, "scope">,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates/favorites", {}, params),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
+				},
+			)
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getUsedSlidesTemplates(
+		params: Pick<SlidesTemplateQueryParams, "page" | "page_size">,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates/used", {}, params),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
+				},
+			)
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getSlidesTemplateCodeAvailability(code: string) {
+		return fetch.get<SlidesTemplateCodeAvailabilityResponse>(
+			genRequestUrl("/api/v1/slides-templates/${code}/availability", { code }),
+		)
+	},
+
+	favoriteSlidesTemplate(code: string) {
+		return fetch.post<[]>(genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }))
+	},
+
+	unfavoriteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(
+			genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }),
 		)
 	},
 
 	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
 		return fetch.get<SlidesTemplateCategoryListResponse>(
 			genRequestUrl("/api/v1/slides-template-categories", {}, params),
+		)
+	},
+
+	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams = {}) {
+		return fetch.get<SlidesTemplateTagListResponse>(
+			genRequestUrl("/api/v1/slides-template-tags", {}, params),
 		)
 	},
 
@@ -817,7 +905,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
 		return fetch.get<SlidesTemplateCountResponse>(
-			genRequestUrl("/api/v1/slides-templates/count", {}, params),
+			genRequestUrl("/api/v1/slides-templates/count", {}, { scope: "official", ...params }),
 		)
 	},
 
@@ -832,6 +920,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				},
 			},
 		)
+	},
+
+	saveSlidesTemplate(payload: SaveSlidesTemplatePayload) {
+		return fetch.post<SlidesTemplateDetail>("/api/v1/slides-templates", payload)
 	},
 
 	/**
@@ -2279,18 +2371,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 超级麦吉话题模型配置
 	 */
 	getSuperMagicTopicModel({ topic_id }: { topic_id: string }) {
-		return fetch.get<{
-			model?: Partial<ModelItem>
-			image_model?: Partial<ModelItem>
-			video_model?: Partial<ModelItem>
-			extra?: {
-				transcription_enabled?: boolean
-				auto_summary_enabled?: boolean
-				model?: Partial<ModelItem>
-			}
-		}>(`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`, {
-			enableRequestUnion: true,
-		})
+		return fetch.get<SuperMagicTopicModelResponse>(
+			`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`,
+			{
+				enableRequestUnion: true,
+			},
+		)
 	},
 
 	/**
@@ -2310,13 +2396,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		model_id?: string
 		image_model_id?: string
 		video_model_id?: string
-		extra?: {
-			transcription_enabled?: boolean
-			auto_summary_enabled?: boolean
-			model?: Partial<ModelItem>
-		}
+		extra?: SuperMagicTopicModelExtra
 	}) {
-		return fetch.put(
+		return fetch.put<SuperMagicTopicModelResponse>(
 			`/api/v1/contact/users/setting/super-magic/topic-model/${cache_id}`,
 			{
 				...(model_id && {

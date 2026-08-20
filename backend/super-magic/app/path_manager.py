@@ -30,6 +30,7 @@ class PathManager(BasePathManager):
             verification/   ← 验证脚本产物
             background_compact/ ← 后台压缩临时上下文
             llm_request/    ← LLM 调试日志
+            slide-template-maker/ ← 幻灯片模板作者中间文件
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）
         .workspace/          ← MagicFS 云端持久工作区（父类管理）

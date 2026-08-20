@@ -45,7 +45,8 @@ function DefaultTool(props: DefaultToolProps) {
 	const { t } = useTranslation("super")
 	const { onMouseEnter, onMouseLeave, loading, classNames } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		ToolMessageNode | undefined
+		| ToolMessageNode
+		| undefined
 	const tool = props.toolData || node?.tool
 	const fileData = useMemo(() => tool?.detail?.data || {}, [tool?.detail?.data])
 

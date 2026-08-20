@@ -14,6 +14,7 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Infrastructure\Audit\Listener\SlidesTemplateUsageLogListener;
 use App\Infrastructure\Audit\Repository\Model\ResourceAccessLogModel;
+use App\Infrastructure\Core\ValueObject\Page;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use ReflectionClass;
@@ -120,6 +121,17 @@ final class RecordingResourceAccessLogRepository implements ResourceAccessLogRep
         $this->entity = $entity;
         return $entity;
     }
+
+    public function queriesRecentlyUsedResources(
+        string $organizationCode,
+        string $userId,
+        string $resourceType,
+        string $operation,
+        Page $page,
+        bool $withTotal = false
+    ): array {
+        return ['list' => []];
+    }
 }
 
 final class FailingResourceAccessLogRepository implements ResourceAccessLogRepositoryInterface
@@ -127,5 +139,16 @@ final class FailingResourceAccessLogRepository implements ResourceAccessLogRepos
     public function save(ResourceAccessLogEntity $entity): ResourceAccessLogEntity
     {
         throw new RuntimeException('save failed');
+    }
+
+    public function queriesRecentlyUsedResources(
+        string $organizationCode,
+        string $userId,
+        string $resourceType,
+        string $operation,
+        Page $page,
+        bool $withTotal = false
+    ): array {
+        return ['list' => []];
     }
 }
