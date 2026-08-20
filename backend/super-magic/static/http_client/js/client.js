@@ -819,6 +819,7 @@ const AgentMode = {
     SUMMARY_CHAT: "summary-chat",
     SUMMARY_VIDEO: "summary-video",
     DESIGN: "design",
+    CANVAS: "canvas",
     VIDEO_PRODUCTION: "video-production",
     TEST: "test",
     SKILL: "skill",
@@ -3012,6 +3013,7 @@ function changeAgentMode() {
         'ppt': 'PPT模式',
         'data_analysis': '数据分析模式',
         'summary': '总结模式',
+        'canvas': 'Canvas管理模式',
         'magiclaw': 'MagicLaw模式',
         'custom_agent': '自定义Agent模式'
     };
