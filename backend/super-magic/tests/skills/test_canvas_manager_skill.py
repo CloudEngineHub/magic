@@ -17,8 +17,9 @@ PUBLIC_TOOLS = (
     "add_canvas_connections",
     "wait_canvas_generation",
     "estimate_canvas_content_points",
-    "compose_canvas_video",
-    "search_canvas_images",
+    "compose_canvas_final_video",
+    "search_canvas_image_candidates",
+    "search_canvas_image_prompts",
 )
 
 
@@ -105,7 +106,7 @@ def test_skill_states_current_production_capabilities() -> None:
     """Skill 必须描述已实现的合成、图片搜索和音频序列能力。"""
     content = SKILL_PATH.read_text(encoding="utf-8")
 
-    assert "compose_canvas_video" in content
-    assert "search_canvas_images" in content
+    assert "compose_canvas_final_video" in content
+    assert "search_canvas_image_candidates" in content
     assert "audioSequence" in content
     assert "asset_path" in content
