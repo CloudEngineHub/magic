@@ -18,7 +18,7 @@ class VideoEditContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为 Video Edit Content 协议字段。"""
-        values: dict[str, object] = {**self._base_dict(), "videoSequence": list(self.video_sequence)}
+        values: dict[str, object] = {"videoSequence": list(self.video_sequence)}
         if self.output is not None:
             values["output"] = deepcopy(self.output)
         return values

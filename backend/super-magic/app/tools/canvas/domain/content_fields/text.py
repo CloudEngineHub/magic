@@ -18,7 +18,7 @@ class TextContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为 Text Content 协议字段。"""
-        values: dict[str, object] = {**self._base_dict(), "content": deepcopy(self.content)}
+        values: dict[str, object] = {"content": deepcopy(self.content)}
         if self.default_style is not None:
             values["defaultStyle"] = deepcopy(self.default_style)
         return values

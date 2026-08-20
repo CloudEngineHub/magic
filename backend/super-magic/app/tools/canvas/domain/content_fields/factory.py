@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-
 from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
 from app.tools.canvas.domain.content_fields.ellipse import EllipseContentFields
@@ -27,12 +25,10 @@ class ContentFieldsFactory:
     @classmethod
     def from_protocol(cls, element_type: str, data: dict[str, JsonValue]) -> CanvasContentFields:
         """按 Element 类型解码并校验 Content Fields。"""
-        visual_understanding = deepcopy(data.get("visualUnderstanding"))
         if element_type in {"frame", "group"}:
-            return StructuralContentFields(visual_understanding=visual_understanding)
+            return StructuralContentFields()
         if element_type == "image":
             return ImageContentFields(
-                visual_understanding=visual_understanding,
                 src=cls._optional_string(data, "src"),
                 status=cls._optional_status(data, "status"),
                 stored_error_message=cls._optional_string(data, "errorMessage"),
@@ -42,7 +38,6 @@ class ContentFieldsFactory:
             )
         if element_type == "video":
             return VideoContentFields(
-                visual_understanding=visual_understanding,
                 src=cls._optional_string(data, "src"),
                 status=cls._optional_status(data, "status"),
                 stored_error_message=cls._optional_string(data, "errorMessage"),
@@ -51,18 +46,15 @@ class ContentFieldsFactory:
             )
         if element_type == "audio":
             return AudioContentFields(
-                visual_understanding=visual_understanding,
                 src=cls._optional_string(data, "src"),
             )
         if element_type == "text":
             return TextContentFields(
-                visual_understanding=visual_understanding,
                 content=cls._object_list(data, "content"),
                 default_style=cls._optional_object(data, "defaultStyle"),
             )
         if element_type == "rectangle":
             return RectangleContentFields(
-                visual_understanding=visual_understanding,
                 fill=cls._optional_string(data, "fill"),
                 stroke=cls._optional_string(data, "stroke"),
                 stroke_width=cls._optional_number(data, "strokeWidth"),
@@ -70,21 +62,18 @@ class ContentFieldsFactory:
             )
         if element_type == "ellipse":
             return EllipseContentFields(
-                visual_understanding=visual_understanding,
                 fill=cls._optional_string(data, "fill"),
                 stroke=cls._optional_string(data, "stroke"),
                 stroke_width=cls._optional_number(data, "strokeWidth"),
             )
         if element_type == "triangle":
             return TriangleContentFields(
-                visual_understanding=visual_understanding,
                 fill=cls._optional_string(data, "fill"),
                 stroke=cls._optional_string(data, "stroke"),
                 stroke_width=cls._optional_number(data, "strokeWidth"),
             )
         if element_type == "star":
             return StarContentFields(
-                visual_understanding=visual_understanding,
                 fill=cls._optional_string(data, "fill"),
                 stroke=cls._optional_string(data, "stroke"),
                 stroke_width=cls._optional_number(data, "strokeWidth"),
@@ -94,13 +83,11 @@ class ContentFieldsFactory:
             )
         if element_type == "storyboard":
             return StoryboardContentFields(
-                visual_understanding=visual_understanding,
                 generation_config=cls._optional_object(data, "generationConfig"),
                 shots=cls._object_list(data, "shots"),
             )
         if element_type == "video-edit":
             return VideoEditContentFields(
-                visual_understanding=visual_understanding,
                 video_sequence=cls._string_list(data, "videoSequence"),
                 output=cls._optional_object(data, "output"),
             )

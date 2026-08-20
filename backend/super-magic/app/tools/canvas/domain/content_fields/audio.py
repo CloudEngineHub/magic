@@ -18,4 +18,4 @@ class AudioContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为 Audio Content 协议字段。"""
-        return {**self._base_dict(), **({"src": self.src} if self.src is not None else {})}
+        return {"src": self.src} if self.src is not None else {}

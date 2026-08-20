@@ -11,4 +11,4 @@ class StructuralContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为结构 Content 协议字段。"""
-        return self._base_dict()
+        return {}

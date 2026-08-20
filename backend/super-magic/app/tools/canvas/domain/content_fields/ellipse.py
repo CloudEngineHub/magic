@@ -15,5 +15,5 @@ class EllipseContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为 Ellipse Content 协议字段。"""
-        values = {**self._base_dict(), "fill": self.fill, "stroke": self.stroke, "strokeWidth": self.stroke_width}
+        values = {"fill": self.fill, "stroke": self.stroke, "strokeWidth": self.stroke_width}
         return {key: value for key, value in values.items() if value is not None}

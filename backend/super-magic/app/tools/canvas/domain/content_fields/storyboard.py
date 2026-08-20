@@ -18,7 +18,7 @@ class StoryboardContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为 Storyboard Content 协议字段。"""
-        values: dict[str, object] = {**self._base_dict(), "shots": deepcopy(self.shots)}
+        values: dict[str, object] = {"shots": deepcopy(self.shots)}
         if self.generation_config is not None:
             values["generationConfig"] = deepcopy(self.generation_config)
         return values

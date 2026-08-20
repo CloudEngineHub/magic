@@ -147,23 +147,20 @@ class ContentInput(BaseToolParams):
 
     def _build_fields(self):
         """按 content_type 构造确定的 Content Fields。"""
-        visual = None
         if self.content_type == "image":
-            return ImageContentFields(visual_understanding=visual)
+            return ImageContentFields()
         if self.content_type == "video":
-            return VideoContentFields(visual_understanding=visual)
+            return VideoContentFields()
         if self.content_type == "audio":
-            return AudioContentFields(visual_understanding=visual)
+            return AudioContentFields()
         if self.content_type == "text":
             paragraphs = self._text_paragraphs()
             return TextContentFields(
-                visual_understanding=visual,
                 content=paragraphs,
                 default_style=self._model_object(self.default_style),
             )
         if self.content_type == "rectangle":
             return RectangleContentFields(
-                visual_understanding=visual,
                 fill=self.fill,
                 stroke=self.stroke,
                 stroke_width=self.stroke_width,
@@ -171,21 +168,18 @@ class ContentInput(BaseToolParams):
             )
         if self.content_type == "ellipse":
             return EllipseContentFields(
-                visual_understanding=visual,
                 fill=self.fill,
                 stroke=self.stroke,
                 stroke_width=self.stroke_width,
             )
         if self.content_type == "triangle":
             return TriangleContentFields(
-                visual_understanding=visual,
                 fill=self.fill,
                 stroke=self.stroke,
                 stroke_width=self.stroke_width,
             )
         if self.content_type == "star":
             return StarContentFields(
-                visual_understanding=visual,
                 fill=self.fill,
                 stroke=self.stroke,
                 stroke_width=self.stroke_width,
@@ -195,13 +189,11 @@ class ContentInput(BaseToolParams):
             )
         if self.content_type == "storyboard":
             return StoryboardContentFields(
-                visual_understanding=visual,
                 generation_config=self._model_object(self.generation_config),
                 shots=[self._model_object(shot) for shot in self.shots or []],
             )
         if self.content_type == "video-edit":
             return VideoEditContentFields(
-                visual_understanding=visual,
                 video_sequence=list(self.video_sequence or []),
                 output=self._model_object(self.output),
             )

@@ -3,7 +3,6 @@
 from app.tools.canvas.infrastructure.persistence.canvas_codec import (
     BASE_ELEMENT_FIELDS,
     CANVAS_PREFIX,
-    COMMON_CONTENT_FIELDS,
     CONTENT_FIELDS,
     MAGIC_PROJECT_TYPE,
     MAGIC_PROJECT_VERSION,
@@ -16,7 +15,7 @@ from app.tools.canvas.infrastructure.persistence.element_details_codec import El
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 
 __all__ = [
-    "BASE_ELEMENT_FIELDS", "CANVAS_PREFIX", "COMMON_CONTENT_FIELDS", "CONTENT_FIELDS",
+    "BASE_ELEMENT_FIELDS", "CANVAS_PREFIX", "CONTENT_FIELDS",
     "MAGIC_PROJECT_TYPE", "MAGIC_PROJECT_VERSION", "SUPPORTED_ELEMENT_TYPES", "CanvasCodec",
     "CanvasRepositoryInterface", "ContentMetadataService", "ElementDetailsAdapter", "ElementDetailsCodec",
 ]

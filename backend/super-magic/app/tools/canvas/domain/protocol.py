@@ -22,4 +22,3 @@ CONTENT_FIELDS = {
     "storyboard": {"generationConfig", "shots"},
     "video-edit": {"videoSequence", "output"},
 }
-COMMON_CONTENT_FIELDS = {"visualUnderstanding"}

@@ -55,7 +55,6 @@ class GeneratedMediaContentFields(CanvasContentFields):
     def _media_dict(self) -> dict[str, object]:
         """生成图片和视频共享的协议字段。"""
         values: dict[str, object | None] = {
-            **self._base_dict(),
             "src": self.src,
             "status": self.status,
             "errorMessage": self.stored_error_message,

@@ -16,5 +16,5 @@ class RectangleContentFields(CanvasContentFields):
 
     def to_dict(self) -> dict[str, object]:
         """转换为 Rectangle Content 协议字段。"""
-        values = {**self._base_dict(), "fill": self.fill, "stroke": self.stroke, "strokeWidth": self.stroke_width, "cornerRadius": self.corner_radius}
+        values = {"fill": self.fill, "stroke": self.stroke, "strokeWidth": self.stroke_width, "cornerRadius": self.corner_radius}
         return {key: value for key, value in values.items() if value is not None}

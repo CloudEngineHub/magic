@@ -15,7 +15,7 @@ from typing import Any
 from app.tools.canvas.domain.errors import CanvasProtocolError
 from app.tools.canvas.domain.content_fields import ContentFieldsFactory
 from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasDocument, CanvasElement, CanvasProject, ElementProperties
-from app.tools.canvas.domain.protocol import BASE_ELEMENT_FIELDS, COMMON_CONTENT_FIELDS, CONTENT_FIELDS, SUPPORTED_ELEMENT_TYPES
+from app.tools.canvas.domain.protocol import BASE_ELEMENT_FIELDS, CONTENT_FIELDS, SUPPORTED_ELEMENT_TYPES
 
 MAGIC_PROJECT_VERSION = "3.0.0"
 MAGIC_PROJECT_TYPE = "design"
@@ -148,7 +148,7 @@ class CanvasCodec:
         content_id = data.get("contentId")
         if not isinstance(content_id, str) or not content_id or "id" in data or "type" in data:
             raise CanvasProtocolError("INVALID_CONTENT", f"{path} has an invalid contentId or forbidden field.")
-        allowed = COMMON_CONTENT_FIELDS | CONTENT_FIELDS[element_type] | {"contentId"}
+        allowed = CONTENT_FIELDS[element_type] | {"contentId"}
         if set(data) - allowed:
             raise CanvasProtocolError("INVALID_CONTENT", f"{path} contains unsupported fields.")
         fields = ContentFieldsFactory.from_protocol(

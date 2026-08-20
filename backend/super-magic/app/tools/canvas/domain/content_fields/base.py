@@ -6,14 +6,9 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 
-from app.tools.canvas.domain.types import JsonValue
-
-
 @dataclass
 class CanvasContentFields(ABC):
     """定义所有 Content Fields 的公共行为。"""
-
-    visual_understanding: JsonValue | None = None
 
     def clone(self) -> "CanvasContentFields":
         """返回当前 Fields 的深拷贝。"""
@@ -37,7 +32,3 @@ class CanvasContentFields(ABC):
     @abstractmethod
     def to_dict(self) -> dict[str, object]:
         """转换为前端协议字段。"""
-
-    def _base_dict(self) -> dict[str, object]:
-        """生成所有 Content 共享的协议字段。"""
-        return {"visualUnderstanding": deepcopy(self.visual_understanding)} if self.visual_understanding is not None else {}
