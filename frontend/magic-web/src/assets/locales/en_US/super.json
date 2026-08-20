@@ -2416,7 +2416,7 @@
 		"slideIsBeingDeleted": "This slide is being deleted",
 		"slidesTemplateLoadFailed": "Unable to open PPT template",
 		"slidesTemplateLoadFailedDescription": "Check template.json and the slide files in the slides directory.",
-		"slidesTemplateLoadFailedReason": "Reason: {reason}",
+		"slidesTemplateLoadFailedReason": "Reason: {{reason}}",
 		"sortSlides": "Sort Pages",
 		"sortSlidesCancel": "Cancel",
 		"sortSlidesFailed": "Update failed",
