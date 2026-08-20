@@ -1582,13 +1582,15 @@ class LLMAppService extends AbstractLLMAppService
             }
         }
         $imageGenerateService = ImageGenerateFactory::create($imageGenerateType, $imageModelConfig);
-        $generateImageOpenAIFormat = $this->generateImageOpenAIFormatWithFileUrlProxy(
-            $imageGenerateService,
-            $imageGenerateRequest,
-            $imageModel->getProviderCode()
-        );
+        $generateImageOpenAIFormat = new OpenAIFormatResponse([]);
 
         try {
+            $generateImageOpenAIFormat = $this->generateImageOpenAIFormatWithFileUrlProxy(
+                $imageGenerateService,
+                $imageGenerateRequest,
+                $imageModel->getProviderCode()
+            );
+
             // 记录日志
             $this->recordImageGenerateMessageLog($modelVersion, $creator, $organizationCode);
 
@@ -1625,7 +1627,7 @@ class LLMAppService extends AbstractLLMAppService
             $errorMessage = $e->getMessage();
             $generateImageOpenAIFormat->setProviderErrorMessage($errorMessage);
             $generateImageOpenAIFormat->setProviderErrorCode($e->getCode());
-            $generateImageOpenAIFormat->setProvider('magic');
+            $generateImageOpenAIFormat->setProvider($imageGenerateService->getProviderName());
             $this->logger->warning('text generate image error:' . $e->getMessage());
 
             // 记录错误事件
