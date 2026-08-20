@@ -259,6 +259,10 @@ export class Canvas {
 			height: height,
 		})
 
+		// Register before the shared input layer so Canvas takes focus before
+		// selection handlers publish the new selection.
+		this.setupCanvasFocusHandler()
+
 		// 创建五层架构的 Layer
 		this.contentLayer = new Konva.Layer({ name: "content", listening: true })
 		this.connectionGroup = new Konva.Group({ name: "canvas-connections", listening: true })
@@ -564,9 +568,6 @@ export class Canvas {
 		// 设置 window 点击监听（点击窗口其他地方取消选中）
 		this.setupWindowClickHandler()
 
-		// 设置画布点击时获得焦点
-		this.setupCanvasFocusHandler()
-
 		// 禁用右键菜单
 		this.setupContextMenuHandler()
 
@@ -605,7 +606,7 @@ export class Canvas {
 	 * 设置画布点击时获得焦点
 	 */
 	private setupCanvasFocusHandler(): void {
-		this.stage.on("mousedown", () => {
+		this.stage.on("pointerdown mousedown", () => {
 			this.container.focus()
 		})
 	}
