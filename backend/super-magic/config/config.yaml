@@ -491,8 +491,8 @@ audio_understanding:
 
 # Checkpoint管理配置
 checkpoint:
-  # 最大保留的checkpoint数量
-  max_count: ${CHECKPOINT_MAX_COUNT:-10}
+  # 最大保留的checkpoint数量，实际保留 max_count + 1 个以支持撤回 max_count 个消息
+  max_count: ${CHECKPOINT_MAX_COUNT:-3}
 
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}

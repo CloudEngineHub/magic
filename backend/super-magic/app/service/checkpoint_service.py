@@ -226,7 +226,7 @@ class CheckpointService(Base):
         """清理超出数量限制的旧checkpoint"""
         try:
             # 从配置文件读取数量限制
-            limit = max_checkpoints or config.get("checkpoint.max_count", 10)
+            limit = max_checkpoints or config.get("checkpoint.max_count", 3)
 
             # 检查是否启用自动清理
             auto_cleanup = config.get("checkpoint.auto_cleanup", True)
