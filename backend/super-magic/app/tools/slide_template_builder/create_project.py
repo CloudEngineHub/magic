@@ -23,6 +23,7 @@ from app.tools.slide_template_builder.common import (
     validate_taxonomy_selection,
     validate_template_id,
 )
+from app.tools.slide_template_builder import taxonomy_source
 from app.tools.slide_template_builder.models import (
     BACKEND_CATEGORY_CODE_PATTERN,
     TemplateCanvas,
@@ -44,16 +45,16 @@ Semantic base template ID using SLIDE- plus alphanumeric kebab-case segments. Th
     category_code: str = Field(
         ...,
         pattern=BACKEND_CATEGORY_CODE_PATTERN,
-        description="""<!--zh: 内置模板分类表中的有效分类 code。必须使用准确的现有值，不能只按格式编造。-->
-Exact active category code from the bundled slide template taxonomy. Do not invent a code that only matches the format.""",
+        description="""<!--zh: 当前有效分类目录中的准确分类 code。按本模板的受众和用途从 result.data 语义挑选，不能按文件名或关键词匹配，也不能只按格式编造。-->
+Exact active category code from query_slide_template_taxonomy result.data. Pick it by this template's audience and use case, not by filename or keyword match.""",
     )
     label: TemplateLabelText = Field(..., description="Template display names in Simplified Chinese and English.")
     description: TemplateDescriptionText = Field(..., description="Reusable template descriptions in Simplified Chinese and English.")
     tag_codes: list[str] = Field(
         ...,
         min_length=1,
-        description="""<!--zh: 内置模板标签表中的有效标签 code，至少一个，不重复。不要自动添加 featured。-->
-Exact tag codes from the bundled slide template taxonomy. Provide at least one unique code and never add featured automatically.""",
+        description="""<!--zh: 当前有效标签目录中的准确标签 code，至少一个，不重复。按本模板可见的用途、风格、配色、版式、氛围和语言从 result.data 语义挑选，不要关键词匹配，不要自动添加 featured。-->
+Exact tag codes from query_slide_template_taxonomy result.data. Pick them by this template's visible purpose, style, color, layout, mood, and language. Never keyword-match names or add featured automatically.""",
     )
     source: TemplateSourceParams = Field(..., description="Template source classification and source basename.")
     slides: list[TemplateSlideParams] = Field(
@@ -76,7 +77,12 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
     async def execute(self, tool_context: ToolContext, params: CreateSlideTemplateProjectParams) -> ToolResult:
         try:
             requested_template_id = validate_template_id(params.template_id)
-            category_code, tag_codes = validate_taxonomy_selection(params.category_code, params.tag_codes)
+            snapshot = await taxonomy_source.resolve_taxonomy(
+                taxonomy_source.access_context_from_tool(tool_context)
+            )
+            category_code, tag_codes = validate_taxonomy_selection(
+                params.category_code, params.tag_codes, snapshot.catalog
+            )
             slide_files = [item.file for item in params.slides]
             if len(slide_files) != len(set(slide_files)):
                 return ToolResult.error("Slide file paths must be unique.")

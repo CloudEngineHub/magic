@@ -106,10 +106,10 @@ Before reporting completion, check the tone sequence directly. Read the backgrou
 
 ## Completion Report
 
-Report:
+Use `status: complete` only when every Completion Gate item in the skill passed, including generated `previews/thumbnail.png`, `previews/collage.png`, and one preview per indexed slide.
 
 ```text
-status:
+status: complete
 source_path:
 input_type:
 output_dir:
@@ -126,3 +126,14 @@ validation:
 quality_pass:
 remaining_limitations:
 ```
+
+If any required step failed or was skipped, use `status: blocked`. Do not say the template is complete, ready, or finished. HTML/CSS in the folder is not enough.
+
+```text
+status: blocked
+blocker:
+missing_steps:
+existing_artifacts:
+```
+
+Name the failed or skipped tool, quote `result.content` when a tool failed, and list remaining work. If `finalize_slide_template` was not called or failed, say that `previews/` was not captured and that thumbnail, collage, and page screenshots still need to be generated.

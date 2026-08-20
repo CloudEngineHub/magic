@@ -1,10 +1,14 @@
 import pytest
-from pydantic import ValidationError
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.tools.slide_template_builder import QuerySlideTemplateTaxonomy
 from app.tools.slide_template_builder.query_taxonomy import QuerySlideTemplateTaxonomyParams
+from app.tools.slide_template_builder.taxonomy import load_taxonomy
+from app.tools.slide_template_builder.taxonomy_source import TaxonomySnapshot
+from tests.tools.conftest import ORIGINAL_RESOLVE_TAXONOMY
 
 
 def _tool() -> QuerySlideTemplateTaxonomy:
@@ -20,124 +24,127 @@ def test_query_slide_template_taxonomy_is_code_mode_only():
 
 
 @pytest.mark.asyncio
-async def test_lookup_returns_categories_and_groups_without_dumping_all_tags():
+async def test_query_returns_index_in_content_and_full_catalog_in_data():
     result = await _tool().execute(_context(), QuerySlideTemplateTaxonomyParams())
 
     assert result.ok
-    assert result.data["action"] == "lookup"
+    assert result.data["source"] == "fallback"
     assert any(item["code"] == "PPT-CATE-education-training" for item in result.data["categories"])
-    assert any(item["code"] == "purpose_group" for item in result.data["groups"])
-    assert result.data["tags"] == []
-    assert "Active categories" in result.content
-    assert "purpose-training-course" not in result.content
-    assert "Do not invent codes" in result.content
-
-
-@pytest.mark.asyncio
-async def test_lookup_lists_tags_for_requested_groups():
-    result = await _tool().execute(
-        _context(),
-        QuerySlideTemplateTaxonomyParams(groups=["layout_group", "mood_group"]),
-    )
-
-    assert result.ok
-    codes = {item["code"] for item in result.data["tags"]}
-    assert "layout-agenda" in codes
-    assert "mood-energetic" in codes
-    assert "purpose-training-course" not in codes
-    assert "layout-agenda" in result.content
-    assert "mood_group" in result.content
-
-
-@pytest.mark.asyncio
-async def test_lookup_searches_multiple_queries_without_aborting_on_a_miss():
-    result = await _tool().execute(
-        _context(),
-        QuerySlideTemplateTaxonomyParams(queries=["培训", "封面", "orange"]),
-    )
-
-    assert result.ok
-    assert any(item["code"] == "purpose-training-course" for item in result.data["matches_by_query"]["培训"])
-    assert any(item["code"] == "color-orange" for item in result.data["matches_by_query"]["orange"])
-    assert result.data["matches_by_query"]["封面"] == []
-    assert result.data["unmatched_queries"] == ["封面"]
-    assert 'Query "封面": no matching tags' in result.content
-    assert "purpose-training-course" in result.content
-    assert "color-orange" in result.content
-
-
-@pytest.mark.asyncio
-async def test_lookup_rejects_unknown_groups():
-    result = await _tool().execute(
-        _context(),
-        QuerySlideTemplateTaxonomyParams(groups=["layout_group", "not_a_group"]),
-    )
-
-    assert result.ok is False
-    assert "Unknown tag group: not_a_group" in result.content
+    purpose = next(item for item in result.data["groups"] if item["code"] == "purpose_group")
+    assert any(tag["code"] == "purpose-training-course" for tag in purpose["tags"])
+    assert purpose["tags"][0]["zh"]
+    assert "PPT-CATE-education-training" in result.content
+    assert "Education" in result.content
     assert "purpose_group" in result.content
+    assert "purpose-training-course" not in result.content
+    assert "Never print the full catalog" in result.content
+    assert "Do not substring-search names" in result.content
+    assert "audience, use case, and decision" in result.content
 
 
 @pytest.mark.asyncio
-async def test_validate_accepts_a_real_selection():
-    result = await _tool().execute(
-        _context(),
-        QuerySlideTemplateTaxonomyParams(
-            action="validate",
-            category_code="PPT-CATE-education-training",
-            tag_codes=[
-                "purpose-training-course",
-                "style-modern",
-                "color-orange",
-                "layout-card-grid",
-                "mood-energetic",
-                "language-chinese",
-            ],
-        ),
-    )
+async def test_query_uses_live_catalog(monkeypatch):
+    live = {
+        "categories": [
+            {
+                "code": "PPT-CATE-education-training",
+                "name_i18n": {"zh_CN": "教育培训", "en_US": "Education"},
+                "status": 1,
+            }
+        ],
+        "groups": [{"code": "purpose_group", "name_i18n": {"zh_CN": "用途", "en_US": "Purpose"}}],
+        "tags": [
+            {
+                "code": "purpose-live-only",
+                "group_code": "purpose_group",
+                "name_i18n": {"zh_CN": "线上标签", "en_US": "Live"},
+                "status": 1,
+            }
+        ],
+    }
+
+    async def _resolve(access_context=None):
+        return TaxonomySnapshot(catalog=live, source="live")
+
+    monkeypatch.setattr("app.tools.slide_template_builder.taxonomy_source.resolve_taxonomy", _resolve)
+    result = await _tool().execute(_context(), QuerySlideTemplateTaxonomyParams())
 
     assert result.ok
-    assert result.data["valid"] is True
-    assert result.data["category"]["code"] == "PPT-CATE-education-training"
-    assert result.data["tags"][0]["code"] == "purpose-training-course"
-    assert "Taxonomy selection is valid." in result.content
+    assert result.data["source"] == "live"
+    assert result.data["groups"][0]["tags"][0]["code"] == "purpose-live-only"
+    assert "purpose-live-only" not in result.content
+    assert "purpose-training-course" not in result.content
 
 
 @pytest.mark.asyncio
-async def test_validate_rejects_unknown_category():
-    result = await _tool().execute(
-        _context(),
-        QuerySlideTemplateTaxonomyParams(
-            action="validate",
-            category_code="PPT-CATE-not-real",
-            tag_codes=["purpose-training-course"],
-        ),
+async def test_resolve_taxonomy_falls_back_when_api_fails(monkeypatch):
+    class BoomClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get_slides_template_taxonomy(self, access_context=None):
+            raise RuntimeError("taxonomy api down")
+
+    monkeypatch.setattr("app.tools.slide_template_builder.taxonomy_source.MagicServiceClient", BoomClient)
+    monkeypatch.setattr(
+        "app.tools.slide_template_builder.taxonomy_source.resolve_taxonomy",
+        ORIGINAL_RESOLVE_TAXONOMY,
+    )
+    snapshot = await ORIGINAL_RESOLVE_TAXONOMY()
+
+    assert snapshot.source == "fallback"
+    assert snapshot.catalog == load_taxonomy()
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_resolves_taxonomy_endpoint():
+    class RecordingMagicServiceClient(MagicServiceClient):
+        def __init__(self):
+            super().__init__(MagicServiceConfig(api_base_url="https://magic.example.test"))
+            self.call = None
+
+        async def _request_json(
+            self,
+            method,
+            path,
+            payload=None,
+            operation_name="Magic Service API",
+            params=None,
+        ):
+            self.call = (method, path, payload, operation_name, params)
+            return {"categories": [], "groups": [], "tags": []}
+
+    client = RecordingMagicServiceClient()
+    result = await client.get_slides_template_taxonomy(
+        {"topic_id": " topic-1 ", "project_id": "project-1", "task_id": ""}
     )
 
-    assert result.ok is False
-    assert "query_slide_template_taxonomy" in result.content
-
-
-def test_validate_requires_category_and_tags():
-    with pytest.raises(ValidationError):
-        QuerySlideTemplateTaxonomyParams(action="validate")
+    assert client.call == (
+        "GET",
+        "/api/v1/open-api/slides-templates/taxonomy",
+        None,
+        "幻灯片模板分类标签获取",
+        {"topic_id": "topic-1", "project_id": "project-1"},
+    )
+    assert result == {"categories": [], "groups": [], "tags": []}
 
 
 @pytest.mark.asyncio
-async def test_lookup_and_validate_have_product_facing_remarks():
+async def test_query_has_product_facing_remarks():
     tool = _tool()
-    lookup = await tool.get_before_tool_call_friendly_action_and_remark(
-        tool.name, _context(), {"action": "lookup"}
-    )
-    validate = await tool.get_after_tool_call_friendly_action_and_remark(
+    before = await tool.get_before_tool_call_friendly_action_and_remark(tool.name, _context(), {})
+    after = await tool.get_after_tool_call_friendly_action_and_remark(
         tool.name,
         _context(),
-        ToolResult(content="ok", data={"action": "validate"}),
+        ToolResult(content="ok", data={"source": "live"}),
         0.1,
-        {"action": "validate"},
+        {},
     )
 
-    assert lookup["action"]
-    assert "分类" in lookup["remark"] or "categor" in lookup["remark"].lower()
-    assert validate["action"]
-    assert "确认" in validate["remark"] or "confirm" in validate["remark"].lower()
+    assert before["action"]
+    assert "分类" in before["remark"] or "categor" in before["remark"].lower()
+    assert after["action"]
+    assert "列出" in after["remark"] or "listed" in after["remark"].lower()

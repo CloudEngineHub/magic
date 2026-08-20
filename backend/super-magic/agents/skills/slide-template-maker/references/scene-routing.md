@@ -2,7 +2,7 @@
 
 Choose exactly one primary scene based on audience and use case.
 
-This table is a common-scene routing aid, not the complete category registry. Confirm the selected code with `query_slide_template_taxonomy`; `template-taxonomy.json` is authoritative.
+This table is a common-scene routing aid, not the complete category registry. Confirm the selected code with `query_slide_template_taxonomy` by matching this template's audience and use case. The live catalog is authoritative; `template-taxonomy.json` is only a fallback.
 
 | Scene | Category code | Typical use |
 | --- | --- | --- |
@@ -17,4 +17,4 @@ This table is a common-scene routing aid, not the complete category registry. Co
 | `healthcare` | `PPT-CATE-healthcare` | Clinical, pharma, hospital, health education, medical research |
 | `culture-creative` | `PPT-CATE-culture-creative` | Art, culture, fashion, entertainment, event, portfolio |
 
-If several scenes fit, choose the one matching the primary audience and decision being supported. Ask only when the source does not provide enough evidence.
+If several scenes fit, choose the one matching the primary audience and decision being supported. Ask only when the source does not provide enough evidence. Do not pick a category because a keyword such as AI, cover, or training appears in the filename.

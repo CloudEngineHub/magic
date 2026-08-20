@@ -1,46 +1,53 @@
 # Template Taxonomy
 
-The authoritative snapshot is `template-taxonomy.json`. It contains all active category records and all tag groups and tags from the supplied backend reference files. Do not load the full JSON into model context unless debugging the taxonomy itself.
+The live catalog from `query_slide_template_taxonomy` is authoritative. `template-taxonomy.json` is only a fallback snapshot when the backend is unavailable. Do not read the JSON file, and do not print every tag into model context.
 
-Query it through `query_slide_template_taxonomy` in Code Mode. Do not use `shell_exec` or read the JSON file to guess codes.
+`content` is a short index of categories and tag groups. Full tags are in `result.data`. Inspect the source first, then list only the groups this template needs, and pick exact codes by meaning. Do not substring-search names. Never `print(catalog.data)`.
+
+Match the actual template, not words:
+
+- Category follows audience, use case, and the decision this deck supports. An AI-assistant training course is `PPT-CATE-education-training`, not a technology category just because "AI" appears.
+- Purpose follows what the reusable template is for. Training course, quarterly review, and product launch are different purposes even when the filename shares a word.
+- Style, color, layout, and mood follow what the source pages show: palette, type, surface, recurring structure. A cover page is not a layout tag; do not search `封面` or `cover`.
+- Language follows the intended sample copy.
+- Add industry or audience tags only when the template clearly targets that domain. Do not copy `industry-education-training` just because the category is education.
 
 ```python
 from sdk.tool import tool
 
-catalog = tool.call("query_slide_template_taxonomy", {
-    "groups": ["purpose_group", "style_group", "color_group", "layout_group", "mood_group", "language_group"],
-    "queries": ["quarterly", "navy"]
-})
+catalog = tool.call("query_slide_template_taxonomy")
+if not catalog.ok:
+    raise SystemExit(catalog.content)
 print(catalog.content)
 
-checked = tool.call("query_slide_template_taxonomy", {
-    "action": "validate",
-    "category_code": "PPT-CATE-business-report",
-    "tag_codes": [
-        "purpose-quarterly-review",
-        "style-business",
-        "color-navy",
-        "layout-dashboard",
-        "mood-professional",
-        "language-chinese"
-    ]
-})
-print(checked.content)
+needed = {
+    "purpose_group",
+    "style_group",
+    "color_group",
+    "layout_group",
+    "mood_group",
+    "language_group",
+}
+for group in catalog.data["groups"]:
+    if group["code"] not in needed:
+        continue
+    print(f"\n{group['code']}\t{group['zh']}")
+    for tag in group["tags"]:
+        print(f"{tag['code']}\t{tag['zh']}")
 ```
 
-Empty lookup returns active categories and tag groups. Pass `groups` to list exact tag codes. Pass several `queries` in one call; a miss does not abort the other keywords. If a keyword misses, list the group instead of guessing names.
+Read those names against the source, then copy exact codes into `create_slide_template_project`. Create and finalize validate against the same live catalog.
 
 ## Selection rules
 
-1. Choose one category matching the primary audience, use case, and decision. Use `scene-routing.md` only as a routing hint, then confirm the exact code with lookup.
+1. Choose one category matching this template's primary audience, use case, and decision. `scene-routing.md` is only a hint.
 2. Choose 4–10 tags that describe visible or intended template characteristics.
 3. Usually include one purpose tag, one or two style tags, one color tag, one or two layout tags, one mood tag, and one language tag.
 4. Add industry and audience/scene tags only when the template clearly targets them.
 5. Use the most specific supported tag. Do not add near-synonyms only to increase tag count.
 6. Do not add `featured`; it is an operational publishing decision.
-7. Validate before calling `create_slide_template_project`.
 
-To refresh the bundled snapshot from updated source files, run:
+To refresh the fallback snapshot from updated source files, maintainers may run:
 
 ```bash
 python3 scripts/template_taxonomy.py sync \

@@ -48,9 +48,9 @@ Later tools only need `template_dir`. Do not write `source-analysis.json`, do no
 
 ## Tool ownership
 
-`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Taxonomy lookup must go through `query_slide_template_taxonomy`. Source review and asset selection must go through `review_slide_template_source` and `select_slide_template_source_assets`. If a dedicated tool fails, retry that same tool. Do not emulate it.
+`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. Category and tag codes must come from `query_slide_template_taxonomy` by matching this template's audience, purpose, and visuals. Source review and asset selection must go through `review_slide_template_source` and `select_slide_template_source_assets`. If a dedicated tool fails, retry that same tool. Do not emulate it.
 
-The template is not complete when authoring finishes. Call `finalize_slide_template` with the returned `template_directory`, inspect `result.ok` and `result.content`, compare `previews/` with the source, and report completion only after finalization succeeds. A failed finalization is a failed template task, even when the source files exist.
+The template is not complete when authoring finishes. Call `finalize_slide_template` with the returned `template_directory`, inspect `result.ok` and `result.content`, and confirm `previews/thumbnail.png`, `previews/collage.png`, and one preview per indexed slide exist. Report completion only after finalization succeeds and those preview files are present. If any required step fails or is skipped, tell the user it is blocked: name the blocker and the remaining steps. Do not say the template is complete. HTML/CSS in the folder is not enough.
 
 ## Intake Checkpoint
 
@@ -90,9 +90,9 @@ The main path is three beats. Taxonomy, canvas, and asset policy live in the ref
 
 1. Inspect the source without modifying it. Note file type, approximate page count, and obvious asset risks. Read the matching workflow reference, then `references/scene-routing.md`, `references/template-taxonomy.md`, `references/template-json-spec.md`, and `references/quality-guidelines.md`.
 2. Run the Intake Checkpoint. Do not call `create_slide_template_project` until missing shape and asset questions are asked or safely defaulted.
-3. Query the bundled taxonomy through `query_slide_template_taxonomy`. Do not use `shell_exec`, `run_python_snippet`, or read `template-taxonomy.json` to guess codes. Select one exact active `category_code` and 4–10 exact `tag_codes`, then call the same tool with `action: "validate"`. Never invent taxonomy codes or add `featured` automatically.
+3. Inspect the source's audience, use case, visible style, palette, layouts, mood, and language. Query the live catalog through `query_slide_template_taxonomy`. From `result.data`, list only the groups this template needs, then pick one exact `category_code` and 4–10 exact `tag_codes` by meaning. Do not substring-search names, guess codes, or add `featured` automatically.
 4. Determine a backend-compatible semantic base ID: `SLIDE-` plus lowercase kebab-case words. `create_slide_template_project` appends a short six-character uppercase hexadecimal suffix to the backend `template_id`, but the local directory name contains no random suffix. Use the returned `created.data["template_directory"]` for every later call.
-5. Call `create_slide_template_project` with the validated category, tags, bilingual labels, and source canvas. Do not create the template directory manually.
+5. Call `create_slide_template_project` with the selected category, tags, bilingual labels, and source canvas. Do not create the template directory manually.
 6. If the source is a presentation with extractable assets, render pages with `document-converter` using `created.data["converter_output_dir"]` as `output_dir`. Do not create `document-converter-output/` in the workspace. Then:
    - `prepare_slide_template_source` with the page images and source OOXML. Pass `high-fidelity` after a page-by-page intake, otherwise `hybrid`. Read the reported background map; it names every measured background scheme and the pages that use it.
    - `review_slide_template_source` for every index in `recommended_review_indexes` (1–3 pages per call). That list already covers one page per background scheme, so skipping entries loses a whole light or dark section. Also include cover, dense, data, closing, and any mascot or brand-illustration pages.
@@ -101,7 +101,7 @@ The main path is three beats. Taxonomy, canvas, and asset policy live in the ref
 8. Author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files in `template_dir`, following the Source Fidelity Rules below. For reusable/hybrid templates, keep 8–15 useful slides and fuse repeated source pages. For high-fidelity, keep the source page count minus ads, watermarks, and copyright pages.
 9. Call `finalize_slide_template`. It still hard-blocks missing prepare (for visual-reconstruction), incomplete asset decisions, unused selected assets, converter residue, canvas/taxonomy errors, and missing previews. Unreviewed source pages become warnings, not a hard stop.
 10. Compare `previews/slides/` with the source. If `result.data["warnings"]` lists unreviewed pages, inspect those previews first. Fix and finalize again if needed.
-11. Report the project directory, inventory, selected/discarded assets, preview paths, warnings, and remaining limits. Never delete the user-provided source file or any final file listed by `template.json` or `template-assets.json`.
+11. If every Completion Gate item passed, report the project directory, inventory, selected/discarded assets, preview paths, warnings, and remaining limits. If any item failed or was skipped, use the Blocked Report instead. Never delete the user-provided source file or any final file listed by `template.json` or `template-assets.json`.
 
 Sanitize sensitive content and ask the user before keeping ambiguous logos, real people, QR codes, customer screenshots, private dashboards, or proprietary UI.
 
@@ -138,36 +138,25 @@ Call the tools through Code Mode:
 ```python
 from sdk.tool import tool
 
-catalog = tool.call("query_slide_template_taxonomy", {
-    "groups": [
-        "purpose_group",
-        "style_group",
-        "color_group",
-        "layout_group",
-        "mood_group",
-        "language_group"
-    ],
-    "queries": ["training", "navy", "dashboard"]
-})
+catalog = tool.call("query_slide_template_taxonomy")
 if not catalog.ok:
     raise SystemExit(catalog.content)
 print(catalog.content)
 
-checked = tool.call("query_slide_template_taxonomy", {
-    "action": "validate",
-    "category_code": "PPT-CATE-business-report",
-    "tag_codes": [
-        "purpose-quarterly-review",
-        "style-business",
-        "color-navy",
-        "layout-dashboard",
-        "mood-professional",
-        "language-english"
-    ]
-})
-if not checked.ok:
-    raise SystemExit(checked.content)
-print(checked.content)
+needed = {
+    "purpose_group",
+    "style_group",
+    "color_group",
+    "layout_group",
+    "mood_group",
+    "language_group",
+}
+for group in catalog.data["groups"]:
+    if group["code"] not in needed:
+        continue
+    print(f"\n{group['code']}\t{group['zh']}")
+    for tag in group["tags"]:
+        print(f"{tag['code']}\t{tag['zh']}")
 
 created = tool.call("create_slide_template_project", {
     "template_id": "SLIDE-navy-quarterly-review",
@@ -244,6 +233,8 @@ if not finalized.ok:
 print(finalized.content)
 ```
 
+If that call fails or `previews/` is missing, the task is blocked. Tell the user the blocker and remaining steps. Do not say the template is complete.
+
 `prepare_slide_template_source` inspects the source without modifying it. It never generates HTML. Read `prepared.data["canvas"]`, `prepared.data["recommended_review_indexes"]`, and `asset-01` style catalog ids. Do not read or write the hidden working directory.
 
 If a dedicated source tool fails, print `result.content`, fix the arguments, and retry the same tool. Do not copy converter images into the template directory and do not hand-write a replacement manifest.
@@ -252,14 +243,14 @@ If a dedicated source tool fails, print `result.content`, fix the arguments, and
 
 ## Tool Guidance
 
-- Call `query_slide_template_taxonomy` once to list needed groups and search several keywords together. A miss does not abort the other keywords. Empty lookup returns categories and groups only; pass `groups` to list exact tag codes. Then call the same tool with `action: "validate"` before `create_slide_template_project`.
+- Call `query_slide_template_taxonomy` once. Print `content` plus only the tag groups this template needs from `result.data`. Pick exact codes by the source's audience, purpose, and visuals. Do not substring-search names such as 封面 or AI. Then call `create_slide_template_project`.
 - Use the `document-converter` skill through `run_sdk_snippet` to render presentation pages. In this template-making workflow only, set `output_dir` to `created.data["converter_output_dir"]`. Leave other document-converter tasks on their normal workspace output.
 - Do not replace `review_slide_template_source` with hand-written `source-analysis.json` or ad-hoc `visual_understanding` against converter filenames.
 - Use `visual_understanding` for standalone images, screenshots, and generated `previews/slides/` files.
 - Call `visual_understanding_webpage` and `analysis_slide_webpage` only through `run_sdk_snippet` with `sdk.tool.call(...)`; they are not directly mounted on the slide agent.
 - Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML before finalization. Pass the declared canvas as `viewport_width` and `viewport_height`, with `device_scale_factor: 1`.
 - Use `analysis_slide_webpage` through that Code Mode path for declared-canvas overflow, clipping, scrollbar, and broken-image checks. The tool uses `max_width` and `max_height` as its Browser viewport.
-- After `finalize_slide_template`, use `visual_understanding` on the generated files under `previews/slides/`. These images are the authoritative visual evidence because they are the exact preview artifacts that will be published.
+- After `finalize_slide_template`, use `visual_understanding` on the generated files under `previews/slides/`. These images are the authoritative visual evidence because they are the exact preview artifacts that will be published. If finalize was skipped, failed, or `previews/` is missing, stop and use the Blocked Report. Do not say the template is complete.
 - Do not install Playwright or Chromium from the Agent. Template finalization uses the configured Super Magic Browser backend automatically.
 - Use `generate_images` only for neutral, non-sensitive visual assets when the source does not provide enough usable imagery.
 - Use `ask_user` for the Intake Checkpoint, later sensitive-asset confirms, intentional template updates, and an occupied user-provided target. Do not ask questions the user already answered.
@@ -320,17 +311,30 @@ print(result.content)
 
 ## Completion Gate
 
-Do not report completion until:
+Do not report completion until every item below is true. Authored HTML/CSS, a `template.json`, or a directory name is not completion.
 
-- `finalize_slide_template` returned `result.ok`.
+- `finalize_slide_template` was called and returned `result.ok`.
 - `template.json` validates against `references/template-json.schema.json`.
-- `category_code` and every `tag_codes` value exist in the bundled taxonomy, and `tag_codes` is non-empty.
+- `category_code` and every `tag_codes` value exist in the live taxonomy catalog, describe this template semantically, and `tag_codes` is non-empty.
 - When a source PPTX was supplied, every extracted source asset has a completed `reuse` or `discard` decision. Only selected assets that are actually referenced by final HTML/CSS may remain under `images/source-assets/`.
 - Every indexed slide exists, loads `../theme.css`, and resolves local assets.
 - Every indexed slide has exactly one `main.slide-container` root, and its `data-width`/`data-height` values match `template.json.source.canvas`.
 - No legacy conversion residue or forbidden output file remains.
-- `previews/` exists. Spot-check cover, dense-content, data/process, and closing pages against the source. If warnings list unreviewed source pages or unreviewed background variants, inspect those previews first.
+- `previews/` exists with `thumbnail.png`, `collage.png`, and one `previews/slides/` image per indexed slide. Spot-check cover, dense-content, data/process, and closing pages against the source. If warnings list unreviewed source pages or unreviewed background variants, inspect those previews first.
 - Every background scheme reported by `prepare_slide_template_source` appears in the finished template, each on the pages that correspond to the source. A deck whose previews are all one tone while the source mixed tones fails this gate.
 - `theme.css` defines a surface class per background scheme, and every slide root carries one.
 - Body text measures at least 1.8% of canvas height, and page margins match the reviewed source geometry rather than a default centered layout.
 - The template has a coherent design system and meaningful layout diversity, not only structurally valid files.
+
+## Blocked Report
+
+If a required tool fails, a required step is skipped, or a gate item is missing after retries, the task is blocked. Tell the user it is incomplete. Do not say the template is complete, ready, or finished.
+
+Write the report in the user's language and include:
+
+- `status: blocked`
+- The blocker: tool name, error from `result.content`, or the missing artifact
+- Remaining steps that were not executed
+- What already exists so the user can continue
+
+Example: `finalize_slide_template` was not called or failed, so `previews/` was never captured. Say that screenshots, thumbnail, and collage were not generated, and that finalization is still required. Do not present the authored slides as a finished template.

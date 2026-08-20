@@ -84,8 +84,8 @@
         "en_US": "Select slide template source assets"
     },
     "query_slide_template_taxonomy": {
-        "zh_CN": "查询模板分类标签",
-        "en_US": "Look up template categories and tags"
+        "zh_CN": "获取模板分类标签",
+        "en_US": "Fetch template categories and tags"
     },
     "review_slide_template_source": {
         "zh_CN": "回顾模板源页视觉",

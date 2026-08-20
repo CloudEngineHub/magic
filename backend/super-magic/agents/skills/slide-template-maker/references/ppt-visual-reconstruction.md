@@ -68,7 +68,7 @@ For reusable/`hybrid` templates, do not copy every page, do not keep only the fi
 
 ## 4. Author A Clean Template
 
-`create_slide_template_project` must already have created `<semantic-template-name>/` at the workspace root before conversion. Later tools only need `template_dir`. Do not use a converter draft as final source or add a `slide-templates/` prefix. After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files. Compare those previews with the source before reporting completion.
+`create_slide_template_project` must already have created `<semantic-template-name>/` at the workspace root before conversion. Later tools only need `template_dir`. Do not use a converter draft as final source or add a `slide-templates/` prefix. After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files. Compare those previews with the source before reporting completion. If finalization fails or `previews/` is missing, report the blocker and remaining steps instead of saying the template is complete.
 
 Author the files in this order:
 

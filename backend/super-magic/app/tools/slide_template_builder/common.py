@@ -18,6 +18,7 @@ from app.tools.slide_template_builder.models import (
     SLIDE_FILE_PATTERN,
     TemplateCanvas,
 )
+from app.tools.slide_template_builder import taxonomy_source
 from app.tools.slide_template_builder.taxonomy import active_category_codes, tag_records_by_code
 from app.utils.async_file_utils import (
     async_exists,
@@ -351,26 +352,30 @@ def validate_template_directory(template_dir: Path, metadata: dict[str, Any]) ->
         raise SlideTemplateBuilderError("Template directory name does not match its localized semantic name.")
 
 
-def validate_taxonomy_selection(category_code: Any, tag_codes: Any) -> tuple[str, list[str]]:
+def validate_taxonomy_selection(
+    category_code: Any,
+    tag_codes: Any,
+    taxonomy: dict[str, Any] | None = None,
+) -> tuple[str, list[str]]:
     category = str(category_code or "").strip()
-    if category not in active_category_codes():
+    if category not in active_category_codes(taxonomy):
         raise SlideTemplateBuilderError(
-            f"category_code is not an active bundled PPT category: {category or '<empty>'}. "
-            "Call query_slide_template_taxonomy to select an exact code."
+            f"category_code is not an active PPT category: {category or '<empty>'}. "
+            "Call query_slide_template_taxonomy and copy an exact code from result.data."
         )
     if not isinstance(tag_codes, list) or not tag_codes:
-        raise SlideTemplateBuilderError("tag_codes must contain at least one bundled tag code.")
+        raise SlideTemplateBuilderError("tag_codes must contain at least one active tag code.")
     normalized = [str(code).strip() for code in tag_codes]
     if any(not code for code in normalized):
         raise SlideTemplateBuilderError("tag_codes cannot contain empty values.")
     if len(normalized) != len(set(normalized)):
         raise SlideTemplateBuilderError("tag_codes cannot contain duplicates.")
-    records = tag_records_by_code()
+    records = tag_records_by_code(taxonomy)
     unknown = [code for code in normalized if code not in records]
     if unknown:
         raise SlideTemplateBuilderError(
-            f"tag_codes contain unknown bundled codes: {', '.join(unknown)}. "
-            "Call query_slide_template_taxonomy to select exact codes."
+            f"tag_codes contain unknown codes: {', '.join(unknown)}. "
+            "Call query_slide_template_taxonomy and copy exact codes from result.data."
         )
     return category, normalized
 
@@ -592,7 +597,10 @@ async def _validate_source_analysis(
     }
 
 
-async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
+async def validate_template_project(
+    template_dir: Path,
+    taxonomy: dict[str, Any] | None = None,
+) -> ValidatedTemplate:
     required_paths = [
         template_dir / "template.json",
         template_dir / "visual-spec.md",
@@ -608,8 +616,9 @@ async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
     validate_template_directory(template_dir, metadata)
     if metadata.get("schema_version") != "1.0":
         raise SlideTemplateBuilderError("schema_version must be 1.0.")
+    catalog = taxonomy if taxonomy is not None else (await taxonomy_source.resolve_taxonomy()).catalog
     category_code, _ = validate_taxonomy_selection(
-        metadata.get("category_code"), metadata.get("tag_codes")
+        metadata.get("category_code"), metadata.get("tag_codes"), catalog
     )
     if not re.fullmatch(BACKEND_CATEGORY_CODE_PATTERN, category_code):
         raise SlideTemplateBuilderError("category_code does not match the backend category code format.")

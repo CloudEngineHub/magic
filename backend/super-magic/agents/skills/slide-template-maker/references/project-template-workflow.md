@@ -35,7 +35,7 @@ Plan the extracted page inventory, then call `create_slide_template_project` to 
 - Preserve the generated `main.slide-container` canvas root on every extracted slide. Its `data-width` and `data-height` values must remain equal to `template.json.source.canvas`.
 - Use `source.kind: "derived"` and `source.method: "project-extract"`.
 - Set `source.canvas` to the source project's fixed canvas. Do not replace a square source with the default `1920x1080` canvas.
-- After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed.
+- After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed. If that call fails or `previews/` is missing, report the blocker instead of completion.
 
 ## 4. Sensitive Content
 
@@ -46,7 +46,7 @@ Ask before keeping any logo, real person, customer image, internal screenshot, p
 ## 5. Verification
 
 - Confirm the source project is unchanged.
-- Confirm the template contains the required source files plus the generated `previews/` and `template-assets.json` sidecars after finalization.
+- Confirm the template contains the required source files plus the generated `previews/` and `template-assets.json` sidecars after finalization. Missing preview screenshots mean the extraction is blocked, not complete.
 - Confirm the template directory contains no leftover `.template-work/`.
 - Confirm repeated pages were reduced to meaningful layouts.
 - Confirm all local asset references resolve.

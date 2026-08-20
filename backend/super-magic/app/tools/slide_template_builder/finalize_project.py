@@ -17,6 +17,7 @@ from app.tools.slide_template_builder.common import (
     resolve_workspace_template_dir,
     validate_template_project,
 )
+from app.tools.slide_template_builder import taxonomy_source
 from app.tools.slide_template_builder.preview import render_slide_previews, write_preview_images
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
@@ -60,7 +61,10 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
         preview_dir = template_dir / "previews"
         keep_alive_task = start_tool_keep_alive(tool_context)
         try:
-            validated = await validate_template_project(template_dir)
+            snapshot = await taxonomy_source.resolve_taxonomy(
+                taxonomy_source.access_context_from_tool(tool_context)
+            )
+            validated = await validate_template_project(template_dir, snapshot.catalog)
             if await async_exists(temp_preview_dir):
                 await async_rmtree(temp_preview_dir)
             await async_mkdir(temp_preview_dir / "slides", parents=True, exist_ok=False)
@@ -174,15 +178,23 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
                     f"Preview assets and source files are together under `{template_dir}`. "
                     f"Removed {len(removed_temporary_paths)} temporary work path(s). No ZIP was created."
                     f"{warning_note}{unreviewed_note} "
-                    "Compare `previews/slides/` with the source pages before reporting completion."
+                    "Compare `previews/slides/` with the source pages before reporting completion. "
+                    "If thumbnail, collage, or a page preview is missing, the template is blocked, not complete."
                 ),
                 data=data,
                 extra_info=data,
             )
         except SlideTemplateBuilderError as exc:
-            return ToolResult.error(str(exc))
+            return ToolResult.error(
+                f"{exc} Do not tell the user the template is complete. "
+                "Report this blocker and the remaining steps, including any missing previews."
+            )
         except Exception as exc:
-            return ToolResult.error(f"Failed to finalize slide template: {exc}")
+            return ToolResult.error(
+                f"Failed to finalize slide template: {exc} "
+                "Do not tell the user the template is complete. "
+                "Report this blocker and the remaining steps, including any missing previews."
+            )
         finally:
             stop_tool_keep_alive(keep_alive_task)
             if await async_exists(temp_preview_dir):

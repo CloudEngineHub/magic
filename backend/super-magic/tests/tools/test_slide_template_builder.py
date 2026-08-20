@@ -214,13 +214,13 @@ async def test_create_project_rejects_unknown_taxonomy_codes(tmp_path):
     tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
     assert not result.ok
-    assert "active bundled PPT category" in result.content
+    assert "active PPT category" in result.content
 
     params = _params()
     params.tag_codes = ["purpose-quarterly-review", "tag-does-not-exist"]
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
     assert not result.ok
-    assert "unknown bundled codes" in result.content
+    assert "unknown codes" in result.content
 
 
 @pytest.mark.asyncio
@@ -591,6 +591,19 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
     (template_dir / "images/source-assets/unused.png").write_bytes(b"unused")
     with pytest.raises(Exception, match="Unused files remain in images/source-assets/"):
         await validate_template_project(template_dir)
+
+
+@pytest.mark.asyncio
+async def test_finalize_failure_tells_agent_not_to_claim_completion(tmp_path):
+    finalize_tool = FinalizeSlideTemplate(base_dir=_workspace(tmp_path))
+    result = await finalize_tool.execute(
+        ToolContext(tool_name=finalize_tool.name, arguments={}),
+        FinalizeSlideTemplateParams(template_dir="SLIDE-missing"),
+    )
+
+    assert not result.ok
+    assert "Do not tell the user the template is complete" in result.content
+    assert "missing previews" in result.content.lower()
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Sync and query the bundled slide template category and tag taxonomy."""
+"""Rebuild the bundled slide template taxonomy snapshot.
+
+Agents must pick category and tag codes through query_slide_template_taxonomy
+by matching the actual template. Do not use this script to search or guess codes.
+"""
 
 from __future__ import annotations
 
@@ -19,13 +23,6 @@ def _read_json(path: Path) -> Any:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _load_taxonomy(path: Path) -> dict[str, Any]:
-    data = _read_json(path)
-    if not isinstance(data, dict):
-        raise ValueError("Taxonomy root must be an object.")
-    return data
 
 
 def _sync(categories_path: Path, tags_path: Path, output_path: Path) -> None:
@@ -80,93 +77,17 @@ def _sync(categories_path: Path, tags_path: Path, output_path: Path) -> None:
     )
 
 
-def _localized_name(item: dict[str, Any]) -> str:
-    names = item.get("name_i18n") if isinstance(item.get("name_i18n"), dict) else {}
-    return f"{names.get('zh_CN', '')} | {names.get('en_US', '')}".strip(" |")
-
-
-def _list_categories(data: dict[str, Any]) -> None:
-    for item in data.get("categories", []):
-        if item.get("status") == 1:
-            print(f"{item['code']}\t{_localized_name(item)}")
-
-
-def _list_groups(data: dict[str, Any]) -> None:
-    counts: dict[str, int] = {}
-    for tag in data.get("tags", []):
-        counts[tag["group_code"]] = counts.get(tag["group_code"], 0) + 1
-    for item in data.get("groups", []):
-        print(f"{item['code']}\t{_localized_name(item)}\t{counts.get(item['code'], 0)} tags")
-
-
-def _search_tags(data: dict[str, Any], query: str, group: str | None) -> None:
-    needle = query.casefold().strip()
-    matches = []
-    for item in data.get("tags", []):
-        if group and item.get("group_code") != group:
-            continue
-        haystack = " ".join((item.get("code", ""), _localized_name(item))).casefold()
-        if not needle or needle in haystack:
-            matches.append(item)
-    for item in matches:
-        print(f"{item['code']}\t{item['group_code']}\t{_localized_name(item)}")
-    if not matches:
-        raise SystemExit("No matching tags found.")
-
-
-def _validate(data: dict[str, Any], category: str, tags: list[str]) -> None:
-    category_codes = {item["code"] for item in data.get("categories", []) if item.get("status") == 1}
-    tag_codes = {item["code"] for item in data.get("tags", [])}
-    errors = []
-    if category not in category_codes:
-        errors.append(f"Unknown or inactive category: {category}")
-    if not tags:
-        errors.append("At least one tag code is required.")
-    duplicates = sorted({code for code in tags if tags.count(code) > 1})
-    if duplicates:
-        errors.append(f"Duplicate tag codes: {', '.join(duplicates)}")
-    unknown_tags = sorted(set(tags) - tag_codes)
-    if unknown_tags:
-        errors.append(f"Unknown tag codes: {', '.join(unknown_tags)}")
-    if errors:
-        raise SystemExit("\n".join(errors))
-    print("Taxonomy selection is valid.")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY)
     subparsers = parser.add_subparsers(dest="command", required=True)
-
     sync_parser = subparsers.add_parser("sync", help="Build the bundled taxonomy snapshot from source JSON files.")
     sync_parser.add_argument("--categories", type=Path, required=True)
     sync_parser.add_argument("--tags", type=Path, required=True)
     sync_parser.add_argument("--output", type=Path, default=DEFAULT_TAXONOMY)
-
-    subparsers.add_parser("categories", help="List active category codes.")
-    subparsers.add_parser("groups", help="List tag groups and counts.")
-
-    search_parser = subparsers.add_parser("search", help="Search tags by code or localized name.")
-    search_parser.add_argument("query", nargs="?", default="")
-    search_parser.add_argument("--group")
-
-    validate_parser = subparsers.add_parser("validate", help="Validate one category and tag selection.")
-    validate_parser.add_argument("--category", required=True)
-    validate_parser.add_argument("--tags", nargs="+", required=True)
-
     args = parser.parse_args()
     if args.command == "sync":
         _sync(args.categories, args.tags, args.output)
-        return
-    data = _load_taxonomy(args.taxonomy)
-    if args.command == "categories":
-        _list_categories(data)
-    elif args.command == "groups":
-        _list_groups(data)
-    elif args.command == "search":
-        _search_tags(data, args.query, args.group)
-    elif args.command == "validate":
-        _validate(data, args.category, args.tags)
 
 
 if __name__ == "__main__":
