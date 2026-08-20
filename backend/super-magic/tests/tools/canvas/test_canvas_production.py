@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.infrastructure.magic_service.client import MagicServiceClient
 from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.domain.content_fields import AudioContentFields, VideoContentFields, VideoEditContentFields
 from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasElement, ElementProperties
@@ -13,11 +14,50 @@ from app.tools.canvas.production.adapters import (
     FakeMediaProbePort,
     FakeVideoCompositionPort,
 )
+from app.tools.canvas.production.adapters.generic_video_point_estimate_port import GenericVideoPointEstimatePort
 from app.tools.canvas.production.contracts import ImageSearchTask, VideoCompositionCommand, VideoPointEstimateItem
+from app.tools.canvas.production.estimation.video_production_request_normalizer import VideoProductionRequestNormalizer
 from app.tools.canvas.production.ports import ImageSearchCandidate
 from app.tools.canvas.repository import CanvasRepository
+from app.tools.generate_video import GenerateVideo
 from app.utils.async_file_utils import async_mkdir, async_write_bytes
 from tests.tools.canvas.helpers import create_test_application
+
+
+@pytest.mark.asyncio
+async def test_generic_video_point_estimate_calls_magic_service_endpoint_directly(tmp_path, monkeypatch) -> None:
+    """积分预估直接调用 Magic Service，不经过生成工具的 execute_purely。"""
+    request = VideoProductionRequestNormalizer().normalize(
+        "mock-project",
+        "shot-1",
+        GenerationParameters(prompt="mock video", model_id="mock-model"),
+    )
+    calls: dict[str, object] = {}
+
+    async def build_payload(self, tool_context, params):
+        """返回测试用的视频预估请求体。"""
+        calls["params"] = params
+        return {"model_id": "mock-model", "prompt": "mock video"}
+
+    async def estimate_video_points(self, payload, request_id=""):
+        """返回测试用的积分结果。"""
+        calls["payload"] = payload
+        calls["request_id"] = request_id
+        return {"points": 12}
+
+    async def execute_purely(*args, **kwargs):
+        """如果错误调用生成工具，测试应立即失败。"""
+        raise AssertionError("point estimation must not call execute_purely")
+
+    monkeypatch.setattr(GenerateVideo, "_build_payload", build_payload)
+    monkeypatch.setattr(GenerateVideo, "execute_purely", execute_purely)
+    monkeypatch.setattr(MagicServiceClient, "estimate_video_points", estimate_video_points)
+
+    points = await GenericVideoPointEstimatePort(tmp_path).estimate_points(request, None)
+
+    assert points == 12
+    assert calls["payload"] == {"model_id": "mock-model", "prompt": "mock video"}
+    assert isinstance(calls["request_id"], str) and calls["request_id"]
 
 
 @pytest.mark.asyncio
