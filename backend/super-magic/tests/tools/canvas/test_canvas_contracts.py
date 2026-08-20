@@ -90,6 +90,31 @@ def test_each_canvas_tool_owns_feedback_hooks() -> None:
         assert hooks <= tool_class.__dict__.keys(), tool_class.__name__
 
 
+def test_canvas_tool_schemas_reject_unknown_top_level_parameters() -> None:
+    """全部 Canvas 工具向模型暴露的 Schema 应与 extra=forbid 运行时策略一致。"""
+    tools = [
+        InitializeCanvas,
+        QueryCanvasOverview,
+        QueryCanvasElementDetails,
+        AddCanvasElements,
+        FrameCanvasElements,
+        AddCanvasContents,
+        RetryCanvasContentGeneration,
+        SelectCanvasMainContent,
+        LayoutCanvasElements,
+        AddCanvasConnections,
+        WaitCanvasGeneration,
+        EstimateCanvasContentPoints,
+        ComposeCanvasVideo,
+        SearchCanvasImagePrompts,
+        SearchCanvasImages,
+    ]
+
+    for tool_class in tools:
+        parameters = tool_class().to_param()["function"]["parameters"]
+        assert parameters["additionalProperties"] is False, tool_class.__name__
+
+
 def test_canvas_tools_do_not_conflict_with_legacy_tool_names() -> None:
     """Canvas 工具在并行迁移期间必须避免覆盖旧 Design 工具。"""
     canvas_names = {

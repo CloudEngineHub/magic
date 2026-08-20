@@ -92,6 +92,7 @@ def test_prompt_tool_schema_keeps_default_fields_optional() -> None:
     parameters = SearchCanvasImagePrompts().to_param()["function"]["parameters"]
 
     assert parameters.get("required") == []
+    assert parameters["additionalProperties"] is False
     assert parameters["properties"]["limit"]["minimum"] == 1
     assert parameters["properties"]["limit"]["maximum"] == 20
     assert parameters["properties"]["offset"]["minimum"] == 0
