@@ -20,10 +20,14 @@ from app.tools.slide_template_builder import (
 )
 from app.tools.slide_template_builder.common import (
     WORK_DIR_NAME,
+    background_variants,
     cleanup_template_intermediates,
+    describe_background_variants,
     evict_stale_template_working_directories,
     generate_semantic_directory_name,
+    recommended_review_indexes,
     resolve_template_working_directory,
+    unreviewed_background_variants,
     validate_template_id,
 )
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
@@ -39,6 +43,11 @@ from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplat
 from app.tools.slide_template_builder.source_asset_selection import (
     SelectSlideTemplateSourceAssetsParams,
     SourceAssetDecisionParams,
+)
+from app.tools.slide_template_builder.source_images import probe_page_background
+from app.tools.slide_template_builder.source_review import (
+    parse_source_review_payload,
+    render_page_digest,
 )
 from app.utils.async_file_utils import async_read_json, async_scandir, async_write_json, async_write_text
 
@@ -266,6 +275,77 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     assert result.data["extracted_asset_count"] == 2
     assert len(result.data["asset_analysis_batches"]) == 1
 
+def test_background_probe_reads_flat_and_image_backed_pages():
+    flat = probe_page_background(Image.new("RGB", (1920, 1080), "#102a43"))
+    assert flat.color == "#102a43"
+    assert flat.tone == "dark"
+    assert flat.uniform
+
+    light = probe_page_background(Image.new("RGB", (1920, 1080), "#f5f7fa"))
+    assert light.tone == "light"
+    assert light.uniform
+
+    row = Image.new("RGB", (1920, 1))
+    for x in range(1920):
+        ratio = x / 1919
+        row.putpixel((x, 0), (
+            round(0x10 + (0xF7 - 0x10) * ratio),
+            round(0x2A + (0xF8 - 0x2A) * ratio),
+            round(0x43 + (0xFA - 0x43) * ratio),
+        ))
+    assert not probe_page_background(row.resize((1920, 1080))).uniform
+
+
+def test_background_variants_group_pages_and_drive_review_sampling():
+    dark = {"color": "#102a43", "tone": "dark", "uniform": True}
+    light = {"color": "#f7f8fa", "tone": "light", "uniform": True}
+    slides = [
+        {"source_index": index, "background_probe": dark if index == 2 else light}
+        for index in range(1, 13)
+    ]
+    variants = background_variants(slides)
+    assert [variant["pages"] for variant in variants] == [[1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], [2]]
+    assert describe_background_variants(variants) == (
+        "light #f7f8fa (flat) on page 1, 3-12; dark #102a43 (flat) on page 2"
+    )
+
+    # 默认抽样漏掉了唯一的深色页，补充变体代表页后它必须进入复核范围
+    assert recommended_review_indexes(12) == [1, 4, 8, 12]
+    assert recommended_review_indexes(12, variants) == [1, 2, 4, 8, 12]
+    assert unreviewed_background_variants(slides) == variants
+
+
+def test_review_digest_exposes_measured_background_and_geometry():
+    payload = parse_source_review_payload(
+        json.dumps({
+            "summary": "Light agenda page on a 6% left axis.",
+            "background": {"tone": "dark", "base_color": "#000000", "text_color": "#1f2933"},
+            "palette": [{"role": "accent", "hex": "#e6b566", "usage": "step numbers"}],
+            "typography": [{"role": "page-title", "size_pct_of_height": 6.5, "weight": 700}],
+            "composition": {
+                "margin_pct": {"top": 8, "right": 6, "bottom": 8, "left": 6},
+                "columns": 2,
+                "title_block": {"x_pct": 6, "y_pct": 10, "width_pct": 55, "align": "left"},
+                "density": "medium",
+            },
+            "must_preserve": ["Gold hairline under the title"],
+        }),
+        {"color": "#f7f8fa", "tone": "light", "luminance": 0.9, "uniform": True},
+    )
+
+    # 测量值覆盖模型猜测，避免浅色页被写成深色
+    assert payload["background"]["base_color"] == "#f7f8fa"
+    assert payload["background"]["tone"] == "light"
+
+    digest = render_page_digest(4, payload)
+    assert "light #f7f8fa" in digest
+    assert "Body text #1f2933" in digest
+    assert "margins T8% R6% B8% L6%" in digest
+    assert "title block x6% y10% w55% left" in digest
+    assert "page-title 6.5% of height weight 700" in digest
+    assert "accent #e6b566 (step numbers)" in digest
+
+
 @pytest.mark.asyncio
 async def test_visual_reconstruction_requires_completed_source_analysis(tmp_path):
     create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
@@ -397,6 +477,17 @@ async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
         "source_slide_count": 1,
         "reviewed_slide_count": 1,
         "unreviewed_source_indexes": [],
+        "background_variants": [
+            {
+                "key": "dark:flat:1-2-3",
+                "color": "#102a43",
+                "tone": "dark",
+                "uniform": True,
+                "pages": [1],
+            }
+        ],
+        "background_map": "dark #102a43 (flat) on page 1",
+        "unreviewed_background_variants": [],
         "must_preserve_count": 2,
         "visual_element_count": 1,
         "pptx_structure_extracted": False,

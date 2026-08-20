@@ -39,20 +39,126 @@ SOURCE_ANALYSIS_FILE = "source-analysis.json"
 RECONSTRUCTION_MODES = {"high-fidelity", "template-abstraction", "hybrid"}
 TEMPLATE_WORK_MAX_AGE_SECONDS = 3 * 24 * 60 * 60
 TEMPLATE_WORK_MAX_ENTRIES = 16
+# 底色分组容差：同一设计里的同类底色允许存在渲染噪声
+BACKGROUND_VARIANT_STEP = 24
+REVIEW_INDEX_LIMIT = 12
 
 
 def public_asset_id(index: int) -> str:
     return f"asset-{index:02d}"
 
 
-def recommended_review_indexes(slide_count: int) -> list[int]:
+def _background_variant_key(probe: dict[str, Any]) -> str | None:
+    color = str(probe.get("color") or "").lower()
+    if not re.fullmatch(r"#[0-9a-f]{6}", color):
+        return None
+    channels = [int(color[position : position + 2], 16) for position in (1, 3, 5)]
+    bucket = "-".join(str(round(channel / BACKGROUND_VARIANT_STEP)) for channel in channels)
+    tone = str(probe.get("tone") or "unknown")
+    surface = "flat" if probe.get("uniform") else "textured"
+    return f"{tone}:{surface}:{bucket}"
+
+
+def background_variants(slides: list[Any]) -> list[dict[str, Any]]:
+    """Group source pages by measured background so each one can be reviewed and rebuilt."""
+    groups: dict[str, dict[str, Any]] = {}
+    for position, slide in enumerate(slides, 1):
+        if not isinstance(slide, dict):
+            continue
+        probe = slide.get("background_probe")
+        if not isinstance(probe, dict):
+            continue
+        key = _background_variant_key(probe)
+        if key is None:
+            continue
+        source_index = slide.get("source_index")
+        page = source_index if isinstance(source_index, int) and source_index > 0 else position
+        variant = groups.get(key)
+        if variant is None:
+            groups[key] = {
+                "key": key,
+                "color": str(probe.get("color") or ""),
+                "tone": str(probe.get("tone") or "unknown"),
+                "uniform": bool(probe.get("uniform")),
+                "pages": [page],
+            }
+            continue
+        if page not in variant["pages"]:
+            variant["pages"].append(page)
+    variants = list(groups.values())
+    for variant in variants:
+        variant["pages"].sort()
+    variants.sort(key=lambda item: (-len(item["pages"]), item["pages"][0]))
+    return variants
+
+
+def format_page_ranges(pages: list[int]) -> str:
+    ordered = sorted({page for page in pages if isinstance(page, int) and page > 0})
+    if not ordered:
+        return ""
+    spans: list[tuple[int, int]] = []
+    start = previous = ordered[0]
+    for page in ordered[1:]:
+        if page == previous + 1:
+            previous = page
+            continue
+        spans.append((start, previous))
+        start = previous = page
+    spans.append((start, previous))
+    return ", ".join(
+        str(first) if first == last else f"{first}-{last}"
+        for first, last in spans
+    )
+
+
+def describe_background_variants(variants: list[dict[str, Any]]) -> str:
+    """Render the background map as one line the model can act on directly."""
+    parts = []
+    for variant in variants:
+        surface = "flat" if variant.get("uniform") else "textured or image-backed"
+        parts.append(
+            f"{variant.get('tone', 'unknown')} {variant.get('color', '')} ({surface}) "
+            f"on page {format_page_ranges(variant.get('pages') or [])}"
+        )
+    return "; ".join(parts)
+
+
+def recommended_review_indexes(
+    slide_count: int,
+    variants: list[dict[str, Any]] | None = None,
+) -> list[int]:
+    """Sample pages for deep review, covering every measured background variant."""
     if slide_count <= 0:
         return []
     if slide_count <= 4:
         return list(range(1, slide_count + 1))
     indexes = {1, slide_count // 3, (2 * slide_count) // 3, slide_count}
     indexes.discard(0)
+    for variant in variants or []:
+        if len(indexes) >= REVIEW_INDEX_LIMIT:
+            break
+        pages = [page for page in variant.get("pages") or [] if isinstance(page, int) and 0 < page <= slide_count]
+        if pages and not indexes.intersection(pages):
+            indexes.add(pages[0])
     return sorted(indexes)
+
+
+def unreviewed_background_variants(slides: list[Any]) -> list[dict[str, Any]]:
+    """Background variants whose pages were all skipped during deep review."""
+    reviewed = set()
+    for position, slide in enumerate(slides, 1):
+        if not isinstance(slide, dict):
+            continue
+        visual = slide.get("visual_analysis")
+        if not isinstance(visual, dict) or visual.get("status") != "complete":
+            continue
+        source_index = slide.get("source_index")
+        reviewed.add(source_index if isinstance(source_index, int) and source_index > 0 else position)
+    return [
+        variant
+        for variant in background_variants(slides)
+        if not reviewed.intersection(variant["pages"])
+    ]
 
 
 def unreviewed_source_indexes(slides: list[Any]) -> list[int]:
@@ -458,12 +564,23 @@ async def _validate_source_analysis(
             + ", ".join(str(item) for item in unreviewed)
             + ". Call review_slide_template_source with those source_indexes."
         )
+    variants = background_variants(analysis_slides)
+    unreviewed_variants = unreviewed_background_variants(analysis_slides)
+    if unreviewed_variants:
+        warnings.append(
+            "These source background variants were never reviewed: "
+            + describe_background_variants(unreviewed_variants)
+            + ". Their light/dark treatment is likely missing from the template."
+        )
     return {
         "completed": True,
         "reconstruction_mode": mode,
         "source_slide_count": len(analysis_slides),
         "reviewed_slide_count": len(analysis_slides) - len(unreviewed),
         "unreviewed_source_indexes": unreviewed,
+        "background_variants": variants,
+        "background_map": describe_background_variants(variants),
+        "unreviewed_background_variants": [variant["key"] for variant in unreviewed_variants],
         "must_preserve_count": must_preserve_count,
         "visual_element_count": visual_element_count,
         "pptx_structure_extracted": bool(capture.get("pptx_structure")),

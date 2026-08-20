@@ -112,8 +112,23 @@ async def test_review_source_writes_official_visual_analysis(tmp_path):
     assert any(path.endswith("full/slide-001.png") for path in sent_images)
     assert any("crops/slide-001" in path for path in sent_images)
 
+    # 测量到的底色要作为事实注入提问，并在模型漏答时补位到回传内容里
+    assert "#102a43" in inspect.await_args.args[1]
+    assert "Background: dark #102a43" in result.content
+    assert result.data["page_backgrounds"] == [
+        {
+            "source_index": 1,
+            "base_color": "#102a43",
+            "measured_color": "#102a43",
+            "tone": "dark",
+            "measured_luminance": 0.0217,
+            "treatment": "flat",
+        }
+    ]
+
     manifest = await async_read_json(Path(prepared.data["source_analysis"]))
     visual = manifest["slides"][0]["visual_analysis"]
     assert visual["status"] == "complete"
     assert visual["must_preserve"] == ["Navy canvas", "Left title"]
+    assert visual["background"]["base_color"] == "#102a43"
     assert result.data["unreviewed_source_indexes"] == []

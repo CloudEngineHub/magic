@@ -20,6 +20,8 @@ from app.tools.slide_template_builder.common import (
     ANALYSIS_DIR_NAME,
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
+    background_variants,
+    describe_background_variants,
     ensure_template_working_directory,
     public_asset_id,
     recommended_review_indexes,
@@ -241,6 +243,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     "source_image": page_path.name,
                     "full_image": full_relative,
                     "source_size": {"width": artifacts.width, "height": artifacts.height},
+                    "background_probe": artifacts.background.as_dict(),
                     "detail_crops": crop_records,
                     "visual_analysis": {
                         "status": "pending",
@@ -334,9 +337,12 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 warnings.append(
                     f"Rendered page count ({len(slide_records)}) differs from PPTX slide count ({structure_slide_count})."
                 )
+            page_backgrounds = background_variants(slide_records)
+            background_map = describe_background_variants(page_backgrounds)
             manifest = {
                 "schema_version": "1.0",
                 "reconstruction_mode": params.reconstruction_mode,
+                "background_variants": page_backgrounds,
                 "source_presentation": Path(params.source_presentation).name if params.source_presentation else "",
                 "capture": {
                     "contact_sheet": f"{ANALYSIS_DIR_NAME}/contact-sheet.png",
@@ -352,7 +358,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             }
             await async_write_json(analysis_file, manifest, ensure_ascii=False, indent=2)
 
-            review_indexes = recommended_review_indexes(len(slide_records))
+            review_indexes = recommended_review_indexes(len(slide_records), page_backgrounds)
             public_ids = [str(item.get("id") or "") for item in asset_catalog if item.get("id")]
             data = {
                 "template_directory": str(template_dir),
@@ -363,6 +369,11 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "reconstruction_mode": params.reconstruction_mode,
                 "canvas": detected_canvas.model_dump(),
                 "slide_count": len(slide_records),
+                "background_variants": page_backgrounds,
+                "page_backgrounds": [
+                    {"source_index": record["source_index"], **record["background_probe"]}
+                    for record in slide_records
+                ],
                 "detail_crop_count": len(slide_records) * params.crop_columns * params.crop_rows,
                 "extracted_asset_count": extracted_asset_count,
                 "asset_catalog": asset_catalog,
@@ -375,9 +386,22 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "warnings": warnings,
             }
             catalog_note = f" Catalog ids: {', '.join(public_ids)}. " if public_ids else ""
+            background_note = (
+                f"Measured page backgrounds: {background_map}. "
+                "Rebuild every page on the background of the source page it derives from, and switch "
+                "text and border colors with it. Never flatten the deck to a single background. "
+                if background_map
+                else ""
+            )
+            if len(page_backgrounds) > 1:
+                background_note += (
+                    f"The source mixes {len(page_backgrounds)} background schemes, so theme.css needs one "
+                    "surface class per scheme with its own foreground colors instead of a single body background. "
+                )
             review_note = (
                 f"Recommended review pages: {', '.join(str(index) for index in review_indexes)}. "
-                "Call review_slide_template_source with 1-3 of those source_indexes per call. "
+                "That list already covers every measured background scheme; review all of them so no scheme "
+                "is reconstructed from guesswork. Call review_slide_template_source with 1-3 source_indexes per call. "
             )
             select_note = (
                 "Then call select_slide_template_source_assets with those catalog ids, not converter filenames. "
@@ -390,6 +414,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     f"Canvas: {detected_canvas.width}x{detected_canvas.height}. "
                     f"Extracted {extracted_asset_count} source asset candidate(s)."
                     + catalog_note
+                    + background_note
                     + review_note
                     + select_note
                     + (f"Warnings: {' '.join(warnings)} " if warnings else "")
@@ -444,6 +469,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "",
                 f"- Mode: `{data.get('reconstruction_mode', '')}`",
                 f"- Source pages: {data.get('slide_count', 0)}",
+                f"- Background schemes: {len(data.get('background_variants', []))}",
                 f"- Detail crops: {data.get('detail_crop_count', 0)}",
                 f"- Extracted PPTX assets: {data.get('extracted_asset_count', 0)}",
                 f"- Source assets pending review: {data.get('extracted_asset_count', 0)}",

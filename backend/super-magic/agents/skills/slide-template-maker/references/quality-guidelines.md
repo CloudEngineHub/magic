@@ -13,6 +13,35 @@ Passing schema validation is necessary but not sufficient. A finished template m
 7. Normal content pages intentionally use the declared source canvas. Accidental empty areas caused by changing the source ratio, tiny type, and scattered cards are failures.
 8. Default content is realistic and editable. Do not use lorem ipsum, fake contact details, fake URLs, or gray placeholders.
 
+## Source Fidelity Bar
+
+Applies to every template derived from a presentation, image, screenshot, or HTML source. Structural validity does not imply the template resembles what the user gave you.
+
+1. Each page carries the background tone of the source page it derives from, and the deck reproduces the source's light and dark alternation instead of one flat tone.
+2. Every background scheme in the background map exists in the finished template, and no page uses a tone the source never used in that position.
+3. `theme.css` defines a surface class per scheme with paired foreground, muted-text, border, and accent values. Every slide root carries one.
+4. Text contrast holds on each surface. Nothing relies on a default color that only works on one tone.
+5. Margins, alignment axis, column counts, and block proportions follow the measured composition rather than a centered default.
+6. The type scale keeps the source's ratios, with body text at or above 1.8% of canvas height.
+7. Accent color, corner radius, border weight, shadow depth, and the source's signature motifs survive, or their removal is recorded in `visual-spec.md`.
+
+## Common Failure Modes
+
+Check for these directly. Each one passes schema validation and still produces a template the user will reject.
+
+| Failure | What it looks like | Prevention |
+| --- | --- | --- |
+| Flattened tone | The whole template is dark because the sampled pages were dark | Read the background map; review one page per scheme |
+| Single hard-coded background | `body` or `.slide-container` sets one background color | Surface classes with paired foreground tokens |
+| Invisible text | Light-page text kept its dark color on a dark surface | Read colors from the active surface only |
+| Recentered layout | Everything centered while the source used one left axis | Apply the measured alignment axis and margins |
+| Generic card grid | Every page becomes equal cards regardless of the source | Keep measured column counts and block proportions |
+| Browser-default type | Text sized for a web page, unreadable at presentation scale | Derive px from percentage of canvas height |
+| Flattened type scale | Only one or two sizes across the deck | Keep a role per reported typography entry |
+| Lost motif | The source's rule lines, mascot, or texture silently disappear | Carry `must_preserve` items into the pages that need them |
+| Ratio drift | A square or 4:3 source rebuilt at 16:9 with dead space | Keep `source.canvas` and its aspect ratio |
+| Unreviewed sections | Pages 12-20 rebuilt from imagination | Clear every warning about unreviewed pages and variants |
+
 ## Scene Page Inventory
 
 Use these as starting points for reusable/`hybrid` templates, then adapt to the source. High-fidelity templates follow the source page inventory minus junk pages.
@@ -48,6 +77,7 @@ Confirm:
 - `category_code` is an active exact taxonomy code, `tag_codes` is non-empty and unique, and `template-assets.json.backend_fields` carries the same values.
 - Every slide index points to an existing file and every slide loads `../theme.css`.
 - Each slide has at least three useful slot hints and no remote or absolute asset reference.
+- Every slide root carries a surface class, and `theme.css` declares one class per background scheme in the background map.
 - No forbidden metadata or legacy conversion residue remains.
 - The temporary working directory, leftover `.template-work/`, reference renders, extracted candidates, contact sheets, downloaded source copies, and QA scratch files are absent from the completed template.
 
@@ -66,8 +96,13 @@ Visually inspect at least:
 - Data, process, or comparison page.
 - Image-led page.
 - Closing page.
+- One page from every background scheme in the background map.
 
 Review hierarchy, readability, composition, canvas usage, image quality, and layout repetition. If a sampled page fails, improve it and re-run the relevant checks.
+
+For a source-derived template, pass two images in the same `visual_understanding` call: the generated preview and the rendered source page it derives from. Ask for a mismatch list covering background color and tone, margins, alignment axis, title placement, type scale, and accent color. A single-image review reliably misses tone and geometry drift, because a page can look internally consistent while no longer matching its source.
+
+Before reporting completion, check the tone sequence directly. Read the background tone of the generated previews in order and compare that sequence with the background map. If the source alternated tones and the previews do not, the template failed regardless of what the per-page reviews said.
 
 ## Completion Report
 
@@ -84,6 +119,7 @@ label.zh_CN:
 slide_count:
 routing_reason:
 visual_reconstruction_summary:
+background_schemes:
 slide_inventory:
 removed_or_replaced_sensitive_assets:
 validation:

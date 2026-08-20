@@ -25,24 +25,66 @@ from app.tools.slide_template_builder.common import (
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_is_file, async_read_json, async_write_json
 
-SOURCE_REVIEW_QUERY = """Analyze this source slide for HTML/CSS template reconstruction.
+SOURCE_REVIEW_QUERY_TEMPLATE = """Analyze this source slide so it can be rebuilt as fixed-canvas HTML and CSS.
 The first image is the full page. Remaining images are representative detail crops.
+{measured_note}
+Report geometry as percentages of page width or page height, never in pixels, so the values survive
+a canvas resize. Report every color as a hex value read from the image, never as a color name.
 Return JSON only with this shape:
-{
-  "summary": "one paragraph of the page visual grammar",
-  "must_preserve": ["concrete detail 1"],
-  "visual_elements": [{"role": "...", "description": "..."}],
-  "style_tokens": {"accent": "#...", "corner_radius_px": 0},
-  "background": {},
-  "palette": [],
-  "typography": [],
-  "composition": {},
+{{
+  "summary": "one paragraph describing this page's visual grammar",
+  "background": {{
+    "tone": "dark or light",
+    "base_color": "#rrggbb",
+    "treatment": "flat, gradient, image, pattern, or split",
+    "detail": "how the background is built, including gradient direction, split ratio, or overlay",
+    "text_color": "#rrggbb for the main body text sitting on this background"
+  }},
+  "palette": [{{"role": "accent", "hex": "#rrggbb", "usage": "where it appears on this page"}}],
+  "typography": [
+    {{"role": "page-title", "size_pct_of_height": 6.5, "weight": 700, "case": "none", "color": "#rrggbb"}}
+  ],
+  "composition": {{
+    "margin_pct": {{"top": 8, "right": 6, "bottom": 8, "left": 6}},
+    "columns": 2,
+    "title_block": {{"x_pct": 6, "y_pct": 10, "width_pct": 55, "align": "left"}},
+    "content_blocks": [
+      {{"role": "kpi-row", "x_pct": 6, "y_pct": 40, "width_pct": 88, "height_pct": 22}}
+    ],
+    "alignment": "the shared alignment axis, for example all blocks start at x 6%",
+    "density": "low, medium, or high"
+  }},
+  "visual_elements": [{{"role": "...", "description": "..."}}],
+  "style_tokens": {{"accent": "#rrggbb", "corner_radius_px": 0, "border": "...", "shadow": "..."}},
   "image_details": [],
+  "must_preserve": ["concrete detail that would change the style if lost"],
   "uncertainties": []
-}
-Focus on layout anchors, palette, typography, motifs or mascots, and details that would change the style if lost.
+}}
+Measure the real margins and block positions instead of assuming a centered or evenly split layout.
+State the background tone explicitly even when it matches the previous page.
 """
+SOURCE_REVIEW_MEASURED_NOTE = (
+    "The page background was already measured programmatically: {color} ({tone}, {surface}, "
+    "relative luminance {luminance}). Treat that as ground truth for base_color and tone, and "
+    "describe how the background is constructed on top of it."
+)
 JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
+PALETTE_DIGEST_LIMIT = 6
+TYPOGRAPHY_DIGEST_LIMIT = 5
+CONTENT_BLOCK_DIGEST_LIMIT = 5
+MUST_PRESERVE_DIGEST_LIMIT = 6
+
+
+def build_source_review_query(probe: dict[str, Any] | None) -> str:
+    measured_note = ""
+    if isinstance(probe, dict) and probe.get("color"):
+        measured_note = SOURCE_REVIEW_MEASURED_NOTE.format(
+            color=probe.get("color"),
+            tone=probe.get("tone") or "unknown tone",
+            surface="flat fill" if probe.get("uniform") else "textured or image-backed",
+            luminance=probe.get("luminance"),
+        )
+    return SOURCE_REVIEW_QUERY_TEMPLATE.format(measured_note=measured_note)
 
 
 class ReviewSlideTemplateSourceParams(BaseToolParams):
@@ -81,7 +123,7 @@ Template directory previously prepared by prepare_slide_template_source.""",
         return unique
 
 
-def parse_source_review_payload(raw: str) -> dict[str, Any]:
+def parse_source_review_payload(raw: str, probe: dict[str, Any] | None = None) -> dict[str, Any]:
     text = (raw or "").strip()
     candidates: list[str] = []
     fence = JSON_FENCE_RE.search(text)
@@ -97,11 +139,32 @@ def parse_source_review_payload(raw: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             continue
         if isinstance(payload, dict):
-            return _normalize_review_payload(payload, text)
-    return _normalize_review_payload({}, text)
+            return _normalize_review_payload(payload, text, probe)
+    return _normalize_review_payload({}, text, probe)
 
 
-def _normalize_review_payload(payload: dict[str, Any], raw: str) -> dict[str, Any]:
+def _merge_measured_background(background: dict[str, Any], probe: dict[str, Any] | None) -> dict[str, Any]:
+    """Measured values win over model guesses, so the per-page light/dark rhythm survives."""
+    merged = dict(background)
+    if not isinstance(probe, dict):
+        return merged
+    if probe.get("color"):
+        merged["base_color"] = probe["color"]
+        merged["measured_color"] = probe["color"]
+    if probe.get("tone"):
+        merged["tone"] = probe["tone"]
+    if probe.get("luminance") is not None:
+        merged["measured_luminance"] = probe["luminance"]
+    if not merged.get("treatment"):
+        merged["treatment"] = "flat" if probe.get("uniform") else "textured"
+    return merged
+
+
+def _normalize_review_payload(
+    payload: dict[str, Any],
+    raw: str,
+    probe: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     summary = str(payload.get("summary") or "").strip() or raw.strip() or "Visual review recorded."
     must_preserve = payload.get("must_preserve")
     if not isinstance(must_preserve, list) or not must_preserve:
@@ -112,18 +175,129 @@ def _normalize_review_payload(payload: dict[str, Any], raw: str) -> dict[str, An
     style_tokens = payload.get("style_tokens")
     if not isinstance(style_tokens, dict) or not style_tokens:
         style_tokens = {"notes": "unparsed"}
+    background = payload.get("background") if isinstance(payload.get("background"), dict) else {}
     return {
         "summary": summary,
         "must_preserve": [str(item).strip() for item in must_preserve if str(item).strip()],
         "visual_elements": visual_elements,
         "style_tokens": style_tokens,
-        "background": payload.get("background") if isinstance(payload.get("background"), dict) else {},
+        "background": _merge_measured_background(background, probe),
         "palette": payload.get("palette") if isinstance(payload.get("palette"), list) else [],
         "typography": payload.get("typography") if isinstance(payload.get("typography"), list) else [],
         "composition": payload.get("composition") if isinstance(payload.get("composition"), dict) else {},
         "image_details": payload.get("image_details") if isinstance(payload.get("image_details"), list) else [],
         "uncertainties": payload.get("uncertainties") if isinstance(payload.get("uncertainties"), list) else [],
     }
+
+
+def _percent(value: Any) -> str | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return f"{value:g}%"
+
+
+def _describe_background(background: dict[str, Any]) -> str:
+    tone = str(background.get("tone") or "unknown tone")
+    color = str(background.get("base_color") or "unknown color")
+    treatment = str(background.get("treatment") or "unspecified treatment")
+    detail = str(background.get("detail") or "").strip()
+    text_color = str(background.get("text_color") or "").strip()
+    line = f"{tone} {color}, {treatment}"
+    if detail:
+        line += f" ({detail})"
+    if text_color:
+        line += f". Body text {text_color}"
+    return line
+
+
+def _describe_palette(palette: list[Any]) -> str:
+    entries = []
+    for item in palette[:PALETTE_DIGEST_LIMIT]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "color")
+        hex_value = str(item.get("hex") or "?")
+        usage = str(item.get("usage") or "").strip()
+        entries.append(f"{role} {hex_value}" + (f" ({usage})" if usage else ""))
+    return "; ".join(entries)
+
+
+def _describe_typography(typography: list[Any]) -> str:
+    entries = []
+    for item in typography[:TYPOGRAPHY_DIGEST_LIMIT]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "text")
+        size = _percent(item.get("size_pct_of_height"))
+        weight = item.get("weight")
+        parts = [role]
+        if size:
+            parts.append(f"{size} of height")
+        if isinstance(weight, (int, float)) and not isinstance(weight, bool):
+            parts.append(f"weight {weight:g}")
+        entries.append(" ".join(parts))
+    return "; ".join(entries)
+
+
+def _describe_composition(composition: dict[str, Any]) -> str:
+    parts = []
+    margin = composition.get("margin_pct")
+    if isinstance(margin, dict):
+        sides = [
+            f"{label}{value}"
+            for label, key in (("T", "top"), ("R", "right"), ("B", "bottom"), ("L", "left"))
+            if (value := _percent(margin.get(key)))
+        ]
+        if sides:
+            parts.append("margins " + " ".join(sides))
+    columns = composition.get("columns")
+    if isinstance(columns, (int, float)) and not isinstance(columns, bool):
+        parts.append(f"{columns:g} column(s)")
+    title_block = composition.get("title_block")
+    if isinstance(title_block, dict):
+        coordinates = [
+            f"{label}{value}"
+            for label, key in (("x", "x_pct"), ("y", "y_pct"), ("w", "width_pct"))
+            if (value := _percent(title_block.get(key)))
+        ]
+        align = str(title_block.get("align") or "").strip()
+        if coordinates or align:
+            parts.append("title block " + " ".join([*coordinates, align]).strip())
+    blocks = composition.get("content_blocks")
+    if isinstance(blocks, list):
+        described = []
+        for block in blocks[:CONTENT_BLOCK_DIGEST_LIMIT]:
+            if not isinstance(block, dict):
+                continue
+            coordinates = [
+                f"{label}{value}"
+                for label, key in (("x", "x_pct"), ("y", "y_pct"), ("w", "width_pct"), ("h", "height_pct"))
+                if (value := _percent(block.get(key)))
+            ]
+            described.append(f"{block.get('role') or 'block'} " + " ".join(coordinates))
+        if described:
+            parts.append("blocks " + "; ".join(described))
+    alignment = str(composition.get("alignment") or "").strip()
+    if alignment:
+        parts.append(f"alignment {alignment}")
+    density = str(composition.get("density") or "").strip()
+    if density:
+        parts.append(f"{density} density")
+    return ", ".join(parts)
+
+
+def render_page_digest(index: int, payload: dict[str, Any]) -> str:
+    lines = [f"Page {index}: {payload['summary']}"]
+    for label, text in (
+        ("Background", _describe_background(payload["background"])),
+        ("Palette", _describe_palette(payload["palette"])),
+        ("Composition", _describe_composition(payload["composition"])),
+        ("Type scale", _describe_typography(payload["typography"])),
+        ("Must preserve", "; ".join(payload["must_preserve"][:MUST_PRESERVE_DIGEST_LIMIT])),
+    ):
+        if text:
+            lines.append(f"- {label}: {text}")
+    return "\n".join(lines)
 
 
 def representative_crop_files(crops: list[Any]) -> list[str]:
@@ -201,8 +375,9 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                     + f". Valid range is 1-{len(slides)}."
                 )
 
-            summaries: list[str] = []
+            digests: list[str] = []
             preserve_notes: list[str] = []
+            page_backgrounds: list[dict[str, Any]] = []
             for index in params.source_indexes:
                 slide = slides_by_index[index]
                 full_image = str(slide.get("full_image") or "")
@@ -212,42 +387,48 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                     slide.get("detail_crops") if isinstance(slide.get("detail_crops"), list) else []
                 )
                 image_paths = [str(work_dir / full_image), *[str(work_dir / path) for path in crop_files]]
-                result = await inspect_source_images(image_paths, SOURCE_REVIEW_QUERY)
+                probe = slide.get("background_probe") if isinstance(slide.get("background_probe"), dict) else None
+                result = await inspect_source_images(image_paths, build_source_review_query(probe))
                 if not result.ok:
                     raise SlideTemplateBuilderError(
                         f"Visual review failed for source page {index}: {result.content}"
                     )
-                payload = parse_source_review_payload(str(result.content or ""))
+                payload = parse_source_review_payload(str(result.content or ""), probe)
                 visual = slide.get("visual_analysis")
                 if not isinstance(visual, dict):
                     visual = {}
                     slide["visual_analysis"] = visual
                 visual.update({"status": "complete", **payload})
-                summaries.append(f"Page {index}: {payload['summary']}")
-                preserve_notes.extend(str(item) for item in payload["must_preserve"][:6])
+                digests.append(render_page_digest(index, payload))
+                preserve_notes.extend(
+                    str(item) for item in payload["must_preserve"][:MUST_PRESERVE_DIGEST_LIMIT]
+                )
+                page_backgrounds.append({"source_index": index, **payload["background"]})
 
             await async_write_json(analysis_file, analysis, ensure_ascii=False, indent=2)
             remaining = unreviewed_source_indexes(slides)
             remaining_note = (
-                f" Remaining unreviewed pages: {', '.join(str(index) for index in remaining)}."
+                f"Remaining unreviewed pages: {', '.join(str(index) for index in remaining)}."
                 if remaining
-                else " All prepared source pages have been reviewed."
+                else "All prepared source pages have been reviewed."
             )
             data = {
                 "template_directory": str(template_dir),
                 "reviewed_source_indexes": list(params.source_indexes),
                 "unreviewed_source_indexes": remaining,
+                "page_backgrounds": page_backgrounds,
                 "must_preserve": preserve_notes,
             }
             return ToolResult(
-                content=(
-                    "Source visual review updated. "
-                    + " ".join(summaries)
-                    + " Must preserve: "
-                    + "; ".join(preserve_notes)
-                    + "."
-                    + remaining_note
-                ),
+                content="\n\n".join([
+                    "Source visual review updated.",
+                    *digests,
+                    "Carry these values into visual-spec.md and theme.css. Rebuild each page on the "
+                    "background reported for the source page it derives from, keep the measured margins "
+                    "and alignment axis instead of centering everything, and scale type from the "
+                    "percentages above so it stays readable on the declared canvas.",
+                    remaining_note,
+                ]),
                 data=data,
                 extra_info=data,
             )
@@ -300,6 +481,14 @@ class ReviewSlideTemplateSource(WorkspaceTool[ReviewSlideTemplateSourceParams]):
                 "",
                 f"- Reviewed pages: {', '.join(str(item) for item in data.get('reviewed_source_indexes', [])) or '-'}",
                 f"- Remaining pages: {', '.join(str(item) for item in data.get('unreviewed_source_indexes', [])) or 'none'}",
+                "- Backgrounds: "
+                + (
+                    "; ".join(
+                        f"page {item.get('source_index')} {item.get('tone', '')} {item.get('base_color', '')}".strip()
+                        for item in data.get("page_backgrounds", [])
+                    )
+                    or "-"
+                ),
                 f"- Must preserve: {'; '.join(data.get('must_preserve', [])) or '-'}",
             ])
         else:

@@ -2,6 +2,8 @@
 
 After calling `create_slide_template_project`, later tools only need `template_dir`. Copy only approved final assets into `images/`. Do not write `source-analysis.json` or create `.template-work/` inside the template directory. Run the Intake Checkpoint in the main skill before create when shape or asset strategy is missing.
 
+These sources have no background measurement tool, so the Source Fidelity Rules in the main skill still apply and you have to do the measuring yourself. For every source, name each background scheme with a hex value and a light or dark tone, note the margins and alignment axis as percentages of the canvas, and set a type scale from the canvas height. Build the surface classes described in `ppt-visual-reconstruction.md` whenever the template needs more than one background tone, including templates authored from a text brief that mixes dark covers with light content pages.
+
 ## Image Or Screenshot Source
 
 1. Use `visual_understanding` before writing files.

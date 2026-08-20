@@ -94,24 +94,34 @@ The main path is three beats. Taxonomy, canvas, and asset policy live in the ref
 4. Determine a backend-compatible semantic base ID: `SLIDE-` plus lowercase kebab-case words. `create_slide_template_project` appends a short six-character uppercase hexadecimal suffix to the backend `template_id`, but the local directory name contains no random suffix. Use the returned `created.data["template_directory"]` for every later call.
 5. Call `create_slide_template_project` with the validated category, tags, bilingual labels, and source canvas. Do not create the template directory manually.
 6. If the source is a presentation with extractable assets, render pages with `document-converter` using `created.data["converter_output_dir"]` as `output_dir`. Do not create `document-converter-output/` in the workspace. Then:
-   - `prepare_slide_template_source` with the page images and source OOXML. Pass `high-fidelity` after a page-by-page intake, otherwise `hybrid`.
-   - `review_slide_template_source` for `recommended_review_indexes` (1–3 pages per call). Include cover, dense, data, closing, and any mascot or brand-illustration pages.
+   - `prepare_slide_template_source` with the page images and source OOXML. Pass `high-fidelity` after a page-by-page intake, otherwise `hybrid`. Read the reported background map; it names every measured background scheme and the pages that use it.
+   - `review_slide_template_source` for every index in `recommended_review_indexes` (1–3 pages per call). That list already covers one page per background scheme, so skipping entries loses a whole light or dark section. Also include cover, dense, data, closing, and any mascot or brand-illustration pages.
    - `select_slide_template_source_assets` with public ids such as `asset-01`. Batch until `pending_count` is `0`. Never pass converter filenames such as `<source>_image_0001.webp`.
 7. Text briefs, screenshots, or HTML with no extractable assets skip beat 6.
-8. Author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files in `template_dir`. For reusable/hybrid templates, keep 8–15 useful slides and fuse repeated source pages. For high-fidelity, keep the source page count minus ads, watermarks, and copyright pages.
+8. Author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files in `template_dir`, following the Source Fidelity Rules below. For reusable/hybrid templates, keep 8–15 useful slides and fuse repeated source pages. For high-fidelity, keep the source page count minus ads, watermarks, and copyright pages.
 9. Call `finalize_slide_template`. It still hard-blocks missing prepare (for visual-reconstruction), incomplete asset decisions, unused selected assets, converter residue, canvas/taxonomy errors, and missing previews. Unreviewed source pages become warnings, not a hard stop.
 10. Compare `previews/slides/` with the source. If `result.data["warnings"]` lists unreviewed pages, inspect those previews first. Fix and finalize again if needed.
 11. Report the project directory, inventory, selected/discarded assets, preview paths, warnings, and remaining limits. Never delete the user-provided source file or any final file listed by `template.json` or `template-assets.json`.
 
 Sanitize sensitive content and ask the user before keeping ambiguous logos, real people, QR codes, customer screenshots, private dashboards, or proprietary UI.
 
+## Source Fidelity Rules
+
+A reconstruction that keeps the source's page structure but loses its background rhythm, margins, or type scale is a failed reconstruction. These four rules produce most of the visual gap between a template and its source. `references/ppt-visual-reconstruction.md` carries the measurement protocol.
+
+- Rebuild each page on the background of the source page it derives from. A deck that opens dark and turns light in later sections must keep that alternation. Never sample one page and apply its background to the whole template. `prepare_slide_template_source` reports a measured hex and light/dark tone per page, and `review_slide_template_source` repeats it per reviewed page; treat both as ground truth over your own impression.
+- Give `theme.css` one surface class per background scheme, each pairing a background with its own foreground, muted-text, border, and accent-on-surface values. A single hard-coded `body` background makes mixed-tone decks impossible, because slide markup then has no way to switch text color with the surface.
+- Use the measured margins, alignment axis, column count, and block proportions from the review output. Do not fall back to a centered title with an even card grid; that is the most common way a reconstruction stops resembling its source.
+- Derive type sizes from the reported percentage of canvas height rather than browser defaults. Keep body text at or above 1.8% of canvas height, about `20px` on a 1080-tall canvas, and scale every other role from the same base.
+
 ## Authoring Rules
 
 - Use the declared source canvas from `template.json` with no responsive layout. Default to `1920x1080` only when the source does not provide dimensions, and preserve source ratios such as `1:1`.
 - Preserve the generated slide canvas contract on every page. Each slide must keep one root element in the form `<main class="slide-container" data-width="..." data-height="...">`.
 - Keep `data-width` and `data-height` equal to `template.json.source.canvas.width` and `template.json.source.canvas.height`. When replacing scaffold content, replace only the content inside the root canvas; do not remove or rename the `slide-container` class or either dimension attribute.
-- Make `visual-spec.md` the design contract: palette, typography, spacing, backgrounds, components, chart rules, image treatment, page rhythm, editing guidance, and forbidden patterns.
-- Keep reusable visual-system CSS in `theme.css`; keep page-specific grid, flex, padding, and positioning in each slide HTML file.
+- Make `visual-spec.md` the design contract: palette, typography scale, spacing, every background scheme with the pages that use it, components, chart rules, image treatment, page rhythm, editing guidance, and forbidden patterns.
+- Keep reusable visual-system CSS in `theme.css`: design tokens, the surface classes, typography scale, components, and chart palette. Keep page-specific grid, flex, padding, and positioning in each slide HTML file.
+- Apply a surface class on the `slide-container` root of every page and read colors from that surface's tokens. Do not hard-code per-page colors that bypass the surface system.
 - Use lowercase kebab-case filenames for English-context templates. Chinese-context templates may use concise Chinese semantic filenames such as `封面.html`, while `layout` remains lowercase kebab-case.
 - Give every slide a clear visual anchor and a layout purpose distinct from adjacent slides.
 - Add at least three meaningful editable regions per slide using `data-slot`, `data-slot-type`, `data-slot-role`, and `data-content-hint`.
@@ -291,8 +301,16 @@ run_sdk_snippet(python_code="""
 from sdk.tool import tool
 
 result = tool.call("visual_understanding", {
-    "images": ["<semantic-template-name>/previews/slides/slide-001.png"],
-    "query": "Review hierarchy, readability, composition, canvas usage, image quality, and background interference."
+    "images": [
+        "<semantic-template-name>/previews/slides/slide-001.png",
+        "<rendered source page this slide derives from>"
+    ],
+    "query": (
+        "The first image is the rebuilt slide, the second is its source page. "
+        "Compare background color and tone, margins, alignment axis, title placement, "
+        "type scale, and accent color, then list every mismatch. Also review hierarchy, "
+        "readability, canvas usage, and image quality."
+    )
 })
 if not result.ok:
     raise SystemExit(result.content)
@@ -311,5 +329,8 @@ Do not report completion until:
 - Every indexed slide exists, loads `../theme.css`, and resolves local assets.
 - Every indexed slide has exactly one `main.slide-container` root, and its `data-width`/`data-height` values match `template.json.source.canvas`.
 - No legacy conversion residue or forbidden output file remains.
-- `previews/` exists. Spot-check cover, dense-content, data/process, and closing pages against the source. If warnings list unreviewed source pages, inspect those previews first.
+- `previews/` exists. Spot-check cover, dense-content, data/process, and closing pages against the source. If warnings list unreviewed source pages or unreviewed background variants, inspect those previews first.
+- Every background scheme reported by `prepare_slide_template_source` appears in the finished template, each on the pages that correspond to the source. A deck whose previews are all one tone while the source mixed tones fails this gate.
+- `theme.css` defines a surface class per background scheme, and every slide root carries one.
+- Body text measures at least 1.8% of canvas height, and page margins match the reviewed source geometry rather than a default centered layout.
 - The template has a coherent design system and meaningful layout diversity, not only structurally valid files.

@@ -65,6 +65,16 @@
       "id": 13,
       "prompt": "把这个 PPT 做成模板。",
       "expected_output": "Load slide-template-maker. After a quick source look and before create_slide_template_project, call ask_user once for missing shape and asset strategy. Recommend reusable 8-15 pages plus keep-usable-source-images, with defaults so skip or timeout can continue. Do not convert first, do not put ask_user inside Code Mode, and do not use converter HTML or full-slide screenshots as finished pages. After intake, create the project, render into created.data[\"converter_output_dir\"], prepare, review, select public ids, author semantic HTML, and finalize."
+    },
+    {
+      "id": 14,
+      "prompt": "这个 PPT 封面和章节页是深色的，中间的内容页是浅色的，帮我做成模板。",
+      "expected_output": "Load slide-template-maker. Read the background map returned by prepare_slide_template_source and review every index in recommended_review_indexes, which already includes one page per background scheme. Define one surface class per scheme in theme.css, each pairing a background with its own foreground, muted-text, border, and accent tokens, and apply the matching surface class on each slide's slide-container root so covers and dividers stay dark while content pages stay light. Do not hard-code a single body background and do not reconstruct the whole deck in one tone. Record the surface inventory in visual-spec.md, and before reporting completion compare the generated previews with the rendered source pages so the light and dark sequence matches."
+    },
+    {
+      "id": 15,
+      "prompt": "做出来的模板看着跟原稿不像，标题都居中了，正文也特别小。",
+      "expected_output": "Load slide-template-maker. Treat this as a fidelity failure, not a styling preference. Use the composition and typography percentages reported by review_slide_template_source: apply the measured margins, alignment axis, column count, and block proportions instead of centering, and convert the reported percentage-of-canvas-height type sizes into px against the declared canvas, keeping body text at or above 1.8% of canvas height. Re-review any source page whose geometry is unknown rather than assuming a default, then finalize and compare each preview against its source page for background, margins, alignment, title placement, type scale, and accent color."
     }
   ]
 }
