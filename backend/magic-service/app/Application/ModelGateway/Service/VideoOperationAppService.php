@@ -14,6 +14,7 @@ use App\Application\ModelGateway\Event\Message\VideoOperationPollMessage;
 use App\Application\ModelGateway\Event\Publish\VideoOperationPollDelayPublisher;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\Service\Video\VideoInputMediaMetadataResolver;
+use App\Application\ModelGateway\Support\InvocationDetailInfo;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
@@ -842,9 +843,9 @@ readonly class VideoOperationAppService
             self::AUDIT_STATUS_FAIL,
         );
 
-        $originalErrorMessage = $throwable?->getOriginalErrorMessage() ?? '';
-        if ($originalErrorMessage !== '') {
-            $businessParams['failure_reason'] = $originalErrorMessage;
+        $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
+        if ($previousExceptions !== []) {
+            $businessParams['previous_exceptions'] = $previousExceptions;
         }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
