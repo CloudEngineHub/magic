@@ -1,10 +1,11 @@
 # @magic-web/logger
 
-统一的日志追踪解决方案，支持阿里云 ARMS 和火山引擎 APMPlus。
+统一的日志追踪解决方案，支持 DataFlux、阿里云 ARMS 和火山引擎 APMPlus。
 
 ## 特性
 
 -   🎯 **统一接口**：抽象统一的 API，屏蔽底层平台差异
+-   📡 **DataFlux RUM**：通过官方 `@cloudcare/browser-rum@3.3.6` 接入 DataFlux Browser RUM
 -   🔌 **配置驱动**：通过配置文件轻松切换追踪平台
 -   🧩 **插件系统**：丰富的插件生态，支持自定义扩展
 -   📦 **按需加载**：支持 Tree Shaking，减少打包体积
@@ -20,6 +21,8 @@ pnpm add @magic-web/logger
 pnpm add @apmplus/web        # 火山引擎 APMPlus
 # 或
 pnpm add @arms/rum-browser   # 阿里云 ARMS RUM
+# 或
+pnpm add @cloudcare/browser-rum@3.3.6   # DataFlux Browser RUM
 ```
 
 ## 快速开始
@@ -146,6 +149,32 @@ function App() {
   }
 }
 ```
+
+### DataFlux Browser RUM 配置
+
+```typescript
+{
+  provider: {
+    type: "DataFlux",
+    appId: "anta_magic_web_001",
+    token: "your-client-token",
+    site: "https://gc-rum.example.com",
+    env: "production",
+    service: "browser",
+    version: "1.0.0",
+    sessionSampleRate: 100,
+    sessionReplaySampleRate: 70,
+    trackUserInteractions: true,
+    trackResources: true,
+    trackLongTasks: true,
+    startSessionReplayRecording: false,
+  }
+}
+```
+
+`site` 必须配置为实际 DataFlux RUM 接入地址。Provider 会将 `appId` 映射为
+`applicationId`、`token` 映射为 `clientToken`，并通过 `addError`、`addAction`、`setUser`
+转发统一 Logger API 的异常、自定义事件和用户信息。
 
 ## 插件系统
 

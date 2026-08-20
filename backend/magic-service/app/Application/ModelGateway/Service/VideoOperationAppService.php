@@ -32,6 +32,8 @@ use App\Domain\ModelGateway\Service\QueueOperationExecutionDomainService;
 use App\Domain\ModelGateway\Service\VideoBillingDetailsResolver;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
+use App\Domain\Operation\Event\OperationUsageFinishedEvent;
+use App\Domain\Operation\Event\OperationUsageWillStartEvent;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -46,6 +48,7 @@ use DateTime;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Amqp\Producer;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use RuntimeException;
 use Throwable;
 use Throwable as BaseThrowable;
@@ -75,6 +78,10 @@ readonly class VideoOperationAppService
     private const string SYNC_LOCK_PREFIX = 'model_gateway_video_operation_sync:';
 
     private const int PRE_SUBMIT_ACTIVE_OPERATION_GRACE_SECONDS = 120;
+
+    private const string OPERATION_NAME_VIDEO_GENERATE = 'model_gateway.video.generate';
+
+    private const string EXECUTION_KEY_VIDEO_PREFIX = 'video_operation:';
 
     public function __construct(
         private LLMAppService $llmAppService,
@@ -141,7 +148,7 @@ readonly class VideoOperationAppService
     public function enqueue(string $accessToken, CreateVideoDTO $requestDTO): VideoOperationResponseDTO
     {
         $dataIsolation = $this->llmAppService->createModelGatewayDataIsolationByAccessToken($accessToken, $requestDTO->getBusinessParams());
-        $this->pointComponent->checkPointsSufficient($requestDTO, $dataIsolation);
+        //        $this->pointComponent->checkPointsSufficient($requestDTO, $dataIsolation); TODO: 下面已经做了积分预冻结，所以这里不需要检查积分是否充足，后续看看如何统一两者
         $videoModelEntry = $this->modelGatewayMapper->getOrganizationVideoModel($dataIsolation, $requestDTO->getModel());
         $videoModel = $videoModelEntry?->getVideoModel();
         if ($videoModel === null) {
@@ -182,14 +189,32 @@ readonly class VideoOperationAppService
         // 占用新槽位前主动同步当前用户运行中的旧任务，释放已完成但调用方未轮询的残留槽位。
         $this->recoverUserActiveOperationsBeforeClaim($operation);
 
+        $operationUsageEventDispatched = false;
         try {
             // 提交 provider 前先按套餐占用个人视频运行槽位
             $this->videoQueueDomainService->claimUserActiveOperation(
                 $operation,
                 $personalVideoGenerationConcurrencyLimit,
             );
+            $this->videoQueueDomainService->saveOperation($operation);
 
             $config = $this->queueOperationExecutionDomainService->getConfig($operation);
+
+            $this->dispatchOperationUsageWillStart(
+                $dataIsolation,
+                $operation,
+                $this->buildVideoPointEstimateRequest(
+                    $dataIsolation,
+                    $requestDTO,
+                    $videoModel->getProviderCode(),
+                    $videoModel->getModelVersion(),
+                    $videoModel->getProviderModelId(),
+                    $videoGenerationConfig,
+                ),
+                $requestDTO->getBusinessParams(),
+            );
+            $operationUsageEventDispatched = true;
+
             $providerTaskId = $this->queueOperationExecutionDomainService->submit($operation, $config);
         } catch (ProviderVideoException $throwable) {
             $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
@@ -205,6 +230,9 @@ readonly class VideoOperationAppService
         } catch (Throwable $throwable) {
             // 非业务异常会中断提交流程，释放槽位避免残留运行态阻塞后续提交。
             $this->videoQueueDomainService->releaseUserActiveOperation($operation);
+            if ($operationUsageEventDispatched) {
+                $this->dispatchOperationUsageFinished($operation, OperationUsageFinishedEvent::STATUS_FAILED);
+            }
             $this->videoQueueDomainService->deleteOperation($operation);
             throw $throwable;
         }
@@ -602,6 +630,82 @@ readonly class VideoOperationAppService
         );
     }
 
+    private function dispatchOperationUsageWillStart(
+        ModelGatewayDataIsolation $dataIsolation,
+        VideoQueueOperationEntity $operation,
+        VideoPointEstimateRequest $estimateRequest,
+        array $requestBusinessParams
+    ): void {
+        $event = new OperationUsageWillStartEvent(
+            executionKey: $this->buildOperationUsageExecutionKey($operation),
+            operationName: self::OPERATION_NAME_VIDEO_GENERATE,
+            organizationCode: $operation->getOrganizationCode(),
+            userId: $operation->getUserId(),
+            sourceId: $operation->getSourceId() ?: $dataIsolation->getSourceId(),
+            usage: $this->buildVideoOperationUsage($operation, $estimateRequest),
+            businessParams: $this->buildManagedPollBusinessParams($dataIsolation, $requestBusinessParams),
+        );
+
+        di(EventDispatcherInterface::class)->dispatch($event);
+        $this->logger->info('OperationUsageWillStartEventDispatched', [
+            'execution_key' => $event->getExecutionKey(),
+            'operation_name' => $event->getOperationName(),
+            'organization_code' => $event->getOrganizationCode(),
+            'user_id' => $event->getUserId(),
+        ]);
+    }
+
+    private function dispatchOperationUsageFinished(VideoQueueOperationEntity $operation, string $status): void
+    {
+        $event = new OperationUsageFinishedEvent(
+            executionKey: $this->buildOperationUsageExecutionKey($operation),
+            status: $status,
+            organizationCode: $operation->getOrganizationCode(),
+            userId: $operation->getUserId(),
+            sourceId: $operation->getSourceId(),
+            failureCode: $status === OperationUsageFinishedEvent::STATUS_FAILED ? $operation->getErrorCode() : null,
+            failureReason: $status === OperationUsageFinishedEvent::STATUS_FAILED ? $operation->getErrorMessage() : null,
+        );
+
+        AsyncEventUtil::dispatch($event);
+        $this->logger->info('OperationUsageFinishedEventDispatched', [
+            'execution_key' => $event->getExecutionKey(),
+            'status' => $event->getStatus(),
+            'organization_code' => $event->getOrganizationCode(),
+            'user_id' => $event->getUserId(),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildVideoOperationUsage(VideoQueueOperationEntity $operation, VideoPointEstimateRequest $estimateRequest): array
+    {
+        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($operation);
+
+        return [
+            'model' => $estimateRequest->getModelId(),
+            'provider_model_id' => $estimateRequest->getProviderModelId(),
+            'resolution' => $estimateRequest->getResolution(),
+            'output_duration_seconds' => $estimateRequest->getOutputDurationSeconds(),
+            'output_width' => $estimateRequest->getOutputWidth(),
+            'output_height' => $estimateRequest->getOutputHeight(),
+            'input_video_duration_seconds' => $estimateRequest->getInputVideoDurationSeconds(),
+            'has_reference_video' => $estimateRequest->hasReferenceVideo(),
+            'has_audio_output' => $estimateRequest->hasAudioOutput(),
+            'reference_material' => $referenceMaterial,
+            'topic_id' => $operation->getTopicId(),
+            'task_id' => $operation->getTaskId(),
+            'project_id' => $operation->getProjectId(),
+            'original_model_id' => $operation->getModel(),
+        ];
+    }
+
+    private function buildOperationUsageExecutionKey(VideoQueueOperationEntity $operation): string
+    {
+        return self::EXECUTION_KEY_VIDEO_PREFIX . $operation->getId();
+    }
+
     /**
      * 解析参考视频元数据；没有参考视频时返回 0。
      * 工作区路径仍要求 project_id，外部 URL 则由 resolver 直接下载探测。
@@ -683,6 +787,7 @@ readonly class VideoOperationAppService
         $event->setTotalTokens($usageTokens['total_tokens']);
 
         AsyncEventUtil::dispatch($event);
+        $this->dispatchOperationUsageFinished($operation, OperationUsageFinishedEvent::STATUS_SUCCESS);
         $this->logger->info('VideoGeneratedEventDispatched', [
             'operation_id' => $operation->getId(),
             'organization_code' => $event->getOrganizationCode(),
@@ -743,6 +848,7 @@ readonly class VideoOperationAppService
         $event->setBusinessParams($businessParams);
 
         AsyncEventUtil::dispatch($event);
+        $this->dispatchOperationUsageFinished($operation, OperationUsageFinishedEvent::STATUS_FAILED);
         $this->logger->info('VideoGenerateFailedEventDispatched', [
             'operation_id' => $operation->getId(),
             'organization_code' => $event->getOrganizationCode(),
@@ -775,6 +881,8 @@ readonly class VideoOperationAppService
 
         $params = [
             'event_id' => (string) IdGenerator::getSnowId(),
+            'operation_id' => $operation->getId(),
+            'operation_usage_execution_key' => $this->buildOperationUsageExecutionKey($operation),
             'model_id' => $operation->getModel(),
             'model_version' => $operation->getModelVersion(),
             'provider_model_id' => $operation->getProviderModelId(),

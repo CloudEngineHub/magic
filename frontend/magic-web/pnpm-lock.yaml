@@ -96,6 +96,9 @@ importers:
       '@arms/rum-browser':
         specifier: ^0.0.37
         version: 0.0.37(@babel/runtime@7.28.4)
+      '@cloudcare/browser-rum':
+        specifier: 3.3.6
+        version: 3.3.6
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1833,6 +1836,15 @@ packages:
 
   '@chevrotain/utils@11.0.3':
     resolution: {integrity: sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ==}
+
+  '@cloudcare/browser-core@3.3.6':
+    resolution: {integrity: sha512-LY7st6P8gjEabLsDT2aDuuBi8mopM8FMLQK3Z3hTWUDpDdTUxxwXd0a0eFqrhWZj1gESlYhUMBZo8uIzps32jA==}
+
+  '@cloudcare/browser-rum@3.3.6':
+    resolution: {integrity: sha512-CsHJaRc46jssHrrkxHs43O9RtXbyPiWNFRvOSe1WxTZU0bLMC51ptJc0BWGWiZhBh3C/DNwqAAicZcReOnEhKw==}
+
+  '@cloudcare/browser-worker@3.3.6':
+    resolution: {integrity: sha512-h7RB7YRS9nqHrSniCvJj0kZzcy6gy7CPfCJvzSrbeSUVBzXLxG4kbBnZS3qoJptgVPHr4dp+0UfU9B66zoPomg==}
 
   '@code-inspector/core@1.4.4':
     resolution: {integrity: sha512-bQNcbiiTodOiVuJ9JQ/AgyArfc5rH9qexzDya3ugasIbUMfUNBPKCwoq6He4Y6/bwUx6mUqwTODwPtu13BR75Q==}
@@ -17564,6 +17576,17 @@ snapshots:
 
   '@chevrotain/utils@11.0.3': {}
 
+  '@cloudcare/browser-core@3.3.6': {}
+
+  '@cloudcare/browser-rum@3.3.6':
+    dependencies:
+      '@cloudcare/browser-core': 3.3.6
+      '@cloudcare/browser-worker': 3.3.6
+
+  '@cloudcare/browser-worker@3.3.6':
+    dependencies:
+      '@cloudcare/browser-core': 3.3.6
+
   '@code-inspector/core@1.4.4':
     dependencies:
       '@vue/compiler-dom': 3.5.30
@@ -24173,17 +24196,6 @@ snapshots:
       - typescript
       - ws
 
-  '@vitejs/devtools-kit@0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)':
-    dependencies:
-      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
-      birpc: 4.0.0
-      ohash: 2.0.11
-      vite: 8.0.3(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.18)(@vitejs/devtools@0.1.13)(esbuild@0.24.0)(jiti@2.6.1)(less@4.4.0)(sass-embedded@1.93.1)(sass@1.93.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - typescript
-      - ws
-    optional: true
-
   '@vitejs/devtools-rolldown@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.7.3)(vite@8.0.3)(vue@3.5.32(typescript@5.8.3))':
     dependencies:
       '@floating-ui/dom': 1.7.6
@@ -24295,62 +24307,6 @@ snapshots:
       - vite
       - vue
 
-  '@vitejs/devtools-rolldown@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)(vue@3.5.32(typescript@5.8.3))':
-    dependencies:
-      '@floating-ui/dom': 1.7.6
-      '@pnpm/read-project-manifest': 1001.2.6(@pnpm/logger@1001.0.1)
-      '@rolldown/debug': 1.0.0-rc.15
-      '@vitejs/devtools-kit': 0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)
-      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
-      ansis: 4.2.0
-      birpc: 4.0.0
-      cac: 7.0.0
-      d3-shape: 3.2.0
-      diff: 8.0.4
-      get-port-please: 3.2.0
-      h3: 1.15.11
-      mlly: 1.8.2
-      mrmime: 2.0.1
-      ohash: 2.0.11
-      p-limit: 7.3.0
-      pathe: 2.0.3
-      publint: 0.3.18
-      sirv: 3.0.2
-      split2: 4.2.0
-      structured-clone-es: 2.0.0
-      tinyglobby: 0.2.16
-      unconfig: 7.5.0
-      unstorage: 1.17.5
-      vue-virtual-scroller: 2.0.1(vue@3.5.32(typescript@5.8.3))
-      ws: 8.20.0
-    transitivePeerDependencies:
-      - '@azure/app-configuration'
-      - '@azure/cosmos'
-      - '@azure/data-tables'
-      - '@azure/identity'
-      - '@azure/keyvault-secrets'
-      - '@azure/storage-blob'
-      - '@capacitor/preferences'
-      - '@deno/kv'
-      - '@netlify/blobs'
-      - '@planetscale/database'
-      - '@pnpm/logger'
-      - '@upstash/redis'
-      - '@vercel/blob'
-      - '@vercel/functions'
-      - '@vercel/kv'
-      - aws4fetch
-      - bufferutil
-      - db0
-      - idb-keyval
-      - ioredis
-      - typescript
-      - uploadthing
-      - utf-8-validate
-      - vite
-      - vue
-    optional: true
-
   '@vitejs/devtools-rpc@0.1.13(typescript@5.7.3)(ws@8.20.0)':
     dependencies:
       birpc: 4.0.0
@@ -24375,19 +24331,6 @@ snapshots:
       ws: 8.20.0
     transitivePeerDependencies:
       - typescript
-
-  '@vitejs/devtools-rpc@0.1.13(typescript@5.9.3)(ws@8.20.0)':
-    dependencies:
-      birpc: 4.0.0
-      ohash: 2.0.11
-      p-limit: 7.3.0
-      structured-clone-es: 2.0.0
-      valibot: 1.3.1(typescript@5.9.3)
-    optionalDependencies:
-      ws: 8.20.0
-    transitivePeerDependencies:
-      - typescript
-    optional: true
 
   '@vitejs/devtools@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.7.3)(vite@8.0.3)':
     dependencies:
@@ -24479,52 +24422,6 @@ snapshots:
       - typescript
       - uploadthing
       - utf-8-validate
-
-  '@vitejs/devtools@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)':
-    dependencies:
-      '@vitejs/devtools-kit': 0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)
-      '@vitejs/devtools-rolldown': 0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)(vue@3.5.32(typescript@5.8.3))
-      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
-      birpc: 4.0.0
-      cac: 7.0.0
-      h3: 1.15.11
-      immer: 11.1.4
-      launch-editor: 2.13.2
-      mlly: 1.8.2
-      obug: 2.1.1
-      open: 11.0.0
-      pathe: 2.0.3
-      perfect-debounce: 2.1.0
-      sirv: 3.0.2
-      tinyexec: 1.1.1
-      vite: 8.0.3(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.18)(@vitejs/devtools@0.1.13)(esbuild@0.24.0)(jiti@2.6.1)(less@4.4.0)(sass-embedded@1.93.1)(sass@1.93.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2)
-      vue: 3.5.32(typescript@5.9.3)
-      ws: 8.20.0
-    transitivePeerDependencies:
-      - '@azure/app-configuration'
-      - '@azure/cosmos'
-      - '@azure/data-tables'
-      - '@azure/identity'
-      - '@azure/keyvault-secrets'
-      - '@azure/storage-blob'
-      - '@capacitor/preferences'
-      - '@deno/kv'
-      - '@netlify/blobs'
-      - '@planetscale/database'
-      - '@pnpm/logger'
-      - '@upstash/redis'
-      - '@vercel/blob'
-      - '@vercel/functions'
-      - '@vercel/kv'
-      - aws4fetch
-      - bufferutil
-      - db0
-      - idb-keyval
-      - ioredis
-      - typescript
-      - uploadthing
-      - utf-8-validate
-    optional: true
 
   '@vitejs/plugin-react@4.7.0(vite@6.3.5(@types/node@25.9.5)(jiti@2.6.1)(less@4.4.0)(lightningcss@1.32.0)(sass-embedded@1.93.1)(sass@1.93.1)(sugarss@2.0.0)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -36134,11 +36031,6 @@ snapshots:
     optionalDependencies:
       typescript: 5.8.3
 
-  valibot@1.3.1(typescript@5.9.3):
-    optionalDependencies:
-      typescript: 5.9.3
-    optional: true
-
   validate-npm-package-license@3.0.4:
     dependencies:
       spdx-correct: 3.2.0
@@ -36489,7 +36381,7 @@ snapshots:
       tinyglobby: 0.2.16
     optionalDependencies:
       '@types/node': 22.19.18
-      '@vitejs/devtools': 0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)
+      '@vitejs/devtools': 0.1.13(@pnpm/logger@1001.0.1)(typescript@5.8.3)(vite@8.0.3)
       esbuild: 0.24.0
       fsevents: 2.3.3
       jiti: 2.6.1
@@ -36734,17 +36626,6 @@ snapshots:
       '@vue/shared': 3.5.32
     optionalDependencies:
       typescript: 5.8.3
-
-  vue@3.5.32(typescript@5.9.3):
-    dependencies:
-      '@vue/compiler-dom': 3.5.32
-      '@vue/compiler-sfc': 3.5.32
-      '@vue/runtime-dom': 3.5.32
-      '@vue/server-renderer': 3.5.32(vue@3.5.32(typescript@5.8.3))
-      '@vue/shared': 3.5.32
-    optionalDependencies:
-      typescript: 5.9.3
-    optional: true
 
   w3c-keyname@2.2.8: {}
 

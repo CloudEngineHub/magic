@@ -120,6 +120,14 @@ class MagicClawRepository extends SuperMagicAbstractRepository implements MagicC
             ->update(['project_id' => $projectId]);
     }
 
+    public function getByProjectId(int $projectId): ?MagicClawEntity
+    {
+        $model = $this->magicClawModel::query()
+            ->where('project_id', $projectId)
+            ->first();
+        return $model ? $this->modelToEntity($model) : null;
+    }
+
     private function modelToEntity(MagicClawModel $model): MagicClawEntity
     {
         $entity = new MagicClawEntity();
