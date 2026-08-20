@@ -86,6 +86,23 @@ export interface SaveFileContentResponse {
 	completed_at: string
 }
 
+export interface SuperMagicTopicModelExtra {
+	transcription_enabled?: boolean
+	auto_summary_enabled?: boolean
+	model?: Partial<ModelItem>
+}
+
+export interface SuperMagicTopicModelResponse {
+	model?: Partial<ModelItem>
+	image_model?: Partial<ModelItem>
+	video_model?: Partial<ModelItem>
+	extra?: SuperMagicTopicModelExtra
+	/** Compatibility with endpoints that resolve business rejection responses. */
+	success?: boolean
+	code?: string | number
+	message?: string
+}
+
 /** LLM model capabilities */
 export interface LlmModelCapabilities {
 	tool_call: boolean
@@ -2279,18 +2296,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 超级麦吉话题模型配置
 	 */
 	getSuperMagicTopicModel({ topic_id }: { topic_id: string }) {
-		return fetch.get<{
-			model?: Partial<ModelItem>
-			image_model?: Partial<ModelItem>
-			video_model?: Partial<ModelItem>
-			extra?: {
-				transcription_enabled?: boolean
-				auto_summary_enabled?: boolean
-				model?: Partial<ModelItem>
-			}
-		}>(`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`, {
-			enableRequestUnion: true,
-		})
+		return fetch.get<SuperMagicTopicModelResponse>(
+			`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`,
+			{
+				enableRequestUnion: true,
+			},
+		)
 	},
 
 	/**
@@ -2310,13 +2321,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		model_id?: string
 		image_model_id?: string
 		video_model_id?: string
-		extra?: {
-			transcription_enabled?: boolean
-			auto_summary_enabled?: boolean
-			model?: Partial<ModelItem>
-		}
+		extra?: SuperMagicTopicModelExtra
 	}) {
-		return fetch.put(
+		return fetch.put<SuperMagicTopicModelResponse>(
 			`/api/v1/contact/users/setting/super-magic/topic-model/${cache_id}`,
 			{
 				...(model_id && {

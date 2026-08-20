@@ -1,4 +1,5 @@
 import { SuperMagicApi } from "@/apis"
+import type { SuperMagicTopicModelResponse } from "@/apis/modules/superMagic"
 import { logger as Logger } from "@/utils/log"
 import superMagicTopicModelCacheService, {
 	type CachedModelData,
@@ -100,6 +101,44 @@ interface ModelRequestGuard {
 
 /** Reports events with the owning requestId attached. */
 type RequestReporter = (message: string, payload?: Record<string, unknown>) => void
+
+function toErrorLogFields(error: unknown): Record<string, unknown> {
+	if (error instanceof Error) {
+		return {
+			errorName: error.name,
+			errorMessage: error.message,
+		}
+	}
+
+	if (error && typeof error === "object") {
+		const record = error as Record<string, unknown>
+		return {
+			...(typeof record.code === "string" || typeof record.code === "number"
+				? { errorCode: record.code }
+				: {}),
+			errorMessage:
+				typeof record.message === "string" ? record.message : "Unknown backend error",
+		}
+	}
+
+	return {
+		errorMessage: typeof error === "string" ? error : "Unknown backend error",
+	}
+}
+
+function toResponseLogFields(response: SuperMagicTopicModelResponse): Record<string, unknown> {
+	return {
+		...(typeof response.success === "boolean" ? { success: response.success } : {}),
+		...(typeof response.code === "string" || typeof response.code === "number"
+			? { code: response.code }
+			: {}),
+		...(typeof response.message === "string" ? { message: response.message } : {}),
+	}
+}
+
+function isExplicitRejectedResponse(response: SuperMagicTopicModelResponse): boolean {
+	return response.success === false
+}
 
 /**
  * Super Magic Topic Model Service
@@ -215,25 +254,23 @@ class SuperMagicTopicModelService {
 		report(`[Fallback] Backfilling ${level} level`, { ...logContext, ...modelIds })
 		await saveLocal(this.toCachedModelData(models))
 		try {
-			const res = await SuperMagicApi.saveSuperMagicTopicModel({
+			const response = await SuperMagicApi.saveSuperMagicTopicModel({
 				cache_id: cacheId,
 				model_id: models.languageModel?.model_id,
 				image_model_id: models.imageModel?.model_id,
 				video_model_id: models.videoModel?.model_id,
 			})
-			if (res.success) {
-				logger.log(`Backfilled ${level} level remotely`, {
-					...logContext,
-					...modelIds,
-				})
-			} else {
-				// Rejected responses never throw, so the local write would
-				// otherwise diverge from the backend without a trace.
+			if (isExplicitRejectedResponse(response)) {
 				report(`[Fallback] ${level} remote backfill rejected`, {
 					...logContext,
 					...modelIds,
 					cacheId,
-					response: res,
+					...toResponseLogFields(response),
+				})
+			} else {
+				logger.log(`Backfilled ${level} level remotely`, {
+					...logContext,
+					...modelIds,
 				})
 			}
 		} catch (error) {
@@ -241,7 +278,7 @@ class SuperMagicTopicModelService {
 				...logContext,
 				...modelIds,
 				cacheId,
-				error,
+				...toErrorLogFields(error),
 			})
 		}
 	}
@@ -808,7 +845,10 @@ class SuperMagicTopicModelService {
 					supportsVideoModel,
 				})
 			} catch (e) {
-				report(`[Fallback] ${levelName} remote API failed`, { levelKey, error: e })
+				report(`[Fallback] ${levelName} remote API failed`, {
+					levelKey,
+					...toErrorLogFields(e),
+				})
 			}
 
 			// Step 3: 校验和纠正逻辑
@@ -930,7 +970,10 @@ class SuperMagicTopicModelService {
 				usedLocalCache,
 			}
 		} catch (error) {
-			report(`[Fallback] ${levelName} level error`, { levelKey, error })
+			report(`[Fallback] ${levelName} level error`, {
+				levelKey,
+				...toErrorLogFields(error),
+			})
 			return {
 				success: false,
 				languageModel: null,
@@ -1348,17 +1391,17 @@ class SuperMagicTopicModelService {
 				modeDefaultSuccess: modeDefaultResult.success,
 			})
 
-			// 回填规则：只有从更高级别获取的数据才应该回填到低级别
-			// Topic 成功 → 不回填任何级别
+			// 回填规则：从更高级别获取的数据回填到低级别；本地命中但远程缺失时重试同级远程写入
+			// Topic 远程成功 → 不回填任何级别
 			// Project 成功 → 只回填 Topic
 			// ModeDefault 成功 → 回填 Topic 和 Project
 			// Global 成功 → 回填 Topic, Project 和 ModeDefault
 
-			// 回填 Topic 级别（仅当数据来源是 Project, ModeDefault 或 Global 时，且 topicId 有效）
+			// 回填 Topic 级别，或重试仅命中本地缓存的 Topic 远程写入
 			// 修复：允许 languageModel 和 imageModel 独立回填（不要求两者都存在）
 			const needTopicBackfill =
 				shouldFetchTopic && // topicId 有效
-				sourceLevel !== "Topic" && // 数据不是来自 Topic 本身
+				(sourceLevel !== "Topic" || topicResult.usedLocalCache) &&
 				(!topicResult.success || !topicResult.hasValidRemoteData) &&
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
@@ -1390,11 +1433,13 @@ class SuperMagicTopicModelService {
 				)
 			}
 
-			// 回填 Project 级别（仅当数据来源是 ModeDefault 或 Global 时）
+			// 回填 Project 级别，或重试仅命中本地缓存的 Project 远程写入
 			// 修复：允许 languageModel 和 imageModel 独立回填
 			const needProjectBackfill =
 				projectId &&
-				(sourceLevel === "ModeDefault" || sourceLevel === "Global") && // 数据来自 ModeDefault 或 Global 级别
+				(sourceLevel === "ModeDefault" ||
+					sourceLevel === "Global" ||
+					projectResult.usedLocalCache) &&
 				(!projectResult.success || !projectResult.hasValidRemoteData) &&
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
@@ -1421,10 +1466,10 @@ class SuperMagicTopicModelService {
 				)
 			}
 
-			// 回填 ModeDefault 级别（仅当数据来源是 Global 时）
+			// 回填 ModeDefault 级别，或重试仅命中本地缓存的 ModeDefault 远程写入
 			// 修复：允许 languageModel 和 imageModel 独立回填
 			const needModeDefaultBackfill =
-				sourceLevel === "Global" && // 数据来自 Global 级别
+				(sourceLevel === "Global" || modeDefaultResult.usedLocalCache) &&
 				(!modeDefaultResult.success || !modeDefaultResult.hasValidRemoteData) &&
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
@@ -1467,7 +1512,10 @@ class SuperMagicTopicModelService {
 			})
 		} catch (error) {
 			if (!isCurrentRequest()) return
-			report("Critical error in fetchTopicModel", { topicId, error })
+			report("Critical error in fetchTopicModel", {
+				topicId,
+				...toErrorLogFields(error),
+			})
 			this.setFirstUsableModels(modelList, imageModelList, videoModelList, store)
 		} finally {
 			completeLoading()
@@ -1642,6 +1690,8 @@ class SuperMagicTopicModelService {
 		if (videoModel !== undefined) {
 			pending.videoModel = videoModel
 		}
+		pending.topicId = topicId
+		pending.projectId = projectId
 		pending.timestamp = Date.now()
 		pending.cacheId = cacheId // Update cacheId
 
@@ -1682,6 +1732,8 @@ class SuperMagicTopicModelService {
 			if (videoModel !== undefined) {
 				projectPending.videoModel = videoModel
 			}
+			projectPending.topicId = topicId
+			projectPending.projectId = projectId
 			projectPending.timestamp = Date.now()
 
 			this.pendingSaves.set(projectKey, projectPending)
@@ -1721,25 +1773,14 @@ class SuperMagicTopicModelService {
 		})
 
 		try {
-			const res = await SuperMagicApi.saveSuperMagicTopicModel({
+			const response = await SuperMagicApi.saveSuperMagicTopicModel({
 				cache_id: cacheId || topicId, // Use cacheId if available, fallback to topicId
 				model_id: languageModel?.model_id,
 				image_model_id: imageModel?.model_id,
 				video_model_id: videoModel?.model_id,
 			})
 
-			if (res.success) {
-				logger.report("[Save] Backend save successful", {
-					cacheId,
-					topicId,
-					projectId,
-					languageModelId: languageModel?.model_id,
-					imageModelId: imageModel?.model_id,
-					videoModelId: videoModel?.model_id,
-				})
-			} else {
-				// Rejected responses never throw, so without this the local
-				// cache silently diverges from the backend.
+			if (isExplicitRejectedResponse(response)) {
 				logger.report("[Save] Backend save rejected", {
 					cacheId,
 					topicId,
@@ -1747,7 +1788,16 @@ class SuperMagicTopicModelService {
 					languageModelId: languageModel?.model_id,
 					imageModelId: imageModel?.model_id,
 					videoModelId: videoModel?.model_id,
-					response: res,
+					...toResponseLogFields(response),
+				})
+			} else {
+				logger.report("[Save] Backend save successful", {
+					cacheId,
+					topicId,
+					projectId,
+					languageModelId: languageModel?.model_id,
+					imageModelId: imageModel?.model_id,
+					videoModelId: videoModel?.model_id,
 				})
 			}
 		} catch (error) {
@@ -1758,7 +1808,7 @@ class SuperMagicTopicModelService {
 				languageModelId: languageModel?.model_id,
 				imageModelId: imageModel?.model_id,
 				videoModelId: videoModel?.model_id,
-				error,
+				...toErrorLogFields(error),
 			})
 		} finally {
 			this.pendingSaves.delete(cacheKey)
@@ -1796,11 +1846,16 @@ class SuperMagicTopicModelService {
 		return `default_${resolveModeMapKey(topicMode, agentCode)}`
 	}
 
-	/** 清理指定话题的 debounce，并清掉它带出的 project 待保存 */
+	/** 清理指定话题的 debounce；仅当 project 待保存仍由该话题拥有时一并清理 */
 	cleanup(topicId: string) {
 		const pending = this.pendingSaves.get(topicId)
 		this.clearPendingSave(topicId)
-		if (pending?.projectId) this.clearPendingSave(this.genProjectKey(pending.projectId))
+		if (!pending?.projectId) return
+
+		const projectKey = this.genProjectKey(pending.projectId)
+		if (this.pendingSaves.get(projectKey)?.topicId === topicId) {
+			this.clearPendingSave(projectKey)
+		}
 	}
 
 	private clearPendingSave(cacheKey: string) {

@@ -538,6 +538,36 @@ describe("SuperMagicTopicModelService - Debounce", () => {
 			vi.advanceTimersByTime(2000)
 			expect(SuperMagicApi.saveSuperMagicTopicModel).not.toHaveBeenCalled()
 		})
+
+		it("keeps the shared project save for another topic", async () => {
+			const secondModel = { ...mockLanguageModel, model_id: "claude-3" }
+
+			await superMagicTopicModelService.saveModel(
+				"topic-1",
+				"project-1",
+				mockLanguageModel,
+				undefined,
+			)
+			await superMagicTopicModelService.saveModel(
+				"topic-2",
+				"project-1",
+				secondModel,
+				undefined,
+			)
+
+			superMagicTopicModelService.cleanup("topic-1")
+			await superMagicTopicModelService.flushAll()
+
+			expect(SuperMagicApi.saveSuperMagicTopicModel).toHaveBeenCalledWith({
+				cache_id: "project_id_project-1",
+				model_id: secondModel.model_id,
+				image_model_id: undefined,
+				video_model_id: undefined,
+			})
+			expect(SuperMagicApi.saveSuperMagicTopicModel).not.toHaveBeenCalledWith(
+				expect.objectContaining({ cache_id: "topic-1" }),
+			)
+		})
 	})
 
 	describe("project key generation", () => {

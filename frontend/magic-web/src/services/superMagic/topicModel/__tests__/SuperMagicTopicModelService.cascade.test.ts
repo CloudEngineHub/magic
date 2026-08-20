@@ -342,6 +342,51 @@ describe("SuperMagicTopicModelService - Cascade & Backfill", () => {
 			// In this case, will use local cache data
 			expect(topicModelStore.selectedLanguageModel?.model_id).toBe("gpt-4")
 		})
+
+		it("retries Topic remote backfill after a previous write failure", async () => {
+			const topicId = "topic-1"
+			const projectId = "project-1"
+			let topicCache: {
+				languageModelId?: string
+				imageModelId?: string
+				timestamp: number
+			} | null = null
+
+			vi.mocked(superMagicTopicModelCacheService.getTopicModel).mockImplementation(
+				async () => topicCache,
+			)
+			vi.mocked(superMagicTopicModelCacheService.saveTopicModel).mockImplementation(
+				async (_topicId, data) => {
+					topicCache = data
+				},
+			)
+			vi.mocked(superMagicTopicModelCacheService.getProjectModel).mockResolvedValue({
+				languageModelId: "gpt-4",
+				imageModelId: "dall-e-3",
+				timestamp: Date.now(),
+			})
+			vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockImplementation(({ topic_id }) => {
+				if (topic_id === "project_id_project-1") {
+					return Promise.resolve({
+						model: { model_id: "gpt-4" },
+						image_model: { model_id: "dall-e-3" },
+					} as never)
+				}
+				return Promise.resolve({ model: {}, image_model: {} } as never)
+			})
+			vi.mocked(SuperMagicApi.saveSuperMagicTopicModel)
+				.mockRejectedValueOnce(new Error("offline"))
+				.mockResolvedValue({ model: { model_id: "gpt-4" } } as never)
+
+			topicModelStore.setCurrentContext(topicId, projectId, "general")
+			await superMagicTopicModelService.fetchTopicModel(topicId, projectId, "general")
+			await superMagicTopicModelService.fetchTopicModel(topicId, projectId, "general")
+
+			const topicBackfills = vi
+				.mocked(SuperMagicApi.saveSuperMagicTopicModel)
+				.mock.calls.filter(([params]) => params.cache_id === topicId)
+			expect(topicBackfills).toHaveLength(2)
+		})
 	})
 
 	describe("Remote data validation and correction", () => {

@@ -95,7 +95,7 @@ describe("SuperMagicTopicModelService observability", () => {
 		)
 		vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockResolvedValue({} as never)
 		vi.mocked(SuperMagicApi.saveSuperMagicTopicModel).mockResolvedValue({
-			success: true,
+			model: { model_id: dataAnalysisModel.model_id },
 		} as never)
 		vi.mocked(superMagicModeService.getModelListByMode).mockImplementation((mode) =>
 			mode === "summary" ? [summaryModel] : [dataAnalysisModel],
@@ -137,9 +137,45 @@ describe("SuperMagicTopicModelService observability", () => {
 				cacheId: "topic-a",
 				topicId: "topic-a",
 				languageModelId: dataAnalysisModel.model_id,
+				success: false,
+				message: "forbidden",
 			}),
 		)
+		const rejectedPayload = reportMock.mock.calls.find(
+			([message]) => message === "[Save] Backend save rejected",
+		)?.[1]
+		expect(rejectedPayload).not.toHaveProperty("response")
 		expect(reportedMessages()).not.toContain("[Save] Backend save successful")
+	})
+
+	it("reports a summarized backend error without the original object", async () => {
+		vi.mocked(SuperMagicApi.saveSuperMagicTopicModel).mockRejectedValue({
+			code: 403,
+			message: "forbidden",
+			internal: { stack: "private stack" },
+		})
+
+		const store = createSuperMagicTopicModelStore()
+		store.setCurrentContext("topic-a", "project-1", "data_analysis")
+		await superMagicTopicModelService.saveModel(
+			"topic-a",
+			"project-1",
+			dataAnalysisModel,
+			null,
+			null,
+			store,
+		)
+		await superMagicTopicModelService.flushAll()
+
+		const failedPayload = reportMock.mock.calls.find(
+			([message]) => message === "[Save] Backend save failed",
+		)?.[1]
+		expect(failedPayload).toMatchObject({
+			errorCode: 403,
+			errorMessage: "forbidden",
+		})
+		expect(failedPayload).not.toHaveProperty("error")
+		expect(failedPayload).not.toHaveProperty("internal")
 	})
 
 	it("reports a successful backend save without a rejection", async () => {
@@ -157,6 +193,33 @@ describe("SuperMagicTopicModelService observability", () => {
 
 		expect(reportedMessages()).toContain("[Save] Backend save successful")
 		expect(reportedMessages()).not.toContain("[Save] Backend save rejected")
+	})
+
+	it("summarizes remote fetch errors without the original object", async () => {
+		vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockRejectedValue({
+			code: 502,
+			message: "bad gateway",
+			internal: { stack: "private stack" },
+		})
+
+		const store = createSuperMagicTopicModelStore()
+		store.setCurrentContext("topic-a", "project-1", "data_analysis")
+		await superMagicTopicModelService.fetchTopicModel(
+			"topic-a",
+			"project-1",
+			"data_analysis",
+			store,
+		)
+
+		const failedPayload = reportMock.mock.calls.find(
+			([message]) => message === "[Fallback] Topic remote API failed",
+		)?.[1]
+		expect(failedPayload).toMatchObject({
+			errorCode: 502,
+			errorMessage: "bad gateway",
+		})
+		expect(failedPayload).not.toHaveProperty("error")
+		expect(failedPayload).not.toHaveProperty("internal")
 	})
 
 	it("reports a discarded request once when the context changes mid-flight", async () => {
