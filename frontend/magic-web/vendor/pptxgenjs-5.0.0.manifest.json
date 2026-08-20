@@ -3,7 +3,7 @@
 	"version": "5.0.0",
 	"sourceRepository": "https://github.com/XiaoBuLiuKun/PptxGenJS.git",
 	"sourceBranch": "feat/pptxgenjs-v5-streaming-only",
-	"sourceCommit": "137cd01cab5c3e5f65951f7f9fb49496318273aa",
+	"sourceCommit": "4b12eb3f8f81060edbe721b008915c18b81215c2",
 	"artifact": "pptxgenjs-5.0.0.tgz",
-	"sha256": "f04facb8da366c17551cf5157bd48e8ba3672a0d437395892eba80ce698bc135"
+	"sha256": "d9ef4f406ab36bd41dbdbe799125409a178b61491111e2f3c1131ce82fa7bf6f"
 }

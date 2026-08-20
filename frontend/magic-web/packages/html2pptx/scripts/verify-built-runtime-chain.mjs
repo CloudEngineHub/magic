@@ -23,7 +23,7 @@ const edition = process.argv.includes("--enterprise") ? "enterprise" : "open"
 const expectedPptxGenJs = {
 	name: "pptxgenjs",
 	version: "5.0.0",
-	sourceCommit: "137cd01cab5c3e5f65951f7f9fb49496318273aa",
+	sourceCommit: "4b12eb3f8f81060edbe721b008915c18b81215c2",
 	artifact: "pptxgenjs-5.0.0.tgz",
 }
 
