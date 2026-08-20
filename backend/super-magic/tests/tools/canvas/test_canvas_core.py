@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.tools.canvas.application import CanvasApplication
-from app.tools.canvas.codec import CanvasCodec
+from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError, CanvasProtocolError
 from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasDocument, CanvasElement, CanvasProject
 from app.tools.canvas.generation import (
