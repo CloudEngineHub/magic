@@ -9,6 +9,7 @@ from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
 from app.tools.canvas.application.commands import (
     AddContentCommand,
+    ContentCommand,
     GenerationParameters,
     GenerationSubmissionCommand,
     SelectMainContentCommand,
@@ -64,7 +65,7 @@ class ContentService:
                     raise CanvasDomainError("FRAME_CONTENT_MANAGED_INTERNAL", "Frame and Group Content is managed internally.")
                 command = item.content
                 if command.content_id is None:
-                    command = type(command)(
+                    command = ContentCommand(
                         source=command.source,
                         content_type=command.content_type,
                         fields=command.fields,

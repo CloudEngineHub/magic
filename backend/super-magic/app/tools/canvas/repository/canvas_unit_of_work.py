@@ -27,7 +27,7 @@ class CanvasUnitOfWork:
     async def transaction_with_sidecar(
         self,
         project_path: str,
-        mutator: Callable[[CanvasProject, dict], T | Awaitable[tuple[T, dict]]],
+        mutator: Callable[[CanvasProject, dict], tuple[T, dict] | Awaitable[tuple[T, dict]]],
         filename: str = "element-details.json",
     ) -> T:
         """执行主文件和 backend sidecar 的联合提交。"""

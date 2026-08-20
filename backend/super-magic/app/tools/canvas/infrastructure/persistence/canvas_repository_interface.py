@@ -33,7 +33,7 @@ class CanvasRepositoryInterface(ABC):
     async def transaction_with_sidecar(
         self,
         project_path: str,
-        mutator: Callable[[CanvasProject, dict], T | Awaitable[tuple[T, dict]]],
+        mutator: Callable[[CanvasProject, dict], tuple[T, dict] | Awaitable[tuple[T, dict]]],
         filename: str = "element-details.json",
     ) -> T:
         """在项目锁内执行主文件和 sidecar 联合事务。"""

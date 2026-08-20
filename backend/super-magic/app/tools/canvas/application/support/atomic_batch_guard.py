@@ -11,7 +11,10 @@ from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError
 class ItemReferenceCommand(Protocol):
     """声明批量命令必须提供的关联标识。"""
 
-    item_ref: str
+    @property
+    def item_ref(self) -> str:
+        """返回批量命令的关联标识。"""
+        ...
 
 
 class AtomicBatchGuard:

@@ -9,6 +9,7 @@ from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
 from app.tools.canvas.application.commands import (
     AddElementCommand,
+    ContentCommand,
     GenerationParameters,
     GenerationSubmissionCommand,
     LayoutCommand,
@@ -85,7 +86,7 @@ class AddElementsService:
                 generated_content_id = None
                 if content is not None:
                     if content.content_id is None:
-                        content = type(content)(
+                        content = ContentCommand(
                             source=content.source,
                             content_type=content.content_type,
                             fields=content.fields,

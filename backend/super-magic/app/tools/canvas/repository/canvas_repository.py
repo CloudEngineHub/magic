@@ -6,7 +6,7 @@ import asyncio
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, TypeVar, cast
 
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
@@ -74,12 +74,12 @@ class CanvasRepository(CanvasRepositoryInterface):
                 result = await result
             project.canvas.validate()
             await self._write(path, project)
-            return result
+            return cast(T, result)
 
     async def transaction_with_sidecar(
         self,
         project_path: str,
-        mutator: Callable[[CanvasProject, dict], T | Awaitable[tuple[T, dict]]],
+        mutator: Callable[[CanvasProject, dict], tuple[T, dict] | Awaitable[tuple[T, dict]]],
         filename: str = "element-details.json",
     ) -> T:
         """在同一项目锁内协调主文件和 sidecar 写入。

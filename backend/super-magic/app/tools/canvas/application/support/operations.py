@@ -1,5 +1,6 @@
 """Canvas Application 共享的无状态业务操作。"""
 
+from collections.abc import Sequence
 from typing import Any
 
 from app.tools.canvas.application.support.atomic_batch_guard import AtomicBatchGuard, ItemReferenceCommand
@@ -29,12 +30,12 @@ class CanvasApplicationOperations:
         return ContentMetadataService.new_detail(element_id, data)
 
     @staticmethod
-    def validate_unique_item_refs(items: list[ItemReferenceCommand] | tuple[ItemReferenceCommand, ...]) -> None:
+    def validate_unique_item_refs(items: Sequence[ItemReferenceCommand]) -> None:
         """保证批次关联标签唯一。"""
         AtomicBatchGuard.validate_item_refs(items)
 
     @staticmethod
-    def batch_error(items: list[ItemReferenceCommand] | tuple[ItemReferenceCommand, ...], failed_item_ref: str | None, error: CanvasDomainError) -> CanvasDomainError:
+    def batch_error(items: Sequence[ItemReferenceCommand], failed_item_ref: str | None, error: CanvasDomainError) -> CanvasDomainError:
         """把多项原子批量异常转换为逐项结果。"""
         return AtomicBatchGuard.map_error(items, failed_item_ref, error)
 

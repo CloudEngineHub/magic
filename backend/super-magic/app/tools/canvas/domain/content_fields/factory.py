@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import cast
 
 from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
@@ -139,7 +140,7 @@ class ContentFieldsFactory:
             return None
         if value not in {"pending", "processing", "completed", "failed"}:
             raise CanvasProtocolError("INVALID_CONTENT", f"{key} contains an unsupported generation status.")
-        return value
+        return cast(GenerationStatus, value)
 
     @staticmethod
     def _optional_object(data: dict[str, JsonValue], key: str) -> JsonObject | None:
@@ -159,7 +160,7 @@ class ContentFieldsFactory:
             return []
         if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
             raise CanvasProtocolError("INVALID_CONTENT", f"{key} must be an array of objects.")
-        return deepcopy(value)
+        return [deepcopy(item) for item in value if isinstance(item, dict)]
 
     @staticmethod
     def _string_list(data: dict[str, JsonValue], key: str) -> list[str]:
@@ -169,4 +170,4 @@ class ContentFieldsFactory:
             return []
         if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
             raise CanvasProtocolError("INVALID_CONTENT", f"{key} must be an array of non-empty strings.")
-        return list(value)
+        return [item for item in value if isinstance(item, str)]

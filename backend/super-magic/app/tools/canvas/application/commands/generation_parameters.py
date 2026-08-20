@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.tools.canvas.domain.types import JsonObject
+from app.tools.canvas.domain.types import JsonObject, JsonValue
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ class GenerationParameters:
             "reference_audio_paths": list(self.reference_audio_paths),
             "extensions": dict(self.extensions),
         }
-        optional: dict[str, object | None] = {
+        optional: dict[str, JsonValue | None] = {
             "model_id": self.model_id,
             "estimate_id": self.estimate_id,
             "name": self.name,
@@ -57,35 +57,61 @@ class GenerationParameters:
             "watermark": self.watermark,
         }
         values.update({key: value for key, value in optional.items() if value is not None})
-        return values  # type: ignore[return-value]
+        return values
 
     @classmethod
     def from_dict(cls, values: JsonObject) -> "GenerationParameters":
         """从 sidecar 中的稳定 JSON 字段恢复生成参数对象。"""
-        tuple_fields = {
-            "reference_images",
-            "reference_image_paths",
-            "reference_video_paths",
-            "reference_audio_paths",
-        }
-        kwargs: dict[str, object] = {}
-        for field_name in tuple_fields:
-            raw = values.get(field_name, [])
-            kwargs[field_name] = tuple(value for value in raw if isinstance(value, str)) if isinstance(raw, list) else ()
-        for field_name in (
-            "prompt", "model_id", "estimate_id", "name", "output_path", "size", "frame_start_path",
-            "frame_end_path", "aspect_ratio", "resolution",
-        ):
-            raw = values.get(field_name)
-            if raw is None or isinstance(raw, str):
-                kwargs[field_name] = raw
-        for field_name in ("duration_seconds", "fps", "seed"):
-            raw = values.get(field_name)
-            if raw is None or isinstance(raw, int):
-                kwargs[field_name] = raw
-        watermark = values.get("watermark")
-        if watermark is None or isinstance(watermark, bool):
-            kwargs["watermark"] = watermark
-        extensions = values.get("extensions", {})
-        kwargs["extensions"] = extensions if isinstance(extensions, dict) else {}
-        return cls(**kwargs)
+        return cls(
+            prompt=_optional_string(values, "prompt") or "",
+            model_id=_optional_string(values, "model_id"),
+            estimate_id=_optional_string(values, "estimate_id"),
+            name=_optional_string(values, "name"),
+            output_path=_optional_string(values, "output_path"),
+            size=_optional_string(values, "size"),
+            reference_images=_string_tuple(values, "reference_images"),
+            reference_image_paths=_string_tuple(values, "reference_image_paths"),
+            reference_video_paths=_string_tuple(values, "reference_video_paths"),
+            reference_audio_paths=_string_tuple(values, "reference_audio_paths"),
+            frame_start_path=_optional_string(values, "frame_start_path"),
+            frame_end_path=_optional_string(values, "frame_end_path"),
+            duration_seconds=_optional_integer(values, "duration_seconds"),
+            aspect_ratio=_optional_string(values, "aspect_ratio"),
+            resolution=_optional_string(values, "resolution"),
+            fps=_optional_integer(values, "fps"),
+            seed=_optional_integer(values, "seed"),
+            watermark=_optional_boolean(values, "watermark"),
+            extensions=_optional_object(values, "extensions"),
+        )
+
+
+def _optional_string(values: JsonObject, key: str) -> str | None:
+    """读取可选字符串字段。"""
+    value = values.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _optional_integer(values: JsonObject, key: str) -> int | None:
+    """读取可选整数，并拒绝布尔值。"""
+    value = values.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _optional_boolean(values: JsonObject, key: str) -> bool | None:
+    """读取可选布尔字段。"""
+    value = values.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def _string_tuple(values: JsonObject, key: str) -> tuple[str, ...]:
+    """读取字符串数组并转换为不可变参数集合。"""
+    value = values.get(key)
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def _optional_object(values: JsonObject, key: str) -> JsonObject:
+    """读取可选扩展对象；非对象值按空对象处理。"""
+    value = values.get(key)
+    return dict(value) if isinstance(value, dict) else {}

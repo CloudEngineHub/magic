@@ -59,18 +59,14 @@ class ConnectionService:
                         and not target
                         and all(ledger.was_removed(connection_id) for connection_id in missing_ids)
                     )
-                    repeated_replace = (
-                        replace
-                        and existing_new is not None
-                        and all(
-                            ledger.replacement_matches(connection_id, source, target)
-                            for connection_id in missing_ids
-                        )
+                    repeated_replace = replace and all(
+                        ledger.replacement_matches(connection_id, source, target)
+                        for connection_id in missing_ids
                     )
                     if repeated_remove:
                         results.append({"item_ref": item.item_ref, "status": "already_removed", "removed_connection_ids": remove_ids})
                         continue
-                    if repeated_replace:
+                    if repeated_replace and existing_new is not None:
                         results.append({
                             "item_ref": item.item_ref,
                             "status": "already_replaced",
