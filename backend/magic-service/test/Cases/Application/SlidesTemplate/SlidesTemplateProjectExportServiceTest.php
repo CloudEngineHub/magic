@@ -15,6 +15,8 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\Response\ExportWorkspaceResponse;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
@@ -24,6 +26,47 @@ use ReflectionClass;
  */
 class SlidesTemplateProjectExportServiceTest extends TestCase
 {
+    public function testSandboxExportFailureReturnsActionableMessage(): void
+    {
+        $service = $this->makeService($this->createMock(CloudFileRepositoryInterface::class));
+        $response = new ExportWorkspaceResponse(
+            false,
+            2000,
+            'Slide template directory may be at most 200 MB.',
+        );
+        $method = (new ReflectionClass($service))->getMethod('throwSandboxFailure');
+        $method->setAccessible(true);
+
+        try {
+            $method->invoke($service, $response->getMessage());
+            $this->fail('Sandbox export failure must throw a business exception.');
+        } catch (BusinessException $exception) {
+            $this->assertSame(SlidesTemplateErrorCode::PROJECT_TEMPLATE_EXPORT_FAILED->value, $exception->getCode());
+            $this->assertSame('Slide template directory may be at most 200 MB.', $exception->getMessage());
+        }
+    }
+
+    public function testSandboxOperationExceptionReturnsOriginalMessage(): void
+    {
+        $service = $this->makeService($this->createMock(CloudFileRepositoryInterface::class));
+        $sandboxException = new SandboxOperationException(
+            'Initialize agent',
+            'HTTP 503 error from gateway',
+            503,
+        );
+        $method = (new ReflectionClass($service))->getMethod('throwSandboxFailure');
+        $method->setAccessible(true);
+
+        try {
+            $method->invoke($service, $sandboxException->getMessage(), $sandboxException);
+            $this->fail('Sandbox operation failure must throw a business exception.');
+        } catch (BusinessException $exception) {
+            $this->assertSame(SlidesTemplateErrorCode::PROJECT_TEMPLATE_EXPORT_FAILED->value, $exception->getCode());
+            $this->assertSame('Initialize agent failed: HTTP 503 error from gateway', $exception->getMessage());
+            $this->assertSame($sandboxException, $exception->getPrevious());
+        }
+    }
+
     public function testSandboxManifestCodeIsIgnored(): void
     {
         $result = SlidesTemplateProjectExportResult::fromSandbox(
