@@ -11,7 +11,7 @@ export default function FrameCreateButton() {
 			return
 		}
 
-		// 使用 UserActionRegistry 执行画框创建
+		// 使用 UserActionRegistry 执行画框创建，沿用通用默认 padding
 		canvas.userActionRegistry.execute("frame.create")
 	}
 
