@@ -168,6 +168,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
         $extras = [
             'chain' => $chain,
             'original_model_id' => (string) ($bp['original_model_id'] ?? ''),
+            'previous_exceptions' => $bp['previous_exceptions'] ?? [],
         ];
         if ($status->isFail()) {
             $extras = InvocationDetailInfo::withFailureReason($extras, (string) ($bp['failure_reason'] ?? ''));
@@ -203,10 +204,6 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
 
     private function buildImageGeneratedUsage(ImageGeneratedEvent $event, AuditStatus $status, array $businessParams): array
     {
-        if ($status->isFail()) {
-            return [];
-        }
-
         $usage = [
             'count' => (int) ($businessParams['image_count'] ?? 0),
             'image_count' => (int) ($businessParams['image_count'] ?? $event->getImageCount()),
@@ -243,6 +240,7 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
                 [
                     'chain' => $chain,
                     'original_model_id' => (string) ($bp['original_model_id'] ?? ''),
+                    'previous_exceptions' => $bp['previous_exceptions'] ?? [],
                 ],
                 (string) ($bp['failure_reason'] ?? ''),
             ),
@@ -281,7 +279,10 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             (string) ($bp['app_id'] ?? ''),
             (string) ($bp['source_id'] ?? ''),
             (string) ($bp['provider_model_id'] ?? $event->getProviderModelId()),
-            ['original_model_id' => $originalModelId],
+            [
+                'original_model_id' => $originalModelId,
+                'previous_exceptions' => $bp['previous_exceptions'] ?? [],
+            ],
         );
 
         // 视频默认带次数与成片时长；若事件含 provider token 用量则一并写入，与对话类审计结构对齐供计费回写
@@ -339,7 +340,10 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             (string) ($bp['source_id'] ?? ''),
             $event->getProviderModelId(),
             InvocationDetailInfo::withFailureReason(
-                ['original_model_id' => $originalModelId],
+                [
+                    'original_model_id' => $originalModelId,
+                    'previous_exceptions' => $bp['previous_exceptions'] ?? [],
+                ],
                 (string) ($bp['failure_reason'] ?? ''),
             ),
         );

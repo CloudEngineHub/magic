@@ -14,6 +14,7 @@ use App\Application\ModelGateway\Event\Message\VideoOperationPollMessage;
 use App\Application\ModelGateway\Event\Publish\VideoOperationPollDelayPublisher;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\Service\Video\VideoInputMediaMetadataResolver;
+use App\Application\ModelGateway\Support\InvocationDetailInfo;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
@@ -224,6 +225,7 @@ readonly class VideoOperationAppService
                 $dataIsolation,
                 $operation,
                 $requestDTO->getBusinessParams(),
+                $throwable
             );
             $this->videoQueueDomainService->deleteOperation($operation);
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $throwable->getMessage(), throwable: $throwable);
@@ -642,7 +644,7 @@ readonly class VideoOperationAppService
             organizationCode: $operation->getOrganizationCode(),
             userId: $operation->getUserId(),
             sourceId: $operation->getSourceId() ?: $dataIsolation->getSourceId(),
-            usage: $this->buildVideoOperationUsage($operation, $estimateRequest),
+            usage: $this->buildVideoOperationUsage($dataIsolation, $operation, $estimateRequest),
             businessParams: $this->buildManagedPollBusinessParams($dataIsolation, $requestBusinessParams),
         );
 
@@ -679,9 +681,9 @@ readonly class VideoOperationAppService
     /**
      * @return array<string, mixed>
      */
-    private function buildVideoOperationUsage(VideoQueueOperationEntity $operation, VideoPointEstimateRequest $estimateRequest): array
+    private function buildVideoOperationUsage(ModelGatewayDataIsolation $dataIsolation, VideoQueueOperationEntity $operation, VideoPointEstimateRequest $estimateRequest): array
     {
-        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($operation);
+        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($dataIsolation, $operation);
 
         return [
             'model' => $estimateRequest->getModelId(),
@@ -830,7 +832,8 @@ readonly class VideoOperationAppService
     private function dispatchVideoGenerateFailedEvent(
         ModelGatewayDataIsolation $dataIsolation,
         VideoQueueOperationEntity $operation,
-        array $requestBusinessParams = []
+        array $requestBusinessParams = [],
+        ?ProviderVideoException $throwable = null
     ): void {
         $event = new VideoGenerateFailedEvent();
         $businessParams = $this->buildVideoAuditBusinessParams(
@@ -839,6 +842,11 @@ readonly class VideoOperationAppService
             $requestBusinessParams,
             self::AUDIT_STATUS_FAIL,
         );
+
+        $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
+        if ($previousExceptions !== []) {
+            $businessParams['previous_exceptions'] = $previousExceptions;
+        }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
         $event->setUserId($operation->getUserId());
