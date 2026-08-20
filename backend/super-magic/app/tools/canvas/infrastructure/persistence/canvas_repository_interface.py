@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Awaitable, Callable, TypeVar
 
 from app.tools.canvas.domain.models import CanvasProject
@@ -12,6 +13,11 @@ T = TypeVar("T")
 
 class CanvasRepositoryInterface(ABC):
     """定义 Application 使用的 Canvas 持久化边界。"""
+
+    @property
+    @abstractmethod
+    def workspace(self) -> Path:
+        """基础工作区路径，所有项目路径都基于它解析；只读，禁止外部修改。"""
 
     @abstractmethod
     async def initialize(self, project_path: str) -> tuple[Any, bool]:

@@ -34,7 +34,12 @@ class CanvasRepository(CanvasRepositoryInterface):
 
     def __init__(self, workspace: Path):
         """初始化工作区级仓储。"""
-        self.workspace = workspace
+        self._workspace = workspace
+
+    @property
+    def workspace(self) -> Path:
+        """基础工作区路径；构造时注入，只读。"""
+        return self._workspace
 
     async def initialize(self, project_path: str) -> tuple[Path, bool]:
         """创建空项目；已存在合法项目时返回未修改状态。"""
