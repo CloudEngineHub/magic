@@ -45,20 +45,24 @@ const ADMIN_ROUTES = [
 	// 平台管理 - 套餐
 	{ path: "/admin/platform", titleKey: "admin.nav.platform" },
 	{
-		path: "/admin/platform/paid-package",
+		path: "/admin/platform/package",
 		titleKey: "admin.nav.platformSubMenu.paidPackage",
 	},
 	{
-		path: "/admin/platform/paid-package/manage",
+		path: "/admin/platform/package/manage",
 		titleKey: "admin.nav.platformSubMenu.packageManagement",
 	},
 	{
-		path: "/admin/platform/paid-package/manage/detail",
+		path: "/admin/platform/package/manage/detail",
 		titleKey: "admin.nav.platformSubMenu.packageDetail",
 	},
 	{
-		path: "/admin/platform/paid-package/order",
+		path: "/admin/platform/package/order",
 		titleKey: "admin.nav.platformSubMenu.orderManagement",
+	},
+	{
+		path: "/admin/platform/package/invoice",
+		titleKey: "admin.nav.platformSubMenu.invoiceManagement",
 	},
 	// 平台 - 系统设置
 	{ path: "/admin/platform/system", titleKey: "admin.nav.platformSubMenu.system" },
