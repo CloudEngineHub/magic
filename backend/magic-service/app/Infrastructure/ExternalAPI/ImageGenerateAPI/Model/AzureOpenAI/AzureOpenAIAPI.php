@@ -14,6 +14,8 @@ use App\Infrastructure\Util\File\ImageBase64DataUriParser;
 use App\Infrastructure\Util\Http\GuzzleClientFactory;
 use Exception;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
@@ -256,23 +258,22 @@ class AzureOpenAIAPI
             }
         }
 
-        $this->throwProviderError($result);
+        $this->throwProviderError($result, $e);
     }
 
-    private function throwProviderError(array $result): never
+    private function throwProviderError(array $result, ?RequestException $requestException = null): never
     {
         $providerError = is_array($result['error'] ?? null) ? $result['error'] : [];
         $providerErrorCode = (string) ($providerError['code'] ?? '');
         $providerErrorMessage = (string) ($providerError['message'] ?? '');
         $errorCode = $this->resolveProviderErrorCode($providerErrorCode, $providerErrorMessage);
 
-        ExceptionBuilder::throw(
-            $errorCode,
-            throwable: new Exception(
-                json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR)
-                    ?: 'Invalid Azure OpenAI response.'
-            )
+        $throwable = $requestException ?? new Exception(
+            json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR)
+                ?: 'Invalid Azure OpenAI response.'
         );
+
+        ExceptionBuilder::throw($errorCode, throwable: $throwable);
     }
 
     private function resolveProviderErrorCode(string $providerErrorCode, string $providerErrorMessage): ImageGenerateErrorCode
