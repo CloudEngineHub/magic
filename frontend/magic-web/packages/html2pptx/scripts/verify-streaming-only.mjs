@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { access, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { gunzipSync } from "node:zlib"
 import ts from "typescript"
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -244,6 +245,59 @@ async function verifyLocalPptxGenJs(manifestPath, specifier) {
 	if (actualSha256 !== provenance.sha256.toLowerCase()) {
 		report(provenancePath, `sha256 mismatch: expected ${provenance.sha256}; calculated ${actualSha256}`)
 	}
+	await verifyInstalledPptxGenJs(dependencyPath, provenancePath)
+}
+
+/**
+ * A frozen install can leave a file: dependency linked to an older unpacked
+ * tarball when the filename and version stay unchanged. Compare the files the
+ * build actually imports with the exact vendored tarball so a green source
+ * gate cannot certify a stale Worker bundle.
+ */
+async function verifyInstalledPptxGenJs(tarballPath, provenancePath) {
+	const installedPath = path.join(packageRoot, "node_modules", "pptxgenjs")
+	if (!(await exists(installedPath))) {
+		report(provenancePath, `installed PptxGenJS package is unavailable: ${installedPath}`)
+		return
+	}
+	const tarball = gunzipSync(await readFile(tarballPath))
+	const runtimeFiles = ["dist/pptxgen.cjs.js", "dist/pptxgen.es.mjs", "types/index.d.ts"]
+	for (const relativePath of runtimeFiles) {
+		const installedFile = path.join(installedPath, relativePath)
+		if (!(await exists(installedFile))) {
+			report(provenancePath, `installed PptxGenJS file is unavailable: ${installedFile}`)
+			continue
+		}
+		const tarEntry = readTarEntry(tarball, `package/${relativePath}`)
+		if (!tarEntry) {
+			report(provenancePath, `vendored PptxGenJS tarball is missing package/${relativePath}`)
+			continue
+		}
+		const installedHash = createHash("sha256").update(await readFile(installedFile)).digest("hex")
+		const tarHash = createHash("sha256").update(tarEntry).digest("hex")
+		if (installedHash !== tarHash) {
+			report(
+				provenancePath,
+				`installed PptxGenJS ${relativePath} is stale: expected ${tarHash}, found ${installedHash}`,
+			)
+		}
+	}
+}
+
+function readTarEntry(tarball, expectedName) {
+	for (let offset = 0; offset + 512 <= tarball.byteLength; ) {
+		const header = tarball.subarray(offset, offset + 512)
+		if (header.every((byte) => byte === 0)) return undefined
+		const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/, "")
+		const prefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/, "")
+		const entryName = prefix ? `${prefix}/${name}` : name
+		const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/, "").trim()
+		const size = sizeText ? parseInt(sizeText, 8) : 0
+		const bodyStart = offset + 512
+		if (entryName === expectedName) return tarball.subarray(bodyStart, bodyStart + size)
+		offset = bodyStart + Math.ceil(size / 512) * 512
+	}
+	return undefined
 }
 
 async function verifyPublicEntry() {
