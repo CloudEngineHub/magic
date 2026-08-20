@@ -6,7 +6,10 @@ import {
 } from "../../editors/message/reference-assets/promptPlaceholderTokenConfig"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
-import { getCanvasResourceAvailability } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceAvailability,
+	isOpaqueAssetReference,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import { buildPreviewMediaResourceItem } from "./mediaPreviewItem"
 import styles from "./PromptPlaceholderPreviewText.module.css"
 
@@ -29,6 +32,7 @@ type PromptSegment =
 			key: string
 			type: "placeholder"
 			value: string
+			path?: string
 			previewItem: MediaResourceFullscreenPreviewItem | null
 			isDeleted: boolean
 	  }
@@ -39,8 +43,12 @@ function getPlaceholderDisplayValue(
 ): string {
 	const displayValue = segment.previewItem?.fileName
 		? `@${segment.previewItem.fileName}`
-		: segment.value
-	return segment.isDeleted ? `${displayValue}${deletedSuffix}` : displayValue
+		: segment.path && isOpaqueAssetReference(segment.path)
+			? `@${segment.path}`
+			: segment.value
+	return segment.previewItem && segment.isDeleted
+		? `${displayValue}${deletedSuffix}`
+		: displayValue
 }
 
 export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewTextProps) {
@@ -77,6 +85,7 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 				key: `placeholder:${match.start}`,
 				type: "placeholder",
 				value: match.rawText,
+				path,
 				previewItem,
 				isDeleted: availability === "deleted",
 			})
@@ -99,12 +108,18 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 			return <Fragment key={segment.key}>{segment.value}</Fragment>
 		}
 
+		const displayValue = getPlaceholderDisplayValue(segment, deletedSuffix)
 		if (!segment.previewItem) {
-			return <Fragment key={segment.key}>{segment.value}</Fragment>
+			return segment.path && isOpaqueAssetReference(segment.path) ? (
+				<span key={segment.key} className={styles.opaquePlaceholder}>
+					{displayValue}
+				</span>
+			) : (
+				<Fragment key={segment.key}>{segment.value}</Fragment>
+			)
 		}
 
 		const previewItem = segment.previewItem
-		const displayValue = getPlaceholderDisplayValue(segment, deletedSuffix)
 
 		if (segment.isDeleted) {
 			return (

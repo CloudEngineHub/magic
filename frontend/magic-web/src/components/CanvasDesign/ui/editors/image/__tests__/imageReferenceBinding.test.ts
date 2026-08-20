@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	pruneProtectedReferencePaths,
+	reconcileOpaqueAssetProtectedReferencePaths,
 	resolveExplicitPromptReferencePaths,
 	resolveReferenceBindingState,
 	unprotectPromptBoundReferencePaths,
@@ -132,6 +133,41 @@ describe("imageReferenceBinding", () => {
 				["/design/images/b.png"],
 			),
 		).toEqual(["/design/images/a.png"])
+	})
+
+	it("protects opaque assets during sync without masking explicit mention removal", () => {
+		expect(
+			reconcileOpaqueAssetProtectedReferencePaths({
+				referenceFileInfos: [
+					{ path: "asset://virtual-human-asset-id" },
+					{ path: "./images/reference.png" },
+				],
+				protectedReferencePaths: [],
+				currentPrompt: "继续编辑 @asset://virtual-human-asset-id",
+				previousPrompt: "继续编辑 @asset://virtual-human-asset-id",
+				source: "user",
+			}),
+		).toEqual(["asset://virtual-human-asset-id"])
+
+		expect(
+			reconcileOpaqueAssetProtectedReferencePaths({
+				referenceFileInfos: [{ path: "asset://virtual-human-asset-id" }],
+				protectedReferencePaths: ["asset://virtual-human-asset-id"],
+				currentPrompt: "继续编辑",
+				previousPrompt: "继续编辑 @asset://virtual-human-asset-id",
+				source: "user",
+			}),
+		).toEqual([])
+
+		expect(
+			reconcileOpaqueAssetProtectedReferencePaths({
+				referenceFileInfos: [{ path: "asset://virtual-human-asset-id" }],
+				protectedReferencePaths: ["asset://virtual-human-asset-id"],
+				currentPrompt: "继续编辑",
+				previousPrompt: "继续编辑",
+				source: "user",
+			}),
+		).toEqual(["asset://virtual-human-asset-id"])
 	})
 
 	it("keeps unresolved path spellings separate when no host context exists", () => {

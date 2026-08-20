@@ -11,9 +11,8 @@ import {
 	type RefCallback,
 } from "react"
 import ReferenceMediaPreview from "../../previews/reference-media/index"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../primitives/shadcn/tooltip"
-import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
+import { Tooltip, TooltipTrigger } from "../../primitives/shadcn/tooltip"
+import ResourcePathTooltipContent from "../../primitives/custom/ResourcePathTooltipContent"
 import { Checkbox } from "../../primitives/shadcn/checkbox"
 import styles from "./SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
@@ -108,7 +107,6 @@ interface SourceListProps {
 /** 视频/图片编辑器顶部素材槽位列表（首帧 / 尾帧 / 参考素材等） */
 export default function SourceList(props: SourceListProps) {
 	const { className, style, options, renderItem, resolveResourceReference } = props
-	const portalContainer = usePortalContainer()
 
 	const entries = options ?? []
 	const slotEntries = entries.filter(isSourceListSlotOption)
@@ -321,18 +319,10 @@ export default function SourceList(props: SourceListProps) {
 										{slotItemNode}
 									</div>
 								</TooltipTrigger>
-								<TooltipPrimitive.Portal container={portalContainer || undefined}>
-									<TooltipContent
-										side="top"
-										sideOffset={6}
-										className="w-max max-w-[85vw] overflow-hidden border-black bg-black text-white"
-									>
-										<span className="block overflow-hidden text-ellipsis whitespace-nowrap text-left">
-											{resourceDisplayName}
-										</span>
-										<TooltipPrimitive.Arrow className="fill-black" />
-									</TooltipContent>
-								</TooltipPrimitive.Portal>
+								<ResourcePathTooltipContent
+									path={resourcePath}
+									displayName={resourceDisplayName}
+								/>
 							</Tooltip>
 						) : (
 							slotItemNode

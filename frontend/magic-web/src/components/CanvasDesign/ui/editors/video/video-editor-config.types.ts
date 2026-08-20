@@ -1,6 +1,6 @@
 import type React from "react"
 import type { VideoElement } from "../../../runtime/document/types"
-import type { MessageEditorRef } from "../message/MessageEditor"
+import type { MessageEditorMentionChangeContext, MessageEditorRef } from "../message/MessageEditor"
 import type {
 	GenerateVideoRequest,
 	StoredLinkedFrameBinding,
@@ -212,7 +212,11 @@ export interface VideoEditorConfig {
 		handleInputModeChange: (value: VideoInputMode) => void
 		/** 切换首尾帧 / 参考图 Tab，仅切换 UI 展示 */
 		handleInputTabChange: (value: "frame" | "reference") => void
-		handleReferenceMentionPathsChange: (paths: string[]) => void
+		handleReferenceMentionPathsChange: (
+			paths: string[],
+			currentPrompt?: string,
+			context?: MessageEditorMentionChangeContext,
+		) => void
 		prepareResourceSlotSelection: (
 			inputTab: "frame" | "reference",
 			slotIndex: number,

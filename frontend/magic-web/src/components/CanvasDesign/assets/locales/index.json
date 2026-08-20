@@ -327,6 +327,7 @@
 	"messageHistory": {
 		"billingPoints": "积分消耗",
 		"copyPrompt": "复制",
+		"copyResourcePath": "复制资源路径",
 		"elapsed": "已耗时",
 		"expandPrompt": "展开",
 		"finishedAt": "完成时间",

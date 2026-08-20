@@ -326,6 +326,7 @@
 	},
 	"messageHistory": {
 		"copyPrompt": "Copy",
+		"copyResourcePath": "Copy resource path",
 		"deletedSuffix": " (Deleted)",
 		"expandPrompt": "Expand",
 		"inputMode": "Input mode",

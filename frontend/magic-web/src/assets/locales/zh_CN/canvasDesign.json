@@ -326,6 +326,7 @@
 	},
 	"messageHistory": {
 		"copyPrompt": "复制",
+		"copyResourcePath": "复制资源路径",
 		"deletedSuffix": "（已删除）",
 		"expandPrompt": "展开",
 		"inputMode": "输入模式",

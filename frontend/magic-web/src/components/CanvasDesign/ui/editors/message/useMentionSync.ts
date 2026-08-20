@@ -10,6 +10,7 @@ import {
 } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MessageEditorMentionChangeContext } from "./MessageEditor"
 import { reconcileMentionPathsWithPersistedReferences } from "./mentionPathReconciliation"
+import { reconcileOpaqueAssetProtectedReferencePaths } from "./reference-assets/referenceBinding"
 
 interface UseMentionSyncOptions {
 	canvas: Canvas | null
@@ -52,9 +53,15 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 	} = options
 
 	const syncVersionRef = useRef(0)
+	const previousPromptRef = useRef<{ elementId: string; prompt: string } | null>(null)
 
 	const syncMentionPaths = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			const previousPrompt =
+				previousPromptRef.current?.elementId === elementId
+					? previousPromptRef.current.prompt
+					: undefined
+			previousPromptRef.current = { elementId, prompt: currentPrompt }
 			if (!canvas) return
 			const resolveResourceReference =
 				canvas.magicConfigManager.config?.methods?.resolveResourceReference
@@ -75,6 +82,14 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
+			const effectiveProtectedReferencePaths = reconcileOpaqueAssetProtectedReferencePaths({
+				referenceFileInfos: currentInfos,
+				protectedReferencePaths,
+				currentPrompt,
+				previousPrompt,
+				source: context.source,
+				resolveResourceReference,
+			})
 			const reconciledPaths = reconcileMentionPathsWithPersistedReferences({
 				incomingPaths: paths,
 				persistedPaths: currentInfos.map((info) => info.path),
@@ -86,7 +101,7 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			)
 			const mentionedPathIdentities = new Set(reconciledPaths.map(getResourceIdentity))
 			const protectedPathIdentities = new Set(
-				protectedReferencePaths.map(getResourceIdentity),
+				effectiveProtectedReferencePaths.map(getResourceIdentity),
 			)
 			const findMatchableItem = (path: string) => {
 				const identity = getResourceIdentity(path)

@@ -6,9 +6,10 @@ import {
 import {
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
+	isOpaqueAssetReference,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
-import { getMatchablePathsFromValue } from "../tiptap/contentUtils"
+import { getMatchablePathsFromValue, promptContainsMentionForFile } from "../tiptap/contentUtils"
 
 export type ReferenceBindingMode = "prompt-linked" | "detached-legacy" | "mixed"
 
@@ -51,6 +52,83 @@ export function areOrderedPathsEqual(
 		}
 	}
 	return true
+}
+
+function promptContainsReferenceMention(
+	prompt: string | undefined,
+	info: ReferenceBindingResourceInfo,
+): boolean {
+	if (!prompt) return false
+	const candidateNames = new Set([info.fileName, info.path].filter(Boolean))
+	return Array.from(candidateNames).some((name) => promptContainsMentionForFile(prompt, name))
+}
+
+/**
+ * Preserve opaque assets during prompt reconciliation without masking explicit user deletion.
+ *
+ * Existing protected references remain detached unless a user edit removes a mention that was
+ * present in the previous prompt. An opaque asset that is not yet protected is added only when
+ * it is currently mentioned or has not previously been mentioned, which covers legacy data and
+ * parser re-syncs without turning every missing path into a permanent resource.
+ */
+export function reconcileOpaqueAssetProtectedReferencePaths(params: {
+	referenceFileInfos: ReferenceBindingResourceInfo[]
+	protectedReferencePaths: string[]
+	currentPrompt?: string
+	previousPrompt?: string
+	source?: "user" | "sync"
+	resolveResourceReference?: ResolveCanvasResourceReference
+}): string[] {
+	const {
+		referenceFileInfos,
+		protectedReferencePaths,
+		currentPrompt,
+		previousPrompt,
+		source = "sync",
+		resolveResourceReference,
+	} = params
+	const infoByIdentity = new Map(
+		referenceFileInfos.map((info) => [
+			getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
+			info,
+		]),
+	)
+	const protectedIdentities = new Set<string>()
+	const nextProtectedPaths: string[] = []
+
+	for (const path of protectedReferencePaths) {
+		const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
+		const info = infoByIdentity.get(identity)
+		const wasMentioned =
+			source === "user" &&
+			Boolean(previousPrompt) &&
+			Boolean(info && promptContainsReferenceMention(previousPrompt, info))
+		const isStillMentioned =
+			Boolean(currentPrompt) &&
+			Boolean(info && promptContainsReferenceMention(currentPrompt, info))
+		if (wasMentioned && !isStillMentioned) continue
+		if (!identity || protectedIdentities.has(identity)) continue
+		protectedIdentities.add(identity)
+		nextProtectedPaths.push(path)
+	}
+
+	for (const info of referenceFileInfos) {
+		if (!isOpaqueAssetReference(info.path)) continue
+		const identity = getCanvasResourceReferenceIdentity(info.path, resolveResourceReference)
+		if (!identity || protectedIdentities.has(identity)) continue
+		const wasMentioned = Boolean(
+			previousPrompt && promptContainsReferenceMention(previousPrompt, info),
+		)
+		const isCurrentlyMentioned = Boolean(
+			currentPrompt && promptContainsReferenceMention(currentPrompt, info),
+		)
+		if (isCurrentlyMentioned || !wasMentioned || source !== "user") {
+			protectedIdentities.add(identity)
+			nextProtectedPaths.push(info.path)
+		}
+	}
+
+	return nextProtectedPaths
 }
 
 /**

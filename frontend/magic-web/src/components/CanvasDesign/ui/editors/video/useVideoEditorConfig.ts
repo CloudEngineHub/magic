@@ -27,6 +27,7 @@ import {
 import {
 	areOrderedPathsEqual,
 	pruneProtectedReferencePaths,
+	reconcileOpaqueAssetProtectedReferencePaths,
 	resolveReferenceBindingState,
 	unprotectPromptBoundReferencePaths,
 	type ReferenceBindingMode,
@@ -90,6 +91,7 @@ import {
 	resolveVideoPromptPlaceholderReferences,
 } from "./prompt-placeholders/video-prompt-placeholder"
 import { createCanvasMentionPathMatcher } from "../connection/linkedMediaMentionMatcher"
+import type { MessageEditorMentionChangeContext } from "../message/MessageEditor"
 
 export type { VideoEditorConfig } from "./video-editor-config.types"
 
@@ -228,6 +230,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		null,
 	)
 	const [uploadUiDismissed, setUploadUiDismissed] = useState(false)
+	const previousReferenceMentionPromptRef = useRef<string | null>(null)
 
 	const hasRestoredRef = useRef(false)
 	const isRestoringRef = useRef(false)
@@ -1342,8 +1345,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 
 	const handleReferenceMentionPathsChange = useCallback(
-		(paths: string[]) => {
+		(paths: string[], currentPrompt?: string, context?: MessageEditorMentionChangeContext) => {
 			if (!supportsReferenceAssets) return
+			const previousPrompt = previousReferenceMentionPromptRef.current ?? undefined
+			previousReferenceMentionPromptRef.current = currentPrompt ?? null
 			const uniquePathByIdentity = new Map<string, string>()
 			paths.forEach((path) => {
 				const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
@@ -1352,8 +1357,16 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				}
 			})
 			const uniquePaths = Array.from(uniquePathByIdentity.values())
-			const nextProtectedPaths = unprotectPromptBoundReferencePaths(
+			const effectiveProtectedPaths = reconcileOpaqueAssetProtectedReferencePaths({
+				referenceFileInfos: referenceImageInfos,
 				protectedReferencePaths,
+				currentPrompt,
+				previousPrompt,
+				source: context?.source,
+				resolveResourceReference,
+			})
+			const nextProtectedPaths = unprotectPromptBoundReferencePaths(
+				effectiveProtectedPaths,
 				uniquePaths,
 				resolveResourceReference,
 			)
@@ -1361,11 +1374,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const nextProtectedPathIdentities = new Set(
 				nextProtectedPaths.map((path) =>
 					getCanvasResourceReferenceIdentity(path, resolveResourceReference),
-				),
-			)
-			const protectedInfos = referenceImageInfos.filter((info) =>
-				nextProtectedPathIdentities.has(
-					getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 				),
 			)
 			const sourcePaths = [
@@ -1379,10 +1387,15 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			]
 			const nextInfos = sourcePaths
 				.map((path) => {
-					const protectedInfo = protectedInfos.find((info) =>
+					const existingInfo = referenceImageInfos.find((info) =>
 						areCanvasResourceReferencesSame(info.path, path, resolveResourceReference),
 					)
-					if (protectedInfo) return protectedInfo
+					if (
+						existingInfo &&
+						isReferenceAssetTypeAllowed(existingInfo.assetType, currentInputModeConfig)
+					) {
+						return existingInfo
+					}
 					const assetType = resolveReferenceAssetType(path)
 					if (!assetType) return null
 					if (!isReferenceAssetTypeAllowed(assetType, currentInputModeConfig)) return null
