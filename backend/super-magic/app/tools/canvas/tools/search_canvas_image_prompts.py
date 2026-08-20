@@ -8,9 +8,9 @@
 """
 
 import random as random_module
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -24,6 +24,17 @@ from app.utils.async_file_utils import async_read_json
 logger = get_logger(__name__)
 
 _VALID_SORT_BY = {"rank", "likes", "views", "date"}
+_PROMPT_CATEGORIES = Literal[
+    "Photography",
+    "Product & Brand",
+    "Girl",
+    "Food & Drink",
+    "Illustration & 3D",
+    "App",
+    "JSON",
+    "Other",
+]
+_PROMPT_SORT_FIELDS = Literal["rank", "likes", "views", "date"]
 
 # 内存缓存，懒加载单例，asyncio 单事件循环下无需加锁
 _prompts_cache: Optional[List[Dict[str, Any]]] = None
@@ -151,28 +162,35 @@ def _format_content(results: List[Dict[str, Any]], total_matched: int, offset: i
 
 
 class SearchCanvasImagePromptsParams(BaseToolParams):
+    """提示词库搜索参数。"""
+
+    model_config = ConfigDict(extra="forbid")
+
     query: Optional[str] = Field(
         default=None,
         description="""<!--zh: 关键词搜索，匹配提示词正文、作者名、分类名。留空则按 sort_by 顺序浏览。-->
 Keyword search. Matches prompt text, author name, and category names. Leave empty to browse by sort_by order.""",
     )
-    category: Optional[str] = Field(
+    category: Optional[_PROMPT_CATEGORIES] = Field(
         default=None,
         description="""<!--zh: 分类过滤，不区分大小写。可选值：Photography, Product & Brand, Girl, Food & Drink, Illustration & 3D, App, JSON, Other。-->
 Category filter, case-insensitive. Valid values: Photography, Product & Brand, Girl, Food & Drink, Illustration & 3D, App, JSON, Other.""",
     )
-    sort_by: str = Field(
+    sort_by: _PROMPT_SORT_FIELDS = Field(
         default="rank",
         description="""<!--zh: 排序字段，仅在无 query 时生效。rank（默认，按互动量综合排名）/ likes / views / date。-->
 Sort field, only applies when query is empty. One of: rank (default, overall engagement rank), likes, views, date.""",
     )
     limit: int = Field(
         default=5,
+        ge=1,
+        le=20,
         description="""<!--zh: 返回结果数量，默认 5，最大 20。-->
 Number of results to return. Default 5, max 20.""",
     )
     offset: int = Field(
         default=0,
+        ge=0,
         description="""<!--zh: 分页偏移量，默认 0。-->
 Pagination offset. Default 0.""",
     )

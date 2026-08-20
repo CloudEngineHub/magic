@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.tools.canvas.tools.search_canvas_image_prompts import (
     SearchCanvasImagePrompts,
@@ -84,3 +85,19 @@ def test_prompt_tool_exposes_all_feedback_hooks() -> None:
     assert "get_before_tool_call_friendly_action_and_remark" in hooks
     assert "get_after_tool_call_friendly_action_and_remark" in hooks
     assert "get_tool_detail" in hooks
+
+
+def test_prompt_tool_schema_keeps_default_fields_optional() -> None:
+    """工具 Schema 不应把带默认值的提示词筛选参数误标为必填。"""
+    parameters = SearchCanvasImagePrompts().to_param()["function"]["parameters"]
+
+    assert parameters.get("required") == []
+    assert parameters["properties"]["limit"]["minimum"] == 1
+    assert parameters["properties"]["limit"]["maximum"] == 20
+    assert parameters["properties"]["offset"]["minimum"] == 0
+
+
+def test_prompt_tool_rejects_unknown_parameters() -> None:
+    """提示词工具不应静默忽略 Schema 之外的参数。"""
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        SearchCanvasImagePromptsParams(unexpected="value")
