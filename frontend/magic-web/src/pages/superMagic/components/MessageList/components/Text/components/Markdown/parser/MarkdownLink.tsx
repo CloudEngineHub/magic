@@ -8,6 +8,8 @@ import {
 } from "@/pages/superMagic/utils/filePathMention"
 import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
+import { FileReference, getFileExtensionFromPath } from "./FileReference"
+import { IconExternalLink } from "@tabler/icons-react"
 
 interface ParsedDomElement {
 	attribs?: Record<string, string>
@@ -55,29 +57,32 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 
 	if (fileInfo) {
 		return (
-			<span
-				className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] hover:bg-[#e0ecff]"
+			<FileReference
+				label={children}
+				fileType={
+					fileInfo.file_extension ||
+					getFileExtensionFromPath(workspacePath ?? normalizedHref)
+				}
 				onClick={onClick}
 				title={typeof children === "string" ? children : normalizedHref}
-			>
-				{children}
-			</span>
+			/>
 		)
 	}
 
 	if (isWorkspaceHrefCandidate(normalizedHref)) {
 		return (
-			<span
-				aria-disabled="true"
-				className="cursor-default overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] opacity-60"
-				title={normalizedTitle ?? normalizedHref}
-				{...safeAttributes}
-				style={normalizedStyle}
-			>
-				{children}
+			<span {...safeAttributes} style={normalizedStyle}>
+				<FileReference
+					label={children}
+					fileType={getFileExtensionFromPath(normalizedHref)}
+					disabled
+					title={normalizedTitle ?? normalizedHref}
+				/>
 			</span>
 		)
 	}
+
+	const isExternalLink = /^(?:https?:|mailto:)/i.test(normalizedHref)
 
 	return (
 		<a
@@ -85,11 +90,14 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			rel={normalizedRel}
 			target={normalizedTarget}
 			className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 !text-[#315cec] hover:bg-[#e0ecff]"
-			title={normalizedTitle ?? `File does not exist @${normalizedHref}`}
+			title={normalizedTitle ?? normalizedHref}
 			data-testid="markdown-link-anchor"
 			{...safeAttributes}
 			style={normalizedStyle}
 		>
+			{isExternalLink ? (
+				<IconExternalLink size={14} className="mr-1 inline shrink-0" />
+			) : null}
 			{children}
 		</a>
 	)

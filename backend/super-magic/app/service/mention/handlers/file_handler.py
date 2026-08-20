@@ -3,7 +3,6 @@ import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from urllib.parse import quote
 
 from app.path_manager import PathManager
 from app.service.mention.base import BaseMentionHandler, logger
@@ -94,14 +93,25 @@ def _markdown_label(value: str) -> str:
     return " ".join(value.split()).replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
 
+def _encode_markdown_path(path: str) -> Optional[str]:
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in path):
+        return None
+
+    replacements = str.maketrans({"%": "%25", "#": "%23", "?": "%3F", "<": "%3C", ">": "%3E"})
+    return "/".join(segment.translate(replacements) for segment in path.split("/"))
+
+
 def _canonical_file_link(file_path: str, file_name: str) -> Optional[str]:
     relative_path = _workspace_relative_path(file_path)
     if not relative_path:
         return None
 
-    encoded_path = "/".join(quote(segment, safe="-._~") for segment in relative_path.split("/"))
+    encoded_path = _encode_markdown_path(relative_path)
+    if not encoded_path:
+        return None
+
     label = _markdown_label(file_name or Path(relative_path).name)
-    return f"[{label}](./{encoded_path})"
+    return f"[{label}](<./{encoded_path}>)"
 
 
 class FileHandler(BaseMentionHandler):

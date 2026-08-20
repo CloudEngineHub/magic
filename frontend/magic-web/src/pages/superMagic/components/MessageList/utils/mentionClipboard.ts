@@ -33,7 +33,7 @@ export function getMentionClipboardRepresentation(
 	if (!href || !label) return null
 
 	return {
-		plainText: `[${escapeMarkdownLinkLabel(label)}](${href})`,
+		plainText: `[${escapeMarkdownLinkLabel(label)}](<${href}>)`,
 		htmlContent: `<a href="${escapeHtmlText(href)}">${escapeHtmlText(label)}</a>`,
 	}
 }

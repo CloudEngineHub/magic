@@ -20,8 +20,14 @@ final class AgentMention extends AbstractMention
             return '';
         }
 
-        $agentName = $data->getAgentName() ?? '';
-        return sprintf('[@agent:%s]', $agentName);
+        $agentId = $data->getAgentId() ?? '';
+        $agentName = $data->getAgentName() ?? $agentId;
+        if ($agentId === '' || $agentName === '') {
+            return '';
+        }
+
+        $label = str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $agentName);
+        return sprintf('[%s](agent://%s)', $label, rawurlencode($agentId));
     }
 
     public function getMentionJsonStruct(): array

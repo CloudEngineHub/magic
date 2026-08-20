@@ -1,4 +1,4 @@
-import { replaceFilePathMentions } from "./filePathMention"
+import { replaceFilePathMentionsOutsideFencedCode } from "./filePathMention"
 
 // 常见的 HTML 标签白名单
 const HTML_TAGS = new Set([
@@ -132,7 +132,7 @@ export const preprocessMarkdown = (content: string) => {
 
 	// 处理 [@file_path:路径] 语法，转换为自定义标签
 	if (processedContent.includes("[@file_path:")) {
-		processedContent = replaceFilePathMentions(processedContent, (path) => {
+		processedContent = replaceFilePathMentionsOutsideFencedCode(processedContent, (path) => {
 			// 对路径进行 HTML 转义，避免属性值中的特殊字符问题
 			const escapedPath = path
 				.replace(/&/g, "&amp;")

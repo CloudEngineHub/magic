@@ -110,6 +110,10 @@ class LLMRetryState:
     backoff_retry_count: int = 0
     # 总退避等待时间（用于日志）
     total_backoff_wait_time: float = 0.0
+    # 当前失败链中可能丢失的生成输出状态
+    consecutive_generation_failures: int = 0
+    max_lost_output_chars_in_streak: int = 0
+    split_recovery_hint_injected: bool = False
 
 
 @dataclass
@@ -1273,7 +1277,10 @@ class Agent(BaseAgent):
                         self.set_agent_state(AgentState.RUNNING)
                         loop_state.agent_loop_retry_count = 0
                         # 重置 LLM 重试状态（成功恢复后重新开始）
-                        loop_state.retry_state = LLMRetryState()
+                        split_hint_injected = loop_state.retry_state.split_recovery_hint_injected
+                        loop_state.retry_state = LLMRetryState(
+                            split_recovery_hint_injected=split_hint_injected,
+                        )
 
                     # 处理无工具调用的情况
                     if not llm_context.has_tool_calls and llm_context.message.role == "assistant":
@@ -1299,7 +1306,10 @@ class Agent(BaseAgent):
                     logger.info(f"从 ERROR 状态恢复为 RUNNING（会话恢复路径）{retry_info}")
                     self.set_agent_state(AgentState.RUNNING)
                     loop_state.agent_loop_retry_count = 0
-                    loop_state.retry_state = LLMRetryState()
+                    split_hint_injected = loop_state.retry_state.split_recovery_hint_injected
+                    loop_state.retry_state = LLMRetryState(
+                        split_recovery_hint_injected=split_hint_injected,
+                    )
 
                 # 执行工具调用并处理结果
                 tool_result = await self._execute_and_process_tool_calls(llm_context)
@@ -2262,23 +2272,11 @@ Since your subsequent output will be merged with pre-interruption content and di
     # 兼容各家不同的 finish_reason 值（"输出被截断"）
     _OUTPUT_TRUNCATED_FINISH_REASONS = {"length", "max_tokens"}
 
-    # 递进式恢复提示词（逐级加严）
-    _PROGRESSIVE_RECOVERY_PROMPTS = [
-        # 第 1 次（含流式降级）
-        "Your previous response was interrupted. "
-        "Break remaining work into smaller pieces and generate shorter responses.",
-        # 第 2 次
-        "Your response was interrupted again. You MUST generate shorter responses. "
-        "Limit each response to ONE focused step.",
-        # 第 3 次
-        "CRITICAL: Your responses keep getting interrupted. "
-        "Each response MUST be under 5000 characters. "
-        "Generate only ONE small, focused action per response.",
-        # 第 4~5 次
-        "FINAL WARNING: Output is still too long. "
-        "Respond with ONLY a single tool call with minimal arguments. "
-        "Do NOT include explanations or commentary. Maximum 2000 characters.",
-    ]
+    _GENERATION_SPLIT_RECOVERY_PROMPT = (
+        "A substantial model response was lost after repeated generation failures. "
+        "Continue from the available context, split the remaining work into smaller steps, "
+        "and keep each response focused."
+    )
 
     def _extract_chunk_count(self, exception: Exception) -> int:
         """从异常链中提取已收到的 chunk 数量（仅用于日志）"""
@@ -2286,6 +2284,33 @@ Since your subsequent output will be merged with pre-interruption content and di
             if isinstance(exc, (StreamInterruptedError, StreamChunkTimeoutError)):
                 return exc.chunk_count
         return 0
+
+    def _extract_emitted_text_chars(self, exception: Exception) -> int:
+        """从异常链提取流式失败前已经输出的 reasoning 和 content 字符数。"""
+        for exc in self._iter_exception_chain(exception):
+            if isinstance(exc, (StreamInterruptedError, StreamChunkTimeoutError)):
+                return exc.emitted_text_chars
+        return 0
+
+    def _record_generation_failure(self, loop_state: AgentLoopState, exception: Exception) -> bool:
+        """记录一次可能丢失生成内容的失败，并判断是否达到拆分提示门槛。"""
+        retry_state = loop_state.retry_state
+        retry_state.consecutive_generation_failures += 1
+        retry_state.max_lost_output_chars_in_streak = max(
+            retry_state.max_lost_output_chars_in_streak,
+            self._extract_emitted_text_chars(exception),
+        )
+        return (
+            retry_state.consecutive_generation_failures >= 2
+            and retry_state.max_lost_output_chars_in_streak >= 5000
+            and not retry_state.split_recovery_hint_injected
+        )
+
+    @staticmethod
+    def _reset_generation_failure_streak(loop_state: AgentLoopState) -> None:
+        retry_state = loop_state.retry_state
+        retry_state.consecutive_generation_failures = 0
+        retry_state.max_lost_output_chars_in_streak = 0
 
     def _find_context_window_error(self, exception: Exception) -> Optional[LLMErrorSnapshot]:
         """在异常链中查找上下文超长错误，返回对应的 snapshot 或 None"""
@@ -2370,16 +2395,19 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 第一阶梯：流式尝试（仅在未降级时）
         if not loop_state.retry_state.streaming_disabled:
             try:
-                return await self._prepare_and_call_llm(
+                response = await self._prepare_and_call_llm(
                     use_stream=True,
                     first_chunk_timeout=config.get("llm.stream_first_chunk_timeout_seconds", 60),
                     chunk_timeout=config.get("llm.stream_chunk_timeout_seconds", 60),
                 )
+                self._reset_generation_failure_streak(loop_state)
+                return response
             except ResourceLimitExceededException:
                 raise  # 平台业务限制（积分/并发），直接终止
             except Exception as e:
                 compact_fallback = await self._try_fallback_compact_model_once(e)
                 if compact_fallback is not None:
+                    self._reset_generation_failure_streak(loop_state)
                     return compact_fallback
                 if self._find_context_window_error(e):
                     raise  # 上下文超长走 compact 路径
@@ -2408,12 +2436,15 @@ Since your subsequent output will be merged with pre-interruption content and di
                     # 流式失败 → 降级非流式
                     loop_state.retry_state.streaming_disabled = True
                     received_chunks = self._extract_chunk_count(e)
-                    # 无论是否收到过 chunk，都注入恢复提示词（保成功率优先）
-                    await self._try_inject_output_recovery_message(
-                        loop_state,
-                        self._PROGRESSIVE_RECOVERY_PROMPTS[0],
-                        source="stream_interruption_recovery",
-                    )
+                    should_inject_split_hint = self._record_generation_failure(loop_state, e)
+                    if should_inject_split_hint:
+                        injected = await self._try_inject_output_recovery_message(
+                            loop_state,
+                            self._GENERATION_SPLIT_RECOVERY_PROMPT,
+                            source="generation_split_recovery",
+                        )
+                        if injected:
+                            loop_state.retry_state.split_recovery_hint_injected = True
                     logger.warning(f"流式请求失败（chunks={received_chunks}），降级非流式: {e}")
                 # 落入第二阶梯
 
@@ -2423,10 +2454,12 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         while True:
             try:
-                return await self._prepare_and_call_llm(
+                response = await self._prepare_and_call_llm(
                     use_stream=False,
                     non_stream_timeout=timeout,
                 )
+                self._reset_generation_failure_streak(loop_state)
+                return response
             except ResourceLimitExceededException:
                 raise  # 平台业务限制，直接终止
             except Exception as e:
@@ -2435,6 +2468,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     non_stream_timeout=timeout,
                 )
                 if compact_fallback is not None:
+                    self._reset_generation_failure_streak(loop_state)
                     return compact_fallback
                 if self._find_context_window_error(e):
                     if not loop_state.reactive_compact_attempted:
@@ -2468,18 +2502,15 @@ Since your subsequent output will be merged with pre-interruption content and di
                 if loop_state.retry_state.backoff_retry_count >= max_retries:
                     raise  # 重试预算耗尽
 
-                # 递进式恢复提示词：backoff_retry_count=1 时取 prompt[1]（第二级）。
-                # prompt[0] 已在流式降级时注入；若从 429 降级（未注入 prompt[0]），
-                # 直接从 prompt[1] 开始也合理——429 不是输出截断问题，不需要最温和的提示。
-                prompt_idx = min(
-                    loop_state.retry_state.backoff_retry_count,
-                    len(self._PROGRESSIVE_RECOVERY_PROMPTS) - 1
-                )
-                await self._try_inject_output_recovery_message(
-                    loop_state,
-                    self._PROGRESSIVE_RECOVERY_PROMPTS[prompt_idx],
-                    source="backoff_retry_recovery",
-                )
+                should_inject_split_hint = self._record_generation_failure(loop_state, e)
+                if should_inject_split_hint:
+                    injected = await self._try_inject_output_recovery_message(
+                        loop_state,
+                        self._GENERATION_SPLIT_RECOVERY_PROMPT,
+                        source="generation_split_recovery",
+                    )
+                    if injected:
+                        loop_state.retry_state.split_recovery_hint_injected = True
 
                 # 指数退避 + jitter（base=10s, max=60s）
                 base_wait = min(10 * (2 ** (loop_state.retry_state.backoff_retry_count - 1)), 60)

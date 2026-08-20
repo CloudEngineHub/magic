@@ -591,7 +591,7 @@ Use visual_understanding tool to analyze uploaded images and write info into sli
 用户有一套话术来描述想对指定页面做的事情，分别是：
 - 重构：思考与回顾content_design_principles中的内容，使用与之前完全不一样的布局设计重新设计组合页面
 - 修复：思考与回顾高度控制技巧、图片使用技巧等，并修复页面中的问题
-如：重构 [slide.html](./project-name/slide.html)
+如：重构 [slide.html](<./project-name/slide.html>)
 若用户未指定页面，则对其发出询问，待用户确认后再进行操作
 
 用户还可能使用以下话术来指定 PPT 模板：
@@ -601,7 +601,7 @@ Use visual_understanding tool to analyze uploaded images and write info into sli
 Users have terminology to describe actions for specified pages:
 - Refactor: Think and review content in content_design_principles, redesign and recombine page with completely different layout design
 - Fix: Think and review height control techniques, image usage techniques, etc., and fix issues in page
-Example: Refactor [slide.html](./project-name/slide.html)
+Example: Refactor [slide.html](<./project-name/slide.html>)
 If user doesn't specify page, ask for clarification, proceed after user confirmation
 
 Users may also use the following expressions to specify a slide template:

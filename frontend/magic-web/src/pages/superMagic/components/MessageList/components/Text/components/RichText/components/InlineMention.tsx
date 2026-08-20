@@ -24,6 +24,10 @@ import {
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import {
+	FileReference,
+	getFileExtensionFromPath,
+} from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/FileReference"
 
 interface InlineMentionProps {
 	data: TiptapMentionAttributes
@@ -139,6 +143,38 @@ function InlineDefaultMention(props: InlineMentionProps) {
 	const isDirectory =
 		data.type === MentionItemType.FOLDER || data.type === MentionItemType.MEMORY_DIRECTORY
 	const label = isDirectory ? `@${displayName}/` : `@${displayName}`
+	const isFileMention =
+		data.type === MentionItemType.PROJECT_FILE || data.type === MentionItemType.UPLOAD_FILE
+	const fileData = isFileMention
+		? (data.data as ProjectFileMentionData | UploadFileMentionData)
+		: undefined
+	const filePath =
+		fileData?.relative_file_path || fileData?.file_path || fileData?.file_name || ""
+	const fileVisual = isFileMention ? (
+		<span
+			className="magic-mention"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			onMouseDown={(event) => event.preventDefault()}
+		>
+			<FileReference
+				label={fileData?.file_name || displayName}
+				fileType={fileData?.file_extension || getFileExtensionFromPath(filePath)}
+				title={fileData?.file_name || displayName}
+				onClick={handleClick}
+			/>
+		</span>
+	) : (
+		<span
+			className="magic-mention"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={handleClick}
+		>
+			{label}
+		</span>
+	)
 
 	return (
 		<MentionTooltipWrapper
@@ -150,15 +186,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			markerLoading={markerLoading}
 			markerImageUrl={markerImageUrl}
 		>
-			<span
-				className="magic-mention"
-				data-type={data.type}
-				data-data={JSON.stringify(data.data)}
-				onMouseDown={(event) => event.preventDefault()}
-				onClick={handleClick}
-			>
-				{label}
-			</span>
+			{fileVisual}
 		</MentionTooltipWrapper>
 	)
 }

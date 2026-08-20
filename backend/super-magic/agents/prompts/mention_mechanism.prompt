@@ -9,12 +9,12 @@ User messages may contain references in two forms:
 
 <!--zh
 ### 1. 顶部引用区
-`<mentions>` 中的文件、MCP、Agent、Skill 分别使用 `[名称](./工作区相对路径)`、`[名称](mcp://服务名)`、`[名称](agent://agent_id)`、`[名称](skill://package_name)`；按需读取或调用，图片需要视觉理解。
+`<mentions>` 中的文件、MCP、Agent、Skill 分别使用 `[名称](<./工作区相对路径>)`、`[名称](mcp://服务名)`、`[名称](agent://agent_id)`、`[名称](skill://package_name)`；按需读取或调用，图片需要视觉理解。
 - `[@design_marker:标记名]`：设计标记引用，用户在图片上标记的特定区域，需精确修改该位置
 - `[@design_canvas_project:路径]`：设计画布项目引用，冒号后的路径是工作区相对路径，在所有画布工具调用中必须原样作为 project_path 使用，不可截断或重命名，不可另建新项目
 -->
 ### 1. Top Reference Section
-In `<mentions>`, files, MCP servers, agents, and skills use `[name](./workspace-relative-path)`, `[name](mcp://server_name)`, `[name](agent://agent_id)`, and `[name](skill://package_name)` when canonical identity is present; inspect or invoke them only as needed, use visual understanding for images, and do not generate legacy token syntax.
+`<mentions>` contains resources explicitly selected by the user through the `@` mention picker. It carries resource data only; the explanation of this meaning comes from this prompt, not from extra prose inside the `<mentions>` block. Files, MCP servers, agents, and skills use `[name](<./workspace-relative-path>)`, `[name](mcp://server_name)`, `[name](agent://agent_id)`, and `[name](skill://package_name)` when canonical identity is present. Inspect or invoke them only as needed, use visual understanding for images, do not add `@` to Markdown link labels, and do not generate legacy token syntax.
 - `[@design_marker:label]`: Design marker reference, user-marked specific region on image, requires precise modification at that location
 - `[@design_canvas_project:path]`: Canvas design project reference. The `path` after the colon is a workspace-relative path; use it verbatim as `project_path` in all canvas tool calls — do not truncate, shorten, or create a different project
 
@@ -23,7 +23,7 @@ In `<mentions>`, files, MCP servers, agents, and skills use `[name](./workspace-
 消息文本中的 Markdown 文件链接；遇到历史 `[@file_path:...]` 时按原语义理解，但不要主动生成
 -->
 ### 2. Inline References
-Use Markdown workspace links in message text. Understand historical `[@file_path:...]` references with their existing meaning, but do not generate them.
+Use Markdown workspace links in message text, including when a file mention appears inside the user's sentence. Keep the original sentence structure and use `[file name](<./workspace-relative-path>)` without an `@` in the label. Understand historical `[@file_path:...]` references with their existing meaning, but do not generate them.
 
 <!--zh
 ### 处理要点
@@ -40,7 +40,7 @@ Use Markdown workspace links in message text. Understand historical `[@file_path
 ### 主动汇报交付物
 
 当你直接回复用户且已生成用户可用的产物文件（报告、图片、表格等），在回复里使用：
-[显示名称](./工作区相对路径)
+[显示名称](<./工作区相对路径>)
 
 前端会渲染为可点击的蓝色文件链接。只列用户真正关心的产物文件，跳过临时或中间文件。
 
@@ -51,10 +51,10 @@ Use Markdown workspace links in message text. Understand historical `[@file_path
 ### Reporting Deliverables to the User
 
 When replying directly to the user and you have generated output files they can use (reports, images, spreadsheets, etc.), reference them using:
-[display name](./workspace-relative-path)
+[display name](<./workspace-relative-path>)
 
 The frontend renders this as a clickable blue file link. Only list files the user actually cares about — skip temporary or intermediate files.
 
 Example:
-  Full report: [market-research.md](./reports/market-research.md)
-  Data file: [result.csv](./data/result.csv)
+  Full report: [market-research.md](<./reports/market-research.md>)
+  Data file: [result.csv](<./data/result.csv>)

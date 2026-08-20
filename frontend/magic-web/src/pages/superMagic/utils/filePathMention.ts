@@ -93,10 +93,16 @@ export function isWorkspaceHrefCandidate(href: string): boolean {
 }
 
 function encodePathSegment(segment: string): string {
-	return encodeURIComponent(segment).replace(
-		/[!'()*]/g,
-		(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-	)
+	return segment.replace(/[#?%<>]/g, (char) => {
+		const encoded: Record<string, string> = {
+			"#": "%23",
+			"?": "%3F",
+			"%": "%25",
+			"<": "%3C",
+			">": "%3E",
+		}
+		return encoded[char]
+	})
 }
 
 export function createCanonicalWorkspaceHref(path: string): string | null {
@@ -441,5 +447,49 @@ export function replaceFilePathMentions(
 	}
 
 	result += content.slice(lastIndex)
+	return result
+}
+
+export function replaceFilePathMentionsOutsideFencedCode(
+	content: string,
+	replacer: (path: string, match: FilePathMentionMatch) => string,
+): string {
+	const lines = content.split(/(\r?\n)/)
+	let fenceCharacter: "`" | "~" | null = null
+	let fenceLength = 0
+	let outsideBuffer = ""
+	let result = ""
+
+	const flushOutsideBuffer = () => {
+		if (!outsideBuffer) return
+		result += replaceFilePathMentions(outsideBuffer, replacer)
+		outsideBuffer = ""
+	}
+
+	for (const line of lines) {
+		const fenceMatch = line.match(/^(?: {0,3})(`{3,}|~{3,})/)
+		if (fenceMatch) {
+			flushOutsideBuffer()
+			const marker = fenceMatch[1]
+			const markerCharacter = marker[0] as "`" | "~"
+			if (!fenceCharacter) {
+				fenceCharacter = markerCharacter
+				fenceLength = marker.length
+			} else if (markerCharacter === fenceCharacter && marker.length >= fenceLength) {
+				fenceCharacter = null
+				fenceLength = 0
+			}
+			result += line
+			continue
+		}
+
+		if (fenceCharacter) {
+			result += line
+		} else {
+			outsideBuffer += line
+		}
+	}
+
+	flushOutsideBuffer()
 	return result
 }
