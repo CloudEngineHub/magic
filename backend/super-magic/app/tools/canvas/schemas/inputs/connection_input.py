@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from app.tools.core import BaseToolParams
+from app.tools.canvas.application.commands import ConnectionCommand
 
 
 class ConnectionInput(BaseToolParams):
@@ -33,3 +34,13 @@ class ConnectionInput(BaseToolParams):
         if not has_endpoints and not self.remove_connection_ids:
             raise ValueError("connection item must add, remove, or replace a Connection")
         return self
+
+    def to_command(self) -> ConnectionCommand:
+        """转换为 Connection 应用命令。"""
+        return ConnectionCommand(
+            item_ref=self.item_ref,
+            source_element_id=self.source_element_id,
+            target_element_id=self.target_element_id,
+            replace_existing_connections=self.replace_existing_connections,
+            remove_connection_ids=tuple(self.remove_connection_ids),
+        )

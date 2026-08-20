@@ -91,8 +91,7 @@ class LayoutCanvasElements(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """执行布局策略，不修改 Content 或 Connection。"""
         try:
-            payload = [item.model_dump(exclude_none=True) for item in params.items]
-            result = await _application(tool_context).layout(params.project_path, payload)
+            result = await _application(tool_context).layout(params.project_path, [item.to_command() for item in params.items])
             return ToolResult(
                 content=items_content(
                     "Canvas layout updated successfully.",

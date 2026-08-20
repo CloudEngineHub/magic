@@ -2,6 +2,7 @@
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasDocument, CanvasElement
+from app.tools.canvas.domain.models.element_properties import ElementProperties
 from app.tools.canvas.strategies.layout.geometry import height, next_z_index, number, overlaps, width
 from app.tools.canvas.strategies.layout.interface import LayoutStrategyInterface
 from app.tools.canvas.strategies.layout.plan import LayoutMutationPlan
@@ -27,8 +28,8 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
             item
             for item in canvas.siblings(element.element_id)
             if item.element_id != element.element_id
-            and number(item.properties.get("x")) is not None
-            and number(item.properties.get("y")) is not None
+            and number(item.properties.x) is not None
+            and number(item.properties.y) is not None
         ]
         source_ids = [
             connection.source_element_id
@@ -44,22 +45,22 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
                 "Dependency layout requires all connected Elements to share the same direct parent.",
             )
         if sources:
-            if any(number(source.properties.get("x")) is None or number(source.properties.get("y")) is None for source in sources):
+            if any(number(source.properties.x) is None or number(source.properties.y) is None for source in sources):
                 raise CanvasDomainError("LAYOUT_SOURCE_UNPOSITIONED", "Dependency layout requires positioned upstream Elements.")
-            preferred_x = max(float(source.properties["x"]) + width(source) for source in sources) + self.horizontal_gap
-            preferred_y = float(sources[0].properties["y"])
+            preferred_x = max(float(source.properties.x or 0.0) + width(source) for source in sources) + self.horizontal_gap
+            preferred_y = float(sources[0].properties.y or 0.0)
         else:
             preferred_x = 0.0
-            root_column = [item for item in occupied if abs(float(item.properties["x"])) < 1.0]
+            root_column = [item for item in occupied if abs(float(item.properties.x or 0.0)) < 1.0]
             preferred_y = (
-                max(float(item.properties["y"]) + height(item) for item in root_column) + self.vertical_gap
+                max(float(item.properties.y or 0.0) + height(item) for item in root_column) + self.vertical_gap
                 if root_column
                 else 0.0
             )
         x, y = self._find_available(element, preferred_x, preferred_y, occupied)
-        changes = {"x": x, "y": y}
-        if number(element.properties.get("zIndex")) is None:
-            changes["zIndex"] = next_z_index(canvas, element)
+        changes = ElementProperties(x=x, y=y)
+        if number(element.properties.z_index) is None:
+            changes.z_index = next_z_index(canvas, element)
         return LayoutMutationPlan(element.element_id, changes)
 
     def _find_available(
@@ -75,4 +76,4 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
             collisions = [item for item in occupied if overlaps(element, preferred_x, candidate_y, item)]
             if not collisions:
                 return preferred_x, candidate_y
-            candidate_y = max(float(item.properties["y"]) + height(item) for item in collisions) + self.vertical_gap
+            candidate_y = max(float(item.properties.y or 0.0) + height(item) for item in collisions) + self.vertical_gap

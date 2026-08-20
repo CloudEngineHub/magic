@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from app.tools.core import BaseToolParams
+from app.tools.canvas.application.commands import LayoutCommand
 
 
 class LayoutInput(BaseToolParams):
@@ -29,3 +30,10 @@ class LayoutInput(BaseToolParams):
         if self.position is not None and any(not math.isfinite(value) for value in self.position.values()):
             raise ValueError("position values must be finite numbers")
         return self
+
+    def to_command(self) -> LayoutCommand:
+        """转换为 Application 使用的布局命令。"""
+        position = None
+        if self.position is not None:
+            position = (self.position["x"], self.position["y"])
+        return LayoutCommand(strategy=self.strategy, position=position)

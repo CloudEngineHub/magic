@@ -88,11 +88,10 @@ class RetryCanvasContentGeneration(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """在重试上限内复用原 Content ID。"""
         try:
-            payload = [item.model_dump(exclude_none=True) for item in params.items]
             result = await _application(tool_context).retry_content(
                 params.project_path,
-                payload,
-                tool_context,
+                [item.to_command() for item in params.items],
+                tool_context=tool_context,
             )
             return ToolResult(
                 content=items_content(

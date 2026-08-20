@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Iterable
 
 from app.tools.canvas.domain.models.canvas_content import CanvasContent
+from app.tools.canvas.domain.models.element_properties import ElementProperties
 
 @dataclass
 class CanvasElement:
@@ -14,7 +14,7 @@ class CanvasElement:
 
     element_id: str
     element_type: str
-    properties: dict[str, Any] = field(default_factory=dict)
+    properties: ElementProperties = field(default_factory=ElementProperties)
     contents: list[CanvasContent] = field(default_factory=list)
     active_content_id: str | None = None
     main_content_id: str | None = None
@@ -25,7 +25,7 @@ class CanvasElement:
         return CanvasElement(
             element_id=self.element_id,
             element_type=self.element_type,
-            properties=deepcopy(self.properties),
+            properties=ElementProperties.from_dict(self.properties.to_dict()),
             contents=[content.clone() for content in self.contents],
             active_content_id=self.active_content_id,
             main_content_id=self.main_content_id,
@@ -44,12 +44,12 @@ class CanvasElement:
             return None
         return next((item for item in self.contents if item.content_id == content_id), None)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         """转换为主协议 Element 字典。"""
         result = {
             "id": self.element_id,
             "type": self.element_type,
-            **deepcopy(self.properties),
+            **self.properties.to_dict(),
             "activeContentId": self.active_content_id,
             "mainContentId": self.main_content_id,
             "contents": [content.to_dict() for content in self.contents],

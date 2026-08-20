@@ -111,8 +111,7 @@ class AddCanvasConnections(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """按明确 ID 管理 Connection。"""
         try:
-            payload = [item.model_dump(exclude_none=True) for item in params.items]
-            result = await _application(tool_context).connections(params.project_path, payload)
+            result = await _application(tool_context).connections(params.project_path, [item.to_command() for item in params.items])
             return ToolResult(
                 content=items_content(
                     "Canvas Connections updated successfully.",

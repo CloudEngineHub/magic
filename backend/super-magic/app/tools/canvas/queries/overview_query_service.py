@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.tools.canvas.domain.models import CanvasContent
+from app.tools.canvas.domain.content_fields import ContentFieldsFactory
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 
@@ -44,17 +45,17 @@ class OverviewQueryService:
                 {
                     "element_id": element.element_id,
                     "element_type": element.element_type,
-                    "name": element.properties.get("name"),
-                    "x": element.properties.get("x"),
-                    "y": element.properties.get("y"),
-                    "width": element.properties.get("width"),
-                    "height": element.properties.get("height"),
+                    "name": element.properties.name,
+                    "x": element.properties.x,
+                    "y": element.properties.y,
+                    "width": element.properties.width,
+                    "height": element.properties.height,
                     "content_count": len(element.contents),
                     "active_content_id": element.active_content_id,
                     "main_content_id": element.main_content_id,
                     "status": (
-                        element.get_content(element.active_content_id) or CanvasContent("", {})
-                    ).fields.get("status"),
+                        element.get_content(element.active_content_id) or CanvasContent("", ContentFieldsFactory.empty(element.element_type))
+                    ).fields.generation_status,
                     "parent_element_id": tree.parent_id(element.element_id),
                     "depth": tree.depth(element.element_id),
                     "child_count": len(tree.child_ids(element.element_id)),

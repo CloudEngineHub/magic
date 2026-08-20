@@ -1,7 +1,7 @@
 """生成请求模型。"""
 
 from dataclasses import dataclass, field
-from typing import Any
+from app.tools.canvas.application.commands import GenerationParameters
 
 
 @dataclass(frozen=True)
@@ -12,4 +12,4 @@ class GenerationRequest:
     element_id: str
     content_id: str
     element_type: str
-    parameters: dict[str, Any] = field(default_factory=dict)
+    parameters: GenerationParameters = field(default_factory=GenerationParameters)

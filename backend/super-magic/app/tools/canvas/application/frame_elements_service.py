@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
+from collections.abc import Sequence
+from app.tools.canvas.application.commands import FrameElementsCommand
 
 from app.tools.canvas.application.support import CanvasApplicationSupport
 from app.tools.canvas.domain.errors import CanvasDomainError
@@ -20,7 +22,7 @@ class FrameElementsService(CanvasApplicationSupport):
     async def frame_elements(
         self,
         project_path: str,
-        items: list[dict[str, Any]],
+        items: Sequence[FrameElementsCommand],
     ) -> dict[str, Any]:
         """将根级普通兄弟节点框选为新 Frame，并完成局部坐标转换。"""
         self.validate_unique_item_refs(items)
@@ -31,12 +33,12 @@ class FrameElementsService(CanvasApplicationSupport):
             results: list[dict[str, Any]] = []
             selected_ids: set[str] = set()
             for item in items:
-                current_item_ref = item["item_ref"]
+                current_item_ref = item.item_ref
                 request = FrameSelectionRequest(
-                    item_ref=item["item_ref"],
-                    element_ids=tuple(item.get("element_ids") or []),
-                    name=item.get("name"),
-                    padding=item.get("padding"),
+                    item_ref=item.item_ref,
+                    element_ids=item.element_ids,
+                    name=item.name,
+                    padding=item.padding,
                 )
                 if selected_ids.intersection(request.element_ids):
                     raise CanvasDomainError("FRAME_SELECTION_OVERLAP", "Frame selections in one batch cannot overlap.")
@@ -50,7 +52,7 @@ class FrameElementsService(CanvasApplicationSupport):
                 ).apply(project.canvas)
                 selected_ids.update(plan.selected_ids)
                 results.append({
-                    "item_ref": item["item_ref"],
+                    "item_ref": item.item_ref,
                     "frame_element_id": plan.frame.element_id,
                     "child_element_ids": [child.element_id for child in children],
                     "content_id": plan.frame.active_content_id,

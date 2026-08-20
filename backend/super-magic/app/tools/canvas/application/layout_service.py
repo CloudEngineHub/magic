@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
+from collections.abc import Sequence
+from app.tools.canvas.application.commands import LayoutElementCommand
 
 from app.tools.canvas.application.support import CanvasApplicationSupport
 from app.tools.canvas.domain.errors import CanvasDomainError
@@ -16,7 +18,7 @@ class LayoutService(CanvasApplicationSupport):
         """绑定共享依赖。"""
         super().__init__(dependencies)
 
-    async def layout(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def layout(self, project_path: str, items: Sequence[LayoutElementCommand]) -> dict[str, Any]:
         """按可插拔布局策略调整 Element 布局。"""
         self.validate_unique_item_refs(items)
         current_item_ref: str | None = None
@@ -24,16 +26,16 @@ class LayoutService(CanvasApplicationSupport):
             nonlocal current_item_ref
             results = []
             for index, item in enumerate(items):
-                current_item_ref = item["item_ref"]
-                element = project.canvas.get_element(item["element_id"])
+                current_item_ref = item.item_ref
+                element = project.canvas.get_element(item.element_id)
                 if element is None:
-                    raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {item['element_id']} does not exist.")
-                self.apply_layout(project, element, item["layout"], index)
+                    raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {item.element_id} does not exist.")
+                self.apply_layout(project, element, item.layout, index)
                 results.append({
-                    "item_ref": item["item_ref"],
+                    "item_ref": item.item_ref,
                     "status": "completed",
                     "element_id": element.element_id,
-                    "strategy": item["layout"]["strategy"],
+                    "strategy": item.layout.strategy,
                 })
             return {"items": results}, metadata
 

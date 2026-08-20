@@ -13,6 +13,8 @@ from app.tools.canvas.generation import CanvasGenerationResultApplier
 from app.tools.canvas.queries import CanvasQueryService
 
 from app.tools.canvas.application.dependencies import CanvasApplicationDependencies
+from app.tools.canvas.application.commands import ContentCommand, LayoutCommand
+from app.tools.canvas.domain.content_fields import GeneratedMediaContentFields
 
 
 class CanvasApplicationSupport:
@@ -40,12 +42,12 @@ class CanvasApplicationSupport:
         return ContentMetadataService.new_detail(element_id, data)
 
     @staticmethod
-    def validate_unique_item_refs(items: list[dict[str, Any]]) -> None:
+    def validate_unique_item_refs(items: list[object]) -> None:
         """保证批次关联标签唯一。"""
         AtomicBatchGuard.validate_item_refs(items)
 
     @staticmethod
-    def batch_error(items: list[dict[str, Any]], failed_item_ref: str | None, error: CanvasDomainError) -> CanvasDomainError:
+    def batch_error(items: list[object], failed_item_ref: str | None, error: CanvasDomainError) -> CanvasDomainError:
         """把多项原子批量异常转换为逐项结果。"""
         return AtomicBatchGuard.map_error(items, failed_item_ref, error)
 
@@ -81,30 +83,32 @@ class CanvasApplicationSupport:
         """把生成终态委托给独立结果回写器。"""
         CanvasGenerationResultApplier.apply(project, element_id, content_id, status, output_uri, error_message)
 
-    def build_content(self, data: dict[str, Any], element_type: str) -> CanvasContent:
+    def build_content(self, command: ContentCommand, element_type: str) -> CanvasContent:
         """把模型输入转换为主协议允许的 Content 字段。"""
-        return self.content_strategies.build(data, element_type)
+        return self.content_strategies.build(command, element_type)
 
-    async def prepare_imported_content(self, project: CanvasProject, data: dict[str, Any]) -> None:
+    async def prepare_imported_content(self, project: CanvasProject, command: ContentCommand) -> ContentCommand:
         """规范化 imported 素材路径并阻止同一素材重复登记。"""
-        if data.get("source") != "imported":
-            return
-        asset_path = str(data.pop("asset_path", "") or "")
+        if command.source != "imported":
+            return command
+        asset_path = str(command.asset_path or "")
         normalized = await self.asset_gateway.normalize_existing_file(asset_path)
         existing_paths = {
-            str(content.fields.get("src"))
+            str(content.fields.asset_path)
             for element in project.canvas.iter_elements()
             for content in element.contents
-            if content.fields.get("src")
+            if content.fields.asset_path
         }
         if normalized in existing_paths:
             raise CanvasDomainError("ASSET_ALREADY_REGISTERED", f"Imported asset is already registered: {normalized}.")
-        data["src"] = normalized
+        if hasattr(command.fields, "src"):
+            command.fields.src = normalized
+        return command
 
-    def apply_layout(self, project: CanvasProject, element: CanvasElement, layout: dict[str, Any] | None, index: int) -> None:
+    def apply_layout(self, project: CanvasProject, element: CanvasElement, layout: LayoutCommand | None, index: int) -> None:
         """按当前请求选择布局策略并应用计划。"""
-        request = layout or {"strategy": "row_incremental"}
-        self.layout_strategies.get(request["strategy"]).apply(project.canvas, element, request, index)
+        request = layout or LayoutCommand(strategy="row_incremental")
+        self.layout_strategies.get(request.strategy).apply(project.canvas, element, request, index)
 
     @staticmethod
     def get_connection(project: CanvasProject, connection_id: str) -> CanvasConnection | None:

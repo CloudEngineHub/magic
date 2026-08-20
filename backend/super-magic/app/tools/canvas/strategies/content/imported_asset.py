@@ -14,6 +14,6 @@ class ImportedAssetContentStrategy(BaseContentStrategy):
     def plan(self, request: ContentStrategyRequest) -> ContentMutationPlan:
         """校验导入 Content 必须提供已经规范化的素材 URI。"""
         content = self._build_base_content(request).content
-        if not content.fields.get("src"):
+        if not content.fields.asset_path:
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Imported Content requires src.")
         return ContentMutationPlan(content)

@@ -101,8 +101,7 @@ class AddCanvasContents(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """追加 Content 版本，不覆盖已有版本。"""
         try:
-            payload = [item.model_dump(exclude_none=True, by_alias=True) for item in params.items]
-            result = await _application(tool_context).add_contents(params.project_path, payload, tool_context)
+            result = await _application(tool_context).add_contents([item.to_command() for item in params.items], tool_context=tool_context)
             return ToolResult(
                 content=items_content(
                     "Canvas Content versions added successfully.",

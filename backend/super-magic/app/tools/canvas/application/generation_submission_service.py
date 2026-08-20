@@ -10,6 +10,7 @@ from app.tools.canvas.application.support import CanvasApplicationSupport
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import GenerationRequest, GenerationSubmission, GenerationTask
+from app.tools.canvas.application.commands import GenerationParameters
 
 
 class GenerationSubmissionService(CanvasApplicationSupport):
@@ -29,16 +30,16 @@ class GenerationSubmissionService(CanvasApplicationSupport):
         """提交生成能力并把逐项状态合并回结构结果。"""
         by_content = {item["content_id"]: item for item in result.get("items", []) if item.get("content_id")}
         for item in generated:
-            capability = self.generation_capabilities.get(
-                item["element_type"],
-                (item.get("parameters") or {}).get("model_id"),
-            )
+            raw_parameters = item.get("parameters")
+            parameters = raw_parameters if isinstance(raw_parameters, GenerationParameters) else GenerationParameters()
+            parameter_payload = parameters.to_dict()
+            capability = self.generation_capabilities.get(item["element_type"], parameters.model_id)
             request = GenerationRequest(
                 project_path=project_path,
                 element_id=item["element_id"],
                 content_id=item["content_id"],
                 element_type=item["element_type"],
-                parameters=item.get("parameters") or {},
+                parameters=parameters,
             )
             strategy = self.generation_execution.get(capability.execution_mode)
             try:
@@ -88,7 +89,7 @@ class GenerationSubmissionService(CanvasApplicationSupport):
                     "elementId": item["element_id"],
                     "source": "generated",
                     "retryCount": int(detail.get("retryCount", 0)),
-                    "generationParameters": item.get("parameters") or {},
+                    "generationParameters": parameter_payload,
                     "providerTaskId": submission.provider_task_id,
                     "generationTaskId": submission.generation_task_id,
                     "generationStatus": submission.status,

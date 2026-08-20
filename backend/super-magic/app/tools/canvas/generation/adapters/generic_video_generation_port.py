@@ -30,26 +30,26 @@ class GenericVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
 
         parameters = request.parameters
         project = self.project_identity_resolver.resolve(request.project_path)
-        extensions = dict(parameters.get("extensions") or {})
+        extensions = dict(parameters.extensions)
         extensions.setdefault("project_path", project.project_path)
         params = GenerateVideoParams(
             action="generate",
-            prompt=str(parameters.get("prompt") or ""),
-            model_id=str(parameters.get("model_id") or ""),
-            video_name=str(parameters.get("name") or request.content_id),
-            output_path=str(parameters.get("output_path") or f"{project.project_path}/videos"),
-            reference_image_paths=list(parameters.get("reference_image_paths") or []),
-            reference_video_paths=list(parameters.get("reference_video_paths") or []),
-            reference_audio_paths=list(parameters.get("reference_audio_paths") or []),
-            frame_start_path=str(parameters.get("frame_start_path") or ""),
-            frame_end_path=str(parameters.get("frame_end_path") or ""),
-            size=str(parameters.get("size") or ""),
-            duration_seconds=parameters.get("duration_seconds"),
-            aspect_ratio=str(parameters.get("aspect_ratio") or ""),
-            resolution=str(parameters.get("resolution") or ""),
-            fps=parameters.get("fps"),
-            seed=parameters.get("seed"),
-            watermark=parameters.get("watermark"),
+            prompt=parameters.prompt,
+            model_id=str(parameters.model_id or ""),
+            video_name=str(parameters.name or request.content_id),
+            output_path=str(parameters.output_path or f"{project.project_path}/videos"),
+            reference_image_paths=list(parameters.reference_image_paths),
+            reference_video_paths=list(parameters.reference_video_paths),
+            reference_audio_paths=list(parameters.reference_audio_paths),
+            frame_start_path=str(parameters.frame_start_path or ""),
+            frame_end_path=str(parameters.frame_end_path or ""),
+            size=str(parameters.size or ""),
+            duration_seconds=parameters.duration_seconds,
+            aspect_ratio=str(parameters.aspect_ratio or ""),
+            resolution=str(parameters.resolution or ""),
+            fps=parameters.fps,
+            seed=parameters.seed,
+            watermark=parameters.watermark,
             extensions=extensions,
         )
         result = await GenerateVideo(base_dir=self.workspace).execute_purely(tool_context, params)

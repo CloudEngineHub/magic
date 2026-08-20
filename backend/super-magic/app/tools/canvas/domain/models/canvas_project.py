@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any
-
 from app.tools.canvas.domain.models.canvas_document import CanvasDocument
+from app.tools.canvas.domain.types import JsonObject
 
 @dataclass
 class CanvasProject:
@@ -16,7 +15,7 @@ class CanvasProject:
     project_type: str
     name: str
     canvas: CanvasDocument
-    extra_data: dict[str, Any] = field(default_factory=dict)
+    extra_data: JsonObject = field(default_factory=dict)
 
     def clone(self) -> "CanvasProject":
         """返回当前项目的深拷贝。"""

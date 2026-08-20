@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
+from typing import Literal, cast
 
 from pydantic import ConfigDict, Field, model_validator
 
 from app.tools.core import BaseToolParams
+from app.tools.canvas.application.commands import ContentCommand, GenerationParameters
+from app.tools.canvas.domain.content_fields import (
+    AudioContentFields,
+    ContentFieldsFactory,
+    EllipseContentFields,
+    ImageContentFields,
+    RectangleContentFields,
+    StarContentFields,
+    StoryboardContentFields,
+    TextContentFields,
+    TriangleContentFields,
+    VideoContentFields,
+    VideoEditContentFields,
+)
+from app.tools.canvas.domain.types import JsonObject, JsonValue
+from app.tools.canvas.schemas.inputs.rich_text_input import RichTextParagraphInput, TextStyleInput
+from app.tools.canvas.schemas.inputs.storyboard_input import StoryboardGenerationConfigInput, StoryboardShotInput
+from app.tools.canvas.schemas.inputs.video_edit_input import VideoEditOutputInput
 
 
 class ContentInput(BaseToolParams):
@@ -45,7 +63,7 @@ class ContentInput(BaseToolParams):
         "storyboard",
         "video-edit",
     ] = Field(..., description="Content type; it must match the target Element type.")
-    content: Any | None = Field(
+    content: str | list[RichTextParagraphInput] | None = Field(
         None,
         description=(
             "User Content payload. For a text node, pass the text string here, "
@@ -62,17 +80,17 @@ class ContentInput(BaseToolParams):
         min_length=1,
         description="Generation prompt; required only when source=generated.",
     )
-    default_style: dict[str, Any] | None = Field(None, alias="defaultStyle")
-    fill: Any | None = None
-    stroke: Any | None = None
+    default_style: TextStyleInput | None = Field(None, alias="defaultStyle")
+    fill: str | None = None
+    stroke: str | None = None
     stroke_width: float | None = Field(None, alias="strokeWidth")
     corner_radius: float | None = Field(None, alias="cornerRadius")
     sides: int | None = None
     inner_radius_ratio: float | None = Field(None, alias="innerRadiusRatio")
-    generation_config: dict[str, Any] | None = Field(None, alias="generationConfig")
-    shots: list[dict[str, Any]] | None = None
+    generation_config: StoryboardGenerationConfigInput | None = Field(None, alias="generationConfig")
+    shots: list[StoryboardShotInput] | None = None
     video_sequence: list[str] | None = Field(None, alias="videoSequence")
-    output: dict[str, Any] | None = None
+    output: VideoEditOutputInput | None = None
     model_id: str | None = None
     name: str | None = None
     reference_images: list[str] = Field(default_factory=list)
@@ -88,7 +106,7 @@ class ContentInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
-    extensions: dict[str, Any] = Field(default_factory=dict)
+    extensions: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_source_fields(self) -> "ContentInput":
@@ -113,3 +131,113 @@ class ContentInput(BaseToolParams):
             if self.asset_path is not None or self.prompt is not None:
                 raise ValueError("user Content does not accept asset_path or prompt")
         return self
+
+    def to_command(self, content_id: str | None = None) -> ContentCommand:
+        """把大模型输入转换为 Application 使用的强类型 Content 命令。"""
+        fields = self._build_fields()
+        generation_parameters = self._build_generation_parameters() if self.source == "generated" else None
+        return ContentCommand(
+            source=self.source,
+            content_type=self.content_type,
+            fields=fields,
+            asset_path=self.asset_path,
+            generation_parameters=generation_parameters,
+            content_id=content_id,
+        )
+
+    def _build_fields(self):
+        """按 content_type 构造确定的 Content Fields。"""
+        visual = None
+        if self.content_type == "image":
+            return ImageContentFields(visual_understanding=visual)
+        if self.content_type == "video":
+            return VideoContentFields(visual_understanding=visual)
+        if self.content_type == "audio":
+            return AudioContentFields(visual_understanding=visual)
+        if self.content_type == "text":
+            paragraphs = self._text_paragraphs()
+            return TextContentFields(
+                visual_understanding=visual,
+                content=paragraphs,
+                default_style=self._model_object(self.default_style),
+            )
+        if self.content_type == "rectangle":
+            return RectangleContentFields(
+                visual_understanding=visual,
+                fill=self.fill,
+                stroke=self.stroke,
+                stroke_width=self.stroke_width,
+                corner_radius=self.corner_radius,
+            )
+        if self.content_type == "ellipse":
+            return EllipseContentFields(
+                visual_understanding=visual,
+                fill=self.fill,
+                stroke=self.stroke,
+                stroke_width=self.stroke_width,
+            )
+        if self.content_type == "triangle":
+            return TriangleContentFields(
+                visual_understanding=visual,
+                fill=self.fill,
+                stroke=self.stroke,
+                stroke_width=self.stroke_width,
+            )
+        if self.content_type == "star":
+            return StarContentFields(
+                visual_understanding=visual,
+                fill=self.fill,
+                stroke=self.stroke,
+                stroke_width=self.stroke_width,
+                corner_radius=self.corner_radius,
+                sides=self.sides,
+                inner_radius_ratio=self.inner_radius_ratio,
+            )
+        if self.content_type == "storyboard":
+            return StoryboardContentFields(
+                visual_understanding=visual,
+                generation_config=self._model_object(self.generation_config),
+                shots=[self._model_object(shot) for shot in self.shots or []],
+            )
+        if self.content_type == "video-edit":
+            return VideoEditContentFields(
+                visual_understanding=visual,
+                video_sequence=list(self.video_sequence or []),
+                output=self._model_object(self.output),
+            )
+        return ContentFieldsFactory.empty(self.content_type)
+
+    def _build_generation_parameters(self) -> GenerationParameters:
+        """构造生成策略使用的强类型参数。"""
+        return GenerationParameters(
+            prompt=self.prompt or "",
+            model_id=self.model_id,
+            name=self.name,
+            size=self.size,
+            reference_images=tuple(self.reference_images),
+            reference_image_paths=tuple(self.reference_image_paths),
+            reference_video_paths=tuple(self.reference_video_paths),
+            reference_audio_paths=tuple(self.reference_audio_paths),
+            frame_start_path=self.frame_start_path,
+            frame_end_path=self.frame_end_path,
+            duration_seconds=self.duration_seconds,
+            aspect_ratio=self.aspect_ratio,
+            resolution=self.resolution,
+            fps=self.fps,
+            seed=self.seed,
+            watermark=self.watermark,
+            extensions=self.extensions,
+        )
+
+    def _text_paragraphs(self) -> list[JsonObject]:
+        """把便于模型填写的字符串或段落输入转换为协议段落。"""
+        if isinstance(self.content, str):
+            return [{"children": [{"type": "text", "text": self.content}]}]
+        return [cast(JsonObject, paragraph.model_dump(by_alias=True, exclude_none=True)) for paragraph in self.content or []]
+
+    @staticmethod
+    def _model_object(model: BaseToolParams | TextStyleInput | StoryboardGenerationConfigInput | StoryboardShotInput | VideoEditOutputInput | None) -> JsonObject | None:
+        """把嵌套输入模型转换为 JSON 对象。"""
+        if model is None:
+            return None
+        return cast(JsonObject, model.model_dump(by_alias=True, exclude_none=True))

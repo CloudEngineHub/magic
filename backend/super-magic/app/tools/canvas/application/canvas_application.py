@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.application.commands import AddContentCommand, AddElementCommand, ConnectionCommand, FrameElementsCommand, RetryContentCommand, SelectMainContentCommand, LayoutElementCommand
 
 from app.tools.canvas.application.add_elements_service import AddElementsService
 from app.tools.canvas.application.connection_service import ConnectionService
@@ -70,31 +71,31 @@ class CanvasApplication(CanvasApplicationSupport):
         """返回精确 Element 的模型友好业务 DTO 和关联连线。"""
         return await self.query_service.elements(project_path, element_ids)
 
-    async def add_elements(self, project_path: str, items: list[dict[str, Any]], tool_context: ToolContext | None = None) -> dict[str, Any]:
+    async def add_elements(self, project_path: str, items: list[AddElementCommand], tool_context: ToolContext | None = None) -> dict[str, Any]:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         return await self.add_elements_service.add_elements(project_path, items, tool_context)
 
-    async def frame_elements(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def frame_elements(self, project_path: str, items: list[FrameElementsCommand]) -> dict[str, Any]:
         """将符合条件的同层级节点框选为新 Frame。"""
         return await self.frame_elements_service.frame_elements(project_path, items)
 
-    async def add_contents(self, project_path: str, items: list[dict[str, Any]], tool_context: ToolContext | None = None) -> dict[str, Any]:
+    async def add_contents(self, project_path: str, items: list[AddContentCommand], tool_context: ToolContext | None = None) -> dict[str, Any]:
         """向已有 Element 追加 Content 版本。"""
         return await self.content_service.add_contents(project_path, items, tool_context)
 
-    async def select_main(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def select_main(self, project_path: str, items: list[SelectMainContentCommand]) -> dict[str, Any]:
         """只修改用户明确选择的 main Content 指针。"""
         return await self.content_service.select_main(project_path, items)
 
-    async def layout(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def layout(self, project_path: str, items: list[LayoutElementCommand]) -> dict[str, Any]:
         """按可插拔布局策略调整 Element 布局。"""
         return await self.layout_service.layout(project_path, items)
 
-    async def connections(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def connections(self, project_path: str, items: list[ConnectionCommand]) -> dict[str, Any]:
         """新增、按 ID 删除或原子替换 Connection。"""
         return await self.connection_service.connections(project_path, items)
 
-    async def retry_content(self, project_path: str, items: list[dict[str, Any]], tool_context: ToolContext | None = None) -> dict[str, Any]:
+    async def retry_content(self, project_path: str, items: list[RetryContentCommand], tool_context: ToolContext | None = None) -> dict[str, Any]:
         """校验失败 Content 的受控重试边界。"""
         return await self.retry_content_service.retry_content(project_path, items, tool_context)
 

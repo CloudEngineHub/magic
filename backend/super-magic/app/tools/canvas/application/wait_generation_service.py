@@ -203,9 +203,9 @@ class WaitGenerationService(CanvasApplicationSupport):
                     element_type=element.element_type,
                     capability_name=capability_name,
                     retry_count=int(detail.get("retryCount", 0)),
-                    status=str(detail.get("generationStatus") or content.fields.get("status") or "processing"),
-                    error=detail.get("errorMessage") or content.fields.get("errorMessage"),
-                    output_uri=detail.get("outputUri") or content.fields.get("src"),
+                    status=str(detail.get("generationStatus") or content.fields.generation_status or "processing"),
+                    error=detail.get("errorMessage") or content.fields.error_message,
+                    output_uri=detail.get("outputUri") or content.fields.asset_path,
                 )
                 await self.generation_tasks.put(record)
                 return record

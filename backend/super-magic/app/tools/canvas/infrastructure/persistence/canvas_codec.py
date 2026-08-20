@@ -13,7 +13,8 @@ from copy import deepcopy
 from typing import Any
 
 from app.tools.canvas.domain.errors import CanvasProtocolError
-from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasDocument, CanvasElement, CanvasProject
+from app.tools.canvas.domain.content_fields import ContentFieldsFactory
+from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasDocument, CanvasElement, CanvasProject, ElementProperties
 from app.tools.canvas.domain.protocol import BASE_ELEMENT_FIELDS, COMMON_CONTENT_FIELDS, CONTENT_FIELDS, SUPPORTED_ELEMENT_TYPES
 
 MAGIC_PROJECT_VERSION = "3.0.0"
@@ -132,7 +133,11 @@ class CanvasCodec:
             if not isinstance(raw_children, list):
                 raise CanvasProtocolError("INVALID_ELEMENT", f"{path}.children must be an array.")
             children = [cls._decode_element(item, f"{path}.children[{index}]") for index, item in enumerate(raw_children)]
-        properties = {key: deepcopy(value) for key, value in data.items() if key not in {"id", "type", "contents", "activeContentId", "mainContentId", "children"}}
+        properties = ElementProperties.from_dict({
+            key: value
+            for key, value in data.items()
+            if key not in {"id", "type", "contents", "activeContentId", "mainContentId", "children"}
+        })
         return CanvasElement(element_id, element_type, properties, contents, active, main, children)
 
     @classmethod
@@ -146,7 +151,11 @@ class CanvasCodec:
         allowed = COMMON_CONTENT_FIELDS | CONTENT_FIELDS[element_type] | {"contentId"}
         if set(data) - allowed:
             raise CanvasProtocolError("INVALID_CONTENT", f"{path} contains unsupported fields.")
-        return CanvasContent(content_id, {key: deepcopy(value) for key, value in data.items() if key != "contentId"})
+        fields = ContentFieldsFactory.from_protocol(
+            element_type,
+            {key: deepcopy(value) for key, value in data.items() if key != "contentId"},
+        )
+        return CanvasContent(content_id, fields)
 
     @staticmethod
     def _decode_connection(data: Any, path: str) -> CanvasConnection:

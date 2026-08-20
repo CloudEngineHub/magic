@@ -86,8 +86,7 @@ class FrameCanvasElements(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建 Frame 并返回真实 Frame 和子节点 ID。"""
         try:
-            payload = [item.model_dump(exclude_none=True) for item in params.items]
-            result = await _application(tool_context).frame_elements(params.project_path, payload)
+            result = await _application(tool_context).frame_elements([item.to_command() for item in params.items])
             return ToolResult(
                 content=items_content(
                     "Canvas Frames created successfully.",

@@ -86,7 +86,7 @@ class SelectCanvasMainContent(BaseTool[ProjectPathParams]):
         try:
             result = await _application(tool_context).select_main(
                 params.project_path,
-                [item.model_dump() for item in params.items],
+                [item.to_command() for item in params.items],
             )
             return ToolResult(
                 content=items_content(

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models.canvas_connection import CanvasConnection
 from app.tools.canvas.domain.models.canvas_element import CanvasElement
+from app.tools.canvas.domain.types import JsonObject
 
 @dataclass
 class CanvasDocument:
@@ -16,7 +16,7 @@ class CanvasDocument:
 
     elements: list[CanvasElement] = field(default_factory=list)
     connections: list[CanvasConnection] = field(default_factory=list)
-    extra_data: dict[str, Any] = field(default_factory=dict)
+    extra_data: JsonObject = field(default_factory=dict)
 
     def clone(self) -> "CanvasDocument":
         """返回当前文档的深拷贝。"""
@@ -118,7 +118,7 @@ class CanvasDocument:
                 return removed
         return None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         """转换为主协议 Canvas 字典。"""
         return {
             **deepcopy(self.extra_data),

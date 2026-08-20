@@ -75,16 +75,21 @@ class ElementDetailsQueryService:
             "scaleX": "scale_x", "scaleY": "scale_y", "zIndex": "z_index",
         }
         layout = {
-            public_key: element.properties[stored_key]
-            for stored_key, public_key in layout_keys.items()
-            if stored_key in element.properties
+            "x": element.properties.x,
+            "y": element.properties.y,
+            "width": element.properties.width,
+            "height": element.properties.height,
+            "scale_x": element.properties.scale_x,
+            "scale_y": element.properties.scale_y,
+            "z_index": element.properties.z_index,
         }
+        layout = {key: value for key, value in layout.items() if value is not None}
         contents = []
         for content in element.contents:
             detail = details.get(content.content_id, {})
             payload = {
                 key: value
-                for key, value in content.fields.items()
+                for key, value in content.fields.to_dict().items()
                 if key not in {
                     "src", "status", "errorMessage", "generateImageRequest", "generateVideoRequest",
                     "imageGenerationTaskMeta", "videoGenerationResultMeta",
@@ -92,11 +97,11 @@ class ElementDetailsQueryService:
             }
             item = {
                 "content_id": content.content_id,
-                "status": content.fields.get("status"),
-                "asset_path": content.fields.get("src"),
+                "status": content.fields.generation_status,
+                "asset_path": content.fields.asset_path,
                 "error_message": (
                     "Generation failed; ask the user whether to retry."
-                    if content.fields.get("errorMessage") else None
+                    if content.fields.error_message else None
                 ),
                 "source": detail.get("source"),
                 "retry_count": int(detail.get("retryCount", 0)),
@@ -108,10 +113,10 @@ class ElementDetailsQueryService:
         return {
             "element_id": element.element_id,
             "element_type": element.element_type,
-            "name": element.properties.get("name"),
-            "visible": element.properties.get("visible"),
-            "locked": element.properties.get("locked"),
-            "opacity": element.properties.get("opacity"),
+            "name": element.properties.name,
+            "visible": element.properties.visible,
+            "locked": element.properties.locked,
+            "opacity": element.properties.opacity,
             "parent_element_id": tree.parent_id(element.element_id),
             "depth": tree.depth(element.element_id),
             "child_element_ids": tree.child_ids(element.element_id),

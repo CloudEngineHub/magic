@@ -101,8 +101,7 @@ class AddCanvasElements(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建一批 Element，并按 item 返回真实标识。"""
         try:
-            payload = [item.model_dump(exclude_none=True, by_alias=True) for item in params.items]
-            result = await _application(tool_context).add_elements(params.project_path, payload, tool_context)
+            result = await _application(tool_context).add_elements([item.to_command() for item in params.items], tool_context=tool_context)
             return ToolResult(
                 content=items_content(
                     "Canvas Elements added successfully.",

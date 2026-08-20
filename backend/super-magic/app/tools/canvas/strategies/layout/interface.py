@@ -1,7 +1,7 @@
 """布局策略抽象接口。"""
 
 from abc import ABC, abstractmethod
-from typing import Any
+from app.tools.canvas.application.commands import LayoutCommand
 
 from app.tools.canvas.domain.models import CanvasDocument, CanvasElement
 from app.tools.canvas.strategies.layout.plan import LayoutMutationPlan
@@ -26,12 +26,12 @@ class LayoutStrategyInterface(ABC):
         self,
         canvas: CanvasDocument,
         element: CanvasElement,
-        request: dict[str, Any],
+        request: LayoutCommand,
         index: int,
     ) -> None:
         """为现有调用方应用布局计划。"""
         self.plan(
             canvas,
             element,
-            LayoutStrategyRequest(element.element_id, dict(request), index),
+            LayoutStrategyRequest(element.element_id, request, index),
         ).apply(canvas)

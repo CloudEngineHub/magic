@@ -2,6 +2,7 @@
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent
+from app.tools.canvas.application.commands import ContentCommand
 from app.tools.canvas.strategies.content.generated_content import GeneratedContentStrategy
 from app.tools.canvas.strategies.content.imported_asset import ImportedAssetContentStrategy
 from app.tools.canvas.strategies.content.interface import ContentStrategyInterface
@@ -22,14 +23,14 @@ class ContentStrategyRegistry:
         ]
         self._strategies = {strategy.source: strategy for strategy in values}
 
-    def build(self, data: dict, element_type: str | None = None) -> CanvasContent:
+    def build(self, command: ContentCommand, element_type: str | None = None) -> CanvasContent:
         """执行选中的 Content 策略并返回 Content。"""
-        return self.plan(data, element_type).content
+        return self.plan(command, element_type).content
 
-    def plan(self, data: dict, element_type: str | None = None) -> ContentMutationPlan:
+    def plan(self, command: ContentCommand, element_type: str | None = None) -> ContentMutationPlan:
         """校验 Element 类型并返回强类型 Content 计划。"""
-        source = str(data.get("source") or "user")
-        content_type = str(data.get("content_type") or "")
+        source = command.source
+        content_type = command.content_type
         if element_type is not None and content_type != element_type:
             raise CanvasDomainError(
                 "CONTENT_TYPE_MISMATCH",
@@ -38,4 +39,4 @@ class ContentStrategyRegistry:
         strategy = self._strategies.get(source)
         if strategy is None:
             raise CanvasDomainError("CONTENT_INPUT_INVALID", f"Unsupported Content source: {source}.")
-        return strategy.plan(ContentStrategyRequest(dict(data), element_type))
+        return strategy.plan(ContentStrategyRequest(command, element_type))

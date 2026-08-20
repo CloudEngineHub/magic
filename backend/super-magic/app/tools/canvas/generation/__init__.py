@@ -22,7 +22,6 @@ from app.tools.canvas.generation.ports.query_port import GenerationQueryPort
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
 from app.tools.canvas.generation.ports.task_repository_interface import GenerationTaskRepositoryInterface
 from app.tools.canvas.generation.result.canvas_generation_result_applier import CanvasGenerationResultApplier
-from app.tools.canvas.generation.result.generation_result_mapper import GenerationResultMapper
 from app.tools.canvas.generation.task.generation_task_poller import GenerationTaskPoller
 from app.tools.canvas.generation.task.in_memory_generation_task_repository import InMemoryGenerationTaskRepository
 
@@ -41,7 +40,6 @@ __all__ = [
     "GenerationQueryRequest",
     "GenerationQueryResult",
     "GenerationRequest",
-    "GenerationResultMapper",
     "GenerationSubmission",
     "GenerationSubmissionPort",
     "GenerationTask",

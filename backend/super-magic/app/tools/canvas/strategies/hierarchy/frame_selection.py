@@ -4,7 +4,8 @@ import math
 import uuid
 
 from app.tools.canvas.domain.errors import CanvasDomainError
-from app.tools.canvas.domain.models import CanvasContent, CanvasDocument, CanvasElement
+from app.tools.canvas.domain.models import CanvasContent, CanvasDocument, CanvasElement, ElementProperties
+from app.tools.canvas.domain.content_fields import ContentFieldsFactory
 from app.tools.canvas.domain.services.coordinate_space_resolver import CoordinateSpaceResolver
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
 from app.tools.canvas.strategies.hierarchy.interface import HierarchyStrategyInterface
@@ -33,7 +34,7 @@ class FrameSelectionStrategy(HierarchyStrategyInterface):
                 raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {element_id} does not exist.")
             if element.element_type in {"frame", "group"}:
                 raise CanvasDomainError("FRAME_SELECTION_INVALID", "Frame selection cannot include Frame or Group Elements.")
-            if element.properties.get("locked") is True:
+            if element.properties.locked is True:
                 raise CanvasDomainError("FRAME_SELECTION_INVALID", f"Element {element_id} is locked.")
             if index.parent_id(element_id) is not None:
                 raise CanvasDomainError("FRAME_SELECTION_ALREADY_NESTED", "Selected Elements must be direct root-level Elements.")
@@ -52,18 +53,12 @@ class FrameSelectionStrategy(HierarchyStrategyInterface):
         frame = CanvasElement(
             element_id=frame_id,
             element_type="frame",
-            properties={
-                "x": frame_x,
-                "y": frame_y,
-                "width": right - left + 2 * float(padding),
-                "height": bottom - top + 2 * float(padding),
-                "zIndex": CoordinateSpaceResolver.next_root_z_index(canvas),
-            },
+            properties=ElementProperties(x=frame_x, y=frame_y, width=right - left + 2 * float(padding), height=bottom - top + 2 * float(padding), z_index=CoordinateSpaceResolver.next_root_z_index(canvas)),
             children=[],
         )
         if request.name:
-            frame.properties["name"] = request.name
-        content = CanvasContent(f"content-{uuid.uuid4().hex[:16]}", {})
+            frame.properties.name = request.name
+        content = CanvasContent(f"content-{uuid.uuid4().hex[:16]}", ContentFieldsFactory.empty("frame"))
         frame.contents = [content]
         frame.active_content_id = content.content_id
         frame.main_content_id = content.content_id

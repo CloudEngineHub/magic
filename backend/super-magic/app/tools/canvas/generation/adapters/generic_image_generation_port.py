@@ -26,19 +26,19 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
 
         parameters = request.parameters
         project = self.project_identity_resolver.resolve(request.project_path)
-        name = str(parameters.get("name") or request.content_id)
-        output_path = str(parameters.get("output_path") or f"{project.project_path}/images")
+        name = str(parameters.name or request.content_id)
+        output_path = str(parameters.output_path or f"{project.project_path}/images")
         task = ImageGenerationTask(
-            prompt=str(parameters.get("prompt") or ""),
-            size=parameters.get("size"),
+            prompt=parameters.prompt,
+            size=parameters.size,
             name=name,
             output_path=output_path,
-            reference_images=list(parameters.get("reference_images") or []),
+            reference_images=list(parameters.reference_images),
         )
         result = await GenerateImages(base_dir=self.workspace).execute_purely(
             tool_context,
             GenerateImagesParams(tasks=[task]),
-            model_id=parameters.get("model_id"),
+            model_id=parameters.model_id,
         )
         if not result.ok:
             return GenerationSubmission("sync", "failed", error_message=result.content)
