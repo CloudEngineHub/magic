@@ -294,7 +294,7 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
 
     image_result = await application.add_elements(
         "mock-project",
-        [{"item_ref": "image", "element_type": "image", "content": {"source": "generated", "content_type": "image", "prompt": "mock"}}],
+        [{"item_ref": "image", "element_type": "image", "content": {"source": "generated", "content_type": "image", "prompt": "mock", "name": "mock image"}}],
     )
     video_result = await application.add_elements(
         "mock-project",
@@ -491,6 +491,7 @@ async def test_generated_image_persists_project_uri_dimensions_and_sidecar_reque
                 "source": "generated",
                 "content_type": "image",
                 "prompt": "mock perfume bottle",
+                "name": "mock perfume bottle",
                 "size": "1728x2304",
             },
         }],
@@ -501,7 +502,9 @@ async def test_generated_image_persists_project_uri_dimensions_and_sidecar_reque
     project = await repository.read("mock-project")
     element = project.canvas.get_element(element_id)
     content = element.get_content(content_id)
-    assert content.fields.src == "./images/" + content_id + ".png"
+    assert content.fields.src.startswith("./images/mock perfume bottle_")
+    assert content.fields.src.endswith(".png")
+    assert content.fields.src[-18:-4].isdigit()
     assert (element.properties.width, element.properties.height) == (800, 600)
     assert "generateImageRequest" not in content.fields.to_dict()
 
@@ -560,7 +563,7 @@ async def test_generated_content_retry_is_limited_and_reuses_content_id(tmp_path
         [{
             "item_ref": "image",
             "element_type": "image",
-            "content": {"source": "generated", "content_type": "image", "prompt": "mock"},
+            "content": {"source": "generated", "content_type": "image", "prompt": "mock", "name": "mock image"},
         }],
     )
     element_id = created["items"][0]["element_id"]
@@ -603,7 +606,7 @@ async def test_identical_retry_request_is_idempotent(tmp_path) -> None:
         [{
             "item_ref": "image",
             "element_type": "image",
-            "content": {"source": "generated", "content_type": "image", "prompt": "mock"},
+            "content": {"source": "generated", "content_type": "image", "prompt": "mock", "name": "mock image"},
         }],
     )
     element_id = created["items"][0]["element_id"]

@@ -4,7 +4,6 @@ import uuid
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
@@ -12,6 +11,7 @@ from app.tools.canvas.generation.contracts.generation_request import GenerationR
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
 from app.tools.canvas.generation.ports.query_port import GenerationQueryPort
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 
 
 class GenericVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):

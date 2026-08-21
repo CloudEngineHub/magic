@@ -104,24 +104,24 @@ class SearchCanvasImages(BaseTool[BaseToolParams]):
                 ],
                 tool_context,
             )
-            imported = sum(int(item.get("imported_count") or 0) for item in data.get("items", []))
+            imported = sum(item.imported_count for item in data.items)
             summary = "Canvas image search completed." if imported else "Canvas image search failed."
-            if any(item.get("status") == "partial" for item in data.get("items", [])):
+            if any(item.status == "partial" for item in data.items):
                 summary = "Canvas image search partially completed."
             lines = [summary, f"- Topic: {params.topic_id}"]
             created_ids: list[str] = []
-            for item in data.get("items", []):
+            for item in data.items:
                 lines.append(
-                    f"- item_ref={item.get('item_ref')} | status={item.get('status')} | "
-                    f"imported={item.get('imported_count', 0)} | failed={item.get('failed_count', 0)}"
+                    f"- item_ref={item.item_ref} | status={item.status} | "
+                    f"imported={item.imported_count} | failed={item.failed_count}"
                 )
                 created_ids.extend(
-                    str(value.get("element_id"))
-                    for value in item.get("items", [])
-                    if value.get("element_id")
+                    value.element_id
+                    for value in item.items
+                    if value.element_id
                 )
-                if item.get("error"):
-                    lines.append(f"  Reason: {item.get('error')}")
+                if item.error:
+                    lines.append(f"  Reason: {item.error}")
             if created_ids:
                 lines.append(f"- Created Element IDs: {', '.join(created_ids)}")
             lines.append("Next: review the imported candidates with query_canvas_element_details. Retry only a failed search item if the user requests it.")

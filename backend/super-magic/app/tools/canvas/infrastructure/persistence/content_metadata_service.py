@@ -62,13 +62,15 @@ class ContentMetadataService:
         if not isinstance(elements, dict):
             return
         element = elements.get(element_id)
-        details = element.get("contentDetails") if isinstance(element, dict) else None
+        if not isinstance(element, dict):
+            return
+        details = element.get("contentDetails")
         if not isinstance(details, dict):
             return
         details.pop(content_id, None)
         if not details:
             element.pop("contentDetails", None)
-        if isinstance(element, dict) and not element:
+        if not element:
             elements.pop(element_id, None)
 
     @staticmethod

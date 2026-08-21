@@ -8,6 +8,7 @@ from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
+from app.tools.canvas.generation.image_filename import build_image_filename
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 
@@ -29,7 +30,9 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
 
         parameters = request.parameters
         project = self.project_identity_resolver.resolve(request.project_path)
-        name = str(parameters.name or request.content_id)
+        if not parameters.name or not parameters.name.strip():
+            raise ValueError("Generated Canvas images require a model-provided name.")
+        name = build_image_filename(parameters.name)
         output_path = str(parameters.output_path or f"{project.project_path}/images")
         reference_images = [
             self.asset_path_resolver.to_workspace_reference_path(request.project_path, path)

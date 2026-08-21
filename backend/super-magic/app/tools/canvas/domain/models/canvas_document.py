@@ -96,11 +96,13 @@ class CanvasDocument:
         target = self.get_element(parent_element_id) if parent_element_id else None
         if parent_element_id and target is None:
             raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Parent Element {parent_element_id} does not exist.")
-        container = target.children if target is not None else self.elements
-        if target is not None and target.element_type not in {"frame", "group"}:
-            raise CanvasDomainError("INVALID_ELEMENT_PARENT", "Only Frame or Group Elements may contain children.")
-        if container is None:
-            target.children = []
+        if target is None:
+            container: list[CanvasElement] = self.elements
+        else:
+            if target.element_type not in {"frame", "group"}:
+                raise CanvasDomainError("INVALID_ELEMENT_PARENT", "Only Frame or Group Elements may contain children.")
+            if target.children is None:
+                target.children = []
             container = target.children
         if index is None or index < 0 or index > len(container):
             container.append(element)

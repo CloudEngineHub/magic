@@ -3,10 +3,11 @@
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
+from app.tools.canvas.generation.image_filename import build_image_filename
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.utils.async_file_utils import async_mkdir, async_write_bytes
 
 _FAKE_PNG = (
@@ -28,7 +29,9 @@ class FakeImageGenerationPort(GenerationSubmissionPort):
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """写入最小合法 PNG 并同步返回。"""
-        output = self.workspace / request.project_path / "images" / f"{request.content_id}.png"
+        if not request.parameters.name or not request.parameters.name.strip():
+            raise ValueError("Generated Canvas images require a model-provided name.")
+        output = self.workspace / request.project_path / "images" / f"{build_image_filename(request.parameters.name)}.png"
         await async_mkdir(output.parent, parents=True, exist_ok=True)
         await async_write_bytes(output, _FAKE_PNG)
         return GenerationSubmission(

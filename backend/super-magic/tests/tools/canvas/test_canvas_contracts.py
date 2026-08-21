@@ -142,6 +142,17 @@ def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
     with pytest.raises(ValidationError, match="source=generated requires prompt"):
         ContentInput(source="generated", content_type="image")
 
+    with pytest.raises(ValidationError, match="source=generated image requires name"):
+        ContentInput(source="generated", content_type="image", prompt="mock prompt")
+
+    image = ContentInput(
+        source="generated",
+        content_type="image",
+        prompt="mock prompt",
+        name="mock image",
+    )
+    assert image.to_command().generation_parameters.name == "mock image"
+
 
 def test_video_generation_mode_and_task_survive_input_conversions() -> None:
     """视频 input_mode 和 task 应贯穿公开输入、命令和重试覆盖。"""

@@ -128,15 +128,19 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
                 [VideoPointEstimateItem(item.item_ref, item.to_parameters()) for item in params.items],
                 tool_context,
             )
-            if result.get("can_continue"):
+            if result.can_continue:
                 lines = ["Content point estimate completed.", f"- Rule: {params.production_rule}"]
-                for item in result["items"]:
-                    lines.append(f"- item_ref={item['item_ref']}: {item.get('points', 0)} points")
-                lines.extend([f"- Total: {result.get('total_points')} points", f"- Estimate ID: {result.get('estimate_id')}", "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same request and estimate_id."])
+                for item in result.items:
+                    lines.append(f"- item_ref={item.item_ref}: {item.points} points")
+                lines.extend([
+                    f"- Total: {result.total_points} points",
+                    f"- Estimate ID: {result.estimate_id}",
+                    "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same request and estimate_id.",
+                ])
             else:
                 lines = ["Content point estimate is unavailable.", f"- Rule: {params.production_rule}"]
-                for item in result["items"]:
-                    lines.append(f"- item_ref={item['item_ref']} | status={item['status']} | reason={item.get('reason') or '-'}")
+                for item in result.items:
+                    lines.append(f"- item_ref={item.item_ref} | status={item.status} | reason={item.reason or '-'}")
                 lines.append("Next: ask the user whether to revise or cancel. Do not submit generation automatically.")
             return ToolResult(content="\n".join(lines), data=result.to_dict())
         except Exception as error:

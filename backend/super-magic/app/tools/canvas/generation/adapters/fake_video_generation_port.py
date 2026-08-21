@@ -4,13 +4,13 @@ import uuid
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
 from app.tools.canvas.generation.ports.query_port import GenerationQueryPort
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.utils.async_file_utils import async_mkdir, async_write_bytes
 
 _FAKE_VIDEO_QUERIES: dict[str, int] = {}

@@ -9,9 +9,9 @@ from app.tools.canvas.application import CanvasApplication
 from app.tools.canvas.application.add_elements_service import AddElementsService
 from app.tools.canvas.application.connection_service import ConnectionService
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
-from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.content_service import ContentService
 from app.tools.canvas.application.dependencies import CanvasApplicationDependencies
+from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.frame_elements_service import FrameElementsService
 from app.tools.canvas.application.generation_submission_service import GenerationSubmissionService
 from app.tools.canvas.application.initialization_service import InitializationService

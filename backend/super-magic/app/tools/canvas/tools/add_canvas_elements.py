@@ -215,7 +215,12 @@ class ContentInput(BaseToolParams):
         json_schema_extra={
             "examples": [
                 {"source": "user", "content_type": "text", "content": "标题文本"},
-                {"source": "generated", "content_type": "image", "prompt": "产品主视觉"},
+                {
+                    "source": "generated",
+                    "content_type": "image",
+                    "prompt": "产品主视觉",
+                    "name": "深蓝香水瓶主视觉",
+                },
                 {"source": "generated", "content_type": "video", "prompt": "产品动态展示"},
                 {
                     "source": "imported",
@@ -245,7 +250,12 @@ class ContentInput(BaseToolParams):
     output: VideoEditOutputInput | None = None
     model_id: str | None = None
     estimate_id: str | None = None
-    name: str | None = None
+    name: str | None = Field(
+        None,
+        min_length=1,
+        description="""<!--zh: 生成媒体的文件名由大模型根据最终内容命名。生成图片时必填，与用户语言一致，建议使用 3-5 个词；系统会清洗名称并追加时间戳。-->
+Model-provided output name for generated media. Required for generated images; describe the actual result in the user's language with 3-5 words. The system sanitizes it and appends a timestamp.""",
+    )
     reference_images: list[str] = Field(
         default_factory=list,
         description="""<!--zh: 当前 Canvas 项目内的参考图片路径，必须使用相对于当前 magic.project.js 的路径，并以 ./ 开头，例如 ./images/reference.jpg。-->
@@ -274,6 +284,8 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                 raise ValueError("source=generated currently supports content_type=image or video")
             if not self.prompt:
                 raise ValueError("source=generated requires prompt")
+            if self.content_type == "image" and (not self.name or not self.name.strip()):
+                raise ValueError("source=generated image requires name")
             if self.asset_path is not None:
                 raise ValueError("asset_path is only allowed when source=imported")
         elif self.source == "imported":

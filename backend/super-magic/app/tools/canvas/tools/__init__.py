@@ -11,21 +11,24 @@ from app.tools.canvas.tools.add_canvas_elements import (
     ElementInput,
 )
 from app.tools.canvas.tools.compose_canvas_video import ComposeCanvasVideo
-from app.tools.canvas.tools.estimate_canvas_content_points import EstimateCanvasContentPoints, VideoPointEstimateItemInput
+from app.tools.canvas.tools.estimate_canvas_content_points import (
+    EstimateCanvasContentPoints,
+    VideoPointEstimateItemInput,
+)
 from app.tools.canvas.tools.frame_canvas_elements import FrameCanvasElements, FrameSelectionInput
+from app.tools.canvas.tools.initialize_canvas import InitializeCanvas
 from app.tools.canvas.tools.layout_canvas_elements import LayoutCanvasElements, LayoutElementInput, LayoutInput
+from app.tools.canvas.tools.query_canvas_element_details import QueryCanvasElementDetails
+from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
 from app.tools.canvas.tools.retry_canvas_content_generation import (
     GenerationOverrideInput,
     RetryCanvasContentGeneration,
     RetryContentInput,
 )
-from app.tools.canvas.tools.select_canvas_main_content import MainContentInput, SelectCanvasMainContent
-from app.tools.canvas.tools.wait_canvas_generation import WaitCanvasGeneration, WaitTask
-from app.tools.canvas.tools.initialize_canvas import InitializeCanvas
-from app.tools.canvas.tools.query_canvas_element_details import QueryCanvasElementDetails
-from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
 from app.tools.canvas.tools.search_canvas_image_prompts import SearchCanvasImagePrompts
 from app.tools.canvas.tools.search_canvas_images import SearchCanvasImages
+from app.tools.canvas.tools.select_canvas_main_content import MainContentInput, SelectCanvasMainContent
+from app.tools.canvas.tools.wait_canvas_generation import WaitCanvasGeneration, WaitTask
 
 CreationConnectionInput = CanvasCreationConnectionInput
 
@@ -58,6 +61,7 @@ __all__ = [
     "SearchCanvasImagePrompts",
     "SearchCanvasImages",
     "SelectCanvasMainContent",
+    "VideoPointEstimateItemInput",
     "WaitCanvasGeneration",
     "WaitTask",
 ]

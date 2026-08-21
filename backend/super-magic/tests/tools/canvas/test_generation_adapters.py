@@ -40,6 +40,7 @@ async def test_generic_image_generation_port_converts_project_reference_path(mon
             parameters=GenerationParameters(
                 prompt="mock prompt",
                 size="1024x1024",
+                name="产品/主视觉",
                 reference_images=("./images/reference.png",),
             ),
         ),
@@ -48,6 +49,24 @@ async def test_generic_image_generation_port_converts_project_reference_path(mon
 
     assert result.status == "completed"
     assert captured["task"].reference_images == ["Canvas/Demo/images/reference.png"]
+    assert captured["task"].name.startswith("产品_主视觉_")
+    assert captured["task"].name[-14:].isdigit()
     assert result.request_metadata["mode"] == "edit"
     assert result.request_metadata["image_id"] == "output"
     assert result.request_metadata["reference_images"] == ["./images/reference.png"]
+
+
+@pytest.mark.asyncio
+async def test_generic_image_generation_port_rejects_missing_model_name(tmp_path) -> None:
+    """生成图片缺少模型命名时不得退化为 Content ID。"""
+    with pytest.raises(ValueError, match="require a model-provided name"):
+        await GenericImageGenerationPort(tmp_path).submit(
+            GenerationRequest(
+                project_path="Canvas/Demo",
+                element_id="element-1",
+                content_id="content-1",
+                element_type="image",
+                parameters=GenerationParameters(prompt="mock prompt"),
+            ),
+            None,
+        )
