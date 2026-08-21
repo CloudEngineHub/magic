@@ -7,6 +7,7 @@ import {
 	SafeHtmlSpan,
 	SafeHtmlTextBlockStyles,
 } from "../components/EditorBody/extensions/safe-html-style"
+import { SafeVideo } from "../components/EditorBody/extensions/safe-video"
 
 describe("Markdown raw HTML rendering", () => {
 	let editor: Editor | null = null
@@ -69,4 +70,41 @@ describe("Markdown raw HTML rendering", () => {
 		expect(html).not.toContain("inset")
 	})
 
+	it("retains safe styles on text, list, and quote HTML blocks", () => {
+		editor = new Editor({
+			extensions: [
+				StarterKit,
+				Markdown.configure({ html: true }),
+				SafeHtmlDiv,
+				SafeHtmlSpan,
+				SafeHtmlTextBlockStyles,
+			],
+			content: `<h2 style="background-color:#fff3cd; color:#8a6d3b; border:2px solid #f0ad4e; padding:8px 12px; border-radius:6px;">标题</h2>
+<p style="background-color:#f3e8ff; color:#6f42c1; border:1px solid #c084fc; padding:10px 12px; border-radius:8px;">段落</p>
+<ul style="background-color:#f1f3f5; color:#343a40; border:1px solid #adb5bd; padding:12px 16px; border-radius:8px;"><li style="color:#1971c2;">列表</li></ul>
+<blockquote style="background-color:#fff9db; color:#8f5b00; border-left:5px solid #f59f00; padding:12px 16px; margin:0; border-radius:6px;">引用</blockquote>`,
+		})
+
+		const html = editor.getHTML()
+		expect(html).toContain("background-color")
+		expect(html).toContain("标题")
+		expect(html).toContain("列表")
+		expect(html).toContain("引用")
+		expect(html).not.toContain("<pre")
+	})
+
+	it("renders a safe HTTPS video with bounded presentation styles", () => {
+		editor = new Editor({
+			extensions: [StarterKit, Markdown.configure({ html: true }), SafeVideo],
+			content:
+				'<video src="https://cdn.example.com/video.mp4" controls style="display:block; max-width:420px; max-height:360px;"></video>',
+		})
+
+		const html = editor.getHTML()
+		expect(html).toContain("<video")
+		expect(html).toContain('src="https://cdn.example.com/video.mp4"')
+		expect(html).toContain('preload="metadata"')
+		expect(html).toContain("controls")
+		expect(html).not.toContain("autoplay")
+	})
 })

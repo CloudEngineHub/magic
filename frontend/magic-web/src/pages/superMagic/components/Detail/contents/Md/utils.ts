@@ -133,6 +133,7 @@ const allowedRawHtmlTags = new Set([
 	"u",
 	"ul",
 	"var",
+	"video",
 	"wbr",
 ])
 
@@ -175,12 +176,14 @@ const safeInlineStylePropertyPatterns = [
 	/^(?:margin|padding)(?:-(?:top|right|bottom|left))?$/,
 	/^font-(?:family|size|style|weight)$/,
 	/^text-(?:align|decoration|indent|transform)$/,
+	/^(?:display|max-width|max-height)$/,
 	/^(?:color|letter-spacing|line-height|vertical-align|white-space)$/,
 ]
 const safeCssColorPattern =
 	/^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\([\d\s.,%+\-/]+\))$/i
 const spacingPropertyPattern = /^(?:margin|padding)(?:-(?:top|right|bottom|left))?$/
 const borderWidthPropertyPattern = /^border(?:-(?:top|right|bottom|left))?(?:-width)?$/
+const borderLonghandWidthPropertyPattern = /^border-(?:top|right|bottom|left)-width$/
 const borderRadiusPropertyPattern =
 	/^border(?:-radius|-(?:top|right|bottom|left)-(?:left|right)-radius)$/
 const unsafeCssValuePattern =
@@ -190,7 +193,7 @@ const MAX_PROBE_MARKDOWN_LENGTH = 4 * 1024 * 1024
 const MAX_RAW_HTML_TOKEN_COUNT = 4096
 const MAX_RAW_HTML_TOTAL_BYTES = 512 * 1024
 const htmlRiskAttributePresencePattern =
-	/\s+(?:on[a-z][\w:-]*|srcdoc|style|href|src|xlink:href|action|formaction|poster|background|cite|manifest|usemap|srcset|ping)\s*=/i
+	/\s+(?:on[a-z][\w:-]*|srcdoc|autoplay|style|href|src|xlink:href|action|formaction|poster|background|cite|manifest|usemap|srcset|ping)(?:\s*=|\s|>)/i
 
 function escapeHtml(value: string): string {
 	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -220,7 +223,7 @@ function removeProtocolWhitespaceAndControls(value: string): string {
 		.join("")
 }
 
-function isSafeUrlAttribute(attributeName: string, value: string): boolean {
+export function isSafeUrlAttribute(attributeName: string, value: string): boolean {
 	const normalizedValue = removeProtocolWhitespaceAndControls(value)
 	if (!normalizedValue) return true
 
@@ -278,10 +281,16 @@ function isSafeBorderWidthValue(value: string): boolean {
 }
 
 function hasUnsafeBorderWidth(value: string): boolean {
-	const dimensions = value.match(/-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|[a-z]+)/gi) ?? []
+	const dimensions = value.match(/(?:^|[\s/])(-?(?:\d+(?:\.\d+)?|\.\d+)[a-z%]+)/gi) ?? []
 	return dimensions.some(
-		(dimension) => !isBoundedCssLength(dimension, { maxPx: 16, maxRelative: 1 }),
+		(dimension) => !isBoundedCssLength(dimension.trim(), { maxPx: 16, maxRelative: 1 }),
 	)
+}
+
+function isSafeBoundedSizeValue(value: string): boolean {
+	const percentage = value.match(/^(\d+(?:\.\d+)?|\.\d+)%$/)
+	if (percentage) return Number(percentage[1]) <= 100
+	return isBoundedCssLength(value, { maxPx: 2048, maxRelative: 128 })
 }
 
 function isSafeBorderRadiusValue(value: string): boolean {
@@ -308,7 +317,9 @@ function isSafeInlineStyleValue(property: string, value: string): boolean {
 	}
 	if (spacingPropertyPattern.test(property)) return isSafeSpacingValue(property, value)
 	if (borderRadiusPropertyPattern.test(property)) return isSafeBorderRadiusValue(value)
-	if (property.endsWith("-width")) return isSafeBorderWidthValue(value)
+	if (property === "border-width" || borderLonghandWidthPropertyPattern.test(property)) {
+		return isSafeBorderWidthValue(value)
+	}
 	if (borderWidthPropertyPattern.test(property) && hasUnsafeBorderWidth(value)) return false
 	if (property === "font-size") {
 		return (
@@ -326,6 +337,10 @@ function isSafeInlineStyleValue(property: string, value: string): boolean {
 	}
 	if (property === "text-indent") {
 		return isBoundedCssLength(value, { maxPx: 128, maxRelative: 8 })
+	}
+	if (property === "display") return /^(?:block|inline|inline-block)$/i.test(value)
+	if (property === "max-width" || property === "max-height") {
+		return isSafeBoundedSizeValue(value)
 	}
 	if (property === "letter-spacing") {
 		return (
@@ -402,7 +417,13 @@ function hasDangerousHtmlAttributes(html: string): boolean {
 	for (const element of Array.from(document.querySelectorAll("*"))) {
 		for (const attribute of Array.from(element.attributes)) {
 			const attributeName = attribute.name.toLowerCase()
-			if (attributeName.startsWith("on") || attributeName === "srcdoc") return true
+			if (
+				attributeName.startsWith("on") ||
+				attributeName === "srcdoc" ||
+				attributeName === "autoplay"
+			) {
+				return true
+			}
 
 			if (attributeName === "style") {
 				if (!isSafeInlineStyle(attribute.value)) return true

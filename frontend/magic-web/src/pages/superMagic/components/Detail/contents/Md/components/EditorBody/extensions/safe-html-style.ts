@@ -77,7 +77,14 @@ export const SafeHtmlTextBlockStyles = Extension.create({
 	addGlobalAttributes() {
 		return [
 			{
-				types: ["paragraph", "heading"],
+				types: [
+					"paragraph",
+					"heading",
+					"bulletList",
+					"orderedList",
+					"listItem",
+					"blockquote",
+				],
 				attributes: {
 					style: {
 						default: null,

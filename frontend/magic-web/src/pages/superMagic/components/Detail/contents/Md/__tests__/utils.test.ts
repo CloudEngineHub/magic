@@ -181,6 +181,15 @@ describe("Markdown Utils", () => {
 			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
 		})
 
+		it("preserves safe video HTML and blocks unsafe video attributes", () => {
+			const safeVideo =
+				'<video src="https://cdn.example.com/video.mp4" controls style="display:block; max-width:420px; max-height:360px;"></video>'
+			expect(escapeDangerousInvisibleHtmlTags(safeVideo)).toBe(safeVideo)
+
+			const autoplayVideo = '<video src="https://cdn.example.com/video.mp4" autoplay></video>'
+			expect(escapeDangerousInvisibleHtmlTags(autoplayVideo)).toContain("<code>")
+		})
+
 		it.each([
 			"java&#x73;cript:alert(1)",
 			"jav&#97;script:alert(1)",
