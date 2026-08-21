@@ -14,6 +14,7 @@ class GenerationParameters:
     prompt: str = ""
     model_id: str | None = None
     estimate_id: str | None = None
+    skip_point_estimate: bool = False
     name: str | None = None
     output_path: str | None = None
     size: str | None = None
@@ -61,6 +62,8 @@ class GenerationParameters:
             "watermark": self.watermark,
         }
         values.update({key: value for key, value in optional.items() if value is not None})
+        if self.skip_point_estimate:
+            values["skip_point_estimate"] = True
         return values
 
     @classmethod
@@ -70,6 +73,7 @@ class GenerationParameters:
             prompt=_optional_string(values, "prompt") or "",
             model_id=_optional_string(values, "model_id"),
             estimate_id=_optional_string(values, "estimate_id"),
+            skip_point_estimate=_optional_boolean(values, "skip_point_estimate") is True,
             name=_optional_string(values, "name"),
             output_path=_optional_string(values, "output_path"),
             size=_optional_string(values, "size"),

@@ -12,7 +12,7 @@ Use this reference for a basic Canvas video request when the user has not asked 
 6. Keep reference paths as generation inputs only. Do not convert them into business Connections.
 7. Wait for an asynchronous generation task immediately, preserve its exact IDs on timeout, and query the completed Element before presenting the result.
 
-Video billing and any required point-estimation gate remain in force. Do not bypass application-level validation for a basic request.
+Video billing remains in force. Point estimation is required by default and may be skipped only when the user explicitly says in the current request that estimation is unnecessary and accepts an unknown point cost. Do not infer this from urgency, "generate directly", "start now", or prior approval; do not bypass application-level validation.
 
 If the user later asks for professional video production, a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition, stop the basic path and continue with `references/professional-video-production.md` using the existing results.
 
@@ -29,7 +29,7 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 ## Generation inputs
 
-For a generated video Content, the supported generation fields are `prompt`, `model_id`, `estimate_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
+For a generated video Content, the supported generation fields are `prompt`, `model_id`, `estimate_id`, `skip_point_estimate`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
 
 - Provide `name` in the user's language using a concise 3-5 word description of the actual video. The saved file uses this model-provided name plus one short unique value.
 - Use only model, duration, aspect ratio, resolution, and mode values declared in the current `<media_model_info>`.
@@ -38,10 +38,11 @@ For a generated video Content, the supported generation fields are `prompt`, `mo
 - Do not put file paths in the prompt. Paths belong in their corresponding reference arrays.
 - Use `frame_start_path` and optional `frame_end_path` for a start/end-frame transition; do not duplicate those files in `reference_image_paths`.
 - Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit.
+- Set `skip_point_estimate=true` only when the user explicitly asked in the current request to skip point estimation and accepted an unknown point cost. Never combine it with `estimate_id`; otherwise use the normal estimate and confirmation workflow.
 
 ## Code Mode example: estimate
 
-The estimate is side-effect free. Build and freeze the exact final request first, including all reference binding tokens and prompt constraints, then show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message. After confirmation, reuse the exact same `item_ref` and request fields without rewriting the prompt. If the prompt, reference list, or any billable field changes, call the estimate again and request a new confirmation; never let `POINT_ESTIMATE_MISMATCH` become a second, avoidable confirmation round.
+The estimate is side-effect free. Build and freeze the exact final request first, including all reference binding tokens and prompt constraints, then show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message. The only exception is an explicit current-request instruction to skip estimation with acceptance of unknown point cost; in that case call generation directly with `skip_point_estimate=true`. After confirmation, reuse the exact same `item_ref` and request fields without rewriting the prompt. If the prompt, reference list, or any billable field changes, call the estimate again and request a new confirmation; never let `POINT_ESTIMATE_MISMATCH` become a second, avoidable confirmation round.
 
 For a retry of failed billable Content, keep the original generation request's `item_ref` unchanged. A retry is an operation on the existing Element and Content, not a new batch item. If a new estimate is required, use the new `estimate_id` with that same original `item_ref`; never rename it with a retry suffix.
 

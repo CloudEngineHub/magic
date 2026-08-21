@@ -120,3 +120,18 @@ def test_skill_freezes_estimated_request_and_routes_provider_assets() -> None:
     assert "Never pass them to `visual_understanding`" in content
     assert "Freeze the complete generation request before estimating" in content
     assert "copy those parameters byte-for-byte" in content
+
+
+def test_canvas_agent_requires_explicit_current_request_to_skip_point_estimate() -> None:
+    """跳过积分预估必须来自用户当前请求的明确主动授权。"""
+    agent = (SKILL_PATH.parent.parent.parent / "canvas.agent").read_text(encoding="utf-8")
+    skill = SKILL_PATH.read_text(encoding="utf-8")
+    video_reference = (SKILL_PATH.parent / "references" / "video-generation.md").read_text(encoding="utf-8")
+
+    for content in (agent, skill, video_reference):
+        assert "skip_point_estimate=true" in content
+        assert "current request" in content
+        assert "unknown point cost" in content
+    assert "never prompt or steer the user to opt out" in agent
+    assert '"generate directly"' in agent
+    assert '"start now"' in agent

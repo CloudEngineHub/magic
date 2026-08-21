@@ -29,7 +29,7 @@ Use this mode only when the user explicitly asks for detailed, fine-grained, sta
 
 1. Understand the submitted assets and identify the intended subject, scene, motion, style, duration, aspect ratio, resolution, output model, and audio expectations. Provider-managed asset URIs such as `asset://virtual-human-asset-id` are opaque generation inputs: keep them in the supported reference array and do not send them to `visual_understanding`, read them as workspace files, import them into Canvas, or create synthetic Elements for them.
 2. Present one complete creative target and the final video prompt before generating anything. Ask one concise confirmation question for unresolved material choices.
-3. Before calling `estimate_canvas_content_points`, freeze the complete final prompt and request, including every reference binding token and prompt constraint. Call the estimate with that exact request, then wait for explicit confirmation of the estimate.
+3. By default, before calling `estimate_canvas_content_points`, freeze the complete final prompt and request, including every reference binding token and prompt constraint. Call the estimate with that exact request, then wait for explicit confirmation of the estimate. Only when the user explicitly says in the current request that estimation is unnecessary and accepts an unknown point cost may you skip the estimate and set `skip_point_estimate=true`.
 4. After the estimate is confirmed, call `add_canvas_elements` once with one `video` Element. Carry the returned `estimate_id` unchanged in the generated Content and copy the estimated request byte-for-byte. Do not add `[imageN]` bindings, watermark instructions, or other prompt text after confirmation. If anything changes, estimate again and ask for confirmation again before generation.
 5. When a submitted Canvas Element is a direct business predecessor, add its exact Element ID in the new video's `connections`. Reference paths alone never create Connections.
 6. Call `wait_canvas_generation` immediately when the generated Content returns a task ID.
@@ -55,7 +55,7 @@ Keep one clear scene and one main action unless the user explicitly asks for a s
 
 ## Shared video generation estimate gate
 
-All professional video generation is billable. Estimate the exact request first, show the full parameters and per-item points, and wait for explicit confirmation. Pass the returned `estimate_id` unchanged to the real generation call. If the parameters change, estimate again before generating.
+All professional video generation is billable. Estimate the exact request first, show the full parameters and per-item points, and wait for explicit confirmation by default. Only an explicit current-request opt-out that accepts an unknown point cost may use `skip_point_estimate=true` without an `estimate_id`. If the parameters change, estimate again before generating unless the user has explicitly opted out for that generation.
 
 ## Core rules
 
@@ -147,7 +147,7 @@ Do not generate a first frame immediately after saving. First confirm the openin
 
 ### 7. Generate and confirm shot videos
 
-Generate the first shot video as a trial; confirm motion, subject consistency, camera behavior, and pacing before generating the rest. Then generate the remaining shots in supported batches. Preserve successful videos and revise only affected shots. Each billed shot video still goes through the shared estimate gate in this reference.
+Generate the first shot video as a trial; confirm motion, subject consistency, camera behavior, and pacing before generating the rest. Then generate the remaining shots in supported batches. Preserve successful videos and revise only affected shots. Each billed shot video still goes through the shared estimate gate in this reference unless the user's explicit current-request opt-out covers that shot generation.
 
 ### 8. Configure the edit and optional audio
 

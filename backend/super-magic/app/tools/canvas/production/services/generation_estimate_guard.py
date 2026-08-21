@@ -2,12 +2,15 @@
 
 from dataclasses import replace
 
+from agentlang.logger import get_logger
 from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.production.estimation import (
     CostEstimateRepositoryInterface,
     CostEstimateRequestNormalizerRegistry,
 )
+
+logger = get_logger(__name__)
 
 
 class GenerationEstimateGuard:
@@ -37,6 +40,19 @@ class GenerationEstimateGuard:
             )
         if not item_ref:
             raise CanvasDomainError("POINT_ESTIMATE_REQUIRED", "Billable generation requires a stable item_ref and estimate_id.")
+        if parameters.skip_point_estimate:
+            if parameters.estimate_id:
+                raise CanvasDomainError(
+                    "POINT_ESTIMATE_CONFLICT",
+                    "skip_point_estimate cannot be combined with estimate_id.",
+                )
+            logger.warning(
+                "Canvas 计费生成跳过积分预估: project_path={} item_ref={} production_rule={}",
+                project_path,
+                item_ref,
+                production_rule,
+            )
+            return parameters
         estimate_id = parameters.estimate_id
         if not estimate_id:
             raise CanvasDomainError("POINT_ESTIMATE_REQUIRED", "Estimate content points and obtain user confirmation before generation.")
@@ -63,6 +79,7 @@ class GenerationEstimateGuard:
         """判断调用方是否只提供了 estimate_id 和非计费展示名称。"""
         payload = parameters.to_dict()
         payload.pop("estimate_id", None)
+        payload.pop("skip_point_estimate", None)
         payload.pop("name", None)
         return not any(value not in (None, "", [], {}) for value in payload.values())
 

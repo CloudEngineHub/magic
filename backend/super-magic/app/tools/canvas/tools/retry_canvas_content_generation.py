@@ -25,6 +25,7 @@ class GenerationOverrideInput(BaseToolParams):
     prompt: str | None = Field(None, min_length=1)
     model_id: str | None = None
     estimate_id: str | None = None
+    skip_point_estimate: bool | None = None
     name: str | None = None
     size: str | None = None
     reference_images: list[str] | None = None
@@ -53,6 +54,7 @@ class GenerationOverrideInput(BaseToolParams):
             prompt=values.get("prompt"),
             model_id=values.get("model_id"),
             estimate_id=values.get("estimate_id"),
+            skip_point_estimate=values.get("skip_point_estimate"),
             name=values.get("name"),
             size=values.get("size"),
             reference_images=values.get("reference_images"),

@@ -22,6 +22,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
 - A generated Content may be retried at most 2 times; never loop retries automatically.
+- Billed video generation requires point estimation by default. The only exception is an explicit current-request instruction from the user to skip estimation and accept an unknown point cost; never infer this from urgency, "generate directly", "start now", or prior approval.
 - Re-query after any write when the next step depends on persisted state.
 - Provider-managed asset URIs such as `asset://...` are generation references, not workspace files. Never pass them to `visual_understanding`, file tools, import tools, or Canvas queries that expect a local media path.
 - You may read every Element type. You may create or edit only `frame`, `storyboard`, `video-edit`, `image`, `video`, and `audio`.
@@ -45,7 +46,7 @@ You cannot:
 
 - Delete Elements or Content.
 - Edit program-managed fields: status, result paths, task binding, retry counts, active/main pointers, or Frame structural Content.
-- Skip the estimate-confirmation gate for billed video generation.
+- Skip point estimation only when the user explicitly asks in the current request to skip it and accepts that the point cost is unknown; otherwise always estimate and obtain confirmation before billed video generation.
 
 ## Core model
 
@@ -98,7 +99,7 @@ Failed generated content + user agrees?      → retry_canvas_content_generation
 User picked a candidate?                     → select_canvas_main_content
 Group sibling elements?                      → frame_canvas_elements
 Async task returned?                         → wait_canvas_generation
-Billed video generation?                    → estimate_canvas_content_points  (see the matching video reference)
+Billed video generation?                    → estimate_canvas_content_points unless the user explicitly opts out (see the matching video reference)
 Change layout / wire dependencies?           → layout_canvas_elements, add_canvas_connections  (see professional-video-production.md)
 Final MP4 from a video-edit?                 → compose_canvas_final_video  (see professional-video-production.md)
 Search and import web images?                → search_canvas_image_candidates  (see image-search.md)
@@ -245,7 +246,7 @@ Retry rules:
 - Reuse the exact `item_ref` from the original generation request or the latest failed Content result. `item_ref` is a stable correlation label for the operation; it is not a retry attempt name. Never add suffixes such as `-retry`, `-new`, or a counter.
 - Reuse the exact `element_id` and `content_id` from the latest Canvas query or the failed Content result.
 - For billable video Content, `generation_override.estimate_id` must belong to the same original `item_ref`. If the tool returns `POINT_ESTIMATE_MISMATCH`, do not invent another `item_ref`; compare the estimate's `item_ref` with the retry request and correct the request.
-- To retry with unchanged generation parameters, omit `generation_override`. If any billable video field changes, estimate the complete changed request again with the same original `item_ref`, obtain confirmation, and pass the new `estimate_id` in `generation_override`.
+- To retry with unchanged generation parameters, omit `generation_override`. If any billable video field changes, estimate the complete changed request again with the same original `item_ref`, obtain confirmation, and pass the new `estimate_id` in `generation_override`. The only exception is a new explicit current-request instruction to skip estimation and accept an unknown point cost; then set `generation_override.skip_point_estimate=true` and do not pass `estimate_id`.
 
 Parameters: `project_path` and `items` required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
 
@@ -394,7 +395,7 @@ result = tool.call("estimate_canvas_content_points", {
 print(result.content)
 ```
 
-After showing the full parameters, points, and `estimate_id`, you must confirm with a direct `ask_user`; do not call video generation before confirmation.
+After showing the full parameters, points, and `estimate_id`, you must confirm with a direct `ask_user`; do not call video generation before confirmation. If and only if the user explicitly said in the current request that estimation is unnecessary and accepted an unknown point cost, omit the estimate and set `skip_point_estimate=true` in the generated video Content.
 
 ## `compose_canvas_final_video`
 
@@ -469,7 +470,7 @@ print(result.content)
 ## Workflow coverage
 
 - Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation.
-- Ordinary video workflow: full creative target, point estimate, `ask_user` confirmation, async generation, and waiting.
+- Ordinary video workflow: full creative target, point estimate and `ask_user` confirmation by default, or an explicit user-requested `skip_point_estimate` exception, then async generation and waiting.
 - Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
 - `video-edit` Content stores ordered inputs via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call.
 - Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups, and no unframing or deletion is offered.

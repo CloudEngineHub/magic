@@ -103,6 +103,7 @@ class ContentMetadataService:
                 "prompt",
                 "model_id",
                 "estimate_id",
+                "skip_point_estimate",
                 "name",
                 "reference_image_paths",
                 "reference_video_paths",
@@ -133,7 +134,10 @@ class ContentMetadataService:
                 "CONTENT_FIELD_MANAGED_INTERNAL",
                 f"Generation override contains unsupported fields: {', '.join(sorted(unexpected))}.",
             )
-        return {**dict(original or {}), **values}
+        merged = {**dict(original or {}), **values}
+        if merged.get("skip_point_estimate") is True:
+            merged.pop("estimate_id", None)
+        return merged
 
     @staticmethod
     def start_retry(
