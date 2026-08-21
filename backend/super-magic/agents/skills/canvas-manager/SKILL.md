@@ -191,6 +191,8 @@ print(result.content)
 
 Read each item's real `element_id`, `content_id`, status, and task ID. If a task ID is returned, call `wait_canvas_generation`. Basic Canvas images and videos use the default `row_incremental` layout and do not wire professional-production Connections. Professional video production is the exception: follow `references/professional-video-production.md` and create only its explicit direct business relations.
 
+For imported media, set `content.source="imported"` and pass the original workspace path as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
+
 ## `frame_canvas_elements`
 
 Group exact sibling Elements into a new Frame.
@@ -536,15 +538,15 @@ Key points: always pass the original image path in `reference_images`; always se
 
 **Image generation:** When the user asks to generate an image — especially multiple views or angles of the same subject (fashion multi-view sheets, character design sheets, product 360° views) — your first tool call must directly read `references/image-generation.md` using the file-reading capability. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until that reference has been read. This is a context-loading requirement only; all image-generation rules, parameters, and the multi-view anchor-then-expand workflow are defined in that reference.
 
-**Video generation:** Distinguish basic Canvas video generation from professional video production. For a basic request such as “generate a video” or “generate a promotional video” without professional-production intent, first read `references/video-generation.md`. For an explicit professional video-production request, or a request naming a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition, first read `references/professional-video-production.md`. Descriptions such as “professional-looking”, “premium”, or “cinematic” express output quality and do not by themselves request the professional production workflow. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until the matching reference has been read.
+**Video generation:** Distinguish minimal basic Canvas video generation from a video-production task. For a minimal request such as “generate a video” or “animate this image” without uploaded-asset production, an existing Canvas task, continuation, revision, delivery, or professional-production intent, first read `references/video-generation.md`. For ordinary/direct video production, professional video production, uploaded-asset production, continuation, revision, final delivery, or a request naming a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition, first read `references/professional-video-production.md`. Descriptions such as “professional-looking”, “premium”, or “cinematic” express output quality and do not by themselves request the professional production workflow. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until the matching reference has been read.
 
 ## Reference routing
 
 Load references only when the matching task appears:
 
 - `references/image-generation.md` — image generation, revision, reference images, or image retry.
-- `references/video-generation.md` — basic Canvas video generation, equivalent to direct Canvas image generation, without professional-production Connections or staged workflow.
-- `references/professional-video-production.md` — professional video production, including direct professional video with Connections and detailed staged production with storyboards, first frames, shot dependencies, layout strategies, and final `compose_canvas_final_video`.
+- `references/video-generation.md` — minimal basic Canvas video generation, equivalent to direct Canvas image generation, without uploaded-asset production, professional-production Connections, staged workflow, or continuation/revision orchestration.
+- `references/professional-video-production.md` — the complete video-production workflow, including ordinary direct production, direct professional video with Connections, detailed staged production with storyboards, first frames, shot dependencies, layout strategies, revisions, recovery, audio, and final `compose_canvas_final_video`.
 - `references/image-search.md` — the user asks to search and import web images (`search_canvas_image_candidates`).
 - `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.
