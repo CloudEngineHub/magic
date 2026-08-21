@@ -60,6 +60,7 @@ describe("generateSuperMagicApi", () => {
 		await api.getSlidesTemplateCodeAvailability("PPT-owned")
 		await api.favoriteSlidesTemplate("PPT-owned")
 		await api.unfavoriteSlidesTemplate("PPT-owned")
+		await api.deleteSlidesTemplate("PPT-owned")
 		await api.getSlidesTemplateTags({ page: 1, page_size: 20, keyword: "报告" })
 		await api.saveSlidesTemplate({
 			label: { zh_CN: "我的模板", en_US: "My template" },
@@ -86,6 +87,7 @@ describe("generateSuperMagicApi", () => {
 		expect(get).toHaveBeenNthCalledWith(4, "/api/v1/slides-templates/PPT-owned/availability")
 		expect(post).toHaveBeenCalledWith("/api/v1/slides-templates/PPT-owned/favorite")
 		expect(deleteRequest).toHaveBeenCalledWith("/api/v1/slides-templates/PPT-owned/favorite")
+		expect(deleteRequest).toHaveBeenCalledWith("/api/v1/slides-templates/PPT-owned")
 		expect(get).toHaveBeenNthCalledWith(
 			5,
 			"/api/v1/slides-template-tags?page=1&page_size=20&keyword=%E6%8A%A5%E5%91%8A",

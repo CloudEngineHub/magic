@@ -475,7 +475,7 @@ export function toTemplateOption(template: SlidesTemplateItem, options?: { isFea
 	const imageCacheValue = isFeatured
 		? FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
 		: SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
-	const markTemplateImageUrl = (url: string | null | undefined) =>
+	const markTemplateImageUrl = <T extends string | null | undefined>(url: T): T =>
 		markSlidesTemplateImageUrlByCacheValue(url, imageCacheValue)
 
 	return {

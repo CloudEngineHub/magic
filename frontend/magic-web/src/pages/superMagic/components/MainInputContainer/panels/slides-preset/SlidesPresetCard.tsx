@@ -6,7 +6,15 @@ import {
 	useRef,
 	useState,
 } from "react"
-import { Award, Check, Eye, FolderOpen, Image as ImageIcon, MousePointerClick } from "lucide-react"
+import {
+	Award,
+	Check,
+	Eye,
+	FolderOpen,
+	Image as ImageIcon,
+	MousePointerClick,
+	Trash2,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
@@ -31,6 +39,8 @@ interface SlidesPresetCardProps {
 	onPreviewPreload?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
 	onOpenProject?: (template: OptionItem) => void
+	onRemove?: (template: OptionItem) => void
+	removePending?: boolean
 	favoritePending?: boolean
 	canUseHoverPreview?: boolean
 	showHoverDetails?: boolean
@@ -74,6 +84,8 @@ function SlidesPresetCard({
 	onPreviewPreload,
 	onFavoriteToggle,
 	onOpenProject,
+	onRemove,
+	removePending = false,
 	favoritePending = false,
 	canUseHoverPreview = false,
 	showHoverDetails = true,
@@ -150,6 +162,12 @@ function SlidesPresetCard({
 		event.preventDefault()
 		event.stopPropagation()
 		onOpenProject?.(template)
+	}
+
+	function handleRemoveClick(event: MouseEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		event.stopPropagation()
+		onRemove?.(template)
 	}
 
 	function handlePreviewIntentStart() {
@@ -251,6 +269,26 @@ function SlidesPresetCard({
 									isFavorite={Boolean(template.is_favorite)}
 									className="size-4"
 								/>
+							</Button>
+						</MagicTooltip>
+					) : null}
+					{onRemove ? (
+						<MagicTooltip title={tSuper("mySlidesTemplates.remove")} placement="top">
+							<Button
+								type="button"
+								size="icon"
+								variant="secondary"
+								className={cn(
+									"size-9 bg-background/95 text-destructive shadow-md backdrop-blur transition-[opacity,transform] active:scale-[0.96] sm:size-8",
+									canUseHoverPreview &&
+										"opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+								)}
+								aria-label={tSuper("mySlidesTemplates.remove")}
+								disabled={removePending}
+								data-testid="slides-preset-card-remove-button"
+								onClick={handleRemoveClick}
+							>
+								<Trash2 className="size-4" />
 							</Button>
 						</MagicTooltip>
 					) : null}

@@ -283,6 +283,17 @@ export function useMySlidesTemplates({
 		},
 		[],
 	)
+	const removeTemplate = useCallback(
+		async (code: string) => {
+			await adapter.remove(code)
+			if (activeSectionRef.current !== "created") return
+			setState((current) => ({
+				...current,
+				templates: current.templates.filter((template) => template.value !== code),
+			}))
+		},
+		[adapter],
+	)
 
 	const emptyStatus: MySlidesTemplatesEmptyStatus | null = (() => {
 		if (!isSelected) return null
@@ -313,6 +324,7 @@ export function useMySlidesTemplates({
 		setActiveSection: selectSection,
 		setSearchValue,
 		setTemplateFavorite,
+		removeTemplate,
 		templates: state.templates,
 	}
 }

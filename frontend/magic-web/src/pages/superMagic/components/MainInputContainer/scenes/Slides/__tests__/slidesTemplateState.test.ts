@@ -3,6 +3,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
 	OptionViewType,
 	type OptionGroup,
+	type OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	createSlidesFixedSceneConfig,
@@ -12,6 +13,7 @@ import {
 	groupSlidesTemplates,
 	isSlidesMode,
 	markSlidesTemplateImageUrl,
+	toTemplateOption,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
 	type SlidesTemplateTagItem,
@@ -273,12 +275,9 @@ describe("slides template state", () => {
 	})
 
 	it("maps per-slide preview image URLs", () => {
-		const panel = createSlidesPresetPanelConfig([officialTemplate])
-		const styleField = panel.field?.items.find((item) => item.data_key === "style")
-		const group = styleField?.options[0] as OptionGroup | undefined
-		const option = group?.children?.[0]
+		const option: OptionItem = toTemplateOption(officialTemplate)
 
-		expect(option?.preview_image_urls).toEqual(
+		expect(option.preview_image_urls).toEqual(
 			officialTemplate.preview_image_urls?.map(markSlidesTemplateImageUrl),
 		)
 	})

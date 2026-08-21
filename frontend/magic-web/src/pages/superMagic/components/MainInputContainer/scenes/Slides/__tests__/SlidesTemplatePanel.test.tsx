@@ -152,8 +152,11 @@ function createSlidesTemplatePanelContentState(
 		templateOptions: [],
 		total: 0,
 		myTemplatesEmptyStatus: null,
+		myTemplatesActiveSection: "created",
+		setMyTemplatesActiveSection: vi.fn(),
 		retryMyTemplates: vi.fn(),
 		favoritePendingCodes: new Set(),
+		removeTemplate: vi.fn(async () => undefined),
 		toggleTemplateFavorite: vi.fn(async () => undefined),
 		...overrides,
 	}
@@ -294,7 +297,8 @@ describe("SlidesTemplatePanel", () => {
 		})
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				JSONContent | undefined
+				| JSONContent
+				| undefined
 			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
 		})
 
@@ -311,7 +315,8 @@ describe("SlidesTemplatePanel", () => {
 
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				JSONContent | undefined
+				| JSONContent
+				| undefined
 			expect(lastContent).toBeUndefined()
 		})
 	})
@@ -1073,6 +1078,64 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(screen.getByTestId(`template-group-selector-option-${myTemplatesGroupKey}`))
 
 		expect(setSelectedGroupKey).not.toHaveBeenCalled()
+	})
+
+	it("hides tag filters when the homepage selects My templates", () => {
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedGroupKey: "__my_slides_templates__",
+					tagGroups: [
+						{
+							id: "style-group",
+							code: "style_group",
+							name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+							sort: 90,
+							tags: [
+								{
+									id: "business-style",
+									code: "style-business",
+									name_i18n: { zh_CN: "商务", en_US: "Business" },
+									sort: 90,
+									template_count: 1,
+									is_official: true,
+								},
+							],
+						},
+					],
+				})}
+				onTemplateClick={vi.fn()}
+				showMyTemplates
+			/>,
+		)
+
+		expect(screen.queryByTestId("slides-template-category-tag-filters")).toBeNull()
+		expect(screen.queryByTestId("slides-template-tag-filters-skeleton")).toBeNull()
+	})
+
+	it("confirms before removing a created template", async () => {
+		const removeTemplate = vi.fn(async () => undefined)
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedGroupKey: "__my_slides_templates__",
+					templateOptions: [{ value: "PPT-created", label: "Created template" }],
+					removeTemplate,
+				})}
+				onTemplateClick={vi.fn()}
+				showMyTemplates
+				enableMyTemplateRemoval
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-preset-card-remove-button"))
+		expect(screen.getByTestId("confirm-dialog-title")).toHaveTextContent(
+			"mySlidesTemplates.removeConfirmTitle",
+		)
+		expect(removeTemplate).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByTestId("confirm-dialog-confirm"))
+		await waitFor(() => expect(removeTemplate).toHaveBeenCalledWith("PPT-created"))
 	})
 
 	it("renders each tag group as a multi-select dropdown", () => {

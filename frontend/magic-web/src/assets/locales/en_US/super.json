@@ -4101,6 +4101,12 @@
 		"loading": "Loading My templates",
 		"openProject": "Open source project",
 		"openProjectFailed": "Unable to open source project. Try again later.",
+		"remove": "Remove template",
+		"removeConfirm": "Remove",
+		"removeConfirmDescription": "Removing “{{name}}” will delete it from templates you created and cannot be undone.",
+		"removeConfirmTitle": "Remove this template?",
+		"removeFailed": "Unable to remove the template. Try again later.",
+		"removeSuccess": "Template removed",
 		"retry": "Retry",
 		"saveDialog": {
 			"create": "Save as a new template",

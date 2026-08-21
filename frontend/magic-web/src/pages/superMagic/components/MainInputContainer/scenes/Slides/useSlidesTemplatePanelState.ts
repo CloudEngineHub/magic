@@ -28,6 +28,7 @@ export function useSlidesTemplatePanelState() {
 		searchValue,
 		select,
 		setActiveSection: setMyTemplatesActiveSection,
+		removeTemplate: removeMyTemplate,
 		setSearchValue,
 		setTemplateFavorite: setMyTemplateFavorite,
 		templates: myTemplates,
@@ -148,6 +149,7 @@ export function useSlidesTemplatePanelState() {
 		setMyTemplatesActiveSection,
 		retryMyTemplates,
 		favoritePendingCodes,
+		removeTemplate: removeMyTemplate,
 		toggleTemplateFavorite,
 	}
 }

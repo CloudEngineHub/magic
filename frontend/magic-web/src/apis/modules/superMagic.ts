@@ -885,6 +885,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		)
 	},
 
+	deleteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(genRequestUrl("/api/v1/slides-templates/${code}", { code }))
+	},
+
 	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
 		return fetch.get<SlidesTemplateCategoryListResponse>(
 			genRequestUrl("/api/v1/slides-template-categories", {}, params),
