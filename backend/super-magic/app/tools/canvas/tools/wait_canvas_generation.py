@@ -6,9 +6,9 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -48,7 +48,12 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
         tasks = args.get("tasks") or []
         project_path = args.get("project_path", "")
         seconds = args.get("max_wait_seconds", 60)
-        remark = f"{project_path} · waiting for {len(tasks)} generation task(s), up to {seconds}s" if project_path else f"waiting for {len(tasks)} generation task(s), up to {seconds}s"
+        remark = canvas_remark(
+            "canvas.wait_pending",
+            project_path,
+            total=len(tasks),
+            seconds=seconds,
+        )
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -71,18 +76,25 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
         else:
             values = (result.data or {}).get("items", [])
             statuses = {item.get("status") for item in values}
+            completed = sum(1 for item in values if item.get("status") == "completed")
+            failed = sum(1 for item in values if item.get("status") in {"failed", "not_found", "not_applicable"})
             if any(item.get("timed_out") for item in values):
                 action_key = "canvas.wait_generation_timeout"
-                remark = f"Generation wait timed out after {args.get('max_wait_seconds', 60)}s; reuse the same task ID to continue waiting."
+                remark = canvas_remark("canvas.wait_timeout", completed=completed, total=len(values))
             elif statuses and statuses <= {"completed"}:
                 action_key = "canvas.wait_generation_completed"
-                remark = f"{len(values)} generation task(s) completed."
+                remark = canvas_remark("canvas.wait_completed", completed=completed, total=len(values))
             elif statuses and statuses <= {"failed", "not_found", "not_applicable"}:
                 action_key = "canvas.wait_generation_failed"
-                remark = f"{len(values)} generation task(s) failed or were unavailable."
+                remark = canvas_remark("canvas.wait_failed", failed=failed, total=len(values))
             else:
                 action_key = "canvas.wait_generation_partial"
-                remark = f"Generation status returned for {len(values)} task(s); continue waiting for unfinished tasks."
+                remark = canvas_remark(
+                    "canvas.wait_partial",
+                    completed=completed,
+                    failed=failed,
+                    total=len(values),
+                )
         return {
             "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
@@ -93,21 +105,18 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成等待工具自己的任务状态详情。"""
         data = result.data or {}
-        lines = [
-            "Canvas generation wait",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "generation_wait", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         for item in data.get("items", []):
-            lines.append(
-                f"- task_id={item.get('generation_task_id', '-')} | status={item.get('status', '-')} | "
-                f"timed_out={str(bool(item.get('timed_out'))).lower()} | "
-                f"element_id={item.get('element_id', '-')}"
+            builder.add_item(
+                {
+                    "task_id": item.get("generation_task_id", "-"),
+                    "status": item.get("status", "-"),
+                    "timed_out": item.get("timed_out"),
+                    "element_id": item.get("element_id", "-"),
+                }
             )
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """查询任务状态；超时后继续使用原任务 ID。"""

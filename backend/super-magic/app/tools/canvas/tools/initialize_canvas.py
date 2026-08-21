@@ -6,9 +6,9 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import error_result
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -37,7 +37,7 @@ class InitializeCanvas(BaseTool[BaseToolParams]):
         project_path = (arguments or {}).get("project_path", "")
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
-            "remark": f"{project_path} · initializing Canvas project" if project_path else "initializing Canvas project",
+            "remark": canvas_remark("canvas.initialize_pending", project_path),
             "tool_name": tool_name,
         }
 
@@ -54,8 +54,8 @@ class InitializeCanvas(BaseTool[BaseToolParams]):
         if not result.ok:
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
-            state = "created" if (result.data or {}).get("created") else "already existed"
-            remark = f"{project_path} · Canvas project {state}" if project_path else f"Canvas project {state}"
+            code = "canvas.initialize_created" if (result.data or {}).get("created") else "canvas.initialize_existing"
+            remark = canvas_remark(code, project_path)
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -67,17 +67,10 @@ class InitializeCanvas(BaseTool[BaseToolParams]):
         """生成初始化工具自己的详情卡片。"""
         data = result.data or {}
         project_path = data.get("project_path") or (arguments or {}).get("project_path") or "-"
-        state = "created" if data.get("created") else "already existed"
-        content = "\n".join([
-            "Canvas initialization",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {project_path}",
-            f"- State: {state}",
-        ])
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content=content),
-        )
+        builder = CanvasToolDetailBuilder(self.name, "initialization", result, arguments)
+        builder.add_field("project_path", project_path)
+        builder.add_field("state", "created" if data.get("created") else "already existed")
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """初始化项目并返回工作区相对路径。"""

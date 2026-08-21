@@ -767,6 +767,10 @@
     "zh_CN": "框选画布节点",
     "en_US": "Frame canvas elements"
   },
+  "add_canvas_contents": {
+    "zh_CN": "新增画布内容",
+    "en_US": "Add canvas content"
+  },
     "canvas.add_generated_content": {
         "zh_CN": "生成画布内容",
         "en_US": "Generate canvas content"
@@ -818,5 +822,17 @@
     "canvas.wait_generation_failed": {
         "zh_CN": "处理内容生成失败",
         "en_US": "Handle generation failure"
+    },
+    "canvas.compose_video": {
+        "zh_CN": "合成最终视频",
+        "en_US": "Compose final video"
+    },
+    "canvas.estimate_content_points": {
+        "zh_CN": "预估内容积分",
+        "en_US": "Estimate content points"
+    },
+    "canvas.search_images": {
+        "zh_CN": "搜索画布图片",
+        "en_US": "Search canvas images"
     }
 }

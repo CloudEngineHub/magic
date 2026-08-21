@@ -6,10 +6,10 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import GenerationParameters
-from app.tools.canvas.presentation import error_result
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result
 from app.tools.canvas.production.contracts import VideoPointEstimateItem
 from app.tools.canvas.tools.add_canvas_elements import VideoInputMode
 from app.tools.canvas.tools.support import _application
@@ -87,7 +87,11 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
     async def get_before_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None) -> dict[str, str]:
         """生成积分预估前的用户反馈。"""
         args = arguments or {}
-        return {"action": i18n.translate(self.feedback_action_key, category="tool.actions"), "remark": f"estimating content points for {len(args.get('items') or [])} item(s)", "tool_name": tool_name}
+        return {
+            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "remark": canvas_remark("canvas.estimate_pending", total=len(args.get("items") or [])),
+            "tool_name": tool_name,
+        }
 
     async def get_after_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, result: ToolResult, execution_time: float, arguments: dict[str, Any] | None = None) -> dict[str, str]:
         """生成积分预估后的用户反馈。"""
@@ -95,18 +99,25 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
         if not result.ok:
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         elif data.get("can_continue"):
-            remark = f"estimated {data.get('total_points')} point(s)"
+            remark = canvas_remark("canvas.estimate_result", points=data.get("total_points", 0))
         else:
-            remark = "content point estimate is unavailable"
+            remark = canvas_remark("canvas.estimate_unavailable")
         return {"action": i18n.translate(self.feedback_action_key, category="tool.actions"), "remark": remark}
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, Any] | None = None) -> ToolDetail | None:
         """生成积分预估详情卡片。"""
         data = result.data or {}
-        lines = ["Canvas content point estimate", f"- Status: {'succeeded' if result.ok else 'failed'}", f"- Rule: {data.get('production_rule') or (arguments or {}).get('production_rule') or '-'}"]
+        builder = CanvasToolDetailBuilder(self.name, "content_point_estimate", result, arguments)
+        builder.add_field("rule", data.get("production_rule") or builder.arguments.get("production_rule") or "-")
         for item in data.get("items", []):
-            lines.append(f"- item_ref={item.get('item_ref', '-')} | status={item.get('status', '-')} | points={item.get('points', '-')}")
-        return ToolDetail(type=DisplayType.MD, data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)))
+            builder.add_item(
+                {
+                    "item_ref": item.get("item_ref", "-"),
+                    "status": item.get("status", "-"),
+                    "points": item.get("points", "-"),
+                }
+            )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """执行积分预估并返回估算凭证。"""

@@ -15,9 +15,10 @@ from pydantic import ConfigDict, Field
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.path_manager import PathManager
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.utils.async_file_utils import async_read_json
 
@@ -226,7 +227,7 @@ class SearchCanvasImagePrompts(BaseTool[SearchCanvasImagePromptsParams]):
         query = str(args.get("query") or "inspiration")
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
-            "remark": f"searching prompt inspirations for {query}",
+            "remark": canvas_remark("canvas.search_prompts_pending", query=query),
             "tool_name": tool_name,
         }
 
@@ -321,14 +322,8 @@ class SearchCanvasImagePrompts(BaseTool[SearchCanvasImagePromptsParams]):
         """生成不包含完整提示词正文的搜索摘要详情。"""
         data = result.data or {}
         args = arguments or {}
-        lines = [
-            "Canvas prompt library search",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Query: {data.get('query') or args.get('query') or '-'}",
-            f"- Results: {len(data.get('results', []))}",
-            f"- Total matched: {data.get('total_matched', 0)}",
-        ]
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        builder = CanvasToolDetailBuilder(self.name, "prompt_library_search", result, arguments)
+        builder.add_field("query", data.get("query") or args.get("query") or "-")
+        builder.add_field("results", len(data.get("results", [])))
+        builder.add_field("total_matched", data.get("total_matched", 0))
+        return builder.build()

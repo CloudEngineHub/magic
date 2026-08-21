@@ -6,9 +6,9 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import error_result, overview_content
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, overview_content
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -38,15 +38,15 @@ class QueryCanvasOverview(BaseTool[BaseToolParams]):
         """生成概览分页查询前的反馈。"""
         args = arguments or {}
         project_path = args.get("project_path", "")
-        remark = i18n.translate(
+        remark = canvas_remark(
             "canvas.page",
-            category="tool.messages",
+            project_path,
             page=args.get("page", 1),
             limit=args.get("limit", 50),
         )
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
-            "remark": f"{project_path} · {remark}" if project_path else remark,
+            "remark": remark,
             "tool_name": tool_name,
         }
 
@@ -64,9 +64,11 @@ class QueryCanvasOverview(BaseTool[BaseToolParams]):
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             data = result.data or {}
-            remark = (
-                f"{data.get('project_path', args.get('project_path', ''))} · "
-                f"{data.get('total_elements', 0)} Elements, {data.get('total_connections', 0)} Connections"
+            remark = canvas_remark(
+                "canvas.overview_result",
+                data.get("project_path", args.get("project_path", "")),
+                elements=data.get("total_elements", 0),
+                connections=data.get("total_connections", 0),
             )
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
@@ -78,24 +80,22 @@ class QueryCanvasOverview(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成概览查询自己的详情卡片。"""
         data = result.data or {}
-        lines = [
-            "Canvas overview",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-            f"- Elements: {data.get('total_elements', 0)}",
-            f"- Connections: {data.get('total_connections', 0)}",
-            f"- Page: {data.get('page', (arguments or {}).get('page', 1))}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "overview", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
+        builder.add_field("elements", data.get("total_elements", 0))
+        builder.add_field("connections", data.get("total_connections", 0))
+        builder.add_field("page", data.get("page", builder.arguments.get("page", 1)))
         for element in data.get("elements", []):
-            lines.append(
-                f"- {element.get('element_id', '-')} | type={element.get('element_type', '-')} | "
-                f"parent={element.get('parent_element_id') or '-'} | depth={element.get('depth', 0)} | "
-                f"children={element.get('child_count', 0)}"
+            builder.add_item(
+                {
+                    "element_id": element.get("element_id", "-"),
+                    "type": element.get("element_type", "-"),
+                    "parent": element.get("parent_element_id") or "-",
+                    "depth": element.get("depth", 0),
+                    "children": element.get("child_count", 0),
+                }
             )
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """读取当前分页概览。"""

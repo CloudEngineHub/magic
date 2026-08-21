@@ -6,10 +6,10 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import FrameElementsCommand
-from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -60,7 +60,7 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
         items = args.get("items") or []
         selected = sum(len(item.get("element_ids") or []) for item in items if isinstance(item, dict))
         project_path = args.get("project_path", "")
-        remark = f"{project_path} · framing {selected} Element(s)" if project_path else f"framing {selected} Element(s)"
+        remark = canvas_remark("canvas.frame_pending", project_path, total=selected)
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -80,7 +80,8 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             values = (result.data or {}).get("items", [])
-            remark = f"Created {sum(1 for item in values if item.get('status') in {'created', 'completed', 'added'})} Frame(s)."
+            total = sum(1 for item in values if item.get("status") in {"created", "completed", "added"})
+            remark = canvas_remark("canvas.frame_result", total=total)
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -91,21 +92,18 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成框选工具自己的层级详情。"""
         data = result.data or {}
-        lines = [
-            "Canvas Frames created",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "frames_created", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         for item in data.get("items", []):
-            lines.append(
-                f"- item_ref={item.get('item_ref', '-')} | status={item.get('status', '-')} | "
-                f"frame_element_id={item.get('frame_element_id', '-')} | "
-                f"child_count={len(item.get('child_element_ids') or [])}"
+            builder.add_item(
+                {
+                    "item_ref": item.get("item_ref", "-"),
+                    "status": item.get("status", "-"),
+                    "frame_element_id": item.get("frame_element_id", "-"),
+                    "child_count": len(item.get("child_element_ids") or []),
+                }
             )
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建 Frame 并返回真实 Frame 和子节点 ID。"""

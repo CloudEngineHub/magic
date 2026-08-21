@@ -6,10 +6,10 @@ from pydantic import ConfigDict, Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import ConnectionCommand
-from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -76,18 +76,15 @@ class AddCanvasConnections(BaseTool[BaseToolParams]):
         items = args.get("items") or []
         if any(item.get("replace_existing_connections") for item in items if isinstance(item, dict)):
             action_key = "canvas.replace_connections"
-            operation = "replacing Connections"
         elif items and all(
             item.get("remove_connection_ids") and not item.get("source_element_id")
             for item in items if isinstance(item, dict)
         ):
             action_key = "canvas.remove_connections"
-            operation = "removing Connections"
         else:
             action_key = self.feedback_action_key
-            operation = "updating Connections"
         project_path = args.get("project_path", "")
-        remark = f"{project_path} · {operation} ({len(items)} item(s))" if project_path else f"{operation} ({len(items)} item(s))"
+        remark = canvas_remark("canvas.connections_pending", project_path, total=len(items))
         return {
             "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
@@ -110,7 +107,12 @@ class AddCanvasConnections(BaseTool[BaseToolParams]):
             removed = sum(1 for item in values if item.get("status") in {"removed", "already_removed"})
             replaced = sum(1 for item in values if item.get("status") in {"replaced", "already_replaced"})
             added = len(values) - removed - replaced
-            remark = f"Connections updated: {added} added, {removed} removed, {replaced} replaced."
+            remark = canvas_remark(
+                "canvas.connections_result",
+                added=added,
+                removed=removed,
+                replaced=replaced,
+            )
         args = arguments or {}
         items = args.get("items") or []
         if any(item.get("replace_existing_connections") for item in items if isinstance(item, dict)):
@@ -132,21 +134,19 @@ class AddCanvasConnections(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成连线工具自己的端点和操作详情。"""
         data = result.data or {}
-        lines = [
-            "Canvas Connections",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "connections", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         for item in data.get("items", []):
-            lines.append(
-                f"- item_ref={item.get('item_ref', '-')} | status={item.get('status', '-')} | "
-                f"connection_id={item.get('connection_id', '-')} | "
-                f"source={item.get('source_element_id', '-')} | target={item.get('target_element_id', '-')}"
+            builder.add_item(
+                {
+                    "item_ref": item.get("item_ref", "-"),
+                    "status": item.get("status", "-"),
+                    "connection_id": item.get("connection_id", "-"),
+                    "source": item.get("source_element_id", "-"),
+                    "target": item.get("target_element_id", "-"),
+                }
             )
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """按明确 ID 管理 Connection。"""

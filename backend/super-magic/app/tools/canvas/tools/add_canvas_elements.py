@@ -9,7 +9,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import (
     AddElementCommand,
@@ -32,11 +32,10 @@ from app.tools.canvas.domain.content_fields import (
     VideoEditContentFields,
 )
 from app.tools.canvas.domain.types import JsonObject
-from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
-
 
 CanvasElementType = Literal[
     "text",
@@ -447,7 +446,7 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
             "canvas.import_content" if sources == {"imported"} else self.feedback_action_key
         )
         project_path = args.get("project_path", "")
-        remark = f"{project_path} · adding {len(items)} Canvas Element(s)" if project_path else f"adding {len(items)} Canvas Element(s)"
+        remark = canvas_remark("canvas.add_elements_pending", project_path, total=len(items))
         return {
             "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
@@ -467,7 +466,12 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             values = (result.data or {}).get("items", [])
-            remark = f"Added {sum(1 for item in values if item.get('status') in {'added', 'completed', 'pending', 'processing'})} of {len(values)} Element(s)."
+            succeeded = sum(
+                1
+                for item in values
+                if item.get("status") in {"added", "completed", "pending", "processing"}
+            )
+            remark = canvas_remark("canvas.add_elements_result", succeeded=succeeded, total=len(values))
         args = arguments or {}
         sources = {
             str(item.get("content", {}).get("source"))
@@ -487,20 +491,18 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成新增 Element 自己的逐项详情。"""
         data = result.data or {}
-        lines = [
-            "Canvas Elements added",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "elements_added", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         for item in data.get("items", []):
-            lines.append(
-                f"- item_ref={item.get('item_ref', '-')} | status={item.get('status', '-')} | "
-                f"element_id={item.get('element_id', '-')} | type={item.get('element_type', '-')}"
+            builder.add_item(
+                {
+                    "item_ref": item.get("item_ref", "-"),
+                    "status": item.get("status", "-"),
+                    "element_id": item.get("element_id", "-"),
+                    "type": item.get("element_type", "-"),
+                }
             )
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建一批 Element，并按 item 返回真实标识。"""

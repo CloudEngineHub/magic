@@ -5439,6 +5439,430 @@
         "zh_CN": "画布操作失败",
         "en_US": "Canvas operation failed"
     },
+    "canvas.detail.title.connections": {
+        "zh_CN": "画布连线",
+        "en_US": "Canvas connections"
+    },
+    "canvas.detail.title.content_versions_added": {
+        "zh_CN": "新增画布内容版本",
+        "en_US": "Canvas content versions added"
+    },
+    "canvas.detail.title.elements_added": {
+        "zh_CN": "新增画布节点",
+        "en_US": "Canvas elements added"
+    },
+    "canvas.detail.title.video_composition": {
+        "zh_CN": "画布视频合成",
+        "en_US": "Canvas video composition"
+    },
+    "canvas.detail.title.content_point_estimate": {
+        "zh_CN": "画布内容积分预估",
+        "en_US": "Canvas content point estimate"
+    },
+    "canvas.detail.title.frames_created": {
+        "zh_CN": "已创建画布画框",
+        "en_US": "Canvas frames created"
+    },
+    "canvas.detail.title.initialization": {
+        "zh_CN": "画布初始化",
+        "en_US": "Canvas initialization"
+    },
+    "canvas.detail.title.layout": {
+        "zh_CN": "画布布局",
+        "en_US": "Canvas layout"
+    },
+    "canvas.detail.title.element_details": {
+        "zh_CN": "画布节点详情",
+        "en_US": "Canvas element details"
+    },
+    "canvas.detail.title.overview": {
+        "zh_CN": "画布概览",
+        "en_US": "Canvas overview"
+    },
+    "canvas.detail.title.content_retry": {
+        "zh_CN": "画布内容重试",
+        "en_US": "Canvas content retry"
+    },
+    "canvas.detail.title.prompt_library_search": {
+        "zh_CN": "画布提示词库搜索",
+        "en_US": "Canvas prompt library search"
+    },
+    "canvas.detail.title.image_search": {
+        "zh_CN": "画布图片搜索",
+        "en_US": "Canvas image search"
+    },
+    "canvas.detail.title.main_content_selection": {
+        "zh_CN": "画布主内容选择",
+        "en_US": "Canvas main content selection"
+    },
+    "canvas.detail.title.generation_wait": {
+        "zh_CN": "等待画布内容生成",
+        "en_US": "Canvas generation wait"
+    },
+    "canvas.detail.field.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "canvas.detail.field.project_path": {
+        "zh_CN": "项目路径",
+        "en_US": "Project path"
+    },
+    "canvas.detail.field.state": {
+        "zh_CN": "状态",
+        "en_US": "State"
+    },
+    "canvas.detail.field.item_ref": {
+        "zh_CN": "项目引用",
+        "en_US": "Item reference"
+    },
+    "canvas.detail.field.connection_id": {
+        "zh_CN": "连线 ID",
+        "en_US": "Connection ID"
+    },
+    "canvas.detail.field.source": {
+        "zh_CN": "来源节点",
+        "en_US": "Source element"
+    },
+    "canvas.detail.field.target": {
+        "zh_CN": "目标节点",
+        "en_US": "Target element"
+    },
+    "canvas.detail.field.element_id": {
+        "zh_CN": "节点 ID",
+        "en_US": "Element ID"
+    },
+    "canvas.detail.field.content_id": {
+        "zh_CN": "内容 ID",
+        "en_US": "Content ID"
+    },
+    "canvas.detail.field.type": {
+        "zh_CN": "类型",
+        "en_US": "Type"
+    },
+    "canvas.detail.field.frame_element_id": {
+        "zh_CN": "画框节点 ID",
+        "en_US": "Frame element ID"
+    },
+    "canvas.detail.field.child_count": {
+        "zh_CN": "子节点数",
+        "en_US": "Child count"
+    },
+    "canvas.detail.field.position": {
+        "zh_CN": "位置",
+        "en_US": "Position"
+    },
+    "canvas.detail.field.task_id": {
+        "zh_CN": "任务 ID",
+        "en_US": "Task ID"
+    },
+    "canvas.detail.field.timed_out": {
+        "zh_CN": "是否超时",
+        "en_US": "Timed out"
+    },
+    "canvas.detail.field.main_content_id": {
+        "zh_CN": "主内容 ID",
+        "en_US": "Main content ID"
+    },
+    "canvas.detail.field.result_element_id": {
+        "zh_CN": "结果节点 ID",
+        "en_US": "Result element ID"
+    },
+    "canvas.detail.field.result_content_id": {
+        "zh_CN": "结果内容 ID",
+        "en_US": "Result content ID"
+    },
+    "canvas.detail.field.asset_path": {
+        "zh_CN": "素材路径",
+        "en_US": "Asset path"
+    },
+    "canvas.detail.field.rule": {
+        "zh_CN": "规则",
+        "en_US": "Rule"
+    },
+    "canvas.detail.field.points": {
+        "zh_CN": "积分",
+        "en_US": "Points"
+    },
+    "canvas.detail.field.topic": {
+        "zh_CN": "主题",
+        "en_US": "Topic"
+    },
+    "canvas.detail.field.imported": {
+        "zh_CN": "已导入",
+        "en_US": "Imported"
+    },
+    "canvas.detail.field.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "canvas.detail.field.warning": {
+        "zh_CN": "警告",
+        "en_US": "Warning"
+    },
+    "canvas.detail.field.elements": {
+        "zh_CN": "节点数",
+        "en_US": "Elements"
+    },
+    "canvas.detail.field.connections": {
+        "zh_CN": "连线数",
+        "en_US": "Connections"
+    },
+    "canvas.detail.field.page": {
+        "zh_CN": "页码",
+        "en_US": "Page"
+    },
+    "canvas.detail.field.parent": {
+        "zh_CN": "父节点",
+        "en_US": "Parent"
+    },
+    "canvas.detail.field.depth": {
+        "zh_CN": "层级",
+        "en_US": "Depth"
+    },
+    "canvas.detail.field.contents": {
+        "zh_CN": "内容数",
+        "en_US": "Contents"
+    },
+    "canvas.detail.field.children": {
+        "zh_CN": "子节点数",
+        "en_US": "Children"
+    },
+    "canvas.detail.field.query": {
+        "zh_CN": "查询词",
+        "en_US": "Query"
+    },
+    "canvas.detail.field.results": {
+        "zh_CN": "结果数",
+        "en_US": "Results"
+    },
+    "canvas.detail.field.total_matched": {
+        "zh_CN": "匹配总数",
+        "en_US": "Total matched"
+    },
+    "canvas.detail.field.project": {
+        "zh_CN": "项目路径",
+        "en_US": "Project path"
+    },
+    "canvas.detail.status.succeeded": {
+        "zh_CN": "成功",
+        "en_US": "Succeeded"
+    },
+    "canvas.detail.status.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "canvas.detail.status.completed": {
+        "zh_CN": "已完成",
+        "en_US": "Completed"
+    },
+    "canvas.detail.status.pending": {
+        "zh_CN": "等待中",
+        "en_US": "Pending"
+    },
+    "canvas.detail.status.processing": {
+        "zh_CN": "处理中",
+        "en_US": "Processing"
+    },
+    "canvas.detail.status.added": {
+        "zh_CN": "已新增",
+        "en_US": "Added"
+    },
+    "canvas.detail.status.removed": {
+        "zh_CN": "已移除",
+        "en_US": "Removed"
+    },
+    "canvas.detail.status.replaced": {
+        "zh_CN": "已替换",
+        "en_US": "Replaced"
+    },
+    "canvas.detail.status.created": {
+        "zh_CN": "已创建",
+        "en_US": "Created"
+    },
+    "canvas.detail.status.not_applied": {
+        "zh_CN": "未应用",
+        "en_US": "Not applied"
+    },
+    "canvas.detail.status.already_removed": {
+        "zh_CN": "已移除（无需重复操作）",
+        "en_US": "Already removed"
+    },
+    "canvas.detail.status.already_replaced": {
+        "zh_CN": "已替换（无需重复操作）",
+        "en_US": "Already replaced"
+    },
+    "canvas.detail.status.unavailable": {
+        "zh_CN": "不可用",
+        "en_US": "Unavailable"
+    },
+    "canvas.detail.status.estimated": {
+        "zh_CN": "已预估",
+        "en_US": "Estimated"
+    },
+    "canvas.detail.status.not_billable": {
+        "zh_CN": "无需计费",
+        "en_US": "Not billable"
+    },
+    "canvas.detail.status.partial": {
+        "zh_CN": "部分完成",
+        "en_US": "Partially completed"
+    },
+    "canvas.detail.status.not_found": {
+        "zh_CN": "未找到",
+        "en_US": "Not found"
+    },
+    "canvas.detail.status.not_applicable": {
+        "zh_CN": "不适用",
+        "en_US": "Not applicable"
+    },
+    "canvas.detail.state.created": {
+        "zh_CN": "已创建",
+        "en_US": "Created"
+    },
+    "canvas.detail.state.already existed": {
+        "zh_CN": "已存在",
+        "en_US": "Already existed"
+    },
+    "canvas.detail.boolean.true": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "canvas.detail.boolean.false": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "canvas.detail.type.frame": {
+        "zh_CN": "画框",
+        "en_US": "Frame"
+    },
+    "canvas.detail.type.group": {
+        "zh_CN": "组",
+        "en_US": "Group"
+    },
+    "canvas.detail.type.image": {
+        "zh_CN": "图片",
+        "en_US": "Image"
+    },
+    "canvas.detail.type.text": {
+        "zh_CN": "文本",
+        "en_US": "Text"
+    },
+    "canvas.detail.type.rectangle": {
+        "zh_CN": "矩形",
+        "en_US": "Rectangle"
+    },
+    "canvas.detail.type.ellipse": {
+        "zh_CN": "椭圆",
+        "en_US": "Ellipse"
+    },
+    "canvas.detail.type.triangle": {
+        "zh_CN": "三角形",
+        "en_US": "Triangle"
+    },
+    "canvas.detail.type.star": {
+        "zh_CN": "星形",
+        "en_US": "Star"
+    },
+    "canvas.detail.type.video": {
+        "zh_CN": "视频",
+        "en_US": "Video"
+    },
+    "canvas.detail.type.audio": {
+        "zh_CN": "音频",
+        "en_US": "Audio"
+    },
+    "canvas.detail.type.storyboard": {
+        "zh_CN": "分镜",
+        "en_US": "Storyboard"
+    },
+    "canvas.detail.type.video-edit": {
+        "zh_CN": "视频成片配置",
+        "en_US": "Video edit"
+    },
+    "canvas.detail.rule.video_generation": {
+        "zh_CN": "视频生成",
+        "en_US": "Video generation"
+    },
+    "canvas.initialize_pending": {
+        "zh_CN": "正在准备画布项目",
+        "en_US": "Preparing the Canvas project"
+    },
+    "canvas.initialize_created": {
+        "zh_CN": "画布项目已创建",
+        "en_US": "Canvas project created"
+    },
+    "canvas.initialize_existing": {
+        "zh_CN": "画布项目已存在",
+        "en_US": "Canvas project already exists"
+    },
+    "canvas.overview_result": {
+        "zh_CN": "共 {{elements}} 个节点，{{connections}} 条连线",
+        "en_US": "Elements: {{elements}}; connections: {{connections}}"
+    },
+    "canvas.element_targets": {
+        "zh_CN": "目标节点：{{targets}}",
+        "en_US": "Target elements: {{targets}}"
+    },
+    "canvas.element_details_result": {
+        "zh_CN": "已返回 {{total}} 个节点的详情",
+        "en_US": "Returned details for {{total}} elements"
+    },
+    "canvas.add_elements_pending": {
+        "zh_CN": "准备新增 {{total}} 个画布节点",
+        "en_US": "Canvas elements to add: {{total}}"
+    },
+    "canvas.add_elements_result": {
+        "zh_CN": "已新增 {{succeeded}}/{{total}} 个画布节点",
+        "en_US": "Canvas elements added: {{succeeded}}/{{total}}"
+    },
+    "canvas.add_contents_pending": {
+        "zh_CN": "准备为 {{total}} 个节点新增内容",
+        "en_US": "Elements receiving new content: {{total}}"
+    },
+    "canvas.add_contents_result": {
+        "zh_CN": "已为 {{succeeded}}/{{total}} 个节点新增内容",
+        "en_US": "Elements updated with content: {{succeeded}}/{{total}}"
+    },
+    "canvas.connections_pending": {
+        "zh_CN": "准备更新 {{total}} 项画布连线",
+        "en_US": "Canvas connection updates: {{total}}"
+    },
+    "canvas.connections_result": {
+        "zh_CN": "连线已更新：新增 {{added}} 条，移除 {{removed}} 条，替换 {{replaced}} 条",
+        "en_US": "Connections updated: {{added}} added, {{removed}} removed, {{replaced}} replaced"
+    },
+    "canvas.frame_pending": {
+        "zh_CN": "准备框选 {{total}} 个节点",
+        "en_US": "Elements to frame: {{total}}"
+    },
+    "canvas.frame_result": {
+        "zh_CN": "已创建 {{total}} 个画框",
+        "en_US": "Frames created: {{total}}"
+    },
+    "canvas.layout_pending": {
+        "zh_CN": "正在对 {{total}} 个节点应用布局策略：{{strategies}}",
+        "en_US": "Layout targets: {{total}}; strategies: {{strategies}}"
+    },
+    "canvas.layout_result": {
+        "zh_CN": "已更新 {{total}} 个节点的布局",
+        "en_US": "Element layouts updated: {{total}}"
+    },
+    "canvas.retry_pending": {
+        "zh_CN": "准备重试 {{total}} 项失败内容",
+        "en_US": "Failed content items to retry: {{total}}"
+    },
+    "canvas.retry_result": {
+        "zh_CN": "已重试 {{retried}} 项内容，{{limited}} 项达到重试上限",
+        "en_US": "Content retries: {{retried}}; retry limit reached: {{limited}}"
+    },
+    "canvas.select_main_pending": {
+        "zh_CN": "准备为 {{total}} 个节点选择主内容",
+        "en_US": "Main content selections pending: {{total}}"
+    },
+    "canvas.select_main_result": {
+        "zh_CN": "已为 {{total}} 个节点选择主内容",
+        "en_US": "Main content selections completed: {{total}}"
+    },
     "canvas.items_pending": {
         "zh_CN": "准备处理 {{total}} 项",
         "en_US": "Preparing {{total}} items"
@@ -5455,6 +5879,10 @@
         "zh_CN": "本次最多等待 {{seconds}} 秒",
         "en_US": "Waiting up to {{seconds}} seconds"
     },
+    "canvas.wait_pending": {
+        "zh_CN": "正在等待 {{total}} 项生成任务，本次最多等待 {{seconds}} 秒",
+        "en_US": "Generation tasks: {{total}}; waiting up to {{seconds}} seconds"
+    },
     "canvas.wait_completed": {
         "zh_CN": "生成任务已全部完成（{{completed}}/{{total}}）",
         "en_US": "All generation tasks completed ({{completed}}/{{total}})"
@@ -5470,5 +5898,37 @@
     "canvas.wait_partial": {
         "zh_CN": "生成任务部分完成（完成 {{completed}}，失败 {{failed}}，共 {{total}}）",
         "en_US": "Generation partially completed ({{completed}} completed, {{failed}} failed, {{total}} total)"
+    },
+    "canvas.compose_pending": {
+        "zh_CN": "正在合成视频：{{name}}",
+        "en_US": "Composing video: {{name}}"
+    },
+    "canvas.compose_result": {
+        "zh_CN": "视频已合成：{{path}}",
+        "en_US": "Video composed: {{path}}"
+    },
+    "canvas.estimate_pending": {
+        "zh_CN": "正在预估 {{total}} 项内容的积分",
+        "en_US": "Content items to estimate: {{total}}"
+    },
+    "canvas.estimate_result": {
+        "zh_CN": "预计需要 {{points}} 积分",
+        "en_US": "Estimated {{points}} points"
+    },
+    "canvas.estimate_unavailable": {
+        "zh_CN": "暂时无法预估内容积分",
+        "en_US": "Content point estimate is unavailable"
+    },
+    "canvas.search_images_pending": {
+        "zh_CN": "正在为 {{topic}} 搜索图片",
+        "en_US": "Searching images for {{topic}}"
+    },
+    "canvas.search_images_result": {
+        "zh_CN": "已导入 {{total}} 张候选图片",
+        "en_US": "Imported {{total}} image candidates"
+    },
+    "canvas.search_prompts_pending": {
+        "zh_CN": "正在搜索提示词灵感：{{query}}",
+        "en_US": "Searching prompt inspirations for {{query}}"
     }
 }

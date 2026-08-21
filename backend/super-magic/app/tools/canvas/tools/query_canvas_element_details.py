@@ -6,9 +6,9 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import elements_content, error_result
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, elements_content, error_result
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -44,7 +44,7 @@ class QueryCanvasElementDetails(BaseTool[BaseToolParams]):
         element_ids = args.get("element_ids") or []
         target = ", ".join(str(item) for item in element_ids) or "-"
         project_path = args.get("project_path", "")
-        remark = f"{project_path} · Elements: {target}" if project_path else f"Elements: {target}"
+        remark = canvas_remark("canvas.element_targets", project_path, targets=target)
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -64,7 +64,7 @@ class QueryCanvasElementDetails(BaseTool[BaseToolParams]):
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             data = result.data or {}
-            remark = f"Returned details for {len(data.get('elements', []))} Element(s)."
+            remark = canvas_remark("canvas.element_details_result", total=len(data.get("elements", [])))
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -75,24 +75,23 @@ class QueryCanvasElementDetails(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成详情查询自己的层级和 Content 摘要。"""
         data = result.data or {}
-        lines = [
-            "Canvas Element details",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-            f"- Elements: {len(data.get('elements', []))}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "element_details", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
+        builder.add_field("elements", len(data.get("elements", [])))
         for element in data.get("elements", []):
-            lines.append(
-                f"- {element.get('element_id', '-')} | type={element.get('element_type', '-')} | "
-                f"parent={element.get('parent_element_id') or '-'} | depth={element.get('depth', 0)} | "
-                f"contents={len(element.get('contents') or [])} | children={len(element.get('children') or [])}"
+            builder.add_item(
+                {
+                    "element_id": element.get("element_id", "-"),
+                    "type": element.get("element_type", "-"),
+                    "parent": element.get("parent_element_id") or "-",
+                    "depth": element.get("depth", 0),
+                    "contents": len(element.get("contents") or []),
+                    "children": len(element.get("children") or []),
+                }
             )
         for warning in data.get("warnings", []):
-            lines.append(f"- Warning: {warning}")
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+            builder.add_warning(warning)
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """读取指定 Element 和关联 Connection。"""

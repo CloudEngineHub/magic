@@ -6,9 +6,9 @@ from pydantic import ConfigDict, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import error_result
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result
 from app.tools.canvas.production.contracts import ImageSearchTask
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
@@ -49,21 +49,41 @@ class SearchCanvasImages(BaseTool[BaseToolParams]):
     async def get_before_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None) -> dict[str, str]:
         """生成图片搜索前的用户反馈。"""
         args = arguments or {}
-        return {"action": i18n.translate(self.feedback_action_key, category="tool.actions"), "remark": f"searching images for {args.get('topic_id') or 'the canvas'}", "tool_name": tool_name}
+        return {
+            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "remark": canvas_remark("canvas.search_images_pending", topic=args.get("topic_id") or "-"),
+            "tool_name": tool_name,
+        }
 
     async def get_after_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, result: ToolResult, execution_time: float, arguments: dict[str, Any] | None = None) -> dict[str, str]:
         """生成图片搜索后的用户反馈。"""
         data = result.data or {}
         imported = sum(int(item.get("imported_count") or 0) for item in data.get("items", []))
-        return {"action": i18n.translate(self.feedback_action_key, category="tool.actions"), "remark": f"imported {imported} image candidate(s)" if result.ok else i18n.translate("canvas.operation_failed", category="tool.messages")}
+        remark = (
+            canvas_remark("canvas.search_images_result", total=imported)
+            if result.ok
+            else i18n.translate("canvas.operation_failed", category="tool.messages")
+        )
+        return {
+            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "remark": remark,
+        }
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, Any] | None = None) -> ToolDetail | None:
         """生成图片搜索详情卡片。"""
         data = result.data or {}
-        lines = ["Canvas image search", f"- Status: {'succeeded' if result.ok else 'failed'}", f"- Topic: {data.get('topic_id') or (arguments or {}).get('topic_id') or '-'}"]
+        builder = CanvasToolDetailBuilder(self.name, "image_search", result, arguments)
+        builder.add_field("topic", data.get("topic_id") or builder.arguments.get("topic_id") or "-")
         for item in data.get("items", []):
-            lines.append(f"- item_ref={item.get('item_ref', '-')} | status={item.get('status', '-')} | imported={item.get('imported_count', 0)} | failed={item.get('failed_count', 0)}")
-        return ToolDetail(type=DisplayType.MD, data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)))
+            builder.add_item(
+                {
+                    "item_ref": item.get("item_ref", "-"),
+                    "status": item.get("status", "-"),
+                    "imported": item.get("imported_count", 0),
+                    "failed": item.get("failed_count", 0),
+                }
+            )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """执行图片搜索和逐项物化。"""

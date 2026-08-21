@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from agentlang.tools.tool_result import ToolResult
+from app.i18n import i18n
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError, CanvasProtocolError
+
+
+def canvas_remark(code: str, project_path: str = "", **kwargs: object) -> str:
+    """翻译 Canvas 用户反馈，并按需附加项目路径。"""
+    remark = i18n.translate(code, category="tool.messages", **kwargs)
+    return f"{project_path} · {remark}" if project_path else remark
 
 
 def error_result(error: Exception) -> ToolResult:

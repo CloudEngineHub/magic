@@ -6,10 +6,10 @@ from pydantic import ConfigDict, Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import LayoutCommand, LayoutElementCommand
-from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
 from app.tools.canvas.tools.add_canvas_elements import CanvasPositionInput
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
@@ -83,7 +83,12 @@ class LayoutCanvasElements(BaseTool[BaseToolParams]):
         }
         strategy_text = ", ".join(sorted(strategies)) if strategies else "default strategy"
         project_path = args.get("project_path", "")
-        remark = f"{project_path} · applying {strategy_text} to {len(items)} Element(s)" if project_path else f"applying {strategy_text} to {len(items)} Element(s)"
+        remark = canvas_remark(
+            "canvas.layout_pending",
+            project_path,
+            total=len(items),
+            strategies=strategy_text,
+        )
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -103,7 +108,7 @@ class LayoutCanvasElements(BaseTool[BaseToolParams]):
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             values = (result.data or {}).get("items", [])
-            remark = f"Updated layout for {len(values)} Element(s)."
+            remark = canvas_remark("canvas.layout_result", total=len(values))
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -114,21 +119,19 @@ class LayoutCanvasElements(BaseTool[BaseToolParams]):
     ) -> ToolDetail | None:
         """生成布局工具自己的坐标变更详情。"""
         data = result.data or {}
-        lines = [
-            "Canvas layout",
-            f"- Status: {'succeeded' if result.ok else 'failed'}",
-            f"- Project path: {data.get('project_path') or (arguments or {}).get('project_path') or '-'}",
-        ]
+        builder = CanvasToolDetailBuilder(self.name, "layout", result, arguments)
+        builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         for item in data.get("items", []):
             layout = item.get("layout") or {}
-            lines.append(
-                f"- item_ref={item.get('item_ref', '-')} | status={item.get('status', '-')} | "
-                f"element_id={item.get('element_id', '-')} | position=({layout.get('x', '-')}, {layout.get('y', '-')})"
+            builder.add_item(
+                {
+                    "item_ref": item.get("item_ref", "-"),
+                    "status": item.get("status", "-"),
+                    "element_id": item.get("element_id", "-"),
+                    "position": f"({layout.get('x', '-')}, {layout.get('y', '-')})",
+                }
             )
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name=f"{self.name}.md", content="\n".join(lines)),
-        )
+        return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """执行布局策略，不修改 Content 或 Connection。"""

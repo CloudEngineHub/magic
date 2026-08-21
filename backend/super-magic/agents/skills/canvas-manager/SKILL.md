@@ -16,7 +16,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
 - If the user message contains `[@design_canvas_project:path]`, the text after the colon is the exact `project_path`. Use it verbatim in every Canvas tool call; never truncate, rename, or create a new project instead.
 - If the user message contains `[@design_marker:name]`, follow the Design marker processing section below.
-- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state.
+- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state. The only exception is writing the resumable task plan as Markdown under `.magic/video-production-plans/` (see `references/video-production.md`); never read or edit any project file, including `magic.project.js`.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
@@ -108,7 +108,7 @@ User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (s
 
 Initialize a new project or recover from `PROJECT_NOT_FOUND`. Idempotent; accepts only a full workspace-relative path.
 
-参数：`project_path` 为完整的 workspace-relative Canvas 项目路径。
+Parameters: `project_path` is the full workspace-relative Canvas project path.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -125,7 +125,7 @@ Read the created-or-existing status. Next: `query_canvas_overview` when you need
 
 Use when element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. Returns a lightweight Element index with compact relations.
 
-参数：`project_path` 必填；`page` 和 `limit` 可选。
+Parameters: `project_path` required; `page` and `limit` optional.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -144,7 +144,7 @@ If it reports a next page, increment `page`. For full Content, hierarchy, or con
 
 Query 1–10 exact element IDs; returns Content, status, media paths, Frame hierarchy, and related Connections.
 
-参数：`project_path` 和 1–10 个精确 `element_ids` 必填。详情中的 `asset_path`、状态、任务 ID 和 Connection ID 只能作为后续工具的真实输入。
+Parameters: `project_path` and 1–10 exact `element_ids` required. The `asset_path`, status, task ID, and Connection ID in the details must only be used as real inputs to later tools.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -165,7 +165,7 @@ Query before retrying, selecting a main version, deleting/replacing Connections,
 
 Create new logical Elements. Use for a new logical result; for a candidate on an existing Element, use `add_canvas_contents` instead.
 
-参数：`project_path` 和 `items` 必填；每个 item 至少包含 `item_ref` 与 `element_type`。
+Parameters: `project_path` and `items` required; each item needs at least `item_ref` and `element_type`.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -193,7 +193,7 @@ Read each item's real `element_id`, `content_id`, status, and task ID. If a task
 
 Group exact sibling Elements into a new Frame.
 
-参数：`project_path` 和 `items` 必填；只能对 root-level sibling Elements 分组。This tool does not frame existing Frames/Groups；也不提供 unframing。
+Parameters: `project_path` and `items` required; only root-level sibling Elements can be grouped. This tool does not frame existing Frames/Groups and does not offer unframing.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -216,7 +216,7 @@ Confirm the exact sibling Element IDs first. Do not pass coordinates, size, or `
 
 Append a new Content candidate to an existing Element without overwriting previous candidates.
 
-参数：`project_path` 和 `items` 必填；每个 item 使用精确 `element_id` 和新的 Content。
+Parameters: `project_path` and `items` required; each item uses an exact `element_id` and new Content.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -239,7 +239,7 @@ Read the new `content_id` and status. Show completed candidates to the user; nev
 
 Retry an existing generated Content that is currently `failed`.
 
-参数：`project_path` 和 `items` 必填；只能重试失败 Content，最多 2 次，Never loop retries automatically。
+Parameters: `project_path` and `items` required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -263,7 +263,7 @@ Only with explicit user consent. At most 2 retries per Content. Never retry `pro
 
 Set a confirmed candidate as the main Content.
 
-参数：`project_path` 和 `items` 必填；只能使用用户确认过的精确 `element_id` 与 `content_id`。
+Parameters: `project_path` and `items` required; use only the exact `element_id` and `content_id` the user confirmed.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -286,7 +286,7 @@ Only after the user picks a candidate. Not valid on Frames, failed, or processin
 
 Wait on any async task ID returned by add, append, or retry.
 
-参数：`project_path`、`tasks` 必填；`max_wait_seconds` 可选。超时或 processing 时复用原 `generation_task_id`，不得重复提交。
+Parameters: `project_path` and `tasks` required; `max_wait_seconds` optional. On timeout or `processing`, reuse the original `generation_task_id`; do not resubmit.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -307,14 +307,14 @@ On `completed`, query details as needed. On `pending`, `processing`, or `timed_o
 
 ## `layout_canvas_elements`
 
-调整已有 Element 或 Frame 的布局。布局只改变位置和尺寸，不会生成新的 Content，也不会自动推断 Connection。
+Adjust the layout of an existing Element or Frame. Layout only changes position and size; it does not generate new Content or infer Connections automatically.
 
-| 参数 | 必填 | 说明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `project_path` | 是 | 完整的 Canvas 项目路径 |
-| `items` | 是 | 每项包含精确 `element_id`、布局策略和可选显式坐标 |
+| `project_path` | Yes | Full Canvas project path |
+| `items` | Yes | Each item: exact `element_id`, layout strategy, and optional explicit coordinates |
 
-支持 `row_incremental`、`dependency_flow`、`explicit_position`。只有用户明确提供坐标时才使用 `explicit_position`；Frame 子节点坐标始终是相对于直接父 Frame 的 local 坐标。
+Supports `row_incremental`, `dependency_flow`, and `explicit_position`. Use `explicit_position` only when the user explicitly provides coordinates; Frame child coordinates are always local to the direct parent Frame.
 
 ```python
 from sdk.tool import tool
@@ -331,14 +331,22 @@ print(result.content)
 
 ## `add_canvas_connections`
 
-创建、移除或替换业务 Connection。Connection 表示明确的业务依赖，不得根据视觉距离、同一 Frame 或数组顺序自行推断。
+Create, remove, or replace a business Connection. A Connection represents an explicit business dependency; do not infer it from visual distance, the same Frame, or array order.
 
-| 参数 | 必填 | 说明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `project_path` | 是 | 完整的 Canvas 项目路径 |
-| `items` | 是 | 新增端点或精确的移除/替换请求 |
+| `project_path` | Yes | Full Canvas project path |
+| `items` | Yes | New endpoints or exact remove/replace requests |
 
-移除使用 `remove_connection_ids`；替换必须同时提供新端点、`replace_existing_connections=true` 和查询得到的旧 Connection ID。任何删除或替换都需要用户明确意图。
+For removal use `remove_connection_ids`; for replacement provide the new endpoint, `replace_existing_connections=true`, and the queried old Connection ID. Any removal or replacement requires explicit user intent.
+
+A Connection declares only a direct business predecessor. Reference paths are generation inputs; they do not imply Connections. Wire upstream as follows:
+
+- Initialization image: connect from every imported or confirmed Element materially combined into the result.
+- Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
+- First frame: connect from the storyboard Element.
+- Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
+- Video edit and final video: their `videoSequence` / `audioSequence` already define upstream; no extra Connections.
 
 ```python
 from sdk.tool import tool
@@ -357,13 +365,13 @@ print(result.content)
 
 ## `estimate_canvas_content_points`
 
-对计费的视频生成执行无副作用积分预估。预估阶段不得新增 Element、Content 或生成任务；任何影响计费的参数变化都必须重新预估。
+Perform a side-effect-free point estimate for billed video generation. The estimate phase must not create Elements, Content, or generation tasks; any parameter change that affects billing requires a re-estimate.
 
-| 参数 | 必填 | 说明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `project_path` | 是 | 完整的 Canvas 项目路径 |
-| `production_rule` | 否 | 当前使用 `video_generation` |
-| `items` | 是 | 与真实视频生成完全一致的请求参数和唯一 `item_ref` |
+| `project_path` | Yes | Full Canvas project path |
+| `production_rule` | No | Currently `video_generation` |
+| `items` | Yes | Request parameters identical to the real video generation, plus a unique `item_ref` |
 
 ```python
 from sdk.tool import tool
@@ -376,18 +384,18 @@ result = tool.call("estimate_canvas_content_points", {
 print(result.content)
 ```
 
-展示完整参数、积分和 `estimate_id` 后，必须使用直接的 `ask_user` 确认；确认前不得调用视频生成。
+After showing the full parameters, points, and `estimate_id`, you must confirm with a direct `ask_user`; do not call video generation before confirmation.
 
 ## `compose_canvas_final_video`
 
-从已确认的 `video-edit` Element 主 Content 同步合成最终 MP4。它不是异步生成任务，因此不调用 `wait_canvas_generation`。
+Synchronously compose the final MP4 from the main Content of a confirmed `video-edit` Element. It is not an async generation task, so do not call `wait_canvas_generation`.
 
-| 参数 | 必填 | 说明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `project_path` | 是 | 完整的 Canvas 项目路径 |
-| `video_edit_element_id` | 是 | 精确的 Video Edit Element ID |
-| `result_name` | 是 | 最终视频名称 |
-| `result_element_id` | 否 | 明确要求复用已有结果 Element 时提供 |
+| `project_path` | Yes | Full Canvas project path |
+| `video_edit_element_id` | Yes | Exact Video Edit Element ID |
+| `result_name` | Yes | Final video name |
+| `result_element_id` | No | Provide when reusing an existing result Element is explicitly requested |
 
 ```python
 from sdk.tool import tool
@@ -400,17 +408,17 @@ result = tool.call("compose_canvas_final_video", {
 print(result.content)
 ```
 
-合成完成后使用返回的真实 Element ID 查询详情，再向用户报告 MP4 路径、时长、尺寸和音频状态。
+After composition, query details with the returned real Element ID, then report the MP4 path, duration, dimensions, and audio status to the user.
 
 ## `search_canvas_image_candidates`
 
-搜索、下载、媒体校验并导入外部图片候选。只物化下载和媒体探测成功的候选；同一 topic 内按来源 URL 去重。
+Search, download, media-validate, and import external image candidates. Only materialize candidates that pass download and media probing; de-duplicate by source URL within the same topic.
 
-| 参数 | 必填 | 说明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `project_path` | 是 | 完整的 Canvas 项目路径 |
-| `topic_id` | 是 | 当前搜索主题 ID |
-| `tasks` | 是 | 每项包含 `item_ref`、`name`、`query` 和可选筛选条件 |
+| `project_path` | Yes | Full Canvas project path |
+| `topic_id` | Yes | Current search topic ID |
+| `tasks` | Yes | Each item: `item_ref`, `name`, `query`, and optional filters |
 
 ```python
 from sdk.tool import tool
@@ -423,20 +431,20 @@ result = tool.call("search_canvas_image_candidates", {
 print(result.content)
 ```
 
-导入后使用 `query_canvas_overview` 或 `query_canvas_element_details` 验证真实 Element ID。失败项只有在用户要求时才重试。
+After import, verify the real Element IDs with `query_canvas_overview` or `query_canvas_element_details`. Retry failed items only when the user asks.
 
 ## `search_canvas_image_prompts`
 
-在用户没有明确创意方向时搜索提示词灵感。该工具只返回灵感，不创建或修改 Canvas 状态。
+Search for prompt inspiration when the user has no clear creative direction. This tool only returns inspiration; it does not create or modify Canvas state.
 
-| 参数 | 必填 | 说明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `query` | 是 | 场景、主体或风格关键词 |
-| `category` | 否 | 提示词分类 |
-| `sort_by` | 否 | 排序方式 |
-| `limit` | 否 | 返回数量上限 |
-| `offset` | 否 | 分页偏移 |
-| `random` | 否 | 是否随机抽取 |
+| `query` | Yes | Scene, subject, or style keywords |
+| `category` | No | Prompt category |
+| `sort_by` | No | Sort order |
+| `limit` | No | Maximum number of results |
+| `offset` | No | Pagination offset |
+| `random` | No | Whether to sample randomly |
 
 ```python
 from sdk.tool import tool
@@ -448,15 +456,15 @@ result = tool.call("search_canvas_image_prompts", {
 print(result.content)
 ```
 
-## 工作流覆盖
+## Workflow coverage
 
-- 图片设计工作流：直接生成、引用图片、追加候选、确认后选择主 Content。
-- 普通视频工作流：完整创意目标、积分预估、`ask_user` 确认、异步生成和等待。
-- 精细视频制作工作流：Storyboard、首帧、视频镜头、直接业务 Connection、`video-edit` 和最终 MP4。
-- `video-edit` Content 使用 `videoSequence` 和可选 `audioSequence` 保存有序视频与音频输入。
-- Frame 工作流：只对精确的 root-level sibling Elements 分组；不允许对已有 Frames/Groups 再次 frame，也不提供 unframing 或删除操作。
-- 布局策略：`row_incremental`、`dependency_flow`、`explicit_position`。
-- 版本管理：Content 候选追加、失败重试上限、用户确认后选择 main Content。
+- Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation.
+- Ordinary video workflow: full creative target, point estimate, `ask_user` confirmation, async generation, and waiting.
+- Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
+- `video-edit` Content stores ordered video and audio inputs via `videoSequence` and optional `audioSequence`.
+- Frame workflow: group only exact root-level sibling Elements; do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
+- Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.
+- Version management: Content candidate appending, retry cap on failures, and main Content selection after user confirmation.
 
 ## Design marker processing
 
@@ -512,6 +520,12 @@ print(result.content)
 ```
 
 Key points: always pass the original image path in `reference_images`; always set `size` to the original dimensions; describe the full scene, not just the change, and explicitly state what is preserved; the new image is a separate Element — the original Element and file remain unchanged.
+
+## Mandatory context loading
+
+**Image generation:** When the user asks to generate an image — especially multiple views or angles of the same subject (fashion multi-view sheets, character design sheets, product 360° views) — your first tool call must directly read `references/image-generation.md` using the file-reading capability. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until that reference has been read. This is a context-loading requirement only; all image-generation rules, parameters, and the multi-view anchor-then-expand workflow are defined in that reference.
+
+**Video generation:** When the user asks to generate a video, animation, shot, clip, or other dynamic media, your first tool call must directly read the matching video reference using the file-reading capability — `references/video-production-ordinary.md` for a simple, direct, one-shot video, and `references/video-production.md` for everything else (multi-shot, storyboards, staged approvals, BGM, final composition), which is also the default when no mode is named. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until that reference has been read. This is a context-loading requirement only; all video-specific tools, parameters, interaction rules, the `estimate_canvas_content_points` gate, and reference token binding are defined in those references.
 
 ## Reference routing
 

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-import json
 import inspect
+import json
 
 import pytest
 from pydantic import ValidationError
 
+import app.tools.canvas.tools as canvas_tools
+import app.tools.design.tools as design_tools
 import tests.tools.canvas.helpers  # noqa: F401
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.i18n import I18nManager
 from app.tools.canvas.bootstrap import CanvasApplicationFactory
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
@@ -32,20 +35,18 @@ from app.tools.canvas.tools import (
     ContentInput,
     EstimateCanvasContentPoints,
     FrameCanvasElements,
+    GenerationOverrideInput,
     InitializeCanvas,
     LayoutCanvasElements,
     QueryCanvasElementDetails,
     QueryCanvasOverview,
     RetryCanvasContentGeneration,
-    GenerationOverrideInput,
     SearchCanvasImagePrompts,
     SearchCanvasImages,
     SelectCanvasMainContent,
-    WaitCanvasGeneration,
     VideoPointEstimateItemInput,
+    WaitCanvasGeneration,
 )
-import app.tools.canvas.tools as canvas_tools
-import app.tools.design.tools as design_tools
 
 
 def test_content_input_exposes_one_stable_model_schema() -> None:
@@ -553,3 +554,374 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
         wait_args,
     )
     assert completed["action"] != timed_out["action"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_class", "arguments", "result", "zh_expected", "en_expected"),
+    [
+        pytest.param(
+            InitializeCanvas,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="mock", data={"created": True}),
+            ("正在准备画布项目", "画布项目已创建"),
+            ("Preparing the Canvas project", "Canvas project created"),
+            id="initialize",
+        ),
+        pytest.param(
+            QueryCanvasOverview,
+            {"project_path": "Canvas/Demo", "page": 2, "limit": 7},
+            ToolResult(
+                content="mock",
+                data={"project_path": "Canvas/Demo", "total_elements": 3, "total_connections": 1},
+            ),
+            ("第 2 页", "共 3 个节点，1 条连线"),
+            ("Page 2", "Elements: 3; connections: 1"),
+            id="overview",
+        ),
+        pytest.param(
+            QueryCanvasElementDetails,
+            {"project_path": "Canvas/Demo", "element_ids": ["element-1", "element-2"]},
+            ToolResult(content="mock", data={"elements": [{}, {}]}),
+            ("目标节点", "已返回 2 个节点的详情"),
+            ("Target elements", "Returned details for 2 elements"),
+            id="element-details",
+        ),
+        pytest.param(
+            AddCanvasElements,
+            {"project_path": "Canvas/Demo", "items": [{}, {}]},
+            ToolResult(content="mock", data={"items": [{"status": "completed"}, {"status": "failed"}]}),
+            ("准备新增 2 个画布节点", "已新增 1/2 个画布节点"),
+            ("Canvas elements to add: 2", "Canvas elements added: 1/2"),
+            id="add-elements",
+        ),
+        pytest.param(
+            AddCanvasContents,
+            {"project_path": "Canvas/Demo", "items": [{}, {}]},
+            ToolResult(content="mock", data={"items": [{"status": "pending"}, {"status": "failed"}]}),
+            ("准备为 2 个节点新增内容", "已为 1/2 个节点新增内容"),
+            ("Elements receiving new content: 2", "Elements updated with content: 1/2"),
+            id="add-contents",
+        ),
+        pytest.param(
+            AddCanvasConnections,
+            {"project_path": "Canvas/Demo", "items": [{}, {}, {}]},
+            ToolResult(
+                content="mock",
+                data={"items": [{"status": "added"}, {"status": "removed"}, {"status": "replaced"}]},
+            ),
+            ("准备更新 3 项画布连线", "新增 1 条，移除 1 条，替换 1 条"),
+            ("Canvas connection updates: 3", "1 added, 1 removed, 1 replaced"),
+            id="connections",
+        ),
+        pytest.param(
+            FrameCanvasElements,
+            {"project_path": "Canvas/Demo", "items": [{"element_ids": ["element-1", "element-2"]}]},
+            ToolResult(content="mock", data={"items": [{"status": "created"}]}),
+            ("准备框选 2 个节点", "已创建 1 个画框"),
+            ("Elements to frame: 2", "Frames created: 1"),
+            id="frame",
+        ),
+        pytest.param(
+            LayoutCanvasElements,
+            {"project_path": "Canvas/Demo", "items": [{"layout": {"strategy": "row_incremental"}}]},
+            ToolResult(content="mock", data={"items": [{"status": "completed"}]}),
+            ("正在对 1 个节点应用布局策略", "已更新 1 个节点的布局"),
+            ("Layout targets: 1", "Element layouts updated: 1"),
+            id="layout",
+        ),
+        pytest.param(
+            RetryCanvasContentGeneration,
+            {"project_path": "Canvas/Demo", "items": [{}, {}]},
+            ToolResult(
+                content="mock",
+                data={"items": [{"status": "pending"}, {"error_code": "CONTENT_RETRY_LIMIT_REACHED"}]},
+            ),
+            ("准备重试 2 项失败内容", "已重试 1 项内容，1 项达到重试上限"),
+            ("Failed content items to retry: 2", "Content retries: 1; retry limit reached: 1"),
+            id="retry",
+        ),
+        pytest.param(
+            SelectCanvasMainContent,
+            {"project_path": "Canvas/Demo", "items": [{}, {}]},
+            ToolResult(content="mock", data={"items": [{}, {}]}),
+            ("准备为 2 个节点选择主内容", "已为 2 个节点选择主内容"),
+            ("Main content selections pending: 2", "Main content selections completed: 2"),
+            id="select-main",
+        ),
+        pytest.param(
+            WaitCanvasGeneration,
+            {"project_path": "Canvas/Demo", "tasks": [{"generation_task_id": "task-1"}], "max_wait_seconds": 5},
+            ToolResult(content="mock", data={"items": [{"status": "completed"}]}),
+            ("正在等待 1 项生成任务", "生成任务已全部完成"),
+            ("Generation tasks: 1", "All generation tasks completed"),
+            id="wait",
+        ),
+        pytest.param(
+            ComposeCanvasVideo,
+            {"project_path": "Canvas/Demo", "result_name": "final-video"},
+            ToolResult(content="mock", data={"src": "videos/final.mp4"}),
+            ("正在合成视频：final-video", "视频已合成：videos/final.mp4"),
+            ("Composing video: final-video", "Video composed: videos/final.mp4"),
+            id="compose-video",
+        ),
+        pytest.param(
+            EstimateCanvasContentPoints,
+            {"project_path": "Canvas/Demo", "items": [{}]},
+            ToolResult(content="mock", data={"can_continue": True, "total_points": 12}),
+            ("正在预估 1 项内容的积分", "预计需要 12 积分"),
+            ("Content items to estimate: 1", "Estimated 12 points"),
+            id="estimate-points",
+        ),
+        pytest.param(
+            SearchCanvasImagePrompts,
+            {"query": "香水"},
+            ToolResult(content="mock", data={"results": [{}, {}]}),
+            ("正在搜索提示词灵感：香水", "已搜索到 2 条提示词灵感"),
+            ("Searching prompt inspirations for 香水", "Found 2 prompt inspirations"),
+            id="search-prompts",
+        ),
+        pytest.param(
+            SearchCanvasImages,
+            {"topic_id": "topic-1"},
+            ToolResult(content="mock", data={"items": [{"imported_count": 2}]}),
+            ("正在为 topic-1 搜索图片", "已导入 2 张候选图片"),
+            ("Searching images for topic-1", "Imported 2 image candidates"),
+            id="search-images",
+        ),
+    ],
+)
+async def test_canvas_tool_remarks_follow_current_language(
+    tool_class: type,
+    arguments: dict[str, object],
+    result: ToolResult,
+    zh_expected: tuple[str, str],
+    en_expected: tuple[str, str],
+) -> None:
+    """全部 Canvas 工具的调用前后 remark 都应跟随当前语言。"""
+    tool = tool_class()
+    context = ToolContext()
+    try:
+        I18nManager.set_language("zh_CN")
+        zh_before = await tool.get_before_tool_call_friendly_action_and_remark(
+            tool.name,
+            context,
+            arguments,
+        )
+        zh_after = await tool.get_after_tool_call_friendly_action_and_remark(
+            tool.name,
+            context,
+            result,
+            0.1,
+            arguments,
+        )
+
+        I18nManager.set_language("en_US")
+        en_before = await tool.get_before_tool_call_friendly_action_and_remark(
+            tool.name,
+            context,
+            arguments,
+        )
+        en_after = await tool.get_after_tool_call_friendly_action_and_remark(
+            tool.name,
+            context,
+            result,
+            0.1,
+            arguments,
+        )
+    finally:
+        I18nManager.reset_language()
+
+    assert zh_expected[0] in zh_before["remark"]
+    assert zh_expected[1] in zh_after["remark"]
+    assert en_expected[0] in en_before["remark"]
+    assert en_expected[1] in en_after["remark"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_class", "arguments", "result", "zh_title", "en_title", "raw_value"),
+    [
+        pytest.param(
+            InitializeCanvas,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "created": True}),
+            "画布初始化",
+            "Canvas initialization",
+            "Canvas/Demo",
+            id="initialize",
+        ),
+        pytest.param(
+            QueryCanvasOverview,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(
+                content="MODEL-ONLY",
+                data={
+                    "project_path": "Canvas/Demo",
+                    "total_elements": 1,
+                    "total_connections": 0,
+                    "page": 1,
+                    "elements": [{"element_id": "element-1", "element_type": "image"}],
+                },
+            ),
+            "画布概览",
+            "Canvas overview",
+            "element-1",
+            id="overview",
+        ),
+        pytest.param(
+            QueryCanvasElementDetails,
+            {"project_path": "Canvas/Demo", "element_ids": ["element-1"]},
+            ToolResult(
+                content="MODEL-ONLY",
+                data={"project_path": "Canvas/Demo", "elements": [{"element_id": "element-1", "element_type": "image"}]},
+            ),
+            "画布节点详情",
+            "Canvas element details",
+            "element-1",
+            id="element-details",
+        ),
+        pytest.param(
+            AddCanvasElements,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "image-1", "status": "completed", "element_id": "element-1", "element_type": "image"}]}),
+            "新增画布节点",
+            "Canvas elements added",
+            "element-1",
+            id="add-elements",
+        ),
+        pytest.param(
+            AddCanvasContents,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "content-1", "status": "added", "element_id": "element-1", "content_id": "content-1"}]}),
+            "新增画布内容版本",
+            "Canvas content versions added",
+            "content-1",
+            id="add-contents",
+        ),
+        pytest.param(
+            AddCanvasConnections,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "link-1", "status": "added", "connection_id": "connection-1", "source_element_id": "element-1", "target_element_id": "element-2"}]}),
+            "画布连线",
+            "Canvas connections",
+            "connection-1",
+            id="connections",
+        ),
+        pytest.param(
+            FrameCanvasElements,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "frame-1", "status": "created", "frame_element_id": "frame-element-1", "child_element_ids": ["element-1"]}]}),
+            "已创建画布画框",
+            "Canvas frames created",
+            "frame-element-1",
+            id="frames",
+        ),
+        pytest.param(
+            LayoutCanvasElements,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "layout-1", "status": "completed", "element_id": "element-1", "layout": {"x": 10, "y": 20}}]}),
+            "画布布局",
+            "Canvas layout",
+            "element-1",
+            id="layout",
+        ),
+        pytest.param(
+            RetryCanvasContentGeneration,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "retry-1", "status": "pending", "element_id": "element-1", "content_id": "content-1", "generation_task_id": "task-1"}]}),
+            "画布内容重试",
+            "Canvas content retry",
+            "task-1",
+            id="retry",
+        ),
+        pytest.param(
+            SelectCanvasMainContent,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "main-1", "status": "completed", "element_id": "element-1", "main_content_id": "content-1"}]}),
+            "画布主内容选择",
+            "Canvas main content selection",
+            "content-1",
+            id="select-main",
+        ),
+        pytest.param(
+            WaitCanvasGeneration,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"generation_task_id": "task-1", "status": "processing", "timed_out": False, "element_id": "element-1"}]}),
+            "等待画布内容生成",
+            "Canvas generation wait",
+            "task-1",
+            id="wait",
+        ),
+        pytest.param(
+            ComposeCanvasVideo,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"result_element_id": "element-2", "result_content_id": "content-2", "src": "videos/final.mp4"}),
+            "画布视频合成",
+            "Canvas video composition",
+            "videos/final.mp4",
+            id="compose",
+        ),
+        pytest.param(
+            EstimateCanvasContentPoints,
+            {"project_path": "Canvas/Demo"},
+            ToolResult(content="MODEL-ONLY", data={"production_rule": "video_generation", "items": [{"item_ref": "video-1", "status": "estimated", "points": 12}]}),
+            "画布内容积分预估",
+            "Canvas content point estimate",
+            "video_generation",
+            id="estimate",
+        ),
+        pytest.param(
+            SearchCanvasImagePrompts,
+            {"query": "香水"},
+            ToolResult(content="MODEL-ONLY", data={"query": "香水", "results": [{}], "total_matched": 1}),
+            "画布提示词库搜索",
+            "Canvas prompt library search",
+            "香水",
+            id="prompt-search",
+        ),
+        pytest.param(
+            SearchCanvasImages,
+            {"topic_id": "perfume"},
+            ToolResult(content="MODEL-ONLY", data={"topic_id": "perfume", "items": [{"item_ref": "image-1", "status": "completed", "imported_count": 1, "failed_count": 0}]}),
+            "画布图片搜索",
+            "Canvas image search",
+            "perfume",
+            id="image-search",
+        ),
+    ],
+)
+async def test_canvas_tool_details_follow_current_language_without_translating_values(
+    tool_class: type,
+    arguments: dict[str, object],
+    result: ToolResult,
+    zh_title: str,
+    en_title: str,
+    raw_value: str,
+) -> None:
+    """ToolDetail 应翻译展示文案，但保留模型结果之外的精确业务值。"""
+    tool = tool_class()
+    try:
+        I18nManager.set_language("zh_CN")
+        zh_detail = await tool.get_tool_detail(ToolContext(), result, arguments)
+        I18nManager.set_language("en_US")
+        en_detail = await tool.get_tool_detail(ToolContext(), result, arguments)
+    finally:
+        I18nManager.reset_language()
+
+    assert zh_detail is not None
+    assert en_detail is not None
+    zh_content = zh_detail.data.content
+    en_content = en_detail.data.content
+    assert zh_title in zh_content
+    assert en_title in en_content
+    if raw_value == "video_generation":
+        assert "视频生成" in zh_content
+        assert "Video generation" in en_content
+        assert "状态=已预估" in zh_content
+        assert "Status=Estimated" in en_content
+    else:
+        assert raw_value in zh_content
+        assert raw_value in en_content
+    assert "MODEL-ONLY" not in zh_content
+    assert "MODEL-ONLY" not in en_content
