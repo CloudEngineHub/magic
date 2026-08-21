@@ -450,6 +450,31 @@ The Canvas Agent may create only storyboard, video-edit, image, video, and audio
     content: ContentInput | None = None
     connections: list[CanvasCreationConnectionInput] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def inherit_generated_media_name(cls, value: Any) -> Any:
+        """生成媒体缺少 Content 名称时，使用外层 Element 名称兼容旧调用。"""
+        if not isinstance(value, dict):
+            return value
+
+        content = value.get("content")
+        if not isinstance(content, dict):
+            return value
+        if content.get("source") != "generated" or content.get("content_type") not in {"image", "video"}:
+            return value
+        if str(content.get("name") or "").strip():
+            return value
+
+        element_name = str(value.get("name") or "").strip()
+        if not element_name:
+            return value
+
+        normalized = dict(value)
+        normalized_content = dict(content)
+        normalized_content["name"] = element_name
+        normalized["content"] = normalized_content
+        return normalized
+
     @model_validator(mode="after")
     def validate_content_type(self) -> "ElementInput":
         """保证 Element 与 Content 类型完全一致。"""

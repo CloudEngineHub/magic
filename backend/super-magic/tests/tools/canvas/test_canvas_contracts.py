@@ -34,6 +34,7 @@ from app.tools.canvas.tools import (
     AddCanvasElements,
     ComposeCanvasVideo,
     ContentInput,
+    ElementInput,
     EstimateCanvasContentPoints,
     FrameCanvasElements,
     GenerationOverrideInput,
@@ -190,6 +191,52 @@ def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
         name="mock image",
     )
     assert image.to_command().generation_parameters.name == "mock image"
+
+
+def test_generated_media_inherits_name_from_element_when_content_name_is_missing() -> None:
+    """生成图片和视频缺少 Content 名称时应兼容使用外层 Element 名称。"""
+    image = ElementInput.model_validate({
+        "item_ref": "image",
+        "element_type": "image",
+        "name": "外层图片名称",
+        "content": {
+            "source": "generated",
+            "content_type": "image",
+            "prompt": "mock prompt",
+        },
+    })
+    assert image.content is not None
+    assert image.content.name == "外层图片名称"
+    assert image.to_command().content is not None
+    assert image.to_command().content.generation_parameters is not None
+    assert image.to_command().content.generation_parameters.name == "外层图片名称"
+
+    video = ElementInput.model_validate({
+        "item_ref": "video",
+        "element_type": "video",
+        "name": "外层视频名称",
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "prompt": "mock prompt",
+        },
+    })
+    assert video.content is not None
+    assert video.content.name == "外层视频名称"
+
+    explicit = ElementInput.model_validate({
+        "item_ref": "explicit",
+        "element_type": "image",
+        "name": "外层名称",
+        "content": {
+            "source": "generated",
+            "content_type": "image",
+            "name": "Content 名称",
+            "prompt": "mock prompt",
+        },
+    })
+    assert explicit.content is not None
+    assert explicit.content.name == "Content 名称"
 
 
 def test_video_generation_mode_and_task_survive_input_conversions() -> None:
