@@ -8,6 +8,7 @@ ASR 核心合并操作模块
 import asyncio
 import re
 import shutil
+import time
 import traceback
 from pathlib import Path
 from typing import List
@@ -22,6 +23,10 @@ from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager
 from app.service.asr.asr_size_config import asr_size_config
 from app.service.asr.asr_time_config import asr_time_config
 from app.service.asr.asr_utils import normalize_audio_format, resolve_audio_format_from_directory
+
+
+class OpusShardsNotReadyError(RuntimeError):
+    """The finish request arrived before every declared Opus shard was ready."""
 
 
 class AsrMergeOperations(AsrServiceBase):
@@ -299,6 +304,118 @@ class AsrMergeOperations(AsrServiceBase):
 
         return True
 
+    async def merge_opus_on_finish(
+        self,
+        task_key: str,
+        source_dir: Path,
+        all_files: list[tuple[int, Path]],
+        expected_shard_count: int | None = None,
+    ) -> bool:
+        """Build one final Ogg Opus file from original numbered shards."""
+        started_at = time.monotonic()
+        ordered_files = sorted(all_files, key=lambda item: item[0])
+        indices = [index for index, _ in ordered_files]
+        if not ordered_files:
+            raise OpusShardsNotReadyError("尚未扫描到 Opus 分片")
+
+        if expected_shard_count is not None and expected_shard_count >= 0:
+            expected_indices = list(range(expected_shard_count))
+            if indices != expected_indices:
+                if len(indices) <= expected_shard_count and set(indices).issubset(expected_indices):
+                    missing = sorted(set(expected_indices) - set(indices))
+                    raise OpusShardsNotReadyError(f"Opus 分片尚未齐全，缺少索引: {missing[:20]}")
+                raise ValueError(
+                    f"Opus 分片与声明数量冲突: declared={expected_shard_count}, indices={indices[:20]}"
+                )
+        else:
+            expected_indices = list(range(indices[-1] + 1))
+            if indices != expected_indices:
+                missing = sorted(set(expected_indices) - set(indices))
+                raise OpusShardsNotReadyError(f"Opus 分片索引不连续，缺少: {missing[:20]}")
+
+        proxy = AsrLocalWorkspaceProxy(task_key, source_dir, audio_format="opus")
+        filenames = [path.name for _, path in ordered_files]
+        local_paths = await proxy.ensure_remote_files_to_local_batch(
+            filenames, required=True, concurrency=32
+        )
+        strict_local_paths = [path for path in local_paths if path is not None]
+        if len(strict_local_paths) != len(ordered_files):
+            raise OpusShardsNotReadyError(
+                f"Opus 本地同步未完成: {len(strict_local_paths)}/{len(ordered_files)}"
+            )
+
+        for (index, _), local_path in zip(ordered_files, strict_local_paths, strict=True):
+            valid, reason = await self.file_detector.validate_audio_file(local_path, "opus")
+            if not valid:
+                raise OpusShardsNotReadyError(f"Opus 分片 {index} 尚不可用: {reason}")
+
+        token = uuid4().hex
+        list_file = proxy.get_local_path(f".concat_list_opus_finish_{token}.txt")
+        temp_output = proxy.get_local_path(f".concat_temp_opus_finish_{token}.opus")
+        local_merged_path = proxy.get_local_path(proxy.merged_filename)
+
+        try:
+            await self._create_concat_list_file(strict_local_paths, list_file)
+            cmd = self._build_opus_finish_command(list_file, temp_output)
+            logger.info(
+                f"{self.LOG_PREFIX} 🎙️ task_key={task_key} Opus finish 全量合并开始: "
+                f"input_count={len(strict_local_paths)}, index_range={indices[0]}-{indices[-1]}, "
+                f"codec=libopus, sample_rate=16000, channels=1, "
+                f"bitrate={asr_time_config.OGG_REENCODE_BITRATE}"
+            )
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            try:
+                _, stderr = await asyncio.wait_for(
+                    process.communicate(), timeout=asr_time_config.OPUS_FINISH_FFMPEG_TIMEOUT
+                )
+            except asyncio.TimeoutError as exc:
+                self._kill_process(process)
+                raise RuntimeError("Opus finish FFmpeg 超时") from exc
+            if process.returncode != 0:
+                stderr_text = stderr.decode("utf-8", errors="replace")[-4000:]
+                raise RuntimeError(f"Opus finish FFmpeg 失败: {stderr_text}")
+
+            valid_output, reason = await self.file_detector.validate_audio_file(temp_output, "opus")
+            if not valid_output:
+                raise RuntimeError(f"Opus finish 输出校验失败: {reason}")
+            duration = await self.get_audio_duration(temp_output)
+            if duration <= 0:
+                raise RuntimeError("Opus finish 输出时长无效")
+
+            await asyncio.to_thread(temp_output.replace, local_merged_path)
+            if not await proxy.sync_local_to_remote_atomic(proxy.merged_filename):
+                raise RuntimeError("Opus finish staging 原子上传失败")
+
+            merged_size = await asyncio.to_thread(lambda: local_merged_path.stat().st_size)
+            metadata_ok = await proxy.save_metadata(
+                indices[-1],
+                extra={
+                    "audio_format": "opus",
+                    "merge_strategy": "opus_finish_full_rebuild_v1",
+                    "source_shard_count": len(indices),
+                    "source_last_index": indices[-1],
+                    "merged_duration": duration,
+                    "merged_size": merged_size,
+                },
+                atomic=True,
+            )
+            if not metadata_ok:
+                raise RuntimeError("Opus finish metadata 原子上传失败")
+
+            await AsrMergeTaskManager.instance().update_progress(
+                task_key, indices[-1], len(indices)
+            )
+            logger.info(
+                f"{self.LOG_PREFIX} ✅ task_key={task_key} Opus finish 全量合并成功: "
+                f"size={merged_size}B, duration={duration}s, elapsed={time.monotonic() - started_at:.2f}s"
+            )
+            return True
+        finally:
+            await asyncio.to_thread(list_file.unlink, missing_ok=True)
+            await asyncio.to_thread(temp_output.unlink, missing_ok=True)
+
     @staticmethod
     def _build_ffmpeg_concat_command(list_file: Path, temp_output: Path) -> list[str]:
         """Build the concat command with a guarded Ogg copy path."""
@@ -333,6 +450,36 @@ class AsrMergeOperations(AsrServiceBase):
             cmd.extend(["-c", "copy"])
         cmd.extend(["-avoid_negative_ts", "make_zero", "-reset_timestamps", "1", str(temp_output)])
         return cmd
+
+    @staticmethod
+    def _build_opus_finish_command(list_file: Path, temp_output: Path) -> list[str]:
+        """Build the one-pass Opus command used only after upload finishes."""
+        return [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(list_file),
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-c:a",
+            "libopus",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            "-b:a",
+            asr_time_config.OGG_REENCODE_BITRATE,
+            "-application",
+            "audio",
+            str(temp_output),
+        ]
 
     def _kill_process(self, process):
         try:

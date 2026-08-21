@@ -72,6 +72,8 @@ class AsrTimeConfig:
         "yes",
     }
     OGG_REENCODE_BITRATE: str = os.getenv("ASR_OGG_REENCODE_BITRATE", "32k")
+    # Opus 只在 finish 后执行一次全量合并，允许比录音期间的增量合并使用更长超时。
+    OPUS_FINISH_FFMPEG_TIMEOUT: int = int(os.getenv("ASR_OPUS_FINISH_FFMPEG_TIMEOUT", "1800"))
 
     # FFmpeg 命令超时时间：执行 FFmpeg 合并命令的最大等待时间
     # 默认 300 秒（5分钟）

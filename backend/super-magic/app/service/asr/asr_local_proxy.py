@@ -90,10 +90,14 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
         """获取文件的本地路径"""
         return self.local_dir / filename
 
-    async def save_metadata(self, last_index: int) -> bool:
+    async def save_metadata(
+        self, last_index: int, extra: Optional[dict] = None, atomic: bool = False
+    ) -> bool:
         """保存合并元数据到本地并同步到远程"""
         try:
             metadata = {"task_key": self.task_key, "last_index": last_index, "timestamp": time.time()}
+            if extra:
+                metadata.update(extra)
 
             local_meta_path = self.local_dir / self.METADATA_FILE
             await asyncio.to_thread(
@@ -102,6 +106,8 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
 
             # metadata 频繁更新，直接覆盖已有远端文件，避免 AGFS 将
             # "临时文件 + rename" 记录成新的 file_id。
+            if atomic:
+                return await self.sync_local_to_remote_atomic(self.METADATA_FILE)
             return await self.sync_local_to_remote_direct(self.METADATA_FILE)
         except Exception as e:
             logger.error(f"{self.LOG_PREFIX} ❌ 保存元数据失败: {e}")
@@ -179,7 +185,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
         return local_path
 
     async def ensure_remote_files_to_local_batch(
-        self, filenames: list[str], required: bool = True, retries: int = None
+        self, filenames: list[str], required: bool = True, retries: int = None, concurrency: int = 32
     ) -> list[Optional[Path]]:
         """
         批量同步远程文件到本地 (并发，支持重试)
@@ -190,28 +196,32 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
         if not filenames:
             return []
 
-        async def _sync_with_retry(filename: str) -> Optional[Path]:
-            last_exception = None
-            for attempt in range(retries + 1):
-                try:
-                    # 批量同步时禁用详细日志，避免重复输出
-                    return await self.ensure_remote_file_to_local(filename, required=required, verbose=False)
-                except Exception as e:
-                    last_exception = e
-                    if attempt < retries:
-                        wait_time = asr_time_config.BATCH_SYNC_INITIAL_BACKOFF * (
-                            asr_time_config.BATCH_SYNC_BACKOFF_MULTIPLIER**attempt
-                        )
-                        logger.warning(
-                            f"{self.LOG_PREFIX} ⚠️ 同步文件 {filename} 失败，{wait_time}s 后重试 ({attempt + 1}/{retries}): {e}"
-                        )
-                        await asyncio.sleep(wait_time)
-                    else:
-                        logger.error(f"{self.LOG_PREFIX} ❌ 同步文件 {filename} 最终失败: {e}")
+        semaphore = asyncio.Semaphore(max(1, concurrency))
 
-            if required and last_exception:
-                raise last_exception
-            return None
+        async def _sync_with_retry(filename: str) -> Optional[Path]:
+            async with semaphore:
+                last_exception = None
+                for attempt in range(retries + 1):
+                    try:
+                        # 批量同步时禁用详细日志，避免重复输出
+                        return await self.ensure_remote_file_to_local(filename, required=required, verbose=False)
+                    except Exception as e:
+                        last_exception = e
+                        if attempt < retries:
+                            wait_time = asr_time_config.BATCH_SYNC_INITIAL_BACKOFF * (
+                                asr_time_config.BATCH_SYNC_BACKOFF_MULTIPLIER**attempt
+                            )
+                            logger.warning(
+                                f"{self.LOG_PREFIX} ⚠️ 同步文件 {filename} 失败，"
+                                f"{wait_time}s 后重试 ({attempt + 1}/{retries}): {e}"
+                            )
+                            await asyncio.sleep(wait_time)
+                        else:
+                            logger.error(f"{self.LOG_PREFIX} ❌ 同步文件 {filename} 最终失败: {e}")
+
+                if required and last_exception:
+                    raise last_exception
+                return None
 
         # 使用 asyncio.gather 并发执行带重试的任务
         tasks = [_sync_with_retry(filename) for filename in filenames]
@@ -272,8 +282,21 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             return False
 
         try:
+            local_size = await asyncio.to_thread(lambda: local_path.stat().st_size)
             # 1. 上传到临时文件
             await asyncio.to_thread(shutil.copy2, str(local_path), str(temp_remote_path))
+
+            is_ready, reason = await self.wait_for_file_ready(
+                temp_remote_path,
+                min_size=asr_size_config.OPTIONAL_FILE_MIN_SIZE,
+                expected_size=local_size,
+                retries=asr_time_config.MERGED_FILE_READY_RETRIES,
+                wait_interval=asr_time_config.FILE_READY_WAIT_INTERVAL,
+                timeout=max(asr_time_config.FILE_READY_TIMEOUT, 300),
+                stable_count=asr_time_config.FILE_STABLE_COUNT,
+            )
+            if not is_ready:
+                raise IOError(f"远端临时文件未就绪: {reason}")
 
             # 2. 强制刷新磁盘缓存 (如果是 NFS/OSS 挂载，这一步很重要)
             # Python 的 shutil.copy2 已经包含了一些 flush，但为了保险可以显式 sync
@@ -282,7 +305,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             # 3. 原子重命名
             await asyncio.to_thread(temp_remote_path.replace, remote_path)
 
-            logger.info(f"{self.LOG_PREFIX} ✅ 同步完成: {filename}")
+            logger.info(f"{self.LOG_PREFIX} ✅ 原子同步完成: {filename} size={local_size}B")
             return True
         except Exception as e:
             logger.error(f"{self.LOG_PREFIX} ❌ 同步失败 {filename}: {e}")
@@ -417,19 +440,20 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
 
         return False
 
-    async def cleanup_local(self, force: bool = False):
+    async def cleanup_local(self, force: bool = False, recreate: bool = True):
         """
         清理本地工作区
 
         Args:
             force: 如果为 True，即使有错误也强制删除（用于任务启动时的清理）
+            recreate: 清理后是否重新创建空的任务缓存目录
         """
         try:
             if await asyncio.to_thread(self.local_dir.exists):
                 await asyncio.to_thread(lambda: shutil.rmtree(str(self.local_dir)))
                 logger.info(f"{self.LOG_PREFIX} 🧹 已清理本地缓存: {self.local_dir}")
-                # 重新创建空目录
-                await asyncio.to_thread(self.local_dir.mkdir, parents=True, exist_ok=True)
+                if recreate:
+                    await asyncio.to_thread(self.local_dir.mkdir, parents=True, exist_ok=True)
         except Exception as e:
             if force:
                 logger.warning(f"{self.LOG_PREFIX} ⚠️ 清理本地缓存失败，但继续执行: {e}")

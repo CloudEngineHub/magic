@@ -322,7 +322,7 @@ class AsrTaskFinalizer(AsrServiceBase):
             await self.delete_audio_source_directory(source_dir, task_key)
 
             # 7. 更新任务状态为 completed
-            await AsrMergeTaskManager.instance().finish_task(
+            finish_saved = await AsrMergeTaskManager.instance().finish_task(
                 task_key,
                 file_path=f"{task_state.target_dir}/{final_audio_name}",
                 duration=duration,
@@ -333,6 +333,16 @@ class AsrTaskFinalizer(AsrServiceBase):
                 deleted_files=deleted_files,
                 operations=operations_result,
             )
+
+            if not finish_saved:
+                logger.error(f"{self.LOG_PREFIX} ❌ task_key={task_key} 完成产物已就绪，但任务状态写入失败")
+                return
+
+            # 只在最终文件上传且 completed 状态持久化后清理本地缓存。
+            # 失败路径保留缓存，便于下次重试复用。
+            await AsrLocalWorkspaceProxy(
+                task_key, source_dir, audio_format=audio_format
+            ).cleanup_local(recreate=False)
 
             logger.info(
                 f"{self.LOG_PREFIX} ✅ task_key={task_key} 任务完成, "

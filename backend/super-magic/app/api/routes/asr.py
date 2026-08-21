@@ -299,6 +299,7 @@ async def _check_and_return_task_status(
     latest_task = await AsrMergeTaskManager.instance().get_task(task_key)
     if latest_task:
         existing_task = latest_task
+    progress = await AsrMergeTaskManager.instance().get_progress(task_key)
 
     # 状态可能在轮询过程中变为 completed/finished，此时直接返回完整结果
     if existing_task.status in [AsrTaskStatus.COMPLETED.value, AsrTaskStatus.FINISHED.value]:
@@ -328,7 +329,8 @@ async def _check_and_return_task_status(
     merged_file = source_dir / build_merged_filename(resolved_format or normalize_audio_format(existing_task.audio_format))
 
     files_info = None
-    if merged_file.exists():
+    expose_staging_file = existing_task.audio_format != "opus"
+    if merged_file.exists() and expose_staging_file:
         file_size = merged_file.stat().st_size
 
         # 获取音频时长（使用 ffprobe）
@@ -364,12 +366,21 @@ async def _check_and_return_task_status(
         }
 
     # 3. 返回状态
+    response_status = existing_task.status
+    response_error = existing_task.audio_format_error
+    if existing_task.audio_format == "opus" and progress and existing_task.status == AsrTaskStatus.RUNNING.value:
+        # Opus 内部状态不扩散为新的 API 枚举，保持客户端兼容。
+        # 合并/最终搬运期间统一复用已有 finalizing；可重试失败仍保持 running，
+        # 真正超过截止时间后任务管理器会把任务置为 error。
+        if progress.opus_merge_status in {"merging", "completed"}:
+            response_status = AsrTaskStatus.FINALIZING.value
+
     response_data = AsrTaskResponse(
-        status=existing_task.status,
+        status=response_status,
         task_key=task_key,
         audio_format=existing_task.audio_format,
         intelligent_title=intelligent_title or existing_task.intelligent_title,
-        error_message=existing_task.audio_format_error,
+        error_message=response_error,
         files=files_info,
         deleted_files=None,
         operations=None

@@ -78,6 +78,10 @@ class TaskProgress(BaseModel):
     file_shard_count: int = -1  # 客户端声明/服务端兜底的分片总数（首次 finish 固定基线）
     upload_completed_at: Optional[float] = None  # 首次 finish 时间戳（unix seconds）
     completion_deadline_at: Optional[float] = None  # 完成等待截止时间（unix seconds）
+    opus_merge_status: str = "pending"  # Opus finish 合并状态：pending/merging/completed/failed
+    opus_merge_error: Optional[str] = None
+    opus_merge_started_at: Optional[float] = None
+    opus_merge_completed_at: Optional[float] = None
     start_time: float = Field(default_factory=lambda: datetime.now().timestamp())
     retry_count: int = 0  # 整体任务重试次数（由 finish 触发），最大允许次数由服务端控制
 
@@ -688,6 +692,80 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         return await self._atomic_update_state(task_key, updater, "更新任务进度失败")
 
+    async def claim_opus_merge(self, task_key: str) -> bool:
+        """Atomically claim the Opus finish merge for one task."""
+
+        def updater(state: TaskState) -> TaskState:
+            status = state.progress.opus_merge_status
+            if status not in {"pending", "failed"}:
+                raise ValueError(f"opus_merge_not_claimable:{status}")
+            now_ts = datetime.now().timestamp()
+            return self._apply_state_updates(
+                state,
+                progress_updates={
+                    "opus_merge_status": "merging",
+                    "opus_merge_error": None,
+                    "opus_merge_started_at": now_ts,
+                    "opus_merge_completed_at": None,
+                },
+            )
+
+        try:
+            claimed = await self._atomic_update_state(task_key, updater, "领取 Opus 合并任务失败")
+        except ValueError:
+            return False
+        if claimed:
+            logger.info(f"🎙️ {self.LOG_PREFIX} task_key={task_key} 已领取 Opus finish 合并")
+        return claimed
+
+    async def recover_interrupted_opus_merge(self, task_key: str) -> bool:
+        """Reset a persisted ``merging`` state after the owning worker has stopped."""
+
+        def updater(state: TaskState) -> TaskState:
+            progress = state.progress
+            if (
+                state.task.audio_format != "opus"
+                or not progress.upload_completed
+                or progress.opus_merge_status != "merging"
+            ):
+                raise ValueError("opus_merge_not_recoverable")
+            return self._apply_state_updates(
+                state,
+                progress_updates={
+                    "opus_merge_status": "pending",
+                    "opus_merge_error": "检测到上一次 Opus 合并中断，已重新等待领取",
+                    "opus_merge_started_at": None,
+                    "opus_merge_completed_at": None,
+                },
+            )
+
+        try:
+            recovered = await self._atomic_update_state(task_key, updater, "恢复中断的 Opus 合并失败")
+        except ValueError:
+            return False
+        if recovered:
+            logger.warning(
+                f"⚠️ {self.LOG_PREFIX} task_key={task_key} 检测到中断的 Opus finish 合并，已重置为 pending"
+            )
+        return recovered
+
+    async def set_opus_merge_status(self, task_key: str, status: str, error: str | None = None) -> bool:
+        """Persist Opus finish merge status and bounded error information."""
+        allowed = {"pending", "merging", "completed", "failed"}
+        if status not in allowed:
+            raise ValueError(f"unsupported opus merge status: {status}")
+
+        def updater(state: TaskState) -> TaskState:
+            progress_updates = {
+                "opus_merge_status": status,
+                "opus_merge_error": (error or None)[:2000] if error else None,
+            }
+            if status == "completed":
+                progress_updates["opus_merge_completed_at"] = datetime.now().timestamp()
+            return self._apply_state_updates(state, progress_updates=progress_updates)
+
+        return await self._atomic_update_state(task_key, updater, "更新 Opus 合并状态失败")
+
     async def set_audio_format(self, task_key: str, audio_format: str) -> bool:
         """
         设置任务音频格式（原子性操作，仅首次生效）
@@ -1194,6 +1272,13 @@ class AsrMergeTaskManager(AsrServiceBase):
             logger.warning(
                 f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 存在音频格式错误，阻止完成: "
                 f"{task.audio_format_error}"
+            )
+            return False
+
+        if task and task.audio_format == "opus" and progress.opus_merge_status != "completed":
+            logger.debug(
+                f"{AsrMergeTaskManager.LOG_PREFIX} task_key={task_key} 等待 Opus finish 合并完成: "
+                f"opus_merge_status={progress.opus_merge_status}"
             )
             return False
 

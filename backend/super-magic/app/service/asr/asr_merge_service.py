@@ -15,7 +15,7 @@ from loguru import logger
 
 from app.service.asr.asr_base import AsrServiceBase
 from app.service.asr.asr_file_detector import AsrFileDetector
-from app.service.asr.asr_merge_operations import AsrMergeOperations
+from app.service.asr.asr_merge_operations import AsrMergeOperations, OpusShardsNotReadyError
 from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager, AsrTaskStatus
 from app.service.asr.asr_monitoring_task import AsrMonitoringTask
 from app.service.asr.asr_task_finalizer import AsrTaskFinalizer
@@ -66,6 +66,12 @@ class AsrMergeService(AsrServiceBase):
     def should_block_merge(audio_format: str | None, all_files: list, audio_format_error: str | None) -> bool:
         """Return whether this polling round must skip merge input preparation."""
         return bool(audio_format_error) or (bool(all_files) and audio_format is None)
+
+    @staticmethod
+    def should_run_opus_finish_merge(
+        audio_format: str | None, upload_completed: bool, merge_status: str
+    ) -> bool:
+        return audio_format == "opus" and upload_completed and merge_status in {"pending", "failed"}
 
     async def _monitor_and_merge(self, task: AsrMonitoringTask) -> None:
         """
@@ -139,15 +145,33 @@ class AsrMergeService(AsrServiceBase):
                         all_files = filtered_files
 
                 # 2. 检查是否应该完成任务
-                if await task_manager.check_should_complete(task.task_key, task.source_dir, len(all_files)):
+                if audio_format != "opus" and await task_manager.check_should_complete(
+                    task.task_key, task.source_dir, len(all_files)
+                ):
                     await self.task_finalizer.complete_task(task.task_key, task.source_dir)
                     break
+
+                current_indices = {idx for idx, _ in all_files}
+
+                # Opus finish 合并必须先于通用 idle timeout 执行，否则长时间无新分片的任务
+                # 会一直等到 deadline，甚至在没有启动 FFmpeg 的情况下退出轮询。
+                if audio_format == "opus" and not merge_blocked:
+                    completed = await self._process_opus_finish(task, all_files)
+                    if completed:
+                        break
+                    if current_indices != last_indices:
+                        last_new_file_time = time.time()
+                        last_indices = current_indices
+                    await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+                    continue
 
                 # 3. 检查超时
                 idle_time = time.time() - last_new_file_time
                 if idle_time >= asr_time_config.NO_NEW_FILE_TIMEOUT:
                     # 再次检查是否应该完成任务（边缘情况）
-                    if await task_manager.check_should_complete(task.task_key, task.source_dir, len(all_files)):
+                    if audio_format != "opus" and await task_manager.check_should_complete(
+                        task.task_key, task.source_dir, len(all_files)
+                    ):
                         await self.task_finalizer.complete_task(task.task_key, task.source_dir)
                         break
 
@@ -184,7 +208,6 @@ class AsrMergeService(AsrServiceBase):
                     continue
 
                 # 4. 检测是否有新文件
-                current_indices = {idx for idx, _ in all_files}
                 if current_indices == last_indices:
                     logger.debug(
                         f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} "
@@ -216,6 +239,62 @@ class AsrMergeService(AsrServiceBase):
             await AsrMergeTaskManager.instance().fail_task(task.task_key, f"监听失败: {e!s}")
         finally:
             logger.info(f"{self.LOG_PREFIX} 🛑 task_key={task.task_key} 停止轮询目录: {task.source_dir}")
+
+    async def _process_opus_finish(self, task: AsrMonitoringTask, all_files: list) -> bool:
+        task_manager = AsrMergeTaskManager.instance()
+        progress = await task_manager.get_progress(task.task_key)
+        if not progress or not progress.upload_completed:
+            return False
+
+        if progress.opus_merge_status == "completed":
+            if await task_manager.check_should_complete(task.task_key, task.source_dir, len(all_files)):
+                await self.task_finalizer.complete_task(task.task_key, task.source_dir)
+                return True
+            return False
+
+        if not self.should_run_opus_finish_merge(
+            "opus", progress.upload_completed, progress.opus_merge_status
+        ):
+            return False
+
+        if not await task_manager.claim_opus_merge(task.task_key):
+            return False
+
+        try:
+            await self.merge_operations.merge_opus_on_finish(
+                task.task_key,
+                task.source_dir,
+                all_files,
+                progress.file_shard_count if progress.file_shard_count >= 0 else None,
+            )
+        except OpusShardsNotReadyError as exc:
+            now_ts = time.time()
+            if progress.completion_deadline_at is not None and now_ts >= progress.completion_deadline_at:
+                await task_manager.set_opus_merge_status(task.task_key, "failed", str(exc))
+                await task_manager.fail_task(task.task_key, f"Opus 分片未就绪: {exc}")
+                return True
+            await task_manager.set_opus_merge_status(task.task_key, "pending", str(exc))
+            logger.info(f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} 等待 Opus 分片: {exc}")
+            return False
+        except Exception as exc:
+            await task_manager.set_opus_merge_status(task.task_key, "failed", str(exc))
+            logger.error(f"{self.LOG_PREFIX} ❌ task_key={task.task_key} Opus finish 合并失败: {exc}")
+            now_ts = time.time()
+            if progress.completion_deadline_at is not None and now_ts >= progress.completion_deadline_at:
+                await task_manager.fail_task(task.task_key, f"Opus finish 合并失败: {exc}")
+                return True
+            return False
+
+        status_saved = await task_manager.set_opus_merge_status(task.task_key, "completed")
+        if not status_saved:
+            logger.error(
+                f"{self.LOG_PREFIX} ❌ task_key={task.task_key} Opus 合并产物已上传，但 completed 状态写入失败"
+            )
+            return False
+        if await task_manager.check_should_complete(task.task_key, task.source_dir, len(all_files)):
+            await self.task_finalizer.complete_task(task.task_key, task.source_dir)
+            return True
+        return False
 
     # TEMP: ---- scan-wav helpers (remove when MagicFS auto-refreshes) ----
 
@@ -406,7 +485,9 @@ class AsrMergeService(AsrServiceBase):
 
                 self.tasks[task_key] = monitoring_task
 
-                await AsrMergeTaskManager.instance().start_monitoring(task_key)
+                task_manager = AsrMergeTaskManager.instance()
+                await task_manager.recover_interrupted_opus_merge(task_key)
+                await task_manager.start_monitoring(task_key)
 
                 asyncio_task = asyncio.create_task(self._monitor_and_merge(monitoring_task))
                 monitoring_task.asyncio_task = asyncio_task
