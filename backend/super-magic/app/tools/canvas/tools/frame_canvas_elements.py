@@ -10,6 +10,7 @@ from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import FrameElementsCommand
 from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
+from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -108,9 +109,16 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建 Frame 并返回真实 Frame 和子节点 ID。"""
         try:
-            result = await _application(tool_context).frame_elements(
+            application = _application(tool_context)
+            commands = [item.to_command() for item in params.items]
+            await CanvasAgentWritePolicy.validate_frame_selection(
+                application.repository,
                 params.project_path,
-                [item.to_command() for item in params.items],
+                commands,
+            )
+            result = await application.frame_elements(
+                params.project_path,
+                commands,
             )
             return ToolResult(
                 content=items_content(

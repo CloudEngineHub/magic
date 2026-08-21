@@ -39,6 +39,7 @@ from app.tools.canvas.presentation import (
     error_result,
     items_content,
 )
+from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -411,7 +412,11 @@ class ElementInput(BaseToolParams):
     model_config = ConfigDict(extra="forbid")
 
     item_ref: str = Field(..., min_length=1)
-    element_type: CanvasElementType
+    element_type: CanvasElementType = Field(
+        ...,
+        description="""<!--zh: Agent 只能创建 storyboard、video-edit、image、video、audio；Frame 请使用 frame_canvas_elements。其他类型只允许读取。-->
+The Canvas Agent may create only storyboard, video-edit, image, video, and audio Elements. Create Frames with frame_canvas_elements. All other Element types are read-only.""",
+    )
     name: str | None = None
     layout: CanvasLayoutInput | None = None
     content: ContentInput | None = None
@@ -581,9 +586,11 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建一批 Element，并按 item 返回真实标识。"""
         try:
+            commands = [item.to_command() for item in params.items]
+            CanvasAgentWritePolicy.validate_creation(commands)
             result = await _application(tool_context).add_elements(
                 params.project_path,
-                [item.to_command() for item in params.items],
+                commands,
                 tool_context=tool_context,
             )
             return ToolResult(

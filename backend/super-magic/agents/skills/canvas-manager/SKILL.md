@@ -22,13 +22,15 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
 - A generated Content may be retried at most 2 times; never loop retries automatically.
 - Re-query after any write when the next step depends on persisted state.
+- You may read every Element type. You may create or edit only `frame`, `storyboard`, `video-edit`, `image`, `video`, and `audio`.
+- `text`, `rectangle`, `ellipse`, `triangle`, `star`, and `group` are read-only. Never create them, change their Content or main selection, lay them out, retry them, or include them in `frame_canvas_elements`.
 
 ## Capabilities
 
 You can:
 
 - Initialize, restore, and query Canvas projects.
-- Create text, shape, and media Elements; generate images and videos; import assets.
+- Create Frames, Storyboards, Video Edits, and media Elements; generate images and videos; import media assets.
 - Append Content candidates, retry failed Content, and select a main Content after user confirmation.
 - Frame sibling Elements.
 - Wait on async generation tasks.
@@ -45,12 +47,12 @@ You cannot:
 
 ## Core model
 
-- **Element** — a node on the Canvas: text, shape, image, video, storyboard, video-edit, or Frame.
+- **Element** — a node on the Canvas. All types are readable, but only Frame, Storyboard, Video Edit, Image, Video, and Audio Elements are writable by this Agent.
 - **Content** — one version of what an Element shows. An Element may hold several Content candidates; one is marked main.
 - **Frame** — a container Element with program-managed structural Content and `children`.
 - **Connection** — a business dependency from one Element to another. See `references/video-production.md`.
 
-You may change only: add Elements, append Content, retry failed Content, select main Content, create Frames, change layout, and change Connections. Revising a Content never overwrites it; create a new candidate with `add_canvas_contents`.
+Within the writable type set, you may add Elements, append Content, retry failed Content, select main Content, create Frames, change layout, and change Connections. Revising a Content never overwrites it; create a new candidate with `add_canvas_contents`.
 
 ## How to call tools
 
@@ -163,7 +165,7 @@ Query before retrying, selecting a main version, deleting/replacing Connections,
 
 ## `add_canvas_elements`
 
-Create new logical Elements. Use for a new logical result; for a candidate on an existing Element, use `add_canvas_contents` instead.
+Create new writable logical Elements: `storyboard`, `video-edit`, `image`, `video`, or `audio`. Frames are created with `frame_canvas_elements`. Use `add_canvas_contents` for a candidate on an existing writable Element.
 
 Parameters: `project_path` and `items` required; each item needs at least `item_ref` and `element_type`.
 
@@ -176,12 +178,9 @@ Parameters: `project_path` and `items` required; each item needs at least `item_
 result = tool.call("add_canvas_elements", {
     "project_path": "Canvas/Product Launch",
     "items": [
-        {"item_ref": "headline", "element_type": "text", "name": "Launch title",
-         "layout": {"strategy": "row_incremental"},
-         "content": {"source": "user", "content_type": "text", "content": "Meet the next generation"}},
         {"item_ref": "hero-image", "element_type": "image", "name": "Hero visual",
          "layout": {"strategy": "row_incremental"},
-         "content": {"source": "generated", "content_type": "image", "prompt": "premium product hero, clean background, no text", "size": "2048x2048"}},
+         "content": {"source": "generated", "content_type": "image", "name": "premium product hero", "prompt": "premium product hero, clean background, no text", "size": "2048x2048"}},
     ],
 })
 print(result.content)
@@ -193,7 +192,7 @@ Read each item's real `element_id`, `content_id`, status, and task ID. If a task
 
 Group exact sibling Elements into a new Frame.
 
-Parameters: `project_path` and `items` required; only root-level sibling Elements can be grouped. This tool does not frame existing Frames/Groups and does not offer unframing.
+Parameters: `project_path` and `items` required. Selected siblings must all be writable Element types. Never include `text`, `rectangle`, `ellipse`, `triangle`, `star`, or `group`. This tool does not frame existing Frames/Groups and does not offer unframing.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -214,7 +213,7 @@ Confirm the exact sibling Element IDs first. Do not pass coordinates, size, or `
 
 ## `add_canvas_contents`
 
-Append a new Content candidate to an existing Element without overwriting previous candidates.
+Append a new Content candidate to an existing writable Element without overwriting previous candidates. Read-only Element types must only be queried.
 
 Parameters: `project_path` and `items` required; each item uses an exact `element_id` and new Content.
 
@@ -261,7 +260,7 @@ Only with explicit user consent. At most 2 retries per Content. Never retry `pro
 
 ## `select_canvas_main_content`
 
-Set a confirmed candidate as the main Content.
+Set a confirmed candidate as the main Content of a writable Element.
 
 Parameters: `project_path` and `items` required; use only the exact `element_id` and `content_id` the user confirmed.
 
@@ -307,7 +306,7 @@ On `completed`, query details as needed. On `pending`, `processing`, or `timed_o
 
 ## `layout_canvas_elements`
 
-Adjust the layout of an existing Element or Frame. Layout only changes position and size; it does not generate new Content or infer Connections automatically.
+Adjust the layout of an existing writable Element or Frame. Never lay out read-only Element types. Layout only changes position and size; it does not generate new Content or infer Connections automatically.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -462,7 +461,7 @@ print(result.content)
 - Ordinary video workflow: full creative target, point estimate, `ask_user` confirmation, async generation, and waiting.
 - Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
 - `video-edit` Content stores ordered video and audio inputs via `videoSequence` and optional `audioSequence`.
-- Frame workflow: group only exact root-level sibling Elements; do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
+- Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
 - Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.
 - Version management: Content candidate appending, retry cap on failures, and main Content selection after user confirmation.
 

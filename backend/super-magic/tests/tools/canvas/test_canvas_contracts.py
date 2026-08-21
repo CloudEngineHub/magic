@@ -14,6 +14,7 @@ import tests.tools.canvas.helpers  # noqa: F401
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import I18nManager
+from app.tools.canvas.application.commands import AddElementCommand, FrameElementsCommand
 from app.tools.canvas.bootstrap import CanvasApplicationFactory
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
@@ -47,6 +48,7 @@ from app.tools.canvas.tools import (
     VideoPointEstimateItemInput,
     WaitCanvasGeneration,
 )
+from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 
 
 def test_content_input_exposes_one_stable_model_schema() -> None:
@@ -61,6 +63,42 @@ def test_content_input_exposes_one_stable_model_schema() -> None:
         "content_type": "text",
         "content": "标题文本",
     }
+
+
+def test_agent_write_policy_rejects_read_only_element_creation() -> None:
+    """Agent 写入策略允许媒体类型，并拒绝基础文本类型。"""
+    CanvasAgentWritePolicy.validate_creation([
+        AddElementCommand(item_ref="image", element_type="image"),
+    ])
+
+    with pytest.raises(CanvasDomainError) as raised:
+        CanvasAgentWritePolicy.validate_creation([
+            AddElementCommand(item_ref="title", element_type="text"),
+        ])
+
+    assert raised.value.code == "ELEMENT_MUTATION_NOT_ALLOWED"
+    assert "text" in raised.value.message
+    assert "image" in raised.value.message
+
+
+@pytest.mark.asyncio
+async def test_agent_write_policy_rejects_read_only_frame_selection(tmp_path) -> None:
+    """Frame 工具不能把只读 Element 纳入新 Frame。"""
+    repository = CanvasRepository(tmp_path)
+    await repository.initialize("mock-project")
+    await repository.transaction(
+        "mock-project",
+        lambda project: project.canvas.elements.append(CanvasElement("text-1", "text")),
+    )
+
+    with pytest.raises(CanvasDomainError) as raised:
+        await CanvasAgentWritePolicy.validate_frame_selection(
+            repository,
+            "mock-project",
+            [FrameElementsCommand(item_ref="frame", element_ids=("text-1",))],
+        )
+
+    assert raised.value.code == "ELEMENT_MUTATION_NOT_ALLOWED"
 
 
 def test_each_canvas_tool_owns_feedback_hooks() -> None:

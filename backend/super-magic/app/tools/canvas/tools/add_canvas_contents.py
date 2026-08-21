@@ -17,6 +17,7 @@ from app.tools.canvas.presentation import (
     items_content,
 )
 from app.tools.canvas.tools.add_canvas_elements import ContentInput
+from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -185,9 +186,12 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """追加 Content 版本，不覆盖已有版本。"""
         try:
-            result = await _application(tool_context).add_contents(
+            application = _application(tool_context)
+            commands = [item.to_command() for item in params.items]
+            await CanvasAgentWritePolicy.validate_targets(application.repository, params.project_path, commands)
+            result = await application.add_contents(
                 params.project_path,
-                [item.to_command() for item in params.items],
+                commands,
                 tool_context=tool_context,
             )
             return ToolResult(

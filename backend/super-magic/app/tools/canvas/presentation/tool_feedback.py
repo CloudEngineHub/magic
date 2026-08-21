@@ -80,4 +80,6 @@ def _model_action_for_error(code: str) -> str:
         return "Ask the user to open a supported Canvas project; do not inspect or migrate the project file."
     if code in {"ELEMENT_NOT_FOUND", "CONTENT_NOT_FOUND"}:
         return "Use the latest Canvas query result to obtain the exact target ID, then retry only the failed item."
+    if code == "ELEMENT_MUTATION_NOT_ALLOWED":
+        return "Do not attempt another write to this Element type. You may query it and describe its current state."
     return "Correct the failed item using the exact IDs from the latest Canvas query, then retry only that operation."
