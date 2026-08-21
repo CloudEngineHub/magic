@@ -257,7 +257,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             logger.info(f"{self.LOG_PREFIX} ✅ 批量同步完成：共 {len(filenames)} 个文件，成功 0 个")
         return final_results
 
-    async def sync_local_to_remote_atomic(self, filename: str) -> bool:
+    async def sync_local_to_remote_atomic(self, filename: str, timeout: int | None = None) -> bool:
         """
         将本地文件原子同步到远程 (Write-Through)
 
@@ -292,7 +292,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
                 expected_size=local_size,
                 retries=asr_time_config.MERGED_FILE_READY_RETRIES,
                 wait_interval=asr_time_config.FILE_READY_WAIT_INTERVAL,
-                timeout=max(asr_time_config.FILE_READY_TIMEOUT, 300),
+                timeout=timeout or max(asr_time_config.FILE_READY_TIMEOUT, 300),
                 stable_count=asr_time_config.FILE_STABLE_COUNT,
             )
             if not is_ready:

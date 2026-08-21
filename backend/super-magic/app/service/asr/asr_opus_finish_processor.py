@@ -1,0 +1,120 @@
+"""Opus finish 状态机。"""
+
+import time
+from pathlib import Path
+from typing import Protocol
+
+from loguru import logger
+
+from app.service.asr.asr_base import AsrServiceBase
+from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager
+from app.service.asr.asr_monitoring_task import AsrMonitoringTask
+from app.service.asr.asr_opus_merge_operations import (
+    AsrOpusMergeOperations,
+    OpusShardsNotReadyError,
+)
+
+
+class _TaskFinalizer(Protocol):
+    async def complete_task(self, task_key: str, source_dir: Path) -> None: ...
+
+
+class AsrOpusFinishProcessor(AsrServiceBase):
+    """Coordinate Opus pending/merging/completed/failed transitions."""
+
+    def __init__(
+        self,
+        merge_operations: AsrOpusMergeOperations,
+        task_finalizer: _TaskFinalizer,
+    ) -> None:
+        self.merge_operations = merge_operations
+        self.task_finalizer = task_finalizer
+
+    @staticmethod
+    def should_run(upload_completed: bool, merge_status: str) -> bool:
+        return upload_completed and merge_status in {"pending", "failed"}
+
+    async def process(
+        self,
+        task: AsrMonitoringTask,
+        all_files: list[tuple[int, Path]],
+    ) -> bool:
+        task_manager = AsrMergeTaskManager.instance()
+        progress = await task_manager.get_progress(task.task_key)
+        if not progress or not progress.upload_completed:
+            return False
+
+        if progress.opus_merge_status == "completed":
+            if await task_manager.check_should_complete_opus(
+                task.task_key, task.source_dir, len(all_files)
+            ):
+                await self.task_finalizer.complete_task(task.task_key, task.source_dir)
+                return True
+            return False
+
+        if not self.should_run(progress.upload_completed, progress.opus_merge_status):
+            return False
+        if not await task_manager.claim_opus_merge(task.task_key):
+            return False
+
+        claimed_progress = await task_manager.get_progress(task.task_key)
+        if not claimed_progress:
+            return False
+        attempt_id = claimed_progress.opus_merge_attempt_id
+
+        try:
+            await self.merge_operations.merge_opus_on_finish(
+                task.task_key,
+                task.source_dir,
+                all_files,
+                claimed_progress.file_shard_count
+                if claimed_progress.file_shard_count >= 0
+                else None,
+                merge_attempt_id=attempt_id,
+            )
+        except OpusShardsNotReadyError as exc:
+            if self._deadline_reached(claimed_progress.completion_deadline_at):
+                await task_manager.set_opus_merge_status(
+                    task.task_key, "failed", str(exc), expected_attempt_id=attempt_id
+                )
+                await task_manager.fail_task(task.task_key, f"Opus 分片未就绪: {exc}")
+                return True
+            await task_manager.set_opus_merge_status(
+                task.task_key, "pending", str(exc), expected_attempt_id=attempt_id
+            )
+            logger.info(f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} 等待 Opus 分片: {exc}")
+            return False
+        except Exception as exc:
+            await task_manager.set_opus_merge_status(
+                task.task_key, "failed", str(exc), expected_attempt_id=attempt_id
+            )
+            logger.error(
+                f"{self.LOG_PREFIX} ❌ task_key={task.task_key} "
+                f"attempt_id={attempt_id} Opus finish 合并失败: {exc}"
+            )
+            if self._deadline_reached(claimed_progress.completion_deadline_at):
+                await task_manager.fail_task(task.task_key, f"Opus finish 合并失败: {exc}")
+                return True
+            return False
+
+        status_saved = await task_manager.set_opus_merge_status(
+            task.task_key,
+            "completed",
+            expected_attempt_id=attempt_id,
+        )
+        if not status_saved:
+            logger.error(
+                f"{self.LOG_PREFIX} ❌ task_key={task.task_key} Opus 产物已上传，"
+                f"attempt_id={attempt_id} completed 状态写入失败"
+            )
+            return False
+        if await task_manager.check_should_complete_opus(
+            task.task_key, task.source_dir, len(all_files)
+        ):
+            await self.task_finalizer.complete_task(task.task_key, task.source_dir)
+            return True
+        return False
+
+    @staticmethod
+    def _deadline_reached(deadline_at: float | None) -> bool:
+        return deadline_at is not None and time.time() >= deadline_at

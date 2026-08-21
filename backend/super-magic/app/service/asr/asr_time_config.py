@@ -65,15 +65,22 @@ class AsrTimeConfig:
 
     # ==================== FFmpeg 操作配置 ====================
 
-    # Ogg/Opus 独立分片的 -c copy 拼接必须经过真实客户端样本验证后再开启。
-    OGG_COPY_CONCAT_ENABLED: bool = os.getenv("ASR_OGG_COPY_CONCAT_ENABLED", "0").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
     OGG_REENCODE_BITRATE: str = os.getenv("ASR_OGG_REENCODE_BITRATE", "32k")
-    # Opus 只在 finish 后执行一次全量合并，允许比录音期间的增量合并使用更长超时。
+    # Opus finish 使用独立阶段超时，不复用录音期间的无新分片超时。
+    OPUS_FINISH_DEADLINE_TIMEOUT: int = int(
+        os.getenv("ASR_OPUS_FINISH_DEADLINE_TIMEOUT", "3600")
+    )
+    OPUS_SHARD_SYNC_TIMEOUT: int = int(os.getenv("ASR_OPUS_SHARD_SYNC_TIMEOUT", "900"))
+    OPUS_STAGING_UPLOAD_TIMEOUT: int = int(
+        os.getenv("ASR_OPUS_STAGING_UPLOAD_TIMEOUT", "900")
+    )
     OPUS_FINISH_FFMPEG_TIMEOUT: int = int(os.getenv("ASR_OPUS_FINISH_FFMPEG_TIMEOUT", "1800"))
+    OPUS_SHARD_SYNC_CONCURRENCY: int = int(
+        os.getenv("ASR_OPUS_SHARD_SYNC_CONCURRENCY", "32")
+    )
+    OPUS_SHARD_PROBE_CONCURRENCY: int = int(
+        os.getenv("ASR_OPUS_SHARD_PROBE_CONCURRENCY", "8")
+    )
 
     # FFmpeg 命令超时时间：执行 FFmpeg 合并命令的最大等待时间
     # 默认 300 秒（5分钟）

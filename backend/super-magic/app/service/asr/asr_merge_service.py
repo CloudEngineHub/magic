@@ -9,15 +9,17 @@ import asyncio
 import time
 import traceback
 from functools import lru_cache
+from pathlib import Path
 from typing import Dict
 
 from loguru import logger
 
 from app.service.asr.asr_base import AsrServiceBase
 from app.service.asr.asr_file_detector import AsrFileDetector
-from app.service.asr.asr_merge_operations import AsrMergeOperations, OpusShardsNotReadyError
 from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager, AsrTaskStatus
 from app.service.asr.asr_monitoring_task import AsrMonitoringTask
+from app.service.asr.asr_opus_finish_processor import AsrOpusFinishProcessor
+from app.service.asr.asr_opus_merge_operations import AsrOpusMergeOperations
 from app.service.asr.asr_task_finalizer import AsrTaskFinalizer
 from app.service.asr.asr_time_config import asr_time_config
 from app.service.asr.asr_utils import (
@@ -26,6 +28,7 @@ from app.service.asr.asr_utils import (
     resolve_path,
     validate_audio_format_for_write,
 )
+from app.service.asr.asr_wav_merge_operations import AsrWavMergeOperations
 
 
 class AsrMergeService(AsrServiceBase):
@@ -38,7 +41,7 @@ class AsrMergeService(AsrServiceBase):
     - 协调各业务模块完成任务
 
     委托业务：
-    - AsrMergeOperations: 合并操作、准备文件、执行事务
+    - AsrWavMergeOperations: WAV 合并操作、准备文件、执行事务
     - AsrTaskFinalizer: 任务完成处理
     - AsrMergeTaskManager: 任务状态管理、完成检查
     """
@@ -57,182 +60,28 @@ class AsrMergeService(AsrServiceBase):
 
         # 初始化子服务
         self.file_detector = AsrFileDetector()
-        self.merge_operations = AsrMergeOperations(self.file_detector)
+        self.merge_operations = AsrWavMergeOperations(self.file_detector)
         self.task_finalizer = AsrTaskFinalizer(self.merge_operations)
+        self.opus_merge_operations = AsrOpusMergeOperations(self.file_detector)
+        self.opus_finish_processor = AsrOpusFinishProcessor(
+            self.opus_merge_operations, self.task_finalizer
+        )
 
         logger.info(f"{self.LOG_PREFIX} 🎙️ ASR音频合并服务初始化完成 (支持 WAV/OPUS)")
 
-    @staticmethod
-    def should_block_merge(audio_format: str | None, all_files: list, audio_format_error: str | None) -> bool:
-        """Return whether this polling round must skip merge input preparation."""
-        return bool(audio_format_error) or (bool(all_files) and audio_format is None)
-
-    @staticmethod
-    def should_run_opus_finish_merge(
-        audio_format: str | None, upload_completed: bool, merge_status: str
-    ) -> bool:
-        return audio_format == "opus" and upload_completed and merge_status in {"pending", "failed"}
-
     async def _monitor_and_merge(self, task: AsrMonitoringTask) -> None:
-        """
-        轮询目录并全量合并 WAV 文件
-
-        这是核心调度循环，负责：
-        1. 扫描文件
-        2. 检查完成条件
-        3. 触发合并操作
-        4. 触发任务完成
-        """
+        """Resolve the task format once, then dispatch to an isolated strategy."""
         logger.info(
             f"{self.LOG_PREFIX} 🔍 task_key={task.task_key} "
             f"开始轮询目录: {task.source_dir} (每{asr_time_config.POLL_INTERVAL}秒)"
         )
-
         await asyncio.sleep(asr_time_config.INITIAL_DELAY)
-
-        last_new_file_time = time.time()
-        last_indices = set()
-        is_first_run = True
-
-        # 获取任务管理器单例
-        task_manager = AsrMergeTaskManager.instance()
-
-        # TEMP(disabled): scan-wav workaround is currently turned off.
-        # Keep the code path for quick rollback if needed.
-        # _scan_wav_project_id, _scan_wav_relative_path = await self._load_scan_wav_context(task)
-
         try:
-            while True:
-                # 0. 更新活跃时间，防止沙箱因超时被杀 (agent_idle_timeout default 20min)
-                self.merge_operations.update_agent_activity(f"ASR轮询: {task.task_key}")
-
-                # TEMP(disabled): scan-wav workaround is currently turned off.
-                # await self._trigger_scan_wav(_scan_wav_project_id, _scan_wav_relative_path, task.task_key)
-
-                # 1. 扫描所有音频分片（wav/opus）
-                merge_blocked = False
-                audio_format = None
-                all_files, format_conflicts = await asyncio.to_thread(
-                    self.file_detector.scan_audio_files_with_conflicts, task.source_dir, False
-                )
-                if format_conflicts:
-                    conflict_message = self._format_conflict_message(format_conflicts)
-                    progress = await task_manager.get_progress(task.task_key)
-                    if progress and progress.upload_completed:
-                        await task_manager.set_audio_format_error(task.task_key, conflict_message)
-                        await task_manager.fail_task(task.task_key, conflict_message)
-                        break
-                    logger.warning(f"{self.LOG_PREFIX} ⚠️ task_key={task.task_key} {conflict_message}")
-                    merge_blocked = True
-                else:
-                    all_files = AsrFileDetector.deduplicate_files(all_files)
-
-                    # 1.5 确定任务音频格式并过滤异格式分片（任务级格式钉住：历史任务 wav，新任务可能 opus）
-                    audio_format = await self._ensure_task_audio_format(task.task_key, all_files)
-                    task_state = await task_manager.get_task(task.task_key)
-                    audio_format_error = task_state.audio_format_error if task_state else None
-                    if task_state and task_state.status in (AsrTaskStatus.ERROR.value, AsrTaskStatus.CANCELED.value):
-                        break
-                    if self.should_block_merge(audio_format, all_files, audio_format_error):
-                        merge_blocked = True
-                    elif audio_format is not None:
-                        filtered_files = AsrFileDetector.filter_by_format(all_files, audio_format)
-                        if len(filtered_files) != len(all_files):
-                            logger.warning(
-                                f"{self.LOG_PREFIX} ⚠️ task_key={task.task_key} 目录混入异格式分片，"
-                                f"已按任务格式 {audio_format} 过滤: {len(all_files)} -> {len(filtered_files)}"
-                            )
-                        all_files = filtered_files
-
-                # 2. 检查是否应该完成任务
-                if audio_format != "opus" and await task_manager.check_should_complete(
-                    task.task_key, task.source_dir, len(all_files)
-                ):
-                    await self.task_finalizer.complete_task(task.task_key, task.source_dir)
-                    break
-
-                current_indices = {idx for idx, _ in all_files}
-
-                # Opus finish 合并必须先于通用 idle timeout 执行，否则长时间无新分片的任务
-                # 会一直等到 deadline，甚至在没有启动 FFmpeg 的情况下退出轮询。
-                if audio_format == "opus" and not merge_blocked:
-                    completed = await self._process_opus_finish(task, all_files)
-                    if completed:
-                        break
-                    if current_indices != last_indices:
-                        last_new_file_time = time.time()
-                        last_indices = current_indices
-                    await asyncio.sleep(asr_time_config.POLL_INTERVAL)
-                    continue
-
-                # 3. 检查超时
-                idle_time = time.time() - last_new_file_time
-                if idle_time >= asr_time_config.NO_NEW_FILE_TIMEOUT:
-                    # 再次检查是否应该完成任务（边缘情况）
-                    if audio_format != "opus" and await task_manager.check_should_complete(
-                        task.task_key, task.source_dir, len(all_files)
-                    ):
-                        await self.task_finalizer.complete_task(task.task_key, task.source_dir)
-                        break
-
-                    # 若已 finish 且尚未到 completion_deadline_at，不因“无新文件超时”提前退出。
-                    progress = await task_manager.get_progress(task.task_key)
-                    now_ts = time.time()
-                    if (
-                        progress
-                        and progress.upload_completed
-                        and progress.completion_deadline_at is not None
-                        and now_ts < progress.completion_deadline_at
-                    ):
-                        remaining = int(progress.completion_deadline_at - now_ts)
-                        logger.info(
-                            f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} "
-                            f"无新文件超时但未到 completion_deadline_at，继续轮询: 剩余{remaining}s"
-                        )
-                        await asyncio.sleep(asr_time_config.POLL_INTERVAL)
-                        continue
-
-                    logger.info(
-                        f"{self.LOG_PREFIX} ⏰ task_key={task.task_key} "
-                        f"{asr_time_config.NO_NEW_FILE_TIMEOUT}秒无新文件，退出轮询"
-                    )
-                    break
-
-                if not all_files or merge_blocked:
-                    wait_reason = "格式未就绪或存在冲突" if merge_blocked else "无文件"
-                    logger.debug(
-                        f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} "
-                        f"{wait_reason} ({int(idle_time)}秒/{asr_time_config.NO_NEW_FILE_TIMEOUT}秒)"
-                    )
-                    await asyncio.sleep(asr_time_config.POLL_INTERVAL)
-                    continue
-
-                # 4. 检测是否有新文件
-                if current_indices == last_indices:
-                    logger.debug(
-                        f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} "
-                        f"无新文件 ({int(idle_time)}秒/{asr_time_config.NO_NEW_FILE_TIMEOUT}秒)"
-                    )
-                    await asyncio.sleep(asr_time_config.POLL_INTERVAL)
-                    continue
-
-                # 5. 有新文件，处理合并
-                completed = await self._process_new_files(
-                    task, all_files, current_indices, is_first_run, audio_format
-                )
-
-                if completed:
-                    break
-
-                # 重置状态
-                if is_first_run:
-                    is_first_run = False
-                last_new_file_time = time.time()
-                last_indices = current_indices
-
-                # 等待下一次轮询
-                await asyncio.sleep(asr_time_config.POLL_INTERVAL)
-
+            audio_format = await self._wait_for_task_audio_format(task)
+            if audio_format == "opus":
+                await self._monitor_opus_task(task)
+            elif audio_format == "wav":
+                await self._monitor_wav_task(task)
         except Exception as e:
             logger.error(f"{self.LOG_PREFIX} ❌ task_key={task.task_key} 监听和合并过程出错: {e}")
             logger.error(f"{self.LOG_PREFIX} task_key={task.task_key} 堆栈信息:\n{traceback.format_exc()}")
@@ -240,63 +89,142 @@ class AsrMergeService(AsrServiceBase):
         finally:
             logger.info(f"{self.LOG_PREFIX} 🛑 task_key={task.task_key} 停止轮询目录: {task.source_dir}")
 
-    async def _process_opus_finish(self, task: AsrMonitoringTask, all_files: list) -> bool:
+    async def _wait_for_task_audio_format(self, task: AsrMonitoringTask) -> str | None:
+        """Wait for the first valid shard and pin the task to WAV or Opus."""
         task_manager = AsrMergeTaskManager.instance()
-        progress = await task_manager.get_progress(task.task_key)
-        if not progress or not progress.upload_completed:
-            return False
+        started_at = time.time()
+        while True:
+            task_state = await task_manager.get_task(task.task_key)
+            if not task_state or task_state.status in {
+                AsrTaskStatus.ERROR.value,
+                AsrTaskStatus.CANCELED.value,
+            }:
+                return None
+            if task_state.audio_format:
+                return validate_audio_format_for_write(task_state.audio_format)
 
-        if progress.opus_merge_status == "completed":
-            if await task_manager.check_should_complete(task.task_key, task.source_dir, len(all_files)):
-                await self.task_finalizer.complete_task(task.task_key, task.source_dir)
-                return True
-            return False
-
-        if not self.should_run_opus_finish_merge(
-            "opus", progress.upload_completed, progress.opus_merge_status
-        ):
-            return False
-
-        if not await task_manager.claim_opus_merge(task.task_key):
-            return False
-
-        try:
-            await self.merge_operations.merge_opus_on_finish(
-                task.task_key,
+            all_files, conflicts = await asyncio.to_thread(
+                self.file_detector.scan_audio_files_with_conflicts,
                 task.source_dir,
-                all_files,
-                progress.file_shard_count if progress.file_shard_count >= 0 else None,
+                False,
             )
-        except OpusShardsNotReadyError as exc:
-            now_ts = time.time()
-            if progress.completion_deadline_at is not None and now_ts >= progress.completion_deadline_at:
-                await task_manager.set_opus_merge_status(task.task_key, "failed", str(exc))
-                await task_manager.fail_task(task.task_key, f"Opus 分片未就绪: {exc}")
-                return True
-            await task_manager.set_opus_merge_status(task.task_key, "pending", str(exc))
-            logger.info(f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} 等待 Opus 分片: {exc}")
-            return False
-        except Exception as exc:
-            await task_manager.set_opus_merge_status(task.task_key, "failed", str(exc))
-            logger.error(f"{self.LOG_PREFIX} ❌ task_key={task.task_key} Opus finish 合并失败: {exc}")
-            now_ts = time.time()
-            if progress.completion_deadline_at is not None and now_ts >= progress.completion_deadline_at:
-                await task_manager.fail_task(task.task_key, f"Opus finish 合并失败: {exc}")
-                return True
-            return False
+            if conflicts:
+                if await self._handle_format_conflicts(task, conflicts):
+                    return None
+                await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+                continue
+            all_files = AsrFileDetector.deduplicate_files(all_files)
+            audio_format = await self._ensure_task_audio_format(task.task_key, all_files)
+            if audio_format:
+                return audio_format
 
-        status_saved = await task_manager.set_opus_merge_status(task.task_key, "completed")
-        if not status_saved:
-            logger.error(
-                f"{self.LOG_PREFIX} ❌ task_key={task.task_key} Opus 合并产物已上传，但 completed 状态写入失败"
-            )
+            progress = await task_manager.get_progress(task.task_key)
+            if progress and progress.upload_completed:
+                if (
+                    progress.completion_deadline_at is not None
+                    and time.time() >= progress.completion_deadline_at
+                ):
+                    await task_manager.fail_task(task.task_key, "finish 后未找到可用音频分片")
+                    return None
+            elif time.time() - started_at >= asr_time_config.NO_NEW_FILE_TIMEOUT:
+                return None
+            await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+
+    async def _monitor_opus_task(self, task: AsrMonitoringTask) -> None:
+        """Opus: recording only stores shards; finish triggers one full rebuild."""
+        task_manager = AsrMergeTaskManager.instance()
+        await task_manager.ensure_opus_finish_deadline(task.task_key)
+        while True:
+            self.merge_operations.update_agent_activity(f"Opus轮询: {task.task_key}")
+            all_files, terminal = await self._scan_files_for_format(task, "opus")
+            if terminal:
+                return
+            if await self.opus_finish_processor.process(task, all_files):
+                return
+            await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+
+    async def _monitor_wav_task(self, task: AsrMonitoringTask) -> None:
+        """WAV: keep the existing recording-time incremental merge strategy."""
+        task_manager = AsrMergeTaskManager.instance()
+        last_new_file_time = time.time()
+        last_indices: set[int] = set()
+        is_first_run = True
+
+        while True:
+            self.merge_operations.update_agent_activity(f"WAV轮询: {task.task_key}")
+            all_files, terminal = await self._scan_files_for_format(task, "wav")
+            if terminal:
+                return
+
+            if await task_manager.check_should_complete(
+                task.task_key, task.source_dir, len(all_files)
+            ):
+                await self.task_finalizer.complete_task(task.task_key, task.source_dir)
+                return
+
+            current_indices = {index for index, _ in all_files}
+            idle_time = time.time() - last_new_file_time
+            if idle_time >= asr_time_config.NO_NEW_FILE_TIMEOUT:
+                progress = await task_manager.get_progress(task.task_key)
+                if (
+                    progress
+                    and progress.upload_completed
+                    and progress.completion_deadline_at is not None
+                    and time.time() < progress.completion_deadline_at
+                ):
+                    await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+                    continue
+                return
+
+            if not all_files or current_indices == last_indices:
+                await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+                continue
+
+            if await self._process_new_files(
+                task, all_files, current_indices, is_first_run, "wav"
+            ):
+                return
+            is_first_run = False
+            last_new_file_time = time.time()
+            last_indices = current_indices
+            await asyncio.sleep(asr_time_config.POLL_INTERVAL)
+
+    async def _scan_files_for_format(
+        self, task: AsrMonitoringTask, audio_format: str
+    ) -> tuple[list[tuple[int, Path]], bool]:
+        all_files, conflicts = await asyncio.to_thread(
+            self.file_detector.scan_audio_files_with_conflicts,
+            task.source_dir,
+            False,
+        )
+        if conflicts:
+            terminal = await self._handle_format_conflicts(task, conflicts)
+            return [], terminal
+
+        task_state = await AsrMergeTaskManager.instance().get_task(task.task_key)
+        if not task_state or task_state.status in {
+            AsrTaskStatus.ERROR.value,
+            AsrTaskStatus.CANCELED.value,
+        }:
+            return [], True
+
+        deduplicated = AsrFileDetector.deduplicate_files(all_files)
+        return AsrFileDetector.filter_by_format(deduplicated, audio_format), False
+
+    async def _handle_format_conflicts(
+        self, task: AsrMonitoringTask, conflicts: list[dict]
+    ) -> bool:
+        if not conflicts:
             return False
-        if await task_manager.check_should_complete(task.task_key, task.source_dir, len(all_files)):
-            await self.task_finalizer.complete_task(task.task_key, task.source_dir)
+        task_manager = AsrMergeTaskManager.instance()
+        message = self._format_conflict_message(conflicts)
+        progress = await task_manager.get_progress(task.task_key)
+        if progress and progress.upload_completed:
+            await task_manager.set_audio_format_error(task.task_key, message)
+            await task_manager.fail_task(task.task_key, message)
             return True
+        logger.warning(f"{self.LOG_PREFIX} ⚠️ task_key={task.task_key} {message}")
         return False
-
-    # TEMP: ---- scan-wav helpers (remove when MagicFS auto-refreshes) ----
 
     @staticmethod
     def _format_conflict_message(conflicts: list[dict]) -> str:
@@ -308,68 +236,6 @@ class AsrMergeService(AsrServiceBase):
             else:
                 details.append(f"index={conflict.get('index')}: {names}")
         return "audio format conflict (" + "; ".join(details) + ")"
-
-    async def _load_scan_wav_context(self, task: AsrMonitoringTask) -> tuple[str, str]:
-        """
-        Resolve project_id and relative_path needed for the scan-wav API.
-
-        project_id comes from InitClientMessage metadata.
-        relative_path is the original (workspace-relative) source_dir string stored
-        in the task result, not the resolved absolute path in AsrMonitoringTask.
-
-        # TEMP: Remove together with _trigger_scan_wav when MagicFS auto-refreshes.
-        """
-        project_id = ""
-        relative_path = ""
-        try:
-            from app.utils.init_client_message_util import InitClientMessageUtil
-            metadata = InitClientMessageUtil.get_metadata()
-            project_id = metadata.get("project_id", "")
-        except Exception as e:
-            logger.warning(f"{self.LOG_PREFIX} [scan-wav TEMP] Failed to load project_id: {e}")
-
-        try:
-            task_result = await AsrMergeTaskManager.instance().get_task(task.task_key)
-            if task_result:
-                relative_path = task_result.source_dir
-        except Exception as e:
-            logger.warning(f"{self.LOG_PREFIX} [scan-wav TEMP] Failed to load relative_path: {e}")
-
-        return project_id, relative_path
-
-    async def _trigger_scan_wav(self, project_id: str, relative_path: str, task_key: str) -> None:
-        """
-        Call the scan-wav API to push MagicFS metadata refresh before local scanning.
-
-        Errors are caught and logged at WARNING level so the polling loop is never
-        interrupted by a backend-side failure of this temporary workaround.
-
-        # TEMP: Remove when MagicFS handles metadata refresh automatically.
-        """
-        if not project_id or not relative_path:
-            logger.debug(
-                f"{self.LOG_PREFIX} [scan-wav TEMP] task_key={task_key} "
-                f"Skipping scan-wav: project_id or relative_path not available"
-            )
-            return
-        try:
-            from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
-            from app.infrastructure.sdk.magic_service.parameter.scan_wav_parameter import ScanWavParameter
-
-            sdk = get_magic_service_sdk()
-            param = ScanWavParameter(project_id=project_id, relative_path=relative_path)
-            result = await sdk.file.scan_wav_async(param)
-            logger.debug(
-                f"{self.LOG_PREFIX} [scan-wav TEMP] task_key={task_key} "
-                f"scan-wav OK: scanned={result.get_scanned()}, inserted={result.get_inserted()}"
-            )
-        except Exception as e:
-            logger.warning(
-                f"{self.LOG_PREFIX} [scan-wav TEMP] task_key={task_key} "
-                f"scan-wav call failed (non-fatal): {e}"
-            )
-
-    # TEMP: ---- end scan-wav helpers ----
 
     async def _ensure_task_audio_format(self, task_key: str, all_files: list) -> str | None:
         """

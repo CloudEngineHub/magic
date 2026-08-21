@@ -20,7 +20,6 @@ from loguru import logger
 
 from app.service.asr.asr_base import AsrServiceBase
 from app.service.asr.asr_local_proxy import AsrLocalWorkspaceProxy
-from app.service.asr.asr_merge_operations import AsrMergeOperations
 from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager, AsrTaskStatus
 from app.service.asr.asr_size_config import asr_size_config
 from app.service.asr.asr_time_config import asr_time_config
@@ -30,6 +29,7 @@ from app.service.asr.asr_utils import (
     resolve_audio_format_from_directory,
     resolve_path,
 )
+from app.service.asr.asr_wav_merge_operations import AsrWavMergeOperations
 
 ASR_RECORDINGS_DIR_NAME = ".asr_recordings"
 WORKSPACE_DIR_NAME = ".workspace"
@@ -55,7 +55,7 @@ def is_under_asr_recordings(path: Path) -> bool:
 class AsrTaskFinalizer(AsrServiceBase):
     """ASR 任务完成处理器"""
 
-    def __init__(self, merge_operations: AsrMergeOperations):
+    def __init__(self, merge_operations: AsrWavMergeOperations):
         """
         初始化任务完成处理器
 
@@ -178,7 +178,7 @@ class AsrTaskFinalizer(AsrServiceBase):
                 )
 
                 # 1. 等待源 merged 文件就绪（远端）
-                is_ready, reason = await AsrMergeOperations.wait_for_file_ready(
+                is_ready, reason = await AsrWavMergeOperations.wait_for_file_ready(
                     merged_file,
                     min_size=asr_size_config.MERGED_OUTPUT_MIN_SIZE,
                     retries=asr_time_config.MERGED_FILE_READY_RETRIES,
@@ -262,7 +262,7 @@ class AsrTaskFinalizer(AsrServiceBase):
                     expected_size = None
 
                 # 等待目标文件就绪（确保文件完整可用）
-                is_ready, reason = await AsrMergeOperations.wait_for_file_ready(
+                is_ready, reason = await AsrWavMergeOperations.wait_for_file_ready(
                     final_audio_path,
                     min_size=asr_size_config.MERGED_OUTPUT_MIN_SIZE,
                     expected_size=expected_size,
@@ -627,7 +627,7 @@ class AsrTaskFinalizer(AsrServiceBase):
                 logger.info(
                     f"{self.LOG_PREFIX} 📝 task_key={task_key} 等待笔记文件: {note_source_path_str} (timeout={timeout}s)"
                 )
-                is_ready, reason = await AsrMergeOperations.wait_for_file_ready(
+                is_ready, reason = await AsrWavMergeOperations.wait_for_file_ready(
                     note_source_path, min_size=asr_size_config.OPTIONAL_FILE_MIN_SIZE, timeout=timeout
                 )
                 if not is_ready:
@@ -851,7 +851,7 @@ class AsrTaskFinalizer(AsrServiceBase):
             logger.info(
                 f"{self.LOG_PREFIX} 🗑️ task_key={task_key} 等待流式文件: {transcript_source_path_str} (timeout={timeout}s)"
             )
-            is_ready, reason = await AsrMergeOperations.wait_for_file_ready(
+            is_ready, reason = await AsrWavMergeOperations.wait_for_file_ready(
                 transcript_abs_path, min_size=asr_size_config.OPTIONAL_FILE_MIN_SIZE, timeout=timeout
             )
             if not is_ready:
