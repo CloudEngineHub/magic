@@ -1,6 +1,6 @@
 ---
 name: canvas-manager
-description: Manage a Canvas through its business tools — initialize and query projects, create Elements and Content candidates, frame Elements, and wait on generation. Load for any Canvas task. Processes design markers inline; layout strategies, Connections, video point estimation, video composition, image search, asset reconciliation, and prompt inspiration live in the references.
+description: "Manage a Canvas through its business tools only — initialize and query projects, create Elements and Content candidates, frame Elements, wait on generation, and process design markers. Use when the user asks to create, edit, or generate anything on a Canvas, such as images, videos, storyboards, video edits, or a final composed video, or when the message contains [@design_canvas_project:...] or [@design_marker:...]. Also use when the user says 'generate an image on my canvas', 'make a video from this canvas project', 'add a new element to my design', or 'edit the marked region of this image'. Layout strategies, Connections, video point estimation, video composition, image search, asset reconciliation, and prompt inspiration live in the references."
 ---
 
 # Canvas Manager
@@ -14,10 +14,9 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Act only on a concrete Canvas task from the user.
 - Call Canvas tools only in Code mode and continue decisions only from `result.content`.
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
-- If the user message contains `[@design_canvas_project:path]`, the text after the colon is the exact `project_path`. Use it verbatim in every Canvas tool call; never truncate, rename, or create a new project instead.
+- Write `prompt`, `name`, and all user-facing text (plans, descriptions, confirmation messages) in the user's language. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
-- If the user message contains `[@design_marker:name]`, follow the Design marker processing section below.
-- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state. The only exception is writing the resumable task plan as Markdown under `.magic/video-production-plans/` for detailed professional video production (see `references/professional-video-production.md`); never read or edit any project file, including `magic.project.js`.
+- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit any project file, including `magic.project.js`.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
@@ -46,7 +45,7 @@ You cannot:
 
 - Delete Elements or Content.
 - Edit program-managed fields: status, result paths, task binding, retry counts, active/main pointers, or Frame structural Content.
-- Skip point estimation only when the user explicitly asks in the current request to skip it and accepts that the point cost is unknown; otherwise always estimate and obtain confirmation before billed video generation.
+- Skip point estimation (see the point-estimation rule in Ground rules).
 
 ## Core model
 
@@ -72,6 +71,7 @@ result = tool.call("query_canvas_overview", {
 print(result.content)
 ```
 
+- The `from sdk.tool import tool` import is required in every snippet; it is shown once above and omitted in all later examples for brevity.
 - Read only `result.content`; never index the result object or read `result.data`.
 - `item_ref` is a batch-local label linking a request to its result, not a persisted Canvas ID.
 
@@ -108,6 +108,8 @@ User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (s
 ```
 
 ## Tool reference
+
+Each tool below is documented with when to use it, its parameters, and a minimal example. Read every result only from `result.content` and reuse returned IDs verbatim.
 
 ## `initialize_canvas`
 
@@ -248,7 +250,7 @@ Retry rules:
 - Reuse the exact `item_ref` from the original generation request or the latest failed Content result. `item_ref` is a stable correlation label for the operation; it is not a retry attempt name. Never add suffixes such as `-retry`, `-new`, or a counter.
 - Reuse the exact `element_id` and `content_id` from the latest Canvas query or the failed Content result.
 - For billable video Content, `generation_override.estimate_id` must belong to the same original `item_ref`. If the tool returns `POINT_ESTIMATE_MISMATCH`, do not invent another `item_ref`; compare the estimate's `item_ref` with the retry request and correct the request.
-- To retry with unchanged generation parameters, omit `generation_override`. If any billable video field changes, estimate the complete changed request again with the same original `item_ref`, obtain confirmation, and pass the new `estimate_id` in `generation_override`. The only exception is a new explicit current-request instruction to skip estimation and accept an unknown point cost; then set `generation_override.skip_point_estimate=true` and do not pass `estimate_id`.
+- To retry with unchanged generation parameters, omit `generation_override`. If any billable video field changes, estimate the complete changed request again with the same original `item_ref`, obtain confirmation, and pass the new `estimate_id` in `generation_override`. When the current request explicitly opts out of estimation (see the point-estimation rule in Ground rules), set `generation_override.skip_point_estimate=true` and do not pass `estimate_id`.
 
 Parameters: `project_path` and `items` required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
 
@@ -327,8 +329,6 @@ Adjust the layout of an existing writable Element or Frame. Never lay out read-o
 Supports `row_incremental`, `dependency_flow`, and `explicit_position`. Use `explicit_position` only when the user explicitly provides coordinates; Frame child coordinates are always local to the direct parent Frame.
 
 ```python
-from sdk.tool import tool
-
 result = tool.call("layout_canvas_elements", {
     "project_path": "Demo",
     "items": [{
@@ -360,8 +360,6 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 - Final video: composition validates the confirmed Video Edit inputs before producing the result.
 
 ```python
-from sdk.tool import tool
-
 result = tool.call("manage_canvas_connections", {
     "project_path": "Demo",
     "items": [{
@@ -387,8 +385,6 @@ Freeze the complete generation request before estimating. This includes the fina
 | `items` | Yes | Request parameters identical to the real video generation, plus a unique `item_ref` |
 
 ```python
-from sdk.tool import tool
-
 result = tool.call("estimate_canvas_content_points", {
     "project_path": "Demo",
     "production_rule": "video_generation",
@@ -397,15 +393,13 @@ result = tool.call("estimate_canvas_content_points", {
 print(result.content)
 ```
 
-After showing the full parameters, points, and `estimate_id`, you must confirm with a direct `ask_user`; do not call video generation before confirmation. If and only if the user explicitly said in the current request that estimation is unnecessary and accepted an unknown point cost, omit the estimate and set `skip_point_estimate=true` in the generated video Content.
+After showing the full parameters, points, and `estimate_id`, you must confirm with a direct `ask_user`; do not call video generation before confirmation. Only when the current request explicitly opts out of estimation (see the point-estimation rule in Ground rules), omit the estimate and set `skip_point_estimate=true` in the generated video Content.
 
 ## Final video composition through `add_canvas_elements`
 
 Treat the final MP4 as an ordinary generated Video Element. The model must declare the final Element, its `video-edit -> final-video` Connection, and dependency layout in the same request. The Canvas application creates a pending generated Content and runs internal FFmpeg composition against that Content; it does not create Elements, Connections, or layout automatically.
 
 ```python
-from sdk.tool import tool
-
 result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
     "items": [{
@@ -427,52 +421,6 @@ print(result.content)
 ```
 
 Composition is synchronous and does not use `wait_canvas_generation`. After success, query the final Video Element with `query_canvas_element_details`. If no Audio Element is declared in the Video Edit, the compositor preserves source-video audio when available.
-
-## `search_canvas_image_candidates`
-
-Search, download, media-validate, and import external image candidates. Only materialize candidates that pass download and media probing; de-duplicate by source URL within the same topic.
-
-| Parameter | Required | Description |
-|---|---|---|
-| `project_path` | Yes | Full Canvas project path |
-| `topic_id` | Yes | Current search topic ID |
-| `tasks` | Yes | Each item: `item_ref`, `name`, `query`, and optional filters |
-
-```python
-from sdk.tool import tool
-
-result = tool.call("search_canvas_image_candidates", {
-    "project_path": "Demo",
-    "topic_id": "hero-images",
-    "tasks": [{"item_ref": "hero", "name": "Hero image", "query": "premium product hero", "count": 3}],
-})
-print(result.content)
-```
-
-After import, verify the real Element IDs with `query_canvas_overview` or `query_canvas_element_details`. Retry failed items only when the user asks.
-
-## `search_canvas_image_prompts`
-
-Search for prompt inspiration when the user has no clear creative direction. This tool only returns inspiration; it does not create or modify Canvas state.
-
-| Parameter | Required | Description |
-|---|---|---|
-| `query` | Yes | Scene, subject, or style keywords |
-| `category` | No | Prompt category |
-| `sort_by` | No | Sort order |
-| `limit` | No | Maximum number of results |
-| `offset` | No | Pagination offset |
-| `random` | No | Whether to sample randomly |
-
-```python
-from sdk.tool import tool
-
-result = tool.call("search_canvas_image_prompts", {
-    "query": "minimal product hero",
-    "limit": 5,
-})
-print(result.content)
-```
 
 ## Workflow coverage
 
@@ -509,8 +457,6 @@ A `[@design_marker:name]` mention is the user annotating a region of a Canvas im
 4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, `reference_images=[original project-relative path]`, and `size` set to the original image's dimensions.
 
 ```python
-from sdk.tool import tool
-
 # visual_understanding was already called and returned the scene description
 # and the original dimensions (e.g. 1920x1080).
 

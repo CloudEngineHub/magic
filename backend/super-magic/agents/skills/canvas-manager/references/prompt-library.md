@@ -26,6 +26,7 @@ Only on an explicit inspiration request. Do not trigger proactively when the use
 | `category` | No | `Photography`, `Product & Brand`, `Girl`, `Food & Drink`, `Illustration & 3D`, `App`, `JSON`, `Other` |
 | `sort_by` | No | `rank` (default), `likes`, `views`, `date` |
 | `limit` | No | Number of results, default 5, max 20 |
+| `offset` | No | Pagination offset |
 | `random` | No | Set `true` for open-ended inspiration browsing |
 
 ```python

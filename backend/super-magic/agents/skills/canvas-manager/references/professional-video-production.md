@@ -103,7 +103,7 @@ Use this mode only when the user explicitly asks for detailed, fine-grained, sta
 
 ## Direct professional mode workflow
 
-1. Understand the submitted assets and identify the intended subject, scene, motion, style, duration, aspect ratio, resolution, output model, and audio expectations. Provider-managed asset URIs such as `asset://virtual-human-asset-id` are opaque generation inputs: keep them in the supported reference array and do not send them to `visual_understanding`, read them as workspace files, import them into Canvas, or create synthetic Elements for them.
+1. Understand the submitted assets and identify the intended subject, scene, motion, style, duration, aspect ratio, resolution, output model, and audio expectations.
 2. Present one complete creative target and the final video prompt before generating anything. Ask one concise confirmation question for unresolved material choices.
 3. By default, before calling `estimate_canvas_content_points`, freeze the complete final prompt and request, including every reference binding token and prompt constraint. Call the estimate with that exact request, then wait for explicit confirmation of the estimate. Only when the user explicitly says in the current request that estimation is unnecessary and accepts an unknown point cost may you skip the estimate and set `skip_point_estimate=true`.
 4. After the estimate is confirmed, call `add_canvas_elements` once with one `video` Element. Carry the returned `estimate_id` unchanged in the generated Content and copy the estimated request byte-for-byte. Do not add `[imageN]` bindings, watermark instructions, or other prompt text after confirmation. If anything changes, estimate again and ask for confirmation again before generation.
@@ -129,8 +129,6 @@ Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-vi
 
 Keep one clear scene and one main action unless the user explicitly asks for a sequence. Cover the subject, action, scene, camera, lighting, pacing, and any requested sound, narration, or dialogue. Preserve requested narration or dialogue verbatim.
 
-For a provider-managed virtual-human asset, keep the opaque URI in `reference_image_paths`, bind it as `[image1]` in the prompt, and do not import it, call `visual_understanding` on it, or create a synthetic Canvas Element. Use this path only with a currently supported Seedance-series model.
-
 Use this reference-mode mapping for generated videos:
 
 | Situation | `input_mode` | Required inputs |
@@ -142,17 +140,12 @@ Use this reference-mode mapping for generated videos:
 
 If the current `<media_model_info>` does not declare a mode, do not use it. A reference path controls generation input; only an explicit Connection creates a Canvas business relation.
 
-## Shared video generation estimate gate
-
-All professional video generation is billable. Estimate the exact request first, show the full parameters and per-item points, and wait for explicit confirmation by default. Only an explicit current-request opt-out that accepts an unknown point cost may use `skip_point_estimate=true` without an `estimate_id`. If the parameters change, estimate again before generating unless the user has explicitly opted out for that generation.
-
 ## Core rules
 
 - Adapt the workflow to the current request and existing results; do not restart completed stages.
-- Treat the current Canvas as the source of truth. The Markdown plan is recovery context, not a replacement for querying current Elements.
+- Treat the current Canvas as the source of truth.
 - Every confirmation is a hard gate: tool success is not user approval. Do not continue past a gate until the user confirms or requests a revision.
 - Infer established facts and reasonable defaults before asking. Ask only about unresolved decisions that materially affect the result.
-- Use the user's language for plans, names, descriptions, prompts, and confirmations. Keep tool names, IDs, and paths unchanged.
 - In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
 - Keep each task bound to its current Canvas project. If a tool fails, do not call `initialize_canvas`, invent a new project suffix, or change `project_path` to bypass the error. Recover in the current project: read the failure from `result.content`, inspect the referenced Element or Content, repair it with the available tools, and retry only after the repair is complete. If safe recovery is impossible, tell the user the blocking reason and stop.
 - Do not repeat a paid image or video generation call speculatively. After a failure, first inspect and repair the current Canvas state or correct the referenced workspace path; regenerate only when the user has approved the revised generation or the retry is an exact, safe retry of the failed task.
@@ -184,27 +177,6 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 - Before each generation call, verify that every used asset appears in the correct reference array and that direct Connections contain only the intended upstream Element IDs.
 - Reference media may contain watermarks, captions, interface marks, compression artifacts, unwanted backgrounds, or accidental crops. Preserve intended subject information but explicitly exclude those defects from generated prompts unless the user requests them.
 - Use only model IDs, `input_mode`, task values, aspect ratios, resolutions, durations, FPS values, and other generation fields declared by the current `<media_model_info>`.
-- Provider-managed asset URIs such as `asset://virtual-human-asset-id` are opaque generation inputs. Keep them in supported reference arrays, bind them in the prompt, and never inspect, import, or create synthetic Canvas Elements for them.
-
-## Asking the user
-
-Use the `ask_user` tool as a direct tool call for every applicable confirmation gate. Prefer `confirm` for yes-or-revise decisions, `select` for mutually exclusive directions, and `multi_select` only for independent choices. Put long-form content (directions, shot plans, prompt collections) in the assistant message as readable Markdown, then ask one concise question that does not repeat the displayed content.
-
-## Detailed mode task plan and recovery
-
-This section applies only to detailed professional mode.
-
-Store each resumable task as Markdown under `.magic/video-production-plans/`.
-
-At the start of a task:
-
-1. Search plan filenames and contents for the task topic, Element IDs, and media filenames.
-2. Continue the matching plan; if several match, ask the user which one.
-3. Create a task-specific plan when none matches.
-4. Query known Element IDs in batches of 1–10 before relying on saved state.
-5. Resume from the earliest incomplete confirmation gate.
-
-Keep the plan concise and update it after each confirmation, generation result, failure, revision, or changed next step.
 
 ## Detailed production stages
 
@@ -397,7 +369,7 @@ An empty `audioSequence` preserves audio already present in the source videos wh
 
 Create the final Video Element through `add_canvas_elements` only after the user confirms the edit configuration. Declare the `video-edit -> final-video` Connection and `dependency_flow` layout in that request. Use generated Video Content with `task="compose"`, `input_mode="video_edit"`, and `videoEditElementId` set to the confirmed Video Edit Element ID. Then verify the returned final Element with `query_canvas_element_details` and present the MP4 path, duration, dimensions, and audio status.
 
-The final output is the current Video Edit's main Content. Composition is synchronous and does not use `wait_canvas_generation`. If composition fails, preserve the failed Content and active/main pointers, repair the inputs or configuration, ask the user before retrying, and verify the returned result Element after a successful retry.
+The final output is the current Video Edit's main Content. Composition is synchronous and does not use `wait_canvas_generation`. Do not call `video_understanding` after composition; query Canvas metadata only. If composition fails, preserve the failed Content and active/main pointers, repair the inputs or configuration, ask the user before retrying, and verify the returned result Element after a successful retry.
 
 ## Canvas tool mapping for migrated video-production scenarios
 
@@ -481,73 +453,4 @@ Only Seedance-series video models support provider-managed asset URIs such as `a
 
 ## Layout strategies
 
-Use `layout_canvas_elements` to arrange the production chain. It changes layout only; never touches Content or Connections.
-
-| Parameter | Required | Description |
-|---|---|---|
-| `project_path` | Yes | Project path |
-| `items` | Yes | Each item: `item_ref`, `element_id`, `layout` required |
-
-| Strategy | Use | Notes |
-|---|---|---|
-| `row_incremental` | Default for design scenes | Omit `position` |
-| `dependency_flow` | Storyboards, first frames, shot videos — any clear dependency chain | Omit `position` |
-| `explicit_position` | Only when the user gives exact coordinates | Pass `position.x`, `position.y` |
-
-```python
-tool.call("layout_canvas_elements", {
-    "project_path": "Demo",
-    "items": [
-        {"item_ref": "layout-storyboard", "element_id": "element-740000000000000005", "layout": {"strategy": "dependency_flow"}},
-        {"item_ref": "layout-shot-1", "element_id": "element-740000000000000010", "layout": {"strategy": "dependency_flow"}},
-    ],
-})
-```
-
-Use `explicit_position` only when the user gives coordinates; otherwise omit `position`. Frame children use coordinates local to their direct Frame. Do not regenerate Content to change layout, do not move nodes to add Content, and do not infer Connections from visual distance.
-
-## manage_canvas_connections
-
-Add, remove, or replace an explicit Connection.
-
-| Parameter | Required | Description |
-|---|---|---|
-| `project_path` | Yes | Project path |
-| `items` | Yes | Add: `source_element_id` + `target_element_id`. Remove: `remove_connection_ids`. Replace: new endpoints + `replace_existing_connections=true` + exact old IDs |
-
-```python
-tool.call("manage_canvas_connections", {
-    "project_path": "Demo",
-    "items": [{"item_ref": "storyboard-to-frame",
-               "source_element_id": "element-740000000000000005",
-               "target_element_id": "element-740000000000000006"}],
-})
-```
-
-Query and obtain the exact Connection ID before removing or replacing; never guess it from names, positions, or endpoints. Remove or replace only with explicit user intent.
-
-## Final composition through `add_canvas_elements`
-
-The final MP4 is a normal generated Video Element. The model owns the Element declaration, Connection, and layout; the application only executes FFmpeg and writes the result into the pending Content.
-
-```python
-tool.call("add_canvas_elements", {
-    "project_path": "Demo",
-    "items": [{
-        "item_ref": "final-video",
-        "element_type": "video",
-        "name": "Product launch final cut",
-        "layout": {"strategy": "dependency_flow"},
-        "connections": [{"source_element_id": "element-740000000000000020"}],
-        "content": {
-            "source": "generated",
-            "content_type": "video",
-            "task": "compose",
-            "input_mode": "video_edit",
-            "videoEditElementId": "element-740000000000000020",
-        },
-    }],
-})
-```
-
-Composition is synchronous and does not use `wait_canvas_generation`. If `audioSequence` is empty, preserve source-video audio when available. Do not call `video_understanding` after composition; query Canvas metadata only. On failure, keep the failed Content for diagnosis and preserve active/main pointers; fix inputs or configuration, ask the user before retrying, and submit a new final Video Element through `add_canvas_elements`.
+Production chains use `dependency_flow`; basic design scenes use `row_incremental`; `explicit_position` only when the user gives coordinates. See the `layout_canvas_elements` tool reference in the parent SKILL.md for parameters. Layout never touches Content or Connections, and never infers Connections from visual distance.
