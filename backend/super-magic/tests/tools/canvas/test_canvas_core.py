@@ -588,6 +588,109 @@ async def test_imported_asset_rejects_mismatched_extension(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_video_edit_creation_validates_media_types_and_explicit_connections(tmp_path) -> None:
+    """创建 Video Edit 时必须由调用方显式连接全部类型正确的媒体输入。"""
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+    media = await application.add_elements(
+        "mock-project",
+        [
+            {"item_ref": "video", "element_type": "video"},
+            {"item_ref": "audio", "element_type": "audio"},
+        ],
+    )
+    video_id, audio_id = [item["element_id"] for item in media["items"]]
+
+    created = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "edit",
+            "element_type": "video-edit",
+            "connections": [
+                {"source_element_id": video_id},
+                {"source_element_id": audio_id},
+            ],
+            "content": {
+                "source": "user",
+                "content_type": "video-edit",
+                "videoSequence": [video_id],
+                "audioSequence": [audio_id],
+            },
+        }],
+    )
+
+    edit_id = created["items"][0]["element_id"]
+    project = await repository.read("mock-project")
+    incoming = {
+        connection.source_element_id
+        for connection in project.canvas.connections
+        if connection.target_element_id == edit_id
+    }
+    assert incoming == {video_id, audio_id}
+
+
+@pytest.mark.asyncio
+async def test_video_edit_creation_rolls_back_when_input_connection_is_missing(tmp_path) -> None:
+    """Video Edit 缺少序列对应的显式 Connection 时必须整体回滚。"""
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+    media = await application.add_elements(
+        "mock-project",
+        [{"item_ref": "video", "element_type": "video"}],
+    )
+    video_id = media["items"][0]["element_id"]
+
+    with pytest.raises(CanvasDomainError) as error:
+        await application.add_elements(
+            "mock-project",
+            [{
+                "item_ref": "edit",
+                "element_type": "video-edit",
+                "content": {
+                    "source": "user",
+                    "content_type": "video-edit",
+                    "videoSequence": [video_id],
+                },
+            }],
+        )
+
+    assert error.value.code == "VIDEO_EDIT_CONNECTION_MISSING"
+    assert (await application.overview("mock-project", 1, 50))["total_elements"] == 1
+
+
+@pytest.mark.asyncio
+async def test_video_edit_creation_rejects_wrong_sequence_element_type(tmp_path) -> None:
+    """videoSequence 引用非 Video Element 时必须在创建事务内拒绝。"""
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+    media = await application.add_elements(
+        "mock-project",
+        [{"item_ref": "audio", "element_type": "audio"}],
+    )
+    audio_id = media["items"][0]["element_id"]
+
+    with pytest.raises(CanvasDomainError) as error:
+        await application.add_elements(
+            "mock-project",
+            [{
+                "item_ref": "edit",
+                "element_type": "video-edit",
+                "connections": [{"source_element_id": audio_id}],
+                "content": {
+                    "source": "user",
+                    "content_type": "video-edit",
+                    "videoSequence": [audio_id],
+                },
+            }],
+        )
+
+    assert error.value.code == "VIDEO_EDIT_INPUT_TYPE_MISMATCH"
+
+
+@pytest.mark.asyncio
 async def test_generated_image_persists_project_uri_dimensions_and_sidecar_request(tmp_path) -> None:
     """生成图片写入项目 URI 和尺寸，主文件不暴露生成请求。"""
     repository = CanvasRepository(tmp_path)

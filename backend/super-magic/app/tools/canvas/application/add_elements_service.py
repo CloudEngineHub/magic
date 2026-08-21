@@ -17,9 +17,10 @@ from app.tools.canvas.application.content_preparation_service import ContentPrep
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import AddElementResultItem, AddElementsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
-from app.tools.canvas.domain.services.element_reference_resolver import ElementReferenceResolver
+from app.tools.canvas.domain.services import ElementReferenceResolver, VideoEditContentValidator
 from app.tools.canvas.generation import GenerationCapabilityRegistry
 from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
 from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
@@ -60,6 +61,7 @@ class AddElementsService:
             created: dict[str, str] = {}
             results: list[AddElementResultItem] = []
             layout_requests: list[tuple[CanvasElement, LayoutCommand | None]] = []
+            video_edit_contents: list[tuple[str, CanvasElement, VideoEditContentFields]] = []
             for item in item_list:
                 item_ref = item.item_ref
                 current_item_ref = item_ref
@@ -77,6 +79,8 @@ class AddElementsService:
                     properties=ElementProperties(name=item.name),
                 )
                 content = item.content
+                if element.element_type == "video-edit" and content is None:
+                    raise CanvasDomainError("VIDEO_EDIT_CONTENT_REQUIRED", "Video Edit Element requires Content.")
                 if element.element_type in {"frame", "group"}:
                     if content is not None:
                         raise CanvasDomainError("FRAME_CONTENT_MANAGED_INTERNAL", "Frame and Group Content is managed internally.")
@@ -100,7 +104,10 @@ class AddElementsService:
                     prepared = await self.content_preparation.prepare_imported(content, project_path)
                     prepared_contents.append(prepared)
                     content = prepared.command
-                    element.contents.append(self.content_preparation.build(content, element.element_type))
+                    built_content = self.content_preparation.build(content, element.element_type)
+                    element.contents.append(built_content)
+                    if isinstance(built_content.fields, VideoEditContentFields):
+                        video_edit_contents.append((item.item_ref, element, built_content.fields))
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
                     if content.is_generated:
@@ -158,6 +165,13 @@ class AddElementsService:
                     if not source_id or not target_id:
                         raise CanvasDomainError("INVALID_CONNECTION", "Connection reference could not be resolved.")
                     CanvasApplicationOperations.add_connection(self.connection_strategies, project, source_id, target_id)
+            for item_ref, element, video_edit_fields in video_edit_contents:
+                current_item_ref = item_ref
+                VideoEditContentValidator.validate(
+                    project,
+                    element.element_id,
+                    video_edit_fields,
+                )
             for index, (element, layout) in enumerate(layout_requests):
                 current_item_ref = item_list[index].item_ref
                 request = layout or LayoutCommand(strategy="row_incremental")

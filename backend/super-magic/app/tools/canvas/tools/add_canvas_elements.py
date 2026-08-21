@@ -257,8 +257,13 @@ Workspace path of imported media. When the file is outside the current Canvas pr
     inner_radius_ratio: float | None = Field(None, gt=0, le=1, alias="innerRadiusRatio")
     generation_config: StoryboardGenerationConfigInput | None = Field(None, alias="generationConfig")
     shots: list[StoryboardShotInput] | None = None
-    video_sequence: list[str] | None = Field(None, alias="videoSequence")
-    audio_sequence: list[str] | None = Field(None, alias="audioSequence")
+    video_sequence: list[str] | None = Field(
+        None,
+        min_length=1,
+        max_length=VideoEditContentFields.MAX_VIDEO_SEQUENCE_LENGTH,
+        alias="videoSequence",
+    )
+    audio_sequence: list[str] | None = Field(None, max_length=1, alias="audioSequence")
     output: VideoEditOutputInput | None = None
     model_id: str | None = None
     estimate_id: str | None = None
@@ -291,6 +296,15 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     @model_validator(mode="after")
     def validate_content_contract(self) -> "ContentInput":
         """按来源和 Content 类型拒绝不确定字段组合。"""
+        if self.content_type == "video-edit":
+            if self.source != "user":
+                raise ValueError("video-edit Content requires source=user")
+            if not self.video_sequence:
+                raise ValueError("video-edit Content requires a non-empty videoSequence")
+            self._validate_unique_sequence("videoSequence", self.video_sequence)
+            self._validate_unique_sequence("audioSequence", self.audio_sequence or [])
+        elif self.video_sequence is not None or self.audio_sequence is not None or self.output is not None:
+            raise ValueError("videoSequence, audioSequence, and output are only allowed for video-edit Content")
         if self.source == "generated":
             if self.content_type not in {"image", "video"}:
                 raise ValueError("source=generated currently supports content_type=image or video")
@@ -315,6 +329,14 @@ Reference image paths inside the current Canvas project. Use paths relative to t
         if self.task == "edit" and self.content_type != "video":
             raise ValueError("task=edit is only allowed for generated video Content")
         return self
+
+    @staticmethod
+    def _validate_unique_sequence(field_name: str, values: list[str]) -> None:
+        """拒绝 Video Edit 序列中的空白或重复 Element ID。"""
+        if any(not value.strip() for value in values):
+            raise ValueError(f"{field_name} IDs must not be empty")
+        if len(values) != len(set(values)):
+            raise ValueError(f"{field_name} IDs must be unique")
 
     def to_command(self, content_id: str | None = None) -> ContentCommand:
         """转换为应用层 Content 命令。"""
@@ -369,7 +391,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             return VideoEditContentFields(
                 video_sequence=list(self.video_sequence or []),
                 audio_sequence=list(self.audio_sequence or []),
-                output=self._model_object(self.output),
+                output=self._model_object(self.output or VideoEditOutputInput()),
             )
         return ContentFieldsFactory.empty(self.content_type)
 
@@ -430,6 +452,8 @@ The Canvas Agent may create only storyboard, video-edit, image, video, and audio
     @model_validator(mode="after")
     def validate_content_type(self) -> "ElementInput":
         """保证 Element 与 Content 类型完全一致。"""
+        if self.element_type == "video-edit" and self.content is None:
+            raise ValueError("video-edit Element requires Content")
         if self.content is not None and self.content.content_type != self.element_type:
             raise ValueError("content.content_type must match element_type")
         return self

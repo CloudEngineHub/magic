@@ -18,7 +18,7 @@ from app.tools.canvas.domain.content_fields.text import TextContentFields
 from app.tools.canvas.domain.content_fields.triangle import TriangleContentFields
 from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFields
-from app.tools.canvas.domain.errors import CanvasProtocolError
+from app.tools.canvas.domain.errors import CanvasDomainError, CanvasProtocolError
 from app.tools.canvas.domain.types import JsonObject, JsonValue
 
 
@@ -90,11 +90,14 @@ class ContentFieldsFactory:
                 shots=cls._object_list(data, "shots"),
             )
         if element_type == "video-edit":
-            return VideoEditContentFields(
-                video_sequence=cls._string_list(data, "videoSequence"),
-                audio_sequence=cls._string_list(data, "audioSequence"),
-                output=cls._optional_object(data, "output"),
-            )
+            try:
+                return VideoEditContentFields(
+                    video_sequence=cls._string_list(data, "videoSequence"),
+                    audio_sequence=cls._string_list(data, "audioSequence"),
+                    output=cls._optional_object(data, "output"),
+                )
+            except CanvasDomainError as error:
+                raise CanvasProtocolError(error.code, error.message) from error
         raise CanvasProtocolError("INVALID_CONTENT", f"Unsupported Content type: {element_type}.")
 
     @staticmethod

@@ -1,10 +1,61 @@
-# Video production
+# Professional video production
 
-Load this reference for multi-shot video production — storyboards, first frames, shot videos, Video Edit, and the final MP4. Use it whenever the user wants a staged, resumable production workflow.
+Load this reference only for professional video production. It covers both the default direct professional mode and the optional detailed staged mode.
+
+## When to use
+
+Use this reference only when the user explicitly asks for professional video production or names a professional production stage such as a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition.
+
+Do not use this reference for a basic Canvas video request such as “generate a video” or “generate a promotional video” when the user has not requested professional production.
 
 ## Production modes
 
-This reference covers the detailed (staged) workflow. If the user explicitly asks for a simple, direct, one-shot generation, follow `references/video-production-ordinary.md` instead. When the user does not name a mode, use this detailed workflow by default.
+### Direct professional mode
+
+This is the default after the user asks for professional video production but does not request a detailed or staged workflow.
+
+- Generate one final video directly.
+- Preserve the direct business predecessor relations from the submitted source Elements.
+- Do not create a storyboard, initialization images, first frames, a `video-edit`, or a separate final composition.
+- The generated video Element is the final result for this mode.
+
+Use the exact parameter confirmation, estimate, generation, wait, and candidate-selection gates described below.
+
+### Detailed professional mode
+
+Use this mode only when the user explicitly asks for detailed, fine-grained, staged, or multi-shot production, or names workflow stages such as a storyboard, first frames, shot videos, staged approvals, BGM replacement, or final composition.
+
+## Direct professional mode workflow
+
+1. Understand the submitted assets and identify the intended subject, scene, motion, style, duration, aspect ratio, resolution, output model, and audio expectations.
+2. Present one complete creative target and the final video prompt before generating anything. Ask one concise confirmation question for unresolved material choices.
+3. After confirmation, call `estimate_canvas_content_points` with the exact generation parameters and wait for explicit confirmation of the estimate.
+4. After the estimate is confirmed, call `add_canvas_elements` once with one `video` Element. Carry the returned `estimate_id` unchanged in the generated Content.
+5. When a submitted Canvas Element is a direct business predecessor, add its exact Element ID in the new video's `connections`. Reference paths alone never create Connections.
+6. Call `wait_canvas_generation` immediately when the generated Content returns a task ID.
+7. Query the generated Element, present the candidate, and select its main Content only after the user confirms it.
+
+Do not create a storyboard, initialization image, first frame, `video-edit`, or final composition in this mode. If the user later requests staged production, continue from the existing result and switch to detailed professional mode without silently mixing the two workflows.
+
+### Direct professional mode references
+
+For a generated video Content, use `prompt`, `model_id`, `estimate_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark` as supported by the current `<media_model_info>`.
+
+Bind reference assets in the prompt by array order:
+
+- `reference_image_paths[0]` → `[image1]`, `reference_image_paths[1]` → `[image2]`
+- `reference_video_paths[0]` → `[video1]`, `reference_video_paths[1]` → `[video2]`
+- `reference_audio_paths[0]` → `[audio1]`, `reference_audio_paths[1]` → `[audio2]`
+
+Place each token next to the subject, action, or source media it controls. Do not put file paths in the prompt.
+
+Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit. For prompt-only generation, omit reference arrays. For image, video, or audio references, populate the corresponding arrays and bind every reference in the prompt.
+
+Keep one clear scene and one main action unless the user explicitly asks for a sequence. Cover the subject, action, scene, camera, lighting, pacing, and any requested sound, narration, or dialogue. Preserve requested narration or dialogue verbatim.
+
+## Shared video generation estimate gate
+
+All professional video generation is billable. Estimate the exact request first, show the full parameters and per-item points, and wait for explicit confirmation. Pass the returned `estimate_id` unchanged to the real generation call. If the parameters change, estimate again before generating.
 
 ## Core rules
 
@@ -21,7 +72,9 @@ This reference covers the detailed (staged) workflow. If the user explicitly ask
 
 Use the `ask_user` tool as a direct tool call for every applicable confirmation gate. Prefer `confirm` for yes-or-revise decisions, `select` for mutually exclusive directions, and `multi_select` only for independent choices. Put long-form content (directions, shot plans, prompt collections) in the assistant message as readable Markdown, then ask one concise question that does not repeat the displayed content.
 
-## Task plan and recovery
+## Detailed mode task plan and recovery
+
+This section applies only to detailed professional mode.
 
 Store each resumable task as Markdown under `.magic/video-production-plans/`.
 
@@ -35,7 +88,7 @@ At the start of a task:
 
 Keep the plan concise and update it after each confirmation, generation result, failure, revision, or changed next step.
 
-## Production stages
+## Detailed production stages
 
 ### 1. Set up the Canvas
 
@@ -94,7 +147,7 @@ Do not generate a first frame immediately after saving. First confirm the openin
 
 ### 7. Generate and confirm shot videos
 
-Generate the first shot video as a trial; confirm motion, subject consistency, camera behavior, and pacing before generating the rest. Then generate the remaining shots in supported batches. Preserve successful videos and revise only affected shots. Each billed shot video still goes through the estimate gate in `references/video-production-ordinary.md`.
+Generate the first shot video as a trial; confirm motion, subject consistency, camera behavior, and pacing before generating the rest. Then generate the remaining shots in supported batches. Preserve successful videos and revise only affected shots. Each billed shot video still goes through the shared estimate gate in this reference.
 
 ### 8. Configure the edit and optional audio
 
@@ -108,6 +161,11 @@ tool.call("add_canvas_elements", {
         "element_type": "video-edit",
         "name": "Product launch final edit",
         "layout": {"strategy": "dependency_flow"},
+        "connections": [
+            {"source_element_id": "element-740000000000000010"},
+            {"source_element_id": "element-740000000000000011"},
+            {"source_element_id": "element-740000000000000014"},
+        ],
         "content": {
             "source": "user",
             "content_type": "video-edit",
@@ -129,11 +187,39 @@ Call `compose_canvas_final_video` with the confirmed Video Edit Element, then ve
 
 A Connection declares only a direct business predecessor. Reference paths are generation inputs; they do not imply Connections.
 
+- Direct professional video: connect from every submitted Canvas Element that materially contributes to the final video. Do not infer a Connection from a reference path whose owning Element was not submitted as a business predecessor.
 - Initialization image: connect from every imported or confirmed Element materially combined into the result.
 - Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
 - First frame: connect from the storyboard Element.
 - Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
-- Video edit and final video: their `videoSequence` / `audioSequence` already define upstream; no extra Connections.
+- Video edit: create direct incoming Connections from every Element listed in `videoSequence` and `audioSequence` in the same `add_canvas_elements` call. Use `add_canvas_connections` only for later standalone relationship maintenance. Composition validates these Video Edit input Connections before producing the result.
+
+For a new direct professional video, create the initial relations in the same `add_canvas_elements` call:
+
+```python
+tool.call("add_canvas_elements", {
+    "project_path": "Canvas/Product Launch",
+    "items": [{
+        "item_ref": "professional-direct-video",
+        "element_type": "video",
+        "name": "Product launch video",
+        "layout": {"strategy": "dependency_flow"},
+        "connections": [
+            {"source_element_id": "element-740000000000000001"},
+            {"source_element_id": "element-740000000000000002"},
+        ],
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "prompt": "Show the confirmed product [image1] in a premium studio scene with a slow push-in, stable product identity, and no text or watermark.",
+            "estimate_id": "confirmed-estimate-id",
+            "reference_image_paths": ["Canvas/Product Launch/images/product.png"],
+        },
+    }],
+})
+```
+
+Use `dependency_flow` for professional production relations. Basic Canvas image and video generation outside this reference remains `row_incremental` and does not create these production Connections.
 
 ## Failure and revision
 
@@ -144,6 +230,13 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 - When changing shot count or order, update the storyboard first, preserve unaffected outputs, rebuild the ordered sequence, confirm the edit, and compose again.
 - When adding, replacing, or removing BGM, import or reuse the Audio Element, update `audio_sequence`, confirm the edit, and compose again.
 - If a video task returns `processing`, keep its IDs and do not submit a duplicate; retry a failed task with its existing IDs.
+- At most 2 retries per Content; never loop.
+- A new direction appends a candidate with `add_canvas_contents`; it does not create a duplicate logical Element.
+- Select main Content only after the user confirms the completed candidate.
+
+## Provider-managed assets
+
+Only Seedance-series video models support provider-managed asset URIs such as `asset://virtual-human-asset-id`. Keep a supported provider asset URI in the appropriate reference array, bind it in the prompt, and do not read it as a workspace file, import it into the Canvas, or create a synthetic Element for it. For other video models, use a workspace-relative media path.
 
 ## Layout strategies
 

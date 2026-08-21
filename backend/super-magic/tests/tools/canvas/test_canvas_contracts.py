@@ -241,6 +241,52 @@ def test_video_edit_content_uses_element_id_sequence() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"videoSequence": []}, "at least 1 item"),
+        ({"videoSequence": ["video-1", "video-1"]}, "videoSequence IDs must be unique"),
+        ({"videoSequence": ["video-1"], "audioSequence": ["audio-1", "audio-2"]}, "at most 1 item"),
+        ({"videoSequence": [" "]}, "videoSequence IDs must not be empty"),
+    ],
+)
+def test_video_edit_content_rejects_invalid_sequences(values, message) -> None:
+    """Video Edit 输入层必须拒绝空序列、重复 ID、空白 ID 和多音频。"""
+    with pytest.raises(ValidationError, match=message):
+        ContentInput(source="user", content_type="video-edit", **values)
+
+
+def test_non_video_edit_content_rejects_video_edit_fields() -> None:
+    """非 Video Edit Content 不能静默接收视频剪辑字段。"""
+    with pytest.raises(ValidationError, match="only allowed for video-edit Content"):
+        ContentInput(
+            source="user",
+            content_type="storyboard",
+            videoSequence=["video-1"],
+        )
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"format": "MP4"},
+        {"format": "mov"},
+        {"format": None},
+        {"codec": "h264"},
+        {"resolution": 1080},
+    ],
+)
+def test_video_edit_content_rejects_invalid_output(output) -> None:
+    """Video Edit 输出配置必须保持旧工具的 MP4 和字段类型约束。"""
+    with pytest.raises(ValidationError):
+        ContentInput(
+            source="user",
+            content_type="video-edit",
+            videoSequence=["video-1"],
+            output=output,
+        )
+
+
 def test_wait_schema_uses_tasks_with_generation_task_id() -> None:
     """等待工具保持技术方案约定的 tasks 结构。"""
     schema = WaitCanvasGeneration.Params.model_json_schema()

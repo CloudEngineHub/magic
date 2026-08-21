@@ -21,8 +21,10 @@ from app.tools.canvas.application.results import (
     SelectMainContentsResult,
 )
 from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
+from app.tools.canvas.domain.services import VideoEditContentValidator
 from app.tools.canvas.generation import GenerationCapabilityRegistry
 from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.repository import CanvasUnitOfWork
@@ -86,6 +88,12 @@ class ContentService:
                 if element.get_content(content.content_id) is not None:
                     raise CanvasDomainError("CONTENT_ALREADY_EXISTS", f"Content {content.content_id} already exists.")
                 element.contents.append(content)
+                if isinstance(content.fields, VideoEditContentFields):
+                    VideoEditContentValidator.validate(
+                        project,
+                        element.element_id,
+                        content.fields,
+                    )
                 if len(element.contents) == 1:
                     element.active_content_id = content.content_id
                     element.main_content_id = content.content_id
