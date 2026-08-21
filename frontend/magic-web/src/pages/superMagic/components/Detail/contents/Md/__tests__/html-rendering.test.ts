@@ -19,7 +19,7 @@ describe("Markdown raw HTML rendering", () => {
 	it("parses both styled div blocks as HTML content rather than code", () => {
 		const markdown = `<div style="border: 2px solid blue; padding: 20px; background-color: lightgray; margin: 10px 0;">
     <h3>样式化的DIV元素</h3>
-    <p>这是一个具有自定义样式的div元素，展示了如何在Markdown中使用内联样式。</p>
+    <p>这是一个具有自定义样式的div元素，带有 <span style="background: yellow;">高亮 span</span>。</p>
 
 </div>
 
@@ -47,6 +47,7 @@ describe("Markdown raw HTML rendering", () => {
 		expect(html).toContain('style="border: 2px solid blue')
 		expect(html).toContain('style="text-align: center')
 		expect(html).toContain("样式化的DIV元素")
+		expect(html).toContain('style="background: yellow')
 		expect(html).toContain("这是另一个带有样式的div")
 	})
 

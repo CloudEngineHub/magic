@@ -87,12 +87,63 @@ describe("Markdown Utils", () => {
 			)
 		})
 
+		it("blocks oversized and negatively offset presentation values", () => {
+			const markdown =
+				'<div style="margin-top:-100vh!important;padding:100vh 100vw;background-color:white">login</div>'
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				'<pre><code>&lt;div style="margin-top:-100vh!important;padding:100vh 100vw;background-color:white"&gt;login&lt;/div&gt;</code></pre>',
+			)
+
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<div style="margin-top:-20px;padding:9999px;font-size:9999px">login</div>',
+				),
+			).toContain("<pre><code>")
+		})
+
 		it("accepts safe shorthand styles consistently across browsers", () => {
 			expect(
 				escapeDangerousInvisibleHtmlTags(
 					'<div style="border: 2px solid blue; padding: 20px; background-color: lightgray; margin: 10px 0;">text</div>',
 				),
 			).toContain('<div style="border: 2px solid blue')
+		})
+
+		it("accepts safe style property families without allowing layout properties", () => {
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<div style="border-left-width: 2px; border-top-right-radius: 4px; padding-inline: 8px">text</div>',
+				),
+			).toContain("<pre><code>")
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<div style="border-left-width: 2px; border-top-right-radius: 4px; padding-left: 8px">text</div>',
+				),
+			).not.toContain("<pre><code>")
+		})
+
+		it("only allows color values in the background shorthand", () => {
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<span style="background: rgb(255 255 0 / 50%)">text</span>',
+				),
+			).toBe('<span style="background: rgb(255 255 0 / 50%)">text</span>')
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<span style="background: linear-gradient(red, blue)">text</span>',
+				),
+			).toBe(
+				'<code>&lt;span style="background: linear-gradient(red, blue)"&gt;text&lt;/span&gt;</code>',
+			)
+		})
+
+		it("preserves a safe styled span nested inside a styled div", () => {
+			const markdown = `<div style="border: 1px solid #ccc; padding: 10px;">
+  <h3>div 容器内的 H3 标题</h3>
+  <p>div 容器内的段落文本，带 <span style="background: yellow;">高亮 span</span>。</p>
+</div>`
+
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
 		})
 
 		it("preserves a styled multiline div across blank lines", () => {

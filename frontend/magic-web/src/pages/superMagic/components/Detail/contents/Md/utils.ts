@@ -167,57 +167,24 @@ const urlAttributeNames = new Set([
 ])
 const multiUrlAttributeNames = new Set(["srcset", "ping"])
 const safeUrlProtocols = new Set(["http", "https", "mailto", "tel"])
-const safeInlineStyleProperties = new Set([
-	"background-color",
-	"border",
-	"border-bottom",
-	"border-bottom-color",
-	"border-bottom-left-radius",
-	"border-bottom-right-radius",
-	"border-bottom-style",
-	"border-bottom-width",
-	"border-color",
-	"border-left",
-	"border-left-color",
-	"border-left-style",
-	"border-left-width",
-	"border-radius",
-	"border-right",
-	"border-right-color",
-	"border-right-style",
-	"border-right-width",
-	"border-style",
-	"border-top",
-	"border-top-color",
-	"border-top-left-radius",
-	"border-top-right-radius",
-	"border-top-style",
-	"border-top-width",
-	"border-width",
-	"color",
-	"font-family",
-	"font-size",
-	"font-style",
-	"font-weight",
-	"letter-spacing",
-	"line-height",
-	"margin",
-	"margin-bottom",
-	"margin-left",
-	"margin-right",
-	"margin-top",
-	"padding",
-	"padding-bottom",
-	"padding-left",
-	"padding-right",
-	"padding-top",
-	"text-align",
-	"text-decoration",
-	"text-indent",
-	"text-transform",
-	"vertical-align",
-	"white-space",
-])
+const safeInlineStylePropertyPatterns = [
+	/^background(?:-color)?$/,
+	/^border(?:-(?:top|right|bottom|left))?(?:-(?:color|style|width))?$/,
+	/^border-radius$/,
+	/^border-(?:top|right|bottom|left)-(?:left|right)-radius$/,
+	/^(?:margin|padding)(?:-(?:top|right|bottom|left))?$/,
+	/^font-(?:family|size|style|weight)$/,
+	/^text-(?:align|decoration|indent|transform)$/,
+	/^(?:color|letter-spacing|line-height|vertical-align|white-space)$/,
+]
+const safeCssColorPattern =
+	/^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\([\d\s.,%+\-/]+\))$/i
+const spacingPropertyPattern = /^(?:margin|padding)(?:-(?:top|right|bottom|left))?$/
+const borderWidthPropertyPattern = /^border(?:-(?:top|right|bottom|left))?(?:-width)?$/
+const borderRadiusPropertyPattern =
+	/^border(?:-radius|-(?:top|right|bottom|left)-(?:left|right)-radius)$/
+const unsafeCssValuePattern =
+	/[\\{}]|\/\*|\*\/|!\s*important|url\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding|(?:calc|min|max|clamp|var|env)\s*\(/i
 const MAX_PROBE_CANDIDATES = 2048
 const MAX_PROBE_MARKDOWN_LENGTH = 4 * 1024 * 1024
 const MAX_RAW_HTML_TOKEN_COUNT = 4096
@@ -270,6 +237,110 @@ function isSafeUrlAttribute(attributeName: string, value: string): boolean {
 	)
 }
 
+function isBoundedCssLength(
+	value: string,
+	options: { maxPx: number; maxRelative: number; allowNegative?: boolean },
+): boolean {
+	if (/^0(?:\.0+)?$/.test(value)) return true
+
+	const match = value.match(/^(-?(?:\d+(?:\.\d+)?|\.\d+))(px|rem|em)$/i)
+	if (!match) return false
+
+	const amount = Number(match[1])
+	if (!Number.isFinite(amount) || (!options.allowNegative && amount < 0)) return false
+
+	const absoluteAmount = Math.abs(amount)
+	return match[2].toLowerCase() === "px"
+		? absoluteAmount <= options.maxPx
+		: absoluteAmount <= options.maxRelative
+}
+
+function isSafeSpacingValue(property: string, value: string): boolean {
+	const values = value.split(/\s+/)
+	if (values.length === 0 || values.length > 4) return false
+
+	return values.every(
+		(item) =>
+			(property.startsWith("margin") && item.toLowerCase() === "auto") ||
+			isBoundedCssLength(item, { maxPx: 128, maxRelative: 8 }),
+	)
+}
+
+function isSafeBorderWidthValue(value: string): boolean {
+	const values = value.split(/\s+/)
+	if (values.length === 0 || values.length > 4) return false
+
+	return values.every(
+		(item) =>
+			/^(?:thin|medium|thick)$/i.test(item) ||
+			isBoundedCssLength(item, { maxPx: 16, maxRelative: 1 }),
+	)
+}
+
+function hasUnsafeBorderWidth(value: string): boolean {
+	const dimensions = value.match(/-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|[a-z]+)/gi) ?? []
+	return dimensions.some(
+		(dimension) => !isBoundedCssLength(dimension, { maxPx: 16, maxRelative: 1 }),
+	)
+}
+
+function isSafeBorderRadiusValue(value: string): boolean {
+	const values = value.split(/[\s/]+/).filter(Boolean)
+	if (values.length === 0 || values.length > 8) return false
+
+	return values.every((item) => {
+		const percentage = item.match(/^(\d+(?:\.\d+)?|\.\d+)%$/)
+		if (percentage) return Number(percentage[1]) <= 100
+		return isBoundedCssLength(item, { maxPx: 128, maxRelative: 8 })
+	})
+}
+
+function isSafeInlineStyleValue(property: string, value: string): boolean {
+	if (unsafeCssValuePattern.test(value)) return false
+
+	if (
+		property === "background" ||
+		property === "background-color" ||
+		property === "color" ||
+		property.endsWith("-color")
+	) {
+		return safeCssColorPattern.test(value)
+	}
+	if (spacingPropertyPattern.test(property)) return isSafeSpacingValue(property, value)
+	if (borderRadiusPropertyPattern.test(property)) return isSafeBorderRadiusValue(value)
+	if (property.endsWith("-width")) return isSafeBorderWidthValue(value)
+	if (borderWidthPropertyPattern.test(property) && hasUnsafeBorderWidth(value)) return false
+	if (property === "font-size") {
+		return (
+			/^(?:xx-small|x-small|small|medium|large|x-large|xx-large)$/i.test(value) ||
+			isBoundedCssLength(value, { maxPx: 96, maxRelative: 6 })
+		)
+	}
+	if (property === "line-height") {
+		if (/^normal$/i.test(value)) return true
+		if (/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) {
+			const amount = Number(value)
+			return amount >= 0.5 && amount <= 3
+		}
+		return isBoundedCssLength(value, { maxPx: 128, maxRelative: 8 })
+	}
+	if (property === "text-indent") {
+		return isBoundedCssLength(value, { maxPx: 128, maxRelative: 8 })
+	}
+	if (property === "letter-spacing") {
+		return (
+			/^normal$/i.test(value) ||
+			isBoundedCssLength(value, { maxPx: 16, maxRelative: 1, allowNegative: true })
+		)
+	}
+
+	// Remaining allowed properties are keyword/string based. Disallow functions
+	// and viewport/container units so they cannot indirectly create unbounded UI.
+	return !/[a-z-]+\s*\(|(?:vh|vw|vmin|vmax|svh|svw|lvh|lvw|dvh|dvw|cqh|cqw|cqi|cqb)\b/i.test(
+		value,
+	)
+}
+
 export function isSafeInlineStyle(styleValue: string): boolean {
 	if (!styleValue.trim()) return true
 
@@ -309,14 +380,10 @@ export function isSafeInlineStyle(styleValue: string): boolean {
 
 		const property = declaration.slice(0, separator).trim().toLowerCase()
 		const value = declaration.slice(separator + 1).trim()
-		if (!safeInlineStyleProperties.has(property) || !value) return false
-		if (
-			/[\\{}]|\/\*|\*\/|url\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding/i.test(
-				value,
-			)
-		) {
+		if (!value || !safeInlineStylePropertyPatterns.some((pattern) => pattern.test(property))) {
 			return false
 		}
+		if (!isSafeInlineStyleValue(property, value)) return false
 	}
 
 	return declarations.some((declaration) => declaration.trim() !== "")
