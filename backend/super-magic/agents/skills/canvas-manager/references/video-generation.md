@@ -43,6 +43,8 @@ For a generated video Content, the supported generation fields are `prompt`, `mo
 
 The estimate is side-effect free. Build and freeze the exact final request first, including all reference binding tokens and prompt constraints, then show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message. After confirmation, reuse the exact same `item_ref` and request fields without rewriting the prompt. If the prompt, reference list, or any billable field changes, call the estimate again and request a new confirmation; never let `POINT_ESTIMATE_MISMATCH` become a second, avoidable confirmation round.
 
+For a retry of failed billable Content, keep the original generation request's `item_ref` unchanged. A retry is an operation on the existing Element and Content, not a new batch item. If a new estimate is required, use the new `estimate_id` with that same original `item_ref`; never rename it with a retry suffix.
+
 ```python
 from sdk.tool import tool
 

@@ -239,6 +239,13 @@ Read the new `content_id` and status. Show completed candidates to the user; nev
 
 Retry an existing generated Content that is currently `failed`.
 
+Retry rules:
+
+- Reuse the exact `item_ref` from the original generation request or the latest failed Content result. `item_ref` is a stable correlation label for the operation; it is not a retry attempt name. Never add suffixes such as `-retry`, `-new`, or a counter.
+- Reuse the exact `element_id` and `content_id` from the latest Canvas query or the failed Content result.
+- For billable video Content, `generation_override.estimate_id` must belong to the same original `item_ref`. If the tool returns `POINT_ESTIMATE_MISMATCH`, do not invent another `item_ref`; compare the estimate's `item_ref` with the retry request and correct the request.
+- To retry with unchanged generation parameters, omit `generation_override`. If any billable video field changes, estimate the complete changed request again with the same original `item_ref`, obtain confirmation, and pass the new `estimate_id` in `generation_override`.
+
 Parameters: `project_path` and `items` required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
 
 | Parameter | Required | Description |
@@ -249,10 +256,9 @@ Parameters: `project_path` and `items` required; only failed Content can be retr
 ```python
 result = tool.call("retry_canvas_content_generation", {
     "project_path": "Canvas/Product Launch",
-    "items": [{"item_ref": "shot-1-retry",
+    "items": [{"item_ref": "shot-1",
                "element_id": "element-740000000000000010",
-               "content_id": "element-740000000000000010-content-2",
-               "generation_override": {"prompt": "retry the confirmed product shot, natural motion, no text watermark"}}],
+               "content_id": "element-740000000000000010-content-2"}],
 })
 print(result.content)
 ```
