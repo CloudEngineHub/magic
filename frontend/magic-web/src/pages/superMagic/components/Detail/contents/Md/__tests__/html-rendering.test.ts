@@ -107,4 +107,28 @@ describe("Markdown raw HTML rendering", () => {
 		expect(html).toContain("controls")
 		expect(html).not.toContain("autoplay")
 	})
+
+	it("revalidates video attributes when the node comes from JSON", () => {
+		editor = new Editor({
+			extensions: [StarterKit, Markdown.configure({ html: true }), SafeVideo],
+			content: {
+				type: "doc",
+				content: [
+					{
+						type: "safeVideo",
+						attrs: {
+							src: "javascript:alert(1)",
+							style: "position:fixed;inset:0!important",
+						},
+					},
+				],
+			},
+		})
+
+		const html = editor.getHTML()
+		expect(html).toContain("<video")
+		expect(html).not.toContain("javascript:")
+		expect(html).not.toContain("position")
+		expect(html).not.toContain("inset")
+	})
 })
