@@ -52,6 +52,35 @@ describe("buildPublishParamsFromDraft", () => {
 		})
 	})
 
+	it("includes selected market categories when publishing to the skills library", () => {
+		expect(
+			buildPublishParamsFromDraft({
+				version: "2.1.0",
+				details: "Categorized release",
+				publishTo: "MARKET",
+				internalTarget: "PRIVATE",
+				specificMembers: [],
+				categoryIds: ["10001", "10002"],
+			}),
+		).toMatchObject({
+			publish_target_type: "MARKET",
+			category_ids: ["10001", "10002"],
+		})
+	})
+
+	it("does not include market categories for internal publishing", () => {
+		expect(
+			buildPublishParamsFromDraft({
+				version: "2.1.0",
+				details: "Internal release",
+				publishTo: "INTERNAL",
+				internalTarget: "PRIVATE",
+				specificMembers: [],
+				categoryIds: ["10001"],
+			}),
+		).not.toHaveProperty("category_ids")
+	})
+
 	it("drops hidden specific members for private publishing", () => {
 		expect(
 			buildPublishParamsFromDraft({
@@ -132,6 +161,26 @@ describe("buildPublishParamsFromDraft", () => {
 		expect(data.draft.publishTo).toBe("MARKET")
 	})
 
+	it("maps first-level market categories into the publish panel", () => {
+		const data = createSkillEditPublishPanelData({
+			skill: null,
+			versions: [],
+			currentPublisherName: "Alice",
+			marketCategories: [
+				{
+					id: "10001",
+					name: "办公协同",
+					logo: undefined,
+					sortOrder: 1,
+					skillCount: 3,
+				},
+			],
+			t: ((key: string) => key) as never,
+		})
+
+		expect(data.marketCategories).toEqual([{ id: "10001", name: "办公协同" }])
+	})
+
 	it("uses detail publish availability for internal skill targets", () => {
 		const data = createSkillEditPublishPanelData({
 			skill: {
@@ -195,6 +244,31 @@ describe("buildPublishParamsFromDraft", () => {
 				type: "department",
 			},
 		])
+	})
+
+	it("keeps market categories in publish history records", () => {
+		const data = createSkillEditPublishPanelData({
+			skill: null,
+			versions: [
+				{
+					id: "version-market",
+					version: "1.0.0",
+					publish_status: "PUBLISHED",
+					review_status: "APPROVED",
+					publish_target_type: "MARKET",
+					publish_target_value: null,
+					category_ids: ["10001", "10002"],
+					publisher: null,
+					published_at: "2026-03-22 10:00:00",
+					is_current_version: true,
+					version_description_i18n: null,
+				},
+			],
+			currentPublisherName: "Alice",
+			t: ((key: string) => key) as never,
+		})
+
+		expect(data.historyRecords[0]?.categoryIds).toEqual(["10001", "10002"])
 	})
 
 	it("maps invalidated market review status into publish history", () => {

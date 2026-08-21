@@ -439,6 +439,8 @@ export interface SkillVersionItem {
 	is_current_version: boolean
 	version_description_i18n: SkillI18nText | null
 	publish_target_value?: SkillPublishTargetValueResolved | null
+	/** Categories selected when this version was published to the skills library. */
+	category_ids?: string[]
 }
 
 export interface GetSkillVersionsResponse {
