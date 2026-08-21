@@ -287,6 +287,7 @@ async function handleSingleImageUpload(
 		onError,
 		onSuccess,
 		resolveImagesFolderParentId,
+		requireImagesFolderParentId,
 	} = options
 
 	// Calculate actual folder path
