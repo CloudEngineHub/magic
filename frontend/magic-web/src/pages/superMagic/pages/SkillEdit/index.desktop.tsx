@@ -15,7 +15,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { logger } from "@/utils/log"
 import { userStore } from "@/models/user"
 import { SupportLocales } from "@/constants/locale"
-import { skillsService, type SkillMarketCategoryView } from "@/services/skills/SkillsService"
+import { skillsService } from "@/services/skills/SkillsService"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
@@ -156,9 +156,6 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const [activeQuickActionPanel, setActiveQuickActionPanel] = useState<"publish" | null>(null)
 	const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
 	const [skillVersions, setSkillVersions] = useState<SkillVersionItem[]>([])
-	const [skillMarketCategories, setSkillMarketCategories] = useState<SkillMarketCategoryView[]>(
-		[],
-	)
 	const [isPublishPrepareLoading, setIsPublishPrepareLoading] = useState(false)
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
@@ -191,16 +188,6 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		}
 	})
 
-	const refreshSkillMarketCategories = useMemoizedFn(async () => {
-		try {
-			const categories = await skillsService.getSkillMarketCategories({ include_empty: true })
-			setSkillMarketCategories(categories)
-		} catch (error) {
-			console.error("Failed to fetch skill market categories:", error)
-			setSkillMarketCategories([])
-		}
-	})
-
 	const publishPanelActionRef = useRef({
 		store,
 		skillCode,
@@ -217,7 +204,6 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				skill: null,
 				versions: [],
 				currentPublisherName: "",
-				marketCategories: [],
 				t,
 			}),
 			onSubmit: async (draft) => {
@@ -279,18 +265,9 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				currentPublisherName,
 				canPublishPrivate: canCreateSkill,
 				canPublishTeam: canPublishSkillTeam,
-				marketCategories: skillMarketCategories,
 				t,
 			}),
-		[
-			store.skill,
-			skillVersions,
-			currentPublisherName,
-			canCreateSkill,
-			canPublishSkillTeam,
-			skillMarketCategories,
-			t,
-		],
+		[store.skill, skillVersions, currentPublisherName, canCreateSkill, canPublishSkillTeam, t],
 	)
 
 	useNamedPageTitle({
@@ -482,7 +459,6 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 
 	const openPublishPanel = useMemoizedFn(() => {
 		void refreshSkillVersions()
-		void refreshSkillMarketCategories()
 		setActiveQuickActionPanel("publish")
 		setActiveFileId(null)
 		setUserSelectDetail(undefined)

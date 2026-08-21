@@ -18,7 +18,6 @@ import type {
 	PublishReviewProgress,
 	PublishSpecificMember,
 } from "@/pages/superMagic/components/PublishPanel/types"
-import type { SkillMarketCategoryView } from "@/services/skills/SkillsService"
 import { createPublishPrefillDraft } from "@/pages/superMagic/components/PublishPanel/publishPrefill"
 import {
 	createDraftForAvailability,
@@ -37,7 +36,6 @@ export function createSkillEditPublishPanelData({
 	currentPublisherName,
 	canPublishPrivate = true,
 	canPublishTeam = true,
-	marketCategories = [],
 	t,
 }: {
 	skill: SkillEditSkillInfo | null
@@ -45,7 +43,6 @@ export function createSkillEditPublishPanelData({
 	currentPublisherName: string
 	canPublishPrivate?: boolean
 	canPublishTeam?: boolean
-	marketCategories?: SkillMarketCategoryView[]
 	t: TFunction<"crew/market">
 }): PublishPanelData {
 	const historyRecords = versions.map((item) => mapVersionToHistoryRecord(item, t))
@@ -73,10 +70,6 @@ export function createSkillEditPublishPanelData({
 		},
 		availablePublishTo: availability.availablePublishTo,
 		availableInternalTargets: availability.availableInternalTargets,
-		marketCategories: marketCategories.map((category) => ({
-			id: category.id,
-			name: category.name,
-		})),
 	}
 }
 
@@ -88,9 +81,6 @@ export function buildPublishParamsFromDraft(draft: PublishDraft): PublishSkillPa
 		version_description_i18n: localeTextToPublishDescriptionI18n(submissionDraft.details),
 		publish_target_type: mapPanelTargetToApi(submissionDraft),
 		publish_target_value: buildPublishTargetValue(submissionDraft),
-		...(submissionDraft.publishTo === "MARKET" && submissionDraft.categoryIds?.length
-			? { category_ids: submissionDraft.categoryIds }
-			: {}),
 	}
 }
 
@@ -188,7 +178,6 @@ function mapVersionToHistoryRecord(
 	const details = pickVersionDescription(item.version_description_i18n)
 	const publisherName = item.publisher?.name?.trim() || emptyLabel
 	const publishedAt = item.published_at?.trim() || emptyLabel
-	const categoryIds = item.category_ids ?? []
 
 	return {
 		id: item.id,
@@ -197,9 +186,6 @@ function mapVersionToHistoryRecord(
 		status: mapApiToRecordStatus(item.review_status, item.publish_status),
 		publishTo: mapApiTargetToPublishTo(item.publish_target_type),
 		internalTarget: mapApiTargetToInternalTarget(item.publish_target_type),
-		...(categoryIds.length
-			? { categoryId: categoryIds[0], categoryIds: [...categoryIds] }
-			: {}),
 		publisherName,
 		publishedAt,
 		specificMembers: mapPublishTargetValueToMembers(item.publish_target_value),
