@@ -53,6 +53,7 @@ from app.core.entity.message.server_message import (
 )
 from app.core.entity.project_archive import ProjectArchiveInfo
 from app.i18n import i18n
+from app.service.tool_detail_persistence_service import ToolDetailPersistenceService
 from app.tools.core.tool_executor import tool_executor
 from app.utils.attachment_sorter import AttachmentSorter
 
@@ -918,6 +919,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             detail=tool_detail,
             attachments=attachments,
         )
+        await ToolDetailPersistenceService.persist(tool_obj)
         inner = cls._build_inner_message(
             agent_context,
             role="tool",

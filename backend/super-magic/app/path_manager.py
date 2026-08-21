@@ -52,6 +52,7 @@ class PathManager(BasePathManager):
 
     持久化边界：
     - `.topic/chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
+    - `.topic/tool_detail/content/` 保存已持久化的工具详情长文本；按需创建，不参与 checkpoint 回滚。
     - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
     - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
     - `.checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
@@ -124,6 +125,10 @@ class PathManager(BasePathManager):
     # 临时目录：.workspace/.tmp（按需创建）
     _tmp_dir_name: ClassVar[str] = ".tmp"
     _tmp_dir: ClassVar[Optional[Path]] = None
+
+    # 工具详情长文本：.topic/tool_detail/content（按需创建）
+    _tool_detail_dir_name: ClassVar[str] = "tool_detail"
+    _tool_detail_content_dir_name: ClassVar[str] = "content"
     @classmethod
     def _ensure_app_initialization(cls) -> None:
         """确保应用层PathManager已初始化"""
@@ -453,6 +458,18 @@ class PathManager(BasePathManager):
         """获取指定子 Agent 会话的 .session.json 文件路径。"""
         cls._ensure_app_initialization()
         return cls.get_subagent_chat_history_dir(agent_name, agent_id) / f"{agent_name}<{agent_id}>.session.json"
+
+    @classmethod
+    def get_tool_detail_dir(cls) -> Path:
+        """获取工具详情持久化目录（.topic/tool_detail），按需创建。"""
+        cls._ensure_app_initialization()
+        return cls.get_topic_dir() / cls._tool_detail_dir_name
+
+    @classmethod
+    def get_tool_detail_content_dir(cls) -> Path:
+        """获取工具详情长文本目录（.topic/tool_detail/content），按需创建。"""
+        cls._ensure_app_initialization()
+        return cls.get_tool_detail_dir() / cls._tool_detail_content_dir_name
 
     @classmethod
     def get_asr_states_dir(cls) -> Path:

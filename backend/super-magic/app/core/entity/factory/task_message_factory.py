@@ -47,6 +47,7 @@ from agentlang.logger import get_logger
 from app.core.entity.event.event_context import EventContext
 from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
 from app.utils.attachment_sorter import AttachmentSorter
+from app.service.tool_detail_persistence_service import ToolDetailPersistenceService
 from typing import Optional, List, Dict
 import random
 import json
@@ -738,6 +739,7 @@ class TaskMessageFactory(TaskMessageFactoryProtocol):
             detail=tool_detail,
             attachments=attachments
         )
+        await ToolDetailPersistenceService.persist(tool)
 
         agent_context = event.data.tool_context.get_extension_typed("agent_context", AgentContext)
 
