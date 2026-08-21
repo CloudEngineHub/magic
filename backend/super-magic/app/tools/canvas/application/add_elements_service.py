@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -101,6 +102,19 @@ class AddElementsService:
                             generation_parameters=content.generation_parameters,
                             content_id=new_canvas_id("content"),
                         )
+                    if content.is_generated:
+                        capability = self.generation_capabilities.get(
+                            element.element_type,
+                            content.generation_parameters.model_id if content.generation_parameters else None,
+                        )
+                        if capability.billable:
+                            resolved_parameters = await self.estimate_guard.resolve_and_validate(
+                                project_path=project_path,
+                                item_ref=item.item_ref,
+                                production_rule=capability.production_rule,
+                                parameters=content.generation_parameters or GenerationParameters(),
+                            )
+                            content = replace(content, generation_parameters=resolved_parameters)
                     prepared = await self.content_preparation.prepare_imported(content, project_path)
                     prepared_contents.append(prepared)
                     content = prepared.command
@@ -111,17 +125,6 @@ class AddElementsService:
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
                     if content.is_generated:
-                        capability = self.generation_capabilities.get(
-                            element.element_type,
-                            content.generation_parameters.model_id if content.generation_parameters else None,
-                        )
-                        if capability.billable:
-                            await self.estimate_guard.validate(
-                                project_path=project_path,
-                                item_ref=item.item_ref,
-                                production_rule=capability.production_rule,
-                                parameters=content.generation_parameters or GenerationParameters(),
-                            )
                         generated_content_id = element.contents[0].content_id
                         generated.append(GenerationSubmissionCommand(
                             element_id=element.element_id,

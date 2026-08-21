@@ -18,3 +18,4 @@ class GenerationTask:
     status: str = "processing"
     error: str | None = None
     output_uri: str | None = None
+    output_filename: str | None = None

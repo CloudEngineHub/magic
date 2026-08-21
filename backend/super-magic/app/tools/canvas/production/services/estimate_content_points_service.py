@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Sequence
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.production.contracts import (
@@ -55,8 +56,10 @@ class EstimateContentPointsService:
         if len(item_refs) != len(set(item_refs)):
             raise CanvasDomainError("DUPLICATE_ITEM_REF", "Each estimate item_ref must be unique.")
         results = []
+        normalized_items = []
         for item in item_list:
             normalized = normalizer.normalize(project_path, item.item_ref, item.parameters)
+            normalized_items.append(normalized)
             results.append(await estimator.estimate(normalized, tool_context))
         can_continue = bool(results) and all(item.can_continue for item in results)
         total_points = (
@@ -73,12 +76,15 @@ class EstimateContentPointsService:
         if estimate_id is not None:
             record_items = tuple(
                 CostEstimateRecordItem(
-                    item_ref=item.item_ref,
-                    status=item.status,
-                    request_fingerprint=item.request_fingerprint or "",
-                    points=item.points,
+                    item_ref=result.item_ref,
+                    status=result.status,
+                    request_fingerprint=result.request_fingerprint or "",
+                    points=result.points,
+                    canonical_parameters=GenerationParameters.from_dict(
+                        normalized.parameters.to_dict()
+                    ),
                 )
-                for item in results
+                for result, normalized in zip(results, normalized_items, strict=True)
             )
             await self._estimate_records.put(
                 CostEstimateRecord.create(

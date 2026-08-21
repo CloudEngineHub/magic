@@ -270,8 +270,8 @@ Workspace path of imported media. When the file is outside the current Canvas pr
     name: str | None = Field(
         None,
         min_length=1,
-        description="""<!--zh: 生成媒体的文件名由大模型根据最终内容命名。生成图片时必填，与用户语言一致，建议使用 3-5 个词；系统会清洗名称并追加时间戳。-->
-Model-provided output name for generated media. Required for generated images; describe the actual result in the user's language with 3-5 words. The system sanitizes it and appends a timestamp.""",
+        description="""<!--zh: 生成媒体的文件名由大模型根据最终内容命名。生成图片时必填，生成视频时应提供；与用户语言一致，建议使用 3-5 个词。系统会清洗名称，图片追加时间戳，视频追加短唯一值。-->
+Model-provided output name for generated media. Required for generated images and recommended for generated videos; describe the actual result in the user's language with 3-5 words. The system sanitizes it, then appends a timestamp for images or a short unique value for videos.""",
     )
     reference_images: list[str] = Field(
         default_factory=list,
@@ -308,8 +308,9 @@ Reference image paths inside the current Canvas project. Use paths relative to t
         if self.source == "generated":
             if self.content_type not in {"image", "video"}:
                 raise ValueError("source=generated currently supports content_type=image or video")
-            if not self.prompt:
-                raise ValueError("source=generated requires prompt")
+            estimate_bound_video = self.content_type == "video" and bool(self.estimate_id)
+            if not self.prompt and not estimate_bound_video:
+                raise ValueError("source=generated requires prompt unless estimate_id is provided")
             if self.content_type == "image" and (not self.name or not self.name.strip()):
                 raise ValueError("source=generated image requires name")
             if self.asset_path is not None:

@@ -41,7 +41,7 @@ from app.tools.canvas.production.adapters import (
     FfmpegVideoCompositionPort,
     FileMediaProbePort,
     GenericImageSearchPort,
-    GenericVideoPointEstimatePort,
+    DesignVideoPointEstimatePort,
     WorkspaceAssetDownloadPort,
 )
 from app.tools.canvas.production.contracts import ContentProductionRuleRegistry
@@ -110,7 +110,7 @@ class CanvasApplicationFactory:
         selected_cost_records = cost_estimate_records if cost_estimate_records is not None else _default_cost_estimate_records
         video_normalizer = VideoProductionRequestNormalizer()
         normalizer_registry = CostEstimateRequestNormalizerRegistry([video_normalizer])
-        point_port = FakeVideoPointEstimatePort() if os.getenv("CANVAS_FAKE_GENERATION") == "1" else GenericVideoPointEstimatePort(workspace)
+        point_port = FakeVideoPointEstimatePort() if os.getenv("CANVAS_FAKE_GENERATION") == "1" else DesignVideoPointEstimatePort(workspace)
         estimator_registry = ContentProductionCostEstimatorRegistry([VideoCostEstimator(point_port)])
         production_rules = ContentProductionRuleRegistry([
             ImageGenerationRule(),

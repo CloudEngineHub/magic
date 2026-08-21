@@ -9,6 +9,7 @@ from app.tools.canvas.production.adapters.ffmpeg_video_composition_port import F
 from app.tools.canvas.production.adapters.file_media_probe_port import FileMediaProbePort
 from app.tools.canvas.production.adapters.generic_image_search_port import GenericImageSearchPort
 from app.tools.canvas.production.adapters.generic_video_point_estimate_port import GenericVideoPointEstimatePort
+from app.tools.canvas.production.adapters.design_video_point_estimate_port import DesignVideoPointEstimatePort
 from app.tools.canvas.production.adapters.workspace_asset_download_port import WorkspaceAssetDownloadPort
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "FileMediaProbePort",
     "GenericImageSearchPort",
     "GenericVideoPointEstimatePort",
+    "DesignVideoPointEstimatePort",
     "WorkspaceAssetDownloadPort",
 ]

@@ -8,7 +8,7 @@ from pathlib import Path
 from app.tools.canvas.generation.adapters.fake_image_generation_port import FakeImageGenerationPort
 from app.tools.canvas.generation.adapters.fake_video_generation_port import FakeVideoGenerationPort
 from app.tools.canvas.generation.adapters.generic_image_generation_port import GenericImageGenerationPort
-from app.tools.canvas.generation.adapters.generic_video_generation_port import GenericVideoGenerationPort
+from app.tools.canvas.generation.adapters.design_video_generation_port import DesignVideoGenerationPort
 from app.tools.canvas.generation.contracts.generation_capability import GenerationCapability
 
 
@@ -23,7 +23,7 @@ def default_generation_capabilities(workspace: Path | None = None) -> list[Gener
             GenerationCapability("fake-video-generation", "video", "async", video, video, billable=True, production_rule="video_generation"),
         ]
     image = GenericImageGenerationPort(workspace)
-    video = GenericVideoGenerationPort(workspace)
+    video = DesignVideoGenerationPort(workspace)
     return [
         GenerationCapability("image-generation", "image", "sync", image, None, production_rule="image_generation"),
         GenerationCapability("video-generation", "video", "async", video, video, billable=True, production_rule="video_generation"),

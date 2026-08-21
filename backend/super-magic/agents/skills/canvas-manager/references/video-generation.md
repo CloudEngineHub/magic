@@ -4,7 +4,7 @@ Use this reference for a basic Canvas video request when the user has not asked 
 
 ## Workflow
 
-1. Understand the subject, action, scene, camera, style, duration, aspect ratio, resolution, model, and requested audio.
+1. Understand the subject, action, scene, camera, style, duration, aspect ratio, resolution, model, and requested audio. If a reference is a provider-managed asset URI such as `asset://virtual-human-asset-id`, treat it as an opaque generation input: do not call `visual_understanding`, do not try to resolve it as a local file, and do not import it into Canvas. Only inspect a reference when it is an actual workspace media path or an accessible image URL.
 2. Present one concise generation target and complete prompt before generating. Ask only about unresolved choices that materially affect the result.
 3. Generate one video Element directly through the basic Canvas video-generation path.
 4. Use the same direct media pattern as basic image generation: the generated video is the result, and no storyboard, initialization image, first frame, `video-edit`, final composition, or professional-production Connection is created.
@@ -31,16 +31,17 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 For a generated video Content, the supported generation fields are `prompt`, `model_id`, `estimate_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
 
+- Provide `name` in the user's language using a concise 3-5 word description of the actual video. The saved file uses this model-provided name plus one short unique value.
 - Use only model, duration, aspect ratio, resolution, and mode values declared in the current `<media_model_info>`.
 - Omit optional parameters when the user did not request them and the current model rules do not make a legal choice clear.
-- Bind every reference asset inside the prompt by array order: `[image1]`, `[video1]`, and `[audio1]`.
+- Bind every reference asset inside the prompt by array order: `[image1]`, `[video1]`, and `[audio1]`. These binding tokens are part of the final prompt and must already be present before point estimation.
 - Do not put file paths in the prompt. Paths belong in their corresponding reference arrays.
 - Use `frame_start_path` and optional `frame_end_path` for a start/end-frame transition; do not duplicate those files in `reference_image_paths`.
 - Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit.
 
 ## Code Mode example: estimate
 
-The estimate is side-effect free. Show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message.
+The estimate is side-effect free. Build and freeze the exact final request first, including all reference binding tokens and prompt constraints, then show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message. After confirmation, reuse the exact same `item_ref` and request fields without rewriting the prompt. If the prompt, reference list, or any billable field changes, call the estimate again and request a new confirmation; never let `POINT_ESTIMATE_MISMATCH` become a second, avoidable confirmation round.
 
 ```python
 from sdk.tool import tool
@@ -69,7 +70,7 @@ print(estimate.content)
 
 ## Code Mode example: generate after confirmation
 
-Use the same `item_ref` and generation parameters as the estimate. Copy the exact `estimate_id` shown in `estimate.content`. Basic Canvas video generation deliberately omits `connections` and uses `row_incremental` layout.
+Use the same `item_ref` and generation parameters as the estimate. Copy the exact `estimate_id` shown in `estimate.content`, including the prompt string byte-for-byte. You may omit the billable generation fields and provide only the confirmed `estimate_id` and `item_ref`; the server will restore the frozen request. Do not mix a partial request with changed billable fields. Basic Canvas video generation deliberately omits `connections` and uses `row_incremental` layout.
 
 ```python
 from sdk.tool import tool

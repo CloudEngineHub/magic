@@ -153,7 +153,7 @@ class ContentMetadataService:
                 "outputUri": updated.get("outputUri"),
                 "errorMessage": updated.get("errorMessage"),
             })
-        for key in ("providerTaskId", "generationTaskId", "outputUri", "errorMessage"):
+        for key in ("providerTaskId", "generationTaskId", "outputUri", "outputFilename", "errorMessage"):
             updated.pop(key, None)
         updated.update({
             "elementId": element_id,

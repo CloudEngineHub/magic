@@ -3,8 +3,10 @@
 from app.tools.canvas.generation.adapters.fake_image_generation_port import FakeImageGenerationPort
 from app.tools.canvas.generation.adapters.fake_video_generation_port import FakeVideoGenerationPort
 from app.tools.canvas.generation.adapters.generic_image_generation_port import GenericImageGenerationPort
-from app.tools.canvas.generation.adapters.generic_video_generation_port import GenericVideoGenerationPort
+from app.tools.canvas.generation.adapters.design_video_generation_port import DesignVideoGenerationPort
+from app.tools.canvas.generation.adapters.design_video_payload_builder import DesignVideoPayloadBuilder
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
+from app.tools.canvas.generation.video_filename import build_video_filename, sanitize_video_filename
 from app.tools.canvas.generation.capability.default_capability_factory import default_generation_capabilities
 from app.tools.canvas.generation.capability.generation_capability_registry import GenerationCapabilityRegistry
 from app.tools.canvas.generation.contracts.generation_capability import GenerationCapability
@@ -47,10 +49,13 @@ __all__ = [
     "GenerationTaskRepository",
     "GenerationTaskRepositoryInterface",
     "GenericImageGenerationPort",
-    "GenericVideoGenerationPort",
+    "DesignVideoGenerationPort",
+    "DesignVideoPayloadBuilder",
     "InMemoryGenerationTaskRepository",
     "ProjectIdentity",
     "ProjectIdentityResolver",
+    "build_video_filename",
+    "sanitize_video_filename",
     "SynchronousGenerationStrategy",
     "default_generation_capabilities",
 ]

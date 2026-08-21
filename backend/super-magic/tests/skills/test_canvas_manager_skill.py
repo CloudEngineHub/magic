@@ -110,3 +110,13 @@ def test_skill_states_current_production_capabilities() -> None:
     assert "search_canvas_image_candidates" in content
     assert "audioSequence" in content
     assert "asset_path" in content
+
+
+def test_skill_freezes_estimated_request_and_routes_provider_assets() -> None:
+    """Skill 必须避免虚拟资产误走视觉理解，并锁定预估与生成请求。"""
+    content = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "Provider-managed asset URIs" in content
+    assert "Never pass them to `visual_understanding`" in content
+    assert "Freeze the complete generation request before estimating" in content
+    assert "copy those parameters byte-for-byte" in content

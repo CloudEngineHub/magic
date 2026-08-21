@@ -25,7 +25,11 @@ class VideoPointEstimateItemInput(BaseToolParams):
     item_ref: str = Field(..., min_length=1)
     prompt: str = Field(..., min_length=1)
     model_id: str | None = None
-    name: str | None = None
+    name: str | None = Field(
+        None,
+        min_length=1,
+        description="视频输出名称，应与后续生成请求保持一致；系统会追加短唯一值。",
+    )
     size: str | None = None
     reference_images: list[str] = Field(default_factory=list)
     reference_image_paths: list[str] = Field(default_factory=list)
@@ -135,7 +139,7 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
                 lines.extend([
                     f"- Total: {result.total_points} points",
                     f"- Estimate ID: {result.estimate_id}",
-                    "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same request and estimate_id.",
+                    "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same item_ref and estimate_id; the server can restore the frozen request, or you may resend the exact same request.",
                 ])
             else:
                 lines = ["Content point estimate is unavailable.", f"- Rule: {params.production_rule}"]

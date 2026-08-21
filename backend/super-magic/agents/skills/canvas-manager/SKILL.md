@@ -22,6 +22,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
 - A generated Content may be retried at most 2 times; never loop retries automatically.
 - Re-query after any write when the next step depends on persisted state.
+- Provider-managed asset URIs such as `asset://...` are generation references, not workspace files. Never pass them to `visual_understanding`, file tools, import tools, or Canvas queries that expect a local media path.
 - You may read every Element type. You may create or edit only `frame`, `storyboard`, `video-edit`, `image`, `video`, and `audio`.
 - `text`, `rectangle`, `ellipse`, `triangle`, `star`, and `group` are read-only. Never create them, change their Content or main selection, lay them out, retry them, or include them in `frame_canvas_elements`.
 
@@ -366,6 +367,8 @@ print(result.content)
 ## `estimate_canvas_content_points`
 
 Perform a side-effect-free point estimate for billed video generation. The estimate phase must not create Elements, Content, or generation tasks; any parameter change that affects billing requires a re-estimate.
+
+Freeze the complete generation request before estimating. This includes the final prompt, every `[imageN]`/`[videoN]`/`[audioN]` binding token, reference arrays, model, duration, aspect ratio, resolution, and all other billable fields. After the user confirms, either copy those parameters byte-for-byte into `add_canvas_elements`, or pass only the confirmed `estimate_id` and the same `item_ref` so the server restores the frozen request. Do not add a reference binding token, a watermark constraint, or any other prompt wording at that point. If any field or prompt text must change, estimate again and ask for confirmation again before submitting.
 
 | Parameter | Required | Description |
 |---|---|---|

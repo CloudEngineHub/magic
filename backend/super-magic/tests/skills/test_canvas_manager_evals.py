@@ -104,5 +104,7 @@ def test_canvas_manager_evals_cover_generation_frame_and_safety_boundaries() -> 
         "final MP4",
         "row_incremental",
         "dependency layout",
+        "byte-for-byte",
+        "asset://virtual-human-asset-id",
     ):
         assert expected in text

@@ -1,5 +1,7 @@
 """真实生成前的积分预估确认门。"""
 
+from dataclasses import replace
+
 from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.production.estimation import (
@@ -20,14 +22,14 @@ class GenerationEstimateGuard:
         self._estimate_records = estimate_records
         self._normalizers = normalizers
 
-    async def validate(
+    async def resolve_and_validate(
         self,
         project_path: str,
         item_ref: str | None,
         production_rule: str | None,
         parameters: GenerationParameters,
-    ) -> None:
-        """对声明为可计费的内容规则执行通用确认校验。"""
+    ) -> GenerationParameters:
+        """校验预估凭证并返回预估时冻结的标准生成参数。"""
         if not production_rule:
             raise CanvasDomainError(
                 "POINT_ESTIMATE_UNAVAILABLE",
@@ -47,5 +49,29 @@ class GenerationEstimateGuard:
         if record_item is None or record_item.status not in {"estimated", "not_billable"}:
             raise CanvasDomainError("POINT_ESTIMATE_MISMATCH", "The point estimate does not contain an eligible result for this item_ref.")
         current = self._normalizers.get(production_rule).normalize(project_path, item_ref, parameters)
-        if current.request_fingerprint != record_item.request_fingerprint:
+        supplied_is_reference_only = self._is_estimate_reference_only(parameters)
+        if not supplied_is_reference_only and current.request_fingerprint != record_item.request_fingerprint:
             raise CanvasDomainError("POINT_ESTIMATE_MISMATCH", "Video parameters changed after estimation. Estimate again before generation.")
+        return replace(
+            record_item.canonical_parameters,
+            estimate_id=estimate_id,
+            name=parameters.name or record_item.canonical_parameters.name,
+        )
+
+    @staticmethod
+    def _is_estimate_reference_only(parameters: GenerationParameters) -> bool:
+        """判断调用方是否只提供了 estimate_id 和非计费展示名称。"""
+        payload = parameters.to_dict()
+        payload.pop("estimate_id", None)
+        payload.pop("name", None)
+        return not any(value not in (None, "", [], {}) for value in payload.values())
+
+    async def validate(
+        self,
+        project_path: str,
+        item_ref: str | None,
+        production_rule: str | None,
+        parameters: GenerationParameters,
+    ) -> None:
+        """兼容旧调用方，仅执行预估凭证校验。"""
+        await self.resolve_and_validate(project_path, item_ref, production_rule, parameters)

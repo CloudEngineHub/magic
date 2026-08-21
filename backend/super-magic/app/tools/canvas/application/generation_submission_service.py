@@ -62,15 +62,15 @@ class GenerationSubmissionService:
                 by_content[generated_item.content_id] = generated_item
         for submission_item in generated:
             parameters = submission_item.parameters
-            parameter_payload = parameters.to_dict()
             capability = self.generation_capabilities.get(submission_item.element_type, parameters.model_id)
             if self.estimate_guard is not None and capability.billable:
-                await self.estimate_guard.validate(
+                parameters = await self.estimate_guard.resolve_and_validate(
                     project_path=project_path,
                     item_ref=submission_item.item_ref or "-",
                     production_rule=capability.production_rule,
                     parameters=parameters,
                 )
+            parameter_payload = parameters.to_dict()
             request = GenerationRequest(
                 project_path=project_path,
                 element_id=submission_item.element_id,
@@ -122,6 +122,7 @@ class GenerationSubmissionService:
                             status=submission.status,
                             error=submission.error_message,
                             output_uri=submission.output_uri,
+                            output_filename=self._output_filename(submission),
                         )
                     )
                 except Exception:
@@ -159,6 +160,7 @@ class GenerationSubmissionService:
                     "generationTaskId": submission.generation_task_id,
                     "generationStatus": submission.status,
                     "outputUri": submission.output_uri,
+                    "outputFilename": self._output_filename(submission),
                     "errorMessage": submission.error_message,
                 }
                 if submission.status == "completed":
@@ -214,3 +216,9 @@ class GenerationSubmissionService:
         """把端口异常收敛为可持久化的失败结果。"""
         message = str(error).strip() or "Generation failed unexpectedly."
         return GenerationSubmission(execution_mode, "failed", error_message=message[:1000])
+
+    @staticmethod
+    def _output_filename(submission: GenerationSubmission) -> str | None:
+        """读取异步任务提交时确定的本地输出文件名。"""
+        value = (submission.request_metadata or {}).get("outputFilename")
+        return value if isinstance(value, str) and value else None

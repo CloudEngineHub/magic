@@ -11,3 +11,4 @@ class GenerationQueryRequest:
     project_path: str
     element_id: str
     content_id: str
+    output_filename: str | None = None

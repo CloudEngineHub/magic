@@ -3,15 +3,18 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from app.tools.canvas.application.commands import GenerationParameters
+
 
 @dataclass(frozen=True)
 class CostEstimateRecordItem:
-    """绑定一次预估中的 item_ref、参数指纹和状态。"""
+    """绑定一次预估中的 item_ref、标准请求、参数指纹和状态。"""
 
     item_ref: str
     status: str
     request_fingerprint: str
     points: int | float | None
+    canonical_parameters: GenerationParameters
 
 
 @dataclass(frozen=True)

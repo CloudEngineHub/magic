@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -81,6 +82,19 @@ class ContentService:
                         generation_parameters=command.generation_parameters,
                         content_id=new_canvas_id("content"),
                     )
+                if command.is_generated:
+                    capability = self.generation_capabilities.get(
+                        element.element_type,
+                        command.generation_parameters.model_id if command.generation_parameters else None,
+                    )
+                    if capability.billable:
+                        resolved_parameters = await self.estimate_guard.resolve_and_validate(
+                            project_path=project_path,
+                            item_ref=item.item_ref,
+                            production_rule=capability.production_rule,
+                            parameters=command.generation_parameters or GenerationParameters(),
+                        )
+                        command = replace(command, generation_parameters=resolved_parameters)
                 prepared = await self.content_preparation.prepare_imported(command, project_path)
                 prepared_contents.append(prepared)
                 command = prepared.command
@@ -98,18 +112,6 @@ class ContentService:
                     element.active_content_id = content.content_id
                     element.main_content_id = content.content_id
                 status = "pending" if command.is_generated else "completed"
-                if command.is_generated:
-                    capability = self.generation_capabilities.get(
-                        element.element_type,
-                        command.generation_parameters.model_id if command.generation_parameters else None,
-                    )
-                    if capability.billable:
-                        await self.estimate_guard.validate(
-                            project_path=project_path,
-                            item_ref=item.item_ref,
-                            production_rule=capability.production_rule,
-                            parameters=command.generation_parameters or GenerationParameters(),
-                        )
                 results.append(AddContentResultItem(
                     item_ref=item.item_ref,
                     element_id=element.element_id,

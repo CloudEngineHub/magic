@@ -129,6 +129,7 @@ class WaitGenerationService:
                 project_path=record.project_path,
                 element_id=record.element_id,
                 content_id=record.content_id,
+                output_filename=record.output_filename,
             ),
             deadline,
             tool_context,
@@ -225,6 +226,7 @@ class WaitGenerationService:
                     status=str(detail.get("generationStatus") or content.fields.generation_status or "processing"),
                     error=detail.get("errorMessage") or content.fields.error_message,
                     output_uri=detail.get("outputUri") or content.fields.asset_path,
+                    output_filename=detail.get("outputFilename") if isinstance(detail.get("outputFilename"), str) else None,
                 )
                 await self.generation_tasks.put(record)
                 return record
