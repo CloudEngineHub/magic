@@ -15,6 +15,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Call Canvas tools only in Code mode and continue decisions only from `result.content`.
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
 - If the user message contains `[@design_canvas_project:path]`, the text after the colon is the exact `project_path`. Use it verbatim in every Canvas tool call; never truncate, rename, or create a new project instead.
+- Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
 - If the user message contains `[@design_marker:name]`, follow the Design marker processing section below.
 - Never use file, directory, or shell tools to inspect, modify, or infer Canvas state. The only exception is writing the resumable task plan as Markdown under `.magic/video-production-plans/` for detailed professional video production (see `references/professional-video-production.md`); never read or edit any project file, including `magic.project.js`.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
@@ -63,7 +64,7 @@ Every Canvas tool is called in Code mode and returns a result whose `content` st
 from sdk.tool import tool
 
 result = tool.call("query_canvas_overview", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "page": 1,
     "limit": 50,
 })
@@ -118,7 +119,7 @@ Parameters: `project_path` is the full workspace-relative Canvas project path.
 | `project_path` | Yes | Full workspace-relative project path |
 
 ```python
-result = tool.call("initialize_canvas", {"project_path": "Canvas/Product Launch"})
+result = tool.call("initialize_canvas", {"project_path": "Demo"})
 print(result.content)
 ```
 
@@ -137,7 +138,7 @@ Parameters: `project_path` required; `page` and `limit` optional.
 | `limit` | No | 1–100; default 50 |
 
 ```python
-result = tool.call("query_canvas_overview", {"project_path": "Canvas/Product Launch", "page": 1, "limit": 50})
+result = tool.call("query_canvas_overview", {"project_path": "Demo", "page": 1, "limit": 50})
 print(result.content)
 ```
 
@@ -156,7 +157,7 @@ Parameters: `project_path` and 1–10 exact `element_ids` required. The `asset_p
 
 ```python
 result = tool.call("query_canvas_element_details", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "element_ids": ["element-740000000000000001", "element-740000000000000002"],
 })
 print(result.content)
@@ -177,7 +178,7 @@ Parameters: `project_path` and `items` required; each item needs at least `item_
 
 ```python
 result = tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [
         {"item_ref": "hero-image", "element_type": "image", "name": "Hero visual",
          "layout": {"strategy": "row_incremental"},
@@ -202,7 +203,7 @@ Parameters: `project_path` and `items` required. Selected siblings must all be w
 
 ```python
 result = tool.call("frame_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{"item_ref": "hero-section",
                "element_ids": ["element-740000000000000001", "element-740000000000000002"],
                "name": "Hero section", "padding": 80}],
@@ -225,7 +226,7 @@ Parameters: `project_path` and `items` required; each item uses an exact `elemen
 
 ```python
 result = tool.call("add_canvas_contents", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{"item_ref": "hero-v2", "element_id": "element-740000000000000002",
                "content": {"source": "generated", "content_type": "image",
                            "prompt": "keep the product identity, switch to a three-quarter close-up, soft rim light, no text"}}],
@@ -255,7 +256,7 @@ Parameters: `project_path` and `items` required; only failed Content can be retr
 
 ```python
 result = tool.call("retry_canvas_content_generation", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{"item_ref": "shot-1",
                "element_id": "element-740000000000000010",
                "content_id": "element-740000000000000010-content-2"}],
@@ -278,7 +279,7 @@ Parameters: `project_path` and `items` required; use only the exact `element_id`
 
 ```python
 result = tool.call("select_canvas_main_content", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{"item_ref": "select-hero-v2",
                "element_id": "element-740000000000000002",
                "content_id": "element-740000000000000002-content-2"}],
@@ -302,7 +303,7 @@ Parameters: `project_path` and `tasks` required; `max_wait_seconds` optional. On
 
 ```python
 result = tool.call("wait_canvas_generation", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "tasks": [{"generation_task_id": "generation-task-740000000000000001"}],
     "max_wait_seconds": 120,
 })
@@ -326,7 +327,7 @@ Supports `row_incremental`, `dependency_flow`, and `explicit_position`. Use `exp
 from sdk.tool import tool
 
 result = tool.call("layout_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "element_id": "element-740000000000000001",
         "layout": {"strategy": "explicit_position", "position": {"x": 120, "y": 80}},
@@ -359,7 +360,7 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 from sdk.tool import tool
 
 result = tool.call("add_canvas_connections", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "source_element_id": "element-740000000000000001",
         "target_element_id": "element-740000000000000002",
@@ -386,7 +387,7 @@ Freeze the complete generation request before estimating. This includes the fina
 from sdk.tool import tool
 
 result = tool.call("estimate_canvas_content_points", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "production_rule": "video_generation",
     "items": [{"item_ref": "shot-s01", "prompt": "confirmed product motion", "duration_seconds": 4}],
 })
@@ -410,7 +411,7 @@ Synchronously compose the final MP4 from the main Content of a confirmed `video-
 from sdk.tool import tool
 
 result = tool.call("compose_canvas_final_video", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "video_edit_element_id": "element-740000000000000020",
     "result_name": "Product launch final cut",
 })
@@ -433,7 +434,7 @@ Search, download, media-validate, and import external image candidates. Only mat
 from sdk.tool import tool
 
 result = tool.call("search_canvas_image_candidates", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "topic_id": "hero-images",
     "tasks": [{"item_ref": "hero", "name": "Hero image", "query": "premium product hero", "count": 3}],
 })
@@ -481,7 +482,7 @@ A `[@design_marker:name]` mention is the user annotating a region of a Canvas im
 
 ```
 [@design_marker:red-ear]
-- Image location: Canvas/Product Launch/images/dog.jpg
+- Image location: Demo/images/dog.jpg
 - Marked area: Small area at top-right of the image
 - Coordinates: Top-left (64.0%, 7.0%)
 ```
@@ -506,7 +507,7 @@ from sdk.tool import tool
 # and the original dimensions (e.g. 1920x1080).
 
 result = tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "item_ref": "dog-red-ear",
         "element_type": "image",

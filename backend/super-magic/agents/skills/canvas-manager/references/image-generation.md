@@ -30,7 +30,7 @@ For an image Content (`source=generated`, `content_type=image`), the generation 
 
 ```python
 result = tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "item_ref": "cat-red-ear",
         "element_type": "image",

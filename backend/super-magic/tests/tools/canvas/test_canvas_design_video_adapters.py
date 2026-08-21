@@ -79,7 +79,8 @@ def test_default_canvas_video_capability_uses_design_adapter(tmp_path: Path, mon
 
 @pytest.mark.asyncio
 async def test_design_video_generation_uses_design_submit_and_query_endpoints(tmp_path: Path, monkeypatch) -> None:
-    """提交和查询都必须调用旧 Design API，完成后下载到 Canvas videos 目录。"""
+    """本地调试模式提交和查询旧 Design API，完成后下载到 Canvas videos 目录。"""
+    monkeypatch.setenv("ENABLE_LOCAL_DEBUG_MODE", "true")
     calls: dict[str, object] = {}
 
     async def generate(self, payload):
@@ -126,6 +127,58 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     assert calls["query"] == ("magic-project-1", "remote-video-1")
     assert result.status == "completed"
     assert result.output_uri == f"./videos/{output_filename}"
+
+
+@pytest.mark.asyncio
+async def test_design_video_generation_uses_magic_service_workspace_file_without_download(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """部署模式应复用 Magic Service 已归档的工作区文件，不重复下载。"""
+    monkeypatch.delenv("ENABLE_LOCAL_DEBUG_MODE", raising=False)
+    calls: dict[str, object] = {}
+
+    async def generate(self, payload):
+        """返回 mock Design 提交结果。"""
+        return {"status": "processing", "video_id": "remote-video-2"}
+
+    async def query(self, project_id, video_id):
+        """返回 Magic Service 已归档的文件信息。"""
+        calls["query"] = (project_id, video_id)
+        return {
+            "status": "completed",
+            "file_dir": "/mock-project/videos/",
+            "file_name": "llm-named-video.mp4",
+        }
+
+    async def download(self, url, target):
+        """记录不应发生的下载调用。"""
+        calls["download"] = (url, target)
+
+    monkeypatch.setattr(MagicServiceClient, "generate_design_video", generate)
+    monkeypatch.setattr(MagicServiceClient, "query_video_generation_result", query)
+    monkeypatch.setattr(MagicServiceClient, "download_url_to_path", download)
+
+    port = DesignVideoGenerationPort(tmp_path)
+    submission = await port.submit(
+        GenerationRequest(
+            project_path="mock-project",
+            element_id="element-1",
+            content_id="content-1",
+            element_type="video",
+            parameters=GenerationParameters(prompt="mock", model_id="model-1", name="城市街景"),
+        ),
+        _ToolContext(),
+    )
+    result = await port.query(
+        GenerationQueryRequest("remote-video-2", "mock-project", "element-1", "content-1", submission.request_metadata["outputFilename"]),
+        _ToolContext(),
+    )
+
+    assert calls["query"] == ("magic-project-1", "remote-video-2")
+    assert "download" not in calls
+    assert result.status == "completed"
+    assert result.output_uri == "./videos/llm-named-video.mp4"
 
 
 @pytest.mark.asyncio

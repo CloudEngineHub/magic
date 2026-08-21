@@ -14,7 +14,7 @@ Search, download, validate, and import image candidates as imported Image Conten
 
 ```python
 tool.call("search_canvas_image_candidates", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "topic_id": "product-hero",
     "tasks": [{
         "item_ref": "hero-candidates",

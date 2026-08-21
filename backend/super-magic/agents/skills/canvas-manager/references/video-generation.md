@@ -49,7 +49,7 @@ For a retry of failed billable Content, keep the original generation request's `
 from sdk.tool import tool
 
 estimate = tool.call("estimate_canvas_content_points", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "production_rule": "video_generation",
     "items": [{
         "item_ref": "product-promo-video",
@@ -61,7 +61,7 @@ estimate = tool.call("estimate_canvas_content_points", {
             "Premium commercial lighting, stable motion, no added text or watermark."
         ),
         "model_id": "model-from-media-model-info",
-        "reference_image_paths": ["Canvas/Product Launch/images/product.png"],
+        "reference_image_paths": ["Demo/images/product.png"],
         "duration_seconds": 5,
         "aspect_ratio": "9:16",
         "resolution": "720p",
@@ -80,7 +80,7 @@ from sdk.tool import tool
 confirmed_estimate_id = "estimate-id-from-result-content"
 
 result = tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "item_ref": "product-promo-video",
         "element_type": "video",
@@ -98,7 +98,7 @@ result = tool.call("add_canvas_elements", {
             ),
             "model_id": "model-from-media-model-info",
             "estimate_id": confirmed_estimate_id,
-            "reference_image_paths": ["Canvas/Product Launch/images/product.png"],
+            "reference_image_paths": ["Demo/images/product.png"],
             "duration_seconds": 5,
             "aspect_ratio": "9:16",
             "resolution": "720p",
@@ -116,7 +116,7 @@ When generation returns a task ID, wait immediately. If waiting times out, call 
 from sdk.tool import tool
 
 wait_result = tool.call("wait_canvas_generation", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "tasks": [{
         "generation_task_id": "generation-task-id-from-result-content",
     }],
@@ -125,7 +125,7 @@ wait_result = tool.call("wait_canvas_generation", {
 print(wait_result.content)
 
 details = tool.call("query_canvas_element_details", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "element_ids": ["element-id-from-result-content"],
 })
 print(details.content)

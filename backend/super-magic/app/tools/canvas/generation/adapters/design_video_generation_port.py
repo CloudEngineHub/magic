@@ -7,6 +7,7 @@ from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
+from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.tools.canvas.generation.adapters.design_video_payload_builder import DesignVideoPayloadBuilder
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
@@ -126,7 +127,7 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         )
 
     async def query(self, request: GenerationQueryRequest, tool_context: ToolContext | None) -> GenerationQueryResult:
-        """查询 Design 视频状态，完成后下载到 Canvas 项目目录。"""
+        """查询 Design 视频状态，仅本地调试模式下载结果文件。"""
         try:
             project_id = self._payload_builder.resolve_project_id(tool_context)
         except Exception as error:
@@ -161,12 +162,15 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         status = self._status(response)
         logger.info(
             "Canvas Design 视频查询响应: project_path={} content_id={} provider_video_id={} status={} "
-            "file_url_present={} response_keys={}",
+            "local_debug={} file_url_present={} file_dir={} file_name={} response_keys={}",
             request.project_path,
             request.content_id,
             request.provider_task_id,
             status or "unknown",
+            is_local_debug_mode_enabled(),
             bool(response.get("file_url")),
+            response.get("file_dir") or "",
+            response.get("file_name") or "",
             sorted(response.keys()),
         )
         if status in {"failed", "error", "canceled", "cancelled"}:
@@ -188,17 +192,44 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 status or "unknown",
             )
             return GenerationQueryResult("processing")
+        project = self._project_identity_resolver.resolve(request.project_path)
+        project_root = self._asset_path_resolver.resolve_project_root(request.project_path)
+        if not is_local_debug_mode_enabled():
+            try:
+                output_uri = self._build_workspace_output_uri(
+                    request,
+                    response,
+                    project.project_path,
+                    project_root,
+                )
+            except Exception as error:
+                logger.exception(
+                    "Canvas Design 工作区视频路径解析失败: project_path={} content_id={} provider_video_id={} error={}",
+                    request.project_path,
+                    request.content_id,
+                    request.provider_task_id,
+                    error,
+                )
+                return GenerationQueryResult("failed", error_message=str(error))
+            logger.info(
+                "Canvas Design 视频已由 Magic Service 写入工作区: project_path={} content_id={} provider_video_id={} output_uri={}",
+                request.project_path,
+                request.content_id,
+                request.provider_task_id,
+                output_uri,
+            )
+            return GenerationQueryResult("completed", output_uri=output_uri)
+
         file_url = str(response.get("file_url") or "").strip()
         if not file_url:
             logger.error(
-                "Canvas Design 视频已完成但缺少 file_url: project_path={} content_id={} provider_video_id={}",
+                "Canvas Design 本地调试视频已完成但缺少 file_url: project_path={} content_id={} provider_video_id={}",
                 request.project_path,
                 request.content_id,
                 request.provider_task_id,
             )
             return GenerationQueryResult("failed", error_message="Design video result has no file_url.")
-        project = self._project_identity_resolver.resolve(request.project_path)
-        project_root = self._asset_path_resolver.resolve_project_root(request.project_path)
+
         output_filename = request.output_filename or build_video_filename(
             None,
             request.provider_task_id,
@@ -206,7 +237,7 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         )
         target = project_root / "videos" / output_filename
         logger.info(
-            "Canvas Design 视频下载开始: project_path={} content_id={} provider_video_id={} output_filename={} file_url_present=True",
+            "Canvas Design 本地调试视频下载开始: project_path={} content_id={} provider_video_id={} output_filename={} file_url_present=True",
             request.project_path,
             request.content_id,
             request.provider_task_id,
@@ -214,20 +245,18 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         )
         try:
             await self._client.download_url_to_path(file_url, target)
+            output_uri = self._asset_path_resolver.to_project_uri(project.project_path, target)
             logger.info(
-                "Canvas Design 视频下载完成: project_path={} content_id={} provider_video_id={} output_uri={}",
+                "Canvas Design 本地调试视频下载完成: project_path={} content_id={} provider_video_id={} output_uri={}",
                 request.project_path,
                 request.content_id,
                 request.provider_task_id,
-                self._asset_path_resolver.to_project_uri(project.project_path, target),
+                output_uri,
             )
-            return GenerationQueryResult(
-                "completed",
-                output_uri=self._asset_path_resolver.to_project_uri(project.project_path, target),
-            )
+            return GenerationQueryResult("completed", output_uri=output_uri)
         except Exception as error:
             logger.exception(
-                "Canvas Design 视频下载失败: project_path={} content_id={} provider_video_id={} target={} error={}",
+                "Canvas Design 本地调试视频下载失败: project_path={} content_id={} provider_video_id={} target={} error={}",
                 request.project_path,
                 request.content_id,
                 request.provider_task_id,
@@ -235,6 +264,43 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 error,
             )
             return GenerationQueryResult("failed", error_message=str(error))
+
+    def _build_workspace_output_uri(
+        self,
+        request: GenerationQueryRequest,
+        response: dict[str, object],
+        project_path: str,
+        project_root: Path,
+    ) -> str:
+        """把 Magic Service 返回的项目文件路径转换为 Canvas 项目 URI。"""
+        file_name = str(response.get("file_name") or "").strip()
+        if not file_name:
+            file_name = str(request.output_filename or "").strip()
+            logger.warning(
+                "Canvas Design 完成响应缺少 file_name，使用提交时文件名回退: project_path={} content_id={} provider_video_id={} output_filename={}",
+                request.project_path,
+                request.content_id,
+                request.provider_task_id,
+                file_name,
+            )
+        if not file_name or Path(file_name).name != file_name:
+            raise ValueError("Design video result has no safe file_name.")
+
+        file_dir = str(response.get("file_dir") or "").strip().replace("\\", "/")
+        normalized_project_path = project_path.strip("/")
+        normalized_file_dir = file_dir.strip("/")
+        relative_dir = "videos"
+        if normalized_file_dir:
+            if normalized_file_dir == normalized_project_path:
+                relative_dir = ""
+            elif normalized_file_dir.startswith(f"{normalized_project_path}/"):
+                relative_dir = normalized_file_dir[len(normalized_project_path) + 1 :].strip("/")
+            else:
+                raise ValueError(
+                    f"Design video result file_dir is outside project: {file_dir}"
+                )
+        target = project_root / relative_dir / file_name if relative_dir else project_root / file_name
+        return self._asset_path_resolver.to_project_uri(project_path, target)
 
     @staticmethod
     def _reference_counts(payload: dict[str, object]) -> dict[str, int]:

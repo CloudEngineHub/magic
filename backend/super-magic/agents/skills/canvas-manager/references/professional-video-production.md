@@ -120,7 +120,7 @@ Display and confirm the complete shot plan before saving. Save the confirmed sho
 
 ```python
 tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "item_ref": "storyboard",
         "element_type": "storyboard",
@@ -155,7 +155,7 @@ Import user-provided audio when needed. The initial composition accepts zero or 
 
 ```python
 tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "item_ref": "final-edit",
         "element_type": "video-edit",
@@ -198,7 +198,7 @@ For a new direct professional video, create the initial relations in the same `a
 
 ```python
 tool.call("add_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{
         "item_ref": "professional-direct-video",
         "element_type": "video",
@@ -213,7 +213,7 @@ tool.call("add_canvas_elements", {
             "content_type": "video",
             "prompt": "Show the confirmed product [image1] in a premium studio scene with a slow push-in, stable product identity, and no text or watermark.",
             "estimate_id": "confirmed-estimate-id",
-            "reference_image_paths": ["Canvas/Product Launch/images/product.png"],
+            "reference_image_paths": ["Demo/images/product.png"],
         },
     }],
 })
@@ -255,7 +255,7 @@ Use `layout_canvas_elements` to arrange the production chain. It changes layout 
 
 ```python
 tool.call("layout_canvas_elements", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [
         {"item_ref": "layout-storyboard", "element_id": "element-740000000000000005", "layout": {"strategy": "dependency_flow"}},
         {"item_ref": "layout-shot-1", "element_id": "element-740000000000000010", "layout": {"strategy": "dependency_flow"}},
@@ -276,7 +276,7 @@ Add, remove, or replace an explicit Connection.
 
 ```python
 tool.call("add_canvas_connections", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "items": [{"item_ref": "storyboard-to-frame",
                "source_element_id": "element-740000000000000005",
                "target_element_id": "element-740000000000000006"}],
@@ -298,7 +298,7 @@ Synchronously compose the final MP4 from a Video Edit Element's main Content.
 
 ```python
 tool.call("compose_canvas_final_video", {
-    "project_path": "Canvas/Product Launch",
+    "project_path": "Demo",
     "video_edit_element_id": "element-740000000000000020",
     "result_name": "Product launch final cut",
 })
