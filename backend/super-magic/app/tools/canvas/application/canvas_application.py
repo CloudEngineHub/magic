@@ -25,7 +25,6 @@ from app.tools.canvas.application.results import (
     CanvasElementsResult,
     CanvasImageSearchResult,
     CanvasOverviewResult,
-    CanvasVideoCompositionResult,
     ConnectionsResult,
     FrameElementsResult,
     InitializeCanvasResult,
@@ -40,12 +39,10 @@ from app.tools.canvas.infrastructure.persistence.canvas_repository_interface imp
 from app.tools.canvas.production.contracts import (
     CostEstimateResult,
     ImageSearchTask,
-    VideoCompositionCommand,
     VideoPointEstimateItem,
 )
 from app.tools.canvas.production.services.estimate_content_points_service import EstimateContentPointsService
 from app.tools.canvas.production.services.image_search_service import ImageSearchService
-from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.queries import CanvasQueryService
 
 
@@ -65,7 +62,6 @@ class CanvasApplication:
         connection_service: ConnectionService,
         wait_generation_service: WaitGenerationService,
         estimate_content_points_service: EstimateContentPointsService,
-        video_composition_service: VideoCompositionService,
         image_search_service: ImageSearchService,
         generation_submission_service: GenerationSubmissionService,
     ):
@@ -81,7 +77,6 @@ class CanvasApplication:
         self.connection_service = connection_service
         self.wait_generation_service = wait_generation_service
         self.estimate_content_points_service = estimate_content_points_service
-        self.video_composition_service = video_composition_service
         self.image_search_service = image_search_service
         self.generation_submission_service = generation_submission_service
 
@@ -150,21 +145,6 @@ class CanvasApplication:
             tool_context,
         )
         return result
-
-    async def compose_video(
-        self,
-        project_path: str,
-        command: VideoCompositionCommand,
-        tool_context: ToolContext | None = None,
-    ) -> CanvasVideoCompositionResult:
-        """执行 Video Edit 到最终 Video Content 的同步合成。"""
-        return await self.video_composition_service.compose(
-            project_path,
-            command.video_edit_element_id,
-            command.result_name,
-            command.result_element_id,
-            tool_context,
-        )
 
     async def search_images(
         self,

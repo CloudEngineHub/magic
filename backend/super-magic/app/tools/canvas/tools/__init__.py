@@ -9,7 +9,6 @@ from app.tools.canvas.tools.add_canvas_elements import (
     ContentInput,
     ElementInput,
 )
-from app.tools.canvas.tools.compose_canvas_video import ComposeCanvasVideo
 from app.tools.canvas.tools.estimate_canvas_content_points import (
     EstimateCanvasContentPoints,
     VideoPointEstimateItemInput,
@@ -39,7 +38,6 @@ __all__ = [
     "CanvasCreationConnectionInput",
     "CanvasLayoutInput",
     "CanvasPositionInput",
-    "ComposeCanvasVideo",
     "ConnectionInput",
     "ContentInput",
     "CreationConnectionInput",

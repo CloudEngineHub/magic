@@ -12,7 +12,7 @@ from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
-from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
+from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.production.contracts import (
     CompositionInputSpec,
@@ -44,14 +44,28 @@ class VideoCompositionService:
         project_path: str,
         video_edit_element_id: str,
         result_name: str,
-        result_element_id: str | None,
+        result_element_id: str,
         tool_context=None,
+        result_content_id: str | None = None,
     ) -> CanvasVideoCompositionResult:
         """创建 processing Content、同步合成并写回完成或失败状态。"""
+        if not result_content_id:
+            raise CanvasDomainError(
+                "CONTENT_NOT_FOUND",
+                "Composition requires the Content created by add_canvas_elements.",
+            )
         output_path = f"./videos/{self._safe_name(result_name)}-{new_canvas_id('video')[-8:]}.mp4"
         preparation = await self._unit_of_work.transaction_with_sidecar(
             project_path,
-            lambda project, metadata: self._prepare(project, metadata, video_edit_element_id, result_name, result_element_id, output_path),
+            lambda project, metadata: self._prepare(
+                project,
+                metadata,
+                video_edit_element_id,
+                result_name,
+                result_element_id,
+                output_path,
+                result_content_id,
+            ),
         )
         try:
             project = await self._unit_of_work.repository.read(project_path)
@@ -86,26 +100,33 @@ class VideoCompositionService:
             has_audio=result.has_audio,
         )
 
-    def _prepare(self, project: CanvasProject, metadata: dict, video_edit_element_id: str, result_name: str, result_element_id: str | None, output_path: str):
+    def _prepare(
+        self,
+        project: CanvasProject,
+        metadata: dict,
+        video_edit_element_id: str,
+        result_name: str,
+        result_element_id: str,
+        output_path: str,
+        result_content_id: str | None,
+    ):
         """在事务内解析输入并创建 processing 结果 Content。"""
         spec = self.inspect_inputs(project, video_edit_element_id)
-        element = project.canvas.get_element(result_element_id) if result_element_id else None
-        if result_element_id and element is not None and element.element_type != "video":
+        element = project.canvas.get_element(result_element_id)
+        if element is None or element.element_type != "video":
             raise CanvasDomainError("ELEMENT_NOT_FOUND", "The result Element must be a video Element.")
-        if element is None:
-            element_id = result_element_id or new_canvas_id("element")
-            element = CanvasElement(element_id, "video", ElementProperties(name=result_name, width=spec.output_width, height=spec.output_height))
-            project.canvas.elements.append(element)
-        elif element.properties.name is None:
+        if element.properties.name is None:
             element.properties.name = result_name
         previous_active_content_id = element.active_content_id
         previous_main_content_id = element.main_content_id
-        content_id = new_canvas_id("content")
-        element.contents.append(CanvasContent(content_id, VideoContentFields(status="processing")))
-        if previous_active_content_id is None:
-            element.active_content_id = content_id
-        if previous_main_content_id is None:
-            element.main_content_id = content_id
+        existing_content = element.get_content(result_content_id) if result_content_id else None
+        if existing_content is None:
+            raise CanvasDomainError("CONTENT_NOT_FOUND", "The requested result Content does not exist.")
+        if not isinstance(existing_content.fields, VideoContentFields):
+            raise CanvasDomainError("CONTENT_NOT_FOUND", "The requested result Content is not a video Content.")
+        content_id = existing_content.content_id
+        existing_content.fields.status = "processing"
+        existing_content.fields.stored_error_message = None
         ContentMetadataService.set(
             metadata,
             element.element_id,
@@ -131,9 +152,24 @@ class VideoCompositionService:
         element.properties.width = result.width
         element.properties.height = result.height
         video_content.update_generation_result("completed", preparation.relative_output_path, None)
+        video_content.video_generation_result_meta = {
+            "durationSeconds": result.duration_seconds,
+            "hasAudio": result.has_audio,
+        }
         element.main_content_id = preparation.result_content_id
         detail = ContentMetadataService.get(metadata, element.element_id, preparation.result_content_id)
-        ContentMetadataService.set(metadata, element.element_id, preparation.result_content_id, {**detail, "generationStatus": "completed", "outputUri": preparation.relative_output_path})
+        ContentMetadataService.set(
+            metadata,
+            element.element_id,
+            preparation.result_content_id,
+            {
+                **detail,
+                "generationStatus": "completed",
+                "outputUri": preparation.relative_output_path,
+                "durationSeconds": result.duration_seconds,
+                "hasAudio": result.has_audio,
+            },
+        )
         return {"result_element_id": element.element_id, "result_content_id": preparation.result_content_id}, metadata
 
     async def _mark_failed(self, project_path: str, preparation: CompositionPreparation, message: str) -> None:

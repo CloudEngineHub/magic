@@ -12,7 +12,6 @@ from app.tools.canvas.production.contracts.cost_estimate_result import (
 from app.tools.canvas.production.contracts.image_search_task import ImageSearchTask
 from app.tools.canvas.production.contracts.normalized_video_production_request import NormalizedVideoProductionRequest
 from app.tools.canvas.production.contracts.production_result_type import ProductionResultType
-from app.tools.canvas.production.contracts.video_composition_command import VideoCompositionCommand
 from app.tools.canvas.production.contracts.video_composition_models import CompositionInputSpec, CompositionPreparation
 from app.tools.canvas.production.contracts.video_point_estimate_item import VideoPointEstimateItem
 
@@ -30,6 +29,5 @@ __all__ = [
     "ImageSearchTask",
     "NormalizedVideoProductionRequest",
     "ProductionResultType",
-    "VideoCompositionCommand",
     "VideoPointEstimateItem",
 ]

@@ -2,22 +2,26 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.tools.canvas.application.commands import GenerationParameters
-from app.tools.canvas.domain.content_fields import AudioContentFields, VideoContentFields, VideoEditContentFields
+from app.tools.canvas.domain.content_fields import VideoContentFields, VideoEditContentFields
 from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasElement, ElementProperties
 from app.tools.canvas.production.adapters import (
     FakeAssetDownloadPort,
     FakeImageSearchPort,
     FakeMediaProbePort,
     FakeVideoCompositionPort,
+    FfmpegVideoCompositionPort,
 )
 from app.tools.canvas.production.adapters.generic_video_point_estimate_port import GenericVideoPointEstimatePort
-from app.tools.canvas.production.contracts import ImageSearchTask, VideoCompositionCommand, VideoPointEstimateItem
+from app.tools.canvas.production.contracts import ImageSearchTask, VideoPointEstimateItem
 from app.tools.canvas.production.estimation.video_production_request_normalizer import VideoProductionRequestNormalizer
 from app.tools.canvas.production.ports import ImageSearchCandidate
+from app.tools.canvas.production.ports import VideoCompositionRequest
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.generate_video import GenerateVideo
 from app.utils.async_file_utils import async_mkdir, async_write_bytes
@@ -120,29 +124,64 @@ async def test_image_search_imports_only_downloaded_and_probed_candidates(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_video_composition_creates_result_element_and_audio_sequence(tmp_path) -> None:
-    """视频合成读取 Video Edit 的有序视频和单条音频输入。"""
+async def test_add_elements_composes_final_video_element_and_declared_connection(tmp_path) -> None:
+    """最终视频通过 add_canvas_elements 创建，并保留模型声明的关系和布局。"""
     repository = CanvasRepository(tmp_path)
     application = create_test_application(repository, video_composition_port=FakeVideoCompositionPort())
     await application.initialize("mock-project")
     await async_mkdir(tmp_path / "mock-project" / "videos", parents=True, exist_ok=True)
-    await async_mkdir(tmp_path / "mock-project" / "audio", parents=True, exist_ok=True)
     await async_write_bytes(tmp_path / "mock-project" / "videos" / "one.mp4", b"mock")
     await async_write_bytes(tmp_path / "mock-project" / "videos" / "two.mp4", b"mock")
-    await async_write_bytes(tmp_path / "mock-project" / "audio" / "track.mp3", b"mock")
 
     def seed(project):
         """写入最小的 mock 合成图。"""
         video_1 = CanvasElement("video-1", "video", ElementProperties(width=720, height=1280), [CanvasContent("video-1-content", VideoContentFields(src="./videos/one.mp4", status="completed"))], "video-1-content", "video-1-content")
         video_2 = CanvasElement("video-2", "video", ElementProperties(width=720, height=1280), [CanvasContent("video-2-content", VideoContentFields(src="./videos/two.mp4", status="completed"))], "video-2-content", "video-2-content")
-        audio = CanvasElement("audio-1", "audio", ElementProperties(width=720, height=1280), [CanvasContent("audio-1-content", AudioContentFields(src="./audio/track.mp3"))], "audio-1-content", "audio-1-content")
-        edit = CanvasElement("edit-1", "video-edit", ElementProperties(name="edit"), [CanvasContent("edit-content", VideoEditContentFields(video_sequence=["video-1", "video-2"], audio_sequence=["audio-1"], output={"format": "mp4", "aspectRatio": "16:9", "resolution": "720p"}))], "edit-content", "edit-content")
-        project.canvas.elements.extend([video_1, video_2, audio, edit])
-        project.canvas.connections.extend([CanvasConnection("c1", "video-1", "edit-1"), CanvasConnection("c2", "video-2", "edit-1"), CanvasConnection("c3", "audio-1", "edit-1")])
+        edit = CanvasElement("edit-1", "video-edit", ElementProperties(name="edit"), [CanvasContent("edit-content", VideoEditContentFields(video_sequence=["video-1", "video-2"], audio_sequence=[], output={"format": "mp4", "aspectRatio": "16:9", "resolution": "720p"}))], "edit-content", "edit-content")
+        project.canvas.elements.extend([video_1, video_2, edit])
+        project.canvas.connections.extend([CanvasConnection("c1", "video-1", "edit-1"), CanvasConnection("c2", "video-2", "edit-1")])
 
     await repository.transaction("mock-project", seed)
-    result = await application.compose_video("mock-project", VideoCompositionCommand("edit-1", "final"))
+    result = await application.add_elements("mock-project", [{
+        "item_ref": "final-video",
+        "element_type": "video",
+        "name": "final",
+        "layout": {"strategy": "dependency_flow"},
+        "connections": [{"source_element_id": "edit-1"}],
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "task": "compose",
+            "input_mode": "video_edit",
+            "videoEditElementId": "edit-1",
+        },
+    }])
 
-    assert result["result_element_id"]
-    assert result["result_content_id"]
-    assert result["src"].startswith("./videos/")
+    assert result["items"][0]["status"] == "completed"
+    final_element_id = result["items"][0]["element_id"]
+    details = await application.elements("mock-project", [final_element_id])
+    final = details["elements"][0]
+    main_content = next(item for item in final["contents"] if item["content_id"] == final["main_content_id"])
+    assert main_content["status"] == "completed"
+    assert main_content["asset_path"].startswith("./videos/")
+    assert any(item["source_element_id"] == "edit-1" and item["target_element_id"] == final_element_id for item in details["connections"])
+
+
+def test_ffmpeg_command_preserves_source_audio_and_fills_silent_segments() -> None:
+    """无外部音频时，FFmpeg 命令保留原音并为无音轨片段补静音。"""
+    port = FfmpegVideoCompositionPort()
+    request = VideoCompositionRequest(
+        video_paths=(Path("one.mp4"), Path("two.mp4")),
+        audio_path=None,
+        output_path=Path("final.mp4"),
+        width=1920,
+        height=1080,
+    )
+    command = port._build_command(request, [
+        type("Media", (), {"has_audio": True, "duration_seconds": 2.0})(),
+        type("Media", (), {"has_audio": False, "duration_seconds": 3.0})(),
+    ])
+    rendered = " ".join(command)
+    assert "anullsrc" in rendered
+    assert "concat=n=2:v=1:a=1" in rendered
+    assert "-map [aout]" in rendered

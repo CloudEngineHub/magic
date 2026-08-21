@@ -184,7 +184,6 @@ from app.tools.canvas import (
     SelectCanvasMainContent,
     WaitCanvasGeneration,
     EstimateCanvasContentPoints,
-    ComposeCanvasVideo as CanvasComposeCanvasVideo,
     SearchCanvasImages as CanvasSearchCanvasImages,
     SearchCanvasImagePrompts,
 )
@@ -447,7 +446,6 @@ __all__ = [
     "SelectCanvasMainContent",
     "WaitCanvasGeneration",
     "EstimateCanvasContentPoints",
-    "CanvasComposeCanvasVideo",
     "CanvasSearchCanvasImages",
     "SearchCanvasImagePrompts",
 

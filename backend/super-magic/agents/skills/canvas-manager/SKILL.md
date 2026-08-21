@@ -101,7 +101,7 @@ Group sibling elements?                      → frame_canvas_elements
 Async task returned?                         → wait_canvas_generation
 Billed video generation?                    → estimate_canvas_content_points unless the user explicitly opts out (see the matching video reference)
 Change layout / wire dependencies?           → layout_canvas_elements, manage_canvas_connections  (see professional-video-production.md)
-Final MP4 from a video-edit?                 → compose_canvas_final_video  (see professional-video-production.md)
+Final MP4 from a video-edit?                 → add_canvas_elements with task="compose" (see professional-video-production.md)
 Search and import web images?                → search_canvas_image_candidates  (see image-search.md)
 Design marker ([@design_marker:...])?        → visual_understanding + add_canvas_elements  (see Design marker processing)
 User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (see prompt-library.md)
@@ -399,29 +399,34 @@ print(result.content)
 
 After showing the full parameters, points, and `estimate_id`, you must confirm with a direct `ask_user`; do not call video generation before confirmation. If and only if the user explicitly said in the current request that estimation is unnecessary and accepted an unknown point cost, omit the estimate and set `skip_point_estimate=true` in the generated video Content.
 
-## `compose_canvas_final_video`
+## Final video composition through `add_canvas_elements`
 
-Synchronously compose the final MP4 from the main Content of a confirmed `video-edit` Element. It is not an async generation task, so do not call `wait_canvas_generation`.
-
-| Parameter | Required | Description |
-|---|---|---|
-| `project_path` | Yes | Full Canvas project path |
-| `video_edit_element_id` | Yes | Exact Video Edit Element ID |
-| `result_name` | Yes | Final video name |
-| `result_element_id` | No | Provide when reusing an existing result Element is explicitly requested |
+Treat the final MP4 as an ordinary generated Video Element. The model must declare the final Element, its `video-edit -> final-video` Connection, and dependency layout in the same request. The Canvas application creates a pending generated Content and runs internal FFmpeg composition against that Content; it does not create Elements, Connections, or layout automatically.
 
 ```python
 from sdk.tool import tool
 
-result = tool.call("compose_canvas_final_video", {
+result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
-    "video_edit_element_id": "element-740000000000000020",
-    "result_name": "Product launch final cut",
+    "items": [{
+        "item_ref": "final-video",
+        "element_type": "video",
+        "name": "Product launch final cut",
+        "layout": {"strategy": "dependency_flow"},
+        "connections": [{"source_element_id": "element-740000000000000020"}],
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "task": "compose",
+            "input_mode": "video_edit",
+            "videoEditElementId": "element-740000000000000020",
+        },
+    }],
 })
 print(result.content)
 ```
 
-After composition, query details with the returned real Element ID, then report the MP4 path, duration, dimensions, and audio status to the user.
+Composition is synchronous and does not use `wait_canvas_generation`. After success, query the final Video Element with `query_canvas_element_details`. If no Audio Element is declared in the Video Edit, the compositor preserves source-video audio when available.
 
 ## `search_canvas_image_candidates`
 
@@ -546,7 +551,7 @@ Load references only when the matching task appears:
 
 - `references/image-generation.md` — image generation, revision, reference images, or image retry.
 - `references/video-generation.md` — minimal basic Canvas video generation, equivalent to direct Canvas image generation, without uploaded-asset production, professional-production Connections, staged workflow, or continuation/revision orchestration.
-- `references/professional-video-production.md` — the complete video-production workflow, including ordinary direct production, direct professional video with Connections, detailed staged production with storyboards, first frames, shot dependencies, layout strategies, revisions, recovery, audio, and final `compose_canvas_final_video`.
+- `references/professional-video-production.md` — the complete video-production workflow, including ordinary direct production, direct professional video with Connections, detailed staged production with storyboards, first frames, shot dependencies, layout strategies, revisions, recovery, audio, and final composition through `add_canvas_elements`.
 - `references/image-search.md` — the user asks to search and import web images (`search_canvas_image_candidates`).
 - `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.

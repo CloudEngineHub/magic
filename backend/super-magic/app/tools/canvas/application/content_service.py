@@ -73,6 +73,11 @@ class ContentService:
                 if element.element_type in {"frame", "group"}:
                     raise CanvasDomainError("FRAME_CONTENT_MANAGED_INTERNAL", "Frame and Group Content is managed internally.")
                 command = item.content
+                if command.is_composition:
+                    raise CanvasDomainError(
+                        "CONTENT_INPUT_INVALID",
+                        "task=compose is only supported when creating the final video Element with add_canvas_elements.",
+                    )
                 if command.content_id is None:
                     command = ContentCommand(
                         source=command.source,
@@ -80,6 +85,7 @@ class ContentService:
                         fields=command.fields,
                         asset_path=command.asset_path,
                         generation_parameters=command.generation_parameters,
+                        composition_video_edit_element_id=command.composition_video_edit_element_id,
                         content_id=new_canvas_id("content"),
                     )
                 if command.is_generated:

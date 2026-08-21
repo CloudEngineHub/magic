@@ -183,6 +183,12 @@ class CanvasApplicationFactory:
             estimate_guard=estimate_guard,
             element_sizing=element_sizing,
         )
+        video_composition_service = VideoCompositionService(
+            unit_of_work=dependencies.unit_of_work,
+            composition_port=dependencies.video_composition_port,
+            production_rule=dependencies.production_rules.get("video_composition"),
+            workspace=dependencies.repository.workspace,
+        )
         return CanvasApplication(
             repository=dependencies.repository,
             query_service=dependencies.query_service,
@@ -197,6 +203,7 @@ class CanvasApplicationFactory:
                 generation_submission_service=generation_submission,
                 estimate_guard=estimate_guard,
                 element_sizing=element_sizing,
+                video_composition_service=video_composition_service,
             ),
             frame_elements_service=FrameElementsService(
                 unit_of_work=dependencies.unit_of_work,
@@ -238,12 +245,6 @@ class CanvasApplicationFactory:
                 estimators=dependencies.cost_estimators,
                 estimate_records=dependencies.cost_estimate_records,
                 normalizers=dependencies.cost_request_normalizers,
-            ),
-            video_composition_service=VideoCompositionService(
-                unit_of_work=dependencies.unit_of_work,
-                composition_port=dependencies.video_composition_port,
-                production_rule=dependencies.production_rules.get("video_composition"),
-                workspace=dependencies.repository.workspace,
             ),
             image_search_service=ImageSearchService(
                 unit_of_work=dependencies.unit_of_work,

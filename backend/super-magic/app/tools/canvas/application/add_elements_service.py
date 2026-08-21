@@ -25,6 +25,7 @@ from app.tools.canvas.domain.services import ElementReferenceResolver, VideoEdit
 from app.tools.canvas.generation import GenerationCapabilityRegistry
 from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
 from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
+from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
 
@@ -32,7 +33,7 @@ from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrate
 class AddElementsService:
     """Canvas AddElementsService 用例服务。"""
 
-    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, estimate_guard: GenerationEstimateGuard, element_sizing: CanvasElementSizingService):
+    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, estimate_guard: GenerationEstimateGuard, element_sizing: CanvasElementSizingService, video_composition_service: VideoCompositionService):
         """显式绑定新增 Element 所需的端口、策略和生成提交服务。"""
         self.unit_of_work = unit_of_work
         self.layout_strategies = layout_strategies
@@ -43,6 +44,7 @@ class AddElementsService:
         self.generation_submission_service = generation_submission_service
         self.estimate_guard = estimate_guard
         self.element_sizing = element_sizing
+        self.video_composition_service = video_composition_service
 
     async def add_elements(
         self,
@@ -52,6 +54,7 @@ class AddElementsService:
     ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[GenerationSubmissionCommand] = []
+        compositions: list[tuple[str, str, str, str, str]] = []
         prepared_contents: list[PreparedContentCommand] = []
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
@@ -91,6 +94,13 @@ class AddElementsService:
                     element.active_content_id = content_id
                     element.main_content_id = content_id
                     element.children = []
+                composition_content = content if content is not None and content.is_composition else None
+                if composition_content is not None:
+                    if element.element_type != "video" or not composition_content.composition_video_edit_element_id:
+                        raise CanvasDomainError(
+                            "CONTENT_INPUT_INVALID",
+                            "Composition Content requires a video Element and video-edit source.",
+                        )
                 generated_content_id = None
                 if content is not None:
                     if content.content_id is None:
@@ -100,6 +110,7 @@ class AddElementsService:
                             fields=content.fields,
                             asset_path=content.asset_path,
                             generation_parameters=content.generation_parameters,
+                            composition_video_edit_element_id=content.composition_video_edit_element_id,
                             content_id=new_canvas_id("content"),
                         )
                     if content.is_generated:
@@ -107,7 +118,7 @@ class AddElementsService:
                             element.element_type,
                             content.generation_parameters.model_id if content.generation_parameters else None,
                         )
-                        if capability.billable:
+                        if capability.billable and not content.is_composition:
                             resolved_parameters = await self.estimate_guard.resolve_and_validate(
                                 project_path=project_path,
                                 item_ref=item.item_ref,
@@ -126,13 +137,24 @@ class AddElementsService:
                     element.main_content_id = element.contents[0].content_id
                     if content.is_generated:
                         generated_content_id = element.contents[0].content_id
-                        generated.append(GenerationSubmissionCommand(
-                            element_id=element.element_id,
-                            content_id=element.contents[0].content_id,
-                            element_type=element.element_type,
-                            parameters=content.generation_parameters or GenerationParameters(),
-                            item_ref=item.item_ref,
-                        ))
+                        if content.is_composition:
+                            compositions.append(
+                                (
+                                    item.item_ref,
+                                    element.element_id,
+                                    element.contents[0].content_id,
+                                    content.composition_video_edit_element_id or "",
+                                    item.name or "Canvas final video",
+                                )
+                            )
+                        else:
+                            generated.append(GenerationSubmissionCommand(
+                                element_id=element.element_id,
+                                content_id=element.contents[0].content_id,
+                                element_type=element.element_type,
+                                parameters=content.generation_parameters or GenerationParameters(),
+                                item_ref=item.item_ref,
+                            ))
                     CanvasApplicationOperations.set_content_detail(
                         metadata,
                         element.element_id,
@@ -189,4 +211,23 @@ class AddElementsService:
             )
         except CanvasDomainError as error:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
-        return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
+        result = await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
+        result_items = {item.item_ref: item for item in result.items}
+        for item_ref, element_id, content_id, video_edit_element_id, result_name in compositions:
+            target = result_items[item_ref]
+            try:
+                composed = await self.video_composition_service.compose(
+                    project_path,
+                    video_edit_element_id,
+                    result_name,
+                    element_id,
+                    tool_context,
+                    result_content_id=content_id,
+                )
+                target.content_id = composed.result_content_id
+                target.status = composed.status
+                target.output_uri = composed.src
+            except Exception as error:
+                target.status = "failed"
+                target.error = str(error)
+        return result

@@ -248,6 +248,7 @@ class ContentInput(BaseToolParams):
 Workspace path of imported media. When the file is outside the current Canvas project's canonical media directory, the tool copies it into the project and returns the project-local path.""",
     )
     prompt: str | None = Field(None, min_length=1)
+    video_edit_element_id: str | None = Field(None, alias="videoEditElementId")
     default_style: TextStyleInput | None = Field(None, alias="defaultStyle")
     fill: str | None = None
     stroke: str | None = None
@@ -289,7 +290,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     frame_start_path: str | None = None
     frame_end_path: str | None = None
     input_mode: VideoInputMode | None = None
-    task: Literal["generate", "edit"] | None = None
+    task: Literal["generate", "edit", "compose"] | None = None
     size: str | None = None
     duration_seconds: int | None = Field(None, gt=0)
     aspect_ratio: str | None = None
@@ -303,6 +304,8 @@ Reference image paths inside the current Canvas project. Use paths relative to t
         """按来源和 Content 类型拒绝不确定字段组合。"""
         if self.skip_point_estimate and not (self.source == "generated" and self.content_type == "video"):
             raise ValueError("skip_point_estimate is only allowed for generated video Content")
+        if self.video_edit_element_id is not None and self.task != "compose":
+            raise ValueError("videoEditElementId is only allowed when task=compose")
         if self.content_type == "video-edit":
             if self.source != "user":
                 raise ValueError("video-edit Content requires source=user")
@@ -312,11 +315,26 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             self._validate_unique_sequence("audioSequence", self.audio_sequence or [])
         elif self.video_sequence is not None or self.audio_sequence is not None or self.output is not None:
             raise ValueError("videoSequence, audioSequence, and output are only allowed for video-edit Content")
+        if self.content_type == "storyboard" and self.source == "user":
+            config = self.generation_config
+            if config is None or not config.model_id or not config.size or not config.resolution or not config.aspect_ratio:
+                raise ValueError(
+                    "storyboard Content requires generationConfig.model_id, size, resolution, and aspect_ratio"
+                )
         if self.source == "generated":
             if self.content_type not in {"image", "video"}:
                 raise ValueError("source=generated currently supports content_type=image or video")
+            if self.task == "compose":
+                if self.content_type != "video" or not self.video_edit_element_id:
+                    raise ValueError("task=compose requires video content and videoEditElementId")
+                if self.input_mode != "video_edit":
+                    raise ValueError("task=compose requires input_mode=video_edit")
+                if self.prompt is not None:
+                    raise ValueError("task=compose does not accept prompt")
+                if self.estimate_id or self.skip_point_estimate:
+                    raise ValueError("task=compose does not use point estimation")
             estimate_bound_video = self.content_type == "video" and bool(self.estimate_id)
-            if not self.prompt and not estimate_bound_video:
+            if self.task != "compose" and not self.prompt and not estimate_bound_video:
                 raise ValueError("source=generated requires prompt unless estimate_id is provided")
             if self.content_type == "image" and (not self.name or not self.name.strip()):
                 raise ValueError("source=generated image requires name")
@@ -331,7 +349,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                 raise ValueError("source=imported requires asset_path")
             if self.prompt is not None:
                 raise ValueError("prompt is only allowed when source=generated")
-        else:
+        elif self.source == "user":
             if self.content_type in {"image", "video", "audio"}:
                 raise ValueError("media Content must use source=imported or source=generated")
             if self.asset_path is not None or self.prompt is not None:
@@ -356,6 +374,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             fields=self._build_fields(),
             asset_path=self.asset_path,
             generation_parameters=self._build_generation_parameters() if self.source == "generated" else None,
+            composition_video_edit_element_id=self.video_edit_element_id,
             content_id=content_id,
         )
 
@@ -394,7 +413,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             )
         if self.content_type == "storyboard":
             return StoryboardContentFields(
-                generation_config=self._model_object(self.generation_config),
+                generation_config=self._storyboard_generation_config(),
                 shots=[self._model_object(shot) for shot in self.shots or []],
             )
         if self.content_type == "video-edit":
@@ -428,6 +447,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             fps=self.fps,
             seed=self.seed,
             watermark=self.watermark,
+            video_edit_element_id=self.video_edit_element_id,
         )
 
     def _text_paragraphs(self) -> list[JsonObject]:
@@ -442,6 +462,23 @@ Reference image paths inside the current Canvas project. Use paths relative to t
         if model is None:
             return None
         return cast(JsonObject, model.model_dump(by_alias=True, exclude_none=True))
+
+    def _storyboard_generation_config(self) -> JsonObject:
+        """转换为前端约定的分镜模型、尺寸、分辨率和画面比例结构。"""
+        config = self.generation_config
+        if config is None:
+            return {}
+        values: JsonObject = {
+            "model_id": config.model_id,
+            "size": config.size,
+            "resolution": config.resolution,
+            "image_generation_config": {"aspect_ratio": config.aspect_ratio},
+        }
+        return {
+            key: value
+            for key, value in values.items()
+            if value is not None and value != {}
+        }
 
 
 class ElementInput(BaseToolParams):

@@ -3,7 +3,6 @@
 from app.tools.canvas.tools import (
     AddCanvasContents,
     AddCanvasElements,
-    ComposeCanvasVideo,
     EstimateCanvasContentPoints,
     FrameCanvasElements,
     InitializeCanvas,
@@ -21,7 +20,6 @@ from app.tools.canvas.tools import (
 __all__ = [
     "AddCanvasContents",
     "AddCanvasElements",
-    "ComposeCanvasVideo",
     "EstimateCanvasContentPoints",
     "FrameCanvasElements",
     "InitializeCanvas",

@@ -20,7 +20,6 @@ PUBLIC_TOOLS = {
     "manage_canvas_connections",
     "wait_canvas_generation",
     "estimate_canvas_content_points",
-    "compose_canvas_final_video",
     "search_canvas_image_candidates",
     "search_canvas_image_prompts",
 }

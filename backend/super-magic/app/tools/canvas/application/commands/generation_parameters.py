@@ -32,6 +32,7 @@ class GenerationParameters:
     fps: int | None = None
     seed: int | None = None
     watermark: bool | None = None
+    video_edit_element_id: str | None = None
     extensions: JsonObject = field(default_factory=dict)
 
     def to_dict(self) -> JsonObject:
@@ -60,6 +61,7 @@ class GenerationParameters:
             "fps": self.fps,
             "seed": self.seed,
             "watermark": self.watermark,
+            "video_edit_element_id": self.video_edit_element_id,
         }
         values.update({key: value for key, value in optional.items() if value is not None})
         if self.skip_point_estimate:
@@ -91,6 +93,7 @@ class GenerationParameters:
             fps=_optional_integer(values, "fps"),
             seed=_optional_integer(values, "seed"),
             watermark=_optional_boolean(values, "watermark"),
+            video_edit_element_id=_optional_string(values, "video_edit_element_id"),
             extensions=_optional_object(values, "extensions"),
         )
 

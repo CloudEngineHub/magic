@@ -275,7 +275,12 @@ tool.call("add_canvas_elements", {
         "content": {
             "source": "user",
             "content_type": "storyboard",
-            "generationConfig": {"aspect_ratio": "16:9", "resolution": "1080p"},
+            "generationConfig": {
+                "model_id": "confirmed-image-model",
+                "size": "1600x900",
+                "resolution": "2K",
+                "aspect_ratio": "16:9",
+            },
             "shots": [
                 {"id": "S01", "description": "Shot: reveal — Scene: dark stage — Camera: slow push-in — Action: product emerges — Focus: establish tone"},
                 {"id": "S02", "description": "Shot: detail — Scene: three-quarter angle — Camera: orbit — Action: product rotates — Focus: material finish"},
@@ -286,13 +291,13 @@ tool.call("add_canvas_elements", {
 ```
 
 A storyboard update is the latest working storyboard; it is not a user-selectable media candidate. For a partial revision, append or update only the changed shot descriptions while preserving the existing storyboard Element and generation settings. For a confirmed complete replacement, removal, or reorder, replace the full shot list in one update. Never save unconfirmed generation prompts as storyboard shot descriptions. If shot count or order changes, update the storyboard before rebuilding the downstream video sequence.
-Use only an image model, aspect ratio, and resolution declared by the current model context and delivery requirements; do not invent unsupported storyboard generation settings.
+The persisted Storyboard generation configuration must include the selected model, size, resolution, and aspect ratio. The Canvas protocol stores it as `model_id`, `size`, `resolution`, and `image_generation_config.aspect_ratio`; do not leave model or aspect ratio implicit and do not invent unsupported settings.
 
 ### 6. Generate and confirm first frames
 
 Do not generate a first frame immediately after saving. First display the opening shot's complete first-frame prompt, call `ask_user`, and wait for explicit approval or revisions. Only after approval should you generate the opening frame.
 
-After the opening frame returns, wait for its task if needed, query the exact Element, show or summarize the candidate, call `ask_user`, and wait for explicit approval. Only after the opening frame is confirmed may you draft and confirm the remaining prompts. Generate one independent image task per shot, verify every requested shot succeeded, preserve successful frames, and retry only missing or rejected shots.
+After the opening frame returns, wait for its task if needed, query the exact Element, show or summarize the candidate, call `ask_user`, and wait for explicit approval. Only after the opening frame is confirmed may you draft and confirm the remaining prompts. Every first-frame request must pass all confirmed initialization assets in `reference_images` (and the corresponding project paths when required by the provider), not just the asset most relevant to that shot. Generate one independent image task per shot, verify every requested shot succeeded, preserve successful frames, and retry only missing or rejected shots.
 
 Use one generated `image` Element per shot. The storyboard Element is the direct upstream source of each first-frame Element; reference paths are generation inputs. A first-frame revision appends a new Content to the same first-frame Element and does not create a duplicate logical Element:
 
@@ -310,7 +315,7 @@ result = tool.call("add_canvas_elements", {
             "content_type": "image",
             "name": "Opening shot first frame",
             "prompt": "The confirmed opening shot composition, subject identity, scene, camera framing, lighting, and artifact exclusions.",
-            "reference_images": ["./images/product-anchor.webp", "./images/scene-anchor.webp"],
+            "reference_images": ["./images/product-anchor.webp", "./images/scene-anchor.webp", "./images/style-anchor.webp"],
             "size": "1080x1920",
         },
     }],
@@ -390,7 +395,7 @@ An empty `audioSequence` preserves audio already present in the source videos wh
 
 ### 9. Compose and deliver
 
-Call `compose_canvas_final_video` with the confirmed Video Edit Element only after the user confirms the edit configuration. Then verify the returned result Element with `query_canvas_element_details` and present the MP4 path, duration, dimensions, and audio status. For a later revision, pass `result_element_id` only when the user wants to keep the same final logical result Element.
+Create the final Video Element through `add_canvas_elements` only after the user confirms the edit configuration. Declare the `video-edit -> final-video` Connection and `dependency_flow` layout in that request. Use generated Video Content with `task="compose"`, `input_mode="video_edit"`, and `videoEditElementId` set to the confirmed Video Edit Element ID. Then verify the returned final Element with `query_canvas_element_details` and present the MP4 path, duration, dimensions, and audio status.
 
 The final output is the current Video Edit's main Content. Composition is synchronous and does not use `wait_canvas_generation`. If composition fails, preserve the failed Content and active/main pointers, repair the inputs or configuration, ask the user before retrying, and verify the returned result Element after a successful retry.
 
@@ -414,7 +419,7 @@ Use the current Canvas tools below; do not call the removed video-production too
 | Change layout | `layout_canvas_elements` |
 | Add, remove, or replace a Connection | `manage_canvas_connections` |
 | Configure an ordered edit | `add_canvas_elements` / `add_canvas_contents` with `video-edit` Content |
-| Compose the final MP4 | `compose_canvas_final_video` |
+| Compose the final MP4 | `add_canvas_elements` with generated Video Content and `task="compose"` |
 
 The table above is authoritative for this workflow. Translate every scenario to the current Canvas tool and Content lifecycle; do not invent alternate tool names or bypass the Canvas business tools.
 
@@ -521,23 +526,28 @@ tool.call("manage_canvas_connections", {
 
 Query and obtain the exact Connection ID before removing or replacing; never guess it from names, positions, or endpoints. Remove or replace only with explicit user intent.
 
-## compose_canvas_final_video
+## Final composition through `add_canvas_elements`
 
-Synchronously compose the final MP4 from a Video Edit Element's main Content.
-
-| Parameter | Required | Description |
-|---|---|---|
-| `project_path` | Yes | Project path |
-| `video_edit_element_id` | Yes | The Video Edit Element to compose |
-| `result_name` | Yes | Name of the final video result |
-| `result_element_id` | No | Only an explicit target Video Element |
+The final MP4 is a normal generated Video Element. The model owns the Element declaration, Connection, and layout; the application only executes FFmpeg and writes the result into the pending Content.
 
 ```python
-tool.call("compose_canvas_final_video", {
+tool.call("add_canvas_elements", {
     "project_path": "Demo",
-    "video_edit_element_id": "element-740000000000000020",
-    "result_name": "Product launch final cut",
+    "items": [{
+        "item_ref": "final-video",
+        "element_type": "video",
+        "name": "Product launch final cut",
+        "layout": {"strategy": "dependency_flow"},
+        "connections": [{"source_element_id": "element-740000000000000020"}],
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "task": "compose",
+            "input_mode": "video_edit",
+            "videoEditElementId": "element-740000000000000020",
+        },
+    }],
 })
 ```
 
-Composition is synchronous and does not use `wait_canvas_generation`. Verify the returned `result_element_id` with `query_canvas_element_details`. On failure, keep the failed Content for diagnosis and preserve active/main pointers; fix inputs or config, then ask the user before composing again.
+Composition is synchronous and does not use `wait_canvas_generation`. If `audioSequence` is empty, preserve source-video audio when available. Do not call `video_understanding` after composition; query Canvas metadata only. On failure, keep the failed Content for diagnosis and preserve active/main pointers; fix inputs or configuration, ask the user before retrying, and submit a new final Video Element through `add_canvas_elements`.

@@ -18,6 +18,7 @@ class ContentCommand:
     fields: CanvasContentFields
     asset_path: str | None = None
     generation_parameters: GenerationParameters | None = None
+    composition_video_edit_element_id: str | None = None
     content_id: str | None = None
 
     @property
@@ -30,6 +31,16 @@ class ContentCommand:
         """判断该 Content 是否来自本地素材。"""
         return self.source == "imported"
 
+    @property
+    def is_composition(self) -> bool:
+        """判断该生成 Content 是否需要通过 Canvas 内部合成能力产出。"""
+        return bool(
+            self.source == "generated"
+            and self.generation_parameters is not None
+            and self.generation_parameters.task == "compose"
+            and self.composition_video_edit_element_id
+        )
+
     def to_metadata(self) -> dict[str, object]:
         """转换为 sidecar 记录使用的稳定输入摘要。"""
         values: dict[str, object] = {
@@ -40,4 +51,8 @@ class ContentCommand:
             values["assetPath"] = self.asset_path
         if self.generation_parameters is not None:
             values["generationParameters"] = self.generation_parameters.to_dict()
+        if self.is_composition:
+            values["composition"] = {
+                "videoEditElementId": self.composition_video_edit_element_id,
+            }
         return values

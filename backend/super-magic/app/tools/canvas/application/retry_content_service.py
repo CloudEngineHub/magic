@@ -49,6 +49,11 @@ class RetryContentService:
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Frame and Group Elements do not have generated Content.")
                 detail = CanvasApplicationOperations.get_content_detail(metadata, element.element_id, item.content_id)
                 original_parameters = detail.get("generationParameters", {})
+                if isinstance(original_parameters, dict) and original_parameters.get("task") == "compose":
+                    raise CanvasDomainError(
+                        "CONTENT_RETRY_NOT_ALLOWED",
+                        "Composition Content must be regenerated through add_canvas_elements with task=compose.",
+                    )
                 override = item.generation_override.to_dict() if item.generation_override else None
                 parameters = CanvasApplicationOperations.merge_generation_override(element.element_type, original_parameters, override)
                 idempotency_key = ContentMetadataService.retry_idempotency_key(item.item_ref, element.element_id, content.content_id, parameters)

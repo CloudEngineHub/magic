@@ -31,7 +31,6 @@ from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.tools import (
     AddCanvasContents,
     AddCanvasElements,
-    ComposeCanvasVideo,
     ContentInput,
     ElementInput,
     EstimateCanvasContentPoints,
@@ -117,7 +116,6 @@ def test_each_canvas_tool_owns_feedback_hooks() -> None:
         ManageCanvasConnections,
         WaitCanvasGeneration,
         EstimateCanvasContentPoints,
-        ComposeCanvasVideo,
         SearchCanvasImagePrompts,
         SearchCanvasImages,
     ]
@@ -145,7 +143,6 @@ def test_canvas_tool_schemas_reject_unknown_top_level_parameters() -> None:
         ManageCanvasConnections,
         WaitCanvasGeneration,
         EstimateCanvasContentPoints,
-        ComposeCanvasVideo,
         SearchCanvasImagePrompts,
         SearchCanvasImages,
     ]
@@ -171,7 +168,6 @@ def test_canvas_tools_do_not_conflict_with_legacy_tool_names() -> None:
     assert canvas_names.isdisjoint(design_names)
     assert ManageCanvasConnections._tool_name == "manage_canvas_connections"
     assert SearchCanvasImages._tool_name == "search_canvas_image_candidates"
-    assert ComposeCanvasVideo._tool_name == "compose_canvas_final_video"
 
 
 def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
@@ -238,6 +234,39 @@ def test_generated_media_inherits_name_from_element_when_content_name_is_missing
     })
     assert explicit.content is not None
     assert explicit.content.name == "Content 名称"
+
+
+def test_storyboard_persists_model_and_nested_aspect_ratio_configuration() -> None:
+    """Storyboard Content 必须保留模型、尺寸、分辨率和嵌套画面比例。"""
+    storyboard = ContentInput(
+        source="user",
+        content_type="storyboard",
+        generationConfig={
+            "model_id": "mock-image-model",
+            "size": "1600x900",
+            "resolution": "2K",
+            "aspect_ratio": "16:9",
+        },
+        shots=[{"id": "S01", "description": "mock shot"}],
+    )
+
+    assert storyboard.to_command().fields.to_dict()["generationConfig"] == {
+        "model_id": "mock-image-model",
+        "size": "1600x900",
+        "resolution": "2K",
+        "image_generation_config": {"aspect_ratio": "16:9"},
+    }
+
+
+def test_composition_content_requires_video_edit_input_mode() -> None:
+    """最终视频生成协议必须显式声明 video_edit 输入模式。"""
+    with pytest.raises(ValidationError, match="input_mode=video_edit"):
+        ContentInput(
+            source="generated",
+            content_type="video",
+            task="compose",
+            videoEditElementId="edit-1",
+        )
 
 
 def test_video_generation_mode_and_task_survive_input_conversions() -> None:
@@ -801,14 +830,6 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
             id="wait",
         ),
         pytest.param(
-            ComposeCanvasVideo,
-            {"project_path": "Canvas/Demo", "result_name": "final-video"},
-            ToolResult(content="mock", data={"src": "videos/final.mp4"}),
-            ("正在合成视频：final-video", "视频已合成：videos/final.mp4"),
-            ("Composing video: final-video", "Video composed: videos/final.mp4"),
-            id="compose-video",
-        ),
-        pytest.param(
             EstimateCanvasContentPoints,
             {"project_path": "Canvas/Demo", "items": [{}]},
             ToolResult(content="mock", data={"can_continue": True, "total_points": 12}),
@@ -995,15 +1016,6 @@ async def test_canvas_tool_remarks_follow_current_language(
             "Canvas generation wait",
             "task-1",
             id="wait",
-        ),
-        pytest.param(
-            ComposeCanvasVideo,
-            {"project_path": "Canvas/Demo"},
-            ToolResult(content="MODEL-ONLY", data={"result_element_id": "element-2", "result_content_id": "content-2", "src": "videos/final.mp4"}),
-            "画布视频合成",
-            "Canvas video composition",
-            "videos/final.mp4",
-            id="compose",
         ),
         pytest.param(
             EstimateCanvasContentPoints,
