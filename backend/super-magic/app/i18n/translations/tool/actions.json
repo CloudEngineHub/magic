@@ -775,6 +775,30 @@
         "zh_CN": "生成画布内容",
         "en_US": "Generate canvas content"
     },
+    "canvas.generate_image": {
+        "zh_CN": "生成图片",
+        "en_US": "Generate images"
+    },
+    "canvas.generate_image_ing": {
+        "zh_CN": "正在生成图片",
+        "en_US": "Generating images"
+    },
+    "canvas.generate_video": {
+        "zh_CN": "生成视频",
+        "en_US": "Generate videos"
+    },
+    "canvas.generate_video_ing": {
+        "zh_CN": "正在生成视频",
+        "en_US": "Generating videos"
+    },
+    "canvas.generate_media": {
+        "zh_CN": "生成图片和视频",
+        "en_US": "Generate images and videos"
+    },
+    "canvas.generate_media_ing": {
+        "zh_CN": "正在生成图片和视频",
+        "en_US": "Generating images and videos"
+    },
     "canvas.import_content": {
         "zh_CN": "导入画布素材",
         "en_US": "Import canvas assets"

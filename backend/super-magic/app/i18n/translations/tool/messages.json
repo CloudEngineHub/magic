@@ -5439,6 +5439,34 @@
         "zh_CN": "画布操作失败",
         "en_US": "Canvas operation failed"
     },
+    "canvas.media.image": {
+        "zh_CN": "图片",
+        "en_US": "image"
+    },
+    "canvas.media.video": {
+        "zh_CN": "视频",
+        "en_US": "video"
+    },
+    "canvas.media.image_video": {
+        "zh_CN": "图片和视频",
+        "en_US": "images and videos"
+    },
+    "canvas.generate_pending": {
+        "zh_CN": "准备生成 {{total}} 个{{media}}",
+        "en_US": "Preparing {{total}} {{media}} generation task(s)"
+    },
+    "canvas.generate_status.completed": {
+        "zh_CN": "已生成 {{count}} 个{{media}}",
+        "en_US": "Generated {{count}} {{media}}"
+    },
+    "canvas.generate_status.processing": {
+        "zh_CN": "{{count}} 个{{media}}生成中",
+        "en_US": "{{count}} {{media}} in progress"
+    },
+    "canvas.generate_status.failed": {
+        "zh_CN": "{{count}} 个{{media}}生成失败",
+        "en_US": "{{count}} {{media}} failed"
+    },
     "canvas.detail.title.connections": {
         "zh_CN": "画布连线",
         "en_US": "Canvas connections"
@@ -5450,6 +5478,18 @@
     "canvas.detail.title.elements_added": {
         "zh_CN": "新增画布节点",
         "en_US": "Canvas elements added"
+    },
+    "canvas.detail.title.generated_images": {
+        "zh_CN": "生成图片",
+        "en_US": "Images generated"
+    },
+    "canvas.detail.title.generated_videos": {
+        "zh_CN": "生成视频",
+        "en_US": "Videos generated"
+    },
+    "canvas.detail.title.generated_media": {
+        "zh_CN": "生成图片和视频",
+        "en_US": "Images and videos generated"
     },
     "canvas.detail.title.video_composition": {
         "zh_CN": "画布视频合成",
@@ -5538,6 +5578,26 @@
     "canvas.detail.field.type": {
         "zh_CN": "类型",
         "en_US": "Type"
+    },
+    "canvas.detail.field.media_type": {
+        "zh_CN": "媒体类型",
+        "en_US": "Media type"
+    },
+    "canvas.detail.field.total": {
+        "zh_CN": "任务总数",
+        "en_US": "Total tasks"
+    },
+    "canvas.detail.field.completed": {
+        "zh_CN": "已生成",
+        "en_US": "Generated"
+    },
+    "canvas.detail.field.processing": {
+        "zh_CN": "生成中",
+        "en_US": "Processing"
+    },
+    "canvas.detail.field.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
     },
     "canvas.detail.field.frame_element_id": {
         "zh_CN": "画框节点 ID",
