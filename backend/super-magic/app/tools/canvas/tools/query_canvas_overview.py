@@ -86,15 +86,17 @@ class QueryCanvasOverview(BaseTool[BaseToolParams]):
         builder.add_field("connections", data.get("total_connections", 0))
         builder.add_field("page", data.get("page", builder.arguments.get("page", 1)))
         for element in data.get("elements", []):
-            builder.add_item(
-                {
-                    "element_id": element.get("element_id", "-"),
-                    "type": element.get("element_type", "-"),
-                    "parent": element.get("parent_element_id") or "-",
-                    "depth": element.get("depth", 0),
-                    "children": element.get("child_count", 0),
-                }
-            )
+            fields = {
+                "element_id": element.get("element_id", "-"),
+                "type": element.get("element_type", "-"),
+            }
+            if element.get("parent_element_id"):
+                fields["parent"] = element["parent_element_id"]
+            if element.get("depth", 0) != 0:
+                fields["depth"] = element["depth"]
+            if element.get("child_count", 0) != 0:
+                fields["children"] = element["child_count"]
+            builder.add_item(fields)
         return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:

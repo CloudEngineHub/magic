@@ -13,21 +13,56 @@ def overview_content(result: dict[str, Any]) -> str:
         f"- Project path: {result['project_path']}",
         f"- Elements: {result['total_elements']}",
         f"- Connections: {result['total_connections']}",
-        f"- Page: {result['page']} | Limit: {result['limit']} | Has more: {str(result['has_more']).lower()}",
     ]
+    pagination = []
+    if result.get("page", 1) != 1:
+        pagination.append(f"page={result['page']}")
+    if result.get("limit", 50) != 50:
+        pagination.append(f"limit={result['limit']}")
+    if result.get("has_more"):
+        pagination.append("has_more=true")
+    if pagination:
+        lines.append("- " + " | ".join(pagination))
     for element in result["elements"]:
-        lines.append(
-            f"- element_id={element['element_id']} | type={element['element_type']} | "
-            f"name={element.get('name') or '-'} | position=({element.get('x')}, {element.get('y')}) | "
-            f"size={element.get('width')}x{element.get('height')} | contents={element['content_count']} | "
-            f"parent_element_id={element.get('parent_element_id') or '-'} | depth={element.get('depth', 0)} | "
-            f"child_count={element.get('child_count', 0)} | "
-            f"active_content_id={element.get('active_content_id') or '-'} | "
-            f"main_content_id={element.get('main_content_id') or '-'} | status={element.get('status') or '-'} | "
-            f"incoming={len(element.get('incoming') or [])} | outgoing={len(element.get('outgoing') or [])}"
-        )
+        lines.append(_overview_element_line(element))
     lines.append("Next: call query_canvas_element_details with exact Element IDs when full details are needed.")
     return "\n".join(lines)
+
+
+def _overview_element_line(element: dict[str, Any]) -> str:
+    """只渲染概览中非默认且对后续决策有用的 Element 字段。"""
+    fields = [
+        f"element_id={element['element_id']}",
+        f"type={element['element_type']}",
+    ]
+    if element.get("name"):
+        fields.append(f"name={element['name']}")
+    if element.get("x") is not None or element.get("y") is not None:
+        fields.append(f"position=({element.get('x')}, {element.get('y')})")
+    if element.get("width") is not None or element.get("height") is not None:
+        fields.append(f"size={element.get('width')}x{element.get('height')}")
+    if element.get("content_count", 1) != 1:
+        fields.append(f"contents={element.get('content_count', 0)}")
+    if element.get("parent_element_id"):
+        fields.append(f"parent_element_id={element['parent_element_id']}")
+    if element.get("depth", 0) != 0:
+        fields.append(f"depth={element['depth']}")
+    if element.get("child_count", 0) != 0:
+        fields.append(f"child_count={element['child_count']}")
+    if element.get("content_count", 1) != 1:
+        if element.get("active_content_id"):
+            fields.append(f"active_content_id={element['active_content_id']}")
+        if element.get("main_content_id"):
+            fields.append(f"main_content_id={element['main_content_id']}")
+    if element.get("status") and element["status"] != "completed":
+        fields.append(f"status={element['status']}")
+    incoming = len(element.get("incoming") or [])
+    outgoing = len(element.get("outgoing") or [])
+    if incoming:
+        fields.append(f"incoming={incoming}")
+    if outgoing:
+        fields.append(f"outgoing={outgoing}")
+    return "- " + " | ".join(fields)
 
 
 def elements_content(result: dict[str, Any]) -> str:
@@ -36,35 +71,60 @@ def elements_content(result: dict[str, Any]) -> str:
         "Canvas Element details returned.",
         f"- Project path: {result['project_path']}",
         f"- Elements: {len(result['elements'])}",
-        f"- details_complete: {str(result.get('details_complete', True)).lower()}",
     ]
+    if result.get("details_complete") is False:
+        lines.append("- details_complete=false")
     for element in result["elements"]:
         lines.append(f"Element {element['element_id']}:")
-        lines.append(
-            f"- type={element['element_type']} | name={element.get('name') or '-'} | "
-            f"parent_element_id={element.get('parent_element_id') or '-'} | depth={element.get('depth', 0)}"
-        )
+        fields = [f"type={element['element_type']}"]
+        if element.get("name"):
+            fields.append(f"name={element['name']}")
+        if element.get("parent_element_id"):
+            fields.append(f"parent_element_id={element['parent_element_id']}")
+        if element.get("depth", 0) != 0:
+            fields.append(f"depth={element['depth']}")
+        lines.append("- " + " | ".join(fields))
         layout = element.get("layout") or {}
-        if layout:
-            lines.append(
-                "- layout="
-                + ", ".join(f"{key}={layout[key]}" for key in ("x", "y", "width", "height", "z_index") if key in layout)
-            )
+        layout_fields = []
+        for key in ("x", "y", "width", "height", "scale_x", "scale_y", "z_index"):
+            value = layout.get(key)
+            if value is None:
+                continue
+            if key in {"scale_x", "scale_y"} and value == 1:
+                continue
+            if key == "z_index" and value == 0:
+                continue
+            layout_fields.append(f"{key}={value}")
+        if layout_fields:
+            lines.append("- layout=" + ", ".join(layout_fields))
         child_ids = element.get("child_element_ids") or []
-        lines.append(f"- child_element_ids={','.join(child_ids) if child_ids else '-'}")
-        lines.append(
-            f"- active_content_id={element.get('active_content_id') or '-'} | "
-            f"main_content_id={element.get('main_content_id') or '-'}"
-        )
-        for content in element.get("contents") or []:
+        children = element.get("children") or []
+        if child_ids and not children:
+            lines.append(f"- child_element_ids={','.join(child_ids)}")
+        contents = element.get("contents") or []
+        active_content_id = element.get("active_content_id")
+        main_content_id = element.get("main_content_id")
+        if (len(contents) > 1 or active_content_id != main_content_id) and (active_content_id or main_content_id):
+            content_fields = []
+            if active_content_id:
+                content_fields.append(f"active_content_id={active_content_id}")
+            if main_content_id:
+                content_fields.append(f"main_content_id={main_content_id}")
+            if content_fields:
+                lines.append("- " + " | ".join(content_fields))
+        for content in contents:
             fields = [
                 f"content_id={content['content_id']}",
-                f"status={content.get('status') or '-'}",
-                f"source={content.get('source') or '-'}",
             ]
-            for key in ("asset_path", "generation_task_id", "retry_count", "error_message"):
-                if content.get(key) is not None:
+            if content.get("status"):
+                fields.append(f"status={content['status']}")
+            if content.get("source"):
+                fields.append(f"source={content['source']}")
+            for key in ("asset_path", "generation_task_id", "error_message"):
+                if content.get(key):
                     fields.append(f"{key}={content[key]}")
+            if content.get("retry_count", 0) != 0:
+                fields.append(f"retry_count={content['retry_count']}")
             parameters = content.get("generation_parameters") or {}
             if parameters.get("prompt"):
                 fields.append(f"prompt={parameters['prompt']}")
@@ -72,24 +132,17 @@ def elements_content(result: dict[str, Any]) -> str:
             if isinstance(payload, dict) and payload.get("content") is not None:
                 fields.append(f"content={_compact_value(payload['content'])}")
             lines.append("- content: " + " | ".join(fields))
-        for child in element.get("children") or []:
-            lines.append(
-                f"- child={child['element_id']} | type={child['element_type']} | "
-                f"parent_element_id={child['parent_element_id']} | depth={child['depth']}"
-            )
-        for connection in element.get("connections") or []:
+        for child in children:
+            lines.append(f"- child={child['element_id']} | type={child['element_type']}")
+    connections = result.get("connections") or []
+    if connections:
+        lines.append(f"Connections ({len(connections)}):")
+        for connection in connections:
             lines.append(
                 f"- connection_id={connection['connection_id']} | "
                 f"source_element_id={connection['source_element_id']} | "
                 f"target_element_id={connection['target_element_id']}"
             )
-    lines.append(f"Connections ({len(result['connections'])}):")
-    for connection in result["connections"]:
-        lines.append(
-            f"- connection_id={connection['connection_id']} | "
-            f"source_element_id={connection['source_element_id']} | "
-            f"target_element_id={connection['target_element_id']}"
-        )
     for warning in result.get("warnings", []):
         lines.append(f"- Warning: {warning}")
     return "\n".join(lines)

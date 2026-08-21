@@ -137,12 +137,12 @@ async def test_add_elements_composes_final_video_element_and_declared_connection
         """写入最小的 mock 合成图。"""
         video_1 = CanvasElement("video-1", "video", ElementProperties(width=720, height=1280), [CanvasContent("video-1-content", VideoContentFields(src="./videos/one.mp4", status="completed"))], "video-1-content", "video-1-content")
         video_2 = CanvasElement("video-2", "video", ElementProperties(width=720, height=1280), [CanvasContent("video-2-content", VideoContentFields(src="./videos/two.mp4", status="completed"))], "video-2-content", "video-2-content")
-        edit = CanvasElement("edit-1", "video-edit", ElementProperties(name="edit"), [CanvasContent("edit-content", VideoEditContentFields(video_sequence=["video-1", "video-2"], audio_sequence=[], output={"format": "mp4", "aspectRatio": "16:9", "resolution": "720p"}))], "edit-content", "edit-content")
+        edit = CanvasElement("edit-1", "video-edit", ElementProperties(name="edit", x=0, y=0, width=720, height=1280), [CanvasContent("edit-content", VideoEditContentFields(video_sequence=["video-1", "video-2"], audio_sequence=[], output={"format": "mp4", "aspectRatio": "16:9", "resolution": "720p"}))], "edit-content", "edit-content")
         project.canvas.elements.extend([video_1, video_2, edit])
         project.canvas.connections.extend([CanvasConnection("c1", "video-1", "edit-1"), CanvasConnection("c2", "video-2", "edit-1")])
 
     await repository.transaction("mock-project", seed)
-    result = await application.add_elements("mock-project", [{
+    result = await application._application.add_elements("mock-project", [{
         "item_ref": "final-video",
         "element_type": "video",
         "name": "final",

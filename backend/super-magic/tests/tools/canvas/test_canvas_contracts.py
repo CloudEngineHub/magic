@@ -26,7 +26,7 @@ from app.tools.canvas.generation import (
     InMemoryGenerationTaskRepository,
 )
 from app.tools.canvas.presentation import error_result as _error_result
-from app.tools.canvas.presentation.model_content import elements_content, items_content
+from app.tools.canvas.presentation.model_content import elements_content, items_content, overview_content
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.tools import (
     AddCanvasContents,
@@ -550,6 +550,72 @@ def test_element_details_content_does_not_dump_raw_element_dto() -> None:
     assert '"contents"' not in content
 
 
+def test_element_details_content_omits_defaults_and_keeps_actionable_fields() -> None:
+    """详情模型文本应省略默认值，并保留多版本、任务和关系信息。"""
+    content = elements_content(
+        {
+            "project_path": "Canvas/Demo",
+            "details_complete": True,
+            "elements": [
+                {
+                    "element_id": "element-1",
+                    "element_type": "video",
+                    "name": None,
+                    "parent_element_id": None,
+                    "depth": 0,
+                    "layout": {"x": 0, "y": 0, "scale_x": 1, "scale_y": 1, "z_index": 0},
+                    "child_element_ids": [],
+                    "active_content_id": "content-2",
+                    "main_content_id": "content-1",
+                    "contents": [
+                        {
+                            "content_id": "content-1",
+                            "status": "completed",
+                            "source": "generated",
+                            "retry_count": 0,
+                        },
+                        {
+                            "content_id": "content-2",
+                            "status": "processing",
+                            "source": "generated",
+                            "retry_count": 1,
+                            "generation_task_id": "task-1",
+                        },
+                    ],
+                    "children": [],
+                    "connections": [
+                        {
+                            "connection_id": "connection-1",
+                            "source_element_id": "element-0",
+                            "target_element_id": "element-1",
+                        }
+                    ],
+                }
+            ],
+            "connections": [
+                {
+                    "connection_id": "connection-1",
+                    "source_element_id": "element-0",
+                    "target_element_id": "element-1",
+                }
+            ],
+        }
+    )
+
+    assert "details_complete" not in content
+    assert "name=-" not in content
+    assert "parent_element_id=-" not in content
+    assert "depth=0" not in content
+    assert "scale_x=1" not in content
+    assert "z_index=0" not in content
+    assert "active_content_id=content-2" in content
+    assert "main_content_id=content-1" in content
+    assert "retry_count=1" in content
+    assert "generation_task_id=task-1" in content
+    assert "connection_id=connection-1" in content
+    assert content.count("connection_id=connection-1") == 1
+
+
 @pytest.mark.asyncio
 async def test_sidecar_write_validation_rolls_back_main_file(tmp_path) -> None:
     """sidecar 写后校验失败时，主文件不能留下半完成的修改。"""
@@ -681,6 +747,73 @@ def test_feedback_and_content_are_separate_channels() -> None:
     assert result.content.startswith("Canvas Elements added successfully.")
     assert "element-1" not in result.content
     assert result.data["items"][0]["element_id"] == "element-1"
+
+
+def test_overview_content_omits_default_element_fields() -> None:
+    """概览模型文本应省略默认值，但保留异常状态和层级关系。"""
+    content = overview_content(
+        {
+            "project_path": "Canvas/Demo",
+            "total_elements": 2,
+            "total_connections": 1,
+            "page": 1,
+            "limit": 50,
+            "has_more": False,
+            "elements": [
+                {
+                    "element_id": "element-1",
+                    "element_type": "image",
+                    "name": None,
+                    "x": None,
+                    "y": None,
+                    "width": None,
+                    "height": None,
+                    "content_count": 1,
+                    "parent_element_id": None,
+                    "depth": 0,
+                    "child_count": 0,
+                    "active_content_id": "content-1",
+                    "main_content_id": "content-1",
+                    "status": "completed",
+                    "incoming": [],
+                    "outgoing": [],
+                },
+                {
+                    "element_id": "element-2",
+                    "element_type": "video",
+                    "name": "Shot 1",
+                    "x": 10,
+                    "y": 20,
+                    "width": 1920,
+                    "height": 1080,
+                    "content_count": 2,
+                    "parent_element_id": "frame-1",
+                    "depth": 1,
+                    "child_count": 1,
+                    "active_content_id": "content-2",
+                    "main_content_id": "content-1",
+                    "status": "processing",
+                    "incoming": ["element-1"],
+                    "outgoing": [],
+                },
+            ],
+        }
+    )
+
+    first_line = next(line for line in content.splitlines() if "element_id=element-1" in line)
+    second_line = next(line for line in content.splitlines() if "element_id=element-2" in line)
+    assert "contents=" not in first_line
+    assert "parent_element_id=" not in first_line
+    assert "depth=" not in first_line
+    assert "child_count=" not in first_line
+    assert "status=" not in first_line
+    assert "name=Shot 1" in second_line
+    assert "contents=2" in second_line
+    assert "parent_element_id=frame-1" in second_line
+    assert "depth=1" in second_line
+    assert "child_count=1" in second_line
+    assert "status=processing" in second_line
+    assert "incoming=1" in second_line
 
 
 @pytest.mark.asyncio
@@ -1080,3 +1213,35 @@ async def test_canvas_tool_details_follow_current_language_without_translating_v
         assert raw_value in en_content
     assert "MODEL-ONLY" not in zh_content
     assert "MODEL-ONLY" not in en_content
+
+
+@pytest.mark.asyncio
+async def test_overview_tool_detail_omits_default_hierarchy_fields() -> None:
+    """概览详情卡片应省略默认父级、深度和子节点数量。"""
+    tool = QueryCanvasOverview()
+    result = ToolResult(
+        content="MODEL-ONLY",
+        data={
+            "project_path": "Canvas/Demo",
+            "total_elements": 1,
+            "total_connections": 0,
+            "page": 1,
+            "elements": [
+                {
+                    "element_id": "element-1",
+                    "element_type": "image",
+                    "parent_element_id": None,
+                    "depth": 0,
+                    "child_count": 0,
+                }
+            ],
+        },
+    )
+    detail = await tool.get_tool_detail(ToolContext(), result, {"project_path": "Canvas/Demo"})
+
+    assert detail is not None
+    content = detail.data.content
+    assert "element-1" in content
+    assert "父节点" not in content
+    assert "深度" not in content
+    assert "子节点" not in content

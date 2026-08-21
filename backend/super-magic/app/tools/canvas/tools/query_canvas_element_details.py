@@ -79,16 +79,23 @@ class QueryCanvasElementDetails(BaseTool[BaseToolParams]):
         builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         builder.add_field("elements", len(data.get("elements", [])))
         for element in data.get("elements", []):
-            builder.add_item(
-                {
-                    "element_id": element.get("element_id", "-"),
-                    "type": element.get("element_type", "-"),
-                    "parent": element.get("parent_element_id") or "-",
-                    "depth": element.get("depth", 0),
-                    "contents": len(element.get("contents") or []),
-                    "children": len(element.get("children") or []),
-                }
-            )
+            fields = {
+                "element_id": element.get("element_id", "-"),
+                "type": element.get("element_type", "-"),
+            }
+            if element.get("name"):
+                fields["name"] = element["name"]
+            if element.get("parent_element_id"):
+                fields["parent"] = element["parent_element_id"]
+            if element.get("depth", 0) != 0:
+                fields["depth"] = element["depth"]
+            content_count = len(element.get("contents") or [])
+            if content_count != 1:
+                fields["contents"] = content_count
+            child_count = len(element.get("children") or [])
+            if child_count:
+                fields["children"] = child_count
+            builder.add_item(fields)
         for warning in data.get("warnings", []):
             builder.add_warning(warning)
         return builder.build()
