@@ -1,32 +1,188 @@
 """工作区素材网关实现。"""
 
+import asyncio
+import hashlib
+import os
+import re
 from pathlib import Path
 from stat import S_ISREG
 
 from app.tools.canvas.domain.errors import CanvasDomainError
-from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway
+from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway, MaterializedCanvasAsset
 from app.tools.canvas.infrastructure.assets.project_asset_path_resolver import ProjectAssetPathResolver
-from app.utils.async_file_utils import async_exists, async_stat
+from app.utils.async_file_utils import (
+    async_close_fd,
+    async_copy2,
+    async_exists,
+    async_mkdir,
+    async_mkstemp,
+    async_stat,
+    async_unlink,
+)
+
+_MEDIA_DIRECTORY_BY_TYPE = {
+    "image": "images",
+    "video": "videos",
+    "audio": "audio",
+}
+_MEDIA_EXTENSIONS_BY_TYPE = {
+    "image": {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"},
+    "video": {".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"},
+    "audio": {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"},
+}
+_SAFE_FILENAME_PATTERN = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
 class WorkspaceAssetGateway(AssetGateway):
-    """在 Canvas 工作区内解析并校验素材文件。"""
+    """在 Canvas 工作区内解析、校验并物化素材文件。"""
 
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""
         self.workspace = workspace
         self.path_resolver = ProjectAssetPathResolver(workspace)
 
-    async def normalize_existing_file(self, project_path: str, asset_path: str) -> str:
-        """校验素材存在、位于工作区内且是受支持的普通文件。"""
-        candidate = self.path_resolver.resolve_workspace_path(asset_path)
+    async def materialize_existing_file(
+        self,
+        project_path: str,
+        asset_path: str,
+        media_type: str,
+    ) -> MaterializedCanvasAsset:
+        """将工作区素材物化到当前项目的类型目录。"""
+        target_directory = self._target_directory(media_type)
+        source = await self._resolve_existing_source(project_path, asset_path)
+        suffix = source.suffix.lower()
+        if suffix not in _MEDIA_EXTENSIONS_BY_TYPE[media_type]:
+            raise CanvasDomainError(
+                "ASSET_TYPE_MISMATCH",
+                f"Asset file type does not match content_type={media_type}: {asset_path}.",
+            )
+
+        project_root = self.path_resolver.resolve_project_root(project_path)
+        canonical_root = (project_root / target_directory).resolve()
         try:
-            candidate.relative_to(self.workspace)
-        except ValueError as exc:
-            raise CanvasDomainError("ASSET_PATH_INVALID", "Asset path must stay inside the Canvas workspace.") from exc
-        if not await async_exists(candidate) or not S_ISREG((await async_stat(candidate)).st_mode):
-            raise CanvasDomainError("ASSET_NOT_FOUND", f"Asset file does not exist: {asset_path}.")
-        try:
-            return self.path_resolver.normalize_existing_asset(project_path, asset_path)
+            canonical_root.relative_to(project_root)
         except ValueError as error:
-            raise CanvasDomainError("ASSET_PATH_INVALID", str(error)) from error
+            raise CanvasDomainError(
+                "ASSET_PATH_INVALID",
+                "Canvas project media directory must stay inside the project.",
+            ) from error
+        try:
+            project_relative = source.relative_to(canonical_root).as_posix()
+        except ValueError:
+            project_relative = None
+        if project_relative is not None:
+            return MaterializedCanvasAsset(
+                project_uri=f"./{target_directory}/{project_relative}",
+                absolute_path=source,
+                created=False,
+            )
+
+        digest = await asyncio.to_thread(self._content_digest, source)
+        filename = self._safe_filename(f"{digest}{suffix}")
+        destination = canonical_root / filename
+        if await async_exists(destination):
+            if not S_ISREG((await async_stat(destination)).st_mode):
+                raise CanvasDomainError(
+                    "ASSET_DESTINATION_INVALID",
+                    f"Canvas asset destination is not a regular file: {destination}.",
+                )
+            return MaterializedCanvasAsset(
+                project_uri=f"./{target_directory}/{filename}",
+                absolute_path=destination,
+                created=False,
+            )
+
+        created = await self._copy_atomically(source, destination)
+        return MaterializedCanvasAsset(
+            project_uri=f"./{target_directory}/{filename}",
+            absolute_path=destination,
+            created=created,
+        )
+
+    async def discard(self, asset: MaterializedCanvasAsset) -> None:
+        """仅删除本次物化新建的项目文件。"""
+        if asset.created:
+            await async_unlink(asset.absolute_path)
+
+    async def _resolve_existing_source(self, project_path: str, asset_path: str) -> Path:
+        """按项目相对、工作区相对或工作区内绝对路径解析素材。"""
+        raw = str(asset_path or "").strip().replace("\\", "/")
+        if not raw:
+            raise CanvasDomainError("ASSET_PATH_INVALID", "Asset path must not be empty.")
+
+        project_root = self.path_resolver.resolve_project_root(project_path)
+        value = Path(raw)
+        if value.is_absolute():
+            candidates = [value]
+        elif raw.startswith("./"):
+            candidates = [project_root / raw[2:]]
+        else:
+            workspace_candidate = self.workspace / value
+            project_candidate = project_root / value
+            project_prefix = Path(project_path).parts
+            candidates = (
+                [workspace_candidate]
+                if value.parts[: len(project_prefix)] == project_prefix
+                else [project_candidate, workspace_candidate]
+            )
+
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            try:
+                resolved.relative_to(self.workspace.resolve())
+            except ValueError as error:
+                raise CanvasDomainError(
+                    "ASSET_PATH_INVALID",
+                    "Asset path must stay inside the Canvas workspace.",
+                ) from error
+            if await async_exists(resolved) and S_ISREG((await async_stat(resolved)).st_mode):
+                return resolved
+        raise CanvasDomainError("ASSET_NOT_FOUND", f"Asset file does not exist: {asset_path}.")
+
+    @staticmethod
+    def _target_directory(media_type: str) -> str:
+        """返回媒体类型对应的 Canvas 项目目录。"""
+        directory = _MEDIA_DIRECTORY_BY_TYPE.get(media_type)
+        if directory is None:
+            raise CanvasDomainError(
+                "ASSET_TYPE_UNSUPPORTED",
+                f"Imported Canvas assets do not support content_type={media_type}.",
+            )
+        return directory
+
+    @staticmethod
+    def _content_digest(path: Path) -> str:
+        """以分块读取计算素材内容指纹。"""
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _safe_filename(value: str) -> str:
+        """将素材名称收窄为稳定的项目文件名。"""
+        normalized = _SAFE_FILENAME_PATTERN.sub("_", value).strip("._")
+        return normalized or "asset"
+
+    @staticmethod
+    async def _copy_atomically(source: Path, destination: Path) -> bool:
+        """先写入同目录临时文件，再以排他链接完成首次落盘。"""
+        await async_mkdir(destination.parent, parents=True, exist_ok=True)
+        fd, raw_temp_path = await async_mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+        await async_close_fd(fd)
+        temporary_path = Path(raw_temp_path)
+        try:
+            await async_copy2(source, temporary_path)
+            try:
+                await asyncio.to_thread(os.link, temporary_path, destination)
+            except FileExistsError:
+                if await async_exists(destination) and S_ISREG((await async_stat(destination)).st_mode):
+                    return False
+                raise CanvasDomainError(
+                    "ASSET_DESTINATION_INVALID",
+                    f"Canvas asset destination is not a regular file: {destination}.",
+                )
+            return True
+        finally:
+            await async_unlink(temporary_path)

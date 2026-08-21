@@ -13,7 +13,7 @@ from app.tools.canvas.application.commands import (
     GenerationSubmissionCommand,
     SelectMainContentCommand,
 )
-from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.application.content_preparation_service import ContentPreparationService, PreparedContentCommand
 from app.tools.canvas.application.results import (
     AddContentResultItem,
     AddContentsResult,
@@ -54,6 +54,7 @@ class ContentService:
     ) -> AddContentsResult:
         """向已有 Element 追加 Content 版本。"""
         generated: list[GenerationSubmissionCommand] = []
+        prepared_contents: list[PreparedContentCommand] = []
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
@@ -78,7 +79,9 @@ class ContentService:
                         generation_parameters=command.generation_parameters,
                         content_id=new_canvas_id("content"),
                     )
-                await self.content_preparation.prepare_imported(project, command, project_path)
+                prepared = await self.content_preparation.prepare_imported(command, project_path)
+                prepared_contents.append(prepared)
+                command = prepared.command
                 content = self.content_preparation.build(command, element.element_type)
                 if element.get_content(content.content_id) is not None:
                     raise CanvasDomainError("CONTENT_ALREADY_EXISTS", f"Content {content.content_id} already exists.")
@@ -122,7 +125,11 @@ class ContentService:
             return AddContentsResult(results), metadata
 
         try:
-            result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
+            result = await self.unit_of_work.transaction_with_sidecar(
+                project_path,
+                mutate,
+                on_rollback=lambda: self.content_preparation.discard_materialized(prepared_contents),
+            )
         except CanvasDomainError as error:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)

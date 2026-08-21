@@ -7,7 +7,7 @@ from app.tools.canvas.strategies.content.request import ContentStrategyRequest
 
 
 class ImportedAssetContentStrategy(BaseContentStrategy):
-    """处理从工作区导入的图片或视频 Content。"""
+    """处理从工作区导入的媒体 Content。"""
 
     source = "imported"
 

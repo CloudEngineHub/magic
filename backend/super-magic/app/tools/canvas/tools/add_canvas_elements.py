@@ -241,7 +241,12 @@ class ContentInput(BaseToolParams):
     source: Literal["user", "imported", "generated"]
     content_type: CanvasElementType
     content: str | list[RichTextParagraphInput] | None = None
-    asset_path: str | None = Field(None, min_length=1)
+    asset_path: str | None = Field(
+        None,
+        min_length=1,
+        description="""<!--zh: imported 媒体的工作区路径。如果文件不在当前 Canvas 项目的标准媒体目录，工具会自动复制并在结果中返回项目内路径。-->
+Workspace path of imported media. When the file is outside the current Canvas project's canonical media directory, the tool copies it into the project and returns the project-local path.""",
+    )
     prompt: str | None = Field(None, min_length=1)
     default_style: TextStyleInput | None = Field(None, alias="defaultStyle")
     fill: str | None = None

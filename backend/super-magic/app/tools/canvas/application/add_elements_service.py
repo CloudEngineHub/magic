@@ -13,7 +13,7 @@ from app.tools.canvas.application.commands import (
     GenerationSubmissionCommand,
     LayoutCommand,
 )
-from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.application.content_preparation_service import ContentPreparationService, PreparedContentCommand
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import AddElementResultItem, AddElementsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
@@ -50,6 +50,7 @@ class AddElementsService:
     ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[GenerationSubmissionCommand] = []
+        prepared_contents: list[PreparedContentCommand] = []
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
@@ -96,7 +97,9 @@ class AddElementsService:
                             generation_parameters=content.generation_parameters,
                             content_id=new_canvas_id("content"),
                         )
-                    await self.content_preparation.prepare_imported(project, content, project_path)
+                    prepared = await self.content_preparation.prepare_imported(content, project_path)
+                    prepared_contents.append(prepared)
+                    content = prepared.command
                     element.contents.append(self.content_preparation.build(content, element.element_type))
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
@@ -162,7 +165,11 @@ class AddElementsService:
             return AddElementsResult(results, list(created.values())), metadata
 
         try:
-            result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
+            result = await self.unit_of_work.transaction_with_sidecar(
+                project_path,
+                mutate,
+                on_rollback=lambda: self.content_preparation.discard_materialized(prepared_contents),
+            )
         except CanvasDomainError as error:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)

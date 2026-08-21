@@ -11,7 +11,10 @@ from typing import Awaitable, Callable, TypeVar, cast
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.infrastructure.persistence.canvas_main_file_sanitizer import CanvasMainFileSanitizer
-from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import (
+    CanvasRepositoryInterface,
+    RollbackCallback,
+)
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import (
     RUNTIME_METADATA_KEY,
     RUNTIME_SIDECAR_FILENAME,
@@ -93,6 +96,7 @@ class CanvasRepository(CanvasRepositoryInterface):
         project_path: str,
         mutator: Callable[[CanvasProject, dict], tuple[T, dict] | Awaitable[tuple[T, dict]]],
         filename: str = "element-details.json",
+        on_rollback: RollbackCallback | None = None,
     ) -> T:
         """在同一项目锁内协调主文件和 sidecar 写入。
 
@@ -102,28 +106,38 @@ class CanvasRepository(CanvasRepositoryInterface):
         path = CanvasPathResolver.resolve(self.workspace, project_path)
         lock = self._locks[str(path)]
         async with lock:
-            project = await self.read(project_path)
-            sidecar = await self._read_sidecar_strict(path / filename)
-            runtime_sidecar = {}
-            if filename == "element-details.json":
-                runtime_sidecar = await self._read_sidecar_strict(
-                    path / RUNTIME_SIDECAR_FILENAME
-                )
-                ContentMetadataService.split_legacy_metadata(sidecar, runtime_sidecar)
-                sidecar[RUNTIME_METADATA_KEY] = runtime_sidecar
-            if filename != "element-details-user.json":
-                await self._read_sidecar_strict(path / "element-details-user.json")
-            result = mutator(project, sidecar)
-            if asyncio.iscoroutine(result):
-                result = await result
-            if not isinstance(result, tuple) or len(result) != 2:
-                raise TypeError("transaction_with_sidecar mutator must return (result, sidecar)")
-            value, updated_sidecar = result
-            project.canvas.validate()
-            if filename == "element-details.json":
-                updated_sidecar = self._main_file_sanitizer.synchronize_sidecar(project, updated_sidecar)
-            await self._write_bundle(path, project, updated_sidecar, filename)
-            return value
+            try:
+                project = await self.read(project_path)
+                sidecar = await self._read_sidecar_strict(path / filename)
+                runtime_sidecar = {}
+                if filename == "element-details.json":
+                    runtime_sidecar = await self._read_sidecar_strict(
+                        path / RUNTIME_SIDECAR_FILENAME
+                    )
+                    ContentMetadataService.split_legacy_metadata(sidecar, runtime_sidecar)
+                    sidecar[RUNTIME_METADATA_KEY] = runtime_sidecar
+                if filename != "element-details-user.json":
+                    await self._read_sidecar_strict(path / "element-details-user.json")
+                result = mutator(project, sidecar)
+                if asyncio.iscoroutine(result):
+                    result = await result
+                if not isinstance(result, tuple) or len(result) != 2:
+                    raise TypeError("transaction_with_sidecar mutator must return (result, sidecar)")
+                value, updated_sidecar = result
+                project.canvas.validate()
+                if filename == "element-details.json":
+                    updated_sidecar = self._main_file_sanitizer.synchronize_sidecar(project, updated_sidecar)
+                await self._write_bundle(path, project, updated_sidecar, filename)
+                return value
+            except BaseException as error:
+                if on_rollback is not None:
+                    try:
+                        rollback = on_rollback()
+                        if asyncio.iscoroutine(rollback):
+                            await rollback
+                    except BaseException as rollback_error:
+                        error.add_note(f"Canvas transaction resource rollback failed: {rollback_error}")
+                raise
 
     async def _write(self, path: Path, project: CanvasProject) -> None:
         """原子写入主文件并保留 sidecar 的已有内容。"""

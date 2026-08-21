@@ -428,16 +428,50 @@ async def test_add_first_content_to_empty_element_initializes_content_pointers(t
 
 
 @pytest.mark.asyncio
-async def test_imported_asset_is_normalized_and_cannot_be_registered_twice(tmp_path) -> None:
-    """imported Content 只能登记真实工作区文件，并按规范路径去重。"""
-    asset = tmp_path / "mock-project" / "images" / "mock.png"
+async def test_add_contents_materializes_imported_asset_into_project(tmp_path) -> None:
+    """向已有 Element 追加 imported Content 时也应使用项目内 URI。"""
+    asset = tmp_path / "uploads" / "mock.mp3"
     asset.parent.mkdir(parents=True)
-    asset.write_bytes(b"mock")
+    asset.write_bytes(b"mock-audio")
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+    created = await application.add_elements(
+        "mock-project",
+        [{"item_ref": "audio", "element_type": "audio"}],
+    )
+
+    result = await application.add_contents(
+        "mock-project",
+        [{
+            "item_ref": "imported-audio",
+            "element_id": created["items"][0]["element_id"],
+            "content": {
+                "source": "imported",
+                "content_type": "audio",
+                "asset_path": "uploads/mock.mp3",
+            },
+        }],
+    )
+
+    project = await repository.read("mock-project")
+    element = project.canvas.get_element(created["items"][0]["element_id"])
+    content = element.get_content(result["items"][0]["content_id"])
+    assert content.fields.src.startswith("./audio/")
+    assert len(list((tmp_path / "mock-project" / "audio").glob("*"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_imported_asset_is_materialized_idempotently_and_reusable(tmp_path) -> None:
+    """imported 素材会物化到项目目录，并允许多个 Content 复用。"""
+    asset = tmp_path / "uploads" / "mock.png"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b"mock-image")
     repository = CanvasRepository(tmp_path)
     application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
 
-    await application.add_elements(
+    first_result = await application.add_elements(
         "mock-project",
         [{
             "item_ref": "asset-one",
@@ -445,26 +479,112 @@ async def test_imported_asset_is_normalized_and_cannot_be_registered_twice(tmp_p
             "content": {
                 "source": "imported",
                 "content_type": "image",
-                "asset_path": "mock-project/images/mock.png",
+                "asset_path": "uploads/mock.png",
             },
         }],
     )
 
+    second = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "asset-two",
+            "element_type": "image",
+            "content": {
+                "source": "imported",
+                "content_type": "image",
+                "asset_path": "uploads/mock.png",
+            },
+        }],
+    )
+
+    project = await repository.read("mock-project")
+    first = project.canvas.get_element(first_result["items"][0]["element_id"])
+    second_element = project.canvas.get_element(second["items"][0]["element_id"])
+    first_uri = first.get_content(first.main_content_id).fields.src
+    second_uri = second_element.get_content(second_element.main_content_id).fields.src
+
+    assert first_uri == second_uri
+    assert first_uri.startswith("./images/")
+    assert asset.exists()
+    assert len(list((tmp_path / "mock-project" / "images").glob("*"))) == 1
+    details = await repository.read_sidecar_runtime("mock-project")
+    assert details["elements"][first.element_id]["contentDetails"][first.main_content_id]["assetPath"] == first_uri
+
+
+@pytest.mark.asyncio
+async def test_imported_image_video_audio_use_type_directories_and_project_uris(tmp_path) -> None:
+    """图片、视频和音频导入后分别落入项目标准目录。"""
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    (uploads / "mock.png").write_bytes(b"mock-image")
+    (uploads / "mock.mp4").write_bytes(b"mock-video")
+    (uploads / "mock.mp3").write_bytes(b"mock-audio")
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+
+    await application.add_elements(
+        "mock-project",
+        [
+            {"item_ref": "image", "element_type": "image", "content": {"source": "imported", "content_type": "image", "asset_path": "uploads/mock.png"}},
+            {"item_ref": "video", "element_type": "video", "content": {"source": "imported", "content_type": "video", "asset_path": "uploads/mock.mp4"}},
+            {"item_ref": "audio", "element_type": "audio", "content": {"source": "imported", "content_type": "audio", "asset_path": "uploads/mock.mp3"}},
+        ],
+    )
+
+    project = await repository.read("mock-project")
+    uris = {
+        element.element_type: element.get_content(element.main_content_id).fields.src
+        for element in project.canvas.elements
+    }
+    assert uris["image"].startswith("./images/")
+    assert uris["video"].startswith("./videos/")
+    assert uris["audio"].startswith("./audio/")
+    assert len(list((tmp_path / "mock-project" / "images").glob("*"))) == 1
+    assert len(list((tmp_path / "mock-project" / "videos").glob("*"))) == 1
+    assert len(list((tmp_path / "mock-project" / "audio").glob("*"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_imported_asset_batch_failure_removes_new_materialized_files(tmp_path) -> None:
+    """批量事务失败时应删除本次新增的项目素材。"""
+    asset = tmp_path / "uploads" / "mock.png"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b"mock-image")
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+
+    with pytest.raises(CanvasBatchError):
+        await application.add_elements(
+            "mock-project",
+            [
+                {"item_ref": "asset", "element_type": "image", "content": {"source": "imported", "content_type": "image", "asset_path": "uploads/mock.png"}},
+                {"item_ref": "invalid", "element_type": "not-supported"},
+            ],
+        )
+
+    images_directory = tmp_path / "mock-project" / "images"
+    assert not list(images_directory.glob("*"))
+
+
+@pytest.mark.asyncio
+async def test_imported_asset_rejects_mismatched_extension(tmp_path) -> None:
+    """导入媒体的扩展名必须与 Content 类型匹配。"""
+    asset = tmp_path / "uploads" / "mock.png"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b"mock-image")
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+
     with pytest.raises(CanvasDomainError) as error:
         await application.add_elements(
             "mock-project",
-            [{
-                "item_ref": "asset-two",
-                "element_type": "image",
-                "content": {
-                    "source": "imported",
-                    "content_type": "image",
-                    "asset_path": "mock-project/images/mock.png",
-                },
-            }],
+            [{"item_ref": "wrong", "element_type": "video", "content": {"source": "imported", "content_type": "video", "asset_path": "uploads/mock.png"}}],
         )
 
-    assert error.value.code == "ASSET_ALREADY_REGISTERED"
+    assert error.value.code == "ASSET_TYPE_MISMATCH"
 
 
 @pytest.mark.asyncio

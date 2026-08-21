@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, TypeVar
 from app.tools.canvas.domain.models import CanvasProject
 
 T = TypeVar("T")
+RollbackCallback = Callable[[], None | Awaitable[None]]
 
 
 class CanvasRepositoryInterface(ABC):
@@ -41,8 +42,9 @@ class CanvasRepositoryInterface(ABC):
         project_path: str,
         mutator: Callable[[CanvasProject, dict], tuple[T, dict] | Awaitable[tuple[T, dict]]],
         filename: str = "element-details.json",
+        on_rollback: RollbackCallback | None = None,
     ) -> T:
-        """在项目锁内执行主文件和 sidecar 联合事务。"""
+        """在项目锁内执行主文件和 sidecar 联合事务，并回滚关联资源。"""
 
     @abstractmethod
     async def read_sidecar(self, project_path: str, filename: str = "element-details.json") -> dict:

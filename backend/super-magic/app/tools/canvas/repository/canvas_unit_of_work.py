@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Awaitable, Callable, TypeVar
 
 from app.tools.canvas.domain.models import CanvasProject
-from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import (
+    CanvasRepositoryInterface,
+    RollbackCallback,
+)
 
 T = TypeVar("T")
 
@@ -29,6 +32,12 @@ class CanvasUnitOfWork:
         project_path: str,
         mutator: Callable[[CanvasProject, dict], tuple[T, dict] | Awaitable[tuple[T, dict]]],
         filename: str = "element-details.json",
+        on_rollback: RollbackCallback | None = None,
     ) -> T:
-        """执行主文件和 backend sidecar 的联合提交。"""
-        return await self.repository.transaction_with_sidecar(project_path, mutator, filename)
+        """执行主文件、backend sidecar 和关联资源的联合提交。"""
+        return await self.repository.transaction_with_sidecar(
+            project_path,
+            mutator,
+            filename,
+            on_rollback,
+        )

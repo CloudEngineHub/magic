@@ -1,11 +1,22 @@
 """Canvas Content 创建前准备服务。"""
 
+from dataclasses import dataclass, replace
+
 from app.tools.canvas.application.commands import ContentCommand
+from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
-from app.tools.canvas.domain.models import CanvasContent, CanvasProject
-from app.tools.canvas.infrastructure.assets import AssetGateway
+from app.tools.canvas.domain.models import CanvasContent
+from app.tools.canvas.infrastructure.assets import AssetGateway, MaterializedCanvasAsset
 from app.tools.canvas.strategies import ContentStrategyRegistry
+
+
+@dataclass(frozen=True)
+class PreparedContentCommand:
+    """保存已准备命令及其新建的项目素材。"""
+
+    command: ContentCommand
+    materialized_asset: MaterializedCanvasAsset | None = None
 
 
 class ContentPreparationService:
@@ -20,19 +31,33 @@ class ContentPreparationService:
         """把强类型命令转换为领域 Content。"""
         return self.content_strategies.build(command, element_type)
 
-    async def prepare_imported(self, project: CanvasProject, command: ContentCommand, project_path: str) -> None:
-        """规范化 imported 素材路径并阻止同一素材重复登记。"""
+    async def prepare_imported(
+        self,
+        command: ContentCommand,
+        project_path: str,
+    ) -> PreparedContentCommand:
+        """将 imported 素材物化到当前项目并返回新命令。"""
         if not command.is_imported:
-            return
-        normalized = await self.asset_gateway.normalize_existing_file(project_path, command.asset_path or "")
-        existing_paths = {
-            content.fields.asset_path
-            for element in project.canvas.iter_elements()
-            for content in element.contents
-            if content.fields.asset_path
-        }
-        if normalized in existing_paths:
-            raise CanvasDomainError("ASSET_ALREADY_REGISTERED", f"Imported asset is already registered: {normalized}.")
-        if not isinstance(command.fields, GeneratedMediaContentFields):
+            return PreparedContentCommand(command)
+        if not isinstance(command.fields, (GeneratedMediaContentFields, AudioContentFields)):
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Imported media Content must expose a src field.")
-        command.fields.src = normalized
+        materialized = await self.asset_gateway.materialize_existing_file(
+            project_path,
+            command.asset_path or "",
+            command.content_type,
+        )
+        fields = replace(command.fields, src=materialized.project_uri)
+        return PreparedContentCommand(
+            command=replace(command, fields=fields, asset_path=materialized.project_uri),
+            materialized_asset=materialized,
+        )
+
+    async def discard_materialized(self, prepared: list[PreparedContentCommand]) -> None:
+        """清理未能随 Canvas 事务提交的新素材。"""
+        discarded: set[str] = set()
+        for item in reversed(prepared):
+            asset = item.materialized_asset
+            if asset is None or not asset.created or str(asset.absolute_path) in discarded:
+                continue
+            await self.asset_gateway.discard(asset)
+            discarded.add(str(asset.absolute_path))

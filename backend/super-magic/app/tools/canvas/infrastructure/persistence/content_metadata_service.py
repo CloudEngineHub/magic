@@ -87,7 +87,7 @@ class ContentMetadataService:
                 "generationParameters": _clean_generation_parameters(data),
             })
         elif data.get("source") == "imported":
-            detail["assetPath"] = data.get("src")
+            detail["assetPath"] = data.get("assetPath")
         return detail
 
     @staticmethod

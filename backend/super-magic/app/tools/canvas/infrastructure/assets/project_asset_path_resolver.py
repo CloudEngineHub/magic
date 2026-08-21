@@ -22,6 +22,10 @@ class ProjectAssetPathResolver:
         self._ensure_inside(resolved, self.workspace, "Asset path must stay inside the Canvas workspace.")
         return resolved
 
+    def resolve_project_root(self, project_path: str) -> Path:
+        """返回已完成工作区边界校验的 Canvas 项目根目录。"""
+        return CanvasPathResolver.resolve(self.workspace, project_path)
+
     def to_project_uri(self, project_path: str, asset_path: str | Path) -> str:
         """把已落盘媒体转换为当前项目根目录下的前端 URI。"""
         project_root = CanvasPathResolver.resolve(self.workspace, project_path)
