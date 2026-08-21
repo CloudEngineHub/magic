@@ -139,7 +139,7 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 error,
             )
             return GenerationQueryResult("failed", error_message=str(error))
-        logger.info(
+        logger.debug(
             "Canvas Design 视频查询请求: endpoint=GET /api/v1/design/video-generation-result "
             "project_id={} project_path={} element_id={} content_id={} provider_video_id={}",
             project_id,
@@ -160,7 +160,8 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             )
             return GenerationQueryResult("failed", error_message=str(error))
         status = self._status(response)
-        logger.info(
+        response_log = logger.info if status in {"completed", "failed", "error", "canceled", "cancelled"} else logger.debug
+        response_log(
             "Canvas Design 视频查询响应: project_path={} content_id={} provider_video_id={} status={} "
             "local_debug={} file_url_present={} file_dir={} file_name={} response_keys={}",
             request.project_path,
@@ -184,13 +185,6 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             )
             return GenerationQueryResult("failed", error_message=self._error_message(response))
         if status != "completed":
-            logger.debug(
-                "Canvas Design 视频仍在处理中: project_path={} content_id={} provider_video_id={} status={}",
-                request.project_path,
-                request.content_id,
-                request.provider_task_id,
-                status or "unknown",
-            )
             return GenerationQueryResult("processing")
         project = self._project_identity_resolver.resolve(request.project_path)
         project_root = self._asset_path_resolver.resolve_project_root(request.project_path)
