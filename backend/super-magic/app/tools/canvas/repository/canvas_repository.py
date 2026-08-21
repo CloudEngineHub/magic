@@ -12,6 +12,11 @@ from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.infrastructure.persistence.canvas_main_file_sanitizer import CanvasMainFileSanitizer
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.infrastructure.persistence.content_metadata_service import (
+    RUNTIME_METADATA_KEY,
+    RUNTIME_SIDECAR_FILENAME,
+    ContentMetadataService,
+)
 from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
 from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
 from app.utils.async_file_utils import (
@@ -99,6 +104,13 @@ class CanvasRepository(CanvasRepositoryInterface):
         async with lock:
             project = await self.read(project_path)
             sidecar = await self._read_sidecar_strict(path / filename)
+            runtime_sidecar = {}
+            if filename == "element-details.json":
+                runtime_sidecar = await self._read_sidecar_strict(
+                    path / RUNTIME_SIDECAR_FILENAME
+                )
+                ContentMetadataService.split_legacy_metadata(sidecar, runtime_sidecar)
+                sidecar[RUNTIME_METADATA_KEY] = runtime_sidecar
             if filename != "element-details-user.json":
                 await self._read_sidecar_strict(path / "element-details-user.json")
             result = mutator(project, sidecar)
@@ -108,7 +120,8 @@ class CanvasRepository(CanvasRepositoryInterface):
                 raise TypeError("transaction_with_sidecar mutator must return (result, sidecar)")
             value, updated_sidecar = result
             project.canvas.validate()
-            updated_sidecar = self._main_file_sanitizer.synchronize_sidecar(project, updated_sidecar)
+            if filename == "element-details.json":
+                updated_sidecar = self._main_file_sanitizer.synchronize_sidecar(project, updated_sidecar)
             await self._write_bundle(path, project, updated_sidecar, filename)
             return value
 
@@ -119,12 +132,34 @@ class CanvasRepository(CanvasRepositoryInterface):
 
     async def read_sidecar(self, project_path: str, filename: str = "element-details.json") -> dict:
         """读取可选 sidecar；不存在或非法时返回空对象。"""
-        path = CanvasPathResolver.resolve(self.workspace, project_path) / filename
-        return await self._read_sidecar_strict(path, missing_ok=True)
+        project_root = CanvasPathResolver.resolve(self.workspace, project_path)
+        value = await self._read_sidecar_strict(project_root / filename, missing_ok=True)
+        if filename == "element-details.json":
+            runtime = await self._read_sidecar_strict(
+                project_root / RUNTIME_SIDECAR_FILENAME,
+                missing_ok=True,
+            )
+            ContentMetadataService.split_legacy_metadata(value, runtime)
+        return value
+
+    async def read_sidecar_runtime(self, project_path: str) -> dict:
+        """读取后端生成运行态 sidecar。"""
+        project_root = CanvasPathResolver.resolve(self.workspace, project_path)
+        runtime = await self._read_sidecar_strict(
+            project_root / RUNTIME_SIDECAR_FILENAME,
+            missing_ok=True,
+        )
+        legacy = await self._read_sidecar_strict(project_root / "element-details.json", missing_ok=True)
+        ContentMetadataService.split_legacy_metadata(legacy, runtime)
+        return runtime
 
     async def write_sidecar(self, project_path: str, data: dict, filename: str = "element-details.json") -> None:
         """原子写入 Canvas 侧车元数据，不把内部字段写入主协议。"""
         path = CanvasPathResolver.resolve(self.workspace, project_path) / filename
+        if filename == "element-details.json":
+            ElementDetailsCodec.validate_public(data)
+        else:
+            ElementDetailsCodec.validate(data)
         await self._atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
 
     async def _read_sidecar_strict(self, path: Path, missing_ok: bool = True) -> dict:
@@ -148,13 +183,24 @@ class CanvasRepository(CanvasRepositoryInterface):
         """以临时文件和备份实现主文件、sidecar 的可恢复写入。"""
         project_file = path / "magic.project.js"
         sidecar_file = path / filename
+        runtime_file = path / RUNTIME_SIDECAR_FILENAME
         encoded = CanvasCodec.encode(self._main_file_sanitizer.sanitize(project))
-        ElementDetailsCodec.validate(sidecar)
+        runtime_sidecar = sidecar.pop(RUNTIME_METADATA_KEY, {}) if filename == "element-details.json" else {}
+        if filename == "element-details.json":
+            ElementDetailsCodec.validate_public(sidecar)
+        else:
+            ElementDetailsCodec.validate(sidecar)
+        if filename == "element-details.json":
+            ElementDetailsCodec.validate(runtime_sidecar)
         sidecar_text = json.dumps(sidecar, ensure_ascii=False, indent=2)
+        runtime_text = json.dumps(runtime_sidecar, ensure_ascii=False, indent=2)
         temp_files: list[Path] = []
         backups: dict[Path, bytes | None] = {}
         try:
-            for target, content in ((project_file, encoded), (sidecar_file, sidecar_text)):
+            targets = [(project_file, encoded), (sidecar_file, sidecar_text)]
+            if filename == "element-details.json":
+                targets.append((runtime_file, runtime_text))
+            for target, content in targets:
                 fd, raw_path = await async_mkstemp(prefix=f".{target.name}.", dir=path)
                 await async_close_fd(fd)
                 temp_path = Path(raw_path)
@@ -163,10 +209,18 @@ class CanvasRepository(CanvasRepositoryInterface):
                 backups[target] = await async_read_bytes(target) if await async_exists(target) else None
             await async_replace(temp_files[0], project_file)
             await async_replace(temp_files[1], sidecar_file)
+            if filename == "element-details.json":
+                await async_replace(temp_files[2], runtime_file)
             persisted_project = await async_read_text(project_file, encoding="utf-8")
             CanvasCodec.decode(persisted_project)
             persisted_sidecar = json.loads(await async_read_text(sidecar_file, encoding="utf-8"))
-            ElementDetailsCodec.validate(persisted_sidecar)
+            if filename == "element-details.json":
+                ElementDetailsCodec.validate_public(persisted_sidecar)
+            else:
+                ElementDetailsCodec.validate(persisted_sidecar)
+            if filename == "element-details.json":
+                persisted_runtime = json.loads(await async_read_text(runtime_file, encoding="utf-8"))
+                ElementDetailsCodec.validate(persisted_runtime)
         except Exception:
             for target, original in backups.items():
                 try:

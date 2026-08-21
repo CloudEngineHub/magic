@@ -8007,7 +8007,87 @@ async function readApiCanvasProjectConfig(dirPath) {
     if (!config || config.type !== 'design' || !config.canvas) {
         throw new Error('目录中的 magic.project.js 不是 design 画布项目');
     }
-    return { config, projectPath, data };
+    const readSidecar = async fileName => {
+        const sidecarPath = dirPath ? `${dirPath}/${fileName}` : fileName;
+        try {
+            const sidecarData = await debugWorkspaceApi.readFile(sidecarPath);
+            const parsed = JSON.parse(sidecarData.content || '{}');
+            return parsed && typeof parsed === 'object' && parsed.elements
+                && typeof parsed.elements === 'object'
+                ? parsed
+                : { elements: {} };
+        } catch (_) {
+            // sidecar 是可选文件；缺失或损坏时只展示主文件内容。
+            return { elements: {} };
+        }
+    };
+    const [agentDetails, userDetails] = await Promise.all([
+        readSidecar('element-details.json'),
+        readSidecar('element-details-user.json'),
+    ]);
+    hydrateApiCanvasElementDetails(config, agentDetails, userDetails);
+    return { config, projectPath, data, agentDetails, userDetails };
+}
+
+/** 判断 sidecar 条目是否为前端用户覆盖。 */
+function isApiCanvasUserDetail(detail) {
+    return detail && typeof detail === 'object' && detail.source === 'user';
+}
+
+/** 选择当前 Content 的详情；用户明确标记的条目优先于后端 baseline。 */
+function selectApiCanvasContentDetail(agentDetail, userDetail, userElement = null) {
+    if (userDetail && (isApiCanvasUserDetail(userElement) || isApiCanvasUserDetail(userDetail))) {
+        return userDetail;
+    }
+    return agentDetail || userDetail || null;
+}
+
+/** 移除元素级 sidecar 的 Content 容器，避免把协议包装层注入预览元素。 */
+function stripApiCanvasContentDetails(detail) {
+    if (!detail || typeof detail !== 'object') return null;
+    const { contentDetails: _contentDetails, ...fields } = detail;
+    return fields;
+}
+
+/** 将画布 sidecar 中的元素级或 Content 级详情回填到预览数据。 */
+function hydrateApiCanvasElementDetails(config, agentDoc, userDoc) {
+    const agentElements = agentDoc?.elements && typeof agentDoc.elements === 'object'
+        ? agentDoc.elements
+        : {};
+    const userElements = userDoc?.elements && typeof userDoc.elements === 'object'
+        ? userDoc.elements
+        : {};
+
+    const visit = elements => {
+        for (const element of Array.isArray(elements) ? elements : []) {
+            if (!element || typeof element !== 'object') continue;
+            const agentElement = agentElements[element.id];
+            const userElement = userElements[element.id];
+            const agentContentDetails = agentElement?.contentDetails;
+            const userContentDetails = userElement?.contentDetails;
+
+            if (Array.isArray(element.contents) && element.contents.length) {
+                element.contents = element.contents.map(content => {
+                    const contentId = content?.contentId;
+                    const agentDetail = contentId && agentContentDetails?.[contentId];
+                    const userDetail = contentId && userContentDetails?.[contentId];
+                    const detail = selectApiCanvasContentDetail(agentDetail, userDetail, userElement);
+                    return detail && typeof detail === 'object'
+                        ? { ...content, ...stripApiCanvasContentDetails(detail) }
+                        : content;
+                });
+            } else {
+                // 兼容旧版元素级 sidecar；不把 contentDetails 容器本身写入元素。
+                const detail = selectApiCanvasContentDetail(agentElement, userElement, userElement);
+                if (detail && typeof detail === 'object') {
+                    Object.assign(element, stripApiCanvasContentDetails(detail));
+                }
+            }
+
+            if (Array.isArray(element.children)) visit(element.children);
+        }
+    };
+    visit(config?.canvas?.elements);
 }
 
 /** 打开只读画布项目预览标签页。 */
@@ -9494,6 +9574,11 @@ function resolveCanvasPreviewContentFields(element, content) {
         errorMessage: content?.errorMessage ?? element?.errorMessage ?? null,
         shots: Array.isArray(content?.shots ?? element?.shots) ? (content?.shots ?? element?.shots) : [],
         generationConfig: content?.generationConfig ?? element?.generationConfig ?? {},
+        // 保留生成请求，供调试画布展示只读的生成记录。
+        generateImageRequest: content?.generateImageRequest ?? element?.generateImageRequest ?? null,
+        generateVideoRequest: content?.generateVideoRequest ?? element?.generateVideoRequest ?? null,
+        imageGenerationTaskMeta: content?.imageGenerationTaskMeta ?? element?.imageGenerationTaskMeta ?? null,
+        videoGenerationResultMeta: content?.videoGenerationResultMeta ?? element?.videoGenerationResultMeta ?? null,
         videoSequence: Array.isArray(content?.videoSequence ?? element?.videoSequence)
             ? (content?.videoSequence ?? element?.videoSequence)
             : [],
@@ -9836,6 +9921,259 @@ function createCanvasImageTopMetadata(element) {
     );
     metadata.append(name, dimensions);
     return metadata;
+}
+
+/** 返回媒体节点对应的最近一次生成请求。 */
+function getCanvasGenerationRequest(element) {
+    if (element?.type === 'image') return element.generateImageRequest;
+    if (element?.type === 'video') return element.generateVideoRequest;
+    return null;
+}
+
+/** 将图片或视频生成请求中的引用素材归一化为面板可展示的数据。 */
+function getCanvasGenerationReferences(element, request) {
+    if (!request || typeof request !== 'object') return [];
+    if (element?.type === 'image') {
+        return (Array.isArray(request.reference_images) ? request.reference_images : [])
+            .filter(Boolean)
+            .map(path => ({ path: String(path), label: '参考图', type: 'image' }));
+    }
+
+    const inputs = request.inputs && typeof request.inputs === 'object' ? request.inputs : {};
+    const references = [];
+    const append = (items, type, label) => {
+        (Array.isArray(items) ? items : []).forEach(item => {
+            const path = typeof item === 'string' ? item : item?.uri;
+            if (path) references.push({ path: String(path), label, type });
+        });
+    };
+    append(inputs.frames, 'image', '关键帧');
+    append(inputs.reference_images, 'image', '参考图');
+    append(inputs.reference_videos, 'video', '参考视频');
+    append(inputs.reference_audios, 'audio', '参考音频');
+    return references;
+}
+
+/** 创建生成记录中的一行只读字段。 */
+function createCanvasGenerationDetailRow(label, value) {
+    if (value === undefined || value === null || value === '') return null;
+    const row = document.createElement('div');
+    row.className = 'canvas-generation-detail-row';
+    const labelEl = document.createElement('div');
+    labelEl.className = 'canvas-generation-detail-label';
+    labelEl.textContent = label;
+    const valueEl = document.createElement('div');
+    valueEl.className = 'canvas-generation-detail-value';
+    valueEl.textContent = String(value);
+    row.append(labelEl, valueEl);
+    return row;
+}
+
+/** 创建媒体节点右上角的生成记录入口按钮。 */
+function createCanvasGenerationInfoButton(element, onClick) {
+    if (!getCanvasGenerationRequest(element)) return null;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'canvas-generation-info-button';
+    button.setAttribute('aria-label', '查看生成记录');
+    button.title = '查看生成记录';
+    button.textContent = 'i';
+    button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+    });
+    return button;
+}
+
+/** 将详情浮层定位到媒体节点右侧，并在空间不足时切换到左侧。 */
+function positionCanvasGenerationDetailPanel(panel, anchorElement, containerEl) {
+    if (!anchorElement || !containerEl) return;
+    const anchorRect = anchorElement.getBoundingClientRect();
+    const containerRect = containerEl.getBoundingClientRect();
+    const gap = 8;
+    const preferredLeft = anchorRect.right - containerRect.left + gap;
+    const fallbackLeft = anchorRect.left - containerRect.left - panel.offsetWidth - gap;
+    const maxLeft = Math.max(gap, containerEl.clientWidth - panel.offsetWidth - gap);
+    const left = preferredLeft + panel.offsetWidth <= containerEl.clientWidth - gap
+        ? preferredLeft
+        : Math.max(gap, Math.min(fallbackLeft, maxLeft));
+    const maxTop = Math.max(gap, containerEl.clientHeight - panel.offsetHeight - gap);
+    const top = Math.max(gap, Math.min(anchorRect.top - containerRect.top, maxTop));
+    panel.style.left = `${left}px`;
+    panel.style.right = 'auto';
+    panel.style.top = `${top}px`;
+}
+
+/** 在调试画布视口中渲染生成记录浮层。 */
+async function renderCanvasGenerationDetailPanel(element, request, resolveMediaUrl, containerEl, anchorElement, onClose) {
+    const existing = containerEl.querySelector('.canvas-generation-detail-panel');
+    if (existing) existing.remove();
+    if (!request) return;
+
+    const panel = document.createElement('aside');
+    panel.className = 'canvas-generation-detail-panel';
+    panel.dataset.elementId = element.id;
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', '生成记录');
+
+    const header = document.createElement('div');
+    header.className = 'canvas-generation-detail-header';
+    const title = document.createElement('div');
+    title.className = 'canvas-generation-detail-title';
+    title.textContent = '生成记录';
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'canvas-generation-detail-close';
+    closeButton.setAttribute('aria-label', '关闭生成记录');
+    closeButton.textContent = '×';
+    closeButton.addEventListener('click', event => {
+        event.stopPropagation();
+        panel.remove();
+        onClose?.();
+    });
+    header.append(title, closeButton);
+    panel.appendChild(header);
+
+    const divider = document.createElement('div');
+    divider.className = 'canvas-generation-detail-divider';
+    panel.appendChild(divider);
+
+    const body = document.createElement('div');
+    body.className = 'canvas-generation-detail-body';
+    panel.appendChild(body);
+
+    const prompt = typeof request.prompt === 'string' ? request.prompt : '';
+    const promptItem = document.createElement('section');
+    promptItem.className = 'canvas-generation-detail-item';
+    const promptTitle = document.createElement('div');
+    promptTitle.className = 'canvas-generation-detail-item-title';
+    promptTitle.textContent = '提示词';
+    const promptActions = document.createElement('div');
+    promptActions.className = 'canvas-generation-detail-prompt-actions';
+    if (prompt) {
+        const copyButton = document.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className = 'canvas-generation-detail-copy';
+        copyButton.textContent = '复制';
+        copyButton.addEventListener('click', event => {
+            event.stopPropagation();
+            void navigator.clipboard?.writeText(prompt);
+        });
+        promptActions.appendChild(copyButton);
+    }
+    promptTitle.appendChild(promptActions);
+    const promptValue = document.createElement('div');
+    promptValue.className = 'canvas-generation-detail-prompt';
+    promptValue.textContent = prompt || '暂无提示词';
+    promptItem.append(promptTitle, promptValue);
+    body.appendChild(promptItem);
+
+    const references = getCanvasGenerationReferences(element, request);
+    if (references.length) {
+        const referencesItem = document.createElement('section');
+        referencesItem.className = 'canvas-generation-detail-item';
+        const referencesTitle = document.createElement('div');
+        referencesTitle.className = 'canvas-generation-detail-item-title';
+        referencesTitle.textContent = element.type === 'image' ? '参考图' : '参考素材';
+        const referencesGrid = document.createElement('div');
+        referencesGrid.className = 'canvas-generation-detail-references';
+        references.forEach(reference => {
+            const referenceItem = document.createElement('div');
+            referenceItem.className = 'canvas-generation-detail-reference';
+            const referenceLabel = document.createElement('span');
+            referenceLabel.className = 'canvas-generation-detail-reference-label';
+            referenceLabel.textContent = reference.label;
+            referenceItem.appendChild(referenceLabel);
+            const media = document.createElement('div');
+            media.className = 'canvas-generation-detail-reference-media';
+            media.textContent = reference.path;
+            referenceItem.appendChild(media);
+            referencesGrid.appendChild(referenceItem);
+            void (async () => {
+                try {
+                    const url = /^https?:|^blob:|^data:/i.test(reference.path)
+                        ? reference.path
+                        : await resolveMediaUrl(reference.path);
+                    if (!url || !panel.isConnected) return;
+                    const mediaElement = reference.type === 'video'
+                        ? document.createElement('video')
+                        : reference.type === 'audio'
+                        ? document.createElement('audio')
+                        : document.createElement('img');
+                    mediaElement.src = url;
+                    if (mediaElement instanceof HTMLImageElement) mediaElement.alt = reference.label;
+                    if (mediaElement instanceof HTMLVideoElement) {
+                        mediaElement.muted = true;
+                        mediaElement.loop = true;
+                        mediaElement.playsInline = true;
+                        mediaElement.autoplay = true;
+                    }
+                    if (mediaElement instanceof HTMLMediaElement) mediaElement.controls = false;
+                    mediaElement.addEventListener('error', () => {
+                        mediaElement.remove();
+                    });
+                    media.textContent = '';
+                    media.appendChild(mediaElement);
+                } catch {
+                    // 引用素材不可用时保留路径文本，避免详情面板整体失败。
+                }
+            })();
+        });
+        referencesItem.append(referencesTitle, referencesGrid);
+        body.appendChild(referencesItem);
+    }
+
+    const model = request.model_id || request.model || null;
+    const size = [request.size, request.resolution, request.generation?.resolution]
+        .filter(Boolean)
+        .join(' · ') || null;
+    const rows = [
+        createCanvasGenerationDetailRow('模型', model),
+        createCanvasGenerationDetailRow('尺寸', size),
+    ];
+    if (element.type === 'image') {
+        const imageConfig = request.image_generation_config && typeof request.image_generation_config === 'object'
+            ? request.image_generation_config
+            : {};
+        const imageSettings = [
+            ['画面比例', imageConfig.aspect_ratio],
+            ['风格', imageConfig.style],
+            ['质量', imageConfig.quality],
+        ];
+        imageSettings.forEach(([label, value]) => {
+            rows.push(createCanvasGenerationDetailRow(label, value));
+        });
+    }
+    if (element.type === 'video') {
+        const resultMeta = element.videoGenerationResultMeta && typeof element.videoGenerationResultMeta === 'object'
+            ? element.videoGenerationResultMeta
+            : {};
+        const generationInfo = resultMeta.generation_info && typeof resultMeta.generation_info === 'object'
+            ? resultMeta.generation_info
+            : {};
+        const runtime = resultMeta.runtime && typeof resultMeta.runtime === 'object'
+            ? resultMeta.runtime
+            : {};
+        rows.push(
+            createCanvasGenerationDetailRow('积分消耗', resultMeta.billing?.points),
+            createCanvasGenerationDetailRow('生成模式', generationInfo.input_mode || request.input_mode),
+            createCanvasGenerationDetailRow('完成时间', runtime.finished_at),
+            createCanvasGenerationDetailRow('生成耗时', runtime.elapsed_seconds ? `${runtime.elapsed_seconds}s` : null),
+        );
+        rows.push(
+            createCanvasGenerationDetailRow('画面比例', generationInfo.aspect_ratio || request.generation?.aspect_ratio),
+            createCanvasGenerationDetailRow('时长', generationInfo.duration_seconds || request.generation?.duration_seconds
+                ? `${generationInfo.duration_seconds || request.generation.duration_seconds}s`
+                : null),
+        );
+    }
+    rows.filter(Boolean).forEach(row => body.appendChild(row));
+
+    containerEl.appendChild(panel);
+    positionCanvasGenerationDetailPanel(panel, anchorElement, containerEl);
+    panel.addEventListener('pointerdown', event => event.stopPropagation());
+    panel.addEventListener('click', event => event.stopPropagation());
 }
 
 /**
@@ -10404,6 +10742,29 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
             elementNode.classList.add('canvas-preview-image-with-metadata');
             elementNode.appendChild(createCanvasImageTopMetadata(element));
         }
+        const generationRequest = getCanvasGenerationRequest(element);
+        const infoButton = createCanvasGenerationInfoButton(element, () => {
+            const existingPanel = containerEl.querySelector('.canvas-generation-detail-panel');
+            if (existingPanel?.dataset.elementId === element.id) {
+                existingPanel.remove();
+                infoButton?.classList.remove('is-active');
+                return;
+            }
+            containerEl.querySelectorAll('.canvas-generation-detail-panel').forEach(panel => panel.remove());
+            containerEl.querySelectorAll('.canvas-generation-info-button.is-active').forEach(button => {
+                button.classList.remove('is-active');
+            });
+            infoButton?.classList.add('is-active');
+            void renderCanvasGenerationDetailPanel(
+                element,
+                generationRequest,
+                resolveMediaUrl,
+                containerEl,
+                elementNode,
+                () => infoButton?.classList.remove('is-active'),
+            );
+        });
+        if (infoButton) elementNode.appendChild(infoButton);
         const versionSwitcher = createCanvasContentVersionSwitcher(
             element,
             selectedContent => renderSelectedContent(selectedContent),

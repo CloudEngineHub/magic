@@ -31,15 +31,16 @@ class CanvasMainFileSanitizer:
                 if not managed:
                     continue
                 detail = ContentMetadataService.get(updated, element.element_id, content.content_id)
-                detail.update(managed)
-                ContentMetadataService.set(updated, element.element_id, content.content_id, detail)
+                if not detail.get("generateImageRequest") and not detail.get("generateVideoRequest"):
+                    detail.update(managed)
+                    ContentMetadataService.set(updated, element.element_id, content.content_id, detail)
         return updated
 
     @staticmethod
     def _managed_fields(fields) -> dict[str, object]:
         """提取不应进入主文件的生成请求字段。"""
-        if isinstance(fields, ImageContentFields) and fields.generate_image_request is not None:
+        if isinstance(fields, ImageContentFields) and fields.status == "completed" and fields.generate_image_request is not None:
             return {"generateImageRequest": fields.generate_image_request}
-        if isinstance(fields, VideoContentFields) and fields.generate_video_request is not None:
+        if isinstance(fields, VideoContentFields) and fields.status == "completed" and fields.generate_video_request is not None:
             return {"generateVideoRequest": fields.generate_video_request}
         return {}

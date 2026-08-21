@@ -488,7 +488,7 @@ A `[@design_marker:name]` mention is the user annotating a region of a Canvas im
 1. **Parse** — extract the marker name (the intent), the image path, and the marked area / coordinates.
 2. **Understand** — call `visual_understanding` on the image to get its content description and dimensions. You need to know what the image contains to describe what should change and what must stay.
 3. **Build the prompt** — `[full scene from visual_understanding] + [the change, at the marked location] + [preserve everything else]`. Fold the marker coordinates directly into the prompt, combined with the object name from `visual_understanding`.
-4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, `reference_images=[original path]`, and `size` set to the original image's dimensions.
+4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, `reference_images=[original project-relative path]`, and `size` set to the original image's dimensions.
 
 ```python
 from sdk.tool import tool
@@ -511,7 +511,7 @@ result = tool.call("add_canvas_elements", {
                 "red — same fur texture, same lighting, just the color changed. Preserve the dog's "
                 "face, body, pose, the grass, and the entire background exactly as they appear."
             ),
-            "reference_images": ["Canvas/Product Launch/images/dog.jpg"],
+            "reference_images": ["./images/dog.jpg"],
             "size": "1920x1080",
         },
     }],

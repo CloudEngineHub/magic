@@ -1,13 +1,15 @@
 """通用生图能力适配器。"""
 
+import time
+from datetime import datetime
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 
 
 class GenericImageGenerationPort(GenerationSubmissionPort):
@@ -29,18 +31,26 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
         project = self.project_identity_resolver.resolve(request.project_path)
         name = str(parameters.name or request.content_id)
         output_path = str(parameters.output_path or f"{project.project_path}/images")
+        reference_images = [
+            self.asset_path_resolver.to_workspace_reference_path(request.project_path, path)
+            for path in parameters.reference_images
+        ]
         task = ImageGenerationTask(
             prompt=parameters.prompt,
             size=parameters.size,
             name=name,
             output_path=output_path,
-            reference_images=list(parameters.reference_images),
+            reference_images=reference_images,
         )
+        start_dt = datetime.now()
+        started = time.monotonic()
         result = await GenerateImages(base_dir=self.workspace).execute_purely(
             tool_context,
             GenerateImagesParams(tasks=[task]),
             model_id=parameters.model_id,
         )
+        end_dt = datetime.now()
+        duration_ms = int((time.monotonic() - started) * 1000)
         if not result.ok:
             return GenerationSubmission("sync", "failed", error_message=result.content)
         saved = list(result.extra_info.get("saved_images") or []) if result.extra_info else []
@@ -55,4 +65,22 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
                 "failed",
                 error_message="Image generation returned an output outside the Canvas workspace.",
             )
-        return GenerationSubmission("sync", "completed", output_uri=output_uri)
+        task_results = (result.extra_info or {}).get("tasks", [])
+        task_info = task_results[0] if isinstance(task_results, list) and task_results and isinstance(task_results[0], dict) else {}
+        request_metadata = {
+            "size": task.size,
+            "image_id": output.stem,
+            "mode": "edit" if parameters.reference_images else "generate",
+            "start_time": start_dt.isoformat(timespec="milliseconds"),
+            "end_time": end_dt.isoformat(timespec="milliseconds"),
+            "duration_ms": duration_ms,
+            "model_id": task_info.get("model") or parameters.model_id,
+            "reference_images": list(parameters.reference_images),
+        }
+        request_metadata = {key: value for key, value in request_metadata.items() if value is not None}
+        return GenerationSubmission(
+            "sync",
+            "completed",
+            output_uri=output_uri,
+            request_metadata=request_metadata,
+        )

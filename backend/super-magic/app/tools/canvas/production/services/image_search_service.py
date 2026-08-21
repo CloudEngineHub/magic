@@ -49,6 +49,7 @@ class ImageSearchService:
         """逐 task 搜索并只物化下载、探测成功的候选。"""
         await self._unit_of_work.repository.read(project_path)
         metadata = await self._unit_of_work.repository.read_sidecar(project_path)
+        metadata["__canvas_runtime__"] = await self._unit_of_work.repository.read_sidecar_runtime(project_path)
         existing_urls = self._existing_topic_urls(metadata, topic_id)
         results: list[ImageSearchItemResult] = []
         for task in tasks:
@@ -182,11 +183,17 @@ class ImageSearchService:
     def _existing_topic_urls(metadata: dict, topic_id: str) -> set[str]:
         """读取 sidecar 中同一主题的来源 URL。"""
         urls: set[str] = set()
-        for element in (metadata.get("elements") or {}).values() if isinstance(metadata.get("elements"), dict) else []:
-            details = element.get("contentDetails") if isinstance(element, dict) else None
-            for detail in details.values() if isinstance(details, dict) else []:
-                if isinstance(detail, dict) and detail.get("topicId") == topic_id and detail.get("sourceUrl"):
-                    urls.add(str(detail["sourceUrl"]))
+        documents = [metadata]
+        runtime = metadata.get("__canvas_runtime__")
+        if isinstance(runtime, dict):
+            documents.append(runtime)
+        for document in documents:
+            elements = document.get("elements") if isinstance(document, dict) else None
+            for element in elements.values() if isinstance(elements, dict) else []:
+                details = element.get("contentDetails") if isinstance(element, dict) else None
+                for detail in details.values() if isinstance(details, dict) else []:
+                    if isinstance(detail, dict) and detail.get("topicId") == topic_id and detail.get("sourceUrl"):
+                        urls.add(str(detail["sourceUrl"]))
         return urls
 
     @staticmethod

@@ -28,9 +28,9 @@ from app.tools.canvas.generation import (
     InMemoryGenerationTaskRepository,
 )
 from app.tools.canvas.generation.adapters import FakeImageGenerationPort
-from app.tools.canvas.production.adapters import FakeMediaProbePort
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
+from app.tools.canvas.production.adapters import FakeMediaProbePort
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.strategies import (
     ConnectionMutationPlan,
@@ -507,7 +507,13 @@ async def test_generated_image_persists_project_uri_dimensions_and_sidecar_reque
 
     sidecar = await repository.read_sidecar("mock-project")
     detail = sidecar["elements"][element_id]["contentDetails"][content_id]
-    assert detail["generationParameters"]["size"] == "1728x2304"
+    assert set(detail) == {"generateImageRequest"}
+    assert detail["generateImageRequest"]["prompt"] == "mock perfume bottle"
+    assert detail["generateImageRequest"]["size"] == "1728x2304"
+    assert "generationParameters" not in detail
+    runtime = await repository.read_sidecar_runtime("mock-project")
+    runtime_detail = runtime["elements"][element_id]["contentDetails"][content_id]
+    assert runtime_detail["generationParameters"]["size"] == "1728x2304"
 
 
 @pytest.mark.asyncio

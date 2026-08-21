@@ -45,6 +45,28 @@ class ProjectAssetPathResolver:
         self._ensure_inside(candidate, self.workspace, "Asset path must stay inside the Canvas workspace.")
         return candidate
 
+    def to_workspace_reference_path(self, project_path: str, asset_path: str) -> str:
+        """把 Canvas 项目相对参考素材转换为工作区相对路径。"""
+        raw = str(asset_path).replace("\\", "/").strip()
+        if not raw or "://" in raw or raw.startswith("data:"):
+            return raw
+
+        project_root = CanvasPathResolver.resolve(self.workspace, project_path)
+        candidate = Path(raw).expanduser()
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+        else:
+            project_relative = raw[2:] if raw.startswith("./") else raw
+            project_parts = Path(project_path).parts
+            raw_parts = Path(raw).parts
+            if raw.startswith("./") or raw_parts[: len(project_parts)] != project_parts:
+                resolved = (project_root / project_relative).resolve()
+            else:
+                resolved = (self.workspace / raw).resolve()
+
+        self._ensure_inside(resolved, self.workspace, "Reference asset must stay inside the Canvas workspace.")
+        return resolved.relative_to(self.workspace).as_posix()
+
     def normalize_existing_asset(self, project_path: str, asset_path: str) -> str:
         """校验已存在素材并优先返回项目内 URI，项目外保留工作区相对路径。"""
         candidate = self.resolve_workspace_path(asset_path)

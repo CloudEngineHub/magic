@@ -49,5 +49,9 @@ class CanvasRepositoryInterface(ABC):
         """读取可选 sidecar。"""
 
     @abstractmethod
+    async def read_sidecar_runtime(self, project_path: str) -> dict:
+        """读取生成任务运行态 sidecar。"""
+
+    @abstractmethod
     async def write_sidecar(self, project_path: str, data: dict, filename: str = "element-details.json") -> None:
         """写入 sidecar。"""

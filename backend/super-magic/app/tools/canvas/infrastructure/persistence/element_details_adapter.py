@@ -20,6 +20,9 @@ class ElementDetailsAdapter:
         """按 user source 优先级合并可唯一映射的 Content 详情。"""
         result: dict[str, dict[str, dict[str, Any]]] = {}
         self._collect(result, project, baseline, user_document=False)
+        runtime = baseline.get("__canvas_runtime__") if isinstance(baseline, dict) else None
+        if isinstance(runtime, dict):
+            self._collect(result, project, runtime, user_document=False)
         self._collect(result, project, user, user_document=True)
         return result
 

@@ -143,18 +143,35 @@ class GenerationSubmissionService:
                 if element is not None:
                     CanvasElementSizingService.apply(element, output_dimensions)
                 detail = ContentMetadataService.get(metadata, submission_item.element_id, submission_item.content_id)
-                detail_update = {
+                public_request = ContentMetadataService.build_public_generation_request(
+                    {
+                        **parameter_payload,
+                        **dict(submission.request_metadata or {}),
+                    },
+                    submission_item.element_type,
+                )
+                detail_update: dict[str, Any] = {
                     **detail,
                     "elementId": submission_item.element_id,
                     "source": "generated",
                     "retryCount": submission_item.retry_count,
-                    "generationParameters": parameter_payload,
                     "providerTaskId": submission.provider_task_id,
                     "generationTaskId": submission.generation_task_id,
                     "generationStatus": submission.status,
                     "outputUri": submission.output_uri,
                     "errorMessage": submission.error_message,
                 }
+                if submission.status == "completed":
+                    if submission_item.element_type == "image":
+                        detail_update["generateImageRequest"] = public_request
+                    elif submission_item.element_type == "video":
+                        detail_update["generateVideoRequest"] = public_request
+                else:
+                    ContentMetadataService.clear_public_request(
+                        metadata,
+                        submission_item.element_id,
+                        submission_item.content_id,
+                    )
                 if submission_item.retry_idempotency_key:
                     detail_update["retryIdempotencyKey"] = submission_item.retry_idempotency_key
                     detail_update["retryResult"] = {

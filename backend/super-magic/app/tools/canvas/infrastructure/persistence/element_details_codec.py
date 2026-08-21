@@ -30,6 +30,24 @@ class ElementDetailsCodec:
         return document
 
     @classmethod
+    def validate_public(cls, document: dict[str, Any]) -> dict[str, Any]:
+        """校验 backend 公共 sidecar 只包含线上约定的重字段。"""
+        cls.validate(document)
+        if set(document) - {"version", "elements"}:
+            raise ValueError("UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE")
+        elements = document.get("elements") or {}
+        for raw_element in elements.values():
+            if not isinstance(raw_element, dict) or set(raw_element) - {"contentDetails"}:
+                raise ValueError("UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE")
+            details = raw_element.get("contentDetails") if isinstance(raw_element, dict) else None
+            for detail in (details or {}).values() if isinstance(details, dict) else ():
+                if not isinstance(detail, dict) or not set(detail).issubset({
+                    "generateImageRequest", "generateVideoRequest", "visualUnderstanding",
+                }):
+                    raise ValueError("UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE")
+        return document
+
+    @classmethod
     def _validate_element_entry(cls, raw_element: dict[str, Any]) -> None:
         """校验 Element 级旧结构和 Content 级新结构。"""
         source = raw_element.get("source")

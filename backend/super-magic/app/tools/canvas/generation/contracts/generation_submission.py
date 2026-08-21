@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from app.tools.canvas.domain.types import JsonObject
+
 
 @dataclass(frozen=True)
 class GenerationSubmission:
@@ -13,3 +15,4 @@ class GenerationSubmission:
     output_uri: str | None = None
     error_message: str | None = None
     provider_task_id: str | None = None
+    request_metadata: JsonObject | None = None

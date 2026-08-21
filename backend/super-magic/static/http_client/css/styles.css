@@ -4326,6 +4326,222 @@ input[type="file"] {
     letter-spacing: 0.04em;
 }
 
+/* ── 画布媒体生成记录入口 ── */
+.canvas-generation-info-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.48);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    cursor: pointer;
+    font: 600 15px/1 Georgia, serif;
+    font-style: italic;
+    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2);
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.canvas-generation-info-button:hover,
+.canvas-generation-info-button.is-active {
+    background: rgba(0, 0, 0, 0.88);
+    transform: scale(1.05);
+}
+
+/* ── 画布生成记录只读浮层 ── */
+.canvas-generation-detail-panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    width: min(420px, calc(100% - 24px));
+    max-height: calc(100% - 24px);
+    overflow: hidden;
+    border: 1px solid rgba(60, 60, 67, 0.16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 10px 32px rgba(24, 31, 44, 0.22);
+    color: #303846;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.canvas-generation-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+    padding: 14px 14px 10px;
+}
+
+.canvas-generation-detail-title {
+    color: #1f2937;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.canvas-generation-detail-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.canvas-generation-detail-close:hover {
+    background: #f3f4f6;
+    color: #111827;
+}
+
+.canvas-generation-detail-divider {
+    height: 1px;
+    flex: 0 0 auto;
+    background: #e5e7eb;
+}
+
+.canvas-generation-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    padding: 12px 14px 16px;
+    overflow-y: auto;
+}
+
+.canvas-generation-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.canvas-generation-detail-item-title,
+.canvas-generation-detail-label {
+    color: #737373;
+    font-size: 12px;
+}
+
+.canvas-generation-detail-item-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.canvas-generation-detail-prompt-actions {
+    display: inline-flex;
+    align-items: center;
+}
+
+.canvas-generation-detail-copy {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.canvas-generation-detail-copy:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.canvas-generation-detail-prompt {
+    position: relative;
+    overflow: visible;
+    color: #303846;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.canvas-generation-detail-references {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.canvas-generation-detail-reference {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 64px;
+}
+
+.canvas-generation-detail-reference-label {
+    overflow: hidden;
+    color: #737373;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.canvas-generation-detail-reference-media {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f5f5f5;
+    color: #737373;
+    font-size: 9px;
+    line-height: 1.3;
+    text-align: center;
+    word-break: break-all;
+}
+
+.canvas-generation-detail-reference-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.canvas-generation-detail-reference-media video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.canvas-generation-detail-reference-media audio {
+    width: 56px;
+}
+
+.canvas-generation-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.canvas-generation-detail-value {
+    color: #303846;
+    font-size: 13px;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
 .canvas-el-body {
     position: relative;
     flex: 1;

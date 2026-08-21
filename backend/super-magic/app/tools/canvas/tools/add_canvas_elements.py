@@ -246,7 +246,11 @@ class ContentInput(BaseToolParams):
     model_id: str | None = None
     estimate_id: str | None = None
     name: str | None = None
-    reference_images: list[str] = Field(default_factory=list)
+    reference_images: list[str] = Field(
+        default_factory=list,
+        description="""<!--zh: 当前 Canvas 项目内的参考图片路径，必须使用相对于当前 magic.project.js 的路径，并以 ./ 开头，例如 ./images/reference.jpg。-->
+Reference image paths inside the current Canvas project. Use paths relative to the current magic.project.js and always prefix them with ./, for example ./images/reference.jpg.""",
+    )
     reference_image_paths: list[str] = Field(default_factory=list)
     reference_video_paths: list[str] = Field(default_factory=list)
     reference_audio_paths: list[str] = Field(default_factory=list)

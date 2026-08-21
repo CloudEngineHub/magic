@@ -34,6 +34,7 @@ class ElementDetailsQueryService:
         sidecar_warnings: list[str] = []
         try:
             baseline = await self.repository.read_sidecar(project_path, "element-details.json")
+            baseline["__canvas_runtime__"] = await self.repository.read_sidecar_runtime(project_path)
         except ValueError:
             baseline = {}
             sidecar_warnings.append("Some generated Content details are temporarily unavailable.")
@@ -117,6 +118,10 @@ class ElementDetailsQueryService:
                 generation_parameters=(
                     cast(JsonObject, detail["generationParameters"])
                     if isinstance(detail.get("generationParameters"), dict)
+                    else cast(JsonObject, detail["generateImageRequest"])
+                    if isinstance(detail.get("generateImageRequest"), dict)
+                    else cast(JsonObject, detail["generateVideoRequest"])
+                    if isinstance(detail.get("generateVideoRequest"), dict)
                     else None
                 ),
                 payload=cast(JsonObject, payload) if payload else None,

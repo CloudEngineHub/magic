@@ -25,7 +25,7 @@ For an image Content (`source=generated`, `content_type=image`), the generation 
 
 - Text-to-image: `size` is required when `reference_images` is empty.
 - Image-to-image: pass the reference path(s) in `reference_images`. When `size` is omitted, the tool auto-reads dimensions from the largest reference image; set `size` explicitly only for a different output size.
-- All paths are workspace-relative. Images inside the current project use project-relative paths (e.g. `images/cat.jpg`); images outside use workspace-relative paths (e.g. `other-project/images/style.jpg`). Never guess a path — use one you already know or obtained from a query result.
+- Images inside the current project use paths relative to that project's `magic.project.js` and must begin with `./` (e.g. `./images/cat.jpg`); images outside the current project use workspace-relative paths (e.g. `other-project/images/style.jpg`). Never guess a path — use one you already know or obtained from a query result.
 - Before image-to-image, call `visual_understanding` on the reference image to get its content description and dimensions; use the description to write the prompt.
 
 ```python
@@ -39,7 +39,7 @@ result = tool.call("add_canvas_elements", {
             "source": "generated",
             "content_type": "image",
             "prompt": "Based on the reference image, change only the ear in the upper-right area to bright red. Preserve the cat's face, body, pose, background, and every other detail exactly as they appear.",
-            "reference_images": ["Canvas/Product Launch/images/cat.jpg"],
+            "reference_images": ["./images/cat.jpg"],
         },
     }],
 })

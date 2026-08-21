@@ -19,6 +19,7 @@ from app.tools.canvas.generation import (
     GenerationTaskRepository,
 )
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
@@ -155,12 +156,23 @@ class WaitGenerationService:
                 query_result.error_message,
             )
             detail = CanvasApplicationOperations.get_content_detail(metadata, record.element_id, record.content_id)
-            CanvasApplicationOperations.set_content_detail(metadata, record.element_id, record.content_id, {
+            if final_status == "failed":
+                ContentMetadataService.clear_public_request(metadata, record.element_id, record.content_id)
+            detail_update = {
                 **detail,
                 "generationStatus": final_status,
                 "outputUri": query_result.output_uri,
                 "errorMessage": query_result.error_message,
-            })
+            }
+            if final_status == "completed" and not detail.get("generateVideoRequest"):
+                parameters = detail.get("generationParameters") or {}
+                if isinstance(parameters, dict):
+                    from pathlib import Path
+                    if query_result.output_uri:
+                        parameters = {**parameters, "image_id": Path(query_result.output_uri).stem}
+                    request_key = "generateImageRequest" if record.element_type == "image" else "generateVideoRequest"
+                    detail_update[request_key] = ContentMetadataService.build_public_generation_request(parameters, record.element_type)
+            CanvasApplicationOperations.set_content_detail(metadata, record.element_id, record.content_id, detail_update)
             return None, metadata
 
         await self.unit_of_work.transaction_with_sidecar(project_path, finalize)
@@ -183,6 +195,7 @@ class WaitGenerationService:
     ) -> GenerationTask | None:
         """从 sidecar 恢复进程重启后仍未完成的异步任务绑定。"""
         metadata = await self.repository.read_sidecar(project_path)
+        metadata["__canvas_runtime__"] = await self.repository.read_sidecar_runtime(project_path)
         project = await self.repository.read(project_path)
         for element in project.canvas.iter_elements():
             for content in element.contents:
