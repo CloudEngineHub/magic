@@ -1,7 +1,6 @@
 """独立 Canvas Agent 工具包。"""
 
 from app.tools.canvas.tools import (
-    AddCanvasConnections,
     AddCanvasContents,
     AddCanvasElements,
     ComposeCanvasVideo,
@@ -9,6 +8,7 @@ from app.tools.canvas.tools import (
     FrameCanvasElements,
     InitializeCanvas,
     LayoutCanvasElements,
+    ManageCanvasConnections,
     QueryCanvasElementDetails,
     QueryCanvasOverview,
     RetryCanvasContentGeneration,
@@ -19,7 +19,6 @@ from app.tools.canvas.tools import (
 )
 
 __all__ = [
-    "AddCanvasConnections",
     "AddCanvasContents",
     "AddCanvasElements",
     "ComposeCanvasVideo",
@@ -27,6 +26,7 @@ __all__ = [
     "FrameCanvasElements",
     "InitializeCanvas",
     "LayoutCanvasElements",
+    "ManageCanvasConnections",
     "QueryCanvasElementDetails",
     "QueryCanvasOverview",
     "RetryCanvasContentGeneration",

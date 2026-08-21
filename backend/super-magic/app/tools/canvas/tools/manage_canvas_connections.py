@@ -51,12 +51,12 @@ class ConnectionInput(BaseToolParams):
         )
 
 
-@tool(name="add_canvas_connections", code_mode_only=True)
-class AddCanvasConnections(BaseTool[BaseToolParams]):
+@tool(name="manage_canvas_connections", code_mode_only=True)
+class ManageCanvasConnections(BaseTool[BaseToolParams]):
     """<!--zh: 新增、删除或替换明确的 Connection。-->Manage explicit Canvas Connections."""
 
-    name = "add_canvas_connections"
-    feedback_action_key = "add_canvas_connections"
+    name = "manage_canvas_connections"
+    feedback_action_key = "manage_canvas_connections"
 
     class Params(BaseToolParams):
         """批量 Connection 操作参数。"""

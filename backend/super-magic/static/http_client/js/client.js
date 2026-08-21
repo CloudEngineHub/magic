@@ -9544,13 +9544,13 @@ function toggleMagicProjectDataView() {
 
 /**
  * 选择 V3 Element 当前用于调试预览的 Content。
- * 优先展示 active Content，再回退 main Content 和第一个 Content。
+ * 只读画布默认展示 main Content，再回退 active Content 和第一个 Content。
  */
 function selectCanvasPreviewContent(element, preferredContentId = null) {
     const contents = Array.isArray(element?.contents) ? element.contents : [];
     return contents.find(content => content?.contentId === preferredContentId)
-        || contents.find(content => content?.contentId === element.activeContentId)
         || contents.find(content => content?.contentId === element.mainContentId)
+        || contents.find(content => content?.contentId === element.activeContentId)
         || contents[0]
         || {};
 }

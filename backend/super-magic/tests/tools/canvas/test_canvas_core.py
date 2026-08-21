@@ -41,7 +41,7 @@ from app.tools.canvas.strategies import (
     LayoutStrategyRegistry,
     LayoutStrategyRequest,
 )
-from app.tools.canvas.tools import AddCanvasConnections, ConnectionInput
+from app.tools.canvas.tools import ConnectionInput, ManageCanvasConnections
 
 
 def test_codec_round_trip_preserves_nested_content_and_connection() -> None:
@@ -124,7 +124,7 @@ async def test_connection_replacement_is_atomic_and_idempotent(tmp_path) -> None
     assert len(current.canvas.connections) == 1
     assert current.canvas.connections[0].target_element_id == ids[2]
     assert ConnectionInput(item_ref="remove", remove_connection_ids=[current.canvas.connections[0].connection_id])
-    assert AddCanvasConnections.code_mode_only is True
+    assert ManageCanvasConnections.code_mode_only is True
 
 
 @pytest.mark.asyncio

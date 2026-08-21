@@ -823,9 +823,9 @@
         "zh_CN": "替换画布连线",
         "en_US": "Replace canvas connections"
     },
-    "add_canvas_connections": {
-        "zh_CN": "新增画布连线",
-        "en_US": "Add canvas connections"
+    "manage_canvas_connections": {
+        "zh_CN": "管理画布连线",
+        "en_US": "Manage canvas connections"
     },
     "canvas.wait_generation": {
         "zh_CN": "等待内容生成",

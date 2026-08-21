@@ -412,7 +412,7 @@ Use the current Canvas tools below; do not call the removed video-production too
 | Select the confirmed main Content | `select_canvas_main_content` |
 | Estimate billed video generation | `estimate_canvas_content_points` |
 | Change layout | `layout_canvas_elements` |
-| Add, remove, or replace a Connection | `add_canvas_connections` |
+| Add, remove, or replace a Connection | `manage_canvas_connections` |
 | Configure an ordered edit | `add_canvas_elements` / `add_canvas_contents` with `video-edit` Content |
 | Compose the final MP4 | `compose_canvas_final_video` |
 
@@ -427,7 +427,7 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 - Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
 - First frame: connect from the storyboard Element.
 - Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
-- Video edit: create direct incoming Connections from every Element listed in `videoSequence` and `audioSequence` in the same `add_canvas_elements` call. Use `add_canvas_connections` only for later standalone relationship maintenance. Composition validates these Video Edit input Connections before producing the result.
+- Video edit: create direct incoming Connections from every Element listed in `videoSequence` and `audioSequence` in the same `add_canvas_elements` call. Use `manage_canvas_connections` only for later standalone relationship maintenance. Composition validates these Video Edit input Connections before producing the result.
 
 For a new direct professional video, create the initial relations in the same `add_canvas_elements` call:
 
@@ -468,7 +468,7 @@ Use `dependency_flow` for professional production relations. Basic Canvas image 
 - At most 2 retries per Content; never loop.
 - A new direction appends a candidate with `add_canvas_contents`; it does not create a duplicate logical Element.
 - Select main Content only after the user confirms the completed candidate.
-- If the media is correct but a Canvas relation is wrong, repair only the relation with `add_canvas_connections`: query the exact current Connection IDs first, provide the complete intended endpoints, and do not regenerate media. Remove or replace relations only with explicit user intent.
+- If the media is correct but a Canvas relation is wrong, repair only the relation with `manage_canvas_connections`: query the exact current Connection IDs first, provide the complete intended endpoints, and do not regenerate media. Remove or replace relations only with explicit user intent.
 
 ## Provider-managed assets
 
@@ -501,7 +501,7 @@ tool.call("layout_canvas_elements", {
 
 Use `explicit_position` only when the user gives coordinates; otherwise omit `position`. Frame children use coordinates local to their direct Frame. Do not regenerate Content to change layout, do not move nodes to add Content, and do not infer Connections from visual distance.
 
-## add_canvas_connections
+## manage_canvas_connections
 
 Add, remove, or replace an explicit Connection.
 
@@ -511,7 +511,7 @@ Add, remove, or replace an explicit Connection.
 | `items` | Yes | Add: `source_element_id` + `target_element_id`. Remove: `remove_connection_ids`. Replace: new endpoints + `replace_existing_connections=true` + exact old IDs |
 
 ```python
-tool.call("add_canvas_connections", {
+tool.call("manage_canvas_connections", {
     "project_path": "Demo",
     "items": [{"item_ref": "storyboard-to-frame",
                "source_element_id": "element-740000000000000005",

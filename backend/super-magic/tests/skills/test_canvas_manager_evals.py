@@ -17,7 +17,7 @@ PUBLIC_TOOLS = {
     "retry_canvas_content_generation",
     "select_canvas_main_content",
     "layout_canvas_elements",
-    "add_canvas_connections",
+    "manage_canvas_connections",
     "wait_canvas_generation",
     "estimate_canvas_content_points",
     "compose_canvas_final_video",

@@ -29,7 +29,6 @@ from app.tools.canvas.presentation import error_result as _error_result
 from app.tools.canvas.presentation.model_content import elements_content, items_content
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.tools import (
-    AddCanvasConnections,
     AddCanvasContents,
     AddCanvasElements,
     ComposeCanvasVideo,
@@ -40,6 +39,7 @@ from app.tools.canvas.tools import (
     GenerationOverrideInput,
     InitializeCanvas,
     LayoutCanvasElements,
+    ManageCanvasConnections,
     QueryCanvasElementDetails,
     QueryCanvasOverview,
     RetryCanvasContentGeneration,
@@ -114,7 +114,7 @@ def test_each_canvas_tool_owns_feedback_hooks() -> None:
         RetryCanvasContentGeneration,
         SelectCanvasMainContent,
         LayoutCanvasElements,
-        AddCanvasConnections,
+        ManageCanvasConnections,
         WaitCanvasGeneration,
         EstimateCanvasContentPoints,
         ComposeCanvasVideo,
@@ -142,7 +142,7 @@ def test_canvas_tool_schemas_reject_unknown_top_level_parameters() -> None:
         RetryCanvasContentGeneration,
         SelectCanvasMainContent,
         LayoutCanvasElements,
-        AddCanvasConnections,
+        ManageCanvasConnections,
         WaitCanvasGeneration,
         EstimateCanvasContentPoints,
         ComposeCanvasVideo,
@@ -169,6 +169,7 @@ def test_canvas_tools_do_not_conflict_with_legacy_tool_names() -> None:
     }
 
     assert canvas_names.isdisjoint(design_names)
+    assert ManageCanvasConnections._tool_name == "manage_canvas_connections"
     assert SearchCanvasImages._tool_name == "search_canvas_image_candidates"
     assert ComposeCanvasVideo._tool_name == "compose_canvas_final_video"
 
@@ -746,7 +747,7 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
             id="add-contents",
         ),
         pytest.param(
-            AddCanvasConnections,
+            ManageCanvasConnections,
             {"project_path": "Canvas/Demo", "items": [{}, {}, {}]},
             ToolResult(
                 content="mock",
@@ -942,7 +943,7 @@ async def test_canvas_tool_remarks_follow_current_language(
             id="add-contents",
         ),
         pytest.param(
-            AddCanvasConnections,
+            ManageCanvasConnections,
             {"project_path": "Canvas/Demo"},
             ToolResult(content="MODEL-ONLY", data={"project_path": "Canvas/Demo", "items": [{"item_ref": "link-1", "status": "added", "connection_id": "connection-1", "source_element_id": "element-1", "target_element_id": "element-2"}]}),
             "画布连线",

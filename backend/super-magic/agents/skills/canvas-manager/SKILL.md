@@ -100,7 +100,7 @@ User picked a candidate?                     → select_canvas_main_content
 Group sibling elements?                      → frame_canvas_elements
 Async task returned?                         → wait_canvas_generation
 Billed video generation?                    → estimate_canvas_content_points unless the user explicitly opts out (see the matching video reference)
-Change layout / wire dependencies?           → layout_canvas_elements, add_canvas_connections  (see professional-video-production.md)
+Change layout / wire dependencies?           → layout_canvas_elements, manage_canvas_connections  (see professional-video-production.md)
 Final MP4 from a video-edit?                 → compose_canvas_final_video  (see professional-video-production.md)
 Search and import web images?                → search_canvas_image_candidates  (see image-search.md)
 Design marker ([@design_marker:...])?        → visual_understanding + add_canvas_elements  (see Design marker processing)
@@ -339,7 +339,7 @@ result = tool.call("layout_canvas_elements", {
 print(result.content)
 ```
 
-## `add_canvas_connections`
+## `manage_canvas_connections`
 
 Create, remove, or replace a business Connection. A Connection represents an explicit business dependency; do not infer it from visual distance, the same Frame, or array order.
 
@@ -356,13 +356,13 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 - Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
 - First frame: connect from the storyboard Element.
 - Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
-- Video edit: include direct incoming Connections from every `videoSequence` and `audioSequence` Element in the same `add_canvas_elements` call. Use `add_canvas_connections` only for later standalone relationship maintenance.
+- Video edit: include direct incoming Connections from every `videoSequence` and `audioSequence` Element in the same `add_canvas_elements` call. Use `manage_canvas_connections` only for later standalone relationship maintenance.
 - Final video: composition validates the confirmed Video Edit inputs before producing the result.
 
 ```python
 from sdk.tool import tool
 
-result = tool.call("add_canvas_connections", {
+result = tool.call("manage_canvas_connections", {
     "project_path": "Demo",
     "items": [{
         "source_element_id": "element-740000000000000001",

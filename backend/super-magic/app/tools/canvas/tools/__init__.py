@@ -1,6 +1,5 @@
 """Canvas Code mode 工具及其公开参数模型导出。"""
 
-from app.tools.canvas.tools.add_canvas_connections import AddCanvasConnections, ConnectionInput
 from app.tools.canvas.tools.add_canvas_contents import AddCanvasContents, AddContentInput
 from app.tools.canvas.tools.add_canvas_elements import (
     AddCanvasElements,
@@ -18,6 +17,7 @@ from app.tools.canvas.tools.estimate_canvas_content_points import (
 from app.tools.canvas.tools.frame_canvas_elements import FrameCanvasElements, FrameSelectionInput
 from app.tools.canvas.tools.initialize_canvas import InitializeCanvas
 from app.tools.canvas.tools.layout_canvas_elements import LayoutCanvasElements, LayoutElementInput, LayoutInput
+from app.tools.canvas.tools.manage_canvas_connections import ConnectionInput, ManageCanvasConnections
 from app.tools.canvas.tools.query_canvas_element_details import QueryCanvasElementDetails
 from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
 from app.tools.canvas.tools.retry_canvas_content_generation import (
@@ -33,7 +33,6 @@ from app.tools.canvas.tools.wait_canvas_generation import WaitCanvasGeneration, 
 CreationConnectionInput = CanvasCreationConnectionInput
 
 __all__ = [
-    "AddCanvasConnections",
     "AddCanvasContents",
     "AddCanvasElements",
     "AddContentInput",
@@ -54,6 +53,7 @@ __all__ = [
     "LayoutElementInput",
     "LayoutInput",
     "MainContentInput",
+    "ManageCanvasConnections",
     "QueryCanvasElementDetails",
     "QueryCanvasOverview",
     "RetryCanvasContentGeneration",
