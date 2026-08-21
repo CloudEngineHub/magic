@@ -9,7 +9,14 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import FrameElementsCommand
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_remark,
+    error_result,
+    items_content,
+    summarize_tool_result,
+)
 from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
@@ -41,7 +48,7 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
     """<!--zh: 将已有同层级节点框选为新的 Frame。-->Frame existing sibling Elements."""
 
     name = "frame_canvas_elements"
-    feedback_action_key = "canvas.frame_elements"
+    feedback_action_key = "canvas.create_frame"
 
     class Params(BaseToolParams):
         """批量框选参数。"""
@@ -77,7 +84,8 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """生成框选后的 Frame 数量反馈。"""
-        if not result.ok:
+        batch_status = summarize_tool_result(result)
+        if batch_status.status in {"failed", "partial"}:
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             values = (result.data or {}).get("items", [])
@@ -120,7 +128,7 @@ class FrameCanvasElements(BaseTool[BaseToolParams]):
                 params.project_path,
                 commands,
             )
-            return ToolResult(
+            return batch_tool_result(
                 content=items_content(
                     "Canvas Frames created successfully.",
                     result.to_dict(),

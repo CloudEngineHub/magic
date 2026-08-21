@@ -16,7 +16,7 @@ class VideoEditContentFields(CanvasContentFields):
     """保存视频 Element 顺序和输出配置。"""
 
     MAX_VIDEO_SEQUENCE_LENGTH: ClassVar[int] = 100
-    OUTPUT_FIELDS: ClassVar[frozenset[str]] = frozenset({"aspectRatio", "resolution", "format"})
+    OUTPUT_FIELDS: ClassVar[frozenset[str]] = frozenset({"aspectRatio", "resolution", "format", "audioPolicy"})
 
     video_sequence: list[str] = field(default_factory=list)
     audio_sequence: list[str] = field(default_factory=list)
@@ -75,6 +75,12 @@ class VideoEditContentFields(CanvasContentFields):
             raise CanvasDomainError(
                 "VIDEO_EDIT_OUTPUT_INVALID",
                 "Only MP4 output is supported.",
+            )
+        audio_policy = output.get("audioPolicy", "preserve")
+        if not isinstance(audio_policy, str) or audio_policy not in {"preserve", "mute"}:
+            raise CanvasDomainError(
+                "VIDEO_EDIT_OUTPUT_INVALID",
+                "Video Edit output audioPolicy must be preserve or mute.",
             )
 
     @staticmethod

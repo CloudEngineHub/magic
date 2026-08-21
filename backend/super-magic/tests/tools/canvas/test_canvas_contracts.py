@@ -318,6 +318,18 @@ def test_video_edit_content_uses_element_id_sequence() -> None:
     ]
 
 
+def test_video_edit_content_persists_audio_policy() -> None:
+    """Video Edit 输出配置应显式保存音频策略。"""
+    content = ContentInput(
+        source="user",
+        content_type="video-edit",
+        videoSequence=["video-element-1"],
+        output={"format": "mp4", "audioPolicy": "mute"},
+    )
+
+    assert content.model_dump(by_alias=True)["output"]["audioPolicy"] == "mute"
+
+
 @pytest.mark.parametrize(
     ("values", "message"),
     [
@@ -351,6 +363,7 @@ def test_non_video_edit_content_rejects_video_edit_fields() -> None:
         {"format": None},
         {"codec": "h264"},
         {"resolution": 1080},
+        {"audioPolicy": "invalid"},
     ],
 )
 def test_video_edit_content_rejects_invalid_output(output) -> None:
@@ -896,16 +909,16 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
             AddCanvasElements,
             {"project_path": "Canvas/Demo", "items": [{}, {}]},
             ToolResult(content="mock", data={"items": [{"status": "completed"}, {"status": "failed"}]}),
-            ("准备新增 2 个画布节点", "已新增 1/2 个画布节点"),
-            ("Canvas elements to add: 2", "Canvas elements added: 1/2"),
+            ("准备新增 2 个画布节点", "批量操作结果：已完成 1 个，处理中 0 个，失败 1 个，共 2 个"),
+            ("Canvas elements to add: 2", "Batch operation result: 1 completed, 0 processing, 1 failed, 2 total"),
             id="add-elements",
         ),
         pytest.param(
             AddCanvasContents,
             {"project_path": "Canvas/Demo", "items": [{}, {}]},
             ToolResult(content="mock", data={"items": [{"status": "pending"}, {"status": "failed"}]}),
-            ("准备为 2 个节点新增内容", "已为 1/2 个节点新增内容"),
-            ("Elements receiving new content: 2", "Elements updated with content: 1/2"),
+            ("准备为 2 个节点新增内容", "批量操作结果：已完成 0 个，处理中 1 个，失败 1 个，共 2 个"),
+            ("Elements receiving new content: 2", "Batch operation result: 0 completed, 1 processing, 1 failed, 2 total"),
             id="add-contents",
         ),
         pytest.param(
@@ -923,8 +936,8 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
             FrameCanvasElements,
             {"project_path": "Canvas/Demo", "items": [{"element_ids": ["element-1", "element-2"]}]},
             ToolResult(content="mock", data={"items": [{"status": "created"}]}),
-            ("准备框选 2 个节点", "已创建 1 个画框"),
-            ("Elements to frame: 2", "Frames created: 1"),
+            ("准备将 2 个节点创建为画布分组", "已创建 1 个画布分组"),
+            ("Preparing to create a canvas group from 2 element(s)", "Canvas groups created: 1"),
             id="frame",
         ),
         pytest.param(
@@ -942,8 +955,8 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
                 content="mock",
                 data={"items": [{"status": "pending"}, {"error_code": "CONTENT_RETRY_LIMIT_REACHED"}]},
             ),
-            ("准备重试 2 项失败内容", "已重试 1 项内容，1 项达到重试上限"),
-            ("Failed content items to retry: 2", "Content retries: 1; retry limit reached: 1"),
+            ("准备重试 2 项失败内容", "批量操作结果：已完成 0 个，处理中 1 个，失败 1 个，共 2 个"),
+            ("Failed content items to retry: 2", "Batch operation result: 0 completed, 1 processing, 1 failed, 2 total"),
             id="retry",
         ),
         pytest.param(
@@ -966,8 +979,8 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
             EstimateCanvasContentPoints,
             {"project_path": "Canvas/Demo", "items": [{}]},
             ToolResult(content="mock", data={"can_continue": True, "total_points": 12}),
-            ("正在预估 1 项内容的积分", "预计需要 12 积分"),
-            ("Content items to estimate: 1", "Estimated 12 points"),
+            ("正在预估 1 段视频的生成积分", "预计需要 12 个视频生成积分"),
+            ("Estimating video generation points for 1 video(s)", "Estimated 12 video generation points"),
             id="estimate-points",
         ),
         pytest.param(
@@ -982,8 +995,8 @@ async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None
             SearchCanvasImages,
             {"topic_id": "topic-1"},
             ToolResult(content="mock", data={"items": [{"imported_count": 2}]}),
-            ("正在为 topic-1 搜索图片", "已导入 2 张候选图片"),
-            ("Searching images for topic-1", "Imported 2 image candidates"),
+            ("正在搜索并导入参考图片：topic-1", "已导入 2 张参考图片"),
+            ("Searching and importing reference images for topic-1", "Imported 2 reference images"),
             id="search-images",
         ),
     ],
@@ -1172,8 +1185,8 @@ async def test_canvas_tool_remarks_follow_current_language(
             SearchCanvasImages,
             {"topic_id": "perfume"},
             ToolResult(content="MODEL-ONLY", data={"topic_id": "perfume", "items": [{"item_ref": "image-1", "status": "completed", "imported_count": 1, "failed_count": 0}]}),
-            "画布图片搜索",
-            "Canvas image search",
+            "搜索并导入参考图片",
+            "Search and import reference images",
             "perfume",
             id="image-search",
         ),

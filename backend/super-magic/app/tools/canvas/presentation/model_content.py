@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.tools.canvas.presentation.batch_status import summarize_items
+
 
 def overview_content(result: dict[str, Any]) -> str:
     """生成概览工具的模型可读文本。"""
@@ -161,7 +163,8 @@ def items_content(
     follow_up: str | None = None,
 ) -> str:
     """生成批量工具的模型可读逐项摘要。"""
-    lines = [summary]
+    batch_status = summarize_items(result.get("items"), fallback_ok=True)
+    lines = [summary, f"Batch status: {batch_status.status}"]
     for item in result.get("items", []):
         ordered_keys = (
             "item_ref",
@@ -214,7 +217,8 @@ def items_content(
             values.append(f"{key}={rendered}")
         lines.append("- " + " | ".join(values))
     if any(
-        item.get("generation_task_id") and item.get("status") in {"pending", "processing"}
+        item.get("generation_task_id")
+        and item.get("status") in {"pending", "processing", "queued", "running"}
         for item in result.get("items", [])
     ):
         lines.append("Next: call wait_canvas_generation with the returned generation_task_id values.")

@@ -61,8 +61,15 @@ class CanvasGenerationFeedback:
     _GENERATED_SOURCES = {"generated"}
     _MEDIA_TYPES = {"image", "video"}
     _COMPLETED_STATUSES = {"added", "completed"}
-    _PROCESSING_STATUSES = {"pending", "processing"}
-    _FAILED_STATUSES = {"failed", "error", "not_found"}
+    _PROCESSING_STATUSES = {"pending", "processing", "queued", "running"}
+    _FAILED_STATUSES = {
+        "failed",
+        "error",
+        "not_found",
+        "not_applicable",
+        "not_applied",
+        "unavailable",
+    }
 
     @classmethod
     def from_arguments(cls, arguments: Mapping[str, Any] | None) -> GenerationFeedbackSummary:

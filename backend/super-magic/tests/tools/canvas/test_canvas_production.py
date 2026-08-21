@@ -185,3 +185,20 @@ def test_ffmpeg_command_preserves_source_audio_and_fills_silent_segments() -> No
     assert "anullsrc" in rendered
     assert "concat=n=2:v=1:a=1" in rendered
     assert "-map [aout]" in rendered
+
+
+def test_ffmpeg_command_mutes_all_audio_sources() -> None:
+    """静音策略必须生成无音频流的 FFmpeg 命令。"""
+    port = FfmpegVideoCompositionPort()
+    request = VideoCompositionRequest(
+        video_paths=(Path("one.mp4"), Path("two.mp4")),
+        audio_path=Path("music.mp3"),
+        output_path=Path("final.mp4"),
+        width=1920,
+        height=1080,
+        audio_policy="mute",
+    )
+    command = port._build_command(request)
+    rendered = " ".join(command)
+    assert "-an" in command
+    assert "-map 2:a:0" not in rendered

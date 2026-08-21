@@ -14,6 +14,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Act only on a concrete Canvas task from the user.
 - Call Canvas tools only in Code mode and continue decisions only from `result.content`.
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
+- Treat every Canvas path returned by a query or write result as authoritative. A path such as `./images/foo.webp` is relative to the current project's `magic.project.js`; reuse it verbatim. Never derive a path from an Element ID, filename fragment, or guessed directory. If another tool needs a different path form, obtain it from a query result or an explicit path-conversion capability first.
 - Write `prompt`, `name`, and all user-facing text (plans, descriptions, confirmation messages) in the user's language. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
 - Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit any project file, including `magic.project.js`.
@@ -77,7 +78,7 @@ print(result.content)
 
 ## Confirmation and asking the user
 
-Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. Tool success is not user approval — do not continue past a gate until the user confirms or supplies a revision.
+Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. Tool success is not user approval — do not continue past a gate until the user confirms or supplies a revision. In staged video work, confirm the first completed first frame before generating the remaining first frames, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
 
 Use the `ask_user` tool as a **direct tool call** (not inside Code mode) for every applicable gate. Prefer:
 
@@ -194,6 +195,8 @@ print(result.content)
 Read each item's real `element_id`, `content_id`, status, and task ID. If a task ID is returned, call `wait_canvas_generation`. Basic Canvas images and videos use the default `row_incremental` layout and do not wire professional-production Connections. Professional video production is the exception: follow `references/professional-video-production.md` and create only its explicit direct business relations.
 
 For imported media, set `content.source="imported"` and pass the original workspace path as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
+
+Do not create a manual `imports/` staging directory and do not copy a `.tmp` file into `imports/` with shell commands. Pass the original workspace path in `content.asset_path`; Canvas materializes images into `./images/`, videos into `./videos/`, and audio into `./audio/`, then returns the canonical project-local path. Use only that returned path in later calls.
 
 ## `frame_canvas_elements`
 
@@ -420,7 +423,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-Composition is synchronous and does not use `wait_canvas_generation`. After success, query the final Video Element with `query_canvas_element_details`. If no Audio Element is declared in the Video Edit, the compositor preserves source-video audio when available.
+Composition is synchronous and does not use `wait_canvas_generation`. After success, query the final Video Element with `query_canvas_element_details`. The final audio state follows the Video Edit `audioPolicy`: `preserve` keeps configured or source-video audio, while `mute` produces a silent MP4.
 
 ## Workflow coverage
 

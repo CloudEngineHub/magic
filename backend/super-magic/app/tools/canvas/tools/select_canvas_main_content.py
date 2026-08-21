@@ -9,9 +9,15 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import SelectMainContentCommand
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_remark,
+    error_result,
+    items_content,
+)
 from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
-from app.tools.canvas.tools.support import _application
+from app.tools.canvas.tools.support import _application, resolve_element_types
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
@@ -47,6 +53,24 @@ class SelectCanvasMainContent(BaseTool[BaseToolParams]):
 
     params_class = Params
 
+    @staticmethod
+    def _media_action_key(media_types: frozenset[str], fallback: str) -> str:
+        """根据目标 Element 类型选择图片或视频主版本文案。"""
+        if media_types == {"image"}:
+            return "canvas.select_image_main"
+        if media_types == {"video"}:
+            return "canvas.select_video_main"
+        return fallback
+
+    @staticmethod
+    def _media_remark_key(media_types: frozenset[str], phase: str) -> str:
+        """根据目标 Element 类型选择主版本操作的阶段文案。"""
+        if media_types == {"image"}:
+            return f"canvas.select_image_main_{phase}"
+        if media_types == {"video"}:
+            return f"canvas.select_video_main_{phase}"
+        return f"canvas.select_main_{phase}"
+
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None
     ) -> dict[str, str]:
@@ -54,9 +78,20 @@ class SelectCanvasMainContent(BaseTool[BaseToolParams]):
         args = arguments or {}
         items = args.get("items") or []
         project_path = args.get("project_path", "")
-        remark = canvas_remark("canvas.select_main_pending", project_path, total=len(items))
+        element_ids = [
+            str(item.get("element_id"))
+            for item in items
+            if isinstance(item, dict) and item.get("element_id")
+        ]
+        media_types = await resolve_element_types(tool_context, project_path, element_ids)
+        action_key = self._media_action_key(media_types, self.feedback_action_key)
+        remark = canvas_remark(
+            self._media_remark_key(media_types, "pending"),
+            project_path,
+            total=len(items),
+        )
         return {
-            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
             "tool_name": tool_name,
         }
@@ -70,13 +105,29 @@ class SelectCanvasMainContent(BaseTool[BaseToolParams]):
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """生成主 Content 切换后的结果反馈。"""
+        values = (result.data or {}).get("items", [])
+        args = arguments or {}
+        project_path = str(args.get("project_path") or "")
+        element_ids = [
+            str(item.get("element_id"))
+            for item in values
+            if isinstance(item, dict) and item.get("element_id")
+        ] or [
+            str(item.get("element_id"))
+            for item in args.get("items", [])
+            if isinstance(item, dict) and item.get("element_id")
+        ]
+        media_types = await resolve_element_types(tool_context, project_path, element_ids)
+        action_key = self._media_action_key(media_types, self.feedback_action_key)
         if not result.ok:
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
-            values = (result.data or {}).get("items", [])
-            remark = canvas_remark("canvas.select_main_result", total=len(values))
+            remark = canvas_remark(
+                self._media_remark_key(media_types, "result"),
+                total=len(values),
+            )
         return {
-            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
         }
 
@@ -108,7 +159,7 @@ class SelectCanvasMainContent(BaseTool[BaseToolParams]):
                 params.project_path,
                 commands,
             )
-            return ToolResult(
+            return batch_tool_result(
                 content=items_content(
                     "Canvas main Content selected successfully.",
                     result.to_dict(),

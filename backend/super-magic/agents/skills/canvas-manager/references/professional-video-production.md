@@ -145,6 +145,7 @@ If the current `<media_model_info>` does not declare a mode, do not use it. A re
 - Adapt the workflow to the current request and existing results; do not restart completed stages.
 - Treat the current Canvas as the source of truth.
 - Every confirmation is a hard gate: tool success is not user approval. Do not continue past a gate until the user confirms or requests a revision.
+- Complete execution confirmation gates are mandatory: confirm the first completed first frame before generating the remaining first frames; confirm the first completed trial shot video before generating the remaining shots; and show the final Video Edit configuration, including `audioPolicy`, for confirmation before composing. A successful tool call, a returned task ID, or a completed query is not confirmation.
 - Infer established facts and reasonable defaults before asking. Ask only about unresolved decisions that materially affect the result.
 - In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
 - Keep each task bound to its current Canvas project. If a tool fails, do not call `initialize_canvas`, invent a new project suffix, or change `project_path` to bypass the error. Recover in the current project: read the failure from `result.content`, inspect the referenced Element or Content, repair it with the available tools, and retry only after the repair is complete. If safe recovery is impossible, tell the user the blocking reason and stop.
@@ -198,12 +199,12 @@ Use this shape for each imported item:
     "content": {
         "source": "imported",
         "content_type": "image",
-        "asset_path": "Project/imports/product.webp",
+        "asset_path": ".tmp/product.webp",
     },
 }
 ```
 
-If validation reports `Unknown parameter`, do not try alternate path field names. Re-read the `add_canvas_elements` schema and retry with `content.asset_path`; do not proceed to asset understanding until the import returns successfully.
+If validation reports `Unknown parameter`, do not try alternate path field names. Re-read the `add_canvas_elements` schema and retry with `content.asset_path`; do not proceed to asset understanding until the import returns successfully. Never create `Project/imports/` as a manual staging area: the import service writes the returned image, video, or audio Content to `./images/`, `./videos/`, or `./audio/` respectively.
 
 ### 2. Understand the assets
 
@@ -263,6 +264,7 @@ tool.call("add_canvas_elements", {
 ```
 
 A storyboard update is the latest working storyboard; it is not a user-selectable media candidate. For a partial revision, append or update only the changed shot descriptions while preserving the existing storyboard Element and generation settings. For a confirmed complete replacement, removal, or reorder, replace the full shot list in one update. Never save unconfirmed generation prompts as storyboard shot descriptions. If shot count or order changes, update the storyboard before rebuilding the downstream video sequence.
+Whenever the user adds or changes a constraint, first update the saved Storyboard with that constraint and obtain confirmation of the updated Storyboard. Only then regenerate affected first frames, shot videos, or edit configuration. Do not change only a downstream generation prompt while leaving the saved Storyboard stale.
 The persisted Storyboard generation configuration must include the selected model, size, resolution, and aspect ratio. The Canvas protocol stores it as `model_id`, `size`, `resolution`, and `image_generation_config.aspect_ratio`; do not leave model or aspect ratio implicit and do not invent unsupported settings.
 
 ### 6. Generate and confirm first frames
@@ -357,13 +359,13 @@ tool.call("add_canvas_elements", {
             "content_type": "video-edit",
             "videoSequence": ["element-740000000000000010", "element-740000000000000011"],
             "audioSequence": ["element-740000000000000014"],
-            "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4"},
+            "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4", "audioPolicy": "preserve"},
         },
     }],
 })
 ```
 
-An empty `audioSequence` preserves audio already present in the source videos when available. When revising an existing Video Edit, preserve its Element, append or update the appropriate Content, rebuild `videoSequence` from the currently confirmed shot Video Element IDs, and confirm the edit configuration again before composing. Adding, replacing, or removing BGM requires importing or reusing the Audio Element, updating `audioSequence`, confirming the new edit, and composing again. Recalculate the expected total duration after adding, removing, or changing shot durations.
+`audioPolicy` controls the final mix: `preserve` keeps the configured Audio Element or source-video audio, while `mute` removes all audio from the composed MP4. An empty `audioSequence` does not imply silence when the policy is `preserve`. When revising an existing Video Edit, preserve its Element, append or update the appropriate Content, rebuild `videoSequence` from the currently confirmed shot Video Element IDs, and confirm the edit configuration again before composing. Adding, replacing, or removing BGM requires importing or reusing the Audio Element, updating `audioSequence`, confirming the new edit, and composing again. Recalculate the expected total duration after adding, removing, or changing shot durations.
 
 ### 9. Compose and deliver
 

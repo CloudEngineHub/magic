@@ -20,7 +20,13 @@ class FakeVideoCompositionPort(VideoCompositionPort):
     async def compose(self, request: VideoCompositionRequest, interruption_event=None) -> VideoCompositionResult:
         """写入最小非空 mock 文件并返回请求尺寸。"""
         await async_write_bytes(request.output_path, b"mock-canvas-video")
-        return VideoCompositionResult(request.output_path, request.width, request.height, self._duration_seconds, request.audio_path is not None)
+        return VideoCompositionResult(
+            request.output_path,
+            request.width,
+            request.height,
+            self._duration_seconds,
+            request.audio_policy == "preserve" and request.audio_path is not None,
+        )
 
     async def inspect_video(self, video_path: Path, interruption_event=None) -> tuple[int, int, float, bool]:
         """返回固定 mock 媒体信息。"""

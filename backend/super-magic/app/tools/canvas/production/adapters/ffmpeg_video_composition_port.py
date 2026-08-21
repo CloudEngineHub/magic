@@ -30,7 +30,7 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
             raise ValueError("At least one video input is required")
         source_media = (
             await self._probe_source_media(request.video_paths, interruption_event)
-            if request.audio_path is None
+            if request.audio_policy == "preserve" and request.audio_path is None
             else None
         )
         command = self._build_command(request, source_media)
@@ -47,11 +47,12 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
         command = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
         for video_path in request.video_paths:
             command.extend(["-i", str(video_path)])
-        if request.audio_path is not None:
+        if request.audio_policy == "preserve" and request.audio_path is not None:
             command.extend(["-i", str(request.audio_path)])
 
         source_audio_enabled = bool(
-            request.audio_path is None
+            request.audio_policy == "preserve"
+            and request.audio_path is None
             and source_media
             and any(item.has_audio for item in source_media)
         )
@@ -109,7 +110,7 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
             )
 
         command.extend(["-filter_complex", ";".join(filters), "-map", "[vout]"])
-        if request.audio_path is not None:
+        if request.audio_policy == "preserve" and request.audio_path is not None:
             audio_input_index = len(request.video_paths)
             command.extend([
                 "-map",

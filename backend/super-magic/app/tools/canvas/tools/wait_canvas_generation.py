@@ -8,8 +8,19 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
-from app.tools.canvas.tools.support import _application
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_remark,
+    error_result,
+    items_content,
+    summarize_items,
+)
+from app.tools.canvas.tools.support import (
+    _application,
+    resolve_element_types,
+    resolve_generation_task_types,
+)
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
@@ -48,12 +59,23 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
         tasks = args.get("tasks") or []
         project_path = args.get("project_path", "")
         seconds = args.get("max_wait_seconds", 60)
-        remark = canvas_remark(
-            "canvas.wait_pending",
-            project_path,
-            total=len(tasks),
-            seconds=seconds,
+        task_ids = [
+            str(task.get("generation_task_id"))
+            for task in tasks
+            if isinstance(task, dict) and task.get("generation_task_id")
+        ]
+        media_types = await resolve_generation_task_types(tool_context, task_ids)
+        remark_key = (
+            "canvas.wait_image_pending"
+            if media_types == {"image"}
+            else "canvas.wait_video_pending"
+            if media_types == {"video"}
+            else "canvas.wait_pending"
         )
+        remark_kwargs = {"seconds": seconds}
+        if remark_key == "canvas.wait_pending":
+            remark_kwargs["total"] = len(tasks)
+        remark = canvas_remark(remark_key, project_path, **remark_kwargs)
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -70,23 +92,57 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
     ) -> dict[str, str]:
         """根据任务状态生成等待完成、超时或部分完成反馈。"""
         args = arguments or {}
-        if not result.ok:
+        values = (result.data or {}).get("items", [])
+        batch_status = summarize_items(values, fallback_ok=result.ok)
+        project_path = str((arguments or {}).get("project_path") or "")
+        element_ids = [
+            str(item.get("element_id"))
+            for item in values
+            if isinstance(item, dict) and item.get("element_id")
+        ]
+        media_types = await resolve_element_types(tool_context, project_path, element_ids)
+        if not media_types:
+            task_ids = [
+                str(item.get("generation_task_id"))
+                for item in values
+                if isinstance(item, dict) and item.get("generation_task_id")
+            ] or [
+                str(item.get("generation_task_id"))
+                for item in args.get("tasks", [])
+                if isinstance(item, dict) and item.get("generation_task_id")
+            ]
+            media_types = await resolve_generation_task_types(tool_context, task_ids)
+        media_action_key = (
+            "canvas.wait_image_"
+            if media_types == {"image"}
+            else "canvas.wait_video_"
+            if media_types == {"video"}
+            else None
+        )
+        if not values and not result.ok:
             action_key = "canvas.wait_generation_failed"
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
-            values = (result.data or {}).get("items", [])
-            statuses = {item.get("status") for item in values}
-            completed = sum(1 for item in values if item.get("status") == "completed")
-            failed = sum(1 for item in values if item.get("status") in {"failed", "not_found", "not_applicable"})
+            completed = batch_status.succeeded
+            failed = batch_status.failed
             if any(item.get("timed_out") for item in values):
                 action_key = "canvas.wait_generation_timeout"
                 remark = canvas_remark("canvas.wait_timeout", completed=completed, total=len(values))
-            elif statuses and statuses <= {"completed"}:
+            elif batch_status.status == "succeeded":
                 action_key = "canvas.wait_generation_completed"
                 remark = canvas_remark("canvas.wait_completed", completed=completed, total=len(values))
-            elif statuses and statuses <= {"failed", "not_found", "not_applicable"}:
+            elif batch_status.status == "failed":
                 action_key = "canvas.wait_generation_failed"
                 remark = canvas_remark("canvas.wait_failed", failed=failed, total=len(values))
+            elif batch_status.status == "processing":
+                action_key = "canvas.wait_generation_processing"
+                remark = canvas_remark(
+                    "canvas.wait_processing",
+                    completed=completed,
+                    processing=batch_status.processing,
+                    failed=failed,
+                    total=len(values),
+                )
             else:
                 action_key = "canvas.wait_generation_partial"
                 remark = canvas_remark(
@@ -95,8 +151,21 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
                     failed=failed,
                     total=len(values),
                 )
+        media_status_suffix = {
+            "succeeded": "completed",
+            "failed": "failed",
+            "processing": "processing",
+            "partial": "partial",
+        }.get(batch_status.status)
+        if any(item.get("timed_out") for item in values):
+            media_status_suffix = "timeout"
+        resolved_action_key = (
+            f"{media_action_key}{media_status_suffix}"
+            if media_action_key and media_status_suffix
+            else media_action_key or action_key
+        )
         return {
-            "action": i18n.translate(action_key, category="tool.actions"),
+            "action": i18n.translate(resolved_action_key, category="tool.actions"),
             "remark": remark,
         }
 
@@ -128,6 +197,9 @@ class WaitCanvasGeneration(BaseTool[BaseToolParams]):
                 params.max_wait_seconds,
                 tool_context,
             )
-            return ToolResult(content=items_content("Canvas generation status returned.", result.to_dict()), data=result.to_dict())
+            return batch_tool_result(
+                content=items_content("Canvas generation status returned.", result.to_dict()),
+                data=result.to_dict(),
+            )
         except Exception as error:
             return error_result(error)

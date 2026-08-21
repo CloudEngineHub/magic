@@ -75,7 +75,7 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
     """对支持计费的内容产出规则执行无副作用积分预估。"""
 
     name = "estimate_canvas_content_points"
-    feedback_action_key = "canvas.estimate_content_points"
+    feedback_action_key = "canvas.estimate_video_points"
 
     class Params(BaseToolParams):
         """批量积分预估参数。"""
@@ -93,19 +93,46 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
         args = arguments or {}
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
-            "remark": canvas_remark("canvas.estimate_pending", total=len(args.get("items") or [])),
+            "remark": canvas_remark("canvas.estimate_video_pending", total=len(args.get("items") or [])),
             "tool_name": tool_name,
         }
 
     async def get_after_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, result: ToolResult, execution_time: float, arguments: dict[str, Any] | None = None) -> dict[str, str]:
         """生成积分预估后的用户反馈。"""
         data = result.data or {}
-        if not result.ok:
-            remark = i18n.translate("canvas.operation_failed", category="tool.messages")
+        items = data.get("items", []) if isinstance(data, dict) else []
+        statuses = {
+            str(item.get("status") or "").casefold()
+            for item in items
+            if isinstance(item, dict)
+        }
+        reasons = " ".join(
+            str(item.get("reason") or "") for item in items if isinstance(item, dict)
+        ).casefold()
+        has_start_frame = any(
+            isinstance(item, dict) and item.get("frame_start_path")
+            for item in (arguments or {}).get("items", [])
+        )
+        reference_unavailable = any(
+            marker in reasons
+            for marker in (
+                "引用文件不存在",
+                "reference file",
+                "asset_not_found",
+                "code=14000",
+            )
+        )
+        if has_start_frame and reference_unavailable:
+            remark = i18n.translate(
+                "canvas.estimate_video_failed_first_frame",
+                category="tool.messages",
+            )
+        elif "failed" in statuses or (not items and not result.ok):
+            remark = i18n.translate("canvas.estimate_video_failed", category="tool.messages")
         elif data.get("can_continue"):
-            remark = canvas_remark("canvas.estimate_result", points=data.get("total_points", 0))
+            remark = canvas_remark("canvas.estimate_video_result", points=data.get("total_points", 0))
         else:
-            remark = canvas_remark("canvas.estimate_unavailable")
+            remark = canvas_remark("canvas.estimate_video_unavailable")
         return {"action": i18n.translate(self.feedback_action_key, category="tool.actions"), "remark": remark}
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, Any] | None = None) -> ToolDetail | None:
@@ -133,19 +160,23 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
                 tool_context,
             )
             if result.can_continue:
-                lines = ["Content point estimate completed.", f"- Rule: {params.production_rule}"]
+                lines = ["Video generation point estimate completed.", f"- Rule: {params.production_rule}"]
                 for item in result.items:
                     lines.append(f"- item_ref={item.item_ref}: {item.points} points")
                 lines.extend([
-                    f"- Total: {result.total_points} points",
+                    f"- Total video generation points: {result.total_points}",
                     f"- Estimate ID: {result.estimate_id}",
                     "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same item_ref and estimate_id; the server can restore the frozen request, or you may resend the exact same request.",
                 ])
             else:
-                lines = ["Content point estimate is unavailable.", f"- Rule: {params.production_rule}"]
+                lines = ["Video generation point estimate is unavailable.", f"- Rule: {params.production_rule}"]
                 for item in result.items:
                     lines.append(f"- item_ref={item.item_ref} | status={item.status} | reason={item.reason or '-'}")
                 lines.append("Next: ask the user whether to revise or cancel. Do not submit generation automatically.")
-            return ToolResult(content="\n".join(lines), data=result.to_dict())
+            return ToolResult(
+                content="\n".join(lines),
+                ok=result.can_continue,
+                data=result.to_dict(),
+            )
         except Exception as error:
             return error_result(error)

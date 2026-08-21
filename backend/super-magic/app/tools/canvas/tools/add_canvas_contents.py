@@ -12,9 +12,11 @@ from app.tools.canvas.application.commands import AddContentCommand
 from app.tools.canvas.presentation import (
     CanvasGenerationFeedback,
     CanvasToolDetailBuilder,
+    batch_tool_result,
     canvas_remark,
     error_result,
     items_content,
+    summarize_tool_result,
 )
 from app.tools.canvas.tools.add_canvas_elements import ContentInput
 from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
@@ -58,6 +60,20 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
 
     params_class = Params
 
+    @staticmethod
+    def _operation_action_key(arguments: dict[str, Any], fallback: str) -> str:
+        """根据追加 Content 的类型选择 Storyboard 或 Video Edit 专用 action。"""
+        content_types = {
+            item.get("content", {}).get("content_type")
+            for item in arguments.get("items", [])
+            if isinstance(item, dict) and isinstance(item.get("content"), dict)
+        }
+        if content_types == {"storyboard"}:
+            return "canvas.create_storyboard"
+        if content_types == {"video-edit"}:
+            return "canvas.create_video_edit"
+        return fallback
+
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None
     ) -> dict[str, str]:
@@ -82,6 +98,7 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
         action_key = "canvas.add_generated_content" if sources == {"generated"} else (
             "canvas.import_content" if sources == {"imported"} else self.feedback_action_key
         )
+        action_key = self._operation_action_key(args, action_key)
         project_path = args.get("project_path", "")
         remark = canvas_remark("canvas.add_contents_pending", project_path, total=len(items))
         return {
@@ -100,8 +117,11 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
     ) -> dict[str, str]:
         """生成追加 Content 后的逐项反馈。"""
         generation_summary = CanvasGenerationFeedback.from_arguments(arguments)
-        if not result.ok:
-            if CanvasGenerationFeedback.is_pure_generated_batch(arguments):
+        batch_status = summarize_tool_result(result)
+        values = (result.data or {}).get("items", [])
+        if CanvasGenerationFeedback.is_pure_generated_batch(arguments):
+            generation_summary = CanvasGenerationFeedback.from_result(result, arguments)
+            if not values and not result.ok:
                 return {
                     "action": i18n.translate(
                         CanvasGenerationFeedback.action_key(generation_summary),
@@ -109,24 +129,24 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
                     ),
                     "remark": CanvasGenerationFeedback.failure_remark(generation_summary),
                 }
-            remark = i18n.translate("canvas.operation_failed", category="tool.messages")
+            return {
+                "action": i18n.translate(
+                    CanvasGenerationFeedback.action_key(generation_summary),
+                    category="tool.actions",
+                ),
+                "remark": CanvasGenerationFeedback.remark(generation_summary),
+            }
         else:
-            values = (result.data or {}).get("items", [])
-            generation_summary = CanvasGenerationFeedback.from_result(result, arguments)
-            if CanvasGenerationFeedback.is_pure_generated_batch(arguments) and generation_summary.is_supported:
-                return {
-                    "action": i18n.translate(
-                        CanvasGenerationFeedback.action_key(generation_summary),
-                        category="tool.actions",
-                    ),
-                    "remark": CanvasGenerationFeedback.remark(generation_summary),
-                }
-            succeeded = sum(
-                1
-                for item in values
-                if item.get("status") in {"added", "completed", "pending", "processing"}
-            )
-            remark = canvas_remark("canvas.add_contents_result", succeeded=succeeded, total=len(values))
+            if not values and not result.ok:
+                remark = i18n.translate("canvas.operation_failed", category="tool.messages")
+            else:
+                remark = canvas_remark(
+                    "canvas.batch_result",
+                    completed=batch_status.succeeded,
+                    processing=batch_status.processing,
+                    failed=batch_status.failed,
+                    total=batch_status.total,
+                )
         args = arguments or {}
         sources = {
             str(item.get("content", {}).get("source"))
@@ -136,6 +156,7 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
         action_key = "canvas.add_generated_content" if sources == {"generated"} else (
             "canvas.import_content" if sources == {"imported"} else self.feedback_action_key
         )
+        action_key = self._operation_action_key(args, action_key)
         return {
             "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
@@ -194,9 +215,9 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
                 commands,
                 tool_context=tool_context,
             )
-            return ToolResult(
+            return batch_tool_result(
                 content=items_content(
-                    "Canvas Content versions added successfully.",
+                    "Canvas Content version operation result.",
                     result.to_dict(),
                     "call query_canvas_element_details with the returned element_id values to verify the Content versions",
                 ),

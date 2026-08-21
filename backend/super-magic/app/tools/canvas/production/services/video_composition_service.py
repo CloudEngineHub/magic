@@ -71,13 +71,24 @@ class VideoCompositionService:
             project = await self._unit_of_work.repository.read(project_path)
             input_spec = preparation.input_spec
             video_paths = tuple(self._resolve_media(project_path, source) for source in input_spec.video_sources)
-            audio_path = self._resolve_media(project_path, input_spec.audio_source) if input_spec.audio_source else None
+            audio_path = (
+                self._resolve_media(project_path, input_spec.audio_source)
+                if input_spec.audio_policy == "preserve" and input_spec.audio_source
+                else None
+            )
             media_paths = video_paths + ((audio_path,) if audio_path else ())
             for path in media_paths:
                 if not await async_exists(path) or (await async_stat(path)).st_size <= 0:
                     raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Composition input file is missing or empty: {path.name}.")
             result = await self._composition_port.compose(
-                VideoCompositionRequest(video_paths, audio_path, self._resolve_media(project_path, output_path), input_spec.output_width, input_spec.output_height),
+                VideoCompositionRequest(
+                    video_paths=video_paths,
+                    audio_path=audio_path,
+                    output_path=self._resolve_media(project_path, output_path),
+                    width=input_spec.output_width,
+                    height=input_spec.output_height,
+                    audio_policy=input_spec.audio_policy,
+                ),
                 interruption_event=self._interruption_event(tool_context),
             )
         except BaseException as error:
@@ -237,7 +248,19 @@ class VideoCompositionService:
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Audio Element is not usable: {audio_element_id}.")
             audio_source = audio_fields.src
         width, height = self._resolve_dimensions(str(output.get("aspectRatio") or "16:9"), str(output.get("resolution") or "1080p"))
-        return CompositionInputSpec(video_edit_element_id, tuple(main.fields.video_sequence), tuple(sources), audio_element_id, audio_source, width, height)
+        audio_policy = str(output.get("audioPolicy") or "preserve").casefold()
+        if audio_policy not in {"preserve", "mute"}:
+            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Unsupported audio policy.")
+        return CompositionInputSpec(
+            video_edit_element_id,
+            tuple(main.fields.video_sequence),
+            tuple(sources),
+            audio_element_id,
+            audio_source,
+            width,
+            height,
+            audio_policy,
+        )
 
     @staticmethod
     def _require_connection(project: CanvasProject, source_id: str, target_id: str) -> None:

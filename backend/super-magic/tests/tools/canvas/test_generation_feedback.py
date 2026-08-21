@@ -8,6 +8,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import I18nManager
 from app.tools.canvas.presentation import CanvasGenerationFeedback
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, batch_tool_result, summarize_items
 from app.tools.canvas.tools.add_canvas_contents import AddCanvasContents
 from app.tools.canvas.tools.add_canvas_elements import AddCanvasElements
 
@@ -79,6 +80,25 @@ def test_generation_feedback_describes_whole_batch_failure() -> None:
         assert CanvasGenerationFeedback.failure_remark(summary) == "1 个视频生成失败"
     finally:
         I18nManager.reset_language()
+
+
+def test_batch_status_preserves_processing_and_partial_semantics() -> None:
+    """批量状态聚合不能把处理中误报成失败。"""
+    assert summarize_items([{"status": "pending"}]).status == "processing"
+    partial = summarize_items([{"status": "completed"}, {"status": "failed"}])
+    assert partial.status == "partial"
+    assert not partial.ok
+
+
+def test_batch_tool_result_and_detail_use_the_same_status() -> None:
+    """ToolResult 与详情必须共同使用逐项聚合状态。"""
+    result = batch_tool_result(
+        "mock",
+        {"items": [{"item_ref": "a", "status": "completed"}, {"item_ref": "b", "status": "failed"}]},
+    )
+    assert result.ok is False
+    detail = CanvasToolDetailBuilder("mock", "elements_added", result).build()
+    assert "部分完成" in detail.data.content
 
 
 @pytest.mark.asyncio

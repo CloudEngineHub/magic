@@ -14,6 +14,7 @@ class CompositionInputSpec:
     audio_source: str | None
     output_width: int
     output_height: int
+    audio_policy: str
 
 
 @dataclass(frozen=True)

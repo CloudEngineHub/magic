@@ -8,7 +8,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result
+from app.tools.canvas.presentation import CanvasToolDetailBuilder, batch_tool_result, canvas_remark, error_result
 from app.tools.canvas.production.contracts import ImageSearchTask
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
@@ -33,7 +33,7 @@ class SearchCanvasImages(BaseTool[BaseToolParams]):
     """搜索、下载并物化 imported Image Content。"""
 
     name = "search_canvas_image_candidates"
-    feedback_action_key = "canvas.search_images"
+    feedback_action_key = "canvas.search_import_reference_images"
 
     class Params(BaseToolParams):
         """图片搜索参数。"""
@@ -51,7 +51,7 @@ class SearchCanvasImages(BaseTool[BaseToolParams]):
         args = arguments or {}
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
-            "remark": canvas_remark("canvas.search_images_pending", topic=args.get("topic_id") or "-"),
+            "remark": canvas_remark("canvas.search_reference_images_pending", topic=args.get("topic_id") or "-"),
             "tool_name": tool_name,
         }
 
@@ -59,11 +59,17 @@ class SearchCanvasImages(BaseTool[BaseToolParams]):
         """生成图片搜索后的用户反馈。"""
         data = result.data or {}
         imported = sum(int(item.get("imported_count") or 0) for item in data.get("items", []))
-        remark = (
-            canvas_remark("canvas.search_images_result", total=imported)
-            if result.ok
-            else i18n.translate("canvas.operation_failed", category="tool.messages")
-        )
+        failed = sum(int(item.get("failed_count") or 0) for item in data.get("items", []))
+        if imported and failed:
+            remark = canvas_remark(
+                "canvas.search_reference_images_partial",
+                imported=imported,
+                failed=failed,
+            )
+        elif imported:
+            remark = canvas_remark("canvas.search_reference_images_result", total=imported)
+        else:
+            remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
             "remark": remark,
@@ -125,6 +131,6 @@ class SearchCanvasImages(BaseTool[BaseToolParams]):
             if created_ids:
                 lines.append(f"- Created Element IDs: {', '.join(created_ids)}")
             lines.append("Next: review the imported candidates with query_canvas_element_details. Retry only a failed search item if the user requests it.")
-            return ToolResult(content="\n".join(lines), data=data.to_dict())
+            return batch_tool_result(content="\n".join(lines), data=data.to_dict())
         except Exception as error:
             return error_result(error)

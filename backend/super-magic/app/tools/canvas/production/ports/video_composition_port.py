@@ -15,6 +15,7 @@ class VideoCompositionRequest:
     output_path: Path
     width: int
     height: int
+    audio_policy: str = "preserve"
 
 
 @dataclass(frozen=True)

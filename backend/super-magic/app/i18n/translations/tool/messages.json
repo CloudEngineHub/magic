@@ -5883,6 +5883,10 @@
         "zh_CN": "已为 {{succeeded}}/{{total}} 个节点新增内容",
         "en_US": "Elements updated with content: {{succeeded}}/{{total}}"
     },
+    "canvas.batch_result": {
+        "zh_CN": "批量操作结果：已完成 {{completed}} 个，处理中 {{processing}} 个，失败 {{failed}} 个，共 {{total}} 个",
+        "en_US": "Batch operation result: {{completed}} completed, {{processing}} processing, {{failed}} failed, {{total}} total"
+    },
     "canvas.connections_pending": {
         "zh_CN": "准备更新 {{total}} 项画布连线",
         "en_US": "Canvas connection updates: {{total}}"
@@ -5892,12 +5896,12 @@
         "en_US": "Connections updated: {{added}} added, {{removed}} removed, {{replaced}} replaced"
     },
     "canvas.frame_pending": {
-        "zh_CN": "准备框选 {{total}} 个节点",
-        "en_US": "Elements to frame: {{total}}"
+        "zh_CN": "准备将 {{total}} 个节点创建为画布分组",
+        "en_US": "Preparing to create a canvas group from {{total}} element(s)"
     },
     "canvas.frame_result": {
-        "zh_CN": "已创建 {{total}} 个画框",
-        "en_US": "Frames created: {{total}}"
+        "zh_CN": "已创建 {{total}} 个画布分组",
+        "en_US": "Canvas groups created: {{total}}"
     },
     "canvas.layout_pending": {
         "zh_CN": "正在对 {{total}} 个节点应用布局策略：{{strategies}}",
@@ -5911,9 +5915,33 @@
         "zh_CN": "准备重试 {{total}} 项失败内容",
         "en_US": "Failed content items to retry: {{total}}"
     },
+    "canvas.retry_image_pending": {
+        "zh_CN": "准备重试失败内容，重新生成图片（{{total}} 项）",
+        "en_US": "Preparing to retry {{total}} failed Content item(s) and regenerate images"
+    },
+    "canvas.retry_video_pending": {
+        "zh_CN": "准备重试失败内容，重新生成视频（{{total}} 项）",
+        "en_US": "Preparing to retry {{total}} failed Content item(s) and regenerate videos"
+    },
     "canvas.retry_result": {
         "zh_CN": "已重试 {{retried}} 项内容，{{limited}} 项达到重试上限",
         "en_US": "Content retries: {{retried}}; retry limit reached: {{limited}}"
+    },
+    "canvas.retry_image_result": {
+        "zh_CN": "已重新生成 {{total}} 张图片",
+        "en_US": "Regenerated {{total}} images"
+    },
+    "canvas.retry_video_result": {
+        "zh_CN": "已重新生成 {{total}} 段视频",
+        "en_US": "Regenerated {{total}} videos"
+    },
+    "canvas.retry_image_failed": {
+        "zh_CN": "图片重试失败",
+        "en_US": "Image regeneration failed"
+    },
+    "canvas.retry_video_failed": {
+        "zh_CN": "视频重试失败",
+        "en_US": "Video regeneration failed"
     },
     "canvas.select_main_pending": {
         "zh_CN": "准备为 {{total}} 个节点选择主内容",
@@ -5922,6 +5950,22 @@
     "canvas.select_main_result": {
         "zh_CN": "已为 {{total}} 个节点选择主内容",
         "en_US": "Main content selections completed: {{total}}"
+    },
+    "canvas.select_image_main_pending": {
+        "zh_CN": "准备选择图片主版本（{{total}} 个节点）",
+        "en_US": "Preparing to select the main image version for {{total}} element(s)"
+    },
+    "canvas.select_image_main_result": {
+        "zh_CN": "已采用 {{total}} 个图片版本",
+        "en_US": "Adopted {{total}} image version(s)"
+    },
+    "canvas.select_video_main_pending": {
+        "zh_CN": "准备选择视频主版本（{{total}} 个节点）",
+        "en_US": "Preparing to select the main video version for {{total}} element(s)"
+    },
+    "canvas.select_video_main_result": {
+        "zh_CN": "已采用 {{total}} 个视频版本",
+        "en_US": "Adopted {{total}} video version(s)"
     },
     "canvas.items_pending": {
         "zh_CN": "准备处理 {{total}} 项",
@@ -5943,6 +5987,14 @@
         "zh_CN": "正在等待 {{total}} 项生成任务，本次最多等待 {{seconds}} 秒",
         "en_US": "Generation tasks: {{total}}; waiting up to {{seconds}} seconds"
     },
+    "canvas.wait_image_pending": {
+        "zh_CN": "正在等待图片生成，本次最多等待 {{seconds}} 秒",
+        "en_US": "Waiting for image generation for up to {{seconds}} seconds"
+    },
+    "canvas.wait_video_pending": {
+        "zh_CN": "正在等待视频生成，本次最多等待 {{seconds}} 秒",
+        "en_US": "Waiting for video generation for up to {{seconds}} seconds"
+    },
     "canvas.wait_completed": {
         "zh_CN": "生成任务已全部完成（{{completed}}/{{total}}）",
         "en_US": "All generation tasks completed ({{completed}}/{{total}})"
@@ -5959,6 +6011,10 @@
         "zh_CN": "生成任务部分完成（完成 {{completed}}，失败 {{failed}}，共 {{total}}）",
         "en_US": "Generation partially completed ({{completed}} completed, {{failed}} failed, {{total}} total)"
     },
+    "canvas.wait_processing": {
+        "zh_CN": "生成任务处理中（完成 {{completed}}，处理中 {{processing}}，失败 {{failed}}，共 {{total}}）",
+        "en_US": "Generation tasks processing ({{completed}} completed, {{processing}} processing, {{failed}} failed, {{total}} total)"
+    },
     "canvas.compose_pending": {
         "zh_CN": "正在合成视频：{{name}}",
         "en_US": "Composing video: {{name}}"
@@ -5971,21 +6027,53 @@
         "zh_CN": "正在预估 {{total}} 项内容的积分",
         "en_US": "Content items to estimate: {{total}}"
     },
+    "canvas.estimate_video_pending": {
+        "zh_CN": "正在预估 {{total}} 段视频的生成积分",
+        "en_US": "Estimating video generation points for {{total}} video(s)"
+    },
     "canvas.estimate_result": {
         "zh_CN": "预计需要 {{points}} 积分",
         "en_US": "Estimated {{points}} points"
+    },
+    "canvas.estimate_video_result": {
+        "zh_CN": "预计需要 {{points}} 个视频生成积分",
+        "en_US": "Estimated {{points}} video generation points"
     },
     "canvas.estimate_unavailable": {
         "zh_CN": "暂时无法预估内容积分",
         "en_US": "Content point estimate is unavailable"
     },
+    "canvas.estimate_video_unavailable": {
+        "zh_CN": "暂时无法预估视频生成积分",
+        "en_US": "Video generation point estimate is unavailable"
+    },
+    "canvas.estimate_video_failed": {
+        "zh_CN": "视频积分预估失败",
+        "en_US": "Video generation point estimate failed"
+    },
+    "canvas.estimate_video_failed_first_frame": {
+        "zh_CN": "视频积分预估失败：首帧引用文件不可用",
+        "en_US": "Video generation point estimate failed: first-frame reference file unavailable"
+    },
     "canvas.search_images_pending": {
         "zh_CN": "正在为 {{topic}} 搜索图片",
         "en_US": "Searching images for {{topic}}"
     },
+    "canvas.search_reference_images_pending": {
+        "zh_CN": "正在搜索并导入参考图片：{{topic}}",
+        "en_US": "Searching and importing reference images for {{topic}}"
+    },
     "canvas.search_images_result": {
         "zh_CN": "已导入 {{total}} 张候选图片",
         "en_US": "Imported {{total}} image candidates"
+    },
+    "canvas.search_reference_images_result": {
+        "zh_CN": "已导入 {{total}} 张参考图片",
+        "en_US": "Imported {{total}} reference images"
+    },
+    "canvas.search_reference_images_partial": {
+        "zh_CN": "已导入 {{imported}} 张参考图片，{{failed}} 张导入失败",
+        "en_US": "Imported {{imported}} reference images; {{failed}} failed"
     },
     "canvas.search_prompts_pending": {
         "zh_CN": "正在搜索提示词灵感：{{query}}",

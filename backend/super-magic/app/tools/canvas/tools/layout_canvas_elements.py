@@ -9,7 +9,13 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import LayoutCommand, LayoutElementCommand
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_remark,
+    error_result,
+    items_content,
+)
 from app.tools.canvas.tools.add_canvas_elements import CanvasPositionInput
 from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
@@ -141,7 +147,7 @@ class LayoutCanvasElements(BaseTool[BaseToolParams]):
             commands = [item.to_command() for item in params.items]
             await CanvasAgentWritePolicy.validate_targets(application.repository, params.project_path, commands)
             result = await application.layout(params.project_path, commands)
-            return ToolResult(
+            return batch_tool_result(
                 content=items_content(
                     "Canvas layout updated successfully.",
                     result.to_dict(),

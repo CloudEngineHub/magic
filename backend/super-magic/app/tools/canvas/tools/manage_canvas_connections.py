@@ -9,7 +9,13 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import ConnectionCommand
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_remark,
+    error_result,
+    items_content,
+)
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
@@ -152,7 +158,7 @@ class ManageCanvasConnections(BaseTool[BaseToolParams]):
         """按明确 ID 管理 Connection。"""
         try:
             result = await _application(tool_context).connections(params.project_path, [item.to_command() for item in params.items])
-            return ToolResult(
+            return batch_tool_result(
                 content=items_content(
                     "Canvas Connections updated successfully.",
                     result.to_dict(),

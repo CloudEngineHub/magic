@@ -8,6 +8,7 @@ from typing import Any
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.tools.canvas.presentation.batch_status import summarize_items
 
 
 class CanvasToolDetailBuilder:
@@ -24,9 +25,10 @@ class CanvasToolDetailBuilder:
         self._file_name = file_name
         self._data = result.data or {}
         self._arguments = arguments or {}
+        batch_status = summarize_items(self._data.get("items"), fallback_ok=result.ok)
         self._lines = [
             self._translate(f"canvas.detail.title.{title_key}"),
-            self._field_line("status", self.status_value("succeeded" if result.ok else "failed")),
+            self._field_line("status", self.status_value(batch_status.status)),
         ]
 
     @property

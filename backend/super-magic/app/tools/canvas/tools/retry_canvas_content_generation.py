@@ -9,10 +9,17 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import GenerationParametersOverride, RetryContentCommand
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, canvas_remark, error_result, items_content
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_remark,
+    error_result,
+    items_content,
+    summarize_tool_result,
+)
 from app.tools.canvas.tools.add_canvas_elements import VideoInputMode
 from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
-from app.tools.canvas.tools.support import _application
+from app.tools.canvas.tools.support import _application, resolve_element_types
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
 
@@ -112,6 +119,15 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
 
     params_class = Params
 
+    @staticmethod
+    def _media_action_key(media_types: frozenset[str], fallback: str) -> str:
+        """根据重试目标 Element 类型选择图片或视频专用 action。"""
+        if media_types == {"image"}:
+            return "canvas.retry_image_generation"
+        if media_types == {"video"}:
+            return "canvas.retry_video_generation"
+        return fallback
+
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: dict[str, Any] | None = None
     ) -> dict[str, str]:
@@ -119,9 +135,23 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
         args = arguments or {}
         items = args.get("items") or []
         project_path = args.get("project_path", "")
-        remark = canvas_remark("canvas.retry_pending", project_path, total=len(items))
+        element_ids = [
+            str(item.get("element_id"))
+            for item in items
+            if isinstance(item, dict) and item.get("element_id")
+        ]
+        media_types = await resolve_element_types(tool_context, project_path, element_ids)
+        action_key = self._media_action_key(media_types, self.feedback_action_key)
+        remark_key = (
+            "canvas.retry_image_pending"
+            if media_types == {"image"}
+            else "canvas.retry_video_pending"
+            if media_types == {"video"}
+            else "canvas.retry_pending"
+        )
+        remark = canvas_remark(remark_key, project_path, total=len(items))
         return {
-            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
             "tool_name": tool_name,
         }
@@ -135,14 +165,55 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """生成重试结果和失败上限反馈。"""
-        if not result.ok:
-            remark = i18n.translate("canvas.operation_failed", category="tool.messages")
+        batch_status = summarize_tool_result(result)
+        values = (result.data or {}).get("items", [])
+        args = arguments or {}
+        project_path = str(args.get("project_path") or "")
+        element_ids = [
+            str(item.get("element_id"))
+            for item in values
+            if isinstance(item, dict) and item.get("element_id")
+        ] or [
+            str(item.get("element_id"))
+            for item in args.get("items", [])
+            if isinstance(item, dict) and item.get("element_id")
+        ]
+        media_types = await resolve_element_types(tool_context, project_path, element_ids)
+        action_key = self._media_action_key(media_types, self.feedback_action_key)
+        if not values and not result.ok:
+            remark_key = (
+                "canvas.retry_image_failed"
+                if media_types == {"image"}
+                else "canvas.retry_video_failed"
+                if media_types == {"video"}
+                else "canvas.operation_failed"
+            )
+            remark = i18n.translate(remark_key, category="tool.messages")
         else:
-            values = (result.data or {}).get("items", [])
             limited = sum(1 for item in values if item.get("error_code") == "CONTENT_RETRY_LIMIT_REACHED")
-            remark = canvas_remark("canvas.retry_result", retried=len(values) - limited, limited=limited)
+            if batch_status.status in {"partial", "failed"}:
+                remark = canvas_remark(
+                    "canvas.batch_result",
+                    completed=batch_status.succeeded,
+                    processing=batch_status.processing,
+                    failed=batch_status.failed,
+                    total=batch_status.total,
+                )
+            else:
+                result_key = (
+                    "canvas.retry_image_result"
+                    if media_types == {"image"}
+                    else "canvas.retry_video_result"
+                    if media_types == {"video"}
+                    else "canvas.retry_result"
+                )
+                remark = (
+                    canvas_remark(result_key, total=len(values))
+                    if result_key != "canvas.retry_result"
+                    else canvas_remark("canvas.retry_result", retried=len(values) - limited, limited=limited)
+                )
         return {
-            "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
+            "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
         }
 
@@ -176,7 +247,7 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
                 commands,
                 tool_context=tool_context,
             )
-            return ToolResult(
+            return batch_tool_result(
                 content=items_content(
                     "Canvas failed Content retry started.",
                     result.to_dict(),
