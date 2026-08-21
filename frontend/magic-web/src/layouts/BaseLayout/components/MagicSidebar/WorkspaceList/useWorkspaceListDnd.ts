@@ -7,12 +7,20 @@ import projectStore from "@/pages/superMagic/stores/core/project"
 import superMagicService from "@/pages/superMagic/services"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { SidebarDragData, SidebarDropPosition } from "./types"
+import {
+	createSidebarDragImage,
+	getDropPosition,
+	getEdgeScrollSpeed,
+	getIndicatorLineY,
+	getNearestProjectTarget,
+	getNearestWorkspaceTarget,
+	insertAtPosition,
+	INSERT_LINE_COLOR,
+	isNoOpInsertion,
+} from "./dndUtils"
 
 const SIDEBAR_DRAG_DATA_TYPE = "application/x-magic-sidebar-dnd"
 const AUTO_EXPAND_DELAY = 1000
-const INSERT_LINE_COLOR = "#b9dcff"
-const EDGE_SCROLL_ZONE = 56
-const MAX_EDGE_SCROLL_SPEED = 14
 
 interface DropPreview {
 	type: "workspace" | "project"
@@ -20,6 +28,7 @@ interface DropPreview {
 	projectId?: string
 	position?: SidebarDropPosition
 	target: HTMLElement
+	disabled?: boolean
 }
 
 interface UseWorkspaceListDndOptions {
@@ -32,30 +41,13 @@ interface DragVisualState {
 	workspaceTarget: HTMLElement | null
 	workspaceHeader: HTMLElement | null
 	workspaceHeaderButton: HTMLElement | null
+	workspaceDisabled: HTMLElement | null
 }
 
 interface DragFrame {
 	target: Element | null
 	clientX: number
 	clientY: number
-}
-
-/** Returns a signed scroll speed from the pointer's distance to the container edge. */
-function getEdgeScrollSpeed(container: HTMLElement, clientY: number) {
-	const rect = container.getBoundingClientRect()
-	if (clientY < rect.top || clientY > rect.bottom) return 0
-
-	const topDistance = clientY - rect.top
-	if (topDistance < EDGE_SCROLL_ZONE) {
-		return -Math.max(2, MAX_EDGE_SCROLL_SPEED * (1 - topDistance / EDGE_SCROLL_ZONE))
-	}
-
-	const bottomDistance = rect.bottom - clientY
-	if (bottomDistance < EDGE_SCROLL_ZONE) {
-		return Math.max(2, MAX_EDGE_SCROLL_SPEED * (1 - bottomDistance / EDGE_SCROLL_ZONE))
-	}
-
-	return 0
 }
 
 /** Returns the closest sidebar element matching a selector, constrained to the DND root. */
@@ -99,95 +91,6 @@ function resolveDropTarget(
 	)
 }
 
-/** Calculates whether the pointer is before or after a target row. */
-function getDropPosition(target: HTMLElement, clientY: number): SidebarDropPosition {
-	const rect = target.getBoundingClientRect()
-	return clientY < rect.top + rect.height / 2 ? "before" : "after"
-}
-
-/** Returns the project row nearest to a pointer inside list padding or row gaps. */
-function getNearestProjectTarget(
-	projectList: HTMLElement,
-	clientY: number,
-	excludedProjectId?: string,
-) {
-	const projectTargets = Array.from(
-		projectList.querySelectorAll<HTMLElement>('[data-sidebar-drop-type="project"]'),
-	).filter((target) => target.dataset.sidebarDropProjectId !== excludedProjectId)
-
-	let nearestTarget: HTMLElement | null = null
-	let nearestDistance = Number.POSITIVE_INFINITY
-	for (const target of projectTargets) {
-		const rect = target.getBoundingClientRect()
-		if (clientY >= rect.top && clientY <= rect.bottom) return target
-		const distance = Math.abs(clientY - (rect.top + rect.height / 2))
-		if (distance < nearestDistance) {
-			nearestDistance = distance
-			nearestTarget = target
-		}
-	}
-	return nearestTarget
-}
-
-/** Moves an item around a list while preserving the requested insertion side. */
-function insertAtPosition<T>(
-	items: T[],
-	sourceIndex: number,
-	targetIndex: number,
-	position: SidebarDropPosition,
-) {
-	const next = [...items]
-	const [item] = next.splice(sourceIndex, 1)
-	if (!item) return items
-	const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
-	const insertIndex = position === "after" ? adjustedTarget + 1 : adjustedTarget
-	next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, item)
-	return next
-}
-
-/** Returns true when the requested insertion keeps the source at its current index. */
-function isNoOpInsertion(
-	sourceIndex: number,
-	targetIndex: number,
-	position: SidebarDropPosition,
-	itemCount: number,
-) {
-	const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
-	const insertIndex = position === "after" ? adjustedTarget + 1 : adjustedTarget
-	const boundedInsertIndex = Math.max(0, Math.min(insertIndex, itemCount - 1))
-	return boundedInsertIndex === sourceIndex
-}
-
-/** Creates a small native drag image without adding a React render to the drag loop. */
-function createDragImage(source: HTMLElement) {
-	if (typeof document === "undefined") return null
-	const image = document.createElement("div")
-	image.textContent = source.dataset.sidebarDndLabel || ""
-	image.style.cssText = [
-		"position:fixed",
-		"top:-1000px",
-		"left:-1000px",
-		"z-index:9999",
-		"pointer-events:none",
-		"user-select:none",
-		"display:flex",
-		"align-items:center",
-		"max-width:260px",
-		"height:28px",
-		"padding:0 10px",
-		"border-radius:8px",
-		"background:#ffffff",
-		"box-shadow:0 0 1px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.1)",
-		"color:#1c1d23",
-		"font:500 12px/1.2 -apple-system,BlinkMacSystemFont,sans-serif",
-		"white-space:nowrap",
-		"overflow:hidden",
-		"text-overflow:ellipsis",
-	].join(";")
-	document.body.appendChild(image)
-	return image
-}
-
 export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDndOptions) {
 	const { t } = useTranslation()
 	const rootRef = useRef<HTMLDivElement>(null)
@@ -199,6 +102,7 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 		workspaceTarget: null,
 		workspaceHeader: null,
 		workspaceHeaderButton: null,
+		workspaceDisabled: null,
 	})
 	const dragImageRef = useRef<HTMLElement | null>(null)
 	const frameRef = useRef<number | null>(null)
@@ -229,9 +133,11 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 		visualRef.current.workspaceHeader?.style.removeProperty("box-shadow")
 		visualRef.current.workspaceHeader?.style.removeProperty("border-radius")
 		visualRef.current.workspaceHeaderButton?.style.removeProperty("background-color")
+		visualRef.current.workspaceDisabled?.style.removeProperty("opacity")
 		visualRef.current.workspaceHeader = null
 		visualRef.current.workspaceHeaderButton = null
 		visualRef.current.workspaceTarget = null
+		visualRef.current.workspaceDisabled = null
 	}, [])
 
 	const clearDragVisuals = useCallback(() => {
@@ -280,6 +186,18 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 		[clearWorkspaceHighlight],
 	)
 
+	/** Applies a non-droppable opacity state to the current workspace target. */
+	const showWorkspaceDisabled = useCallback(
+		(target: HTMLElement | null) => {
+			if (!target) return
+			clearWorkspaceHighlight()
+			target.style.opacity = "0.45"
+			visualRef.current.workspaceTarget = target
+			visualRef.current.workspaceDisabled = target
+		},
+		[clearWorkspaceHighlight],
+	)
+
 	const showDropIndicator = useCallback((target: HTMLElement, position: SidebarDropPosition) => {
 		const root = rootRef.current
 		const indicator = dropIndicatorRef.current
@@ -287,7 +205,8 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 
 		const rootRect = root.getBoundingClientRect()
 		const targetRect = target.getBoundingClientRect()
-		const requestedLineY = position === "before" ? targetRect.top : targetRect.bottom
+		const projectList = target.closest<HTMLElement>('[data-sidebar-drop-type="project-list"]')
+		const requestedLineY = getIndicatorLineY(target, position, projectList || root)
 		const stickyHeader = root.querySelector<HTMLElement>(
 			"[data-testid='sidebar-workspace-list-sticky-header']",
 		)
@@ -345,6 +264,27 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 		(target: EventTarget | null, clientY: number, active: SidebarDragData | null) => {
 			if (!active) return null
 			let dropTarget = resolveDropTarget(rootRef.current, target, active)
+			if (active.type === "workspace") {
+				// Resolve row gaps to one stable workspace instead of switching with elementFromPoint.
+				dropTarget =
+					getNearestWorkspaceTarget(
+						rootRef.current,
+						clientY,
+						active.workspaceId,
+						'[data-sidebar-drop-type="workspace"]',
+						"sidebarDropWorkspaceId",
+					) || dropTarget
+			}
+			if (active.type === "project" && !dropTarget) {
+				// Project drags may hover the source workspace; do not exclude it from hit testing.
+				dropTarget = getNearestWorkspaceTarget(
+					rootRef.current,
+					clientY,
+					undefined,
+					'[data-sidebar-drop-type="workspace"]',
+					"sidebarDropWorkspaceId",
+				)
+			}
 			if (!dropTarget) return null
 			if (
 				active.type === "project" &&
@@ -352,7 +292,13 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 				dropTarget.dataset.sidebarDropEmpty !== "true"
 			) {
 				dropTarget =
-					getNearestProjectTarget(dropTarget, clientY, active.projectId) || dropTarget
+					getNearestProjectTarget(
+						dropTarget,
+						clientY,
+						active.projectId,
+						'[data-sidebar-drop-type="project"]',
+						"sidebarDropProjectId",
+					) || dropTarget
 			}
 
 			const dropType = dropTarget.dataset.sidebarDropType
@@ -377,9 +323,20 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 					target: dropTarget,
 				} satisfies DropPreview
 			}
+			if (active.type !== "project") return null
 
 			if (dropType === "workspace") {
-				if (workspaceId === active.workspaceId) return null
+				if (workspaceId === active.workspaceId) {
+					const workspaceRoot = dropTarget.closest<HTMLElement>(
+						"[data-sidebar-workspace-root]",
+					)
+					return {
+						type: "workspace",
+						workspaceId,
+						target: workspaceRoot || dropTarget,
+						disabled: true,
+					} satisfies DropPreview
+				}
 				return { type: "workspace", workspaceId, target: dropTarget } satisfies DropPreview
 			}
 
@@ -446,6 +403,7 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 				previous?.workspaceId === preview?.workspaceId &&
 				previous?.projectId === preview?.projectId &&
 				previous?.position === preview?.position &&
+				previous?.disabled === preview?.disabled &&
 				previous?.target === preview?.target
 			if (isSamePreview) {
 				if (
@@ -472,6 +430,10 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 					showDropIndicator(preview.target, preview.position || "after")
 					return
 				}
+				if (preview.disabled) {
+					showWorkspaceDisabled(preview.target)
+					return
+				}
 				if (!sidebarStore.expandedWorkspaces.has(preview.workspaceId)) {
 					scheduleExpand(preview.workspaceId)
 				}
@@ -491,6 +453,7 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 			hideDropIndicator,
 			scheduleExpand,
 			showDropIndicator,
+			showWorkspaceDisabled,
 			showWorkspaceHighlight,
 		],
 	)
@@ -569,7 +532,7 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 			event.dataTransfer.effectAllowed = "move"
 			event.dataTransfer.clearData()
 			event.dataTransfer.setData(SIDEBAR_DRAG_DATA_TYPE, JSON.stringify(data))
-			const image = createDragImage(source)
+			const image = createSidebarDragImage(source.dataset.sidebarDndLabel || "", data.type)
 			if (image) {
 				dragImageRef.current = image
 				event.dataTransfer.setDragImage(image, 12, 14)
@@ -680,6 +643,7 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 					await superMagicService.workspace.reorderWorkspaces(next.map((item) => item.id))
 					return
 				}
+				if (active.type !== "project") return
 
 				const sourceProjects = projectStore.getProjectsByWorkspace(active.workspaceId)
 				const project = sourceProjects.find((item) => item.id === active.projectId)
@@ -742,6 +706,23 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 				dragImageRef.current.parentNode.removeChild(dragImageRef.current)
 		}
 	}, [clearDragVisuals, clearExpandTimer, stopAutoScroll])
+
+	useEffect(() => {
+		const cancelDrag = () => {
+			if (activeDragRef.current) resetDragState()
+		}
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") cancelDrag()
+		}
+		document.addEventListener("keydown", handleKeyDown, true)
+		window.addEventListener("blur", cancelDrag)
+		document.addEventListener("visibilitychange", cancelDrag)
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown, true)
+			window.removeEventListener("blur", cancelDrag)
+			document.removeEventListener("visibilitychange", cancelDrag)
+		}
+	}, [resetDragState])
 
 	return {
 		rootRef: rootRef as RefObject<HTMLDivElement>,
