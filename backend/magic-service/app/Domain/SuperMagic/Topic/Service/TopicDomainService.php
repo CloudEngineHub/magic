@@ -1220,8 +1220,18 @@ class TopicDomainService
             return;
         }
 
-        foreach ($messageIdMapping as $targetMessageId) {
-            $message = $this->taskMessageRepository->getById((int) $targetMessageId);
+        $targetMessageIds = array_map(
+            static fn ($targetMessageId): int => (int) $targetMessageId,
+            array_values($messageIdMapping)
+        );
+        $messages = $this->taskMessageRepository->getByIds($targetMessageIds);
+        $messageMap = [];
+        foreach ($messages as $message) {
+            $messageMap[$message->getId()] = $message;
+        }
+
+        foreach ($targetMessageIds as $targetMessageId) {
+            $message = $messageMap[$targetMessageId] ?? null;
             if ($message === null) {
                 $this->logger->error('Copied topic message not found while remapping file references', [
                     'target_message_id' => $targetMessageId,

@@ -19,6 +19,14 @@ interface TaskMessageRepositoryInterface
     public function getById(int $id): ?TaskMessageEntity;
 
     /**
+     * 通过ID批量获取消息.
+     *
+     * @param int[] $ids
+     * @return TaskMessageEntity[]
+     */
+    public function getByIds(array $ids): array;
+
+    /**
      * 保存消息.
      */
     public function save(TaskMessageEntity $message): void;
