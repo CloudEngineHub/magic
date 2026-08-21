@@ -15,6 +15,7 @@ from app.tools.canvas.generation.contracts.generation_query_request import Gener
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.production.adapters.design_video_point_estimate_port import DesignVideoPointEstimatePort
 from app.tools.canvas.production.contracts import NormalizedVideoProductionRequest
+from app.tools.video_generation_utils.video_input_utils import VideoInputPayloadBuilder
 
 
 class _ToolContext:
@@ -75,6 +76,106 @@ def test_default_canvas_video_capability_uses_design_adapter(tmp_path: Path, mon
 
     video = next(capability for capability in capabilities if capability.element_type == "video")
     assert isinstance(video.submission_port, DesignVideoGenerationPort)
+
+
+@pytest.mark.asyncio
+async def test_canvas_video_transport_keeps_workspace_paths_when_base64_is_disabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """关闭开关时应原样提交工作区路径。"""
+    monkeypatch.setattr(VideoInputPayloadBuilder, "enabled", property(lambda _self: False))
+    port = DesignVideoGenerationPort(tmp_path)
+    payload = {
+        "inputs": {
+            "reference_images": [{"uri": "/mock-project/images/source.png"}],
+            "reference_videos": [{"uri": "/mock-project/videos/source.mp4"}],
+            "frames": [{"role": "start", "uri": "/mock-project/images/start.png"}],
+        }
+    }
+
+    transport_payload = await port._build_transport_payload(
+        payload,
+        "mock-project",
+        GenerationParameters(
+            reference_image_paths=("./images/source.png",),
+            frame_start_path="./images/start.png",
+        ),
+    )
+
+    assert transport_payload is payload
+
+
+@pytest.mark.asyncio
+async def test_canvas_video_transport_converts_images_to_base64_when_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """开启开关时仅转换参考图片和首尾帧，并保留持久化路径请求。"""
+    converted_paths: list[str] = []
+
+    async def build_image_input(_self, source_path: str) -> dict[str, str]:
+        """返回 mock Base64 输入并记录转换路径。"""
+        converted_paths.append(source_path)
+        return {
+            "source_type": "base64",
+            "base64_data": f"mock-{Path(source_path).name}",
+            "mime_type": "image/png",
+        }
+
+    monkeypatch.setattr(VideoInputPayloadBuilder, "enabled", property(lambda _self: True))
+    monkeypatch.setattr(VideoInputPayloadBuilder, "build_image_input", build_image_input)
+    port = DesignVideoGenerationPort(tmp_path)
+    persisted_payload = {
+        "inputs": {
+            "reference_images": [{"uri": "/mock-project/images/source.png"}],
+            "reference_videos": [{"uri": "/mock-project/videos/source.mp4"}],
+            "reference_audios": [{"uri": "/mock-project/audios/source.wav"}],
+            "frames": [{"role": "start", "uri": "/mock-project/images/start.png"}],
+        }
+    }
+
+    transport_payload = await port._build_transport_payload(
+        persisted_payload,
+        "mock-project",
+        GenerationParameters(
+            reference_image_paths=("./images/source.png",),
+            frame_start_path="./images/start.png",
+            frame_end_path="./images/end.png",
+        ),
+    )
+
+    assert converted_paths == [
+        "mock-project/images/source.png",
+        "mock-project/images/start.png",
+        "mock-project/images/end.png",
+    ]
+    assert transport_payload["inputs"]["reference_images"] == [
+        {
+            "source_type": "base64",
+            "base64_data": "mock-source.png",
+            "mime_type": "image/png",
+        }
+    ]
+    assert transport_payload["inputs"]["frames"] == [
+        {
+            "role": "start",
+            "source_type": "base64",
+            "base64_data": "mock-start.png",
+            "mime_type": "image/png",
+        },
+        {
+            "role": "end",
+            "source_type": "base64",
+            "base64_data": "mock-end.png",
+            "mime_type": "image/png",
+        },
+    ]
+    assert transport_payload["inputs"]["reference_videos"] == persisted_payload["inputs"]["reference_videos"]
+    assert transport_payload["inputs"]["reference_audios"] == persisted_payload["inputs"]["reference_audios"]
+    assert persisted_payload["inputs"]["reference_images"] == [
+        {"uri": "/mock-project/images/source.png"}
+    ]
 
 
 @pytest.mark.asyncio

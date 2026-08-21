@@ -4,21 +4,24 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.infrastructure.magic_service.client import MagicServiceClient
+from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.generation.adapters.design_video_payload_builder import DesignVideoPayloadBuilder
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
-from app.tools.canvas.generation.video_filename import build_video_filename
 from app.tools.canvas.generation.ports.query_port import GenerationQueryPort
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
+from app.tools.canvas.generation.video_filename import build_video_filename
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
+from app.tools.video_generation_utils.video_input_utils import VideoInputPayloadBuilder
 
 logger = get_logger(__name__)
 
@@ -48,6 +51,11 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 provider_task_id,
                 f"/{project.project_path}/videos/",
                 tool_context,
+            )
+            payload = await self._build_transport_payload(
+                payload,
+                request.project_path,
+                request.parameters,
             )
         except Exception as error:
             logger.exception(
@@ -125,6 +133,50 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             provider_task_id=returned_id,
             request_metadata={"outputFilename": output_filename},
         )
+
+    async def _build_transport_payload(
+        self,
+        persisted_payload: dict[str, Any],
+        project_path: str,
+        parameters: GenerationParameters,
+    ) -> dict[str, Any]:
+        """按配置转换视频参考图片，但保留 Canvas 中持久化的路径参数。"""
+        builder = VideoInputPayloadBuilder(self.workspace)
+        if not builder.enabled:
+            return persisted_payload
+
+        image_paths = parameters.reference_image_paths or parameters.reference_images
+        reference_images = [
+            await builder.build_image_input(
+                self._asset_path_resolver.to_workspace_reference_path(project_path, path)
+            )
+            for path in image_paths
+        ]
+        frames: list[dict[str, Any]] = []
+        for role, path in (
+            ("start", parameters.frame_start_path),
+            ("end", parameters.frame_end_path),
+        ):
+            if path:
+                frames.append(
+                    {
+                        "role": role,
+                        **await builder.build_image_input(
+                            self._asset_path_resolver.to_workspace_reference_path(project_path, path)
+                        ),
+                    }
+                )
+
+        inputs = persisted_payload.get("inputs")
+        persisted_inputs = inputs if isinstance(inputs, dict) else {}
+        return {
+            **persisted_payload,
+            "inputs": {
+                **persisted_inputs,
+                "reference_images": reference_images,
+                "frames": frames,
+            },
+        }
 
     async def query(self, request: GenerationQueryRequest, tool_context: ToolContext | None) -> GenerationQueryResult:
         """查询 Design 视频状态，仅本地调试模式下载结果文件。"""
