@@ -167,6 +167,57 @@ const urlAttributeNames = new Set([
 ])
 const multiUrlAttributeNames = new Set(["srcset", "ping"])
 const safeUrlProtocols = new Set(["http", "https", "mailto", "tel"])
+const safeInlineStyleProperties = new Set([
+	"background-color",
+	"border",
+	"border-bottom",
+	"border-bottom-color",
+	"border-bottom-left-radius",
+	"border-bottom-right-radius",
+	"border-bottom-style",
+	"border-bottom-width",
+	"border-color",
+	"border-left",
+	"border-left-color",
+	"border-left-style",
+	"border-left-width",
+	"border-radius",
+	"border-right",
+	"border-right-color",
+	"border-right-style",
+	"border-right-width",
+	"border-style",
+	"border-top",
+	"border-top-color",
+	"border-top-left-radius",
+	"border-top-right-radius",
+	"border-top-style",
+	"border-top-width",
+	"border-width",
+	"color",
+	"font-family",
+	"font-size",
+	"font-style",
+	"font-weight",
+	"letter-spacing",
+	"line-height",
+	"margin",
+	"margin-bottom",
+	"margin-left",
+	"margin-right",
+	"margin-top",
+	"padding",
+	"padding-bottom",
+	"padding-left",
+	"padding-right",
+	"padding-top",
+	"text-align",
+	"text-decoration",
+	"text-indent",
+	"text-transform",
+	"vertical-align",
+	"white-space",
+])
 const MAX_PROBE_CANDIDATES = 2048
 const MAX_PROBE_MARKDOWN_LENGTH = 4 * 1024 * 1024
 const MAX_RAW_HTML_TOKEN_COUNT = 4096
@@ -219,6 +270,58 @@ function isSafeUrlAttribute(attributeName: string, value: string): boolean {
 	)
 }
 
+export function isSafeInlineStyle(styleValue: string): boolean {
+	if (!styleValue.trim()) return true
+
+	// Validate the authored declarations instead of enumerating CSSStyleDeclaration.
+	// Browsers differ in whether shorthand properties such as `border` and
+	// `margin` are exposed as authored shorthands or expanded longhands. Using
+	// the authored form keeps the safety decision deterministic across browsers.
+	const declarations: string[] = []
+	let start = 0
+	let quote: "'" | '"' | null = null
+	let parentheses = 0
+
+	for (let index = 0; index < styleValue.length; index += 1) {
+		const character = styleValue[index]
+		if (quote) {
+			if (character === quote && styleValue[index - 1] !== "\\") quote = null
+			continue
+		}
+		if (character === "'" || character === '"') {
+			quote = character
+			continue
+		}
+		if (character === "(") parentheses += 1
+		if (character === ")") parentheses -= 1
+		if (character === ";" && parentheses === 0) {
+			declarations.push(styleValue.slice(start, index))
+			start = index + 1
+		}
+	}
+	if (quote || parentheses !== 0) return false
+	declarations.push(styleValue.slice(start))
+
+	for (const declaration of declarations) {
+		if (!declaration.trim()) continue
+		const separator = declaration.indexOf(":")
+		if (separator <= 0) return false
+
+		const property = declaration.slice(0, separator).trim().toLowerCase()
+		const value = declaration.slice(separator + 1).trim()
+		if (!safeInlineStyleProperties.has(property) || !value) return false
+		if (
+			/[\\{}]|\/\*|\*\/|url\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding/i.test(
+				value,
+			)
+		) {
+			return false
+		}
+	}
+
+	return declarations.some((declaration) => declaration.trim() !== "")
+}
+
 function hasDangerousHtmlAttributes(html: string): boolean {
 	if (typeof DOMParser === "undefined") {
 		// Rendering without a DOM parser is uncommon for this client-only flow.
@@ -234,9 +337,11 @@ function hasDangerousHtmlAttributes(html: string): boolean {
 			const attributeName = attribute.name.toLowerCase()
 			if (attributeName.startsWith("on") || attributeName === "srcdoc") return true
 
-			// Untrusted inline CSS can cover the application UI, intercept clicks,
-			// or imitate trusted dialogs without using script or external URLs.
-			if (attributeName === "style") return true
+			if (attributeName === "style") {
+				if (!isSafeInlineStyle(attribute.value)) return true
+				inspectedRiskAttribute = true
+				continue
+			}
 
 			if (multiUrlAttributeNames.has(attributeName)) return true
 

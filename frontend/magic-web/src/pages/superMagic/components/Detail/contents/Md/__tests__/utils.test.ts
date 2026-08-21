@@ -76,15 +76,58 @@ describe("Markdown Utils", () => {
 			).toBe('before <code>&lt;a href="javascript:alert(1)"&gt;click&lt;/a&gt;</code> after')
 		})
 
-		it("renders any inline style as code to prevent UI overlay injection", () => {
+		it("preserves safe presentation styles and blocks overlay styles", () => {
 			const markdown =
 				'<div style="position:fixed;inset:0;z-index:2147483647;background:white">login</div>'
 			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
 				'<pre><code>&lt;div style="position:fixed;inset:0;z-index:2147483647;background:white"&gt;login&lt;/div&gt;</code></pre>',
 			)
 			expect(escapeDangerousInvisibleHtmlTags('<span style="color:red">text</span>')).toBe(
-				'<code>&lt;span style="color:red"&gt;text&lt;/span&gt;</code>',
+				'<span style="color:red">text</span>',
 			)
+		})
+
+		it("accepts safe shorthand styles consistently across browsers", () => {
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<div style="border: 2px solid blue; padding: 20px; background-color: lightgray; margin: 10px 0;">text</div>',
+				),
+			).toContain('<div style="border: 2px solid blue')
+		})
+
+		it("preserves a styled multiline div across blank lines", () => {
+			const markdown = `这是一个用于测试的Markdown文件，其中包含了设置了style属性的div元素。
+
+<div style="border: 2px solid blue; padding: 20px; background-color: lightgray; margin: 10px 0;">
+    <h3>样式化的DIV元素</h3>
+    <p>这是一个具有自定义样式的div元素，展示了如何在Markdown中使用内联样式。</p>
+
+</div>`
+
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+		})
+
+		it("preserves multiple styled divs around a markdown image", () => {
+			const markdown = `# 测试Markdown文件
+
+这是一个用于测试的Markdown文件，其中包含了设置了style属性的div元素和一张图片。
+
+<div style="border: 2px solid blue; padding: 20px; background-color: lightgray; margin: 10px 0;">
+    <h3>样式化的DIV元素</h3>
+    <p>这是一个具有自定义样式的div元素，展示了如何在Markdown中使用内联样式。</p>
+
+</div>
+
+以下是一张来自钉钉静态资源的图片：
+
+![DingTalk Logo](https://static-legacy.dingtalk.com/media/example.jpg)
+
+<div style="text-align: center; background-color: #f0f8ff; padding: 15px; border-radius: 10px; margin-top: 20px;">
+    <p><strong>这是另一个带有样式的div</strong>，居中对齐并有淡蓝色背景。</p>
+
+</div>`
+
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
 		})
 
 		it.each([
