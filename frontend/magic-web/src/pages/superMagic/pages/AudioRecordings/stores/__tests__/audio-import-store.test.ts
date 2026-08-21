@@ -210,6 +210,24 @@ describe("AudioImportStore", () => {
 		expect(toastErrorMock).toHaveBeenCalled()
 	})
 
+	it("accepts an Opus recording artifact when the browser omits its MIME type", async () => {
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+
+		await store.startAudioImport([new File(["mock-audio"], "mock-recording.opus")], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: false,
+		})
+
+		expect(uploadFilesMock).toHaveBeenCalledTimes(1)
+		expect(toastErrorMock).not.toHaveBeenCalled()
+	})
+
 	it("stops after import-files when imported auto summary is disabled", async () => {
 		const { AudioImportStore } = await import("../audio-import-store")
 		const store = new AudioImportStore()
