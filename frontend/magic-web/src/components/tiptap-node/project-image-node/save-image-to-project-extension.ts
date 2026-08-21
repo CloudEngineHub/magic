@@ -305,9 +305,14 @@ async function handleSingleImageUpload(
 			lastModified: file.lastModified,
 		})
 
-		// Resolve the parent folder file_id before uploading
+		// Resolve the parent folder file_id before uploading.
+		// Non-required mode keeps the project-root fallback on resolver errors.
 		const parentFolderId = resolveImagesFolderParentId
-			? await resolveImagesFolderParentId(folderPath)
+			? await resolveImagesFolderParentId(folderPath).catch((error) => {
+					if (requireImagesFolderParentId) throw error
+					console.error("Failed to resolve image folder:", error)
+					return undefined
+				})
 			: undefined
 		if (requireImagesFolderParentId && resolveImagesFolderParentId && !parentFolderId) {
 			throw new Error(ImageUploadErrorType.UPLOAD_FAILED)
