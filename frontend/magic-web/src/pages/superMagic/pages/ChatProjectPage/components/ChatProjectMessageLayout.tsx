@@ -36,6 +36,7 @@ export default function ChatProjectMessageLayout({
 		minHeight: inputMinHeight,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
+	const effectiveInputMinHeight = inputHeight.minHeight ?? inputMinHeight
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,
@@ -64,7 +65,7 @@ export default function ChatProjectMessageLayout({
 					<div className="flex h-full min-h-0 w-full flex-col">{messageList}</div>
 				</MagicSplitter.Panel>
 				<MagicSplitter.Panel
-					min={inputMinHeight}
+					min={effectiveInputMinHeight}
 					size={inputHeight.effectiveHeight}
 					max={inputHeight.maxHeight}
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}
@@ -82,7 +83,7 @@ export default function ChatProjectMessageLayout({
 							<div className="absolute inset-x-2 top-0 mx-auto h-2 max-w-3xl">
 								<ConversationInputResizeHandle
 									value={inputHeight.effectiveHeight}
-									min={inputMinHeight}
+									min={effectiveInputMinHeight}
 									max={inputHeight.maxHeight}
 									onResizeStart={inputHeight.startPointerResize}
 									onResize={inputHeight.resizeByPointerDelta}

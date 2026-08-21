@@ -190,4 +190,31 @@ describe("useConversationInputHeight", () => {
 		await waitFor(() => expect(result.current.maxHeight).toBe(260))
 		expect(result.current.effectiveHeight).toBe(260)
 	})
+
+	it("adds task queue chrome to a manual preference without persisting the temporary offset", async () => {
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "manual", height: 200 })
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "test-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(200))
+
+		const accessory = document.createElement("div")
+		accessory.dataset.conversationInputAccessory = "true"
+		accessory.getBoundingClientRect = () => createRect(72)
+		container.appendChild(accessory)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(272))
+		expect(result.current.minHeight).toBe(272)
+
+		accessory.remove()
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(200))
+
+		expect(storeMocks.setChatInputHeightPreference).not.toHaveBeenCalled()
+	})
 })
