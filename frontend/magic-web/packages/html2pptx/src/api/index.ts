@@ -9,6 +9,7 @@ export type {
 	LargeExportOptions,
 	LargeExportOutputPolicy,
 	MediaPolicy,
+	NodeWritable,
 	PptxDestination,
 	PptxOutputSink,
 	PreflightIssue,

@@ -184,16 +184,34 @@ export interface PptxOutputSink {
 }
 
 /**
+ * Minimal Node-compatible writable contract accepted by the streaming exporter.
+ *
+ * This intentionally describes the runtime shape instead of exposing the
+ * Node-specific writable namespace from the public declaration. Browser-only
+ * TypeScript consumers can therefore import `PptxDestination` without also
+ * installing `@types/node`, while native Node streams remain structurally
+ * compatible with the contract.
+ */
+export interface NodeWritable {
+	write(chunk: Uint8Array, callback?: (error?: Error | null) => void): boolean
+	end(callback?: () => void): this
+	on(event: string, listener: (...args: any[]) => void): this
+	once?(event: string, listener: (...args: any[]) => void): this
+	removeListener?(event: string, listener: (...args: any[]) => void): this
+	destroy?(error?: Error): void
+}
+
+/**
  * Destination selected by the host while the original click activation is still valid.
  * Wrapper variants are structured-clone friendly and can be forwarded to a packaging Worker.
  */
 export type PptxDestination =
 	| WritableStream<Uint8Array>
-	| NodeJS.WritableStream
+	| NodeWritable
 	| PptxOutputSink
 	| { kind: "transferable-stream"; writable: WritableStream<Uint8Array> }
 	| { kind: "writable-stream"; writable: WritableStream<Uint8Array> }
-	| { kind: "node-writable"; writable: NodeJS.WritableStream }
+	| { kind: "node-writable"; writable: NodeWritable }
 	| { kind: "sink-proxy"; sink: PptxOutputSink; ackWindow?: number }
 
 /**
