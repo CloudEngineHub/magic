@@ -14,11 +14,13 @@ const unsupportedProfiles = [
 		name: "Firefox (OPFS unavailable)",
 		userAgent: "Mozilla/5.0 Firefox/147.0",
 		storage: {},
+		expectedDetails: undefined,
 	},
 	{
 		name: "Safari (OPFS unavailable)",
 		userAgent: "Mozilla/5.0 Version/18.6 Safari/605.1.15",
 		storage: {},
+		expectedDetails: undefined,
 	},
 	{
 		name: "Safari private/restricted context",
