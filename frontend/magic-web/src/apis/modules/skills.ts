@@ -8,7 +8,11 @@ import { SupportLocales } from "@/constants/locale"
 
 /** Publisher type for store skills */
 export type SkillPublisherType =
-	"USER" | "OFFICIAL" | "OFFICIAL_BUILTIN" | "VERIFIED_CREATOR" | "PARTNER"
+	| "USER"
+	| "OFFICIAL"
+	| "OFFICIAL_BUILTIN"
+	| "VERIFIED_CREATOR"
+	| "PARTNER"
 
 /** Source type for user skills */
 export type SkillSourceType =
@@ -25,7 +29,11 @@ export type SkillPublishStatus = "PUBLISHED" | "UNPUBLISHED"
 
 /** Review status for published skill versions */
 export type SkillVersionReviewStatus =
-	"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INVALIDATED"
+	| "PENDING"
+	| "UNDER_REVIEW"
+	| "APPROVED"
+	| "REJECTED"
+	| "INVALIDATED"
 
 /**
  * i18n text object for skills.
@@ -112,8 +120,9 @@ export interface StoreSkillItem {
 	install_count?: number
 	/** Latest published version; empty string if unavailable */
 	latest_version?: string
-	name_i18n: Record<string, string>
-	description_i18n: Record<string, string>
+	/** Deprecated compatibility fields; use the resolved display fields above. */
+	name_i18n?: Record<string, string>
+	description_i18n?: Record<string, string>
 	logo: string
 	file_key?: string | null
 	file_url?: string | null
@@ -152,12 +161,16 @@ export interface SkillItem {
 	code: string
 	user_role?: CollaboratorPermission
 	package_name?: string
-	/** Resolved name for current locale (optional; from API) */
+	/** Resolved name for the current locale. */
 	name?: string
-	/** Resolved description for current locale (optional; from API) */
+	/** Resolved description for the current locale. */
 	description?: string
-	name_i18n: SkillI18nText
-	description_i18n: SkillI18nText
+	/** Resolved source for the current locale. */
+	source?: string
+	/** Deprecated compatibility fields; use the resolved display fields above. */
+	name_i18n?: SkillI18nText
+	description_i18n?: SkillI18nText
+	source_i18n?: SkillI18nText
 	logo: string
 	source_type: SkillSourceType
 	/** 0=disabled, 1=enabled */
@@ -208,8 +221,12 @@ export interface SkillLastVersionItem {
 	name: string
 	/** Resolved description for current locale */
 	description: string
-	name_i18n: SkillI18nText
-	description_i18n: SkillI18nText
+	/** Resolved source for the current locale. */
+	source?: string
+	/** Deprecated compatibility fields; use the resolved display fields above. */
+	name_i18n?: SkillI18nText
+	description_i18n?: SkillI18nText
+	source_i18n?: SkillI18nText
 	logo: string
 	file_key: string | null
 	file_url: string | null
@@ -313,7 +330,8 @@ export interface ImportOfficialSkillByFileKeyParams extends OfficialSkillImportF
 }
 
 export type ImportOfficialSkillParams =
-	ImportOfficialSkillByTokenParams | ImportOfficialSkillByFileKeyParams
+	| ImportOfficialSkillByTokenParams
+	| ImportOfficialSkillByFileKeyParams
 
 export interface ImportOfficialSkillResponse {
 	code: string
@@ -355,9 +373,16 @@ export interface SkillDetailResponse {
 	/** 0=disabled, 1=enabled */
 	is_enabled: 0 | 1
 	pinned_at: string | null
-	name_i18n: SkillI18nText
-	description_i18n: SkillI18nText
-	source_i18n: SkillI18nText
+	/** Resolved name for the current locale. */
+	name: string
+	/** Resolved description for the current locale. */
+	description: string
+	/** Resolved source for the current locale. */
+	source: string
+	/** Deprecated compatibility fields; use the resolved display fields above. */
+	name_i18n?: SkillI18nText
+	description_i18n?: SkillI18nText
+	source_i18n?: SkillI18nText
 	logo: string
 	package_name: string
 	package_description: string | null
@@ -383,9 +408,10 @@ export interface SkillMarketDetailResponse {
 	name: string
 	description: string
 	source: string
-	name_i18n: Record<string, string>
-	description_i18n: Record<string, string>
-	source_i18n: Record<string, string> | string[]
+	/** Deprecated compatibility fields; use the resolved display fields above. */
+	name_i18n?: Record<string, string>
+	description_i18n?: Record<string, string>
+	source_i18n?: Record<string, string> | string[]
 	skill_file_url: string
 	version_code: string
 	package_name: string
