@@ -1,4 +1,7 @@
-"""设计画布领域模型。"""
+"""旧 Design Canvas 领域模型，仅保留兼容读取和旧工具使用。
+
+本模块计划在下一版本随 ``app.tools.design`` 一并删除。
+"""
 
 from app.tools.design.domain.canvas_document import (
     CanvasConnection,

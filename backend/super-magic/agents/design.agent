@@ -18,7 +18,12 @@ tools:
   - ask_user
 skills:
   preload:
-    - name: canvas-designer
+    - name: canvas-manager
+      files:
+        - SKILL.md
+        - references/image-generation.md
+        - references/image-search.md
+        - references/prompt-library.md
   system_skills:
     - name: skill-vetter
     - name: using-mcp

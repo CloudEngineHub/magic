@@ -5,10 +5,10 @@ from typing import Any, Awaitable, Callable
 from app.path_manager import PathManager
 from app.service.file_service import FileService
 from app.service.sandbox_task.models import SandboxTask, SandboxTaskStatus
-from app.tools.design.video_production.adapters.ffmpeg_video_composition_adapter import (
-    FfmpegVideoCompositionAdapter,
+from app.tools.canvas.production.adapters.ffmpeg_video_composition_port import (
+    FfmpegVideoCompositionPort,
 )
-from app.tools.design.video_production.service.file_video_composition_service import (
+from app.tools.canvas.production.services.file_video_composition_service import (
     FileVideoCompositionService,
 )
 
@@ -18,7 +18,7 @@ class VideoCompositionCapability:
 
     def __init__(self) -> None:
         """初始化文件合成服务和 FFmpeg 适配器。"""
-        self._adapter = FfmpegVideoCompositionAdapter()
+        self._adapter = FfmpegVideoCompositionPort()
         self._composition_service = FileVideoCompositionService(self._adapter)
 
     async def execute(

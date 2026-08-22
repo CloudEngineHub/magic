@@ -1,6 +1,6 @@
-"""Design mode tools module
+"""旧 Design 工具实现，仅用于当前版本兼容。
 
-This module contains all design mode related tools.
+新的 Canvas Agent 工具统一位于 ``app.tools.canvas``；本模块计划在下一版本删除。
 """
 
 from app.tools.design.tools.base_design_tool import BaseDesignTool

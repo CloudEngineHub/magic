@@ -174,17 +174,19 @@ def test_tool_is_only_declared_by_general_agent():
     assert "- generate_video" not in (root / "agents/design.agent").read_text()
 
 
-def test_design_agent_preloads_canvas_designer_without_explicit_files():
+def test_design_agent_preloads_canvas_manager_image_references():
+    """设计 Agent 应预加载统一 Canvas Skill 的图片 reference。"""
     root = Path(__file__).parents[2]
     design_source = (root / "agents/design.agent").read_text()
     preload_section = design_source.split("  preload:", 1)[1].split(
         "  system_skills:", 1
     )[0]
 
-    assert "- name: canvas-designer" in preload_section
-    assert "files:" not in preload_section
-    assert "SKILL.md" not in preload_section
-    assert "reference/video/generation.md" not in preload_section
+    assert "- name: canvas-manager" in preload_section
+    assert "- SKILL.md" in preload_section
+    assert "- references/image-generation.md" in preload_section
+    assert "- references/image-search.md" in preload_section
+    assert "- references/prompt-library.md" in preload_section
 
 
 def test_image_only_request_uses_image_reference_mode():
