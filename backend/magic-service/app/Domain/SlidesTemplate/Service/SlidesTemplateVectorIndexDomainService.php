@@ -23,6 +23,8 @@ use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInte
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
 use GuzzleHttp\Exception\ClientException;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
 
@@ -32,12 +34,16 @@ final class SlidesTemplateVectorIndexDomainService
 
     private int $availabilityCacheExpiresAt = 0;
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private readonly SlidesTemplateRepositoryInterface $slidesTemplateRepository,
         private readonly SlidesTemplateTagRelationRepositoryInterface $slidesTemplateTagRelationRepository,
         private readonly VectorStoreInterface $vectorStore,
         private readonly EmbeddingGeneratorInterface $embeddingGenerator,
+        LoggerFactory $loggerFactory,
     ) {
+        $this->logger = $loggerFactory?->get('vector-index-sync');
     }
 
     /** Cache the Qdrant collection probe briefly so an outage does not delay every search request. */
@@ -74,7 +80,25 @@ final class SlidesTemplateVectorIndexDomainService
 
         $template = $this->slidesTemplateRepository->findById($dataIsolation, $resourceId);
         if ($template === null || ! $template->getStatus()->isEnabled()) {
+            $this->logger->info('Slides template vector sync skipped and stale point removed', [
+                'resource_type' => 'slides_template',
+                'resource_id' => $resourceId,
+                'organization_code' => $template?->getOrganizationCode() ?: $dataIsolation->getCurrentOrganizationCode(),
+                'operator_id' => $operatorId,
+                'reason' => $template === null ? 'template_not_found' : 'template_disabled',
+            ]);
             $this->removePoint($resourceId);
+            return;
+        }
+
+        if (! $template->getOwnerType()->isOfficial()) {
+            $this->logger->info('Slides template vector sync skipped because template owner is not official', [
+                'resource_type' => 'slides_template',
+                'resource_id' => $resourceId,
+                'organization_code' => $template->getOrganizationCode(),
+                'operator_id' => $operatorId,
+                'owner_type' => $template->getOwnerType()->value,
+            ]);
             return;
         }
 

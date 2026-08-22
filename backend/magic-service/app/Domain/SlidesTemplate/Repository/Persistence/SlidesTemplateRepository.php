@@ -119,7 +119,8 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         int $limit
     ): array {
         $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
-            ->where('organization_code', $organizationCode)
+            ->where('owner_type', SlidesTemplateOwnerType::Official->value)
+            ->where('status', 1)
             ->where('id', '>', $afterId)
             ->orderBy('id')
             ->limit(max(1, $limit));
