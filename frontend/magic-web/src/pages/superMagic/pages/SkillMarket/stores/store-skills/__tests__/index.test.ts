@@ -70,15 +70,13 @@ describe("StoreSkillsStore", () => {
 		expect(store.keyword).toBe("")
 	})
 
-	it("loads empty categories explicitly with include_empty enabled", async () => {
+	it("loads only categories containing skills", async () => {
 		const store = new StoreSkillsStore()
 		vi.mocked(skillsService.getSkillMarketCategories).mockResolvedValueOnce([])
 
 		await store.fetchCategories()
 
-		expect(skillsService.getSkillMarketCategories).toHaveBeenCalledWith({
-			include_empty: true,
-		})
+		expect(skillsService.getSkillMarketCategories).toHaveBeenCalledWith()
 		expect(store.categories).toEqual([])
 		expect(store.categoriesLoading).toBe(false)
 		expect(store.categoriesError).toBe(false)

@@ -206,7 +206,7 @@ describe("SkillsLibrary", () => {
 		).not.toBeInTheDocument()
 	})
 
-	it("includes empty categories and filters the skill list by string id", async () => {
+	it("loads populated categories and filters the skill list by string id", async () => {
 		getSkillMarketCategoriesMock.mockResolvedValueOnce([
 			{
 				id: "10001",
@@ -222,7 +222,7 @@ describe("SkillsLibrary", () => {
 		render(<SkillsLibrary />)
 
 		expect(await screen.findByRole("tab", { name: "Productivity" })).toBeInTheDocument()
-		expect(getSkillMarketCategoriesMock).toHaveBeenCalledWith({ include_empty: true })
+		expect(getSkillMarketCategoriesMock).toHaveBeenCalledWith()
 
 		fireEvent.click(screen.getByRole("tab", { name: "Productivity" }))
 

@@ -75,9 +75,7 @@ export class StoreSkillsStore {
 		this.categoriesError = false
 
 		try {
-			const categories = await skillsService.getSkillMarketCategories({
-				include_empty: true,
-			})
+			const categories = await skillsService.getSkillMarketCategories()
 			if (requestId !== this.categoryRequestId) return
 			runInAction(() => {
 				this.categories = categories

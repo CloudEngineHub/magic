@@ -86,7 +86,7 @@ export interface SkillMarketCategoryItem {
 
 /** Query params for getting skill-market categories. */
 export interface GetSkillMarketCategoriesParams {
-	/** Return categories even when they currently contain no visible skills. */
+	/** Set true to include categories without visible skills; omit for the Skill library. */
 	include_empty?: boolean | 0 | 1
 }
 
@@ -512,16 +512,14 @@ export interface UpdateSkillInfoParams {
 export const generateSkillsApi = (fetch: HttpClient) => ({
 	/**
 	 * Get the skill-market category tree.
-	 * Empty categories are intentionally included for the library filter UI.
+	 * Empty categories are returned only when include_empty is explicitly enabled.
 	 */
 	getSkillMarketCategories(params: GetSkillMarketCategoriesParams = {}) {
 		return fetch.get<GetSkillMarketCategoriesResponse>(
 			genRequestUrl(
 				"/api/v1/skill-market/categories",
 				{},
-				{
-					include_empty: params.include_empty ?? true,
-				},
+				{ include_empty: params.include_empty },
 			),
 		)
 	},

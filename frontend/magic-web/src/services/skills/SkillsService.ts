@@ -125,9 +125,7 @@ export class SkillsService {
 	async getSkillMarketCategories(
 		params: GetSkillMarketCategoriesParams = {},
 	): Promise<SkillMarketCategoryView[]> {
-		const data = await SkillsApi.getSkillMarketCategories({
-			include_empty: params.include_empty ?? true,
-		})
+		const data = await SkillsApi.getSkillMarketCategories(params)
 		return data.list.map((item) => this.mapSkillMarketCategory(item))
 	}
 
