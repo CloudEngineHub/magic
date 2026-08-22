@@ -22,7 +22,6 @@ skills:
       files:
         - SKILL.md
         - references/professional-video-production.md
-        - references/video-generation.md
   workspace_skills: "*"
 ---
 
