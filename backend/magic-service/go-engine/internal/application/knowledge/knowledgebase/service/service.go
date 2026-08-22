@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	kbdto "magic/internal/application/knowledge/knowledgebase/dto"
+	sharedaccess "magic/internal/application/knowledge/shared/access"
 	userdomain "magic/internal/domain/contact/user"
 	kbaccess "magic/internal/domain/knowledge/access/service"
 	docentity "magic/internal/domain/knowledge/document/entity"
@@ -982,10 +983,18 @@ func (s *KnowledgeBaseAppService) knowledgeAccessService() (*kbaccess.Service, e
 	if s == nil || s.permissionReader == nil {
 		return nil, ErrKnowledgeBasePermissionReaderRequired
 	}
+	relationshipReader := sharedaccess.NewDigitalEmployeeRelationshipReader(
+		s.domainService,
+		s.knowledgeBaseBindings,
+		s.superMagicAgentAccess,
+	)
 	return kbaccess.NewService(
 		s.permissionReader,
 		s.permissionWriter,
-		&knowledgeBaseExternalAccessReader{support: s},
+		kbaccess.NewCompositeAccessReader(
+			&knowledgeBaseExternalAccessReader{support: s},
+			relationshipReader,
+		),
 		nil,
 	), nil
 }

@@ -36,26 +36,27 @@ import (
 
 // FragmentAppService 片段应用层服务
 type FragmentAppService struct {
-	fragmentService           fragmentAppFragmentService
-	kbService                 fragmentAppKnowledgeBaseReader
-	documentService           fragmentAppDocumentReader
-	manualFragmentCoordinator fragmentManualCoordinator
-	parseService              fragmentAppParseService
-	projectFileContentPort    documentdomain.ProjectFileContentAccessor
-	thirdPlatformDocumentPort thirdPlatformPreviewResolver
-	previewSplitter           documentsplitter.PreviewSplitter
-	knowledgeBaseBindingRepo  fragmentAppKnowledgeBaseBindingReader
-	superMagicAgentAccess     fragmentAppSuperMagicAgentAccessChecker
-	teamshareTempCodeMapper   fragmentAppTeamshareTempCodeMapper
-	permissionReader          kbaccess.PermissionReader
-	thirdPlatformAccess       fragmentKnowledgeAccessPort
-	tokenizer                 *tokenizer.Service
-	defaultEmbeddingModel     string
-	thirdPlatformProviders    *thirdplatformprovider.Registry
-	legacyThirdPlatformCompat *LegacyThirdPlatformFragmentCompat
-	userService               *userdomain.DomainService
-	logger                    *logging.SugaredLogger
-	previewGroup              singleflight.Group
+	fragmentService                 fragmentAppFragmentService
+	kbService                       fragmentAppKnowledgeBaseReader
+	documentService                 fragmentAppDocumentReader
+	manualFragmentCoordinator       fragmentManualCoordinator
+	parseService                    fragmentAppParseService
+	projectFileContentPort          documentdomain.ProjectFileContentAccessor
+	thirdPlatformDocumentPort       thirdPlatformPreviewResolver
+	previewSplitter                 documentsplitter.PreviewSplitter
+	knowledgeBaseBindingRepo        fragmentAppKnowledgeBaseBindingReader
+	superMagicAgentAccess           fragmentAppSuperMagicAgentAccessChecker
+	superMagicAgentManageableAccess fragmentAppSuperMagicAgentManageableAccessChecker
+	teamshareTempCodeMapper         fragmentAppTeamshareTempCodeMapper
+	permissionReader                kbaccess.PermissionReader
+	thirdPlatformAccess             fragmentKnowledgeAccessPort
+	tokenizer                       *tokenizer.Service
+	defaultEmbeddingModel           string
+	thirdPlatformProviders          *thirdplatformprovider.Registry
+	legacyThirdPlatformCompat       *LegacyThirdPlatformFragmentCompat
+	userService                     *userdomain.DomainService
+	logger                          *logging.SugaredLogger
+	previewGroup                    singleflight.Group
 }
 
 // ErrFragmentWriteDisabled 表示片段级写操作已被禁用，必须改为整篇文档重向量化。
@@ -137,11 +138,11 @@ type fragmentAppParseService interface {
 }
 
 type fragmentAppKnowledgeBaseBindingReader interface {
-	ListBindIDsByKnowledgeBase(
+	ListBindIDsByKnowledgeBases(
 		ctx context.Context,
-		knowledgeBaseCode string,
+		knowledgeBaseCodes []string,
 		bindType kbentity.BindingType,
-	) ([]string, error)
+	) (map[string][]string, error)
 	ListBindIDsByKnowledgeBaseInOrg(
 		ctx context.Context,
 		organizationCode string,
@@ -171,6 +172,15 @@ type fragmentAppSuperMagicAgentAccessChecker interface {
 	) (map[string]struct{}, error)
 }
 
+type fragmentAppSuperMagicAgentManageableAccessChecker interface {
+	ListManageableCodes(
+		ctx context.Context,
+		organizationCode string,
+		userID string,
+		codes []string,
+	) (map[string]struct{}, error)
+}
+
 type fragmentAppTeamshareTempCodeMapper interface {
 	LookupBusinessIDs(ctx context.Context, knowledgeCodes []string) (map[string]string, error)
 }
@@ -181,20 +191,21 @@ type thirdPlatformPreviewResolver interface {
 
 // AppDeps 聚合片段应用服务需要的窄协作对象。
 type AppDeps struct {
-	ParseService              *documentdomain.ParseService
-	ProjectFileContentPort    documentdomain.ProjectFileContentAccessor
-	ThirdPlatformDocumentPort thirdPlatformPreviewResolver
-	ThirdPlatformProviders    *thirdplatformprovider.Registry
-	PreviewSplitter           documentsplitter.PreviewSplitter
-	KnowledgeBaseBindingRepo  fragmentAppKnowledgeBaseBindingReader
-	SuperMagicAgentAccess     fragmentAppSuperMagicAgentAccessChecker
-	TeamshareTempCodeMapper   fragmentAppTeamshareTempCodeMapper
-	ManualFragmentCoordinator fragmentManualCoordinator
-	PermissionReader          kbaccess.PermissionReader
-	ThirdPlatformAccess       fragmentKnowledgeAccessPort
-	Tokenizer                 *tokenizer.Service
-	UserService               *userdomain.DomainService
-	DefaultEmbeddingModel     string
+	ParseService                    *documentdomain.ParseService
+	ProjectFileContentPort          documentdomain.ProjectFileContentAccessor
+	ThirdPlatformDocumentPort       thirdPlatformPreviewResolver
+	ThirdPlatformProviders          *thirdplatformprovider.Registry
+	PreviewSplitter                 documentsplitter.PreviewSplitter
+	KnowledgeBaseBindingRepo        fragmentAppKnowledgeBaseBindingReader
+	SuperMagicAgentAccess           fragmentAppSuperMagicAgentAccessChecker
+	SuperMagicAgentManageableAccess fragmentAppSuperMagicAgentManageableAccessChecker
+	TeamshareTempCodeMapper         fragmentAppTeamshareTempCodeMapper
+	ManualFragmentCoordinator       fragmentManualCoordinator
+	PermissionReader                kbaccess.PermissionReader
+	ThirdPlatformAccess             fragmentKnowledgeAccessPort
+	Tokenizer                       *tokenizer.Service
+	UserService                     *userdomain.DomainService
+	DefaultEmbeddingModel           string
 }
 
 // NewFragmentAppService 创建片段应用层服务
@@ -210,24 +221,25 @@ func NewFragmentAppService(
 		previewSplitter = documentsplitter.NewPreviewSplitter()
 	}
 	service := &FragmentAppService{
-		fragmentService:           fragmentService,
-		kbService:                 kbService,
-		documentService:           documentService,
-		manualFragmentCoordinator: deps.ManualFragmentCoordinator,
-		parseService:              deps.ParseService,
-		projectFileContentPort:    deps.ProjectFileContentPort,
-		thirdPlatformDocumentPort: deps.ThirdPlatformDocumentPort,
-		previewSplitter:           previewSplitter,
-		knowledgeBaseBindingRepo:  deps.KnowledgeBaseBindingRepo,
-		superMagicAgentAccess:     deps.SuperMagicAgentAccess,
-		teamshareTempCodeMapper:   deps.TeamshareTempCodeMapper,
-		permissionReader:          deps.PermissionReader,
-		thirdPlatformAccess:       deps.ThirdPlatformAccess,
-		tokenizer:                 deps.Tokenizer,
-		defaultEmbeddingModel:     resolveDefaultEmbeddingModel(deps.DefaultEmbeddingModel),
-		thirdPlatformProviders:    deps.ThirdPlatformProviders,
-		userService:               deps.UserService,
-		logger:                    logger,
+		fragmentService:                 fragmentService,
+		kbService:                       kbService,
+		documentService:                 documentService,
+		manualFragmentCoordinator:       deps.ManualFragmentCoordinator,
+		parseService:                    deps.ParseService,
+		projectFileContentPort:          deps.ProjectFileContentPort,
+		thirdPlatformDocumentPort:       deps.ThirdPlatformDocumentPort,
+		previewSplitter:                 previewSplitter,
+		knowledgeBaseBindingRepo:        deps.KnowledgeBaseBindingRepo,
+		superMagicAgentAccess:           deps.SuperMagicAgentAccess,
+		superMagicAgentManageableAccess: deps.SuperMagicAgentManageableAccess,
+		teamshareTempCodeMapper:         deps.TeamshareTempCodeMapper,
+		permissionReader:                deps.PermissionReader,
+		thirdPlatformAccess:             deps.ThirdPlatformAccess,
+		tokenizer:                       deps.Tokenizer,
+		defaultEmbeddingModel:           resolveDefaultEmbeddingModel(deps.DefaultEmbeddingModel),
+		thirdPlatformProviders:          deps.ThirdPlatformProviders,
+		userService:                     deps.UserService,
+		logger:                          logger,
 	}
 	service.legacyThirdPlatformCompat = NewLegacyThirdPlatformFragmentCompat(documentService, deps.ThirdPlatformProviders)
 	return service
