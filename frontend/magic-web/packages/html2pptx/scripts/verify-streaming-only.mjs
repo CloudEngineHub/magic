@@ -47,6 +47,13 @@ const removedFiles = [
 	"src/workers/image-worker.ts",
 ]
 
+const forbiddenLegacyBackupPath =
+	"src/pages/superMagic/components/Detail/components/PPTRender/stores/PPTStore.old.ts"
+const forbiddenLegacyBackupDocs = [
+	"src/pages/superMagic/components/Detail/components/PPTRender/stores/REFACTORING.md",
+	"src/pages/superMagic/components/Detail/components/PPTRender/stores/CHANGELOG.md",
+]
+
 const scanRoots = [
 	path.join(packageRoot, "src"),
 	path.join(packageRoot, "enterprise/src"),
@@ -68,6 +75,19 @@ let scannedFiles = 0
 for (const relativePath of removedFiles) {
 	const absolutePath = path.join(packageRoot, relativePath)
 	if (await exists(absolutePath)) report(absolutePath, "removed implementation file still exists")
+}
+
+const forbiddenLegacyBackupAbsolutePath = path.join(magicWebRoot, forbiddenLegacyBackupPath)
+if (await exists(forbiddenLegacyBackupAbsolutePath)) {
+	report(forbiddenLegacyBackupAbsolutePath, "retired PPTStore backup file remains")
+}
+for (const relativePath of forbiddenLegacyBackupDocs) {
+	const absolutePath = path.join(magicWebRoot, relativePath)
+	if (!(await exists(absolutePath))) continue
+	const sourceText = await readFile(absolutePath, "utf8")
+	if (/\bPPTStore\.old\.ts\b|\bmv\s+[^\n]*PPTStore\.old\.ts\b/.test(sourceText)) {
+		report(absolutePath, "retired PPTStore backup or rollback command is documented")
+	}
 }
 
 for (const root of scanRoots) {
