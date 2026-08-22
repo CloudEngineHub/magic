@@ -14,7 +14,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Act only on a concrete Canvas task from the user.
 - Call Canvas tools only in Code mode and continue decisions only from `result.content`.
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
-- Treat every Canvas path returned by a query or write result as authoritative. A path such as `./images/foo.webp` is relative to the current project's `magic.project.js`; reuse it verbatim. Never derive a path from an Element ID, filename fragment, or guessed directory. If another tool needs a different path form, obtain it from a query result or an explicit path-conversion capability first.
+- Treat every Canvas path returned by a query or write result as authoritative. A path such as `./images/foo.webp` is relative to the current project's `magic.project.js` (project-relative), not automatically relative to the workspace. Reuse it verbatim for Canvas generation fields. When passing that asset to a workspace-anchored tool such as `visual_understanding`, convert it deterministically to a workspace-relative path by prefixing the exact current `project_path` (for example, `My Canvas` + `/images/foo.webp` becomes `My Canvas/images/foo.webp`); do not guess a directory, filename, or Element ID. If the returned path is already workspace-relative or the conversion is ambiguous, query the exact Element details and stop rather than inventing a path.
 - Write `prompt`, `name`, and all user-facing text (plans, descriptions, confirmation messages) in the user's language. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
 - Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit any project file, including `magic.project.js`.
@@ -27,6 +27,18 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Provider-managed asset URIs such as `asset://...` are generation references, not workspace files. Never pass them to `visual_understanding`, file tools, import tools, or Canvas queries that expect a local media path.
 - You may read every Element type. You may create or edit only `frame`, `storyboard`, `video-edit`, `image`, `video`, and `audio`.
 - `text`, `rectangle`, `ellipse`, `triangle`, `star`, and `group` are read-only. Never create them, change their Content or main selection, lay them out, retry them, or include them in `frame_canvas_elements`.
+
+## Mandatory request preflight
+
+Before every write-tool call, validate the request against the minimum structures below. Do not depend on server errors to discover omitted fields, and do not substitute similarly named fields for protocol fields.
+
+- `add_canvas_elements`: every item must have a unique `item_ref` and a valid `element_type`. When `content` is present, it must explicitly provide `source` and `content_type`. Generated image/video Content must have a `name` that describes the actual result. Imported Content must have `asset_path` and the correct `content_type`. Every entry in `connections` must contain `source_element_id`; keep a stable `item_ref` for every item so batch results remain traceable.
+- `add_canvas_contents`: every item must contain `item_ref`, the exact `element_id`, and `content`. Content must explicitly provide `source` and `content_type`; generated image/video Content must have `name`. Never substitute `element_id`, `content_id`, and `item_ref` for one another.
+- `manage_canvas_connections`: every item must have a unique `item_ref`. Creation or replacement requires exact `source_element_id` and `target_element_id`; removal or replacement also requires the exact queried Connection ID and explicit user intent.
+- Generation tasks: when a write result returns `generation_task_id`, wait immediately. A timeout or a `pending`, `processing`, `queued`, or `running` state is not a failure and must not trigger another generation submission. Only an explicit `status=failed` enters controlled retry, using the original `item_ref`, `element_id`, and `content_id`.
+- Paths: Canvas-returned `./images/...`, `./videos/...`, and `./audio/...` paths are for fields scoped to the current Canvas project. Before passing one to a Workspace tool, combine the exact `project_path` with the project-relative path after removing its leading `./`. Without an authoritative returned path, never construct one from a name, directory guess, or file listing.
+
+If the preflight cannot be satisfied, query the current Canvas state or report the missing information to the user. Do not bypass preflight with guessed values, empty strings, placeholder IDs, or extra file operations.
 
 ## Capabilities
 
@@ -41,6 +53,16 @@ You can:
 - Search the curated prompt library for inspiration when the user has no idea (`search_canvas_image_prompts`).
 
 Layout strategies, Connections, video point estimation, final video composition, image search, asset reconciliation, and prompt inspiration are covered in the references below.
+
+## Real-asset repair boundary
+
+When the user asks to restore real assets from `.tmp` or another Workspace location, use only source paths that actually exist and were supplied by the user or system. Never create, download, generate, copy, or rename substitute files. Never use shell commands such as `mkdir` or `cp` to modify Canvas state, and never represent a missing source file as a successful repair.
+
+If the original asset is missing, inaccessible, or cannot be mapped reliably to a Workspace path, report that no real asset is available for repair and stop the import. After a successful import, call `query_canvas_element_details` with the exact returned `element_id` and verify the actual Content, status, and media path. Never claim that restoration is complete from an overview, file listing, or name alone.
+
+## Execution and test-reporting boundary
+
+When reporting a Canvas workflow, distinguish `passed`, `initial call failed but recovered`, `partially passed`, `external resource failed`, `skipped at the user's request`, `not tested`, and `invalid test`. A task that completes after a wait timeout is a recovery case, not a generation failure. An external candidate download or validation failure is not automatically a Canvas workflow failure. Never claim full coverage, end-to-end success, or a 100% success rate for tools or stages that were not actually executed.
 
 You cannot:
 
@@ -192,7 +214,9 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-Read each item's real `element_id`, `content_id`, status, and task ID. If a task ID is returned, call `wait_canvas_generation`. Basic Canvas images and videos use the default `row_incremental` layout and do not wire professional-production Connections. Professional video production is the exception: follow `references/professional-video-production.md` and create only its explicit direct business relations.
+Read each item's real `element_id`, `content_id`, status, and task ID. If a task ID is returned, call `wait_canvas_generation`. Basic Canvas images and videos use the default `row_incremental` layout and do not wire professional-production Connections. Professional video production is the exception: follow `references/professional-video-production.md` and create only its explicit direct business relations. Before submitting a new item with `layout.strategy="dependency_flow"`, query every existing connection source and inspect its direct parent; a new item is root-level unless the tool explicitly says otherwise, so do not use `dependency_flow` when that would cross a container boundary.
+
+Before calling this tool, validate every nested item against the preflight checklist above. In particular, do not omit `content.name` for generated image/video Content, and do not omit `content.content_type` for imported media. A missing `name` or `content_type` is a request-construction error, not a generation failure.
 
 For imported media, set `content.source="imported"` and pass the original workspace path as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
 
@@ -237,12 +261,15 @@ result = tool.call("add_canvas_contents", {
     "project_path": "Demo",
     "items": [{"item_ref": "hero-v2", "element_id": "element-740000000000000002",
                "content": {"source": "generated", "content_type": "image",
+                           "name": "three-quarter product close-up",
                            "prompt": "keep the product identity, switch to a three-quarter close-up, soft rim light, no text"}}],
 })
 print(result.content)
 ```
 
 Read the new `content_id` and status. Show completed candidates to the user; never select a main Content without confirmation. Not valid on Frames.
+
+Before calling this tool, preserve the exact current `element_id` and use a new stable `item_ref` for the append operation. Generated image/video Content must include its own `name`, even when the parent Element already has a name.
 
 ## `retry_canvas_content_generation`
 
@@ -318,7 +345,7 @@ result = tool.call("wait_canvas_generation", {
 print(result.content)
 ```
 
-On `completed`, query details as needed. On `pending`, `processing`, or `timed_out=true`, keep waiting with the same task ID; do not resubmit. Only `failed` enters the controlled retry flow.
+On `completed`, query details as needed. On `pending`, `processing`, `queued`, `running`, or `timed_out=true`, keep waiting in bounded follow-up calls with the same task ID; do not resubmit `add_canvas_elements`, `add_canvas_contents`, or retry. A timeout means that this wait call ended before completion, not that generation failed. Only an explicit `status=failed` enters the controlled retry flow.
 
 ## `layout_canvas_elements`
 
@@ -329,7 +356,7 @@ Adjust the layout of an existing writable Element or Frame. Never lay out read-o
 | `project_path` | Yes | Full Canvas project path |
 | `items` | Yes | Each item: exact `element_id`, layout strategy, and optional explicit coordinates |
 
-Supports `row_incremental`, `dependency_flow`, and `explicit_position`. Use `explicit_position` only when the user explicitly provides coordinates; Frame child coordinates are always local to the direct parent Frame.
+Supports `row_incremental`, `dependency_flow`, and `explicit_position`. Use `explicit_position` only when the user explicitly provides coordinates; Frame child coordinates are always local to the direct parent Frame. Before using `dependency_flow`, query the exact endpoint Elements and inspect `parent_element_id`: all connected endpoints must share the same direct parent. If endpoints are in different containers, do not force `dependency_flow`; use `row_incremental` or an explicit user-provided position, then create the business Connection separately when the relation itself is valid. Never change `project_path` or reinitialize the Canvas to bypass a layout error.
 
 ```python
 result = tool.call("layout_canvas_elements", {
@@ -351,7 +378,7 @@ Create, remove, or replace a business Connection. A Connection represents an exp
 | `project_path` | Yes | Full Canvas project path |
 | `items` | Yes | New endpoints or exact remove/replace requests |
 
-For removal use `remove_connection_ids`; for replacement provide the new endpoint, `replace_existing_connections=true`, and the queried old Connection ID. Any removal or replacement requires explicit user intent.
+For removal use `remove_connection_ids`; for replacement provide the new endpoint, `replace_existing_connections=true`, and the queried old Connection ID. Any removal or replacement requires explicit user intent. Every create/remove/replace item must include a stable `item_ref`; every create or replacement item must include exact `source_element_id` and `target_element_id`.
 
 A Connection declares only a direct business predecessor. Reference paths are generation inputs; they do not imply Connections. Wire upstream as follows:
 
@@ -366,6 +393,7 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 result = tool.call("manage_canvas_connections", {
     "project_path": "Demo",
     "items": [{
+        "item_ref": "replace-product-source",
         "source_element_id": "element-740000000000000001",
         "target_element_id": "element-740000000000000002",
         "replace_existing_connections": True,
@@ -414,6 +442,7 @@ result = tool.call("add_canvas_elements", {
         "content": {
             "source": "generated",
             "content_type": "video",
+            "name": "Product launch final cut",
             "task": "compose",
             "input_mode": "video_edit",
             "videoEditElementId": "element-740000000000000020",
@@ -455,9 +484,9 @@ A `[@design_marker:name]` mention is the user annotating a region of a Canvas im
 ### Processing steps
 
 1. **Parse** — extract the marker name (the intent), the image path, and the marked area / coordinates.
-2. **Understand** — call `visual_understanding` on the image to get its content description and dimensions. You need to know what the image contains to describe what should change and what must stay.
+2. **Understand** — call `visual_understanding` on the image to get its content description and dimensions. Convert the marker's Canvas project-relative path to a Workspace-relative path by prefixing the exact `project_path` before this call (for example, `./images/dog.jpg` in project `Demo` becomes `Demo/images/dog.jpg`). Do not pass the bare `./images/...` path to `visual_understanding`. You need to know what the image contains to describe what should change and what must stay.
 3. **Build the prompt** — `[full scene from visual_understanding] + [the change, at the marked location] + [preserve everything else]`. Fold the marker coordinates directly into the prompt, combined with the object name from `visual_understanding`.
-4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, `reference_images=[original project-relative path]`, and `size` set to the original image's dimensions.
+4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, a specific `name`, `reference_images=[original project-relative path]`, and `size` set to the original image's dimensions.
 
 ```python
 # visual_understanding was already called and returned the scene description
@@ -472,6 +501,7 @@ result = tool.call("add_canvas_elements", {
         "content": {
             "source": "generated",
             "content_type": "image",
+            "name": "dog with red ear",
             "prompt": (
                 "A golden retriever sitting on grass, looking at the camera, warm afternoon "
                 "sunlight from the left. Change only the ear at approximately (64%, 7%) to bright "

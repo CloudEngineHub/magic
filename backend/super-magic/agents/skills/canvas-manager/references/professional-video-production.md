@@ -147,9 +147,10 @@ If the current `<media_model_info>` does not declare a mode, do not use it. A re
 - Every confirmation is a hard gate: tool success is not user approval. Do not continue past a gate until the user confirms or requests a revision.
 - Complete execution confirmation gates are mandatory: confirm the first completed first frame before generating the remaining first frames; confirm the first completed trial shot video before generating the remaining shots; and show the final Video Edit configuration, including `audioPolicy`, for confirmation before composing. A successful tool call, a returned task ID, or a completed query is not confirmation.
 - Infer established facts and reasonable defaults before asking. Ask only about unresolved decisions that materially affect the result.
-- In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
+- Localize user-facing terminology to the user's language while keeping tool names, parameter names, IDs, paths, and protocol values unchanged.
 - Keep each task bound to its current Canvas project. If a tool fails, do not call `initialize_canvas`, invent a new project suffix, or change `project_path` to bypass the error. Recover in the current project: read the failure from `result.content`, inspect the referenced Element or Content, repair it with the available tools, and retry only after the repair is complete. If safe recovery is impossible, tell the user the blocking reason and stop.
 - Do not repeat a paid image or video generation call speculatively. After a failure, first inspect and repair the current Canvas state or correct the referenced workspace path; regenerate only when the user has approved the revised generation or the retry is an exact, safe retry of the failed task.
+- Before using `dependency_flow`, query every endpoint Element and compare its `parent_element_id`. Use this strategy only when all connected endpoints share the same direct parent. For cross-container endpoints, create the Elements with `row_incremental` or another valid non-dependent layout, then maintain the explicit business relation separately with `manage_canvas_connections` when the relation is required. Do not treat a layout validation error as a reason to reinitialize or move the project.
 
 ## Confirmation gates
 
@@ -170,6 +171,7 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 - Never identify an existing result by name alone. Preserve every returned Element ID, Content ID, task ID, video ID, status, and media path.
 - Retry only failed Content with explicit user consent, at most twice. Never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
 - If waiting times out or returns a still-running task, call `wait_canvas_generation` again with the exact returned `generation_task_id`; never submit a duplicate generation request.
+- `timed_out=true`, `pending`, `processing`, `queued`, and `running` are waiting states, not generation failures. Report them as "waiting not completed" and continue with the same task identity in bounded waits. Only an explicit failed status enters the retry flow.
 
 ## Asset and prompt fidelity
 
@@ -191,17 +193,23 @@ For imported media, the source file must be passed as `content.asset_path`. This
 Use this shape for each imported item:
 
 ```python
-{
-    "item_ref": "import-product",
-    "element_type": "image",
-    "name": "Product reference",
-    "layout": {"strategy": "dependency_flow"},
-    "content": {
-        "source": "imported",
-        "content_type": "image",
-        "asset_path": ".tmp/product.webp",
-    },
-}
+from sdk.tool import tool
+
+result = tool.call("add_canvas_elements", {
+    "project_path": "Demo",
+    "items": [{
+        "item_ref": "import-product",
+        "element_type": "image",
+        "name": "Product reference",
+        "layout": {"strategy": "dependency_flow"},
+        "content": {
+            "source": "imported",
+            "content_type": "image",
+            "asset_path": ".tmp/product.webp",
+        },
+    }],
+})
+print(result.content)
 ```
 
 If validation reports `Unknown parameter`, do not try alternate path field names. Re-read the `add_canvas_elements` schema and retry with `content.asset_path`; do not proceed to asset understanding until the import returns successfully. Never create `Project/imports/` as a manual staging area: the import service writes the returned image, video, or audio Content to `./images/`, `./videos/`, or `./audio/` respectively.
@@ -425,6 +433,7 @@ tool.call("add_canvas_elements", {
         "content": {
             "source": "generated",
             "content_type": "video",
+            "name": "Product launch video",
             "prompt": "Show the confirmed product [image1] in a premium studio scene with a slow push-in, stable product identity, and no text or watermark.",
             "estimate_id": "confirmed-estimate-id",
             "reference_image_paths": ["Demo/images/product.png"],

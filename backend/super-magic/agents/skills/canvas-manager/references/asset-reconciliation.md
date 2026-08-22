@@ -10,4 +10,6 @@ Load this reference only when the user reports a mismatch between the Canvas and
 4. Do not delete, overwrite, auto-resolve name conflicts, or modify existing Content.
 5. After import, query the new Elements to confirm actual state.
 
+The repair must use real source files only. If the named `.tmp` or Workspace asset does not exist, is empty, or cannot be mapped to an exact workspace-relative path, stop and report that there is no real asset to repair. Never create sample images, download substitutes, generate replacement media, copy files into `imports/`, or use shell commands such as `mkdir`/`cp` to manufacture a successful test. A successful import is proven only by querying the exact returned `element_id` and checking its Content, status, and canonical project-local media path.
+
 This is not a dry-run/confirm tool; keep the read-only comparison, user confirmation, and explicit import as separate stages.

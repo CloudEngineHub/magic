@@ -23,9 +23,34 @@ Load this reference for image generation, image revision, reference images, or i
 
 For an image Content (`source=generated`, `content_type=image`), the generation fields are `prompt`, `size`, `model_id`, `name`, and `reference_images`.
 
+Before submitting, validate the complete nested shape:
+
+```python
+from sdk.tool import tool
+
+result = tool.call("add_canvas_elements", {
+    "project_path": "Demo",
+    "items": [{
+        "item_ref": "product-hero-image",
+        "element_type": "image",
+        "name": "Product hero image",
+        "content": {
+            "source": "generated",
+            "content_type": "image",
+            "name": "Product hero image",
+            "prompt": "A premium product hero image on a clean studio background, soft commercial lighting, no text or watermark.",
+            "size": "2048x2048",
+        },
+    }],
+})
+print(result.content)
+```
+
+`name` is required for every generated image Content, including a candidate appended with `add_canvas_contents`; the parent Element name does not satisfy this field. Keep `item_ref`, `element_id`, and `content_id` in their own fields and never substitute one for another.
+
 - Text-to-image: `size` is required when `reference_images` is empty.
 - Image-to-image: pass the reference path(s) in `reference_images`. When `size` is omitted, the tool auto-reads dimensions from the largest reference image; set `size` explicitly only for a different output size.
-- Images inside the current project use paths relative to that project's `magic.project.js` and must begin with `./` (e.g. `./images/cat.jpg`); images outside the current project use workspace-relative paths (e.g. `other-project/images/style.jpg`). Never guess a path — use one you already know or obtained from a query result.
+- Images inside the current project use paths relative to that project's `magic.project.js` and must begin with `./` (e.g. `./images/cat.jpg`); images outside the current project use workspace-relative paths (e.g. `other-project/images/style.jpg`). `visual_understanding` is workspace-anchored, so convert a returned Canvas path such as `./images/cat.jpg` to `<exact project_path>/images/cat.jpg` before calling it. Never guess a path — use one you already know or obtained from a query result.
 - Before image-to-image, call `visual_understanding` on the reference image to get its content description and dimensions; use the description to write the prompt.
 
 ```python
@@ -38,6 +63,7 @@ result = tool.call("add_canvas_elements", {
         "content": {
             "source": "generated",
             "content_type": "image",
+            "name": "cat with red ear",
             "prompt": "Based on the reference image, change only the ear in the upper-right area to bright red. Preserve the cat's face, body, pose, background, and every other detail exactly as they appear.",
             "reference_images": ["./images/cat.jpg"],
         },

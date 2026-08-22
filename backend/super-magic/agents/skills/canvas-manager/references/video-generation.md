@@ -31,6 +31,33 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 For a generated video Content, the supported generation fields are `prompt`, `model_id`, `estimate_id`, `skip_point_estimate`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
 
+Before submitting, validate the complete nested shape and keep the operation identity stable:
+
+```python
+from sdk.tool import tool
+
+confirmed_estimate_id = "estimate-id-from-result-content"
+
+result = tool.call("add_canvas_elements", {
+    "project_path": "Demo",
+    "items": [{
+        "item_ref": "product-promo-video",
+        "element_type": "video",
+        "name": "Product promotional video",
+        "layout": {"strategy": "row_incremental"},
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "name": "Product promotional video",
+            "estimate_id": confirmed_estimate_id,
+        },
+    }],
+})
+print(result.content)
+```
+
+`name` and `content_type` are required for every generated video Content, including an appended candidate. The exact original `item_ref` must be reused for an approved retry; do not create a retry suffix or a new item identity.
+
 - Provide `name` in the user's language using a concise 3-5 word description of the actual video. The saved file uses this model-provided name plus one short unique value.
 - Use only model, duration, aspect ratio, resolution, and mode values declared in the current `<media_model_info>`.
 - Omit optional parameters when the user did not request them and the current model rules do not make a legal choice clear.
@@ -54,7 +81,7 @@ estimate = tool.call("estimate_canvas_content_points", {
     "production_rule": "video_generation",
     "items": [{
         "item_ref": "product-promo-video",
-        "name": "产品宣传视频",
+        "name": "Product promotional video",
         "prompt": (
             "Show the confirmed product [image1] on a clean studio stage. "
             "The product slowly rotates while the camera makes a gentle push-in. "
@@ -85,12 +112,12 @@ result = tool.call("add_canvas_elements", {
     "items": [{
         "item_ref": "product-promo-video",
         "element_type": "video",
-        "name": "产品宣传视频",
+        "name": "Product promotional video",
         "layout": {"strategy": "row_incremental"},
         "content": {
             "source": "generated",
             "content_type": "video",
-            "name": "产品宣传视频",
+            "name": "Product promotional video",
             "prompt": (
                 "Show the confirmed product [image1] on a clean studio stage. "
                 "The product slowly rotates while the camera makes a gentle push-in. "
@@ -111,7 +138,7 @@ print(result.content)
 
 ## Code Mode example: wait and verify
 
-When generation returns a task ID, wait immediately. If waiting times out, call the same tool again with the same `generation_task_id`; never submit a duplicate generation.
+When generation returns a task ID, wait immediately. `timed_out=true`, `pending`, `processing`, `queued`, and `running` only mean that the current wait did not observe completion. Call the same tool again in a bounded follow-up with the same `generation_task_id`; never submit a duplicate generation and never enter retry unless the task or Content is explicitly `failed`.
 
 ```python
 from sdk.tool import tool
