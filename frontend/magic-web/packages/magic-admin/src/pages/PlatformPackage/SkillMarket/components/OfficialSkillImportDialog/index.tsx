@@ -166,6 +166,7 @@ const OfficialSkillImportDialog = memo(
 
 		const { upload, uploading } = useUpload<Upload.FileData>({
 			storageType: "private",
+			businessCode: "skill",
 			sts: true,
 			onProgress: (_, nextProgress) => setProgress(nextProgress),
 		})

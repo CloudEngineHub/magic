@@ -61,7 +61,10 @@ function EditSkillDialog({
 	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [showDefaultNameError, setShowDefaultNameError] = useState(false)
 
-	const { upload: uploadPublic } = useUpload({ storageType: "public" })
+	const { upload: uploadPublic } = useUpload({
+		storageType: "public",
+		businessCode: "skill",
+	})
 
 	// Fetch skill detail when dialog opens
 	useEffect(() => {

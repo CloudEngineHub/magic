@@ -71,6 +71,10 @@ export const RequestUrl = {
 	uploadFile: "/api/v1/file/upload-business-file",
 	/** 获取上传凭证 */
 	getUploadCredentials: "/api/v1/file/temporary-credential",
+	/** 获取业务隔离的公有桶上传凭证 */
+	getPublicBusinessUploadToken: "/api/v1/file/public-upload-token",
+	/** 获取业务隔离的私有桶上传凭证 */
+	getPrivateBusinessUploadToken: "/api/v1/file/private-upload-token",
 	/** 删除文件 */
 	deleteFile: "/api/v1/file/delete-business-file",
 	/** 获取文件临时链接 */
