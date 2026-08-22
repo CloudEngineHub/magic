@@ -155,14 +155,20 @@ final class SlidesTemplateVectorIndexDomainService
             return [];
         }
 
+        // Normalize equivalent user input before embedding so cache keys are reused.
+        $keyword = $this->normalizeSearchKeyword($query->getKeyword());
+        if ($keyword === '') {
+            return [];
+        }
+
         $embedding = $this->embedText(
             $dataIsolation,
-            $query->getKeyword(),
+            $keyword,
             [
                 'business_params' => [
                     'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
                     'user_id' => $dataIsolation->getCurrentUserId(),
-                    'business_id' => 'search:' . md5($query->getKeyword()),
+                    'business_id' => 'search:' . md5($keyword),
                     'source_id' => SourceId::SEMANTIC_SEARCH,
                 ],
             ],
@@ -331,6 +337,15 @@ final class SlidesTemplateVectorIndexDomainService
     private function collectionName(): string
     {
         return (string) config('vector_index.resources.slides_template.collection', 'slides_templates');
+    }
+
+    /** Normalize search text so whitespace and letter-case variants share one embedding cache entry. */
+    private function normalizeSearchKeyword(string $keyword): string
+    {
+        $keyword = trim($keyword);
+        $keyword = preg_replace('/\s+/u', ' ', $keyword) ?? $keyword;
+
+        return mb_strtolower($keyword, 'UTF-8');
     }
 
     /** Generate an embedding through the shared knowledge-base embedding pipeline. */
