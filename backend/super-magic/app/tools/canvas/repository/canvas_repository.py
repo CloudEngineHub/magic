@@ -23,12 +23,9 @@ from app.tools.canvas.infrastructure.persistence.content_metadata_service import
 from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
 from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
 from app.utils.async_file_utils import (
-    async_close_fd,
     async_exists,
-    async_mkstemp,
     async_read_bytes,
     async_read_text,
-    async_replace,
     async_unlink,
     async_write_bytes,
     async_write_text,
@@ -61,7 +58,7 @@ class CanvasRepository(CanvasRepositoryInterface):
         if await async_exists(project_file):
             await self.read(project_path)
             return path, False
-        await self._atomic_write_text(
+        await self._write_text(
             project_file, CanvasCodec.encode(CanvasCodec.empty_project(path.name))
         )
         return path, True
@@ -142,7 +139,7 @@ class CanvasRepository(CanvasRepositoryInterface):
     async def _write(self, path: Path, project: CanvasProject) -> None:
         """原子写入主文件并保留 sidecar 的已有内容。"""
         encoded = CanvasCodec.encode(self._main_file_sanitizer.sanitize(project))
-        await self._atomic_write_text(path / "magic.project.js", encoded)
+        await self._write_text(path / "magic.project.js", encoded)
 
     async def read_sidecar(self, project_path: str, filename: str = "element-details.json") -> dict:
         """读取可选 sidecar；不存在或非法时返回空对象。"""
@@ -174,7 +171,7 @@ class CanvasRepository(CanvasRepositoryInterface):
             ElementDetailsCodec.validate_public(data)
         else:
             ElementDetailsCodec.validate(data)
-        await self._atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
+        await self._write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
 
     async def _read_sidecar_strict(self, path: Path, missing_ok: bool = True) -> dict:
         """严格读取 sidecar，损坏或非对象结构不静默覆盖。"""
@@ -194,7 +191,7 @@ class CanvasRepository(CanvasRepositoryInterface):
     async def _write_bundle(
         self, path: Path, project: CanvasProject, sidecar: dict, filename: str
     ) -> None:
-        """以临时文件和备份实现主文件、sidecar 的可恢复写入。"""
+        """直接写入主文件和 sidecar，并在失败时恢复已有内容。"""
         project_file = path / "magic.project.js"
         sidecar_file = path / filename
         runtime_file = path / RUNTIME_SIDECAR_FILENAME
@@ -208,23 +205,15 @@ class CanvasRepository(CanvasRepositoryInterface):
             ElementDetailsCodec.validate(runtime_sidecar)
         sidecar_text = json.dumps(sidecar, ensure_ascii=False, indent=2)
         runtime_text = json.dumps(runtime_sidecar, ensure_ascii=False, indent=2)
-        temp_files: list[Path] = []
         backups: dict[Path, bytes | None] = {}
         try:
             targets = [(project_file, encoded), (sidecar_file, sidecar_text)]
             if filename == "element-details.json":
                 targets.append((runtime_file, runtime_text))
-            for target, content in targets:
-                fd, raw_path = await async_mkstemp(prefix=f".{target.name}.", dir=path)
-                await async_close_fd(fd)
-                temp_path = Path(raw_path)
-                await async_write_text(temp_path, content, encoding="utf-8")
-                temp_files.append(temp_path)
+            for target, _ in targets:
                 backups[target] = await async_read_bytes(target) if await async_exists(target) else None
-            await async_replace(temp_files[0], project_file)
-            await async_replace(temp_files[1], sidecar_file)
-            if filename == "element-details.json":
-                await async_replace(temp_files[2], runtime_file)
+            for target, content in targets:
+                await async_write_text(target, content, encoding="utf-8")
             persisted_project = await async_read_text(project_file, encoding="utf-8")
             CanvasCodec.decode(persisted_project)
             persisted_sidecar = json.loads(await async_read_text(sidecar_file, encoding="utf-8"))
@@ -245,18 +234,7 @@ class CanvasRepository(CanvasRepositoryInterface):
                 except OSError:
                     pass
             raise
-        finally:
-            for temp_path in temp_files:
-                await async_unlink(temp_path)
-
     @staticmethod
-    async def _atomic_write_text(target: Path, content: str) -> None:
-        """通过同目录临时文件和原子替换写入单个文件。"""
-        fd, raw_path = await async_mkstemp(prefix=f".{target.name}.", dir=target.parent)
-        await async_close_fd(fd)
-        temp_path = Path(raw_path)
-        try:
-            await async_write_text(temp_path, content, encoding="utf-8")
-            await async_replace(temp_path, target)
-        finally:
-            await async_unlink(temp_path)
+    async def _write_text(target: Path, content: str) -> None:
+        """直接写入单个 Canvas 文件，避免依赖挂载盘的原子替换。"""
+        await async_write_text(target, content, encoding="utf-8")

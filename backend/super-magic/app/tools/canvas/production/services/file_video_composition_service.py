@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.tools.canvas.production.ports import VideoCompositionPort, VideoCompositionRequest
+from app.utils.async_file_utils import async_is_file
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ class FileVideoCompositionService:
     ) -> FileVideoCompositionPlan:
         """解析文件列表、分析媒体并构造 Canvas 合成请求。"""
         video_paths = [
-            self._resolve_workspace_path(workspace_dir, item.get("path"))
+            await self._resolve_workspace_path(workspace_dir, item.get("path"))
             for item in self._media_items(composition, "videos")
         ]
         if not video_paths:
@@ -56,7 +57,7 @@ class FileVideoCompositionService:
         if len(audio_items) > 1:
             raise ValueError("composition supports at most one audio")
         audio_path = (
-            self._resolve_workspace_path(workspace_dir, audio_items[0].get("path"))
+            await self._resolve_workspace_path(workspace_dir, audio_items[0].get("path"))
             if audio_items
             else None
         )
@@ -155,7 +156,7 @@ class FileVideoCompositionService:
         return result
 
     @classmethod
-    def _resolve_workspace_path(cls, workspace_dir: Path, value: Any) -> Path:
+    async def _resolve_workspace_path(cls, workspace_dir: Path, value: Any) -> Path:
         """解析 workspace-relative 文件路径并拒绝目录穿越。"""
         relative = cls._normalize_workspace_relative_path(
             str(value or ""),
@@ -168,7 +169,7 @@ class FileVideoCompositionService:
             path.relative_to(workspace_root)
         except ValueError as error:
             raise ValueError("media.path is outside workspace") from error
-        if not path.is_file():
+        if not await async_is_file(path):
             raise ValueError(f"Media file does not exist: /{relative}")
         return path
 

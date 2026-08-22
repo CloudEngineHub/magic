@@ -1,24 +1,13 @@
 """工作区素材网关实现。"""
 
-import asyncio
-import hashlib
-import os
-import re
 from pathlib import Path
 from stat import S_ISREG
+from uuid import uuid4
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway, MaterializedCanvasAsset
 from app.tools.canvas.infrastructure.assets.project_asset_path_resolver import ProjectAssetPathResolver
-from app.utils.async_file_utils import (
-    async_close_fd,
-    async_copy2,
-    async_exists,
-    async_mkdir,
-    async_mkstemp,
-    async_stat,
-    async_unlink,
-)
+from app.utils.async_file_utils import async_copy_contents, async_exists, async_stat, async_unlink
 
 _MEDIA_DIRECTORY_BY_TYPE = {
     "image": "images",
@@ -30,7 +19,6 @@ _MEDIA_EXTENSIONS_BY_TYPE = {
     "video": {".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"},
     "audio": {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"},
 }
-_SAFE_FILENAME_PATTERN = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
 class WorkspaceAssetGateway(AssetGateway):
@@ -77,8 +65,8 @@ class WorkspaceAssetGateway(AssetGateway):
                 created=False,
             )
 
-        digest = await asyncio.to_thread(self._content_digest, source)
-        filename = self._safe_filename(f"{digest}{suffix}")
+        # 使用 UUID 生成唯一文件名，避免为大文件完整读取并计算哈希。
+        filename = f"asset-{uuid4().hex}{suffix}"
         destination = canonical_root / filename
         if await async_exists(destination):
             if not S_ISREG((await async_stat(destination)).st_mode):
@@ -92,7 +80,7 @@ class WorkspaceAssetGateway(AssetGateway):
                 created=False,
             )
 
-        created = await self._copy_atomically(source, destination)
+        created = await self._copy_to_destination(source, destination)
         return MaterializedCanvasAsset(
             project_uri=f"./{target_directory}/{filename}",
             absolute_path=destination,
@@ -150,39 +138,11 @@ class WorkspaceAssetGateway(AssetGateway):
             )
         return directory
 
-    @staticmethod
-    def _content_digest(path: Path) -> str:
-        """以分块读取计算素材内容指纹。"""
-        digest = hashlib.sha256()
-        with path.open("rb") as stream:
-            while chunk := stream.read(1024 * 1024):
-                digest.update(chunk)
-        return digest.hexdigest()
-
-    @staticmethod
-    def _safe_filename(value: str) -> str:
-        """将素材名称收窄为稳定的项目文件名。"""
-        normalized = _SAFE_FILENAME_PATTERN.sub("_", value).strip("._")
-        return normalized or "asset"
-
-    @staticmethod
-    async def _copy_atomically(source: Path, destination: Path) -> bool:
-        """先写入同目录临时文件，再以排他链接完成首次落盘。"""
-        await async_mkdir(destination.parent, parents=True, exist_ok=True)
-        fd, raw_temp_path = await async_mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
-        await async_close_fd(fd)
-        temporary_path = Path(raw_temp_path)
+    async def _copy_to_destination(source: Path, destination: Path) -> bool:
+        """直接复制素材内容到项目目录，兼容普通目录和 S3 挂载目录。"""
         try:
-            await async_copy2(source, temporary_path)
-            try:
-                await asyncio.to_thread(os.link, temporary_path, destination)
-            except FileExistsError:
-                if await async_exists(destination) and S_ISREG((await async_stat(destination)).st_mode):
-                    return False
-                raise CanvasDomainError(
-                    "ASSET_DESTINATION_INVALID",
-                    f"Canvas asset destination is not a regular file: {destination}.",
-                )
+            await async_copy_contents(source, destination)
             return True
-        finally:
-            await async_unlink(temporary_path)
+        except Exception:
+            await async_unlink(destination)
+            raise

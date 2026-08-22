@@ -14,14 +14,13 @@ from typing import List, Dict, Any, Optional, cast
 from urllib.parse import quote, urlparse
 
 import aiohttp
-import aiofiles
 from agentlang.logger import get_logger
 from agentlang.config.config import config
 from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.file import File
 
 from app.utils.credential_utils import sanitize_headers
-from app.utils.async_file_utils import async_mkdir, async_replace, async_unlink
+from app.utils.async_file_utils import async_unlink, async_write_bytes_iter
 
 from .config import MagicServiceConfig, MagicServiceConfigLoader
 from .constants import FileEditType
@@ -257,9 +256,6 @@ class MagicServiceClient:
         interruption_event: Optional[asyncio.Event] = None,
     ) -> None:
         """把远程文件流式下载到指定本地路径。"""
-        await async_mkdir(target_path.parent, parents=True, exist_ok=True)
-        temporary_path = target_path.with_name(f".{target_path.name}.download")
-        await async_unlink(temporary_path)
         session_to_use = self.session or aiohttp.ClientSession()
         should_close_session = self.session is None
         try:
@@ -272,14 +268,15 @@ class MagicServiceClient:
                     raise ApiError(
                         f"视频文件下载失败，HTTP {response.status}: {body[:200]}"
                     )
-                async with aiofiles.open(temporary_path, "wb") as output_file:
+                async def chunks():
                     async for chunk in response.content.iter_chunked(1024 * 1024):
                         if interruption_event is not None and interruption_event.is_set():
                             raise asyncio.CancelledError
-                        await output_file.write(chunk)
-            await async_replace(temporary_path, target_path)
+                        yield chunk
+
+                await async_write_bytes_iter(target_path, chunks())
         except BaseException:
-            await async_unlink(temporary_path)
+            await async_unlink(target_path)
             raise
         finally:
             if should_close_session:

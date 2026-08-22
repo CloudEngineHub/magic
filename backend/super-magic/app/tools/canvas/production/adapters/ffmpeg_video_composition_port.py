@@ -1,9 +1,7 @@
 """FFmpeg 视频合成端口实现。"""
 
 import asyncio
-import errno
 import json
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -15,10 +13,10 @@ from app.tools.canvas.production.ports.video_composition_port import (
     VideoCompositionResult,
 )
 from app.utils.async_file_utils import (
-    async_copy2,
+    async_copy_contents,
     async_exists,
+    async_gettempdir,
     async_mkdir,
-    async_replace,
     async_stat,
     async_unlink,
     async_which,
@@ -46,7 +44,7 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
             if request.audio_policy == "preserve" and request.audio_path is None
             else None
         )
-        temp_dir = Path(tempfile.gettempdir()) / "super-magic" / "canvas-video-composition"
+        temp_dir = await async_gettempdir() / "super-magic" / "canvas-video-composition"
         temporary_output = temp_dir / f"composition-{uuid4().hex}.mp4"
         await async_mkdir(temp_dir, parents=True, exist_ok=True)
         await async_mkdir(request.output_path.parent, parents=True, exist_ok=True)
@@ -284,13 +282,8 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
 
     @staticmethod
     async def _move_output(source_path: Path, target_path: Path) -> None:
-        """优先原子移动输出，跨文件系统时复制后校验大小。"""
-        try:
-            await async_replace(source_path, target_path)
-        except OSError as error:
-            if error.errno != errno.EXDEV:
-                raise
-            await async_copy2(source_path, target_path)
+        """直接复制合成输出到目标路径，兼容跨设备和 S3 挂载目录。"""
+        await async_copy_contents(source_path, target_path)
         if not await async_exists(target_path) or (await async_stat(target_path)).st_size <= 0:
             raise RuntimeError("Composed MP4 was not persisted successfully")
 
