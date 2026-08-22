@@ -16,6 +16,7 @@ import (
 	fragmentapp "magic/internal/application/knowledge/fragment/service"
 	knowledgebaseapp "magic/internal/application/knowledge/knowledgebase/service"
 	revectorizeapp "magic/internal/application/knowledge/revectorize/service"
+	sharedaccess "magic/internal/application/knowledge/shared/access"
 	revectorizeshared "magic/internal/application/knowledge/shared/revectorize"
 	thirdplatformprovider "magic/internal/application/knowledge/shared/thirdplatformprovider"
 	autoloadcfg "magic/internal/config/autoload"
@@ -114,10 +115,11 @@ type BaseDocumentFlowDeps struct {
 
 // BasePortDeps 表示知识库应用服务依赖的外部只读端口。
 type BasePortDeps struct {
-	KnowledgeBasePermissionPort *ipcclient.PHPKnowledgeBasePermissionRPCClient
-	SuperMagicAgentPort         *ipcclient.PHPSuperMagicAgentRPCClient
-	ProjectFilePort             *ipcclient.PHPProjectFileRPCClient
-	ThirdPlatformPort           *ipcclient.PHPThirdPlatformDocumentRPCClient
+	KnowledgeBasePermissionPort   *ipcclient.PHPKnowledgeBasePermissionRPCClient
+	KnowledgeBasePermissionReader kbaccess.PermissionReader
+	SuperMagicAgentPort           *ipcclient.PHPSuperMagicAgentRPCClient
+	ProjectFilePort               *ipcclient.PHPProjectFileRPCClient
+	ThirdPlatformPort             *ipcclient.PHPThirdPlatformDocumentRPCClient
 }
 
 // BaseBindingDeps 表示知识库产品线绑定相关依赖。
@@ -157,16 +159,31 @@ func ProvideKnowledgeBaseCoordinatorDeps(
 // ProvideKnowledgeBasePortDeps 提供知识库应用服务依赖的外部端口。
 func ProvideKnowledgeBasePortDeps(
 	knowledgeBasePermissionPort *ipcclient.PHPKnowledgeBasePermissionRPCClient,
+	knowledgeBasePermissionReader kbaccess.PermissionReader,
 	superMagicAgentPort *ipcclient.PHPSuperMagicAgentRPCClient,
 	projectFilePort *ipcclient.PHPProjectFileRPCClient,
 	thirdPlatformPort *ipcclient.PHPThirdPlatformDocumentRPCClient,
 ) BasePortDeps {
 	return BasePortDeps{
-		KnowledgeBasePermissionPort: knowledgeBasePermissionPort,
-		SuperMagicAgentPort:         superMagicAgentPort,
-		ProjectFilePort:             projectFilePort,
-		ThirdPlatformPort:           thirdPlatformPort,
+		KnowledgeBasePermissionPort:   knowledgeBasePermissionPort,
+		KnowledgeBasePermissionReader: knowledgeBasePermissionReader,
+		SuperMagicAgentPort:           superMagicAgentPort,
+		ProjectFilePort:               projectFilePort,
+		ThirdPlatformPort:             thirdPlatformPort,
 	}
+}
+
+// ProvideKnowledgeBasePermissionReader 统一组装 PHP 权限与数字员工关系权限读取器。
+func ProvideKnowledgeBasePermissionReader(
+	knowledgeBasePermissionPort *ipcclient.PHPKnowledgeBasePermissionRPCClient,
+	domainSvc *knowledgebasedomain.DomainService,
+	knowledgeBaseBindingRepo *mysqlknowledgebasebinding.Repository,
+	superMagicAgentPort *ipcclient.PHPSuperMagicAgentRPCClient,
+) kbaccess.PermissionReader {
+	return sharedaccess.NewPermissionReader(
+		knowledgeBasePermissionPort,
+		sharedaccess.NewDigitalEmployeeRelationshipReader(domainSvc, knowledgeBaseBindingRepo, superMagicAgentPort),
+	)
 }
 
 // ProvideKnowledgeBaseDomainDeps 提供知识库应用依赖的领域服务集合。
@@ -251,7 +268,7 @@ func ProvideKnowledgeBaseAppService(
 	appSvc.SetKnowledgeBaseBindingRepository(deps.KnowledgeBaseBindingRepo)
 	appSvc.SetDestroyCoordinator(deps.DestroyCoordinator)
 	appSvc.SetWriteCoordinator(deps.WriteCoordinator)
-	appSvc.SetKnowledgeBasePermissionReader(deps.PortDeps.KnowledgeBasePermissionPort)
+	appSvc.SetKnowledgeBasePermissionReader(deps.PortDeps.KnowledgeBasePermissionReader)
 	appSvc.SetKnowledgeBasePermissionWriter(newKnowledgeBasePermissionWriter(deps.PortDeps.KnowledgeBasePermissionPort))
 	appSvc.SetOfficialOrganizationMemberChecker(deps.PortDeps.KnowledgeBasePermissionPort)
 	appSvc.SetProjectFileResolver(deps.PortDeps.ProjectFilePort)
@@ -335,20 +352,19 @@ func ProvideFragmentAppDeps(
 	userService *userdomain.DomainService,
 ) fragmentapp.AppDeps {
 	return fragmentapp.AppDeps{
-		ParseService:                    parseService,
-		ProjectFileContentPort:          portDeps.ProjectFilePort,
-		ThirdPlatformDocumentPort:       portDeps.ThirdPlatformPort,
-		ThirdPlatformProviders:          thirdPlatformProviders,
-		KnowledgeBaseBindingRepo:        bindingDeps.KnowledgeBaseBindingRepo,
-		PermissionReader:                portDeps.KnowledgeBasePermissionPort,
-		SuperMagicAgentAccess:           portDeps.SuperMagicAgentPort,
-		SuperMagicAgentManageableAccess: portDeps.SuperMagicAgentPort,
-		ThirdPlatformAccess:             portDeps.ThirdPlatformPort,
-		ManualFragmentCoordinator:       runtimeDeps.ManualFragmentCoordinator,
-		PreviewSplitter:                 documentsplitter.NewPreviewSplitter(),
-		Tokenizer:                       runtimeDeps.TokenizerService,
-		UserService:                     userService,
-		DefaultEmbeddingModel:           string(runtimeDeps.DefaultEmbeddingModel),
+		ParseService:              parseService,
+		ProjectFileContentPort:    portDeps.ProjectFilePort,
+		ThirdPlatformDocumentPort: portDeps.ThirdPlatformPort,
+		ThirdPlatformProviders:    thirdPlatformProviders,
+		KnowledgeBaseBindingRepo:  bindingDeps.KnowledgeBaseBindingRepo,
+		PermissionReader:          portDeps.KnowledgeBasePermissionReader,
+		SuperMagicAgentAccess:     portDeps.SuperMagicAgentPort,
+		ThirdPlatformAccess:       portDeps.ThirdPlatformPort,
+		ManualFragmentCoordinator: runtimeDeps.ManualFragmentCoordinator,
+		PreviewSplitter:           documentsplitter.NewPreviewSplitter(),
+		Tokenizer:                 runtimeDeps.TokenizerService,
+		UserService:               userService,
+		DefaultEmbeddingModel:     string(runtimeDeps.DefaultEmbeddingModel),
 	}
 }
 
@@ -538,8 +554,7 @@ func ProvideDocumentAppDeps(
 		ProjectFilePort:           portDeps.ProjectFilePort,
 		ProjectFileContentPort:    portDeps.ProjectFilePort,
 		ThirdPlatformProviders:    thirdPlatformProviders,
-		PermissionReader:          portDeps.KnowledgeBasePermissionPort,
-		SuperMagicAgentAccess:     portDeps.SuperMagicAgentPort,
+		PermissionReader:          portDeps.KnowledgeBasePermissionReader,
 		ThirdPlatformAccess:       portDeps.ThirdPlatformPort,
 		Tokenizer:                 tokenizerService,
 		UserService:               userService,
@@ -566,7 +581,7 @@ func ProvideKnowledgeSourceFileLinkService(
 		documentapp.KnowledgeSourceFileLinkDeps{
 			DocumentReader:            documentDomainSvc,
 			KnowledgeBaseReader:       knowledgeBaseDomainSvc,
-			PermissionReader:          portDeps.KnowledgeBasePermissionPort,
+			PermissionReader:          portDeps.KnowledgeBasePermissionReader,
 			ThirdPlatformAccess:       portDeps.ThirdPlatformPort,
 			FileLinkProvider:          fileLinkProvider,
 			ProjectFileContentPort:    portDeps.ProjectFilePort,

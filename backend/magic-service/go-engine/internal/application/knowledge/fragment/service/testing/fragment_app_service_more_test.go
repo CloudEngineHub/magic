@@ -13,6 +13,7 @@ import (
 	fragdto "magic/internal/application/knowledge/fragment/dto"
 	appservice "magic/internal/application/knowledge/fragment/service"
 	docfilehelper "magic/internal/application/knowledge/helper/docfile"
+	sharedaccess "magic/internal/application/knowledge/shared/access"
 	thirdplatformprovider "magic/internal/application/knowledge/shared/thirdplatformprovider"
 	autoloadcfg "magic/internal/config/autoload"
 	kbaccess "magic/internal/domain/knowledge/access/service"
@@ -1709,6 +1710,14 @@ func newSimilarityAuthorizationTestService(
 		KnowledgeBaseType: knowledgeBaseType,
 		Model:             "text-embedding-3-small",
 	}
+	permissionReader := sharedaccess.NewPermissionReader(
+		deps.permissionReader,
+		sharedaccess.NewDigitalEmployeeRelationshipReader(
+			&fragmentAppKnowledgeReaderStub{listResult: []*kbentity.KnowledgeBase{knowledgeBase}},
+			bindingRepo,
+			agentAccess,
+		),
+	)
 	svc := appservice.NewFragmentAppServiceForTest(t, appservice.AppServiceForTestOptions{
 		FragmentService: fragmentSvc,
 		KBService: &fragmentAppKnowledgeReaderStub{
@@ -1717,7 +1726,7 @@ func newSimilarityAuthorizationTestService(
 		},
 		KnowledgeBaseBindingRepo: bindingRepo,
 		SuperMagicAgentAccess:    agentAccess,
-		PermissionReader:         deps.permissionReader,
+		PermissionReader:         permissionReader,
 		DefaultEmbeddingModel:    "text-embedding-3-small",
 	})
 	return fragmentSvc, bindingRepo, agentAccess, svc
@@ -3222,6 +3231,14 @@ func (s *fragmentAppSuperMagicAgentAccessCheckerStub) ListAccessibleCodes(
 		result[code] = struct{}{}
 	}
 	return result, s.err
+}
+
+func (s *fragmentAppSuperMagicAgentAccessCheckerStub) ListManageableCodes(
+	_ context.Context,
+	_, _ string,
+	_ []string,
+) (map[string]struct{}, error) {
+	return map[string]struct{}{}, s.err
 }
 
 func (s *fragmentAppKnowledgeReaderStub) Show(_ context.Context, code string) (*kbentity.KnowledgeBase, error) {

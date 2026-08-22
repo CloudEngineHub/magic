@@ -133,6 +133,35 @@ func TestDigitalEmployeeRelationshipReaderPropagatesLookupErrors(t *testing.T) {
 	}
 }
 
+func TestCompositePermissionReaderMergesStrongestOperation(t *testing.T) {
+	t.Parallel()
+
+	reader := sharedaccess.NewPermissionReader(
+		permissionReaderStub{operations: map[string]string{
+			"kb-edit":  "read",
+			"kb-owner": "owner",
+		}},
+		staticExternalAccessReader{operations: map[string]kbaccess.Operation{
+			"kb-edit":  kbaccess.OperationEdit,
+			"kb-owner": kbaccess.OperationRead,
+			"kb-read":  kbaccess.OperationRead,
+		}},
+	)
+
+	operations, err := reader.ListOperations(context.Background(), "org", "user", []string{"kb-edit", "kb-owner", "kb-read"})
+	if err != nil {
+		t.Fatalf("ListOperations() error = %v", err)
+	}
+	expected := map[string]string{
+		"kb-edit":  "edit",
+		"kb-owner": "owner",
+		"kb-read":  "read",
+	}
+	if !reflect.DeepEqual(operations, expected) {
+		t.Fatalf("expected strongest merged operations %#v, got %#v", expected, operations)
+	}
+}
+
 type knowledgeBaseReaderStub struct {
 	items   []*kbentity.KnowledgeBase
 	err     error
@@ -166,6 +195,22 @@ type superMagicAgentAccessStub struct {
 	manageable      map[string]struct{}
 	err             error
 	accessibleCalls [][]string
+}
+
+type permissionReaderStub struct {
+	operations map[string]string
+}
+
+func (s permissionReaderStub) ListOperations(context.Context, string, string, []string) (map[string]string, error) {
+	return s.operations, nil
+}
+
+type staticExternalAccessReader struct {
+	operations map[string]kbaccess.Operation
+}
+
+func (s staticExternalAccessReader) ListOperations(context.Context, kbaccess.Actor, []string) (map[string]kbaccess.Operation, error) {
+	return s.operations, nil
 }
 
 func (s *superMagicAgentAccessStub) ListAccessibleCodes(_ context.Context, _ string, _ string, codes []string) (map[string]struct{}, error) {

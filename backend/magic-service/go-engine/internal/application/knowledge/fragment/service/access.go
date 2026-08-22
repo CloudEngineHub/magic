@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	sharedaccess "magic/internal/application/knowledge/shared/access"
 	kbaccess "magic/internal/domain/knowledge/access/service"
 	kbrepository "magic/internal/domain/knowledge/knowledgebase/repository"
 	"magic/internal/pkg/ctxmeta"
@@ -17,53 +16,12 @@ func (s *FragmentAppService) knowledgeAccessService() *kbaccess.Service {
 	if s == nil || s.permissionReader == nil {
 		return nil
 	}
-	var relationshipReader kbaccess.ExternalAccessReader
-	if s.kbService != nil && s.knowledgeBaseBindingRepo != nil && s.superMagicAgentAccess != nil {
-		relationshipReader = sharedaccess.NewDigitalEmployeeRelationshipReader(
-			s.kbService,
-			s.knowledgeBaseBindingRepo,
-			fragmentRelationshipAgentAccessReader{
-				reader:           s.superMagicAgentAccess,
-				manageableReader: s.superMagicAgentManageableAccess,
-			},
-		)
-	}
 	return kbaccess.NewService(
 		s.permissionReader,
 		nil,
-		kbaccess.NewCompositeAccessReader(
-			&fragmentExternalAccessReader{support: s},
-			relationshipReader,
-		),
+		&fragmentExternalAccessReader{support: s},
 		nil,
 	)
-}
-
-type fragmentRelationshipAgentAccessReader struct {
-	reader           fragmentAppSuperMagicAgentAccessChecker
-	manageableReader fragmentAppSuperMagicAgentManageableAccessChecker
-}
-
-func (r fragmentRelationshipAgentAccessReader) ListAccessibleCodes(
-	ctx context.Context,
-	organizationCode, userID string,
-	codes []string,
-) (map[string]struct{}, error) {
-	if r.reader == nil {
-		return map[string]struct{}{}, nil
-	}
-	return r.reader.ListAccessibleCodes(ctx, organizationCode, userID, codes)
-}
-
-func (r fragmentRelationshipAgentAccessReader) ListManageableCodes(
-	ctx context.Context,
-	organizationCode, userID string,
-	codes []string,
-) (map[string]struct{}, error) {
-	if r.manageableReader != nil {
-		return r.manageableReader.ListManageableCodes(ctx, organizationCode, userID, codes)
-	}
-	return map[string]struct{}{}, nil
 }
 
 func (s *FragmentAppService) authorizeKnowledgeBaseAction(

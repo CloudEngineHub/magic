@@ -24,22 +24,21 @@ import (
 
 // AppServiceForTestOptions 聚合片段应用服务测试依赖。
 type AppServiceForTestOptions struct {
-	FragmentService                 any
-	KBService                       any
-	DocumentService                 any
-	ManualFragmentCoordinator       any
-	ParseService                    any
-	ProjectFileContentPort          documentdomain.ProjectFileContentAccessor
-	ThirdPlatformDocumentPort       thirdPlatformPreviewResolver
-	ThirdPlatformProviders          *thirdplatformprovider.Registry
-	PreviewSplitter                 documentsplitter.PreviewSplitter
-	KnowledgeBaseBindingRepo        fragmentAppKnowledgeBaseBindingReader
-	SuperMagicAgentAccess           fragmentAppSuperMagicAgentAccessChecker
-	SuperMagicAgentManageableAccess fragmentAppSuperMagicAgentManageableAccessChecker
-	TeamshareTempCodeMapper         fragmentAppTeamshareTempCodeMapper
-	PermissionReader                kbaccess.PermissionReader
-	DefaultEmbeddingModel           string
-	Logger                          *logging.SugaredLogger
+	FragmentService           any
+	KBService                 any
+	DocumentService           any
+	ManualFragmentCoordinator any
+	ParseService              any
+	ProjectFileContentPort    documentdomain.ProjectFileContentAccessor
+	ThirdPlatformDocumentPort thirdPlatformPreviewResolver
+	ThirdPlatformProviders    *thirdplatformprovider.Registry
+	PreviewSplitter           documentsplitter.PreviewSplitter
+	KnowledgeBaseBindingRepo  fragmentAppKnowledgeBaseBindingReader
+	SuperMagicAgentAccess     fragmentAppSuperMagicAgentAccessChecker
+	TeamshareTempCodeMapper   fragmentAppTeamshareTempCodeMapper
+	PermissionReader          kbaccess.PermissionReader
+	DefaultEmbeddingModel     string
+	Logger                    *logging.SugaredLogger
 }
 
 // KnowledgeAccessBatchOperationsForTest 暴露统一知识库权限批量判定，供应用层回归测试使用。
@@ -105,23 +104,22 @@ func NewFragmentAppServiceForTest(tb testing.TB, opts AppServiceForTestOptions) 
 		}
 	}
 	service := &FragmentAppService{
-		fragmentService:                 fs,
-		kbService:                       kbs,
-		documentService:                 ds,
-		manualFragmentCoordinator:       coordinator,
-		parseService:                    ps,
-		projectFileContentPort:          opts.ProjectFileContentPort,
-		thirdPlatformDocumentPort:       opts.ThirdPlatformDocumentPort,
-		thirdPlatformProviders:          opts.ThirdPlatformProviders,
-		previewSplitter:                 opts.PreviewSplitter,
-		knowledgeBaseBindingRepo:        opts.KnowledgeBaseBindingRepo,
-		superMagicAgentAccess:           opts.SuperMagicAgentAccess,
-		superMagicAgentManageableAccess: opts.SuperMagicAgentManageableAccess,
-		teamshareTempCodeMapper:         opts.TeamshareTempCodeMapper,
-		permissionReader:                opts.PermissionReader,
-		tokenizer:                       tokenizer.NewService(),
-		defaultEmbeddingModel:           opts.DefaultEmbeddingModel,
-		logger:                          opts.Logger,
+		fragmentService:           fs,
+		kbService:                 kbs,
+		documentService:           ds,
+		manualFragmentCoordinator: coordinator,
+		parseService:              ps,
+		projectFileContentPort:    opts.ProjectFileContentPort,
+		thirdPlatformDocumentPort: opts.ThirdPlatformDocumentPort,
+		thirdPlatformProviders:    opts.ThirdPlatformProviders,
+		previewSplitter:           opts.PreviewSplitter,
+		knowledgeBaseBindingRepo:  opts.KnowledgeBaseBindingRepo,
+		superMagicAgentAccess:     opts.SuperMagicAgentAccess,
+		teamshareTempCodeMapper:   opts.TeamshareTempCodeMapper,
+		permissionReader:          opts.PermissionReader,
+		tokenizer:                 tokenizer.NewService(),
+		defaultEmbeddingModel:     opts.DefaultEmbeddingModel,
+		logger:                    opts.Logger,
 	}
 	service.legacyThirdPlatformCompat = NewLegacyThirdPlatformFragmentCompat(ds, opts.ThirdPlatformProviders)
 	return service

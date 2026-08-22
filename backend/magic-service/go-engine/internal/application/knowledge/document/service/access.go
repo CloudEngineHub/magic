@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	sharedaccess "magic/internal/application/knowledge/shared/access"
 	kbaccess "magic/internal/domain/knowledge/access/service"
 	kbrepository "magic/internal/domain/knowledge/knowledgebase/repository"
 	"magic/internal/pkg/ctxmeta"
@@ -20,8 +19,6 @@ type documentKnowledgeAccessDeps struct {
 	permissionReader    kbaccess.PermissionReader
 	thirdPlatformAccess SourceFileThirdPlatformAccess
 	knowledgeBaseReader SourceFileKnowledgeBaseReader
-	bindingReader       knowledgeBaseBindingRepository
-	agentAccessReader   superMagicAgentAccessReader
 }
 
 func (s *DocumentAppService) knowledgeAccessService() *kbaccess.Service {
@@ -32,8 +29,6 @@ func (s *DocumentAppService) knowledgeAccessService() *kbaccess.Service {
 		permissionReader:    s.permissionReader,
 		thirdPlatformAccess: s.thirdPlatformAccess,
 		knowledgeBaseReader: s.kbService,
-		bindingReader:       s.knowledgeBaseBindingRepo,
-		agentAccessReader:   s.superMagicAgentAccess,
 	})
 }
 
@@ -44,14 +39,7 @@ func newDocumentKnowledgeAccessService(deps documentKnowledgeAccessDeps) *kbacce
 	return kbaccess.NewService(
 		deps.permissionReader,
 		nil,
-		kbaccess.NewCompositeAccessReader(
-			&documentExternalAccessReader{deps: deps},
-			sharedaccess.NewDigitalEmployeeRelationshipReader(
-				deps.knowledgeBaseReader,
-				deps.bindingReader,
-				deps.agentAccessReader,
-			),
-		),
+		&documentExternalAccessReader{deps: deps},
 		nil,
 	)
 }

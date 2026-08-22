@@ -74,7 +74,6 @@ type DocumentAppService struct {
 	logger                      *logging.SugaredLogger
 	sourceBindingRepo           sourceBindingRepository
 	knowledgeBaseBindingRepo    knowledgeBaseBindingRepository
-	superMagicAgentAccess       superMagicAgentAccessReader
 	sourceBindingCache          sourcebindingrepository.SourceBindingCandidateCache
 	sourceCallbackSingleflight  sourcebindingrepository.SourceCallbackSingleflight
 	revectorizeProgressStore    revectorizeshared.ProgressStore
@@ -233,11 +232,6 @@ type knowledgeBaseBindingRepository interface {
 	) (map[string][]string, error)
 }
 
-type superMagicAgentAccessReader interface {
-	ListAccessibleCodes(ctx context.Context, organizationCode, userID string, codes []string) (map[string]struct{}, error)
-	ListManageableCodes(ctx context.Context, organizationCode, userID string, codes []string) (map[string]struct{}, error)
-}
-
 type thirdPlatformDocumentResolver interface {
 	Resolve(ctx context.Context, input thirdplatform.DocumentResolveInput) (*thirdplatform.DocumentResolveResult, error)
 }
@@ -261,7 +255,6 @@ type AppDeps struct {
 	Tokenizer                  *tokenizer.Service
 	SourceBindingRepo          sourceBindingRepository
 	KnowledgeBaseBindingRepo   knowledgeBaseBindingRepository
-	SuperMagicAgentAccess      superMagicAgentAccessReader
 	PermissionReader           kbaccess.PermissionReader
 	ThirdPlatformAccess        documentKnowledgeAccessPort
 	UserService                *userdomain.DomainService
@@ -294,7 +287,6 @@ func NewDocumentAppService(
 		logger:                     logger,
 		sourceBindingRepo:          deps.SourceBindingRepo,
 		knowledgeBaseBindingRepo:   deps.KnowledgeBaseBindingRepo,
-		superMagicAgentAccess:      deps.SuperMagicAgentAccess,
 		sourceBindingCache:         deps.SourceBindingCache,
 		sourceCallbackSingleflight: deps.SourceCallbackSingleflight,
 		resourceLimits:             parseServiceResourceLimits(deps.ParseService),
