@@ -49,6 +49,9 @@ final class SourceId
 
     public const string SLIDES_TEMPLATE_USE = 'slides_template_use';
 
+    /** Internal system-account embedding calls used to build the slides index. */
+    public const string SLIDES_TEMPLATE_VECTOR_SYNC = 'slides_template_vector_sync';
+
     public const array NON_BILLING_SOURCE_IDS = [
         self::RENAME_TOPIC,
         self::SUMMARY_CONTENT,

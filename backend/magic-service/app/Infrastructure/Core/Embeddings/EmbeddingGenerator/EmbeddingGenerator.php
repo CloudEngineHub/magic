@@ -15,4 +15,9 @@ class EmbeddingGenerator
     {
         return config('magic_flows.default_embedding_model');
     }
+
+    public static function getVectorDefaultModel(): string
+    {
+        return (string) config('vector_index.embedding_model', '');
+    }
 }

@@ -278,6 +278,8 @@ use App\Infrastructure\Core\Embeddings\DocumentSplitter\DocumentSplitterInterfac
 use App\Infrastructure\Core\Embeddings\DocumentSplitter\OdinRecursiveCharacterTextSplitter;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\OdinEmbeddingGenerator;
+use App\Infrastructure\Core\Embeddings\VectorStores\OdinQdrantVectorStore;
+use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\File\Parser\Driver\ExcelFileParserDriver;
 use App\Infrastructure\Core\File\Parser\Driver\Interfaces\ExcelFileParserDriverInterface;
 use App\Infrastructure\Core\File\Parser\Driver\Interfaces\OcrFileParserDriverInterface;
@@ -481,6 +483,7 @@ $dependencies = [
 
     // embeddings
     EmbeddingGeneratorInterface::class => OdinEmbeddingGenerator::class,
+    VectorStoreInterface::class => OdinQdrantVectorStore::class,
 
     // rerank
 

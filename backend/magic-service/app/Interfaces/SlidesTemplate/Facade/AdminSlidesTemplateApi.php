@@ -15,6 +15,7 @@ use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
+use App\Interfaces\SlidesTemplate\DTO\Request\SlidesTemplateSearchSyncRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateSortRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateStatusRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateTagsRequest;
@@ -99,5 +100,12 @@ class AdminSlidesTemplateApi extends AbstractApi
     {
         $this->adminSlidesTemplateAppService->delete($this->getAuthorization(), $id);
         return [];
+    }
+
+    #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::EDIT)]
+    public function searchSync(SlidesTemplateSearchSyncRequest $request): array
+    {
+        $request->validated();
+        return $this->adminSlidesTemplateAppService->searchSync($this->getAuthorization(), $request);
     }
 }

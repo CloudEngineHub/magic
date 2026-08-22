@@ -7,19 +7,39 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Service;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 
 final class SlidesTemplateSearchTextBuilder
 {
-    public static function build(SlidesTemplateEntity $template): string
-    {
+    /** Build the database exact-search text, including category and tag names. */
+    public static function build(
+        SlidesTemplateEntity $template,
+        ?SlidesTemplateCategoryEntity $category = null,
+        array $tags = []
+    ): string {
         $values = [];
         $seen = [];
 
         self::appendText($values, $seen, $template->getCode());
         self::appendText($values, $seen, $template->getSourceType()->value);
+        self::appendText($values, $seen, $template->getCategoryCode());
         self::appendI18nTexts($values, $seen, $template->getLabel());
         self::appendI18nTexts($values, $seen, $template->getDescription());
+        if ($category !== null) {
+            self::appendText($values, $seen, $category->getCode());
+            self::appendI18nTexts($values, $seen, $category->getNameI18n());
+        }
+        foreach ($tags as $tag) {
+            if (! $tag instanceof SlidesTemplateTagEntity
+                || $tag->getStatus() !== SlidesTemplateTagStatus::Enabled) {
+                continue;
+            }
+            self::appendText($values, $seen, $tag->getCode());
+            self::appendI18nTexts($values, $seen, $tag->getNameI18n());
+        }
 
         return implode(' ', $values);
     }
@@ -55,6 +75,7 @@ final class SlidesTemplateSearchTextBuilder
         }
     }
 
+    /** Normalize case and whitespace so duplicate search terms are stored once. */
     private static function normalizeText(?string $text): ?string
     {
         if ($text === null) {

@@ -110,6 +110,13 @@ class SlidesTemplateDomainServiceTest extends TestCase
         self::$originalContainer = null;
     }
 
+    public function testVectorSearchEnabledReadsFeatureConfiguration(): void
+    {
+        $service = $this->makeService(new CapturingSlidesTemplateRepository());
+
+        self::assertFalse($service->isVectorSearchEnabled());
+    }
+
     public function testCreateBuildsSearchTextBeforeSaving(): void
     {
         $repository = new CapturingSlidesTemplateRepository();
@@ -383,6 +390,21 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
     public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
     {
         return $this->entityToFind ? [$this->entityToFind] : [];
+    }
+
+    public function findByIds(SlidesTemplateDataIsolation $dataIsolation, array $ids): array
+    {
+        return $this->entityToFind ? [$this->entityToFind] : [];
+    }
+
+    public function findIdsForSync(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $organizationCode,
+        array $templateIds,
+        string $afterId,
+        int $limit
+    ): array {
+        return [];
     }
 
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array

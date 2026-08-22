@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Service;
 
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
@@ -42,6 +43,29 @@ class SlidesTemplateDomainService
         return $entity;
     }
 
+    /** Read a template for queue processing without applying the public official-only guard. */
+    public function findByIdForSync(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateEntity
+    {
+        return $this->slidesTemplateRepository->findById($dataIsolation, $id);
+    }
+
+    /** Return one ID cursor page for the administrative full-sync endpoint. */
+    public function findIdsForSync(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $organizationCode,
+        array $templateIds,
+        string $afterId,
+        int $limit
+    ): array {
+        return $this->slidesTemplateRepository->findIdsForSync(
+            $dataIsolation,
+            $organizationCode,
+            $templateIds,
+            $afterId,
+            $limit,
+        );
+    }
+
     public function findEnabledByCodeOrFail(SlidesTemplateDataIsolation $dataIsolation, string $code): SlidesTemplateEntity
     {
         $entity = $this->findByCodeOrFail($dataIsolation, $code);
@@ -72,6 +96,12 @@ class SlidesTemplateDomainService
         return $this->slidesTemplateRepository->findByCodes($dataIsolation, $codes);
     }
 
+    /** Return templates in the same order as the supplied IDs for vector search results. */
+    public function findByIds(SlidesTemplateDataIsolation $dataIsolation, array $ids): array
+    {
+        return $this->slidesTemplateRepository->findByIds($dataIsolation, $ids);
+    }
+
     public function assertUserAccessible(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): void
     {
         $isAccessibleOfficial = $this->isOfficialTemplate($dataIsolation, $entity)
@@ -98,6 +128,13 @@ class SlidesTemplateDomainService
         return $this->slidesTemplateRepository->queries($dataIsolation, $query, $page);
     }
 
+    /** Centralize the feature switch so every application and sync path uses one rule. */
+    public function isVectorSearchEnabled(): bool
+    {
+        return (bool) config('vector_index.enabled', false)
+            && (bool) config('vector_index.resources.slides_template.enabled', false);
+    }
+
     /**
      * @return array{total: int, list: SlidesTemplateEntity[]}
      */
@@ -115,8 +152,12 @@ class SlidesTemplateDomainService
         return $this->usageCountPolicy->getCount($dataIsolation, $query);
     }
 
-    public function create(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
-    {
+    public function create(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateEntity $entity,
+        ?SlidesTemplateCategoryEntity $category = null,
+        array $tags = []
+    ): SlidesTemplateEntity {
         if (! $dataIsolation->isOfficialOrganization()) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::TEMPLATE_NOT_FOUND);
         }
@@ -127,7 +168,7 @@ class SlidesTemplateDomainService
             ->setOwnerType(SlidesTemplateOwnerType::Official)
             ->setOwnerId($dataIsolation->getCurrentOrganizationCode());
 
-        $this->refreshSearchText($entity);
+        $this->refreshSearchText($entity, $category, $tags);
         $totalUsageCount = max(0, $entity->getBaseUsageCount()) + max(0, $entity->getActualUsageCount());
         $entity->setTotalUsageCount($totalUsageCount);
         try {
@@ -141,15 +182,25 @@ class SlidesTemplateDomainService
         }
     }
 
-    public function update(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
-    {
+    public function update(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateEntity $entity,
+        ?SlidesTemplateCategoryEntity $category = null,
+        array $tags = []
+    ): SlidesTemplateEntity {
         $existing = $this->findByIdOrFail($dataIsolation, (string) $entity->getId());
         $entity->setOrganizationCode($existing->getOrganizationCode())
             ->setOwnerType($existing->getOwnerType())
             ->setOwnerId($existing->getOwnerId());
-        $this->refreshSearchText($entity);
+        $this->refreshSearchText($entity, $category, $tags);
         $totalUsageCount = max(0, $entity->getBaseUsageCount()) + max(0, $entity->getActualUsageCount());
         $entity->setTotalUsageCount($totalUsageCount);
+        return $this->slidesTemplateRepository->save($dataIsolation, $entity);
+    }
+
+    /** Persist a search_text refresh after a template-tag relation change. */
+    public function saveSearchText(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): SlidesTemplateEntity
+    {
         return $this->slidesTemplateRepository->save($dataIsolation, $entity);
     }
 
@@ -158,9 +209,11 @@ class SlidesTemplateDomainService
         SlidesTemplateEntity $entity,
         ?SlidesTemplateStatus $status = null,
         ?array $tagCodes = null,
+        ?SlidesTemplateCategoryEntity $category = null,
+        array $tags = [],
     ): SlidesTemplateEntity {
         try {
-            return $this->transaction(function () use ($dataIsolation, $entity, $status, $tagCodes): SlidesTemplateEntity {
+            return $this->transaction(function () use ($dataIsolation, $entity, $status, $tagCodes, $category, $tags): SlidesTemplateEntity {
                 if ($entity->getCode() === '') {
                     $entity->setCode($this->generateAvailableCode());
                 }
@@ -185,8 +238,14 @@ class SlidesTemplateDomainService
                 if (! $isCreate && $status !== null) {
                     $entity->setStatus($status);
                 }
+                $resolvedTags = $tags;
+                if (! $isCreate && $tagCodes === null) {
+                    $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$existing]);
+                    $resolvedTags = $existing->getTags();
+                }
                 $entity->setUpdatedUid($dataIsolation->getCurrentUserId());
-                $this->refreshSearchText($entity);
+                // Keep database search_text in step with the template's current category and tags.
+                $this->refreshSearchText($entity, $category, $resolvedTags);
                 $entity->recalculateTotalUsageCount();
                 $saved = $this->slidesTemplateRepository->save($dataIsolation, $entity);
                 if ($tagCodes !== null) {
@@ -274,9 +333,13 @@ class SlidesTemplateDomainService
         return Db::transaction($callback);
     }
 
-    private function refreshSearchText(SlidesTemplateEntity $entity): void
-    {
-        $entity->setSearchText(SlidesTemplateSearchTextBuilder::build($entity));
+    /** Rebuild database search text from template, category, and enabled tags. */
+    private function refreshSearchText(
+        SlidesTemplateEntity $entity,
+        ?SlidesTemplateCategoryEntity $category = null,
+        array $tags = []
+    ): void {
+        $entity->setSearchText(SlidesTemplateSearchTextBuilder::build($entity, $category, $tags));
     }
 
     private function isOwnedByUser(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateEntity $entity): bool
