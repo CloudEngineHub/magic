@@ -350,8 +350,10 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         SlidesTemplateQuery $query,
         Page $page,
     ): array {
+        $keyword = $query->getKeyword();
         if ($query->getSearchType() !== SlidesTemplateSearchType::Vector
-            || $query->getKeyword() === null
+            || $keyword === null
+            || trim($keyword) === ''
             || ! $this->slidesTemplateVectorIndexDomainService->isVectorSearchEnabled()) {
             return $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         }
