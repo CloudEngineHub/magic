@@ -235,6 +235,17 @@ class MagicPermission implements MagicPermissionInterface
                 continue;
             }
 
+            if (
+                $isPlatformOrganization
+                && in_array(
+                    $permission['resource'],
+                    (array) config('permission_menu.official_organization_hidden_resource_keys', []),
+                    true
+                )
+            ) {
+                continue;
+            }
+
             $pathNodeSets = $this->resolvePermissionPathNodeSets($permission);
             if ($pathNodeSets === []) {
                 continue;

@@ -20,7 +20,7 @@ return [
         'platform.model.text' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_model', 'label' => '平台模型'],
+                ['key' => 'model_management', 'label' => '模型管理'],
                 ['key' => 'text_model', 'label' => '文本大模型'],
             ],
             'tag' => '平台模型',
@@ -28,7 +28,7 @@ return [
         'platform.model.image' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_model', 'label' => '平台模型'],
+                ['key' => 'model_management', 'label' => '模型管理'],
                 ['key' => 'image_model', 'label' => '生图大模型'],
             ],
             'tag' => '平台模型',
@@ -36,7 +36,7 @@ return [
         'platform.model.video' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_model', 'label' => '平台模型'],
+                ['key' => 'model_management', 'label' => '模型管理'],
                 ['key' => 'video_model', 'label' => '视频大模型'],
             ],
             'tag' => '平台模型',
@@ -76,23 +76,24 @@ return [
         'platform.ai.ability' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
-                ['key' => 'system_skill', 'label' => '系统技能'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'system_skill', 'label' => '系统能力'],
             ],
             'tag' => '智能体增强',
         ],
         'platform.agent.official' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
-                ['key' => 'official_agent', 'label' => '官方内置员工'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'official_agent', 'label' => '官方员工'],
             ],
             'tag' => '智能体增强',
         ],
         'platform.agent.review' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'publish_review', 'label' => '发布审核'],
                 ['key' => 'employee_review', 'label' => '员工审核'],
             ],
             'tag' => '智能体增强',
@@ -100,7 +101,8 @@ return [
         'platform.agent.market' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'official_market', 'label' => '官方市场'],
                 ['key' => 'employee_market', 'label' => '员工市场'],
             ],
             'tag' => '智能体增强',
@@ -108,7 +110,8 @@ return [
         'platform.skill.review' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'publish_review', 'label' => '发布审核'],
                 ['key' => 'skill_review', 'label' => 'Skill 审核'],
             ],
             'tag' => '智能体增强',
@@ -116,7 +119,8 @@ return [
         'platform.skill.market' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'official_market', 'label' => '官方市场'],
                 ['key' => 'skill_market', 'label' => 'Skill 市场'],
             ],
             'tag' => '智能体增强',
@@ -140,15 +144,15 @@ return [
         'platform.organization.list' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_tenant', 'label' => '平台租户'],
                 ['key' => 'tenant_management', 'label' => '租户管理'],
+                ['key' => 'tenant_list', 'label' => '租户列表'],
             ],
             'tag' => '平台租户',
         ],
         'platform.organization.user_list' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_tenant', 'label' => '平台租户'],
+                ['key' => 'tenant_management', 'label' => '租户管理'],
                 ['key' => 'platform_user', 'label' => '平台用户'],
             ],
             'tag' => '平台租户',
@@ -156,7 +160,7 @@ return [
         'platform.setting.platform_info' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_console_management', 'label' => '平台管理'],
+                ['key' => 'basic_settings', 'label' => '基础设置'],
                 ['key' => 'platform_info', 'label' => '平台信息'],
             ],
             'tag' => '平台管理',
@@ -164,7 +168,7 @@ return [
         'platform.setting.maintenance' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_console_management', 'label' => '平台管理'],
+                ['key' => 'operations_settings', 'label' => '运营设置'],
                 ['key' => 'platform_maintenance', 'label' => '平台维护'],
             ],
             'tag' => '平台管理',
@@ -172,7 +176,7 @@ return [
         'platform.setting.application' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_console_management', 'label' => '平台管理'],
+                ['key' => 'basic_settings', 'label' => '基础设置'],
                 ['key' => 'application_menu', 'label' => '应用菜单'],
             ],
             'tag' => '平台管理',
@@ -180,62 +184,62 @@ return [
         'platform.setting.slides_template' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'agent_enhancement', 'label' => '智能体增强'],
-                ['key' => 'slides_template', 'label' => '幻灯片模板'],
+                ['key' => 'agent_management', 'label' => '智能体管理'],
+                ['key' => 'slides_template', 'label' => 'PPT 模板'],
             ],
             'tag' => '智能体增强',
         ],
         'admin.safe.sub_admin' => [
             'path' => [
-                ['key' => 'enterprise_feature', 'label' => '企业功能'],
-                ['key' => 'security_and_permission', 'label' => '安全与权限'],
-                ['key' => 'admin_permission', 'label' => '管理员权限'],
+                ['key' => 'data_security', 'label' => '数据与安全'],
+                ['key' => 'security_permissions', 'label' => '管理权限'],
+                ['key' => 'sub_admin', 'label' => '子管理员'],
             ],
             'tag' => '安全与权限',
         ],
         'admin.safe.admin' => [
             'path' => [
-                ['key' => 'enterprise_feature', 'label' => '企业功能'],
-                ['key' => 'security_and_permission', 'label' => '安全与权限'],
-                ['key' => 'admin_permission', 'label' => '管理员权限'],
+                ['key' => 'data_security', 'label' => '数据与安全'],
+                ['key' => 'security_permissions', 'label' => '管理权限'],
+                ['key' => 'admin', 'label' => '企业管理员'],
             ],
             'tag' => '安全与权限',
         ],
         'admin.safe.operation_log' => [
             'path' => [
-                ['key' => 'enterprise_feature', 'label' => '企业功能'],
-                ['key' => 'security_and_permission', 'label' => '安全与权限'],
-                ['key' => 'admin_log', 'label' => '管理员日志'],
+                ['key' => 'data_security', 'label' => '数据与安全'],
+                ['key' => 'logs_analytics', 'label' => '日志及分析'],
+                ['key' => 'operation_log', 'label' => '后台操作日志'],
             ],
             'tag' => '安全与权限',
         ],
         'admin.safe.function_permission' => [
             'path' => [
-                ['key' => 'enterprise_feature', 'label' => '企业功能'],
-                ['key' => 'security_and_permission', 'label' => '安全与权限'],
-                ['key' => 'function_permission', 'label' => '功能权限'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
+                ['key' => 'governance_policies', 'label' => '管控策略'],
+                ['key' => 'function_permission', 'label' => 'AI 权限设置'],
             ],
             'tag' => '安全与权限',
         ],
         'admin.ai.model_access_role' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI管理'],
-                ['key' => 'custom_model', 'label' => '自定义大模型'],
-                ['key' => 'model_access_role', 'label' => '模型访问权限'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
+                ['key' => 'governance_policies', 'label' => '管控策略'],
+                ['key' => 'model_access_role', 'label' => '大模型管控'],
             ],
             'tag' => '自定义大模型',
         ],
         'admin.ai.application.menu' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI管理'],
-                ['key' => 'application_config', 'label' => '应用配置'],
-                ['key' => 'application_menu', 'label' => '应用菜单'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
+                ['key' => 'application_management', 'label' => '应用管理'],
+                ['key' => 'organization_app_menu', 'label' => '组织应用菜单'],
             ],
             'tag' => '应用菜单',
         ],
         'workspace.model.text' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'custom_model', 'label' => '自定义大模型'],
                 ['key' => 'text_model', 'label' => '文本大模型'],
             ],
@@ -243,7 +247,7 @@ return [
         ],
         'workspace.model.image' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'custom_model', 'label' => '自定义大模型'],
                 ['key' => 'image_model', 'label' => '生图大模型'],
             ],
@@ -251,7 +255,7 @@ return [
         ],
         'workspace.model.video' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'custom_model', 'label' => '自定义大模型'],
                 ['key' => 'video_model', 'label' => '视频大模型'],
             ],
@@ -259,23 +263,23 @@ return [
         ],
         'workspace.ai.agent_management' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
-                ['key' => 'internal_employee_and_skill', 'label' => '内部员工及技能'],
-                ['key' => 'agent', 'label' => '员工发布审核'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
+                ['key' => 'internal_employee_and_skill', 'label' => '发布与审核'],
+                ['key' => 'agent', 'label' => '员工审核'],
             ],
             'tag' => '内部员工及技能',
         ],
         'workspace.ai.skill_management' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
-                ['key' => 'internal_employee_and_skill', 'label' => '内部员工及技能'],
-                ['key' => 'skill', 'label' => '技能发布审核'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
+                ['key' => 'internal_employee_and_skill', 'label' => '发布与审核'],
+                ['key' => 'skill', 'label' => 'Skill 审核'],
             ],
             'tag' => '内部员工及技能',
         ],
         'workspace.ai.model_management' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'custom_model', 'label' => '自定义大模型'],
                 ['key' => 'text_model', 'label' => '文本大模型'],
             ],
@@ -283,7 +287,7 @@ return [
         ],
         'workspace.ai.image_generation' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'custom_model', 'label' => '自定义大模型'],
                 ['key' => 'image_model', 'label' => '生图大模型'],
             ],
@@ -291,9 +295,17 @@ return [
         ],
         'workspace.ai.model_audit_log' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => 'AI 管理'],
-                ['key' => 'custom_model', 'label' => '自定义大模型'],
-                ['key' => 'model_audit_log', 'label' => '模型调用审计'],
+                ['key' => 'data_security', 'label' => '数据与安全'],
+                ['key' => 'logs_analytics', 'label' => '日志及分析'],
+                ['key' => 'model_audit', 'label' => '大模型审计'],
+            ],
+            'tag' => '自定义大模型',
+        ],
+        'workspace.ai.model_audit_statistics' => [
+            'path' => [
+                ['key' => 'data_security', 'label' => '数据与安全'],
+                ['key' => 'logs_analytics', 'label' => '日志及分析'],
+                ['key' => 'model_monitoring', 'label' => '大模型监控'],
             ],
             'tag' => '自定义大模型',
         ],
@@ -336,6 +348,21 @@ return [
         'workspace.ai.image_generation',
         'platform.ai.agent_management',
         'platform.ai.skill_management',
+        'platform.ai.model_audit_log',
+        'platform.ai.model_audit_statistics',
+    ],
+
+    /*
+     * 官方组织不展示的组织级资源。
+     *
+     * 这些资源仍保留真实 permission key 和接口鉴权能力；这里只控制官方组织的
+     * 子管理员权限树，避免把仅属于普通组织的菜单配置项展示给平台管理员。
+     */
+    'official_organization_hidden_resource_keys' => [
+        'admin.ai.application.menu',
+        'workspace.model.text',
+        'workspace.model.image',
+        'workspace.model.video',
     ],
 
     /*
