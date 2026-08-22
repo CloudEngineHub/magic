@@ -38,7 +38,7 @@ describe("awaitAppInitPromise", () => {
 
 	it("stops waiting after timeout when init promise hangs", async () => {
 		vi.useFakeTimers()
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		appStore.appInitPromise = new Promise<void>(() => undefined)
 		let settled = false
 		const runAwaitAppInitPromise = awaitAppInitPromise as (timeoutMs?: number) => Promise<void>
@@ -50,8 +50,8 @@ describe("awaitAppInitPromise", () => {
 		await pending
 
 		expect(settled).toBe(true)
-		expect(warnSpy).toHaveBeenCalledTimes(1)
-		warnSpy.mockRestore()
+		expect(errorSpy).toHaveBeenCalledTimes(1)
+		errorSpy.mockRestore()
 		vi.useRealTimers()
 	})
 })
@@ -76,24 +76,28 @@ describe("awaitAppInitForOutgoingRequest", () => {
 		expect(done).toBe(true)
 	})
 
-	it("stops waiting after timeout when init promise hangs", async () => {
+	it("rejects outgoing requests after timeout instead of sending before app init", async () => {
 		vi.useFakeTimers()
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		appStore.appInitPromise = new Promise<void>(() => undefined)
-		let settled = false
 		const runAwaitForRequest = awaitAppInitForOutgoingRequest as (
 			timeoutMs?: number,
 		) => Promise<void>
-		const pending = runAwaitForRequest(1000).then(() => {
-			settled = true
+		let rejection: unknown
+		const pending = runAwaitForRequest(1000).catch((error) => {
+			rejection = error
 		})
 
 		await vi.advanceTimersByTimeAsync(1000)
 		await pending
 
-		expect(settled).toBe(true)
-		expect(warnSpy).toHaveBeenCalledTimes(1)
-		warnSpy.mockRestore()
+		expect(rejection).toEqual(
+			expect.objectContaining({
+				message: "http client wait for app init failed or timed out",
+			}),
+		)
+		expect(errorSpy).toHaveBeenCalledTimes(1)
+		errorSpy.mockRestore()
 		vi.useRealTimers()
 	})
 })

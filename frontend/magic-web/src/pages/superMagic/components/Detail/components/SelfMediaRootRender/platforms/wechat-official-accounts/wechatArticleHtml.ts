@@ -23,7 +23,8 @@ export interface LoadWechatArticleHtmlResult {
 }
 
 type AttachmentSource =
-	PlatformComponentProps["attachmentList"] | PlatformComponentProps["attachments"]
+	| PlatformComponentProps["attachmentList"]
+	| PlatformComponentProps["attachments"]
 
 function getAttachmentKey(item: SelfMediaAttachmentNode): string {
 	return (

@@ -28,6 +28,7 @@ use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Event\ProjectUpdatedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Event\StopRunningTaskEvent;
@@ -322,6 +323,9 @@ class TopicAppService extends AbstractAppService
             // 发布话题已创建事件
             $topicCreatedEvent = new TopicCreatedEvent($topicEntity, $userAuthorization);
             $this->eventDispatcher->dispatch($topicCreatedEvent);
+            if (! empty($requestDTO->getProjectMode())) {
+                $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($projectEntity, $userAuthorization));
+            }
 
             // 返回结果
             return TopicItemDTO::fromEntity($topicEntity);
@@ -375,6 +379,9 @@ class TopicAppService extends AbstractAppService
             }
             // 提交事务
             Db::commit();
+            if (! empty($requestDTO->getProjectMode())) {
+                $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($projectEntity, $userAuthorization));
+            }
             // 返回结果
             return TopicItemDTO::fromEntity($topicEntity);
         } catch (Throwable $e) {
@@ -1491,6 +1498,9 @@ class TopicAppService extends AbstractAppService
 
         // 发布话题已创建事件（与正常创建流程保持一致）
         $this->eventDispatcher->dispatch(new TopicCreatedEvent($hiddenTopic, $userAuthorization));
+        if (! empty($requestDTO->getProjectMode())) {
+            $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($projectEntity, $userAuthorization));
+        }
 
         return TopicItemDTO::fromEntity($hiddenTopic);
     }

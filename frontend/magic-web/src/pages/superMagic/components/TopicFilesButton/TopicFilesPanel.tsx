@@ -88,6 +88,8 @@ interface TopicFilesPanelProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
@@ -146,6 +148,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			onSaveSlidesTemplate,
+			onConvertToSlidesTemplate,
 			headerTrailingAction,
 			spaceConfig,
 			isItemSelectable,
@@ -760,6 +764,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
+								onSaveSlidesTemplate={onSaveSlidesTemplate}
+								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
 								spaceConfig={spaceConfig}
 								isItemSelectable={isItemSelectable}
 								operationRoot={operationRoot}

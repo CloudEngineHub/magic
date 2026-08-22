@@ -14,6 +14,7 @@ const {
 	getRawGlobalTopicModeMock,
 	roleStoreState,
 	selectedContextStores,
+	selectedUserStore,
 	topicModeState,
 } = vi.hoisted(() => ({
 	applyResolvedRoleMock: vi.fn(),
@@ -27,6 +28,9 @@ const {
 	selectedContextStores: {
 		topicStore: null as null | { selectedTopic: unknown },
 		projectStore: null as null | { selectedProject: unknown },
+	},
+	selectedUserStore: {
+		user: null as null | { organizationCode: string; userInfo: { user_id: string } },
 	},
 	topicModeState: {
 		value: "unavailable-agent",
@@ -162,15 +166,15 @@ vi.mock("@/pages/superMagic/stores", () => ({
 	},
 }))
 
-vi.mock("@/models/user", () => ({
-	userStore: {
-		user: {
-			userInfo: {
-				user_id: "user-1",
-			},
-		},
-	},
-}))
+vi.mock("@/models/user", async () => {
+	const { observable } = await import("mobx")
+	const user = observable({
+		organizationCode: "org-initial",
+		userInfo: { user_id: "user-test" },
+	})
+	selectedUserStore.user = user
+	return { userStore: { user } }
+})
 
 vi.mock("@/pages/superMagic/hooks/useTaskInterrupt", () => ({
 	useTaskInterrupt: () => ({
@@ -274,6 +278,7 @@ describe("MobileHomePage", () => {
 		runInAction(() => {
 			topicStore.selectedTopic = null
 			projectStore.selectedProject = null
+			if (selectedUserStore.user) selectedUserStore.user.organizationCode = "org-initial"
 		})
 		refreshFeaturedModeListMock.mockResolvedValue([
 			{
@@ -326,6 +331,21 @@ describe("MobileHomePage", () => {
 			expect(recoverTopicModeMock).toHaveBeenCalledWith("first-agent")
 			expect(applyResolvedRoleMock).toHaveBeenCalledWith("first-agent")
 		})
+	})
+
+	it("skips hidden employees when falling back to the first available employee", async () => {
+		refreshFeaturedModeListMock.mockResolvedValueOnce([
+			{ mode: { identifier: "hidden-first-agent" }, agent: { is_visible: false } },
+			{ mode: { identifier: "visible-next-agent" }, agent: { is_visible: true } },
+		])
+		isModeValidMock.mockReturnValue(false)
+
+		render(<MobileHomePage />)
+
+		await waitFor(() => {
+			expect(recoverTopicModeMock).toHaveBeenCalledWith("visible-next-agent")
+		})
+		expect(recoverTopicModeMock).not.toHaveBeenCalledWith("hidden-first-agent")
 	})
 
 	it("restores the saved employee when a valid legacy homepage mode is displayed", async () => {
@@ -388,5 +408,93 @@ describe("MobileHomePage", () => {
 			expect(applyResolvedRoleMock).toHaveBeenCalledWith("general")
 		})
 		expect(recoverTopicModeMock).not.toHaveBeenCalledWith("summary")
+	})
+
+	it("refreshes the homepage mode after the organization context changes", async () => {
+		if (!selectedUserStore.user) throw new Error("User store is not initialized")
+
+		refreshFeaturedModeListMock
+			.mockResolvedValueOnce([
+				{ mode: { identifier: "initial-agent" }, agent: { is_visible: true } },
+			])
+			.mockResolvedValueOnce([
+				{ mode: { identifier: "next-org-agent" }, agent: { is_visible: true } },
+			])
+		isModeValidMock.mockImplementation((mode: string) =>
+			["initial-agent", "next-org-agent"].includes(mode),
+		)
+
+		render(<MobileHomePage />)
+
+		await waitFor(() => {
+			expect(refreshFeaturedModeListMock).toHaveBeenCalledTimes(1)
+			expect(recoverTopicModeMock).toHaveBeenCalledWith("initial-agent")
+		})
+
+		act(() => {
+			runInAction(() => {
+				if (selectedUserStore.user) {
+					selectedUserStore.user.organizationCode = "org-next"
+				}
+			})
+		})
+
+		await waitFor(() => {
+			expect(refreshFeaturedModeListMock).toHaveBeenCalledTimes(2)
+			expect(recoverTopicModeMock).toHaveBeenCalledWith("next-org-agent")
+		})
+	})
+
+	it("ignores an outdated homepage mode refresh result", async () => {
+		if (!selectedUserStore.user) throw new Error("User store is not initialized")
+
+		type MockModeItem = {
+			mode: { identifier: string }
+			agent: { is_visible: boolean }
+		}
+		let resolveInitialRequest: (modeList: MockModeItem[]) => void = () => undefined
+		let resolveNextRequest: (modeList: MockModeItem[]) => void = () => undefined
+		const initialRequest = new Promise<MockModeItem[]>((resolve) => {
+			resolveInitialRequest = resolve
+		})
+		const nextRequest = new Promise<MockModeItem[]>((resolve) => {
+			resolveNextRequest = resolve
+		})
+		refreshFeaturedModeListMock
+			.mockReturnValueOnce(initialRequest)
+			.mockReturnValueOnce(nextRequest)
+		isModeValidMock.mockImplementation((mode: string) =>
+			["initial-agent", "next-org-agent"].includes(mode),
+		)
+
+		render(<MobileHomePage />)
+		await waitFor(() => expect(refreshFeaturedModeListMock).toHaveBeenCalledTimes(1))
+
+		act(() => {
+			runInAction(() => {
+				if (selectedUserStore.user) {
+					selectedUserStore.user.organizationCode = "org-next"
+				}
+			})
+		})
+		await waitFor(() => expect(refreshFeaturedModeListMock).toHaveBeenCalledTimes(2))
+
+		await act(async () => {
+			resolveInitialRequest([
+				{ mode: { identifier: "initial-agent" }, agent: { is_visible: true } },
+			])
+			await Promise.resolve()
+		})
+		expect(recoverTopicModeMock).not.toHaveBeenCalledWith("initial-agent")
+
+		await act(async () => {
+			resolveNextRequest([
+				{ mode: { identifier: "next-org-agent" }, agent: { is_visible: true } },
+			])
+			await Promise.resolve()
+		})
+		await waitFor(() => {
+			expect(recoverTopicModeMock).toHaveBeenCalledWith("next-org-agent")
+		})
 	})
 })

@@ -11,6 +11,8 @@ use App\Infrastructure\Core\AbstractDTO;
 
 class SlidesTemplatePublicListItemDTO extends AbstractDTO
 {
+    public string $id = '';
+
     public string $code = '';
 
     public string $sourceType = '';
@@ -35,7 +37,13 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
 
     public bool $isOfficial = false;
 
-    public array $tags = [];
+    public bool $isFavorite = false;
+
+    public int $status = 1;
+
+    public ?string $createdAt = null;
+
+    public ?string $updatedAt = null;
 
     public function __construct(?array $data = null)
     {
@@ -47,6 +55,11 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
     public function getCode(): string
     {
         return $this->code;
+    }
+
+    public function setId(null|int|string $id): void
+    {
+        $this->id = $id === null ? '' : (string) $id;
     }
 
     public function setCode(?string $code): void
@@ -170,13 +183,23 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
         $this->isOfficial = $isOfficial;
     }
 
-    public function getTags(): array
+    public function setIsFavorite(bool $isFavorite): void
     {
-        return $this->tags;
+        $this->isFavorite = $isFavorite;
     }
 
-    public function setTags(array $tags): void
+    public function setStatus(int $status): void
     {
-        $this->tags = array_values($tags);
+        $this->status = $status;
+    }
+
+    public function setCreatedAt(?string $createdAt): void
+    {
+        $this->createdAt = $createdAt;
+    }
+
+    public function setUpdatedAt(?string $updatedAt): void
+    {
+        $this->updatedAt = $updatedAt;
     }
 }

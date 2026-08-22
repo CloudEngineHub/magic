@@ -684,11 +684,18 @@ class SkillAppService extends AbstractSkillAppService
         // 详情查看统一走共享可读判定；系统内置 Skill 会在断言方法中直接放行。
         $operation = $this->assertSkillReadable($dataIsolation, $code);
 
-        // 查询技能记录（校验权限）
+        // 优先读取 magic_skills；官方内置 Skill 没有主体记录时，回退到 magic_skill_versions。
         $dataIsolation->disabled();
-        $skillEntity = $this->skillDomainService->findSkillByCode($dataIsolation, $code);
-
         $latestVersionEntity = $this->skillVersionDomainService->findLatestSkillVersionByCode($dataIsolation, $code);
+
+        $skillEntity = $this->skillDomainService->findOptionalSkillByCode($dataIsolation, $code);
+        if ($skillEntity === null && $latestVersionEntity !== null) {
+            $skillEntity = $this->buildExternalVisibleSkillFromVersion($latestVersionEntity);
+        }
+        if ($skillEntity === null) {
+            ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND, 'skill.skill_not_found');
+        }
+
         // Use the latest published version as the source of truth for creator metadata.
         // This keeps creator_info stable for shared and market-installed skills.
         $creatorUserMap = $latestVersionEntity !== null

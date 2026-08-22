@@ -515,12 +515,21 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             $response = $exception->getResponse();
             $errorMessage = trim((string) $response?->getBody());
             $result = Json::decode($errorMessage);
-            if ($result['error']['code'] === 'InvalidParameter') {
+            $error = is_array($result) && is_array($result['error'] ?? null) ? $result['error'] : [];
+            if (($error['code'] ?? null) === 'InvalidParameter') {
                 return true;
             }
+
+            throw ProviderVideoException::nonRetriable(
+                (string) ($error['message'] ?? 'Volcengine Ark connectivity test failed'),
+                $exception,
+                $response?->getStatusCode(),
+            );
         }
 
-        throw ProviderVideoException::nonRetriable($result['error']['message']);
+        throw ProviderVideoException::nonRetriable(
+            'Volcengine Ark connectivity test did not receive the expected validation error',
+        );
     }
 
     /**
