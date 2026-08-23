@@ -136,6 +136,17 @@ class PlatformPermissionTreeTest extends HttpTestCase
         $this->assertSame('积分管理-绑定套餐', $node['full_label'] ?? null);
     }
 
+    public function testGetPermissionTreeUsesTranslatedApplicationMenuResourceLabel(): void
+    {
+        $tree = $this->permission->getPermissionTree(false);
+        $permissionKey = $this->permission->buildPermission('admin.ai.application.menu', 'query');
+        $node = $this->findNodeByPermissionKey($tree, $permissionKey);
+
+        $this->assertIsArray($node);
+        $this->assertSame('查询', $node['label'] ?? null);
+        $this->assertSame('组织应用菜单-查询', $node['full_label'] ?? null);
+    }
+
     public function testGetPermissionTreeHidesPlatformResourcesForNonPlatformOrganization(): void
     {
         $tree = $this->permission->getPermissionTree(false);

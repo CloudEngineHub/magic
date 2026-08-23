@@ -18,6 +18,7 @@ return [
         'admin_ai_model' => '大模型',
         'admin_ai_image' => '智能绘图',
         'ai_ability' => '能力管理',
+        'ai_application' => '组织应用菜单',
         'admin_ai_agent' => '数字员工',
         'admin_ai_skill' => 'Skill',
         'ai_mode' => '模式',
