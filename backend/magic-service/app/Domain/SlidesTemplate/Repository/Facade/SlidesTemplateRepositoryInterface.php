@@ -35,6 +35,9 @@ interface SlidesTemplateRepositoryInterface
         SlidesTemplateDataIsolation $dataIsolation,
         string $organizationCode,
         array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
         string $afterId,
         int $limit
     ): array;

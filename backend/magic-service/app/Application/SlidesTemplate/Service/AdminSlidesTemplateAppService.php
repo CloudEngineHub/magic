@@ -30,7 +30,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
-use App\Interfaces\SlidesTemplate\DTO\Request\SlidesTemplateSearchSyncRequest;
+use App\Interfaces\SlidesTemplate\DTO\Request\SlidesTemplateVectorReindexRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateTagsRequest;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
@@ -279,9 +279,9 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
      *
      * @return array{task_id: string, queued: int, after_id: string}
      */
-    public function searchSync(
+    public function reindexVectorIndex(
         Authenticatable|BaseDataIsolation $authorization,
-        SlidesTemplateSearchSyncRequest $request
+        SlidesTemplateVectorReindexRequest $request
     ): array {
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
@@ -304,12 +304,18 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $afterId = $request->isForce() ? '0' : $request->getAfterId();
         $batchSize = $request->getBatchSize();
         $templateIds = $request->getTemplateIds();
+        $categoryCode = $request->getCategoryCode();
+        $tagCodes = $request->getTagCodes();
+        $tagMatch = $request->getTagMatch();
         $context = [
             'organization_code' => $organizationCode,
             'after_id' => $afterId,
             'force' => $request->isForce(),
             'batch_size' => $batchSize,
             'template_ids_count' => count($templateIds),
+            'category_code' => $categoryCode,
+            'tag_codes' => $tagCodes,
+            'tag_match' => $tagMatch,
         ];
         $this->logger->info('Slides template full vector sync started', $context);
 
@@ -321,6 +327,9 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
                     $dataIsolation,
                     $organizationCode,
                     $templateIds,
+                    $categoryCode,
+                    $tagCodes,
+                    $tagMatch,
                     $nextAfterId,
                     $batchSize,
                 );
