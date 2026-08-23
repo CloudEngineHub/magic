@@ -307,7 +307,7 @@ return [
                 ['key' => 'logs_analytics', 'label' => '日志及分析'],
                 ['key' => 'model_audit', 'label' => '大模型审计'],
             ],
-            'tag' => '自定义大模型',
+            'tag' => '日志及分析',
         ],
         'workspace.ai.model_audit_statistics' => [
             'path' => [
@@ -315,7 +315,7 @@ return [
                 ['key' => 'logs_analytics', 'label' => '日志及分析'],
                 ['key' => 'model_monitoring', 'label' => '大模型监控'],
             ],
-            'tag' => '自定义大模型',
+            'tag' => '日志及分析',
         ],
     ],
 

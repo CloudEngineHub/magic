@@ -326,6 +326,9 @@ class MagicPermissionPermissionFlowTest extends HttpTestCase
         $platformTree = $this->permission->getPermissionTree(true);
         $workspaceTree = $this->permission->getPermissionTree(false);
 
+        $this->assertFalse($this->containsPermissionKey($platformTree, 'menu.ai_management.custom_model'));
+        $this->assertTrue($this->containsPermissionKey($workspaceTree, 'menu.ai_management.custom_model'));
+
         $this->assertFalse($this->containsPermissionKey(
             $platformTree,
             $this->permission->buildPermission(MagicResourceEnum::PLATFORM_AI_MODEL->value, MagicOperationEnum::QUERY->value)
@@ -479,6 +482,18 @@ class MagicPermissionPermissionFlowTest extends HttpTestCase
                 MagicOperationEnum::QUERY->value
             )
         ));
+    }
+
+    public function testWorkspaceModelAuditResourcesUseLogsAnalyticsPermissionTag(): void
+    {
+        $this->assertSame(
+            '日志及分析',
+            $this->permission->getResourceModule(MagicResourceEnum::WORKSPACE_AI_MODEL_AUDIT_LOG->value)
+        );
+        $this->assertSame(
+            '日志及分析',
+            $this->permission->getResourceModule(MagicResourceEnum::WORKSPACE_AI_MODEL_AUDIT_STATISTICS->value)
+        );
     }
 
     public function testGetResourceModuleKeepsLegacyModelTagForRolePermissionTagBackfill(): void
