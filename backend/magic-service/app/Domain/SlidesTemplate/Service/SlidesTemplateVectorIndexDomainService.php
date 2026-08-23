@@ -109,9 +109,9 @@ final class SlidesTemplateVectorIndexDomainService
         );
         $template->setTags($tagMap[(int) $template->getId()] ?? []);
         $payload = $this->buildPayload($template, $template->getTags());
-        $searchText = trim((string) $template->getSearchText());
+        $searchText = SlidesTemplateSearchTextBuilder::buildSemanticText($template, tags: $template->getTags());
         if ($searchText === '') {
-            throw new RuntimeException('Slides template search text is empty');
+            throw new RuntimeException('Slides template semantic text is empty');
         }
         $payload['search_text'] = $searchText;
 

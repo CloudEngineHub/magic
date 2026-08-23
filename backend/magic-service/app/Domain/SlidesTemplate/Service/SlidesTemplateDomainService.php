@@ -54,6 +54,9 @@ class SlidesTemplateDomainService
         SlidesTemplateDataIsolation $dataIsolation,
         string $organizationCode,
         array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
         string $afterId,
         int $limit
     ): array {
@@ -61,6 +64,9 @@ class SlidesTemplateDomainService
             $dataIsolation,
             $organizationCode,
             $templateIds,
+            $categoryCode,
+            $tagCodes,
+            $tagMatch,
             $afterId,
             $limit,
         );

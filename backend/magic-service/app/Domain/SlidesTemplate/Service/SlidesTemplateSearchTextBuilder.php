@@ -44,6 +44,41 @@ final class SlidesTemplateSearchTextBuilder
         return implode(' ', $values);
     }
 
+    /** Build the natural-language text used only for vector embedding. */
+    public static function buildSemanticText(
+        SlidesTemplateEntity $template,
+        ?SlidesTemplateCategoryEntity $category = null,
+        array $tags = []
+    ): string {
+        $sections = [];
+        self::appendI18nSection($sections, '标题', $template->getLabel());
+        self::appendI18nSection($sections, '描述', $template->getDescription());
+        if ($category !== null) {
+            self::appendI18nSection($sections, '分类', $category->getNameI18n());
+        }
+
+        $tagNames = [];
+        $seen = [];
+        foreach ($tags as $tag) {
+            if (! $tag instanceof SlidesTemplateTagEntity
+                || $tag->getStatus() !== SlidesTemplateTagStatus::Enabled) {
+                continue;
+            }
+            foreach ($tag->getNameI18n() as $name) {
+                $normalized = self::normalizeText(is_string($name) ? $name : null);
+                if ($normalized !== null && ! isset($seen[$normalized])) {
+                    $seen[$normalized] = true;
+                    $tagNames[] = $normalized;
+                }
+            }
+        }
+        if ($tagNames !== []) {
+            $sections[] = '标签：' . implode('、', $tagNames);
+        }
+
+        return implode("\n", $sections);
+    }
+
     /**
      * @param array<int, string> $values
      * @param array<string, bool> $seen
@@ -72,6 +107,19 @@ final class SlidesTemplateSearchTextBuilder
             }
 
             self::appendText($values, $seen, $text);
+        }
+    }
+
+    /** Append a labeled bilingual section while keeping the text readable to the embedding model. */
+    private static function appendI18nSection(array &$sections, string $label, array $i18nTexts): void
+    {
+        $values = [];
+        $seen = [];
+        foreach ($i18nTexts as $text) {
+            self::appendText($values, $seen, is_string($text) ? $text : null);
+        }
+        if ($values !== []) {
+            $sections[] = $label . '：' . implode('；', $values);
         }
     }
 

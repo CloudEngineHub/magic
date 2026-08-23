@@ -115,10 +115,14 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         SlidesTemplateDataIsolation $dataIsolation,
         string $organizationCode,
         array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
         string $afterId,
         int $limit
     ): array {
         $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->where('organization_code', $organizationCode)
             ->where('owner_type', SlidesTemplateOwnerType::Official->value)
             ->where('status', 1)
             ->where('id', '>', $afterId)
@@ -126,6 +130,16 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
             ->limit(max(1, $limit));
         if ($templateIds !== []) {
             $builder->whereIn('id', $templateIds);
+        }
+        if ($categoryCode !== null) {
+            $builder->where('category_code', $categoryCode);
+        }
+        if ($tagMatch === 'all') {
+            foreach ($tagCodes as $tagCode) {
+                $this->whereHasEnabledTag($builder, [$tagCode]);
+            }
+        } elseif ($tagCodes !== []) {
+            $this->whereHasEnabledTag($builder, $tagCodes);
         }
         return array_map('strval', $builder->pluck('id')->all());
     }
