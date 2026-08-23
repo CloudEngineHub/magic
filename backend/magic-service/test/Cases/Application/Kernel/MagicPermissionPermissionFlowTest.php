@@ -396,6 +396,31 @@ class MagicPermissionPermissionFlowTest extends HttpTestCase
         $this->assertTrue($this->containsPermissionKey($platformTree, $platformUserPermission));
     }
 
+    public function testGetPermissionTreeContainsProviderAliasesUnderPlatformModelManagement(): void
+    {
+        $platformTree = $this->permission->getPermissionTree(true);
+        $workspaceTree = $this->permission->getPermissionTree(false);
+
+        $this->assertTrue($this->containsPermissionKey($platformTree, 'menu.platform_management.model_management'));
+        $this->assertTrue($this->containsPermissionKey($platformTree, 'menu.platform_management.model_management.text_provider'));
+        $this->assertTrue($this->containsPermissionKey($platformTree, 'menu.platform_management.model_management.image_provider'));
+        $this->assertTrue($this->containsPermissionKey($platformTree, 'menu.platform_management.model_management.video_provider'));
+        $this->assertFalse($this->containsPermissionKey($workspaceTree, 'menu.platform_management.model_management.text_provider'));
+        $this->assertFalse($this->containsPermissionKey($workspaceTree, 'menu.platform_management.model_management.image_provider'));
+        $this->assertFalse($this->containsPermissionKey($workspaceTree, 'menu.platform_management.model_management.video_provider'));
+
+        foreach ([
+            MagicResourceEnum::PLATFORM_MODEL_TEXT,
+            MagicResourceEnum::PLATFORM_MODEL_IMAGE,
+            MagicResourceEnum::PLATFORM_MODEL_VIDEO,
+        ] as $resource) {
+            $this->assertTrue($this->containsPermissionKey(
+                $platformTree,
+                $this->permission->buildPermission($resource->value, MagicOperationEnum::QUERY->value)
+            ));
+        }
+    }
+
     public function testGetPermissionTreeContainsModelAccessRolePermissionWhenMapped(): void
     {
         $modelAccessRolePermission = $this->permission->buildPermission(

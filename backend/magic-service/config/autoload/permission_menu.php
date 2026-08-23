@@ -65,6 +65,14 @@ return [
             ],
             'tag' => '平台模型',
         ],
+        'platform.ai.model_audit_statistics' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理'],
+                ['key' => 'platform_model', 'label' => '平台模型'],
+                ['key' => 'model_audit_statistics', 'label' => '模型调用统计'],
+            ],
+            'tag' => '平台模型',
+        ],
         'platform.ai.mode_management' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
@@ -373,5 +381,33 @@ return [
      * - 例如视频大模型、Skill 审核/市场、员工审核/市场
      * - 主路径仍由 resource_menu_mapping 决定，这里只追加别名菜单节点
      */
-    'resource_menu_alias_mapping' => [],
+    'resource_menu_alias_mapping' => [
+        'platform.model.text' => [
+            [
+                'path' => [
+                    ['key' => 'platform_management', 'label' => '平台管理'],
+                    ['key' => 'model_management', 'label' => '模型管理'],
+                    ['key' => 'text_provider', 'label' => '文本模型服务商'],
+                ],
+            ],
+        ],
+        'platform.model.image' => [
+            [
+                'path' => [
+                    ['key' => 'platform_management', 'label' => '平台管理'],
+                    ['key' => 'model_management', 'label' => '模型管理'],
+                    ['key' => 'image_provider', 'label' => '图片模型服务商'],
+                ],
+            ],
+        ],
+        'platform.model.video' => [
+            [
+                'path' => [
+                    ['key' => 'platform_management', 'label' => '平台管理'],
+                    ['key' => 'model_management', 'label' => '模型管理'],
+                    ['key' => 'video_provider', 'label' => '视频模型服务商'],
+                ],
+            ],
+        ],
+    ],
 ];
