@@ -454,8 +454,8 @@ class MagicPermissionPermissionFlowTest extends HttpTestCase
 
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.ai_management'));
         $this->assertTrue($this->containsPermissionKey($tree, 'menu.ai_management.internal_employee_and_skill'));
-        $this->assertTrue($this->containsPermissionKey($tree, 'menu.ai_management.internal_employee_and_skill.agent'));
-        $this->assertTrue($this->containsPermissionKey($tree, 'menu.ai_management.internal_employee_and_skill.skill'));
+        $this->assertTrue($this->containsPermissionKey($tree, 'menu.ai_management.internal_employee_and_skill.internal_publish_review.agent'));
+        $this->assertTrue($this->containsPermissionKey($tree, 'menu.ai_management.internal_employee_and_skill.internal_publish_review.skill'));
         $this->assertTrue($this->containsPermissionKey($tree, $agentReviewPermission));
         $this->assertTrue($this->containsPermissionKey($tree, $skillReviewPermission));
     }

@@ -273,6 +273,7 @@ return [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'internal_employee_and_skill', 'label' => '发布与审核'],
+                ['key' => 'internal_publish_review', 'label' => '内部发布审核'],
                 ['key' => 'agent', 'label' => '员工审核'],
             ],
             'tag' => '内部员工及技能',
@@ -281,6 +282,7 @@ return [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理'],
                 ['key' => 'internal_employee_and_skill', 'label' => '发布与审核'],
+                ['key' => 'internal_publish_review', 'label' => '内部发布审核'],
                 ['key' => 'skill', 'label' => 'Skill 审核'],
             ],
             'tag' => '内部员工及技能',
