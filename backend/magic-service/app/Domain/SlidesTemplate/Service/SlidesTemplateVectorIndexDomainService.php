@@ -114,12 +114,17 @@ final class SlidesTemplateVectorIndexDomainService
             throw new RuntimeException('Slides template semantic text is empty');
         }
         $payload['search_text'] = $searchText;
+        $this->logger->info('Slides template semantic text prepared', [
+            'resource_id' => $resourceId,
+            'search_text' => $searchText,
+        ]);
 
         $collectionName = $this->collectionName();
         $existingPoint = $this->vectorStore->getPoint($collectionName, (string) $template->getId());
         if ($existingPoint !== null) {
             // Only search text changes require a paid embedding call; metadata changes reuse the stored vector.
             if (($existingPoint->payload['search_text'] ?? null) !== $searchText) {
+                $this->logger->info('Slides template vector re-embedding', ['resource_id' => $resourceId]);
                 $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
                 $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
                 return;
@@ -143,6 +148,7 @@ final class SlidesTemplateVectorIndexDomainService
             }
         }
         $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
+        $this->logger->info('Slides template vector stored', ['resource_id' => $resourceId]);
     }
 
     /** Search Qdrant with all public filters applied before returning IDs. */
