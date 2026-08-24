@@ -49,6 +49,7 @@
 			"fileTooLarge": "The file cannot exceed 100 MB",
 			"importFailed": "Import failed. Try again later.",
 			"invalidFile": "Select a .skill or .zip file",
+			"logoUploadFailed": "The icon could not be uploaded. Try again.",
 			"parseFailed": "The file could not be uploaded or parsed. Check it and try again."
 		},
 		"fields": {
@@ -58,14 +59,14 @@
 			"descriptionPlaceholder": "Enter a skill description",
 			"featured": "Featured",
 			"hidden": "Hidden",
-			"logo": "Icon URL",
-			"logoPlaceholder": "Enter an icon URL (optional)",
+			"logo": "Icon",
 			"name": "Skill name",
 			"namePlaceholder": "Enter a skill name",
 			"notFeatured": "Not featured",
 			"sortOrder": "Sort order",
 			"source": "Source",
 			"sourcePlaceholder": "Enter a source (optional)",
+			"uploadLogo": "Upload",
 			"version": "Version",
 			"visible": "Visible"
 		},

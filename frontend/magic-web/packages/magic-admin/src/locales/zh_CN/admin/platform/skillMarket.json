@@ -49,6 +49,7 @@
 			"fileTooLarge": "文件大小不能超过 100 MB",
 			"importFailed": "导入失败，请稍后重试",
 			"invalidFile": "请选择 .skill 或 .zip 文件",
+			"logoUploadFailed": "图标上传失败，请重试",
 			"parseFailed": "文件上传或解析失败，请检查文件后重试"
 		},
 		"fields": {
@@ -58,14 +59,14 @@
 			"descriptionPlaceholder": "请输入技能描述",
 			"featured": "精选",
 			"hidden": "隐藏",
-			"logo": "图标地址",
-			"logoPlaceholder": "请输入图标地址（可选）",
+			"logo": "图标",
 			"name": "技能名称",
 			"namePlaceholder": "请输入技能名称",
 			"notFeatured": "非精选",
 			"sortOrder": "排序",
 			"source": "来源",
 			"sourcePlaceholder": "请输入来源（可选）",
+			"uploadLogo": "上传",
 			"version": "版本号",
 			"visible": "显示"
 		},

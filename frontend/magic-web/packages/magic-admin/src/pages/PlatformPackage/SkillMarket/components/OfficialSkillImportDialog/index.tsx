@@ -77,7 +77,7 @@ function LocalizedField({
 	required,
 	textarea,
 }: LocalizedFieldProps) {
-	const value = Form.useWatch([field], form) as Lang | undefined
+	const value = Form.useWatch([field], form) as PlatformPackage.NameI18N | undefined
 	const updateLang = useMemoizedFn((next: Lang) => {
 		form.setFieldsValue({ [field]: { ...form.getFieldValue(field), ...next } })
 		if (required) form.setFields([{ name: [field, "en_US"], errors: [] }])
@@ -87,7 +87,7 @@ function LocalizedField({
 		<Form.Item label={label} required={required}>
 			<Flex gap={8} align="start">
 				<Form.Item
-					name={[field, "zh_CN"]}
+					name={[field, "default"]}
 					noStyle
 					rules={required ? [{ required: true, message: "" }] : undefined}
 				>
@@ -96,6 +96,14 @@ function LocalizedField({
 					) : (
 						<MagicInput placeholder={placeholder} />
 					)}
+				</Form.Item>
+				<Form.Item
+					name={[field, "zh_CN"]}
+					noStyle
+					hidden
+					rules={required ? [{ required: true, message: "" }] : undefined}
+				>
+					<MagicInput />
 				</Form.Item>
 				<Form.Item
 					name={[field, "en_US"]}
@@ -107,7 +115,7 @@ function LocalizedField({
 				</Form.Item>
 				<MultiLangSetting
 					required={required}
-					supportLangs={[LanguageType.en_US]}
+					supportLangs={[LanguageType.zh_CN, LanguageType.en_US]}
 					supportType={textarea ? "textarea" : "input"}
 					info={value}
 					onSave={updateLang}
@@ -128,8 +136,11 @@ const OfficialSkillImportDialog = memo(
 		const [packing, setPacking] = useState(false)
 		const [parsing, setParsing] = useState(false)
 		const [submitting, setSubmitting] = useState(false)
+		const [logoFile, setLogoFile] = useState<File | null>(null)
+		const [logoPreviewUrl, setLogoPreviewUrl] = useState("")
 		const [categories, setCategories] = useState<Category[]>([])
 		const submittingRef = useRef(false)
+		const logoObjectUrlRef = useRef<string | null>(null)
 
 		const { run: fetchCategories, loading: categoriesLoading } = useRequest(
 			() =>
@@ -143,18 +154,36 @@ const OfficialSkillImportDialog = memo(
 			},
 		)
 
-		const { upload, uploading } = useUpload<Upload.FileData>({
+		const { upload: uploadPackage, uploading: packageUploading } = useUpload<Upload.FileData>({
 			storageType: "private",
 			businessCode: "skill",
 			sts: true,
 			onProgress: (_, nextProgress) => setProgress(nextProgress),
 		})
+		// Keep the icon flow aligned with the frontend Skill import: upload a changed icon
+		// to the public Skill bucket only when the import is confirmed.
+		const { upload: uploadLogo, uploading: logoUploading } = useUpload<Upload.FileData>({
+			storageType: "public",
+			businessCode: "skill",
+			sts: true,
+		})
 
 		const categoryOptions = useMemo(() => getCategoryOptions(categories), [categories])
+
+		// Local previews use object URLs; revoke them whenever a selection is replaced or reset.
+		const clearLogoSelection = useMemoizedFn(() => {
+			if (logoObjectUrlRef.current) {
+				URL.revokeObjectURL(logoObjectUrlRef.current)
+				logoObjectUrlRef.current = null
+			}
+			setLogoFile(null)
+			setLogoPreviewUrl("")
+		})
 
 		const clearSelectedFile = useMemoizedFn(() => {
 			setParsed(null)
 			setProgress(0)
+			clearLogoSelection()
 			form.resetFields()
 		})
 
@@ -165,15 +194,23 @@ const OfficialSkillImportDialog = memo(
 			setPacking(false)
 			setParsing(false)
 			setSubmitting(false)
+			clearLogoSelection()
 			setCategories([])
 			submittingRef.current = false
 		})
+
+		useEffect(
+			() => () => {
+				if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current)
+			},
+			[],
+		)
 
 		useEffect(() => {
 			if (!rest.open) return
 			reset()
 			fetchCategories()
-		}, [reset, rest.open])
+		}, [fetchCategories, reset, rest.open])
 
 		const processSelectedFile = useMemoizedFn(async (selected?: File) => {
 			if (!selected) return
@@ -192,12 +229,13 @@ const OfficialSkillImportDialog = memo(
 			setProgress(0)
 			setParsing(true)
 			try {
-				const result = await upload([nextFile])
+				const result = await uploadPackage([nextFile])
 				if (!result.fullfilled.length) throw new Error("upload-failed")
 				const parsedResult = await PlatformPackageApi.parseOfficialSkillFile({
 					file_key: result.fullfilled[0].value.key,
 				})
 				setParsed(parsedResult)
+				setLogoPreviewUrl(parsedResult.logo || "")
 				form.setFieldsValue({
 					version: "1.0.0",
 					name_i18n: getLocalizedValue(parsedResult.name_i18n, parsedResult.package_name),
@@ -228,7 +266,7 @@ const OfficialSkillImportDialog = memo(
 		})
 
 		const handleFolderChange = useMemoizedFn(async (files: FileList) => {
-			if (!files.length || packing || parsing || uploading) return
+			if (!files.length || packing || parsing || packageUploading) return
 			clearSelectedFile()
 
 			const selectedFiles = Array.from(files)
@@ -258,12 +296,36 @@ const OfficialSkillImportDialog = memo(
 			if (archive) await processSelectedFile(archive)
 		})
 
+		const handleLogoChange = useMemoizedFn((files: FileList) => {
+			const selected = files[0]
+			if (!selected) return
+			if (!selected.type.startsWith("image/")) {
+				message.error(tCommon("file.onlySupportUploadImage"))
+				return
+			}
+
+			if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current)
+			const previewUrl = URL.createObjectURL(selected)
+			logoObjectUrlRef.current = previewUrl
+			setLogoFile(selected)
+			setLogoPreviewUrl(previewUrl)
+		})
+
 		const handleSubmit = useMemoizedFn(async () => {
 			if (!parsed || submittingRef.current) return
 			submittingRef.current = true
 			setSubmitting(true)
 			try {
 				const values = await form.validateFields()
+				let logo = values.logo?.trim() || undefined
+				if (logoFile) {
+					const logoResult = await uploadLogo([genFileData(logoFile)])
+					if (!logoResult.fullfilled.length) {
+						message.error(t("officialSkillImport.errors.logoUploadFailed"))
+						return
+					}
+					logo = logoResult.fullfilled[0].value.key
+				}
 				const result = await PlatformPackageApi.importOfficialSkill({
 					import_token: parsed.import_token,
 					version: String(values.version).trim(),
@@ -273,7 +335,7 @@ const OfficialSkillImportDialog = memo(
 						values.source_i18n,
 						t("officialSkillImport.defaultSource"),
 					),
-					logo: values.logo?.trim() || undefined,
+					logo,
 					category_ids: (values.category_ids ?? []).map(String),
 					publish_status: "PUBLISHED",
 					is_hidden: Boolean(values.is_hidden),
@@ -317,7 +379,13 @@ const OfficialSkillImportDialog = memo(
 				onCancel={handleCancel}
 				onOk={handleSubmit}
 				okButtonProps={{
-					disabled: !parsed || packing || parsing || uploading || submitting,
+					disabled:
+						!parsed ||
+						packing ||
+						parsing ||
+						packageUploading ||
+						logoUploading ||
+						submitting,
 					loading: submitting,
 				}}
 				{...rest}
@@ -368,8 +436,8 @@ const OfficialSkillImportDialog = memo(
 								<UploadButton
 									type="primary"
 									icon={<IconUpload size={16} />}
-									loading={packing || uploading || parsing}
-									disabled={packing || uploading || parsing || submitting}
+									loading={packing || packageUploading || parsing}
+									disabled={packing || packageUploading || parsing || submitting}
 									multiple={false}
 									accept={ACCEPT}
 									onFileChange={handleFileChange}
@@ -379,8 +447,8 @@ const OfficialSkillImportDialog = memo(
 								<UploadButton
 									type="default"
 									icon={<IconFolder size={16} />}
-									loading={packing || uploading || parsing}
-									disabled={packing || uploading || parsing || submitting}
+									loading={packing || packageUploading || parsing}
+									disabled={packing || packageUploading || parsing || submitting}
 									directory
 									onFileChange={handleFolderChange}
 								>
@@ -388,7 +456,7 @@ const OfficialSkillImportDialog = memo(
 								</UploadButton>
 							</Flex>
 						</Flex>
-						{packing || uploading || parsing ? (
+						{packing || packageUploading || parsing ? (
 							<Progress percent={progress} size="small" showInfo={false} />
 						) : null}
 					</div>
@@ -444,14 +512,57 @@ const OfficialSkillImportDialog = memo(
 										maxTagCount="responsive"
 									/>
 								</Form.Item>
-								<Form.Item label={t("officialSkillImport.fields.logo")} name="logo">
-									<MagicInput
-										placeholder={t(
-											"officialSkillImport.fields.logoPlaceholder",
-										)}
-									/>
+								<Form.Item label={t("officialSkillImport.fields.logo")}>
+									{/* Match the frontend Skill import affordance: square preview with upload below. */}
+									<Flex vertical align="center" gap={8} style={{ width: 128 }}>
+										<div
+											style={{
+												width: 128,
+												height: 128,
+												display: "grid",
+												placeItems: "center",
+												overflow: "hidden",
+												border: "1px solid #D9D9D9",
+												borderRadius: 8,
+												background: "#F5F5F5",
+											}}
+										>
+											{logoPreviewUrl ? (
+												<img
+													src={logoPreviewUrl}
+													alt={t("officialSkillImport.fields.logo")}
+													style={{
+														width: "100%",
+														height: "100%",
+														objectFit: "cover",
+													}}
+													draggable={false}
+												/>
+											) : (
+												<IconUpload
+													size={32}
+													color="#8C8C8C"
+													stroke={1.6}
+												/>
+											)}
+										</div>
+										<UploadButton
+											type="default"
+											icon={<IconUpload size={16} />}
+											loading={logoUploading}
+											disabled={logoUploading || submitting}
+											multiple={false}
+											accept="image/*"
+											onFileChange={handleLogoChange}
+										>
+											{t("officialSkillImport.fields.uploadLogo")}
+										</UploadButton>
+									</Flex>
 								</Form.Item>
-								<Flex align="end" gap={12} wrap="wrap">
+								<Form.Item name="logo" hidden>
+									<MagicInput />
+								</Form.Item>
+								<Flex align="center" gap={16} wrap="nowrap">
 									<Form.Item
 										name="is_hidden"
 										valuePropName="checked"
@@ -478,13 +589,22 @@ const OfficialSkillImportDialog = memo(
 											)}
 										/>
 									</Form.Item>
-									<Form.Item
-										label={t("officialSkillImport.fields.sortOrder")}
-										name="sort_order"
-										style={{ width: 220, marginBottom: 0 }}
+									<Flex
+										align="center"
+										gap={8}
+										style={{ width: 220, flexShrink: 0 }}
 									>
-										<Input type="number" min={0} style={{ width: "100%" }} />
-									</Form.Item>
+										<Typography.Text style={{ whiteSpace: "nowrap" }}>
+											{t("officialSkillImport.fields.sortOrder")}
+										</Typography.Text>
+										<Form.Item name="sort_order" noStyle>
+											<Input
+												type="number"
+												min={0}
+												style={{ width: "100%" }}
+											/>
+										</Form.Item>
+									</Flex>
 								</Flex>
 							</MagicForm>
 						</>
