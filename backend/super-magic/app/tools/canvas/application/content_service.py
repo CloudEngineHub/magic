@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -26,8 +25,6 @@ from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFi
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.domain.services import VideoEditContentValidator
-from app.tools.canvas.generation import GenerationCapabilityRegistry
-from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.repository import CanvasUnitOfWork
 
 
@@ -37,17 +34,13 @@ class ContentService:
     def __init__(
         self,
         unit_of_work: CanvasUnitOfWork,
-        generation_capabilities: GenerationCapabilityRegistry,
         content_preparation: ContentPreparationService,
         generation_submission_service,
-        estimate_guard: GenerationEstimateGuard,
     ):
         """显式绑定追加 Content 所需的事务、内容准备和生成提交服务。"""
         self.unit_of_work = unit_of_work
-        self.generation_capabilities = generation_capabilities
         self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
-        self.estimate_guard = estimate_guard
 
     async def add_contents(
         self,
@@ -88,22 +81,10 @@ class ContentService:
                         composition_video_edit_element_id=command.composition_video_edit_element_id,
                         content_id=new_canvas_id("content"),
                     )
-                if command.is_generated:
-                    capability = self.generation_capabilities.get(
-                        element.element_type,
-                        command.generation_parameters.model_id if command.generation_parameters else None,
-                    )
-                    if capability.billable:
-                        resolved_parameters = await self.estimate_guard.resolve_and_validate(
-                            project_path=project_path,
-                            item_ref=item.item_ref,
-                            production_rule=capability.production_rule,
-                            parameters=command.generation_parameters or GenerationParameters(),
-                        )
-                        command = replace(command, generation_parameters=resolved_parameters)
                 prepared = await self.content_preparation.prepare_imported(command, project_path)
                 prepared_contents.append(prepared)
                 command = prepared.command
+                materialized_asset_path = command.asset_path if command.is_imported else None
                 content = self.content_preparation.build(command, element.element_type)
                 if element.get_content(content.content_id) is not None:
                     raise CanvasDomainError("CONTENT_ALREADY_EXISTS", f"Content {content.content_id} already exists.")
@@ -123,6 +104,7 @@ class ContentService:
                     element_id=element.element_id,
                     content_id=content.content_id,
                     status=status,
+                    asset_path=materialized_asset_path,
                 ))
                 if command.is_generated:
                     generated.append(GenerationSubmissionCommand(

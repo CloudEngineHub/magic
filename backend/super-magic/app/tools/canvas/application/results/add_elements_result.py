@@ -14,6 +14,7 @@ class AddElementResultItem(CanvasResultItem):
     element_id: str
     content_id: str | None
     status: str
+    asset_path: str | None = None
     generation_task_id: str | None = None
     output_uri: str | None = None
     error: str | None = None
@@ -27,6 +28,7 @@ class AddElementResultItem(CanvasResultItem):
             "element_id": self.element_id,
             "content_id": self.content_id,
             "status": self.status,
+            "asset_path": self.asset_path,
             "generation_task_id": self.generation_task_id,
             "output_uri": self.output_uri,
             "error": self.error,

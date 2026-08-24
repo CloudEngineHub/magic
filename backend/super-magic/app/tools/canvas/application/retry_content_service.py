@@ -11,23 +11,19 @@ from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
-from app.tools.canvas.generation import GenerationCapabilityRegistry
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
-from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.repository import CanvasUnitOfWork
 
 
 class RetryContentService:
     """Canvas RetryContentService 用例服务。"""
 
-    def __init__(self, repository: CanvasRepositoryInterface, unit_of_work: CanvasUnitOfWork, generation_capabilities: GenerationCapabilityRegistry, generation_submission_service, estimate_guard: GenerationEstimateGuard):
+    def __init__(self, repository: CanvasRepositoryInterface, unit_of_work: CanvasUnitOfWork, generation_submission_service):
         """显式绑定重试用例所需的仓储、事务、生成能力和提交服务。"""
         self.repository = repository
         self.unit_of_work = unit_of_work
-        self.generation_capabilities = generation_capabilities
         self.generation_submission_service = generation_submission_service
-        self.estimate_guard = estimate_guard
 
     async def retry_content(self, project_path: str, items: Sequence[RetryContentCommand], tool_context: ToolContext | None = None) -> RetryContentsResult:
         """校验失败 Content 的受控重试边界，并复用原 Content ID。"""
@@ -94,14 +90,6 @@ class RetryContentService:
                 retry_count = int(detail.get("retryCount", 0))
                 if retry_count >= 2:
                     raise CanvasDomainError("CONTENT_RETRY_LIMIT_REACHED", "This Content has reached the retry limit.")
-                capability = self.generation_capabilities.get(element.element_type, parameters.get("model_id"))
-                if capability.billable:
-                    await self.estimate_guard.validate(
-                        project_path=project_path,
-                        item_ref=item.item_ref,
-                        production_rule=capability.production_rule,
-                        parameters=GenerationParameters.from_dict(parameters),
-                    )
                 previous_status = content.fields.generation_status
                 if not isinstance(content.fields, GeneratedMediaContentFields):
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only generated media Content can be retried.")

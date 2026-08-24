@@ -108,10 +108,7 @@ class ElementDetailsQueryService:
                 content_id=content.content_id,
                 status=content.fields.generation_status,
                 asset_path=content.fields.asset_path,
-                error_message=(
-                    "Generation failed; ask the user whether to retry."
-                    if content.fields.error_message else None
-                ),
+                error_message=content.fields.error_message,
                 source=detail.get("source"),
                 retry_count=int(detail.get("retryCount", 0)),
                 generation_task_id=detail.get("generationTaskId"),

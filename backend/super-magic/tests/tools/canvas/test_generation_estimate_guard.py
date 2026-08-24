@@ -130,44 +130,10 @@ async def test_guard_rejects_skip_and_estimate_id_together():
         )
 
 
-def test_generated_video_accepts_estimate_reference_without_repeated_prompt():
-    """确认后的生成输入可以只携带 estimate_id，由服务端恢复请求。"""
-    content = ContentInput(
-        source="generated",
-        content_type="video",
-        estimate_id="estimate-test-1",
-    )
-
-    assert content.prompt is None
-    assert content.estimate_id == "estimate-test-1"
-
-
-def test_generated_video_can_explicitly_skip_point_estimate():
-    """生成视频可以显式声明跳过积分预估。"""
-    content = ContentInput(
-        source="generated",
-        content_type="video",
-        prompt="mock video",
-        skip_point_estimate=True,
-    )
-
-    assert content.to_command().generation_parameters.skip_point_estimate is True
-
-
-def test_skip_point_estimate_is_restricted_to_generated_video():
-    """跳过积分预估不能用于图片或非生成 Content。"""
-    with pytest.raises(ValueError, match="only allowed for generated video"):
+def test_generated_video_requires_prompt_without_estimate_protocol():
+    """生成工具必须携带实际提示词，不能依赖估算凭证恢复请求。"""
+    with pytest.raises(ValueError, match="requires prompt"):
         ContentInput(
             source="generated",
-            content_type="image",
-            prompt="mock image",
-            name="mock image",
-            skip_point_estimate=True,
-        )
-    with pytest.raises(ValueError, match="only allowed for generated video"):
-        ContentInput(
-            source="imported",
             content_type="video",
-            asset_path="./videos/mock.mp4",
-            skip_point_estimate=True,
         )

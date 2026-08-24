@@ -2,13 +2,13 @@
 
 import asyncio
 import hashlib
-import re
 from pathlib import Path
 from stat import S_ISREG
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway, MaterializedCanvasAsset
 from app.tools.canvas.infrastructure.assets.project_asset_path_resolver import ProjectAssetPathResolver
+from app.utils.asset_filename_policy import AssetFilenamePolicy
 from app.utils.async_file_utils import async_copy_contents, async_exists, async_stat, async_unlink
 
 _MEDIA_DIRECTORY_BY_TYPE = {
@@ -21,9 +21,6 @@ _MEDIA_EXTENSIONS_BY_TYPE = {
     "video": {".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"},
     "audio": {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"},
 }
-_SAFE_FILENAME_PATTERN = re.compile(r"[^a-zA-Z0-9._-]+")
-
-
 class WorkspaceAssetGateway(AssetGateway):
     """在 Canvas 工作区内解析、校验并物化素材文件。"""
 
@@ -69,19 +66,23 @@ class WorkspaceAssetGateway(AssetGateway):
             )
 
         digest = await asyncio.to_thread(self._content_digest, source)
-        filename = self._safe_filename(f"{digest}{suffix}")
+        filename = AssetFilenamePolicy.sanitize(source.name)
         destination = canonical_root / filename
-        if await async_exists(destination):
+        while await async_exists(destination):
             if not S_ISREG((await async_stat(destination)).st_mode):
                 raise CanvasDomainError(
                     "ASSET_DESTINATION_INVALID",
                     f"Canvas asset destination is not a regular file: {destination}.",
                 )
-            return MaterializedCanvasAsset(
-                project_uri=f"./{target_directory}/{filename}",
-                absolute_path=destination,
-                created=False,
-            )
+            existing_digest = await asyncio.to_thread(self._content_digest, destination)
+            if existing_digest == digest:
+                return MaterializedCanvasAsset(
+                    project_uri=f"./{target_directory}/{filename}",
+                    absolute_path=destination,
+                    created=False,
+                )
+            filename = AssetFilenamePolicy.unique_name(filename)
+            destination = canonical_root / filename
 
         created = await self._copy_to_destination(source, destination)
         return MaterializedCanvasAsset(
@@ -159,9 +160,3 @@ class WorkspaceAssetGateway(AssetGateway):
             while chunk := stream.read(1024 * 1024):
                 digest.update(chunk)
         return digest.hexdigest()
-
-    @staticmethod
-    def _safe_filename(value: str) -> str:
-        """将素材名称收窄为稳定的项目文件名。"""
-        normalized = _SAFE_FILENAME_PATTERN.sub("_", value).strip("._")
-        return normalized or "asset"

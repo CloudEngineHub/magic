@@ -12,7 +12,7 @@ Use this reference for a basic Canvas video request when the user has not asked 
 6. Keep reference paths as generation inputs only. Do not convert them into business Connections.
 7. Wait for an asynchronous generation task immediately, preserve its exact IDs on timeout, and query the completed Element before presenting the result.
 
-Video billing remains in force. Point estimation is required by default and may be skipped only when the user explicitly says in the current request that estimation is unnecessary and accepts an unknown point cost. Do not infer this from urgency, "generate directly", "start now", or prior approval; do not bypass application-level validation.
+Video billing remains in force. Before generating, call `estimate_canvas_content_points`, show the estimated points, and obtain explicit user confirmation. This is a workflow instruction; the estimate tool and generation tool are independent, and generation does not validate an estimate ID.
 
 If the user later asks for professional video production, a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition, stop the basic path and continue with `references/professional-video-production.md` using the existing results.
 
@@ -29,14 +29,12 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 ## Generation inputs
 
-For a generated video Content, the supported generation fields are `prompt`, `model_id`, `estimate_id`, `skip_point_estimate`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
+For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
 
 Before submitting, validate the complete nested shape and keep the operation identity stable:
 
 ```python
 from sdk.tool import tool
-
-confirmed_estimate_id = "estimate-id-from-result-content"
 
 result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
@@ -49,7 +47,6 @@ result = tool.call("add_canvas_elements", {
             "source": "generated",
             "content_type": "video",
             "name": "Product promotional video",
-            "estimate_id": confirmed_estimate_id,
         },
     }],
 })
@@ -65,13 +62,12 @@ print(result.content)
 - Do not put file paths in the prompt. Paths belong in their corresponding reference arrays.
 - Use `frame_start_path` and optional `frame_end_path` for a start/end-frame transition; do not duplicate those files in `reference_image_paths`.
 - Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit.
-- Set `skip_point_estimate=true` only when the user explicitly asked in the current request to skip point estimation and accepted an unknown point cost. Never combine it with `estimate_id`; otherwise use the normal estimate and confirmation workflow.
 
 ## Code Mode example: estimate
 
-The estimate is side-effect free. Build and freeze the exact final request first, including all reference binding tokens and prompt constraints, then show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message. The only exception is an explicit current-request instruction to skip estimation with acceptance of unknown point cost; in that case call generation directly with `skip_point_estimate=true`. After confirmation, reuse the exact same `item_ref` and request fields without rewriting the prompt. If the prompt, reference list, or any billable field changes, call the estimate again and request a new confirmation; never let `POINT_ESTIMATE_MISMATCH` become a second, avoidable confirmation round.
+The estimate is side-effect free. Build and freeze the exact final request first, including all reference binding tokens and prompt constraints, then show `estimate.content` to the user and end the turn. Do not submit generation until the user confirms the parameters and points in a later message. After confirmation, call generation with the same request fields; do not pass an estimate ID. If the prompt, reference list, or any billable field changes, call the estimate again and request a new confirmation. The generation tool does not compare the request with the estimate.
 
-For a retry of failed billable Content, keep the original generation request's `item_ref` unchanged. A retry is an operation on the existing Element and Content, not a new batch item. If a new estimate is required, use the new `estimate_id` with that same original `item_ref`; never rename it with a retry suffix.
+For a retry of failed Content, keep the original generation request's `item_ref` unchanged. A retry is an operation on the existing Element and Content, not a new batch item. The retry tool does not accept an estimate ID.
 
 ```python
 from sdk.tool import tool
@@ -100,12 +96,10 @@ print(estimate.content)
 
 ## Code Mode example: generate after confirmation
 
-Use the same `item_ref` and generation parameters as the estimate. Copy the exact `estimate_id` shown in `estimate.content`, including the prompt string byte-for-byte. You may omit the billable generation fields and provide only the confirmed `estimate_id` and `item_ref`; the server will restore the frozen request. Do not mix a partial request with changed billable fields. Basic Canvas video generation deliberately omits `connections` and uses `row_incremental` layout.
+Use the same `item_ref` and generation parameters as the estimate, including the prompt string byte-for-byte. The generation call does not need the estimate result ID and must contain the actual generation parameters. Basic Canvas video generation deliberately omits `connections` and uses `row_incremental` layout.
 
 ```python
 from sdk.tool import tool
-
-confirmed_estimate_id = "estimate-id-from-result-content"
 
 result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
@@ -125,7 +119,6 @@ result = tool.call("add_canvas_elements", {
                 "Premium commercial lighting, stable motion, no added text or watermark."
             ),
             "model_id": "model-from-media-model-info",
-            "estimate_id": confirmed_estimate_id,
             "reference_image_paths": ["Demo/images/product.png"],
             "duration_seconds": 5,
             "aspect_ratio": "9:16",

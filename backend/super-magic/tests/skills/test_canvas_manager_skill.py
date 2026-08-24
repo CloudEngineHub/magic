@@ -122,16 +122,16 @@ def test_skill_freezes_estimated_request_and_routes_provider_assets() -> None:
     assert "copy those parameters byte-for-byte" in content
 
 
-def test_canvas_agent_requires_explicit_current_request_to_skip_point_estimate() -> None:
-    """跳过积分预估必须来自用户当前请求的明确主动授权。"""
+def test_canvas_agent_requires_estimate_before_generation_without_protocol_coupling() -> None:
+    """Skill 必须要求生成前估算，但不能把估算凭证耦合到生成协议。"""
     agent = (SKILL_PATH.parent.parent.parent / "canvas.agent").read_text(encoding="utf-8")
     skill = SKILL_PATH.read_text(encoding="utf-8")
     video_reference = (SKILL_PATH.parent / "references" / "video-generation.md").read_text(encoding="utf-8")
 
+    assert "estimate_canvas_content_points" in skill
+    assert "estimate_canvas_content_points" in video_reference
+    assert "point-estimation" in agent
     for content in (agent, skill, video_reference):
-        assert "skip_point_estimate=true" in content
-        assert "current request" in content
-        assert "unknown point cost" in content
-    assert "never prompt or steer the user to opt out" in agent
-    assert '"generate directly"' in agent
-    assert '"start now"' in agent
+        assert "estimate ID" in content or "estimate result ID" in content or "estimate_id" in content
+    assert "does not require or validate an estimate ID" in agent
+    assert "does not receive or validate an `estimate_id`" in skill

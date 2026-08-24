@@ -26,7 +26,7 @@ Use this mode only when the user explicitly asks for a simple, direct, or ordina
 
 1. Understand all submitted assets and identify the subject, product treatment, scene, visual style, motion, pacing, audio expectation, duration, aspect ratio, resolution, model, and artifact exclusions.
 2. Present one complete creative target and the final video prompt in readable Markdown. Ask one concise confirmation question after presenting it; ask again after any material revision.
-3. Freeze the complete billable request, estimate points, and wait for explicit confirmation unless the user explicitly opts out in the current request and accepts an unknown cost.
+3. Freeze the complete billable request, estimate points, and wait for explicit confirmation before submission.
 4. After confirmation, create one `video` Element with `add_canvas_elements`, use `dependency_flow` layout for the production relation, put all used reference paths in the corresponding arrays, and add Connections only for submitted Canvas Elements that directly contribute to the final video. Reference-only assets stay in the arrays without a Connection.
 5. Wait immediately on any returned generation task, query the completed Element, present the candidate, and select its main Content only after user confirmation.
 6. For a revision, append a candidate to the same Video Element with `add_canvas_contents`; do not create a duplicate logical Element. If the user asks for a storyboard, staged approvals, BGM replacement, or separate composition, preserve the current result and continue in detailed staged mode.
@@ -72,7 +72,6 @@ result = tool.call("add_canvas_elements", {
             "content_type": "video",
             "name": "Product launch video",
             "prompt": "Create the confirmed 15-second product video from [image1] and [image2]. Preserve product identity and scene details. Smooth commercial motion, no text, watermark, captions, or interface artifacts.",
-            "estimate_id": "confirmed-estimate-id",
             "model_id": "model-from-media-model-info",
             "input_mode": "image_reference",
             "task": "generate",
@@ -105,8 +104,8 @@ Use this mode only when the user explicitly asks for detailed, fine-grained, sta
 
 1. Understand the submitted assets and identify the intended subject, scene, motion, style, duration, aspect ratio, resolution, output model, and audio expectations.
 2. Present one complete creative target and the final video prompt before generating anything. Ask one concise confirmation question for unresolved material choices.
-3. By default, before calling `estimate_canvas_content_points`, freeze the complete final prompt and request, including every reference binding token and prompt constraint. Call the estimate with that exact request, then wait for explicit confirmation of the estimate. Only when the user explicitly says in the current request that estimation is unnecessary and accepts an unknown point cost may you skip the estimate and set `skip_point_estimate=true`.
-4. After the estimate is confirmed, call `add_canvas_elements` once with one `video` Element. Carry the returned `estimate_id` unchanged in the generated Content and copy the estimated request byte-for-byte. Do not add `[imageN]` bindings, watermark instructions, or other prompt text after confirmation. If anything changes, estimate again and ask for confirmation again before generation.
+3. Before calling `estimate_canvas_content_points`, freeze the complete final prompt and request, including every reference binding token and prompt constraint. Call the estimate with that exact request, then wait for explicit confirmation of the estimate.
+4. After the estimate is confirmed, call `add_canvas_elements` once with one `video` Element and copy the estimated request byte-for-byte. Do not add `[imageN]` bindings, watermark instructions, or other prompt text after confirmation. If anything changes, estimate again and ask for confirmation again before generation. The generation tool does not receive or validate an estimate ID.
 5. When a submitted Canvas Element is a direct business predecessor, add its exact Element ID in the new video's `connections`. Reference paths alone never create Connections.
 6. Call `wait_canvas_generation` immediately when the generated Content returns a task ID.
 7. Query the generated Element, present the candidate, and select its main Content only after the user confirms it.
@@ -115,7 +114,7 @@ Do not create a storyboard, initialization image, first frame, `video-edit`, or 
 
 ### Direct professional mode references
 
-For a generated video Content, use `prompt`, `model_id`, `estimate_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark` as supported by the current `<media_model_info>`.
+For a generated video Content, use `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark` as supported by the current `<media_model_info>`.
 
 Bind reference assets in the prompt by array order:
 
@@ -329,7 +328,6 @@ result = tool.call("add_canvas_elements", {
             "content_type": "video",
             "name": "Opening shot video",
             "prompt": "Animate the confirmed first frame [image1] with stable subject identity, natural motion, and the approved camera behavior. No text or watermark.",
-            "estimate_id": "confirmed-estimate-id",
             "model_id": "model-from-media-model-info",
             "input_mode": "image_reference",
             "task": "generate",
@@ -435,7 +433,6 @@ tool.call("add_canvas_elements", {
             "content_type": "video",
             "name": "Product launch video",
             "prompt": "Show the confirmed product [image1] in a premium studio scene with a slow push-in, stable product identity, and no text or watermark.",
-            "estimate_id": "confirmed-estimate-id",
             "reference_image_paths": ["Demo/images/product.png"],
         },
     }],

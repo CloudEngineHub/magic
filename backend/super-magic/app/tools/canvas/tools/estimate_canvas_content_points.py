@@ -15,6 +15,9 @@ from app.tools.canvas.tools.add_canvas_elements import VideoInputMode
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+
+SdkSnippetTimeoutRegistry.register("estimate_canvas_content_points", min_timeout=600)
 
 
 class VideoPointEstimateItemInput(BaseToolParams):
@@ -166,7 +169,7 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
                 lines.extend([
                     f"- Total video generation points: {result.total_points}",
                     f"- Estimate ID: {result.estimate_id}",
-                    "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same item_ref and estimate_id; the server can restore the frozen request, or you may resend the exact same request.",
+                    "Next: ask the user to confirm the parameters and estimated points. After confirmation, submit video generation with the same frozen parameters. The estimate ID is informational and is not required by the generation tool.",
                 ])
             else:
                 lines = ["Video generation point estimate is unavailable.", f"- Rule: {params.production_rule}"]

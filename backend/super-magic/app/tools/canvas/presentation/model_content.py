@@ -204,9 +204,7 @@ def items_content(
             value = item.get(key)
             if value is None or value == []:
                 continue
-            if key == "error":
-                value = "Generation failed; report the failure and retry only after explicit user confirmation."
-            elif key in {"query_error", "persistence_error"}:
+            if key in {"query_error", "persistence_error"}:
                 value = "Generation status is temporarily unavailable; continue with the same task ID."
             if isinstance(value, (list, dict)):
                 rendered = json.dumps(value, ensure_ascii=False, separators=(",", ":"))

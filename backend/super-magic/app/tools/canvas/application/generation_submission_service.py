@@ -19,7 +19,6 @@ from app.tools.canvas.generation import (
     GenerationTaskRepository,
 )
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
-from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.repository import CanvasUnitOfWork
 
 TGeneratedItem = TypeVar("TGeneratedItem", bound=CanvasResultItem)
@@ -35,7 +34,6 @@ class GenerationSubmissionService:
         generation_tasks: GenerationTaskRepository,
         generation_execution: GenerationExecutionStrategyRegistry,
         generation_result_applier: CanvasGenerationResultApplier,
-        estimate_guard: GenerationEstimateGuard | None = None,
         element_sizing: CanvasElementSizingService | None = None,
     ) -> None:
         """显式绑定生成提交所需的事务、能力、执行、任务和结果端口。"""
@@ -44,7 +42,6 @@ class GenerationSubmissionService:
         self.generation_tasks = generation_tasks
         self.generation_execution = generation_execution
         self.generation_result_applier = generation_result_applier
-        self.estimate_guard = estimate_guard
         self.element_sizing = element_sizing
 
     async def submit_generated(
@@ -63,13 +60,6 @@ class GenerationSubmissionService:
         for submission_item in generated:
             parameters = submission_item.parameters
             capability = self.generation_capabilities.get(submission_item.element_type, parameters.model_id)
-            if self.estimate_guard is not None and capability.billable:
-                parameters = await self.estimate_guard.resolve_and_validate(
-                    project_path=project_path,
-                    item_ref=submission_item.item_ref or "-",
-                    production_rule=capability.production_rule,
-                    parameters=parameters,
-                )
             parameter_payload = parameters.to_dict()
             request = GenerationRequest(
                 project_path=project_path,

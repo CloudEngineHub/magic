@@ -13,8 +13,6 @@ class GenerationParametersOverride:
 
     prompt: str | None = None
     model_id: str | None = None
-    estimate_id: str | None = None
-    skip_point_estimate: bool | None = None
     name: str | None = None
     size: str | None = None
     reference_images: tuple[str, ...] | None = None
@@ -39,8 +37,6 @@ class GenerationParametersOverride:
         values = {
             "prompt": self.prompt,
             "model_id": self.model_id,
-            "estimate_id": self.estimate_id,
-            "skip_point_estimate": self.skip_point_estimate,
             "name": self.name,
             "size": self.size,
             "reference_images": list(self.reference_images) if self.reference_images is not None else None,

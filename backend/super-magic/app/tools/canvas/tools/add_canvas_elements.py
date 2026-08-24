@@ -45,6 +45,9 @@ from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+
+SdkSnippetTimeoutRegistry.register("add_canvas_elements", min_timeout=600)
 
 CanvasElementType = Literal[
     "text",
@@ -274,12 +277,6 @@ Workspace path of imported media. When the file is outside the current Canvas pr
     audio_sequence: list[str] | None = Field(None, max_length=1, alias="audioSequence")
     output: VideoEditOutputInput | None = None
     model_id: str | None = None
-    estimate_id: str | None = None
-    skip_point_estimate: bool = Field(
-        False,
-        description="""<!--zh: 仅当用户在当前请求中明确表示不需要积分预估、接受未知积分消耗并要求直接生成视频时设为 true。不得根据“直接生成”“开始吧”、催促或历史授权推断。仅适用于 generated video，不能与 estimate_id 同时使用。-->
-Set true only when the user explicitly says in the current request to skip point estimation, accepts an unknown point cost, and asks to generate the video directly. Never infer this from urgency, phrases such as \"generate directly\" or \"start now\", or prior authorization. Only valid for generated video and mutually exclusive with estimate_id.""",
-    )
     name: str | None = Field(
         None,
         min_length=1,
@@ -309,8 +306,6 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     @model_validator(mode="after")
     def validate_content_contract(self) -> "ContentInput":
         """按来源和 Content 类型拒绝不确定字段组合。"""
-        if self.skip_point_estimate and not (self.source == "generated" and self.content_type == "video"):
-            raise ValueError("skip_point_estimate is only allowed for generated video Content")
         if self.video_edit_element_id is not None and self.task != "compose":
             raise ValueError("videoEditElementId is only allowed when task=compose")
         if self.content_type == "video-edit":
@@ -338,15 +333,10 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                     raise ValueError("task=compose requires input_mode=video_edit")
                 if self.prompt is not None:
                     raise ValueError("task=compose does not accept prompt")
-                if self.estimate_id or self.skip_point_estimate:
-                    raise ValueError("task=compose does not use point estimation")
-            estimate_bound_video = self.content_type == "video" and bool(self.estimate_id)
-            if self.task != "compose" and not self.prompt and not estimate_bound_video:
-                raise ValueError("source=generated requires prompt unless estimate_id is provided")
+            if self.task != "compose" and not self.prompt:
+                raise ValueError("source=generated requires prompt")
             if self.content_type == "image" and (not self.name or not self.name.strip()):
                 raise ValueError("source=generated image requires name")
-            if self.skip_point_estimate and self.estimate_id:
-                raise ValueError("skip_point_estimate cannot be combined with estimate_id")
             if self.asset_path is not None:
                 raise ValueError("asset_path is only allowed when source=imported")
         elif self.source == "imported":
@@ -436,8 +426,6 @@ Reference image paths inside the current Canvas project. Use paths relative to t
         return GenerationParameters(
             prompt=self.prompt or "",
             model_id=self.model_id,
-            estimate_id=self.estimate_id,
-            skip_point_estimate=self.skip_point_estimate,
             name=self.name,
             size=self.size,
             reference_images=tuple(self.reference_images),

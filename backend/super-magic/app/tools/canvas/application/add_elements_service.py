@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -22,9 +21,7 @@ from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFi
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
 from app.tools.canvas.domain.services import ElementReferenceResolver, VideoEditContentValidator
-from app.tools.canvas.generation import GenerationCapabilityRegistry
 from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
-from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
@@ -33,16 +30,14 @@ from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrate
 class AddElementsService:
     """Canvas AddElementsService 用例服务。"""
 
-    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, estimate_guard: GenerationEstimateGuard, element_sizing: CanvasElementSizingService, video_composition_service: VideoCompositionService):
+    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, element_sizing: CanvasElementSizingService, video_composition_service: VideoCompositionService):
         """显式绑定新增 Element 所需的端口、策略和生成提交服务。"""
         self.unit_of_work = unit_of_work
         self.layout_strategies = layout_strategies
         self.connection_strategies = connection_strategies
-        self.generation_capabilities = generation_capabilities
         self.element_references = element_references
         self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
-        self.estimate_guard = estimate_guard
         self.element_sizing = element_sizing
         self.video_composition_service = video_composition_service
 
@@ -102,6 +97,7 @@ class AddElementsService:
                             "Composition Content requires a video Element and video-edit source.",
                         )
                 generated_content_id = None
+                materialized_asset_path: str | None = None
                 if content is not None:
                     if content.content_id is None:
                         content = ContentCommand(
@@ -113,22 +109,10 @@ class AddElementsService:
                             composition_video_edit_element_id=content.composition_video_edit_element_id,
                             content_id=new_canvas_id("content"),
                         )
-                    if content.is_generated:
-                        capability = self.generation_capabilities.get(
-                            element.element_type,
-                            content.generation_parameters.model_id if content.generation_parameters else None,
-                        )
-                        if capability.billable and not content.is_composition:
-                            resolved_parameters = await self.estimate_guard.resolve_and_validate(
-                                project_path=project_path,
-                                item_ref=item.item_ref,
-                                production_rule=capability.production_rule,
-                                parameters=content.generation_parameters or GenerationParameters(),
-                            )
-                            content = replace(content, generation_parameters=resolved_parameters)
                     prepared = await self.content_preparation.prepare_imported(content, project_path)
                     prepared_contents.append(prepared)
                     content = prepared.command
+                    materialized_asset_path = content.asset_path if content.is_imported else None
                     built_content = self.content_preparation.build(content, element.element_type)
                     element.contents.append(built_content)
                     if isinstance(built_content.fields, VideoEditContentFields):
@@ -170,6 +154,7 @@ class AddElementsService:
                     element_id=element_id,
                     content_id=generated_content_id or (element.contents[0].content_id if element.contents else None),
                     status="pending" if generated_content_id else "completed",
+                    asset_path=materialized_asset_path,
                 ))
             for item in item_list:
                 current_item_ref = item.item_ref

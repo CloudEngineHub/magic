@@ -13,6 +13,9 @@ from app.tools.canvas.production.contracts import ImageSearchTask
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+
+SdkSnippetTimeoutRegistry.register("search_canvas_image_candidates", min_timeout=600)
 
 
 class SearchImageTaskInput(BaseToolParams):

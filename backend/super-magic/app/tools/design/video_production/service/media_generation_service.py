@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -20,12 +21,12 @@ from app.tools.design.utils.magic_project_design_parser import (
     VideoElement,
     flatten_all_elements,
 )
+from app.utils.asset_filename_policy import AssetFilenamePolicy
 from app.utils.async_file_utils import (
     async_copy2,
     async_exists,
     async_is_file,
     async_realpath,
-    async_stat,
 )
 
 
@@ -399,27 +400,41 @@ class MediaGenerationService:
             raise ValueError(f"Reference media path has multiple workspace candidates: {value}")
         raise ValueError(f"Reference media file does not exist in the workspace: {value}")
 
-    @staticmethod
+    @classmethod
     async def _copy_to_project_media(
+        cls,
         source_path: Path,
         media_type: MediaSourceType,
         project_path: Path,
         workspace_root: Path,
     ) -> Path:
         """把项目外素材复制到类型对应目录，并避免覆盖已有文件。"""
-        source_stat = await async_stat(source_path)
-        source_relative = source_path.relative_to(workspace_root).as_posix()
-        fingerprint = sha256(
-            f"{source_relative}:{source_stat.st_size}:{source_stat.st_mtime_ns}".encode("utf-8")
-        ).hexdigest()[:10]
+        filename = AssetFilenamePolicy.sanitize(source_path.name)
         destination = (
             project_path
             / MEDIA_DIRECTORY_BY_TYPE[media_type]
-            / f"{source_path.stem}-{fingerprint}{source_path.suffix.lower()}"
+            / filename
         )
+        if await async_exists(destination):
+            source_digest = await asyncio.to_thread(cls._content_digest, source_path)
+            destination_digest = await asyncio.to_thread(cls._content_digest, destination)
+            while source_digest != destination_digest:
+                destination = destination.with_name(AssetFilenamePolicy.unique_name(filename))
+                if not await async_exists(destination):
+                    break
+                destination_digest = await asyncio.to_thread(cls._content_digest, destination)
         if not await async_exists(destination):
             await async_copy2(source_path, destination)
         return await async_realpath(destination)
+
+    @staticmethod
+    def _content_digest(path: Path) -> str:
+        """以分块读取计算素材内容指纹，仅用于判断同名文件是否相同。"""
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     @staticmethod
     async def _resolve_display_size(

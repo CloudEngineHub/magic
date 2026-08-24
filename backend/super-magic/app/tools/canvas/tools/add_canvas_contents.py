@@ -23,6 +23,9 @@ from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+
+SdkSnippetTimeoutRegistry.register("add_canvas_contents", min_timeout=600)
 
 
 class AddContentInput(BaseToolParams):

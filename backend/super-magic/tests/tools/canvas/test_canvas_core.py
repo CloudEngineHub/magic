@@ -504,11 +504,49 @@ async def test_imported_asset_is_materialized_idempotently_and_reusable(tmp_path
     second_uri = second_element.get_content(second_element.main_content_id).fields.src
 
     assert first_uri == second_uri
-    assert first_uri.startswith("./images/")
+    assert first_uri == "./images/mock.png"
+    assert first_result["items"][0]["asset_path"] == first_uri
+    assert second["items"][0]["asset_path"] == first_uri
     assert asset.exists()
     assert len(list((tmp_path / "mock-project" / "images").glob("*"))) == 1
     details = await repository.read_sidecar_runtime("mock-project")
     assert details["elements"][first.element_id]["contentDetails"][first.main_content_id]["assetPath"] == first_uri
+
+
+@pytest.mark.asyncio
+async def test_imported_asset_conflict_keeps_original_name_and_adds_unique_suffix(tmp_path) -> None:
+    """同名不同内容的导入素材不覆盖旧文件，并返回带唯一后缀的新路径。"""
+    first_asset = tmp_path / "uploads" / "mock.png"
+    first_asset.parent.mkdir(parents=True)
+    first_asset.write_bytes(b"mock-image-one")
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+    first = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "asset-one",
+            "element_type": "image",
+            "content": {"source": "imported", "content_type": "image", "asset_path": "uploads/mock.png"},
+        }],
+    )
+
+    first_asset.write_bytes(b"mock-image-two")
+    second = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "asset-two",
+            "element_type": "image",
+            "content": {"source": "imported", "content_type": "image", "asset_path": "uploads/mock.png"},
+        }],
+    )
+
+    first_path = first["items"][0]["asset_path"]
+    second_path = second["items"][0]["asset_path"]
+    assert first_path == "./images/mock.png"
+    assert second_path.startswith("./images/mock-")
+    assert second_path.endswith(".png")
+    assert len(list((tmp_path / "mock-project" / "images").glob("*.png"))) == 2
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ from app.tools.canvas.presentation import (
     canvas_remark,
     error_result,
     items_content,
+    summarize_items,
     summarize_tool_result,
 )
 from app.tools.canvas.tools.add_canvas_elements import VideoInputMode
@@ -22,6 +23,9 @@ from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application, resolve_element_types
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+
+SdkSnippetTimeoutRegistry.register("retry_canvas_content_generation", min_timeout=600)
 
 
 class GenerationOverrideInput(BaseToolParams):
@@ -31,8 +35,6 @@ class GenerationOverrideInput(BaseToolParams):
 
     prompt: str | None = Field(None, min_length=1)
     model_id: str | None = None
-    estimate_id: str | None = None
-    skip_point_estimate: bool | None = None
     name: str | None = None
     size: str | None = None
     reference_images: list[str] | None = None
@@ -60,8 +62,6 @@ class GenerationOverrideInput(BaseToolParams):
         return GenerationParametersOverride(
             prompt=values.get("prompt"),
             model_id=values.get("model_id"),
-            estimate_id=values.get("estimate_id"),
-            skip_point_estimate=values.get("skip_point_estimate"),
             name=values.get("name"),
             size=values.get("size"),
             reference_images=values.get("reference_images"),
@@ -225,15 +225,16 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
         builder = CanvasToolDetailBuilder(self.name, "content_retry", result, arguments)
         builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
         for item in data.get("items", []):
-            builder.add_item(
-                {
-                    "item_ref": item.get("item_ref", "-"),
-                    "status": item.get("status", "-"),
-                    "element_id": item.get("element_id", "-"),
-                    "content_id": item.get("content_id", "-"),
-                    "task_id": item.get("generation_task_id", "-"),
-                }
-            )
+            fields = {
+                "item_ref": item.get("item_ref", "-"),
+                "status": item.get("status", "-"),
+                "element_id": item.get("element_id", "-"),
+                "content_id": item.get("content_id", "-"),
+                "task_id": item.get("generation_task_id", "-"),
+            }
+            if item.get("error"):
+                fields["error"] = item["error"]
+            builder.add_item(fields)
         return builder.build()
 
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
@@ -247,13 +248,21 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
                 commands,
                 tool_context=tool_context,
             )
+            result_data = result.to_dict()
+            batch_status = summarize_items(result_data.get("items"), fallback_ok=True)
+            summary = {
+                "succeeded": "Canvas failed Content retry completed.",
+                "processing": "Canvas failed Content retry started.",
+                "partial": "Canvas failed Content retry partially failed.",
+                "failed": "Canvas failed Content retry failed.",
+            }.get(batch_status.status, "Canvas failed Content retry completed.")
             return batch_tool_result(
                 content=items_content(
-                    "Canvas failed Content retry started.",
-                    result.to_dict(),
+                    summary,
+                    result_data,
                     "call query_canvas_element_details with the returned element_id values to verify the retried Content",
                 ),
-                data=result.to_dict(),
+                data=result_data,
             )
         except Exception as error:
             return error_result(error)

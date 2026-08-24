@@ -2069,7 +2069,7 @@ async def test_initialization_image_generation_materializes_and_registers_upload
     reference_path = target.get_active_content().fields["generateImageRequest"][
         "reference_images"
     ][0]
-    assert reference_path.startswith(f"{project_name}/images/upload-")
+    assert reference_path == f"{project_name}/images/upload.png"
     assert reference_path.endswith(".png")
     assert (workspace / reference_path).is_file()
     assert config.canvas.connections == []

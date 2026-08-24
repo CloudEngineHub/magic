@@ -23,6 +23,9 @@ from app.tools.canvas.tools.support import (
 )
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.base_tool import BaseTool
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+
+SdkSnippetTimeoutRegistry.register("wait_canvas_generation", min_timeout=600)
 
 
 class WaitTask(BaseToolParams):

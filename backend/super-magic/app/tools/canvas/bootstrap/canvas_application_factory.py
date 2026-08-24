@@ -65,7 +65,6 @@ from app.tools.canvas.production.rules import (
     VideoGenerationRule,
 )
 from app.tools.canvas.production.services.estimate_content_points_service import EstimateContentPointsService
-from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.production.services.image_search_service import ImageSearchService
 from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.queries import CanvasQueryService
@@ -182,17 +181,12 @@ class CanvasApplicationFactory:
             workspace=dependencies.repository.workspace,
             media_probe=dependencies.media_probe_port,
         )
-        estimate_guard = GenerationEstimateGuard(
-            estimate_records=dependencies.cost_estimate_records,
-            normalizers=dependencies.cost_request_normalizers,
-        )
         generation_submission = GenerationSubmissionService(
             unit_of_work=dependencies.unit_of_work,
             generation_capabilities=dependencies.generation_capabilities,
             generation_tasks=dependencies.generation_tasks,
             generation_execution=dependencies.generation_execution,
             generation_result_applier=dependencies.generation_result_applier,
-            estimate_guard=estimate_guard,
             element_sizing=element_sizing,
         )
         video_composition_service = VideoCompositionService(
@@ -209,11 +203,9 @@ class CanvasApplicationFactory:
                 unit_of_work=dependencies.unit_of_work,
                 layout_strategies=dependencies.layout_strategies,
                 connection_strategies=dependencies.connection_strategies,
-                generation_capabilities=dependencies.generation_capabilities,
                 element_references=dependencies.element_references,
                 content_preparation=content_preparation,
                 generation_submission_service=generation_submission,
-                estimate_guard=estimate_guard,
                 element_sizing=element_sizing,
                 video_composition_service=video_composition_service,
             ),
@@ -223,17 +215,13 @@ class CanvasApplicationFactory:
             ),
             content_service=ContentService(
                 unit_of_work=dependencies.unit_of_work,
-                generation_capabilities=dependencies.generation_capabilities,
                 content_preparation=content_preparation,
                 generation_submission_service=generation_submission,
-                estimate_guard=estimate_guard,
             ),
             retry_content_service=RetryContentService(
                 repository=dependencies.repository,
                 unit_of_work=dependencies.unit_of_work,
-                generation_capabilities=dependencies.generation_capabilities,
                 generation_submission_service=generation_submission,
-                estimate_guard=estimate_guard,
             ),
             layout_service=LayoutService(
                 unit_of_work=dependencies.unit_of_work,
