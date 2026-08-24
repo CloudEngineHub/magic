@@ -33,6 +33,7 @@ import { StoryboardGenerationController } from "./StoryboardGenerationController
 import { resolveStoryboardRequiredHeight } from "../../elements/storyboard/StoryboardElement.layout"
 import { ImageElement } from "../../elements/image/ImageElement"
 import { resolveStoryboardReferenceImages } from "./storyboardReferenceImages"
+import type { ElementControlInteractionPolicy } from "../element-control/ElementControlInteractionPolicy"
 
 export type StoryboardControlState = "idle" | "hover" | "pressed" | "disabled" | "editing"
 
@@ -72,6 +73,7 @@ export interface StoryboardControlBindingOptions {
 	editorPresentation?: StoryboardEditorPresentation
 	action: StoryboardControlAction
 	applyState: (state: StoryboardControlState) => void
+	elementInteraction?: ElementControlInteractionPolicy<StoryboardControlAction>
 }
 
 interface StoryboardControlBinding extends StoryboardControlBindingOptions {
@@ -149,7 +151,7 @@ export class StoryboardInteractionManager {
 
 		const handleMouseEnter = () => {
 			binding.hovered = true
-			if (!this.canvas.deviceInfo.input.hover || !this.isSelectedBinding(binding)) return
+			if (!this.canvas.deviceInfo.input.hover || !this.canInteractWithElement(binding)) return
 			if (this.isDisabled(binding)) {
 				binding.applyState("disabled")
 				this.canvas.cursorManager.setTemporary("not-allowed")
@@ -173,7 +175,7 @@ export class StoryboardInteractionManager {
 		}
 
 		const tryActivateFromGesture = (): boolean => {
-			if (this.isDisabled(binding) && this.isSelectedBinding(binding)) return false
+			if (this.isDisabled(binding)) return false
 			if (!binding.activationPending || !this.canActivate(binding)) return false
 			binding.activationPending = false
 			const now = Date.now()
@@ -184,12 +186,11 @@ export class StoryboardInteractionManager {
 		}
 
 		const handlePressStart = (event: Konva.KonvaEventObject<Event>) => {
-			const selected = this.isSelectedBinding(binding)
-			if (!selected) {
-				binding.activationPending = false
+			if (!this.canInteractWithElement(binding)) {
+				stopKonvaEvent(event)
+				binding.applyState("disabled")
 				return
 			}
-
 			if (this.isDisabled(binding)) {
 				stopKonvaEvent(event)
 				binding.applyState("disabled")
@@ -201,13 +202,13 @@ export class StoryboardInteractionManager {
 				binding.activationPending = false
 				return
 			}
+			stopKonvaEvent(event)
+			this.ensureElementSelected(binding)
 			if (this.editingBinding && this.isGenerationAction(binding.action)) {
 				const nativeEvent = event.evt as Event & { pointerType?: string }
 				const isTouch = event.type.includes("touch") || nativeEvent.pointerType === "touch"
 				if (!isTouch) nativeEvent.preventDefault()
 			}
-
-			stopKonvaEvent(event)
 
 			// 同一控件已在编辑：保持打开，只拦截拖拽。
 			if (this.editingBinding === binding) {
@@ -265,7 +266,11 @@ export class StoryboardInteractionManager {
 		}
 
 		const handleActivate = (event: Konva.KonvaEventObject<Event>) => {
-			if (this.isDisabled(binding) && this.isSelectedBinding(binding)) {
+			if (!this.canInteractWithElement(binding)) {
+				stopKonvaEvent(event)
+				return
+			}
+			if (this.isDisabled(binding)) {
 				stopKonvaEvent(event)
 				return
 			}
@@ -390,7 +395,9 @@ export class StoryboardInteractionManager {
 	}
 
 	private activate(binding: StoryboardControlBinding): void {
-		if (this.isGenerationAction(binding.action)) this.overlayHost.commit()
+		// 添加/删除分镜会基于当前 DSL 重建 shots 列表。描述输入在失焦前仍停留
+		// 在临时 overlay/draft 中，必须先提交，否则列表更新会读取旧描述并将其覆盖。
+		if (this.shouldCommitEditorBeforeActivate(binding.action)) this.overlayHost.commit()
 		switch (binding.action.type) {
 			case "select-model":
 				this.openModelSelect(binding)
@@ -997,15 +1004,32 @@ export class StoryboardInteractionManager {
 	}
 
 	private canActivate(binding: StoryboardControlBinding): boolean {
-		if (this.destroyed || this.isDisabled(binding) || !this.isSelectedBinding(binding))
+		if (this.destroyed || this.isDisabled(binding) || !this.canInteractWithElement(binding))
 			return false
+		return true
+	}
+
+	private canInteractWithElement(binding: StoryboardControlBinding): boolean {
+		if (this.destroyed) return false
+		if (binding.elementInteraction)
+			return binding.elementInteraction.canInteract(binding.action)
 		const element = this.getStoryboardElement(binding.elementId)
 		if (!element) return false
 		if (binding.action.type !== "preview-reference-image") {
 			if (this.canvas.readonly || element.locked) return false
 			if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) return false
 		}
-		return this.hasUsableScreenSize(binding)
+		return true
+	}
+
+	private ensureElementSelected(binding: StoryboardControlBinding): void {
+		if (binding.elementInteraction?.prepare) {
+			binding.elementInteraction.prepare(binding.action)
+			return
+		}
+		if (binding.action.type === "preview-reference-image") return
+		if (this.isSelectedBinding(binding)) return
+		this.canvas.selectionManager.replaceSelection?.([binding.elementId])
 	}
 
 	private isSelectedBinding(binding: StoryboardControlBinding): boolean {
@@ -1013,19 +1037,6 @@ export class StoryboardInteractionManager {
 			this.canvas.selectionManager.getSelectionCount() === 1 &&
 			this.canvas.selectionManager.isSelected(binding.elementId)
 		)
-	}
-
-	private hasUsableScreenSize(binding: StoryboardControlBinding): boolean {
-		const bounds = binding.node.getAttr("storyboardBaseHitBounds") as
-			{ width: number; height: number } | undefined
-		if (!bounds) return true
-		const scale = binding.node.getAbsoluteScale()
-		const screenMinor = Math.min(
-			Math.abs(bounds.width * scale.x),
-			Math.abs(bounds.height * scale.y),
-		)
-		const minimum = this.canvas.deviceInfo.input.coarsePointer ? 24 : 18
-		return screenMinor >= minimum
 	}
 
 	private isDisabled(binding: StoryboardControlBinding): boolean {
@@ -1129,6 +1140,14 @@ export class StoryboardInteractionManager {
 
 	private isGenerationAction(action: StoryboardControlAction): boolean {
 		return action.type === "generate-shot" || action.type === "generate-all"
+	}
+
+	private shouldCommitEditorBeforeActivate(action: StoryboardControlAction): boolean {
+		return (
+			this.isGenerationAction(action) ||
+			action.type === "add-shot" ||
+			action.type === "delete-shot"
+		)
 	}
 
 	/**

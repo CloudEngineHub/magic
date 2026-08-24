@@ -89,6 +89,9 @@ function createCanvasMock(
 		selectionManager: {
 			getSelectionCount: vi.fn(() => (selected.value ? 1 : 0)),
 			isSelected: vi.fn(() => selected.value),
+			replaceSelection: vi.fn(() => {
+				selected.value = true
+			}),
 		},
 		permissionManager: {
 			canUseSelectionToolAffordance: vi.fn(() => true),
@@ -169,7 +172,7 @@ describe("StoryboardInteractionManager", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("keeps the first click for selecting an unselected node and activates after selection", () => {
+	it("selects the element and activates its control from the first click", () => {
 		const data = createStoryboardData()
 		const harness = createCanvasMock(data)
 		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
@@ -185,9 +188,8 @@ describe("StoryboardInteractionManager", () => {
 		hit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
 		hit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
 		hit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
-		expect(harness.updates).toHaveLength(0)
+		expect(harness.updates).toHaveLength(1)
 
-		harness.selected.value = true
 		hit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
 		expect(states).toContain("pressed")
 		hit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
@@ -334,6 +336,26 @@ describe("StoryboardInteractionManager", () => {
 		const shots = harness.updates[0]?.patch.shots as StoryboardElementContent["shots"]
 		expect(shots?.map((shot) => shot.id)).toEqual(["shot-2"])
 
+		manager.destroy()
+	})
+
+	it("keeps a small delete control interactive when the element is zoomed out", () => {
+		const data = createStoryboardData()
+		const harness = createCanvasMock(data)
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		const hit = new Konva.Rect({ width: 48, height: 48, scaleX: 0.2, scaleY: 0.2 })
+		manager.bindControl({
+			elementId: data.id,
+			node: hit,
+			action: { type: "delete-shot", shotId: "shot-1" },
+			applyState: vi.fn(),
+		})
+
+		hit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		hit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		hit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+
+		expect(harness.updates[0]?.patch.shots).toEqual([])
 		manager.destroy()
 	})
 
@@ -615,6 +637,78 @@ describe("StoryboardInteractionManager", () => {
 		await vi.waitFor(() => {
 			expect(harness.container.querySelector('button[aria-label="画面比例"]')).toBeTruthy()
 		})
+
+		manager.destroy()
+	})
+
+	it("commits an active description before adding another shot", () => {
+		const data = createStoryboardData()
+		const harness = createCanvasMock(data)
+		// Keep the mock element data in sync with updates so addShot observes the
+		// description committed immediately before it reads the current shot list.
+		vi.mocked(harness.canvas.elementManager.update).mockImplementation(
+			(id: string, patch: Record<string, unknown>) => {
+				harness.updates.push({ id, patch })
+				const element = harness.elements.get(id)
+				if (!element || element.type !== ElementTypeEnum.Storyboard) return
+				const content = getStoryboardContent(element)
+				if (patch.shots) content.shots = patch.shots as StoryboardElementContent["shots"]
+				if (patch.height !== undefined) element.height = patch.height as number
+			},
+		)
+		harness.selected.value = true
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		const descriptionHit = new Konva.Rect({ width: 240, height: 80 })
+		const addHit = new Konva.Rect({ width: 100, height: 40 })
+		const descriptionAnchor = {
+			getStage: () => ({}),
+			getAbsoluteTransform: () => ({ getMatrix: () => [1, 0, 0, 1, 10, 20] }),
+			width: () => 240,
+			height: () => 80,
+		} as unknown as Konva.Node
+		manager.bindControl({
+			elementId: data.id,
+			node: descriptionHit,
+			overlayAnchorNode: descriptionAnchor,
+			action: { type: "edit-description", shotId: "shot-1" },
+			applyState: vi.fn(),
+		})
+		manager.bindControl({
+			elementId: data.id,
+			node: addHit,
+			action: { type: "add-shot" },
+			applyState: vi.fn(),
+		})
+
+		descriptionHit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		descriptionHit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		descriptionHit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+		const textarea = harness.container.querySelector<HTMLTextAreaElement>("textarea")
+		if (!textarea) throw new Error("Expected storyboard description editor")
+		textarea.value = "点击添加前的描述"
+		textarea.dispatchEvent(new Event("input", { bubbles: true }))
+		harness.updates.length = 0
+
+		addHit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		addHit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		addHit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+
+		expect(harness.updates).toEqual([
+			{
+				id: data.id,
+				patch: { shots: [{ id: "shot-1", description: "点击添加前的描述" }] },
+			},
+			{
+				id: data.id,
+				patch: {
+					shots: [
+						{ id: "shot-1", description: "点击添加前的描述" },
+						expect.objectContaining({ description: "" }),
+					],
+					height: expect.any(Number),
+				},
+			},
+		])
 
 		manager.destroy()
 	})
