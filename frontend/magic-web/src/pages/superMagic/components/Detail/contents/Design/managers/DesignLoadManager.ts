@@ -274,10 +274,6 @@ export class DesignLoadManager {
 				this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
 			}
 			return { didLoad: false, pendingUpgrade: null, issue: loadIssue, sidecarStatus }
-		} finally {
-			if (this.isCurrentLoadRequest(request)) {
-				this.stateBag.setters.setIsInitialLoading(false)
-			}
 		}
 	}
 }
