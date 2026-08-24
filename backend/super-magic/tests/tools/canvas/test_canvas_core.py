@@ -43,6 +43,7 @@ from app.tools.canvas.strategies import (
     LayoutStrategyRequest,
 )
 from app.tools.canvas.tools import ConnectionInput, ManageCanvasConnections
+from app.utils.async_file_utils import async_write_bytes
 
 
 def test_codec_round_trip_preserves_nested_content_and_connection() -> None:
@@ -218,7 +219,7 @@ class MockAsynchronousGenerationPort:
     async def query(self, request, tool_context):
         """返回固定完成状态和视频路径。"""
         self.query_count += 1
-        return GenerationQueryResult("completed", output_uri="mock/videos/result.mp4")
+        return GenerationQueryResult("completed", output_uri="./videos/result.mp4")
 
 
 class MockVideoMediaProbePort(FakeMediaProbePort):
@@ -304,6 +305,7 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
         media_probe_port=MockVideoMediaProbePort(),
     )
     await application.initialize("mock-project")
+    await async_write_bytes(tmp_path / "mock-project" / "videos" / "result.mp4", b"mock-video")
 
     image_result = await application.add_elements(
         "mock-project",
@@ -324,7 +326,7 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     assert waited["items"][0]["status"] == "completed"
     assert waited_again["items"][0]["already_finalized"] is True
     assert video_port.query_count == 1
-    assert video.get_content(video.active_content_id).fields.src == "mock/videos/result.mp4"
+    assert video.get_content(video.active_content_id).fields.src == "./videos/result.mp4"
     assert (video.properties.width, video.properties.height) == (1080, 1920)
 
 
@@ -674,6 +676,8 @@ async def test_video_edit_creation_validates_media_types_and_explicit_connection
 
     edit_id = created["items"][0]["element_id"]
     project = await repository.read("mock-project")
+    edit = project.canvas.get_element(edit_id)
+    assert (edit.properties.width, edit.properties.height) == (520.0, 360.0)
     incoming = {
         connection.source_element_id
         for connection in project.canvas.connections
@@ -1191,6 +1195,28 @@ def test_strategy_registries_return_typed_plans() -> None:
     assert isinstance(layout_plan, LayoutMutationPlan)
     assert isinstance(content_plan, ContentMutationPlan)
     assert isinstance(connection_plan, ConnectionMutationPlan)
+
+
+def test_dependency_flow_centers_target_between_multiple_sources() -> None:
+    """多上游依赖布局应按来源整体居中，不受 Connection 顺序影响。"""
+    canvas = CanvasDocument(elements=[
+        CanvasElement("source-top", "video", ElementProperties(x=0, y=0, width=200, height=100)),
+        CanvasElement("source-bottom", "video", ElementProperties(x=0, y=300, width=200, height=100)),
+        CanvasElement("target", "video", ElementProperties(width=100, height=100)),
+    ])
+    canvas.connections.extend([
+        CanvasConnection("connection-bottom", "source-bottom", "target"),
+        CanvasConnection("connection-top", "source-top", "target"),
+    ])
+
+    layout_plan = LayoutStrategyRegistry().get("dependency_flow").plan(
+        canvas,
+        canvas.get_element("target"),
+        LayoutStrategyRequest("target", {"strategy": "dependency_flow"}),
+    )
+
+    assert layout_plan.properties.x == pytest.approx(760)
+    assert layout_plan.properties.y == pytest.approx(150)
 
 
 def test_generation_capability_registry_selects_model_specific_capability() -> None:

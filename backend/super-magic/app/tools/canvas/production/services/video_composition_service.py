@@ -15,6 +15,7 @@ from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
+from app.tools.canvas.infrastructure.workspace import CanvasFileReadinessChecker
 from app.tools.canvas.production.contracts import (
     CompositionInputSpec,
     CompositionPreparation,
@@ -23,7 +24,7 @@ from app.tools.canvas.production.contracts import (
 )
 from app.tools.canvas.production.ports import VideoCompositionPort, VideoCompositionRequest, VideoCompositionResult
 from app.tools.canvas.repository import CanvasUnitOfWork
-from app.utils.async_file_utils import async_exists, async_stat
+from app.utils.async_file_utils import async_exists
 
 
 class VideoCompositionService:
@@ -37,6 +38,7 @@ class VideoCompositionService:
             raise ValueError("video_composition must produce a single Content result")
         self._production_rule = production_rule
         self._workspace = workspace
+        self._file_readiness = CanvasFileReadinessChecker(workspace)
 
     async def compose(
         self,
@@ -80,7 +82,7 @@ class VideoCompositionService:
             )
             media_paths = video_paths + ((audio_path,) if audio_path else ())
             for path in media_paths:
-                if not await async_exists(path) or (await async_stat(path)).st_size <= 0:
+                if not await self._file_readiness.wait_for_path(path):
                     raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Composition input file is missing or empty: {path.name}.")
             result = await self._composition_port.compose(
                 VideoCompositionRequest(

@@ -11,7 +11,12 @@ from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.production.ports import MediaProbePort
-from app.tools.canvas.strategies.layout.geometry import DEFAULT_ELEMENT_HEIGHT, DEFAULT_ELEMENT_WIDTH
+from app.tools.canvas.strategies.layout.geometry import (
+    DEFAULT_ELEMENT_HEIGHT,
+    DEFAULT_ELEMENT_WIDTH,
+    DEFAULT_VIDEO_EDIT_HEIGHT,
+    DEFAULT_VIDEO_EDIT_WIDTH,
+)
 
 _SIZABLE_ELEMENT_TYPES = {"image", "video", "audio"}
 _SIZE_PATTERN = re.compile(r"^(\d+)x(\d+)$", re.IGNORECASE)
@@ -28,6 +33,12 @@ class CanvasElementSizingService:
 
     async def initialize(self, project_path: str, element: CanvasElement) -> None:
         """为媒体类 Element 补齐尺寸；文本、形状等交由前端测量。"""
+        if element.element_type == "video-edit":
+            if element.properties.width is None or element.properties.width <= 0:
+                element.properties.width = DEFAULT_VIDEO_EDIT_WIDTH
+            if element.properties.height is None or element.properties.height <= 0:
+                element.properties.height = DEFAULT_VIDEO_EDIT_HEIGHT
+            return
         if element.element_type not in _SIZABLE_ELEMENT_TYPES:
             return
         width, height = self._initial_size(element)

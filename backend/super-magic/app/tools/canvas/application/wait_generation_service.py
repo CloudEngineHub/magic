@@ -21,6 +21,7 @@ from app.tools.canvas.generation import (
 )
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
+from app.tools.canvas.infrastructure.workspace import CanvasFileReadinessChecker
 from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
@@ -37,6 +38,7 @@ class WaitGenerationService:
         self.generation_tasks = generation_tasks
         self.generation_poller = generation_poller
         self.element_sizing = element_sizing
+        self.file_readiness = CanvasFileReadinessChecker(repository.workspace)
 
     async def wait(
         self,
@@ -147,6 +149,21 @@ class WaitGenerationService:
             )
 
         final_status = query_result.status
+        if final_status == "completed" and query_result.output_uri:
+            output_ready = await self.file_readiness.wait_for_uri(
+                project_path,
+                query_result.output_uri,
+                deadline=deadline,
+            )
+            if not output_ready:
+                return WaitGenerationResultItem(
+                    task_id,
+                    "processing",
+                    element_id=record.element_id,
+                    content_id=record.content_id,
+                    timed_out=time.monotonic() >= deadline,
+                    next_action="Call wait_canvas_generation again with the same generation_task_id.",
+                )
         output_dimensions = None
         if final_status == "completed" and self.element_sizing is not None:
             output_dimensions = await self.element_sizing.inspect_generated_media(

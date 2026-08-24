@@ -14,6 +14,7 @@ from app.tools.canvas.presentation.batch_status import summarize_items
 class CanvasToolDetailBuilder:
     """在保留结构化值的前提下构建国际化 Canvas Markdown 详情。"""
 
+    _MARKDOWN_EXTENSION = ".md"
     _MAX_LIST_ITEMS = 20
     _MAX_TEXT_LENGTH = 500
     _SENSITIVE_INPUT_KEYS = frozenset(
@@ -37,7 +38,7 @@ class CanvasToolDetailBuilder:
         arguments: Mapping[str, Any] | None = None,
     ) -> None:
         """初始化详情标题、状态和工具结果数据。"""
-        self._file_name = file_name
+        self._file_name = self._normalize_markdown_file_name(file_name)
         self._data = result.data or {}
         self._arguments = arguments or {}
         self._result_content = result.content
@@ -47,6 +48,14 @@ class CanvasToolDetailBuilder:
         self._input_lines = self._render_input_lines(self._arguments)
         self._output_lines = [self._field_line("status", self.status_value(batch_status.status))]
         self._output_field_keys = {"status"}
+
+    @classmethod
+    def _normalize_markdown_file_name(cls, file_name: str) -> str:
+        """确保 Markdown 详情文件名带有正确的 .md 后缀。"""
+        normalized = file_name.strip() or "canvas_tool"
+        if normalized.lower().endswith(cls._MARKDOWN_EXTENSION):
+            return normalized
+        return f"{normalized}{cls._MARKDOWN_EXTENSION}"
 
     @property
     def data(self) -> dict[str, Any]:

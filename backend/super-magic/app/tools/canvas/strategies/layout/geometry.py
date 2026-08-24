@@ -7,6 +7,8 @@ from app.tools.canvas.domain.models import CanvasDocument, CanvasElement
 DEFAULT_ELEMENT_SPACING = 200.0
 DEFAULT_ELEMENT_WIDTH = 1024.0
 DEFAULT_ELEMENT_HEIGHT = 1024.0
+DEFAULT_VIDEO_EDIT_WIDTH = 520.0
+DEFAULT_VIDEO_EDIT_HEIGHT = 360.0
 
 
 def number(value: object) -> float | None:
@@ -17,13 +19,21 @@ def number(value: object) -> float | None:
 def width(element: CanvasElement) -> float:
     """读取布局宽度，缺失时使用统一占位宽度。"""
     value = number(element.properties.width)
-    return value if value is not None and value > 0 else DEFAULT_ELEMENT_WIDTH
+    if value is not None and value > 0:
+        return value
+    if element.element_type == "video-edit":
+        return DEFAULT_VIDEO_EDIT_WIDTH
+    return DEFAULT_ELEMENT_WIDTH
 
 
 def height(element: CanvasElement) -> float:
     """读取布局高度，缺失时使用统一占位高度。"""
     value = number(element.properties.height)
-    return value if value is not None and value > 0 else DEFAULT_ELEMENT_HEIGHT
+    if value is not None and value > 0:
+        return value
+    if element.element_type == "video-edit":
+        return DEFAULT_VIDEO_EDIT_HEIGHT
+    return DEFAULT_ELEMENT_HEIGHT
 
 
 def next_z_index(canvas: CanvasDocument, element: CanvasElement) -> int:

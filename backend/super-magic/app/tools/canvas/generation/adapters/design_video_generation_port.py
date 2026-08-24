@@ -21,7 +21,10 @@ from app.tools.canvas.generation.ports.query_port import GenerationQueryPort
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
 from app.tools.canvas.generation.video_filename import build_video_filename
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
-from app.tools.canvas.infrastructure.workspace import CanvasWorkspaceDirectoryManager
+from app.tools.canvas.infrastructure.workspace import (
+    CanvasFileReadinessChecker,
+    CanvasWorkspaceDirectoryManager,
+)
 from app.tools.video_generation_utils.video_input_utils import VideoInputPayloadBuilder
 
 logger = get_logger(__name__)
@@ -40,6 +43,7 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         self._project_identity_resolver = ProjectIdentityResolver()
         self._asset_path_resolver = ProjectAssetPathResolver(workspace)
         self._workspace_directories = CanvasWorkspaceDirectoryManager(workspace)
+        self._file_readiness = CanvasFileReadinessChecker(workspace)
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """提交 Design 视频任务并保存服务返回的视频 ID。"""
@@ -278,6 +282,16 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                     error,
                 )
                 return GenerationQueryResult("failed", error_message=str(error))
+            if not await self._file_readiness.wait_for_uri(request.project_path, output_uri):
+                logger.debug(
+                    "Canvas Design 视频已完成但本地 MagicFS 文件尚未就绪，继续等待: "
+                    "project_path={} content_id={} provider_video_id={} output_uri={}",
+                    request.project_path,
+                    request.content_id,
+                    request.provider_task_id,
+                    output_uri,
+                )
+                return GenerationQueryResult("processing")
             logger.info(
                 "Canvas Design 视频已由 Magic Service 写入工作区: project_path={} content_id={} provider_video_id={} output_uri={}",
                 request.project_path,
@@ -313,6 +327,8 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         try:
             await self._client.download_url_to_path(file_url, target)
             output_uri = self._asset_path_resolver.to_project_uri(project.project_path, target)
+            if not await self._file_readiness.wait_for_uri(request.project_path, output_uri):
+                return GenerationQueryResult("failed", error_message="Downloaded Design video is not ready in the Canvas workspace.")
             logger.info(
                 "Canvas Design 本地调试视频下载完成: project_path={} content_id={} provider_video_id={} output_uri={}",
                 request.project_path,

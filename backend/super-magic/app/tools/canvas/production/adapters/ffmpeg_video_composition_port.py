@@ -302,18 +302,18 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
 
     @staticmethod
     async def _move_output(source_path: Path, target_path: Path) -> None:
-        """先写入同目录临时文件，再原子替换目标，兼容挂载目录回退复制。"""
-        temporary_target = target_path.with_name(f".{target_path.name}.part-{uuid4().hex}")
+        """直接写入最终工作区文件，避免 MagicFS 挂载目录中的中间文件和替换操作。"""
+        if await async_exists(target_path):
+            raise FileExistsError(f"Composition output already exists: {target_path}")
         try:
-            await async_copy_contents(source_path, temporary_target)
-            if not await async_exists(temporary_target) or (await async_stat(temporary_target)).st_size <= 0:
-                raise RuntimeError("Composed MP4 was not persisted successfully")
+            await async_copy_contents(source_path, target_path)
+        except BaseException:
             try:
-                await asyncio.to_thread(os.replace, temporary_target, target_path)
-            except OSError:
-                await async_copy_contents(temporary_target, target_path)
-        finally:
-            await async_unlink(temporary_target)
+                await async_unlink(target_path)
+            except Exception:
+                # MagicFS 在 I/O 异常后可能暂时不接受删除，不能覆盖原始写入错误。
+                pass
+            raise
         if not await async_exists(target_path) or (await async_stat(target_path)).st_size <= 0:
             raise RuntimeError("Composed MP4 was not persisted successfully")
 

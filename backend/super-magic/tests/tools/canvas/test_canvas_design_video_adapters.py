@@ -236,6 +236,7 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     assert calls["directories"] == [
         ("magic-project-1", ["mock-project", "images"]),
         ("magic-project-1", ["mock-project", "videos"]),
+        ("magic-project-1", ["mock-project", "audio"]),
     ]
     assert calls["query"] == ("magic-project-1", "remote-video-1")
     assert result.status == "completed"
@@ -290,6 +291,8 @@ async def test_design_video_generation_uses_magic_service_workspace_file_without
         ),
         _ToolContext(),
     )
+    output_path = tmp_path / "mock-project" / "videos" / "llm-named-video.mp4"
+    output_path.write_bytes(b"mock-video")
     result = await port.query(
         GenerationQueryRequest("remote-video-2", "mock-project", "element-1", "content-1", submission.request_metadata["outputFilename"]),
         _ToolContext(),
@@ -299,6 +302,34 @@ async def test_design_video_generation_uses_magic_service_workspace_file_without
     assert "download" not in calls
     assert result.status == "completed"
     assert result.output_uri == "./videos/llm-named-video.mp4"
+
+
+@pytest.mark.asyncio
+async def test_design_video_generation_waits_for_magicfs_output_visibility(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """远端已完成但本地文件尚未可见时，应继续等待而不是提前完成。"""
+    monkeypatch.delenv("ENABLE_LOCAL_DEBUG_MODE", raising=False)
+
+    async def query(self, project_id, video_id):
+        """返回已完成但本地尚未落盘的 mock 结果。"""
+        return {
+            "status": "completed",
+            "file_dir": "/mock-project/videos/",
+            "file_name": "not-visible.mp4",
+        }
+
+    monkeypatch.setattr(MagicServiceClient, "query_video_generation_result", query)
+    await CanvasRepository(tmp_path).initialize("mock-project")
+
+    result = await DesignVideoGenerationPort(tmp_path).query(
+        GenerationQueryRequest("remote-video-3", "mock-project", "element-1", "content-1", "fallback.mp4"),
+        _ToolContext(),
+    )
+
+    assert result.status == "processing"
+    assert result.output_uri is None
 
 
 @pytest.mark.asyncio

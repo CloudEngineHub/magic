@@ -4299,6 +4299,19 @@ input[type="file"] {
     box-shadow: 0 8px 22px rgba(35, 45, 64, 0.14);
 }
 
+/* 与 magic-web 的 Konva Group 对齐：容器节点内部使用局部坐标承载子节点。 */
+.canvas-el-children-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.canvas-el-children-layer > .canvas-preview-element {
+    pointer-events: auto;
+}
+
 .canvas-preview-element.is-interactive {
     cursor: pointer;
 }

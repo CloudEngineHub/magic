@@ -106,6 +106,28 @@ def test_batch_tool_result_and_detail_use_the_same_status() -> None:
     assert "部分完成" in detail.data.content
 
 
+def test_canvas_tool_detail_builder_adds_markdown_extension() -> None:
+    """Canvas Markdown 详情缺少后缀时应自动补齐。"""
+    detail = CanvasToolDetailBuilder(
+        "add_canvas_elements",
+        "elements_added",
+        ToolResult(content="mock", data={}),
+    ).build()
+
+    assert detail.data.file_name == "add_canvas_elements.md"
+
+
+def test_canvas_tool_detail_builder_does_not_duplicate_markdown_extension() -> None:
+    """Canvas Markdown 详情已有后缀时不应重复追加。"""
+    detail = CanvasToolDetailBuilder(
+        "add_canvas_elements.md",
+        "elements_added",
+        ToolResult(content="mock", data={}),
+    ).build()
+
+    assert detail.data.file_name == "add_canvas_elements.md"
+
+
 def test_single_canvas_operation_does_not_use_batch_wording() -> None:
     """单个画布操作使用简洁结果，只有多个项目才展示批量统计。"""
     I18nManager.set_language("zh_CN")

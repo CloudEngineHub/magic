@@ -17,6 +17,7 @@ from app.tools.canvas.production.adapters import (
     FakeVideoCompositionPort,
     FfmpegVideoCompositionPort,
 )
+from app.tools.canvas.production.adapters import ffmpeg_video_composition_port as ffmpeg_port_module
 from app.tools.canvas.production.adapters.generic_video_point_estimate_port import GenericVideoPointEstimatePort
 from app.tools.canvas.production.contracts import ImageSearchTask, VideoPointEstimateItem
 from app.tools.canvas.production.estimation.video_production_request_normalizer import VideoProductionRequestNormalizer
@@ -371,3 +372,37 @@ def test_ffmpeg_command_mutes_all_audio_sources() -> None:
     rendered = " ".join(command)
     assert "-an" in command
     assert "-map 2:a:0" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_output_writes_directly_to_final_path(tmp_path: Path) -> None:
+    """合成输出不应在目标目录创建 MagicFS 不兼容的中间文件。"""
+    source = tmp_path / "composition.mp4"
+    target = tmp_path / "workspace" / "final.mp4"
+    await async_write_bytes(source, b"mock-composed-video")
+
+    await FfmpegVideoCompositionPort._move_output(source, target)
+
+    assert target.read_bytes() == b"mock-composed-video"
+    assert not list(target.parent.glob(".*.part-*"))
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_output_cleans_partial_target_after_copy_failure(tmp_path: Path, monkeypatch) -> None:
+    """最终文件写入失败时应清理不完整目标，避免留下半个 MP4。"""
+    source = tmp_path / "composition.mp4"
+    target = tmp_path / "workspace" / "final.mp4"
+    await async_write_bytes(source, b"mock-composed-video")
+
+    async def fail_copy(_source, destination):
+        """模拟 MagicFS 在写入过程中返回 I/O 错误。"""
+        await async_mkdir(destination.parent, parents=True, exist_ok=True)
+        await async_write_bytes(destination, b"partial")
+        raise OSError(5, "Input/output error")
+
+    monkeypatch.setattr(ffmpeg_port_module, "async_copy_contents", fail_copy)
+
+    with pytest.raises(OSError, match="Input/output error"):
+        await FfmpegVideoCompositionPort._move_output(source, target)
+
+    assert not target.exists()

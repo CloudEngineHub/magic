@@ -9602,16 +9602,17 @@ function applyCanvasPreviewContent(element, content) {
  * 把 V1/V2/V3 Element 归一化为调试面板唯一预览模型。
  * 该模型只存在于浏览器内，不会写回 magic.project.js。
  */
-function normalizeCanvasPreviewElement(element, version, index, parentOffset = { x: 0, y: 0 }) {
+function normalizeCanvasPreviewElement(element, version, index, parentId = null, depth = 0) {
     const isV3 = version === MAGIC_PROJECT_VERSION_V3;
     const content = isV3 ? selectCanvasPreviewContent(element) : {};
     const previewContents = isV3 && Array.isArray(element?.contents) ? element.contents : [];
-    const rawX = Number.isFinite(element?.x) ? element.x + parentOffset.x : null;
-    const rawY = Number.isFinite(element?.y) ? element.y + parentOffset.y : null;
+    const rawX = Number.isFinite(element?.x) ? element.x : null;
+    const rawY = Number.isFinite(element?.y) ? element.y : null;
     const scaleX = Number.isFinite(element?.scaleX) ? element.scaleX : 1;
     const scaleY = Number.isFinite(element?.scaleY) ? element.scaleY : 1;
-    const width = Number.isFinite(element?.width) && element.width > 0 ? element.width * scaleX : null;
-    const height = Number.isFinite(element?.height) && element.height > 0 ? element.height * scaleY : null;
+    // magic-web 将 width/height 与 scaleX/scaleY 分开保存，Konva 节点再统一应用缩放。
+    const width = Number.isFinite(element?.width) && element.width > 0 ? element.width : null;
+    const height = Number.isFinite(element?.height) && element.height > 0 ? element.height : null;
     return {
         id: String(element?.id || `preview-element-${index + 1}`),
         type: String(element?.type || 'unknown'),
@@ -9620,6 +9621,10 @@ function normalizeCanvasPreviewElement(element, version, index, parentOffset = {
         y: rawY,
         width,
         height,
+        scaleX,
+        scaleY,
+        parentId,
+        depth,
         zIndex: Number.isFinite(element?.zIndex) ? element.zIndex : index,
         visible: element?.visible !== false,
         locked: element?.locked === true,
@@ -9636,18 +9641,14 @@ function normalizeCanvasPreviewElement(element, version, index, parentOffset = {
 }
 
 /**
- * 递归展开已有 Frame/Group 子节点，仅用于兼容预览，不赋予后端容器语义。
+ * 递归展开已有 Frame/Group 子节点，同时保留父子关系供预览层恢复 Konva Group 语义。
  */
-function flattenCanvasPreviewElements(elements, version, parentOffset = { x: 0, y: 0 }, result = []) {
+function flattenCanvasPreviewElements(elements, version, parentId = null, depth = 0, result = []) {
     for (const element of Array.isArray(elements) ? elements : []) {
-        const normalized = normalizeCanvasPreviewElement(element, version, result.length, parentOffset);
+        const normalized = normalizeCanvasPreviewElement(element, version, result.length, parentId, depth);
         result.push(normalized);
-        const nextOffset = {
-            x: normalized.x ?? parentOffset.x,
-            y: normalized.y ?? parentOffset.y,
-        };
         if (Array.isArray(element?.children)) {
-            flattenCanvasPreviewElements(element.children, version, nextOffset, result);
+            flattenCanvasPreviewElements(element.children, version, normalized.id, depth + 1, result);
         }
     }
     return result;
@@ -9702,6 +9703,100 @@ function applyDeterministicCanvasPreviewLayout(elements) {
 }
 
 /**
+ * 计算二维仿射矩阵。
+ * 矩阵顺序与 Konva 的节点树一致：父级变换先应用，子级再应用自身的平移、缩放和旋转。
+ */
+function multiplyCanvasPreviewMatrix(left, right) {
+    return {
+        a: left.a * right.a + left.c * right.b,
+        b: left.b * right.a + left.d * right.b,
+        c: left.a * right.c + left.c * right.d,
+        d: left.b * right.c + left.d * right.d,
+        e: left.a * right.e + left.c * right.f + left.e,
+        f: left.b * right.e + left.d * right.f + left.f,
+    };
+}
+
+/** 创建与 Konva 节点等价的平移、缩放、旋转矩阵。 */
+function createCanvasPreviewLocalMatrix(element) {
+    const rotation = Number.isFinite(element.rotation) ? element.rotation * Math.PI / 180 : 0;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const scaleX = Number.isFinite(element.scaleX) ? element.scaleX : 1;
+    const scaleY = Number.isFinite(element.scaleY) ? element.scaleY : 1;
+    return {
+        a: cos * scaleX,
+        b: sin * scaleX,
+        c: -sin * scaleY,
+        d: cos * scaleY,
+        e: Number.isFinite(element.x) ? element.x : 0,
+        f: Number.isFinite(element.y) ? element.y : 0,
+    };
+}
+
+/** 将局部矩形转换为世界坐标包围盒。 */
+function getCanvasPreviewWorldBounds(matrix, width, height) {
+    const points = [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: 0, y: height },
+        { x: width, y: height },
+    ].map(point => ({
+        x: matrix.a * point.x + matrix.c * point.y + matrix.e,
+        y: matrix.b * point.x + matrix.d * point.y + matrix.f,
+    }));
+    const minX = Math.min(...points.map(point => point.x));
+    const minY = Math.min(...points.map(point => point.y));
+    const maxX = Math.max(...points.map(point => point.x));
+    const maxY = Math.max(...points.map(point => point.y));
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
+ * 为每个节点生成 magic-web 兼容的世界几何。
+ * x/y/width/height 仍保留原始文档值，避免预览层修改项目数据；布局结果只放在 layout 字段中。
+ */
+function resolveCanvasPreviewScene(elements) {
+    const elementById = new Map(elements.map(element => [element.id, element]));
+    const layoutById = new Map();
+    const resolving = new Set();
+
+    const resolve = element => {
+        if (layoutById.has(element.id)) return layoutById.get(element.id);
+        if (resolving.has(element.id)) {
+            // 损坏的循环父子关系不能阻塞整个调试预览，退化为根节点处理。
+            return { matrix: createCanvasPreviewLocalMatrix({ ...element, parentId: null }) };
+        }
+        resolving.add(element.id);
+        const parent = element.parentId ? elementById.get(element.parentId) : null;
+        const parentLayout = parent ? resolve(parent) : null;
+        const localMatrix = createCanvasPreviewLocalMatrix(element);
+        const matrix = parentLayout
+            ? multiplyCanvasPreviewMatrix(parentLayout.matrix, localMatrix)
+            : localMatrix;
+        const width = Number.isFinite(element.width) && element.width > 0 ? element.width : 1;
+        const height = Number.isFinite(element.height) && element.height > 0 ? element.height : 1;
+        const worldBounds = getCanvasPreviewWorldBounds(
+            matrix,
+            width,
+            height,
+        );
+        const layout = {
+            matrix,
+            worldOrigin: { x: matrix.e, y: matrix.f },
+            worldBounds,
+            width,
+            height,
+        };
+        resolving.delete(element.id);
+        layoutById.set(element.id, layout);
+        return layout;
+    };
+
+    return elements.map(element => ({ ...element, layout: resolve(element) }));
+}
+
+/**
  * 把三种持久化结构转换为统一画布预览文档。
  */
 function normalizeMagicProjectForPreview(config) {
@@ -9714,7 +9809,7 @@ function normalizeMagicProjectForPreview(config) {
         && Number.isFinite(element.width)
         && Number.isFinite(element.height)
     ));
-    elements = applyDeterministicCanvasPreviewLayout(elements);
+    elements = resolveCanvasPreviewScene(applyDeterministicCanvasPreviewLayout(elements));
     const connections = Array.isArray(config?.canvas?.connections)
         ? config.canvas.connections.map((connection, index) => ({
             id: String(connection?.id || `preview-connection-${index + 1}`),
@@ -10337,19 +10432,31 @@ function renderCanvasConnections(space, connections, elementById, minX, minY, ca
         const source = elementById.get(connection.sourceElementId);
         const target = elementById.get(connection.targetElementId);
         if (!source || !target || source.id === target.id) continue;
-        const sourceX = source.x - minX + source.width;
-        const sourceY = source.y - minY + source.height / 2;
-        const targetX = target.x - minX;
-        const targetY = target.y - minY + target.height / 2;
-        const bend = Math.max(48, Math.abs(targetX - sourceX) * 0.45);
+        const sourceBounds = source.layout?.worldBounds || {
+            x: source.x,
+            y: source.y,
+            width: source.width,
+            height: source.height,
+        };
+        const targetBounds = target.layout?.worldBounds || {
+            x: target.x,
+            y: target.y,
+            width: target.width,
+            height: target.height,
+        };
+        const sourceX = sourceBounds.x - minX + sourceBounds.width;
+        const sourceY = sourceBounds.y - minY + sourceBounds.height / 2;
+        const targetX = targetBounds.x - minX;
+        const targetY = targetBounds.y - minY + targetBounds.height / 2;
+        const controlOffset = Math.max(60, Math.abs(targetX - sourceX) * 0.5);
         const direction = targetX >= sourceX ? 1 : -1;
         const path = document.createElementNS(namespace, 'path');
         path.classList.add('canvas-preview-connection');
         if (connection.locked) path.classList.add('is-locked');
         path.setAttribute(
             'd',
-            `M ${sourceX} ${sourceY} C ${sourceX + bend * direction} ${sourceY}, `
-                + `${targetX - bend * direction} ${targetY}, ${targetX} ${targetY}`,
+            `M ${sourceX} ${sourceY} C ${sourceX + controlOffset * direction} ${sourceY}, `
+                + `${targetX - controlOffset * direction} ${targetY}, ${targetX} ${targetY}`,
         );
         path.setAttribute('marker-end', 'url(#canvas-preview-connection-arrow)');
         const title = document.createElementNS(namespace, 'title');
@@ -10734,10 +10841,16 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
     let maxX = -Infinity;
     let maxY = -Infinity;
     for (const element of elements) {
-        minX = Math.min(minX, element.x);
-        minY = Math.min(minY, element.y);
-        maxX = Math.max(maxX, element.x + element.width);
-        maxY = Math.max(maxY, element.y + element.height);
+        const bounds = element.layout?.worldBounds || {
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+        };
+        minX = Math.min(minX, bounds.x);
+        minY = Math.min(minY, bounds.y);
+        maxX = Math.max(maxX, bounds.x + bounds.width);
+        maxY = Math.max(maxY, bounds.y + bounds.height);
     }
     const canvasW = Math.max(1, maxX - minX);
     const canvasH = Math.max(1, maxY - minY);
@@ -10753,6 +10866,7 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
     scaleWrap.appendChild(space);
 
     const elementById = new Map(elements.map(element => [element.id, element]));
+    const elementNodeById = new Map();
     renderCanvasConnections(
         space,
         preview.connections,
@@ -10769,10 +10883,20 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
         elementNode.className = 'canvas-preview-element';
         elementNode.dataset.elementId = element.id;
         elementNode.dataset.elementType = element.type;
-        elementNode.style.left = `${element.x - minX}px`;
-        elementNode.style.top = `${element.y - minY}px`;
-        elementNode.style.width = `${element.width}px`;
-        elementNode.style.height = `${element.height}px`;
+        const layout = element.layout || {
+            matrix: { a: 1, b: 0, c: 0, d: 1, e: element.x, f: element.y },
+            worldOrigin: { x: element.x, y: element.y },
+            worldBounds: { x: element.x, y: element.y, width: element.width, height: element.height },
+            width: element.width,
+            height: element.height,
+        };
+        elementNode.style.left = `${layout.worldOrigin.x - minX}px`;
+        elementNode.style.top = `${layout.worldOrigin.y - minY}px`;
+        elementNode.style.width = `${layout.width}px`;
+        elementNode.style.height = `${layout.height}px`;
+        elementNode.style.transformOrigin = 'top left';
+        const localMatrix = createCanvasPreviewLocalMatrix(element);
+        elementNode.style.transform = `matrix(${localMatrix.a}, ${localMatrix.b}, ${localMatrix.c}, ${localMatrix.d}, 0, 0)`;
         elementNode.style.zIndex = String(element.zIndex + 1);
         elementNode.title = `${element.name}\n${element.id}`;
         if (!element.visible) elementNode.classList.add('is-hidden');
@@ -10839,6 +10963,12 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
             elementNode.classList.add('canvas-preview-image-with-metadata');
             elementNode.appendChild(createCanvasImageTopMetadata(element));
         }
+        if (elements.some(child => child.parentId === element.id)) {
+            const childrenLayer = document.createElement('div');
+            childrenLayer.className = 'canvas-el-children-layer';
+            childrenLayer.setAttribute('aria-hidden', 'true');
+            elementNode.appendChild(childrenLayer);
+        }
         infoButton = createCanvasGenerationInfoButton(element, () => {
             const existingPanel = containerEl.querySelector('.canvas-generation-detail-panel');
             if (existingPanel?.dataset.elementId === element.id) {
@@ -10870,10 +11000,23 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
         );
         if (versionSwitcher) elementNode.appendChild(versionSwitcher);
         elementNode.style.opacity = String(element.opacity);
-        if (element.rotation) elementNode.style.transform = `rotate(${element.rotation}deg)`;
-        space.appendChild(elementNode);
+        elementNodeById.set(element.id, elementNode);
         await renderSelectedContent(null);
     }));
+
+    // 先完成所有节点渲染，再按 magic-web 的父子关系挂载到对应 Group。
+    for (const element of elements) {
+        const elementNode = elementNodeById.get(element.id);
+        if (!elementNode) continue;
+        const parentNode = element.parentId ? elementNodeById.get(element.parentId) : null;
+        const parentLayer = parentNode?.querySelector(':scope > .canvas-el-children-layer');
+        if (parentLayer) parentLayer.appendChild(elementNode);
+        else space.appendChild(elementNode);
+
+        const isRoot = !parentLayer;
+        elementNode.style.left = `${isRoot ? element.x - minX : element.x}px`;
+        elementNode.style.top = `${isRoot ? element.y - minY : element.y}px`;
+    }
 
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const minimumScale = 0.04;

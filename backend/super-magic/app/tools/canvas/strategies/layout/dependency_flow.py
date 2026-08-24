@@ -48,7 +48,15 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
             if any(number(source.properties.x) is None or number(source.properties.y) is None for source in sources):
                 raise CanvasDomainError("LAYOUT_SOURCE_UNPOSITIONED", "Dependency layout requires positioned upstream Elements.")
             preferred_x = max(float(source.properties.x or 0.0) + width(source) for source in sources) + self.horizontal_gap
-            preferred_y = float(sources[0].properties.y or 0.0)
+            source_top = min(float(source.properties.y or 0.0) for source in sources)
+            source_bottom = max(
+                float(source.properties.y or 0.0) + height(source)
+                for source in sources
+            )
+            preferred_y = source_top + max(
+                0.0,
+                (source_bottom - source_top - height(element)) / 2,
+            )
         else:
             preferred_x = 0.0
             root_column = [item for item in occupied if abs(float(item.properties.x or 0.0)) < 1.0]

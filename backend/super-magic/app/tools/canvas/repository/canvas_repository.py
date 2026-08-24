@@ -29,7 +29,7 @@ from app.utils.async_file_utils import (
     async_read_text,
     async_unlink,
     async_write_bytes,
-    async_write_text,
+    async_write_text_with_retry,
 )
 
 T = TypeVar("T")
@@ -59,7 +59,9 @@ class CanvasRepository(CanvasRepositoryInterface):
             await self.read(project_path)
             return path, False
         await self._write_text(
-            project_file, CanvasCodec.encode(CanvasCodec.empty_project(path.name))
+            project_file,
+            CanvasCodec.encode(CanvasCodec.empty_project(path.name)),
+            content_validator=self._is_valid_main_file,
         )
         return path, True
 
@@ -138,9 +140,13 @@ class CanvasRepository(CanvasRepositoryInterface):
                 raise
 
     async def _write(self, path: Path, project: CanvasProject) -> None:
-        """原子写入主文件并保留 sidecar 的已有内容。"""
+        """写入主文件并等待 MagicFS 返回合法内容。"""
         encoded = CanvasCodec.encode(self._main_file_sanitizer.sanitize(project))
-        await self._write_text(path / "magic.project.js", encoded)
+        await self._write_text(
+            path / "magic.project.js",
+            encoded,
+            content_validator=self._is_valid_main_file,
+        )
 
     async def read_sidecar(self, project_path: str, filename: str = "element-details.json") -> dict:
         """读取可选 sidecar；不存在或非法时返回空对象。"""
@@ -172,7 +178,15 @@ class CanvasRepository(CanvasRepositoryInterface):
             ElementDetailsCodec.validate_public(data)
         else:
             ElementDetailsCodec.validate(data)
-        await self._write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
+        await self._write_text(
+            path,
+            json.dumps(data, ensure_ascii=False, indent=2),
+            content_validator=(
+                self._is_valid_public_sidecar
+                if filename == "element-details.json"
+                else self._is_valid_runtime_sidecar
+            ),
+        )
 
     async def _read_sidecar_strict(self, path: Path, missing_ok: bool = True) -> dict:
         """严格读取 sidecar，损坏或非对象结构不静默覆盖。"""
@@ -214,7 +228,17 @@ class CanvasRepository(CanvasRepositoryInterface):
             for target, _ in targets:
                 backups[target] = await async_read_bytes(target) if await async_exists(target) else None
             for target, content in targets:
-                await async_write_text(target, content, encoding="utf-8")
+                if target == project_file:
+                    validator = self._is_valid_main_file
+                elif target == sidecar_file:
+                    validator = (
+                        self._is_valid_public_sidecar
+                        if filename == "element-details.json"
+                        else self._is_valid_runtime_sidecar
+                    )
+                else:
+                    validator = self._is_valid_runtime_sidecar
+                await self._write_text(target, content, content_validator=validator)
             persisted_project = await async_read_text(project_file, encoding="utf-8")
             CanvasCodec.decode(persisted_project)
             persisted_sidecar = json.loads(await async_read_text(sidecar_file, encoding="utf-8"))
@@ -236,6 +260,57 @@ class CanvasRepository(CanvasRepositoryInterface):
                     pass
             raise
     @staticmethod
-    async def _write_text(target: Path, content: str) -> None:
-        """直接写入单个 Canvas 文件，避免依赖挂载盘的原子替换。"""
-        await async_write_text(target, content, encoding="utf-8")
+    async def _write_text(
+        target: Path,
+        content: str,
+        content_validator: Callable[[str], bool] | None = None,
+    ) -> None:
+        """直接写入单个 Canvas 文件并等待 MagicFS 可见性稳定。"""
+        def verify_persisted_content(value: str) -> bool:
+            """同时确认读取内容不是旧版本且满足结构校验。"""
+            if value != content:
+                return False
+            return content_validator is None or content_validator(value)
+
+        await async_write_text_with_retry(
+            target,
+            content,
+            encoding="utf-8",
+            max_retries=5,
+            retry_delay=0.2,
+            content_validator=verify_persisted_content,
+        )
+
+    @staticmethod
+    def _is_valid_main_file(content: str) -> bool:
+        """校验主文件内容仍是合法 Canvas 文档。"""
+        try:
+            CanvasCodec.decode(content)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return True
+
+    @staticmethod
+    def _is_valid_sidecar(content: str, *, public: bool) -> bool:
+        """校验 sidecar 内容是合法对象并符合对应公开边界。"""
+        try:
+            value = json.loads(content)
+            if not isinstance(value, dict):
+                return False
+            if public:
+                ElementDetailsCodec.validate_public(value)
+            else:
+                ElementDetailsCodec.validate(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return True
+
+    @staticmethod
+    def _is_valid_public_sidecar(content: str) -> bool:
+        """校验公开 sidecar 文本。"""
+        return CanvasRepository._is_valid_sidecar(content, public=True)
+
+    @staticmethod
+    def _is_valid_runtime_sidecar(content: str) -> bool:
+        """校验运行态 sidecar 文本。"""
+        return CanvasRepository._is_valid_sidecar(content, public=False)
