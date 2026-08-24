@@ -463,8 +463,15 @@ export interface SkillVersionItem {
 	publisher: SkillVersionPublisher | null
 	published_at: string | null
 	is_current_version: boolean
-	version_description_i18n: SkillI18nText | null
+	/** Resolved version details displayed by the publish history/detail view. */
+	version_description?: string | null
+	/** @deprecated Kept for compatibility with older version responses. */
+	version_description_i18n?: SkillI18nText | null
 	publish_target_value?: SkillPublishTargetValueResolved | null
+	categories?: Array<{
+		id: string | number
+		name: string
+	}> | null
 }
 
 export interface GetSkillVersionsResponse {

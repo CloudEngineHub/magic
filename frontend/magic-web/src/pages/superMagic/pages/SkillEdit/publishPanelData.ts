@@ -1,5 +1,4 @@
 import type { TFunction } from "i18next"
-import i18n from "i18next"
 import type {
 	PublishSkillParams,
 	PublishSkillPrefillResponse,
@@ -24,7 +23,6 @@ import {
 	resolvePublishAvailability,
 	sanitizeDraftForSubmission,
 } from "@/pages/superMagic/components/PublishPanel/publishAvailability"
-import { resolveLocalizedText } from "@/utils/locale"
 import type { SkillEditSkillInfo } from "./store/types"
 
 const defaultSkillPublishTo = ["INTERNAL", "MARKET"] as const
@@ -175,7 +173,13 @@ function mapVersionToHistoryRecord(
 ): PublishHistoryRecord {
 	const emptyLabel = t("skillEditPage.publishPanel.emptyValue")
 	const versionLabel = formatVersionLabel(item.version)
-	const details = pickVersionDescription(item.version_description_i18n)
+	const details = item.version_description?.trim() ?? ""
+	const categoryIds = Array.from(
+		new Set((item.categories ?? []).map((category) => String(category.id)).filter(Boolean)),
+	)
+	const categoryNames = Array.from(
+		new Set((item.categories ?? []).map((category) => category.name.trim()).filter(Boolean)),
+	)
 	const publisherName = item.publisher?.name?.trim() || emptyLabel
 	const publishedAt = item.published_at?.trim() || emptyLabel
 
@@ -186,6 +190,8 @@ function mapVersionToHistoryRecord(
 		status: mapApiToRecordStatus(item.review_status, item.publish_status),
 		publishTo: mapApiTargetToPublishTo(item.publish_target_type),
 		internalTarget: mapApiTargetToInternalTarget(item.publish_target_type),
+		...(categoryIds.length ? { categoryId: categoryIds[0], categoryIds } : {}),
+		...(categoryNames.length ? { categoryName: categoryNames[0], categoryNames } : {}),
 		publisherName,
 		publishedAt,
 		specificMembers: mapPublishTargetValueToMembers(item.publish_target_value),
@@ -279,10 +285,6 @@ function mapApiTargetToInternalTarget(
 	if (apiTarget === "MEMBER") return "MEMBER"
 	if (apiTarget === "ORGANIZATION") return "ORGANIZATION"
 	return "PRIVATE"
-}
-
-function pickVersionDescription(text: SkillVersionItem["version_description_i18n"]): string {
-	return resolveLocalizedText(text as Record<string, string>, i18n.language)
 }
 
 export function formatVersionLabel(version: string) {

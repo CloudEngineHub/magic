@@ -197,6 +197,40 @@ describe("buildPublishParamsFromDraft", () => {
 		])
 	})
 
+	it("uses resolved version details and categories for market version detail", () => {
+		const data = createSkillEditPublishPanelData({
+			skill: null,
+			versions: [
+				{
+					id: "version-market",
+					version: "1.0.0",
+					publish_status: "UNPUBLISHED",
+					review_status: "UNDER_REVIEW",
+					publish_target_type: "MARKET",
+					publish_target_value: null,
+					publisher: null,
+					published_at: null,
+					is_current_version: false,
+					version_description: "Resolved release notes",
+					version_description_i18n: {
+						zh_CN: "旧的本地化版本说明",
+						en_US: "Old localized release notes",
+					},
+					categories: [
+						{ id: "category-1", name: "办公" },
+						{ id: "category-2", name: "效率" },
+					],
+				},
+			],
+			currentPublisherName: "Alice",
+			t: ((key: string) => key) as never,
+		})
+
+		expect(data.historyRecords[0]?.versionDetails).toBe("Resolved release notes")
+		expect(data.historyRecords[0]?.categoryIds).toEqual(["category-1", "category-2"])
+		expect(data.historyRecords[0]?.categoryNames).toEqual(["办公", "效率"])
+	})
+
 	it("maps invalidated market review status into publish history", () => {
 		const data = createSkillEditPublishPanelData({
 			skill: null,
