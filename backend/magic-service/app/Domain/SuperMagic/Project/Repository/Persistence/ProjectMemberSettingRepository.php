@@ -11,6 +11,7 @@ use App\Domain\SuperMagic\Project\Entity\ProjectMemberSettingEntity;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberSettingRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Model\ProjectMemberSettingModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\DbConnection\Db;
 
 /**
  * 项目成员设置仓储实现.
@@ -123,6 +124,130 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             ->update($attributes);
 
         return $updated > 0;
+    }
+
+    public function updateSortOrder(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool
+    {
+        $existing = $this->model::query()
+            ->where('user_id', $userId)
+            ->where('project_id', $projectId)
+            ->first();
+
+        if ($existing) {
+            return $this->model::query()
+                ->where('user_id', $userId)
+                ->where('project_id', $projectId)
+                ->update(['sort_order' => $sortOrder]) > 0;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $projectCreatedAt = Db::table('magic_super_agent_project')
+            ->where('id', $projectId)
+            ->value('created_at');
+        return $this->model::query()->insert([
+            'id' => IdGenerator::getSnowId(),
+            'user_id' => $userId,
+            'project_id' => $projectId,
+            'organization_code' => $organizationCode,
+            'is_pinned' => 0,
+            'pinned_at' => null,
+            'is_bind_workspace' => 0,
+            'bind_workspace_id' => 0,
+            'sort_order' => $sortOrder,
+            'last_active_at' => $projectCreatedAt ?: $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    public function ensureSettingsForSorting(string $userId, array $projectIds, string $organizationCode): int
+    {
+        $projectIds = array_values(array_unique(array_map('intval', $projectIds)));
+        if ($projectIds === []) {
+            return 0;
+        }
+
+        $existingProjectIds = $this->model::query()
+            ->where('user_id', $userId)
+            ->whereIn('project_id', $projectIds)
+            ->pluck('project_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+        $missingProjectIds = array_values(array_diff($projectIds, $existingProjectIds));
+        if ($missingProjectIds === []) {
+            return 0;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $projectCreatedAt = Db::table('magic_super_agent_project')
+            ->whereIn('id', $missingProjectIds)
+            ->pluck('created_at', 'id')
+            ->all();
+        $insertData = [];
+        foreach ($missingProjectIds as $missingProjectId) {
+            $lastActiveAt = $projectCreatedAt[$missingProjectId] ?? $now;
+            $insertData[] = [
+                'id' => IdGenerator::getSnowId(),
+                'user_id' => $userId,
+                'project_id' => $missingProjectId,
+                'organization_code' => $organizationCode,
+                'is_pinned' => 0,
+                'pinned_at' => null,
+                'is_bind_workspace' => 0,
+                'bind_workspace_id' => 0,
+                'sort_order' => null,
+                // A sorting operation must not make a legacy project look recently used.
+                'last_active_at' => $lastActiveAt,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        $this->model::query()->insert($insertData);
+        return count($insertData);
+    }
+
+    public function getSortOrderRows(string $userId, ?int $workspaceId = null, ?int $excludeProjectId = null): array
+    {
+        $query = $this->model::query()
+            ->from($this->model->getTable() . ' as pms')
+            ->join('magic_super_agent_project as p', 'p.id', '=', 'pms.project_id')
+            ->where('pms.user_id', $userId)
+            ->whereRaw('COALESCE(pms.is_pinned, 0) = 0')
+            ->whereNull('p.deleted_at')
+            ->where('p.is_hidden', 0);
+        if ($workspaceId !== null) {
+            $query->where('p.workspace_id', $workspaceId);
+        }
+        if ($excludeProjectId !== null) {
+            $query->where('p.id', '<>', $excludeProjectId);
+        }
+
+        return $query->select(['p.id', 'pms.sort_order'])
+            ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN 0 ELSE 1 END ASC')
+            ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN p.id END DESC')
+            ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN p.id END DESC')
+            ->orderByRaw('CASE WHEN pms.sort_order IS NOT NULL THEN pms.sort_order END ASC')
+            ->lockForUpdate()
+            ->get()
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'sort_order' => $row->sort_order !== null ? (int) $row->sort_order : null,
+            ])
+            ->all();
+    }
+
+    public function batchUpdateSortOrders(string $userId, array $sortOrders): int
+    {
+        $updated = 0;
+        foreach ($sortOrders as $projectId => $sortOrder) {
+            $updated += (int) $this->model::query()
+                ->where('user_id', $userId)
+                ->where('project_id', (int) $projectId)
+                ->update(['sort_order' => $sortOrder]);
+        }
+
+        return $updated;
     }
 
     /**

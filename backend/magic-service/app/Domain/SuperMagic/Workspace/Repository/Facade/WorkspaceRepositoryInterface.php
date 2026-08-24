@@ -75,6 +75,7 @@ interface WorkspaceRepositoryInterface
      * @param int $pageSize 每页数量
      * @param string $orderBy 排序字段
      * @param string $orderDirection 排序方向
+     * @param bool $enableManualOrdering 是否启用侧边栏手工排序
      * @return array [total, list] 总数和工作区列表
      */
     public function getWorkspacesByConditions(
@@ -82,8 +83,15 @@ interface WorkspaceRepositoryInterface
         int $page = 1,
         int $pageSize = 10,
         string $orderBy = 'id',
-        string $orderDirection = 'desc'
+        string $orderDirection = 'desc',
+        bool $enableManualOrdering = true
     ): array;
+
+    public function updateSortOrder(int $workspaceId, ?int $sortOrder): bool;
+
+    public function getUserWorkspaceSortOrders(string $userId, ?int $excludeWorkspaceId = null): array;
+
+    public function batchUpdateSortOrders(array $sortOrders): int;
 
     /**
      * 保存工作区（创建或更新）.

@@ -1416,7 +1416,9 @@ class ProjectAppService extends AbstractAppService
             $targetWorkspaceId,
             $userAuthorization->getId(),
             $requestDTO->getTargetProjectName(),
-            $requestDTO->getProjectMode()
+            $requestDTO->getProjectMode(),
+            $requestDTO->getPreProjectId(),
+            $requestDTO->preProjectIdProvided
         );
 
         $this->logger->info(sprintf(
@@ -1496,14 +1498,17 @@ class ProjectAppService extends AbstractAppService
 
         /** @var int[] $validProjectIds */
         $validProjectIds = [];
+        /** @var int[] $workspaceChangeProjectIds */
+        $workspaceChangeProjectIds = [];
         $invalidResults = [];
 
         foreach ($requestDTO->getProjectIds() as $projectId) {
             $projectIdInt = (int) $projectId;
             if (isset($projectMap[$projectIdInt])) {
                 $project = $projectMap[$projectIdInt];
-                // Check if project is already in target workspace
-                if ($project->getWorkspaceId() === $targetWorkspaceId) {
+                // A same-workspace request is valid when it explicitly carries a
+                // sorting parameter; otherwise preserve the legacy no-op rejection.
+                if ($project->getWorkspaceId() === $targetWorkspaceId && ! $requestDTO->preProjectIdProvided) {
                     $invalidResults[] = [
                         'project_id' => $projectId,
                         'success' => false,
@@ -1511,6 +1516,9 @@ class ProjectAppService extends AbstractAppService
                     ];
                 } else {
                     $validProjectIds[] = $projectIdInt;
+                    if ($project->getWorkspaceId() !== $targetWorkspaceId) {
+                        $workspaceChangeProjectIds[] = $projectIdInt;
+                    }
                 }
             } else {
                 $invalidResults[] = [
@@ -1527,10 +1535,18 @@ class ProjectAppService extends AbstractAppService
 
         if (! empty($validProjectIds)) {
             try {
-                $successResults = Db::transaction(function () use ($validProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode) {
-                    // Step 4.1: Batch update projects (1 query)
-                    $updatedCount = $this->projectRepository->batchUpdateWorkspace(
-                        $validProjectIds,
+                $successResults = Db::transaction(function () use ($validProjectIds, $workspaceChangeProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode, $requestDTO) {
+                    $preProjectId = $requestDTO->getPreProjectId();
+                    if ($requestDTO->preProjectIdProvided
+                        && $preProjectId !== null
+                        && in_array($preProjectId, $validProjectIds, true)
+                    ) {
+                        throw new RuntimeException('Previous project cannot be included in the moved project list');
+                    }
+
+                    // Step 4.1: Batch update projects only when workspace changes.
+                    $updatedCount = $workspaceChangeProjectIds === [] ? 0 : $this->projectRepository->batchUpdateWorkspace(
+                        $workspaceChangeProjectIds,
                         $targetWorkspaceId,
                         $now
                     );
@@ -1540,8 +1556,8 @@ class ProjectAppService extends AbstractAppService
                     ]);
 
                     // Step 4.2: Batch update topics (1 query)
-                    $topicUpdatedCount = $this->topicDomainService->batchUpdateWorkspaceByProjects(
-                        $validProjectIds,
+                    $topicUpdatedCount = $workspaceChangeProjectIds === [] ? 0 : $this->topicDomainService->batchUpdateWorkspaceByProjects(
+                        $workspaceChangeProjectIds,
                         $targetWorkspaceId,
                         $now
                     );
@@ -1552,7 +1568,7 @@ class ProjectAppService extends AbstractAppService
 
                     // Step 4.3: Sync message schedule workspace.
                     $scheduleUpdatedCount = $this->messageScheduleDomainService->syncMovedProjectSchedules(
-                        $validProjectIds,
+                        $workspaceChangeProjectIds,
                         $userId,
                         $organizationCode,
                         (int) ($targetWorkspaceId ?? 0),
@@ -1566,7 +1582,7 @@ class ProjectAppService extends AbstractAppService
                     // Step 4.4: Sync owner's personal workspace binding.
                     $settingUpdatedCount = $this->projectMemberDomainService->syncOwnerProjectWorkspaceBindings(
                         $userId,
-                        $validProjectIds,
+                        $workspaceChangeProjectIds,
                         $targetWorkspaceId,
                         $organizationCode
                     );
@@ -1574,6 +1590,19 @@ class ProjectAppService extends AbstractAppService
                     $this->logger->info('Batch synced owner project workspace bindings', [
                         'updated_count' => $settingUpdatedCount,
                     ]);
+
+                    if ($requestDTO->preProjectIdProvided) {
+                        foreach ($validProjectIds as $projectId) {
+                            $this->projectDomainService->applyProjectSortOrderForBatch(
+                                $userId,
+                                $organizationCode,
+                                $projectId,
+                                $targetWorkspaceId,
+                                $preProjectId
+                            );
+                            $preProjectId = $projectId;
+                        }
+                    }
 
                     // Step 4.5: Build success results
                     $results = [];

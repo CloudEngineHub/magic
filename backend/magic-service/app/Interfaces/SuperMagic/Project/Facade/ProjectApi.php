@@ -350,6 +350,7 @@ class ProjectApi extends AbstractApi
         $requestContext->setUserAuthorization($this->getAuthorization());
 
         $requestDTO = MoveProjectRequestDTO::fromRequest($this->request);
+        $requestDTO->preProjectIdProvided = $this->request->has('pre_project_id');
 
         return $this->projectAppService->moveProject($requestContext, $requestDTO);
     }
@@ -363,6 +364,7 @@ class ProjectApi extends AbstractApi
         $requestContext->setUserAuthorization($this->getAuthorization());
 
         $requestDTO = BatchMoveProjectsRequestDTO::fromRequest($this->request);
+        $requestDTO->preProjectIdProvided = $this->request->has('pre_project_id');
 
         return $this->projectAppService->batchMoveProjects($requestContext, $requestDTO);
     }

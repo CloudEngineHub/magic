@@ -15,7 +15,7 @@ use App\Infrastructure\Core\AbstractRequestDTO;
  */
 class GetProjectListRequestDTO extends AbstractRequestDTO
 {
-    private const ALLOWED_ORDER_BY = ['id', 'updated_at'];
+    private const ALLOWED_ORDER_BY = ['id', 'created_at', 'updated_at'];
 
     private const ALLOWED_SORT = ['asc', 'desc'];
 
@@ -40,9 +40,9 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
     public string $projectName = '';
 
     /**
-     * Sort field: id, updated_at.
+     * Sort field: id, created_at, updated_at.
      */
-    public string $orderBy = 'id';
+    public string $orderBy = 'created_at';
 
     /**
      * Sort direction: asc, desc.
@@ -173,7 +173,7 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
             'project_name.string' => 'Project name must be a string',
             'project_name.max' => 'Project name cannot exceed 255 characters',
             'order_by.string' => 'Order by must be a string',
-            'order_by.in' => 'Order by must be one of: id, updated_at',
+            'order_by.in' => 'Order by must be one of: id, created_at, updated_at',
             'sort.string' => 'Sort must be a string',
             'sort.in' => 'Sort must be either asc or desc',
             'pin_priority.boolean' => 'Pin priority must be a boolean',
@@ -184,7 +184,7 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
     {
         $orderBy = strtolower($orderBy);
         if (! in_array($orderBy, self::ALLOWED_ORDER_BY, true)) {
-            return 'id';
+            return 'created_at';
         }
 
         return $orderBy;

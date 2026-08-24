@@ -256,12 +256,22 @@ class WorkspaceAppService extends AbstractAppService
         }
 
         $workspaceId = (int) $requestDTO->getWorkspaceId();
-        $this->workspaceDomainService->updateWorkspace(
-            $dataIsolation,
-            $workspaceId,
-            $requestDTO->getWorkspaceName(),
-            $requestDTO->getIsPinned()
-        );
+        if ($requestDTO->getWorkspaceName() !== '' || $requestDTO->getIsPinned() !== null) {
+            $this->workspaceDomainService->updateWorkspace(
+                $dataIsolation,
+                $workspaceId,
+                $requestDTO->getWorkspaceName(),
+                $requestDTO->getIsPinned()
+            );
+        }
+
+        if ($requestDTO->preWorkspaceIdProvided) {
+            $this->workspaceDomainService->moveWorkspace(
+                $dataIsolation,
+                $workspaceId,
+                $requestDTO->getPreWorkspaceId()
+            );
+        }
 
         // Get updated workspace entity
         $workspaceEntity = $this->workspaceDomainService->getWorkspaceDetail($workspaceId);

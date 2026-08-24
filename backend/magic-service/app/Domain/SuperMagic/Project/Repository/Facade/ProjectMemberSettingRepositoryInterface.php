@@ -53,6 +53,12 @@ interface ProjectMemberSettingRepositoryInterface
      */
     public function updatePinStatus(string $userId, int $projectId, bool $isPinned): bool;
 
+    public function updateSortOrder(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool;
+
+    public function getSortOrderRows(string $userId, ?int $workspaceId = null, ?int $excludeProjectId = null): array;
+
+    public function batchUpdateSortOrders(string $userId, array $sortOrders): int;
+
     /**
      * 批量获取用户的置顶项目ID列表.
      *
@@ -148,6 +154,11 @@ interface ProjectMemberSettingRepositoryInterface
      * @return int Number of affected records
      */
     public function batchEnsureSettings(string $userId, array $projectIds, string $organizationCode): int;
+
+    /**
+     * Ensure settings exist for sorting without changing recent-use timestamps.
+     */
+    public function ensureSettingsForSorting(string $userId, array $projectIds, string $organizationCode): int;
 
     /**
      * Batch set project shortcuts for a user across multiple projects.

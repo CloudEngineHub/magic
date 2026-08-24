@@ -14,7 +14,7 @@ use Hyperf\HttpServer\Contract\RequestInterface;
 
 class WorkspaceListRequestDTO extends AbstractDTO
 {
-    private const ALLOWED_ORDER_BY = ['id', 'updated_at'];
+    private const ALLOWED_ORDER_BY = ['id', 'created_at', 'updated_at'];
 
     private const ALLOWED_SORT = ['asc', 'desc'];
 
@@ -49,9 +49,9 @@ class WorkspaceListRequestDTO extends AbstractDTO
     public bool $autoCreate = true;
 
     /**
-     * Sort field: id, updated_at.
+     * Sort field: id, created_at, updated_at.
      */
-    public string $orderBy = 'id';
+    public string $orderBy = 'created_at';
 
     /**
      * Sort direction: asc, desc.
@@ -75,7 +75,7 @@ class WorkspaceListRequestDTO extends AbstractDTO
             || $request->input('auto_create', true) === 'true'
             || $request->input('auto_create', true) === 1
             || $request->input('auto_create', true) === '1';
-        $dto->orderBy = self::normalizeOrderBy((string) $request->input('order_by', 'id'));
+        $dto->orderBy = self::normalizeOrderBy((string) $request->input('order_by', 'created_at'));
         $dto->sort = self::normalizeSort((string) $request->input('sort', 'desc'));
 
         return $dto;
@@ -122,7 +122,7 @@ class WorkspaceListRequestDTO extends AbstractDTO
     {
         $orderBy = strtolower($orderBy);
         if (! in_array($orderBy, self::ALLOWED_ORDER_BY, true)) {
-            return 'id';
+            return 'created_at';
         }
 
         return $orderBy;

@@ -42,6 +42,10 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
      */
     public ?string $projectMode = null;
 
+    public ?string $preProjectId = null;
+
+    public bool $preProjectIdProvided = false;
+
     /**
      * Get source project ID.
      */
@@ -100,6 +104,15 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
         return $this->projectMode;
     }
 
+    public function getPreProjectId(): ?int
+    {
+        if ($this->preProjectId === null || $this->preProjectId === '') {
+            return null;
+        }
+
+        return (int) $this->preProjectId;
+    }
+
     /**
      * Get validation rules.
      */
@@ -112,6 +125,7 @@ class MoveProjectRequestDTO extends AbstractRequestDTO
             'target_workspace_id' => 'present|string|max:64',
             'target_project_name' => 'nullable|string|max:100',
             'project_mode' => 'nullable|string|in:' . $projectModes,
+            'pre_project_id' => 'nullable|string',
         ];
     }
 

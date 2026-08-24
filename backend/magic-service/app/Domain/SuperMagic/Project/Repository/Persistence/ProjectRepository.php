@@ -178,6 +178,8 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         string $orderDirection = 'desc',
         bool $pinPriority = false
     ): array {
+        $orderBy = in_array($orderBy, ['id', 'created_at', 'updated_at'], true) ? $orderBy : 'created_at';
+        $orderDirection = in_array(strtolower($orderDirection), ['asc', 'desc'], true) ? strtolower($orderDirection) : 'desc';
         $query = $this->projectModel::query()
             ->withoutGlobalScopes()
             ->from($this->projectModel->getTable() . ' as p');
@@ -223,10 +225,17 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
             $query->addSelect([
                 Db::raw('COALESCE(pms.is_pinned, 0) as is_pinned'),
                 Db::raw('pms.pinned_at as pinned_at'),
+                Db::raw('pms.sort_order as sort_order'),
             ]);
             if ($pinPriority) {
+                $dynamicOrderBy = $orderBy === 'created_at' ? 'id' : $orderBy;
                 $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC')
-                    ->orderByRaw('pms.pinned_at DESC');
+                    ->orderByRaw('pms.pinned_at DESC')
+                    ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN 0 ELSE 1 END ASC')
+                    ->orderByRaw("CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN p.{$dynamicOrderBy} END {$orderDirection}")
+                    ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN p.id END DESC')
+                    ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 THEN pms.sort_order END ASC')
+                    ->orderBy('p.id', 'asc');
             }
         }
 
