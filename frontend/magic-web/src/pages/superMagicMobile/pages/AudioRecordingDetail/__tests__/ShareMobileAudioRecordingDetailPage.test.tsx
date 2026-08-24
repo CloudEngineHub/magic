@@ -268,7 +268,8 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 
 		expect(summaryPanelPropsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
-				scrollPaddingBottom: 96,
+				scrollPaddingBottom:
+					"calc(max(24px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) + 40px + 44px)",
 			}),
 		)
 
@@ -276,7 +277,8 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 
 		expect(sourcePanelPropsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
-				scrollPaddingBottom: 96,
+				scrollPaddingBottom:
+					"calc(max(24px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) + 40px + 44px)",
 			}),
 		)
 	})
