@@ -12,6 +12,7 @@ async function waitForAppInitWithTimeout(
 	timeoutMs: number,
 	warnMessage: string,
 	requestConfig?: RequestConfig<Headers>,
+	failClosed = false,
 ): Promise<void> {
 	if (!appStore.appInitPromise) return
 
@@ -26,6 +27,9 @@ async function waitForAppInitWithTimeout(
 			error: error,
 			context: { requestConfig },
 		})
+		// Business requests must never escape the bootstrap gate with an incomplete
+		// session, otherwise their 401 responses can restart the login flow.
+		if (failClosed) throw error
 	}
 }
 
@@ -43,7 +47,7 @@ export async function awaitAppInitForOutgoingRequest(
 	timeoutMs = appInitWaitTimeoutMs,
 	requestConfig?: RequestConfig<Headers>,
 ): Promise<void> {
-	await waitForAppInitWithTimeout(timeoutMs, outgoingRequestTimeoutMessage, requestConfig)
+	await waitForAppInitWithTimeout(timeoutMs, outgoingRequestTimeoutMessage, requestConfig, true)
 }
 
 /**

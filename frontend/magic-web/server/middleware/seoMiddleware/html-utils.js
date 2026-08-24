@@ -169,7 +169,16 @@ function buildPreloadLink(minimalLogo) {
  * @returns {string}
  */
 function processHtmlContent(htmlTemplate, options) {
-	const { favicon, title, keywords, description, ogUrl, minimal_logo } = options
+	const {
+		favicon,
+		title,
+		keywords,
+		description,
+		ogUrl,
+		minimal_logo,
+		manifestUrl,
+		appleTouchIconUrl,
+	} = options
 
 	let html = htmlTemplate
 
@@ -177,9 +186,11 @@ function processHtmlContent(htmlTemplate, options) {
 	if (favicon) {
 		const mimeType = getFaviconMimeType(favicon)
 		const safeFavicon = escapeUrl(favicon)
+		const installMarker =
+			manifestUrl || appleTouchIconUrl ? " data-micro-app-install=\"favicon\"" : ""
 		html = html.replace(
 			/<link\s+rel="icon"[^>]*>/i,
-			`<link rel="icon" type="${mimeType}" href="${safeFavicon}" />`,
+			`<link rel="icon" type="${mimeType}" href="${safeFavicon}"${installMarker} />`,
 		)
 	}
 
@@ -192,6 +203,22 @@ function processHtmlContent(htmlTemplate, options) {
 		html = html.replace(/(<meta\s+name="viewport"[\s\S]*?\/>)/i, (match) => {
 			// 在 viewport 标签后添加预加载链接
 			return `${match}\n\t\t${preloadLink}`
+		})
+	}
+
+	const installLinks = [
+		manifestUrl
+			? `<link rel="manifest" href="${escapeUrl(manifestUrl)}" data-micro-app-install="manifest" />`
+			: "",
+		appleTouchIconUrl
+			? `<link rel="apple-touch-icon" href="${escapeUrl(appleTouchIconUrl)}" data-micro-app-install="apple-touch-icon" />`
+			: "",
+	]
+		.filter(Boolean)
+		.join("\n\t\t")
+	if (installLinks) {
+		html = html.replace(/(<meta\s+name="viewport"[\s\S]*?\/>)/i, (match) => {
+			return `${match}\n\t\t${installLinks}`
 		})
 	}
 

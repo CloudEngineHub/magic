@@ -38,6 +38,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 	const [isSlidesTemplatePickerOpen, setIsSlidesTemplatePickerOpen] = useState(false)
 	const [isSlidesTemplatePreviewOpen, setIsSlidesTemplatePreviewOpen] = useState(false)
 	const isSlidesMode = editorContext?.topicMode === TopicMode.PPT
+	const selectedTopicId = editorContext?.selectedTopic?.id
 	const variant = useOptionalScenePanelVariant()
 	const isProjectScene = variant === ScenePanelVariant.TopicPage
 	const inputLayout = useConversationInputLayout()
@@ -51,6 +52,14 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 			setIsSlidesTemplatePickerOpen(false)
 		}
 	}, [isSlidesMode])
+
+	useEffect(() => {
+		// Local selection outlives topic switches unless we reset it.
+		setSelectedSlidesTemplate(null)
+		setSelectedSlidesFilters([])
+		setIsSlidesTemplatePickerOpen(false)
+		setIsSlidesTemplatePreviewOpen(false)
+	}, [selectedTopicId])
 
 	const editorPortalTarget = usePortalTarget({
 		portalId: SCENE_INPUT_IDS.INPUT_CONTAINER,

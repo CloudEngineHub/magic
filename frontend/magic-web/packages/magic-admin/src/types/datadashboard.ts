@@ -494,7 +494,11 @@ export namespace DataDashboard {
 
 	/** 数据看板导出任务状态 */
 	export type DashboardExportStatus =
-		"pending" | "processing" | "completed" | "failed" | "expired"
+		| "pending"
+		| "processing"
+		| "completed"
+		| "failed"
+		| "expired"
 
 	/** 数据看板导出请求；不携带分页和表格排序参数 */
 	export interface DashboardExportRequest extends BaseQuery {

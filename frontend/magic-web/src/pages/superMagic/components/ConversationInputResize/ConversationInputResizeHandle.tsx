@@ -9,6 +9,8 @@ import { cn } from "@/utils/cn"
 
 interface ConversationInputResizeHandleProps {
 	disabled?: boolean
+	/** Allows a page-specific offset while keeping the default handle position unchanged. */
+	positionClassName?: string
 	value: number
 	min: number
 	max: number
@@ -22,6 +24,7 @@ interface ConversationInputResizeHandleProps {
 /** Render the grab target and translate pointer movement into height deltas. */
 export default function ConversationInputResizeHandle({
 	disabled = false,
+	positionClassName = "top-0",
 	value,
 	min,
 	max,
@@ -158,7 +161,8 @@ export default function ConversationInputResizeHandle({
 			data-resizing={isDragging}
 			data-testid="conversation-input-resize-handle"
 			className={cn(
-				"group absolute inset-x-0 top-0 z-10 flex h-2 overflow-hidden",
+				"group absolute inset-x-0 z-10 flex h-2 overflow-hidden",
+				positionClassName,
 				"cursor-row-resize touch-none select-none items-center justify-center",
 				"before:pointer-events-none before:absolute before:inset-0",
 				"before:bg-gradient-to-r before:from-[rgba(239,246,255,0)] before:via-[rgba(210,230,255,1)] before:to-[rgba(239,246,255,0)]",

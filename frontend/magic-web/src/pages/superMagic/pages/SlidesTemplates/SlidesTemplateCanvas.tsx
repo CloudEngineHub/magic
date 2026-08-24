@@ -41,6 +41,7 @@ import { useTemplateCanvasVisibleItems } from "./useTemplateCanvasVisibleItems"
 
 interface SlidesTemplateCanvasProps {
 	enableInfiniteLoop?: boolean
+	favoritePendingCodes?: ReadonlySet<string>
 	hasMore: boolean
 	initialAlignment?: SlidesTemplateCanvasInitialAlignment
 	isLoading: boolean
@@ -50,6 +51,8 @@ interface SlidesTemplateCanvasProps {
 	loadMoreSignal?: number | string
 	onLoadMore: () => void
 	onFindSimilarColors?: (template: OptionItem) => void
+	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPreviewOpenChange?: (isOpen: boolean) => void
 	onRetryRefresh?: () => void
 	onTemplateDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
@@ -69,6 +72,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 	function SlidesTemplateCanvas(
 		{
 			enableInfiniteLoop = true,
+			favoritePendingCodes,
 			hasMore,
 			initialAlignment = "center",
 			isLoading,
@@ -78,6 +82,8 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			loadMoreSignal,
 			onLoadMore,
 			onFindSimilarColors,
+			onFavoriteToggle,
+			onOpenProject,
 			onPreviewOpenChange,
 			onRetryRefresh,
 			onTemplateDetailLoad,
@@ -478,6 +484,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				selectedTemplate={selectedTemplate}
 				previewFocus={previewFocus}
 				canvasScale={canvasScale}
+				favoritePendingCodes={favoritePendingCodes}
 				canZoomIn={canZoomIn}
 				canZoomOut={canZoomOut}
 				isDragging={isDragging}
@@ -500,6 +507,8 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onCanvasPointerLeave={markCanvasInactive}
 				onCanvasClickCapture={handleCanvasClickCapture}
 				onFindSimilarColors={onFindSimilarColors}
+				onFavoriteToggle={onFavoriteToggle}
+				onOpenProject={onOpenProject}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewIntent={handlePreviewIntent}
 				onPreviewToggle={handlePreviewToggle}

@@ -35,6 +35,7 @@ use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Service\MessageQueueDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Event\ProjectDeletedEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectHiddenStatusUpdatedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus as SuperAgentTaskStatus;
@@ -3080,7 +3081,14 @@ class AsrFileAppService extends AbstractAppService
 
             // 删除项目
             try {
-                $this->projectDomainService->deleteProject((int) $taskStatus->projectId, $taskStatus->userId);
+                $project = $this->projectDomainService->getProjectNotUserId((int) $taskStatus->projectId);
+                $deleted = $this->projectDomainService->deleteProject((int) $taskStatus->projectId, $taskStatus->userId);
+                if ($deleted && $project !== null) {
+                    $authorization = (new MagicUserAuthorization())
+                        ->setId($taskStatus->userId)
+                        ->setOrganizationCode((string) $taskStatus->organizationCode);
+                    $this->eventDispatcher->dispatch(new ProjectDeletedEvent($project, $authorization));
+                }
                 $this->logger->info('删除空项目成功', [
                     'task_key' => $taskStatus->taskKey,
                     'project_id' => $taskStatus->projectId,

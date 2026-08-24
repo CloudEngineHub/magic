@@ -1,6 +1,8 @@
 import { observer } from "mobx-react-lite"
 import { useCurrentSceneConfig } from "@/pages/superMagic/components/MainInputContainer/hooks/useCurrentSceneConfig"
 import ScenePanelContainer from "@/pages/superMagic/components/MainInputContainer/components/ScenePanelContainer"
+import { SkillPanelType } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { isMobileScenePanelRenderable } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import VideoProductionConfigPanel from "@/pages/superMagic/components/MainInputContainer/components/VideoProductionConfigPanel"
 import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
@@ -32,8 +34,13 @@ function MobileScenePanelsComponent({
 
 	const handleTemplateSelect = () => undefined
 	const handleFilterChange = () => undefined
+	// Mirror each mobile renderer's visibility rules so empty child panels do not leave
+	// the mobile composer padding and separator visible.
+	const hasRenderablePanels = panels.some(
+		(panel) => panel.type === SkillPanelType.FIELD && isMobileScenePanelRenderable(panel),
+	)
 
-	const shouldRenderScenePanels = renderScenePanels && (isLoading || panels.length > 0)
+	const shouldRenderScenePanels = renderScenePanels && (isLoading || hasRenderablePanels)
 	if (!shouldRenderScenePanels && !shouldShowVideoProductionConfig) return null
 
 	return (

@@ -351,6 +351,8 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
+			// Lower the claw-only resize handle so it aligns with the message editor edge.
+			resizeHandlePositionClassName="top-6"
 			// stickyMessageClassName="top-0"
 		/>
 	)

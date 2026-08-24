@@ -19,14 +19,20 @@ use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Database\Exception\QueryException;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 class SlidesTemplateTagDomainService
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private readonly SlidesTemplateTagRepositoryInterface $slidesTemplateTagRepository,
         private readonly SlidesTemplateTagRelationRepositoryInterface $slidesTemplateTagRelationRepository,
+        LoggerFactory $loggerFactory,
     ) {
+        $this->logger = $loggerFactory->get('slides-template');
     }
 
     public function findByIdOrFail(SlidesTemplateDataIsolation $dataIsolation, int|string $id): SlidesTemplateTagEntity
@@ -125,7 +131,7 @@ class SlidesTemplateTagDomainService
      * @param string[] $codes
      * @return SlidesTemplateTagEntity[]
      */
-    public function findEnabledByCodesOrFail(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
+    public function findEnabledByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array
     {
         $codes = $this->normalizeCodes($codes);
         if ($codes === []) {
@@ -134,7 +140,17 @@ class SlidesTemplateTagDomainService
 
         $tags = $this->slidesTemplateTagRepository->findByCodes($dataIsolation, $codes, SlidesTemplateTagStatus::Enabled->value);
         if (count($tags) !== count($codes)) {
-            ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_NOT_FOUND);
+            $foundCodes = array_map(
+                static fn (SlidesTemplateTagEntity $tag): string => $tag->getCode(),
+                $tags
+            );
+            $this->logger->warning('Slides template unavailable tags ignored', [
+                'requested_codes' => $codes,
+                'found_codes' => $foundCodes,
+                'missing_codes' => array_values(array_diff($codes, $foundCodes)),
+                'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                'official_organization_codes' => $dataIsolation->getOfficialOrganizationCodes(),
+            ]);
         }
 
         return $tags;
@@ -145,7 +161,7 @@ class SlidesTemplateTagDomainService
      */
     public function syncTemplateTagsByCodes(SlidesTemplateDataIsolation $dataIsolation, int $templateId, array $tagCodes, string $createdUid): void
     {
-        $tags = $this->findEnabledByCodesOrFail($dataIsolation, $tagCodes);
+        $tags = $this->findEnabledByCodes($dataIsolation, $tagCodes);
         foreach ($tags as $tag) {
             if (! $tag->isTag()) {
                 ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_GROUP_CANNOT_BIND);

@@ -105,6 +105,7 @@ function FilterBar({
 	return (
 		<HeadlessHorizontalScroll
 			className="w-full"
+			allowVerticalOverflow={isMobile}
 			scrollContainerClassName={cn(
 				"flex w-full min-w-0 items-center justify-between overflow-x-auto overflow-y-hidden",
 				isCompactMobile ? "no-scrollbar gap-2" : "gap-4",

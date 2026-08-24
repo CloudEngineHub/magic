@@ -141,7 +141,11 @@ readonly class VolcengineArkVideoClient
             return $request();
         } catch (RequestException $exception) {
             $response = $exception->getResponse();
-            $errorMessage = trim((string) $response?->getBody());
+            $responseBody = $response?->getBody();
+            $errorMessage = $responseBody !== null ? (string) $responseBody : $exception->getMessage();
+            if ($responseBody?->isSeekable()) {
+                $responseBody->rewind();
+            }
             $httpStatus = $response?->getStatusCode();
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
@@ -153,7 +157,7 @@ readonly class VolcengineArkVideoClient
                 'error' => $errorMessage,
             ]);
             throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($errorMessage),
+                $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage),
                 $exception,
                 $httpStatus
             );
@@ -182,7 +186,7 @@ readonly class VolcengineArkVideoClient
         return max(0, (int) round((microtime(true) - $startedAt) * 1000));
     }
 
-    private function formatRequestExceptionMessage(string $errorContent): string
+    private function formatRequestExceptionMessage(int $httpStatus, string $errorContent): string
     {
         try {
             $payload = Json::decode(trim($errorContent));
@@ -194,6 +198,9 @@ readonly class VolcengineArkVideoClient
                     $translated = __($key);
                     if (is_string($translated) && $translated !== '' && $translated !== $key) {
                         return $translated;
+                    }
+                    if ($httpStatus === 400) {
+                        return $error['message'] ?? '视频生成失败，请检查输入内容或稍后重试。';
                     }
                 }
             }

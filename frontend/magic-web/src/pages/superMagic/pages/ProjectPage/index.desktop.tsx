@@ -39,6 +39,7 @@ import type {
 	SuperMagicOpenKnowledgeBaseTabPayload,
 } from "../../events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "../../events/openPlaybackTab"
+import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
 
 // 项目页组件
 function ProjectPage() {
@@ -103,6 +104,13 @@ function ProjectPage() {
 		setAutoDetail(null)
 		setUserSelectDetail(null)
 	}, [selectedProject?.id])
+
+	useSlidesTemplateNavigation({
+		selectedProjectId: selectedProject?.id,
+		attachments,
+		openTemplateFile: (templateItem) => detailRef.current?.openFileTab?.(templateItem),
+		setUserSelectDetail,
+	})
 
 	useEffect(() => {
 		const handleOpenFileTab = (data: SuperMagicOpenFileTabPayload) => {

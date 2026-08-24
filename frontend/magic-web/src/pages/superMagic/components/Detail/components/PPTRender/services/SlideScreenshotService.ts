@@ -14,6 +14,7 @@ const THUMBNAIL_SCALE = 4
 const MAX_CONCURRENT_SCREENSHOT_GENERATIONS = 2
 const MAX_PRIORITY_GENERATION_BURST = 3
 const SCREENSHOT_PREPARATION_IDLE_TIMEOUT = 32
+const MAX_CONCURRENT_IMAGE_CACHE_REFRESHES = MAX_CONCURRENT_SCREENSHOT_GENERATIONS
 
 interface ScheduledScreenshotGeneration<T> {
 	promise: Promise<T>
@@ -47,6 +48,11 @@ interface InFlightScreenshotGeneration {
 	epoch: number
 	hasRequiredConsumer: boolean
 	scheduledGeneration: ScheduledScreenshotGeneration<string>
+}
+
+interface InlineCrossOriginImagesResult {
+	restore: () => void
+	inlinedCount: number
 }
 
 export type SlideScreenshotRequestKind = "preview" | "required"
@@ -638,17 +644,40 @@ export class SlideScreenshotService {
 			await this.waitForRenderingReady(iframeDoc, signal)
 
 			const restoreTextStyles = stabilizeSingleLineTextForSnapdom(screenshotTarget)
+			let restoreImageSources: () => void = () => undefined
 			try {
-				const snapdomGeneration = snapdom(screenshotTarget, {
-					width,
-					height,
-					backgroundColor: "#ffffff",
-					embedFonts: true,
-					fallbackURL: fallbackImageBase64,
-					plugins: [this.createSnapdomAbortPlugin(signal)],
+				let usedFallbackImage = false
+				const captureWithSnapdom = async (onFallback: () => void) => {
+					const snapdomGeneration = snapdom(screenshotTarget, {
+						width,
+						height,
+						backgroundColor: "#ffffff",
+						embedFonts: true,
+						fallbackURL: () => {
+							onFallback()
+							return fallbackImageBase64
+						},
+						plugins: [this.createSnapdomAbortPlugin(signal)],
+					})
+					holdSlotUntil(snapdomGeneration)
+					return this.waitForAbortableOperation(snapdomGeneration, signal)
+				}
+
+				let result = await captureWithSnapdom(() => {
+					usedFallbackImage = true
 				})
-				holdSlotUntil(snapdomGeneration)
-				const result = await this.waitForAbortableOperation(snapdomGeneration, signal)
+
+				if (usedFallbackImage && this.hasCrossOriginImagesForSnapdom(screenshotTarget)) {
+					const inlineResult = await this.inlineCrossOriginImagesForSnapdom(
+						screenshotTarget,
+						signal,
+					)
+					restoreImageSources = inlineResult.restore
+					if (inlineResult.inlinedCount > 0) {
+						result = await captureWithSnapdom(() => undefined)
+					}
+				}
+
 				this.throwIfAborted(signal)
 
 				const webpGeneration = result.toWebp({
@@ -667,6 +696,7 @@ export class SlideScreenshotService {
 				)
 			} finally {
 				restoreTextStyles()
+				restoreImageSources()
 			}
 			if (!thumbnailUrl) {
 				throw new Error("Screenshot generation failed")
@@ -1070,6 +1100,210 @@ export class SlideScreenshotService {
 
 	private getScreenshotTarget(doc: Document): HTMLElement | null {
 		return doc.querySelector<HTMLElement>(".slide-container") || doc.body
+	}
+
+	/**
+	 * A regular img request can populate Chromium's cache with a no-CORS response.
+	 * A later CORS fetch from snapDOM may then reuse that entry and fail even though
+	 * OSS returns the correct CORS headers for a fresh request. Refresh the resource
+	 * cache and inline the result before snapDOM reads the image pixels.
+	 */
+	private async inlineCrossOriginImagesForSnapdom(
+		target: HTMLElement,
+		signal: AbortSignal,
+	): Promise<InlineCrossOriginImagesResult> {
+		const restorations: Array<() => void> = []
+		const entries = Array.from(this.collectCrossOriginImagesByUrl(target).entries())
+		let isRestored = false
+		const restore = () => {
+			if (isRestored) return
+			isRestored = true
+			for (let index = restorations.length - 1; index >= 0; index -= 1) {
+				restorations[index]()
+			}
+		}
+
+		try {
+			for (
+				let index = 0;
+				index < entries.length;
+				index += MAX_CONCURRENT_IMAGE_CACHE_REFRESHES
+			) {
+				this.throwIfAborted(signal)
+				const batch = entries.slice(index, index + MAX_CONCURRENT_IMAGE_CACHE_REFRESHES)
+				await Promise.all(
+					batch.map(([sourceUrl, images]) =>
+						this.refreshAndInlineImageGroup(sourceUrl, images, signal, restorations),
+					),
+				)
+			}
+			return {
+				restore,
+				inlinedCount: restorations.length,
+			}
+		} catch (error) {
+			restore()
+			throw error
+		}
+	}
+
+	private collectCrossOriginImagesByUrl(target: HTMLElement): Map<string, HTMLImageElement[]> {
+		const imagesByUrl = new Map<string, HTMLImageElement[]>()
+		for (const image of Array.from(target.querySelectorAll<HTMLImageElement>("img[src]"))) {
+			const sourceUrl = image.currentSrc || image.src
+			if (!this.isCrossOriginHttpUrl(sourceUrl)) continue
+			const images = imagesByUrl.get(sourceUrl) ?? []
+			images.push(image)
+			imagesByUrl.set(sourceUrl, images)
+		}
+		return imagesByUrl
+	}
+
+	private hasCrossOriginImagesForSnapdom(target: HTMLElement): boolean {
+		return this.collectCrossOriginImagesByUrl(target).size > 0
+	}
+
+	private async refreshAndInlineImageGroup(
+		sourceUrl: string,
+		images: HTMLImageElement[],
+		signal: AbortSignal,
+		restorations: Array<() => void>,
+	): Promise<void> {
+		try {
+			const response = await fetch(sourceUrl, {
+				cache: "reload",
+				credentials: "omit",
+				mode: "cors",
+				signal,
+			})
+			if (!response.ok) return
+
+			const blob = await response.blob()
+			const mimeType = blob.type.toLowerCase()
+			if (mimeType && !mimeType.startsWith("image/")) return
+
+			const dataUrl = await this.readBlobAsDataUrl(blob, signal)
+			if (!dataUrl.startsWith("data:")) return
+
+			await Promise.all(
+				images.map((image) =>
+					this.replaceImageSourceForSnapdom(image, dataUrl, signal, restorations),
+				),
+			)
+		} catch {
+			this.throwIfAborted(signal)
+			// Keep the original source so snapDOM's existing fallback behavior remains intact.
+		}
+	}
+
+	private async replaceImageSourceForSnapdom(
+		image: HTMLImageElement,
+		dataUrl: string,
+		signal: AbortSignal,
+		restorations: Array<() => void>,
+	): Promise<void> {
+		const originalSrc = image.getAttribute("src")
+		const originalSrcset = image.getAttribute("srcset")
+		const originalSizes = image.getAttribute("sizes")
+		const pictureSources = Array.from(
+			image.parentElement?.tagName === "PICTURE"
+				? image.parentElement.querySelectorAll<HTMLSourceElement>("source")
+				: [],
+		).map((source) => ({
+			source,
+			srcset: source.getAttribute("srcset"),
+			sizes: source.getAttribute("sizes"),
+		}))
+
+		image.removeAttribute("srcset")
+		image.removeAttribute("sizes")
+		pictureSources.forEach(({ source }) => {
+			source.removeAttribute("srcset")
+			source.removeAttribute("sizes")
+		})
+		image.src = dataUrl
+
+		const restore = () => {
+			this.restoreAttribute(image, "src", originalSrc)
+			this.restoreAttribute(image, "srcset", originalSrcset)
+			this.restoreAttribute(image, "sizes", originalSizes)
+			pictureSources.forEach(({ source, srcset, sizes }) => {
+				this.restoreAttribute(source, "srcset", srcset)
+				this.restoreAttribute(source, "sizes", sizes)
+			})
+		}
+		restorations.push(restore)
+
+		if (typeof image.decode === "function") {
+			await this.waitForAbortableOperation(
+				image.decode().catch(() => undefined),
+				signal,
+			)
+		}
+	}
+
+	private isCrossOriginHttpUrl(sourceUrl: string): boolean {
+		try {
+			const url = new URL(sourceUrl, window.location.href)
+			return (
+				(url.protocol === "http:" || url.protocol === "https:") &&
+				url.origin !== window.location.origin
+			)
+		} catch {
+			return false
+		}
+	}
+
+	private readBlobAsDataUrl(blob: Blob, signal: AbortSignal): Promise<string> {
+		return new Promise<string>((resolve, reject) => {
+			const reader = new FileReader()
+			let settled = false
+			let abortedBySignal = false
+			const cleanup = () => signal.removeEventListener("abort", handleAbort)
+			const settle = (callback: () => void) => {
+				if (settled) return
+				settled = true
+				cleanup()
+				callback()
+			}
+			const handleAbort = () => {
+				abortedBySignal = true
+				try {
+					reader.abort()
+				} catch {
+					// Ignore abort calls when the FileReader has already completed.
+				}
+				settle(() => reject(this.getAbortReason(signal)))
+			}
+
+			if (signal.aborted) {
+				handleAbort()
+				return
+			}
+
+			signal.addEventListener("abort", handleAbort, { once: true })
+			reader.onload = () => settle(() => resolve(String(reader.result ?? "")))
+			reader.onerror = () =>
+				settle(() => reject(reader.error ?? new Error("Failed to read image blob")))
+			reader.onabort = () => {
+				if (abortedBySignal) return
+				settle(() => reject(new Error("Image blob read was aborted")))
+			}
+
+			try {
+				reader.readAsDataURL(blob)
+			} catch (error) {
+				settle(() => reject(error))
+			}
+		})
+	}
+
+	private restoreAttribute(element: Element, name: string, value: string | null): void {
+		if (value === null) {
+			element.removeAttribute(name)
+			return
+		}
+		element.setAttribute(name, value)
 	}
 
 	private async waitForRenderingReady(doc: Document, signal: AbortSignal): Promise<void> {

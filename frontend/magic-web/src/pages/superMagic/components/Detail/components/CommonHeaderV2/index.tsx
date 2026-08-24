@@ -71,12 +71,8 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const effectiveShowDownload = useDownloadVisibility(showDownload, isMobile)
-	const {
-		hideShareFile,
-		hideFullscreen,
-		hideVersionHistory,
-		showShareFileInReadOnly,
-	} = useFileActionVisibility()
+	const { hideShareFile, hideFullscreen, hideVersionHistory, showShareFileInReadOnly } =
+		useFileActionVisibility()
 	const headerContainerRef = useRef<HTMLDivElement>(null)
 	const rightActionsContainerRef = useRef<HTMLDivElement>(null)
 	const showButtonText = useContainerShowButtonText(rightActionsContainerRef)
