@@ -5528,8 +5528,8 @@
         "en_US": "Canvas prompt library search"
     },
     "canvas.detail.title.image_search": {
-        "zh_CN": "画布图片搜索",
-        "en_US": "Canvas image search"
+        "zh_CN": "搜索并导入参考图片",
+        "en_US": "Search and import reference images"
     },
     "canvas.detail.title.main_content_selection": {
         "zh_CN": "画布主内容选择",
