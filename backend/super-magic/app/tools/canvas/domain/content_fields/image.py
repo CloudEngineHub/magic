@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.domain.content_fields.generated_media_protocol import generation_request_field
 from app.tools.canvas.domain.types import JsonObject
 
 
@@ -17,11 +18,24 @@ class ImageContentFields(GeneratedMediaContentFields):
     image_generation_task_meta: JsonObject | None = None
     crop: JsonObject | None = None
 
+    @property
+    def generated_request_field(self) -> str:
+        """返回图片生成请求的协议字段名。"""
+        return generation_request_field("image") or "generateImageRequest"
+
+    def set_generation_request(self, request: JsonObject) -> None:
+        """保存图片生成请求。"""
+        self.generate_image_request = request
+
+    def clear_generation_request(self) -> None:
+        """清除图片生成请求。"""
+        self.generate_image_request = None
+
     def to_dict(self) -> dict[str, object]:
         """转换为 Image Content 协议字段。"""
         values: dict[str, object | None] = {
             **self._media_dict(),
-            "generateImageRequest": deepcopy(self.generate_image_request),
+            self.generated_request_field: deepcopy(self.generate_image_request),
             "imageGenerationTaskMeta": deepcopy(self.image_generation_task_meta),
             "crop": deepcopy(self.crop),
         }

@@ -7,6 +7,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.domain.content_fields.generated_media_protocol import find_generation_request
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
@@ -110,8 +111,9 @@ class CanvasElementSizingService:
         content = element.get_content(element.active_content_id)
         if content is not None:
             fields = content.fields.to_dict()
-            request = fields.get("generateImageRequest") or fields.get("generateVideoRequest")
-            if isinstance(request, dict):
+            generation_request = find_generation_request(fields)
+            request = generation_request[1] if generation_request is not None else None
+            if request is not None:
                 parsed = cls._parse_size(request.get("size"))
                 if parsed is not None:
                     return parsed

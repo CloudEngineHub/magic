@@ -6,11 +6,15 @@ import hashlib
 import json
 from typing import Any
 
+from app.tools.canvas.domain.content_fields.generated_media_protocol import (
+    find_generation_request,
+    generated_request_fields,
+)
 from app.tools.canvas.domain.errors import CanvasDomainError
 
 RUNTIME_METADATA_KEY = "__canvas_runtime__"
 RUNTIME_SIDECAR_FILENAME = "element-details-runtime.json"
-PUBLIC_DETAIL_FIELDS = frozenset({"generateImageRequest", "generateVideoRequest", "visualUnderstanding"})
+PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"visualUnderstanding"}
 
 
 class ContentMetadataService:
@@ -27,9 +31,9 @@ class ContentMetadataService:
         if public_detail or runtime_detail:
             merged = {**runtime_detail, **public_detail}
             if "generationParameters" not in merged:
-                request = public_detail.get("generateImageRequest") or public_detail.get("generateVideoRequest")
-                if isinstance(request, dict):
-                    merged["generationParameters"] = _generation_parameters_from_public_request(request)
+                generation_request = find_generation_request(public_detail)
+                if generation_request is not None:
+                    merged["generationParameters"] = _generation_parameters_from_public_request(generation_request[1])
             return merged
         legacy = metadata.get("contentDetails") if isinstance(metadata, dict) else None
         if isinstance(legacy, dict) and isinstance(legacy.get(content_id), dict):
@@ -241,7 +245,7 @@ class ContentMetadataService:
         parameters: dict[str, Any],
         element_type: str,
     ) -> dict[str, Any]:
-        """按 Design sidecar 协议生成公共生成请求。"""
+        """按媒体类型注册的构建器生成公共请求。"""
         request: dict[str, Any] = {
             "prompt": str(parameters.get("prompt") or ""),
         }
@@ -249,17 +253,24 @@ class ContentMetadataService:
             value = parameters.get(key)
             if value is not None:
                 request[key] = value
-        if element_type == "image":
-            references = parameters.get("reference_images")
-            if isinstance(references, (list, tuple)) and references:
-                request["reference_images"] = [
-                    _normalize_project_path(path)
-                    for path in references
-                    if isinstance(path, str) and path
-                ]
-        else:
-            request.update(_build_public_video_request(parameters))
+        builder = _PUBLIC_GENERATION_REQUEST_BUILDERS.get(element_type)
+        if builder is not None:
+            request.update(builder(parameters))
         return request
+
+
+def _build_public_image_request(parameters: dict[str, Any]) -> dict[str, Any]:
+    """构建图片生成请求的媒体特有字段。"""
+    references = parameters.get("reference_images")
+    if not isinstance(references, (list, tuple)) or not references:
+        return {}
+    return {
+        "reference_images": [
+            _normalize_project_path(path)
+            for path in references
+            if isinstance(path, str) and path
+        ]
+    }
 
 
 def _find_detail(elements: Any, element_id: str, content_id: str) -> dict[str, Any]:
@@ -333,6 +344,12 @@ def _build_public_video_request(parameters: dict[str, Any]) -> dict[str, Any]:
     if isinstance(extensions, dict) and extensions:
         request["extensions"] = dict(extensions)
     return request
+
+
+_PUBLIC_GENERATION_REQUEST_BUILDERS = {
+    "image": _build_public_image_request,
+    "video": _build_public_video_request,
+}
 
 
 def _build_uri_inputs(values: Any) -> list[dict[str, str]]:

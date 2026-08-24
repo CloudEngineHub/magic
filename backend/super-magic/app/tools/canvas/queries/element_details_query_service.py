@@ -12,6 +12,10 @@ from app.tools.canvas.application.results import (
     CanvasElementsResult,
     CanvasLayoutResult,
 )
+from app.tools.canvas.domain.content_fields.generated_media_protocol import (
+    find_generation_request,
+    generated_request_fields,
+)
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
@@ -100,10 +104,10 @@ class ElementDetailsQueryService:
                 key: value
                 for key, value in content.fields.to_dict().items()
                 if key not in {
-                    "src", "status", "errorMessage", "generateImageRequest", "generateVideoRequest",
-                    "imageGenerationTaskMeta",
-                }
+                    "src", "status", "errorMessage", "imageGenerationTaskMeta",
+                } | generated_request_fields()
             }
+            generation_request = find_generation_request(detail)
             contents.append(CanvasContentDetailResult(
                 content_id=content.content_id,
                 status=content.fields.generation_status,
@@ -115,10 +119,8 @@ class ElementDetailsQueryService:
                 generation_parameters=(
                     cast(JsonObject, detail["generationParameters"])
                     if isinstance(detail.get("generationParameters"), dict)
-                    else cast(JsonObject, detail["generateImageRequest"])
-                    if isinstance(detail.get("generateImageRequest"), dict)
-                    else cast(JsonObject, detail["generateVideoRequest"])
-                    if isinstance(detail.get("generateVideoRequest"), dict)
+                    else cast(JsonObject, generation_request[1])
+                    if generation_request is not None
                     else None
                 ),
                 payload=cast(JsonObject, payload) if payload else None,

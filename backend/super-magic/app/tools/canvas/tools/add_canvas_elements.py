@@ -19,18 +19,16 @@ from app.tools.canvas.application.commands import (
     LayoutCommand,
 )
 from app.tools.canvas.domain.content_fields import (
-    AudioContentFields,
     ContentFieldsFactory,
     EllipseContentFields,
-    ImageContentFields,
     RectangleContentFields,
     StarContentFields,
     StoryboardContentFields,
     TextContentFields,
     TriangleContentFields,
-    VideoContentFields,
     VideoEditContentFields,
 )
+from app.tools.canvas.domain.content_fields.generated_media_protocol import generated_media_types
 from app.tools.canvas.domain.types import JsonObject
 from app.tools.canvas.presentation import (
     CanvasGenerationFeedback,
@@ -350,8 +348,8 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                     "storyboard Content requires generationConfig.model_id, size, resolution, and aspect_ratio"
                 )
         if self.source == "generated":
-            if self.content_type not in {"image", "video"}:
-                raise ValueError("source=generated currently supports content_type=image or video")
+            if self.content_type not in generated_media_types():
+                raise ValueError(f"source=generated is not configured for content_type={self.content_type}")
             if self.task == "compose":
                 if self.content_type != "video" or not self.video_edit_element_id:
                     raise ValueError("task=compose requires video content and videoEditElementId")
@@ -403,12 +401,8 @@ Reference image paths inside the current Canvas project. Use paths relative to t
 
     def _build_fields(self):
         """按确定的 Content 类型构造领域字段。"""
-        if self.content_type == "image":
-            return ImageContentFields()
-        if self.content_type == "video":
-            return VideoContentFields()
-        if self.content_type == "audio":
-            return AudioContentFields()
+        if self.content_type in {"image", "video", "audio"}:
+            return ContentFieldsFactory.empty(self.content_type)
         if self.content_type == "text":
             return TextContentFields(
                 content=self._text_paragraphs(),
@@ -528,7 +522,7 @@ The Canvas Agent may create only storyboard, video-edit, image, video, and audio
         content = value.get("content")
         if not isinstance(content, dict):
             return value
-        if content.get("source") != "generated" or content.get("content_type") not in {"image", "video"}:
+        if content.get("source") != "generated" or content.get("content_type") not in generated_media_types():
             return value
         if str(content.get("name") or "").strip():
             return value

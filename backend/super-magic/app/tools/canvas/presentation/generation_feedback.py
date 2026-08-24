@@ -7,6 +7,10 @@ from typing import Any, Mapping
 
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import i18n
+from app.tools.canvas.domain.content_fields.generated_media_protocol import (
+    generated_media_types,
+    ordered_generated_media_types,
+)
 
 
 @dataclass
@@ -22,14 +26,14 @@ class GenerationMediaCounts:
 
 @dataclass
 class GenerationFeedbackSummary:
-    """记录生成反馈需要的图片、视频分类统计。"""
+    """记录生成反馈需要的媒体分类统计。"""
 
     by_type: dict[str, GenerationMediaCounts]
 
     @property
     def media_types(self) -> tuple[str, ...]:
         """返回按稳定顺序排列的媒体类型。"""
-        return tuple(media_type for media_type in ("image", "video") if media_type in self.by_type)
+        return tuple(media_type for media_type in ordered_generated_media_types() if media_type in self.by_type)
 
     @property
     def total(self) -> int:
@@ -39,7 +43,7 @@ class GenerationFeedbackSummary:
     @property
     def is_supported(self) -> bool:
         """判断本次操作是否是纯图片/视频生成批次。"""
-        return bool(self.by_type) and all(media_type in {"image", "video"} for media_type in self.by_type)
+        return bool(self.by_type) and all(media_type in generated_media_types() for media_type in self.by_type)
 
     @property
     def is_mixed(self) -> bool:
@@ -59,7 +63,7 @@ class CanvasGenerationFeedback:
     """根据生成参数和结果统一构建 Canvas 的 action、remark 与 detail 数据。"""
 
     _GENERATED_SOURCES = {"generated"}
-    _MEDIA_TYPES = {"image", "video"}
+    _MEDIA_TYPES = generated_media_types()
     _COMPLETED_STATUSES = {"added", "completed"}
     _PROCESSING_STATUSES = {"pending", "processing", "queued", "running"}
     _FAILED_STATUSES = {

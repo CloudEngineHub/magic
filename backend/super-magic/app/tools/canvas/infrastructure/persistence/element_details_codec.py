@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.tools.canvas.domain.content_fields.generated_media_protocol import generated_request_fields
+
 
 class ElementDetailsCodec:
     """校验 Element Details sidecar 的公共结构。"""
@@ -41,9 +43,9 @@ class ElementDetailsCodec:
                 raise ValueError("UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE")
             details = raw_element.get("contentDetails") if isinstance(raw_element, dict) else None
             for detail in (details or {}).values() if isinstance(details, dict) else ():
-                if not isinstance(detail, dict) or not set(detail).issubset({
-                    "generateImageRequest", "generateVideoRequest", "visualUnderstanding",
-                }):
+                if not isinstance(detail, dict) or not set(detail).issubset(
+                    generated_request_fields() | {"visualUnderstanding"}
+                ):
                     raise ValueError("UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE")
         return document
 

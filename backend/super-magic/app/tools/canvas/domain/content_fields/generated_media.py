@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
+from app.tools.canvas.domain.types import JsonObject
 
 GenerationStatus = Literal["pending", "processing", "completed", "failed"]
 
@@ -17,6 +18,19 @@ class GeneratedMediaContentFields(CanvasContentFields):
     src: str | None = None
     status: GenerationStatus | None = None
     stored_error_message: str | None = None
+
+    @property
+    def generated_request_field(self) -> str | None:
+        """返回当前媒体类型对应的生成请求字段。"""
+        return None
+
+    def set_generation_request(self, request: JsonObject) -> None:
+        """保存生成请求；具体媒体类型负责提供字段映射。"""
+        raise NotImplementedError("Generated media fields must define a generation request field.")
+
+    def clear_generation_request(self) -> None:
+        """清除生成请求；具体媒体类型负责清除对应字段。"""
+        raise NotImplementedError("Generated media fields must define a generation request field.")
 
     @property
     def generation_status(self) -> str | None:

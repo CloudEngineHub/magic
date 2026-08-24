@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.tools.canvas.domain.content_fields import ImageContentFields, VideoContentFields
+from app.tools.canvas.domain.content_fields import GeneratedMediaContentFields
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 
@@ -16,10 +16,8 @@ class CanvasMainFileSanitizer:
         for element in sanitized.canvas.iter_elements():
             for content in element.contents:
                 fields = content.fields
-                if isinstance(fields, ImageContentFields):
-                    fields.generate_image_request = None
-                elif isinstance(fields, VideoContentFields):
-                    fields.generate_video_request = None
+                if isinstance(fields, GeneratedMediaContentFields):
+                    fields.clear_generation_request()
         return sanitized
 
     def synchronize_sidecar(self, project: CanvasProject, sidecar: dict) -> dict:
@@ -27,11 +25,13 @@ class CanvasMainFileSanitizer:
         updated = dict(sidecar)
         for element in project.canvas.iter_elements():
             for content in element.contents:
+                fields = content.fields
                 managed = self._managed_fields(content.fields)
                 if not managed:
                     continue
                 detail = ContentMetadataService.get(updated, element.element_id, content.content_id)
-                if not detail.get("generateImageRequest") and not detail.get("generateVideoRequest"):
+                request_field = fields.generated_request_field if isinstance(fields, GeneratedMediaContentFields) else None
+                if not request_field or not detail.get(request_field):
                     detail.update(managed)
                     ContentMetadataService.set(updated, element.element_id, content.content_id, detail)
         return updated
@@ -39,8 +39,9 @@ class CanvasMainFileSanitizer:
     @staticmethod
     def _managed_fields(fields) -> dict[str, object]:
         """提取不应进入主文件的生成请求字段。"""
-        if isinstance(fields, ImageContentFields) and fields.status == "completed" and fields.generate_image_request is not None:
-            return {"generateImageRequest": fields.generate_image_request}
-        if isinstance(fields, VideoContentFields) and fields.status == "completed" and fields.generate_video_request is not None:
-            return {"generateVideoRequest": fields.generate_video_request}
+        if isinstance(fields, GeneratedMediaContentFields) and fields.status == "completed":
+            request_field = fields.generated_request_field
+            request = fields.to_dict().get(request_field) if request_field else None
+            if isinstance(request, dict):
+                return {request_field: request}
         return {}

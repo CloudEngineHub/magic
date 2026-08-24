@@ -9,6 +9,7 @@ from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
 from app.tools.canvas.domain.content_fields.ellipse import EllipseContentFields
 from app.tools.canvas.domain.content_fields.generated_media import GenerationStatus
+from app.tools.canvas.domain.content_fields.generated_media_protocol import generation_request_field
 from app.tools.canvas.domain.content_fields.image import ImageContentFields
 from app.tools.canvas.domain.content_fields.rectangle import RectangleContentFields
 from app.tools.canvas.domain.content_fields.star import StarContentFields
@@ -31,20 +32,22 @@ class ContentFieldsFactory:
         if element_type in {"frame", "group"}:
             return StructuralContentFields()
         if element_type == "image":
+            request_field = generation_request_field("image")
             return ImageContentFields(
                 src=cls._optional_string(data, "src"),
                 status=cls._optional_status(data, "status"),
                 stored_error_message=cls._optional_string(data, "errorMessage"),
-                generate_image_request=cls._optional_object(data, "generateImageRequest"),
+                generate_image_request=cls._optional_object(data, request_field or ""),
                 image_generation_task_meta=cls._optional_object(data, "imageGenerationTaskMeta"),
                 crop=cls._optional_object(data, "crop"),
             )
         if element_type == "video":
+            request_field = generation_request_field("video")
             return VideoContentFields(
                 src=cls._optional_string(data, "src"),
                 status=cls._optional_status(data, "status"),
                 stored_error_message=cls._optional_string(data, "errorMessage"),
-                generate_video_request=cls._optional_object(data, "generateVideoRequest"),
+                generate_video_request=cls._optional_object(data, request_field or ""),
                 video_generation_result_meta=cls._optional_object(data, "videoGenerationResultMeta"),
             )
         if element_type == "audio":

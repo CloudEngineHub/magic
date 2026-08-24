@@ -5,6 +5,16 @@ from app.tools.canvas.domain.content_fields.base import CanvasContentFields
 from app.tools.canvas.domain.content_fields.ellipse import EllipseContentFields
 from app.tools.canvas.domain.content_fields.factory import ContentFieldsFactory
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields, GenerationStatus
+from app.tools.canvas.domain.content_fields.generated_media_protocol import (
+    GeneratedMediaProtocol,
+    find_generation_request,
+    generated_content_fields,
+    generated_media_protocol,
+    generated_media_types,
+    generated_request_fields,
+    generation_request_field,
+    ordered_generated_media_types,
+)
 from app.tools.canvas.domain.content_fields.image import ImageContentFields
 from app.tools.canvas.domain.content_fields.rectangle import RectangleContentFields
 from app.tools.canvas.domain.content_fields.star import StarContentFields
@@ -21,6 +31,7 @@ __all__ = [
     "ContentFieldsFactory",
     "EllipseContentFields",
     "GeneratedMediaContentFields",
+    "GeneratedMediaProtocol",
     "GenerationStatus",
     "ImageContentFields",
     "RectangleContentFields",
@@ -31,4 +42,11 @@ __all__ = [
     "TriangleContentFields",
     "VideoContentFields",
     "VideoEditContentFields",
+    "find_generation_request",
+    "generated_content_fields",
+    "generated_media_protocol",
+    "generated_media_types",
+    "generated_request_fields",
+    "generation_request_field",
+    "ordered_generated_media_types",
 ]

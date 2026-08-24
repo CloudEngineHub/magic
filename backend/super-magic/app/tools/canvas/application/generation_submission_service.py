@@ -8,6 +8,7 @@ from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.commands import GenerationSubmissionCommand
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import CanvasBatchResult, CanvasResultItem, GeneratedResultItem
+from app.tools.canvas.domain.content_fields.generated_media_protocol import generation_request_field
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
     CanvasGenerationResultApplier,
@@ -151,10 +152,9 @@ class GenerationSubmissionService:
                     "errorMessage": submission.error_message,
                 }
                 if submission.status == "completed":
-                    if submission_item.element_type == "image":
-                        detail_update["generateImageRequest"] = public_request
-                    elif submission_item.element_type == "video":
-                        detail_update["generateVideoRequest"] = public_request
+                    request_field = generation_request_field(submission_item.element_type)
+                    if request_field:
+                        detail_update[request_field] = public_request
                 else:
                     ContentMetadataService.clear_public_request(
                         metadata,

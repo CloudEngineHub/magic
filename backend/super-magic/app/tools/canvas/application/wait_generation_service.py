@@ -9,6 +9,10 @@ from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import WaitGenerationResult, WaitGenerationResultItem
 from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.domain.content_fields.generated_media_protocol import (
+    find_generation_request,
+    generation_request_field,
+)
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
@@ -194,14 +198,18 @@ class WaitGenerationService:
                 "outputUri": query_result.output_uri,
                 "errorMessage": query_result.error_message,
             }
-            if final_status == "completed" and not detail.get("generateVideoRequest"):
+            if final_status == "completed" and find_generation_request(detail) is None:
                 parameters = detail.get("generationParameters") or {}
                 if isinstance(parameters, dict):
                     from pathlib import Path
                     if query_result.output_uri:
                         parameters = {**parameters, "image_id": Path(query_result.output_uri).stem}
-                    request_key = "generateImageRequest" if record.element_type == "image" else "generateVideoRequest"
-                    detail_update[request_key] = ContentMetadataService.build_public_generation_request(parameters, record.element_type)
+                    request_key = generation_request_field(record.element_type)
+                    if request_key:
+                        detail_update[request_key] = ContentMetadataService.build_public_generation_request(
+                            parameters,
+                            record.element_type,
+                        )
             CanvasApplicationOperations.set_content_detail(metadata, record.element_id, record.content_id, detail_update)
             return None, metadata
 
