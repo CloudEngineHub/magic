@@ -2,14 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { MediaRecorderService } from "../index"
 import { RecorderCoreAdapter } from "../RecorderCoreAdapter"
 
+const mockState = vi.hoisted(() => ({
+	startError: null as Error | null,
+}))
+
 // Mock RecorderCoreAdapter
 vi.mock("../RecorderCoreAdapter", () => ({
 	RecorderCoreAdapter: vi.fn().mockImplementation(() => ({
-		start: vi.fn().mockResolvedValue(undefined),
+		start: vi.fn().mockImplementation(async () => {
+			if (mockState.startError) throw mockState.startError
+		}),
 		stop: vi.fn().mockResolvedValue(undefined),
 		pause: vi.fn(),
 		resume: vi.fn(),
 		cleanup: vi.fn(),
+		getEncodingSnapshot: vi.fn().mockReturnValue(null),
+		getMediaStream: vi.fn().mockReturnValue({
+			getAudioTracks: vi.fn().mockReturnValue([{ readyState: "live" }]),
+		}),
 		getStatus: vi.fn().mockReturnValue({
 			isRecording: false,
 			isPaused: false,
@@ -39,6 +49,7 @@ describe("MediaRecorderService", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mockState.startError = null
 		service = new MediaRecorderService()
 	})
 
@@ -69,6 +80,17 @@ describe("MediaRecorderService", () => {
 			expect(status.sessionId).toBe(sessionId)
 		})
 
+		it("should preserve the explicit PCM format configuration", async () => {
+			const pcmService = new MediaRecorderService({ mimeType: "audio/pcm" })
+
+			await pcmService.startRecording("mock-pcm-session")
+
+			const constructorMock = vi.mocked(RecorderCoreAdapter)
+			const latestConfig =
+				constructorMock.mock.calls[constructorMock.mock.calls.length - 1]?.[0]
+			expect(latestConfig).toMatchObject({ type: "pcm" })
+		})
+
 		it("should throw error if session ID is missing", async () => {
 			await expect(service.startRecording("")).rejects.toThrow(
 				"Session ID is required to start recording",
@@ -79,11 +101,11 @@ describe("MediaRecorderService", () => {
 			const sessionId = "test-session-123"
 			await service.startRecording(sessionId)
 
-			// Try to start again
-			const consoleSpy = vi.spyOn(console, "warn")
+			const constructorMock = vi.mocked(RecorderCoreAdapter)
+			const constructorCallCount = constructorMock.mock.calls.length
 			await service.startRecording(sessionId)
 
-			expect(consoleSpy).toHaveBeenCalledWith("Recording is already in progress")
+			expect(constructorMock).toHaveBeenCalledTimes(constructorCallCount)
 		})
 	})
 
@@ -142,7 +164,7 @@ describe("MediaRecorderService", () => {
 				chunkIndex: 0,
 				mediaRecorderState: "inactive",
 				hasAudioStream: false,
-				supportedMimeTypes: ["audio/pcm"],
+				supportedMimeTypes: ["audio/ogg; codecs=opus", "audio/wav", "audio/pcm"],
 			})
 		})
 
@@ -187,7 +209,11 @@ describe("MediaRecorderService", () => {
 	describe("configuration", () => {
 		it("should use default configuration", () => {
 			const status = service.getStatus()
-			expect(status.supportedMimeTypes).toContain("audio/pcm")
+			expect(status.supportedMimeTypes).toEqual([
+				"audio/ogg; codecs=opus",
+				"audio/wav",
+				"audio/pcm",
+			])
 		})
 
 		it("should accept custom configuration", () => {
@@ -225,9 +251,7 @@ describe("MediaRecorderService", () => {
 			const onRecordingError = vi.fn()
 			const errorService = new MediaRecorderService({}, { onRecordingError })
 
-			// Mock adapter to throw error
-			const mockAdapter = vi.mocked(RecorderCoreAdapter)
-			mockAdapter.prototype.start = vi.fn().mockRejectedValue(new Error("Test error"))
+			mockState.startError = new Error("Test error")
 
 			try {
 				await errorService.startRecording("test-session")

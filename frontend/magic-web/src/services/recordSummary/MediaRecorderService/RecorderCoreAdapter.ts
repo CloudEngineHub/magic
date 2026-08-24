@@ -16,6 +16,7 @@ import type {
 	AudioChunkData,
 	AudioRecorder,
 	AudioProcessingMode,
+	RecordingEncodingSnapshot,
 } from "./types/RecorderTypes"
 import {
 	RecorderError,
@@ -35,8 +36,8 @@ import { TimeTrackingWorkerManager } from "./managers/TimeTrackingWorkerManager"
 
 // Import encoders
 import type { AudioEncoder } from "./encoders/AudioEncoder"
-import { WAVEncoder } from "./encoders/WAVEncoder"
-import { PCMEncoder } from "./encoders/PCMEncoder"
+import { RecordingEncoderResolver } from "./encoders/RecordingEncoderResolver"
+import { normalizeAudioChunk } from "./utils/PcmNormalizer"
 
 // Import strategies
 import type { AudioSourceStrategy } from "./strategies/AudioSourceStrategy"
@@ -74,6 +75,10 @@ export class RecorderCoreAdapter {
 	// Components
 	private bufferManager: AudioBufferManager | null = null
 	private encoder: AudioEncoder | null = null
+	private readonly encoderResolver = new RecordingEncoderResolver()
+	private encodingSnapshot: RecordingEncodingSnapshot | null = null
+	private chunkProcessingPromise: Promise<void> = Promise.resolve()
+	private encodingFailed = false
 	private resourceManager: ResourceManager
 	private audioSourceStrategy: AudioSourceStrategy | null = null
 	private audioRecorder: AudioRecorder | null = null
@@ -99,9 +104,6 @@ export class RecorderCoreAdapter {
 			: createDefaultDependencies(logger)
 
 		this.resourceManager = new ResourceManager(this.dependencies.logger)
-
-		// Create encoder based on config
-		this.encoder = this.createEncoder()
 	}
 
 	/**
@@ -126,6 +128,16 @@ export class RecorderCoreAdapter {
 			this.setState("initializing")
 			this.sessionId = sessionId
 			this.chunkIndex = startChunkIndex
+			this.encodingFailed = false
+
+			// Resolve and smoke-test the encoder before opening the microphone. This prevents
+			// a session from producing a first chunk with a format that later becomes invalid.
+			const resolvedEncoder = await this.encoderResolver.resolve(this.config)
+			this.encoder = resolvedEncoder.encoder
+			this.encodingSnapshot = {
+				format: resolvedEncoder.format,
+				policyVersion: resolvedEncoder.policyVersion,
+			}
 
 			this.dependencies.logger.log("Starting recording", {
 				sessionId,
@@ -247,7 +259,16 @@ export class RecorderCoreAdapter {
 
 			// Flush any remaining buffer
 			if (this.bufferManager && this.bufferManager.hasData()) {
-				this.bufferManager.forceFlush(this.config.sampleRate)
+				this.bufferManager.forceFlush()
+			}
+
+			// Wait until the last encoded chunk has been delivered before marking the session idle.
+			await this.chunkProcessingPromise
+			await this.encoder?.flush()
+			// Keep the failure state visible when an asynchronous chunk encode failed during stop.
+			if (this.encodingFailed) {
+				this.setState("error")
+				return
 			}
 
 			this.dependencies.logger.log("Recording stopped")
@@ -581,6 +602,11 @@ export class RecorderCoreAdapter {
 		return this.sessionId || null
 	}
 
+	/** Return the format snapshot that must be reused when this session resumes. */
+	getEncodingSnapshot(): RecordingEncodingSnapshot | null {
+		return this.encodingSnapshot ? { ...this.encodingSnapshot } : null
+	}
+
 	/**
 	 * Get media stream for silence detection
 	 * 获取用于静音检测的音频流
@@ -621,6 +647,11 @@ export class RecorderCoreAdapter {
 	async cleanup(): Promise<void> {
 		try {
 			this.dependencies.logger.log("Cleaning up RecorderCoreAdapter")
+			await this.chunkProcessingPromise
+			await this.encoder?.close()
+			this.encoder = null
+			this.encodingSnapshot = null
+			this.encodingFailed = false
 
 			// Clean up time tracking worker
 			// 清理时间追踪 Worker
@@ -1178,65 +1209,52 @@ export class RecorderCoreAdapter {
 	 * 处理音频分片准备就绪事件
 	 */
 	private handleChunkReady(chunkData: AudioChunkData): void {
-		try {
-			if (!this.encoder) {
-				throw new RecorderError("Encoder not initialized", "ENCODER_MISSING")
-			}
-
-			// Encode audio data
-			const encodedChunk = this.encoder.encode(chunkData)
-
-			// Create blob
-			const blob = new Blob([encodedChunk.data], { type: encodedChunk.mimeType })
-
-			// Create stored audio chunk
-			const currentChunkIndex = this.chunkIndex
-			const storedChunk: StoredAudioChunk = {
-				id: this.generateChunkId(),
-				sessionId: this.sessionId,
-				chunk: blob,
-				index: this.chunkIndex++,
-				timestamp: Date.now(),
-				size: blob.size,
-				mimeType: encodedChunk.mimeType,
-				uploadStatus: "pending",
-			}
-
-			this.dependencies.logger.log("Chunk created", {
-				index: currentChunkIndex,
-				size: blob.size,
-				duration: chunkData.duration,
+		if (this.encodingFailed) return
+		// Serialize async encodes so IndexedDB and upload callbacks retain chunk index order.
+		this.chunkProcessingPromise = this.chunkProcessingPromise
+			.then(() => this.encodeAndEmitChunk(chunkData))
+			.catch((error: Error) => {
+				this.dependencies.logger.error({
+					eventKey: "handle_chunk_ready_failed",
+					errorKind: "unknown",
+					error,
+					message: "Failed to handle chunk ready:",
+				})
+				this.encodingFailed = true
+				if (this.audioRecorder) {
+					this.audioRecorder.isRecording = false
+					this.audioRecorder.isPaused = false
+				}
+				this.setState("error")
+				this.events.onError?.(error)
 			})
-
-			// Notify about chunk ready
-			this.events.onChunkReady?.(storedChunk, currentChunkIndex)
-		} catch (error) {
-			this.dependencies.logger.error({
-				eventKey: "handle_chunk_ready_failed",
-				errorKind: "unknown",
-				error: error,
-				message: "Failed to handle chunk ready:",
-			})
-			this.events.onError?.(error as Error)
-		}
 	}
 
-	/**
-	 * Create encoder based on config
-	 * 根据配置创建编码器
-	 */
-	private createEncoder(): AudioEncoder {
-		switch (this.config.type) {
-			case "wav":
-				return new WAVEncoder()
-			case "pcm":
-				return new PCMEncoder()
-			default:
-				this.dependencies.logger.warn(
-					`Unknown encoder type: ${this.config.type}, defaulting to WAV`,
-				)
-				return new WAVEncoder()
+	/** Encode one chunk and emit it only after a complete file is available. */
+	private async encodeAndEmitChunk(chunkData: AudioChunkData): Promise<void> {
+		if (!this.encoder) throw new RecorderError("Encoder not initialized", "ENCODER_MISSING")
+		const normalizedChunkData = normalizeAudioChunk(chunkData, this.config.sampleRate)
+		const encodedChunk = await this.encoder.encode(normalizedChunkData)
+		const blob = new Blob([encodedChunk.data], { type: encodedChunk.mimeType })
+		const currentChunkIndex = this.chunkIndex
+		const storedChunk: StoredAudioChunk = {
+			id: this.generateChunkId(),
+			sessionId: this.sessionId,
+			chunk: blob,
+			index: this.chunkIndex++,
+			timestamp: Date.now(),
+			size: blob.size,
+			mimeType: encodedChunk.mimeType,
+			uploadStatus: "pending",
 		}
+
+		this.dependencies.logger.log("Chunk created", {
+			index: currentChunkIndex,
+			size: blob.size,
+			duration: normalizedChunkData.duration,
+			format: this.encodingSnapshot?.format,
+		})
+		await this.events.onChunkReady?.(storedChunk, currentChunkIndex)
 	}
 
 	/**

@@ -7,6 +7,7 @@ import { recordingLogger } from "./utils/RecordingLogger"
 import { getSnowflakeUploadFileName } from "./utils/getSnowflakeUploadFileName"
 import { isTaskEndError } from "./RecordingErrorManager"
 import { getNetworkMonitor, type NetworkMonitor } from "./NetworkMonitor"
+import { WasmOpusEncoder } from "./MediaRecorderService/encoders/WasmOpusEncoder"
 
 const logger = recordingLogger.namespace("Upload:Chunk")
 
@@ -40,6 +41,8 @@ export const PLACEHOLDER_UPLOAD_MAX_FAILED_CHUNKS = 30
 export const PLACEHOLDER_UPLOAD_TIMEOUT_MS = 120000
 export const PLACEHOLDER_UPLOAD_CONCURRENCY = 3
 
+let emptyOggOpusPlaceholderPromise: Promise<Blob> | null = null
+
 export interface PlaceholderUploadProgress {
 	total: number
 	completed: number
@@ -60,6 +63,33 @@ interface PlaceholderUploadAbortState {
 	abort: (reason: Error) => void
 	getReason: () => Error
 	cleanup: () => void
+}
+
+/** Encode one reusable silent Ogg/Opus artifact for failed-chunk compensation. */
+async function createEmptyOggOpusPlaceholderBlob(): Promise<Blob> {
+	if (!emptyOggOpusPlaceholderPromise) {
+		emptyOggOpusPlaceholderPromise = (async () => {
+			const encoder = new WasmOpusEncoder()
+			try {
+				await encoder.initialize()
+				const encoded = await encoder.encode({
+					pcmData: new Int16Array(320),
+					sampleRate: 16_000,
+					bitRate: 16,
+					duration: 0.02,
+				})
+				return new Blob([encoded.data], { type: encoded.mimeType })
+			} finally {
+				await encoder.close()
+			}
+		})().catch((error) => {
+			// Allow a later compensation attempt to retry after a transient WASM failure.
+			emptyOggOpusPlaceholderPromise = null
+			throw error
+		})
+	}
+
+	return emptyOggOpusPlaceholderPromise
 }
 
 /**
@@ -385,7 +415,7 @@ export class ChunkUploader {
 	 */
 	public async uploadChunk(chunk: StoredAudioChunk): Promise<string> {
 		// Auto-detect audio format based on data header or use default WebM
-		const { mimeType, extension } = this.detectAudioFormat(chunk.chunk)
+		const { mimeType, extension } = this.detectAudioFormat(chunk.chunk, chunk.mimeType)
 
 		const originalFileName = `${chunk.index}.${extension}`
 		// Use a snowflake ID to avoid backend name collisions.
@@ -452,10 +482,16 @@ export class ChunkUploader {
 	 * Detect audio format from Blob header
 	 * 从Blob头部检测音频格式
 	 */
-	private detectAudioFormat(blob: Blob): { mimeType: string; extension: string } {
+	private detectAudioFormat(
+		blob: Blob,
+		preferredMimeType?: string,
+	): { mimeType: string; extension: string } {
 		// If blob already has a type, use it
-		if (blob.type) {
-			const mimeType = blob.type
+		const sourceMimeType = preferredMimeType || blob.type
+		if (sourceMimeType) {
+			const baseMimeType = sourceMimeType.split(";")[0]
+			// Prefer the explicit stored MIME type when a Blob loses its type after persistence.
+			const mimeType = baseMimeType
 			const extension = this.getExtensionFromMimeType(mimeType)
 			return { mimeType, extension }
 		}
@@ -475,11 +511,15 @@ export class ChunkUploader {
 			"audio/wav": "wav",
 			"audio/mpeg": "mp3",
 			"audio/ogg": "ogg",
+			"audio/opus": "opus",
 			"audio/pcm": "pcm",
 		}
 
 		// Handle codec specifications in MIME type
 		const baseMimeType = mimeType.split(";")[0]
+		// The recording contract uses Ogg pages with Opus packets, so an Ogg MIME
+		// value must be uploaded with the backend's `.opus` extension.
+		if (baseMimeType === "audio/ogg") return "opus"
 		return mimeToExt[baseMimeType] || "webm"
 	}
 
@@ -1075,13 +1115,17 @@ export class ChunkUploader {
 		}
 	}
 
-	private createEmptyAudioPlaceholderBlob(chunk: StoredAudioChunk): Blob {
+	/** Create a valid placeholder artifact matching the failed chunk's persisted format. */
+	private async createEmptyAudioPlaceholderBlob(chunk: StoredAudioChunk): Promise<Blob> {
 		const mimeType = (chunk.mimeType || chunk.chunk.type || "audio/wav").split(";")[0]
 		if (mimeType === "audio/wav") {
 			return this.createEmptyWavBlob()
 		}
 		if (mimeType === "audio/pcm") {
 			return new Blob([], { type: "audio/pcm" })
+		}
+		if (mimeType === "audio/ogg" || mimeType === "audio/opus") {
+			return createEmptyOggOpusPlaceholderBlob()
 		}
 
 		throw new Error(`Unsupported placeholder audio format: ${mimeType}`)
@@ -1092,7 +1136,7 @@ export class ChunkUploader {
 		abortState: PlaceholderUploadAbortState,
 	): Promise<void> {
 		this.throwIfPlaceholderUploadAborted(abortState)
-		const placeholderBlob = this.createEmptyAudioPlaceholderBlob(chunk)
+		const placeholderBlob = await this.createEmptyAudioPlaceholderBlob(chunk)
 		const placeholderChunk: StoredAudioChunk = {
 			...chunk,
 			chunk: placeholderBlob,

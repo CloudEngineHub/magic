@@ -93,6 +93,16 @@ describe("AudioBufferManager", () => {
 		expect(mockEvents.onChunkReady).toHaveBeenCalledTimes(1)
 	})
 
+	it("uses the last actual sample rate when force flushing without an override", () => {
+		const manager = new AudioBufferManager(mockConfig, mockEvents, mockLogger)
+		manager.addData(new Int16Array(24_000), 48_000)
+
+		manager.forceFlush()
+
+		const chunkData = (mockEvents.onChunkReady as ReturnType<typeof vi.fn>).mock.calls[0][0]
+		expect(chunkData.sampleRate).toBe(48_000)
+	})
+
 	it("should clear all data", () => {
 		const manager = new AudioBufferManager(mockConfig, mockEvents, mockLogger)
 

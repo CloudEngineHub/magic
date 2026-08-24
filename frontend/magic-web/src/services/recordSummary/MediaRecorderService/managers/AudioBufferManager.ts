@@ -354,7 +354,7 @@ export class AudioBufferManager {
 	 * Force flush current buffer regardless of duration
 	 * 强制清空当前缓冲区，无论时长如何
 	 */
-	forceFlush(sampleRate: number): void {
+	forceFlush(sampleRate: number = this.lastKnownSampleRate): void {
 		if (this.audioBuffer.length > 0 || this.bufferOffset > 0) {
 			this.flushBuffer(sampleRate, false)
 		}
