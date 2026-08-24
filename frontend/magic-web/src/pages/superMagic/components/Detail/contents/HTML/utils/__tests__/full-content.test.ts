@@ -18,6 +18,32 @@ vi.mock("@/models/config", () => ({
 }))
 
 describe("getFullContent", () => {
+	it("injects HTML navigation state and forwards internal navigation messages", async () => {
+		const { getFullContent } = await import("../full-content")
+		const result = getFullContent(
+			"<!DOCTYPE html><html><head><script>window.__USER_SEARCH__ = location.search</script></head><body><a href='./detail.html?mode=preview#summary'>Open</a></body></html>",
+			"index-file",
+			{
+				locationSearch: "?mode=preview",
+				locationAnchor: "#summary",
+				navigationRequestId: "file-1:1",
+			},
+		)
+
+		expect(result).toContain('data-injected="html-navigation"')
+		expect(result).toContain('search: "?mode=preview"')
+		expect(result).toContain('hash: "#summary"')
+		expect(result).toContain('requestId: "file-1:1"')
+		expect(result).not.toContain('data-injected="sandbox-html-navigation"')
+		expect(result).toContain("getInternalNavigationHref: getInternalNavigationHref")
+		expect(result).toContain("__magicGetFetchPostMessageTarget")
+		expect(result).toContain("window.__MAGIC_HTML_NAVIGATION_RUNTIME__")
+		expect(result).not.toContain("const originalWindowOpen = window.open")
+		expect(result.indexOf("var nativeWindowOpen = window.open")).toBeLessThan(
+			result.indexOf("window.__USER_SEARCH__"),
+		)
+	})
+
 	it("injects hidden scrollbar styles without disabling vertical scrolling", async () => {
 		const { getFullContent } = await import("../full-content")
 		const result = getFullContent(

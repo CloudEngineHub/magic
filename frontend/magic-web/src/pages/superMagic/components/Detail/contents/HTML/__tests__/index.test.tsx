@@ -649,6 +649,30 @@ describe("HTML", () => {
 		)
 	})
 
+	it("should pass HTML navigation state to the isolated renderer", async () => {
+		const htmlNavigation = {
+			filePath: "page1.html",
+			search: "?name=%E5%BC%A0%E4%B8%89&mode=preview",
+			hash: "#summary",
+			anchor: "summary",
+		}
+
+		render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation }),
+			)
+		})
+	})
+
 	it("should require an exact relative path match for bundled template entry html", () => {
 		expect(
 			resolveHtmlPreviewBundledTemplate({

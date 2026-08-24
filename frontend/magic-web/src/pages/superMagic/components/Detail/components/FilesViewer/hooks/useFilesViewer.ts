@@ -501,6 +501,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			...(normalizedFileItem || {}),
 			...targetFile,
 			display_config: targetDisplayConfig,
+			htmlNavigation: normalizedPreviewFile?.htmlNavigation,
 		}
 
 		const newTab = convertFileToTabItem(mergedTargetFile, attachments, {
@@ -1577,6 +1578,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 					title: tabTitle,
 					fileData: {
 						...file,
+						htmlNavigation: activeTab.fileData.htmlNavigation,
 						// 清除缓存的内容，强制重新加载
 						content: undefined,
 					},
@@ -1758,10 +1760,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 			// 类型已经在 getFileDetail 中处理，直接使用
 			const type = fileDetail.type
+			const renderData =
+				type === DetailType.Html && fileDetail.data && typeof fileDetail.data === "object"
+					? {
+							...fileDetail.data,
+							htmlNavigation: tab.fileData.htmlNavigation,
+						}
+					: fileDetail.data
 
 			return {
 				type,
-				data: fileDetail.data,
+				data: renderData,
 				updatedAt: fileDetail.updatedAt,
 				attachments,
 				setUserSelectDetail,

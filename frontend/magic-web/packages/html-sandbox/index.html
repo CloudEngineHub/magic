@@ -17,7 +17,19 @@
 			}
 
 			function postToParent(message) {
-				window.parent.postMessage(message, "*")
+				var navigation = window.__MAGIC_HTML_NAVIGATION__
+				var enrichedMessage = message
+				if (
+					navigation &&
+					navigation.requestId &&
+					message &&
+					message.navigationRequestId == null
+				) {
+					enrichedMessage = Object.assign({}, message, {
+						navigationRequestId: navigation.requestId,
+					})
+				}
+				window.parent.postMessage(enrichedMessage, "*")
 			}
 
 			var HTML_SANDBOX_TELEMETRY_MESSAGE = "MAGIC_HTML_SANDBOX_TELEMETRY"
@@ -742,11 +754,19 @@
 			function handleMessage(event) {
 				try {
 					if (event.data && event.data.type === "setContent") {
+						var locationSearch = event.data.locationSearch || ""
+						var locationAnchor = event.data.locationAnchor || ""
+						var navigationRequestId = event.data.navigationRequestId || ""
 						var sanitizedContent = sanitizeContentForSandbox(event.data.content)
 						resetTelemetryDedupe()
 						document.open()
 						document.write(sanitizedContent)
 						document.close()
+						window.__MAGIC_HTML_NAVIGATION__ = {
+							search: locationSearch,
+							hash: locationAnchor,
+							requestId: navigationRequestId,
+						}
 						restartInlineRuntime()
 						setupMessageListener()
 						setupClickListener()

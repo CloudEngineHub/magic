@@ -529,4 +529,61 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		expect(getSetContentCalls(postMessageB)).toHaveLength(1)
 	})
+
+	it("does not send content twice for iframeReady and pageLoaded", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		dispatchIframeMessage(iframe, "pageLoaded")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+	})
+
+	it("updates location query when the same HTML navigation changes", async () => {
+		const firstNavigation = {
+			filePath: "index.html",
+			search: "?value=123",
+			hash: "",
+			anchor: "",
+		}
+		const secondNavigation = {
+			...firstNavigation,
+			search: "?value=456",
+		}
+
+		const { rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={firstNavigation} />,
+		)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+		expect(getSetContentCalls(postMessage)[0][0]).toMatchObject({
+			locationSearch: "?value=123",
+		})
+
+		rerender(<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={secondNavigation} />)
+		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const nextPostMessage = vi
+			.spyOn(nextIframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(nextIframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(nextIframe.src).toContain("/husky.html?value=456")
+		expect(getSetContentCalls(nextPostMessage)).toHaveLength(1)
+		expect(getSetContentCalls(nextPostMessage)[0][0]).toMatchObject({
+			locationSearch: "?value=456",
+		})
+	})
 })
