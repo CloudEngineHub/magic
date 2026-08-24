@@ -318,4 +318,28 @@ describe("ConnectionHandleRenderer", () => {
 		expect(vertical.stroke()).toBe(baseStyle.plusStroke)
 		expect(circle.shadowOpacity()).toBe(0)
 	})
+
+	it("applies a non-interactive disabled style to configured handle sides", () => {
+		const renderer = new ConnectionHandleRenderer()
+		const group = renderer.createOverlay(
+			{ kind: "element", elementId: "video-edit-1" },
+			TEST_RECT,
+			1,
+			["right"],
+		)
+		const leftHandle = getHandle(group, "left")
+		const rightHandle = getHandle(group, "right")
+		const leftCircle = getCircle(leftHandle)
+		const rightCircle = getCircle(rightHandle)
+
+		expect(leftHandle.getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR)).toBe(false)
+		expect(leftHandle.listening()).toBe(true)
+		expect(leftCircle.opacity()).toBe(1)
+		expect(rightHandle.getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR)).toBe(true)
+		expect(rightHandle.getAttr("connectionHandleInteractionState")).toBe("disabled")
+		expect(rightHandle.listening()).toBe(false)
+		expect(rightCircle.opacity()).toBeLessThan(leftCircle.opacity())
+		expect(getHorizontalPlus(rightHandle).opacity()).toBeLessThan(1)
+		expect(getVerticalPlus(rightHandle).opacity()).toBeLessThan(1)
+	})
 })

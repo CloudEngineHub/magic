@@ -244,6 +244,16 @@ function getHandle(overlay: Konva.Group, side: "left" | "right"): Konva.Group {
 	return handle
 }
 
+function getCorridor(overlay: Konva.Group, side: "left" | "right"): Konva.Rect {
+	const corridor = overlay
+		.find(`.${ConnectionHandleRenderer.HANDLE_CORRIDOR_NAME}`)
+		.find((node) => node.getAttr("connectionHandleSide") === side)
+	if (!(corridor instanceof Konva.Rect)) {
+		throw new Error(`Expected ${side} corridor`)
+	}
+	return corridor
+}
+
 function getCircle(handle: Konva.Group): Konva.Circle {
 	const circle = handle.findOne(`.${ConnectionHandleRenderer.HANDLE_CIRCLE_NAME}`)
 	if (!(circle instanceof Konva.Circle)) {
@@ -727,6 +737,70 @@ describe("ConnectionHandleOverlayManager", () => {
 		expect(leftHandle.getAttr("connectionHandleInteractionState")).toBe("idle")
 		expect(circle.fill()).toBe(idleFill)
 		expect(cursorManager.restoreToolCursor).toHaveBeenCalledTimes(1)
+		manager.destroy()
+	})
+
+	it("disables the right handle when the source has no right-side menu", () => {
+		const { canvas, connectionDragManager, controlsLayer, manager, state } = createCanvasStub()
+		state.elementTypes.set("element-1", ElementTypeEnum.VideoEdit)
+		state.hoveredElementId = "element-1"
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+
+		const overlay = getRequiredOverlay(controlsLayer)
+		const leftHandle = getHandle(overlay, "left")
+		const rightHandle = getHandle(overlay, "right")
+		const rightCorridor = getCorridor(overlay, "right")
+		expect(leftHandle.getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR)).toBe(false)
+		expect(rightHandle.getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR)).toBe(true)
+		expect(rightHandle.listening()).toBe(false)
+
+		rightCorridor.fire("mouseenter")
+		expect(canvas.cursorManager.setTemporary).toHaveBeenLastCalledWith("not-allowed")
+		rightCorridor.fire("mouseleave")
+		expect(canvas.cursorManager.restoreToolCursor).toHaveBeenCalled()
+
+		rightHandle.fire("mousedown", {
+			evt: { stopImmediatePropagation: vi.fn(), stopPropagation: vi.fn() },
+		})
+		expect(connectionDragManager.startFromHandle).not.toHaveBeenCalled()
+
+		manager.destroy()
+	})
+
+	it("keeps the left handle enabled for storyboard image input", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub()
+		state.elementTypes.set("element-1", ElementTypeEnum.Storyboard)
+		state.hoveredElementId = "element-1"
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+
+		const overlay = getRequiredOverlay(controlsLayer)
+		expect(
+			getHandle(overlay, "left").getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR),
+		).toBe(false)
+		expect(
+			getHandle(overlay, "right").getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR),
+		).toBe(true)
+
+		manager.destroy()
+	})
+
+	it("disables the left handle when audio has no upstream menu", () => {
+		const { canvas, controlsLayer, manager, state } = createCanvasStub()
+		state.elementTypes.set("element-1", ElementTypeEnum.Audio)
+		state.hoveredElementId = "element-1"
+
+		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
+
+		const overlay = getRequiredOverlay(controlsLayer)
+		expect(
+			getHandle(overlay, "left").getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR),
+		).toBe(true)
+		expect(
+			getHandle(overlay, "right").getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR),
+		).toBe(false)
+
 		manager.destroy()
 	})
 

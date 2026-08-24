@@ -13,6 +13,7 @@ import {
 	type ConnectionHandleOverlayIntent,
 } from "./connectionHandleOverlayIntent"
 import { collectSelectionContentSnapshot } from "../selection/selectionContentCollector"
+import { isConnectionMenuSideDisabled } from "../selection/connectionMenuCapabilities"
 
 type ConnectionHandleInteractionBlocker =
 	| "crop"
@@ -58,6 +59,7 @@ export class ConnectionHandleOverlayManager {
 	private interactionBlockers = new Set<ConnectionHandleInteractionBlocker>()
 	private hoveredHandleNode: Konva.Group | null = null
 	private activeHandleNode: Konva.Group | null = null
+	private disabledHoveredCorridor: Konva.Rect | null = null
 	private settledReconcileQueued = false
 	private settledBlockers = new Set<ConnectionHandleInteractionBlocker>()
 	private destroyed = false
@@ -92,6 +94,7 @@ export class ConnectionHandleOverlayManager {
 	private readonly handleStagePointerLeave = (): void => {
 		this.isStagePointerInside = false
 		this.bridgeCandidateElementId = null
+		this.clearDisabledHandleHover()
 		this.reconcile("stage-pointer-leave")
 	}
 
@@ -443,10 +446,12 @@ export class ConnectionHandleOverlayManager {
 		const isNewOverlay = !this.overlayNode
 		const elementChanged = previousIdentity !== nextIdentity
 		if (!this.overlayNode) {
+			const disabledSides = this.resolveDisabledHandleSides(intent)
 			this.overlayNode = this.renderer.createOverlay(
 				this.getRendererOrigin(intent),
 				bounds,
 				stageScale,
+				disabledSides,
 			)
 			this.bindHandleInteractionEvents(this.overlayNode)
 			this.canvas.controlsLayer.add(this.overlayNode)
@@ -460,6 +465,7 @@ export class ConnectionHandleOverlayManager {
 				this.getRendererOrigin(intent),
 				bounds,
 				stageScale,
+				this.resolveDisabledHandleSides(intent),
 			)
 		}
 
@@ -630,8 +636,27 @@ export class ConnectionHandleOverlayManager {
 	}
 
 	private bindHandleInteractionEvents(overlayNode: Konva.Group): void {
+		this.getCorridorNodes(overlayNode).forEach((corridor) => {
+			corridor.on("mouseenter", () => {
+				const side = this.getConnectionHandleSide(corridor)
+				if (!side) return
+				const handle = this.getHandleNodes(overlayNode).find(
+					(node) => this.getConnectionHandleSide(node) === side,
+				)
+				if (!handle || !this.isHandleDisabled(handle)) return
+				this.disabledHoveredCorridor = corridor
+				this.canvas.cursorManager.setTemporary("not-allowed")
+			})
+
+			corridor.on("mouseleave", () => {
+				if (this.disabledHoveredCorridor !== corridor) return
+				this.clearDisabledHandleHover()
+			})
+		})
+
 		this.getHandleNodes(overlayNode).forEach((handle) => {
 			handle.on("mouseenter", () => {
+				if (this.isHandleDisabled(handle)) return
 				this.hoveredHandleNode = handle
 				this.setHandleInteractionState(
 					handle,
@@ -642,6 +667,7 @@ export class ConnectionHandleOverlayManager {
 			})
 
 			handle.on("mouseleave", () => {
+				if (this.isHandleDisabled(handle)) return
 				if (this.hoveredHandleNode === handle) {
 					this.hoveredHandleNode = null
 				}
@@ -654,6 +680,7 @@ export class ConnectionHandleOverlayManager {
 
 			handle.on("pointerdown mousedown touchstart", (event) => {
 				this.stopHandleEvent(event)
+				if (this.isHandleDisabled(handle)) return
 				this.activeHandleNode = handle
 				this.hoveredHandleNode = handle
 				this.setHandleInteractionState(handle, "active", "connection-handle-active")
@@ -779,12 +806,44 @@ export class ConnectionHandleOverlayManager {
 		return { kind: "element", elementId: intent.elementId }
 	}
 
-	private getConnectionHandleSide(handle: Konva.Group): ConnectionHandleSide | null {
-		const side = handle.getAttr("connectionHandleSide")
+	private getConnectionHandleSide(node: Konva.Node): ConnectionHandleSide | null {
+		const side = node.getAttr("connectionHandleSide")
 		return side === "left" || side === "right" ? side : null
 	}
 
+	private isHandleDisabled(handle: Konva.Group): boolean {
+		return handle.getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR) === true
+	}
+
+	private resolveDisabledHandleSides(
+		intent: Extract<ConnectionHandleOverlayIntent, { visible: true }>,
+	): ConnectionHandleSide[] {
+		const origin = this.getRendererOrigin(intent)
+		const snapshot = collectSelectionContentSnapshot(
+			this.canvas,
+			origin.kind === "selection" ? origin.elementIds : [origin.elementId],
+			"kind" in intent && intent.kind === "selection" ? intent.boundingRect : undefined,
+		)
+		return (["left", "right"] as const).filter((side) =>
+			isConnectionMenuSideDisabled({
+				origin:
+					origin.kind === "selection"
+						? {
+								...origin,
+								side,
+								boundingRect:
+									"kind" in intent && intent.kind === "selection"
+										? intent.boundingRect
+										: { x: 0, y: 0, width: 0, height: 0 },
+							}
+						: { ...origin, side },
+				snapshot,
+			}),
+		)
+	}
+
 	private resetHandleInteractionState(): void {
+		this.clearDisabledHandleHover()
 		const hasInteraction = !!this.hoveredHandleNode || !!this.activeHandleNode
 		const handles = new Set(
 			[this.hoveredHandleNode, this.activeHandleNode].filter(
@@ -793,7 +852,11 @@ export class ConnectionHandleOverlayManager {
 		)
 		handles.forEach((handle) => {
 			if (handle.getParent()) {
-				this.renderer.setHandleInteractionState(handle, "idle")
+				if (this.isHandleDisabled(handle)) {
+					this.renderer.setHandleDisabledState(handle, true)
+				} else {
+					this.renderer.setHandleInteractionState(handle, "idle")
+				}
 			}
 		})
 		this.hoveredHandleNode = null
@@ -802,6 +865,12 @@ export class ConnectionHandleOverlayManager {
 		if (hasInteraction) {
 			this.canvas.cursorManager.restoreToolCursor()
 		}
+	}
+
+	private clearDisabledHandleHover(): void {
+		if (!this.disabledHoveredCorridor) return
+		this.disabledHoveredCorridor = null
+		this.canvas.cursorManager.restoreToolCursor()
 	}
 
 	private restoreHandleCursorIfIdle(): void {
@@ -945,6 +1014,12 @@ export class ConnectionHandleOverlayManager {
 		return overlayNode
 			.find(`.${ConnectionHandleRenderer.HANDLE_GROUP_NAME}`)
 			.filter((node): node is Konva.Group => node instanceof Konva.Group)
+	}
+
+	private getCorridorNodes(overlayNode: Konva.Group): Konva.Rect[] {
+		return overlayNode
+			.find(`.${ConnectionHandleRenderer.HANDLE_CORRIDOR_NAME}`)
+			.filter((node): node is Konva.Rect => node instanceof Konva.Rect)
 	}
 
 	private canAnimateOverlay(overlayNode: Konva.Group): boolean {
