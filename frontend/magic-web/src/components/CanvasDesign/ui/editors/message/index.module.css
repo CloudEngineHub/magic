@@ -212,14 +212,14 @@
 	color: var(--base-muted-foreground, #737373);
 }
 
-/* SelectContent 需要比消息框更高的 z-index */
+/* 编辑器内部 Portal 浮层需要高于编辑器容器和 History */
 .select-content {
-	z-index: 2 !important;
+	z-index: 4 !important;
 }
 
 /* 参考图按钮和列表 */
 .reference-image-popover {
-	z-index: 2 !important;
+	z-index: 4 !important;
 }
 
 /* 移除 PopoverTrigger 的 focus outline */

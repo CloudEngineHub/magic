@@ -332,11 +332,11 @@
 }
 
 .selectContent {
-	z-index: 2 !important;
+	z-index: 4 !important;
 }
 
 .referenceImagePopover {
-	z-index: 2 !important;
+	z-index: 4 !important;
 	width: 320px !important;
 	padding: var(--spacing-2-5, 10px) !important;
 }

@@ -7,6 +7,8 @@ import {
 	PRESERVE_TEXT_EDITOR_FOCUS_ATTR,
 	useShouldPreserveTextEditorFocus,
 } from "../../../runtime/shared/dom/preserveTextEditorFocus"
+import { useFloatingSurfaceId } from "./floatingSurfaceContext"
+export { FloatingSurfaceScope } from "./floatingSurfaceContext"
 
 const Popover = PopoverPrimitive.Root
 
@@ -14,23 +16,13 @@ const PopoverTrigger = PopoverPrimitive.Trigger
 
 const PopoverAnchor = PopoverPrimitive.Anchor
 
-const FloatingSurfaceContext = React.createContext<string | null>(null)
-
-export function FloatingSurfaceScope(props: { id: string; children: React.ReactNode }) {
-	return (
-		<FloatingSurfaceContext.Provider value={props.id}>
-			{props.children}
-		</FloatingSurfaceContext.Provider>
-	)
-}
-
 const PopoverContent = React.forwardRef<
 	React.ElementRef<typeof PopoverPrimitive.Content>,
 	React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
 >(({ className, align = "center", sideOffset = 4, ...props }, ref) => {
 	const container = usePortalContainer()
 	const shouldPreserveTextEditorFocus = useShouldPreserveTextEditorFocus()
-	const floatingSurfaceId = React.useContext(FloatingSurfaceContext)
+	const floatingSurfaceId = useFloatingSurfaceId()
 	return (
 		<PopoverPrimitive.Portal container={container || undefined}>
 			<PopoverPrimitive.Content
