@@ -71,12 +71,14 @@ class ProjectStore {
 	}
 
 	removeProject(id: string) {
-		this.projects = this.projects.filter((p) => p.id !== id)
-		if (this.selectedProject?.id === id) {
-			this.selectedProject = null
-		}
+		this.removeProjectFromCollections(id)
+		if (this.selectedProject?.id === id) this.selectedProject = null
+	}
 
-		// Remove from projectsByWorkspace
+	/** Removes a project from list caches without changing the active project or file state. */
+	removeProjectFromCollections(id: string) {
+		this.projects = this.projects.filter((p) => p.id !== id)
+
 		this.projectsByWorkspace.forEach((projects, workspaceId) => {
 			const filtered = projects.filter((p) => p.id !== id)
 			if (filtered.length !== projects.length) {

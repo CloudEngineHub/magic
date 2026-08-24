@@ -448,10 +448,33 @@ class ProjectService {
 			targetProjectName,
 		})
 
-		// Optimistic update: remove project from list immediately
+		const activeProject =
+			projectStore.selectedProject?.id === projectId ? projectStore.selectedProject : null
+		const targetWorkspace = workspaceStore.workspaces.find(
+			(workspace) => workspace.id === targetWorkspaceId,
+		)
+		const sourceWorkspace = workspaceStore.workspaces.find(
+			(workspace) => workspace.id === sourceWorkspaceId,
+		)
+		const movedActiveProject = activeProject
+			? {
+					...activeProject,
+					project_name: targetProjectName?.trim() || activeProject.project_name,
+					workspace_id: targetWorkspaceId,
+					workspace_name:
+						targetWorkspaceName?.trim() ||
+						targetWorkspace?.name ||
+						activeProject.workspace_name ||
+						"",
+				}
+			: null
+
+		// Optimistic update: remove only list entries so the active project and its file state survive.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
-			projectStore.removeProject(projectId)
+			projectStore.removeProjectFromCollections(projectId)
+			if (movedActiveProject) projectStore.setSelectedProject(movedActiveProject)
+			if (targetWorkspace) workspaceStore.setSelectedWorkspace?.(targetWorkspace)
 		})
 
 		// Await move API so callers (e.g. save-as-project + list reload) do not race ahead of server state
@@ -476,6 +499,12 @@ class ProjectService {
 				throw new Error("Move project failed")
 			} catch (error) {
 				console.error("移动项目失败，失败原因：", error)
+				if (activeProject) {
+					runInAction(() => {
+						projectStore.setSelectedProject(activeProject)
+						if (sourceWorkspace) workspaceStore.setSelectedWorkspace(sourceWorkspace)
+					})
+				}
 				this.rollbackSnapshot(operationId)
 				throw error
 			}
@@ -489,7 +518,7 @@ class ProjectService {
 		const { sourceWorkspaceId, targetWorkspaceId } = params
 		await this.moveProject(params)
 
-		await Promise.all([
+		const [, targetProjects] = await Promise.all([
 			this.fetchProjects({
 				workspaceId: sourceWorkspaceId,
 				clearWhenNoProjects: false,
@@ -499,6 +528,28 @@ class ProjectService {
 				clearWhenNoProjects: false,
 			}),
 		])
+
+		this.syncSelectedProjectAfterMove(params.projectId, targetWorkspaceId, targetProjects)
+	}
+
+	/** Synchronizes the active project with the freshly loaded target workspace entry. */
+	private syncSelectedProjectAfterMove(
+		projectId: string,
+		targetWorkspaceId: string,
+		refreshedProjects: ProjectListItem[],
+	) {
+		if (projectStore.selectedProject?.id !== projectId) return
+		const refreshedProject = refreshedProjects.find((project) => project.id === projectId)
+		if (refreshedProject) {
+			projectStore.setSelectedProject({
+				...projectStore.selectedProject,
+				...refreshedProject,
+			})
+		}
+		const targetWorkspace = workspaceStore.workspaces.find(
+			(workspace) => workspace.id === targetWorkspaceId,
+		)
+		if (targetWorkspace) workspaceStore.setSelectedWorkspace(targetWorkspace)
 	}
 
 	/**
@@ -539,6 +590,11 @@ class ProjectService {
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
 				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
 			])
+			this.syncSelectedProjectAfterMove(
+				project.id,
+				targetWorkspaceId,
+				projectStore.getProjectsByWorkspace(targetWorkspaceId),
+			)
 			if (targetIndex !== undefined) {
 				const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
 				const movedIndex = targetProjects.findIndex((item) => item.id === project.id)
