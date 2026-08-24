@@ -66,6 +66,7 @@ final class SourceId
         self::API_PLATFORM,
         self::FOLLOW_UP_SUGGESTIONS,
         self::AI_ABILITY_CONNECTIVITY_TEST,
+        self::SLIDES_TEMPLATE_VECTOR_SYNC,
     ];
 
     public static function isNonBilling(string $sourceId): bool
