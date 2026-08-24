@@ -109,7 +109,7 @@ class KnowledgeBaseDocumentAppService extends AbstractKnowledgeAppService
             $context->dataIsolation(),
             $thirdKnowledgeId,
         );
-        di(ThirdFileRevectorizeCooldownService::class)->notify($request);
+        di(ThirdFileRevectorizeCooldownAppService::class)->notify($request);
     }
 
     public function showRaw(

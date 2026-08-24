@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\KnowledgeBase\Crontab;
 
-use App\Application\KnowledgeBase\Service\ThirdFileRevectorizeCooldownService;
+use App\Application\KnowledgeBase\Service\ThirdFileRevectorizeCooldownAppService;
 use Hyperf\Crontab\Annotation\Crontab;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -24,7 +24,7 @@ use Throwable;
 class ThirdFileRevectorizeCooldownCrontab
 {
     public function __construct(
-        private readonly ThirdFileRevectorizeCooldownService $service,
+        private readonly ThirdFileRevectorizeCooldownAppService $service,
         private readonly LoggerInterface $logger,
     ) {
     }
