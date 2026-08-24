@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from fractions import Fraction
 from pathlib import Path
 
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
@@ -15,6 +16,13 @@ _SIZABLE_ELEMENT_TYPES = {"image", "video", "audio"}
 _SIZE_PATTERN = re.compile(r"^(\d+)x(\d+)$", re.IGNORECASE)
 _VIDEO_DEFAULT_SIZE = (1280.0, 720.0)
 _AUDIO_DEFAULT_SIZE = (480.0, 120.0)
+_VIDEO_RESOLUTION_SHORT_SIDE = {
+    "480p": 480.0,
+    "720p": 720.0,
+    "1080p": 1080.0,
+    "2k": 1440.0,
+    "4k": 2160.0,
+}
 
 
 class CanvasElementSizingService:
@@ -103,6 +111,13 @@ class CanvasElementSizingService:
                 parsed = cls._parse_size(request.get("size"))
                 if parsed is not None:
                     return parsed
+                if element.element_type == "video":
+                    parsed = cls._parse_video_aspect_ratio_size(
+                        request.get("aspect_ratio"),
+                        request.get("resolution"),
+                    )
+                    if parsed is not None:
+                        return parsed
         return cls._default_size(element.element_type)
 
     @staticmethod
@@ -126,3 +141,40 @@ class CanvasElementSizingService:
         if width <= 0 or height <= 0:
             return None
         return width, height
+
+    @classmethod
+    def _parse_video_aspect_ratio_size(
+        cls,
+        aspect_ratio: object,
+        resolution: object,
+    ) -> tuple[float, float] | None:
+        """根据视频画面比例和短边分辨率计算初始布局宽高。"""
+        ratio = cls._parse_aspect_ratio(aspect_ratio)
+        if ratio is None:
+            return None
+
+        short_side = cls._parse_resolution_short_side(resolution)
+        if short_side is None:
+            short_side = min(_VIDEO_DEFAULT_SIZE)
+        if ratio >= 1:
+            return float(round(short_side * float(ratio))), short_side
+        return short_side, float(round(short_side / float(ratio)))
+
+    @staticmethod
+    def _parse_aspect_ratio(value: object) -> Fraction | None:
+        """解析正数形式的宽高比，例如 16:9 或 9:16。"""
+        if not isinstance(value, str) or ":" not in value:
+            return None
+        left, right = (part.strip() for part in value.split(":", 1))
+        try:
+            ratio = Fraction(int(left), int(right))
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+        return ratio if ratio > 0 else None
+
+    @staticmethod
+    def _parse_resolution_short_side(value: object) -> float | None:
+        """解析视频分辨率对应的短边长度。"""
+        if not isinstance(value, str):
+            return None
+        return _VIDEO_RESOLUTION_SHORT_SIDE.get(value.strip().casefold())

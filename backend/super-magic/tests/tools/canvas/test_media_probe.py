@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
+from app.tools.canvas.domain.content_fields import VideoContentFields
+from app.tools.canvas.domain.models import CanvasContent, CanvasElement, ElementProperties
 from app.tools.canvas.production.adapters import FakeMediaProbePort, FileMediaProbePort
 
 
@@ -26,6 +28,29 @@ async def test_generated_video_dimension_probe_failure_returns_fallback_signal(t
     sizing = CanvasElementSizingService(tmp_path, FakeMediaProbePort())
 
     assert await sizing.inspect_generated_video("Demo", "./videos/missing.mp4") is None
+
+
+@pytest.mark.asyncio
+async def test_pending_video_dimensions_follow_aspect_ratio_and_resolution(tmp_path) -> None:
+    """生成前的视频 Element 应根据比例和分辨率设置初始宽高。"""
+    element = CanvasElement(
+        "video-1",
+        "video",
+        ElementProperties(),
+        [
+            CanvasContent(
+                "content-1",
+                VideoContentFields(generate_video_request={"aspect_ratio": "9:16", "resolution": "720p"}),
+            )
+        ],
+        "content-1",
+        "content-1",
+    )
+    sizing = CanvasElementSizingService(tmp_path, FakeMediaProbePort())
+
+    await sizing.initialize("Demo", element)
+
+    assert (element.properties.width, element.properties.height) == (720.0, 1280.0)
 
 
 def test_file_media_probe_parses_mock_ffprobe_video_metadata() -> None:
