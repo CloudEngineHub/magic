@@ -141,14 +141,16 @@ function localeTextToPublishDescriptionI18n(
 ): PublishSkillParams["version_description_i18n"] {
 	if (typeof details === "string") {
 		const value = details.trim()
-		return { zh_CN: value, en_US: value }
+		return { default: value, zh_CN: value, en_US: value }
 	}
 
 	const fallback = localeTextToDisplayString(details).trim()
-	const zh = (details.zh_CN ?? details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
-	const en = (details.en_US ?? details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
+	const defaultValue = (details[DEFAULT_LOCALE_KEY] ?? fallback).trim()
+	const zh = (details.zh_CN ?? defaultValue).trim()
+	const en = (details.en_US ?? defaultValue).trim()
 
 	return {
+		default: defaultValue,
 		zh_CN: zh,
 		en_US: en,
 	}

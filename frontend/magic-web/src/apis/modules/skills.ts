@@ -482,6 +482,7 @@ export interface GetSkillVersionsResponse {
 }
 
 export interface PublishSkillVersionDescriptionI18n {
+	default?: string
 	zh_CN?: string
 	en_US?: string
 }
