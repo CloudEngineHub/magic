@@ -35,11 +35,15 @@ class GenerationParameters:
     video_edit_element_id: str | None = None
     extensions: JsonObject = field(default_factory=dict)
 
+    def effective_reference_images(self) -> tuple[str, ...]:
+        """返回规范化后的参考图路径，并兼容旧版路径字段。"""
+        return self.reference_images or self.reference_image_paths
+
     def to_dict(self) -> JsonObject:
         """转换为 sidecar 和调试日志使用的 JSON 对象。"""
         values: JsonObject = {
             "prompt": self.prompt,
-            "reference_images": list(self.reference_images),
+            "reference_images": list(self.effective_reference_images()),
             "reference_image_paths": list(self.reference_image_paths),
             "reference_video_paths": list(self.reference_video_paths),
             "reference_audio_paths": list(self.reference_audio_paths),
@@ -71,6 +75,8 @@ class GenerationParameters:
     @classmethod
     def from_dict(cls, values: JsonObject) -> "GenerationParameters":
         """从 sidecar 中的稳定 JSON 字段恢复生成参数对象。"""
+        reference_images = _string_tuple(values, "reference_images")
+        legacy_reference_images = _string_tuple(values, "reference_image_paths")
         return cls(
             prompt=_optional_string(values, "prompt") or "",
             model_id=_optional_string(values, "model_id"),
@@ -79,8 +85,8 @@ class GenerationParameters:
             name=_optional_string(values, "name"),
             output_path=_optional_string(values, "output_path"),
             size=_optional_string(values, "size"),
-            reference_images=_string_tuple(values, "reference_images"),
-            reference_image_paths=_string_tuple(values, "reference_image_paths"),
+            reference_images=reference_images or legacy_reference_images,
+            reference_image_paths=legacy_reference_images,
             reference_video_paths=_string_tuple(values, "reference_video_paths"),
             reference_audio_paths=_string_tuple(values, "reference_audio_paths"),
             frame_start_path=_optional_string(values, "frame_start_path"),

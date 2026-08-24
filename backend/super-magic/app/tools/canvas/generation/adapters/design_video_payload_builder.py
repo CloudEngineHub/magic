@@ -52,7 +52,7 @@ class DesignVideoPayloadBuilder:
 
     def _build_inputs(self, project_path: str, parameters: GenerationParameters) -> dict[str, Any]:
         """转换参考图片、视频、音频及首尾帧输入。"""
-        image_paths = parameters.reference_image_paths or parameters.reference_images
+        image_paths = parameters.effective_reference_images()
         inputs: dict[str, Any] = {
             "reference_images": [{"uri": self._to_design_uri(project_path, path)} for path in image_paths],
             "reference_videos": [{"uri": self._to_design_uri(project_path, path)} for path in parameters.reference_video_paths],
@@ -97,8 +97,7 @@ class DesignVideoPayloadBuilder:
         if parameters.frame_start_path or parameters.frame_end_path:
             return "keyframe_guided"
         if (
-            parameters.reference_image_paths
-            or parameters.reference_images
+            parameters.effective_reference_images()
             or parameters.reference_video_paths
             or parameters.reference_audio_paths
         ):

@@ -222,6 +222,7 @@ class CanvasApplicationFactory:
                 repository=dependencies.repository,
                 unit_of_work=dependencies.unit_of_work,
                 generation_submission_service=generation_submission,
+                video_composition_service=video_composition_service,
             ),
             layout_service=LayoutService(
                 unit_of_work=dependencies.unit_of_work,

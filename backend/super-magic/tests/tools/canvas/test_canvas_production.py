@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.infrastructure.magic_service.client import MagicServiceClient
-from app.tools.canvas.application.commands import GenerationParameters
+from app.tools.canvas.application.commands import GenerationParameters, RetryContentCommand
 from app.tools.canvas.domain.content_fields import VideoContentFields, VideoEditContentFields
 from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasElement, ElementProperties
 from app.tools.canvas.production.adapters import (
@@ -20,8 +20,8 @@ from app.tools.canvas.production.adapters import (
 from app.tools.canvas.production.adapters.generic_video_point_estimate_port import GenericVideoPointEstimatePort
 from app.tools.canvas.production.contracts import ImageSearchTask, VideoPointEstimateItem
 from app.tools.canvas.production.estimation.video_production_request_normalizer import VideoProductionRequestNormalizer
-from app.tools.canvas.production.ports import ImageSearchCandidate
-from app.tools.canvas.production.ports import VideoCompositionRequest
+from app.tools.canvas.production.ports import ImageSearchCandidate, VideoCompositionRequest
+from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.generate_video import GenerateVideo
 from app.utils.async_file_utils import async_mkdir, async_write_bytes
@@ -190,8 +190,140 @@ async def test_add_elements_composes_final_video_element_and_declared_connection
     final = details["elements"][0]
     main_content = next(item for item in final["contents"] if item["content_id"] == final["main_content_id"])
     assert main_content["status"] == "completed"
-    assert main_content["asset_path"].startswith("./videos/")
+    assert main_content["asset_path"] == "./videos/final.mp4"
     assert any(item["source_element_id"] == "edit-1" and item["target_element_id"] == final_element_id for item in details["connections"])
+
+
+@pytest.mark.asyncio
+async def test_composition_input_failure_marks_created_content_failed(tmp_path) -> None:
+    """合成输入解析失败时，已创建的结果 Content 也必须落为 failed。"""
+    repository = CanvasRepository(tmp_path)
+    application = create_test_application(repository, video_composition_port=FakeVideoCompositionPort())
+    await application.initialize("mock-project")
+
+    def seed(project):
+        """写入带非法比例的 mock 合成图。"""
+        video = CanvasElement(
+            "video-1",
+            "video",
+            ElementProperties(x=0, y=0, width=720, height=1280),
+            [CanvasContent("video-content", VideoContentFields(src="./videos/one.mp4", status="completed"))],
+            "video-content",
+            "video-content",
+        )
+        edit = CanvasElement(
+            "edit-1",
+            "video-edit",
+            ElementProperties(name="edit", x=0, y=0),
+            [CanvasContent(
+                "edit-content",
+                VideoEditContentFields(
+                    video_sequence=["video-1"],
+                    output={"format": "mp4", "aspectRatio": "invalid", "resolution": "768p"},
+                ),
+            )],
+            "edit-content",
+            "edit-content",
+        )
+        project.canvas.elements.extend([video, edit])
+        project.canvas.connections.append(CanvasConnection("c1", "video-1", "edit-1"))
+
+    await repository.transaction("mock-project", seed)
+    result = await application._application.add_elements("mock-project", [{
+        "item_ref": "final-video",
+        "element_type": "video",
+        "name": "final",
+        "layout": {"strategy": "dependency_flow"},
+        "connections": [{"source_element_id": "edit-1"}],
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "task": "compose",
+            "input_mode": "video_edit",
+            "videoEditElementId": "edit-1",
+        },
+    }])
+
+    assert result["items"][0]["status"] == "failed"
+    final_element_id = result["items"][0]["element_id"]
+    details = await application.elements("mock-project", [final_element_id])
+    final_content = details["elements"][0]["contents"][0]
+    assert final_content["status"] == "failed"
+    assert "Invalid output aspect ratio" in final_content["error_message"]
+
+
+@pytest.mark.asyncio
+async def test_composition_retry_reuses_existing_element_and_content(tmp_path) -> None:
+    """最终视频合成失败后，重试必须原位复用 Element 和 Content。"""
+    repository = CanvasRepository(tmp_path)
+    application = create_test_application(repository, video_composition_port=FakeVideoCompositionPort())
+    await application.initialize("mock-project")
+    await async_mkdir(tmp_path / "mock-project" / "videos", parents=True, exist_ok=True)
+    await async_write_bytes(tmp_path / "mock-project" / "videos" / "one.mp4", b"mock")
+
+    def seed(project):
+        """写入一次可先失败、再修复配置的 mock 合成图。"""
+        video = CanvasElement(
+            "video-1",
+            "video",
+            ElementProperties(width=720, height=1280),
+            [CanvasContent("video-content", VideoContentFields(src="./videos/one.mp4", status="completed"))],
+            "video-content",
+            "video-content",
+        )
+        edit = CanvasElement(
+            "edit-1",
+            "video-edit",
+            ElementProperties(name="edit"),
+            [CanvasContent(
+                "edit-content",
+                VideoEditContentFields(
+                    video_sequence=["video-1"],
+                    output={"format": "mp4", "aspectRatio": "invalid", "resolution": "768p"},
+                ),
+            )],
+            "edit-content",
+            "edit-content",
+        )
+        project.canvas.elements.extend([video, edit])
+        project.canvas.connections.append(CanvasConnection("c1", "video-1", "edit-1"))
+
+    await repository.transaction("mock-project", seed)
+    initial = await application._application.add_elements("mock-project", [{
+        "item_ref": "final-video",
+        "element_type": "video",
+        "name": "final",
+        "content": {
+            "source": "generated",
+            "content_type": "video",
+            "task": "compose",
+            "input_mode": "video_edit",
+            "videoEditElementId": "edit-1",
+        },
+    }])
+    element_id = initial["items"][0]["element_id"]
+    content_id = initial["items"][0]["content_id"]
+    assert initial["items"][0]["status"] == "failed"
+
+    def repair(project):
+        """修复原 Video Edit 的输出比例，不创建新的 Element。"""
+        edit = project.canvas.get_element("edit-1")
+        edit.get_content("edit-content").fields.output["aspectRatio"] = "16:9"
+
+    await repository.transaction("mock-project", repair)
+    retried = await application._application._application.retry_content(
+        "mock-project",
+        [RetryContentCommand(
+            item_ref="final-video",
+            element_id=element_id,
+            content_id=content_id,
+        )],
+    )
+
+    assert retried["items"][0]["status"] == "completed"
+    assert retried["items"][0]["element_id"] == element_id
+    assert retried["items"][0]["content_id"] == content_id
+    assert (await application.overview("mock-project", 1, 50))["total_elements"] == 3
 
 
 def test_ffmpeg_command_preserves_source_audio_and_fills_silent_segments() -> None:
@@ -212,6 +344,16 @@ def test_ffmpeg_command_preserves_source_audio_and_fills_silent_segments() -> No
     assert "anullsrc" in rendered
     assert "concat=n=2:v=1:a=1" in rendered
     assert "-map [aout]" in rendered
+
+
+def test_video_composition_accepts_numeric_short_side_resolution() -> None:
+    """Canvas 视频合成应接受非预设的数字短边分辨率。"""
+    assert VideoCompositionService._resolve_dimensions("16:9", "768p") == (1366, 768)
+
+
+def test_video_composition_prefers_explicit_dimensions() -> None:
+    """Canvas 视频合成应优先使用明确的输出宽高。"""
+    assert VideoCompositionService._resolve_dimensions("16:9", "720p", 1344, 768) == (1344, 768)
 
 
 def test_ffmpeg_command_mutes_all_audio_sources() -> None:

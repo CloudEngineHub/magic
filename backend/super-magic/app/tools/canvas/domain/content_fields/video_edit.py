@@ -16,7 +16,9 @@ class VideoEditContentFields(CanvasContentFields):
     """保存视频 Element 顺序和输出配置。"""
 
     MAX_VIDEO_SEQUENCE_LENGTH: ClassVar[int] = 100
-    OUTPUT_FIELDS: ClassVar[frozenset[str]] = frozenset({"aspectRatio", "resolution", "format", "audioPolicy"})
+    OUTPUT_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"aspectRatio", "width", "height", "resolution", "format", "audioPolicy"}
+    )
 
     video_sequence: list[str] = field(default_factory=list)
     audio_sequence: list[str] = field(default_factory=list)
@@ -70,6 +72,25 @@ class VideoEditContentFields(CanvasContentFields):
                     "VIDEO_EDIT_OUTPUT_INVALID",
                     f"Video Edit output {field_name} must be a string.",
                 )
+        width = output.get("width")
+        height = output.get("height")
+        if (width is None) != (height is None):
+            raise CanvasDomainError(
+                "VIDEO_EDIT_OUTPUT_INVALID",
+                "Video Edit output width and height must be provided together.",
+            )
+        if width is not None and (
+            isinstance(width, bool)
+            or not isinstance(width, int)
+            or width < 2
+            or isinstance(height, bool)
+            or not isinstance(height, int)
+            or height < 2
+        ):
+            raise CanvasDomainError(
+                "VIDEO_EDIT_OUTPUT_INVALID",
+                "Video Edit output width and height must be positive pixel integers.",
+            )
         output_format = output.get("format", "mp4")
         if output_format != "mp4":
             raise CanvasDomainError(

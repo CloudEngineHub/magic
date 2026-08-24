@@ -166,6 +166,7 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 - New logical result: omit `element_id` and `content_id` in `add_canvas_elements`.
 - New candidate for an existing result: pass the existing `element_id` and omit `content_id`; use `add_canvas_contents` when appending to an existing writable Element.
 - Exact retry: use `retry_canvas_content_generation` with the exact `element_id`, `content_id`, and original `item_ref` returned by the latest result or query. Never add `-retry`, `-new`, or a counter to `item_ref`.
+- A failed final composition is an in-place retry of the existing final Video Element and Content. Reuse their exact IDs; do not call `add_canvas_elements` to create a duplicate final-video Element.
 - The first Content of a newly created Element is automatically main and must not be passed to `select_canvas_main_content`. For an appended candidate, select main only after the user confirms the exact candidate, using `select_canvas_main_content` with the exact Element and Content IDs.
 - Never identify an existing result by name alone. Preserve every returned Element ID, Content ID, task ID, video ID, status, and media path.
 - Retry only failed Content with explicit user consent, at most twice. Never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
@@ -370,6 +371,8 @@ tool.call("add_canvas_elements", {
     }],
 })
 ```
+
+Use `resolution` as the requested short-side value; preset values such as `720p`, `1080p`, `2k`, and `4k` remain supported, and numeric values such as `768p` are also valid. When exact pixel dimensions are required, set both `width` and `height` in `output`; explicit dimensions take precedence over `aspectRatio` and `resolution`.
 
 `audioPolicy` controls the final mix: `preserve` keeps the configured Audio Element or source-video audio, while `mute` removes all audio from the composed MP4. An empty `audioSequence` does not imply silence when the policy is `preserve`. When revising an existing Video Edit, preserve its Element, append or update the appropriate Content, rebuild `videoSequence` from the currently confirmed shot Video Element IDs, and confirm the edit configuration again before composing. Adding, replacing, or removing BGM requires importing or reusing the Audio Element, updating `audioSequence`, confirming the new edit, and composing again. Recalculate the expected total duration after adding, removing, or changing shot durations.
 

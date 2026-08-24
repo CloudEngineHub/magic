@@ -280,6 +280,7 @@ Retry rules:
 - Reuse the exact `item_ref` from the original generation request or the latest failed Content result. `item_ref` is a stable correlation label for the operation; it is not a retry attempt name. Never add suffixes such as `-retry`, `-new`, or a counter.
 - Reuse the exact `element_id` and `content_id` from the latest Canvas query or the failed Content result.
 - The failed-content retry tool only retries existing Content and does not receive or validate point-estimation credentials. If the user changes billable parameters, the workflow may independently call `estimate_canvas_content_points`, obtain confirmation, and then call the retry tool; the estimate result is not a retry-tool submission parameter.
+- A failed final video composition is retried in place: reuse the exact final video `element_id` and `content_id`. Do not call `add_canvas_elements` to create `final-video-v2` or another duplicate Element.
 
 Parameters: `project_path` and `items` required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
 
@@ -452,6 +453,8 @@ print(result.content)
 ```
 
 Composition is synchronous and does not use `wait_canvas_generation`. After success, query the final Video Element with `query_canvas_element_details`. The final audio state follows the Video Edit `audioPolicy`: `preserve` keeps configured or source-video audio, while `mute` produces a silent MP4.
+
+Video Edit output supports preset or numeric short-side resolutions, such as `1080p` or `768p`. For exact pixel dimensions, provide both `width` and `height` in the Video Edit `output`; explicit dimensions take precedence over `aspectRatio` and `resolution`.
 
 ## Workflow coverage
 

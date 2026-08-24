@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path, PurePosixPath
 
-from app.tools.canvas.application.canvas_id import new_canvas_id
 from app.tools.canvas.application.results import CanvasVideoCompositionResult
 from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
+from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.production.contracts import (
     CompositionInputSpec,
@@ -27,8 +28,6 @@ from app.utils.async_file_utils import async_exists, async_stat
 
 class VideoCompositionService:
     """解析 Video Edit、管理 processing Content 并执行独立合成端口。"""
-
-    _RESOLUTION_SHORT_SIDE = {"720p": 720, "1080p": 1080, "2k": 1440, "4k": 2160}
 
     def __init__(self, unit_of_work: CanvasUnitOfWork, composition_port: VideoCompositionPort, production_rule: ContentProductionRuleInterface, workspace: Path) -> None:
         """显式绑定事务、合成端口和工作区。"""
@@ -47,6 +46,7 @@ class VideoCompositionService:
         result_element_id: str,
         tool_context=None,
         result_content_id: str | None = None,
+        retry_count: int = 0,
     ) -> CanvasVideoCompositionResult:
         """创建 processing Content、同步合成并写回完成或失败状态。"""
         if not result_content_id:
@@ -54,20 +54,22 @@ class VideoCompositionService:
                 "CONTENT_NOT_FOUND",
                 "Composition requires the Content created by add_canvas_elements.",
             )
-        output_path = f"./videos/{self._safe_name(result_name)}-{new_canvas_id('video')[-8:]}.mp4"
-        preparation = await self._unit_of_work.transaction_with_sidecar(
-            project_path,
-            lambda project, metadata: self._prepare(
-                project,
-                metadata,
-                video_edit_element_id,
-                result_name,
-                result_element_id,
-                output_path,
-                result_content_id,
-            ),
-        )
+        output_path = await self._output_path(project_path, result_name)
+        preparation: CompositionPreparation | None = None
         try:
+            preparation = await self._unit_of_work.transaction_with_sidecar(
+                project_path,
+                lambda project, metadata: self._prepare(
+                    project,
+                    metadata,
+                    video_edit_element_id,
+                    result_name,
+                    result_element_id,
+                    output_path,
+                    result_content_id,
+                    retry_count,
+                ),
+            )
             project = await self._unit_of_work.repository.read(project_path)
             input_spec = preparation.input_spec
             video_paths = tuple(self._resolve_media(project_path, source) for source in input_spec.video_sources)
@@ -91,15 +93,24 @@ class VideoCompositionService:
                 ),
                 interruption_event=self._interruption_event(tool_context),
             )
+            await self._unit_of_work.transaction_with_sidecar(
+                project_path,
+                lambda project, metadata: self._complete(project, metadata, preparation, result),
+            )
         except BaseException as error:
-            await self._mark_failed(project_path, preparation, str(error)[:500])
+            message = str(error)[:500]
+            if preparation is not None:
+                await self._mark_failed(project_path, preparation, message)
+            else:
+                await self._mark_unprepared_failed(
+                    project_path,
+                    result_element_id,
+                    result_content_id,
+                    message,
+                )
             if isinstance(error, asyncio.CancelledError):
                 raise
-            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", str(error)[:500]) from error
-        await self._unit_of_work.transaction_with_sidecar(
-            project_path,
-            lambda project, metadata: self._complete(project, metadata, preparation, result),
-        )
+            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", message) from error
         return CanvasVideoCompositionResult(
             result_element_id=preparation.result_element_id,
             result_content_id=preparation.result_content_id,
@@ -120,6 +131,7 @@ class VideoCompositionService:
         result_element_id: str,
         output_path: str,
         result_content_id: str | None,
+        retry_count: int,
     ):
         """在事务内解析输入并创建 processing 结果 Content。"""
         spec = self.inspect_inputs(project, video_edit_element_id)
@@ -138,17 +150,20 @@ class VideoCompositionService:
         content_id = existing_content.content_id
         existing_content.fields.status = "processing"
         existing_content.fields.stored_error_message = None
+        detail = ContentMetadataService.get(metadata, element.element_id, content_id)
         ContentMetadataService.set(
             metadata,
             element.element_id,
             content_id,
             {
+                **detail,
                 "elementId": element.element_id,
                 "source": "generated",
                 "productionRule": "video_composition",
                 "generationStatus": "processing",
                 "outputUri": output_path,
-                "retryCount": 0,
+                "retryCount": retry_count if retry_count > 0 else int(detail.get("retryCount", 0)),
+                "errorMessage": None,
             },
         )
         return (CompositionPreparation(element.element_id, content_id, output_path, spec, previous_active_content_id, previous_main_content_id), metadata)
@@ -192,6 +207,50 @@ class VideoCompositionService:
             )
         except Exception:
             return
+
+    async def _mark_unprepared_failed(
+        self,
+        project_path: str,
+        result_element_id: str,
+        result_content_id: str,
+        message: str,
+    ) -> None:
+        """在输入解析尚未完成时，将已创建的结果 Content 标记为 failed。"""
+        try:
+            await self._unit_of_work.transaction_with_sidecar(
+                project_path,
+                lambda project, metadata: self._fail_unprepared(
+                    project,
+                    metadata,
+                    result_element_id,
+                    result_content_id,
+                    message,
+                ),
+            )
+        except Exception:
+            return
+
+    def _fail_unprepared(
+        self,
+        project: CanvasProject,
+        metadata: dict,
+        result_element_id: str,
+        result_content_id: str,
+        message: str,
+    ):
+        """在事务内更新尚未进入 processing 状态的结果 Content。"""
+        element = project.canvas.get_element(result_element_id)
+        content = element.get_content(result_content_id) if element else None
+        if element is not None and content is not None and isinstance(content.fields, VideoContentFields):
+            content.fields.update_generation_result("failed", None, message)
+            detail = ContentMetadataService.get(metadata, result_element_id, result_content_id)
+            ContentMetadataService.set(
+                metadata,
+                result_element_id,
+                result_content_id,
+                {**detail, "generationStatus": "failed", "errorMessage": message},
+            )
+        return {"status": "failed"}, metadata
 
     def _fail(self, project: CanvasProject, metadata: dict, preparation: CompositionPreparation, message: str):
         """在事务内写入失败状态。"""
@@ -247,7 +306,12 @@ class VideoCompositionService:
             if not audio_fields.src:
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Audio Element is not usable: {audio_element_id}.")
             audio_source = audio_fields.src
-        width, height = self._resolve_dimensions(str(output.get("aspectRatio") or "16:9"), str(output.get("resolution") or "1080p"))
+        width, height = self._resolve_dimensions(
+            str(output.get("aspectRatio") or "16:9"),
+            str(output.get("resolution") or "1080p"),
+            output.get("width"),
+            output.get("height"),
+        )
         audio_policy = str(output.get("audioPolicy") or "preserve").casefold()
         if audio_policy not in {"preserve", "mute"}:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Unsupported audio policy.")
@@ -289,14 +353,36 @@ class VideoCompositionService:
         return self._workspace / project_path / relative
 
     @classmethod
-    def _resolve_dimensions(cls, aspect_ratio: str, resolution: str) -> tuple[int, int]:
-        """按短边分辨率计算偶数输出尺寸。"""
+    def _resolve_dimensions(
+        cls,
+        aspect_ratio: str,
+        resolution: str,
+        width: object | None = None,
+        height: object | None = None,
+    ) -> tuple[int, int]:
+        """优先使用明确宽高，否则按比例和短边分辨率计算输出尺寸。"""
+        if width is not None or height is not None:
+            if (
+                isinstance(width, bool)
+                or not isinstance(width, int)
+                or width < 2
+                or isinstance(height, bool)
+                or not isinstance(height, int)
+                or height < 2
+            ):
+                raise CanvasDomainError(
+                    "VIDEO_COMPOSITION_FAILED",
+                    "Output width and height must be positive pixel integers.",
+                )
+            return cls._even(width), cls._even(height)
         try:
             left, right = aspect_ratio.split(":", 1)
             ratio = Fraction(int(left), int(right))
         except (ValueError, ZeroDivisionError) as error:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Invalid output aspect ratio.") from error
-        short_side = cls._RESOLUTION_SHORT_SIDE.get(resolution.casefold())
+        if ratio <= 0:
+            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Invalid output aspect ratio.")
+        short_side = parse_resolution_short_side(resolution)
         if short_side is None:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Unsupported output resolution.")
         if ratio >= 1:
@@ -317,6 +403,15 @@ class VideoCompositionService:
     def _safe_name(name: str) -> str:
         """清理输出文件名中的路径字符。"""
         return "".join(character if character.isalnum() or character in "-_" else "_" for character in name).strip("_") or "canvas-video"
+
+    async def _output_path(self, project_path: str, result_name: str) -> str:
+        """优先保留结果原名，只有目标已存在时才追加可读时间戳。"""
+        filename = f"{self._safe_name(result_name)}.mp4"
+        candidate = self._workspace / project_path / "videos" / filename
+        if not await async_exists(candidate):
+            return f"./videos/{filename}"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        return f"./videos/{self._safe_name(result_name)}-{timestamp}.mp4"
 
     @staticmethod
     def _interruption_event(tool_context):

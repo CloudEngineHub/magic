@@ -9774,8 +9774,11 @@ function captureVideoFrame(videoBlobUrl) {
     return new Promise((resolve) => {
         const v = document.createElement('video');
         v.muted = true;
-        v.preload = 'metadata';
+        v.playsInline = true;
+        v.preload = 'auto';
+        if (/^https?:/i.test(videoBlobUrl)) v.crossOrigin = 'anonymous';
         let settled = false;
+        let captureRequested = false;
         const done = (result) => {
             if (settled) return;
             settled = true;
@@ -9784,20 +9787,37 @@ function captureVideoFrame(videoBlobUrl) {
         };
         const timer = setTimeout(() => done(null), 10000);
         v.addEventListener('error', () => { clearTimeout(timer); done(null); });
-        v.addEventListener('loadeddata', () => { v.currentTime = 0.01; });
-        v.addEventListener('seeked', () => {
+        const requestCapture = () => {
+            if (captureRequested || settled || v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+            captureRequested = true;
+            const duration = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0.1;
+            try {
+                v.currentTime = Math.min(0.1, Math.max(0.01, duration / 2));
+            } catch {
+                done(null);
+            }
+        };
+        const capture = () => {
+            if (settled || v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
             clearTimeout(timer);
             try {
                 const c = document.createElement('canvas');
                 c.width = v.videoWidth || 640;
                 c.height = v.videoHeight || 360;
-                c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+                const context = c.getContext('2d');
+                if (!context || !c.width || !c.height) return done(null);
+                context.drawImage(v, 0, 0, c.width, c.height);
                 done(c.toDataURL('image/jpeg', 0.82));
             } catch {
                 done(null);
             }
-        });
+        };
+        v.addEventListener('loadedmetadata', requestCapture);
+        v.addEventListener('loadeddata', requestCapture);
+        v.addEventListener('canplay', requestCapture);
+        v.addEventListener('seeked', capture);
         v.src = videoBlobUrl;
+        v.load();
     });
 }
 
@@ -9930,6 +9950,15 @@ function getCanvasGenerationRequest(element) {
     return null;
 }
 
+/** 判断节点或其任一历史 Content 是否存在生成请求。 */
+function hasCanvasGenerationRequest(element) {
+    if (getCanvasGenerationRequest(element)) return true;
+    const contents = Array.isArray(element?.previewContents) ? element.previewContents : [];
+    return contents.some(content => element?.type === 'image'
+        ? Boolean(content?.generateImageRequest)
+        : element?.type === 'video' ? Boolean(content?.generateVideoRequest) : false);
+}
+
 /** 将图片或视频生成请求中的引用素材归一化为面板可展示的数据。 */
 function getCanvasGenerationReferences(element, request) {
     if (!request || typeof request !== 'object') return [];
@@ -9951,6 +9980,13 @@ function getCanvasGenerationReferences(element, request) {
     append(inputs.reference_images, 'image', '参考图');
     append(inputs.reference_videos, 'video', '参考视频');
     append(inputs.reference_audios, 'audio', '参考音频');
+    const appendSingle = (item, type, label) => {
+        const path = typeof item === 'string' ? item : item?.uri;
+        if (path) references.push({ path: String(path), label, type });
+    };
+    appendSingle(inputs.video, 'video', '源视频');
+    appendSingle(inputs.mask, 'image', '遮罩');
+    append(inputs.audio, 'audio', '输入音频');
     return references;
 }
 
@@ -9971,7 +10007,7 @@ function createCanvasGenerationDetailRow(label, value) {
 
 /** 创建媒体节点右上角的生成记录入口按钮。 */
 function createCanvasGenerationInfoButton(element, onClick) {
-    if (!getCanvasGenerationRequest(element)) return null;
+    if (!hasCanvasGenerationRequest(element)) return null;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'canvas-generation-info-button';
@@ -10092,7 +10128,9 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
             referencesGrid.appendChild(referenceItem);
             void (async () => {
                 try {
-                    const url = /^https?:|^blob:|^data:/i.test(reference.path)
+                    // asset:// 是 provider 资源标识，不属于当前工作区文件，保留原始 URI。
+                    if (/^asset:/i.test(reference.path)) return;
+                    const url = /^https?:|^blob:|^data:|^file:/i.test(reference.path)
                         ? reference.path
                         : await resolveMediaUrl(reference.path);
                     if (!url || !panel.isConnected) return;
@@ -10111,7 +10149,7 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
                     }
                     if (mediaElement instanceof HTMLMediaElement) mediaElement.controls = false;
                     mediaElement.addEventListener('error', () => {
-                        mediaElement.remove();
+                        media.textContent = reference.path;
                     });
                     media.textContent = '';
                     media.appendChild(mediaElement);
@@ -10125,7 +10163,7 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
     }
 
     const model = request.model_id || request.model || null;
-    const size = [request.size, request.resolution, request.generation?.resolution]
+    const size = [request.size, request.resolution]
         .filter(Boolean)
         .join(' · ') || null;
     const rows = [
@@ -10155,16 +10193,20 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
         const runtime = resultMeta.runtime && typeof resultMeta.runtime === 'object'
             ? resultMeta.runtime
             : {};
+        const finalResolution = generationInfo.resolution || request.generation?.resolution || request.resolution;
         rows.push(
             createCanvasGenerationDetailRow('积分消耗', resultMeta.billing?.points),
+            createCanvasGenerationDetailRow('任务类型', generationInfo.task || request.task),
             createCanvasGenerationDetailRow('生成模式', generationInfo.input_mode || request.input_mode),
+            createCanvasGenerationDetailRow('最终分辨率', finalResolution),
+            createCanvasGenerationDetailRow('开始时间', runtime.started_at),
             createCanvasGenerationDetailRow('完成时间', runtime.finished_at),
             createCanvasGenerationDetailRow('生成耗时', runtime.elapsed_seconds ? `${runtime.elapsed_seconds}s` : null),
         );
         rows.push(
             createCanvasGenerationDetailRow('画面比例', generationInfo.aspect_ratio || request.generation?.aspect_ratio),
-            createCanvasGenerationDetailRow('时长', generationInfo.duration_seconds || request.generation?.duration_seconds
-                ? `${generationInfo.duration_seconds || request.generation.duration_seconds}s`
+            createCanvasGenerationDetailRow('时长', (generationInfo.duration_seconds ?? request.generation?.duration_seconds) !== undefined
+                ? `${generationInfo.duration_seconds ?? request.generation.duration_seconds}s`
                 : null),
         );
     }
@@ -10510,7 +10552,7 @@ function createCanvasRichTextContent(element) {
 /**
  * 创建视频节点的可播放封面卡片。
  */
-function createCanvasVideoCard(posterBlobUrl, name) {
+function createCanvasVideoCard(posterBlobUrl, name, videoBlobUrl = null) {
     const card = document.createElement('div');
     card.className = 'canvas-el-video-card';
     if (posterBlobUrl) {
@@ -10518,6 +10560,23 @@ function createCanvasVideoCard(posterBlobUrl, name) {
         image.src = posterBlobUrl;
         image.alt = name || '';
         card.appendChild(image);
+    } else if (videoBlobUrl) {
+        // Canvas 抓帧受跨域策略或编码格式影响时，直接使用视频元素作为预览兜底。
+        const video = document.createElement('video');
+        video.src = videoBlobUrl;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+        video.controls = false;
+        video.setAttribute('aria-hidden', 'true');
+        video.addEventListener('loadedmetadata', () => {
+            try {
+                video.currentTime = 0.01;
+            } catch {
+                // 某些视频在元数据加载后仍不允许主动定位，保留浏览器默认首帧。
+            }
+        });
+        card.appendChild(video);
     }
     const overlay = document.createElement('div');
     overlay.className = 'canvas-el-video-overlay';
@@ -10561,12 +10620,23 @@ async function renderCanvasElementBody(element, resolveMediaUrl, body) {
         body.appendChild(createCanvasPreviewText(element.errorMessage || '生成失败'));
         return;
     }
+    if ((element.type === 'image' || element.type === 'video')
+        && element.status === 'completed' && !element.src) {
+        body.classList.add('canvas-el-state', 'canvas-el-completed-pending-resource');
+        body.appendChild(createCanvasPreviewText('已完成，等待文件落盘'));
+        return;
+    }
     if (element.type === 'video') {
         const posterBlobUrl = element.poster ? await resolveMediaUrl(element.poster) : null;
         const videoBlobUrl = element.src ? await resolveMediaUrl(element.src) : null;
+        if (!posterBlobUrl && !videoBlobUrl) {
+            body.classList.add('canvas-el-state', 'canvas-el-missing');
+            body.appendChild(createCanvasPreviewText('视频文件不可用'));
+            return;
+        }
         let thumbnailUrl = posterBlobUrl;
         if (!thumbnailUrl && videoBlobUrl) thumbnailUrl = await captureVideoFrame(videoBlobUrl);
-        body.appendChild(createCanvasVideoCard(thumbnailUrl, element.name));
+        body.appendChild(createCanvasVideoCard(thumbnailUrl, element.name, thumbnailUrl ? null : videoBlobUrl));
         if (videoBlobUrl || thumbnailUrl) {
             body.closest('.canvas-preview-element').classList.add('is-interactive');
             body.addEventListener('click', () => openCanvasMediaModal(
@@ -10712,7 +10782,17 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
         body.className = 'canvas-el-body';
         elementNode.appendChild(body);
 
-        /** 使用当前或指定 Content 重新渲染节点正文。 */
+        let infoButton = null;
+
+        /** 根据当前 Content 是否有生成请求同步详情入口。 */
+        const syncGenerationInfoButton = () => {
+            if (!infoButton) return;
+            const hasCurrentRequest = Boolean(getCanvasGenerationRequest(element));
+            infoButton.style.display = hasCurrentRequest ? '' : 'none';
+            if (!hasCurrentRequest) infoButton.classList.remove('is-active');
+        };
+
+        /** 使用当前或指定 Content 重新渲染节点正文和已打开的生成详情。 */
         const renderSelectedContent = async selectedContent => {
             if (selectedContent) applyCanvasPreviewContent(element, selectedContent);
             elementNode.classList.remove('is-interactive');
@@ -10721,6 +10801,23 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
             body.replaceWith(nextBody);
             body = nextBody;
             await renderCanvasElementBody(element, resolveMediaUrl, body);
+            syncGenerationInfoButton();
+
+            const detailPanel = containerEl.querySelector('.canvas-generation-detail-panel');
+            if (detailPanel?.dataset.elementId !== element.id) return;
+            const currentRequest = getCanvasGenerationRequest(element);
+            if (!currentRequest) {
+                detailPanel.remove();
+                return;
+            }
+            await renderCanvasGenerationDetailPanel(
+                element,
+                currentRequest,
+                resolveMediaUrl,
+                containerEl,
+                elementNode,
+                () => infoButton?.classList.remove('is-active'),
+            );
         };
 
         if (showLabels) {
@@ -10742,14 +10839,15 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
             elementNode.classList.add('canvas-preview-image-with-metadata');
             elementNode.appendChild(createCanvasImageTopMetadata(element));
         }
-        const generationRequest = getCanvasGenerationRequest(element);
-        const infoButton = createCanvasGenerationInfoButton(element, () => {
+        infoButton = createCanvasGenerationInfoButton(element, () => {
             const existingPanel = containerEl.querySelector('.canvas-generation-detail-panel');
             if (existingPanel?.dataset.elementId === element.id) {
                 existingPanel.remove();
                 infoButton?.classList.remove('is-active');
                 return;
             }
+            const currentRequest = getCanvasGenerationRequest(element);
+            if (!currentRequest) return;
             containerEl.querySelectorAll('.canvas-generation-detail-panel').forEach(panel => panel.remove());
             containerEl.querySelectorAll('.canvas-generation-info-button.is-active').forEach(button => {
                 button.classList.remove('is-active');
@@ -10757,7 +10855,7 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl, options =
             infoButton?.classList.add('is-active');
             void renderCanvasGenerationDetailPanel(
                 element,
-                generationRequest,
+                currentRequest,
                 resolveMediaUrl,
                 containerEl,
                 elementNode,

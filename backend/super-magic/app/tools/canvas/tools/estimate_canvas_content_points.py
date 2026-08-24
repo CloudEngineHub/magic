@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -48,6 +48,17 @@ class VideoPointEstimateItemInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_reference_images(cls, values: Any) -> Any:
+        """把旧版 reference_image_paths 兼容归一化到 reference_images。"""
+        if not isinstance(values, dict):
+            return values
+        normalized = dict(values)
+        if not normalized.get("reference_images") and normalized.get("reference_image_paths"):
+            normalized["reference_images"] = normalized["reference_image_paths"]
+        return normalized
 
     def to_parameters(self) -> GenerationParameters:
         """转换为不包含开放扩展字典的生成参数。"""

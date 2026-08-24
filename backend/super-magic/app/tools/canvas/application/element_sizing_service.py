@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
 from app.tools.canvas.domain.models import CanvasElement
+from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.production.ports import MediaProbePort
 from app.tools.canvas.strategies.layout.geometry import DEFAULT_ELEMENT_HEIGHT, DEFAULT_ELEMENT_WIDTH
@@ -16,14 +17,6 @@ _SIZABLE_ELEMENT_TYPES = {"image", "video", "audio"}
 _SIZE_PATTERN = re.compile(r"^(\d+)x(\d+)$", re.IGNORECASE)
 _VIDEO_DEFAULT_SIZE = (1280.0, 720.0)
 _AUDIO_DEFAULT_SIZE = (480.0, 120.0)
-_VIDEO_RESOLUTION_SHORT_SIDE = {
-    "480p": 480.0,
-    "720p": 720.0,
-    "1080p": 1080.0,
-    "2k": 1440.0,
-    "4k": 2160.0,
-}
-
 
 class CanvasElementSizingService:
     """为 Canvas Element 提供稳定的初始尺寸和媒体实测尺寸。"""
@@ -177,4 +170,5 @@ class CanvasElementSizingService:
         """解析视频分辨率对应的短边长度。"""
         if not isinstance(value, str):
             return None
-        return _VIDEO_RESOLUTION_SHORT_SIDE.get(value.strip().casefold())
+        short_side = parse_resolution_short_side(value)
+        return float(short_side) if short_side is not None else None

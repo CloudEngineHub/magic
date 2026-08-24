@@ -42,7 +42,7 @@ class GenericVideoPointEstimatePort(VideoPointEstimatePort):
                 input_mode=str(parameters.input_mode or ""),
                 task=str(parameters.task or "generate"),
                 output_path=str(parameters.output_path or f"{project.project_path}/videos"),
-                reference_image_paths=list(parameters.reference_image_paths),
+                reference_image_paths=list(parameters.effective_reference_images()),
                 reference_video_paths=list(parameters.reference_video_paths),
                 reference_audio_paths=list(parameters.reference_audio_paths),
                 frame_start_path=str(parameters.frame_start_path or ""),

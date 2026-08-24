@@ -8,6 +8,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.production.ports import VideoCompositionPort, VideoCompositionRequest
 from app.utils.async_file_utils import async_is_file
 
@@ -22,14 +23,6 @@ class FileVideoCompositionPlan:
 
 class FileVideoCompositionService:
     """把沙箱 workspace-relative 文件列表转换为 Canvas 合成请求。"""
-
-    _RESOLUTION_SHORT_SIDE = {
-        "480p": 480,
-        "720p": 720,
-        "1080p": 1080,
-        "2k": 1440,
-        "4k": 2160,
-    }
 
     def __init__(self, adapter: VideoCompositionPort) -> None:
         """初始化媒体探测端口。"""
@@ -66,6 +59,13 @@ class FileVideoCompositionService:
             for path in video_paths
         ]
         width, height = self._resolve_dimensions(source_infos, generation)
+        audio_policy = str(
+            generation.get("audio_policy")
+            or generation.get("audioPolicy")
+            or "preserve"
+        ).strip().casefold()
+        if audio_policy not in {"preserve", "mute"}:
+            raise ValueError("generation audio_policy must be preserve or mute")
 
         normalized_file_dir = self._normalize_workspace_relative_path(
             file_dir,
@@ -90,6 +90,7 @@ class FileVideoCompositionService:
                 output_path=output_path,
                 width=width,
                 height=height,
+                audio_policy=audio_policy,
             ),
             output_relative_path=f"./{output_relative_path}",
         )
@@ -102,18 +103,30 @@ class FileVideoCompositionService:
     ) -> tuple[int, int]:
         """按显式规格或首个视频规格确定输出尺寸。"""
         first_width, first_height, _, _ = source_infos[0]
+        explicit_width = generation.get("width")
+        explicit_height = generation.get("height")
+        if explicit_width is not None or explicit_height is not None:
+            if (
+                isinstance(explicit_width, bool)
+                or not isinstance(explicit_width, int)
+                or explicit_width < 2
+                or isinstance(explicit_height, bool)
+                or not isinstance(explicit_height, int)
+                or explicit_height < 2
+            ):
+                raise ValueError("generation width and height must be positive pixel integers")
+            return cls._even(explicit_width), cls._even(explicit_height)
         aspect_ratio = str(generation.get("aspect_ratio") or "").strip()
         resolution = str(generation.get("resolution") or "").strip().casefold()
         if aspect_ratio == "" and resolution == "":
             return cls._even(first_width), cls._even(first_height)
-
         ratio = (
             cls._parse_aspect_ratio(aspect_ratio)
             if aspect_ratio
             else Fraction(first_width, first_height)
         )
         short_side = (
-            cls._RESOLUTION_SHORT_SIDE.get(resolution)
+            parse_resolution_short_side(resolution)
             if resolution
             else min(first_width, first_height)
         )
@@ -140,7 +153,8 @@ class FileVideoCompositionService:
     @staticmethod
     def _even(value: int) -> int:
         """将尺寸调整为 FFmpeg 友好的偶数。"""
-        return max(2, value - value % 2)
+        value = max(2, value)
+        return value if value % 2 == 0 else value + 1
 
     @staticmethod
     def _media_items(composition: dict[str, Any], media_type: str) -> list[dict[str, Any]]:

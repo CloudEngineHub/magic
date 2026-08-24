@@ -101,7 +101,7 @@ class ElementDetailsQueryService:
                 for key, value in content.fields.to_dict().items()
                 if key not in {
                     "src", "status", "errorMessage", "generateImageRequest", "generateVideoRequest",
-                    "imageGenerationTaskMeta", "videoGenerationResultMeta",
+                    "imageGenerationTaskMeta",
                 }
             }
             contents.append(CanvasContentDetailResult(

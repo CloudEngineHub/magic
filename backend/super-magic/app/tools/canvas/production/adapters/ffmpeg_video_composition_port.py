@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -36,9 +37,8 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
 
     async def compose(self, request: VideoCompositionRequest, interruption_event=None) -> VideoCompositionResult:
         """执行顺序拼接，并在没有外部音频时保留源视频音轨。"""
+        self._validate_request(request)
         await self._ensure_binaries()
-        if not request.video_paths:
-            raise ValueError("At least one video input is required")
         source_media = (
             await self._probe_source_media(request.video_paths, interruption_event)
             if request.audio_policy == "preserve" and request.audio_path is None
@@ -121,7 +121,7 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
                 f"[{index}:v:0]"
                 f"scale={request.width}:{request.height}:force_original_aspect_ratio=decrease,"
                 f"pad={request.width}:{request.height}:(ow-iw)/2:(oh-ih)/2,"
-                f"setsar=1,fps=30,format=yuv420p[{video_label}]"
+                    f"setpts=PTS-STARTPTS,setsar=1,format=yuv420p[{video_label}]"
             )
             video_labels.append(f"[{video_label}]")
 
@@ -133,7 +133,7 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
                 audio_input = f"[{audio_input_indices[index]}:a:0]"
                 filters.append(
                     f"{audio_input}aresample=48000,aformat=sample_fmts=fltp:"
-                    f"sample_rates=48000:channel_layouts=stereo[{audio_label}]"
+                    f"sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[{audio_label}]"
                 )
                 audio_labels.append(f"[{audio_label}]")
             concat_inputs = "".join(
@@ -155,7 +155,7 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
                 "-map",
                 f"{audio_input_index}:a:0",
                 "-af",
-                "aresample=async=1:first_pts=0,apad",
+                "aresample=async=1:first_pts=0,asetpts=PTS-STARTPTS,apad",
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -203,6 +203,26 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
         """确认运行环境同时具备 FFmpeg 和 FFprobe。"""
         if await async_which("ffmpeg") is None or await async_which("ffprobe") is None:
             raise RuntimeError("FFmpeg and FFprobe are required for MP4 composition")
+
+    @classmethod
+    def _validate_request(cls, request: VideoCompositionRequest) -> None:
+        """在启动 FFmpeg 前限制输入数量和输出尺寸，避免失控资源消耗。"""
+        if not request.video_paths:
+            raise ValueError("At least one video input is required")
+        try:
+            max_inputs = int(os.getenv("CANVAS_MAX_VIDEO_INPUTS", "100"))
+            max_dimension = int(os.getenv("CANVAS_MAX_VIDEO_DIMENSION", "16384"))
+        except ValueError as error:
+            raise ValueError("Canvas media resource limits must be integers") from error
+        if len(request.video_paths) > max(1, max_inputs):
+            raise ValueError("Too many video inputs for one composition")
+        if (
+            request.width < 2
+            or request.height < 2
+            or request.width > max(2, max_dimension)
+            or request.height > max(2, max_dimension)
+        ):
+            raise ValueError("Requested output dimensions exceed the configured safety limit")
 
     async def _probe_output(self, output_path: Path, interruption_event=None) -> dict:
         """使用 FFprobe 读取媒体流和时长，并校验返回结构。"""
@@ -282,13 +302,23 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
 
     @staticmethod
     async def _move_output(source_path: Path, target_path: Path) -> None:
-        """直接复制合成输出到目标路径，兼容跨设备和 S3 挂载目录。"""
-        await async_copy_contents(source_path, target_path)
+        """先写入同目录临时文件，再原子替换目标，兼容挂载目录回退复制。"""
+        temporary_target = target_path.with_name(f".{target_path.name}.part-{uuid4().hex}")
+        try:
+            await async_copy_contents(source_path, temporary_target)
+            if not await async_exists(temporary_target) or (await async_stat(temporary_target)).st_size <= 0:
+                raise RuntimeError("Composed MP4 was not persisted successfully")
+            try:
+                await asyncio.to_thread(os.replace, temporary_target, target_path)
+            except OSError:
+                await async_copy_contents(temporary_target, target_path)
+        finally:
+            await async_unlink(temporary_target)
         if not await async_exists(target_path) or (await async_stat(target_path)).st_size <= 0:
             raise RuntimeError("Composed MP4 was not persisted successfully")
 
     async def _run(self, command: list[str], interruption_event, capture_stdout: bool = False) -> str:
-        """运行媒体命令并处理用户中断。"""
+        """运行媒体命令并处理用户中断和可配置超时。"""
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
@@ -300,16 +330,23 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
             if interruption_event is not None
             else None
         )
+        timeout_task = asyncio.create_task(asyncio.sleep(self._command_timeout_seconds()))
         try:
             wait_tasks = [communicate_task]
             if interrupt_task is not None:
                 wait_tasks.append(interrupt_task)
+            wait_tasks.append(timeout_task)
             done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
             if interrupt_task is not None and interrupt_task in done and interruption_event.is_set():
                 await self._terminate_process(process)
                 communicate_task.cancel()
                 await asyncio.gather(communicate_task, return_exceptions=True)
                 raise asyncio.CancelledError
+            if timeout_task in done:
+                await self._terminate_process(process)
+                communicate_task.cancel()
+                await asyncio.gather(communicate_task, return_exceptions=True)
+                raise TimeoutError("Media process exceeded the configured timeout")
             stdout, stderr = await communicate_task
             if process.returncode != 0:
                 summary = self._sanitize_stderr(stderr.decode("utf-8", errors="replace"))
@@ -322,6 +359,8 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
             if interrupt_task is not None:
                 interrupt_task.cancel()
                 await asyncio.gather(interrupt_task, return_exceptions=True)
+            timeout_task.cancel()
+            await asyncio.gather(timeout_task, return_exceptions=True)
             if not communicate_task.done():
                 communicate_task.cancel()
                 await asyncio.gather(communicate_task, return_exceptions=True)
@@ -340,6 +379,15 @@ class FfmpegVideoCompositionPort(VideoCompositionPort):
 
     @staticmethod
     def _sanitize_stderr(stderr: str) -> str:
-        """压缩 FFmpeg 错误，只保留单行可诊断摘要。"""
+        """压缩 FFmpeg 错误，同时保留末尾多行上下文。"""
         lines = [line.strip() for line in stderr.splitlines() if line.strip()]
-        return (lines[-1] if lines else "unknown FFmpeg error")[:500]
+        return "\n".join(lines[-8:] if lines else ["unknown FFmpeg error"])[:2000]
+
+    @staticmethod
+    def _command_timeout_seconds() -> float:
+        """读取媒体命令超时，非法配置时使用安全默认值。"""
+        try:
+            value = float(os.getenv("CANVAS_FFMPEG_TIMEOUT_SECONDS", "1800"))
+        except ValueError:
+            return 1800.0
+        return max(1.0, value)

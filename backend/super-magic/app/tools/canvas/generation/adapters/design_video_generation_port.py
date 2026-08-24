@@ -165,7 +165,7 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         if not builder.enabled:
             return persisted_payload
 
-        image_paths = parameters.reference_image_paths or parameters.reference_images
+        image_paths = parameters.effective_reference_images()
         reference_images = [
             await builder.build_image_input(
                 self._asset_path_resolver.to_workspace_reference_path(project_path, path)

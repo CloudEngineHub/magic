@@ -215,7 +215,21 @@ class VideoEditOutputInput(BaseToolParams):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     aspect_ratio: str | None = Field(None, alias="aspectRatio")
-    resolution: str | None = None
+    width: int | None = Field(
+        None,
+        ge=2,
+        description="Explicit output width in pixels. Use together with height when exact dimensions are required.",
+    )
+    height: int | None = Field(
+        None,
+        ge=2,
+        description="Explicit output height in pixels. Use together with width when exact dimensions are required.",
+    )
+    resolution: str | None = Field(
+        None,
+        description="""<!--zh: 输出短边分辨率。支持 480p、720p、1080p、2k、4k，也支持任意正整数形式，例如 768p。-->
+Output short-side resolution. Presets such as 480p, 720p, 1080p, 2k, and 4k are supported, as well as any positive integer form such as 768p.""",
+    )
     format: Literal["mp4"] = "mp4"
     audio_policy: Literal["preserve", "mute"] = Field(
         "preserve",
@@ -303,6 +317,17 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_reference_images(cls, values: Any) -> Any:
+        """把旧版 reference_image_paths 兼容归一化到 reference_images。"""
+        if not isinstance(values, dict):
+            return values
+        normalized = dict(values)
+        if not normalized.get("reference_images") and normalized.get("reference_image_paths"):
+            normalized["reference_images"] = normalized["reference_image_paths"]
+        return normalized
 
     @model_validator(mode="after")
     def validate_content_contract(self) -> "ContentInput":

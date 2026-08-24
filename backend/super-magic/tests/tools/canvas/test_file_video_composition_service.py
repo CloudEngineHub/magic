@@ -47,7 +47,7 @@ async def test_default_dimensions_follow_first_video(tmp_path: Path) -> None:
         task_id="task-1",
     )
 
-    assert (plan.request.width, plan.request.height) == (1920, 1080)
+    assert (plan.request.width, plan.request.height) == (1922, 1082)
     assert plan.output_relative_path == "./project/videos/composition-task-1.mp4"
 
 
@@ -69,7 +69,49 @@ async def test_explicit_generation_overrides_dimensions(tmp_path: Path) -> None:
         task_id="task-2",
     )
 
-    assert (plan.request.width, plan.request.height) == (480, 852)
+    assert (plan.request.width, plan.request.height) == (480, 854)
+
+
+@pytest.mark.asyncio
+async def test_numeric_resolution_is_converted_to_requested_short_side(tmp_path: Path) -> None:
+    """任意数字短边分辨率应参与输出尺寸计算。"""
+    source = tmp_path / "video.mp4"
+    source.write_bytes(b"mock")
+    service = FileVideoCompositionService(
+        _MockCompositionPort([(1344, 768, 3.0, True)])
+    )
+
+    plan = await service.build_plan(
+        workspace_dir=tmp_path,
+        file_dir="/videos",
+        composition={"videos": [{"path": "/video.mp4"}]},
+        generation={"aspect_ratio": "16:9", "resolution": "768p"},
+        output_file_name="final.mp4",
+        task_id="task-768",
+    )
+
+    assert (plan.request.width, plan.request.height) == (1366, 768)
+
+
+@pytest.mark.asyncio
+async def test_explicit_dimensions_are_used_for_output(tmp_path: Path) -> None:
+    """明确宽高应优先于比例和分辨率预设。"""
+    source = tmp_path / "video.mp4"
+    source.write_bytes(b"mock")
+    service = FileVideoCompositionService(
+        _MockCompositionPort([(1920, 1080, 3.0, True)])
+    )
+
+    plan = await service.build_plan(
+        workspace_dir=tmp_path,
+        file_dir="/videos",
+        composition={"videos": [{"path": "/video.mp4"}]},
+        generation={"aspect_ratio": "16:9", "resolution": "720p", "width": 1344, "height": 768},
+        output_file_name="final.mp4",
+        task_id="task-explicit",
+    )
+
+    assert (plan.request.width, plan.request.height) == (1344, 768)
 
 
 @pytest.mark.asyncio

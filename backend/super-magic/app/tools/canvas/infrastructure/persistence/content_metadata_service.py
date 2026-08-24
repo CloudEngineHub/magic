@@ -29,7 +29,7 @@ class ContentMetadataService:
             if "generationParameters" not in merged:
                 request = public_detail.get("generateImageRequest") or public_detail.get("generateVideoRequest")
                 if isinstance(request, dict):
-                    merged["generationParameters"] = dict(request)
+                    merged["generationParameters"] = _generation_parameters_from_public_request(request)
             return merged
         legacy = metadata.get("contentDetails") if isinstance(metadata, dict) else None
         if isinstance(legacy, dict) and isinstance(legacy.get(content_id), dict):
@@ -105,6 +105,7 @@ class ContentMetadataService:
                 "estimate_id",
                 "skip_point_estimate",
                 "name",
+                "reference_images",
                 "reference_image_paths",
                 "reference_video_paths",
                 "reference_audio_paths",
@@ -257,14 +258,7 @@ class ContentMetadataService:
                     if isinstance(path, str) and path
                 ]
         else:
-            for key in (
-                "reference_image_paths", "reference_video_paths", "reference_audio_paths",
-                "frame_start_path", "frame_end_path", "input_mode", "task", "duration_seconds",
-                "aspect_ratio", "resolution", "fps", "seed", "watermark", "extensions",
-            ):
-                value = parameters.get(key)
-                if value not in (None, [], {}):
-                    request[key] = value
+            request.update(_build_public_video_request(parameters))
         return request
 
 
@@ -306,3 +300,111 @@ def _normalize_project_path(value: str) -> str:
     if normalized.startswith("./") or "://" in normalized or normalized.startswith("data:"):
         return normalized
     return f"./{normalized.lstrip('/')}"
+
+
+def _build_public_video_request(parameters: dict[str, Any]) -> dict[str, Any]:
+    """将内部视频参数转换为 magic-web 读取的 GenerateVideoRequest 结构。"""
+    request: dict[str, Any] = {}
+    for key in ("input_mode", "task", "model_id"):
+        value = parameters.get(key)
+        if value not in (None, ""):
+            request[key] = value
+
+    image_paths = parameters.get("reference_images") or parameters.get("reference_image_paths") or []
+    video_paths = parameters.get("reference_video_paths") or []
+    audio_paths = parameters.get("reference_audio_paths") or []
+    inputs: dict[str, Any] = {
+        "reference_images": _build_uri_inputs(image_paths),
+        "reference_videos": _build_uri_inputs(video_paths),
+        "reference_audios": _build_uri_inputs(audio_paths),
+        "frames": _build_video_frames(parameters),
+    }
+    request["inputs"] = inputs
+
+    generation_keys = ("aspect_ratio", "resolution", "duration_seconds", "fps", "seed", "watermark")
+    generation = {
+        key: parameters[key]
+        for key in generation_keys
+        if parameters.get(key) not in (None, "")
+    }
+    if generation:
+        request["generation"] = generation
+    extensions = parameters.get("extensions")
+    if isinstance(extensions, dict) and extensions:
+        request["extensions"] = dict(extensions)
+    return request
+
+
+def _build_uri_inputs(values: Any) -> list[dict[str, str]]:
+    """将路径列表转换成 GenerateVideoRequest 的 URI 输入项。"""
+    if not isinstance(values, (list, tuple)):
+        return []
+    return [
+        {"uri": _normalize_project_path(value)}
+        for value in values
+        if isinstance(value, str) and value
+    ]
+
+
+def _build_video_frames(parameters: dict[str, Any]) -> list[dict[str, str]]:
+    """将首尾帧路径转换成带角色的输入项。"""
+    frames: list[dict[str, str]] = []
+    for role, key in (("start", "frame_start_path"), ("end", "frame_end_path")):
+        value = parameters.get(key)
+        if isinstance(value, str) and value:
+            frames.append({"role": role, "uri": _normalize_project_path(value)})
+    return frames
+
+
+def _generation_parameters_from_public_request(request: dict[str, Any]) -> dict[str, Any]:
+    """从新旧公共视频请求恢复重试所需的内部参数。"""
+    inputs = request.get("inputs") if isinstance(request.get("inputs"), dict) else {}
+    generation = request.get("generation") if isinstance(request.get("generation"), dict) else {}
+    parameters: dict[str, Any] = {
+        key: value for key, value in request.items()
+        if key not in {"inputs", "generation", "callbacks", "execution"}
+    }
+    image_values = _read_uri_values(inputs.get("reference_images"))
+    if not image_values:
+        image_values = _read_string_values(request.get("reference_image_paths"))
+    if not image_values:
+        image_values = _read_string_values(request.get("reference_images"))
+    if image_values:
+        parameters["reference_images"] = image_values
+    for request_key, input_key in (
+        ("reference_video_paths", "reference_videos"),
+        ("reference_audio_paths", "reference_audios"),
+    ):
+        values = _read_uri_values(inputs.get(input_key))
+        if values:
+            parameters[request_key] = values
+    frames = inputs.get("frames") if isinstance(inputs, dict) else None
+    if isinstance(frames, list):
+        for frame in frames:
+            if not isinstance(frame, dict) or not isinstance(frame.get("uri"), str):
+                continue
+            role = frame.get("role")
+            if role == "start":
+                parameters["frame_start_path"] = frame["uri"]
+            elif role == "end":
+                parameters["frame_end_path"] = frame["uri"]
+    parameters.update(generation)
+    return parameters
+
+
+def _read_uri_values(value: Any) -> list[str]:
+    """读取 URI 对象数组，同时兼容旧的字符串数组。"""
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item:
+            result.append(item)
+        elif isinstance(item, dict) and isinstance(item.get("uri"), str) and item["uri"]:
+            result.append(item["uri"])
+    return result
+
+
+def _read_string_values(value: Any) -> list[str]:
+    """读取旧版路径字符串数组。"""
+    return [item for item in value if isinstance(item, str) and item] if isinstance(value, list) else []

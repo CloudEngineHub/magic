@@ -5062,7 +5062,8 @@ input[type="file"] {
     overflow: hidden;
 }
 
-.canvas-el-video-card > img {
+.canvas-el-video-card > img,
+.canvas-el-video-card > video {
     position: absolute;
     inset: 0;
     display: block;
