@@ -1,30 +1,10 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
-import {
-	Alert,
-	Divider,
-	Flex,
-	Form,
-	Input,
-	Progress,
-	Select,
-	Spin,
-	Switch,
-	Typography,
-	message,
-} from "antd"
+import { Alert, Flex, Form, Input, Progress, Select, Switch, Typography, message } from "antd"
 import { useMemoizedFn, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
-import {
-	IconCheck,
-	IconFileZip,
-	IconFolder,
-	IconInfoCircle,
-	IconUpload,
-	IconX,
-} from "@tabler/icons-react"
+import { IconFileZip, IconFolder, IconInfoCircle, IconUpload } from "@tabler/icons-react"
 import {
 	LanguageType,
-	MagicButton,
 	MagicForm,
 	MagicInput,
 	MagicModal,
@@ -144,7 +124,6 @@ const OfficialSkillImportDialog = memo(
 		const { PlatformPackageApi } = useApis()
 		const [form] = Form.useForm()
 		const [parsed, setParsed] = useState<ParsedSkill | null>(null)
-		const [file, setFile] = useState<Upload.FileData | null>(null)
 		const [progress, setProgress] = useState(0)
 		const [packing, setPacking] = useState(false)
 		const [parsing, setParsing] = useState(false)
@@ -174,7 +153,6 @@ const OfficialSkillImportDialog = memo(
 		const categoryOptions = useMemo(() => getCategoryOptions(categories), [categories])
 
 		const clearSelectedFile = useMemoizedFn(() => {
-			setFile(null)
 			setParsed(null)
 			setProgress(0)
 			form.resetFields()
@@ -183,7 +161,6 @@ const OfficialSkillImportDialog = memo(
 		const reset = useMemoizedFn(() => {
 			form.resetFields()
 			setParsed(null)
-			setFile(null)
 			setProgress(0)
 			setPacking(false)
 			setParsing(false)
@@ -211,7 +188,6 @@ const OfficialSkillImportDialog = memo(
 			}
 
 			const nextFile = genFileData(selected)
-			setFile(nextFile)
 			setParsed(null)
 			setProgress(0)
 			setParsing(true)
@@ -241,7 +217,6 @@ const OfficialSkillImportDialog = memo(
 				})
 				setProgress(100)
 			} catch {
-				setFile({ ...nextFile, status: "error" })
 				message.error(t("officialSkillImport.errors.parseFailed"))
 			} finally {
 				setParsing(false)
@@ -281,11 +256,6 @@ const OfficialSkillImportDialog = memo(
 			}
 
 			if (archive) await processSelectedFile(archive)
-		})
-
-		const handleRemoveFile = useMemoizedFn(() => {
-			if (packing || parsing || uploading || submitting) return
-			clearSelectedFile()
 		})
 
 		const handleSubmit = useMemoizedFn(async () => {
@@ -418,49 +388,13 @@ const OfficialSkillImportDialog = memo(
 								</UploadButton>
 							</Flex>
 						</Flex>
-						{file ? (
-							<Flex align="center" gap={10} style={{ marginTop: 16 }}>
-								{file.status === "done" || parsed ? (
-									<IconCheck size={17} color="#1A9F55" />
-								) : file.status === "error" ? (
-									<IconX size={17} color="#D4380D" />
-								) : (
-									<Spin size="small" />
-								)}
-								<Typography.Text ellipsis style={{ maxWidth: 420 }}>
-									{file.name}
-								</Typography.Text>
-								<Typography.Text type="secondary" style={{ fontSize: 12 }}>
-									{`${(file.size / 1024 / 1024).toFixed(1)} MB`}
-								</Typography.Text>
-								<MagicButton
-									type="text"
-									danger
-									icon={<IconX size={15} />}
-									disabled={packing || submitting || uploading || parsing}
-									onClick={handleRemoveFile}
-								/>
-							</Flex>
-						) : null}
-						{file && (packing || uploading || parsing) ? (
+						{packing || uploading || parsing ? (
 							<Progress percent={progress} size="small" showInfo={false} />
 						) : null}
 					</div>
 
 					{parsed ? (
 						<>
-							<Divider style={{ margin: "0" }} />
-							<Flex align="center" justify="space-between" gap={12}>
-								<div>
-									<Typography.Text strong>{parsed.package_name}</Typography.Text>
-									<Typography.Paragraph
-										type="secondary"
-										style={{ margin: 0, fontSize: 12 }}
-									>
-										{parsed.code}
-									</Typography.Paragraph>
-								</div>
-							</Flex>
 							<MagicForm form={form} layout="vertical" afterRequiredMask>
 								<LocalizedField
 									form={form}
