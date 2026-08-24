@@ -23,6 +23,7 @@ import {
 import AIAutoSelectVisual from "../scenes/Slides/AIAutoSelectVisual"
 import { ScenePanelVariant } from "../components/LazyScenePanel/types"
 import { useOptionalScenePanelVariant, useOptionalSceneStateStore } from "../stores"
+import { VideoDurationRangeInput } from "./VideoDurationRangeInput"
 
 interface VideoProductionConfigPanelProps {
 	topicMode?: string
@@ -355,18 +356,17 @@ function MobileVideoProductionConfigPanel({
 											: `${config.durationSeconds}s`}
 									</span>
 								</div>
-								<input
-									type="range"
+								<VideoDurationRangeInput
+									value={config.durationSeconds}
 									min={capabilities.duration.min}
 									max={capabilities.duration.max}
 									step={capabilities.duration.step}
-									value={config.durationSeconds ?? capabilities.duration.min}
-									onChange={(event) =>
-										onConfigChange({
-											durationSeconds: Number(event.target.value),
-										})
+									onValueChange={(durationSeconds) =>
+										onConfigChange({ durationSeconds })
 									}
 									className="w-full accent-primary"
+									ariaLabel={durationLabel}
+									dataTestId="mobile-video-production-duration-range"
 								/>
 							</div>
 						</MagicPopup>
@@ -799,26 +799,19 @@ function VideoProductionConfigPanel({
 															: `${config.durationSeconds}s`}
 													</span>
 												</div>
-												<input
-													type="range"
+												<VideoDurationRangeInput
+													value={config.durationSeconds}
 													min={capabilities.duration.min}
 													max={capabilities.duration.max}
 													step={capabilities.duration.step}
-													value={
-														config.durationSeconds ??
-														capabilities.duration.min
-													}
-													onChange={(event) =>
-														configStore.setConfig({
-															durationSeconds: Number(
-																event.target.value,
-															),
-														})
+													onValueChange={(durationSeconds) =>
+														configStore.setConfig({ durationSeconds })
 													}
 													className="w-full accent-primary"
-													aria-label={t(
+													ariaLabel={t(
 														"messageEditor.videoProductionConfig.duration",
 													)}
+													dataTestId="video-production-duration-range"
 												/>
 												<div className="flex justify-between text-xs text-muted-foreground">
 													<span>{capabilities.duration.min}s</span>
