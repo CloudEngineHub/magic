@@ -46,7 +46,6 @@ export interface WebsitePreset {
 	url: string
 	description?: string
 	descriptionKey?: string
-	icon?: "nano-banana-pro" | "gpt-image-2"
 	iconSrc?: string
 }
 
