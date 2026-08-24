@@ -174,12 +174,6 @@ function mapVersionToHistoryRecord(
 	const emptyLabel = t("skillEditPage.publishPanel.emptyValue")
 	const versionLabel = formatVersionLabel(item.version)
 	const details = item.version_description?.trim() ?? ""
-	const categoryIds = Array.from(
-		new Set((item.categories ?? []).map((category) => String(category.id)).filter(Boolean)),
-	)
-	const categoryNames = Array.from(
-		new Set((item.categories ?? []).map((category) => category.name.trim()).filter(Boolean)),
-	)
 	const publisherName = item.publisher?.name?.trim() || emptyLabel
 	const publishedAt = item.published_at?.trim() || emptyLabel
 
@@ -190,8 +184,6 @@ function mapVersionToHistoryRecord(
 		status: mapApiToRecordStatus(item.review_status, item.publish_status),
 		publishTo: mapApiTargetToPublishTo(item.publish_target_type),
 		internalTarget: mapApiTargetToInternalTarget(item.publish_target_type),
-		...(categoryIds.length ? { categoryId: categoryIds[0], categoryIds } : {}),
-		...(categoryNames.length ? { categoryName: categoryNames[0], categoryNames } : {}),
 		publisherName,
 		publishedAt,
 		specificMembers: mapPublishTargetValueToMembers(item.publish_target_value),
