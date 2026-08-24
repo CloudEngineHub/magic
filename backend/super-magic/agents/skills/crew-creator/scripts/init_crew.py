@@ -9,34 +9,15 @@ Usage:
     python scripts/init_crew.py --config /path/to/config.json [--overwrite]
 
 Config JSON schema:
-    # Single-language mode (default) — fields in user's preferred language:
+    # All fields are written in the selected language:
     {
         "name":            "Research Assistant",        # required
         "role":            "Academic Researcher",       # required
         "description":     "A professional research assistant",  # required
         "role_body":       "You are an academic researcher...",  # optional (IDENTITY.md body)
         "personality":     "Rigorous, concise...",      # optional -> SOUL.md
-        "personality_en":  "Rigorous, concise...",      # optional English translation
-        "instructions":    "Workflow...",               # optional -> AGENTS.md
-        "instructions_en": "Workflow...",               # optional English translation
-    }
-
-    # Multilingual mode — add _cn or _en suffixed fields for translations.
-    # Base fields remain the primary language. Suffixed fields are written as
-    # ordinary language-specific sections, not HTML comments.
-    {
-        "name":            "Research Assistant",
-        "name_en":         "Research Assistant",
-        "role":            "Academic Researcher",
-        "role_en":         "Academic Researcher",
-        "description":     "A professional research assistant",
-        "description_en":  "A professional research assistant",
-        "role_body":       "You are an academic researcher...",
-        "role_body_en":    "You are an academic researcher...",
-        "personality":     "Rigorous, concise...",
-        "personality_en":  "Rigorous, concise...",
-        "instructions":    "Workflow...",
-        "instructions_en": "Workflow..."
+        "instructions":    "Workflow...",               # required -> AGENTS.md
+        "skill_decomposition_decision": "yes"            # required: "yes" or "no"
     }
 
 Files generated:
@@ -50,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -58,36 +40,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _shared.bootstrap import get_project_root
 
 
-REQUIRED_FIELDS = ("name", "role", "description")
-
-# Mapping from suffix to section heading
-SUFFIX_LABEL: dict[str, str] = {
-    "_cn": "Chinese",
-    "_en": "English",
+REQUIRED_FIELDS = ("name", "role", "description", "instructions", "skill_decomposition_decision")
+VALID_SKILL_DECOMPOSITION_DECISIONS = {"yes", "no"}
+AGENTS_REQUIRED_SECTIONS = {
+    "overview": (r"overview", r"总览", r"概述"),
+    "inputs": (r"inputs?", r"输入"),
+    "outputs": (r"outputs?", r"输出"),
+    "tool_or_skill_calls": (r"tools?", r"skills?", r"工具", r"技能"),
+    "failure_handling": (r"fail(?:ure)?", r"error", r"失败", r"异常"),
+    "completion_criteria": (r"completion", r"done", r"完成条件", r"验收"),
 }
 
 
-def _has_translations(cfg: dict) -> bool:
-    """Check if the config has any translation (suffixed) fields."""
-    return any(k.endswith(tuple(SUFFIX_LABEL)) for k in cfg)
+def _resolve_config_path(config_arg: str, project_root: Path) -> tuple[Path | None, list[Path]]:
+    config_path = Path(config_arg).expanduser()
+    if config_path.is_absolute():
+        candidates = [config_path]
+    else:
+        candidates = [
+            Path.cwd() / config_path,
+            project_root / ".workspace" / config_path,
+            project_root / config_path,
+        ]
 
-
-def _wrap_body(body: str, cfg: dict, field: str) -> str:
-    """
-    Format body text. In multilingual mode, keep the primary content first and
-    append translations as ordinary language-specific sections.
-    `field` is the base field name (e.g. "role_body", "instructions", "personality").
-    """
-    if not _has_translations(cfg):
-        return f"{body}\n"
-
-    parts: list[str] = [body]
-    for suffix, label in SUFFIX_LABEL.items():
-        translation = cfg.get(f"{field}{suffix}")
-        if translation:
-            parts.append(f"## {label}\n\n{translation}")
-
-    return "\n\n".join(parts) + "\n"
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve(), candidates
+    return None, candidates
 
 
 def _build_identity(cfg: dict) -> str:
@@ -98,38 +77,50 @@ def _build_identity(cfg: dict) -> str:
         f"description: {cfg['description']}",
     ]
 
-    # Add suffixed header fields for multilingual mode
-    for suffix in SUFFIX_LABEL:
-        for field in ("name", "role", "description"):
-            value = cfg.get(f"{field}{suffix}")
-            if value:
-                header_lines.append(f"{field}{suffix}: {value}")
-
     header_lines.append("---")
     header = "\n".join(header_lines) + "\n"
 
-    # Build body with language-aware default
     body = cfg.get("role_body") or ""
     if not body:
         role = cfg["role"]
         desc = cfg["description"]
         body = f"Role: {role}\n\nDescription: {desc}"
 
-    return f"{header}\n{_wrap_body(body, cfg, 'role_body')}"
+    return f"{header}\n{body}\n"
 
 
 def _build_agents(cfg: dict) -> str | None:
     body = cfg.get("instructions")
     if not body:
         return None
-    return _wrap_body(body, cfg, "instructions")
+    return f"{body}\n"
 
 
 def _build_soul(cfg: dict) -> str | None:
     body = cfg.get("personality")
     if not body:
         return None
-    return _wrap_body(body, cfg, "personality")
+    return f"{body}\n"
+
+
+def _validate_agents_content(content: str) -> list[str]:
+    headings = [
+        match.group(1).strip().lower()
+        for line in content.splitlines()
+        if (match := re.match(r"^#{1,6}\s+(.+?)\s*$", line))
+    ]
+    heading_text = "\n".join(headings)
+    missing = [
+        section
+        for section, patterns in AGENTS_REQUIRED_SECTIONS.items()
+        if not any(re.search(pattern, heading_text, re.IGNORECASE) for pattern in patterns)
+    ]
+
+    ordered_steps = re.findall(r"^\s*\d+[.)]\s+\S", content, re.MULTILINE)
+    if len(ordered_steps) < 2:
+        missing.append("ordered_sop_steps")
+
+    return missing
 
 
 def main() -> int:
@@ -148,11 +139,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    config_path = Path(args.config)
-    if not config_path.is_absolute():
-        config_path = Path.cwd() / config_path
-    if not config_path.is_file():
-        print(json.dumps({"ok": False, "error": f"Config file not found: {config_path}"}, ensure_ascii=False))
+    project_root = get_project_root()
+    config_path, candidates = _resolve_config_path(args.config, project_root)
+    if config_path is None:
+        checked_paths = ", ".join(str(path) for path in candidates)
+        print(json.dumps({
+            "ok": False,
+            "error": f"Config file not found. Checked: {checked_paths}",
+        }, ensure_ascii=False))
         return 1
 
     try:
@@ -166,7 +160,23 @@ def main() -> int:
         print(json.dumps({"ok": False, "error": f"Missing required fields: {missing}"}, ensure_ascii=False))
         return 1
 
-    project_root = get_project_root()
+    skill_decision = str(cfg["skill_decomposition_decision"]).strip().lower()
+    if skill_decision not in VALID_SKILL_DECOMPOSITION_DECISIONS:
+        print(json.dumps({
+            "ok": False,
+            "error": "skill_decomposition_decision must be an explicit 'yes' or 'no'.",
+        }, ensure_ascii=False))
+        return 1
+
+    invalid_agents_sections = _validate_agents_content(str(cfg["instructions"]))
+    if invalid_agents_sections:
+        print(json.dumps({
+            "ok": False,
+            "error": "AGENTS.md instructions do not satisfy the required workflow format.",
+            "missing_sections": invalid_agents_sections,
+        }, ensure_ascii=False))
+        return 1
+
     ws_dir = project_root / ".workspace" / ".magic"
 
     identity_path = ws_dir / "IDENTITY.md"
@@ -193,14 +203,12 @@ def main() -> int:
         (ws_dir / "SOUL.md").write_text(soul_content, encoding="utf-8")
         created.append("SOUL.md")
 
-    multilingual = _has_translations(cfg)
-    mode = "multilingual" if multilingual else "single-language"
     print(json.dumps({
         "ok": True,
         "workspace": str(ws_dir),
-        "mode": mode,
+        "mode": "single-language",
         "files_created": created,
-        "message": f"Employee '{cfg['name']}' ({cfg['role']}) initialized with {len(created)} file(s) in {mode} mode.",
+        "message": f"Employee '{cfg['name']}' ({cfg['role']}) initialized with {len(created)} file(s) in single-language mode.",
     }, ensure_ascii=False))
     return 0
 

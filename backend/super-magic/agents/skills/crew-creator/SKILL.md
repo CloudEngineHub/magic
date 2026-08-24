@@ -18,11 +18,26 @@ Also handles first-time employee initialization when the workspace has no defini
 
 ## Language Generation Strategy
 
-The system injects `<user_preferred_language>` indicating the user's preferred language. Follow these rules when generating employee files:
+Determine the output language in this order:
 
-**Default single-language mode**: Generate all content in the user's preferred language. YAML header uses single-language fields only.
+1. If the user explicitly specifies an output language in the current request, use that language.
+2. Otherwise, run the language helper script before generating or editing employee files:
 
-**Only enable multilingual mode when the user explicitly requests multiple languages**. Use clear language-specific sections or fields. Do not use HTML comment annotations for translations.
+```python
+shell_exec(
+    command="python '<skill_dir>/scripts/language.py'"
+)
+```
+
+将 `<skill_dir>` 替换为当前技能的绝对目录。不要省略技能目录前缀，因为 Shell 的当前目录可能是 `.workspace` 或其他目录。
+
+The script reads `.credentials/metadata.json` and returns JSON such as `{"language": "zh_CN", "language_name": "Chinese"}`. It defaults to `zh_CN` when the metadata file is missing, invalid, or has no usable `language` value. `USER_AUTH_METADATA_PATH` can override the metadata path for testing or operational use.
+
+When the user has not specified a language, use the returned `language_name` as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision.
+
+**Default single-language mode**: Generate all content in the selected language. YAML header uses single-language fields only.
+
+Always generate single-language output. Do not ask for, generate, or maintain translations or language-specific duplicate sections.
 
 ## Employee Initialization Flow
 
@@ -36,61 +51,70 @@ Use `list_dir` to check `.magic/`. If `IDENTITY.md` is missing, enter the initia
 
 Collect information in rounds; you may combine questions but don't overwhelm the user.
 
-**Before gathering, check user's preferred language**: Look at `<user_preferred_language>`. Communicate and collect information in that language.
+**Before gathering, determine the language using the priority above**. Communicate and collect information in the selected language.
 
 **Round 1 (required)**:
-1. **Employee name**: Ask in the user's preferred language (e.g., for English users: "What name would you like to give your employee?")
+1. **Employee name**: Ask in the selected language (e.g., for English users: "What name would you like to give your employee?")
 2. **Employee role**: (e.g., "What role will this employee take on?")
 3. **One-line description**: What does this employee mainly do?
 
-**Only ask for translations when the user explicitly requests multiple languages** (e.g., "need bilingual support").
+Do not ask for translations or offer multilingual output.
 
 **Round 2 (recommended but optional)**:
 4. **Role definition**: A richer description of capabilities, expertise, and working style (goes into IDENTITY.md body)
-5. **Workflow / rules**: What workflow should this employee follow? Any special rules? (goes into AGENTS.md)
+5. **Personality and communication style**: What personality should the employee have? (e.g. rigorous, lively, concise) (goes into SOUL.md)
 
-**Round 3 (optional, user may skip)**:
-6. **Personality and communication style**: What personality should the employee have? (e.g. rigorous, lively, concise) (goes into SOUL.md)
+**Round 3 (required)**:
+6. **Workflow / rules**: What workflow should this employee follow? What special rules apply? (goes into AGENTS.md)
 
-If the user signals intent to skip (e.g., "later", "that's fine for now"), proceed immediately with whatever has been collected.
+Workflows must be split into clear, independently executable processes. Each process should be designed to call one independent skill; do not pile multiple complex workflows into AGENTS.md.
+
+**Round 4 (required decision)**:
+7. **Skill decomposition decision**: After collecting the workflow, explicitly ask whether the independent processes should be created as separate skills. Do not infer consent from silence, and do not finish initialization before receiving a clear yes/no answer.
+8. If the user chooses yes, summarize the proposed skill boundaries and specify which workflow in `AGENTS.md` will call each skill, or which invocation rules each skill will follow. Then load `skill-creator` and follow its plan, confirmation, conflict-check, creation, and validation workflow once for each independent process.
+9. If the user chooses no, record that decision in the initialization summary and keep the workflow in `AGENTS.md`. If the user is unsure, explain the tradeoff and ask again; do not silently choose.
+
+Round 2 may be skipped. If the user has not provided workflow / rules for Round 3, initialization cannot be completed and the conversation must continue until they provide them. Round 4 is a required decision gate even when the user ultimately chooses no.
 
 ### Generating Files
 
 After collecting info, write a JSON config and call the init script:
 
 **Single-language mode (default)**:
+
+Use the selected language for all generated values. Do not add `_en`/`_cn` translation fields.
+
 ```python
-# 1. Write collected info as JSON config (no _en suffix variants needed)
+# Write collected info as JSON config using only the selected language.
 write_file(
     path=".crew_init_config.json",
     content='{"name": "Research Assistant", "role": "Academic Researcher", "description": "A professional research assistant", "role_body": "You are an academic researcher...", "instructions": "...", "personality": "..."}'
 )
 
-# 2. Call the init script
+# 2. Call the init script only after the skill-decomposition decision is recorded.
 shell_exec(
-    command="python scripts/init_crew.py --config .workspace/.crew_init_config.json"
+    command="python '<skill_dir>/scripts/init_crew.py' --config .crew_init_config.json"
 )
 ```
 
-**Only when the user explicitly requests multiple languages**, supplement with auxiliary language fields (e.g., `name_cn`, `role_body_cn`, etc.):
-```python
-write_file(
-    path=".crew_init_config.json",
-    content='{"name": "Research Assistant", "name_cn": "<translated name>", "role": "Academic Researcher", "role_cn": "<translated role>", "description": "A professional research assistant", "description_cn": "<translated description>", ...}'
-)
-```
+The init script first checks the current directory, then the project's `.workspace` directory and project root for a relative config path. The command does not require copying the config into the skill directory.
 
-The script generates files based on the config (TOOLS.md and SKILLS.md are intentionally not created — the system uses defaults):
+The script generates files based on the config (TOOLS.md and SKILLS.md are intentionally not created by the initialization script — the system uses defaults):
 - `IDENTITY.md` — always generated (YAML header + role definition body)
 - `AGENTS.md` — generated if workflow instructions were provided
 - `SOUL.md` — generated if personality was provided
 
+If the user chooses skill decomposition in Round 4, after initialization call `skill-creator` once for each independent workflow. Follow `skill-creator`'s plan, confirmation, creation, and validation process; do not write `SKILL.md` manually.
+
 ### After Initialization
 
-1. Show the generated files to the user via `read_files`
-2. Ask if they want any adjustments
-3. Clean up the temp config: `delete_files(path=".crew_init_config.json")`
-4. Inform the user: TOOLS.md and SKILLS.md were not generated (system defaults apply); they can be added later through employee management
+1. Before writing, validate `AGENTS.md` against the workflow format: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, and completion checks must be present. Add security constraints or other special rules only when the user explicitly requests them.
+2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or add special rules that the user did not specify.
+3. Show the generated files to the user via `read_files`.
+4. If the user chose skill decomposition, confirm that every skill has an invocation workflow or rule declared in `AGENTS.md`, then call `skill-creator` for each independent skill and validate the results before reporting completion.
+5. Ask if the user wants any adjustments.
+6. Clean up the temp config: `delete_files(path=".crew_init_config.json")`.
+7. Inform the user: TOOLS.md and SKILLS.md were not generated by the initialization script (system defaults apply); custom skills are created under `.magic/skills/` and can be adjusted later through employee management.
 
 ## File Responsibility Mapping
 
@@ -123,7 +147,7 @@ After each edit, present:
 |------------|--------|-------|
 | Role clarity | pass | ... |
 | Instruction specificity | pass | ... |
-| Language consistency (check if multilingual) | pass | ... |
+| Language consistency | pass | All generated content uses the selected language. |
 | Format compliance | pass | ... |
 | ... | ... | ... |
 ```
@@ -134,26 +158,19 @@ After each edit, present:
 
 Contains YAML header (metadata) and body (role definition).
 
-**YAML header fields**: `name`, `role`, `description` in the user's preferred language. Only in multilingual mode, add auxiliary language variants: `name_cn`/`name_en`, `role_cn`/`role_en`, `description_cn`/`description_en`.
+**YAML header fields**: `name`, `role`, and `description` in the selected language. Do not add language-suffixed variants.
 
-**Body**: Write directly in single-language mode. In multilingual mode, use `<!--xx -->` comment format with the user's preferred language as active content.
+**Body**: Write directly in the selected language.
 
 **Key points**:
 - Role definition must be specific; avoid vague descriptions like "you are an AI assistant"
 - Define expertise domains, target users, and usage scenarios
-- In multilingual mode, all language versions must be semantically equivalent
-
-### AGENTS.md — Workflow Instructions
-
-Pure Markdown, no YAML header. Defines this employee's specific workflow and rules.
-
-**Key points**: Prioritized instructions, numbered lists, decision logic (if/then/else), output format specs.
 
 ### SOUL.md — Personality and Behavior
 
 Pure Markdown, no YAML header. Defines the employee's personality and behavior guidelines.
 
-**Key points**: Core traits (3-5 keywords + behavioral descriptions), communication style, behavior boundaries.
+**Key points**: Core traits (3-5 keywords + behavioral descriptions), aesthetic preferences including presentation, expression, and creative style, actionable communication style, and behavior boundaries.
 
 ### TOOLS.md — Tool Management
 
@@ -200,22 +217,6 @@ shell_exec(
 shell_exec(
     command="python scripts/tools.py search image"
 )
-```
-
-## Multilingual Content Format
-
-**Default single-language mode**: Write staff files directly in the user's preferred language. Do not use HTML comment annotations for translations.
-
-**Only when the user explicitly requests multiple languages**, use ordinary language-specific sections. Keep the user's preferred language first, then add the auxiliary language below it with a clear heading:
-
-```markdown
-## English
-
-English content.
-
-## Chinese
-
-Chinese content.
 ```
 
 ## Reference Documents

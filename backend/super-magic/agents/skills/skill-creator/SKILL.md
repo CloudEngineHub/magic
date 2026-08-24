@@ -14,10 +14,21 @@ Assess where the user is and jump in from there.
 
 ## Language Awareness
 
-- Always use the language the user is currently speaking in, unless the user explicitly requests a different language
-- Generate skill content (SKILL.md body, comments, examples) in the same language as the current conversation
-- Default to single-language skill content. If the user explicitly requests multiple languages, write ordinary multilingual sections and do not use HTML comment annotations in SKILL.md.
+- If the user explicitly specifies an output language in the current request, use that language
+- Otherwise, run `python '<skill_dir>/scripts/language.py'` before generating or editing skill content, replacing `<skill_dir>` with the skill's absolute directory, and use the returned `language_name`
+- Generate skill content (SKILL.md body, comments, and examples) in the selected language
+- Skills always use single-language content. Do not ask for, generate, or maintain translations or language-specific duplicate sections.
 - Keep `description` in English (triggering relies on English semantics)
+
+When the user has not explicitly specified a language, run the language helper before generating or editing skill content:
+
+```python
+shell_exec(
+  command="python '<skill_dir>/scripts/language.py'"
+)
+```
+
+将 `<skill_dir>` 替换为当前技能的绝对目录。不要省略技能目录前缀，因为 Shell 的当前目录可能是 `.workspace` 或其他目录。脚本读取 `.credentials/metadata.json`，元数据不可用或无效时回退到 `zh_CN`。
 
 ---
 
@@ -65,7 +76,10 @@ Then confirm:
 1. What should this skill enable AI to do?
 2. When should it trigger? (what user phrases/contexts)
 3. **What is the final output form?** (see "Output Form Decision" below — must be decided here)
-4. Should we set up test cases?
+4. In which employee workflow should this skill be called, or what invocation rules should it follow? This workflow or rule must be written to the employee's `AGENTS.md`.
+5. Should we set up test cases?
+
+Before continuing to planning, read the current employee's `AGENTS.md`. If the file is missing, or it does not explicitly define the skill's workflow, trigger conditions, applicable scenarios, or invocation timing, pause skill creation, add this workflow information, and get user confirmation. Do not create `SKILL.md` first and add the invocation rule afterward.
 
 ### Output Form Decision (Required in Capture Intent Phase)
 
@@ -109,6 +123,7 @@ After the interview, write the plan to `<workspace-skills-dir>/<skill-name>_plan
 Plan document contents:
 - Skill scope and boundaries (what it can/cannot do)
 - Tool list with selection rationale (with code format examples)
+- The invocation workflow or rules in the employee's `AGENTS.md`, and how this skill maps to that workflow
 - Expected SKILL.md structure outline
 - Whether `scripts/`, `references/`, `assets/` subdirectories are needed
 - Final output form (from Phase 1 decision)
@@ -121,6 +136,8 @@ Plan document contents:
 ### Phase 4: Check Conflicts and Write Files
 
 After user confirms the plan, **check for name conflicts first**, then create files.
+
+Before writing, confirm that the employee's `AGENTS.md` explicitly specifies which workflow calls this skill, or specifies its trigger conditions, applicable scenarios, and invocation timing. If this invocation mapping is missing or has not been confirmed by the user, do not write any skill files.
 
 **Conflict check** — look at the `<available_skills>` block already in the system prompt to see if a skill with the same name already exists. No tool call or shell command is needed for this step.
 

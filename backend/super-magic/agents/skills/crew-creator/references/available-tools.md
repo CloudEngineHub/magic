@@ -47,6 +47,18 @@ tools:
   - video_understanding
 ```
 
+### Design & Visual Creation Employee
+
+```yaml
+tools:
+  - web_search
+  - visual_understanding
+  - video_understanding
+  - generate_canvas_images
+  - search_images_to_canvas
+  - create_canvas
+```
+
 ### Development & Programming Employee
 
 ```yaml
