@@ -56,6 +56,16 @@ class PermissionLabelService implements PermissionLabelServiceInterface
      */
     public function getResourceLabelPath(string $resourceCode): string
     {
+        // 权限实现可为扩展资源提供自己的层级路径解析（例如企业版资源）。
+        // 通过可选扩展保持开源包不依赖企业包；旧实现继续走下方兼容逻辑。
+        if (method_exists($this->magicPermission, 'getResourceLabelPath')) {
+            try {
+                return $this->magicPermission->getResourceLabelPath($resourceCode);
+            } catch (Throwable) {
+                // 扩展实现无法解析时，继续使用开源版兼容逻辑。
+            }
+        }
+
         $enum = MagicResourceEnum::tryFrom($resourceCode);
         if (! $enum) {
             $segments = array_values(array_filter(explode('.', $resourceCode)));
