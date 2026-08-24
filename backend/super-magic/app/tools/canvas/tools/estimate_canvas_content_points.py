@@ -102,6 +102,8 @@ class EstimateCanvasContentPoints(BaseTool[BaseToolParams]):
 
     async def get_after_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, result: ToolResult, execution_time: float, arguments: dict[str, Any] | None = None) -> dict[str, str]:
         """生成积分预估后的用户反馈。"""
+        # 保留积分预估工具自身的成功、失败和不可用状态 remark。
+        result.use_custom_remark = True
         data = result.data or {}
         items = data.get("items", []) if isinstance(data, dict) else []
         statuses = {

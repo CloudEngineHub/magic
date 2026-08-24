@@ -188,6 +188,7 @@ def items_content(
             "generation_task_id",
             "retry_count",
             "idempotent_replay",
+            "asset_path",
             "output_uri",
             "error_code",
             "error",

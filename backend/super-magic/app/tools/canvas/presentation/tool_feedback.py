@@ -36,13 +36,15 @@ def error_result(error: Exception) -> ToolResult:
             "Canvas operation failed.\n"
             f"- Error code: {code}\n"
             f"- Reason: {error.message}\n"
-            f"- Action: {action}"
+            f"- Action: {action}",
+            data={"error_code": code, "error": error.message},
         )
     if isinstance(error, FileNotFoundError) and str(error) == "PROJECT_NOT_FOUND":
         return ToolResult.error(
             "Canvas operation failed.\n"
             "- Error code: PROJECT_NOT_FOUND\n"
-            "- Action: Call initialize_canvas with the same project_path."
+            "- Action: Call initialize_canvas with the same project_path.",
+            data={"error_code": "PROJECT_NOT_FOUND", "error": "Canvas project was not found."},
         )
     if isinstance(error, ValueError) and str(error) in {
         "INVALID_ELEMENT_DETAILS",
@@ -52,19 +54,28 @@ def error_result(error: Exception) -> ToolResult:
             "Canvas operation failed.\n"
             "- Error code: INVALID_ELEMENT_DETAILS\n"
             "- Reason: Canvas metadata is unavailable or has an unsupported structure.\n"
-            "- Action: Query the Canvas first and ask the user to repair the project metadata."
+            "- Action: Query the Canvas first and ask the user to repair the project metadata.",
+            data={
+                "error_code": "INVALID_ELEMENT_DETAILS",
+                "error": "Canvas metadata is unavailable or has an unsupported structure.",
+            },
         )
     if isinstance(error, ValueError) and str(error) == "PROJECT_PATH_INVALID":
         return ToolResult.error(
             "Canvas operation failed.\n"
             "- Error code: PROJECT_PATH_INVALID\n"
-            "- Reason: project_path must be a workspace-relative directory."
+            "- Reason: project_path must be a workspace-relative directory.",
+            data={
+                "error_code": "PROJECT_PATH_INVALID",
+                "error": "project_path must be a workspace-relative directory.",
+            },
         )
     return ToolResult.error(
         "Canvas operation failed.\n"
         "- Error code: INTERNAL_ERROR\n"
         "- Reason: An unexpected internal error occurred.\n"
-        "- Action: Keep the returned IDs and retry the smallest failed operation."
+        "- Action: Keep the returned IDs and retry the smallest failed operation.",
+        data={"error_code": "INTERNAL_ERROR", "error": "An unexpected internal error occurred."},
     )
 
 

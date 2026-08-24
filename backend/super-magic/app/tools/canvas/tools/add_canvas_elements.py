@@ -612,6 +612,8 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """生成新增 Element 后的逐项结果反馈。"""
+        # 保留 Canvas 工具自身按结果状态生成的 remark，避免失败时被通用文案覆盖。
+        result.use_custom_remark = True
         generation_summary = CanvasGenerationFeedback.from_arguments(arguments)
         batch_status = summarize_tool_result(result)
         values = (result.data or {}).get("items", [])
@@ -689,6 +691,7 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
                     "status": item.get("status", "-"),
                     "element_id": item.get("element_id", "-"),
                     "type": item.get("element_type", "-"),
+                    **({"asset_path": item["asset_path"]} if item.get("asset_path") else {}),
                     **({"media_type": CanvasGenerationFeedback.media_label_for_type(media_type)} if media_type else {}),
                 }
             )
