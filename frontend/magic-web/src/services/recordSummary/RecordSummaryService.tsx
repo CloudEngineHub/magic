@@ -185,37 +185,64 @@ class RecordSummaryService {
 		this.startSilenceDetection()
 	}
 
+	/** Stops realtime transcription resources without touching the media recorder. */
+	private async stopRealtimeTranscription(): Promise<void> {
+		await this.voiceToTextService.stopRecording().catch((error) => {
+			logger.error({
+				eventKey: "stop_voice_recording_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to stop voice recording",
+			})
+		})
+
+		this.voiceTimeoutChecker.stop()
+		this.silenceDetector.stop()
+
+		try {
+			this.voiceToTextService.disconnect()
+		} catch (error) {
+			logger.error({
+				eventKey: "release_voice_resources_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to release voice resources",
+			})
+		}
+	}
+
 	/**
-	 * Enables realtime transcription for the current recording after the user turns it on.
+	 * Updates realtime transcription for the current recording after the user changes it.
 	 */
-	enableTranscriptionForCurrentSession = async (): Promise<void> => {
+	setTranscriptionEnabledForCurrentSession = async (enabled: boolean): Promise<void> => {
 		const currentSession = this.sessionManager.getCurrentSession()
 		if (!currentSession || recordSummaryStore.status === "init") {
 			throw new Error("No active recording session")
 		}
-		if (currentSession.transcriptionEnabled) {
-			recordSummaryStore.setTranscriptionEnabled(true)
+		if (currentSession.transcriptionEnabled === enabled) {
+			recordSummaryStore.setTranscriptionEnabled(enabled)
 			return
 		}
 
 		if (recordSummaryStore.isPaused) {
-			// Paused sessions have no active ASR flow to attach to; resume will start ASR from this flag.
-			const updatedSession = this.sessionManager.updateTranscriptionEnabled(true)
-			if (updatedSession) {
-				this.recordingPersistence.saveSession(updatedSession)
-			}
-			recordSummaryStore.setTranscriptionEnabled(true)
-			recordSummaryStore.clearVoiceError()
-			return
+			// Paused sessions have no active ASR flow to start or stop; resume uses this flag.
+		} else if (enabled) {
+			await this.startRealtimeTranscription(currentSession.id)
+		} else {
+			await this.stopRealtimeTranscription()
 		}
 
-		await this.startRealtimeTranscription(currentSession.id)
-		const updatedSession = this.sessionManager.updateTranscriptionEnabled(true)
+		const updatedSession = this.sessionManager.updateTranscriptionEnabled(enabled)
 		if (updatedSession) {
 			this.recordingPersistence.saveSession(updatedSession)
 		}
-		recordSummaryStore.setTranscriptionEnabled(true)
-		recordSummaryStore.clearVoiceError()
+		recordSummaryStore.setTranscriptionEnabled(enabled)
+		if (enabled) recordSummaryStore.clearVoiceError()
+	}
+
+	/** Keeps the existing enable-only API for other recording entry points. */
+	enableTranscriptionForCurrentSession = async (): Promise<void> => {
+		await this.setTranscriptionEnabledForCurrentSession(true)
 	}
 	// 用于管理总结过程中的消息提示
 	private summaryMessageService = getSummaryMessageService()

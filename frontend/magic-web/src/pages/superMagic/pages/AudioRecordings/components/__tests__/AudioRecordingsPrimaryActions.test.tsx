@@ -61,7 +61,6 @@ function renderPrimaryActions(
 	const onStartRecording = vi.fn()
 	const onOpenSettings = vi.fn()
 	const onImportFiles = vi.fn()
-
 	render(
 		<AudioRecordingsPrimaryActions
 			onStartRecording={onStartRecording}

@@ -3895,6 +3895,9 @@
 				"transcriptionEnabled": {
 					"description": "录制开始时自动启用转写",
 					"label": "自动转写"
+				},
+				"transcriptionToggle": {
+					"label": "开启实时转写"
 				}
 			},
 			"startMissingWorkspace": "暂时无法开始录音，请先进入一个工作区",

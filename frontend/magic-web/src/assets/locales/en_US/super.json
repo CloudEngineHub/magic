@@ -3895,6 +3895,9 @@
 				"transcriptionEnabled": {
 					"description": "Automatically start transcription when recording begins",
 					"label": "Auto Transcribe"
+				},
+				"transcriptionToggle": {
+					"label": "Enable real-time transcription"
 				}
 			},
 			"startMissingWorkspace": "Recording is unavailable right now. Please enter a workspace first.",
