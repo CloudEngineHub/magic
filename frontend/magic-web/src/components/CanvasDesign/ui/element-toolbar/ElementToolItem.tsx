@@ -4,6 +4,7 @@ import SizeEditButton from "./size/SizeEditButton/index"
 import FrameCreateButton from "./frame/FrameCreateButton/index"
 import FrameRemoveButton from "./frame/FrameRemoveButton/index"
 import FrameDownloadButton from "./frame/FrameDownloadButton/index"
+import StoryboardVideoBatchButton from "./frame/StoryboardVideoBatchButton/index"
 import RichTextFontFamily from "./text/RichTextFontFamily/index"
 import RichTextFontStyle from "./text/RichTextFontStyle/index"
 import RichTextFontSize from "./text/RichTextFontSize/index"
@@ -44,6 +45,8 @@ export default function ElementToolItem({ type }: { type: ElementToolType }) {
 			return <FrameRemoveButton />
 		case ElementToolTypeEnum.FrameDownloadButton:
 			return <FrameDownloadButton />
+		case ElementToolTypeEnum.StoryboardVideoBatchButton:
+			return <StoryboardVideoBatchButton />
 		case ElementToolTypeEnum.RichTextFontFamily:
 			return <RichTextFontFamily />
 		case ElementToolTypeEnum.RichTextFontStyle:

@@ -57,7 +57,12 @@ function createSnapshot(
 	}
 }
 
-function createBatchCanvas(connectionStatus: "created" | "invalid") {
+function createBatchCanvas(
+	connectionStatus: "created" | "invalid",
+	options?: {
+		imageBounds?: Record<string, { x: number; y: number; width: number; height: number }>
+	},
+) {
 	let videoSeq = 0
 	const createdVideoIds: string[] = []
 	const createVideoAtCanvasPoint = vi.fn(() => {
@@ -81,6 +86,11 @@ function createBatchCanvas(connectionStatus: "created" | "invalid") {
 	const register = vi.fn()
 	const selectMultiple = vi.fn()
 	const getElementBounds = vi.fn((elementId: string) => {
+		if (elementId === "frame-1") {
+			return { x: 10, y: 20, width: 300, height: 400 }
+		}
+		const configuredBounds = options?.imageBounds?.[elementId]
+		if (configuredBounds) return configuredBounds
 		const index = elementId === "image-2" ? 1 : 0
 		return { x: 0, y: index * 200, width: 160, height: 160 }
 	})
@@ -97,6 +107,8 @@ function createBatchCanvas(connectionStatus: "created" | "invalid") {
 				),
 			),
 			delete: remove,
+			getAllElementIds: vi.fn(() => ["image-1", "image-2", "image-3", "frame-1"]),
+			isElementVisibleInDataTree: vi.fn(() => true),
 			getElementInstance: vi.fn(() => null),
 			getElementData: vi.fn((elementId: string) => {
 				if (elementId === "frame-1") {
@@ -127,7 +139,11 @@ function createBatchCanvas(connectionStatus: "created" | "invalid") {
 				return { elementId: element.id, element }
 			}),
 		},
-		connectionManager: { connectElementsBatch },
+		connectionManager: {
+			connectElementsBatch,
+			getDownstreamConnections: vi.fn(() => []),
+			getUpstreamConnections: vi.fn(() => []),
+		},
 		toolManager: {
 			switchToSelection: vi.fn(),
 			getVideoGeneratorTool: vi.fn(() => ({
@@ -259,6 +275,8 @@ describe("imageVideoBatchCreation", () => {
 				id: frameId,
 				type: ElementTypeEnum.Frame,
 				name: "分镜视频组合",
+				x: 1334,
+				y: -1,
 				children: expect.arrayContaining([
 					expect.objectContaining({ type: ElementTypeEnum.Video }),
 					expect.objectContaining({ type: ElementTypeEnum.Video }),
@@ -297,6 +315,42 @@ describe("imageVideoBatchCreation", () => {
 			edges: [
 				expect.objectContaining({ sourceElementId: "image-1" }),
 				expect.objectContaining({ sourceElementId: "image-3" }),
+			],
+		})
+	})
+
+	it("orders storyboard video children by source visual position to avoid crossed connections", async () => {
+		const { collectSelectionContentSnapshot } =
+			await import("../../selection/selectionContentCollector")
+		const { canvas, connectElementsBatch } = createBatchCanvas("created", {
+			imageBounds: {
+				"image-1": { x: 0, y: 300, width: 160, height: 160 },
+				"image-2": { x: 0, y: 0, width: 160, height: 160 },
+			},
+		})
+		vi.mocked(collectSelectionContentSnapshot).mockReturnValue(
+			createSnapshot({
+				rootElementIds: ["frame-1"],
+				imageSequence: ["image-1", "image-2"],
+				selectionRevision: "frame-1",
+			}),
+		)
+
+		const frameId = createStoryboardVideosFromConnection({
+			canvas,
+			origin: { kind: "element", elementId: "frame-1", side: "right" },
+			videoModelList: [referenceModel],
+		})
+
+		expect(frameId).toEqual(expect.any(String))
+		const createdFrame = vi.mocked(canvas.elementManager.create).mock.calls[0]?.[0] as {
+			children?: Array<{ id: string; y?: number }>
+		}
+		expect(createdFrame.children?.[0]?.y).toBeLessThan(createdFrame.children?.[1]?.y ?? 0)
+		expect(connectElementsBatch).toHaveBeenCalledWith({
+			edges: [
+				{ sourceElementId: "image-2", targetElementId: expect.any(String) },
+				{ sourceElementId: "image-1", targetElementId: expect.any(String) },
 			],
 		})
 	})

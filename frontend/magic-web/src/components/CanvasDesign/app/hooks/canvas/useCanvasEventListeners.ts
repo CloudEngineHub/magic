@@ -38,6 +38,10 @@ interface UseCanvasEventListenersOptions {
 	onSelectionChange?: (elementIds: string[]) => void
 }
 
+type PendingCanvasDataChangeMeta = CanvasDesignDataChangeMeta & {
+	requiresFullExport?: boolean
+}
+
 /**
  * 处理所有 Canvas 事件监听
  * 职责：统一管理所有 Canvas 事件的订阅和处理
@@ -66,7 +70,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	const onCanvasDesignDataPatchChangeRef = useLatest(onCanvasDesignDataPatchChange)
 	const onSelectionChangeRef = useLatest(onSelectionChange)
 	const readonlyRef = useLatest(readonly)
-	const pendingCanvasDataChangeMetaRef = useRef<CanvasDesignDataChangeMeta | null>(null)
+	const pendingCanvasDataChangeMetaRef = useRef<PendingCanvasDataChangeMeta | null>(null)
 	const pendingDeletedElementIdsRef = useRef<Set<string>>(new Set())
 	const isElementWithinSelection = useCallback(
 		(elementId: string, selectedIds: string[]) => {
@@ -172,6 +176,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 					previous?.elementNameChanges,
 					changeMeta?.elementNameChanges,
 				),
+				requiresFullExport: previous?.requiresFullExport || source === "document:restored",
 			}
 		},
 		[mergeElementNameChanges],
@@ -185,6 +190,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 
 		const meta = pendingCanvasDataChangeMetaRef.current
 		pendingCanvasDataChangeMetaRef.current = null
+		const requiresFullExport = meta?.requiresFullExport === true
 		const deletedElementIds = Array.from(pendingDeletedElementIdsRef.current)
 		pendingDeletedElementIdsRef.current.clear()
 		if (!canvas || readonlyRef.current) return
@@ -211,6 +217,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			(deletedConnectionIds && deletedConnectionIds.length > 0)
 		if (
 			patchHandler &&
+			!requiresFullExport &&
 			(hasElementPatch || hasConnectionPatch) &&
 			metaWithDeletedElementIds?.source !== "canvas:clear"
 		) {

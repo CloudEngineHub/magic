@@ -1,7 +1,8 @@
 import type { FrameElement, LayerElement } from "../../document/types"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
 
-export const FRAME_CONTENT_PADDING_RATIO = 0.05
+export const FRAME_CONTENT_PADDING_RATIO = 0.08
+export const FRAME_CONTENT_VERTICAL_GAP = 50
 
 export interface FrameContentLayout {
 	padding: number
@@ -24,7 +25,7 @@ interface CreateContentFrameDataOptions extends ContentFrameSize {
 	padding?: number
 }
 
-/** 画框四周 padding 默认取内容短边的 5%。 */
+/** 画框四周 padding 默认取内容短边的 8%。 */
 export function resolveFrameContentLayout(
 	size: ContentFrameSize,
 	options: { padding?: number } = {},
@@ -61,4 +62,19 @@ export function createContentFrameData(options: CreateContentFrameDataOptions): 
 	}
 
 	return { frameData, layout }
+}
+
+/** 纵向堆叠子元素时，计算指定索引相对内容区顶部的偏移。 */
+export function getVerticalFrameContentOffset(heights: number[], index: number): number {
+	return heights
+		.slice(0, index)
+		.reduce((total, height) => total + height + FRAME_CONTENT_VERTICAL_GAP, 0)
+}
+
+/** 纵向堆叠子元素所需的内容区高度，不含 Frame padding。 */
+export function getVerticalFrameContentHeight(heights: number[]): number {
+	return (
+		heights.reduce((total, height) => total + height, 0) +
+		Math.max(0, heights.length - 1) * FRAME_CONTENT_VERTICAL_GAP
+	)
 }

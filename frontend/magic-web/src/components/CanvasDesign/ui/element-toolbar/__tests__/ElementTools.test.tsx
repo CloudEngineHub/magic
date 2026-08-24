@@ -7,7 +7,21 @@ import ElementTools from "../index"
 const mocks = vi.hoisted(() => ({
 	selectedElements: [] as Array<Record<string, unknown>>,
 	canvas: undefined as
-		{ mediaReplaceController: { getReplacingElementId: () => string | null } } | undefined,
+		| {
+				mediaReplaceController: { getReplacingElementId: () => string | null }
+				readonly?: boolean
+				elementManager?: {
+					getAllElementIds: () => string[]
+					getElementData: (elementId: string) => unknown
+				}
+				connectionManager?: {
+					getUpstreamConnections: (elementId: string) => Array<{
+						sourceElementId: string
+						targetElementId: string
+					}>
+				}
+		  }
+		| undefined,
 	mediaReplaceStateHandler: undefined as
 		| ((event: {
 				data: { elementId: string; status: "idle" | "uploading" | "applying" | "error" }
@@ -163,6 +177,86 @@ describe("ElementTools image replacement ordering", () => {
 		)
 
 		expect(labels).toContain(ElementToolTypeEnum.FrameDownloadButton)
+	})
+
+	it("shows storyboard video batch execution for a storyboard output frame", () => {
+		const image = {
+			id: "image-output",
+			type: ElementTypeEnum.Image,
+			contents: [{ contentId: "image-content", src: "./images/output.png" }],
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+		}
+		const storyboard = {
+			id: "storyboard-1",
+			type: ElementTypeEnum.Storyboard,
+			contents: [
+				{
+					contentId: "storyboard-content",
+					shots: [{ id: "shot-1", description: "shot", outputImageElementId: image.id }],
+				},
+			],
+			activeContentId: "storyboard-content",
+			mainContentId: "storyboard-content",
+		}
+		const frame = {
+			id: "output-frame",
+			type: ElementTypeEnum.Frame,
+			children: [image],
+		}
+		mocks.canvas = {
+			mediaReplaceController: { getReplacingElementId: () => null },
+			elementManager: {
+				getAllElementIds: () => [frame.id, image.id, storyboard.id],
+				getElementData: (elementId) =>
+					elementId === frame.id ? frame : elementId === image.id ? image : storyboard,
+			},
+			connectionManager: {
+				getUpstreamConnections: (elementId) =>
+					elementId === image.id
+						? [{ sourceElementId: storyboard.id, targetElementId: image.id }]
+						: [],
+			},
+		}
+		mocks.selectedElements = [frame]
+
+		render(<ElementTools />)
+		const labels = Array.from(screen.getByTestId("element-tools").children).map(
+			(node) => node.textContent,
+		)
+
+		expect(labels).toContain(ElementToolTypeEnum.StoryboardVideoBatchButton)
+	})
+
+	it("does not show storyboard video batch execution for an ordinary image frame", () => {
+		const image = {
+			id: "ordinary-image",
+			type: ElementTypeEnum.Image,
+			contents: [{ contentId: "image-content", src: "./images/output.png" }],
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+		}
+		const frame = {
+			id: "ordinary-frame",
+			type: ElementTypeEnum.Frame,
+			children: [image],
+		}
+		mocks.canvas = {
+			mediaReplaceController: { getReplacingElementId: () => null },
+			elementManager: {
+				getAllElementIds: () => [frame.id, image.id],
+				getElementData: (elementId) => (elementId === frame.id ? frame : image),
+			},
+			connectionManager: { getUpstreamConnections: () => [] },
+		}
+		mocks.selectedElements = [frame]
+
+		render(<ElementTools />)
+		const labels = Array.from(screen.getByTestId("element-tools").children).map(
+			(node) => node.textContent,
+		)
+
+		expect(labels).not.toContain(ElementToolTypeEnum.StoryboardVideoBatchButton)
 	})
 
 	it("shows download for a single audio element", () => {

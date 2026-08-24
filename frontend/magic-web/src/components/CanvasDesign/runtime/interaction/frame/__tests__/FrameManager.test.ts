@@ -6,7 +6,7 @@ import { FrameManager } from "../FrameManager"
 import { resolveFrameContentLayout } from "../frameCreation"
 
 describe("FrameManager frame creation", () => {
-	it("uses 5% of the content short edge as the default padding", () => {
+	it("uses 8% of the content short edge as the default padding", () => {
 		const elements = new Map<string, LayerElement>([
 			[
 				"first",
@@ -102,27 +102,27 @@ describe("FrameManager frame creation", () => {
 				children: [],
 			}),
 		)
-		expect(createdFrameData?.x).toBeCloseTo(95)
-		expect(createdFrameData?.y).toBeCloseTo(195)
-		expect(createdFrameData?.width).toBeCloseTo(240)
-		expect(createdFrameData?.height).toBeCloseTo(110)
-		expect(nodes.get("first")?.position().x).toBeCloseTo(5)
-		expect(nodes.get("first")?.position().y).toBeCloseTo(5)
-		expect(nodes.get("second")?.position().x).toBeCloseTo(155)
-		expect(nodes.get("second")?.position().y).toBeCloseTo(65)
+		expect(createdFrameData?.x).toBeCloseTo(92)
+		expect(createdFrameData?.y).toBeCloseTo(192)
+		expect(createdFrameData?.width).toBeCloseTo(246)
+		expect(createdFrameData?.height).toBeCloseTo(116)
+		expect(nodes.get("first")?.position().x).toBeCloseTo(8)
+		expect(nodes.get("first")?.position().y).toBeCloseTo(8)
+		expect(nodes.get("second")?.position().x).toBeCloseTo(158)
+		expect(nodes.get("second")?.position().y).toBeCloseTo(68)
 		expect(update).toHaveBeenCalledWith(
 			frameId,
 			expect.objectContaining({
 				children: [
-					expect.objectContaining({
+						expect.objectContaining({
 						id: "second",
-						x: expect.closeTo(155),
-						y: expect.closeTo(65),
+						x: expect.closeTo(158),
+						y: expect.closeTo(68),
 					}),
 					expect.objectContaining({
 						id: "first",
-						x: expect.closeTo(5),
-						y: expect.closeTo(5),
+						x: expect.closeTo(8),
+						y: expect.closeTo(8),
 					}),
 				],
 			}),
@@ -132,9 +132,9 @@ describe("FrameManager frame creation", () => {
 
 	it("uses the content height when it is the long edge", () => {
 		expect(resolveFrameContentLayout({ width: 100, height: 200 })).toEqual({
-			padding: 5,
-			width: 110,
-			height: 210,
+			padding: 8,
+			width: 116,
+			height: 216,
 		})
 	})
 })

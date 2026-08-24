@@ -6,7 +6,11 @@ import { ElementFactory } from "../../elements/core/ElementFactory"
 import { VideoElement } from "../../elements/video/VideoElement"
 import { generateElementId } from "../../shared/ids"
 import type { ConnectionOrigin } from "../../shared/connectionOrigin"
-import { CREATE_ELEMENT_GAP_MIN_CANVAS_PX } from "../../shared/placement/connectionCreatePlacement"
+import {
+	resolveConnectionCreateGapForAxisSize,
+	resolveConnectionCreateGapForElement,
+} from "../../shared/placement/connectionCreateGap"
+import { resolveConnectedPlacement } from "../../shared/placement/placementEngine"
 import {
 	collectSelectionContentSnapshot,
 	createSelectionRevision,
@@ -17,12 +21,15 @@ import {
 	resolveImageReferenceVideoModel,
 	type ResolvedImageReferenceVideoModel,
 } from "./imageVideoReferenceModel"
-import { createContentFrameData, resolveFrameContentLayout } from "../frame/frameCreation"
+import {
+	createContentFrameData,
+	getVerticalFrameContentHeight,
+	getVerticalFrameContentOffset,
+	resolveFrameContentLayout,
+} from "../frame/frameCreation"
 import { buildMediaEditSourceFingerprint } from "../media-edit-recovery/MediaEditRecoveryManager"
 
 const COLUMN_GAP = 64
-const FRAME_GAP = 50
-const FRAME_HORIZONTAL_GAP = 120
 
 function resolveStoryboardVideoFrameName(canvas: Canvas): string {
 	return canvas.t?.("storyboardVideo.outputFrameName", "分镜视频组合") || "分镜视频组合"
@@ -157,6 +164,27 @@ function resolveBatchVideoPlacements(options: {
 	return placements
 }
 
+/** 按图片的视觉中心 Y 排列组合内的视频，保持图片与视频的纵向顺序一致。 */
+function sortImageElementIdsByVisualOrder(canvas: Canvas, imageElementIds: string[]): string[] {
+	const positioned = imageElementIds.map((imageElementId, index) => {
+		const rect = canvas.geometryCacheManager.getElementBounds(imageElementId)
+		return {
+			imageElementId,
+			index,
+			centerY: rect ? rect.y + rect.height / 2 : undefined,
+		}
+	})
+
+	if (positioned.some((item) => item.centerY === undefined)) return imageElementIds
+
+	return positioned
+		.sort((left, right) => {
+			const delta = (left.centerY ?? 0) - (right.centerY ?? 0)
+			return delta !== 0 ? delta : left.index - right.index
+		})
+		.map((item) => item.imageElementId)
+}
+
 function selectAndFocus(canvas: Canvas, elementIds: string[]): void {
 	canvas.toolManager.switchToSelection()
 	if (elementIds.length === 1) canvas.selectionManager.select(elementIds[0])
@@ -169,17 +197,6 @@ function selectAndFocus(canvas: Canvas, elementIds: string[]): void {
 			padding: { top: 50, right: 50, bottom: 50, left: 100 },
 		})
 	})
-}
-
-function getChildrenOffset(heights: number[], index: number): number {
-	return heights.slice(0, index).reduce((total, height) => total + height + FRAME_GAP, 0)
-}
-
-function getFrameContentHeight(heights: number[]): number {
-	return (
-		heights.reduce((total, height) => total + height, 0) +
-		Math.max(0, heights.length - 1) * FRAME_GAP
-	)
 }
 
 /** 多选批量：至少 2 张可用图，且默认视频模型支持单张参考图。 */
@@ -220,8 +237,7 @@ export function createBatchImageVideos(options: {
 	const bounds = snapshot.boundingRect
 	if (!bounds) return []
 
-	const columnLeft =
-		bounds.x + bounds.width + Math.max(CREATE_ELEMENT_GAP_MIN_CANVAS_PX, COLUMN_GAP)
+	const columnLeft = bounds.x + bounds.width + resolveConnectionCreateGapForAxisSize(bounds.width)
 	const placements = resolveBatchVideoPlacements({
 		canvas,
 		imageElementIds,
@@ -322,8 +338,9 @@ export function createStoryboardVideosFromConnection(options: {
 
 	// 点击执行时重新收集，避免菜单打开后图片状态变化
 	const snapshot = collectSelectionContentSnapshot(canvas, [origin.elementId])
-	const imageElementIds = snapshot.imageSequence.filter((elementId) =>
-		canvas.elementManager.hasElement(elementId),
+	const imageElementIds = sortImageElementIdsByVisualOrder(
+		canvas,
+		snapshot.imageSequence.filter((elementId) => canvas.elementManager.hasElement(elementId)),
 	)
 	if (imageElementIds.length < 1) return null
 
@@ -338,12 +355,30 @@ export function createStoryboardVideosFromConnection(options: {
 	const heights = imageElementIds.map(() => size.height)
 	const frameLayout = resolveFrameContentLayout({
 		width: size.width,
-		height: getFrameContentHeight(heights),
+		height: getVerticalFrameContentHeight(heights),
 	})
-	const frameOrigin = {
-		x: (sourceFrame.x ?? 0) + (sourceFrame.width ?? 0) + FRAME_HORIZONTAL_GAP,
-		y: (sourceFrame.y ?? 0) + (sourceFrame.height ?? 0) / 2 - frameLayout.height / 2,
+	const sourceRect = canvas.geometryCacheManager.getElementBounds(origin.elementId) ?? {
+		x: sourceFrame.x ?? 0,
+		y: sourceFrame.y ?? 0,
+		width: sourceFrame.width ?? 0,
+		height: sourceFrame.height ?? 0,
 	}
+	const frameOrigin = resolveConnectedPlacement(
+		canvas,
+		{
+			originSide: "right",
+			source: "handle",
+			canvasX: sourceRect.x + sourceRect.width,
+			canvasY: sourceRect.y + sourceRect.height / 2,
+		},
+		{ width: frameLayout.width, height: frameLayout.height },
+		{
+			output: "top-left",
+			originElementId: origin.elementId,
+			originRect: sourceRect,
+			gap: resolveConnectionCreateGapForElement(sourceFrame, "right"),
+		},
+	)
 
 	const created = canvas.historyManager.runTransaction(
 		() => {
@@ -359,7 +394,7 @@ export function createStoryboardVideosFromConnection(options: {
 				const videoChildren = imageElementIds.map((imageElementId, index) => {
 					const videoData = createEmptyVideoData({
 						x: frameLayout.padding,
-						y: frameLayout.padding + getChildrenOffset(heights, index),
+						y: frameLayout.padding + getVerticalFrameContentOffset(heights, index),
 						width: size.width,
 						height: size.height,
 						zIndex: imageElementIds.length - index,
@@ -373,7 +408,7 @@ export function createStoryboardVideosFromConnection(options: {
 					x: frameOrigin.x,
 					y: frameOrigin.y,
 					width: size.width,
-					height: getFrameContentHeight(heights),
+					height: getVerticalFrameContentHeight(heights),
 					zIndex: canvas.elementManager.getNextZIndexInLevel(),
 					name: resolveStoryboardVideoFrameName(canvas),
 					children: videoChildren,

@@ -231,4 +231,37 @@ describe("useCanvasEventListeners connection changes", () => {
 			expect.objectContaining({ source: "document:restored" }),
 		)
 	})
+
+	it("does not downgrade a restored document to an element patch", async () => {
+		const { canvas, elementManager, eventEmitter } = createCanvasStub()
+		const onPatch = vi.fn()
+		const onChange = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={onPatch} onChange={onChange} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("document:restored")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({
+				type: "element:change",
+				data: { elementIds: ["element-1"], phase: "commit" },
+			})
+			eventEmitter.emit({ type: "document:restored", data: undefined })
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(elementManager.exportDocumentPatch).not.toHaveBeenCalled()
+		expect(onPatch).not.toHaveBeenCalled()
+		expect(onChange).toHaveBeenCalledWith(
+			{ elements: [], connections: [connection] },
+			expect.objectContaining({ source: "document:restored" }),
+		)
+	})
 })

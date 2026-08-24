@@ -49,6 +49,7 @@ import {
 	resolveConnectionCreateGapForElement,
 	type ConnectionCreatePlacementContext,
 } from "../../../runtime/shared/placement/connectionCreatePlacement"
+import { resolveConnectionCreateGapForAxisSize } from "../../../runtime/shared/placement/connectionCreateGap"
 import { resolveConnectedPlacement } from "../../../runtime/shared/placement/placementEngine"
 
 type DefaultConnectionMenuCreateKind = ConnectionMenuCreateKind
@@ -107,13 +108,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		(context: ConnectionMenuContext): number => {
 			if (!canvas) return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
 			if (context.origin.kind === "selection") {
-				return Math.min(
-					2048,
-					Math.max(
-						CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
-						context.origin.boundingRect.width * 0.7,
-					),
-				)
+				return resolveConnectionCreateGapForAxisSize(context.origin.boundingRect.width)
 			}
 
 			const originElement = canvas.elementManager.getElementData(context.origin.elementId)

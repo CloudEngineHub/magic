@@ -23,6 +23,14 @@ export function getConnectionMenuTriggerAxisSize(
 	return Number.isFinite(scaledSize) && scaledSize > 0 ? scaledSize : null
 }
 
+/** 将视觉锚点在连线方向上的尺寸换算为右/左侧创建间距。 */
+export function resolveConnectionCreateGapForAxisSize(axisSize: number | null | undefined): number {
+	if (!axisSize || !Number.isFinite(axisSize) || axisSize <= 0) {
+		return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
+	}
+	return clampCreateElementGap(axisSize * CREATE_ELEMENT_GAP_SIZE_RATIO)
+}
+
 /**
  * 连接 handle 新增元素使用的横向间距。
  *
@@ -35,7 +43,5 @@ export function resolveConnectionCreateGapForElement(
 	if (!side) return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
 
 	const triggerAxisSize = getConnectionMenuTriggerAxisSize(element, side)
-	if (!triggerAxisSize) return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
-
-	return clampCreateElementGap(triggerAxisSize * CREATE_ELEMENT_GAP_SIZE_RATIO)
+	return resolveConnectionCreateGapForAxisSize(triggerAxisSize)
 }

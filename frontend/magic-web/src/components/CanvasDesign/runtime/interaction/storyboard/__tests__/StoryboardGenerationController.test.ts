@@ -186,6 +186,7 @@ function createHarness(options?: {
 			getElementData: vi.fn((id: string) => elements.get(id)),
 			getElementInstance: vi.fn((id: string) => instances.get(id)),
 			getAllElementIds: vi.fn(() => Array.from(elements.keys())),
+			isElementVisibleInDataTree: vi.fn(() => true),
 			hasElement: vi.fn((id: string) => elements.has(id)),
 			getNextZIndexInLevel: vi.fn(() => ++zIndex),
 			create: vi.fn((data: any) => register(data)),
@@ -215,6 +216,18 @@ function createHarness(options?: {
 				parents.delete(id)
 			}),
 			findParentIdForElement: vi.fn((id: string) => parents.get(id)),
+		},
+		geometryCacheManager: {
+			getElementBounds: vi.fn((id: string) => {
+				const element = elements.get(id)
+				if (!element) return null
+				return {
+					x: element.x ?? 0,
+					y: element.y ?? 0,
+					width: element.width ?? 0,
+					height: element.height ?? 0,
+				}
+			}),
 		},
 		connectionManager: {
 			getUpstreamConnections: vi.fn((id: string) => {

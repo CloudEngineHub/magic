@@ -9,6 +9,7 @@ import { useCanvas } from "../../app/providers/CanvasProvider"
 import { useCanvasEvent } from "../../app/hooks/canvas"
 import useShowVideoOriginalSizeButton from "./hooks/useShowVideoOriginalSizeButton"
 import { getActiveContent, getActiveImageContent } from "../../runtime/document/elementContent"
+import { isStoryboardOutputFrame } from "../../runtime/interaction/storyboard/storyboardOutputFrame"
 
 export default function ElementTools() {
 	const { convertHightConfig } = useMagic()
@@ -109,11 +110,17 @@ export default function ElementTools() {
 					]
 
 				case ElementTypeEnum.Frame:
+					const isStoryboardFrame = Boolean(
+						canvas && isStoryboardOutputFrame(canvas, firstSelectedElement.id),
+					)
 					return [
 						{ type: ElementToolTypeEnum.FrameRemoveButton },
 						Divider,
 						{ type: ElementToolTypeEnum.SizeEditButton },
 						{ type: ElementToolTypeEnum.FrameDownloadButton },
+						...(isStoryboardFrame
+							? [{ type: ElementToolTypeEnum.StoryboardVideoBatchButton }]
+							: []),
 						Divider,
 						{ type: ElementToolTypeEnum.ElementAlign },
 						{ type: ElementToolTypeEnum.ElementDistribute },
@@ -203,6 +210,7 @@ export default function ElementTools() {
 		isSelecting,
 		isSingleElement,
 		selectedElements,
+		canvas,
 		showVideoOriginalSizeButton,
 		replacingMediaElementId,
 		subElementTooltip,

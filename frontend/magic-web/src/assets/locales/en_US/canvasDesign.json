@@ -544,6 +544,7 @@
 		"shotWithIndex": "Shot {{index}}"
 	},
 	"storyboardVideo": {
+		"executeAll": "Execute all",
 		"menuName": "Create storyboard videos",
 		"menuNameWithCount": "Create storyboard videos ({{count}})",
 		"outputFrameName": "Storyboard video group"

@@ -19,7 +19,12 @@ import {
 	resolveStoryboardReferenceImages,
 	type StoryboardReferenceImage,
 } from "./storyboardReferenceImages"
-import { createContentFrameData, resolveFrameContentLayout } from "../frame/frameCreation"
+import {
+	createContentFrameData,
+	getVerticalFrameContentHeight,
+	getVerticalFrameContentOffset,
+	resolveFrameContentLayout,
+} from "../frame/frameCreation"
 import {
 	buildDefaultImageGenerationConfig,
 	getDefaultResolutionForModel,
@@ -29,8 +34,8 @@ import {
 } from "../../shared/imageGenerationConfig"
 import { generateElementId } from "../../shared/ids"
 import { resolveConnectionCreateGapForElement } from "../../shared/placement/connectionCreateGap"
+import { resolveConnectedPlacement } from "../../shared/placement/placementEngine"
 
-const FRAME_GAP = 50
 const STORYBOARD_OUTPUT_FRAME_NAME = "分镜图片组合"
 
 interface OutputLayout {
@@ -306,13 +311,8 @@ export class StoryboardGenerationController {
 		const existingOutputIds = resolvedImageIds.filter((id): id is string => Boolean(id))
 		const existingFrame = this.findOutputFrame(existingOutputIds)
 		const layout = this.resolveOutputLayout(storyboardContent.generationConfig, shots.length)
-		const frameOffsetX = resolveConnectionCreateGapForElement(storyboard, "right")
 		const frameLayout = this.resolveFrameLayout(layout.width, layout.heights)
-		const frameOrigin = this.resolveOutputFrameOrigin(
-			storyboard,
-			frameOffsetX,
-			frameLayout.height,
-		)
+		const frameOrigin = this.resolveOutputFrameOrigin(storyboard, frameLayout)
 		const missingIndexes = resolvedImageIds.flatMap((id, index) =>
 			!id && requestedShotIndexSet.has(index) ? [index] : [],
 		)
@@ -335,8 +335,7 @@ export class StoryboardGenerationController {
 				const requestedFrameLayout = this.resolveFrameLayout(layout.width, requestedHeights)
 				const requestedFrameOrigin = this.resolveOutputFrameOrigin(
 					storyboard,
-					frameOffsetX,
-					requestedFrameLayout.height,
+					requestedFrameLayout,
 				)
 				const imageChildren = requestedShotIndexes.map((shotIndex) =>
 					this.createImageData(
@@ -357,7 +356,7 @@ export class StoryboardGenerationController {
 					x: requestedFrameLayout.padding,
 					y:
 						requestedFrameLayout.padding +
-						this.getChildrenOffset(requestedHeights, index),
+						getVerticalFrameContentOffset(requestedHeights, index),
 					zIndex: imageChildren.length - index,
 				}))
 				const { frameData } = createContentFrameData({
@@ -365,7 +364,7 @@ export class StoryboardGenerationController {
 					x: requestedFrameOrigin.x,
 					y: requestedFrameOrigin.y,
 					width: layout.width,
-					height: this.getFrameContentHeight(requestedHeights),
+					height: getVerticalFrameContentHeight(requestedHeights),
 					zIndex: this.canvas.elementManager.getNextZIndexInLevel(),
 					name: STORYBOARD_OUTPUT_FRAME_NAME,
 					children: frameChildren,
@@ -398,7 +397,7 @@ export class StoryboardGenerationController {
 					targetFrameOrigin.x + frameLayout.padding,
 					targetFrameOrigin.y +
 						frameLayout.padding +
-						this.getChildrenOffset(layout.heights, shotIndex),
+						getVerticalFrameContentOffset(layout.heights, shotIndex),
 					layout.width,
 					layout.heights[shotIndex],
 					shotIndex,
@@ -468,13 +467,30 @@ export class StoryboardGenerationController {
 
 	private resolveOutputFrameOrigin(
 		storyboard: StoryboardElement,
-		horizontalGap: number,
-		frameHeight: number,
+		frameLayout: { width: number; height: number },
 	): { x: number; y: number } {
-		return {
-			x: (storyboard.x ?? 0) + (storyboard.width ?? 0) + horizontalGap,
-			y: (storyboard.y ?? 0) + (storyboard.height ?? 0) / 2 - frameHeight / 2,
+		const originRect = this.canvas.geometryCacheManager?.getElementBounds(storyboard.id) ?? {
+			x: storyboard.x ?? 0,
+			y: storyboard.y ?? 0,
+			width: storyboard.width ?? 0,
+			height: storyboard.height ?? 0,
 		}
+		return resolveConnectedPlacement(
+			this.canvas,
+			{
+				originSide: "right",
+				source: "handle",
+				canvasX: originRect.x + originRect.width,
+				canvasY: originRect.y + originRect.height / 2,
+			},
+			frameLayout,
+			{
+				output: "top-left",
+				originElementId: storyboard.id,
+				originRect,
+				gap: resolveConnectionCreateGapForElement(storyboard, "right"),
+			},
+		)
 	}
 
 	private ensureConnections(storyboardId: string, imageIds: string[]): void {
@@ -503,7 +519,7 @@ export class StoryboardGenerationController {
 				imageId,
 				{
 					x: frameLayout.padding,
-					y: frameLayout.padding + this.getChildrenOffset(layout.heights, index),
+					y: frameLayout.padding + getVerticalFrameContentOffset(layout.heights, index),
 					width: layout.width,
 					height: layout.heights[index],
 					zIndex: shotCount - index,
@@ -583,21 +599,10 @@ export class StoryboardGenerationController {
 		}
 	}
 
-	private getChildrenOffset(heights: number[], index: number): number {
-		return heights.slice(0, index).reduce((total, height) => total + height + FRAME_GAP, 0)
-	}
-
 	private resolveFrameLayout(width: number, heights: number[]) {
 		return resolveFrameContentLayout({
 			width,
-			height: this.getFrameContentHeight(heights),
+			height: getVerticalFrameContentHeight(heights),
 		})
-	}
-
-	private getFrameContentHeight(heights: number[]): number {
-		return (
-			heights.reduce((total, height) => total + height, 0) +
-			Math.max(0, heights.length - 1) * FRAME_GAP
-		)
 	}
 }
