@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Skill\Service;
 
 use App\Application\SuperMagic\Skill\DTO\SkillPackageDTO;
-use App\Application\SuperMagic\Skill\Import\SkillImportService;
+use App\Application\SuperMagic\Skill\Import\SkillPackageParser;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
@@ -31,6 +31,8 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ImportOfficialSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OfficialSkillImportPreviewDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OfficialSkillImportResultDTO;
+use Hyperf\DbConnection\Db;
+use Throwable;
 
 final class AdminOfficialSkillAppService extends AbstractSkillAppService
 {
@@ -39,7 +41,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
     private const LOCK_PREFIX = 'official_skill_import:';
 
     public function __construct(
-        private readonly SkillImportService $skillImportService,
+        private readonly SkillPackageParser $skillPackageParser,
         private readonly SkillVersionDomainService $officialSkillVersionDomainService,
         private readonly SkillMarketDomainService $officialSkillMarketDomainService,
         private readonly SkillCategoryDomainService $officialSkillCategoryDomainService,
@@ -47,13 +49,18 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
     ) {
     }
 
+    /**
+     * 解析官方 Skill 导入文件，并生成确认导入所需的预填信息。
+     */
     public function parseImport(
         RequestContext $requestContext,
         string $fileKey
     ): OfficialSkillImportPreviewDTO {
         $authorization = $this->assertOfficialOrganization($requestContext);
         $organizationCode = $authorization->getOrganizationCode();
-        $package = $this->skillImportService->parseByFileKey($organizationCode, $fileKey);
+        // 解析压缩包，获取官方 Skill 的包名和描述。
+        $package = $this->skillPackageParser->parseByFileKey($organizationCode, $fileKey);
+        // 通过官方组织和包名判断当前导入是新建还是更新。
         $market = $this->officialSkillMarketDomainService->findOfficialSkillByPackageName($package->packageName);
         $isUpdate = $market !== null;
 
@@ -62,9 +69,11 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
 
         $code = $market?->getSkillCode() ?? SkillEntity::generateNewCode();
 
+        // 更新场景回显已有分类，新建场景不预设分类。
         $categoryIds = $market === null ? [] : $this->officialSkillCategoryRelationDomainService->getMarketCategoryIds($market->getId() ?? 0);
 
-        $token = $this->skillImportService->generate(self::IMPORT_TOKEN_PREFIX, [
+        // 保存解析结果，确认导入时通过 Token 恢复文件信息。
+        $token = $this->createImportToken(self::IMPORT_TOKEN_PREFIX, [
             'organization_code' => $organizationCode,
             'operator_id' => $authorization->getId(),
             'file_key' => $fileKey,
@@ -92,40 +101,41 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         );
     }
 
+    /**
+     * 导入官方 Skill 版本、市场信息和分类关系.
+     */
     public function import(
         RequestContext $requestContext,
         ImportOfficialSkillRequestDTO $requestDTO
     ): OfficialSkillImportResultDTO {
         $authorization = $this->assertOfficialOrganization($requestContext);
         $organizationCode = $authorization->getOrganizationCode();
-        $package = $this->resolvePackage($authorization, $requestDTO);
+        // 解析压缩包，确定官方 Skill 的包名和描述。
+        $package = $this->resolveImportPackage($authorization, $requestDTO);
 
         $lockKey = self::LOCK_PREFIX . $organizationCode . ':' . $package->packageName;
-        return $this->skillImportService->execute(
-            $lockKey,
-            function () use ($organizationCode, $authorization, $package, $requestDTO): OfficialSkillImportResultDTO {
-                $market = $this->officialSkillMarketDomainService->findOfficialSkillByPackageName($package->packageName);
-                $isUpdate = $market !== null;
-                $code = $market?->getSkillCode() ?? $package->skillCode ?? SkillEntity::generateNewCode();
-                $version = $this->saveVersion($organizationCode, $authorization, $package, $requestDTO, $market, $code);
-                $market = $this->saveMarket($organizationCode, $authorization, $requestDTO, $version, $market, $code);
-                $this->officialSkillCategoryRelationDomainService->replaceMarketCategories(
-                    $organizationCode,
-                    (int) $market->getId(),
-                    $requestDTO->getCategoryIdList()
-                );
+        $lockOwner = '';
 
-                return new OfficialSkillImportResultDTO(
-                    $code,
-                    $version->getVersion(),
-                    $isUpdate ? 'updated' : 'created',
-                    $market->getId(),
-                    $version->getId()
-                );
-            },
-            self::IMPORT_TOKEN_PREFIX,
-            $requestDTO->getImportToken()
-        );
+        try {
+            // 锁定同名官方 Skill，并在一个事务中更新版本、市场和分类。
+            $lockOwner = $this->acquireImportLock($lockKey);
+            Db::beginTransaction();
+            try {
+                $result = $this->saveOfficialSkillImport($organizationCode, $authorization, $package, $requestDTO);
+
+                Db::commit();
+            } catch (Throwable $e) {
+                Db::rollBack();
+                throw $e;
+            }
+        } finally {
+            $this->releaseImportLock($lockKey, $lockOwner);
+        }
+
+        // 事务提交后再删除 Token，避免失败重试时丢失导入信息。
+        $this->removeImportToken(self::IMPORT_TOKEN_PREFIX, $requestDTO->getImportToken());
+
+        return $result;
     }
 
     private function buildDefaultNameI18n(string $packageName): array
@@ -138,10 +148,11 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         return ['default' => $packageDescription];
     }
 
-    private function resolvePackage(MagicUserAuthorization $authorization, ImportOfficialSkillRequestDTO $requestDTO): SkillPackageDTO
+    private function resolveImportPackage(MagicUserAuthorization $authorization, ImportOfficialSkillRequestDTO $requestDTO): SkillPackageDTO
     {
         if ($requestDTO->getImportToken() !== '') {
-            $tokenData = $this->skillImportService->get(self::IMPORT_TOKEN_PREFIX, $requestDTO->getImportToken());
+            // 优先复用解析阶段的 Token，避免重复下载和解析文件。
+            $tokenData = $this->readImportToken(self::IMPORT_TOKEN_PREFIX, $requestDTO->getImportToken());
             if (($tokenData['organization_code'] ?? '') !== $authorization->getOrganizationCode()) {
                 ExceptionBuilder::throw(SkillErrorCode::IMPORT_TOKEN_EXPIRED, 'skill.import_token_expired');
             }
@@ -153,10 +164,44 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             );
         }
 
-        return $this->skillImportService->parseByFileKey($authorization->getOrganizationCode(), $requestDTO->getFileKey());
+        // 没有 Token 时直接解析本次上传的文件。
+        return $this->skillPackageParser->parseByFileKey($authorization->getOrganizationCode(), $requestDTO->getFileKey());
     }
 
-    private function saveVersion(
+    /**
+     * 保存官方 Skill 的版本、市场信息和分类关系.
+     */
+    private function saveOfficialSkillImport(
+        string $organizationCode,
+        MagicUserAuthorization $authorization,
+        SkillPackageDTO $package,
+        ImportOfficialSkillRequestDTO $requestDTO
+    ): OfficialSkillImportResultDTO {
+        // 按官方组织和包名查找已有市场记录，决定复用编码还是生成新编码。
+        $market = $this->officialSkillMarketDomainService->findOfficialSkillByPackageName($package->packageName);
+        $isUpdate = $market !== null;
+        $code = $market?->getSkillCode() ?? $package->skillCode ?? SkillEntity::generateNewCode();
+        // 先保存版本，再将市场记录指向当前版本。
+        $version = $this->saveOfficialSkillVersion($organizationCode, $authorization, $package, $requestDTO, $market, $code);
+        $market = $this->saveOfficialSkillMarket($organizationCode, $authorization, $requestDTO, $version, $market, $code);
+
+        // 用本次提交的分类完整替换旧关系。
+        $this->officialSkillCategoryRelationDomainService->replaceMarketCategories(
+            $organizationCode,
+            (int) $market->getId(),
+            $requestDTO->getCategoryIdList()
+        );
+
+        return new OfficialSkillImportResultDTO(
+            $code,
+            $version->getVersion(),
+            $isUpdate ? 'updated' : 'created',
+            $market->getId(),
+            $version->getId()
+        );
+    }
+
+    private function saveOfficialSkillVersion(
         string $organizationCode,
         MagicUserAuthorization $authorization,
         SkillPackageDTO $package,
@@ -164,6 +209,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         ?SkillMarketEntity $market,
         string $code
     ): SkillVersionEntity {
+        // 更新时复用当前版本并清理旧的 current 标记，新建时创建版本记录。
         $dataIsolation = SkillDataIsolation::create($organizationCode, $authorization->getId());
         $dataIsolation->disabled();
         $version = $market === null ? new SkillVersionEntity() : $this->officialSkillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($market->getSkillVersionId());
@@ -197,7 +243,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         return $this->officialSkillVersionDomainService->saveSkillVersion($dataIsolation, $version);
     }
 
-    private function saveMarket(
+    private function saveOfficialSkillMarket(
         string $organizationCode,
         MagicUserAuthorization $authorization,
         ImportOfficialSkillRequestDTO $requestDTO,
@@ -205,6 +251,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         ?SkillMarketEntity $market,
         string $code
     ): SkillMarketEntity {
+        // 保存市场展示信息、发布状态和发布方信息。
         $market ??= new SkillMarketEntity();
         $market->setOrganizationCode($organizationCode);
         $market->setSkillCode($code);

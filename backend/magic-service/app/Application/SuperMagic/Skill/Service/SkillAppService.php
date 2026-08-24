@@ -9,7 +9,7 @@ namespace App\Application\SuperMagic\Skill\Service;
 
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Skill\DTO\PublishSkillResultDTO;
-use App\Application\SuperMagic\Skill\Import\SkillImportService;
+use App\Application\SuperMagic\Skill\Import\SkillPackageParser;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
@@ -58,7 +58,6 @@ use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
-use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Infrastructure\Util\ZipUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
@@ -78,7 +77,6 @@ use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
-use Hyperf\Redis\Redis;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -120,8 +118,6 @@ class SkillAppService extends AbstractSkillAppService
         protected SkillMarketDomainService $skillMarketDomainService,
         protected MagicUserDomainService $magicUserDomainService,
         protected MagicDepartmentDomainService $magicDepartmentDomainService,
-        protected LockerInterface $locker,
-        protected Redis $redis,
         protected ProjectAppService $projectAppService,
         protected OperationPermissionDomainService $operationPermissionDomainService,
         protected ProjectDomainService $projectDomainService,
@@ -131,7 +127,7 @@ class SkillAppService extends AbstractSkillAppService
         protected TaskDomainService $taskDomainService,
         protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
         protected SkillCategoryDomainService $skillCategoryDomainService,
-        protected SkillImportService $skillImportService,
+        protected SkillPackageParser $skillPackageParser,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -150,21 +146,27 @@ class SkillAppService extends AbstractSkillAppService
         $organizationCode = $userAuthorization->getOrganizationCode();
         $fileKey = $requestDTO->getFileKey();
 
-        $package = $this->skillImportService->parseByFileKey($organizationCode, $fileKey);
+        // 解析上传文件，获取 Skill 包名和描述。
+        $package = $this->skillPackageParser->parseByFileKey($organizationCode, $fileKey);
         $packageName = $package->packageName;
         $packageDescription = $package->packageDescription;
 
-        // 3. 创建数据隔离对象并检查用户是否已存在同名技能（非store来源）
+        // 查询当前用户的同名 Skill，确定后续是更新还是新建。
         $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
         $existingSkillEntity = $this->skillDomainService->findSkillByPackageNameAndCreator($dataIsolation, $packageName);
 
-        // 4. 生成 skill_code（用于确定文件存储路径，仅在新建场景需要）
+        // 更新场景沿用原有编码，新建场景在确认导入时生成编码。
         $skillCode = $existingSkillEntity ? $existingSkillEntity->getCode() : null;
 
-        // 5. 生成 import_token（保存原始的 file_key，不需要重新上传）
-        $importToken = $this->generateImportToken($packageName, $packageDescription, $fileKey, $skillCode);
+        // 保存解析结果，确认导入时通过 Token 恢复文件信息。
+        $importToken = $this->createImportToken(self::IMPORT_TOKEN_KEY_PREFIX, [
+            'package_name' => $packageName,
+            'package_description' => $packageDescription,
+            'file_key' => $fileKey,
+            'skill_code' => $skillCode,
+        ]);
 
-        // 6. 根据是否存在同名技能，分别处理并返回结果
+        // 根据是否存在同名 Skill，返回对应的预填信息。
         if ($existingSkillEntity) {
             return $this->handleExistingSkillParse(
                 $existingSkillEntity,
@@ -195,72 +197,46 @@ class SkillAppService extends AbstractSkillAppService
         $organizationCode = $userAuthorization->getOrganizationCode();
         $sourceType = $requestDTO->getSourceType();
 
-        // 1. 校验并解析 import_token
-        $tokenData = $this->skillImportService->get(self::IMPORT_TOKEN_KEY_PREFIX, $requestDTO->getImportToken());
-        $packageName = $tokenData['package_name'];
-        $packageDescription = $tokenData['package_description'];
-        $fileKey = $tokenData['file_key']; // 原始的 file_key，直接使用
-        $skillCode = $tokenData['skill_code'] ?? null; // 从 token 中获取 skillCode（新建时可能为 null）
+        // 读取解析阶段生成的 Token，恢复导入文件和 Skill 信息。
+        $tokenData = $this->readImportToken(self::IMPORT_TOKEN_KEY_PREFIX, $requestDTO->getImportToken());
+        $packageName = (string) $tokenData['package_name'];
+        $packageDescription = (string) $tokenData['package_description'];
+        $fileKey = (string) $tokenData['file_key'];
+        $skillCode = isset($tokenData['skill_code']) ? (string) $tokenData['skill_code'] : null;
 
-        // 2. 分布式锁：防止并发重复创建/更新
         $lockKey = sprintf(self::LOCK_KEY_FORMAT, $userId, $organizationCode, $packageName);
         $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
-        $result = $this->skillImportService->execute(
-            $lockKey,
-            function () use (
-                $dataIsolation,
-                $skillCode,
-                $packageName,
-                $packageDescription,
-                $fileKey,
-                $sourceType,
-                $userId,
-                $organizationCode,
-                $requestContext,
-                $requestDTO,
-            ): SkillEntity {
-                $existingSkillEntity = null;
-                if (! empty($skillCode)) {
-                    $existingSkillEntity = $this->skillDomainService->findUserSkillByCode($dataIsolation, $skillCode);
-                }
+        $lockOwner = '';
 
-                if ($existingSkillEntity) {
-                    $result = $this->updateSkillInternal(
-                        $dataIsolation,
-                        $existingSkillEntity,
-                        $packageName,
-                        $packageDescription,
-                        $fileKey,
-                        $requestDTO->getNameI18n(),
-                        $requestDTO->getDescriptionI18n(),
-                        $requestDTO->getLogo()
-                    );
-                } else {
-                    $newSkillCode = SkillEntity::generateNewCode();
-                    $result = $this->createSkillInternal(
-                        $dataIsolation,
-                        $userId,
-                        $organizationCode,
-                        $packageName,
-                        $packageDescription,
-                        $fileKey,
-                        $newSkillCode,
-                        $sourceType,
-                        $requestDTO->getNameI18n(),
-                        $requestDTO->getDescriptionI18n(),
-                        $requestDTO->getLogo()
-                    );
-                }
+        try {
+            // 获取同名导入锁，确保同一 Skill 不被并发写入。
+            $lockOwner = $this->acquireImportLock($lockKey);
+            Db::beginTransaction();
+            try {
+                // 保存 Skill；Crew 来源在此阶段同步完成发布。
+                $result = $this->saveConfirmedSkillImport(
+                    $dataIsolation,
+                    $skillCode,
+                    $packageName,
+                    $packageDescription,
+                    $fileKey,
+                    $sourceType,
+                    $userId,
+                    $organizationCode,
+                    $requestDTO
+                );
 
-                if ($sourceType === SkillSourceType::CREW_IMPORT) {
-                    $this->publishImportedCrewSkill($requestContext, $dataIsolation, $result);
-                }
+                Db::commit();
+            } catch (Throwable $e) {
+                Db::rollBack();
+                throw $e;
+            }
+        } finally {
+            $this->releaseImportLock($lockKey, $lockOwner);
+        }
 
-                return $result;
-            },
-            self::IMPORT_TOKEN_KEY_PREFIX,
-            $requestDTO->getImportToken()
-        );
+        // 事务提交后再删除 Token，避免失败重试时丢失导入信息。
+        $this->removeImportToken(self::IMPORT_TOKEN_KEY_PREFIX, $requestDTO->getImportToken());
 
         try {
             AsyncEventUtil::dispatch(new SkillImportedEvent($userAuthorization, $result->getCode()));
@@ -1010,49 +986,31 @@ class SkillAppService extends AbstractSkillAppService
         $tempFilePath = $tempFile;
 
         $fileKey = null;
-        $lockAcquired = false;
         $lockOwner = $lockKey = '';
 
         try {
-            $package = $this->skillImportService->parseFile($tempFilePath, $tempFilePath);
+            // 解析压缩包并提取 Skill 元数据。
+            $package = $this->skillPackageParser->parseFile($tempFilePath, $tempFilePath);
             $packageName = $package->packageName;
             $packageDescription = $package->packageDescription;
 
-            // 2. 分布式锁：防止并发重复创建/更新
-            $lockOwner = IdGenerator::getUniqueId32();
             $lockKey = sprintf(self::LOCK_KEY_FORMAT, $userId, $organizationCode, $packageName);
-            $lockAcquired = $this->locker->mutexLock($lockKey, $lockOwner, 60);
-            if (! $lockAcquired) {
-                ExceptionBuilder::throw(SkillErrorCode::IMPORT_CONCURRENT_ERROR, 'skill.import_concurrent_error');
-            }
+            // 获取同名导入锁，避免重复创建或更新。
+            $lockOwner = $this->acquireImportLock($lockKey);
 
-            // 3. 创建数据隔离对象并检查用户是否已存在同名技能（非store来源）
             $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
             $existingSkillEntity = $this->skillDomainService->findSkillByPackageNameAndCreator($dataIsolation, $packageName);
 
-            // 4. 生成 skill_code（新建时生成，更新时使用已有的）
             $skillCode = $existingSkillEntity ? $existingSkillEntity->getCode() : SkillEntity::generateNewCode();
 
-            // 5. 上传文件到私有桶
             $fileKey = $this->uploadFileToPrivateStorage($organizationCode, $tempFilePath, $skillCode);
 
-            // 6. 使用事务处理创建或更新逻辑
+            // 保存上传文件对应的 Skill 数据。
             Db::beginTransaction();
-            if ($existingSkillEntity) {
-                // 更新场景
-                $result = $this->updateSkillInternal(
+            try {
+                $result = $this->saveAgentImportedSkill(
                     $dataIsolation,
                     $existingSkillEntity,
-                    $packageName,
-                    $packageDescription,
-                    $fileKey,
-                    $nameI18n,
-                    $descriptionI18n
-                );
-            } else {
-                // 创建场景
-                $result = $this->createSkillInternal(
-                    $dataIsolation,
                     $userId,
                     $organizationCode,
                     $packageName,
@@ -1063,10 +1021,14 @@ class SkillAppService extends AbstractSkillAppService
                     $nameI18n,
                     $descriptionI18n
                 );
+
+                Db::commit();
+            } catch (Throwable $e) {
+                Db::rollBack();
+                throw $e;
             }
 
-            Db::commit();
-
+            // 导入成功后异步通知下游刷新 Skill 数据。
             try {
                 AsyncEventUtil::dispatch(new SkillImportedEvent($userAuthorization, $result->getCode()));
             } catch (Throwable $eventException) {
@@ -1083,14 +1045,9 @@ class SkillAppService extends AbstractSkillAppService
                 'description' => $result->getDescriptionI18n(),
                 'is_create' => $existingSkillEntity ? false : true,
             ];
-        } catch (Throwable $e) {
-            Db::rollBack();
-            throw $e;
         } finally {
-            if ($lockAcquired) {
-                $this->locker->release($lockKey, $lockOwner);
-            }
-            // 6. 清理临时文件
+            $this->releaseImportLock($lockKey, $lockOwner);
+            // 无论导入成功与否，都清理本地临时文件。
             if ($tempFilePath && file_exists($tempFilePath)) {
                 @unlink($tempFilePath);
             }
@@ -1154,6 +1111,110 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         return array_values(array_unique(array_merge($skillCodes, $builtinSkillCodes)));
+    }
+
+    /**
+     * 保存确认导入的 Skill，并处理 Crew 来源的自动发布.
+     */
+    private function saveConfirmedSkillImport(
+        SkillDataIsolation $dataIsolation,
+        ?string $skillCode,
+        string $packageName,
+        string $packageDescription,
+        string $fileKey,
+        SkillSourceType $sourceType,
+        string $userId,
+        string $organizationCode,
+        ImportSkillRequestDTO $requestDTO
+    ): SkillEntity {
+        // Token 中有旧编码时更新原 Skill，否则创建新 Skill。
+        $existingSkillEntity = empty($skillCode)
+            ? null
+            : $this->skillDomainService->findUserSkillByCode($dataIsolation, $skillCode);
+
+        if ($existingSkillEntity !== null) {
+            $skillEntity = $this->updateSkillInternal(
+                $dataIsolation,
+                $existingSkillEntity,
+                $packageName,
+                $packageDescription,
+                $fileKey,
+                $requestDTO->getNameI18n(),
+                $requestDTO->getDescriptionI18n(),
+                $requestDTO->getLogo()
+            );
+        } else {
+            $skillEntity = $this->createSkillInternal(
+                $dataIsolation,
+                $userId,
+                $organizationCode,
+                $packageName,
+                $packageDescription,
+                $fileKey,
+                SkillEntity::generateNewCode(),
+                $sourceType,
+                $requestDTO->getNameI18n(),
+                $requestDTO->getDescriptionI18n(),
+                $requestDTO->getLogo()
+            );
+        }
+
+        // Crew 导入需要在保存后自动发布。
+        if ($sourceType === SkillSourceType::CREW_IMPORT) {
+            $this->publishImportedCrewSkill($dataIsolation, $skillEntity);
+        }
+
+        return $skillEntity;
+    }
+
+    /**
+     * 保存 Agent 导入的 Skill.
+     */
+    private function saveAgentImportedSkill(
+        SkillDataIsolation $dataIsolation,
+        ?SkillEntity $existingSkillEntity,
+        string $userId,
+        string $organizationCode,
+        string $packageName,
+        string $packageDescription,
+        string $fileKey,
+        string $skillCode,
+        SkillSourceType $skillSource,
+        ?array $nameI18n,
+        ?array $descriptionI18n
+    ): SkillEntity {
+        // Agent 导入按包名复用已有 Skill，避免重复创建。
+        if ($existingSkillEntity !== null) {
+            return $this->updateSkillInternal(
+                $dataIsolation,
+                $existingSkillEntity,
+                $packageName,
+                $packageDescription,
+                $fileKey,
+                $nameI18n,
+                $descriptionI18n
+            );
+        }
+
+        $skillEntity = $this->createSkillInternal(
+            $dataIsolation,
+            $userId,
+            $organizationCode,
+            $packageName,
+            $packageDescription,
+            $fileKey,
+            $skillCode,
+            $skillSource,
+            $nameI18n,
+            $descriptionI18n
+        );
+
+        // Crew 来源的 Agent 导入保存后自动发布。
+        if ($skillSource === SkillSourceType::CREW_IMPORT) {
+            $this->publishImportedCrewSkill($dataIsolation, $skillEntity);
+        }
+
+        return $skillEntity;
     }
 
     /**
@@ -1665,26 +1726,6 @@ class SkillAppService extends AbstractSkillAppService
     }
 
     /**
-     * 生成 import_token.
-     *
-     * @param string $packageName 包名
-     * @param string $packageDescription 包描述
-     * @param string $fileKey 文件 key（原始 file_key，不需要重新上传）
-     * @param null|string $skillCode Skill 代码（新建时生成，更新时使用已有的）
-     * @return string import_token
-     */
-    private function generateImportToken(string $packageName, string $packageDescription, string $fileKey, ?string $skillCode = null): string
-    {
-        $tokenData = [
-            'package_name' => $packageName,
-            'package_description' => $packageDescription,
-            'file_key' => $fileKey, // 保存原始的 file_key，直接使用，不需要重新上传
-            'skill_code' => $skillCode, // 保存 skillCode，用于第二阶段创建时使用
-        ];
-        return $this->skillImportService->generate(self::IMPORT_TOKEN_KEY_PREFIX, $tokenData);
-    }
-
-    /**
      * 上传文件到私有存储桶.
      *
      * @param string $organizationCode 组织代码
@@ -1840,11 +1881,8 @@ class SkillAppService extends AbstractSkillAppService
         );
     }
 
-    private function publishImportedCrewSkill(
-        RequestContext $requestContext,
-        SkillDataIsolation $dataIsolation,
-        SkillEntity $skillEntity
-    ): void {
+    private function publishImportedCrewSkill(SkillDataIsolation $dataIsolation, SkillEntity $skillEntity): void
+    {
         $publishRequestDTO = new PublishSkillRequestDTO();
         $publishRequestDTO->setVersion(sprintf(
             '%d.0.0',
