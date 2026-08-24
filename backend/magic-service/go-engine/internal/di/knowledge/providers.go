@@ -497,6 +497,14 @@ func newDocumentResyncRabbitMQSchedulerConfig(
 			cfg.RabbitMQ.DocumentResync.MaxRequeueAttempts,
 			defaults.MaxRequeueAttempts,
 		),
+		UnexpectedEOFBackoffBase: millisDurationOrDefault(
+			cfg.RabbitMQ.DocumentResync.UnexpectedEOFBackoffBaseMillis,
+			defaults.UnexpectedEOFBackoffBase,
+		),
+		UnexpectedEOFBackoffMax: millisDurationOrDefault(
+			cfg.RabbitMQ.DocumentResync.UnexpectedEOFBackoffMaxMillis,
+			defaults.UnexpectedEOFBackoffMax,
+		),
 	}
 }
 

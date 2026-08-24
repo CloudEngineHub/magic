@@ -72,14 +72,14 @@ func TestDocumentResyncRabbitMQSchedulerConfigMaxRequeueAttempts(t *testing.T) {
 	t.Parallel()
 
 	defaults := documentsync.DefaultRabbitMQSchedulerConfig()
-	if defaults.MaxRequeueAttempts != 20 {
-		t.Fatalf("expected default max requeue attempts 20, got %d", defaults.MaxRequeueAttempts)
+	if defaults.MaxRequeueAttempts != 3 {
+		t.Fatalf("expected default max requeue attempts 3, got %d", defaults.MaxRequeueAttempts)
 	}
 
 	cfg := &autoloadcfg.Config{}
 	got := newDocumentResyncRabbitMQSchedulerConfig(cfg, defaults)
-	if got.MaxRequeueAttempts != 20 {
-		t.Fatalf("expected empty config to use default 20, got %d", got.MaxRequeueAttempts)
+	if got.MaxRequeueAttempts != 3 {
+		t.Fatalf("expected empty config to use default 3, got %d", got.MaxRequeueAttempts)
 	}
 
 	cfg.RabbitMQ.DocumentResync.MaxRequeueAttempts = 7
