@@ -212,7 +212,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-If validation reports `Unknown parameter`, do not try alternate path field names. Re-read the `add_canvas_elements` schema and retry with `content.asset_path`; do not proceed to asset understanding until the import returns successfully. Never create `Project/imports/` as a manual staging area: the import service writes the returned image, video, or audio Content to `./images/`, `./videos/`, or `./audio/` respectively.
+If validation reports `Unknown parameter`, do not try alternate path field names. Re-read the `add_canvas_elements` schema and retry with `content.asset_path`; do not proceed to asset understanding until the import returns successfully. Never create `Project/imports/` as a manual staging area: the import service writes the returned image, video, or audio Content to `./images/`, `./videos/`, or `./audios/` respectively.
 
 ### 2. Understand the assets
 

@@ -36,7 +36,7 @@ Before every write-tool call, validate the request against the minimum structure
 - `add_canvas_contents`: every item must contain `item_ref`, the exact `element_id`, and `content`. Content must explicitly provide `source` and `content_type`; generated image/video Content must have `name`. Never substitute `element_id`, `content_id`, and `item_ref` for one another.
 - `manage_canvas_connections`: every item must have a unique `item_ref`. Creation or replacement requires exact `source_element_id` and `target_element_id`; removal or replacement also requires the exact queried Connection ID and explicit user intent.
 - Generation tasks: when a write result returns `generation_task_id`, wait immediately. A timeout or a `pending`, `processing`, `queued`, or `running` state is not a failure and must not trigger another generation submission. Only an explicit `status=failed` enters controlled retry, using the original `item_ref`, `element_id`, and `content_id`.
-- Paths: Canvas-returned `./images/...`, `./videos/...`, and `./audio/...` paths are for fields scoped to the current Canvas project. Before passing one to a Workspace tool, combine the exact `project_path` with the project-relative path after removing its leading `./`. Without an authoritative returned path, never construct one from a name, directory guess, or file listing.
+- Paths: Canvas-returned `./images/...`, `./videos/...`, and `./audios/...` paths are for fields scoped to the current Canvas project. Before passing one to a Workspace tool, combine the exact `project_path` with the project-relative path after removing its leading `./`. Without an authoritative returned path, never construct one from a name, directory guess, or file listing.
 
 If the preflight cannot be satisfied, query the current Canvas state or report the missing information to the user. Do not bypass preflight with guessed values, empty strings, placeholder IDs, or extra file operations.
 
@@ -220,7 +220,7 @@ Before calling this tool, validate every nested item against the preflight check
 
 For imported media, set `content.source="imported"` and pass the original workspace path as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
 
-Do not create a manual `imports/` staging directory and do not copy a `.tmp` file into `imports/` with shell commands. Pass the original workspace path in `content.asset_path`; Canvas materializes images into `./images/`, videos into `./videos/`, and audio into `./audio/`, then returns the canonical project-local path. Use only that returned path in later calls.
+Do not create a manual `imports/` staging directory and do not copy a `.tmp` file into `imports/` with shell commands. Pass the original workspace path in `content.asset_path`; Canvas materializes images into `./images/`, videos into `./videos/`, and audio into `./audios/`, then returns the canonical project-local path. Use only that returned path in later calls.
 
 ## `frame_canvas_elements`
 

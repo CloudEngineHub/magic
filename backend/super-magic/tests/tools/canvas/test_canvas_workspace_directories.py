@@ -25,7 +25,7 @@ async def test_initialize_creates_required_media_directories(tmp_path: Path) -> 
 
     assert (tmp_path / "mock-project" / "images").is_dir()
     assert (tmp_path / "mock-project" / "videos").is_dir()
-    assert (tmp_path / "mock-project" / "audio").is_dir()
+    assert (tmp_path / "mock-project" / "audios").is_dir()
 
 
 @pytest.mark.asyncio
@@ -35,13 +35,13 @@ async def test_read_repairs_missing_media_directories(tmp_path: Path) -> None:
     await repository.initialize("mock-project")
     (tmp_path / "mock-project" / "images").rmdir()
     (tmp_path / "mock-project" / "videos").rmdir()
-    (tmp_path / "mock-project" / "audio").rmdir()
+    (tmp_path / "mock-project" / "audios").rmdir()
 
     await repository.read("mock-project")
 
     assert (tmp_path / "mock-project" / "images").is_dir()
     assert (tmp_path / "mock-project" / "videos").is_dir()
-    assert (tmp_path / "mock-project" / "audio").is_dir()
+    assert (tmp_path / "mock-project" / "audios").is_dir()
 
 
 @pytest.mark.asyncio
@@ -62,8 +62,8 @@ def test_project_directory_parts_are_workspace_relative() -> None:
     """远端目录路径应保留嵌套项目层级并追加媒体目录。"""
     assert CanvasWorkspaceDirectoryManager.project_directory_parts(
         "group/mock-project",
-        "audio",
-    ) == ["group", "mock-project", "audio"]
+        "audios",
+    ) == ["group", "mock-project", "audios"]
 
 
 @pytest.mark.asyncio

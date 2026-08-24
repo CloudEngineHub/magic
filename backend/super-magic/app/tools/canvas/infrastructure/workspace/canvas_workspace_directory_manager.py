@@ -13,7 +13,7 @@ from app.utils.async_file_utils import async_exists, async_mkdir, async_stat
 class CanvasWorkspaceDirectoryManager:
     """保证 Canvas 项目所需的本地媒体目录存在且类型正确。"""
 
-    REQUIRED_DIRECTORIES = ("images", "videos", "audio")
+    REQUIRED_DIRECTORIES = ("images", "videos", "audios")
 
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""

@@ -473,8 +473,8 @@ async def test_add_contents_materializes_imported_asset_into_project(tmp_path) -
     project = await repository.read("mock-project")
     element = project.canvas.get_element(created["items"][0]["element_id"])
     content = element.get_content(result["items"][0]["content_id"])
-    assert content.fields.src.startswith("./audio/")
-    assert len(list((tmp_path / "mock-project" / "audio").glob("*"))) == 1
+    assert content.fields.src.startswith("./audios/")
+    assert len(list((tmp_path / "mock-project" / "audios").glob("*"))) == 1
 
 
 @pytest.mark.asyncio
@@ -593,10 +593,10 @@ async def test_imported_image_video_audio_use_type_directories_and_project_uris(
     }
     assert uris["image"].startswith("./images/")
     assert uris["video"].startswith("./videos/")
-    assert uris["audio"].startswith("./audio/")
+    assert uris["audio"].startswith("./audios/")
     assert len(list((tmp_path / "mock-project" / "images").glob("*"))) == 1
     assert len(list((tmp_path / "mock-project" / "videos").glob("*"))) == 1
-    assert len(list((tmp_path / "mock-project" / "audio").glob("*"))) == 1
+    assert len(list((tmp_path / "mock-project" / "audios").glob("*"))) == 1
 
 
 @pytest.mark.asyncio

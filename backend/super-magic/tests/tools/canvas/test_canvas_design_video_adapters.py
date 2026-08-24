@@ -236,7 +236,7 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     assert calls["directories"] == [
         ("magic-project-1", ["mock-project", "images"]),
         ("magic-project-1", ["mock-project", "videos"]),
-        ("magic-project-1", ["mock-project", "audio"]),
+        ("magic-project-1", ["mock-project", "audios"]),
     ]
     assert calls["query"] == ("magic-project-1", "remote-video-1")
     assert result.status == "completed"

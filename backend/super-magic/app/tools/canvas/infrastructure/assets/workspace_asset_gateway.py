@@ -14,7 +14,7 @@ from app.utils.async_file_utils import async_copy_contents, async_exists, async_
 _MEDIA_DIRECTORY_BY_TYPE = {
     "image": "images",
     "video": "videos",
-    "audio": "audio",
+    "audio": "audios",
 }
 _MEDIA_EXTENSIONS_BY_TYPE = {
     "image": {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"},
