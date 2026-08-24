@@ -2448,6 +2448,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					workspaces={workspaces}
 					fileIds={crossProjectOperation.fileIds}
 					sourceAttachments={attachments}
+					sourceAttachmentsLoading={refreshLoading}
 					initialPath={crossProjectOperation.initialPath}
 					onClose={crossProjectOperation.closeModal}
 					onSubmit={
