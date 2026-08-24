@@ -190,6 +190,14 @@ describe("Markdown Utils", () => {
 			expect(escapeDangerousInvisibleHtmlTags(autoplayVideo)).toContain("<code>")
 		})
 
+		it("preserves safe min() sizing used by media HTML", () => {
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'<div style="margin:8px 0;"><img src="https://cdn.example.com/avatar.jpg" style="display:block; max-width:min(100%, 56px); max-height:56px;"></div>',
+				),
+			).not.toContain("<code>")
+		})
+
 		it.each([
 			"java&#x73;cript:alert(1)",
 			"jav&#97;script:alert(1)",

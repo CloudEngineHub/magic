@@ -4,6 +4,7 @@
  */
 
 import MarkdownIt from "markdown-it"
+import DOMPurify from "dompurify"
 
 // Export shared utilities from image-url-resolver
 export {
@@ -166,7 +167,6 @@ const urlAttributeNames = new Set([
 	"manifest",
 	"usemap",
 ])
-const multiUrlAttributeNames = new Set(["srcset", "ping"])
 const safeUrlProtocols = new Set(["http", "https", "mailto", "tel"])
 const safeInlineStylePropertyPatterns = [
 	/^background(?:-color)?$/,
@@ -187,13 +187,60 @@ const borderLonghandWidthPropertyPattern = /^border-(?:top|right|bottom|left)-wi
 const borderRadiusPropertyPattern =
 	/^border(?:-radius|-(?:top|right|bottom|left)-(?:left|right)-radius)$/
 const unsafeCssValuePattern =
-	/[\\{}]|\/\*|\*\/|!\s*important|url\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding|(?:calc|min|max|clamp|var|env)\s*\(/i
+	/[\\{}]|\/\*|\*\/|!\s*important|url\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding|(?:calc|clamp|var|env)\s*\(/i
 const MAX_PROBE_CANDIDATES = 2048
 const MAX_PROBE_MARKDOWN_LENGTH = 4 * 1024 * 1024
 const MAX_RAW_HTML_TOKEN_COUNT = 4096
 const MAX_RAW_HTML_TOTAL_BYTES = 512 * 1024
 const htmlRiskAttributePresencePattern =
 	/\s+(?:on[a-z][\w:-]*|srcdoc|autoplay|style|href|src|xlink:href|action|formaction|poster|background|cite|manifest|usemap|srcset|ping)(?:\s*=|\s|>)/i
+
+const safeHtmlSanitizeConfig = {
+	ALLOWED_TAGS: Array.from(allowedRawHtmlTags),
+	ALLOWED_ATTR: [
+		"alt",
+		"cite",
+		"class",
+		"controls",
+		"height",
+		"href",
+		"loading",
+		"max",
+		"media",
+		"min",
+		"open",
+		"poster",
+		"preload",
+		"rel",
+		"src",
+		"start",
+		"style",
+		"target",
+		"title",
+		"type",
+		"value",
+		"width",
+		"playsinline",
+	],
+	ALLOW_DATA_ATTR: true,
+	ALLOW_UNKNOWN_PROTOCOLS: false,
+	FORBID_TAGS: Array.from(protectedHtmlTags),
+	FORBID_ATTR: ["autoplay", "onerror", "onclick", "onload", "srcdoc"],
+} as const
+
+DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+	const attributeName = data.attrName.toLowerCase()
+	if (attributeName === "style" && !isSafeInlineStyle(data.attrValue)) {
+		data.keepAttr = false
+		return
+	}
+	if (
+		urlAttributeNames.has(attributeName) &&
+		!isSafeUrlAttribute(attributeName, data.attrValue)
+	) {
+		data.keepAttr = false
+	}
+})
 
 function escapeHtml(value: string): string {
 	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -288,6 +335,16 @@ function hasUnsafeBorderWidth(value: string): boolean {
 }
 
 function isSafeBoundedSizeValue(value: string): boolean {
+	const minMatch = value.match(/^min\(\s*([^,]+)\s*,\s*([^)]+)\s*\)$/i)
+	if (minMatch) {
+		return [minMatch[1], minMatch[2]].every((part) => {
+			const normalizedPart = part.trim()
+			const percentage = normalizedPart.match(/^(\d+(?:\.\d+)?|\.\d+)%$/)
+			if (percentage) return Number(percentage[1]) <= 100
+			return isBoundedCssLength(normalizedPart, { maxPx: 2048, maxRelative: 128 })
+		})
+	}
+
 	const percentage = value.match(/^(\d+(?:\.\d+)?|\.\d+)%$/)
 	if (percentage) return Number(percentage[1]) <= 100
 	return isBoundedCssLength(value, { maxPx: 2048, maxRelative: 128 })
@@ -404,56 +461,36 @@ export function isSafeInlineStyle(styleValue: string): boolean {
 	return declarations.some((declaration) => declaration.trim() !== "")
 }
 
-function hasDangerousHtmlAttributes(html: string): boolean {
-	if (typeof DOMParser === "undefined") {
-		// Rendering without a DOM parser is uncommon for this client-only flow.
-		// Fall back conservatively rather than allowing an encoded value through.
-		return htmlRiskAttributePresencePattern.test(html)
+function hasDangerousHtmlContent(html: string): boolean {
+	if (typeof window === "undefined") return htmlRiskAttributePresencePattern.test(html)
+
+	// DOMPurify intentionally removes some elements before adding an entry to
+	// `removed` (notably script/style and unsupported namespaces). Inspect the
+	// parsed fragment as well so those removals cannot be mistaken for a safe
+	// empty result. The template fragment avoids treating the document's
+	// synthetic html/head/body wrappers as authored tags.
+	const template = window.document.createElement("template")
+	template.innerHTML = html
+	for (const element of Array.from(template.content.querySelectorAll("*"))) {
+		if (!allowedRawHtmlTags.has(element.tagName.toLowerCase())) return true
 	}
 
-	const document = new DOMParser().parseFromString(html, "text/html")
-	let inspectedRiskAttribute = false
-
-	for (const element of Array.from(document.querySelectorAll("*"))) {
-		for (const attribute of Array.from(element.attributes)) {
-			const attributeName = attribute.name.toLowerCase()
-			if (
-				attributeName.startsWith("on") ||
-				attributeName === "srcdoc" ||
-				attributeName === "autoplay"
-			) {
-				return true
-			}
-
-			if (attributeName === "style") {
-				if (!isSafeInlineStyle(attribute.value)) return true
-				inspectedRiskAttribute = true
-				continue
-			}
-
-			if (multiUrlAttributeNames.has(attributeName)) return true
-
-			if (urlAttributeNames.has(attributeName)) {
-				inspectedRiskAttribute = true
-				if (!isSafeUrlAttribute(attributeName, attribute.value)) return true
-			}
-		}
-	}
-
-	// If malformed/container-sensitive HTML prevented DOMParser from exposing a
-	// risky attribute, prefer rendering it as code instead of trusting raw text.
-	return !inspectedRiskAttribute && htmlRiskAttributePresencePattern.test(html)
+	DOMPurify.removed = []
+	DOMPurify.sanitize(html, safeHtmlSanitizeConfig)
+	// DOMPurify parses fragments through a temporary BODY element. That
+	// container is reported in `removed` for every sanitize call, including
+	// completely safe HTML, so checking the array length would turn all raw
+	// HTML into code. Only removed attributes/elements from the authored
+	// fragment represent a policy violation; ignore the parser container.
+	return DOMPurify.removed.some((entry) => {
+		if (entry.attribute) return true
+		const elementName = entry.element?.tagName?.toLowerCase()
+		return !!elementName && elementName !== "body"
+	})
 }
 
 function shouldRenderHtmlAsCode(html: string): boolean {
-	const tagNames = Array.from(html.matchAll(/<\s*\/?\s*([a-z][\w:-]*)\b/gi)).map((match) =>
-		match[1].toLowerCase(),
-	)
-
-	return (
-		tagNames.some((tagName) => !allowedRawHtmlTags.has(tagName)) ||
-		hasDangerousHtmlAttributes(html)
-	)
+	return hasDangerousHtmlContent(html)
 }
 
 function shouldRenderHtmlAsCodeCached(html: string, cache: Map<string, boolean>): boolean {
@@ -760,7 +797,9 @@ function applySourceReplacements(
  *
  * The same markdown-it grammar used by the renderer identifies code blocks,
  * inline code, and raw HTML, so code samples are intentionally left untouched.
- * This is a display hardening step, not a general-purpose HTML sanitizer.
+ * DOMPurify supplies the maintained HTML/attribute policy; the source-range
+ * pass below preserves the product behavior of showing rejected fragments as
+ * literal code instead of silently dropping them.
  */
 export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 	if (!markdown) return markdown
