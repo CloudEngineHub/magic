@@ -151,7 +151,8 @@ export function getProjectPinBoundaryAction(
 		targetIndex === -1 ? remaining.length : position === "after" ? targetIndex + 1 : targetIndex
 	const pinnedCount = remaining.filter((item) => Boolean(item.is_pinned)).length
 	if (!source.is_pinned && insertIndex < pinnedCount) return "pin" as const
-	if (source.is_pinned && insertIndex >= pinnedCount) return "unpin" as const
+	// The boundary index is still the last position of the pinned group.
+	if (source.is_pinned && insertIndex > pinnedCount) return "unpin" as const
 	return null
 }
 
