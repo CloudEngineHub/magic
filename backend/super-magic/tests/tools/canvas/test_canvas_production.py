@@ -92,6 +92,33 @@ async def test_video_point_estimate_has_no_canvas_side_effect(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_canvas_fake_video_estimate_skips_magic_service_and_uses_configured_points(tmp_path, monkeypatch) -> None:
+    """独立 fake 估算开关只替换积分端口，并使用配置的模拟积分。"""
+    monkeypatch.delenv("CANVAS_FAKE_GENERATION", raising=False)
+    monkeypatch.setenv("CANVAS_FAKE_VIDEO_ESTIMATE", "1")
+    monkeypatch.setenv("CANVAS_FAKE_VIDEO_ESTIMATE_POINTS", "12.5")
+
+    async def estimate_design_video_points(self, payload):
+        """如果 fake 端口错误访问 Magic Service，测试应失败。"""
+        raise AssertionError("fake video estimate must not call Magic Service")
+
+    monkeypatch.setattr(MagicServiceClient, "estimate_design_video_points", estimate_design_video_points)
+    repository = CanvasRepository(tmp_path)
+    application = create_test_application(repository)
+    await application.initialize("mock-project")
+
+    result = await application.estimate_content_points(
+        "mock-project",
+        "video_generation",
+        [VideoPointEstimateItem("shot-1", GenerationParameters(prompt="mock video", duration_seconds=4))],
+    )
+
+    assert result["can_continue"] is True
+    assert result["total_points"] == 12.5
+    assert result["estimate_id"]
+
+
+@pytest.mark.asyncio
 async def test_image_search_imports_only_downloaded_and_probed_candidates(tmp_path) -> None:
     """图片搜索只物化下载和媒体探测成功的候选，并按主题去重。"""
     repository = CanvasRepository(tmp_path)

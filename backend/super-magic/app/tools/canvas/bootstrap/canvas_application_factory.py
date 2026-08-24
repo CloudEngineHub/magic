@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from app.core.config.debug_config import (
+    get_canvas_fake_video_estimate_points,
+    is_canvas_fake_video_estimate_enabled,
+)
 from app.tools.canvas.application import CanvasApplication
 from app.tools.canvas.application.add_elements_service import AddElementsService
 from app.tools.canvas.application.connection_service import ConnectionService
@@ -110,7 +114,15 @@ class CanvasApplicationFactory:
         selected_cost_records = cost_estimate_records if cost_estimate_records is not None else _default_cost_estimate_records
         video_normalizer = VideoProductionRequestNormalizer()
         normalizer_registry = CostEstimateRequestNormalizerRegistry([video_normalizer])
-        point_port = FakeVideoPointEstimatePort() if os.getenv("CANVAS_FAKE_GENERATION") == "1" else DesignVideoPointEstimatePort(workspace)
+        use_fake_video_estimate = (
+            os.getenv("CANVAS_FAKE_GENERATION") == "1"
+            or is_canvas_fake_video_estimate_enabled()
+        )
+        point_port = (
+            FakeVideoPointEstimatePort(get_canvas_fake_video_estimate_points())
+            if use_fake_video_estimate
+            else DesignVideoPointEstimatePort(workspace)
+        )
         estimator_registry = ContentProductionCostEstimatorRegistry([VideoCostEstimator(point_port)])
         production_rules = ContentProductionRuleRegistry([
             ImageGenerationRule(),
