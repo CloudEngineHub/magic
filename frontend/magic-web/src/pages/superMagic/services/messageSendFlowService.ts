@@ -13,6 +13,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import GlobalMentionPanelStore, {
 	type MentionPanelStore,
 } from "@/components/business/MentionPanel/builtin-store"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { userStore } from "@/models/user"
 import {
@@ -45,6 +46,28 @@ import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSen
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 
 const logger = Logger.createLogger("messageSendService")
+
+/**
+ * Mirrors text Mention semantics into the legacy label field consumed by the backend text parser.
+ * The original data payload remains intact so editor rendering and history restoration keep using it.
+ */
+function normalizeTextMentionLabelsForBackend(content: JSONContent): JSONContent {
+	const normalizedContent = content.content?.map(normalizeTextMentionLabelsForBackend)
+	const attrs = content.attrs
+
+	if (content.type !== "mention" || attrs?.type !== MentionItemType.TEXT) {
+		return normalizedContent ? { ...content, content: normalizedContent } : content
+	}
+
+	const data = attrs.data
+	const text = isObject(data) && typeof data.text === "string" ? data.text.trim() : ""
+
+	return {
+		...content,
+		attrs: text ? { ...attrs, label: text } : attrs,
+		...(normalizedContent && { content: normalizedContent }),
+	}
+}
 
 export interface HandleSendParams {
 	value: JSONContent | undefined
@@ -178,7 +201,8 @@ class MessageSendService {
 		const trimmedText = textContent?.trim()
 		let resolvedJson: JSONContent | undefined
 		if (isObject(jsonContent)) {
-			resolvedJson = jsonContent
+			// Preserve structured mention nodes in the rich-text payload so refreshes can restore them.
+			resolvedJson = normalizeTextMentionLabelsForBackend(jsonContent)
 		} else if (trimmedText) {
 			resolvedJson = buildPlainTextJSONContent(trimmedText)
 		} else {
@@ -235,34 +259,40 @@ class MessageSendService {
 		})
 
 		if (currentTopic?.id && sendOptions?.extra?.super_agent?.mentions) {
-			const mentions = sendOptions.extra.super_agent.mentions
+			const mentions = sendOptions.extra.super_agent.mentions.filter(
+				(item) => item.attrs.type !== MentionItemType.TEXT,
+			)
 			this.deps.mentionPanelStore.addMentionListItemsToHistory(mentions)
 		}
+
+		/** Builds the single pending message envelope shared by optimistic UI, recovery, and transport. */
+		const createPendingUserMessage = (messageContent: string) => ({
+			message: {
+				type: messageType,
+				[messageType]: {
+					content: messageContent,
+					/**
+					 * @deprecated follow_up 和 normal 后期将废弃，follow_up 追加对话，normal 正常新对话
+					 */
+					instructs: [{ value: showLoading ? "follow_up" : "normal" }],
+					...mergedSendOptions,
+				},
+				send_timestamp: date,
+				send_time: date,
+				sender_id: this.deps.userStore.user.userInfo?.user_id,
+				app_message_id: messageId,
+				message_id: messageId,
+				topic_id: chat_topic_id,
+			} as unknown as ConversationMessageSend["message"],
+			conversation_id: chat_conversation_id,
+		})
+
+		const pendingUserMessage = createPendingUserMessage(content)
 
 		// 调用聊天接口发送消息
 		const sendMessage = () => {
 			const optimisticAnchor = this.deps.superMagicStore.getLatestMessageAnchor(chat_topic_id)
-			const pendingUserMessage = {
-				message: {
-					type: messageType,
-					[messageType]: {
-						content,
-						/**
-						 * @deprecated follow_up 和 normal 后期将废弃，follow_up 追加对话，normal 正常新对话
-						 */
-						instructs: [{ value: showLoading ? "follow_up" : "normal" }],
-						...mergedSendOptions,
-					},
-					send_timestamp: date,
-					send_time: date,
-					sender_id: this.deps.userStore.user.userInfo?.user_id,
-					app_message_id: messageId,
-					message_id: messageId,
-					topic_id: chat_topic_id,
-				} as unknown as ConversationMessageSend["message"],
-				conversation_id: chat_conversation_id,
-			}
-
+			// The same rich-text snapshot drives immediate rendering and the outbound request.
 			this.deps.superMagicStore.addUserMessage(chat_topic_id, pendingUserMessage)
 			optimisticMessageStore.markSending({
 				chat_topic_id,
@@ -445,7 +475,10 @@ class MessageSendService {
 			internetSearchManager.setIsChecked(currentTopic.id, isInternetSearch)
 		}
 
-		const transformedMentionItems = transformMentions(mentionItems)
+		const structuredMentionItems = mentionItems.filter(
+			(item) => item.attrs.type !== MentionItemType.TEXT,
+		)
+		const transformedMentionItems = transformMentions(structuredMentionItems)
 
 		return {
 			extra: {

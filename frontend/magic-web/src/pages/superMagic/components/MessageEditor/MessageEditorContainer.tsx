@@ -407,6 +407,8 @@ export const MessageEditorContainer = observer(
 				mentionPanelStore,
 				isAllowedMention: isAllowedEditorMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
+				shouldSkipMentionValidation: () => store.editorStore.preserveMentionValidation,
+				isTrustedMention: (attrs) => store.editorStore.isTrustedMention(attrs),
 				shouldRestoreRemovedMention,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
@@ -464,9 +466,14 @@ export const MessageEditorContainer = observer(
 				}
 			}, [])
 
-			const updateContent = useMemoizedFn((content: JSONContent | undefined) => {
-				store.editorStore.updateContent(content)
-			})
+			const updateContent = useMemoizedFn(
+				(
+					content: JSONContent | undefined,
+					options?: { preserveMentionValidation?: boolean },
+				) => {
+					store.editorStore.updateContent(content, options)
+				},
+			)
 
 			const handleSendMessageByContent = useMemoizedFn(
 				async (data: SendMessageByContentPayload) => {
@@ -518,6 +525,7 @@ export const MessageEditorContainer = observer(
 				updateContent,
 				enableMessageSendByContent,
 				onSendMessageByContent: handleSendMessageByContent,
+				onSendCurrentContent: handleSend,
 			})
 
 			useSharedDataFromApp({

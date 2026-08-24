@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { WidgetBridge } from "../src/bridge"
-import { WIDGET_PROTOCOL, WIDGET_PROTOCOL_VERSION } from "../src/protocol"
+import {
+	isWidgetInputContent,
+	isWidgetProtocolMessage,
+	WIDGET_PROTOCOL,
+	WIDGET_PROTOCOL_VERSION,
+} from "../src/protocol"
 import type { MagicWidget } from "../src/types"
 
 const TEST_ORIGIN = "https://magic.example.invalid"
@@ -101,6 +106,52 @@ describe("WidgetBridge", () => {
 		document.body.innerHTML = ""
 	})
 
+	it("keeps protocol validation shallow and validates input data separately", () => {
+		const validMessage = {
+			protocol: WIDGET_PROTOCOL,
+			version: WIDGET_PROTOCOL_VERSION,
+			instanceId: TEST_INSTANCE_ID,
+			requestId: "request-mock-payload",
+			type: "command",
+			command: "setInput",
+			payload: {
+				content: {
+					blocks: [
+						{
+							type: "mention",
+							metadata: "ignored-by-input-contract",
+							mention: {
+								type: "tool",
+								data: {
+									id: "tool-mock-001",
+									name: "Tool Mock",
+									unsupported: true,
+								},
+							},
+						},
+					],
+				},
+			},
+		}
+		expect(isWidgetProtocolMessage(validMessage)).toBe(true)
+		expect(isWidgetInputContent(validMessage.payload.content)).toBe(true)
+
+		const invalidContent = {
+			blocks: [
+				{ type: "mention", mention: { type: "custom", data: { invalid: new Date(0) } } },
+			],
+		}
+		expect(
+			isWidgetProtocolMessage({ ...validMessage, payload: { content: invalidContent } }),
+		).toBe(true)
+		expect(isWidgetInputContent(invalidContent)).toBe(true)
+		expect(
+			isWidgetInputContent({
+				blocks: [{ type: "mention", mention: { type: "custom", data: null } }],
+			}),
+		).toBe(false)
+	})
+
 	it("notifies agent_ready listeners and returns command results", async () => {
 		const { iframe, postMessage } = createTestIframe()
 		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
@@ -132,6 +183,71 @@ describe("WidgetBridge", () => {
 		)
 
 		expect(await inputPromise).toEqual({ content: "mock input" })
+	})
+
+	it("preserves structured command payloads and supports payload-free sendMessage", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+		const structuredContent: MagicWidget.InputContent = {
+			blocks: [
+				{ type: "text", text: "Ask " },
+				{
+					type: "mention",
+					mention: {
+						type: "tool",
+						data: { id: "tool-mock-001", name: "Tool Mock" },
+					},
+				},
+			],
+		}
+
+		const setPromise = bridge.send("setInput", { content: structuredContent })
+		await Promise.resolve()
+		const setMessage = postMessage.mock.calls[0]?.[0] as {
+			requestId: string
+			payload: { content: MagicWidget.InputContent }
+		}
+		expect(setMessage.payload.content).toEqual(structuredContent)
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: setMessage.requestId,
+					type: "response",
+					ok: true,
+				},
+			}),
+		)
+		await expect(setPromise).resolves.toBeUndefined()
+
+		postMessage.mockClear()
+		const sendPromise = bridge.send("sendMessage")
+		await Promise.resolve()
+		const sendMessage = postMessage.mock.calls[0]?.[0] as {
+			requestId: string
+			payload?: unknown
+		}
+		expect(sendMessage.payload).toBeUndefined()
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: sendMessage.requestId,
+					type: "response",
+					ok: true,
+				},
+			}),
+		)
+		await expect(sendPromise).resolves.toBeUndefined()
 	})
 
 	it("resolves newConversation from its response without a newer READY", async () => {

@@ -93,9 +93,43 @@ const unsubscribeTaskCompleted = window.MagicWidget?.on("task.completed", (event
 void unsubscribeTaskCompleted
 void window.MagicWidget?.setInput("mock input")
 void window.MagicWidget?.appendInput("mock suffix")
+const structuredInput: MagicWidget.InputContent = {
+	blocks: [
+		{ type: "text", text: "Ask " },
+		{
+			type: "mention",
+			mention: {
+				type: "agent",
+				data: { agent_id: "agent-mock-001", agent_name: "Agent Mock" },
+			},
+		},
+		{
+			type: "mention",
+			mention: {
+				type: "mcp",
+				data: { id: "mcp-mock-001", name: "MCP Mock", icon: "mock-icon" },
+			},
+		},
+		{
+			type: "mention",
+			mention: {
+				type: "text",
+				data: {
+					id: "text-mock-001",
+					label: "Chart Mock",
+					text: "chart id: mock-chart",
+				},
+			},
+		},
+	],
+}
+void window.MagicWidget?.setInput(structuredInput)
+void window.MagicWidget?.appendInput(structuredInput)
 void window.MagicWidget?.clearInput()
 void window.MagicWidget?.getInput()
 void window.MagicWidget?.sendMessage("mock message")
+void window.MagicWidget?.sendMessage(structuredInput)
+void window.MagicWidget?.sendMessage()
 void window.MagicWidget?.newConversation()
 void window.MagicWidget?.updateConfig({
 	layout: "mobile",
@@ -205,3 +239,15 @@ const invalidIframeTitleOptions: MagicWidget.MountOptions = {
 }
 
 void invalidIframeTitleOptions
+
+void window.MagicWidget?.setInput({
+	blocks: [
+		{
+			type: "mention",
+			mention: {
+				type: "unknown",
+				data: { id: "unknown-mock-001", name: "Unknown Mock" },
+			},
+		},
+	],
+})
