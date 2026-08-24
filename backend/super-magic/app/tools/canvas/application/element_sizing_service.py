@@ -60,6 +60,31 @@ class CanvasElementSizingService:
             return None
         return media.width, media.height
 
+    async def inspect_generated_video(self, project_path: str, output_uri: str | None):
+        """探测已生成视频尺寸，探测失败时返回空值让初始尺寸兜底。"""
+        if not output_uri:
+            return None
+        try:
+            media = await self.media_probe.inspect_video(
+                self.path_resolver.resolve_workspace_path_for_project(project_path, output_uri)
+            )
+        except (OSError, ValueError):
+            return None
+        return media.width, media.height
+
+    async def inspect_generated_media(
+        self,
+        project_path: str,
+        element_type: str,
+        output_uri: str | None,
+    ) -> tuple[int, int] | None:
+        """按 Element 类型探测已生成媒体尺寸，未知类型返回空值。"""
+        if element_type == "image":
+            return await self.inspect_generated_image(project_path, output_uri)
+        if element_type == "video":
+            return await self.inspect_generated_video(project_path, output_uri)
+        return None
+
     @staticmethod
     def apply(element: CanvasElement, dimensions: tuple[int, int] | None) -> None:
         """把可信的媒体尺寸写入 Element，保持其他布局字段不变。"""

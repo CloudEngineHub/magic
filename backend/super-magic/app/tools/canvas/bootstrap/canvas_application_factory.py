@@ -37,6 +37,7 @@ from app.tools.canvas.infrastructure.assets import WorkspaceAssetGateway
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
 from app.tools.canvas.production.adapters import (
+    DesignVideoPointEstimatePort,
     FakeAssetDownloadPort,
     FakeImageSearchPort,
     FakeMediaProbePort,
@@ -45,7 +46,6 @@ from app.tools.canvas.production.adapters import (
     FfmpegVideoCompositionPort,
     FileMediaProbePort,
     GenericImageSearchPort,
-    DesignVideoPointEstimatePort,
     WorkspaceAssetDownloadPort,
 )
 from app.tools.canvas.production.contracts import ContentProductionRuleRegistry
@@ -238,6 +238,7 @@ class CanvasApplicationFactory:
                 generation_tasks=dependencies.generation_tasks,
                 generation_poller=dependencies.generation_poller,
                 generation_result_applier=dependencies.generation_result_applier,
+                element_sizing=element_sizing,
             ),
             estimate_content_points_service=EstimateContentPointsService(
                 repository=dependencies.repository,

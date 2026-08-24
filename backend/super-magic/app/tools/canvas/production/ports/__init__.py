@@ -6,7 +6,7 @@ from app.tools.canvas.production.ports.image_search_port import (
     ImageSearchPort,
     ImageSearchRequest,
 )
-from app.tools.canvas.production.ports.media_probe_port import ImageMediaInfo, MediaProbePort
+from app.tools.canvas.production.ports.media_probe_port import ImageMediaInfo, MediaProbePort, VideoMediaInfo
 from app.tools.canvas.production.ports.video_composition_port import (
     VideoCompositionPort,
     VideoCompositionRequest,
@@ -21,6 +21,7 @@ __all__ = [
     "ImageSearchPort",
     "ImageSearchRequest",
     "MediaProbePort",
+    "VideoMediaInfo",
     "VideoCompositionPort",
     "VideoCompositionRequest",
     "VideoCompositionResult",

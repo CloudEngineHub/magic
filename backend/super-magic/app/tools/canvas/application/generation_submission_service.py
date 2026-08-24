@@ -75,13 +75,10 @@ class GenerationSubmissionService:
                 submission = self._failed_generation_submission(capability.execution_mode, error)
 
             output_dimensions = None
-            if (
-                submission.status == "completed"
-                and submission_item.element_type == "image"
-                and self.element_sizing is not None
-            ):
-                output_dimensions = await self.element_sizing.inspect_generated_image(
+            if submission.status == "completed" and self.element_sizing is not None:
+                output_dimensions = await self.element_sizing.inspect_generated_media(
                     project_path,
+                    submission_item.element_type,
                     submission.output_uri,
                 )
 

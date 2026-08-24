@@ -31,6 +31,7 @@ from app.tools.canvas.generation.adapters import FakeImageGenerationPort
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.production.adapters import FakeMediaProbePort
+from app.tools.canvas.production.ports import VideoMediaInfo
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.strategies import (
     ConnectionMutationPlan,
@@ -220,6 +221,14 @@ class MockAsynchronousGenerationPort:
         return GenerationQueryResult("completed", output_uri="mock/videos/result.mp4")
 
 
+class MockVideoMediaProbePort(FakeMediaProbePort):
+    """返回与请求尺寸不同的 mock 视频尺寸，验证真实媒体尺寸回写。"""
+
+    async def inspect_video(self, path):
+        """返回竖屏视频尺寸，不依赖真实媒体文件。"""
+        return VideoMediaInfo(1080, 1920, 4.0, False)
+
+
 class MockFailedGenerationPort:
     """用于验证失败 Content 重试上限的 mock 端口。"""
 
@@ -289,7 +298,11 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
         GenerationCapability("mock-video", "video", "async", video_port, video_port),
     ])
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplicationFactory.create(repository, generation_capabilities=registry)
+    application = CanvasApplicationFactory.create(
+        repository,
+        generation_capabilities=registry,
+        media_probe_port=MockVideoMediaProbePort(),
+    )
     await application.initialize("mock-project")
 
     image_result = await application.add_elements(
@@ -312,6 +325,7 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     assert waited_again["items"][0]["already_finalized"] is True
     assert video_port.query_count == 1
     assert video.get_content(video.active_content_id).fields.src == "mock/videos/result.mp4"
+    assert (video.properties.width, video.properties.height) == (1080, 1920)
 
 
 @pytest.mark.asyncio

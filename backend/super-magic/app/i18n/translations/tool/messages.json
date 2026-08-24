@@ -5439,6 +5439,18 @@
         "zh_CN": "画布操作失败",
         "en_US": "Canvas operation failed"
     },
+    "canvas.operation_completed": {
+        "zh_CN": "已完成",
+        "en_US": "Completed"
+    },
+    "canvas.operation_processing": {
+        "zh_CN": "处理中",
+        "en_US": "Processing"
+    },
+    "canvas.operation_partial": {
+        "zh_CN": "部分完成",
+        "en_US": "Partially completed"
+    },
     "canvas.media.image": {
         "zh_CN": "图片",
         "en_US": "image"
@@ -5538,6 +5550,14 @@
     "canvas.detail.title.generation_wait": {
         "zh_CN": "等待画布内容生成",
         "en_US": "Canvas generation wait"
+    },
+    "canvas.detail.section.input": {
+        "zh_CN": "输入参数",
+        "en_US": "Input parameters"
+    },
+    "canvas.detail.section.output": {
+        "zh_CN": "输出结果",
+        "en_US": "Output result"
     },
     "canvas.detail.field.status": {
         "zh_CN": "状态",
@@ -5702,6 +5722,134 @@
     "canvas.detail.field.project": {
         "zh_CN": "项目路径",
         "en_US": "Project path"
+    },
+    "canvas.detail.field.project_id": {
+        "zh_CN": "项目 ID",
+        "en_US": "Project ID"
+    },
+    "canvas.detail.field.items": {
+        "zh_CN": "项目列表",
+        "en_US": "Items"
+    },
+    "canvas.detail.field.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "canvas.detail.field.content": {
+        "zh_CN": "内容",
+        "en_US": "Content"
+    },
+    "canvas.detail.field.count": {
+        "zh_CN": "数量",
+        "en_US": "Count"
+    },
+    "canvas.detail.field.size": {
+        "zh_CN": "尺寸",
+        "en_US": "Size"
+    },
+    "canvas.detail.field.model_id": {
+        "zh_CN": "模型",
+        "en_US": "Model"
+    },
+    "canvas.detail.field.prompt": {
+        "zh_CN": "提示词",
+        "en_US": "Prompt"
+    },
+    "canvas.detail.field.input_mode": {
+        "zh_CN": "输入模式",
+        "en_US": "Input mode"
+    },
+    "canvas.detail.field.task": {
+        "zh_CN": "任务类型",
+        "en_US": "Task"
+    },
+    "canvas.detail.field.duration_seconds": {
+        "zh_CN": "时长（秒）",
+        "en_US": "Duration (seconds)"
+    },
+    "canvas.detail.field.aspect_ratio": {
+        "zh_CN": "画面比例",
+        "en_US": "Aspect ratio"
+    },
+    "canvas.detail.field.resolution": {
+        "zh_CN": "分辨率",
+        "en_US": "Resolution"
+    },
+    "canvas.detail.field.reference_images": {
+        "zh_CN": "参考图片",
+        "en_US": "Reference images"
+    },
+    "canvas.detail.field.reference_image_paths": {
+        "zh_CN": "参考图片路径",
+        "en_US": "Reference image paths"
+    },
+    "canvas.detail.field.reference_video_paths": {
+        "zh_CN": "参考视频路径",
+        "en_US": "Reference video paths"
+    },
+    "canvas.detail.field.reference_audio_paths": {
+        "zh_CN": "参考音频路径",
+        "en_US": "Reference audio paths"
+    },
+    "canvas.detail.field.frame_start_path": {
+        "zh_CN": "首帧图片路径",
+        "en_US": "Start frame path"
+    },
+    "canvas.detail.field.frame_end_path": {
+        "zh_CN": "尾帧图片路径",
+        "en_US": "End frame path"
+    },
+    "canvas.detail.field.error": {
+        "zh_CN": "错误原因",
+        "en_US": "Error reason"
+    },
+    "canvas.detail.field.output_uri": {
+        "zh_CN": "输出路径",
+        "en_US": "Output path"
+    },
+    "canvas.detail.field.generation_task_id": {
+        "zh_CN": "生成任务 ID",
+        "en_US": "Generation task ID"
+    },
+    "canvas.detail.field.retry_count": {
+        "zh_CN": "重试次数",
+        "en_US": "Retry count"
+    },
+    "canvas.detail.field.production_rule": {
+        "zh_CN": "生产规则",
+        "en_US": "Production rule"
+    },
+    "canvas.detail.field.next_action": {
+        "zh_CN": "下一步",
+        "en_US": "Next step"
+    },
+    "canvas.detail.value.none": {
+        "zh_CN": "无",
+        "en_US": "None"
+    },
+    "canvas.detail.value.provided": {
+        "zh_CN": "已提供（内容不在详情中展开）",
+        "en_US": "Provided (content is not expanded)"
+    },
+    "canvas.detail.value.field_count": {
+        "zh_CN": "共 {{count}} 个字段",
+        "en_US": "{{count}} field(s)"
+    },
+    "canvas.detail.value.unknown": {
+        "zh_CN": "字段",
+        "en_US": "Field"
+    },
+    "canvas.detail.value.item_count": {
+        "zh_CN": "共 {{count}} 项",
+        "en_US": "{{count}} item(s)"
+    },
+    "canvas.detail.value.item_index": {
+        "zh_CN": "第 {{index}} 项",
+        "en_US": "Item {{index}}"
+    },
+    "canvas.detail.value.more_items": {
+        "zh_CN": "其余 {{count}} 项未展开",
+        "en_US": "{{count}} more item(s) not expanded"
     },
     "canvas.detail.status.succeeded": {
         "zh_CN": "成功",

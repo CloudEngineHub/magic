@@ -8,7 +8,12 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import I18nManager
 from app.tools.canvas.presentation import CanvasGenerationFeedback
-from app.tools.canvas.presentation import CanvasToolDetailBuilder, batch_tool_result, summarize_items
+from app.tools.canvas.presentation import (
+    CanvasToolDetailBuilder,
+    batch_tool_result,
+    canvas_result_remark,
+    summarize_items,
+)
 from app.tools.canvas.tools.add_canvas_contents import AddCanvasContents
 from app.tools.canvas.tools.add_canvas_elements import AddCanvasElements
 
@@ -99,6 +104,70 @@ def test_batch_tool_result_and_detail_use_the_same_status() -> None:
     assert result.ok is False
     detail = CanvasToolDetailBuilder("mock", "elements_added", result).build()
     assert "部分完成" in detail.data.content
+
+
+def test_single_canvas_operation_does_not_use_batch_wording() -> None:
+    """单个画布操作使用简洁结果，只有多个项目才展示批量统计。"""
+    I18nManager.set_language("zh_CN")
+    try:
+        single = canvas_result_remark(summarize_items([{"status": "created"}]))
+        multiple = canvas_result_remark(
+            summarize_items([{"status": "created"}, {"status": "processing"}])
+        )
+    finally:
+        I18nManager.reset_language()
+
+    assert single == "已完成"
+    assert "批量" not in single
+    assert multiple.startswith("批量操作结果：")
+
+
+def test_canvas_detail_renders_friendly_input_and_output_markdown() -> None:
+    """详情应以小白用户可读的 Markdown 展示入参和出参。"""
+    result = ToolResult(
+        content="mock success",
+        data={
+            "project_path": "Canvas/Mock",
+            "items": [{"item_ref": "image-1", "status": "completed"}],
+            "elements": ["element-1", "element-2"],
+        },
+    )
+    arguments = {
+        "project_path": "Canvas/Mock",
+        "prompt": "一张产品图",
+        "items": [{"item_ref": "image-1", "content": {"source": "generated"}}],
+        "api_key": "mock-secret",
+    }
+
+    I18nManager.set_language("zh_CN")
+    try:
+        content = CanvasToolDetailBuilder("mock", "elements_added", result, arguments).build().data.content
+    finally:
+        I18nManager.reset_language()
+
+    assert "## 输入参数" in content
+    assert "## 输出结果" in content
+    assert "- 提示词: 一张产品图" in content
+    assert "- 项目列表: 共 1 项" in content
+    assert "mock-secret" not in content
+    assert '"item_ref"' not in content
+
+
+def test_canvas_detail_keeps_original_failure_reason_for_users() -> None:
+    """失败详情应展示原始错误摘要，而不是只显示通用失败文案。"""
+    result = ToolResult.error(
+        "Canvas operation failed.\n- Error code: MODEL_NOT_SUPPORTED\n- Reason: model x is unsupported"
+    )
+
+    I18nManager.set_language("zh_CN")
+    try:
+        content = CanvasToolDetailBuilder("mock", "elements_added", result, {}).build().data.content
+    finally:
+        I18nManager.reset_language()
+
+    assert "## 输出结果" in content
+    assert "MODEL_NOT_SUPPORTED" in content
+    assert "model x is unsupported" in content
 
 
 @pytest.mark.asyncio

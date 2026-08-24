@@ -3,6 +3,7 @@
 from app.tools.canvas.presentation.batch_status import (
     CanvasBatchStatus,
     batch_tool_result,
+    canvas_result_remark,
     summarize_items,
     summarize_tool_result,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "CanvasToolDetailBuilder",
     "GenerationFeedbackSummary",
     "batch_tool_result",
+    "canvas_result_remark",
     "canvas_remark",
     "elements_content",
     "error_result",

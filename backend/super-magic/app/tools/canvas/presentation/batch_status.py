@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from agentlang.tools.tool_result import ToolResult
+from app.i18n import i18n
 
 SUCCESS_STATUSES = frozenset(
     {
@@ -92,6 +93,26 @@ def summarize_tool_result(result: ToolResult) -> CanvasBatchStatus:
     if isinstance(items, list):
         return summarize_items(items, fallback_ok=result.ok)
     return summarize_items([], fallback_ok=result.ok)
+
+
+def canvas_result_remark(status: CanvasBatchStatus) -> str:
+    """根据结果数量选择单项反馈或批量反馈文案。"""
+    if status.total <= 1:
+        if status.partial:
+            return i18n.translate("canvas.operation_partial", category="tool.messages")
+        if status.processing:
+            return i18n.translate("canvas.operation_processing", category="tool.messages")
+        if status.failed:
+            return i18n.translate("canvas.operation_failed", category="tool.messages")
+        return i18n.translate("canvas.operation_completed", category="tool.messages")
+    return i18n.translate(
+        "canvas.batch_result",
+        category="tool.messages",
+        completed=status.succeeded,
+        processing=status.processing,
+        failed=status.failed,
+        total=status.total,
+    )
 
 
 def batch_tool_result(content: str, data: dict[str, Any]) -> ToolResult:

@@ -14,6 +14,7 @@ from app.tools.canvas.presentation import (
     CanvasToolDetailBuilder,
     batch_tool_result,
     canvas_remark,
+    canvas_result_remark,
     error_result,
     items_content,
     summarize_tool_result,
@@ -143,13 +144,7 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
             if not values and not result.ok:
                 remark = i18n.translate("canvas.operation_failed", category="tool.messages")
             else:
-                remark = canvas_remark(
-                    "canvas.batch_result",
-                    completed=batch_status.succeeded,
-                    processing=batch_status.processing,
-                    failed=batch_status.failed,
-                    total=batch_status.total,
-                )
+                remark = canvas_result_remark(batch_status)
         args = arguments or {}
         sources = {
             str(item.get("content", {}).get("source"))

@@ -6,6 +6,7 @@ import asyncio
 import time
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import WaitGenerationResult, WaitGenerationResultItem
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
@@ -27,7 +28,7 @@ from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_
 class WaitGenerationService:
     """Canvas WaitGenerationService 用例服务。"""
 
-    def __init__(self, repository: CanvasRepositoryInterface, unit_of_work: CanvasUnitOfWork, generation_capabilities: GenerationCapabilityRegistry, generation_tasks: GenerationTaskRepository, generation_poller: GenerationTaskPoller, generation_result_applier: CanvasGenerationResultApplier):
+    def __init__(self, repository: CanvasRepositoryInterface, unit_of_work: CanvasUnitOfWork, generation_capabilities: GenerationCapabilityRegistry, generation_tasks: GenerationTaskRepository, generation_poller: GenerationTaskPoller, generation_result_applier: CanvasGenerationResultApplier, element_sizing: CanvasElementSizingService | None = None):
         """显式绑定等待用例所需的仓储、事务、能力、任务和结果端口。"""
         self.repository = repository
         self.unit_of_work = unit_of_work
@@ -35,6 +36,7 @@ class WaitGenerationService:
         self.generation_result_applier = generation_result_applier
         self.generation_tasks = generation_tasks
         self.generation_poller = generation_poller
+        self.element_sizing = element_sizing
 
     async def wait(
         self,
@@ -145,6 +147,13 @@ class WaitGenerationService:
             )
 
         final_status = query_result.status
+        output_dimensions = None
+        if final_status == "completed" and self.element_sizing is not None:
+            output_dimensions = await self.element_sizing.inspect_generated_media(
+                project_path,
+                record.element_type,
+                query_result.output_uri,
+            )
 
         def finalize(project: CanvasProject, metadata: dict) -> tuple[None, dict]:
             """在同一项目事务中完成异步结果和任务元数据回写。"""
@@ -156,6 +165,9 @@ class WaitGenerationService:
                 query_result.output_uri,
                 query_result.error_message,
             )
+            element = project.canvas.get_element(record.element_id)
+            if element is not None:
+                CanvasElementSizingService.apply(element, output_dimensions)
             detail = CanvasApplicationOperations.get_content_detail(metadata, record.element_id, record.content_id)
             if final_status == "failed":
                 ContentMetadataService.clear_public_request(metadata, record.element_id, record.content_id)

@@ -13,6 +13,7 @@ from app.tools.canvas.presentation import (
     CanvasToolDetailBuilder,
     batch_tool_result,
     canvas_remark,
+    canvas_result_remark,
     error_result,
     items_content,
     summarize_items,
@@ -192,13 +193,7 @@ class RetryCanvasContentGeneration(BaseTool[BaseToolParams]):
         else:
             limited = sum(1 for item in values if item.get("error_code") == "CONTENT_RETRY_LIMIT_REACHED")
             if batch_status.status in {"partial", "failed"}:
-                remark = canvas_remark(
-                    "canvas.batch_result",
-                    completed=batch_status.succeeded,
-                    processing=batch_status.processing,
-                    failed=batch_status.failed,
-                    total=batch_status.total,
-                )
+                remark = canvas_result_remark(batch_status)
             else:
                 result_key = (
                     "canvas.retry_image_result"
