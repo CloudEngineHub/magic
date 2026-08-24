@@ -558,7 +558,7 @@ export default function LayersDrawer() {
 					))}
 			</div>
 			<div className={styles.layersDrawerFooter}>
-				<Tooltip>
+				<Tooltip delayDuration={0}>
 					<TooltipTrigger>
 						<IconButton
 							className={styles.layersDrawerCollapseButton}

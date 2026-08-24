@@ -15,11 +15,11 @@ class SlidesTemplateCategoryItemDTO extends AbstractDTO
 
     public string $code = '';
 
+    public string $name = '';
+
     public I18nTextDTO $nameI18n;
 
     public int $sort = 0;
-
-    public int $templateCount = 0;
 
     public bool $isOfficial = false;
 
@@ -49,6 +49,16 @@ class SlidesTemplateCategoryItemDTO extends AbstractDTO
         $this->code = $code ?? '';
     }
 
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function setName(?string $name): void
+    {
+        $this->name = $name ?? '';
+    }
+
     public function getNameI18n(): I18nTextDTO
     {
         return $this->nameI18n;
@@ -67,16 +77,6 @@ class SlidesTemplateCategoryItemDTO extends AbstractDTO
     public function setSort(null|int|string $sort): void
     {
         $this->sort = $sort === null ? 0 : (int) $sort;
-    }
-
-    public function getTemplateCount(): int
-    {
-        return $this->templateCount;
-    }
-
-    public function setTemplateCount(null|int|string $templateCount): void
-    {
-        $this->templateCount = $templateCount === null ? 0 : (int) $templateCount;
     }
 
     public function isOfficial(): bool

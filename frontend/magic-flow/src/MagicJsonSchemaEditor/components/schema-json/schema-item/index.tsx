@@ -1,6 +1,5 @@
-import { IconEdit } from "@douyinfe/semi-icons"
+import { IconCircleMinus, IconCirclePlus, IconPencil } from "@tabler/icons-react"
 import { Checkbox, Col, Row, Select, Switch, Tooltip } from "antd"
-import { IconCircleMinus, IconCirclePlus } from "@tabler/icons-react"
 import { useMemoizedFn } from "ahooks"
 import i18next from "i18next"
 import { get, omit, set } from "lodash-es"
@@ -484,7 +483,9 @@ const SchemaItem = observer((props: SchemaItemProp): ReactElement | null => {
 							<Col span={DescCol}>
 								<MagicInput
 									suffix={
-										<IconEdit
+										<IconPencil
+											size={16}
+											stroke={1.8}
 											className="input-icon-editor"
 											onClick={() => handleShowEdit("description")}
 										/>

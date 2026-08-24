@@ -75,7 +75,7 @@ export default function useArgsModal({ value, handleChange }: UseArgsModalProps)
 
 	const onPopoverModalClick = useMemoizedFn(
 		(
-			e: React.MouseEvent<HTMLSpanElement, MouseEvent>,
+			e: React.MouseEvent<HTMLElement | SVGElement, MouseEvent>,
 			item: EXPRESSION_ITEM,
 			arg: InputExpressionValue,
 			index: number,

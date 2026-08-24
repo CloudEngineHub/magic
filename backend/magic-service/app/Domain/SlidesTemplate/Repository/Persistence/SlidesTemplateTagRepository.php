@@ -10,6 +10,7 @@ namespace App\Domain\SlidesTemplate\Repository\Persistence;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateTagQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateOwnerType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
@@ -301,15 +302,19 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
 
     private function joinEnabledTemplateRelations(Builder $builder, SlidesTemplateDataIsolation $dataIsolation): void
     {
-        $organizationCodes = array_values(array_filter($dataIsolation->getOrganizationCodes()));
+        $organizationCodes = array_values(array_filter($dataIsolation->getOfficialOrganizationCodes()));
         $builder->leftJoin('magic_slides_template_tag_relations AS r', static function (JoinClause $join) use ($organizationCodes): void {
-            $join->on('r.tag_id', '=', 'magic_slides_template_tags.id');
+            $join->on('r.tag_id', '=', 'magic_slides_template_tags.id')
+                ->on('r.organization_code', '=', 'magic_slides_template_tags.organization_code');
             if ($organizationCodes !== []) {
                 $join->whereIn('r.organization_code', $organizationCodes);
             }
         });
         $builder->leftJoin('magic_slides_templates AS t', static function (JoinClause $join) use ($organizationCodes): void {
             $join->on('t.id', '=', 'r.template_id')
+                ->on('t.organization_code', '=', 'r.organization_code')
+                ->on('t.owner_id', '=', 't.organization_code')
+                ->where('t.owner_type', '=', SlidesTemplateOwnerType::Official->value)
                 ->where('t.status', '=', SlidesTemplateStatus::Enabled->value)
                 ->whereNull('t.deleted_at');
 
@@ -321,18 +326,22 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
 
     private function queryVisibleTemplateTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): iterable
     {
-        $organizationCodes = array_values(array_filter($dataIsolation->getOrganizationCodes()));
+        $organizationCodes = array_values(array_filter($dataIsolation->getOfficialOrganizationCodes()));
         $builder = $this->createBuilder($dataIsolation, SlidesTemplateTagModel::query());
         $builder->select('magic_slides_template_tags.*')
             ->distinct()
             ->join('magic_slides_template_tag_relations AS r', static function (JoinClause $join) use ($organizationCodes): void {
-                $join->on('r.tag_id', '=', 'magic_slides_template_tags.id');
+                $join->on('r.tag_id', '=', 'magic_slides_template_tags.id')
+                    ->on('r.organization_code', '=', 'magic_slides_template_tags.organization_code');
                 if ($organizationCodes !== []) {
                     $join->whereIn('r.organization_code', $organizationCodes);
                 }
             })
             ->join('magic_slides_templates AS t', static function (JoinClause $join) use ($organizationCodes): void {
                 $join->on('t.id', '=', 'r.template_id')
+                    ->on('t.organization_code', '=', 'r.organization_code')
+                    ->on('t.owner_id', '=', 't.organization_code')
+                    ->where('t.owner_type', '=', SlidesTemplateOwnerType::Official->value)
                     ->where('t.status', '=', SlidesTemplateStatus::Enabled->value)
                     ->whereNull('t.deleted_at');
 

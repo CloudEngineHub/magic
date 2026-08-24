@@ -17,6 +17,8 @@ export interface PreviewDetailPopupRef {
 		attachmentTree: AttachmentItem[],
 		attachmentList: AttachmentItem[],
 	) => void
+	/** Refreshes the file context without closing or reopening the current preview. */
+	updateAttachments: (attachmentTree: AttachmentItem[], attachmentList: AttachmentItem[]) => void
 }
 
 export interface PreviewDetailPopupProps {

@@ -1,4 +1,5 @@
 import ErrorContent from "@/common/BaseUI/ErrorComponent/ErrorComponent"
+import TablerIconGlobalStyle from "@/common/BaseUI/TablerIconGlobalStyle"
 import clsx from "clsx"
 import { omit } from "lodash-es"
 import React, { useImperativeHandle, useMemo } from "react"
@@ -297,6 +298,7 @@ const MagicFlowComponent = React.forwardRef(
 					return <ErrorContent />
 				}}
 			>
+				<TablerIconGlobalStyle />
 				<ConfigProvider prefixCls={CLASSNAME_PREFIX}>
 					<MagicFlowProvider>
 						<ExternalProvider {...externalProviderProps}>

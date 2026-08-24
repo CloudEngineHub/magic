@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { parseMagicProjectJsContent, parseMagicProjectJsContentWithDiagnostics } from "../utils"
+import {
+	parseMagicProjectJsContent,
+	parseMagicProjectJsContentSafely,
+	parseMagicProjectJsContentWithDiagnostics,
+} from "../utils"
 
 describe("parseMagicProjectJsContentWithDiagnostics", () => {
 	it("reports valid-empty only when canvas.elements is explicitly an empty array", () => {
@@ -41,6 +45,18 @@ describe("parseMagicProjectJsContentWithDiagnostics", () => {
 
 		expect(result.canvasStatus).toBe("missing")
 		expect(result.data).toBeNull()
+	})
+
+	it("returns null for unsafe remote content", () => {
+		const result = parseMagicProjectJsContentSafely(`
+			window.magicProjectConfig = {
+				version: "1.0.0",
+				type: "design",
+				name: "missing",
+			};
+		`)
+
+		expect(result).toBeNull()
 	})
 
 	it("keeps legacy empty-canvas fallback for ordinary parsing", () => {

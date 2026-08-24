@@ -17,6 +17,13 @@ use App\Infrastructure\Core\ValueObject\Page;
 interface SkillMarketRepositoryInterface
 {
     /**
+     * 获取已发布的官方内置 Skill 实体。
+     *
+     * @return array<int, SkillMarketEntity>
+     */
+    public function getOfficialBuiltinSkillEntities(): array;
+
+    /**
      * 批量查询市场技能的最新版本信息（用于判断 need_upgrade）.
      *
      * @param array $skillCodes Skill code 列表（对应 magic_skills.version_code）

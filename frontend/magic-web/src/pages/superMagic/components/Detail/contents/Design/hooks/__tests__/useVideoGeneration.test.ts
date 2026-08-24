@@ -1,6 +1,8 @@
 import { renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { MODEL_TYPE_VIDEO } from "@/apis/modules/org-ai-model-provider"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import superMagicCustomModelService from "@/services/superMagic/SuperMagicCustomModelService"
 import { useVideoGeneration } from "../useVideoGeneration"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -16,6 +18,12 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 		fetchModeList: vi.fn(async () => []),
 		fetchDefaultModeModelList: vi.fn(async () => undefined),
 		getAllVideoModelGroups: vi.fn(),
+	},
+}))
+
+vi.mock("@/services/superMagic/SuperMagicCustomModelService", () => ({
+	default: {
+		getMyModelsByType: vi.fn(async () => []),
 	},
 }))
 
@@ -65,5 +73,39 @@ describe("useVideoGeneration model grouping", () => {
 			force: false,
 		})
 		expect(superMagicModeService.getAllVideoModelGroups).toHaveBeenCalledTimes(1)
+	})
+
+	it("includes personal video models in the canvas model list", async () => {
+		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([])
+		vi.mocked(superMagicCustomModelService.getMyModelsByType).mockResolvedValue([
+			{
+				id: "custom-video-1",
+				name: "MiniMax-H3",
+				model_id: "minimax-h3",
+				model_type: MODEL_TYPE_VIDEO,
+				category: "vgmm",
+				service_provider_config_id: "provider-1",
+				service_provider_config: { id: "provider-1", name: "自定义服务商" },
+			},
+		])
+
+		const { result } = renderHook(() =>
+			useVideoGeneration({
+				projectId: "project-1",
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await expect(result.current.getVideoModelList()).resolves.toEqual([
+			expect.objectContaining({
+				model_id: "minimax-h3",
+				model_name: "MiniMax-H3",
+				model_source: "custom",
+				model_group: expect.objectContaining({ source: "custom" }),
+			}),
+		])
+		expect(superMagicCustomModelService.getMyModelsByType).toHaveBeenCalledWith(
+			MODEL_TYPE_VIDEO,
+		)
 	})
 })

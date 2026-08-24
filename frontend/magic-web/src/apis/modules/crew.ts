@@ -64,7 +64,11 @@ export type CrewI18nArrayText = Record<string, CrewI18nArrayValue> & {
 
 /** Publisher type for store agents */
 export type CrewPublisherType =
-	"USER" | "OFFICIAL" | "OFFICIAL_BUILTIN" | "VERIFIED_CREATOR" | "PARTNER"
+	| "USER"
+	| "OFFICIAL"
+	| "OFFICIAL_BUILTIN"
+	| "VERIFIED_CREATOR"
+	| "PARTNER"
 
 /** Publisher info for store agents */
 export interface CrewPublisher {
@@ -269,7 +273,11 @@ export interface GetTeamSharedAgentsResponse extends GetCreatedAgentsResponse {}
 
 /** Scope filter for unified agent list query */
 export type UnifiedAgentScope =
-	"all" | "created" | "team_shared" | "market_installed" | "collaborated"
+	| "all"
+	| "created"
+	| "team_shared"
+	| "market_installed"
+	| "collaborated"
 
 /** Sort field for unified agent list query */
 export type UnifiedAgentSort = "updated_at" | "created_at"
@@ -333,7 +341,11 @@ export type AgentPublishToType = "INTERNAL" | "MARKET"
 export type AgentAllowedPublishTargetType = Exclude<AgentPublishTargetType, "MARKET">
 
 export type AgentVersionReviewStatus =
-	"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INVALIDATED"
+	| "PENDING"
+	| "UNDER_REVIEW"
+	| "APPROVED"
+	| "REJECTED"
+	| "INVALIDATED"
 
 export type AgentVersionPublishStatus = "PUBLISHED" | "OFFLINE"
 

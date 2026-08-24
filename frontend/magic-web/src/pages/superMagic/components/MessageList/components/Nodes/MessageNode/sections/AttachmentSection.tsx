@@ -43,7 +43,8 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			Record<string, unknown> | undefined
+			| Record<string, unknown>
+			| undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		return prevContent ? buildFilePathAttachments(prevContent) : []

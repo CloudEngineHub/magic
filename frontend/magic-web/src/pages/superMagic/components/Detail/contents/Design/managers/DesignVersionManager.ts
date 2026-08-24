@@ -3,7 +3,7 @@ import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	loadMagicProjectJsContent,
-	parseMagicProjectJsContent,
+	parseMagicProjectJsContentSafely,
 	resolveDesignProjectBasePathFromAttachments,
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
@@ -52,7 +52,7 @@ export class DesignVersionManager {
 		const content = await loadMagicProjectJsContent(magicProjectJsFileId, {
 			file_versions: { [magicProjectJsFileId]: version },
 		})
-		const data = parseMagicProjectJsContent(content)
+		const data = parseMagicProjectJsContentSafely(content)
 		if (data) {
 			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 			if (dslBase) {
@@ -76,7 +76,7 @@ export class DesignVersionManager {
 		if (!magicProjectJsFileId) return { data: null, version: null }
 
 		const content = await loadMagicProjectJsContent(magicProjectJsFileId)
-		const data = parseMagicProjectJsContent(content)
+		const data = parseMagicProjectJsContentSafely(content)
 		if (data) {
 			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 			if (dslBase) {

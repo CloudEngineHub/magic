@@ -74,6 +74,8 @@ interface ModeToggleProps {
 	useChatTerminology?: boolean
 	onModeChange?: (mode: TopicMode) => void
 	size?: MessageEditorSize
+	/** Controls which mobile viewport edge owns the crew selector sheet. */
+	mobilePopupPosition?: "bottom" | "top"
 }
 
 const TopicPlusIcon = <MagicIcon component={MessageCirclePlus} size={18} color="currentColor" />
@@ -100,6 +102,7 @@ function ModeToggle({
 	useChatTerminology,
 	onModeChange,
 	size = "default",
+	mobilePopupPosition = "top",
 }: ModeToggleProps) {
 	const { t } = useTranslation("super")
 	const { t: tCrewCreate } = useTranslation("crew/create")
@@ -651,7 +654,7 @@ function ModeToggle({
 					onClose={() => {
 						handleOpenChange(false)
 					}}
-					position="top"
+					position={mobilePopupPosition}
 					className="z-popup"
 					title={t("modeToggle.selectCrew")}
 				>
@@ -664,7 +667,7 @@ function ModeToggle({
 						onClose={() => {
 							setShowNewTopicModal({ visible: false, mode: null })
 						}}
-						position="top"
+						position={mobilePopupPosition}
 						title={t("modeToggle.selectCrew")}
 					>
 						<div className="flex flex-col gap-4 p-4">{confirmPopoverContent}</div>

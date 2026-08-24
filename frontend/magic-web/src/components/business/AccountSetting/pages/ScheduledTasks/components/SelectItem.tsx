@@ -27,6 +27,7 @@ interface SelectItemProps {
 	workspaceId?: string
 	projectId?: string
 	value?: string
+	autoSelectFirstOption?: boolean
 	onChange?: (value: string) => void
 	onSelect?: (value: OptionItem | undefined) => void
 }
@@ -55,7 +56,16 @@ const TYPE_CONFIG = {
 	},
 } as const
 
-function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }: SelectItemProps) {
+/** Renders a task context selector and optionally preselects the first mobile topic. */
+function SelectItem({
+	type,
+	workspaceId,
+	projectId,
+	value,
+	autoSelectFirstOption = false,
+	onChange,
+	onSelect,
+}: SelectItemProps) {
 	const { t } = useTranslation("interface")
 	const isMobile = useIsMobile()
 	const { workspaceOptions, handleAddWorkspace } = useWorkspace()
@@ -74,6 +84,7 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 	}>()
 	const creatingRef = useRef(false)
 	const createInputRef = useRef<InputRef>(null)
+	const autoSelectedContextRef = useRef<string>()
 
 	const sourceOptions = useMemo(() => {
 		if (type === "workspace") return workspaceOptions
@@ -205,6 +216,27 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 	})
 
 	const currentLabel = options.find((option) => option.value === value)?.label
+
+	useEffect(() => {
+		if (
+			!autoSelectFirstOption ||
+			type !== "topic" ||
+			!workspaceId ||
+			!projectId ||
+			value ||
+			options.length === 0
+		)
+			return
+
+		const contextKey = `${workspaceId}:${projectId}`
+		if (autoSelectedContextRef.current === contextKey) return
+
+		// Prefill only new mobile task forms when no topic was provided by the route.
+		const firstOption = options[0]
+		autoSelectedContextRef.current = contextKey
+		onChange?.(firstOption.value)
+		onSelect?.(firstOption)
+	}, [autoSelectFirstOption, onChange, onSelect, options, projectId, type, value, workspaceId])
 
 	return (
 		<MagicSelect

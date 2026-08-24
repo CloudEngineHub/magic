@@ -67,9 +67,29 @@
         "zh_CN": "转换文档格式",
         "en_US": "Convert document format"
     },
-    "convert_pptx_to_slide_template": {
-        "zh_CN": "转换 PPTX 为幻灯片模板",
-        "en_US": "Convert PPTX to slide template"
+    "create_slide_template_project": {
+        "zh_CN": "创建幻灯片模板结构",
+        "en_US": "Create slide template structure"
+    },
+    "finalize_slide_template": {
+        "zh_CN": "生成幻灯片模板预览",
+        "en_US": "Finalize slide template previews"
+    },
+    "prepare_slide_template_source": {
+        "zh_CN": "准备模板视觉重建素材",
+        "en_US": "Prepare slide template reconstruction source"
+    },
+    "select_slide_template_source_assets": {
+        "zh_CN": "筛选模板原始素材",
+        "en_US": "Select slide template source assets"
+    },
+    "query_slide_template_taxonomy": {
+        "zh_CN": "获取模板分类标签",
+        "en_US": "Fetch template categories and tags"
+    },
+    "review_slide_template_source": {
+        "zh_CN": "回顾模板源页视觉",
+        "en_US": "Review slide template source pages"
     },
     "install_slides_template": {
         "zh_CN": "安装幻灯片模板",
@@ -198,6 +218,14 @@
     "generate_images_ing": {
         "zh_CN": "正在生成图像",
         "en_US": "Generating images"
+    },
+    "generate_video": {
+        "zh_CN": "生成视频",
+        "en_US": "Generate video"
+    },
+    "get_video": {
+        "zh_CN": "获取视频",
+        "en_US": "Get video"
     },
     "video_generation_progress": {
         "zh_CN": "视频生成进度通知",

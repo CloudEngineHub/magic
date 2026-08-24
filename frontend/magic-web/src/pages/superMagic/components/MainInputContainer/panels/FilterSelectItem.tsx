@@ -186,7 +186,10 @@ function FilterSelectItem({
 			<div className={cn("flex flex-col items-start gap-1", isCompactMobile && "block")}>
 				{isCompactMobile ? null : (
 					<Label
-						className="text-xs font-medium text-muted-foreground"
+						className={cn(
+							"text-xs font-medium text-muted-foreground",
+							!isCompactMobile && "ml-3",
+						)}
 						onClick={handleOpenDrawer}
 					>
 						{lt(filter.label)}

@@ -5,9 +5,23 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'generation' => [
+        'generate_audio' => [
+            'name' => 'Generate audio',
+            'description' => 'Whether to generate audio',
+        ],
+        'web_search' => [
+            'name' => 'Web search',
+            'description' => 'Whether to enable web search',
+        ],
+    ],
     'input_modes' => [
         'standard' => 'Standard text-to-video mode without any reference assets.',
         'omni_reference' => 'Upload 1 to :max_count reference images to generate a video, with up to 1 reference video. Example: combine the subject from @image 1 with the motion from @video 1 to create an atmospheric short film.',
+        'minimax_h3_omni_reference' => 'Supports up to 9 reference images, 3 reference videos, and 3 reference audios. Reference audio must be used with a reference image or video.',
+        'minimax_h3_omni_reference_mode' => [
+            'reference_media' => 'Mix reference images, videos, and audios, with up to 9 images and up to 3 videos and audios each. Reference audio must be paired with an image or video.',
+        ],
         'omni_reference_mode' => [
             'images_only' => 'Upload reference images only, with support for up to 7 images.',
             'image_and_video' => 'When uploading reference images together with 1 reference video, up to 6 reference images are supported.',

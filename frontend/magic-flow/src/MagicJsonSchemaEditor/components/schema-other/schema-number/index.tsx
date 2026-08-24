@@ -1,4 +1,4 @@
-import { QuestionCircleOutlined } from '@ant-design/icons';
+import { IconHelpCircle } from '@tabler/icons-react';
 import {
   Checkbox,
   Col,
@@ -154,7 +154,7 @@ const SchemaNumber = (props: SchemaNumberProp): ReactElement => {
               <span>
                 exclusiveMinimum&nbsp;
                 <Tooltip title="exclusiveMinimum">
-                  <QuestionCircleOutlined />
+                  <IconHelpCircle size={16} />
                 </Tooltip>
                 &nbsp;：
               </span>
@@ -173,7 +173,7 @@ const SchemaNumber = (props: SchemaNumberProp): ReactElement => {
               <span>
                 exclusiveMaximum&nbsp;
                 <Tooltip title="exclusiveMaximum">
-                  <QuestionCircleOutlined />
+                  <IconHelpCircle size={16} />
                 </Tooltip>
                 &nbsp;：
               </span>

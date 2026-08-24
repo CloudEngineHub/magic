@@ -7,6 +7,8 @@ import { superMagicStore } from "../stores"
 import { topicStore } from "../stores/core"
 import { buildFilePathAttachments } from "../components/MessageList/utils/attachmentByFilePath"
 import type { FilePathAttachment } from "../components/MessageList/utils/attachmentByFilePath"
+import type { AttachmentItem } from "../components/TopicFilesButton/hooks/types"
+import { isSlidesTemplateFolder } from "../components/TopicFilesButton/utils/slides-template-folder"
 
 interface AutoOpenFileCommonParams {
 	/** 最后一条消息节点（助手侧） */
@@ -29,6 +31,18 @@ export interface CheckAndOpenFileByMessagesParams extends AutoOpenFileCommonPara
 export interface CheckAndOpenFileByTopicChangedParams {
 	activeFileId?: string | null
 	getActiveFileId?: () => string | null | undefined
+}
+
+type AutoOpenAttachmentCandidate = {
+	file_id?: string
+	file_name?: string
+	filename?: string
+	display_filename?: string
+	name?: string
+	file_extension?: string
+	is_directory?: boolean
+	display_config?: { type?: string }
+	children?: AutoOpenAttachmentCandidate[]
 }
 
 /**
@@ -55,16 +69,24 @@ function getPrevMessageFilePathAttachments(
 	return buildFilePathAttachments(prevContent)
 }
 
-function isOpenableAttachment(attachment: {
-	file_id?: string
-	file_extension?: string
-	is_directory?: boolean
-	display_config?: { type?: string }
-}) {
+function getAttachmentName(attachment: AutoOpenAttachmentCandidate): string {
+	return (
+		attachment.file_name ||
+		attachment.filename ||
+		attachment.display_filename ||
+		attachment.name ||
+		""
+	)
+}
+
+function isOpenableAttachment(attachment: AutoOpenAttachmentCandidate) {
 	if (!attachment?.file_id) return false
 
 	if (attachment.is_directory) {
-		return Boolean(attachment.display_config?.type)
+		return (
+			Boolean(attachment.display_config?.type) ||
+			isSlidesTemplateFolder(attachment as AttachmentItem)
+		)
 	}
 
 	// 部分目录附件是浅层数据，只暴露空扩展名。
@@ -73,6 +95,30 @@ function isOpenableAttachment(attachment: {
 	}
 
 	return true
+}
+
+function isTemplateRootAttachment(attachment: AutoOpenAttachmentCandidate): boolean {
+	if (!attachment?.file_id || !attachment.is_directory) return false
+	return (
+		attachment.display_config?.type === "slide-template" ||
+		isSlidesTemplateFolder(attachment as AttachmentItem)
+	)
+}
+
+function isTemplateJsonAttachment(attachment: AutoOpenAttachmentCandidate): boolean {
+	if (!attachment?.file_id || attachment.is_directory) return false
+	return getAttachmentName(attachment).toLowerCase() === "template.json"
+}
+
+/** Prefer template root / template.json over the first ordinary attachment. */
+export function pickPreferredAutoOpenAttachment(
+	attachments: AutoOpenAttachmentCandidate[],
+): AutoOpenAttachmentCandidate | undefined {
+	return (
+		attachments.find(isTemplateRootAttachment) ||
+		attachments.find(isTemplateJsonAttachment) ||
+		attachments.find(isOpenableAttachment)
+	)
 }
 
 /**
@@ -147,10 +193,9 @@ export function useAutoOpenFile() {
 				return
 			}
 
-			// Fallback to the first file from the original attachments.
+			// Prefer template root / template.json, then the first openable attachment.
 			const attachments = lastDetailMessageNode?.attachments || []
-
-			const firstFileAttachment = attachments.find(isOpenableAttachment)
+			const firstFileAttachment = pickPreferredAutoOpenAttachment(attachments)
 			const firstFileId = firstFileAttachment?.file_id
 
 			if (!firstFileId) return

@@ -80,15 +80,8 @@ readonly class CloudswaySeedanceVideoAdapter extends AbstractCloudswayVideoAdapt
                 'resolutions' => ['480p', '720p', '1080p'],
                 'sizes' => self::SUPPORTED_SIZES,
                 'default_resolution' => '720p',
-                'supports_seed' => false,
                 'supports_watermark' => true,
-                'supports_negative_prompt' => false,
                 'supports_generate_audio' => true,
-                'supports_person_generation' => false,
-                'supports_enhance_prompt' => false,
-                'supports_compression_quality' => false,
-                'supports_resize_mode' => false,
-                'supports_sample_count' => false,
             ],
             'input_modes' => [
                 'standard' => [
@@ -211,7 +204,7 @@ readonly class CloudswaySeedanceVideoAdapter extends AbstractCloudswayVideoAdapt
             $response['data']['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException(
+            throw ProviderVideoException::nonRetriable(
                 $this->extractProviderMessage($response, 'cloudsway seedance submit succeeded but task id missing')
             );
         }

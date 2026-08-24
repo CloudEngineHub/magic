@@ -16,9 +16,10 @@ import CascaderDropdown from "@/common/BaseUI/DropdownRenderer/Reference"
 import { multipleTypes } from "@/common/BaseUI/DropdownRenderer/Reference/hooks/useRender"
 import ErrorContent from "@/common/BaseUI/ErrorComponent/ErrorComponent"
 import MagicSelect from "@/common/BaseUI/Select"
+import TablerIconGlobalStyle from "@/common/BaseUI/TablerIconGlobalStyle"
 import { useNodeMap } from "@/common/context/NodeMap/useResize"
 import { generateSnowFlake } from "@/common/utils/snowflake"
-import { IconChevronDown } from "@douyinfe/semi-icons"
+import { IconChevronDown } from "@tabler/icons-react"
 import i18next from "i18next"
 import { ErrorBoundary } from "react-error-boundary"
 import { useTranslation } from "react-i18next"
@@ -482,6 +483,7 @@ const CustomInputExpression = (props: InputExpressionProps) => {
 				return <ErrorContent />
 			}}
 		>
+			<TablerIconGlobalStyle />
 			<ConfigProvider prefixCls={CLASSNAME_PREFIX}>
 				<ArgsModalProvider
 					isOpenArgsModal={isOpenArgsModal}
@@ -548,7 +550,7 @@ const CustomInputExpression = (props: InputExpressionProps) => {
 												},
 											]}
 											className="type-select"
-											suffixIcon={<IconChevronDown />}
+									suffixIcon={<IconChevronDown size={16} />}
 											onChange={handleValueTypeChange}
 											disabled={disabled}
 											value={valueType}

@@ -18,6 +18,7 @@ import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/us
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useImageUrlResolver } from "@/pages/superMagic/components/Detail/contents/Md/hooks/useImageUrlResolver"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useFileChangeCheck } from "./hooks/useFileChangeCheck"
 import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
@@ -25,12 +26,17 @@ import { SuperMagicApi } from "@/apis"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
-import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { RoutePath } from "@/constants/routes"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { shouldHideRecordingFloatPanel } from "./utils/float-panel-visibility-policy"
+import {
+	getVisibleRecordingAttachmentTree,
+	findRecordingImagesFolderId,
+	selectRecordingImageLookupTree,
+	shouldMarkRecordingAttachmentsReady,
+} from "./utils/recordingImageLookupSnapshot"
 import { isAudioProjectMode } from "@/services/audioRecordings"
 import { MobileActiveRecordingIndicator } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileActiveRecordingIndicator"
 import {
@@ -68,8 +74,8 @@ export function RecordingSummaryFloatPanel() {
 		isOnMobileRecordingsListRoute || isOnMobileRecordingDetailRoute
 
 	const editorRef = useRef<SimpleEditorRef>(null)
-	// Create projectFilesStore for managing workspace files
-	// Used by both AiChat and image URL resolution
+	// Local store for overlay file UI and @ mentions. Note image restore uses a
+	// separate hidden-inclusive snapshot so the visible-only store contract stays intact.
 	const { projectFilesStore, recordSummaryFileStore } = useMemo(() => {
 		const projectFilesStore = new ProjectFilesStore()
 		const recordSummaryFileStore = createMentionPanelStore(projectFilesStore)
@@ -79,9 +85,19 @@ export function RecordingSummaryFloatPanel() {
 	// Attachment state management
 	const [attachments, _setAttachments] = useState<any[]>([])
 	const [attachmentList, _setAttachmentList] = useState<any[]>([])
+	/** Hidden-inclusive tree used only for note image path lookup. */
+	const [imageLookupAttachments, setImageLookupAttachments] = useState<AttachmentItem[]>([])
 	const [isEnablingTranscription, setIsEnablingTranscription] = useState(false)
 	/** Project id whose attachments fetch has settled; gates note image URL resolution after refresh. */
 	const [attachmentsReadyProjectId, setAttachmentsReadyProjectId] = useState("")
+	/** Cache the folder id together with its scope so project switches cannot reuse it. */
+	const imagesFolderRef = useRef<
+		{ projectId: string; parentId: string; folderName: string; folderId: string } | undefined
+	>(undefined)
+	const attachmentsRefreshRef = useRef<{
+		requestId: number
+		controller: AbortController | null
+	}>({ requestId: 0, controller: null })
 
 	/**
 	 * Marks attachment context ready for the active project after a settled load.
@@ -126,53 +142,81 @@ export function RecordingSummaryFloatPanel() {
 		},
 	})
 
-	// Update attachments from API
+	const resetAttachments = useMemoizedFn(() => {
+		setAttachments([])
+		setImageLookupAttachments([])
+		setAttachmentsReadyProjectId("")
+		projectFilesStore.setWorkspaceFileTree([])
+	})
+
+	useEffect(() => {
+		const refreshState = attachmentsRefreshRef.current
+		return () => {
+			refreshState.controller?.abort()
+		}
+	}, [])
+
+	/** Reloads the hidden-inclusive snapshot used by note image URL resolution. */
+	const refreshRecordingAttachments = useMemoizedFn(async (projectId?: string) => {
+		const requestId = attachmentsRefreshRef.current.requestId + 1
+		attachmentsRefreshRef.current.requestId = requestId
+		attachmentsRefreshRef.current.controller?.abort()
+
+		if (!projectId) {
+			attachmentsRefreshRef.current.controller = null
+			resetAttachments()
+			pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+			return { tree: [], list: [] }
+		}
+
+		const controller = new AbortController()
+		attachmentsRefreshRef.current.controller = controller
+		pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
+		try {
+			const res = await loadProjectAttachments({
+				projectId,
+				signal: controller.signal,
+				// @ts-ignore 使用window添加临时的token
+				temporaryToken: window.temporary_token || "",
+				includeHidden: true,
+			})
+			if (
+				requestId !== attachmentsRefreshRef.current.requestId ||
+				controller.signal.aborted
+			) {
+				return { tree: [], list: [] }
+			}
+			const lookupTree = res.tree as AttachmentItem[]
+			setImageLookupAttachments(lookupTree)
+			// Store/UI keep the visible-only tree; image lookup uses the full snapshot.
+			setAttachments(getVisibleRecordingAttachmentTree(lookupTree))
+			recordSummaryFileStore.finishLoadAttachmentsPromise(projectId)
+			markAttachmentsReady(projectId)
+			return res
+		} catch (error: unknown) {
+			if (controller.signal.aborted) return { tree: [], list: [] }
+			console.error("Failed to fetch attachments:", error)
+			resetAttachments()
+			// Settle readiness even on failure so images do not spin forever.
+			markAttachmentsReady(projectId)
+			return { tree: [], list: [] }
+		} finally {
+			if (requestId === attachmentsRefreshRef.current.requestId) {
+				attachmentsRefreshRef.current.controller = null
+				pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
+			}
+		}
+	})
+
+	// Update attachments from API with a debounce for project-selection changes.
 	const { run: updateAttachments } = useDebounceFn(
 		(
 			selectedProject: any,
 			callback?: (res: { tree: AttachmentItem[]; list: AttachmentItem[] }) => void,
 		) => {
-			if (!selectedProject?.id) {
-				setAttachments([])
-				setAttachmentsReadyProjectId("")
-				projectFilesStore.setWorkspaceFileTree([])
-				return
-			}
-			try {
-				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
-				loadProjectAttachments({
-					projectId: selectedProject?.id,
-					// @ts-ignore 使用window添加临时的token
-					temporaryToken: window.temporary_token || "",
-				})
-					.then((res: any) => {
-						setAttachments(res?.tree || [])
-						recordSummaryFileStore.finishLoadAttachmentsPromise(selectedProject?.id)
-						markAttachmentsReady(selectedProject?.id)
-						callback?.(res)
-					})
-					.catch((error: unknown) => {
-						console.error("Failed to fetch attachments:", error)
-						setAttachments([])
-						projectFilesStore.setWorkspaceFileTree([])
-						// Settle readiness even on failure so images do not spin forever.
-						markAttachmentsReady(selectedProject?.id)
-						callback?.({ tree: [], list: [] })
-					})
-					.finally(() => {
-						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
-					})
-			} catch (error) {
-				console.error("Failed to fetch attachments:", error)
-				setAttachments([])
-				projectFilesStore.setWorkspaceFileTree([])
-				markAttachmentsReady(selectedProject?.id)
-				callback?.({ tree: [], list: [] })
-			}
+			void refreshRecordingAttachments(selectedProject?.id).then(callback)
 		},
-		{
-			wait: 500,
-		},
+		{ wait: 500 },
 	)
 
 	// 监听窗口大小变化，自动调整位置
@@ -302,10 +346,24 @@ export function RecordingSummaryFloatPanel() {
 		projectId: selectedProjectId,
 		enabled: !isManagedByMobileRecordingPage,
 		store: projectFilesStore,
-		onAttachmentsChange: useMemoizedFn(({ tree, list }) => {
+		onAttachmentsChange: useMemoizedFn(({ tree, list, source }) => {
 			_setAttachments(tree)
 			_setAttachmentList(list)
-			markAttachmentsReady(selectedProjectId)
+			setImageLookupAttachments((current) =>
+				selectRecordingImageLookupTree({
+					current,
+					incoming: tree,
+					source,
+				}),
+			)
+			if (
+				shouldMarkRecordingAttachmentsReady({
+					treeLength: tree.length,
+					source,
+				})
+			) {
+				markAttachmentsReady(selectedProjectId)
+			}
 			void checkNoteFileChange(list)
 		}),
 		onFallbackError: useMemoizedFn((error: unknown) => {
@@ -317,8 +375,13 @@ export function RecordingSummaryFloatPanel() {
 	useEffect(() => {
 		if (isManagedByMobileRecordingPage) return
 		const selectedProject = recordingSummaryStore.businessData.project
+		attachmentsRefreshRef.current.requestId += 1
+		attachmentsRefreshRef.current.controller?.abort()
+		attachmentsRefreshRef.current.controller = null
 		// Reset readiness when switching projects after restore/remount.
 		setAttachmentsReadyProjectId("")
+		setImageLookupAttachments([])
+		imagesFolderRef.current = undefined
 		if (selectedProjectId && selectedProject) {
 			projectFilesStore.setSelectedProject(selectedProject)
 			// Initialize attachment loading promise
@@ -358,9 +421,6 @@ export function RecordingSummaryFloatPanel() {
 	// Get note file path (use preset file path directly)
 	const noteFilePath = noteFile?.file_path ? `/${noteFile.file_path}` : ""
 
-	/** Cache for images folder file_id — avoids re-creating on every upload within the same session */
-	const imagesFolderIdRef = useRef<string | undefined>(undefined)
-
 	/**
 	 * Resolve or create the images folder under asr_display_dir before an image upload.
 	 * Uses note_file.parent_id (= asr_display_dir.directory_id) as the parent.
@@ -368,15 +428,34 @@ export function RecordingSummaryFloatPanel() {
 	const resolveImagesFolderParentId = useMemoizedFn(async (folderPath: string) => {
 		if (!selectedProjectId) return undefined
 
-		// Return cached value if already resolved in this session
-		if (imagesFolderIdRef.current) return imagesFolderIdRef.current
-
 		// asr_display_dir.directory_id is the parent of the note file
 		const displayDirId = recordSummaryService.getAsrDisplayDir()?.directory_id
 		if (!displayDirId) return undefined
 
 		// Extract the folder name (last segment of folderPath)
 		const folderName = folderPath.split("/").filter(Boolean).pop() || "images"
+		const cachedFolder = imagesFolderRef.current
+		if (
+			cachedFolder?.projectId === selectedProjectId &&
+			cachedFolder.parentId === displayDirId &&
+			cachedFolder.folderName === folderName
+		) {
+			return cachedFolder.folderId
+		}
+		const existingFolderId = findRecordingImagesFolderId(
+			imageLookupAttachments,
+			displayDirId,
+			folderName,
+		)
+		if (existingFolderId) {
+			imagesFolderRef.current = {
+				projectId: selectedProjectId,
+				parentId: displayDirId,
+				folderName,
+				folderId: existingFolderId,
+			}
+			return existingFolderId
+		}
 
 		try {
 			const result = await SuperMagicApi.createFile(
@@ -390,27 +469,48 @@ export function RecordingSummaryFloatPanel() {
 				{ enableErrorMessagePrompt: false },
 			)
 			const folderId = (result as any)?.file_id as string | undefined
-			if (folderId) imagesFolderIdRef.current = folderId
+			if (folderId) {
+				imagesFolderRef.current = {
+					projectId: selectedProjectId,
+					parentId: displayDirId,
+					folderName,
+					folderId,
+				}
+			}
 			return folderId
 		} catch (error: unknown) {
 			const errorObj = error as { code?: number }
 			if (errorObj.code === SuperMagicApiErrorCode.DuplicateFile) {
-				// Folder already exists; cached value unavailable (e.g. after remount) — graceful degradation
-				requestProjectAttachmentsFullRefresh({
-					projectId: selectedProjectId,
-					reason: "recording-summary-images-folder-duplicate",
-				})
-				return imagesFolderIdRef.current
+				// A remounted panel has no cached id; query the hidden-inclusive tree again.
+				const refreshed = await refreshRecordingAttachments(selectedProjectId)
+				const existingFolderId = findRecordingImagesFolderId(
+					refreshed.tree as AttachmentItem[],
+					displayDirId,
+					folderName,
+				)
+				if (existingFolderId) {
+					imagesFolderRef.current = {
+						projectId: selectedProjectId,
+						parentId: displayDirId,
+						folderName,
+						folderId: existingFolderId,
+					}
+				}
+				return existingFolderId
 			}
 			console.error("[RecordSummary] Failed to create images folder:", error)
 			return undefined
 		}
 	})
 
+	const handleImageUploadSuccess = useMemoizedFn(async () => {
+		await refreshRecordingAttachments(selectedProjectId)
+	})
+
 	// URL resolver for project images - converts relative paths to download URLs.
 	// Gate on attachments readiness so refresh restore does not resolve against an empty tree.
 	const { urlResolver } = useImageUrlResolver({
-		attachments,
+		attachments: imageLookupAttachments as unknown as AttachmentFile[],
 		relativeFilePath: noteFilePath,
 		isReady:
 			Boolean(selectedProjectId && noteFilePath) &&
@@ -553,6 +653,7 @@ export function RecordingSummaryFloatPanel() {
 					attachments={attachments}
 					attachmentList={attachmentList}
 					checkNowDebounced={checkNowDebounced}
+					onImageUploadSuccess={handleImageUploadSuccess}
 					recordSummaryFileStore={recordSummaryFileStore}
 					currentDocumentPath={noteFilePath}
 					folderPath={
@@ -560,6 +661,7 @@ export function RecordingSummaryFloatPanel() {
 					}
 					urlResolver={urlResolver}
 					resolveImagesFolderParentId={resolveImagesFolderParentId}
+					requireImagesFolderParentId
 				/>
 			</>
 		)
@@ -610,6 +712,7 @@ export function RecordingSummaryFloatPanel() {
 				attachments={attachments}
 				attachmentList={attachmentList}
 				checkNowDebounced={checkNowDebounced}
+				onImageUploadSuccess={handleImageUploadSuccess}
 				recordSummaryFileStore={recordSummaryFileStore}
 				urlResolver={urlResolver}
 				currentDocumentPath={noteFilePath}
@@ -617,6 +720,7 @@ export function RecordingSummaryFloatPanel() {
 				editorRef={editorRef}
 				onSave={handleSave}
 				resolveImagesFolderParentId={resolveImagesFolderParentId}
+				requireImagesFolderParentId
 				isAudioProjectMode={isAudioRecordingProject}
 				transcriptionEnabled={recordingSummaryStore.businessData.transcriptionEnabled}
 				isEnablingTranscription={isEnablingTranscription}

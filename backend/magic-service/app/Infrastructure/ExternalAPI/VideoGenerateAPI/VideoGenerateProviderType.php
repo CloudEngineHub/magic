@@ -15,6 +15,7 @@ enum VideoGenerateProviderType: string
     case Cloudsway = 'Cloudsway';
     case DashScope = 'DashScope';
     case Keling = 'Keling';
+    case MiniMax = 'MiniMax';
     case VolcengineArk = 'VolcengineArk';
 
     public static function fromProviderCode(ProviderCode $providerCode, ?string $modelVersion = null): self
@@ -23,6 +24,7 @@ enum VideoGenerateProviderType: string
             ProviderCode::Cloudsway => self::Cloudsway,
             ProviderCode::DashScope => self::DashScope,
             ProviderCode::Keling => self::Keling,
+            ProviderCode::MiniMax => self::MiniMax,
             ProviderCode::VolcengineArk => self::VolcengineArk,
             default => throw new InvalidArgumentException(sprintf(
                 'unsupported video provider code %s for model %s',

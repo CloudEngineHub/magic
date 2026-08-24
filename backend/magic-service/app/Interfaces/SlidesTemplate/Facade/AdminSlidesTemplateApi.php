@@ -39,7 +39,6 @@ class AdminSlidesTemplateApi extends AbstractApi
             $result['page'],
             $result['total'],
             true,
-            false,
             $result['categories']
         )->toArray();
     }
