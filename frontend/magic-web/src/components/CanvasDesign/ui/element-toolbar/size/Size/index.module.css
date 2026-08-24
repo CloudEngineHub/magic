@@ -55,11 +55,11 @@
 	height: 32px !important;
 	padding-right: var(--spacing-3, 12px) !important;
 	padding-left: 32px !important;
+	text-align: right;
 }
 
 .input-wrapper.autoFillWrapper .input {
 	padding-right: var(--spacing-2, 8px) !important;
-	padding-left: 54px !important;
 }
 
 /* 隐藏 Chrome, Safari, Edge, Opera 的数字输入框箭头 */
