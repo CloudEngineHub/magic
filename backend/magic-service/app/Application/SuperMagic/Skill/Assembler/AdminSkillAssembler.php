@@ -317,7 +317,7 @@ class AdminSkillAssembler
             publisherType: $entity->getPublisherType()->value,
             categoryIds: $categoryIds,
             publishStatus: $entity->getPublishStatus()->value,
-            installCount: $entity->getInstallCount(),
+            installCount: $entity->getTotalInstallCount(),
             sortOrder: $entity->getSortOrder(),
             isFeatured: $entity->isFeatured(),
             isHidden: $entity->isHidden(),
