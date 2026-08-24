@@ -172,6 +172,64 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
     }
 
     /**
+     * 获取仅通过发布可见性共享的技能代码。
+     *
+     * operation_permissions 中明确授权的技能由 collaborated 作用域负责，
+     * 不应继续出现在新的 team_shared 作用域中。
+     *
+     * @return array{codes: array<string>, operations: array<string, Operation>}
+     */
+    protected function getTeamSharedVisibleSkillCodes(SkillDataIsolation $dataIsolation): array
+    {
+        /** @var array{operations: array<string, Operation>, operation_codes: array<string>, visibility_codes: array<string>} $accessibleSkillResult */
+        $accessibleSkillResult = $this->resourceAccessPolicyService->getReadableResourceCodes(
+            $dataIsolation,
+            OperationPermissionResourceType::Skill,
+            ResourceVisibilityResourceType::SKILL
+        );
+        $currentUserSkillCodes = $this->skillDomainService->findCurrentUserSkillCodes($dataIsolation);
+        $excludedCodes = array_merge(
+            $currentUserSkillCodes,
+            $accessibleSkillResult['operation_codes'] ?? [],
+            $this->skillMarketDomainService->getOfficialBuiltinSkillCodes()
+        );
+
+        return [
+            'codes' => array_values(array_diff($accessibleSkillResult['visibility_codes'] ?? [], $excludedCodes)),
+            'operations' => [],
+        ];
+    }
+
+    /**
+     * 获取当前用户明确参与协作的技能代码。
+     *
+     * @return array{codes: array<string>, operations: array<string, Operation>}
+     */
+    protected function getCollaboratedSkillCodes(SkillDataIsolation $dataIsolation): array
+    {
+        /** @var array{operations: array<string, Operation>, operation_codes: array<string>} $accessibleSkillResult */
+        $accessibleSkillResult = $this->resourceAccessPolicyService->getReadableResourceCodes(
+            $dataIsolation,
+            OperationPermissionResourceType::Skill,
+            ResourceVisibilityResourceType::SKILL
+        );
+        $creatorSkillCodes = $this->skillDomainService->findCurrentUserCreatedSkillCodes($dataIsolation);
+        $codes = array_values(array_diff(
+            $accessibleSkillResult['operation_codes'] ?? [],
+            $creatorSkillCodes,
+            $this->skillMarketDomainService->getOfficialBuiltinSkillCodes()
+        ));
+
+        return [
+            'codes' => $codes,
+            'operations' => array_intersect_key(
+                $accessibleSkillResult['operations'] ?? [],
+                array_fill_keys($codes, true)
+            ),
+        ];
+    }
+
+    /**
      * 获取市场已安装的技能代码。
      *
      * @return array<string>

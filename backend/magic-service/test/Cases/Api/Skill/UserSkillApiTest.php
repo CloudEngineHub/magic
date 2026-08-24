@@ -760,6 +760,146 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
     }
 
+    public function testQueriesCollaboratedScope(): void
+    {
+        $collaboratorUserId = $this->switchUserTest1();
+
+        $this->switchUserTest2();
+        $ownerHeaders = $this->getCommonHeaders();
+        $collaboratedSkillCode = $this->createTestSkill();
+        $publishedInfoResponse = $this->put(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/info',
+            [
+                'name_i18n' => [
+                    'zh_CN' => '协作已发布名称',
+                    'en_US' => 'Collaborated Published Name',
+                ],
+                'description_i18n' => [
+                    'zh_CN' => '协作已发布描述',
+                    'en_US' => 'Collaborated Published Description',
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $publishedInfoResponse['code'], $publishedInfoResponse['message'] ?? '');
+        $publishCollaboratedResponse = $this->publishSkillVersion($collaboratedSkillCode, '1.0.0', 'ORGANIZATION');
+        $this->assertEquals(1000, $publishCollaboratedResponse['code'], $publishCollaboratedResponse['message'] ?? '');
+        $draftInfoResponse = $this->put(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/info',
+            [
+                'name_i18n' => [
+                    'zh_CN' => '协作草稿名称',
+                    'en_US' => 'Collaborated Draft Name',
+                ],
+                'description_i18n' => [
+                    'zh_CN' => '协作草稿描述',
+                    'en_US' => 'Collaborated Draft Description',
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $draftInfoResponse['code'], $draftInfoResponse['message'] ?? '');
+        $visibilityOnlySkillCode = $this->createTestSkill();
+
+        $addCollaboratorResponse = $this->post(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                        'role' => 'viewer',
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $addCollaboratorResponse['code'], $addCollaboratorResponse['message'] ?? '');
+
+        $publishResponse = $this->publishSkillVersion($visibilityOnlySkillCode, '1.0.0', 'ORGANIZATION');
+        $this->assertEquals(1000, $publishResponse['code'], $publishResponse['message'] ?? '');
+
+        $this->switchUserTest1();
+        $collaboratorHeaders = $this->getCommonHeaders();
+        $createdSkillCode = $this->createTestSkill();
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'collaborated',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $collaboratorHeaders
+        );
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $skillCodes = array_column($response['data']['list'], 'code');
+        $this->assertContains($collaboratedSkillCode, $skillCodes, '协作者技能应出现在 collaborated 列表中');
+        $this->assertNotContains($visibilityOnlySkillCode, $skillCodes, '仅可见技能不应出现在 collaborated 列表中');
+        $this->assertNotContains($createdSkillCode, $skillCodes, '本人创建技能不应出现在 collaborated 列表中');
+
+        $collaboratedSkill = null;
+        foreach ($response['data']['list'] as $item) {
+            if (($item['code'] ?? null) === $collaboratedSkillCode) {
+                $collaboratedSkill = $item;
+                break;
+            }
+        }
+        $this->assertNotNull($collaboratedSkill);
+        $this->assertSame('viewer', $collaboratedSkill['user_role'] ?? null);
+        $this->assertSame('协作已发布名称', $collaboratedSkill['name_i18n']['zh_CN'] ?? null);
+        $this->assertSame('Collaborated Published Name', $collaboratedSkill['name_i18n']['en_US'] ?? null);
+        $this->assertSame('1.0.0', $collaboratedSkill['latest_version'] ?? null);
+
+        $teamSharedResponse = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'team_shared',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $collaboratorHeaders
+        );
+        $this->assertEquals(1000, $teamSharedResponse['code'], $teamSharedResponse['message'] ?? '');
+        $this->assertContains(
+            $visibilityOnlySkillCode,
+            array_column($teamSharedResponse['data']['list'], 'code'),
+            '仅可见技能应出现在 team_shared 列表中'
+        );
+        $this->assertNotContains(
+            $collaboratedSkillCode,
+            array_column($teamSharedResponse['data']['list'], 'code'),
+            '仅协作授权技能不应出现在 team_shared 列表中'
+        );
+
+        $removeCollaboratorResponse = $this->delete(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $removeCollaboratorResponse['code'], $removeCollaboratorResponse['message'] ?? '');
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'collaborated',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $collaboratorHeaders
+        );
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertNotContains($collaboratedSkillCode, array_column($response['data']['list'], 'code'));
+    }
+
     public function testQueriesMarketInstalled(): void
     {
         $storeSkillData = $this->createPublishedStoreSkill();

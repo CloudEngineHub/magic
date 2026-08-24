@@ -33,6 +33,11 @@ function buildMySkillsTabItems(variant: UseMySkillsTabsParams["variant"]): MySki
 				testId: "my-skills-mobile-tab-created-by-me",
 			},
 			{
+				value: MY_SKILLS_TAB_VALUES.collaborated,
+				labelKey: "mySkills.tabs.collaborated",
+				testId: "my-skills-mobile-tab-collaborated",
+			},
+			{
 				value: MY_SKILLS_TAB_VALUES.sharedByTeam,
 				labelKey: "mySkills.tabs.sharedByTeam",
 				testId: "my-skills-mobile-tab-shared-by-team",
@@ -50,6 +55,11 @@ function buildMySkillsTabItems(variant: UseMySkillsTabsParams["variant"]): MySki
 			value: MY_SKILLS_TAB_VALUES.createdByMe,
 			labelKey: "mySkills.tabs.createdByMe",
 			testId: "my-skills-tab-created-by-me",
+		},
+		{
+			value: MY_SKILLS_TAB_VALUES.collaborated,
+			labelKey: "mySkills.tabs.collaborated",
+			testId: "my-skills-tab-collaborated",
 		},
 		{
 			value: MY_SKILLS_TAB_VALUES.sharedByTeam,
@@ -141,6 +151,7 @@ export function useMySkillsTabs({ variant }: UseMySkillsTabsParams) {
 		setCreatedByMeTab,
 		tabCount: tabItems.length,
 		isCreatedByMeTab: activeTab === MY_SKILLS_TAB_VALUES.createdByMe,
+		isCollaboratedTab: activeTab === MY_SKILLS_TAB_VALUES.collaborated,
 		isFromSkillsLibraryTab: activeTab === MY_SKILLS_TAB_VALUES.fromSkillsLibrary,
 	}
 }

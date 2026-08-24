@@ -96,7 +96,7 @@ export interface SkillDetailView {
 	isCreator?: boolean
 }
 
-export type UserSkillsListScope = "created" | "team-shared" | "market-installed"
+export type UserSkillsListScope = "created" | "team-shared" | "collaborated" | "market-installed"
 
 export class SkillsService {
 	async getStoreSkills(params: GetStoreSkillsParams = {}): Promise<PagedSkills<StoreSkillView>> {
@@ -115,6 +115,10 @@ export class SkillsService {
 
 	async getTeamSharedSkills(params: GetSkillsParams = {}): Promise<PagedSkills<UserSkillView>> {
 		return this.getUserSkillsByScope("team-shared", params)
+	}
+
+	async getCollaboratedSkills(params: GetSkillsParams = {}): Promise<PagedSkills<UserSkillView>> {
+		return this.getUserSkillsByScope("collaborated", params)
 	}
 
 	async getMarketInstalledSkills(
@@ -331,11 +335,13 @@ export class SkillsService {
 	private fetchUserSkillsByScope(scope: UserSkillsListScope, params: GetSkillsParams = {}) {
 		switch (scope) {
 			case "created":
-				return SkillsApi.getCreatedSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "created" })
 			case "team-shared":
-				return SkillsApi.getTeamSharedSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "team_shared" })
+			case "collaborated":
+				return SkillsApi.getUserSkills({ ...params, scope: "collaborated" })
 			case "market-installed":
-				return SkillsApi.getMarketInstalledSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "market_installed" })
 		}
 	}
 

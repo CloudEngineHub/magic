@@ -311,6 +311,7 @@
 		"subscribe": "订阅",
 		"subtitle": "您的专属专业技能集合。",
 		"tabs": {
+			"collaborated": "我协作的",
 			"createdByMe": "我创建的",
 			"fromSkillsLibrary": "来自技能库",
 			"sharedByTeam": "团队共享"

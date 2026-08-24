@@ -312,6 +312,7 @@
 		"subscribe": "Subscribe",
 		"subtitle": "Your personalized collection of specialized professional expertise.",
 		"tabs": {
+			"collaborated": "Collaborated",
 			"createdByMe": "Created by Me",
 			"fromSkillsLibrary": "From Skills Library",
 			"sharedByTeam": "Shared by Team"

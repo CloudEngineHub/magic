@@ -24,6 +24,9 @@ export type SkillSourceType =
 	| "SYSTEM"
 	| "CREW_IMPORT"
 
+/** User skill list scope. */
+export type SkillListScope = "all" | "created" | "team_shared" | "collaborated" | "market_installed"
+
 /** Publish status */
 export type SkillPublishStatus = "PUBLISHED" | "UNPUBLISHED"
 
@@ -116,6 +119,8 @@ export interface GetSkillsParams {
 	keyword?: string
 	/** Filter by source type; omit for all */
 	source_type?: SkillSourceType
+	/** Explicit list scope for the unified user skills endpoint. */
+	scope?: SkillListScope
 }
 
 /** Single user skill item */
@@ -457,6 +462,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * Endpoint: POST /api/v1/skills/queries/created
 	 * latest_version is the newest published version or an empty string.
 	 * @param params Query parameters
+	 * @deprecated Use getUserSkills({ ...params, scope: "created" }) instead.
 	 */
 	getCreatedSkills(params: GetSkillsParams = {}) {
 		return fetch.post<GetSkillsResponse>(
@@ -466,10 +472,19 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * Get user skills by an explicit scope.
+	 * Endpoint: POST /api/v1/skills/queries
+	 */
+	getUserSkills(params: GetSkillsParams = {}) {
+		return fetch.post<GetSkillsResponse>(genRequestUrl("/api/v1/skills/queries"), params)
+	},
+
+	/**
 	 * Get team-shared skills visible to the current user.
 	 * Endpoint: POST /api/v1/skills/queries/team-shared
 	 * Data is based on the current published snapshot, not local drafts.
 	 * @param params Query parameters
+	 * @deprecated Use getUserSkills({ ...params, scope: "team_shared" }) instead.
 	 */
 	getTeamSharedSkills(params: GetSkillsParams = {}) {
 		return fetch.post<GetSkillsResponse>(
@@ -483,6 +498,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * Endpoint: POST /api/v1/skills/queries/market-installed
 	 * Data is based on the current published snapshot, not local drafts.
 	 * @param params Query parameters
+	 * @deprecated Use getUserSkills({ ...params, scope: "market_installed" }) instead.
 	 */
 	getMarketInstalledSkills(params: GetSkillsParams = {}) {
 		return fetch.post<GetSkillsResponse>(
