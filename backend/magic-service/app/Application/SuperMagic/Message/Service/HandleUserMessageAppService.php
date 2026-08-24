@@ -17,8 +17,8 @@ use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Task\DTO\InterruptClientNotification;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
+use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
 use App\Domain\Chat\DTO\Message\ChatMessage\UserToolCallMessage;
-use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
@@ -36,7 +36,6 @@ use App\Domain\SuperMagic\File\Service\UpsertProjectFileNodeDTO;
 use App\Domain\SuperMagic\Message\Entity\TaskMessageEntity;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\ChatInstruction;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
-use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
@@ -80,6 +79,7 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly TaskDomainService $taskDomainService,
         private readonly MagicDepartmentUserDomainService $departmentUserDomainService,
         private readonly TopicTaskAppService $topicTaskAppService,
+        private readonly TopicAgentConfigResolver $topicAgentConfigResolver,
         private readonly AgentDomainService $agentDomainService,
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
@@ -251,27 +251,30 @@ class HandleUserMessageAppService extends AbstractAppService
         if (empty($taskId)) {
             // Fresh path (WebSocket): create task + persist user message in this service
             $taskEntity = $this->initializeChatTask($dataIsolation, $topicEntity, $userMessageDTO);
-            // Request-level topic_pattern must also win on the WebSocket path. This keeps
-            // built-in modes such as micro-app independent from a Topic's historical mode.
-            [$agentMode, $resolvedAgentCode] = $this->resolveRequestedAgentConfig($topicEntity, $userMessageDTO->getExtra());
+            $topicAgentConfig = $this->topicAgentConfigResolver->resolve(
+                topicEntity: $topicEntity,
+                extra: $userMessageDTO->getExtra(),
+            );
         } else {
             // Reuse path (HTTP queue): task already created and user message already persisted
             $taskEntity = $this->taskDomainService->getTaskById($taskId);
             if (is_null($taskEntity)) {
                 ExceptionBuilder::throw(SuperAgentErrorCode::TASK_NOT_FOUND, 'task.task_not_found');
             }
-            // Request-level extra (topic_pattern / agent_code) overrides persisted topic config
-            [$agentMode, $resolvedAgentCode] = $this->resolveRequestedAgentConfig($topicEntity, $userMessageDTO->getExtra());
+            $topicAgentConfig = $this->topicAgentConfigResolver->resolve(
+                topicEntity: $topicEntity,
+                extra: $userMessageDTO->getExtra(),
+            );
         }
 
-        $topicPattern = trim((string) ($userMessageDTO->getExtra()?->getTopicPattern() ?? $userMessageDTO->getTopicMode()));
+        $topicPattern = $topicAgentConfig->topicMode;
         [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
             SuperMagicAgentDataIsolation::create(
                 $dataIsolation->getCurrentOrganizationCode(),
                 $dataIsolation->getCurrentUserId()
             ),
             $topicPattern,
-            $resolvedAgentCode
+            $topicAgentConfig->agentCode
         );
         if (! $allowed) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
@@ -287,13 +290,13 @@ class HandleUserMessageAppService extends AbstractAppService
             sandboxId: $topicEntity->getSandboxId(),
             taskId: (string) $taskEntity->getId(),
             instruction: ChatInstruction::FollowUp,
-            agentMode: $agentMode,
+            agentMode: $topicAgentConfig->topicMode,
             mcpConfig: [],
             modelId: $userMessageDTO->getModelId(),
             messageId: $userMessageDTO->getMessageId(),
             isFirstTask: $isFirstTask,
             extra: $userMessageDTO->getExtra(),
-            agentCode: $resolvedAgentCode,
+            agentCode: $topicAgentConfig->agentCode,
             messageSubscriptionConfig: $userMessageDTO->getMessageSubscriptionConfig(),
         );
         $taskContext = $this->appendVideoModelDynamicConfig($taskContext, $userMessageDTO->getExtra());
@@ -307,7 +310,7 @@ class HandleUserMessageAppService extends AbstractAppService
 
         // Write agent_code into dynamicConfig independently (always pass through, regardless of skills)
         $dynamicConfig = $taskContext->getDynamicConfig();
-        $dynamicConfig['agent_code'] = $resolvedAgentCode;
+        $dynamicConfig['agent_code'] = $topicAgentConfig->agentCode;
         $taskContext = $taskContext->setDynamicConfig($dynamicConfig);
 
         // Append skill dynamic config independently (separate from agent_code and MCP config)
@@ -419,53 +422,25 @@ class HandleUserMessageAppService extends AbstractAppService
 
         $taskEntity = TaskEntity::fromArray($data);
 
-        // Resolve agent_code before initTopicTask (no dependency on task initialization)
-        $agentCode = $userMessageDTO->getExtra()?->getAgentCode() ?? '';
+        $topicAgentConfig = $this->topicAgentConfigResolver->resolve(
+            topicEntity: $topicEntity,
+            extra: $userMessageDTO->getExtra(),
+            fallbackTopicMode: $userMessageDTO->getTopicMode(),
+        );
 
         // Initialize task
         $taskEntity = $this->taskDomainService->initTopicTask(
             dataIsolation: $dataIsolation,
             topicEntity: $topicEntity,
             taskEntity: $taskEntity,
-            topicMode: $userMessageDTO->getTopicMode(),
-            agentCode: $agentCode
+            topicMode: $topicAgentConfig->topicMode,
+            agentCode: $topicAgentConfig->agentCode
         );
 
         // Save user information
         $this->saveUserMessage($dataIsolation, $taskEntity, $userMessageDTO);
 
         return $taskEntity;
-    }
-
-    /**
-     * Resolve the effective agent mode/code for the current request.
-     *
-     * Request-level extra (topic_pattern / agent_code) overrides the persisted topic
-     * config; SMA-* is normalized to custom_agent + agent_code. Mirrors the logic
-     * previously living in TaskInitializationConsumer so the HTTP queue flow keeps the
-     * same behavior after converging on handleChatMessage.
-     *
-     * @return array{0: string, 1: string} [agentMode, agentCode]
-     */
-    private function resolveRequestedAgentConfig(TopicEntity $topicEntity, ?SuperAgentExtra $extra): array
-    {
-        $extraTopicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
-        $agentMode = $extraTopicPattern !== '' ? $extraTopicPattern : trim((string) $topicEntity->getTopicMode());
-        $extraAgentCode = trim((string) ($extra?->getAgentCode() ?? ''));
-        $agentCode = $extraAgentCode !== '' ? $extraAgentCode : trim((string) $topicEntity->getAgentCode());
-
-        if ($agentMode !== '' && str_starts_with($agentMode, 'SMA-')) {
-            $agentCode = $agentMode;
-            $agentMode = ProjectMode::CUSTOM_AGENT->value;
-        }
-
-        // micro-app is a built-in runtime mode. It must never inherit a stale custom
-        // employee code from the Topic or request and therefore never enters Crew logic.
-        if ($agentMode === ProjectMode::MICRO_APP->value) {
-            $agentCode = '';
-        }
-
-        return [$agentMode, $agentCode];
     }
 
     /**
