@@ -264,4 +264,31 @@ describe("useCanvasEventListeners connection changes", () => {
 			expect.objectContaining({ source: "document:restored" }),
 		)
 	})
+
+	it("does not flush a destroyed canvas during cleanup", async () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		const onPatch = vi.fn()
+		const onChange = vi.fn()
+		const rendered = render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={onPatch} onChange={onChange} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("element:change")).toBe(1)
+		})
+
+		act(() => {
+			eventEmitter.emit({
+				type: "element:change",
+				data: { elementIds: ["element-1"], phase: "commit" },
+			})
+		})
+		;(canvas as unknown as { isDestroyed: boolean }).isDestroyed = true
+		rendered.unmount()
+
+		expect(onPatch).not.toHaveBeenCalled()
+		expect(onChange).not.toHaveBeenCalled()
+	})
 })

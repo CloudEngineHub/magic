@@ -194,6 +194,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		const deletedElementIds = Array.from(pendingDeletedElementIdsRef.current)
 		pendingDeletedElementIdsRef.current.clear()
 		if (!canvas || readonlyRef.current) return
+		if (canvas.isDestroyed) return
 		const metaWithDeletedElementIds: CanvasDesignDataChangeMeta | undefined =
 			meta || deletedElementIds.length > 0
 				? {

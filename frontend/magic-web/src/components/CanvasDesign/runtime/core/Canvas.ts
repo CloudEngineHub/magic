@@ -135,6 +135,8 @@ function getElementResourceReferencePath(element: LayerElement | undefined): str
  * Canvas类 - 封装Konva画布的初始化和管理
  */
 export class Canvas {
+	private destroyed = false
+
 	public container: HTMLDivElement
 	public stage: Konva.Stage
 
@@ -218,6 +220,10 @@ export class Canvas {
 	public readonly: boolean
 	public deviceInfo: CanvasDeviceInfo
 	public id: string
+
+	public get isDestroyed(): boolean {
+		return this.destroyed
+	}
 
 	public t?: TFunction
 	private scopeElement: HTMLElement
@@ -1501,6 +1507,9 @@ export class Canvas {
 	 * 销毁画布
 	 */
 	public destroy(): void {
+		if (this.destroyed) return
+		this.destroyed = true
+
 		this.mediaEditRecoveryManager.clearAll()
 		this.visibilityManager.destroy()
 		this.imagePresentationScheduler.destroy()
