@@ -323,15 +323,7 @@ export class VideoGeneratorTool extends BaseTool {
 		}
 
 		if (options?.ensureInViewport !== false) {
-			requestAnimationFrame(() => {
-				const isInViewport = this.canvas.viewportController.isElementInViewport([elementId])
-				if (!isInViewport) {
-					this.canvas.viewportController.moveElementToViewport([elementId], {
-						animated: true,
-						padding: { top: 50, right: 50, bottom: 50, left: 100 },
-					})
-				}
-			})
+			this.ensureElementVisible(elementId)
 		}
 
 		if (options?.completeTask !== false) {

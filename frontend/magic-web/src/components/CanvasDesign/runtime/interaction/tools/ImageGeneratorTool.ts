@@ -353,17 +353,8 @@ export class ImageGeneratorTool extends BaseTool {
 			this.canvas.selectionManager?.select(elementId)
 		}
 
-		// 在下一帧检查可视性；行为与图层列表点击定位保持一致
 		if (options?.ensureInViewport !== false) {
-			requestAnimationFrame(() => {
-				const isInViewport = this.canvas.viewportController.isElementInViewport([elementId])
-				if (!isInViewport) {
-					this.canvas.viewportController.moveElementToViewport([elementId], {
-						animated: true,
-						padding: { top: 50, right: 50, bottom: 50, left: 100 },
-					})
-				}
-			})
+			this.ensureElementVisible(elementId)
 		}
 
 		// 创建完成后切回选择工具
