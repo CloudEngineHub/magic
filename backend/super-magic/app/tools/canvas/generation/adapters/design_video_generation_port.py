@@ -21,6 +21,7 @@ from app.tools.canvas.generation.ports.query_port import GenerationQueryPort
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
 from app.tools.canvas.generation.video_filename import build_video_filename
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
+from app.tools.canvas.infrastructure.workspace import CanvasWorkspaceDirectoryManager
 from app.tools.video_generation_utils.video_input_utils import VideoInputPayloadBuilder
 
 logger = get_logger(__name__)
@@ -38,12 +39,16 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         self._payload_builder = DesignVideoPayloadBuilder(workspace)
         self._project_identity_resolver = ProjectIdentityResolver()
         self._asset_path_resolver = ProjectAssetPathResolver(workspace)
+        self._workspace_directories = CanvasWorkspaceDirectoryManager(workspace)
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """提交 Design 视频任务并保存服务返回的视频 ID。"""
         provider_task_id = f"vid_{uuid.uuid4().hex[:16]}"
         try:
             project = self._project_identity_resolver.resolve(request.project_path)
+            project_id = self._payload_builder.resolve_project_id(tool_context)
+            await self._workspace_directories.ensure_media_directories(project.project_path)
+            await self._ensure_remote_media_directories(project_id, project.project_path)
             output_filename = build_video_filename(request.parameters.name, provider_task_id, request.content_id)
             payload = self._payload_builder.build(
                 request.project_path,
@@ -134,6 +139,21 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             request_metadata={"outputFilename": output_filename},
         )
 
+    async def _ensure_remote_media_directories(self, project_id: str, project_path: str) -> None:
+        """确保 Magic Service 文件树存在 Canvas 的媒体目录。"""
+        for media_directory in CanvasWorkspaceDirectoryManager.REQUIRED_DIRECTORIES:
+            directory_parts = CanvasWorkspaceDirectoryManager.project_directory_parts(
+                project_path,
+                media_directory,
+            )
+            await self._client.ensure_project_directories(project_id, directory_parts)
+        logger.debug(
+            "Canvas Design 视频工作区目录已准备: project_id={} project_path={} directories={}",
+            project_id,
+            project_path,
+            CanvasWorkspaceDirectoryManager.REQUIRED_DIRECTORIES,
+        )
+
     async def _build_transport_payload(
         self,
         persisted_payload: dict[str, Any],
@@ -182,6 +202,7 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         """查询 Design 视频状态，仅本地调试模式下载结果文件。"""
         try:
             project_id = self._payload_builder.resolve_project_id(tool_context)
+            await self._workspace_directories.ensure_media_directories(request.project_path)
         except Exception as error:
             logger.exception(
                 "Canvas Design 视频查询请求构造失败: project_path={} content_id={} provider_video_id={} error={}",

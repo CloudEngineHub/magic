@@ -15,6 +15,7 @@ from app.tools.canvas.generation.contracts.generation_query_request import Gener
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.production.adapters.design_video_point_estimate_port import DesignVideoPointEstimatePort
 from app.tools.canvas.production.contracts import NormalizedVideoProductionRequest
+from app.tools.canvas.repository import CanvasRepository
 from app.tools.video_generation_utils.video_input_utils import VideoInputPayloadBuilder
 
 
@@ -184,6 +185,11 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     monkeypatch.setenv("ENABLE_LOCAL_DEBUG_MODE", "true")
     calls: dict[str, object] = {}
 
+    async def ensure_directories(self, project_id, directory_parts):
+        """记录远端项目目录准备调用。"""
+        calls.setdefault("directories", []).append((project_id, directory_parts))
+        return "mock-directory-id"
+
     async def generate(self, payload):
         """返回 mock Design 提交结果。"""
         calls["submit"] = payload
@@ -203,7 +209,9 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     monkeypatch.setattr(MagicServiceClient, "generate_design_video", generate)
     monkeypatch.setattr(MagicServiceClient, "query_video_generation_result", query)
     monkeypatch.setattr(MagicServiceClient, "download_url_to_path", download)
+    monkeypatch.setattr(MagicServiceClient, "ensure_project_directories", ensure_directories)
 
+    await CanvasRepository(tmp_path).initialize("mock-project")
     port = DesignVideoGenerationPort(tmp_path)
     submission = await port.submit(
         GenerationRequest(
@@ -225,6 +233,10 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     assert len(calls["submit"]["video_id"]) == 20
     assert output_filename.startswith("城市街景-vid_")
     assert calls["submit"]["project_id"] == "magic-project-1"
+    assert calls["directories"] == [
+        ("magic-project-1", ["mock-project", "images"]),
+        ("magic-project-1", ["mock-project", "videos"]),
+    ]
     assert calls["query"] == ("magic-project-1", "remote-video-1")
     assert result.status == "completed"
     assert result.output_uri == f"./videos/{output_filename}"
@@ -238,6 +250,11 @@ async def test_design_video_generation_uses_magic_service_workspace_file_without
     """部署模式应复用 Magic Service 已归档的工作区文件，不重复下载。"""
     monkeypatch.delenv("ENABLE_LOCAL_DEBUG_MODE", raising=False)
     calls: dict[str, object] = {}
+
+    async def ensure_directories(self, project_id, directory_parts):
+        """记录远端项目目录准备调用。"""
+        calls.setdefault("directories", []).append((project_id, directory_parts))
+        return "mock-directory-id"
 
     async def generate(self, payload):
         """返回 mock Design 提交结果。"""
@@ -259,7 +276,9 @@ async def test_design_video_generation_uses_magic_service_workspace_file_without
     monkeypatch.setattr(MagicServiceClient, "generate_design_video", generate)
     monkeypatch.setattr(MagicServiceClient, "query_video_generation_result", query)
     monkeypatch.setattr(MagicServiceClient, "download_url_to_path", download)
+    monkeypatch.setattr(MagicServiceClient, "ensure_project_directories", ensure_directories)
 
+    await CanvasRepository(tmp_path).initialize("mock-project")
     port = DesignVideoGenerationPort(tmp_path)
     submission = await port.submit(
         GenerationRequest(

@@ -1,8 +1,10 @@
 """工作区素材网关实现。"""
 
+import asyncio
+import hashlib
+import re
 from pathlib import Path
 from stat import S_ISREG
-from uuid import uuid4
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway, MaterializedCanvasAsset
@@ -19,6 +21,7 @@ _MEDIA_EXTENSIONS_BY_TYPE = {
     "video": {".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"},
     "audio": {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"},
 }
+_SAFE_FILENAME_PATTERN = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
 class WorkspaceAssetGateway(AssetGateway):
@@ -65,8 +68,8 @@ class WorkspaceAssetGateway(AssetGateway):
                 created=False,
             )
 
-        # 使用 UUID 生成唯一文件名，避免为大文件完整读取并计算哈希。
-        filename = f"asset-{uuid4().hex}{suffix}"
+        digest = await asyncio.to_thread(self._content_digest, source)
+        filename = self._safe_filename(f"{digest}{suffix}")
         destination = canonical_root / filename
         if await async_exists(destination):
             if not S_ISREG((await async_stat(destination)).st_mode):
@@ -138,6 +141,7 @@ class WorkspaceAssetGateway(AssetGateway):
             )
         return directory
 
+    @staticmethod
     async def _copy_to_destination(source: Path, destination: Path) -> bool:
         """直接复制素材内容到项目目录，兼容普通目录和 S3 挂载目录。"""
         try:
@@ -146,3 +150,18 @@ class WorkspaceAssetGateway(AssetGateway):
         except Exception:
             await async_unlink(destination)
             raise
+
+    @staticmethod
+    def _content_digest(path: Path) -> str:
+        """以分块读取计算素材内容指纹，保持重复导入幂等。"""
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _safe_filename(value: str) -> str:
+        """将素材名称收窄为稳定的项目文件名。"""
+        normalized = _SAFE_FILENAME_PATTERN.sub("_", value).strip("._")
+        return normalized or "asset"

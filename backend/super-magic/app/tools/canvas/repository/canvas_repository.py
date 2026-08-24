@@ -21,6 +21,7 @@ from app.tools.canvas.infrastructure.persistence.content_metadata_service import
     ContentMetadataService,
 )
 from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
+from app.tools.canvas.infrastructure.workspace import CanvasWorkspaceDirectoryManager
 from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
 from app.utils.async_file_utils import (
     async_exists,
@@ -42,6 +43,7 @@ class CanvasRepository(CanvasRepositoryInterface):
         """初始化工作区级仓储。"""
         self._workspace = workspace
         self._main_file_sanitizer = CanvasMainFileSanitizer()
+        self._workspace_directories = CanvasWorkspaceDirectoryManager(workspace)
 
     @property
     def workspace(self) -> Path:
@@ -51,9 +53,7 @@ class CanvasRepository(CanvasRepositoryInterface):
     async def initialize(self, project_path: str) -> tuple[Path, bool]:
         """创建空项目；已存在合法项目时返回未修改状态。"""
         path = CanvasPathResolver.resolve(self.workspace, project_path)
-        from app.utils.async_file_utils import async_mkdir
-
-        await async_mkdir(path, parents=True, exist_ok=True)
+        await self._workspace_directories.ensure_project(project_path)
         project_file = path / "magic.project.js"
         if await async_exists(project_file):
             await self.read(project_path)
@@ -69,6 +69,7 @@ class CanvasRepository(CanvasRepositoryInterface):
         project_file = path / "magic.project.js"
         if not await async_exists(project_file):
             raise FileNotFoundError("PROJECT_NOT_FOUND")
+        await self._workspace_directories.ensure_media_directories(project_path)
         return CanvasCodec.decode(await async_read_text(project_file, encoding="utf-8"))
 
     async def transaction(
