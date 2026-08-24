@@ -350,6 +350,7 @@ class SkillApi extends AbstractApi
             pageSize: $result['page_size'],
             total: $result['total'],
             memberDepartmentMap: $result['member_department_map'] ?? [],
+            categoryMap: $result['category_map'] ?? [],
         )->toArray();
     }
 

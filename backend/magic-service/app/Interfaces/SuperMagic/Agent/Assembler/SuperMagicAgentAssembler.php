@@ -425,6 +425,7 @@ class SuperMagicAgentAssembler
                 publishedAt: $version->getPublishedAt(),
                 isCurrentVersion: $version->isCurrentVersion(),
                 versionDescriptionI18n: $version->getVersionDescriptionI18n(),
+                versionDescription: $version->getI18nVersionDescription(CoContext::getLanguage()),
                 publishTargetValue: $enrichedPublishTargetValue,
                 categories: self::buildCategoryInfoDTOs($version, $categoryMap),
             );

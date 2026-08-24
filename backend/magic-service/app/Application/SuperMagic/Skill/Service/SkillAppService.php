@@ -24,6 +24,7 @@ use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
@@ -38,6 +39,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Domain\SuperMagic\Skill\Event\SkillImportedEvent;
+use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
@@ -128,6 +130,7 @@ class SkillAppService extends AbstractSkillAppService
         protected TopicDomainService $topicDomainService,
         protected TaskDomainService $taskDomainService,
         protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
+        protected SkillCategoryDomainService $skillCategoryDomainService,
         protected SkillImportService $skillImportService,
         LoggerFactory $loggerFactory
     ) {
@@ -781,7 +784,8 @@ class SkillAppService extends AbstractSkillAppService
      *     page_size: int,
      *     total: int,
      *     user_map: array<string, MagicUserEntity>,
-     *     member_department_map: array<string, MagicDepartmentEntity>
+     *     member_department_map: array<string, MagicDepartmentEntity>,
+     *     category_map: array<int, SkillCategoryEntity>
      * }
      */
     public function queryVersions(RequestContext $requestContext, string $code, QuerySkillVersionsRequestDTO $requestDTO): array
@@ -812,6 +816,7 @@ class SkillAppService extends AbstractSkillAppService
             $organizationCode,
             $versions
         );
+        $categoryMap = $this->loadSkillCategoryMap($versions);
 
         return [
             'list' => $versions,
@@ -820,6 +825,7 @@ class SkillAppService extends AbstractSkillAppService
             'total' => $result['total'],
             'user_map' => $userMap,
             'member_department_map' => $memberDepartmentMap,
+            'category_map' => $categoryMap,
         ];
     }
 
@@ -1148,6 +1154,40 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         return array_values(array_unique(array_merge($skillCodes, $builtinSkillCodes)));
+    }
+
+    /**
+     * @param SkillVersionEntity[] $versions
+     * @return array<int, SkillCategoryEntity>
+     */
+    private function loadSkillCategoryMap(array $versions): array
+    {
+        $versionIds = array_values(array_filter(array_map(
+            static fn (SkillVersionEntity $version): ?int => $version->getId(),
+            $versions
+        )));
+        if ($versionIds === []) {
+            return [];
+        }
+
+        $categoryIdsMap = $this->skillCategoryRelationDomainService->getVersionCategoryIdsMap($versionIds);
+        $categoryIds = array_values(array_unique(array_merge(...array_values($categoryIdsMap) ?: [[]])));
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $categoryMap = [];
+        foreach ($this->skillCategoryDomainService->findByIds($categoryIds) as $category) {
+            if ($category->getId() !== null) {
+                $categoryMap[$category->getId()] = $category;
+            }
+        }
+
+        foreach ($versions as $version) {
+            $version->setCategoryIds($categoryIdsMap[$version->getId() ?? 0] ?? []);
+        }
+
+        return $categoryMap;
     }
 
     /**

@@ -23,6 +23,7 @@ class AgentVersionListItemDTO extends AbstractDTO
         private readonly ?string $publishedAt,
         private readonly bool $isCurrentVersion,
         private readonly ?array $versionDescriptionI18n,
+        private readonly string $versionDescription,
         private readonly ?array $publishTargetValue = null,
         private readonly array $categories = [],
     ) {
@@ -41,6 +42,7 @@ class AgentVersionListItemDTO extends AbstractDTO
             'published_at' => $this->publishedAt,
             'is_current_version' => $this->isCurrentVersion,
             'version_description_i18n' => $this->versionDescriptionI18n,
+            'version_description' => $this->versionDescription,
             'publish_target_value' => $this->publishTargetValue,
             'categories' => array_map(
                 static fn (CategoryInfoDTO $category): array => $category->toArray(),

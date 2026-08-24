@@ -11,6 +11,7 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishStatus;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishTargetValue;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\ReviewStatus;
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use Hyperf\Codec\Json;
@@ -20,6 +21,8 @@ use Hyperf\Codec\Json;
  */
 class AgentVersionEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /**
      * @var int 主键 ID（版本ID，雪花ID）
      */
@@ -507,6 +510,11 @@ class AgentVersionEntity extends AbstractEntity
     public function getVersionDescriptionI18n(): ?array
     {
         return $this->versionDescriptionI18n;
+    }
+
+    public function getI18nVersionDescription(string $language): string
+    {
+        return $this->resolveI18nText($this->versionDescriptionI18n, $language);
     }
 
     public function setVersionDescriptionI18n(?array $versionDescriptionI18n): self

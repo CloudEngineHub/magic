@@ -10,13 +10,16 @@ namespace App\Interfaces\SuperMagic\Skill\Assembler;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
+use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
+use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
+use App\Interfaces\SuperMagic\Skill\DTO\Response\CategoryInfoDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\LatestPublishedSkillVersionItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\LatestPublishedSkillVersionsResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\PublishSkillResponseDTO;
@@ -344,7 +347,9 @@ class SkillAssembler
         int $pageSize,
         int $total,
         array $memberDepartmentMap = [],
+        array $categoryMap = [],
     ): QuerySkillVersionsResponseDTO {
+        $language = self::getLanguage();
         $list = [];
         foreach ($versions as $version) {
             $enrichedPublishTargetValue = self::buildEnrichedPublishTargetValue(
@@ -364,7 +369,9 @@ class SkillAssembler
                 publishedAt: $version->getPublishedAt(),
                 isCurrentVersion: $version->isCurrentVersion(),
                 versionDescriptionI18n: $version->getVersionDescriptionI18n(),
+                versionDescription: $version->getI18nVersionDescription($language),
                 publishTargetValue: $enrichedPublishTargetValue,
+                categories: self::buildCategoryInfoDTOs($version, $categoryMap, $language),
             );
         }
 
@@ -448,6 +455,28 @@ class SkillAssembler
             isFeatured: $skillMarket->isFeatured(),
             categoryIds: $skillMarket->getCategoryIds(),
         );
+    }
+
+    /**
+     * @param array<int, SkillCategoryEntity> $categoryMap
+     * @return CategoryInfoDTO[]
+     */
+    private static function buildCategoryInfoDTOs(SkillVersionEntity $version, array $categoryMap, string $language): array
+    {
+        $items = [];
+        foreach ($version->getCategoryIds() as $categoryId) {
+            $category = $categoryMap[$categoryId] ?? null;
+            if ($category === null) {
+                continue;
+            }
+
+            $items[] = new CategoryInfoDTO(
+                id: (string) $categoryId,
+                name: $category->getI18nName($language),
+            );
+        }
+
+        return $items;
     }
 
     /**

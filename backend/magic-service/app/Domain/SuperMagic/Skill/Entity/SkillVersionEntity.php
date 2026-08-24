@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Skill\Entity;
 
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetValue;
@@ -502,6 +503,11 @@ class SkillVersionEntity extends AbstractEntity
     public function getVersionDescriptionI18n(): ?array
     {
         return $this->versionDescriptionI18n;
+    }
+
+    public function getI18nVersionDescription(string $language): string
+    {
+        return $this->resolveI18nText($this->versionDescriptionI18n, $language);
     }
 
     public function setVersionDescriptionI18n(?array $versionDescriptionI18n): self

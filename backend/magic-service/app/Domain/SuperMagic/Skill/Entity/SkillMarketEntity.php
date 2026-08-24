@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Skill\Entity;
 
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Infrastructure\Core\AbstractEntity;

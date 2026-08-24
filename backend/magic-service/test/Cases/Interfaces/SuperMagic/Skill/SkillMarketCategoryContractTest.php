@@ -9,12 +9,14 @@ namespace HyperfTest\Cases\Interfaces\SuperMagic\Skill;
 
 use App\Application\SuperMagic\Skill\Service\AdminSkillCategoryAppService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\SuperMagic\Agent\Entity\AgentVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Infrastructure\Util\Context\CoContext;
+use App\Interfaces\SuperMagic\Agent\Assembler\SuperMagicAgentAssembler;
 use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\CreateSkillCategoryRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
@@ -502,6 +504,70 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('temp/skills/example.zip', $payload['file_key']);
         $this->assertSame('https://example.com/skill.zip', $payload['file_url']);
         $this->assertArrayNotHasKey('category_ids', $payload);
+    }
+
+    public function testSkillVersionResponseExposesLocalizedDescriptionAndCategories(): void
+    {
+        CoContext::setLanguage('zh_CN');
+        $version = new SkillVersionEntity([
+            'id' => 1,
+            'version' => '1.0.0',
+            'publish_status' => 'PUBLISHED',
+            'review_status' => 'APPROVED',
+            'publish_target_type' => 'MARKET',
+            'version_description_i18n' => [
+                'default' => 'Default description',
+                'zh_CN' => '中文描述',
+            ],
+            'category_ids' => [10, 20],
+        ]);
+        $categories = [
+            10 => (new SkillCategoryEntity())->setId(10)->setNameI18n(['default' => 'Default category', 'zh_CN' => '营销场景']),
+            20 => (new SkillCategoryEntity())->setId(20)->setNameI18n(['default' => 'Default HR', 'zh_CN' => '人力资源']),
+        ];
+
+        $payload = SkillAssembler::createQuerySkillVersionsResponseDTO(
+            versions: [$version],
+            userMap: [],
+            page: 1,
+            pageSize: 10,
+            total: 1,
+            categoryMap: $categories,
+        )->toArray();
+
+        $this->assertSame('中文描述', $payload['list'][0]['version_description']);
+        $this->assertSame([
+            ['id' => '10', 'name' => '营销场景'],
+            ['id' => '20', 'name' => '人力资源'],
+        ], $payload['list'][0]['categories']);
+        $this->assertSame($version->getVersionDescriptionI18n(), $payload['list'][0]['version_description_i18n']);
+    }
+
+    public function testAgentVersionResponseExposesLocalizedDescription(): void
+    {
+        CoContext::setLanguage('zh_CN');
+        $version = new AgentVersionEntity([
+            'id' => 1,
+            'version' => '1.0.0',
+            'publish_status' => 'PUBLISHED',
+            'review_status' => 'APPROVED',
+            'publish_target_type' => 'MARKET',
+            'version_description_i18n' => [
+                'default' => 'Default description',
+                'zh_CN' => '中文描述',
+            ],
+        ]);
+
+        $payload = SuperMagicAgentAssembler::createQueryAgentVersionsResponseDTO(
+            versions: [$version],
+            userMap: [],
+            page: 1,
+            pageSize: 10,
+            total: 1,
+        )->toArray();
+
+        $this->assertSame('中文描述', $payload['list'][0]['version_description']);
+        $this->assertSame($version->getVersionDescriptionI18n(), $payload['list'][0]['version_description_i18n']);
     }
 
     /**
