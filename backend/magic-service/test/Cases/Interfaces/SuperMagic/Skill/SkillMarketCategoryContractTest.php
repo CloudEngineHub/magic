@@ -435,6 +435,17 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertArrayNotHasKey('name_i18n', $tree[0]['children'][0]);
     }
 
+    public function testSkillCategoryResolvesLocalizedNameWithDefaultFallback(): void
+    {
+        $category = (new SkillCategoryEntity())->setNameI18n([
+            'default' => 'Default category',
+            'zh_CN' => '中文分类',
+        ]);
+
+        $this->assertSame('中文分类', $category->getI18nName('zh_CN'));
+        $this->assertSame('Default category', $category->getI18nName('en_US'));
+    }
+
     public function testSkillCategoryParentIdUsesStringForRequestsAndResponses(): void
     {
         $createRules = $this->getValidationRules(CreateSkillCategoryRequestAdminDTO::class);

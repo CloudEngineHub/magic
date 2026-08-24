@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Domain\SuperMagic\Skill\Entity;
+namespace App\Domain\SuperMagic\Common\Entity;
 
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
