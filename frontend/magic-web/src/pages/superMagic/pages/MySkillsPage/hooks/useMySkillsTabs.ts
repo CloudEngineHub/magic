@@ -98,19 +98,24 @@ export function useMySkillsTabs({ variant }: UseMySkillsTabsParams) {
 	useEffect(() => {
 		const requestedTab = getMySkillsRequestedTab(location.search)
 		const requestedPublishPromptSkillCode = getMySkillsPublishPromptSkillCode(location.search)
-		if (!requestedTab && !requestedPublishPromptSkillCode) return
+		const normalizedRequestedTab = normalizeMySkillsTabValue(
+			requestedTab,
+			isPersonalOrganization,
+		)
 
-		if (requestedTab) {
-			setActiveTabState(normalizeMySkillsTabValue(requestedTab, isPersonalOrganization))
-		}
+		setActiveTabState(normalizedRequestedTab)
 		if (requestedPublishPromptSkillCode) {
 			setPublishPromptSkillCode(requestedPublishPromptSkillCode)
 		}
+
+		const shouldNormalizeRequestedTab =
+			requestedTab !== null && normalizedRequestedTab !== requestedTab
+		if (!requestedPublishPromptSkillCode && !shouldNormalizeRequestedTab) return
 		navigate({
 			name: RouteName.MySkills,
 			query: buildMySkillsQuery({
 				search: location.search,
-				tab: null,
+				tab: normalizedRequestedTab,
 				publishSkillCode: null,
 			}),
 			replace: true,
@@ -124,9 +129,19 @@ export function useMySkillsTabs({ variant }: UseMySkillsTabsParams) {
 
 	const setActiveTab = useCallback(
 		(nextTab: MySkillsTabValue) => {
-			setActiveTabState(normalizeMySkillsTabValue(nextTab, isPersonalOrganization))
+			const normalizedTab = normalizeMySkillsTabValue(nextTab, isPersonalOrganization)
+			setActiveTabState(normalizedTab)
+			navigate({
+				name: RouteName.MySkills,
+				query: buildMySkillsQuery({
+					search: location.search,
+					tab: normalizedTab,
+					publishSkillCode: null,
+				}),
+				replace: true,
+			})
 		},
-		[isPersonalOrganization],
+		[isPersonalOrganization, location.search, navigate],
 	)
 
 	const handleTabValueChange = useCallback(
