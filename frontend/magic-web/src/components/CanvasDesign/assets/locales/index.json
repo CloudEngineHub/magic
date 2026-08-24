@@ -624,7 +624,7 @@
 		"failed": "续写视频失败，请重试",
 		"menu": "续写视频",
 		"partialSuccess": "已创建 {{created}} 个，{{failed}} 个失败",
-		"processing": "正在续写视频，请稍候...",
+		"processing": "正在创建续写视频，请稍后",
 		"success": "续写视频已创建"
 	},
 	"videoEditNode": {

@@ -113,10 +113,7 @@ export class VideoContinuationManager {
 		this.abortControllers.add(controller)
 		const isBatch = sources.length > 1
 		const loadingToastId = toast.loading(
-			this.translate(
-				"videoContinuation.processing",
-				isBatch ? "正在批量续写视频，请稍候..." : "正在续写视频，请稍候...",
-			),
+			this.translate("videoContinuation.processing", "正在创建续写视频，请稍后"),
 		)
 		let toastFinalized = false
 
