@@ -21,6 +21,8 @@ describe("Canvas destroy", () => {
 			resizeObserver: null,
 			containerContextMenuHandler: null,
 			stageContextMenuHandler: null,
+			stageBlankClickHandler: null,
+			stageDoubleClickHandler: null,
 			handleWindowClick: null,
 			cropManager: destroyable("cropManager"),
 			extendManager: destroyable("extendManager"),

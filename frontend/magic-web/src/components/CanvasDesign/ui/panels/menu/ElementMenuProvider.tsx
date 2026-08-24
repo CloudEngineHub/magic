@@ -30,6 +30,7 @@ import {
 } from "./resolveCanvasDownloadMenuContext"
 import { getLoadedImageElements } from "../../../runtime/shared/ids"
 import { getActiveImageContent } from "../../../runtime/document/elementContent"
+import { getCreateElementMenuItems, type CreateElementMenuKind } from "./createElementMenuItems"
 
 export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -39,6 +40,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const [isClickEnabled, setIsClickEnabled] = useState(false)
 	const [isCanvasMenu, setIsCanvasMenu] = useState(false)
+	const [isCanvasCreateMenu, setIsCanvasCreateMenu] = useState(false)
 	const [canvasMenuPosition, setCanvasMenuPosition] = useState<{
 		x: number
 		y: number
@@ -55,7 +57,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const triggerRef = useRef<HTMLDivElement>(null)
 
 	const { canvas } = useCanvas()
-	const { permissions } = useMagic()
+	const { imageModelList, permissions, videoModelList } = useMagic()
 	const { readonly, selectedElementIds, setLayerRenamingElementId, setCanvasRenamingElementId } =
 		useCanvasUI()
 
@@ -372,13 +374,61 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		[canvas, readonly, t, canvasMenuPosition],
 	)
 
+	const createElementAtCanvasPoint = useCallback(
+		(kind: CreateElementMenuKind, position?: { x: number; y: number }) => {
+			const targetPosition = position ?? canvasMenuPosition
+			if (!canvas || readonly || !targetPosition) return
+
+			if (kind === "text") {
+				canvas.textEditingManager.startCreatingAt(targetPosition.x, targetPosition.y)
+				return
+			}
+
+			if (kind === "image-generator") {
+				canvas.toolManager
+					.getImageGeneratorTool()
+					.createImageAtCanvasPoint(targetPosition.x, targetPosition.y, imageModelList)
+				return
+			}
+
+			canvas.toolManager
+				.getVideoGeneratorTool()
+				.createVideoAtCanvasPoint(targetPosition.x, targetPosition.y, videoModelList)
+		},
+		[canvas, canvasMenuPosition, imageModelList, readonly, videoModelList],
+	)
+
+	const getCanvasCreateMenuItems = useCallback(
+		(position?: { x: number; y: number }): MenuItem[] => {
+			const targetPosition = position ?? canvasMenuPosition
+			if (!canvas || readonly || !targetPosition) return []
+
+			const translate = (key: string, fallback: string) => {
+				return t ? t(key, fallback) : fallback
+			}
+
+			return getCreateElementMenuItems({
+				idPrefix: "canvas-create",
+				translate,
+				onSelect: (kind) => createElementAtCanvasPoint(kind, targetPosition),
+				translationKeys: {
+					text: "menu.createText",
+					imageGenerator: "menu.createImageGenerator",
+					videoGenerator: "menu.createVideoGenerator",
+				},
+			})
+		},
+		[canvas, canvasMenuPosition, createElementAtCanvasPoint, readonly, t],
+	)
+
 	// 获取菜单项
 	const menuItems = useMemo(() => {
 		void fileInfoEpoch
 		if (!canvas) return []
 
-		// 如果是画布空白区域的菜单，只返回粘贴项
+		// 画布空白区域菜单根据触发方式显示粘贴项或创建项
 		if (isCanvasMenu) {
+			if (isCanvasCreateMenu) return getCanvasCreateMenuItems()
 			return getCanvasMenuItems()
 		}
 
@@ -404,6 +454,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		t,
 		cleanMenuItems,
 		isCanvasMenu,
+		isCanvasCreateMenu,
+		getCanvasCreateMenuItems,
 		getCanvasMenuItems,
 		fileInfoEpoch,
 		handleRenameElement,
@@ -426,6 +478,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			menuSource.current = null
 			setCurrentElementId(null)
 			setIsCanvasMenu(false)
+			setIsCanvasCreateMenu(false)
 			setCanvasMenuPosition(null)
 			setIsClickEnabled(false)
 		}
@@ -455,6 +508,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				const canvasItems = cleanMenuItems(getCanvasMenuItems({ x: canvasX, y: canvasY }))
 				if (canvasItems.length === 0) return
 				setIsCanvasMenu(true)
+				setIsCanvasCreateMenu(false)
 				setCanvasMenuPosition({ x: canvasX, y: canvasY })
 				setCurrentElementId(null)
 				menuSource.current = "canvas"
@@ -464,6 +518,34 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			[triggerMenuDisplay, cleanMenuItems, getCanvasMenuItems],
 		),
 		[triggerMenuDisplay, cleanMenuItems, getCanvasMenuItems],
+	)
+
+	// 监听画布空白区域的左键双击菜单事件
+	useCanvasEvent(
+		"canvas:dblclick",
+		useCallback(
+			({ data }) => {
+				if (!canvas || readonly) return
+				if (canvas.toolManager.getActiveTool() !== canvas.toolManager.getSelectionTool()) {
+					return
+				}
+
+				const { x, y, canvasX, canvasY } = data
+				const position = { x: canvasX, y: canvasY }
+				const canvasItems = cleanMenuItems(getCanvasCreateMenuItems(position))
+				if (canvasItems.length === 0) return
+
+				setIsCanvasMenu(true)
+				setIsCanvasCreateMenu(true)
+				setCanvasMenuPosition(position)
+				setCurrentElementId(null)
+				menuSource.current = "canvas"
+				setMenuKey((prev) => prev + 1)
+				triggerMenuDisplay(x, y)
+			},
+			[canvas, cleanMenuItems, getCanvasCreateMenuItems, readonly, triggerMenuDisplay],
+		),
+		[canvas, cleanMenuItems, getCanvasCreateMenuItems, readonly, triggerMenuDisplay],
 	)
 
 	return (

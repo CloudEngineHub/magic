@@ -132,6 +132,7 @@ export interface CanvasEventMap {
 		clientX?: number
 		clientY?: number
 	}
+	"canvas:dblclick": { x: number; y: number; canvasX: number; canvasY: number }
 	"element:contextmenu": { elementId: string; x: number; y: number }
 	"element:image:infoButtonClick": { elementId: string }
 	"element:video:infoButtonClick": { elementId: string }

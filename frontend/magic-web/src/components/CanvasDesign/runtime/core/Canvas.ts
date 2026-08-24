@@ -100,6 +100,8 @@ import {
 } from "../actions/index"
 import { normalizeStoryboardDocument } from "../document/storyboardMigration"
 
+const CANVAS_DOUBLE_CLICK_DISTANCE = 8
+
 function areCanvasDeviceInfoEqual(a: CanvasDeviceInfo, b: CanvasDeviceInfo): boolean {
 	return (
 		a.formFactor === b.formFactor &&
@@ -228,6 +230,10 @@ export class Canvas {
 	private resizeObserver: ResizeObserver | null = null
 	private containerContextMenuHandler: ((e: MouseEvent) => void) | null = null
 	private stageContextMenuHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private stageBlankClickHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private stageDoubleClickHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private previousBlankClickPoint: { x: number; y: number } | null = null
+	private lastBlankClickPoint: { x: number; y: number } | null = null
 
 	/**
 	 * 构造函数
@@ -596,6 +602,9 @@ export class Canvas {
 		// 禁用右键菜单
 		this.setupContextMenuHandler()
 
+		// 设置画布空白区域双击监听
+		this.setupCanvasDoubleClickHandler()
+
 		// 发布画布就绪事件
 		this.eventEmitter.emit({ type: "canvas:ready", data: undefined })
 	}
@@ -672,6 +681,60 @@ export class Canvas {
 			}
 		}
 		this.stage.on("contextmenu", this.stageContextMenuHandler)
+	}
+
+	/**
+	 * 设置画布空白区域双击监听
+	 */
+	private setupCanvasDoubleClickHandler(): void {
+		this.stageBlankClickHandler = (e) => {
+			if (e.target !== this.stage) {
+				this.previousBlankClickPoint = null
+				this.lastBlankClickPoint = null
+				return
+			}
+
+			this.previousBlankClickPoint = this.lastBlankClickPoint
+			this.lastBlankClickPoint = {
+				x: e.evt.clientX,
+				y: e.evt.clientY,
+			}
+		}
+
+		this.stageDoubleClickHandler = (e) => {
+			if (e.target !== this.stage) return
+
+			const previousPoint = this.previousBlankClickPoint
+			const lastPoint = this.lastBlankClickPoint
+			if (!previousPoint || !lastPoint) return
+
+			const distance = Math.max(
+				Math.abs(lastPoint.x - previousPoint.x),
+				Math.abs(lastPoint.y - previousPoint.y),
+			)
+			if (distance > CANVAS_DOUBLE_CLICK_DISTANCE) return
+
+			const pos = this.stage.getPointerPosition()
+			if (!pos) return
+
+			const transform = this.stage.getAbsoluteTransform().copy().invert()
+			const canvasPos = transform.point(pos)
+			this.previousBlankClickPoint = null
+			this.lastBlankClickPoint = null
+
+			this.eventEmitter.emit({
+				type: "canvas:dblclick",
+				data: {
+					x: e.evt.clientX,
+					y: e.evt.clientY,
+					canvasX: canvasPos.x,
+					canvasY: canvasPos.y,
+				},
+			})
+		}
+
+		this.stage.on("mousedown", this.stageBlankClickHandler)
+		this.stage.on("dblclick", this.stageDoubleClickHandler)
 	}
 
 	/**
@@ -1458,6 +1521,16 @@ export class Canvas {
 			this.stage.off("contextmenu", this.stageContextMenuHandler)
 			this.stageContextMenuHandler = null
 		}
+		if (this.stageBlankClickHandler) {
+			this.stage.off("mousedown", this.stageBlankClickHandler)
+			this.stageBlankClickHandler = null
+		}
+		if (this.stageDoubleClickHandler) {
+			this.stage.off("dblclick", this.stageDoubleClickHandler)
+			this.stageDoubleClickHandler = null
+		}
+		this.previousBlankClickPoint = null
+		this.lastBlankClickPoint = null
 
 		// 移除 window 点击监听器
 		if (this.handleWindowClick) {
