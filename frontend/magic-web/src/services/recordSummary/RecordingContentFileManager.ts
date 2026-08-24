@@ -677,10 +677,13 @@ export class RecordingContentFileManager {
 			return
 		}
 
+		const taskId = this.tokenManager.getSandboxTaskId(this.sessionId) || ""
+
 		await this.batchSaveReporter.reportUploadedFile({
 			sessionId: this.sessionId,
 			projectId: this.projectId,
 			topicId: this.topicId,
+			taskId,
 			parentId: file.parentId,
 			fileKey: uploadResult.fileKey,
 			fileName: file.fileName,

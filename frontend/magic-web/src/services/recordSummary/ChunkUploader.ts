@@ -579,6 +579,7 @@ export class ChunkUploader {
 		const topicId = this.sessionTopicMap.get(chunk.sessionId) || ""
 		const projectId = this.sessionProjectMap.get(chunk.sessionId) || ""
 		const hiddenDirectory = this.tokenManager.getDirectories(chunk.sessionId)?.asr_hidden_dir
+		const sandboxTaskId = this.tokenManager.getSandboxTaskId(chunk.sessionId) || ""
 		const fileName = this.getChunkFileName(chunk)
 
 		if (!projectId || !topicId || !hiddenDirectory?.directory_id) {
@@ -600,6 +601,7 @@ export class ChunkUploader {
 			sessionId: chunk.sessionId,
 			projectId,
 			topicId,
+			taskId: sandboxTaskId,
 			parentId: hiddenDirectory.directory_id,
 			fileKey: uploadUrl,
 			fileName,

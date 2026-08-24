@@ -156,6 +156,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 				asr_display_dir: RecordingDirectory
 			}
 			sandbox_topic_id: string
+			sandbox_task_id: string
 			preset_files: {
 				note_file: PresetFile
 				transcript_file: PresetFile
