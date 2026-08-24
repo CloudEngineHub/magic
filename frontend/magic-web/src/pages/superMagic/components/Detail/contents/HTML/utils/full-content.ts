@@ -2023,6 +2023,9 @@ export const getFullContent = (
 		POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR
 	const virtualStorageContext =
 		options.virtualStorage ?? createEphemeralVirtualStorageContext(markerId || "default")
+	// Explicit host contexts use the virtual storage bridge; keep the legacy mock for
+	// standalone callers that rely on marker-based browser storage isolation.
+	const shouldInjectLegacyStorageMock = !options.virtualStorage
 
 	// 使用DOMParser解析原始HTML
 	const parser = new DOMParser()
@@ -2098,7 +2101,7 @@ export const getFullContent = (
 		${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
 		${getVirtualStorageBridgeScript(virtualStorageContext)}
 		${getCookieMockScript()}
-		${getStorageMockScript(markerId)}
+		${shouldInjectLegacyStorageMock ? getStorageMockScript(markerId) : ""}
 		${getIndexedDBMockScript()}
 		${getServiceWorkerMockScript(serviceWorkerMockMode)}
 		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}

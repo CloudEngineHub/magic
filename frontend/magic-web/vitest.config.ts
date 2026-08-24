@@ -98,6 +98,21 @@ const getVitestBaseConfig = () => {
 					find: "@dtyq/es6-template-strings",
 					replacement: resolve(__dirname, "test/mocks/es6-template-strings.ts"),
 				},
+				{
+					find: /^@dtyq\/magic-admin$/,
+					replacement: resolve(__dirname, "packages/magic-admin/src/index.ts"),
+				},
+				{
+					find: /^@dtyq\/magic-admin\/components$/,
+					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
+				},
+				{
+					find: /^@dtyq\/magic-admin\/provider$/,
+					replacement: resolve(
+						__dirname,
+						"packages/magic-admin/src/provider/AdminProvider/index.tsx",
+					),
+				},
 				// Keep Vitest aligned with app-local package aliases that are normally resolved by Vite.
 				{
 					find: "@dtyq/magic-admin/locales",

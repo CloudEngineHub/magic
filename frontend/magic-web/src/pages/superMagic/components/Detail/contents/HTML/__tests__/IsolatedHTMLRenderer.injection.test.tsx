@@ -473,8 +473,6 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
 			projectId: "project-1",
-			topicId: "topic-1",
-			fileId: "index-file",
 		})
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
