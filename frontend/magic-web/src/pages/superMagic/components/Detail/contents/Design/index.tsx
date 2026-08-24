@@ -482,6 +482,7 @@ function DesignViewer(props: DesignViewerProps) {
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
 		loadFromRemote,
 		reloadPreservingLocalDraft,
+		reloadCurrentVersion,
 		reloadDiscardingLocalDraft,
 		isReadOnly: isReadOnlyState,
 		setIsReadOnly: setIsReadOnlyState,
@@ -997,13 +998,19 @@ function DesignViewer(props: DesignViewerProps) {
 	const handleReinitialize = useCallback(async () => {
 		// 先更新 markersForCanvas，并保留当前画布内尚未落远端的编辑。
 		setMarkersForCanvas(markerManager.getMarkers(designProjectId ?? ""))
-		persistCurrentCanvasDraftImmediately("manual-refresh")
-		await reloadPreservingLocalDraft()
+		if (fileVersion !== undefined) {
+			await reloadCurrentVersion()
+		} else {
+			persistCurrentCanvasDraftImmediately("manual-refresh")
+			await reloadPreservingLocalDraft()
+		}
 		refreshCanvasDesign()
 		if (magicProjectJsFileId && fetchFileVersions && !isShareRoute) {
 			await fetchFileVersions()
 		}
 	}, [
+		fileVersion,
+		reloadCurrentVersion,
 		reloadPreservingLocalDraft,
 		refreshCanvasDesign,
 		magicProjectJsFileId,

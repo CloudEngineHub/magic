@@ -51,6 +51,7 @@ export interface UseDesignProjectManagerReturn {
 
 	loadFromRemote: () => Promise<boolean>
 	reloadPreservingLocalDraft: () => Promise<boolean>
+	reloadCurrentVersion: () => Promise<void>
 	reloadDiscardingLocalDraft: () => Promise<boolean>
 
 	saveToRemote: () => Promise<void>
@@ -318,6 +319,7 @@ export function useDesignProjectManager(
 
 		loadFromRemote,
 		reloadPreservingLocalDraft,
+		reloadCurrentVersion: () => manager.reloadCurrentVersion(),
 		reloadDiscardingLocalDraft,
 
 		saveToRemote: () => manager.saveToRemote(),

@@ -100,4 +100,34 @@ describe("DesignVersionManager", () => {
 			"elementDetailsContext",
 		)
 	})
+
+	it("reloads the current history version instead of loading latest", async () => {
+		const bag = stateBag()
+		const manager = new DesignVersionManager(
+			bag,
+			{
+				allowEdit: true,
+				isPlaybackMode: false,
+				isShareRoute: false,
+				isMobile: false,
+				projectId: "project-1",
+				attachments: [],
+				flatAttachments: [],
+			},
+			{ cancelAutoSave: vi.fn(), clearRemoteConflict: vi.fn() } as never,
+			() => [],
+			() => 7,
+		)
+
+		await manager.reloadCurrentVersion()
+
+		expect(loadMagicProjectJsContent).toHaveBeenCalledWith("main-file", {
+			file_versions: { "main-file": 7 },
+		})
+		expect(bag.setters.setFileVersion).toHaveBeenCalledWith(7)
+		expect(bag.setters.setDesignData).toHaveBeenCalledWith(
+			expect.objectContaining({ name: "history" }),
+		)
+		expect(bag.setters.setIsReadOnly).toHaveBeenCalledWith(true)
+	})
 })

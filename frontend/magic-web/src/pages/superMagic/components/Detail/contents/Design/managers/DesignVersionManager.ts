@@ -130,6 +130,25 @@ export class DesignVersionManager {
 		return { data, version, loadResult: loaded }
 	}
 
+	/** 重新加载当前正在查看的历史版本，不能退回到最新版本。 */
+	async reloadCurrentVersion(): Promise<void> {
+		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
+		const fileVersion = this.getFileVersion()
+		if (!magicProjectJsFileId || fileVersion === undefined) return
+
+		try {
+			const parsedDesignData = await this.loadWithVersion(fileVersion)
+			if (!parsedDesignData) return
+
+			this.stateBag.setters.setFileVersion(fileVersion)
+			this.applyVersionData(parsedDesignData, true)
+		} catch (error) {
+			if (error instanceof DesignLoadError) {
+				this.stateBag.setters.setDesignLoadIssue?.(error.issue)
+			}
+		}
+	}
+
 	async fetchFileVersions(): Promise<FileHistoryVersion[]> {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (this.options.isShareRoute || !magicProjectJsFileId) return []

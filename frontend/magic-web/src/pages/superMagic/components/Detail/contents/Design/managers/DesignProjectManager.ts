@@ -117,6 +117,7 @@ export interface DesignProjectManagerAPI {
 
 	loadFromRemote: () => Promise<boolean>
 	reloadPreservingLocalDraft: () => Promise<boolean>
+	reloadCurrentVersion: () => Promise<void>
 	reloadDiscardingLocalDraft: () => Promise<boolean>
 
 	saveToRemote: () => Promise<void>
@@ -2056,6 +2057,17 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	async reloadPreservingLocalDraft(): Promise<boolean> {
 		this.clearPendingRemoteDesignData()
 		return this.completeRemoteLoad(() => this.loadManager.resetAndReload(), true)
+	}
+
+	async reloadCurrentVersion(): Promise<void> {
+		const unlockVersionDataSource = this.lockVersionDataSource()
+		try {
+			this.clearPendingRemoteDesignData()
+			this.saveManager.cancelAutoSave()
+			await this.versionManager.reloadCurrentVersion()
+		} finally {
+			unlockVersionDataSource()
+		}
 	}
 
 	async reloadDiscardingLocalDraft(): Promise<boolean> {
