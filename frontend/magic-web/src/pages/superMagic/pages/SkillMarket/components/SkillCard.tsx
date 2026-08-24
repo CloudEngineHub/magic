@@ -4,6 +4,7 @@ import dayjs from "dayjs"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import type { SkillPublisherType } from "@/apis/modules/skills"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
@@ -176,31 +177,33 @@ function SkillCard({
 				</div>
 			</div>
 
-			<Button
-				type="button"
-				size="icon"
-				variant="ghost"
-				className={cn(
-					"absolute right-4 top-4 z-10 size-8 rounded-lg",
-					isAdded
-						? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-100 dark:text-emerald-400"
-						: "bg-muted/80 text-foreground/80 hover:bg-muted",
-				)}
-				disabled={isAdded || isAdding}
-				aria-label={actionLabel}
-				onClick={() => {
-					if (!isAdded && !isAdding) onAdd?.(skill.id)
-				}}
-				data-testid={isAdded ? "skill-card-added-button" : "skill-card-add-button"}
-			>
-				{isAdding ? (
-					<Loader2 className="size-4 animate-spin" />
-				) : isAdded ? (
-					<Check className="size-4" />
-				) : (
-					<Plus className="size-4" />
-				)}
-			</Button>
+			<MagicTooltip title={!isAdded && !isAdding ? actionLabel : undefined}>
+				<Button
+					type="button"
+					size="icon"
+					variant="ghost"
+					className={cn(
+						"absolute right-4 top-4 z-10 size-8 rounded-lg",
+						isAdded
+							? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-100 dark:text-emerald-400"
+							: "bg-muted/80 text-foreground/80 hover:bg-muted",
+					)}
+					disabled={isAdded || isAdding}
+					aria-label={actionLabel}
+					onClick={() => {
+						if (!isAdded && !isAdding) onAdd?.(skill.id)
+					}}
+					data-testid={isAdded ? "skill-card-added-button" : "skill-card-add-button"}
+				>
+					{isAdding ? (
+						<Loader2 className="size-4 animate-spin" />
+					) : isAdded ? (
+						<Check className="size-4" />
+					) : (
+						<Plus className="size-4" />
+					)}
+				</Button>
+			</MagicTooltip>
 		</article>
 	)
 }
