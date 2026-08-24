@@ -12,15 +12,26 @@ import {
 	type VideoElementContent,
 } from "../../document/types"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
+import {
+	isCanvasZoomWheel,
+	shouldForwardWheelToCanvas,
+} from "../../interaction/viewport/ViewportWheelPolicy"
 import type {
 	VideoEditControlAction,
 	VideoEditControlState,
 } from "../../interaction/video-edit/VideoEditInteractionManager"
+import {
+	canInteractWithElementControls,
+	type ElementControlInteractionPolicy,
+} from "../../interaction/element-control/ElementControlInteractionPolicy"
+import {
+	moveControlHitsToTop,
+	syncControlHitCircle,
+	syncControlHitRect,
+} from "../../interaction/element-control/ControlHitTarget"
 import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackManager"
 import { VideoEditPlaybackManager } from "../../interaction/video-edit/VideoEditPlaybackManager"
-import {
-	type VideoCompositionSnapshot,
-} from "../../resources/video-composition/VideoCompositionManager"
+import { type VideoCompositionSnapshot } from "../../resources/video-composition/VideoCompositionManager"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import {
@@ -467,9 +478,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			)
 		}
 		if (!this.documentLoadedUnsubscribe && this.canvas.eventEmitter?.on) {
-			this.documentLoadedUnsubscribe = this.canvas.eventEmitter.on(
-				"document:loaded",
-				() => this.refreshConnectedInputs(),
+			this.documentLoadedUnsubscribe = this.canvas.eventEmitter.on("document:loaded", () =>
+				this.refreshConnectedInputs(),
 			)
 		}
 		if (!this.documentRestoredUnsubscribe && this.canvas.eventEmitter?.on) {
@@ -537,13 +547,15 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 		const controlHits = node.find(".video-edit-control-hit")
 		// 参数 hit 必须压在全尺寸 hit-area 之上，否则事件会落到可拖拽根节点上。
-		controlHits.forEach((candidate) => candidate.moveToTop())
-		node.find(`.${NODE_NAMES.audioProgressHit}, .${NODE_NAMES.audioProgressThumbHit}`).forEach(
-			(candidate) => candidate.moveToTop(),
+		moveControlHitsToTop(node, ".video-edit-control-hit")
+		moveControlHitsToTop(
+			node,
+			`.${NODE_NAMES.audioProgressHit}, .${NODE_NAMES.audioProgressThumbHit}`,
 		)
 
 		const manager = this.canvas.videoEditInteractionManager
 		if (manager) {
+			const elementInteraction = this.getElementControlInteractionPolicy(node)
 			controlHits.forEach((candidate) => {
 				if (!(candidate instanceof Konva.Rect)) return
 				const metadata = candidate.getAttr("videoEditControlMetadata") as
@@ -554,6 +566,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 						elementId: this.data.id,
 						node: candidate,
 						action: metadata.action,
+						elementInteraction,
 						applyState: (state) => this.applyControlState(metadata, state),
 					}),
 				)
@@ -568,6 +581,41 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			)
 		}
 		this.syncInteractionHitTargets(node)
+	}
+
+	private getElementControlInteractionPolicy(
+		node: Konva.Group,
+	): ElementControlInteractionPolicy<VideoEditControlAction> {
+		return {
+			canInteract: (action) => {
+				if (!this.canUseElementControls(node)) return false
+				if (action.type === "toggle-audio-playback") return true
+				return (
+					!this.canvas.readonly &&
+					!this.data.locked &&
+					this.canvas.permissionManager.canUseSelectionToolAffordance()
+				)
+			},
+			prepare: (action) => {
+				if (this.canvas.readonly && action.type === "toggle-audio-playback") return
+				if (
+					this.canvas.selectionManager.getSelectionCount() !== 1 ||
+					!this.canvas.selectionManager.isSelected(this.data.id)
+				) {
+					this.canvas.selectionManager.replaceSelection([this.data.id])
+				}
+			},
+		}
+	}
+
+	private canUseElementControls(node: Konva.Group = this.node as Konva.Group): boolean {
+		if (!(node instanceof Konva.Group)) return false
+		const absoluteScale = node.getAbsoluteScale()
+		return canInteractWithElementControls({
+			screenWidth: node.width() * Math.abs(absoluteScale.x),
+			screenHeight: node.height() * Math.abs(absoluteScale.y),
+			coarsePointer: this.canvas.deviceInfo?.input?.coarsePointer ?? false,
+		})
 	}
 
 	protected override cleanupNodeListeners(node: Konva.Node): void {
@@ -796,7 +844,12 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		})
 		viewport.add(track)
 		viewport.on("wheel", (event: Konva.KonvaEventObject<WheelEvent>) => {
-			if (this.videoScrollMax <= 0) return
+			if (shouldForwardWheelToCanvas(event.evt, this.videoScrollMax > 0)) {
+				if (!isCanvasZoomWheel(event.evt)) return
+				event.cancelBubble = true
+				this.canvas.viewportController.handleWheelFromFloating(event.evt)
+				return
+			}
 			event.cancelBubble = true
 			event.evt.preventDefault()
 			const delta =
@@ -1041,9 +1094,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const beginCardDrag = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
 			if (
 				this.canvas.readonly ||
-				["checking", "preparing", "processing"].includes(
-					this.compositionSnapshot.status,
-				)
+				["checking", "preparing", "processing"].includes(this.compositionSnapshot.status)
 			)
 				return
 			event.cancelBubble = true
@@ -1569,6 +1620,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			perfectDrawEnabled: false,
 			name: NODE_NAMES.audioProgressHit,
 		})
+		hit.setAttr("videoEditAudioProgressBaseHitBounds", {
+			x: x - thumbRadius,
+			y: thumbY - hitHeight / 2,
+			width: width + thumbRadius * 2,
+			height: hitHeight,
+			expandX: false,
+		})
 		const thumbHit = new Konva.Circle({
 			x: thumbX,
 			y: thumbY,
@@ -1578,6 +1636,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			perfectDrawEnabled: false,
 			name: NODE_NAMES.audioProgressThumbHit,
 		})
+		thumbHit.setAttr(
+			"videoEditAudioProgressBaseHitRadius",
+			Math.max(thumbRadius, hitHeight / 2),
+		)
 		group.add(hit, thumbHit)
 
 		const track = group.findOne(`.${NODE_NAMES.audioProgressTrack}`) as Konva.Rect
@@ -1604,10 +1666,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		})
 	}
 
-	private renderFooter(
-		group: Konva.Group,
-		layout: VideoEditElementLayout,
-	): void {
+	private renderFooter(group: Konva.Group, layout: VideoEditElementLayout): void {
 		const { videoSequence } = this.collectInputs()
 		const videoCount = videoSequence.length
 		group.add(
@@ -1662,28 +1721,39 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			) {
 				return
 			}
-			const absoluteScale = candidate.getAbsoluteScale()
-			const scaleX = Number.isFinite(absoluteScale.x)
-				? Math.max(0.0001, Math.abs(absoluteScale.x))
-				: 1
-			const scaleY = Number.isFinite(absoluteScale.y)
-				? Math.max(0.0001, Math.abs(absoluteScale.y))
-				: 1
-			const width = Math.max(baseBounds.width, minimumScreenSize / scaleX)
-			const height = Math.max(baseBounds.height, minimumScreenSize / scaleY)
-			if (!Number.isFinite(width) || !Number.isFinite(height)) {
-				candidate.setAttrs({ ...baseBounds })
-				candidate.moveToTop()
-				return
-			}
-			candidate.setAttrs({
-				x: baseBounds.x - (width - baseBounds.width) / 2,
-				y: baseBounds.y - (height - baseBounds.height) / 2,
-				width,
-				height,
-			})
+			syncControlHitRect(candidate, baseBounds, minimumScreenSize)
 			candidate.moveToTop()
 		})
+		const progressMinimumHeight = minimumScreenSize
+		group.find(`.${NODE_NAMES.audioProgressHit}`).forEach((candidate) => {
+			if (!(candidate instanceof Konva.Rect)) return
+			const bounds = candidate.getAttr("videoEditAudioProgressBaseHitBounds") as
+				| {
+						x: number
+						y: number
+						width: number
+						height: number
+						expandX: false
+				  }
+				| undefined
+			if (!bounds) return
+			syncControlHitRect(candidate, bounds, minimumScreenSize, progressMinimumHeight)
+			candidate.moveToTop()
+		})
+		group.find(`.${NODE_NAMES.audioProgressThumbHit}`).forEach((candidate) => {
+			if (!(candidate instanceof Konva.Circle)) return
+			const radius = candidate.getAttr("videoEditAudioProgressBaseHitRadius") as
+				number | undefined
+			if (radius === undefined) return
+			syncControlHitCircle(candidate, radius, minimumScreenSize)
+			candidate.moveToTop()
+		})
+		const controlsEnabled = this.canUseElementControls(group)
+		group
+			.find(
+				`.video-edit-control-hit, .${NODE_NAMES.audioProgressHit}, .${NODE_NAMES.audioProgressThumbHit}`,
+			)
+			.forEach((candidate) => candidate.listening(controlsEnabled))
 		this.canvas.videoEditInteractionManager?.refreshControlStates?.(this.data.id)
 	}
 
@@ -1736,7 +1806,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			text?.fill("#FFFFFF")
 			return
 		}
-
 	}
 
 	private renderMergeButton(
@@ -2028,7 +2097,12 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			y: thumbY,
 			radius: audioProgressRow.thumbRadius,
 		})
-		const hitHeight = hit?.height() ?? Math.max(audioProgressRow.thumbRadius * 2.4, 24)
+		const baseHitBounds = hit?.getAttr("videoEditAudioProgressBaseHitBounds") as
+			{ height?: number } | undefined
+		const hitHeight =
+			baseHitBounds?.height ??
+			hit?.height() ??
+			Math.max(audioProgressRow.thumbRadius * 2.4, 24)
 		hit?.setAttrs({
 			x: audioProgressRow.progressRect.x - audioProgressRow.thumbRadius,
 			y: thumbY - hitHeight / 2,
@@ -2056,10 +2130,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		group: Konva.Group,
 		track: Konva.Rect,
 	): void {
-		if (!this.canScrubAudio()) return
 		event.cancelBubble = true
 		event.evt?.stopPropagation()
 		event.evt?.preventDefault()
+		if (!this.canScrubAudio()) return
 		const stage = group.getStage()
 		if (!stage) return
 		this.finishAudioScrub()

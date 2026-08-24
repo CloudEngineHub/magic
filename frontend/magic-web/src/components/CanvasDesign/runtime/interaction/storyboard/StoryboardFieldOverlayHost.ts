@@ -83,6 +83,7 @@ export class StoryboardFieldOverlayHost {
 	private options: StoryboardFieldOverlayMountOptions | null = null
 	private finishing = false
 	private eventUnsubscribers: Array<() => void> = []
+	private wheelHandler: ((event: WheelEvent) => void) | null = null
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
@@ -294,14 +295,37 @@ export class StoryboardFieldOverlayHost {
 			"contextmenu",
 			"keydown",
 			"keyup",
-			"wheel",
 		] as const
 		eventNames.forEach((eventName) => wrapper.addEventListener(eventName, stopPropagation))
+		this.wheelHandler = (event: WheelEvent) => {
+			if (this.shouldConsumeTextareaWheel(event)) return
+			event.stopPropagation()
+			this.canvas.viewportController.handleWheelFromFloating(event)
+		}
+		wrapper.addEventListener("wheel", this.wheelHandler, { passive: false })
 		this.eventUnsubscribers.push(() => {
 			eventNames.forEach((eventName) =>
 				wrapper.removeEventListener(eventName, stopPropagation),
 			)
+			if (this.wheelHandler) {
+				wrapper.removeEventListener("wheel", this.wheelHandler)
+				this.wheelHandler = null
+			}
 		})
+	}
+
+	private shouldConsumeTextareaWheel(event: WheelEvent): boolean {
+		if (event.ctrlKey || event.metaKey) return false
+		const path = typeof event.composedPath === "function" ? event.composedPath() : []
+		const textarea = path.find(
+			(node): node is HTMLTextAreaElement => node instanceof HTMLTextAreaElement,
+		)
+		if (!textarea || textarea.scrollHeight <= textarea.clientHeight) return false
+		if (event.deltaY < 0) return textarea.scrollTop > 0
+		if (event.deltaY > 0) {
+			return textarea.scrollTop + textarea.clientHeight < textarea.scrollHeight - 1
+		}
+		return false
 	}
 
 	private bindCanvasEvents(): void {
@@ -327,5 +351,6 @@ export class StoryboardFieldOverlayHost {
 		this.control = null
 		this.options = null
 		this.finishing = false
+		this.wheelHandler = null
 	}
 }

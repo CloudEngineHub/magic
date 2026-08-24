@@ -9,12 +9,24 @@ import {
 	type StoryboardShot,
 } from "../../document/types"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
+import {
+	isCanvasZoomWheel,
+	shouldForwardWheelToCanvas,
+} from "../../interaction/viewport/ViewportWheelPolicy"
 import type {
 	StoryboardControlAction,
 	StoryboardControlState,
 	StoryboardEditorPresentation,
 	StoryboardSelectPresentation,
 } from "../../interaction/storyboard/StoryboardInteractionManager"
+import {
+	canInteractWithElementControls,
+	type ElementControlInteractionPolicy,
+} from "../../interaction/element-control/ElementControlInteractionPolicy"
+import {
+	moveControlHitsToTop,
+	syncControlHitRect,
+} from "../../interaction/element-control/ControlHitTarget"
 import { generateUUID } from "../../shared/ids"
 import { ELEMENT_DESIGN_TOKENS } from "../../shared/layout/ElementDesignTokens"
 import { RenderUtils } from "../../shared/render/RenderUtils"
@@ -326,9 +338,11 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	protected override setupNodeListeners(node: Konva.Node): void {
 		super.setupNodeListeners(node)
 		if (!(node instanceof Konva.Group)) return
+		moveControlHitsToTop(node, ".storyboard-control-hit")
 
 		const manager = this.canvas.storyboardInteractionManager
 		if (manager) {
+			const elementInteraction = this.getElementControlInteractionPolicy(node)
 			node.find(".storyboard-control-hit").forEach((candidate) => {
 				if (!(candidate instanceof Konva.Rect)) return
 				const metadata = candidate.getAttr("storyboardControlMetadata") as
@@ -342,6 +356,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 						selectPresentation: metadata.selectPresentation,
 						editorPresentation: metadata.editorPresentation,
 						action: metadata.action,
+						elementInteraction,
 						applyState: (state) => this.applyControlState(metadata, state),
 					}),
 				)
@@ -356,6 +371,41 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			)
 		}
 		this.syncInteractionHitTargets()
+	}
+
+	private getElementControlInteractionPolicy(
+		node: Konva.Group,
+	): ElementControlInteractionPolicy<StoryboardControlAction> {
+		return {
+			canInteract: (action) => {
+				if (!this.canUseElementControls(node)) return false
+				if (action.type === "preview-reference-image") return true
+				return (
+					!this.canvas.readonly &&
+					!this.data.locked &&
+					this.canvas.permissionManager.canUseSelectionToolAffordance()
+				)
+			},
+			prepare: (action) => {
+				if (action.type === "preview-reference-image") return
+				if (
+					this.canvas.selectionManager.getSelectionCount() !== 1 ||
+					!this.canvas.selectionManager.isSelected(this.data.id)
+				) {
+					this.canvas.selectionManager.replaceSelection([this.data.id])
+				}
+			},
+		}
+	}
+
+	private canUseElementControls(node: Konva.Group = this.node as Konva.Group): boolean {
+		if (!(node instanceof Konva.Group)) return false
+		const absoluteScale = node.getAbsoluteScale()
+		return canInteractWithElementControls({
+			screenWidth: node.width() * Math.abs(absoluteScale.x),
+			screenHeight: node.height() * Math.abs(absoluteScale.y),
+			coarsePointer: this.canvas.deviceInfo?.input?.coarsePointer ?? false,
+		})
 	}
 
 	protected override cleanupNodeListeners(node: Konva.Node): void {
@@ -665,7 +715,12 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		})
 		viewport.add(track)
 		viewport.on("wheel", (event: Konva.KonvaEventObject<WheelEvent>) => {
-			if (this.referenceScrollMax <= 0) return
+			if (shouldForwardWheelToCanvas(event.evt, this.referenceScrollMax > 0)) {
+				if (!isCanvasZoomWheel(event.evt)) return
+				event.cancelBubble = true
+				this.canvas.viewportController.handleWheelFromFloating(event.evt)
+				return
+			}
 			event.cancelBubble = true
 			event.evt.preventDefault()
 			const delta =
@@ -1369,22 +1424,17 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			? STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE
 			: STORYBOARD_CONFIG.DESKTOP_MIN_HIT_SIZE
 
+		moveControlHitsToTop(this.node, ".storyboard-control-hit")
 		this.node.find(".storyboard-control-hit").forEach((candidate) => {
 			if (!(candidate instanceof Konva.Rect)) return
 			const baseBounds = candidate.getAttr("storyboardBaseHitBounds") as
 				{ x: number; y: number; width: number; height: number } | undefined
 			if (!baseBounds) return
-			const absoluteScale = candidate.getAbsoluteScale()
-			const scaleX = Math.max(0.0001, Math.abs(absoluteScale.x))
-			const scaleY = Math.max(0.0001, Math.abs(absoluteScale.y))
-			const width = Math.max(baseBounds.width, minimumScreenSize / scaleX)
-			const height = Math.max(baseBounds.height, minimumScreenSize / scaleY)
-			candidate.setAttrs({
-				x: baseBounds.x - (width - baseBounds.width) / 2,
-				y: baseBounds.y - (height - baseBounds.height) / 2,
-				width,
-				height,
-			})
+			syncControlHitRect(candidate, baseBounds, minimumScreenSize)
+		})
+		const controlsEnabled = this.canUseElementControls(this.node)
+		this.node.find(".storyboard-control-hit").forEach((candidate) => {
+			candidate.listening(controlsEnabled)
 		})
 	}
 

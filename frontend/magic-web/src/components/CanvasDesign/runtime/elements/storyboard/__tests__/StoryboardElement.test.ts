@@ -444,6 +444,39 @@ describe("StoryboardElement", () => {
 		expect(closeIcons).toHaveLength(2)
 	})
 
+	it("keeps storyboard controls hittable when the element is very small on screen", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const canvas = createCanvasMock()
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-small-hit",
+				x: 0,
+				y: 0,
+				shots: [{ id: "shot-1", description: "" }],
+			}),
+			canvas,
+		)
+		const group = element.render()
+		vi.spyOn(group, "getAbsoluteScale").mockReturnValue({ x: 0.1, y: 0.1 })
+		const controlHits = group.find(".storyboard-control-hit")
+		controlHits.forEach((hit) => {
+			vi.spyOn(hit, "getAbsoluteScale").mockReturnValue({ x: 0.1, y: 0.1 })
+		})
+
+		element.onMounted()
+
+		expect(controlHits.length).toBeGreaterThan(0)
+		expect(controlHits.every((hit) => hit.listening())).toBe(false)
+		expect(
+			controlHits.every((hit) => hit.width() >= STORYBOARD_CONFIG.DESKTOP_MIN_HIT_SIZE / 0.1),
+		).toBe(true)
+	})
+
 	it("keeps transformer bounds aligned through viewport transforms", () => {
 		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
 			clearRect: vi.fn(),

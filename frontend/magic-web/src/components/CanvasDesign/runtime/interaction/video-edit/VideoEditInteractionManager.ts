@@ -4,6 +4,7 @@ import { getDownstreamContent } from "../../document/elementContent"
 import { ElementTypeEnum, type AudioElementContent } from "../../document/types"
 import { collectConnectedVideoEditInputs } from "../connection/connectedInputSources"
 import { VideoEditPlaybackManager } from "./VideoEditPlaybackManager"
+import type { ElementControlInteractionPolicy } from "../element-control/ElementControlInteractionPolicy"
 
 export type VideoEditControlState = "idle" | "hover" | "pressed" | "disabled"
 
@@ -16,6 +17,7 @@ export interface VideoEditControlBindingOptions {
 	node: Konva.Node
 	action: VideoEditControlAction
 	applyState: (state: VideoEditControlState) => void
+	elementInteraction?: ElementControlInteractionPolicy<VideoEditControlAction>
 }
 
 interface VideoEditControlBinding extends VideoEditControlBindingOptions {
@@ -45,7 +47,8 @@ export class VideoEditInteractionManager {
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
 		this.playbackManager =
-			this.canvas.videoEditPlaybackManager ?? new VideoEditPlaybackManager({ canvas: this.canvas })
+			this.canvas.videoEditPlaybackManager ??
+			new VideoEditPlaybackManager({ canvas: this.canvas })
 		this.bindCanvasEvents()
 	}
 
@@ -54,7 +57,7 @@ export class VideoEditInteractionManager {
 		this.bindings.add(binding)
 
 		const handleMouseEnter = () => {
-			if (!this.isSelectedBinding(binding)) return
+			if (!this.canInteractWithElement(binding)) return
 			if (this.isDisabled(binding)) {
 				binding.applyState("disabled")
 				this.canvas.cursorManager.setTemporary("not-allowed")
@@ -70,8 +73,11 @@ export class VideoEditInteractionManager {
 			binding.node.getLayer()?.batchDraw()
 		}
 		const activate = (event: Konva.KonvaEventObject<Event>) => {
-			if (!this.isSelectedBinding(binding)) return
 			stopKonvaEvent(event)
+			if (!this.canInteractWithElement(binding)) {
+				binding.applyState("disabled")
+				return
+			}
 			if (this.isDisabled(binding)) {
 				binding.applyState("disabled")
 				return
@@ -83,8 +89,13 @@ export class VideoEditInteractionManager {
 			this.activate(binding)
 		}
 		const handlePressStart = (event: Konva.KonvaEventObject<Event>) => {
-			if (!this.isSelectedBinding(binding)) return
+			if (!this.canInteractWithElement(binding)) {
+				stopKonvaEvent(event)
+				binding.applyState("disabled")
+				return
+			}
 			stopKonvaEvent(event)
+			this.ensureElementSelected(binding)
 			binding.applyState(this.isDisabled(binding) ? "disabled" : "pressed")
 			binding.node.getLayer()?.batchDraw()
 		}
@@ -149,8 +160,31 @@ export class VideoEditInteractionManager {
 		return this.canvas.selectionManager.getSelectedIds().includes(binding.elementId)
 	}
 
+	private canInteractWithElement(binding: VideoEditControlBinding): boolean {
+		if (binding.elementInteraction)
+			return binding.elementInteraction.canInteract(binding.action)
+		const element = this.canvas.elementManager.getElementData(binding.elementId)
+		if (!element) return false
+		if (binding.action.type === "toggle-audio-playback") return true
+		if (this.canvas.readonly || element.locked) return false
+		return this.canvas.permissionManager.canUseSelectionToolAffordance()
+	}
+
+	private ensureElementSelected(binding: VideoEditControlBinding): void {
+		if (binding.elementInteraction?.prepare) {
+			binding.elementInteraction.prepare(binding.action)
+			return
+		}
+		if (binding.action.type === "toggle-audio-playback" && this.canvas.readonly) return
+		if (this.isSelectedBinding(binding)) return
+		this.canvas.selectionManager.replaceSelection?.([binding.elementId])
+	}
+
 	private isDisabled(binding: VideoEditControlBinding): boolean {
-		if (binding.action.disabled || this.canvas.readonly) return true
-		return binding.action.type === "merge-videos" && isCompositionBusy(binding.elementId, this.canvas)
+		if (binding.action.disabled || !this.canInteractWithElement(binding)) return true
+		return (
+			binding.action.type === "merge-videos" &&
+			isCompositionBusy(binding.elementId, this.canvas)
+		)
 	}
 }

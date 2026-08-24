@@ -1083,7 +1083,7 @@ describe("AudioElement", () => {
 		expect(playHit.size()).toEqual({ width: expandedPlayHitWidth, height: 88 })
 	})
 
-	it("gives the whole card drag priority when controls are too small on screen", () => {
+	it("disables controls when the card is too small on screen", () => {
 		mockCanvasRenderingContext()
 		const harness = createAudioElementHarness()
 		const group = harness.element.render()
@@ -1094,7 +1094,7 @@ describe("AudioElement", () => {
 
 		const controlHits = group.find(".audio-control-hit")
 		expect(controlHits.length).toBeGreaterThan(0)
-		expect(controlHits.every((node) => !node.listening())).toBe(true)
+		expect(controlHits.every((node) => node.listening())).toBe(false)
 
 		scale.mockReturnValue({ x: 0.5, y: 0.5 })
 		harness.emitViewportScale()

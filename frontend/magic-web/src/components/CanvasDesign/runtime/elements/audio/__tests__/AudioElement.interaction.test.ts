@@ -9,17 +9,17 @@ describe("resolveAudioControlInteractionPolicy", () => {
 				screenHeight: 180,
 				coarsePointer: false,
 			}),
-		).toEqual({ mode: "full", progressMinimumScreenHeight: 32 })
+		).toEqual({ mode: "full", controlsEnabled: true, progressMinimumScreenHeight: 32 })
 	})
 
-	it("uses compact track interaction before prioritizing element dragging", () => {
+	it("uses compact track interaction only when the element remains large enough", () => {
 		expect(
 			resolveAudioControlInteractionPolicy({
 				screenWidth: 240,
 				screenHeight: 120,
 				coarsePointer: false,
 			}),
-		).toEqual({ mode: "compact", progressMinimumScreenHeight: 16 })
+		).toEqual({ mode: "compact", controlsEnabled: true, progressMinimumScreenHeight: 16 })
 
 		expect(
 			resolveAudioControlInteractionPolicy({
@@ -27,7 +27,7 @@ describe("resolveAudioControlInteractionPolicy", () => {
 				screenHeight: 90,
 				coarsePointer: false,
 			}),
-		).toEqual({ mode: "drag-only", progressMinimumScreenHeight: 16 })
+		).toEqual({ mode: "compact", controlsEnabled: false, progressMinimumScreenHeight: 16 })
 	})
 
 	it("requires more visible space for touch controls", () => {
@@ -37,7 +37,7 @@ describe("resolveAudioControlInteractionPolicy", () => {
 				screenHeight: 180,
 				coarsePointer: true,
 			}),
-		).toEqual({ mode: "compact", progressMinimumScreenHeight: 24 })
+		).toEqual({ mode: "compact", controlsEnabled: true, progressMinimumScreenHeight: 24 })
 
 		expect(
 			resolveAudioControlInteractionPolicy({
@@ -45,6 +45,6 @@ describe("resolveAudioControlInteractionPolicy", () => {
 				screenHeight: 140,
 				coarsePointer: true,
 			}),
-		).toEqual({ mode: "drag-only", progressMinimumScreenHeight: 24 })
+		).toEqual({ mode: "compact", controlsEnabled: false, progressMinimumScreenHeight: 24 })
 	})
 })

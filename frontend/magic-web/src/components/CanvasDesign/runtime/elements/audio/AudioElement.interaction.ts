@@ -1,16 +1,32 @@
-export type AudioControlInteractionMode = "full" | "compact" | "drag-only"
+import {
+	ELEMENT_CONTROL_INTERACTION_LIMITS,
+	canInteractWithElementControls,
+} from "../../interaction/element-control/ElementControlInteractionPolicy"
+import type { ElementControlInteractionPolicy } from "../../interaction/element-control/ElementControlInteractionPolicy"
+
+export type AudioControlInteractionMode = "full" | "compact"
+
+export type AudioControlAction =
+	| { type: "toggle-playback" }
+	| { type: "seek-backward" }
+	| { type: "seek-forward" }
+	| { type: "seek-progress" }
+	| { type: "scrub-progress" }
+
+export type AudioElementControlInteractionPolicy =
+	ElementControlInteractionPolicy<AudioControlAction>
 
 export const AUDIO_CONTROL_INTERACTION = {
 	desktop: {
-		compactMinWidth: 180,
-		compactMinHeight: 96,
+		compactMinWidth: ELEMENT_CONTROL_INTERACTION_LIMITS.desktop.minWidth,
+		compactMinHeight: ELEMENT_CONTROL_INTERACTION_LIMITS.desktop.minHeight,
 		fullMinWidth: 320,
 		fullMinHeight: 180,
 		compactProgressHitHeight: 16,
 	},
 	coarsePointer: {
-		compactMinWidth: 240,
-		compactMinHeight: 144,
+		compactMinWidth: ELEMENT_CONTROL_INTERACTION_LIMITS.coarsePointer.minWidth,
+		compactMinHeight: ELEMENT_CONTROL_INTERACTION_LIMITS.coarsePointer.minHeight,
 		fullMinWidth: 400,
 		fullMinHeight: 240,
 		compactProgressHitHeight: 24,
@@ -19,6 +35,7 @@ export const AUDIO_CONTROL_INTERACTION = {
 
 export interface AudioControlInteractionPolicy {
 	mode: AudioControlInteractionMode
+	controlsEnabled: boolean
 	progressMinimumScreenHeight: number
 }
 
@@ -36,7 +53,12 @@ export function resolveAudioControlInteractionPolicy(options: {
 
 	if (screenWidth < config.compactMinWidth || screenHeight < config.compactMinHeight) {
 		return {
-			mode: "drag-only",
+			mode: "compact",
+			controlsEnabled: canInteractWithElementControls({
+				screenWidth,
+				screenHeight,
+				coarsePointer: options.coarsePointer,
+			}),
 			progressMinimumScreenHeight: config.compactProgressHitHeight,
 		}
 	}
@@ -44,12 +66,14 @@ export function resolveAudioControlInteractionPolicy(options: {
 	if (screenWidth < config.fullMinWidth || screenHeight < config.fullMinHeight) {
 		return {
 			mode: "compact",
+			controlsEnabled: true,
 			progressMinimumScreenHeight: config.compactProgressHitHeight,
 		}
 	}
 
 	return {
 		mode: "full",
+		controlsEnabled: true,
 		progressMinimumScreenHeight: options.coarsePointer ? 44 : 32,
 	}
 }

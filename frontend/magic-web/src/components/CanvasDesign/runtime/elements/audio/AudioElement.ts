@@ -33,8 +33,15 @@ import {
 } from "./AudioElement.layout"
 import {
 	resolveAudioControlInteractionPolicy,
+	type AudioControlAction,
+	type AudioElementControlInteractionPolicy,
 	type AudioControlInteractionMode,
 } from "./AudioElement.interaction"
+import {
+	moveControlHitsToTop,
+	syncControlHitCircle,
+	syncControlHitRect,
+} from "../../interaction/element-control/ControlHitTarget"
 
 const NODE_NAMES = {
 	background: "audio-background",
@@ -202,6 +209,12 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private lastTouchActionAt = 0
 	private lastProgressTouchActionAt = 0
 	private controlInteractionMode: AudioControlInteractionMode = "full"
+	private controlsEnabled = true
+	private readonly elementControlInteractionPolicy: AudioElementControlInteractionPolicy = {
+		canInteract: () =>
+			this.controlsEnabled &&
+			(this.canvas.permissionManager?.canUseSelectionToolAffordance?.() ?? true),
+	}
 	private pendingScrubProgress: number | null = null
 	private scrubStage?: Konva.Stage
 	private scrubWindowCleanup?: () => void
@@ -900,7 +913,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		)
 
 		const handlePointerEnter = () => {
-			if (!this.canUseControls()) return
+			if (!this.canUseControls({ type: "seek-progress" })) return
 			this.setProgressInteractionState("hover")
 			this.canvas.cursorManager?.setTemporary("pointer")
 		}
@@ -943,6 +956,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			name: NODE_NAMES.backButton,
 			iconName: NODE_NAMES.backButtonIcon,
 			direction: "backward",
+			action: { type: "seek-backward" },
 			isEnabled: () => this.canSeekBackward(),
 			onActivate: () => this.seekBy(-5),
 		})
@@ -951,6 +965,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			name: NODE_NAMES.forwardButton,
 			iconName: NODE_NAMES.forwardButtonIcon,
 			direction: "forward",
+			action: { type: "seek-forward" },
 			isEnabled: () => this.canSeekForward(),
 			onActivate: () => this.seekBy(5),
 		})
@@ -1004,6 +1019,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			idleFill: INTERACTION_COLORS.playButton,
 			hoverFill: INTERACTION_COLORS.playButtonHover,
 			activeFill: INTERACTION_COLORS.playButtonActive,
+			action: { type: "toggle-playback" },
 			onActivate: () => this.playPreview(),
 		})
 		return button
@@ -1013,6 +1029,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		name: string
 		iconName: string
 		direction: "backward" | "forward"
+		action: AudioControlAction
 		isEnabled: () => boolean
 		onActivate: () => void
 	}): { button: Konva.Group; syncState: () => void } {
@@ -1075,6 +1092,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			contentIdleOpacity: 0.64,
 			contentHoverOpacity: 0.88,
 			contentActiveOpacity: 1,
+			action: options.action,
 			disabledContentOpacity: 0.24,
 			disabledButtonOpacity: 1,
 			disabledCursor: "not-allowed",
@@ -1093,6 +1111,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		idleFill: string
 		hoverFill: string
 		activeFill: string
+		action: AudioControlAction
 		disabledFill?: string
 		contentIdleOpacity?: number
 		contentHoverOpacity?: number
@@ -1103,7 +1122,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		onActivate: () => void
 		isEnabled?: () => boolean
 	}): () => void {
-		const isEnabled = () => this.canUseControls() && (options.isEnabled?.() ?? true)
+		const isEnabled = () =>
+			this.canUseControls(options.action) && (options.isEnabled?.() ?? true)
 		let pointerInside = false
 		const setState = (state: InteractiveState) => {
 			const enabled = isEnabled()
@@ -1194,10 +1214,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		playerGroup: Konva.Group,
 		track: Konva.Rect,
 	): void {
-		if (!this.canUseControls()) return
 		event.cancelBubble = true
 		event.evt?.stopPropagation()
 		event.evt?.preventDefault()
+		if (!this.canUseControls({ type: "scrub-progress" })) return
 		const stage = playerGroup.getStage()
 		if (!stage) return
 		this.finishScrub()
@@ -1231,10 +1251,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		playerGroup: Konva.Group,
 		track: Konva.Rect,
 	): void {
-		if (!this.canUseControls()) return
 		event.cancelBubble = true
 		event.evt?.stopPropagation()
 		event.evt?.preventDefault()
+		if (!this.canUseControls({ type: "seek-progress" })) return
 		const pointer = playerGroup.getRelativePointerPosition()
 		if (!pointer || track.width() <= 0) return
 		const progress = clampProgress((pointer.x - track.x()) / track.width())
@@ -1541,28 +1561,18 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			screenHeight: this.node.height() * Math.abs(nodeScale.y),
 			coarsePointer,
 		})
-		const previousMode = this.controlInteractionMode
 		this.controlInteractionMode = policy.mode
-		if (policy.mode === "drag-only" && previousMode !== "drag-only") {
-			if (this.scrubStage) this.finishScrub()
-			this.setProgressInteractionState("idle")
-			this.canvas.cursorManager?.restoreToolCursor()
-		}
+		this.controlsEnabled = policy.controlsEnabled
+		moveControlHitsToTop(this.node, `.${NODE_NAMES.controlHit}`)
 
 		this.node.find(`.${NODE_NAMES.controlHit}`).forEach((candidate) => {
-			candidate.listening(policy.mode !== "drag-only")
-			if (policy.mode === "drag-only") return
+			candidate.listening(this.controlsEnabled)
 
 			if (candidate instanceof Konva.Circle) {
 				const baseRadius = candidate.getAttr("audioControlBaseHitRadius") as
 					number | undefined
 				if (baseRadius === undefined) return
-				const absoluteScale = candidate.getAbsoluteScale()
-				const minimumScale = Math.max(
-					0.0001,
-					Math.min(Math.abs(absoluteScale.x), Math.abs(absoluteScale.y)),
-				)
-				candidate.radius(Math.max(baseRadius, minimumScreenSize / minimumScale / 2))
+				syncControlHitCircle(candidate, baseRadius, minimumScreenSize)
 				return
 			}
 
@@ -1570,24 +1580,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			const baseBounds = candidate.getAttr("audioControlBaseHitBounds") as
 				AudioControlHitBounds | undefined
 			if (!baseBounds) return
-			const absoluteScale = candidate.getAbsoluteScale()
-			const scaleX = Math.max(0.0001, Math.abs(absoluteScale.x))
-			const scaleY = Math.max(0.0001, Math.abs(absoluteScale.y))
-			const desiredWidth =
-				baseBounds.expandX === false
-					? baseBounds.width
-					: Math.max(baseBounds.width, minimumScreenSize / scaleX)
-			const width = Math.min(baseBounds.maxWidth ?? Number.POSITIVE_INFINITY, desiredWidth)
 			const minimumScreenHeight = candidate.hasName(NODE_NAMES.progressHit)
 				? policy.progressMinimumScreenHeight
 				: minimumScreenSize
-			const height = Math.max(baseBounds.height, minimumScreenHeight / scaleY)
-			candidate.setAttrs({
-				x: baseBounds.x - (width - baseBounds.width) / 2,
-				y: baseBounds.y - (height - baseBounds.height) / 2,
-				width,
-				height,
-			})
+			syncControlHitRect(candidate, baseBounds, minimumScreenSize, minimumScreenHeight)
 		})
 	}
 
@@ -1686,7 +1682,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		})
 	}
 
-	private canUseControls(): boolean {
-		return this.canvas.permissionManager?.canUseSelectionToolAffordance?.() ?? true
+	private canUseControls(action: AudioControlAction): boolean {
+		return this.elementControlInteractionPolicy.canInteract(action)
 	}
 }

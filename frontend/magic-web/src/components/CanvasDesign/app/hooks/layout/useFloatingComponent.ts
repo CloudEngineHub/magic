@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react"
 import { useFloatingUI } from "../../providers/FloatingUIProvider"
 import { useCanvas } from "../../providers/CanvasProvider"
+import { isCanvasZoomWheel } from "../../../runtime/interaction/viewport/ViewportWheelPolicy"
 
 const OVERFLOW_SCROLL_VALUES = new Set(["auto", "scroll", "overlay"])
 const POINTER_INTERACTIVE_SELECTOR = [
@@ -159,6 +160,12 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 		// 如果启用 wheel 转发，添加事件监听
 		if (enableWheelForwarding) {
 			const wheelHandler = (e: WheelEvent) => {
+				// Trackpad pinch is represented as ctrl/meta + wheel. It must always
+				// belong to the canvas viewport, even inside scrollable popovers.
+				if (isCanvasZoomWheel(e)) {
+					handleWheel(e)
+					return
+				}
 				if (wheelInsideHardTrapRegion(container, e)) {
 					e.stopPropagation()
 					return

@@ -8,6 +8,7 @@ function createHarness() {
 	const container = document.createElement("div")
 	document.body.appendChild(container)
 	const eventEmitter = new EventEmitter()
+	const handleWheelFromFloating = vi.fn()
 	let matrix = [0.75, 0, 0, 0.75, 120, 80]
 	let mounted = true
 	const anchorNode = {
@@ -18,6 +19,7 @@ function createHarness() {
 	} as unknown as Konva.Node
 	const canvas = {
 		stage: { container: () => container },
+		viewportController: { handleWheelFromFloating },
 		eventEmitter,
 	} as unknown as Canvas
 
@@ -26,6 +28,7 @@ function createHarness() {
 		eventEmitter,
 		anchorNode,
 		canvas,
+		handleWheelFromFloating,
 		setMatrix: (next: number[]) => {
 			matrix = next
 		},
@@ -105,6 +108,65 @@ describe("StoryboardFieldOverlayHost", () => {
 
 		textarea.dispatchEvent(new FocusEvent("blur"))
 		expect(onCommit).toHaveBeenCalledWith("输入中的描述")
+	})
+
+	it("forwards wheel gestures to the canvas viewport while editing", () => {
+		const harness = createHarness()
+		const host = new StoryboardFieldOverlayHost({ canvas: harness.canvas })
+		host.mount({
+			kind: "number",
+			anchorNode: harness.anchorNode,
+			ariaLabel: "分镜时长",
+			value: "3",
+			fontSize: 15,
+			borderRadius: 8,
+			onCommit: vi.fn(),
+		})
+
+		const input = harness.container.querySelector<HTMLInputElement>(
+			"[data-canvas-ui='storyboard-field-overlay'] input",
+		)
+		if (!input) throw new Error("Expected input overlay")
+
+		const event = new WheelEvent("wheel", {
+			deltaX: 12,
+			deltaY: -8,
+			ctrlKey: true,
+			bubbles: true,
+		})
+		input.dispatchEvent(event)
+
+		expect(harness.handleWheelFromFloating).toHaveBeenCalledWith(event)
+	})
+
+	it("keeps textarea scrolling local while forwarding pinch zoom", () => {
+		const harness = createHarness()
+		const host = new StoryboardFieldOverlayHost({ canvas: harness.canvas })
+		host.mount({
+			kind: "textarea",
+			anchorNode: harness.anchorNode,
+			ariaLabel: "分镜描述",
+			value: "描述",
+			fontSize: 15,
+			borderRadius: 8,
+			onCommit: vi.fn(),
+		})
+
+		const textarea = harness.container.querySelector<HTMLTextAreaElement>("textarea")
+		if (!textarea) throw new Error("Expected textarea overlay")
+		Object.defineProperties(textarea, {
+			scrollHeight: { configurable: true, value: 300 },
+			clientHeight: { configurable: true, value: 100 },
+			scrollTop: { configurable: true, writable: true, value: 40 },
+		})
+
+		textarea.dispatchEvent(new WheelEvent("wheel", { deltaY: 20, bubbles: true }))
+		expect(harness.handleWheelFromFloating).not.toHaveBeenCalled()
+
+		textarea.dispatchEvent(
+			new WheelEvent("wheel", { deltaY: 20, ctrlKey: true, bubbles: true }),
+		)
+		expect(harness.handleWheelFromFloating).toHaveBeenCalledTimes(1)
 	})
 
 	it("cancels without committing when the anchor leaves the stage", () => {
