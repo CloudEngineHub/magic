@@ -39,8 +39,6 @@ function AddModelConnectivityTest({
 		onLoadingChange?.(isTestingConnectivity)
 	}, [isTestingConnectivity, onLoadingChange])
 
-	if (store.addModelType === "video") return null
-
 	const handleConnectivityTest = async () => {
 		onBeforeTest?.()
 
