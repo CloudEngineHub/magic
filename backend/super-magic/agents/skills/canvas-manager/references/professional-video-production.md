@@ -28,7 +28,7 @@ Use this mode only when the user explicitly asks for a simple, direct, or ordina
 2. Present one complete creative target and the final video prompt in readable Markdown. Ask one concise confirmation question after presenting it; ask again after any material revision.
 3. Freeze the complete billable request, estimate points, and wait for explicit confirmation before submission.
 4. After confirmation, create one `video` Element with `add_canvas_elements`, use `dependency_flow` layout for the production relation, put all used reference paths in the corresponding arrays, and add Connections only for submitted Canvas Elements that directly contribute to the final video. Reference-only assets stay in the arrays without a Connection.
-5. Wait immediately on any returned generation task, query the completed Element, present the candidate, and select its main Content only after user confirmation.
+5. Wait immediately on any returned generation task, query the completed Element, and present the candidate. The first Content of this newly created Video Element is automatically main, so do not ask whether to make it main or call `select_canvas_main_content`. For a revision appended to an existing Video Element, select the appended candidate as main only after user confirmation.
 6. For a revision, append a candidate to the same Video Element with `add_canvas_contents`; do not create a duplicate logical Element. If the user asks for a storyboard, staged approvals, BGM replacement, or separate composition, preserve the current result and continue in detailed staged mode.
 
 Example using the current Canvas tools:
@@ -94,7 +94,7 @@ This is the default after the user asks for professional video production but do
 - Do not create a storyboard, initialization images, first frames, a `video-edit`, or a separate final composition.
 - The generated video Element is the final result for this mode.
 
-Use the exact parameter confirmation, estimate, generation, wait, and candidate-selection gates described below.
+Use the exact parameter confirmation, estimate, generation, wait, and later-candidate selection gates described below.
 
 ### Detailed staged mode
 
@@ -108,7 +108,7 @@ Use this mode only when the user explicitly asks for detailed, fine-grained, sta
 4. After the estimate is confirmed, call `add_canvas_elements` once with one `video` Element and copy the estimated request byte-for-byte. Do not add `[imageN]` bindings, watermark instructions, or other prompt text after confirmation. If anything changes, estimate again and ask for confirmation again before generation. The generation tool does not receive or validate an estimate ID.
 5. When a submitted Canvas Element is a direct business predecessor, add its exact Element ID in the new video's `connections`. Reference paths alone never create Connections.
 6. Call `wait_canvas_generation` immediately when the generated Content returns a task ID.
-7. Query the generated Element, present the candidate, and select its main Content only after the user confirms it.
+7. Query the generated Element and present the candidate. Because this is the first Content of a newly created Video Element, it is already main; do not ask whether to make it main or call `select_canvas_main_content`. For a later appended candidate, select its main Content only after the user confirms it.
 
 Do not create a storyboard, initialization image, first frame, `video-edit`, or final composition in this mode. If the user later requests staged production, continue from the existing result and switch to detailed professional mode without silently mixing the two workflows.
 
@@ -166,7 +166,7 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 - New logical result: omit `element_id` and `content_id` in `add_canvas_elements`.
 - New candidate for an existing result: pass the existing `element_id` and omit `content_id`; use `add_canvas_contents` when appending to an existing writable Element.
 - Exact retry: use `retry_canvas_content_generation` with the exact `element_id`, `content_id`, and original `item_ref` returned by the latest result or query. Never add `-retry`, `-new`, or a counter to `item_ref`.
-- Select main Content only after the user confirms the exact candidate, using `select_canvas_main_content` with the exact Element and Content IDs.
+- The first Content of a newly created Element is automatically main and must not be passed to `select_canvas_main_content`. For an appended candidate, select main only after the user confirms the exact candidate, using `select_canvas_main_content` with the exact Element and Content IDs.
 - Never identify an existing result by name alone. Preserve every returned Element ID, Content ID, task ID, video ID, status, and media path.
 - Retry only failed Content with explicit user consent, at most twice. Never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
 - If waiting times out or returns a still-running task, call `wait_canvas_generation` again with the exact returned `generation_task_id`; never submit a duplicate generation request.
@@ -234,7 +234,7 @@ Canvas node arrangement and final video aspect ratio are separate decisions. Do 
 
 Map every submitted source medium to its Canvas Element. Pass every media path as generation evidence and every owning Element as a direct upstream source — do not rely on prompt text alone to represent an imported subject.
 
-Confirm each generated anchor and select its main Content before depending on it downstream. If the user requests a change, append a candidate to the same Element, confirm again, and only then select main.
+Confirm each generated anchor before depending on it downstream; its first Content is automatically main, so no main-selection call is needed. If the user requests a change, append a candidate to the same Element, confirm again, and only then select that appended candidate as main.
 
 The confirmation sequence is mandatory: generate the initialization candidate, wait for completion, query its Element, show or summarize the candidate, call `ask_user`, and wait. A successful tool result or visual inspection is not user approval.
 
@@ -394,7 +394,7 @@ Use the current Canvas tools below; do not call the removed video-production too
 | Generate a direct video or shot video | `add_canvas_elements` / `add_canvas_contents` with generated `video` Content |
 | Wait for image or video generation | `wait_canvas_generation` |
 | Retry one failed Content | `retry_canvas_content_generation` |
-| Select the confirmed main Content | `select_canvas_main_content` |
+| Select the confirmed later candidate as main Content | `select_canvas_main_content` |
 | Estimate billed video generation | `estimate_canvas_content_points` |
 | Change layout | `layout_canvas_elements` |
 | Add, remove, or replace a Connection | `manage_canvas_connections` |
@@ -452,7 +452,7 @@ Use `dependency_flow` for professional production relations. Basic Canvas image 
 - If a video task returns `processing`, keep its IDs and do not submit a duplicate; retry a failed task with its existing IDs.
 - At most 2 retries per Content; never loop.
 - A new direction appends a candidate with `add_canvas_contents`; it does not create a duplicate logical Element.
-- Select main Content only after the user confirms the completed candidate.
+- The first Content of a newly created Element is already main. Select main only after the user confirms a completed candidate appended to an existing Element.
 - If the media is correct but a Canvas relation is wrong, repair only the relation with `manage_canvas_connections`: query the exact current Connection IDs first, provide the complete intended endpoints, and do not regenerate media. Remove or replace relations only with explicit user intent.
 
 ## Provider-managed assets

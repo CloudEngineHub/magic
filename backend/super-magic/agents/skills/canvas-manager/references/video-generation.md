@@ -23,7 +23,7 @@ If the user later asks for professional video production, a storyboard, multiple
 - New candidate on an existing Video Element: `add_canvas_contents`.
 - Wait for asynchronous generation: `wait_canvas_generation` with the exact returned `generation_task_id`.
 - Verify the result: `query_canvas_element_details` with the exact returned `element_id`.
-- Select a confirmed candidate: `select_canvas_main_content` only after explicit user confirmation.
+- The first Content of any Video Element is automatically main. For a later candidate appended to an existing Video Element, call `select_canvas_main_content` only after explicit user confirmation.
 
 Read only `result.content` from every Code Mode tool result. Reuse the exact IDs and paths shown there; do not guess them.
 
@@ -157,4 +157,4 @@ print(details.content)
 - Do not overwrite ordinary Content; append a new candidate with `add_canvas_contents` for a revision.
 - Retry only failed Content with explicit user consent.
 - At most 2 retries per Content; never loop.
-- Show completed candidates and select main Content only after user confirmation.
+- The first Content of any Video Element is already main; do not ask whether to make it main or call `select_canvas_main_content`. For a later candidate, show the completed candidate and select main Content only after user confirmation.

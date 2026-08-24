@@ -46,7 +46,7 @@ You can:
 
 - Initialize, restore, and query Canvas projects.
 - Create Frames, Storyboards, Video Edits, and media Elements; generate images and videos; import media assets.
-- Append Content candidates, retry failed Content, and select a main Content after user confirmation.
+- Create or add the first Content as the automatic main Content; append later candidates, retry failed Content, and select an appended candidate as main after user confirmation.
 - Frame sibling Elements.
 - Wait on async generation tasks.
 - Process `[@design_marker:...]` annotations into image revisions.
@@ -100,7 +100,7 @@ print(result.content)
 
 ## Confirmation and asking the user
 
-Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. Tool success is not user approval — do not continue past a gate until the user confirms or supplies a revision. In staged video work, confirm the first completed first frame before generating the remaining first frames, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
+Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. The first Content of an Element, whether created with the Element or added to an otherwise empty Element, is automatically its main Content; do not ask whether to make that first Content main and do not call `select_canvas_main_content` for it. Tool success is not user approval — do not continue past an applicable gate until the user confirms or supplies a revision. In staged video work, confirm the first completed first frame before generating the remaining first frames, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
 
 Use the `ask_user` tool as a **direct tool call** (not inside Code mode) for every applicable gate. Prefer:
 
@@ -119,7 +119,7 @@ Need full content / hierarchy / media?       → query_canvas_element_details
 New logical element?                         → add_canvas_elements
 New candidate on an existing element?        → add_canvas_contents
 Failed generated content + user agrees?      → retry_canvas_content_generation
-User picked a candidate?                     → select_canvas_main_content
+User picked an appended candidate?           → select_canvas_main_content
 Group sibling elements?                      → frame_canvas_elements
 Async task returned?                         → wait_canvas_generation
 Billed video generation?                    → estimate_canvas_content_points first, then ask for confirmation before generation
@@ -267,7 +267,7 @@ result = tool.call("add_canvas_contents", {
 print(result.content)
 ```
 
-Read the new `content_id` and status. Show completed candidates to the user; never select a main Content without confirmation. Not valid on Frames.
+Read the new `content_id` and status. When this appends a later candidate to an existing Element, keep the current main Content unchanged, show the completed candidate, and select it as main only after explicit user confirmation. If the Element was otherwise empty, this first Content is already main and does not require a selection call. Not valid on Frames.
 
 Before calling this tool, preserve the exact current `element_id` and use a new stable `item_ref` for the append operation. Generated image/video Content must include its own `name`, even when the parent Element already has a name.
 
@@ -302,7 +302,7 @@ Only with explicit user consent. At most 2 retries per Content. Never retry `pro
 
 ## `select_canvas_main_content`
 
-Set a confirmed candidate as the main Content of a writable Element.
+Set a confirmed later candidate as the main Content of a writable Element.
 
 Parameters: `project_path` and `items` required; use only the exact `element_id` and `content_id` the user confirmed.
 
@@ -321,7 +321,7 @@ result = tool.call("select_canvas_main_content", {
 print(result.content)
 ```
 
-Only after the user picks a candidate. Not valid on Frames, failed, or processing Content.
+Use only after the user picks a later candidate on an Element that already has a main Content. The first Content of any Element is already main and must not be selected again. Not valid on Frames, failed, or processing Content.
 
 ## `wait_canvas_generation`
 
@@ -455,13 +455,13 @@ Composition is synchronous and does not use `wait_canvas_generation`. After succ
 
 ## Workflow coverage
 
-- Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation.
+- Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation only for appended candidates.
 - Ordinary video workflow: full creative target, point estimate and `ask_user` confirmation, then async generation and waiting.
 - Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
 - `video-edit` Content stores ordered inputs via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call.
 - Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
 - Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.
-- Version management: Content candidate appending, retry cap on failures, and main Content selection after user confirmation.
+- Version management: the first Content is automatically main; appended candidates require user confirmation before main Content selection, with a retry cap on failures.
 
 ## Design marker processing
 

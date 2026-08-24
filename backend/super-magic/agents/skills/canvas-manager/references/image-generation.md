@@ -10,14 +10,14 @@ Load this reference for image generation, image revision, reference images, or i
 4. New logical image → `add_canvas_elements`.
 5. New candidate on an existing image → `add_canvas_contents`.
 6. Failed and the user agrees → `retry_canvas_content_generation`.
-7. The user confirms a candidate → `select_canvas_main_content`.
+7. The first Content of any Element is automatically main; the user confirms a later candidate → `select_canvas_main_content`.
 
 ## Tool choice
 
 - New logical image: `add_canvas_elements`, `element_type=image`, Content `source=generated`, `content_type=image`.
 - New candidate on an existing image: `add_canvas_contents` — appends, never overwrites.
 - In-place retry: `retry_canvas_content_generation` with the exact Element ID and failed Content ID.
-- After the user confirms: `select_canvas_main_content`.
+- After the user confirms a later candidate: `select_canvas_main_content`. Do not call it for the first Content of any Element.
 
 ## Generation inputs
 
@@ -77,7 +77,7 @@ print(result.content)
 - Ordinary Content is never overwritten; create a new candidate for a revision.
 - Retry only `failed` Content with explicit user consent.
 - At most 2 retries per Content; never loop.
-- Always show completed candidates and wait for the user to choose before selecting main.
+- The first Content of any Element is already main. For a later candidate, always show the completed candidate and wait for the user to choose before selecting main.
 
 ## Writing a high-quality prompt
 
