@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { MoreHorizontal } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
@@ -28,7 +29,12 @@ interface ShareMobileAudioRecordingDetailPageProps {
 	projectId: string
 	resourceName?: string
 	allowDownloadProjectFile: boolean
-	topbarOffset?: string
+	showCopyProject?: boolean
+	copyProjectLabel?: string
+	showLogin?: boolean
+	loginLabel?: string
+	onCopyProject?: () => void
+	onLogin?: () => void
 	attachments: {
 		tree: AttachmentItem[]
 		list: AttachmentItem[]
@@ -40,11 +46,15 @@ export default function ShareMobileAudioRecordingDetailPage({
 	projectId,
 	resourceName,
 	allowDownloadProjectFile,
-	topbarOffset,
+	showCopyProject = false,
+	copyProjectLabel,
+	showLogin = false,
+	loginLabel,
+	onCopyProject,
+	onLogin,
 	attachments,
 }: ShareMobileAudioRecordingDetailPageProps) {
 	const { t } = useTranslation("audioRecordings")
-	const resolvedTopbarOffset = topbarOffset ?? "0px"
 	const { loading, error, fileMap, texts, audioUrl, title, attachmentList } =
 		useShareRecordingDetailData({
 			projectId,
@@ -173,11 +183,9 @@ export default function ShareMobileAudioRecordingDetailPage({
 		<div
 			className="flex h-full min-h-0 flex-col bg-[#f7f7f8]"
 			data-testid="mobile-recording-share-page"
-			style={{ paddingTop: resolvedTopbarOffset }}
 		>
 			<ShareMobileRecordingHeader
 				activeTab={activeTab}
-				topbarOffset={resolvedTopbarOffset}
 				onOpenMore={openShareExportSheet}
 				onTabChange={setActiveTab}
 			/>
@@ -270,6 +278,12 @@ export default function ShareMobileAudioRecordingDetailPage({
 				fileMap={fileMap}
 				projectId={projectId}
 				allowDownload={allowDownloadProjectFile}
+				showCopyProject={showCopyProject}
+				copyProjectLabel={copyProjectLabel}
+				showLogin={showLogin}
+				loginLabel={loginLabel}
+				onCopyProject={onCopyProject}
+				onLogin={onLogin}
 				showShareSection={false}
 				mainHeaderTitle={t("card.moreActions")}
 				onOpenChange={setShareExportSheetOpen}
@@ -284,12 +298,10 @@ export default function ShareMobileAudioRecordingDetailPage({
 /** Aligns the readonly share header with the mobile detail prototype while keeping share actions disabled. */
 function ShareMobileRecordingHeader({
 	activeTab,
-	topbarOffset,
 	onOpenMore,
 	onTabChange,
 }: {
 	activeTab: MobileRecordingTopTab
-	topbarOffset: string
 	onOpenMore: () => void
 	onTabChange: (tab: MobileRecordingTopTab) => void
 }) {
@@ -297,13 +309,16 @@ function ShareMobileRecordingHeader({
 
 	return (
 		<header
-			className="sticky z-20 bg-[#f7f7f8]"
+			className="sticky top-0 z-20 bg-[#f7f7f8]"
 			data-testid="mobile-recording-share-sticky-header"
-			style={{ top: topbarOffset }}
 		>
-			<div className="relative flex items-center justify-end px-4 pt-1">
+			<div className="relative flex min-h-[calc(52px+var(--safe-area-inset-top,0px))] items-center justify-between gap-2 px-4 pt-[var(--safe-area-inset-top,0px)]">
+				{/* Keep the brand centered in a control-sized slot after removing the outer share header. */}
+				<div className="inline-flex h-11 w-11 shrink-0 items-center justify-center">
+					<Logo className="h-9 w-auto" />
+				</div>
 				{/* Center the segmented tabs independently from the trailing action so the layout stays balanced on narrow screens. */}
-				<div className="pointer-events-none absolute inset-x-0 flex justify-center px-20">
+				<div className="pointer-events-none absolute inset-x-0 bottom-0 top-[var(--safe-area-inset-top,0px)] flex items-center justify-center px-20">
 					<div className="pointer-events-auto grid grid-cols-2 rounded-full bg-muted p-[3px]">
 						<TopTabButton
 							active={activeTab === "source"}
