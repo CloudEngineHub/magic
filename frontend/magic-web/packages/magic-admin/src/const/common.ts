@@ -63,7 +63,7 @@ export const PERMISSION_KEY_MAP: Record<string, string> = {
 	/** AI管理 - 应用菜单-查询 */
 	AI_APP_MENU_QUERY: "admin.ai.application.menu.query",
 	/** AI管理 - 应用菜单-编辑 */
-	AI_APP_MENU_EDIT: "admin.ai.application.edit",
+	AI_APP_MENU_EDIT: "admin.ai.application.menu.edit",
 
 	/* -- 平台管理 -- */
 	/** 平台管理 - 模型管理-查询 */
