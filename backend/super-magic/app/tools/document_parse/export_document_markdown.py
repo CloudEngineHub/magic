@@ -140,7 +140,14 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
         combined_path: Path | None = None
         combined_filename = "document.md"
         if combined_filename:
-            combined_path = await MarkdownWriter.write_combined(output_dir / combined_filename, extraction.chunks, input_path.stem)
+            combined_path = await MarkdownWriter.write_combined(
+                output_dir / combined_filename,
+                extraction.chunks,
+                input_path.stem,
+                output_dir,
+                output_dir,
+                [asset.path for asset in extraction.assets],
+            )
             if tool_context:
                 await self._dispatch_file_event(tool_context, str(combined_path), EventType.FILE_CREATED)
 
@@ -188,7 +195,16 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
         chunks: list[DocumentChunk],
         correction_note: str | None,
     ) -> ToolResult:
-        combined_path = await MarkdownWriter.write_combined(output_dir / "document.md", chunks, input_path.stem)
+        index = await async_read_json(output_dir / INDEX_FILENAME)
+        asset_paths = [str(item.get("path")) for item in index.get("assets") or [] if item.get("path")]
+        combined_path = await MarkdownWriter.write_combined(
+            output_dir / "document.md",
+            chunks,
+            input_path.stem,
+            output_dir,
+            output_dir,
+            asset_paths,
+        )
         if tool_context:
             await self._dispatch_file_event(tool_context, str(combined_path), EventType.FILE_CREATED)
             await self._dispatch_file_event(tool_context, str(output_dir), EventType.FILE_CREATED)
@@ -247,7 +263,14 @@ class ExportDocumentMarkdown(AbstractFileTool[ExportDocumentMarkdownParams], Wor
                 exclude_watermark_images=True,
                 deduplicate_repeated_images=True,
             )
-            await MarkdownWriter.write_combined(combined_path, extraction.chunks, input_path.stem)
+            await MarkdownWriter.write_combined(
+                combined_path,
+                extraction.chunks,
+                input_path.stem,
+                temp_dir,
+                output_dir,
+                [asset.path for asset in extraction.assets],
+            )
             await self._copy_simple_optional_dir(temp_dir, output_dir, ASSETS_DIRNAME)
             await self._copy_simple_optional_dir(temp_dir, output_dir, VISUAL_RESULTS_DIRNAME)
             structure = await DocumentIndexer().build_simple_from_extraction(input_path, output_dir, extraction, combined_path)

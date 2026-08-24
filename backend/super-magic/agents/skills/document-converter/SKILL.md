@@ -108,6 +108,13 @@ All path parameters passed to these tools must be absolute paths.
 
 For the same source document, reuse one stable `output_dir` across all document-converter tool calls. Keep `document.index.json`, `document.outline.md`, `document.reading_state.json`, `samples/`, `chunks/`, `visual-results/`, summaries, converted files, and combined Markdown exports under that same directory unless the user explicitly asks for a different location.
 
+Asset path contract:
+
+- `document.index.json.assets[].path` is canonical relative to `output_dir`, such as `assets/page_001.png`.
+- Images inside `chunks/*.md` are relative to the chunk file, such as `../assets/page_001.png`.
+- Images inside root-level `document.md` are relative to `document.md`, such as `assets/page_001.png`.
+- When opening an image for visual understanding, resolve the canonical asset path from `output_dir`; do not infer the filesystem path from the Markdown link text.
+
 When the user does not provide an output directory, create one under the current workspace output area and derive the directory name from the current full file name, including the extension. For example, use `sample_pdf` for `sample.pdf`, `sample_docx` for `sample.docx`, and `README_md` for `README.md`. Do not use only the file stem in batch jobs, because files such as `sample.pdf`, `sample.docx`, and `sample.png` would otherwise overwrite or mix artifacts in the same `sample/` directory.
 
 Before writing to an existing `output_dir`, make sure it belongs to the same source file. If unsure, choose a fresh unique directory instead of reusing a possibly polluted directory.

@@ -116,7 +116,7 @@ class GenericMarkItDownDriver(DocumentDriver):
         self._assign_asset_units_from_markdown(content, assets)
         content = self._append_missing_image_links(content, assets)
         chunks = DocumentChunker.chunk_text(content, path.name, ranges or "all", max_chars=max_chars)
-        chunks = await ChunkStore.write_chunks(output_dir, chunks)
+        chunks = await ChunkStore.write_chunks(output_dir, chunks, [asset.path for asset in assets])
         total_units = self._resolve_total_units(path, content, parse_result, chunks)
         processed_units = self._resolve_processed_units(ranges, total_units, chunks)
         nodes = OutlineBuilder.build_tree(HeadingDetector.detect(content)) or VirtualOutlineBuilder.by_units(self.unit_type, total_units, 1)

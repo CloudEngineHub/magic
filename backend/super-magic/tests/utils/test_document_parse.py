@@ -657,7 +657,7 @@ async def test_image_document_parse_pipeline_uses_metadata_without_visual_model(
     assert profile.metadata["width"] == 32
     assert extraction.assets
     assert extraction.chunks[0].path == "chunks/chunk_0001.md"
-    assert "![sample.png](assets/sample.png)" in extraction.chunks[0].content
+    assert "![sample.png](../assets/sample.png)" in extraction.chunks[0].content
     assert structure.metadata["chunk_lookup"]["chunk_0001"]["source_range"] == "image:1"
     assert (output_dir / "assets" / "sample.png").exists()
 
@@ -848,7 +848,7 @@ async def test_document_image_understander_writes_visual_results_back_to_chunk(t
     assets_dir.mkdir(parents=True)
     Image.new("RGB", (32, 16), color="white").save(assets_dir / "page1.png")
     (chunks_dir / "chunk_0001.md").write_text(
-        "## Page 1\n\n![Page 1](assets/page1.png)\n",
+        "## Page 1\n\n![Page 1](../assets/page1.png)\n",
         encoding="utf-8",
     )
     await async_write_json(
@@ -863,7 +863,7 @@ async def test_document_image_understander_writes_visual_results_back_to_chunk(t
                     "chunk_id": "chunk_0001",
                     "path": "chunks/chunk_0001.md",
                     "source_range": "pages:1",
-                    "content": "## Page 1\n\n![Page 1](assets/page1.png)\n",
+                    "content": "## Page 1\n\n![Page 1](../assets/page1.png)\n",
                 }
             ],
             "assets": [
@@ -1155,6 +1155,7 @@ async def test_pdf_visual_hint_persists_page_snapshot_asset(tmp_path: Path):
     assert extraction.assets[0].asset_type == DocumentAssetType.PAGE_SNAPSHOT.value
     assert (output_dir / extraction.assets[0].path).exists()
     assert "### Page Snapshot" in extraction.chunks[0].content
+    assert f"![{extraction.assets[0].title}](../{extraction.assets[0].path})" in extraction.chunks[0].content
     assert extraction.chunks[0].path == "chunks/chunk_0001.md"
 
 
@@ -1182,7 +1183,7 @@ async def test_pdf_local_text_extracts_image_assets_without_visual_understanding
     assert extraction.assets[0].path.startswith("assets/")
     assert (output_dir / extraction.assets[0].path).exists()
     assert structure.assets[0].metadata["page"] == 1
-    assert f"![PDF page 1 image 1]({extraction.assets[0].path})" in extraction.chunks[0].content
+    assert f"![PDF page 1 image 1](../{extraction.assets[0].path})" in extraction.chunks[0].content
 
 
 @pytest.mark.asyncio
@@ -1283,7 +1284,10 @@ async def test_export_small_scanned_pdf_simple_artifacts_keep_assets(tmp_path: P
     assert (output_dir / "document.md").exists()
     assert (output_dir / "document.index.json").exists()
     assert (output_dir / "assets").exists()
-    assert "![" in (output_dir / "document.md").read_text(encoding="utf-8")
+    document_text = (output_dir / "document.md").read_text(encoding="utf-8")
+    assert "![" in document_text
+    assert "](../assets/" not in document_text
+    assert "](assets/" in document_text
     assert not (output_dir / "chunks").exists()
 
 

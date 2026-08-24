@@ -138,7 +138,7 @@ class PdfDocumentDriver(DocumentDriver):
 
         segments = await PdfTextExtractor.extract_page_segments(path, pages)
         chunks = self._chunk_page_segments(segments, path.name, max_chars, assets, skipped_images)
-        chunks = await ChunkStore.write_chunks(output_dir, chunks)
+        chunks = await ChunkStore.write_chunks(output_dir, chunks, [asset.path for asset in assets])
         outline = OutlineBuilder.build_tree(await PdfOutlineReader.read(path)) or VirtualOutlineBuilder.by_units("page", total_pages)
         self._attach_chunks_to_outline(outline, chunks)
         remaining = [page for page in range(1, total_pages + 1) if page not in pages]

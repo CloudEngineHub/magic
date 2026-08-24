@@ -97,7 +97,7 @@ class ImageDocumentDriver(DocumentDriver):
             parent_node_id="image_1",
             metadata={"asset_ids": [item.asset_id for item in assets], "skipped_images": skipped_images, **metadata},
         )
-        chunks = await ChunkStore.write_chunks(output_dir, [chunk])
+        chunks = await ChunkStore.write_chunks(output_dir, [chunk], [item.path for item in assets])
         node = DocumentNode(
             node_id="image_1",
             title=path.name,
