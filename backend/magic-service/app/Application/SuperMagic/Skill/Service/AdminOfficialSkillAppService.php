@@ -9,6 +9,7 @@ namespace App\Application\SuperMagic\Skill\Service;
 
 use App\Application\SuperMagic\Skill\DTO\SkillPackageDTO;
 use App\Application\SuperMagic\Skill\Import\SkillImportService;
+use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
@@ -17,11 +18,13 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
+use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
 use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -39,6 +42,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         private readonly SkillImportService $skillImportService,
         private readonly SkillVersionDomainService $officialSkillVersionDomainService,
         private readonly SkillMarketDomainService $officialSkillMarketDomainService,
+        private readonly SkillCategoryDomainService $officialSkillCategoryDomainService,
         private readonly SkillCategoryRelationDomainService $officialSkillCategoryRelationDomainService,
     ) {
     }
@@ -50,31 +54,41 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $authorization = $this->assertOfficialOrganization($requestContext);
         $organizationCode = $authorization->getOrganizationCode();
         $package = $this->skillImportService->parseByFileKey($organizationCode, $fileKey);
-        $market = $this->resolveOfficialMarket($organizationCode, $package->packageName);
+        $market = $this->officialSkillMarketDomainService->findOfficialSkillByPackageName($package->packageName);
         $isUpdate = $market !== null;
 
-        if ($this->officialSkillMarketDomainService->findStoreSkillBySkillCode($package->packageName) !== null && ! $isUpdate) {
-            ExceptionBuilder::throw(SkillErrorCode::OFFICIAL_IMPORT_SOURCE_CONFLICT, 'skill.official_import_source_conflict');
-        }
+        $version = $market === null ? null
+            : $this->officialSkillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($market->getSkillVersionId());
+
+        $code = $market?->getSkillCode() ?? SkillEntity::generateNewCode();
+
+        $categoryIds = $market === null ? [] : $this->officialSkillCategoryRelationDomainService->getMarketCategoryIds($market->getId() ?? 0);
 
         $token = $this->skillImportService->generate(self::IMPORT_TOKEN_PREFIX, [
             'organization_code' => $organizationCode,
             'operator_id' => $authorization->getId(),
             'file_key' => $fileKey,
-            'code' => $package->packageName,
+            'package_name' => $package->packageName,
+            'skill_code' => $code,
             'package_description' => $package->packageDescription,
         ]);
 
         return new OfficialSkillImportPreviewDTO(
             importToken: $token,
-            code: $package->packageName,
+            code: $code,
             packageName: $package->packageName,
             packageDescription: $package->packageDescription,
             isUpdate: $isUpdate,
-            nameI18n: $this->buildDefaultNameI18n($package->packageName),
-            descriptionI18n: $this->buildDefaultDescriptionI18n($package->packageDescription),
+            nameI18n: $market?->getNameI18n() ?: $this->buildDefaultNameI18n($package->packageName),
+            descriptionI18n: $market?->getDescriptionI18n() ?: $this->buildDefaultDescriptionI18n($package->packageDescription),
             logo: $market?->getLogo() ?? '',
-            marketId: $market?->getId()
+            id: $market === null ? '' : (string) $market->getId(),
+            publisherType: $market?->getPublisherType()->value ?? PublisherType::OFFICIAL->value,
+            isFeatured: $market?->isFeatured() ?? false,
+            isHidden: $market?->isHidden() ?? false,
+            sortOrder: $market?->getSortOrder() ?? 0,
+            version: $this->resolveImportVersion($market, $version),
+            categories: $this->buildCategories($categoryIds),
         );
     }
 
@@ -90,22 +104,19 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         return $this->skillImportService->execute(
             $lockKey,
             function () use ($organizationCode, $authorization, $package, $requestDTO): OfficialSkillImportResultDTO {
-                $market = $this->resolveOfficialMarket($organizationCode, $package->packageName);
-                if ($this->officialSkillMarketDomainService->findStoreSkillBySkillCode($package->packageName) !== null && $market === null) {
-                    ExceptionBuilder::throw(SkillErrorCode::OFFICIAL_IMPORT_SOURCE_CONFLICT, 'skill.official_import_source_conflict');
-                }
-
+                $market = $this->officialSkillMarketDomainService->findOfficialSkillByPackageName($package->packageName);
                 $isUpdate = $market !== null;
-                $version = $this->saveVersion($organizationCode, $authorization, $package, $requestDTO, $market);
-                $market = $this->saveMarket($organizationCode, $package, $requestDTO, $version, $market);
+                $code = $market?->getSkillCode() ?? $package->skillCode ?? SkillEntity::generateNewCode();
+                $version = $this->saveVersion($organizationCode, $authorization, $package, $requestDTO, $market, $code);
+                $market = $this->saveMarket($organizationCode, $authorization, $requestDTO, $version, $market, $code);
                 $this->officialSkillCategoryRelationDomainService->replaceMarketCategories(
                     $organizationCode,
                     (int) $market->getId(),
-                    $requestDTO->getCategoryIds()
+                    $requestDTO->getCategoryIdList()
                 );
 
                 return new OfficialSkillImportResultDTO(
-                    $package->packageName,
+                    $code,
                     $version->getVersion(),
                     $isUpdate ? 'updated' : 'created',
                     $market->getId(),
@@ -136,8 +147,9 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             }
             return new SkillPackageDTO(
                 (string) $tokenData['file_key'],
-                (string) $tokenData['code'],
-                (string) ($tokenData['package_description'] ?? '')
+                (string) ($tokenData['package_name'] ?? $tokenData['skill_code']),
+                (string) ($tokenData['package_description'] ?? ''),
+                isset($tokenData['skill_code']) ? (string) $tokenData['skill_code'] : null,
             );
         }
 
@@ -149,16 +161,17 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         MagicUserAuthorization $authorization,
         SkillPackageDTO $package,
         ImportOfficialSkillRequestDTO $requestDTO,
-        ?SkillMarketEntity $market
+        ?SkillMarketEntity $market,
+        string $code
     ): SkillVersionEntity {
         $dataIsolation = SkillDataIsolation::create($organizationCode, $authorization->getId());
         $dataIsolation->disabled();
         $version = $market === null ? new SkillVersionEntity() : $this->officialSkillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($market->getSkillVersionId());
         $version ??= new SkillVersionEntity();
         if ($version->getId() !== null) {
-            $this->officialSkillVersionDomainService->clearCurrentVersionByCode($dataIsolation, $package->packageName);
+            $this->officialSkillVersionDomainService->clearCurrentVersionByCode($dataIsolation, $code);
         }
-        $version->setCode($package->packageName);
+        $version->setCode($code);
         $version->setOrganizationCode($organizationCode);
         $version->setCreatorId($authorization->getId());
         $version->setPackageName($package->packageName);
@@ -186,21 +199,23 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
 
     private function saveMarket(
         string $organizationCode,
-        SkillPackageDTO $package,
+        MagicUserAuthorization $authorization,
         ImportOfficialSkillRequestDTO $requestDTO,
         SkillVersionEntity $version,
-        ?SkillMarketEntity $market
+        ?SkillMarketEntity $market,
+        string $code
     ): SkillMarketEntity {
         $market ??= new SkillMarketEntity();
         $market->setOrganizationCode($organizationCode);
-        $market->setSkillCode($package->packageName);
+        $market->setSkillCode($code);
         $market->setSkillVersionId((int) $version->getId());
         $market->setNameI18n($requestDTO->getNameI18n());
         $market->setDescriptionI18n($requestDTO->getDescriptionI18n());
         $market->setSearchText($version->getSearchText());
         $market->setLogo($requestDTO->getLogo() !== '' ? $requestDTO->getLogo() : null);
-        $market->setPublisherId(OfficialOrganizationUtil::getOfficialOrganizationCode());
-        $market->setPublisherType(PublisherType::OFFICIAL);
+        $publisherType = PublisherType::from($requestDTO->getPublisherType());
+        $market->setPublisherId($publisherType->isUser() ? $authorization->getId() : OfficialOrganizationUtil::getOfficialOrganizationCode());
+        $market->setPublisherType($publisherType);
         $market->setPublishStatus($requestDTO->getPublishStatus());
         $market->setIsHidden($requestDTO->isHidden());
         $market->setIsFeatured($requestDTO->isFeatured());
@@ -209,9 +224,34 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         return $this->officialSkillMarketDomainService->saveStoreSkill($market);
     }
 
-    private function resolveOfficialMarket(string $organizationCode, string $code): ?SkillMarketEntity
+    private function resolveImportVersion(?SkillMarketEntity $market, ?SkillVersionEntity $version): string
     {
-        return $this->officialSkillMarketDomainService->findOfficialSkillBySkillCode($organizationCode, $code);
+        return $market === null ? '1.0.0' : ($version?->getVersion() ?? '');
+    }
+
+    /** @param array<int, int> $categoryIds @return array<int, array{id: string, name: string}> */
+    private function buildCategories(array $categoryIds): array
+    {
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $categories = [];
+        foreach ($this->officialSkillCategoryDomainService->findByIds($categoryIds) as $category) {
+            $categories[(int) $category->getId()] = [
+                'id' => (string) $category->getId(),
+                'name' => $category->getI18nName(CoContext::getLanguage()),
+            ];
+        }
+
+        $result = [];
+        foreach ($categoryIds as $categoryId) {
+            if (isset($categories[$categoryId])) {
+                $result[] = $categories[$categoryId];
+            }
+        }
+
+        return $result;
     }
 
     private function assertOfficialOrganization(RequestContext $requestContext): MagicUserAuthorization

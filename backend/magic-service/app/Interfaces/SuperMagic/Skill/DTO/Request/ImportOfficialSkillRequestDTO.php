@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\Skill\DTO\Request;
 
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Infrastructure\Core\AbstractRequestDTO;
 use Hyperf\Validation\ValidationException;
@@ -29,7 +30,9 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
 
     public string $logo = '';
 
-    public array $categoryIds = [];
+    public array $categories = [];
+
+    public string $publisherType = PublisherType::OFFICIAL->value;
 
     public string $publishStatus = 'OFFLINE';
 
@@ -74,9 +77,32 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
         return $this->logo;
     }
 
-    public function getCategoryIds(): array
+    public function getCategories(): array
     {
-        return $this->categoryIds;
+        return $this->categories;
+    }
+
+    /** @return array<int, string> */
+    public function getCategoryIdList(): array
+    {
+        $categoryIds = [];
+        foreach ($this->categories as $category) {
+            if (! is_array($category) || ! isset($category['id'])) {
+                continue;
+            }
+
+            $categoryId = (string) $category['id'];
+            if ($categoryId !== '' && ! in_array($categoryId, $categoryIds, true)) {
+                $categoryIds[] = $categoryId;
+            }
+        }
+
+        return $categoryIds;
+    }
+
+    public function getPublisherType(): string
+    {
+        return $this->publisherType;
     }
 
     public function getPublishStatus(): string
@@ -111,8 +137,11 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
             'description_i18n.default' => 'required|string',
             'source_i18n' => 'nullable|array',
             'logo' => 'nullable|string',
-            'category_ids' => 'nullable|array',
-            'category_ids.*' => 'integer|min:1',
+            'categories' => 'nullable|array|max:100',
+            'categories.*' => 'required|array',
+            'categories.*.id' => 'required|string|regex:/^\d+$/',
+            'categories.*.name' => 'nullable|string',
+            'publisher_type' => 'sometimes|string|in:' . PublisherType::USER->value . ',' . PublisherType::OFFICIAL->value,
             'publish_status' => 'nullable|string|in:' . implode(',', [PublishStatus::OFFLINE->value, PublishStatus::PUBLISHED->value]),
             'is_hidden' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',

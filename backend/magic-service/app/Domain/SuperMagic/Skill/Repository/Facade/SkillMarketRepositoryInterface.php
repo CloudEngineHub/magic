@@ -43,6 +43,8 @@ interface SkillMarketRepositoryInterface
 
     public function findOfficialBySkillCode(string $organizationCode, string $skillCode): ?SkillMarketEntity;
 
+    public function findOfficialByPackageName(string $packageName): ?SkillMarketEntity;
+
     /**
      * Find the latest published market skill by skill code.
      */

@@ -20,7 +20,13 @@ final readonly class OfficialSkillImportPreviewDTO implements JsonSerializable
         private array $nameI18n = [],
         private array $descriptionI18n = [],
         private string $logo = '',
-        private ?int $marketId = null,
+        private string $id = '',
+        private string $publisherType = 'OFFICIAL',
+        private bool $isFeatured = false,
+        private bool $isHidden = false,
+        private ?int $sortOrder = 0,
+        private string $version = '',
+        private array $categories = [],
     ) {
     }
 
@@ -35,7 +41,13 @@ final readonly class OfficialSkillImportPreviewDTO implements JsonSerializable
             'name_i18n' => $this->nameI18n,
             'description_i18n' => $this->descriptionI18n,
             'logo' => $this->logo,
-            'market_id' => $this->marketId,
+            'id' => $this->id,
+            'publisher_type' => $this->publisherType,
+            'is_featured' => $this->isFeatured,
+            'is_hidden' => $this->isHidden,
+            'sort_order' => $this->sortOrder,
+            'version' => $this->version,
+            'categories' => $this->categories,
         ];
     }
 }

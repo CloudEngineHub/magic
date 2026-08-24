@@ -19,6 +19,7 @@ use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\SuperMagic\Utils\DateFormatUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Codec\Json;
 use RuntimeException;
 
@@ -101,6 +102,27 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             ->where('skill_code', $skillCode)
             ->where('publisher_type', PublisherType::OFFICIAL->value)
             ->whereNull('deleted_at')
+            ->first();
+
+        return $model === null ? null : $this->toEntity($model->toArray());
+    }
+
+    public function findOfficialByPackageName(string $packageName): ?SkillMarketEntity
+    {
+        $marketTable = $this->skillMarketModel->getTable();
+        $versionTable = $this->resolveSkillVersionTable();
+        $officialOrganizationCode = OfficialOrganizationUtil::getOfficialOrganizationCode();
+
+        /** @var null|SkillMarketModel $model */
+        $model = $this->skillMarketModel::query()
+            ->join($versionTable . ' as skill_versions', $marketTable . '.skill_version_id', '=', 'skill_versions.id')
+            ->select($marketTable . '.*', 'skill_versions.package_name')
+            ->where($marketTable . '.organization_code', $officialOrganizationCode)
+            ->where('skill_versions.package_name', $packageName)
+            ->where($marketTable . '.publisher_type', PublisherType::OFFICIAL->value)
+            ->where($marketTable . '.publisher_id', $officialOrganizationCode)
+            ->whereNull($marketTable . '.deleted_at')
+            ->whereNull('skill_versions.deleted_at')
             ->first();
 
         return $model === null ? null : $this->toEntity($model->toArray());

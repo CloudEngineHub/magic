@@ -65,6 +65,11 @@ class SkillMarketDomainService
         return $this->skillMarketRepository->findOfficialBySkillCode($organizationCode, $skillCode);
     }
 
+    public function findOfficialSkillByPackageName(string $packageName): ?SkillMarketEntity
+    {
+        return $this->skillMarketRepository->findOfficialByPackageName($packageName);
+    }
+
     /**
      * Find the latest published market skill by skill code.
      */

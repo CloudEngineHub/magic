@@ -13,6 +13,7 @@ final readonly class SkillPackageDTO
         public string $fileKey,
         public string $packageName,
         public string $packageDescription,
+        public ?string $skillCode = null,
     ) {
     }
 }

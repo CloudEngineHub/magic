@@ -44,10 +44,14 @@ class OfficialSkillImportRequestDTOTest extends TestCase
         $dto = ImportOfficialSkillRequestDTO::fromRequest($this->createRequest([
             'file_key' => 'official/demo.zip',
             'version' => '1.0.0',
-            'name_i18n' => ['en_US' => 'Official skill'],
-            'description_i18n' => ['en_US' => 'Description'],
-            'source_i18n' => ['en_US' => 'Official'],
-            'category_ids' => [1, '2'],
+            'name_i18n' => ['default' => 'Official skill'],
+            'description_i18n' => ['default' => 'Description'],
+            'source_i18n' => ['default' => 'Official'],
+            'categories' => [
+                ['id' => '1', 'name' => 'Marketing'],
+                ['id' => '2', 'name' => 'Human Resources'],
+            ],
+            'publisher_type' => 'USER',
             'publish_status' => 'OFFLINE',
             'is_hidden' => true,
             'is_featured' => false,
@@ -56,8 +60,39 @@ class OfficialSkillImportRequestDTOTest extends TestCase
 
         $this->assertSame('official/demo.zip', $dto->getFileKey());
         $this->assertSame('1.0.0', $dto->getVersion());
-        $this->assertSame([1, '2'], $dto->getCategoryIds());
+        $this->assertSame([
+            ['id' => '1', 'name' => 'Marketing'],
+            ['id' => '2', 'name' => 'Human Resources'],
+        ], $dto->getCategories());
+        $this->assertSame('USER', $dto->getPublisherType());
         $this->assertTrue($dto->isHidden());
+    }
+
+    public function testImportRejectsUnsupportedPublisherType(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        ImportOfficialSkillRequestDTO::fromRequest($this->createRequest([
+            'file_key' => 'official/demo.zip',
+            'version' => '1.0.0',
+            'name_i18n' => ['default' => 'Official skill'],
+            'description_i18n' => ['default' => 'Description'],
+            'publisher_type' => 'PARTNER',
+        ]));
+    }
+
+    public function testImportDefaultsToOfficialPublisher(): void
+    {
+        $dto = ImportOfficialSkillRequestDTO::fromRequest($this->createRequest([
+            'file_key' => 'official/demo.zip',
+            'version' => '1.0.0',
+            'name_i18n' => ['default' => 'Official skill'],
+            'description_i18n' => ['default' => 'Description'],
+        ]));
+
+        $this->assertSame('OFFICIAL', $dto->getPublisherType());
+        $this->assertSame([], $dto->getCategories());
+        $this->assertSame([], $dto->getCategoryIdList());
     }
 
     private function createRequest(array $payload): RequestInterface
