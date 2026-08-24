@@ -64,6 +64,26 @@ class MagicPermission implements MagicPermissionInterface
     }
 
     /**
+     * 获取资源的完整标签路径。
+     */
+    public function getResourceLabelPath(string $resource): string
+    {
+        $enum = MagicResourceEnum::tryFrom($resource);
+        if (! $enum) {
+            throw new InvalidArgumentException('Not a resource type: ' . $resource);
+        }
+
+        $labels = [];
+        $current = $enum;
+        while ($current !== null) {
+            $labels[] = $this->getResourceLabel($current->value);
+            $current = $current->parent();
+        }
+
+        return implode('-', array_reverse($labels));
+    }
+
+    /**
      * 构建完整权限标识.
      */
     public function buildPermission(string $resource, string $operation): string

@@ -56,6 +56,11 @@ interface MagicPermissionInterface
     public function getResourceLabel(string $resource): string;
 
     /**
+     * 获取资源的完整标签路径。
+     */
+    public function getResourceLabelPath(string $resource): string;
+
+    /**
      * 获取操作标签.
      */
     public function getOperationLabel(string $operation): string;
