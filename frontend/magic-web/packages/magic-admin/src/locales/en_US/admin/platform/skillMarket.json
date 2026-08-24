@@ -42,6 +42,12 @@
 		},
 		"defaultSource": "Official source",
 		"description": "Upload a .skill file, .zip archive, or Skill folder, complete the market information, and publish it. This entry is for manual admin imports only.",
+		"duplicate": {
+			"cancel": "Cancel import",
+			"continue": "Continue update",
+			"description": "The official Skill “{{name}}” already exists. Continue updating it?",
+			"title": "Skill already exists"
+		},
 		"errors": {
 			"archiveFailed": "The folder could not be archived. Try again later.",
 			"categoriesFailed": "Categories could not be loaded. Try again later.",

@@ -107,6 +107,16 @@ export interface ParseOfficialSkillResponse {
 	code: string
 	package_description: string
 	is_update: boolean
+	id?: string | null
+	publisher_type?: SkillPublisherType
+	version?: string
+	is_featured?: boolean
+	is_hidden?: boolean
+	sort_order?: number
+	categories?: Array<{
+		id: string
+		name: string
+	}>
 	name_i18n?: NameI18N
 	description_i18n?: NameI18N
 	source_i18n?: NameI18N

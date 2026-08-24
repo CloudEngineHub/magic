@@ -42,6 +42,12 @@
 		},
 		"defaultSource": "官方来源",
 		"description": "上传 .skill、.zip 或 Skill 文件夹，解析后填写市场信息并发布，此入口仅用于后台手动导入",
+		"duplicate": {
+			"cancel": "取消导入",
+			"continue": "继续更新",
+			"description": "官方 Skill“{{name}}”已经存在，是否继续更新？",
+			"title": "Skill 已存在"
+		},
 		"errors": {
 			"archiveFailed": "文件夹打包失败，请稍后重试",
 			"categoriesFailed": "分类加载失败，请稍后重试",

@@ -253,6 +253,18 @@ const OfficialSkillImportDialog = memo(
 					is_featured: false,
 					sort_order: 0,
 				})
+				if (parsedResult.is_update) {
+					MagicModal.confirm({
+						centered: true,
+						title: t("officialSkillImport.duplicate.title"),
+						content: t("officialSkillImport.duplicate.description", {
+							name: parsedResult.package_name,
+						}),
+						cancelText: t("officialSkillImport.duplicate.cancel"),
+						okText: t("officialSkillImport.duplicate.continue"),
+						onCancel: clearSelectedFile,
+					})
+				}
 				setProgress(100)
 			} catch {
 				message.error(t("officialSkillImport.errors.parseFailed"))
