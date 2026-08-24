@@ -774,6 +774,32 @@ describe("dedupeLinkedMediaItemsByPath", () => {
 })
 
 describe("resolveLinkedMediaDisplay", () => {
+	it("hides media rejected by the existing type or mode policy", () => {
+		const unsupportedItems = [
+			{
+				connectionId: "unsupported-type",
+				sourceElementId: "video-source",
+				kind: "video" as const,
+				path: "/videos/source.mp4",
+				status: "inactive" as const,
+				reason: "unsupported-type" as const,
+			},
+			{
+				connectionId: "unsupported-mode",
+				sourceElementId: "audio-source",
+				kind: "audio" as const,
+				path: "/audios/source.mp3",
+				status: "inactive" as const,
+				reason: "unsupported-mode" as const,
+			},
+		]
+
+		expect(resolveLinkedMediaDisplay([], () => "", unsupportedItems)).toEqual({
+			manualItems: [],
+			linkedItems: [],
+		})
+	})
+
 	it("uses the linked card as the single display item for a manually mentioned resource", () => {
 		const linkedItem = {
 			connectionId: "connection-image",

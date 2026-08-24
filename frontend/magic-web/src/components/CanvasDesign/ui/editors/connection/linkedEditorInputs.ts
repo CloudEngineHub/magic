@@ -113,7 +113,10 @@ export interface LinkedMediaDisplayResolution<TManual, TLinked extends LinkedEdi
 	linkedItems: Array<TLinked & { path: string }>
 }
 
-/** 同一路径存在画布连接时，由关联卡片统一承载展示，避免退化为纯手动资源卡片。 */
+/**
+ * 同一路径存在受支持的画布连接时，由关联卡片统一承载展示。
+ * 类型或当前模式不支持的候选保留在关联解析中，但不进入 SourceList。
+ */
 export function resolveLinkedMediaDisplay<TManual, TLinked extends LinkedEditorMediaItem>(
 	manualItems: TManual[],
 	getManualPath: (item: TManual) => string,
@@ -121,7 +124,12 @@ export function resolveLinkedMediaDisplay<TManual, TLinked extends LinkedEditorM
 	resolveResourceReference?: ResolveCanvasResourceReference,
 ): LinkedMediaDisplayResolution<TManual, TLinked> {
 	const visibleLinkedItems = dedupeLinkedMediaItemsByPath(
-		linkedItems.filter((item): item is TLinked & { path: string } => Boolean(item.path)),
+		linkedItems.filter(
+			(item): item is TLinked & { path: string } =>
+				Boolean(item.path) &&
+				item.reason !== "unsupported-type" &&
+				item.reason !== "unsupported-mode",
+		),
 		resolveResourceReference,
 	)
 	const linkedPathIdentities = new Set(
