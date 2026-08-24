@@ -1433,9 +1433,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * 保存侧栏工作区顺序。
 	 */
-	reorderWorkspaces({ workspace_ids }: { workspace_ids: string[] }) {
-		return fetch.post<{ workspace_ids?: string[] }>("/api/v1/super-agent/workspaces/reorder", {
-			workspace_ids,
+	moveWorkspace({ id, pre_workspace_id }: { id: string; pre_workspace_id: string | null }) {
+		return fetch.put<{ workspace?: Workspace }>(`/api/v1/super-agent/workspaces/${id}`, {
+			pre_workspace_id,
 		})
 	},
 
@@ -1496,14 +1496,16 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		id,
 		workspace_name,
 		is_pinned,
+		pre_workspace_id,
 	}: {
 		id: string
 		workspace_name: string
 		is_pinned?: boolean
+		pre_workspace_id?: string | null
 	}) {
 		return fetch.put(
 			`/api/v1/super-agent/workspaces/${id}`,
-			{ workspace_name, is_pinned },
+			{ workspace_name, is_pinned, pre_workspace_id },
 			{
 				enableRequestUnion: true,
 			},
@@ -2176,6 +2178,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_name,
 		order_by,
 		sort,
+		pin_priority,
 		page,
 		page_size,
 	}: {
@@ -2183,6 +2186,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_name?: string
 		order_by?: string
 		sort?: string
+		pin_priority?: number
 		page: number
 		page_size: number
 	}) {
@@ -2195,6 +2199,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 					project_name,
 					order_by,
 					sort,
+					pin_priority,
 					page,
 					page_size,
 				},
@@ -2208,16 +2213,22 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * 保存指定工作区内的项目顺序。
 	 */
-	reorderProjects({
-		workspace_id,
-		project_ids,
+	moveProject({
+		source_project_id,
+		target_workspace_id,
+		pre_project_id,
+		target_project_name,
 	}: {
-		workspace_id: string
-		project_ids: string[]
+		source_project_id: string
+		target_workspace_id: string
+		pre_project_id: string | null
+		target_project_name?: string
 	}) {
-		return fetch.post<{ project_ids?: string[] }>("/api/v1/super-agent/projects/reorder", {
-			workspace_id,
-			project_ids,
+		return fetch.post("/api/v1/super-agent/projects/move", {
+			source_project_id,
+			target_workspace_id,
+			pre_project_id,
+			target_project_name,
 		})
 	},
 
@@ -2666,17 +2677,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_workspace_id,
 		target_workspace_name,
 		target_project_name,
+		pre_project_id,
 	}: {
 		source_project_id: string
 		target_workspace_id: string
 		target_workspace_name?: string
 		target_project_name?: string
+		pre_project_id?: string | null
 	}) {
 		return fetch.post("/api/v1/super-agent/projects/move", {
 			source_project_id,
 			target_workspace_id,
 			target_workspace_name,
 			target_project_name,
+			pre_project_id,
 		})
 	},
 

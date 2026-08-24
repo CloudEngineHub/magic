@@ -54,6 +54,7 @@ export interface MoveProjectParams {
 	projectId: string
 	targetWorkspaceId: string
 	sourceWorkspaceId: string
+	preProjectId?: string | null
 	/** Optional; resolved from workspace list when omitted. */
 	targetWorkspaceName?: string
 	/** Optional; used by save-as-project flow as API `target_project_name`. */
@@ -224,29 +225,34 @@ class ProjectService {
 		}
 	}
 
-	reorderProjects = async (workspaceId: string, projectIds: string[]): Promise<void> => {
-		const previousProjectIds = projectStore
-			.getProjectsByWorkspace(workspaceId)
-			.map((project) => project.id)
-		runInAction(() => {
-			projectStore.reorderProjectsInWorkspace(workspaceId, projectIds)
-		})
+	moveProjectInWorkspace = async (
+		workspaceId: string,
+		projectId: string,
+		preProjectId: string | null,
+	): Promise<void> => {
+		const projects = projectStore.getProjectsByWorkspace(workspaceId)
+		const previousIds = projects.map((project) => project.id)
+		const sourceIndex = previousIds.indexOf(projectId)
+		if (sourceIndex === -1) return
+		const nextIds = previousIds.filter((id) => id !== projectId)
+		const insertIndex = preProjectId ? nextIds.indexOf(preProjectId) + 1 : 0
+		nextIds.splice(Math.max(0, insertIndex), 0, projectId)
+		runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, nextIds))
 
 		try {
-			const response = await SuperMagicApi.reorderProjects({
-				workspace_id: workspaceId,
-				project_ids: projectIds,
+			await SuperMagicApi.moveProject({
+				source_project_id: projectId,
+				target_workspace_id: workspaceId,
+				pre_project_id: preProjectId,
 			})
-			const confirmedIds = response?.project_ids
-			if (confirmedIds?.length) {
-				runInAction(() => {
-					projectStore.reorderProjectsInWorkspace(workspaceId, confirmedIds)
-				})
-			}
+			await projectStore.loadProjectsForWorkspace(workspaceId, true, true)
+			this.syncSelectedProjectAfterMove(
+				projectId,
+				workspaceId,
+				projectStore.getProjectsByWorkspace(workspaceId),
+			)
 		} catch (error) {
-			runInAction(() => {
-				projectStore.reorderProjectsInWorkspace(workspaceId, previousProjectIds)
-			})
+			runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, previousIds))
 			throw error
 		}
 	}
@@ -433,6 +439,7 @@ class ProjectService {
 		sourceWorkspaceId,
 		targetWorkspaceName,
 		targetProjectName,
+		preProjectId,
 	}: MoveProjectParams): Promise<boolean> => {
 		const operationId = `move_${projectId}_${Date.now()}`
 		const resolvedTargetWorkspaceName =
@@ -446,6 +453,7 @@ class ProjectService {
 			targetWorkspaceId,
 			resolvedTargetWorkspaceName,
 			targetProjectName,
+			preProjectId,
 		})
 
 		const activeProject =
@@ -485,6 +493,7 @@ class ProjectService {
 					target_workspace_id: targetWorkspaceId,
 					target_workspace_name: resolvedTargetWorkspaceName,
 					target_project_name: targetProjectName?.trim() || undefined,
+					pre_project_id: preProjectId ?? null,
 				})
 
 				if (res) {
@@ -560,15 +569,19 @@ class ProjectService {
 		project,
 		targetWorkspaceId,
 		targetWorkspaceName,
-		targetIndex,
+		preProjectId,
 	}: {
 		project: ProjectListItem
 		targetWorkspaceId: string
 		targetWorkspaceName?: string
-		targetIndex?: number
+		preProjectId?: string | null
 	}): Promise<void> => {
 		const sourceWorkspaceId = project.workspace_id
 		if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
+		const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
+		const targetIndex = preProjectId
+			? targetProjects.findIndex((item) => item.id === preProjectId) + 1
+			: 0
 
 		runInAction(() => {
 			projectStore.moveProjectBetweenWorkspaces(
@@ -585,6 +598,7 @@ class ProjectService {
 				source_project_id: project.id,
 				target_workspace_id: targetWorkspaceId,
 				target_workspace_name: targetWorkspaceName,
+				pre_project_id: preProjectId ?? null,
 			})
 			await Promise.all([
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
@@ -595,25 +609,6 @@ class ProjectService {
 				targetWorkspaceId,
 				projectStore.getProjectsByWorkspace(targetWorkspaceId),
 			)
-			if (targetIndex !== undefined) {
-				const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
-				const movedIndex = targetProjects.findIndex((item) => item.id === project.id)
-				if (movedIndex !== -1 && movedIndex !== targetIndex) {
-					const orderedProjects = [...targetProjects]
-					const [movedProject] = orderedProjects.splice(movedIndex, 1)
-					if (!movedProject) return
-					orderedProjects.splice(
-						Math.max(0, Math.min(targetIndex, orderedProjects.length)),
-						0,
-						movedProject,
-					)
-					await SuperMagicApi.reorderProjects({
-						workspace_id: targetWorkspaceId,
-						project_ids: orderedProjects.map((item) => item.id),
-					})
-					projectStore.setProjectsForWorkspace(targetWorkspaceId, orderedProjects)
-				}
-			}
 		} catch (error) {
 			// A forced refresh is the safest rollback because either side may have
 			// been changed by another tab while the move was in flight.

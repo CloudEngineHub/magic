@@ -14,10 +14,13 @@ import {
 	getIndicatorLineY,
 	getNearestProjectTarget,
 	getNearestWorkspaceTarget,
+	getPredecessorId,
+	getProjectPinBoundaryAction,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
 	isNoOpInsertion,
 } from "./dndUtils"
+import type { ProjectPinBoundaryAction } from "./ProjectPinBoundaryConfirmDialog"
 
 const SIDEBAR_DRAG_DATA_TYPE = "application/x-magic-sidebar-dnd"
 const AUTO_EXPAND_DELAY = 1000
@@ -34,6 +37,10 @@ interface DropPreview {
 interface UseWorkspaceListDndOptions {
 	workspaces: Workspace[]
 	disabled: boolean
+	requestPinBoundaryConfirmation: (request: {
+		action: ProjectPinBoundaryAction
+		projectName: string
+	}) => Promise<boolean>
 }
 
 interface DragVisualState {
@@ -91,8 +98,12 @@ function resolveDropTarget(
 	)
 }
 
-export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDndOptions) {
-	const { t } = useTranslation()
+export function useWorkspaceListDnd({
+	workspaces,
+	disabled,
+	requestPinBoundaryConfirmation,
+}: UseWorkspaceListDndOptions) {
+	const { t } = useTranslation("super")
 	const rootRef = useRef<HTMLDivElement>(null)
 	const dropIndicatorRef = useRef<SVGSVGElement>(null)
 	const activeDragRef = useRef<SidebarDragData | null>(null)
@@ -640,7 +651,16 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 						preview.position || "after",
 					)
 					if (next.every((item, index) => item.id === workspaces[index]?.id)) return
-					await superMagicService.workspace.reorderWorkspaces(next.map((item) => item.id))
+					const preWorkspaceId = getPredecessorId(
+						workspaces,
+						active.workspaceId,
+						preview.workspaceId,
+						preview.position || "after",
+					)
+					await superMagicService.workspace.moveWorkspace(
+						active.workspaceId,
+						preWorkspaceId,
+					)
 					return
 				}
 				if (active.type !== "project") return
@@ -665,35 +685,66 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 						preview.position || "after",
 					)
 					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) return
-					await superMagicService.project.reorderProjects(
+					const preProjectId = getPredecessorId(
+						sourceProjects,
+						active.projectId,
+						preview.type === "project" ? preview.projectId : undefined,
+						preview.position || "after",
+					)
+					const pinAction = getProjectPinBoundaryAction(
+						sourceProjects,
+						active.projectId,
+						preview.type === "project" ? preview.projectId : undefined,
+						preview.position || "after",
+					)
+					if (pinAction) {
+						const confirmed = await requestPinBoundaryConfirmation({
+							action: pinAction,
+							projectName: project.project_name || t("project.unnamedProject"),
+						})
+						if (!confirmed) return
+					}
+					await superMagicService.project.moveProjectInWorkspace(
 						active.workspaceId,
-						next.map((item) => item.id),
+						active.projectId,
+						preProjectId,
 					)
 					return
 				}
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
-				const targetIndex =
-					preview.type === "project" && preview.projectId
-						? Math.max(
-								0,
-								targetProjects.findIndex((item) => item.id === preview.projectId) +
-									(preview.position === "after" ? 1 : 0),
-							)
-						: targetProjects.length
+				const preProjectId = getPredecessorId(
+					[project, ...targetProjects],
+					active.projectId,
+					preview.type === "project" ? preview.projectId : undefined,
+					preview.position || "after",
+				)
+				const pinAction = getProjectPinBoundaryAction(
+					[project, ...targetProjects],
+					active.projectId,
+					preview.type === "project" ? preview.projectId : undefined,
+					preview.position || "after",
+				)
+				if (pinAction) {
+					const confirmed = await requestPinBoundaryConfirmation({
+						action: pinAction,
+						projectName: project.project_name || t("project.unnamedProject"),
+					})
+					if (!confirmed) return
+				}
 				const targetWorkspace = workspaceStore.getWorkspaceById(preview.workspaceId)
 				await superMagicService.project.moveProjectFromSidebar({
 					project,
 					targetWorkspaceId: preview.workspaceId,
 					targetWorkspaceName: targetWorkspace?.name,
-					targetIndex,
+					preProjectId,
 				})
 			} catch (error) {
 				console.error("Failed to persist sidebar drag result:", error)
 				message.error(t("common.operationFailed", { defaultValue: "操作失败，请稍后重试" }))
 			}
 		},
-		[buildPreview, disabled, resetDragState, t, workspaces],
+		[buildPreview, disabled, requestPinBoundaryConfirmation, resetDragState, t, workspaces],
 	)
 
 	useEffect(() => {

@@ -35,6 +35,7 @@ import {
 	SidebarMenu,
 } from "@/components/shadcn-ui/sidebar"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
+import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -114,6 +115,7 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 				).values(),
 			)
 		: workspaces
+	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
 	const {
 		rootRef: dndRootRef,
 		dropIndicatorRef,
@@ -123,7 +125,11 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		handleDragLeave,
 		handleDrop,
 		handleDragEnd,
-	} = useWorkspaceListDnd({ workspaces, disabled: isSearchMode })
+	} = useWorkspaceListDnd({
+		workspaces,
+		disabled: isSearchMode,
+		requestPinBoundaryConfirmation: requestConfirmation,
+	})
 
 	function handleStartCreateWorkspace() {
 		setIsCreatingWorkspace(true)
@@ -377,6 +383,7 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			onDragEnd={handleDragEnd}
 			className="relative"
 		>
+			{confirmationDialog}
 			<SidebarGroup
 				className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
 				data-testid="sidebar-workspace-list"

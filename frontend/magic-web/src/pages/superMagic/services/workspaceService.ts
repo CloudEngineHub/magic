@@ -146,20 +146,19 @@ class WorkspaceService {
 		}
 	}
 
-	reorderWorkspaces = async (workspaceIds: string[]): Promise<void> => {
+	moveWorkspace = async (workspaceId: string, preWorkspaceId: string | null): Promise<void> => {
 		const previousWorkspaceIds = workspaceStore.workspaces.map((workspace) => workspace.id)
+		const sourceIndex = previousWorkspaceIds.indexOf(workspaceId)
+		if (sourceIndex === -1) return
+		const nextWorkspaceIds = previousWorkspaceIds.filter((id) => id !== workspaceId)
+		const insertIndex = preWorkspaceId ? nextWorkspaceIds.indexOf(preWorkspaceId) + 1 : 0
+		nextWorkspaceIds.splice(Math.max(0, insertIndex), 0, workspaceId)
 		runInAction(() => {
-			workspaceStore.reorderWorkspaces(workspaceIds)
+			workspaceStore.reorderWorkspaces(nextWorkspaceIds)
 		})
 
 		try {
-			const response = await SuperMagicApi.reorderWorkspaces({ workspace_ids: workspaceIds })
-			const confirmedIds = response?.workspace_ids
-			if (confirmedIds?.length) {
-				runInAction(() => {
-					workspaceStore.reorderWorkspaces(confirmedIds)
-				})
-			}
+			await SuperMagicApi.moveWorkspace({ id: workspaceId, pre_workspace_id: preWorkspaceId })
 		} catch (error) {
 			runInAction(() => {
 				workspaceStore.reorderWorkspaces(previousWorkspaceIds)

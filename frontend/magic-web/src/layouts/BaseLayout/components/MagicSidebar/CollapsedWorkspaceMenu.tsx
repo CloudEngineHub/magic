@@ -14,6 +14,7 @@ import SidebarCreateInput from "./components/SidebarCreateInput"
 import CollapsedWorkspaceMenuWorkspaceItem from "./CollapsedWorkspaceMenuWorkspaceItem"
 import { SidebarMenuButton } from "@/components/shadcn-ui/sidebar"
 import { useCollapsedWorkspaceDnd } from "./useCollapsedWorkspaceDnd"
+import { useProjectPinBoundaryConfirmation } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
@@ -37,11 +38,13 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const workspaces = workspaceStore.workspaces
 	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
+	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
 	const { rootRef: dndRootRef } = useCollapsedWorkspaceDnd({
 		workspaces,
 		enabled: isOpen,
 		openProjectMenuId,
 		onProjectMenuChange: setOpenProjectMenuId,
+		requestPinBoundaryConfirmation: requestConfirmation,
 	})
 
 	function handleProjectClick(projectId: string, workspaceId: string) {
@@ -160,6 +163,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 			className="flex shrink-0 flex-col items-center p-2"
 			data-testid="sidebar-collapsed-workspace-menu"
 		>
+			{confirmationDialog}
 			<div className="flex w-8 shrink-0 flex-col items-start gap-1">
 				<Popover
 					open={isOpen}

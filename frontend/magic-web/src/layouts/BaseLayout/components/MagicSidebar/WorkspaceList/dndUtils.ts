@@ -120,6 +120,41 @@ export function insertAtPosition<T>(
 	return next
 }
 
+/** Resolves the item that should precede a dragged item after insertion. */
+export function getPredecessorId<T extends { id: string }>(
+	items: T[],
+	sourceId: string,
+	targetId: string | undefined,
+	position: SidebarDropPosition,
+) {
+	const remaining = items.filter((item) => item.id !== sourceId)
+	if (!targetId) return remaining.at(-1)?.id ?? null
+	const targetIndex = remaining.findIndex((item) => item.id === targetId)
+	if (targetIndex === -1) return remaining.at(-1)?.id ?? null
+	return position === "after"
+		? remaining[targetIndex]?.id || null
+		: remaining[targetIndex - 1]?.id || null
+}
+
+/** Detects a pin-group boundary crossing that requires user confirmation. */
+export function getProjectPinBoundaryAction(
+	items: Array<{ id: string; is_pinned?: boolean }>,
+	sourceId: string,
+	targetId: string | undefined,
+	position: SidebarDropPosition,
+) {
+	const source = items.find((item) => item.id === sourceId)
+	if (!source) return null
+	const remaining = items.filter((item) => item.id !== sourceId)
+	const targetIndex = targetId ? remaining.findIndex((item) => item.id === targetId) : -1
+	const insertIndex =
+		targetIndex === -1 ? remaining.length : position === "after" ? targetIndex + 1 : targetIndex
+	const pinnedCount = remaining.filter((item) => Boolean(item.is_pinned)).length
+	if (!source.is_pinned && insertIndex < pinnedCount) return "pin" as const
+	if (source.is_pinned && insertIndex >= pinnedCount) return "unpin" as const
+	return null
+}
+
 /** Returns true when the requested insertion leaves the source unchanged. */
 export function isNoOpInsertion(
 	sourceIndex: number,
