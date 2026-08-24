@@ -26,8 +26,8 @@ final readonly class OfficialSkillImportResultDTO implements JsonSerializable
             'code' => $this->code,
             'version' => $this->version,
             'action' => $this->action,
-            'market_id' => $this->marketId,
-            'version_id' => $this->versionId,
+            'id' => (string) $this->marketId,
+            'version_id' => (string) $this->versionId,
         ];
     }
 }

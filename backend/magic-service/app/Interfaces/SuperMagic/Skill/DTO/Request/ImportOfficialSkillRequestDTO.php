@@ -30,7 +30,7 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
 
     public string $logo = '';
 
-    public array $categories = [];
+    public array $categoryIds = [];
 
     public string $publisherType = PublisherType::OFFICIAL->value;
 
@@ -77,21 +77,12 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
         return $this->logo;
     }
 
-    public function getCategories(): array
-    {
-        return $this->categories;
-    }
-
     /** @return array<int, string> */
     public function getCategoryIdList(): array
     {
         $categoryIds = [];
-        foreach ($this->categories as $category) {
-            if (! is_array($category) || ! isset($category['id'])) {
-                continue;
-            }
-
-            $categoryId = (string) $category['id'];
+        foreach ($this->categoryIds as $categoryId) {
+            $categoryId = (string) $categoryId;
             if ($categoryId !== '' && ! in_array($categoryId, $categoryIds, true)) {
                 $categoryIds[] = $categoryId;
             }
@@ -137,10 +128,8 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
             'description_i18n.default' => 'required|string',
             'source_i18n' => 'nullable|array',
             'logo' => 'nullable|string',
-            'categories' => 'nullable|array|max:100',
-            'categories.*' => 'required|array',
-            'categories.*.id' => 'required|string|regex:/^\d+$/',
-            'categories.*.name' => 'nullable|string',
+            'category_ids' => 'nullable|array|max:100',
+            'category_ids.*' => 'required|string|regex:/^\d+$/',
             'publisher_type' => 'sometimes|string|in:' . PublisherType::USER->value . ',' . PublisherType::OFFICIAL->value,
             'publish_status' => 'nullable|string|in:' . implode(',', [PublishStatus::OFFLINE->value, PublishStatus::PUBLISHED->value]),
             'is_hidden' => 'nullable|boolean',

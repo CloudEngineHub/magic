@@ -47,10 +47,7 @@ class OfficialSkillImportRequestDTOTest extends TestCase
             'name_i18n' => ['default' => 'Official skill'],
             'description_i18n' => ['default' => 'Description'],
             'source_i18n' => ['default' => 'Official'],
-            'categories' => [
-                ['id' => '1', 'name' => 'Marketing'],
-                ['id' => '2', 'name' => 'Human Resources'],
-            ],
+            'category_ids' => ['1', '2'],
             'publisher_type' => 'USER',
             'publish_status' => 'OFFLINE',
             'is_hidden' => true,
@@ -60,10 +57,7 @@ class OfficialSkillImportRequestDTOTest extends TestCase
 
         $this->assertSame('official/demo.zip', $dto->getFileKey());
         $this->assertSame('1.0.0', $dto->getVersion());
-        $this->assertSame([
-            ['id' => '1', 'name' => 'Marketing'],
-            ['id' => '2', 'name' => 'Human Resources'],
-        ], $dto->getCategories());
+        $this->assertSame(['1', '2'], $dto->getCategoryIdList());
         $this->assertSame('USER', $dto->getPublisherType());
         $this->assertTrue($dto->isHidden());
     }
@@ -91,7 +85,6 @@ class OfficialSkillImportRequestDTOTest extends TestCase
         ]));
 
         $this->assertSame('OFFICIAL', $dto->getPublisherType());
-        $this->assertSame([], $dto->getCategories());
         $this->assertSame([], $dto->getCategoryIdList());
     }
 
