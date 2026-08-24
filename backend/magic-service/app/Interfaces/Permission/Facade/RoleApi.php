@@ -68,7 +68,7 @@ class RoleApi extends AbstractPermissionApi
         $allNeedUserIds = [];
         foreach ($result['list'] as $index => $roleEntity) {
             /** @var RoleEntity $roleEntity */
-            $limitedIds = $roleEntity->getUserIds();
+            $limitedIds = array_slice($roleEntity->getUserIds(), 0, 30);
             $limitedIds[] = $roleEntity->getUpdatedUid();
             $roleUserIdsMap[$index] = $limitedIds;
             $allNeedUserIds = array_merge($allNeedUserIds, $limitedIds);
