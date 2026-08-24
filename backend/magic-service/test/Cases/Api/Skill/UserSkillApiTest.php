@@ -758,6 +758,7 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
+
     }
 
     public function testQueriesCollaboratedScope(): void
@@ -959,6 +960,29 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
+
+        $unifiedResponse = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'market_installed',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $this->getCommonHeaders()
+        );
+
+        $this->assertEquals(1000, $unifiedResponse['code'], $unifiedResponse['message'] ?? '');
+        $this->assertArrayHasKey('list', $unifiedResponse['data']);
+        $this->assertSame(1, $unifiedResponse['data']['page']);
+        $this->assertSame(20, $unifiedResponse['data']['page_size']);
+        $this->assertGreaterThanOrEqual(1, $unifiedResponse['data']['total']);
+        $this->assertArrayNotHasKey('code', $unifiedResponse['data']);
+        $this->assertArrayNotHasKey('message', $unifiedResponse['data']);
+        $this->assertContains(
+            $storeSkillData['skill_code'],
+            array_column($unifiedResponse['data']['list'], 'code'),
+            '统一技能查询接口的 market_installed scope 应该返回市场安装技能'
+        );
     }
 
     /**

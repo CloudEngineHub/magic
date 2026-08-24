@@ -14,6 +14,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillListScope;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
+use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
@@ -26,6 +27,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillInfoRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillDetailResponseDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -150,7 +152,7 @@ class SkillApi extends AbstractApi
 
         $scope = SkillListScope::from($requestData['scope'] ?? SkillListScope::ALL->value);
         if ($scope === SkillListScope::MARKET_INSTALLED) {
-            return $this->queriesMarketInstalled($requestContext, $request);
+            return $this->createMarketInstalledListResponse($requestContext, $query, $page);
         }
 
         $result = $this->userSkillAppService->queriesByScope($requestContext, $query, $page, $scope);
@@ -230,6 +232,14 @@ class SkillApi extends AbstractApi
         $query = new SkillQuery($requestData);
         $page = $this->createPage();
 
+        return $this->createMarketInstalledListResponse($requestContext, $query, $page);
+    }
+
+    private function createMarketInstalledListResponse(
+        RequestContext $requestContext,
+        SkillQuery $query,
+        Page $page
+    ): SkillListResponseDTO {
         $result = $this->userSkillAppService->queriesMarketInstalled($requestContext, $query, $page);
 
         return SkillAssembler::createListResponseDTOFromVersions(
