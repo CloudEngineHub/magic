@@ -1,5 +1,6 @@
 import { memo, useCallback, type MouseEvent } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import TSIcon from "@/components/base/TSIcon"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	getMentionDescription,
@@ -142,7 +143,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 
 	const isDirectory =
 		data.type === MentionItemType.FOLDER || data.type === MentionItemType.MEMORY_DIRECTORY
-	const label = isDirectory ? `@${displayName}/` : `@${displayName}`
+	const label = `@${displayName}`
 	const isFileMention =
 		data.type === MentionItemType.PROJECT_FILE || data.type === MentionItemType.UPLOAD_FILE
 	const fileData = isFileMention
@@ -163,6 +164,19 @@ function InlineDefaultMention(props: InlineMentionProps) {
 				title={fileData?.file_name || displayName}
 				onClick={handleClick}
 			/>
+		</span>
+	) : isDirectory ? (
+		<span
+			className="magic-mention inline-flex items-center gap-1 align-middle"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={handleClick}
+		>
+			<TSIcon type="ts-folder" size="16" className="shrink-0" />
+			<span className="min-w-0 truncate" title={displayName}>
+				{displayName}
+			</span>
 		</span>
 	) : (
 		<span
