@@ -1,30 +1,60 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import type { GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
 import { useDebounceEffect } from "ahooks"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export const useFileUrl = ({
 	file_id,
-	type = "download",
+	enabled = true,
 }: {
 	file_id: string
 	type?: "preview" | "download"
+	enabled?: boolean
 }) => {
 	const [fileUrl, setFileUrl] = useState<string>("")
+	const [isLoading, setIsLoading] = useState(false)
+	const [hasError, setHasError] = useState(false)
+	const requestIdRef = useRef(0)
 
 	useDebounceEffect(
 		() => {
-			if (!file_id) return
-			getTemporaryDownloadUrl({
-				file_ids: [file_id],
-			}).then((res: any) => {
-				setFileUrl(res[0]?.url)
-			})
+			const requestId = ++requestIdRef.current
+			if (!enabled || !file_id) {
+				setFileUrl("")
+				setIsLoading(false)
+				setHasError(false)
+				return
+			}
+			setIsLoading(true)
+			setHasError(false)
+			getTemporaryDownloadUrl({ file_ids: [file_id] })
+				.then((res: GetTemporaryDownloadUrlItem[]) => {
+					if (requestIdRef.current !== requestId) return
+					const url = res[0]?.url || ""
+					setFileUrl(url)
+					setHasError(!url)
+				})
+				.catch(() => {
+					if (requestIdRef.current !== requestId) return
+					setFileUrl("")
+					setHasError(true)
+				})
+				.finally(() => {
+					if (requestIdRef.current === requestId) setIsLoading(false)
+				})
 		},
-		[file_id],
+		[file_id, enabled],
 		{
 			wait: 16,
 		},
 	)
 
-	return { fileUrl }
+	useEffect(
+		() => () => {
+			requestIdRef.current += 1
+		},
+		[],
+	)
+
+	return { fileUrl, isLoading, hasError }
 }

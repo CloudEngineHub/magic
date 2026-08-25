@@ -56,7 +56,7 @@ function createProps(
 		},
 		selected: false,
 		deleteNode: vi.fn(),
-	} as ComponentProps<typeof UploadFileMentionNodeView>
+	} as unknown as ComponentProps<typeof UploadFileMentionNodeView>
 }
 
 describe("UploadFileMentionNodeView", () => {
@@ -75,7 +75,7 @@ describe("UploadFileMentionNodeView", () => {
 
 		render(<UploadFileMentionNodeView {...createProps()} />)
 
-		const fileName = screen.getByText("@demo.mov")
+		const fileName = screen.getByText("demo.mov")
 		expect(fileName).toBeInTheDocument()
 		const mention = fileName.closest(".magic-mention")
 		const visual = screen.getByTestId("upload-file-mention-visual")
@@ -110,7 +110,7 @@ describe("UploadFileMentionNodeView", () => {
 
 		render(<UploadFileMentionNodeView {...createProps()} />)
 
-		const mention = screen.getByText("@demo.mov").closest(".magic-mention")
+		const mention = screen.getByText("demo.mov").closest(".magic-mention")
 		expect(mention).toHaveClass("magic-mention")
 		expect(screen.getByTestId("upload-file-mention-visual")).toHaveClass(
 			"bg-primary-10",
@@ -201,7 +201,7 @@ describe("UploadFileMentionNodeView", () => {
 			storeMocks.getFileById.mock.calls.filter(([fileId]) => fileId === "file-1").length,
 		).toBe(firstLookupCount)
 		expect(
-			within(screen.getByText("@second.mov").parentElement as HTMLElement).getByText("40%"),
+			within(screen.getByText("second.mov").parentElement as HTMLElement).getByText("40%"),
 		).toBeInTheDocument()
 	})
 
