@@ -234,7 +234,7 @@ class AsrTaskStatusDTO
      */
     public function toArray(): array
     {
-        return [
+        $data = [
             'task_key' => $this->taskKey,
             'user_id' => $this->userId,
             'organization_code' => $this->organizationCode,
@@ -281,13 +281,18 @@ class AsrTaskStatusDTO
             'upload_generated_title' => $this->uploadGeneratedTitle,
             'finish_output_filename' => $this->finishOutputFilename,
             'expected_audio_file_name' => $this->expectedAudioFileName,
-            'file_shard_count' => $this->fileShardCount,
             // 异步阶段管理字段
             'current_phase' => $this->currentPhase,
             'phase_status' => $this->phaseStatus,
             'phase_percent' => $this->phasePercent,
             'phase_error' => $this->phaseError,
         ];
+
+        if ($this->fileShardCount !== null) {
+            $data['file_shard_count'] = $this->fileShardCount;
+        }
+
+        return $data;
     }
 
     /**
@@ -420,9 +425,17 @@ class AsrTaskStatusDTO
     private static function getIntValue(array $data, array $keys, ?int $default = null): ?int
     {
         foreach ($keys as $key) {
-            if (isset($data[$key])) {
-                return (int) $data[$key];
+            if (! array_key_exists($key, $data)) {
+                continue;
             }
+
+            $value = $data[$key];
+            if ($value === null || $value === '') {
+                return $default;
+            }
+
+            $value = (int) $value;
+            return $value > 0 ? $value : $default;
         }
         return $default;
     }

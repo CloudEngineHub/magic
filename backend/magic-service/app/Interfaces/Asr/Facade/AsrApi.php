@@ -1331,17 +1331,8 @@ class AsrApi extends AbstractApi
 
     private function applyFileShardCount(AsrTaskStatusDTO $taskStatus, int $fileShardCount): void
     {
-        if ($taskStatus->fileShardCount !== null && $taskStatus->fileShardCount !== $fileShardCount) {
-            ExceptionBuilder::throw(
-                GenericErrorCode::ParameterValidationFailed,
-                sprintf(
-                    'file_shard_count conflicts with the existing value: existing=%d, requested=%d',
-                    $taskStatus->fileShardCount,
-                    $fileShardCount
-                )
-            );
-        }
-
+        // 分片数的唯一业务来源是客户端请求；服务端已有值不作为冲突约束。
+        // 这样可以兼容历史任务中的空值/0值，也允许客户端重试时纠正数量。
         $taskStatus->fileShardCount = $fileShardCount;
     }
 
