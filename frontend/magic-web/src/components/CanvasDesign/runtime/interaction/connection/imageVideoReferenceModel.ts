@@ -9,7 +9,7 @@ import {
 	getAvailableInputModes,
 	getInputModeConfig,
 	resolveReferenceAssetLimits,
-} from "../../../ui/editors/video/model-config/video-editor-config.model"
+} from "../../media-editors/video/video-editor-config.model"
 
 export interface ResolvedImageReferenceVideoModel {
 	model: VideoModelItem

@@ -3,7 +3,7 @@ import type { CropConfig, LayerElement } from "../../runtime/document/types"
 import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import { useCanvasElements } from "../hooks/canvas/useCanvasElement"
 import { useUpdateEffect } from "ahooks"
-import type { ElementToolType } from "../../public/props"
+import type { ElementToolSession } from "../../runtime/element-tools"
 
 export interface FullscreenMediaElement {
 	elementId: string
@@ -58,9 +58,13 @@ interface CanvasUIContextValue {
 	erasingElementId: string | null
 	setErasingElementId: (id: string | null) => void
 
-	// 画布提示
-	subElementTooltip: ElementToolType | null
-	setSubElementTooltip: (type: ElementToolType | null) => void
+	// 当前正在使用图片/视频编辑器的元素 ID
+	editingElementId: string | null
+	setEditingElementId: (id: string | null) => void
+
+	// 当前工具会话
+	activeToolSession: ElementToolSession | null
+	setActiveToolSession: (session: ElementToolSession | null) => void
 
 	// 画布是否处于只读模式
 	readonly?: boolean
@@ -78,8 +82,8 @@ interface CanvasSelectionUIContextValue {
 	selectedElements: LayerElement[]
 	isDragging: boolean
 	isSelecting: boolean
-	subElementTooltip: ElementToolType | null
-	setSubElementTooltip: (type: ElementToolType | null) => void
+	activeToolSession: ElementToolSession | null
+	setActiveToolSession: (session: ElementToolSession | null) => void
 }
 
 interface CanvasPanelUIContextValue {
@@ -98,6 +102,8 @@ interface CanvasModeUIContextValue {
 	setExtendingElementId: (id: string | null) => void
 	erasingElementId: string | null
 	setErasingElementId: (id: string | null) => void
+	editingElementId: string | null
+	setEditingElementId: (id: string | null) => void
 	readonly?: boolean
 }
 
@@ -128,19 +134,22 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 	const [croppingElementId, setCroppingElementId] = useState<string | null>(null)
 	const [extendingElementId, setExtendingElementId] = useState<string | null>(null)
 	const [erasingElementId, setErasingElementId] = useState<string | null>(null)
+	const [editingElementId, setEditingElementId] = useState<string | null>(null)
 
-	const [subElementTooltip, setSubElementTooltip] = useState<ElementToolType | null>(null)
+	const [activeToolSession, setActiveToolSession] = useState<ElementToolSession | null>(null)
 
 	// 监听选中事件
 	useCanvasEvent("element:select", ({ data }) => {
 		setSelectedElementIds(data.elementIds)
-		setSubElementTooltip(null)
+		setActiveToolSession(null)
+		setEditingElementId(null)
 	})
 
 	// 监听取消选中事件
 	useCanvasEvent("element:deselect", () => {
 		setSelectedElementIds([])
-		setSubElementTooltip(null)
+		setActiveToolSession(null)
+		setEditingElementId(null)
 	})
 
 	// 监听拖拽开始事件
@@ -221,6 +230,7 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			setCroppingElementId((current) => (current === data.elementId ? null : current))
 			setExtendingElementId((current) => (current === data.elementId ? null : current))
 			setErasingElementId((current) => (current === data.elementId ? null : current))
+			setEditingElementId((current) => (current === data.elementId ? null : current))
 		},
 		[],
 	)
@@ -283,10 +293,10 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			selectedElementIds,
 			isDragging,
 			isSelecting,
-			subElementTooltip,
-			setSubElementTooltip,
+			activeToolSession,
+			setActiveToolSession,
 		}
-	}, [selectedElements, selectedElementIds, isDragging, isSelecting, subElementTooltip])
+	}, [selectedElements, selectedElementIds, isDragging, isSelecting, activeToolSession])
 
 	const panelValue = useMemo<CanvasPanelUIContextValue>(() => {
 		return {
@@ -307,9 +317,11 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			setExtendingElementId,
 			erasingElementId,
 			setErasingElementId,
+			editingElementId,
+			setEditingElementId,
 			readonly,
 		}
-	}, [croppingElementId, extendingElementId, erasingElementId, readonly])
+	}, [croppingElementId, extendingElementId, erasingElementId, editingElementId, readonly])
 
 	return (
 		<CanvasRenameUIContext.Provider value={renameValue}>

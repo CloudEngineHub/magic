@@ -279,42 +279,50 @@ export interface ShortcutDisplay {
 	modifiers?: ModifierAlias[]
 }
 
-/** 元素工具 */
+/** 稳定的元素工具业务身份。顶部、底部和版本工具共用这一套 ID。 */
 export const ElementToolTypeEnum = {
-	RichTextFillColor: "rich-text-fill-color", // 富文本填充颜色
-	StrokeColor: "stroke-color", // 描边颜色
-	SizeEditButton: "size-edit-button", // 编辑尺寸（Popover 内预设 + 宽高）
-	FrameCreateButton: "frame-create-button", // 创建画框按钮
-	FrameRemoveButton: "frame-remove-button", // 解除画框按钮
-	FrameDownloadButton: "frame-download-button", // 批量下载画框内媒体资源按钮
-	StoryboardVideoBatchButton: "storyboard-video-batch-button", // 整组执行分镜视频按钮
-	RichTextFontFamily: "rich-text-font-family", // 富文本字体簇(font-family)
-	RichTextFontStyle: "rich-text-font-style", // 富文本文字粗细(font-weight)
-	RichTextFontSize: "rich-text-font-size", // 富文本字体大小(font-size)
-	RichTextTextAlign: "rich-text-text-align", // 富文本对齐方式(align)
-	ElementAlign: "element-align", // 元素对齐
-	ElementDistribute: "element-distribute", // 元素分布
-	ShapeStyle: "shape-style", // 图形样式配置
-	DownloadButton: "download-button", // 下载按钮
-	MediaReplaceButton: "media-replace-button", // 统一替换图片、视频、音频资源按钮
-	MediaDownloadButton: "media-download-button", // 统一下载图片、视频、音频资源按钮
-	AudioReplaceButton: "audio-replace-button", // 替换/上传音频按钮
-	AudioDownloadButton: "audio-download-button", // 下载音频按钮
-	RichTextAdvancedButton: "rich-text-advanced-button", // 富文本高级按钮
-	TextContentOptimizationButton: "text-content-optimization-button", // 文本内容优化按钮
-	ImagePromptExtractionButton: "image-prompt-extraction-button", // 图片提炼提示词按钮
-	ImageConvertHightButton: "image-convert-hight-button", // 转高清按钮
-	ImageConvertHight: "image-convert-hight", // 转高清配置
-	ImageCropButton: "image-crop-button", // 裁剪按钮
-	ImageCrop: "image-crop", // 裁剪模式提示
-	ImageExtendButton: "image-extend-button", // 扩展按钮
-	ImageRemoveBackgroundButton: "image-remove-background-button", // 去背景按钮
-	ImageEraserButton: "image-eraser-button", // 橡皮工具按钮
-	ImageReplaceButton: "image-replace-button", // 替换当前图片 Content 资源
-	VideoOriginalSizeButton: "video-original-size-button", // 视频原始尺寸按钮
+	ElementResize: "element.resize",
+	ElementAlign: "element.align",
+	ElementDistribute: "element.distribute",
+
+	FrameCreate: "frame.create",
+	FrameRemove: "frame.remove",
+	FrameDownload: "frame.download",
+	FrameStoryboardVideoBatch: "frame.storyboard-video-batch",
+
+	TextFillColor: "text.fill-color",
+	TextFontFamily: "text.font-family",
+	TextFontStyle: "text.font-style",
+	TextFontSize: "text.font-size",
+	TextAlign: "text.align",
+	TextAdvanced: "text.advanced",
+	TextDownload: "text.download",
+	TextContentOptimization: "text.content-optimization",
+
+	ShapeStrokeColor: "shape.stroke-color",
+	ShapeStyle: "shape.style",
+
+	ContentReplace: "content.replace",
+	ContentDownload: "content.download",
+	ContentCrop: "content.crop",
+	ContentExtend: "content.extend",
+	ContentRemoveBackground: "content.remove-background",
+	ContentEraser: "content.eraser",
+	ContentEnhance: "content.enhance",
+	ContentPromptExtraction: "content.prompt-extraction",
+	ContentVideoOriginalSize: "content.video-original-size",
+
+	GenerationQuickEdit: "generation.quick-edit",
+	GenerationReEdit: "generation.re-edit",
+	GenerationGenerateAgain: "generation.generate-again",
+
+	VersionPrevious: "version.previous",
+	VersionNext: "version.next",
+	VersionCount: "version.count",
+	VersionSetMain: "version.set-main",
+	VersionDelete: "version.delete",
 } as const
 
-/** 元素工具类型 */
 export type ElementToolType = (typeof ElementToolTypeEnum)[keyof typeof ElementToolTypeEnum]
 
 export interface CanvasResourceRefreshItem {

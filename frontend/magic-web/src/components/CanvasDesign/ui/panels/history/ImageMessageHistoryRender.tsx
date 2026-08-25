@@ -21,7 +21,7 @@ import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsibleProm
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { useGenerationRuntime } from "../../../app/hooks/canvas"
 import { getActiveImageContent } from "../../../runtime/document/elementContent"
-import { normalizeImageSizeValue } from "../../editors/image/image-editor-config.utils"
+import { normalizeImageSizeValue } from "../../element-tools/editors/image/image-editor-config.utils"
 
 interface ImageMessageHistoryRenderProps {
 	imageElement: ImageElement

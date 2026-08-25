@@ -3,13 +3,13 @@ import { useMount, useUnmount, useUpdateEffect } from "ahooks"
 import ViewportControls from "../../ui/canvas-editor/viewport-controls"
 import Tools from "../../ui/toolbar/index"
 import Layers from "../../ui/layers/index"
-import ElementTools from "../../ui/element-toolbar/index"
+import ElementToolTopSurface from "../../ui/element-tools/surfaces/ElementToolTopSurface"
 import { useCanvas } from "../providers/CanvasProvider"
 import { useCanvasPanelUI } from "../providers/CanvasUIProvider"
 import { useLayersUI } from "../providers/LayersUIProvider"
 import { Canvas } from "../../runtime/core/Canvas"
-import ImageMessageEditor from "../../ui/editors/image/index"
-import VideoGenerateEditor from "../../ui/editors/video/index"
+import ImageMessageEditor from "../../ui/element-tools/editors/image/index"
+import VideoGenerateEditor from "../../ui/element-tools/editors/video/index"
 import MessageHistory from "../../ui/panels/history/index"
 import VideoFullscreenOverlay from "../../ui/fullscreen/video/index"
 import ImageElementFullscreenOverlay from "../../ui/fullscreen/image-element/index"
@@ -29,7 +29,6 @@ import ImageEraserPanel from "../../ui/panels/eraser/index"
 import ElementRenameOverlay from "../../ui/panels/rename/index"
 import ElementActionHints from "../../ui/panels/action-hints/index"
 import PluginPanel from "../../ui/panels/plugin/window/index"
-import { ElementBottomToolbarProvider } from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
 import ElementBottomToolbarHost from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarHost"
 
 import styles from "./index.module.css"
@@ -234,60 +233,58 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	return (
 		<FloatingUIProvider canvas={canvas}>
-			<ElementBottomToolbarProvider>
-				<div ref={canvasContainerRef} className={styles.canvasContainer} />
-				<ElementActionHints
-					hints={elementActionHints}
-					onAction={onElementActionHintAction}
-					connectionHints={connectionActionHints}
-					onConnectionAction={onConnectionActionHintAction}
+			<div ref={canvasContainerRef} className={styles.canvasContainer} />
+			<ElementActionHints
+				hints={elementActionHints}
+				onAction={onElementActionHintAction}
+				connectionHints={connectionActionHints}
+				onConnectionAction={onConnectionActionHintAction}
+			/>
+			{!readonly && <ElementRenameOverlay />}
+			{!readonly && <ElementToolTopSurface />}
+			{!readonly && <ImageMessageEditor />}
+			{!readonly && <VideoGenerateEditor />}
+			{!readonly && <ElementBottomToolbarHost />}
+			{!readonly && <ImageCropPanel />}
+			{!readonly && <ImageExtendPanel />}
+			{!readonly && <ImageEraserPanel />}
+			<MessageHistory />
+			{fullscreenMediaElement?.type === "video" ? (
+				<VideoFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
 				/>
-				{!readonly && <ElementRenameOverlay />}
-				{!readonly && <ElementTools />}
-				{!readonly && <ImageMessageEditor />}
-				{!readonly && <VideoGenerateEditor />}
-				{!readonly && <ElementBottomToolbarHost />}
-				{!readonly && <ImageCropPanel />}
-				{!readonly && <ImageExtendPanel />}
-				{!readonly && <ImageEraserPanel />}
-				<MessageHistory />
-				{fullscreenMediaElement?.type === "video" ? (
-					<VideoFullscreenOverlay
-						elementId={fullscreenMediaElement.elementId}
-						onClose={() => setFullscreenMediaElement(null)}
-					/>
-				) : null}
-				{fullscreenMediaElement?.type === "image" ? (
-					<ImageElementFullscreenOverlay
-						elementId={fullscreenMediaElement.elementId}
-						onClose={() => setFullscreenMediaElement(null)}
-					/>
-				) : null}
-				{fullscreenMediaElement?.type === "audio" ? (
-					<AudioElementFullscreenOverlay
-						elementId={fullscreenMediaElement.elementId}
-						onClose={() => setFullscreenMediaElement(null)}
-					/>
-				) : null}
-				{storyboardReferenceImagePreview ? (
-					<MediaResourceFullscreenPreview
-						resource={{
-							kind: "image",
-							path: storyboardReferenceImagePreview.path,
-							fileName:
-								getCanvasResourceFileName(storyboardReferenceImagePreview.path) ||
-								storyboardReferenceImagePreview.path,
-							crop: storyboardReferenceImagePreview.crop,
-						}}
-						onClose={() => setStoryboardReferenceImagePreview(null)}
-					/>
-				) : null}
-				<Layers />
-				{!readonly && <Tools />}
-				{!readonly && <PluginPanel />}
-				{!readonly && <CanvasTips />}
-				<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
-			</ElementBottomToolbarProvider>
+			) : null}
+			{fullscreenMediaElement?.type === "image" ? (
+				<ImageElementFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
+			{fullscreenMediaElement?.type === "audio" ? (
+				<AudioElementFullscreenOverlay
+					elementId={fullscreenMediaElement.elementId}
+					onClose={() => setFullscreenMediaElement(null)}
+				/>
+			) : null}
+			{storyboardReferenceImagePreview ? (
+				<MediaResourceFullscreenPreview
+					resource={{
+						kind: "image",
+						path: storyboardReferenceImagePreview.path,
+						fileName:
+							getCanvasResourceFileName(storyboardReferenceImagePreview.path) ||
+							storyboardReferenceImagePreview.path,
+						crop: storyboardReferenceImagePreview.crop,
+					}}
+					onClose={() => setStoryboardReferenceImagePreview(null)}
+				/>
+			) : null}
+			<Layers />
+			{!readonly && <Tools />}
+			{!readonly && <PluginPanel />}
+			{!readonly && <CanvasTips />}
+			<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
 		</FloatingUIProvider>
 	)
 })

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { GenerationStatus } from "../../../public/magic-types"
 import { ElementTypeEnum, type AudioElement as AudioElementData } from "../../document/types"
 import { AudioElement } from "../audio/AudioElement"
+import { ImageElement } from "../image/ImageElement"
 import { VideoElement } from "../video/VideoElement"
 
 function createAudioData(): AudioElementData {
@@ -81,6 +82,36 @@ describe("media Content version operations", () => {
 		} as unknown as VideoElement
 
 		expect(VideoElement.prototype.deleteActiveContent.call(context)).toBe(false)
+		expect(update).not.toHaveBeenCalled()
+	})
+
+	it("image refuses deleting a completed version while another version is generating", () => {
+		const update = vi.fn()
+		const context = {
+			data: {
+				id: "image-1",
+				type: ElementTypeEnum.Image,
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 100,
+				activeContentId: "completed",
+				mainContentId: "completed",
+				contents: [
+					{
+						contentId: "completed",
+						src: "one.png",
+						status: GenerationStatus.Completed,
+					},
+					{ contentId: "processing", status: GenerationStatus.Processing },
+				],
+			},
+			canvas: {
+				elementManager: { update },
+			},
+		} as unknown as ImageElement
+
+		expect(ImageElement.prototype.deleteActiveContent.call(context)).toBe(false)
 		expect(update).not.toHaveBeenCalled()
 	})
 })

@@ -7,7 +7,7 @@ import {
 	buildVideoAspectRatioOptions,
 	buildVideoDurationOptions,
 	buildVideoResolutionOptions,
-} from "@/components/CanvasDesign/ui/editors/video/generation/video-editor-config.generation"
+} from "@/components/CanvasDesign/ui/element-tools/editors/video/generation/video-editor-config.generation"
 import type { ModelItem } from "../components/ModelSwitch/types"
 
 export type VideoProductionGenerationMode = "normal" | "detailed"

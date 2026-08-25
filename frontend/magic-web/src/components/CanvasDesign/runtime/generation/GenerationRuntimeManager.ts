@@ -67,6 +67,7 @@ export class GenerationRuntimeManager {
 	private attempts = new Map<string, GenerationAttempt>()
 	private targetStates = new Map<string, GenerationRuntimeTargetState>()
 	private latestTargetKeyByElementId = new Map<string, string>()
+	private revisionsByElementId = new Map<string, number>()
 	private listeners = new Map<string, Set<() => void>>()
 	private unsubscribers: Array<() => void> = []
 
@@ -152,9 +153,22 @@ export class GenerationRuntimeManager {
 		return this.attempts.get(attemptId) ?? null
 	}
 
-	public getTargetState(elementId: string): GenerationRuntimeTargetState | null {
+	public getTargetState(
+		elementId: string,
+		contentId?: string,
+	): GenerationRuntimeTargetState | null {
+		if (contentId !== undefined) {
+			return this.targetStates.get(this.getTargetKey(elementId, contentId)) ?? null
+		}
 		const targetKey = this.latestTargetKeyByElementId.get(elementId)
 		return targetKey ? (this.targetStates.get(targetKey) ?? null) : null
+	}
+
+	/** 返回元素当前所有 Content 目标，避免多版本并发时只读取最后一个 attempt。 */
+	public getTargetStates(elementId: string): GenerationRuntimeTargetState[] {
+		return Array.from(this.targetStates.values()).filter(
+			(state) => state.elementId === elementId,
+		)
 	}
 
 	public isCurrent(attemptId: string, elementId?: string, contentId?: string): boolean {
@@ -186,6 +200,10 @@ export class GenerationRuntimeManager {
 		}
 	}
 
+	public getRevision(elementId: string): number {
+		return this.revisionsByElementId.get(elementId) ?? 0
+	}
+
 	public completeAttempt(attemptId: string): GenerationAttempt | null {
 		return this.clearAttempt(attemptId)
 	}
@@ -203,6 +221,7 @@ export class GenerationRuntimeManager {
 		const attemptIds = new Set(targetEntries.map(([, state]) => state.attemptId))
 		targetEntries.forEach(([targetKey]) => this.targetStates.delete(targetKey))
 		this.latestTargetKeyByElementId.delete(elementId)
+		this.revisionsByElementId.delete(elementId)
 		attemptIds.forEach((attemptId) => {
 			const attempt = this.attempts.get(attemptId)
 			if (!attempt) return
@@ -221,6 +240,7 @@ export class GenerationRuntimeManager {
 		this.attempts.clear()
 		this.targetStates.clear()
 		this.latestTargetKeyByElementId.clear()
+		this.revisionsByElementId.clear()
 		elementIds.forEach((elementId) => this.notifyElement(elementId))
 	}
 
@@ -230,6 +250,7 @@ export class GenerationRuntimeManager {
 		this.attempts.clear()
 		this.targetStates.clear()
 		this.latestTargetKeyByElementId.clear()
+		this.revisionsByElementId.clear()
 		this.listeners.clear()
 	}
 
@@ -283,6 +304,7 @@ export class GenerationRuntimeManager {
 	}
 
 	private notifyElement(elementId: string): void {
+		this.revisionsByElementId.set(elementId, this.getRevision(elementId) + 1)
 		this.listeners.get(elementId)?.forEach((listener) => listener())
 	}
 

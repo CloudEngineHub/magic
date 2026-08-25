@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest"
 import type { ImageElement, ImageElementContent, VideoElement } from "../types"
 import {
 	appendContent,
+	canDeleteActiveContentVersion,
 	createContentId,
 	deleteActiveContent,
 	getActiveContent,
 	getContentById,
+	getContentGenerationState,
 	getElementContentFields,
 	getMainContent,
 	getPendingVideoGenerationContent,
 	hasPendingVideoGenerationContent,
+	isContentGenerationPending,
 	setMainContent,
 	switchActiveContent,
 	updateContent,
@@ -112,5 +115,27 @@ describe("elementContent", () => {
 
 		expect(getPendingVideoGenerationContent(element)?.contentId).toBe("pending")
 		expect(hasPendingVideoGenerationContent(element)).toBe(true)
+		expect(isContentGenerationPending(element.contents[1])).toBe(true)
+		expect(canDeleteActiveContentVersion(element)).toBe(false)
+	})
+
+	it("separates active and sibling generation state", () => {
+		const element = image([
+			{ contentId: "ready", src: "ready.png", status: "completed" },
+			{ contentId: "pending", status: "processing" },
+		])
+
+		const activeReadyState = getContentGenerationState(element)
+		expect(activeReadyState.activeContent?.contentId).toBe("ready")
+		expect(activeReadyState.activeContentIsGenerating).toBe(false)
+		expect(activeReadyState.hasSiblingGenerating).toBe(true)
+		expect(activeReadyState.hasAnyGenerating).toBe(true)
+
+		const activePendingState = getContentGenerationState({
+			...element,
+			activeContentId: "pending",
+		})
+		expect(activePendingState.activeContentIsGenerating).toBe(true)
+		expect(activePendingState.hasSiblingGenerating).toBe(false)
 	})
 })

@@ -87,6 +87,25 @@ describe("GenerationRuntimeManager", () => {
 		expect(manager.getTargetState("image-1")?.contentId).toBe("v2")
 	})
 
+	it("reads the runtime state for the requested Content instead of the latest sibling", () => {
+		const manager = new GenerationRuntimeManager()
+		manager.beginAttempt({
+			attemptId: "version-a",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "a" }],
+		})
+		manager.beginAttempt({
+			attemptId: "version-b",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "b" }],
+		})
+
+		expect(manager.getTargetState("image-1", "a")?.attemptId).toBe("version-a")
+		expect(manager.getTargetState("image-1", "b")?.attemptId).toBe("version-b")
+	})
+
 	it("updates a batch phase and clears all remaining current targets atomically", () => {
 		const manager = new GenerationRuntimeManager()
 		const firstListener = vi.fn()

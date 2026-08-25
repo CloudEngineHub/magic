@@ -43,6 +43,8 @@ export interface ExtendFrameConfig {
 
 /** 扩展编辑态会话数据 */
 export interface ExtendSession {
+	/** 进入扩展会话时锁定的图片 Content，避免异步确认写错版本。 */
+	contentId?: string
 	frame: ExtendFrameConfig
 }
 

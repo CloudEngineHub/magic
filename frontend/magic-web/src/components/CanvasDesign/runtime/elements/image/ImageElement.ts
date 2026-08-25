@@ -17,6 +17,7 @@ import {
 	getMainImageContent as resolveMainImageContent,
 	hasProcessingImageContent,
 	isImageElementContent,
+	isContentGenerationPending,
 	updateImageContent,
 	type ImageContentFields,
 } from "../../document/elementContent"
@@ -687,8 +688,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		recoveryIntent: MediaEditIntent = "generate",
 	): Promise<boolean> {
 		const generateImage = this.canvas.magicConfigManager.config?.methods?.generateImage
-		if (!generateImage || this.isGenerating || hasProcessingImageContent(this.data))
-			return false
+		if (!generateImage || this.isGenerating) return false
 		if (!request.model_id || !request.prompt?.trim()) return false
 
 		const contentId = createImageContentId()
@@ -702,11 +702,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isRetryEditing = false
 		const recoveryContent = this.getActiveContentData()
 
-		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
-			elementId: this.data.id,
-			contentId,
-			generateImageRequest: requestWithId,
-		})
+		const attemptId = this.beginOrReuseGenerationAttempt(
+			"image-generate",
+			{
+				elementId: this.data.id,
+				contentId,
+				generateImageRequest: requestWithId,
+			},
+			{ allowConcurrent: true },
+		)
 		const rejectSubmission = (): false => {
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			this.isGenerating = false
@@ -1152,7 +1156,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	/**
 	 * 获取图片生成状态
 	 */
-	isImageGenerating(): boolean {
+	isImageGenerating(contentId?: string): boolean {
+		if (contentId !== undefined) {
+			const content = getImageContentById(this.data, contentId)
+			return Boolean(
+				this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, contentId) ||
+				(content && isContentGenerationPending(content)),
+			)
+		}
+
 		return (
 			this.isGenerating ||
 			Boolean(this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)) ||

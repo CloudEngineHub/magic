@@ -15,6 +15,7 @@ import { ImageEditingSession } from "../image-editing/ImageEditingSession"
 import {
 	getActiveImageContent,
 	getActiveImageContentId,
+	getImageContentById,
 	isImageElementContent,
 	updateImageContent,
 } from "../../document/elementContent"
@@ -35,6 +36,7 @@ export class CropManager {
 
 	// 当前裁剪的元素ID
 	private croppingElementId: string | null = null
+	private croppingContentId: string | null = null
 
 	// 临时裁剪参数(编辑过程中使用)
 	private tempCrop: CropConfig | null = null
@@ -77,10 +79,11 @@ export class CropManager {
 
 	private getActiveCropUpdates(
 		imageElement: ImageElement,
+		contentId: string,
 		crop: CropConfig | undefined,
 	): ElementUpdatePatch {
 		if (!isImageElementContent(imageElement)) return { crop }
-		const next = updateImageContent(imageElement, getActiveImageContentId(imageElement), {
+		const next = updateImageContent(imageElement, contentId, {
 			crop,
 		})
 		return isImageElementContent(next) ? { contents: next.contents } : {}
@@ -127,7 +130,7 @@ export class CropManager {
 
 		// 选中变化时，若当前在裁剪模式且新选中不包含裁剪元素则退出裁剪
 		// 用于处理非正常情况下导致的裁剪过程中断（如通过其他方式选中了其他元素）
-		this.elementSelectHandler = ({ data }) => {
+		this.elementSelectHandler = () => {
 			if (this.croppingElementId) {
 				this.exitCropMode(true)
 			}
@@ -243,7 +246,7 @@ export class CropManager {
 	/**
 	 * 进入裁剪模式
 	 */
-	public enterCropMode(elementId: string): void {
+	public enterCropMode(elementId: string, contentId?: string): void {
 		if (this.croppingElementId === elementId) return
 
 		// 获取元素数据
@@ -252,20 +255,24 @@ export class CropManager {
 			return
 		}
 
+		const imageElement = elementData as ImageElement
+		if (contentId && getActiveImageContentId(imageElement) !== contentId) return
+		const elementInstance = this.canvas.elementManager.getElementInstance(
+			elementId,
+		) as ImageElementClass | null
+		const activeContent = contentId
+			? getImageContentById(imageElement, contentId)
+			: elementInstance instanceof ImageElementClass
+				? elementInstance.getActiveContentData()
+				: getActiveImageContent(imageElement)
+		if (!activeContent) return
+		this.croppingContentId = activeContent.contentId
+
 		this.canvas.imageEditingCoordinator.activate({
 			mode: "crop",
 			elementId,
 			cancel: () => this.cancelCrop(),
 		})
-
-		const imageElement = elementData as ImageElement
-		const elementInstance = this.canvas.elementManager.getElementInstance(
-			elementId,
-		) as ImageElementClass | null
-		const activeContent =
-			elementInstance instanceof ImageElementClass
-				? elementInstance.getActiveContentData()
-				: getActiveImageContent(imageElement)
 
 		this.originalImageState = {
 			x: imageElement.x,
@@ -391,6 +398,12 @@ export class CropManager {
 		if (shouldRestore && this.originalImageState) {
 			const elementData = this.canvas.elementManager.getElementData(elementId)
 			if (elementData?.type === ElementTypeEnum.Image) {
+				const targetContentId = this.croppingContentId
+				const canRestoreContentCrop = Boolean(
+					targetContentId &&
+					getActiveImageContentId(elementData) === targetContentId &&
+					getImageContentById(elementData, targetContentId),
+				)
 				this.canvas.elementManager.update(
 					elementId,
 					{
@@ -398,7 +411,13 @@ export class CropManager {
 						y: this.originalImageState.y,
 						width: this.originalImageState.width,
 						height: this.originalImageState.height,
-						...this.getActiveCropUpdates(elementData, this.originalImageState.crop),
+						...(canRestoreContentCrop
+							? this.getActiveCropUpdates(
+									elementData,
+									targetContentId as string,
+									this.originalImageState.crop,
+								)
+							: {}),
 					},
 					{ silent: true },
 				)
@@ -408,6 +427,7 @@ export class CropManager {
 
 		// 先清空裁剪状态并触发最终 rerender；会话监听会保持新节点隐藏，直到代理清理完成。
 		this.croppingElementId = null
+		this.croppingContentId = null
 		this.canvas.eventEmitter.emit({
 			type: "crop:exit",
 			data: { elementId, restored: shouldRestore },
@@ -507,6 +527,15 @@ export class CropManager {
 		}
 
 		const imageElement = elementData as ImageElement
+		const contentId = this.croppingContentId
+		if (
+			!contentId ||
+			getActiveImageContentId(imageElement) !== contentId ||
+			!getImageContentById(imageElement, contentId)
+		) {
+			this.exitCropMode(true)
+			return
+		}
 		const elementInstance = this.canvas.elementManager.getElementInstance(
 			this.croppingElementId,
 		) as ImageElementClass | null
@@ -556,7 +585,7 @@ export class CropManager {
 			y: nextPosition.y,
 			width: finalVisibleCrop.width,
 			height: finalVisibleCrop.height,
-			...this.getActiveCropUpdates(imageElement, nextPersistedCrop),
+			...this.getActiveCropUpdates(imageElement, contentId, nextPersistedCrop),
 		})
 		this.canvas.markerManager.applyConfirmedCropToMarkers(
 			this.croppingElementId,
@@ -566,7 +595,7 @@ export class CropManager {
 		)
 		this.canvas.eventEmitter.emit({
 			type: "crop:confirmed",
-			data: { elementId: this.croppingElementId },
+			data: { elementId: this.croppingElementId, contentId },
 		})
 
 		// 退出裁剪模式(不恢复)

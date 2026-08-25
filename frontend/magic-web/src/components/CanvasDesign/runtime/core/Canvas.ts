@@ -65,6 +65,7 @@ import { PluginManager } from "../plugins/PluginManager"
 import { GenerationRuntimeManager } from "../generation/GenerationRuntimeManager"
 import { ElementDetailsRuntimeManager } from "../generation/ElementDetailsRuntimeManager"
 import { GenerationAttemptCoordinator } from "../generation/GenerationAttemptCoordinator"
+import { CanvasElementToolCommandBus } from "../element-tools/commands/ElementToolCommandBus"
 import { ElementRenameManager } from "../interaction/rename/ElementRenameManager"
 import { TextEditingManager } from "../interaction/text-editing/TextEditingManager"
 import { TextFormattingManager } from "../interaction/text-editing/TextFormattingManager"
@@ -185,6 +186,7 @@ export class Canvas {
 	public dropOverlayManager: DropOverlayManager
 	public cursorManager: CursorManager
 	public userActionRegistry: UserActionRegistry
+	public elementToolCommandBus: CanvasElementToolCommandBus
 	public backgroundManager: BackgroundManager
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
@@ -562,6 +564,7 @@ export class Canvas {
 			...conversationActions,
 			...downloadActions,
 		])
+		this.elementToolCommandBus = new CanvasElementToolCommandBus(this)
 
 		// 初始化背景管理器（使用 Content Layer 的最底层）
 		this.backgroundManager = new BackgroundManager({

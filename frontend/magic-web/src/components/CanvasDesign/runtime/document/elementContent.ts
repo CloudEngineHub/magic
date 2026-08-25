@@ -1,4 +1,4 @@
-import { ImageGenerationTaskTypeMap } from "../../public/magic-types"
+import { GenerationStatus, ImageGenerationTaskTypeMap } from "../../public/magic-types"
 import type { GenerateHightImageRequest, ImageGenerationTaskMeta } from "../../public/magic-types"
 import { ElementTypeEnum } from "./types"
 import type {
@@ -158,6 +158,97 @@ export function getMainContentId<TContent extends ElementContentBase>(
 	element: ContentElementProps<TContent>,
 ): string | undefined {
 	return getMainContent(element)?.contentId
+}
+
+export interface ContentGenerationState<TContent extends ElementContentBase> {
+	activeContent: TContent | undefined
+	activeContentIsGenerating: boolean
+	hasSiblingGenerating: boolean
+	hasAnyGenerating: boolean
+}
+
+export type ContentState = "empty" | "pending" | "processing" | "completed" | "failed"
+
+/** 统一把持久化字段和运行态字段投影为工具层可消费的 Content 状态。 */
+export function getContentState(content: ElementContentBase | undefined): ContentState {
+	if (!content) return "empty"
+	const candidate = content as ElementContentBase & {
+		status?: GenerationStatus
+		src?: string
+	}
+	if (candidate.status === GenerationStatus.Pending) return "pending"
+	if (candidate.status === GenerationStatus.Processing) return "processing"
+	if (candidate.status === GenerationStatus.Failed) return "failed"
+	if (candidate.status === GenerationStatus.Completed || candidate.src) return "completed"
+	return isContentGenerationPending(content) ? "pending" : "empty"
+}
+
+export function getContentStateMap<TContent extends ElementContentBase>(
+	element: ContentElementProps<TContent>,
+): ReadonlyMap<string, ContentState> {
+	return new Map(
+		getContents(element).map((content) => [content.contentId, getContentState(content)]),
+	)
+}
+
+/** 统一派生当前版本与其他版本的生成状态，避免 UI 各自做元素级判断。 */
+export function getContentGenerationState<TContent extends ElementContentBase>(
+	element: ContentElementProps<TContent>,
+): ContentGenerationState<TContent> {
+	const activeContent = getActiveContent(element)
+	const activeContentIsGenerating = Boolean(
+		activeContent && isContentGenerationPending(activeContent),
+	)
+	const hasSiblingGenerating = getContents(element).some(
+		(content) =>
+			content.contentId !== activeContent?.contentId && isContentGenerationPending(content),
+	)
+
+	return {
+		activeContent,
+		activeContentIsGenerating,
+		hasSiblingGenerating,
+		hasAnyGenerating: activeContentIsGenerating || hasSiblingGenerating,
+	}
+}
+
+/** 生成中的状态属于单个 Content；元素级操作需要读取整个版本集合。 */
+export function isContentGenerationPending(content: ElementContentBase): boolean {
+	const candidate = content as {
+		status?: GenerationStatus
+		src?: string
+		generateImageRequest?: { image_id?: string }
+		imageGenerationTaskMeta?: { image_id?: string }
+		generateVideoRequest?: { video_id?: string }
+	}
+	if (
+		candidate.status === GenerationStatus.Pending ||
+		candidate.status === GenerationStatus.Processing
+	) {
+		return true
+	}
+	if (
+		candidate.src ||
+		candidate.status === GenerationStatus.Completed ||
+		candidate.status === GenerationStatus.Failed
+	) {
+		return false
+	}
+	return Boolean(
+		candidate.generateImageRequest?.image_id ||
+		candidate.imageGenerationTaskMeta?.image_id ||
+		candidate.generateVideoRequest?.video_id,
+	)
+}
+
+/** 删除版本前保证不会删除唯一 Content 或任何仍有后台任务的版本集合。 */
+export function canDeleteActiveContentVersion(element: ContentElement): boolean {
+	const contents = getContents(element)
+	const activeContent = getActiveContent(element)
+	if (contents.length <= 1 || !activeContent || isContentGenerationPending(activeContent)) {
+		return false
+	}
+	return !contents.some(isContentGenerationPending)
 }
 
 export function updateContent<TElement extends ContentElement>(
@@ -398,6 +489,7 @@ export interface DeleteImageContentResult {
 }
 
 export function deleteActiveImageContent(element: ImageElement): DeleteImageContentResult | null {
+	if (!canDeleteActiveContentVersion(element)) return null
 	return deleteActiveContent<ImageElement>(
 		element,
 		(content) => Boolean(content.src) && content.status === "completed",

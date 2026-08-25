@@ -1,6 +1,11 @@
 import type { Canvas } from "../../core/Canvas"
 import type { VideoElement as VideoElementData, VideoElementContent } from "../../document/types"
-import { getContentById, getActiveContent, updateContent } from "../../document/elementContent"
+import {
+	getActiveContent,
+	getContentById,
+	getContents,
+	updateContent,
+} from "../../document/elementContent"
 import type {
 	GetVideoGenerationResultParams,
 	VideoGenerationResultResponse,
@@ -14,161 +19,209 @@ import {
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
 
-/** VideoPollingManager 构造参数 */
+/** 视频轮询管理器构造参数。 */
 export interface VideoPollingManagerConfig {
-	/** 画布上的视频元素 id */
+	/** 画布上的视频元素 id。 */
 	elementId: string
 	canvas: Canvas
-	/** 读取最新元素数据（含 generateVideoRequest.video_id） */
+	/** 读取最新元素数据（含 generateVideoRequest.video_id）。 */
 	getElementData: () => VideoElementData
-	/** 轮询提交时捕获的目标 Content；异步结果不得写入其他 Content。 */
+	/** 构造时可指定一个需要轮询的 Content。 */
 	contentId?: string
-	/** 轮询同步出现临时异常时通知视图层自行处理展示态 */
+	/** 轮询同步出现临时异常时通知视图层自行处理展示态。 */
 	onPollingIssue?: (contentId?: string) => void
 }
 
 /**
- * 视频生成提交后，按间隔调用 getVideoGenerationResult，直到状态脱离 Pending/Processing
+ * 视频生成提交后，按 Content 独立轮询，直到状态脱离 Pending/Processing。
+ *
+ * 一个元素可以同时拥有多个后台生成 Content；每个请求都必须通过自己的
+ * contentId 读取和写回，切换 active Content 不会中断其他版本的轮询。
  */
 export class VideoPollingManager {
 	private config: VideoPollingManagerConfig
 	private isPolling = false
-	private pollingTimer?: ReturnType<typeof setTimeout>
+	private pollingContentIds = new Set<string | undefined>()
+	private pollingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+	private inFlightKeys = new Set<string>()
+	private unsubscribeElementUpdated?: () => void
 
 	constructor(config: VideoPollingManagerConfig) {
 		this.config = config
+		this.pollingContentIds.add(config.contentId)
+
+		const eventEmitter = config.canvas.eventEmitter as typeof config.canvas.eventEmitter & {
+			on?: (
+				event: "element:updated",
+				listener: (event: { data: { elementId: string } }) => void,
+			) => () => void
+		}
+		if (typeof eventEmitter.on === "function") {
+			this.unsubscribeElementUpdated = eventEmitter.on("element:updated", (event) => {
+				if (event.data?.elementId !== this.config.elementId) return
+				this.syncWithElementData()
+			})
+		}
 	}
 
-	/** 追加新 Content 后，将轮询明确绑定到本次提交的 Content，避免异步结果串写。 */
+	/** 追加新 Content 后，将轮询绑定到本次提交的 Content。 */
 	public setContentId(contentId?: string): void {
 		this.config.contentId = contentId
+		this.pollingContentIds.add(contentId)
 	}
 
-	/** 开始轮询（若已在轮询则忽略） */
-	public start(): void {
-		if (this.isPolling || !this.shouldPollCurrentElement()) return
+	/** 开始指定 Content 的轮询；未传入时使用构造或最近一次设置的 Content。 */
+	public start(contentId = this.config.contentId): void {
+		this.pollingContentIds.add(contentId)
+		this.syncPendingTargets()
+		if (this.pollingContentIds.size === 0) return
 		this.isPolling = true
-		this.poll()
+		for (const targetContentId of this.pollingContentIds) {
+			void this.poll(targetContentId)
+		}
 	}
 
-	/** 停止轮询并清除定时器 */
+	/** 停止全部轮询并清除定时器。 */
 	public stop(): void {
 		this.isPolling = false
-		if (this.pollingTimer) {
-			clearTimeout(this.pollingTimer)
-			this.pollingTimer = undefined
-		}
+		for (const timer of this.pollingTimers.values()) clearTimeout(timer)
+		this.pollingTimers.clear()
+		this.inFlightKeys.clear()
+		this.pollingContentIds.clear()
 	}
 
-	/** 等价于 stop，供元素销毁时调用 */
+	/** 等价于 stop，供元素销毁时调用。 */
 	public destroy(): void {
 		this.stop()
+		this.unsubscribeElementUpdated?.()
+		this.unsubscribeElementUpdated = undefined
 	}
 
-	private async poll(): Promise<void> {
-		if (!this.isPolling) return
-		if (!this.shouldPollCurrentElement()) {
-			this.stop()
+	private async poll(contentId?: string): Promise<void> {
+		const key = this.getContentKey(contentId)
+		if (
+			!this.isPolling ||
+			!this.pollingContentIds.has(contentId) ||
+			this.inFlightKeys.has(key)
+		) {
+			return
+		}
+		if (!this.shouldPollCurrentElement(contentId)) {
+			this.removeTarget(contentId)
 			return
 		}
 
-		const videoId = this.getPollingVideoId()
+		const videoId = this.getPollingVideoId(contentId)
 		if (!videoId) {
-			this.stop()
+			this.removeTarget(contentId)
 			return
 		}
 
-		const result = await this.fetchGenerationResult(videoId)
-		if (!result) {
-			return
-		}
+		this.inFlightKeys.add(key)
+		try {
+			const result = await this.fetchGenerationResult(videoId, contentId)
+			if (!result || !this.isCurrentTarget(contentId)) return
 
-		const didApplyPatch = this.applyResultPatch(result)
-		if (!didApplyPatch) {
-			return
-		}
+			const didApplyPatch = this.applyResultPatch(result, contentId)
+			if (!didApplyPatch) return
 
-		this.finishPoll(result.status)
+			this.finishPoll(result.status, contentId)
+		} finally {
+			this.inFlightKeys.delete(key)
+			this.syncWithElementData()
+		}
 	}
 
-	private getPollingVideoId(): string | undefined {
-		return this.getPollingContent()?.generateVideoRequest?.video_id
+	private getPollingVideoId(contentId?: string): string | undefined {
+		return this.getPollingContent(contentId)?.generateVideoRequest?.video_id
 	}
 
-	private getPollingContent(): VideoElementContent | undefined {
+	private getPollingContent(contentId?: string): VideoElementContent | undefined {
 		const element = this.config.getElementData()
-		return (
-			getContentById(element, this.config.contentId) ??
-			getActiveContent<VideoElementContent>(element)
-		)
+		return contentId
+			? getContentById(element, contentId)
+			: getActiveContent<VideoElementContent>(element)
 	}
 
-	private shouldPollCurrentElement(): boolean {
-		const content = this.getPollingContent()
-		if (!content?.generateVideoRequest?.video_id) {
-			return false
+	private shouldPollCurrentElement(contentId?: string): boolean {
+		const content = this.getPollingContent(contentId)
+		if (!content?.generateVideoRequest?.video_id || content.src) return false
+		return !content.status || shouldContinueGenerationPolling(content.status)
+	}
+
+	private syncPendingTargets(): void {
+		const element = this.config.getElementData()
+		for (const content of getContents(element)) {
+			if (
+				content.generateVideoRequest?.video_id &&
+				!content.src &&
+				(!content.status || shouldContinueGenerationPolling(content.status))
+			) {
+				this.pollingContentIds.add(content.contentId)
+			}
 		}
 
-		if (content.src) {
-			return false
+		for (const contentId of [...this.pollingContentIds]) {
+			if (!this.shouldPollCurrentElement(contentId)) this.removeTarget(contentId)
 		}
+	}
 
-		if (content.status && !shouldContinueGenerationPolling(content.status)) {
-			return false
+	private syncWithElementData(): void {
+		if (!this.isPolling) return
+		this.syncPendingTargets()
+		for (const contentId of this.pollingContentIds) {
+			const key = this.getContentKey(contentId)
+			if (this.inFlightKeys.has(key) || this.pollingTimers.has(key)) continue
+			void this.poll(contentId)
 		}
-
-		return true
 	}
 
 	private async fetchGenerationResult(
 		videoId: string,
+		contentId?: string,
 	): Promise<VideoGenerationResultResponse | undefined> {
 		const getVideoGenerationResult =
 			this.config.canvas.magicConfigManager.config?.methods?.getVideoGenerationResult
 		if (!getVideoGenerationResult) {
-			this.stop()
+			this.removeTarget(contentId)
 			return undefined
 		}
 
 		try {
-			const params: GetVideoGenerationResultParams = {
-				video_id: videoId,
-			}
+			const params: GetVideoGenerationResultParams = { video_id: videoId }
 			return await getVideoGenerationResult(params)
 		} catch (error) {
 			if (isGenerationTaskNotFoundError(error, videoId)) {
-				this.recoverMissingTask(videoId)
+				this.recoverMissingTask(videoId, contentId)
 				return undefined
 			}
-			this.handleRecoverablePollingIssue()
+			this.handleRecoverablePollingIssue(contentId)
 			return undefined
 		}
 	}
 
-	private recoverMissingTask(videoId: string): void {
-		this.stop()
+	private recoverMissingTask(videoId: string, contentId?: string): void {
 		const elementData = this.config.getElementData()
-		const content = this.getPollingContent()
+		const content = this.getPollingContent(contentId)
 		if (content?.generateVideoRequest?.video_id !== videoId) return
-		const next = updateContent(elementData, this.config.contentId, {
+
+		const next = updateContent(elementData, contentId, {
 			generateVideoRequest: undefined,
 			videoGenerationResultMeta: undefined,
 			status: undefined,
 			errorMessage: undefined,
 		})
-
 		this.config.canvas.elementManager.update(this.config.elementId, next, { silent: false })
 		this.config.canvas.eventEmitter.emit({
 			type: "element:video:generate-submit-failed",
 			data: { elementId: this.config.elementId },
 		})
+		this.removeTarget(contentId)
 	}
 
 	private buildResultPatch(
 		result: VideoGenerationResultResponse,
-	): Partial<VideoElementContent> & {
-		name?: string
-	} {
+	): Partial<VideoElementContent> & { name?: string } {
 		const storagePath =
 			result.file_dir && result.file_name
 				? resolveCanvasGeneratedResourceStoragePath(
@@ -198,9 +251,9 @@ export class VideoPollingManager {
 		return updateData
 	}
 
-	private applyResultPatch(result: VideoGenerationResultResponse): boolean {
+	private applyResultPatch(result: VideoGenerationResultResponse, contentId?: string): boolean {
 		if (!this.config.canvas.elementManager.hasElement(this.config.elementId)) {
-			this.stop()
+			this.removeTarget(contentId)
 			return false
 		}
 
@@ -208,50 +261,59 @@ export class VideoPollingManager {
 			const updateData = this.buildResultPatch(result)
 			const elementData = this.config.getElementData()
 			const { name, ...contentPatch } = updateData
-			const next = updateContent(elementData, this.config.contentId, contentPatch)
+			const next = updateContent(elementData, contentId, contentPatch)
 			this.config.canvas.elementManager.update(
 				this.config.elementId,
 				name ? { ...next, name } : next,
-				{
-					silent: false,
-				},
+				{ silent: false },
 			)
 			return true
 		} catch {
-			this.handleRecoverablePollingIssue()
+			this.handleRecoverablePollingIssue(contentId)
 			return false
 		}
 	}
 
-	private finishPoll(status: VideoGenerationResultResponse["status"]): void {
+	private finishPoll(status: VideoGenerationResultResponse["status"], contentId?: string): void {
 		if (shouldContinueGenerationPolling(status)) {
-			this.scheduleNextPoll()
+			this.scheduleNextPoll(contentId)
 			return
 		}
-
-		this.stop()
+		this.removeTarget(contentId)
 	}
 
-	private handleRecoverablePollingIssue(): void {
-		if (!this.isPolling) {
-			return
-		}
-
-		this.config.onPollingIssue?.(this.config.contentId)
-		this.scheduleNextPoll()
+	private handleRecoverablePollingIssue(contentId?: string): void {
+		if (!this.isPolling || !this.isCurrentTarget(contentId)) return
+		this.config.onPollingIssue?.(contentId)
+		this.scheduleNextPoll(contentId)
 	}
 
-	private scheduleNextPoll(): void {
-		if (!this.isPolling) {
-			return
-		}
-
-		if (this.pollingTimer) {
-			clearTimeout(this.pollingTimer)
-		}
-
-		this.pollingTimer = setTimeout(() => {
-			this.poll()
+	private scheduleNextPoll(contentId?: string): void {
+		if (!this.isPolling || !this.isCurrentTarget(contentId)) return
+		const key = this.getContentKey(contentId)
+		const previousTimer = this.pollingTimers.get(key)
+		if (previousTimer) clearTimeout(previousTimer)
+		const timer = setTimeout(() => {
+			this.pollingTimers.delete(key)
+			void this.poll(contentId)
 		}, VIDEO_CONFIG.POLLING_INTERVAL)
+		this.pollingTimers.set(key, timer)
+	}
+
+	private removeTarget(contentId?: string): void {
+		this.pollingContentIds.delete(contentId)
+		const key = this.getContentKey(contentId)
+		const timer = this.pollingTimers.get(key)
+		if (timer) clearTimeout(timer)
+		this.pollingTimers.delete(key)
+		if (this.pollingContentIds.size === 0) this.isPolling = false
+	}
+
+	private isCurrentTarget(contentId?: string): boolean {
+		return this.isPolling && this.pollingContentIds.has(contentId)
+	}
+
+	private getContentKey(contentId?: string): string {
+		return `content:${contentId ?? "active"}`
 	}
 }

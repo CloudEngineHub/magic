@@ -9,7 +9,7 @@ import {
 	getAvailableInputModes,
 	getInputModeConfig,
 	resolveVideoFrameRoleSupport,
-} from "../../../ui/editors/video/model-config/video-editor-config.model"
+} from "../../media-editors/video/video-editor-config.model"
 
 export interface ResolvedVideoContinuationModel {
 	model: VideoModelItem

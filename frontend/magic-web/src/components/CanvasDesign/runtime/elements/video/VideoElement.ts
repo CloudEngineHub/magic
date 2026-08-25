@@ -8,6 +8,7 @@ import { ElementTypeEnum } from "../../document/types"
 import { GenerationStatus } from "../../../public/magic-types"
 import {
 	appendContent,
+	canDeleteActiveContentVersion,
 	createContentId,
 	deleteActiveContent as deleteContentFromData,
 	getActiveContent,
@@ -351,7 +352,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
 			!generateVideo ||
-			this.hasPendingVideoGeneration() ||
+			this.isGenerating ||
 			!request.model_id ||
 			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
@@ -431,7 +432,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isErrorState = false
 			this.clearGenerateRecoveryDraft(recoveryContent)
 			this.pollingManager.setContentId(contentId)
-			this.pollingManager.start()
+			this.pollingManager.start(contentId)
 			this.rerender()
 			return true
 		} catch {
@@ -478,6 +479,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	public deleteActiveContent(): boolean {
 		const activeContent = getActiveContent<VideoElementContent>(this.data)
 		if (
+			!canDeleteActiveContentVersion(this.data) ||
 			activeContent?.status === GenerationStatus.Pending ||
 			activeContent?.status === GenerationStatus.Processing ||
 			this.isGenerating
@@ -1337,10 +1339,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
 	public getActiveGenerateVideoRequest(): GenerateVideoRequest | undefined {
-		return (
-			this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
-				?.generateVideoRequest || this.getVideoRequest()
-		)
+		const activeContentId = this.getVideoContent()?.contentId
+		const runtimeTarget = activeContentId
+			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
+			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
+		return runtimeTarget?.generateVideoRequest || this.getVideoRequest()
 	}
 
 	private shouldShowFullscreenButton(): boolean {

@@ -289,4 +289,88 @@ describe("VideoPollingManager", () => {
 			}),
 		)
 	})
+
+	it("polls multiple pending Contents independently", async () => {
+		const element: VideoElement = {
+			id: "video-element-multiple-pending",
+			type: ElementTypeEnum.Video,
+			activeContentId: "completed",
+			mainContentId: "completed",
+			contents: [
+				{
+					contentId: "completed",
+					src: "./videos/original.mp4",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "pending-1",
+					status: GenerationStatus.Processing,
+					generateVideoRequest: {
+						video_id: "video-task-1",
+						model_id: "model-1",
+						prompt: "first",
+					},
+				},
+				{
+					contentId: "pending-2",
+					status: GenerationStatus.Processing,
+					generateVideoRequest: {
+						video_id: "video-task-2",
+						model_id: "model-1",
+						prompt: "second",
+					},
+				},
+			],
+		}
+		const update = vi.fn((elementId: string, updates: Partial<VideoElement>) => {
+			if (elementId === element.id) Object.assign(element, updates)
+		})
+		const getVideoGenerationResult = vi.fn(({ video_id }: { video_id: string }) =>
+			Promise.resolve({
+				video_id,
+				status: GenerationStatus.Completed,
+				error_message: null,
+				file_dir: "/画布A/videos/",
+				file_name: `${video_id}.mp4`,
+			}),
+		)
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						resolveResourceReference,
+						getVideoGenerationResult,
+					},
+				},
+			},
+			elementManager: { hasElement: vi.fn(() => true), update },
+			eventEmitter: { emit: vi.fn() },
+		}
+
+		const manager = new VideoPollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+		manager.start()
+
+		await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2))
+		expect(getVideoGenerationResult).toHaveBeenCalledWith({ video_id: "video-task-1" })
+		expect(getVideoGenerationResult).toHaveBeenCalledWith({ video_id: "video-task-2" })
+		expect(element.activeContentId).toBe("completed")
+		expect(element.contents[1]).toEqual(
+			expect.objectContaining({
+				contentId: "pending-1",
+				src: "./videos/video-task-1.mp4",
+				status: GenerationStatus.Completed,
+			}),
+		)
+		expect(element.contents[2]).toEqual(
+			expect.objectContaining({
+				contentId: "pending-2",
+				src: "./videos/video-task-2.mp4",
+				status: GenerationStatus.Completed,
+			}),
+		)
+	})
 })
