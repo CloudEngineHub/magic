@@ -10,12 +10,14 @@ import type { SidebarDragData, SidebarDropPosition } from "./types"
 import {
 	createSidebarDragImage,
 	getDropPosition,
+	getProjectDropPosition,
 	getEdgeScrollSpeed,
 	getIndicatorLineY,
 	getNearestProjectTarget,
 	getNearestWorkspaceTarget,
 	getPredecessorId,
 	getProjectPinBoundaryAction,
+	getRenderedProjectIds,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
 	isNoOpInsertion,
@@ -225,7 +227,6 @@ export function useWorkspaceListDnd({
 		// Keep the indicator's 4px radius below the sticky header instead of covering its controls.
 		const lineY = Math.max(requestedLineY, stickyHeaderBottom + 4)
 		const width = Math.max(8, targetRect.width)
-
 		indicator.style.display = "block"
 		indicator.style.position = "absolute"
 		indicator.style.pointerEvents = "none"
@@ -381,11 +382,11 @@ export function useWorkspaceListDnd({
 
 			const projectId = dropTarget.dataset.sidebarDropProjectId
 			if (!projectId || projectId === active.projectId) return null
-			const position = getDropPosition(dropTarget, clientY)
+			const projects = projectStore.getProjectsByWorkspace(active.workspaceId)
+			const sourceIndex = projects.findIndex((item) => item.id === active.projectId)
+			const targetIndex = projects.findIndex((item) => item.id === projectId)
+			const position = getProjectDropPosition(dropTarget, clientY, sourceIndex, targetIndex)
 			if (workspaceId === active.workspaceId) {
-				const projects = projectStore.getProjectsByWorkspace(active.workspaceId)
-				const sourceIndex = projects.findIndex((item) => item.id === active.projectId)
-				const targetIndex = projects.findIndex((item) => item.id === projectId)
 				if (
 					sourceIndex !== -1 &&
 					targetIndex !== -1 &&
@@ -609,6 +610,10 @@ export function useWorkspaceListDnd({
 		activeDragRef.current = null
 	}, [clearDragVisuals, clearExpandTimer, stopAutoScroll])
 
+	const terminateDrag = useCallback(() => {
+		resetDragState()
+	}, [resetDragState])
+
 	const handleDragLeave = useCallback(
 		(event: DragEvent<HTMLDivElement>) => {
 			if (!activeDragRef.current) return
@@ -631,8 +636,17 @@ export function useWorkspaceListDnd({
 			if (!activeDragRef.current) return
 			event.preventDefault()
 			const active = activeDragRef.current
-			const preview = previewRef.current || buildPreview(event.target, event.clientY, active)
-			resetDragState()
+			const releaseTarget =
+				document.elementFromPoint(event.clientX, event.clientY) || event.target
+			const releasePreview = buildPreview(releaseTarget, event.clientY, active)
+			// Resolve the final drop from the release coordinates first. The cached
+			// frame may describe the previous gap when the last drag frame is queued.
+			// The release decision must be the same decision represented by the
+			// indicator. Never submit an older cached target when release hit-testing
+			// produced no valid target.
+			const preview = releasePreview
+			if (preview) applyPreview(preview)
+			terminateDrag()
 			if (!preview || disabled) return
 
 			try {
@@ -685,8 +699,21 @@ export function useWorkspaceListDnd({
 						preview.position || "after",
 					)
 					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) return
+					const renderedOrder = getRenderedProjectIds(
+						preview.target.closest<HTMLElement>(
+							'[data-sidebar-drop-type="project-list"]',
+						),
+						'[data-sidebar-drop-type="project"]',
+						"sidebarDropProjectId",
+					)
+					const storeOrder = sourceProjects.map((item) => item.id)
+					const decisionOrder =
+						renderedOrder.length === storeOrder.length &&
+						new Set(renderedOrder).size === storeOrder.length
+							? renderedOrder
+							: storeOrder
 					const preProjectId = getPredecessorId(
-						sourceProjects,
+						decisionOrder.map((id) => ({ id })),
 						active.projectId,
 						preview.type === "project" ? preview.projectId : undefined,
 						preview.position || "after",
@@ -715,11 +742,22 @@ export function useWorkspaceListDnd({
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
 				// Dropping on the workspace row means inserting at the beginning.
+				const renderedTargetOrder = getRenderedProjectIds(
+					preview.target.closest<HTMLElement>('[data-sidebar-drop-type="project-list"]'),
+					'[data-sidebar-drop-type="project"]',
+					"sidebarDropProjectId",
+				)
+				const targetStoreOrder = targetProjects.map((item) => item.id)
+				const targetDecisionOrder =
+					renderedTargetOrder.length === targetStoreOrder.length &&
+					new Set(renderedTargetOrder).size === targetStoreOrder.length
+						? renderedTargetOrder
+						: targetStoreOrder
 				const preProjectId =
 					preview.type === "workspace"
 						? null
 						: getPredecessorId(
-								[project, ...targetProjects],
+								targetDecisionOrder.map((id) => ({ id })),
 								active.projectId,
 								preview.projectId,
 								preview.position || "after",
@@ -750,7 +788,15 @@ export function useWorkspaceListDnd({
 				message.error(t("common.operationFailed", { defaultValue: "操作失败，请稍后重试" }))
 			}
 		},
-		[buildPreview, disabled, requestPinBoundaryConfirmation, resetDragState, t, workspaces],
+		[
+			applyPreview,
+			buildPreview,
+			disabled,
+			requestPinBoundaryConfirmation,
+			t,
+			terminateDrag,
+			workspaces,
+		],
 	)
 
 	useEffect(() => {
@@ -766,7 +812,7 @@ export function useWorkspaceListDnd({
 
 	useEffect(() => {
 		const cancelDrag = () => {
-			if (activeDragRef.current) resetDragState()
+			if (activeDragRef.current) terminateDrag()
 		}
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") cancelDrag()
@@ -779,7 +825,7 @@ export function useWorkspaceListDnd({
 			window.removeEventListener("blur", cancelDrag)
 			document.removeEventListener("visibilitychange", cancelDrag)
 		}
-	}, [resetDragState])
+	}, [terminateDrag])
 
 	return {
 		rootRef: rootRef as RefObject<HTMLDivElement>,
@@ -789,7 +835,7 @@ export function useWorkspaceListDnd({
 		handleDragOver,
 		handleDragLeave,
 		handleDrop,
-		handleDragEnd: resetDragState,
-		handleDragCancel: resetDragState,
+		handleDragEnd: () => terminateDrag(),
+		handleDragCancel: () => terminateDrag(),
 	}
 }

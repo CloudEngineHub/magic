@@ -10,12 +10,14 @@ import {
 	createSidebarDragImage,
 	createSidebarDropIndicator,
 	getDropPosition,
+	getProjectDropPosition,
 	getEdgeScrollSpeed,
 	getIndicatorLineY,
 	getNearestProjectTarget,
 	getNearestWorkspaceTarget,
 	getPredecessorId,
 	getProjectPinBoundaryAction,
+	getRenderedProjectIds,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
 	isNoOpInsertion,
@@ -106,6 +108,7 @@ export function useCollapsedWorkspaceDnd({
 	const indicatorRef = useRef<SVGSVGElement | null>(null)
 	const latestWorkspacesRef = useRef(workspaces)
 	const latestBuildPreviewRef = useRef<BuildPreview | null>(null)
+	const latestApplyPreviewRef = useRef<((preview: DropPreview | null) => void) | null>(null)
 	const latestQueueFrameRef = useRef<((frame: DragFrame) => void) | null>(null)
 	const latestClearPreviewVisualsRef = useRef<(() => void) | null>(null)
 	const latestResetRef = useRef<(() => void) | null>(null)
@@ -296,11 +299,16 @@ export function useCollapsedWorkspaceDnd({
 				if (!workspaceId || !projectId || projectId === active.projectId) {
 					return null
 				}
-				const position = getDropPosition(projectTarget, clientY)
+				const projects = projectStore.getProjectsByWorkspace(active.workspaceId)
+				const sourceIndex = projects.findIndex((item) => item.id === active.projectId)
+				const targetIndex = projects.findIndex((item) => item.id === projectId)
+				const position = getProjectDropPosition(
+					projectTarget,
+					clientY,
+					sourceIndex,
+					targetIndex,
+				)
 				if (workspaceId === active.workspaceId) {
-					const projects = projectStore.getProjectsByWorkspace(active.workspaceId)
-					const sourceIndex = projects.findIndex((item) => item.id === active.projectId)
-					const targetIndex = projects.findIndex((item) => item.id === projectId)
 					if (
 						sourceIndex === -1 ||
 						targetIndex === -1 ||
@@ -328,7 +336,15 @@ export function useCollapsedWorkspaceDnd({
 					const workspaceId = nearestProjectTarget.dataset.collapsedSidebarDndWorkspaceId
 					const projectId = nearestProjectTarget.dataset.collapsedSidebarDndProjectId
 					if (!workspaceId || !projectId) return null
-					const position = getDropPosition(nearestProjectTarget, clientY)
+					const projects = projectStore.getProjectsByWorkspace(active.workspaceId)
+					const sourceIndex = projects.findIndex((item) => item.id === active.projectId)
+					const targetIndex = projects.findIndex((item) => item.id === projectId)
+					const position = getProjectDropPosition(
+						nearestProjectTarget,
+						clientY,
+						sourceIndex,
+						targetIndex,
+					)
 					if (workspaceId === active.workspaceId) {
 						const projects = projectStore.getProjectsByWorkspace(active.workspaceId)
 						const sourceIndex = projects.findIndex(
@@ -544,6 +560,7 @@ export function useCollapsedWorkspaceDnd({
 
 	latestWorkspacesRef.current = workspaces
 	latestBuildPreviewRef.current = buildPreview
+	latestApplyPreviewRef.current = applyPreview
 	latestQueueFrameRef.current = queueFrame
 	latestClearPreviewVisualsRef.current = clearPreviewVisuals
 	latestResetRef.current = reset
@@ -628,9 +645,17 @@ export function useCollapsedWorkspaceDnd({
 			const dragEvent = event as DragEvent
 			dragEvent.preventDefault()
 			const active = activeDragRef.current
-			const preview =
-				previewRef.current ||
-				latestBuildPreviewRef.current?.(event.target, dragEvent.clientY, active)
+			const releaseTarget =
+				document.elementFromPoint(dragEvent.clientX, dragEvent.clientY) || event.target
+			const releasePreview = latestBuildPreviewRef.current?.(
+				releaseTarget,
+				dragEvent.clientY,
+				active,
+			)
+			// The release decision must be the same decision represented by the
+			// indicator. Do not submit an older cached target.
+			const preview = releasePreview
+			latestApplyPreviewRef.current?.(preview)
 			latestResetRef.current?.()
 			if (!preview || preview.disabled) return
 
@@ -686,8 +711,21 @@ export function useCollapsedWorkspaceDnd({
 						preview.position || "after",
 					)
 					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) return
+					const renderedOrder = getRenderedProjectIds(
+						preview.target.closest<HTMLElement>(
+							'[data-collapsed-sidebar-dnd-drop-type="project-list"]',
+						),
+						'[data-collapsed-sidebar-dnd-drop-type="project"]',
+						"collapsedSidebarDndProjectId",
+					)
+					const storeOrder = sourceProjects.map((item) => item.id)
+					const decisionOrder =
+						renderedOrder.length === storeOrder.length &&
+						new Set(renderedOrder).size === storeOrder.length
+							? renderedOrder
+							: storeOrder
 					const preProjectId = getPredecessorId(
-						sourceProjects,
+						decisionOrder.map((id) => ({ id })),
 						active.projectId,
 						preview.type === "project" ? preview.projectId : undefined,
 						preview.position || "after",
@@ -718,11 +756,24 @@ export function useCollapsedWorkspaceDnd({
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
 				// Dropping on the workspace row means inserting at the beginning.
+				const renderedTargetOrder = getRenderedProjectIds(
+					preview.target.closest<HTMLElement>(
+						'[data-collapsed-sidebar-dnd-drop-type="project-list"]',
+					),
+					'[data-collapsed-sidebar-dnd-drop-type="project"]',
+					"collapsedSidebarDndProjectId",
+				)
+				const targetStoreOrder = targetProjects.map((item) => item.id)
+				const targetDecisionOrder =
+					renderedTargetOrder.length === targetStoreOrder.length &&
+					new Set(renderedTargetOrder).size === targetStoreOrder.length
+						? renderedTargetOrder
+						: targetStoreOrder
 				const preProjectId =
 					preview.type === "workspace"
 						? null
 						: getPredecessorId(
-								targetProjects,
+								targetDecisionOrder.map((id) => ({ id })),
 								active.projectId,
 								preview.projectId,
 								preview.position || "after",

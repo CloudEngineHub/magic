@@ -3,11 +3,32 @@ import type { SidebarDropPosition } from "./types"
 export const INSERT_LINE_COLOR = "#b9dcff"
 export const EDGE_SCROLL_ZONE = 56
 export const MAX_EDGE_SCROLL_SPEED = 14
+/** Keeps a small top edge for before when dragging downward. */
+export const DOWNWARD_DROP_BEFORE_ZONE_PX = 3
 
 /** Returns the insertion side for a row and pointer Y coordinate. */
-export function getDropPosition(target: HTMLElement, clientY: number): SidebarDropPosition {
+export function getDropPosition(
+	target: HTMLElement,
+	clientY: number,
+	lowerBiasPx = 0,
+): SidebarDropPosition {
 	const rect = target.getBoundingClientRect()
-	return clientY < rect.top + rect.height / 2 ? "before" : "after"
+	const midpoint = rect.top + rect.height / 2
+	return clientY < midpoint - lowerBiasPx ? "before" : "after"
+}
+
+/** Resolves project insertion direction with a small downward-drag top zone. */
+export function getProjectDropPosition(
+	target: HTMLElement,
+	clientY: number,
+	sourceIndex?: number,
+	targetIndex?: number,
+) {
+	if (sourceIndex !== undefined && targetIndex !== undefined && sourceIndex < targetIndex) {
+		const rect = target.getBoundingClientRect()
+		return clientY < rect.top + DOWNWARD_DROP_BEFORE_ZONE_PX ? "before" : "after"
+	}
+	return getDropPosition(target, clientY)
 }
 
 /** Returns one shared Y coordinate for both sides of the same item gap. */
@@ -72,6 +93,18 @@ export function getNearestProjectTarget(
 		}
 	}
 	return nearestTarget
+}
+
+/** Returns the rendered project order for a project list when all rows are present. */
+export function getRenderedProjectIds(
+	projectList: HTMLElement | null,
+	rowSelector: string,
+	projectIdKey: string,
+) {
+	if (!projectList) return []
+	return Array.from(projectList.querySelectorAll<HTMLElement>(rowSelector))
+		.map((target) => target.dataset[projectIdKey])
+		.filter((id): id is string => Boolean(id))
 }
 
 /** Returns the nearest workspace row when the pointer is in a row gap. */
