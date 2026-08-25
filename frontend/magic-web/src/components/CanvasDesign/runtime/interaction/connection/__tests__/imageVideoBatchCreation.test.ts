@@ -276,7 +276,9 @@ describe("imageVideoBatchCreation", () => {
 				type: ElementTypeEnum.Frame,
 				name: "分镜视频组合",
 				x: 1334,
-				y: -1,
+				y: -11,
+				width: 372,
+				height: 462,
 				children: expect.arrayContaining([
 					expect.objectContaining({ type: ElementTypeEnum.Video }),
 					expect.objectContaining({ type: ElementTypeEnum.Video }),

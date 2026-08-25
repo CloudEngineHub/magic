@@ -1,5 +1,6 @@
 import type { FrameElement, LayerElement } from "../../document/types"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
+import { normalizeFrameCreationSize } from "../../shared/normalize/normalizeUtils"
 
 export const FRAME_CONTENT_PADDING_RATIO = 0.08
 export const FRAME_CONTENT_VERTICAL_GAP = 50
@@ -34,11 +35,14 @@ export function resolveFrameContentLayout(
 	const contentHeight = Math.max(0, size.height)
 	const contentShortEdge = Math.min(contentWidth, contentHeight)
 	const padding = Math.max(0, options.padding ?? contentShortEdge * FRAME_CONTENT_PADDING_RATIO)
+	const frameSize = normalizeFrameCreationSize(
+		contentWidth + padding * 2,
+		contentHeight + padding * 2,
+	)
 
 	return {
 		padding,
-		width: contentWidth + padding * 2,
-		height: contentHeight + padding * 2,
+		...frameSize,
 	}
 }
 

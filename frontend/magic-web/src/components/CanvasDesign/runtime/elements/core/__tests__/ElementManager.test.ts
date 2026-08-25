@@ -90,9 +90,83 @@ describe("ElementManager element creation names", () => {
 			{},
 		)
 	})
+
+	it("normalizes Frame dimensions at the public create boundary", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			doCreate: ReturnType<typeof vi.fn>
+			getElementsDict: ElementManager["getElementsDict"]
+			create: ElementManager["create"]
+		}
+		const frame: LayerElement = {
+			id: "frame",
+			type: "frame",
+			x: 10,
+			y: 20,
+			width: 101.2,
+			height: 99.4,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
+		}
+		manager.elements = new Map()
+		manager.doCreate = vi.fn((element: LayerElement) => {
+			manager.elements.set(element.id, { getData: () => element })
+		})
+		manager.getElementsDict = () => ({})
+
+		manager.create(frame)
+
+		expect(manager.doCreate).toHaveBeenCalledWith(
+			expect.objectContaining({ width: 102, height: 100 }),
+			{},
+		)
+	})
 })
 
 describe("ElementManager document loading", () => {
+	it("preserves persisted Frame dimensions during document loading", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			batchMode: boolean
+			elements: Map<string, unknown>
+			pendingEvents: unknown[]
+			clear: ReturnType<typeof vi.fn>
+			doCreate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			reorderTopLevelElements: ReturnType<typeof vi.fn>
+			replaceAll: ElementManager["replaceAll"]
+		}
+		const frame: LayerElement = {
+			id: "persisted-frame",
+			type: "frame",
+			x: 10,
+			y: 20,
+			width: 101.2,
+			height: 99.4,
+			activeContentId: "persisted-frame-content",
+			mainContentId: "persisted-frame-content",
+			contents: [{ contentId: "persisted-frame-content" }],
+		}
+		manager.batchMode = false
+		manager.elements = new Map()
+		manager.pendingEvents = []
+		manager.clear = vi.fn()
+		manager.doCreate = vi.fn()
+		manager.flush = vi.fn()
+		manager.reorderTopLevelElements = vi.fn()
+
+		manager.replaceAll([frame])
+
+		expect(manager.doCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: frame.id,
+				width: frame.width,
+				height: frame.height,
+			}),
+			{ batch: true },
+		)
+	})
+
 	it("continues loading after one element fails and records the issue", () => {
 		const manager = Object.create(ElementManager.prototype) as unknown as {
 			batchMode: boolean

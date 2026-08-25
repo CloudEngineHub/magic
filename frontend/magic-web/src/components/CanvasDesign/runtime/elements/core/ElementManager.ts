@@ -22,7 +22,7 @@ import { ImageElement as ImageElementClass } from "../image/ImageElement"
 import { VideoElement as VideoElementClass } from "../video/VideoElement"
 import { exportCanvasDocument, exportLayerElement } from "../../document/exportDocument"
 import { syncCropConfigOnResize } from "../../resources/image/imageCropUtils"
-import { normalizeSize } from "../../shared/normalize/normalizeUtils"
+import { normalizeFrameCreationSize, normalizeSize } from "../../shared/normalize/normalizeUtils"
 import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
@@ -187,6 +187,7 @@ export class ElementManager {
 	 * 创建元素
 	 * @param elementData - 元素数据
 	 * @param options - 操作选项
+	 * 主动创建的 Frame 会在此统一规范化宽高；文档加载不经过此入口。
 	 * @throws 如果元素已存在
 	 */
 	public create<T extends LayerElement>(
@@ -198,7 +199,9 @@ export class ElementManager {
 				`Element ${elementData.id} already exists. Use update() or upsert() instead.`,
 			)
 		}
-		const resolvedElement = this.resolveUniqueElementName(elementData)
+		const resolvedElement = this.resolveUniqueElementName(
+			this.normalizeCreatedElementData(elementData),
+		)
 		this.doCreate(resolvedElement, options || {})
 		const createdElement = this.elements.get(resolvedElement.id)?.getData()
 		if (!createdElement) {
@@ -220,7 +223,9 @@ export class ElementManager {
 			throw new Error(`Element ${elementData.id} already exists`)
 		}
 
-		const elementWithUniqueName = this.resolveUniqueElementName(elementData)
+		const elementWithUniqueName = this.resolveUniqueElementName(
+			this.normalizeCreatedElementData(elementData),
+		)
 		this.markElementTemporary(elementWithUniqueName.id, temporaryKind)
 		try {
 			this.doCreate(elementWithUniqueName, options || {})
@@ -498,7 +503,7 @@ export class ElementManager {
 		if (this.elements.has(elementData.id)) {
 			this.doUpdate(elementData.id, elementData, options || {})
 		} else {
-			this.doCreate(elementData, options || {})
+			this.doCreate(this.normalizeCreatedElementData(elementData), options || {})
 		}
 	}
 
@@ -787,6 +792,25 @@ export class ElementManager {
 	}
 
 	// ==================== 私有实现方法 ====================
+
+	/**
+	 * 规范化主动创建的元素数据。
+	 * 文档加载使用 replaceAll()/doCreate()，因此不会改写历史 DSL。
+	 */
+	private normalizeCreatedElementData<T extends LayerElement>(elementData: T): T {
+		if (
+			elementData.type !== ElementTypeEnum.Frame ||
+			elementData.width === undefined ||
+			elementData.height === undefined
+		) {
+			return elementData
+		}
+
+		return {
+			...elementData,
+			...normalizeFrameCreationSize(elementData.width, elementData.height),
+		}
+	}
 
 	/**
 	 * 规范化更新数据（提取公共逻辑）

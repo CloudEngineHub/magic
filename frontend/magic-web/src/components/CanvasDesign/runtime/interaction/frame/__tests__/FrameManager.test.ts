@@ -114,7 +114,7 @@ describe("FrameManager frame creation", () => {
 			frameId,
 			expect.objectContaining({
 				children: [
-						expect.objectContaining({
+					expect.objectContaining({
 						id: "second",
 						x: expect.closeTo(158),
 						y: expect.closeTo(68),
@@ -135,6 +135,16 @@ describe("FrameManager frame creation", () => {
 			padding: 8,
 			width: 116,
 			height: 216,
+		})
+	})
+
+	it("rounds generated frame dimensions up to preserve the content bounds", () => {
+		expect(
+			resolveFrameContentLayout({ width: 101.2, height: 99.4 }, { padding: 7.13 }),
+		).toEqual({
+			padding: 7.13,
+			width: 116,
+			height: 114,
 		})
 	})
 })
