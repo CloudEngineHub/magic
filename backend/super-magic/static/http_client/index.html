@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=merge-ppt-template-20260810-1">
+    <link rel="stylesheet" href="css/styles.css?v=long-term-memory-toggle-20260818-2">
     <link rel="stylesheet" href="css/model_picker.css?v=unified-model-picker-6">
 </head>
 
@@ -28,6 +28,16 @@
                 <div class="form-group">
                     <label for="authToken">鉴权 Token:</label>
                     <input type="text" id="authToken" placeholder="User-Authorization，留空则取上传配置中的 authorization">
+                </div>
+                <div class="debug-preference-row">
+                    <div class="debug-preference-copy">
+                        <label for="longTermMemoryToggle">长期记忆</label>
+                        <small>控制通用长期记忆的自动读取和自动提取</small>
+                    </div>
+                    <label class="toggle-switch" title="长期记忆开关">
+                        <input type="checkbox" id="longTermMemoryToggle" checked>
+                        <span class="toggle-switch-slider"></span>
+                    </label>
                 </div>
                 <div class="connection-buttons">
                     <button id="subscribeBtn" class="btn secondary">建立消息订阅</button>
@@ -511,7 +521,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
     <script src="js/model_picker.js?v=unified-model-picker-4"></script>
-    <script src="js/client.js?v=merge-ppt-template-20260810-1"></script>
+    <script src="js/client.js?v=long-term-memory-toggle-20260818-2"></script>
 </body>
 
 </html>

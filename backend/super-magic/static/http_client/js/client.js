@@ -384,6 +384,7 @@ function renderClientEntry(entry, options = {}) {
 // DOM 元素
 const serverUrlInput = document.getElementById('serverUrl');
 const authTokenInput = document.getElementById('authToken');
+const longTermMemoryToggle = document.getElementById('longTermMemoryToggle');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -434,6 +435,7 @@ const messageInputPanel = document.getElementById('messageInputPanel');
 
 const INIT_CONFIG_PANEL_OPEN_KEY = 'httpClient.initConfigPanelOpen';
 const MCP_CONFIG_PANEL_OPEN_KEY = 'httpClient.mcpConfigPanelOpen';
+const LONG_TERM_MEMORY_ENABLED_KEY = 'httpClient.longTermMemoryEnabled';
 const TOKEN_CONTEXT_DEFAULT_LIMIT = 200_000;
 const TOKEN_CONTEXT_WARNING_THRESHOLD = 0.7;
 const TOKEN_CONTEXT_RING_CIRCUMFERENCE = 42.41;
@@ -1588,6 +1590,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (imModeToggle) {
         imModeToggle.addEventListener('change', toggleImMode);
     }
+    if (longTermMemoryToggle) {
+        const savedLongTermMemoryEnabled = localStorage.getItem(LONG_TERM_MEMORY_ENABLED_KEY);
+        longTermMemoryToggle.checked = savedLongTermMemoryEnabled !== 'false';
+        longTermMemoryToggle.addEventListener('change', () => {
+            localStorage.setItem(LONG_TERM_MEMORY_ENABLED_KEY, String(longTermMemoryToggle.checked));
+        });
+    }
     if (imChannelSelect) {
         imChannelSelect.addEventListener('change', () => {
             currentImChannel = imChannelSelect.value;
@@ -1989,6 +1998,7 @@ async function sendHttpMessage(messageData) {
 
     try {
         injectDebugTaskId(messageData);
+        injectLongTermMemoryPreference(messageData);
         applyLocalDebugOptions(messageData);
         const response = await fetch(`${serverUrl}/api/v1/messages/chat`, {
             method: 'POST',
@@ -2030,6 +2040,22 @@ function injectDebugTaskId(messageData) {
 
     messageData.metadata = messageData.metadata || {};
     messageData.metadata.super_magic_task_id = generateDebugTaskId();
+}
+
+/**
+ * 将调试面板中的长期记忆开关注入每次 CHAT metadata。
+ * system prompt 首次生成时使用当前 CHAT 值，后续 CHAT 只影响运行时功能。
+ */
+function injectLongTermMemoryPreference(messageData) {
+    if (!messageData || messageData.type !== MessageType.CHAT) return;
+
+    messageData.metadata = messageData.metadata || {};
+    messageData.metadata.personal_preferences = {
+        ...(messageData.metadata.personal_preferences || {}),
+        long_term_memory_enabled: longTermMemoryToggle
+            ? longTermMemoryToggle.checked
+            : true,
+    };
 }
 
 /**
