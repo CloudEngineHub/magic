@@ -1222,11 +1222,25 @@ class AsrMergeTaskManager(AsrServiceBase):
                 raise ValueError(f"retry_limit_reached({current_retry}/{max_retries})")
 
             new_retry = current_retry + 1
+            now_ts = datetime.now().timestamp()
 
             state = self._apply_state_updates(
                 state,
                 task_updates={"status": AsrTaskStatus.WAITING, "error_message": None},
-                progress_updates={"retry_count": new_retry},
+                progress_updates={
+                    "retry_count": new_retry,
+                    "upload_completed": True,
+                    "upload_completed_at": now_ts,
+                    "completion_deadline_at": now_ts + asr_time_config.FINISH_SHARD_TIMEOUT_SECONDS,
+                    "finish_scan_signature": None,
+                    "finish_stable_count": 0,
+                    "last_stable_shard_indices": [],
+                    "opus_merge_status": "pending",
+                    "opus_merge_error": None,
+                    "opus_merge_attempt_id": None,
+                    "opus_merge_started_at": None,
+                    "opus_merge_completed_at": None,
+                },
             )
 
             logger.warning(

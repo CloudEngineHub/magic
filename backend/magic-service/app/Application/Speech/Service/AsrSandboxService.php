@@ -334,6 +334,21 @@ class AsrSandboxService extends AbstractAppService
         $statusString = $queryResponse->getStatus();
         $status = SandboxAsrStatusEnum::fromString($statusString) ?? SandboxAsrStatusEnum::ERROR;
 
+        // super-magic 已进入 error 时，recover 需要重新提交 finish；
+        // super-magic finish 接口会先原子重置任务并启动新一轮监听。
+        if ($status->isError()) {
+            $this->logger->warning('finish-recording 恢复：沙箱任务已失败，重新提交 finish 重试', [
+                'task_key' => $taskStatus->taskKey,
+                'sandbox_id' => $sandboxId,
+                'error_message' => $queryResponse->getErrorMessage(),
+            ]);
+
+            $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
+            $taskStatus->updateStatus($targetStatus);
+
+            return $mergeResult;
+        }
+
         $completedResult = $this->checkResponseStatus(
             $queryResponse,
             $status,

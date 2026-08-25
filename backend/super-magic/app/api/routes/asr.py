@@ -72,7 +72,8 @@ async def _resolve_finish_file_shard_count(audio_config, workspace_dir: str, tas
 
 
 async def _get_task_and_check_completed_or_error(
-    task_key: str
+    task_key: str,
+    allow_error_retry: bool = False,
 ) -> tuple[BaseResponse | None, AsrTaskResult | None]:
     """
     查询任务并检查是否已完成或出错
@@ -115,6 +116,25 @@ async def _get_task_and_check_completed_or_error(
 
     # 如果任务出错，返回错误
     if existing_task.status == AsrTaskStatus.ERROR.value:
+        if allow_error_retry:
+            retry_ok, retry_count, max_retries = await AsrMergeTaskManager.instance().request_retry(task_key)
+            if retry_ok:
+                existing_task = await AsrMergeTaskManager.instance().get_task(task_key)
+                if existing_task is not None:
+                    logger.warning(
+                        f"🔁 [asrmerge] task_key={task_key} ERROR 任务进入重试: "
+                        f"retry_count={retry_count}/{max_retries}"
+                    )
+                    return None, existing_task
+            response_data = _build_task_response(existing_task)
+            return (
+                create_error_response(
+                    message=f"任务重试次数已达上限或重试失败 ({retry_count}/{max_retries})",
+                    data=response_data.model_dump(),
+                ),
+                None,
+            )
+
         response_data = _build_task_response(existing_task)
         # 关键日志：finish/query 在 error 状态会直接返回，不会进入文件就绪检测/完成流程
         logger.warning(
@@ -554,7 +574,10 @@ async def finish_asr_task(
         workspace_dir = request.workspace_dir or ".workspace"
 
         # 1. 查询任务状态。已完成/已失败/不存在的任务直接返回，不触发分片扫描。
-        error_response, existing_task = await _get_task_and_check_completed_or_error(task_key)
+        error_response, existing_task = await _get_task_and_check_completed_or_error(
+            task_key,
+            allow_error_retry=True,
+        )
         if error_response:
             return error_response
 
