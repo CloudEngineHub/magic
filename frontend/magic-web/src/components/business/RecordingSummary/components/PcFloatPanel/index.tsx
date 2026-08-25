@@ -164,7 +164,8 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 	} = props
 
 	const isEditMode = mode === "edit"
-	const shouldShowTranscriptionDisabledState = isEditMode && transcriptionEnabled === false
+	const shouldShowTranscriptionDisabledState =
+		isEditMode && transcriptionEnabled === false && messages.length === 0
 
 	const [enableAnimation, setEnableAnimation] = useState(false)
 	// 用于存储动画定时器引用，便于清理

@@ -219,25 +219,28 @@ class RecordSummaryService {
 		if (!currentSession || recordSummaryStore.status === "init") {
 			throw new Error("No active recording session")
 		}
-		if (currentSession.transcriptionEnabled === enabled) {
+		const isTranscriptionStateUnchanged = currentSession.transcriptionEnabled === enabled
+		if (isTranscriptionStateUnchanged) {
 			recordSummaryStore.setTranscriptionEnabled(enabled)
-			return
-		}
-
-		if (recordSummaryStore.isPaused) {
-			// Paused sessions have no active ASR flow to start or stop; resume uses this flag.
-		} else if (enabled) {
-			await this.startRealtimeTranscription(currentSession.id)
 		} else {
-			await this.stopRealtimeTranscription()
-		}
+			if (recordSummaryStore.isPaused) {
+				// Paused sessions have no active ASR flow to start or stop; resume uses this flag.
+			} else if (enabled) {
+				await this.startRealtimeTranscription(currentSession.id)
+			} else {
+				await this.stopRealtimeTranscription()
+			}
 
-		const updatedSession = this.sessionManager.updateTranscriptionEnabled(enabled)
-		if (updatedSession) {
-			this.recordingPersistence.saveSession(updatedSession)
+			if (!enabled) recordSummaryStore.markLastMessageDefinite()
+
+			const updatedSession = this.sessionManager.updateTranscriptionEnabled(enabled)
+			if (updatedSession) {
+				this.recordingPersistence.saveSession(updatedSession)
+			}
+			recordSummaryStore.setTranscriptionEnabled(enabled)
+			if (enabled) recordSummaryStore.clearVoiceError()
 		}
-		recordSummaryStore.setTranscriptionEnabled(enabled)
-		if (enabled) recordSummaryStore.clearVoiceError()
+		if (!enabled && isTranscriptionStateUnchanged) recordSummaryStore.markLastMessageDefinite()
 	}
 
 	/** Keeps the existing enable-only API for other recording entry points. */
@@ -2404,6 +2407,8 @@ class RecordSummaryService {
 	 */
 	private handleVoiceResult = (params: VoiceResultParams) => {
 		const { result } = params
+		// Ignore final packets that arrive after the user has disabled realtime transcription.
+		if (recordSummaryStore.businessData.transcriptionEnabled === false) return
 
 		// 记录语音结果并重置超时检测
 		this.voiceTimeoutChecker.recordVoiceResult()
