@@ -175,6 +175,33 @@ async def test_document_output_version_resolver_keeps_previous_strategy(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_document_output_version_resolver_isolates_explicit_strategy_from_legacy_index(tmp_path: Path):
+    source = tmp_path / "legacy.pdf"
+    source.write_bytes(b"mock")
+    output_dir = tmp_path / "legacy_pdf"
+    output_dir.mkdir()
+    (output_dir / "document.index.json").write_text(
+        json.dumps(
+            {
+                "source_path": str(source),
+                "chunks": [{"chunk_id": "legacy_chunk", "path": "chunks/chunk_0001.md"}],
+                "assets": [{"asset_id": "legacy_asset", "path": "assets/legacy.png"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resolved = await DocumentOutputVersionResolver.resolve(
+        output_dir,
+        source,
+        "text_only",
+        "text_only",
+    )
+
+    assert resolved == tmp_path / "legacy_pdf__text_only"
+
+
+@pytest.mark.asyncio
 async def test_document_extractor_batches_page_visual_requests(monkeypatch, tmp_path: Path):
     calls: list[str | None] = []
 

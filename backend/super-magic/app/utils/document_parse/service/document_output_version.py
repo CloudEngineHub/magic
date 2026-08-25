@@ -26,7 +26,7 @@ class DocumentOutputVersionResolver:
         if not cls._is_same_source(index, source_path):
             return output_dir
         recorded_strategy = cls._recorded_strategy(index)
-        if requested_strategy == "auto" or not recorded_strategy or recorded_strategy == resolved_strategy:
+        if requested_strategy == "auto" or recorded_strategy == resolved_strategy:
             return output_dir
 
         versioned = output_dir.with_name(f"{output_dir.name}__{resolved_strategy}")

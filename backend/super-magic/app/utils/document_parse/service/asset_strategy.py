@@ -149,7 +149,6 @@ class AssetStrategyResolver:
             context["is_scanned_like"] = bool(metadata.get("is_scanned_like"))
         return context
 
-    @classmethod
     @staticmethod
     def _options(
         requested: AssetStrategy,
