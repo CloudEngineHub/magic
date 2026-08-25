@@ -188,11 +188,19 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $version = $this->saveOfficialSkillVersion($organizationCode, $authorization, $package, $requestDTO, $market, $code);
         $market = $this->saveOfficialSkillMarket($authorization, $requestDTO, $version, $market, $code);
 
-        // 用本次提交的分类完整替换旧关系。
+        // 使用同一份分类数据同步维护版本和市场关系。
+        $categoryIds = $this->officialSkillCategoryRelationDomainService->normalizeCategoryIds(
+            $requestDTO->getCategoryIdList()
+        );
+        $this->officialSkillCategoryRelationDomainService->replaceVersionCategories(
+            $organizationCode,
+            (int) $version->getId(),
+            $categoryIds
+        );
         $this->officialSkillCategoryRelationDomainService->replaceMarketCategories(
             $organizationCode,
             (int) $market->getId(),
-            $requestDTO->getCategoryIdList()
+            $categoryIds
         );
 
         return new OfficialSkillImportResultDTO(

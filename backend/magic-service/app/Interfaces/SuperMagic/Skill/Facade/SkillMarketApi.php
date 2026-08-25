@@ -47,7 +47,7 @@ class SkillMarketApi extends AbstractApi
         $requestData = $request->validated();
         $query = new SkillQuery($requestData);
         $page = $this->createPage();
-        // 前台列表不使用 total，跳过总数统计
+        // 前台列表不返回 total，跳过总数统计
         $page->setTotal(false);
 
         // 市场技能列表不返回 file_url，避免批量加载文件链接
