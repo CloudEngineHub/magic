@@ -627,6 +627,7 @@ function Share() {
 	const shouldHideHeader = shareDisplayOptions.hideHeader || (isFileShare && !isShareDataReady)
 	// The recording detail owns its mobile header, so the outer share shell must not reserve a second header row.
 	const isMobileAudioShare = isMobile && shouldRenderAudioShareShell
+	const [mobileAudioSharePlayerExpanded, setMobileAudioSharePlayerExpanded] = useState(false)
 	const createdByBadgeBottom = useMemo(() => {
 		// Keep the default share footer behavior for every scene except the readonly mobile audio shell.
 		const defaultBottom = routeInfo.isFileShare || !hasStarted ? "12px" : "64px"
@@ -634,8 +635,15 @@ function Share() {
 			defaultBottom,
 			isMobile,
 			shouldRenderAudioShareShell,
+			playerExpanded: mobileAudioSharePlayerExpanded,
 		})
-	}, [hasStarted, isMobile, routeInfo.isFileShare, shouldRenderAudioShareShell])
+	}, [
+		hasStarted,
+		isMobile,
+		mobileAudioSharePlayerExpanded,
+		routeInfo.isFileShare,
+		shouldRenderAudioShareShell,
+	])
 
 	const clearWindowData = useMemoizedFn(() => {
 		// @ts-ignore
@@ -1044,6 +1052,7 @@ function Share() {
 								onCopyProject={handleCopyProject}
 								onLogin={handleShareLogin}
 								attachments={attachments}
+								onPlayerExpandedChange={setMobileAudioSharePlayerExpanded}
 							/>
 						) : (
 							<RecordingDetailShareDesktop

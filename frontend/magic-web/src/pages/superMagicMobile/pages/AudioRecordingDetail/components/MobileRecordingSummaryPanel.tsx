@@ -368,7 +368,7 @@ function MindmapViewSwitch({
 	onChange,
 }: {
 	value: "map" | "markdown"
-	bottom: number
+	bottom: CSSProperties["bottom"]
 	onChange: (value: "map" | "markdown") => void
 }) {
 	const { t } = useTranslation("audioRecordings")

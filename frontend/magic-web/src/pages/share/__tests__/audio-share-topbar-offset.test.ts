@@ -13,6 +13,17 @@ describe("resolveMobileAudioShareCreatedByBadgeBottom", () => {
 				shouldRenderAudioShareShell: true,
 			}),
 		).toBe(MOBILE_AUDIO_SHARE_CREATED_BY_BADGE_BOTTOM)
+
+		expect(
+			resolveMobileAudioShareCreatedByBadgeBottom({
+				defaultBottom: "12px",
+				isMobile: true,
+				shouldRenderAudioShareShell: true,
+				playerExpanded: true,
+			}),
+		).toBe(
+			"calc(max(24px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) + 182px + 12px)",
+		)
 	})
 
 	it("falls back to the default bottom outside the mobile audio share shell", () => {

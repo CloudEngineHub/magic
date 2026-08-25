@@ -110,8 +110,17 @@ vi.mock("../components/MobileRecordingSummaryPanel", () => ({
 }))
 
 vi.mock("../components/MobileRecordingAudioPlayer", () => ({
-	MobileRecordingAudioPlayer: ({ hidden }: { hidden?: boolean }) => (
+	MobileRecordingAudioPlayer: ({
+		hidden,
+		onExpandedChange,
+	}: {
+		hidden?: boolean
+		onExpandedChange?: (expanded: boolean) => void
+	}) => (
 		<div data-testid="mock-audio-player" data-hidden={hidden ? "true" : "false"}>
+			<button type="button" onClick={() => onExpandedChange?.(true)}>
+				Expand player
+			</button>
 			Player
 		</div>
 	),
@@ -281,6 +290,23 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 					"calc(max(24px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) + 40px + 44px)",
 			}),
 		)
+	})
+
+	it("forwards player expansion to the outer share shell", () => {
+		const onPlayerExpandedChange = vi.fn()
+		render(
+			<ShareMobileAudioRecordingDetailPage
+				projectId="project-share-001"
+				resourceName="Mock resource"
+				allowDownloadProjectFile
+				onPlayerExpandedChange={onPlayerExpandedChange}
+				attachments={{ tree: [], list: [] }}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Expand player" }))
+
+		expect(onPlayerExpandedChange).toHaveBeenCalledWith(true)
 	})
 
 	it("switches between source and summary tabs without changing readonly behavior", () => {

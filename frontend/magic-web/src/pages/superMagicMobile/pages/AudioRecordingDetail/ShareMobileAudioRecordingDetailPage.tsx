@@ -17,10 +17,12 @@ import type { MobileRecordingSourceTab, MobileRecordingTopTab } from "./types"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { useMobileRecordingContentSearch } from "./hooks/useMobileRecordingContentSearch"
-import { getMobileRecordingPlayerScrollPadding } from "./utils/mobile-recording-player-layout"
+import {
+	getMobileRecordingPlayerScrollPadding,
+	MOBILE_RECORDING_COLLAPSED_PLAYER_HEIGHT,
+	MOBILE_RECORDING_EXPANDED_PLAYER_HEIGHT,
+} from "./utils/mobile-recording-player-layout"
 
-const COLLAPSED_PLAYER_HEIGHT = 40
-const EXPANDED_PLAYER_HEIGHT = 182
 const SHARE_PAGE_BOTTOM_READABLE_GAP = 24
 const SHARE_SEARCH_BAR_HEIGHT = 72
 const SHARE_SEARCH_WATERMARK_GAP = 44
@@ -39,6 +41,7 @@ interface ShareMobileAudioRecordingDetailPageProps {
 		tree: AttachmentItem[]
 		list: AttachmentItem[]
 	}
+	onPlayerExpandedChange?: (expanded: boolean) => void
 }
 
 /** Renders the H5 read-only recording detail experience inside the share route container. */
@@ -53,6 +56,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 	onCopyProject,
 	onLogin,
 	attachments,
+	onPlayerExpandedChange,
 }: ShareMobileAudioRecordingDetailPageProps) {
 	const { t } = useTranslation("audioRecordings")
 	const { loading, error, fileMap, texts, audioUrl, title, attachmentList } =
@@ -111,15 +115,27 @@ export default function ShareMobileAudioRecordingDetailPage({
 			.map((file) => file?.content?.length ?? 0)
 			.join(",")}`,
 	})
+	const activePlayerHeight = playerExpanded
+		? MOBILE_RECORDING_EXPANDED_PLAYER_HEIGHT
+		: MOBILE_RECORDING_COLLAPSED_PLAYER_HEIGHT
 	const scrollPaddingBottom = contentSearchOpen
 		? SHARE_SEARCH_BAR_HEIGHT + SHARE_SEARCH_WATERMARK_GAP + SHARE_PAGE_BOTTOM_READABLE_GAP
 		: getMobileRecordingPlayerScrollPadding(
-				playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT,
+				activePlayerHeight,
 				20 +
 					// Reserve extra reading room for the share footer so the last lines stay above the floating player.
 					SHARE_PAGE_BOTTOM_READABLE_GAP,
 			)
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+
+	/** Keeps the outer share watermark aligned with the inner player's expanded height. */
+	const handlePlayerExpandedChange = useCallback(
+		(expanded: boolean) => {
+			setPlayerExpanded(expanded)
+			onPlayerExpandedChange?.(expanded)
+		},
+		[onPlayerExpandedChange],
+	)
 
 	/** Keeps readonly share filtering session-local while still allowing transcript inspection controls. */
 	function handleSelectedSpeakerIdsChange(speakerIdsToSelect: string[]) {
@@ -134,22 +150,22 @@ export default function ShareMobileAudioRecordingDetailPage({
 	/** Opens the readonly action sheet even when download permission is disabled. */
 	function openShareExportSheet() {
 		setShareExportSheetOpen(true)
-		setPlayerExpanded(false)
+		handlePlayerExpandedChange(false)
 	}
 
 	/** Opens readonly content search while preserving the current audio playback session. */
 	const openContentSearch = useCallback(() => {
 		if (!searchSupported) return
 		setContentSearchOpen(true)
-		setPlayerExpanded(false)
-	}, [searchSupported])
+		handlePlayerExpandedChange(false)
+	}, [handlePlayerExpandedChange, searchSupported])
 
 	/** Exits readonly content search and clears its session-local query. */
 	const closeContentSearch = useCallback(() => {
 		setContentSearchOpen(false)
 		setContentSearchQuery("")
-		setPlayerExpanded(false)
-	}, [])
+		handlePlayerExpandedChange(false)
+	}, [handlePlayerExpandedChange])
 
 	useEffect(() => {
 		if (!searchSupported && contentSearchOpen) closeContentSearch()
@@ -247,7 +263,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 				colorSegments={colorSegments}
 				onToggle={player.toggle}
 				onSeek={player.seekTo}
-				onExpandedChange={setPlayerExpanded}
+				onExpandedChange={handlePlayerExpandedChange}
 				onPlaybackRateChange={player.setPlaybackRate}
 				hidden={contentSearchOpen}
 			/>
