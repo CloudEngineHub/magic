@@ -20,13 +20,13 @@ const tagGroups: SlidesTemplateTagGroupItem[] = [
 	{
 		id: "purpose-group",
 		code: "purpose_group",
-		name_i18n: { zh_CN: "用途与交付物", en_US: "Purpose" },
+		name: "Purpose",
 		sort: 100,
 		tags: [
 			{
 				id: "annual-report",
 				code: "purpose-annual-report",
-				name_i18n: { zh_CN: "年度报告", en_US: "Annual Report" },
+				name: "Annual Report",
 				sort: 100,
 				template_count: 1,
 				is_official: true,
@@ -34,7 +34,7 @@ const tagGroups: SlidesTemplateTagGroupItem[] = [
 			{
 				id: "long-purpose",
 				code: "purpose-long",
-				name_i18n: { zh_CN: "行业与领域综合方案", en_US: "行业领域方案" },
+				name: "Industry Solution",
 				sort: 90,
 				template_count: 1,
 				is_official: true,
@@ -44,13 +44,13 @@ const tagGroups: SlidesTemplateTagGroupItem[] = [
 	{
 		id: "style-group",
 		code: "style_group",
-		name_i18n: { zh_CN: "视觉风格", en_US: "Style" },
+		name: "Style",
 		sort: 90,
 		tags: [
 			{
 				id: "business-style",
 				code: "style-business",
-				name_i18n: { zh_CN: "商务", en_US: "Business" },
+				name: "Business",
 				sort: 90,
 				template_count: 1,
 				is_official: true,
@@ -149,7 +149,7 @@ describe("SlidesTemplateMobileTagFilters", () => {
 		expect(panel).toBeInTheDocument()
 		expect(panel).toHaveClass("flex", "h-full", "rounded-lg", "bg-card")
 		expect(screen.getByTestId("slides-template-mobile-all-filters-groups")).toHaveClass(
-			"w-[116px]",
+			"w-[86px]",
 			"py-1",
 			"border-r",
 			"bg-card",

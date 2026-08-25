@@ -67,6 +67,8 @@ interface ConversationPanelScaffoldProps {
 	revokedEditorContext?: RevokedMessageEditorContext
 	/** Task list + message queue above editor (e.g. Topic message queue) */
 	editorNodes?: SceneEditorNodes
+	/** Optional page-specific offset for the desktop input resize handle. */
+	resizeHandlePositionClassName?: string
 }
 
 interface AnimatedEmptyStateProps {
@@ -121,6 +123,7 @@ function ConversationPanelScaffold({
 	enableRevokedUserMessageReedit,
 	revokedEditorContext,
 	editorNodes,
+	resizeHandlePositionClassName,
 }: ConversationPanelScaffoldProps) {
 	/** 与全局移动端判定一致，用于在窄屏下去掉根容器多余底边距，避免与全屏输入区叠出双份留白 */
 	const isMobile = useIsMobile()
@@ -460,6 +463,7 @@ function ConversationPanelScaffold({
 							value={inputHeight.effectiveHeight}
 							min={200}
 							max={inputHeight.maxHeight}
+							positionClassName={resizeHandlePositionClassName}
 							onResizeStart={inputHeight.startPointerResize}
 							onResize={inputHeight.resizeByPointerDelta}
 							onResizeEnd={inputHeight.finishPointerResize}

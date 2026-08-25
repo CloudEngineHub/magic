@@ -135,4 +135,16 @@ describe("FilterSelectItem", () => {
 		expect(handleFilterChange).toHaveBeenCalledWith("pages", "")
 		expect(screen.queryByTestId("mobile-scene-panel-filter-popup")).not.toBeInTheDocument()
 	})
+
+	it("adds the mobile label alignment offset only to the full mobile layout", () => {
+		render(
+			<FilterSelectItem
+				filter={pagesFilter}
+				onFilterChange={vi.fn()}
+				variant={ScenePanelVariant.Mobile}
+			/>,
+		)
+
+		expect(screen.getByText("Pages")).toHaveClass("ml-3")
+	})
 })

@@ -838,7 +838,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 
 		fireEvent.click(screen.getByText("Summary"))
 		const latestSummaryPanelProps = summaryPanelPropsMock.mock.calls.at(-1)?.[0] as
-			{ onTimeClick?: (start: number, end?: number) => void } | undefined
+			| { onTimeClick?: (start: number, end?: number) => void }
+			| undefined
 
 		act(() => {
 			latestSummaryPanelProps?.onTimeClick?.(12, 24)

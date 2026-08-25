@@ -73,6 +73,7 @@ describe("ConversationPanelScaffold input resizing", () => {
 		)
 
 		expect(screen.getByTestId("conversation-input-resize-handle")).toBeInTheDocument()
+		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveClass("top-0")
 		expect(screen.getByTestId("layout-consumer")).toHaveAttribute("data-fill-height", "true")
 		expect(screen.getByTestId("test-conversation-editor-layout")).toHaveStyle({
 			height: "320px",
@@ -80,6 +81,24 @@ describe("ConversationPanelScaffold input resizing", () => {
 
 		fireEvent.doubleClick(screen.getByTestId("conversation-input-resize-handle"))
 		expect(scaffoldMocks.restoreAutoHeight).toHaveBeenCalledTimes(1)
+	})
+
+	/** Verifies that a page-specific handle offset is applied without changing the scaffold contract. */
+	it("supports a custom resize handle position", () => {
+		render(
+			<ConversationPanelScaffold
+				scope="custom-position"
+				emptyHero={<EmptyState />}
+				emptyCompact={<div />}
+				editor={<LayoutConsumer />}
+				messageListProviderValue={{} as never}
+				messages={[{ id: "synthetic-message", role: "assistant" }] as never}
+				selectedTopic={{ id: "synthetic-topic" } as never}
+				resizeHandlePositionClassName="top-2"
+			/>,
+		)
+
+		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveClass("top-2")
 	})
 
 	it("disables layout transitions while the input height is being dragged", () => {
@@ -97,7 +116,12 @@ describe("ConversationPanelScaffold input resizing", () => {
 
 		const editorLayout = screen.getByTestId("test-conversation-editor-layout")
 		const handle = screen.getByTestId("conversation-input-resize-handle")
-		fireEvent.mouseDown(handle, { button: 0, clientY: 100 })
+		fireEvent.pointerDown(handle, {
+			button: 0,
+			clientY: 100,
+			pointerId: 1,
+			isPrimary: true,
+		})
 		expect(editorLayout).toHaveClass("transition-none")
 	})
 

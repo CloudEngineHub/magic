@@ -37,7 +37,7 @@ interface EditorBodyProps {
 	currentDocumentPath?: string
 	urlResolver?: ProjectImageUrlResolver
 	folderPath?: string
-	onImageUploadSuccess?: (relativePath: string) => void
+	onImageUploadSuccess?: (relativePath: string) => void | Promise<void>
 	onImageUploadError?: (error: Error) => void
 	editorRef?: React.RefObject<SimpleEditorRef>
 	placeholder?: string
@@ -47,9 +47,11 @@ interface EditorBodyProps {
 	"data-testid"?: string
 	/**
 	 * Async callback to resolve or create the images folder before upload.
-	 * Should return the file_id of the images folder, or undefined to fall back to root.
+	 * Should return the file_id of the images folder. Recording callers can set
+	 * requireImagesFolderParentId to fail instead of falling back to the project root.
 	 */
 	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
+	requireImagesFolderParentId?: boolean
 }
 
 function EditorBody({
@@ -77,6 +79,7 @@ function EditorBody({
 	onSave,
 	"data-testid": dataTestId,
 	resolveImagesFolderParentId,
+	requireImagesFolderParentId,
 }: EditorBodyProps) {
 	// Use project image extensions hook
 	const projectImageExtensions = useProjectImageExtensions({
@@ -87,6 +90,7 @@ function EditorBody({
 		onSuccess: onImageUploadSuccess,
 		onError: onImageUploadError,
 		resolveImagesFolderParentId,
+		requireImagesFolderParentId,
 	})
 
 	// Handle link click: open external URLs in new tab, or open relative files in tab

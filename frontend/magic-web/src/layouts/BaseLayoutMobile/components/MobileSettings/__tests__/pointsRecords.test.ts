@@ -7,6 +7,8 @@ import {
 	getPointsRecordGroupKey,
 	getPointsRecordsHasMore,
 	getPointsRecordsTotal,
+	normalizePointsRecordRemark,
+	normalizePointsRecords,
 } from "../pointsRecords"
 
 const pointsStoreMock = vi.hoisted(() => ({
@@ -78,6 +80,54 @@ describe("getPointsRecordsHasMore", () => {
 	test("falls back to list length when total is null", () => {
 		expect(getPointsRecordsHasMore(1, 20, 20, null)).toBe(true)
 		expect(getPointsRecordsHasMore(1, 20, 15, null)).toBe(false)
+	})
+})
+
+describe("normalizePointsRecordRemark", () => {
+	test("returns empty string for nullish and blank values", () => {
+		expect(normalizePointsRecordRemark(null)).toBe("")
+		expect(normalizePointsRecordRemark(undefined)).toBe("")
+		expect(normalizePointsRecordRemark("   ")).toBe("")
+	})
+
+	test("returns trimmed remark text", () => {
+		expect(normalizePointsRecordRemark("  活动赠送  ")).toBe("活动赠送")
+	})
+})
+
+describe("normalizePointsRecords", () => {
+	test("maps description and remark independently", () => {
+		const [record] = normalizePointsRecords(
+			[
+				{
+					id: "1",
+					amount: "10",
+					description: "模型调用",
+					remark: "测试备注",
+					updated_at: "05-20 19:45",
+				},
+			],
+			"积分变更",
+		)
+
+		expect(record?.description).toBe("模型调用")
+		expect(record?.remark).toBe("测试备注")
+	})
+
+	test("keeps remark empty when historical data has no remark", () => {
+		const [record] = normalizePointsRecords(
+			[
+				{
+					id: "2",
+					amount: "-5",
+					description: "话题消耗",
+					updated_at: "05-20 19:45",
+				},
+			],
+			"积分变更",
+		)
+
+		expect(record?.remark).toBe("")
 	})
 })
 

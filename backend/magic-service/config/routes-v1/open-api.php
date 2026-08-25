@@ -31,6 +31,7 @@ Router::addGroup('/api/v1/open-api', function () {
 
 // Slides template APIs
 Router::addGroup('/api/v1/open-api', function () {
+    Router::get('/slides-templates/taxonomy', [SlidesTemplateApi::class, 'getTaxonomy']);
     Router::get('/slides-templates/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
 }, ['middleware' => [ApiKeyMiddleware::class]]);
 // Slides template APIs（Deprecated)

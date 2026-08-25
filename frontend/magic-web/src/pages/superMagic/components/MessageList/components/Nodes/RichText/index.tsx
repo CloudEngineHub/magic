@@ -50,7 +50,8 @@ function RichText(props: NodeProps) {
 	const { projectFilesStore } = useMessageListContext()
 
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		RichTextMessageNode | undefined
+		| RichTextMessageNode
+		| undefined
 	const mentions: NonNullable<MessageRichTextProps["mentions"]> =
 		((node?.extra?.super_agent?.mentions || []) as MessageRichTextProps["mentions"]) || []
 	const mentionItems = getMentionItemsMissingFromRichTextContent(mentions, node?.content)

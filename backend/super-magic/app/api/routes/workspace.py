@@ -171,6 +171,7 @@ async def export_workspace_endpoint(request: WorkspaceExportRequest) -> BaseResp
             export_type=request.type,
             code=request.code,
             upload_config=request.upload_config,
+            public_upload_config=request.public_upload_config,
             source_path=request.source_path,
             archive_root=request.archive_root,
             file_name=request.file_name,

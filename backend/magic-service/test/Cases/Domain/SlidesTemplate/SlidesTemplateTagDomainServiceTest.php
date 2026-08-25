@@ -19,8 +19,10 @@ use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
+use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\Log\NullLogger;
 use ReflectionClass;
 use RuntimeException;
 
@@ -111,7 +113,7 @@ class SlidesTemplateTagDomainServiceTest extends TestCase
     {
         $repository = new CapturingSlidesTemplateTagRepository();
         $repository->entityToFind = $this->makeGroup();
-        $service = new SlidesTemplateTagDomainService($repository, new NullSlidesTemplateTagRelationRepository());
+        $service = $this->makeService($repository);
 
         $tag = $this->makeTag()->setId(1);
 
@@ -126,12 +128,37 @@ class SlidesTemplateTagDomainServiceTest extends TestCase
         $repository = new CapturingSlidesTemplateTagRepository();
         $repository->entityToFind = $this->makeGroup();
         $repository->hasChildren = true;
-        $service = new SlidesTemplateTagDomainService($repository, new NullSlidesTemplateTagRelationRepository());
+        $service = $this->makeService($repository);
 
         $this->expectException(BusinessException::class);
         $this->expectExceptionCode(SlidesTemplateErrorCode::TAG_STRUCTURE_INVALID->value);
 
         $service->delete($this->makeDataIsolation(), 1);
+    }
+
+    public function testFindEnabledByCodesIgnoresUnavailableTags(): void
+    {
+        $repository = new CapturingSlidesTemplateTagRepository();
+        $repository->entitiesByCodes = [$this->makeTag()->setId(2)];
+
+        $tags = $this->makeService($repository)->findEnabledByCodes(
+            $this->makeDataIsolation(),
+            ['purpose-annual-report', 'missing-tag'],
+        );
+
+        $this->assertCount(1, $tags);
+        $this->assertSame('purpose-annual-report', $tags[0]->getCode());
+    }
+
+    private function makeService(CapturingSlidesTemplateTagRepository $repository): SlidesTemplateTagDomainService
+    {
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new NullLogger());
+        return new SlidesTemplateTagDomainService(
+            $repository,
+            new NullSlidesTemplateTagRelationRepository(),
+            $loggerFactory,
+        );
     }
 
     private function makeGroup(): SlidesTemplateTagEntity
@@ -177,6 +204,9 @@ class CapturingSlidesTemplateTagRepository implements SlidesTemplateTagRepositor
 
     public bool $hasChildren = false;
 
+    /** @var SlidesTemplateTagEntity[] */
+    public array $entitiesByCodes = [];
+
     public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateTagEntity
     {
         return $this->entityToFind;
@@ -194,7 +224,7 @@ class CapturingSlidesTemplateTagRepository implements SlidesTemplateTagRepositor
 
     public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes, ?int $status = null): array
     {
-        return [];
+        return $this->entitiesByCodes;
     }
 
     public function queriesWithTemplateCount(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagQuery $query, Page $page): array

@@ -31,11 +31,13 @@ use App\Domain\SuperMagic\Common\RecycleBin\Enum\RestoreConflictType;
 use App\Domain\SuperMagic\Common\RecycleBin\Service\RecycleBinDomainService;
 use App\Domain\SuperMagic\Common\RecycleBin\Service\RecycleBinRestoreDomainService;
 use App\Domain\SuperMagic\Common\RecycleBin\Service\TopicRecycleDomainService;
+use App\Domain\SuperMagic\Project\Event\ProjectUpdatedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\Infrastructure\Util\Context\RequestContext;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
@@ -53,6 +55,7 @@ class RecycleBinAppService extends AbstractAppService
         private readonly MagicUserDomainService $magicUserDomainService,
         private readonly WorkspaceDomainService $workspaceDomainService,
         private readonly ProjectDomainService $projectDomainService,
+        private readonly EventDispatcherInterface $eventDispatcher,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -237,6 +240,15 @@ class RecycleBinAppService extends AbstractAppService
             $userId,
             $requestDTO->getConflictResolutions()
         );
+
+        if ($result['succeeded'] !== [] && $resourceType === RecycleBinResourceType::Project) {
+            foreach ($result['succeeded'] as $entity) {
+                $project = $this->projectDomainService->getProjectNotUserId((int) $entity->getResourceId());
+                if ($project !== null) {
+                    $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($project, $userAuthorization));
+                }
+            }
+        }
 
         $resultDTOs = [];
 

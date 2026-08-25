@@ -287,6 +287,9 @@ export function useMoveHandle({
 				stopMove()
 				return
 			}
+			// React may execute the state updater after pointerup has cleared the move refs.
+			// Capture the drag origin before scheduling the updater so it uses stable state.
+			const moveStartRect = moveStartRectRef.current
 
 			const scaleFactor = getScaleFactor()
 			const deltaX = (event.clientX - moveStartMouseRef.current.x) / scaleFactor
@@ -300,14 +303,13 @@ export function useMoveHandle({
 			const { left: newLeft, top: newTop } = constrainToBounds(
 				rawNewLeft,
 				rawNewTop,
-				moveStartRectRef.current.width,
-				moveStartRectRef.current.height,
+				moveStartRect.width,
+				moveStartRect.height,
 			)
 
 			// Calculate constrained delta for UI update
 			const constrainedDeltaX = newLeft - initialPositionRef.current.left
 			const constrainedDeltaY = newTop - initialPositionRef.current.top
-
 			// Immediately update UI for smooth feedback
 			setSelectedInfo((prev) => {
 				if (!prev) return prev
@@ -315,8 +317,8 @@ export function useMoveHandle({
 					...prev,
 					rect: {
 						...prev.rect,
-						left: moveStartRectRef.current!.left + constrainedDeltaX,
-						top: moveStartRectRef.current!.top + constrainedDeltaY,
+						left: moveStartRect.left + constrainedDeltaX,
+						top: moveStartRect.top + constrainedDeltaY,
 					},
 				}
 			})

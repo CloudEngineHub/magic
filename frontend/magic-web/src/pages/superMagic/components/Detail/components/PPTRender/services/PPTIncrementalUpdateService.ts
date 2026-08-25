@@ -41,19 +41,6 @@ export class PPTIncrementalUpdateService {
 		return context.isCurrent?.() !== false
 	}
 
-	private flattenAttachmentItems(list: AttachmentItem[] | undefined): AttachmentItem[] {
-		if (!Array.isArray(list)) return []
-		const result: AttachmentItem[] = []
-		for (const item of list) {
-			result.push(item)
-			const children = (item as AttachmentItem & { children?: AttachmentItem[] }).children
-			if (Array.isArray(children) && children.length > 0) {
-				result.push(...this.flattenAttachmentItems(children))
-			}
-		}
-		return result
-	}
-
 	private collectAttachmentItemsByFileIds(
 		list: AttachmentItem[] | undefined,
 		fileIds: Set<string>,
@@ -81,7 +68,8 @@ export class PPTIncrementalUpdateService {
 	private getScopedAttachmentItems(list: AttachmentItem[] | undefined): AttachmentItem[] {
 		const pptFolderFileIds = this.pathMappingService.getPPTFolderFileIds()
 		if (pptFolderFileIds.size === 0) {
-			return this.flattenAttachmentItems(list)
+			// An empty folder index must not watch the whole project tree.
+			return []
 		}
 		return this.collectAttachmentItemsByFileIds(list, pptFolderFileIds)
 	}
@@ -408,7 +396,12 @@ export class PPTIncrementalUpdateService {
 		const editingSlides: Array<{ fileId: string; index: number; isManuallySaved: boolean }> = []
 
 		context.slides.forEach((slide, index) => {
-			const fileId = this.pathMappingService.getFileIdByPath(slide.path)
+			const fileId =
+				this.pathMappingService.getFileIdByPath(slide.path) ||
+				this.pathMappingService.extractFileIdFromPath(slide.path)
+			if (fileId && !this.pathMappingService.getFileIdByPath(slide.path)) {
+				this.pathMappingService.setPathFileIdMapping(slide.path, fileId)
+			}
 			if (fileId && updatedFileIds.has(fileId)) {
 				const isManuallySaved = context.isSlideManuallySaved?.(fileId) || false
 				const isEditing = context.getSlideEditingState?.(fileId) || false
@@ -526,11 +519,7 @@ export class PPTIncrementalUpdateService {
 
 				if (newUrl) {
 					slide.url = newUrl
-					slide.loadingState = "idle"
-					slide.rawContent = undefined
-					slide.content = undefined
-
-					// Clear cache for slides that need reload
+					// Keep current HTML visible while the new file downloads.
 					const cacheKey = slide.url || `slide-${index}`
 					this.screenshotService.clearCache(cacheKey)
 					slide.thumbnailUrl = undefined

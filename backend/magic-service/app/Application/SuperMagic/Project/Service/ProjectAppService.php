@@ -2481,7 +2481,12 @@ class ProjectAppService extends AbstractAppService
         $this->audioProjectDomainService->deleteAudioProjectByProjectId($projectId);
 
         // Delete core project
-        $this->projectDomainService->deleteProject($projectId, $project->getUserId());
+        if ($this->projectDomainService->deleteProject($projectId, $project->getUserId())) {
+            $this->eventDispatcher->dispatch(new ProjectDeletedEvent(
+                $project,
+                $requestContext->getUserAuthorization()
+            ));
+        }
     }
 
     /**

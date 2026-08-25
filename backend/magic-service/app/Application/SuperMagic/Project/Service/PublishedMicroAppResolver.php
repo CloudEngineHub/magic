@@ -7,19 +7,27 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Project\Service;
 
+use App\Domain\File\Service\FileDomainService;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use Throwable;
 
 class PublishedMicroAppResolver
 {
+    private const INSTALL_ICON_FILE = 'icon.svg';
+
     public function __construct(
         private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly ProjectRepositoryInterface $projectRepository,
         private readonly ResourceShareDomainService $resourceShareDomainService,
+        private readonly TaskFileRepositoryInterface $taskFileRepository,
+        private readonly FileDomainService $fileDomainService,
     ) {
     }
 
@@ -55,5 +63,36 @@ class PublishedMicroAppResolver
         }
 
         return trim($project->getProjectName());
+    }
+
+    /** Resolve the install icon link from the generated file in the project root. */
+    public function getInstallIconUrl(MicroAppEntity $record): string
+    {
+        $rootDirectory = $this->taskFileRepository->findRootDirectoryByProjectId($record->getProjectId());
+        if ($rootDirectory === null) {
+            return '';
+        }
+
+        $iconFile = $this->taskFileRepository->getByProjectParentAndName(
+            $record->getProjectId(),
+            $rootDirectory->getFileId(),
+            self::INSTALL_ICON_FILE
+        );
+        if ($iconFile === null || $iconFile->getFileKey() === '') {
+            return '';
+        }
+
+        try {
+            $links = $this->fileDomainService->getLinks(
+                $record->getOrganizationCode(),
+                [$iconFile->getFileKey()],
+                StorageBucketType::SandBox
+            );
+        } catch (Throwable) {
+            return '';
+        }
+
+        $link = $links[$iconFile->getFileKey()] ?? null;
+        return $link?->getUrl() ?? '';
     }
 }

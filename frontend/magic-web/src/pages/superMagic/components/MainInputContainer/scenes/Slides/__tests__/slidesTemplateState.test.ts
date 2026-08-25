@@ -3,6 +3,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
 	OptionViewType,
 	type OptionGroup,
+	type OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	createSlidesFixedSceneConfig,
@@ -12,6 +13,7 @@ import {
 	groupSlidesTemplates,
 	isSlidesMode,
 	markSlidesTemplateImageUrl,
+	toTemplateOption,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
 	type SlidesTemplateTagItem,
@@ -61,10 +63,7 @@ const organizationTemplate: SlidesTemplateItem = {
 const businessCategory: SlidesTemplateCategoryItem = {
 	id: "1",
 	code: "PPT-CATE-business",
-	name_i18n: {
-		zh_CN: "商务",
-		en_US: "Business",
-	},
+	name: "商务",
 	sort: 100,
 	template_count: 1,
 	is_official: true,
@@ -73,10 +72,7 @@ const businessCategory: SlidesTemplateCategoryItem = {
 const educationCategory: SlidesTemplateCategoryItem = {
 	id: "2",
 	code: "PPT-CATE-education",
-	name_i18n: {
-		zh_CN: "教育",
-		en_US: "Education",
-	},
+	name: "教育",
 	sort: 90,
 	template_count: 1,
 	is_official: true,
@@ -85,10 +81,7 @@ const educationCategory: SlidesTemplateCategoryItem = {
 const featuredTag: SlidesTemplateTagItem = {
 	id: "tag-1",
 	code: "featured",
-	name_i18n: {
-		zh_CN: "精选",
-		en_US: "Featured",
-	},
+	name: "精选",
 	sort: 100,
 	template_count: 1,
 	is_official: true,
@@ -148,7 +141,7 @@ describe("slides template state", () => {
 			createSlidesTemplateCategoryGroupKey(businessCategory.code),
 			createSlidesTemplateCategoryGroupKey(educationCategory.code),
 		])
-		expect(groups[1].group_name).toEqual(businessCategory.name_i18n)
+		expect(groups[1].group_name).toBe(businessCategory.name)
 		expect(groups[1].group_icon).toBeUndefined()
 		expect(groups[1].children?.[0].value).toBe(businessTemplate.code)
 		expect(groups[2].children?.[0].value).toBe(educationTemplate.code)
@@ -181,7 +174,7 @@ describe("slides template state", () => {
 		const annualReportTag: SlidesTemplateTagItem = {
 			...featuredTag,
 			code: "purpose-annual-report",
-			name_i18n: { zh_CN: "年度报告", en_US: "Annual Report" },
+			name: "年度报告",
 		}
 		const template = {
 			...officialTemplate,
@@ -190,7 +183,7 @@ describe("slides template state", () => {
 				{
 					id: featuredTag.id,
 					code: featuredTag.code,
-					name_i18n: featuredTag.name_i18n,
+					name: featuredTag.name,
 					sort: featuredTag.sort,
 				},
 			],
@@ -208,7 +201,7 @@ describe("slides template state", () => {
 			createSlidesTemplateTagGroupKey(annualReportTag.code),
 			createSlidesTemplateCategoryGroupKey(businessCategory.code),
 		])
-		expect(groups[1].group_name).toEqual(featuredTag.name_i18n)
+		expect(groups[1].group_name).toBe(featuredTag.name)
 		expect(groups[1].children?.[0].value).toBe(template.code)
 	})
 
@@ -255,7 +248,7 @@ describe("slides template state", () => {
 				{
 					id: featuredTag.id,
 					code: featuredTag.code,
-					name_i18n: featuredTag.name_i18n,
+					name: featuredTag.name,
 					sort: featuredTag.sort,
 				},
 			],
@@ -282,12 +275,9 @@ describe("slides template state", () => {
 	})
 
 	it("maps per-slide preview image URLs", () => {
-		const panel = createSlidesPresetPanelConfig([officialTemplate])
-		const styleField = panel.field?.items.find((item) => item.data_key === "style")
-		const group = styleField?.options[0] as OptionGroup | undefined
-		const option = group?.children?.[0]
+		const option: OptionItem = toTemplateOption(officialTemplate)
 
-		expect(option?.preview_image_urls).toEqual(
+		expect(option.preview_image_urls).toEqual(
 			officialTemplate.preview_image_urls?.map(markSlidesTemplateImageUrl),
 		)
 	})
@@ -299,7 +289,7 @@ describe("slides template state", () => {
 				{
 					id: featuredTag.id,
 					code: featuredTag.code,
-					name_i18n: featuredTag.name_i18n,
+					name: featuredTag.name,
 					sort: featuredTag.sort,
 				},
 			],

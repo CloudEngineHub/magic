@@ -83,7 +83,7 @@
 		"nav": {
 			"apps": "Apps",
 			"chats": "Chats",
-			"magiClaw": "MagiClaw",
+			"magiClaw": "{{clawBrand}}",
 			"myCrew": "My Crew",
 			"recording": "Recording",
 			"trash": "Recycle Bin",
@@ -120,6 +120,7 @@
 		"createDialog": {
 			"avatarLabel": "Avatar",
 			"basicInformationLabel": "Basic Information",
+			"heading": "Create {{clawBrand}}",
 			"nameLabel": "Name",
 			"namePlaceholder": "Enter {{clawBrand}}'s name",
 			"removeUploadedAvatar": "Remove uploaded avatar",
@@ -209,6 +210,7 @@
 			}
 		},
 		"getStarted": "Get Started",
+		"heroDescription": "{{clawBrand}} is an AI assistant with a distinct personality and long-term memory.\nNo complex setup—available 24/7.",
 		"heroLead": "{{clawLead}}",
 		"mobile": {
 			"createdByMe": "Created by Me",

@@ -211,6 +211,18 @@ function slideDataTransformer(item: FileItem) {
 	}
 }
 
+function slidesTemplateDataTransformer(item: FileItem) {
+	return {
+		file_name: item.display_filename || item.file_name || item.filename,
+		name: item.display_filename || item.file_name || item.filename,
+		is_directory: true,
+		children: item.children,
+		relative_file_path: item.relative_file_path,
+		parent_id: item.parent_id,
+		display_config: item.display_config,
+	}
+}
+
 /**
  * Self-media folder transformer. Platforms are now expressed as keys
  * under the top-level `self-media` map (e.g. `rednote`, `instagram`),
@@ -256,6 +268,12 @@ const contentTypeRenderConfigs: ContentTypeRenderConfig[] = [
 		detailType: DetailType.Html,
 		dataTransformer: slideDataTransformer,
 		priority: 10,
+	},
+	{
+		displayConfigType: "slide-template",
+		detailType: DetailType.SlidesTemplate,
+		dataTransformer: slidesTemplateDataTransformer,
+		priority: 20,
 	},
 	{
 		displayConfigType: "design",
