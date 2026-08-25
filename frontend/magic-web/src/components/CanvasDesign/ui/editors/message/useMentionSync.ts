@@ -6,7 +6,7 @@ import type { UploadFileResponse } from "../../../public/magic-types"
 import type { MatchableMentionItem } from "./tiptap/contentUtils"
 import {
 	getCanvasResourceFileName,
-	getCanvasResourceReferenceIdentity,
+	getCanvasResourceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseMentionSyncOptions {
@@ -54,10 +54,6 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 	const syncMentionPaths = useCallback(
 		(paths: string[], currentPrompt: string) => {
 			if (!canvas) return
-			const resolveResourceReference =
-				canvas.magicConfigManager.config?.methods?.resolveResourceReference
-			const getResourceIdentity = (path?: string) =>
-				getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 
 			// 保护：paths 为空但 currentPrompt 中仍有 @ 时，可能是 @ 尚未解析为 mention 节点，不执行
 			if (paths.length === 0 && /@/.test(currentPrompt)) {
@@ -76,20 +72,22 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
 			const currentPathByIdentity = new Map(
-				currentInfos.map((info) => [getResourceIdentity(info.path), info.path]),
+				currentInfos.map((info) => [getCanvasResourceIdentity(info.path), info.path]),
 			)
-			const mentionedPathIdentities = new Set(paths.map(getResourceIdentity))
+			const mentionedPathIdentities = new Set(paths.map(getCanvasResourceIdentity))
 			const protectedPathIdentities = new Set(
-				protectedReferencePaths.map(getResourceIdentity),
+				protectedReferencePaths.map(getCanvasResourceIdentity),
 			)
 			const findMatchableItem = (path: string) => {
-				const identity = getResourceIdentity(path)
-				return matchableItems.find((item) => getResourceIdentity(item.path) === identity)
+				const identity = getCanvasResourceIdentity(path)
+				return matchableItems.find(
+					(item) => getCanvasResourceIdentity(item.path) === identity,
+				)
 			}
 
 			const pathsToAddIdentities = new Set<string>()
 			let pathsToAdd = paths.filter((path) => {
-				const identity = getResourceIdentity(path)
+				const identity = getCanvasResourceIdentity(path)
 				if (
 					!identity ||
 					currentPathByIdentity.has(identity) ||
@@ -106,15 +104,15 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 						.map((info) => info.path)
 						.filter(
 							(path) =>
-								!mentionedPathIdentities.has(getResourceIdentity(path)) &&
-								!protectedPathIdentities.has(getResourceIdentity(path)),
+								!mentionedPathIdentities.has(getCanvasResourceIdentity(path)) &&
+								!protectedPathIdentities.has(getCanvasResourceIdentity(path)),
 						)
 
 			// 限制场景下过滤 pathsToAdd
 			if (isReferenceFileLimitReached && maxReferenceFiles !== undefined) {
 				const currentPathsArray = currentInfos.map((info) => info.path)
 				pathsToAdd = pathsToAdd.filter((path) => {
-					if (currentPathByIdentity.has(getResourceIdentity(path))) return true
+					if (currentPathByIdentity.has(getCanvasResourceIdentity(path))) return true
 					const matchableItem = findMatchableItem(path)
 					if (matchableItem?.disabled) return false
 					const currentCount = currentPathsArray.length - pathsToRemove.length

@@ -23,7 +23,7 @@ import {
 import { useCanvasReferenceMentionRuntime } from "./reference-assets/useCanvasReferenceMentionRuntime"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./reference-assets/canvasReferenceMention.constants"
 import { MentionPanelViewMode } from "@/components/business/MentionPanel/types"
-import { getCanvasResourceReferenceIdentity } from "../../../runtime/shared/path/canvasResourcePath"
+import { getCanvasResourceIdentity } from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
@@ -69,7 +69,6 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		assetLimits,
 		currentAssetCounts,
 	} = options || {}
-	const resolveResourceReference = methods?.resolveResourceReference
 
 	// nodeView 点击时读取最新宿主方法，避免因宿主回传新引用而重建 nodeView renderer。
 	const locateProjectFileRef = useRef(methods?.locateProjectFile)
@@ -81,7 +80,6 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 				src: item.path || "",
 				fileName: item.name,
 				path: item.path || "",
-				...(item.assetType ? { assetType: item.assetType } : {}),
 			})),
 		[externalMatchableItems],
 	)
@@ -110,10 +108,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 
 		const pushItem = (item: MatchableMentionItem) => {
 			if (item.path) {
-				const identity = getCanvasResourceReferenceIdentity(
-					item.path,
-					resolveResourceReference,
-				)
+				const identity = getCanvasResourceIdentity(item.path)
 				if (seenPathIdentities.has(identity)) return
 				seenPathIdentities.add(identity)
 			}
@@ -151,13 +146,11 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 							currentAssetCounts,
 							candidatePaths: [item.path, item.name],
 							currentReferenceFiles,
-							resolveResourceReference,
 						})
 					: isReferenceSelectionLimitBlocked({
 							candidatePaths: [item.path, item.name],
 							currentReferenceFiles,
 							isReferenceFileLimitReached,
-							resolveResourceReference,
 						})),
 		}))
 	}, [
@@ -168,7 +161,6 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		referenceResourceType,
 		assetLimits,
 		currentAssetCounts,
-		resolveResourceReference,
 	])
 
 	const mentionNodeViewRenderers = useMemo(() => {

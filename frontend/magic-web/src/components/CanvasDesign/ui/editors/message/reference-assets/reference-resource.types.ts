@@ -1,5 +1,4 @@
 import type { ReactNode } from "react"
-import type { ResolvedCanvasResourceReference } from "../../../../public/resource-reference"
 
 export const REFERENCE_RESOURCE_TYPES = {
 	image: "image",
@@ -12,19 +11,6 @@ export type ReferenceResourceType =
 	(typeof REFERENCE_RESOURCE_TYPES)[keyof typeof REFERENCE_RESOURCE_TYPES]
 
 export type ReferenceResourceTypeFilter = ReferenceResourceType | ReferenceResourceType[]
-
-/** 参考资源参与生成请求时的媒体类型。opaque URI 不能从字符串扩展名推断。 */
-export type ReferenceResourceAssetType = "image" | "video" | "audio"
-
-/** 参考资源的运行时描述；只有 path 需要持久化。 */
-export interface ReferenceResourceDescriptor {
-	path: string
-	identity: string
-	resourceKind: ResolvedCanvasResourceReference["resourceKind"]
-	fileName: string
-	src: string
-	assetType?: ReferenceResourceAssetType
-}
 
 export const REFERENCE_RESOURCE_SOURCE_TYPES = {
 	localUpload: "local-upload",

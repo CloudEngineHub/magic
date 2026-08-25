@@ -110,43 +110,4 @@ describe("useLinkedMediaAssociationController", () => {
 		})
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/remounted.png"])
 	})
-
-	it("passes linked media types when a sync restores opaque references", () => {
-		mocks.useLinkedEditorInputs.mockReturnValue({
-			mediaItems: [],
-			activeMediaReferences: [{ kind: "video", path: "asset://linked-video" }],
-			canSelectMediaConnection: vi.fn(() => true),
-		})
-		const onReadyMentionChange = vi.fn()
-		const editorRef = createRef<MessageEditorRef>()
-		const { result } = renderHook(() =>
-			useLinkedMediaAssociationController({
-				targetElementId: "target-video",
-				targetKind: "video",
-				mediaPolicy: { supportedKinds: ["video"] },
-				editorRef,
-				onReadyMentionChange,
-			}),
-		)
-
-		act(() => {
-			result.current.handleMentionChange(["asset://linked-video"], "@linked-video", {
-				source: "sync",
-				status: "pending",
-				revision: 1,
-			})
-			result.current.handleMentionChange(["asset://linked-video"], "@linked-video", {
-				source: "sync",
-				status: "ready",
-				revision: 1,
-			})
-		})
-
-		expect(onReadyMentionChange).toHaveBeenCalledWith(
-			["asset://linked-video"],
-			"@linked-video",
-			undefined,
-			[{ path: "asset://linked-video", assetType: "video" }],
-		)
-	})
 })

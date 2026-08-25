@@ -21,7 +21,6 @@ import { getMediaResourcePathKind } from "../../../runtime/resources/media-commo
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { CropConfig } from "../../../runtime/document/types"
-import ResourcePathTooltipContent from "../../primitives/custom/ResourcePathTooltipContent"
 
 const DEFAULT_OVERLAY_SLOT_ORDINALS: [number, number] = [0, 1]
 
@@ -213,7 +212,6 @@ export default function SourceList(props: SourceListProps) {
 					const resourceKind = resourcePath
 						? getMediaResourcePathKind(resourcePath)
 						: "other"
-					const hasMediaTooltip = resourceKind !== "other"
 					const previewResource =
 						resourcePath && resourceKind !== "other"
 							? ({
@@ -342,25 +340,18 @@ export default function SourceList(props: SourceListProps) {
 									{slotItemNode}
 								</div>
 							</TooltipTrigger>
-							{hasMediaTooltip ? (
-								<TooltipPrimitive.Portal container={portalContainer || undefined}>
-									<TooltipContent
-										side="top"
-										sideOffset={6}
-										className="w-max max-w-[85vw] overflow-hidden border-black bg-black text-white"
-									>
-										<span className="block overflow-hidden text-ellipsis whitespace-nowrap text-left">
-											{resourceDisplayName}
-										</span>
-										<TooltipPrimitive.Arrow className="fill-black" />
-									</TooltipContent>
-								</TooltipPrimitive.Portal>
-							) : (
-								<ResourcePathTooltipContent
-									path={resourcePath}
-									displayName={resourceDisplayName}
-								/>
-							)}
+							<TooltipPrimitive.Portal container={portalContainer || undefined}>
+								<TooltipContent
+									side="top"
+									sideOffset={6}
+									className="w-max max-w-[85vw] overflow-hidden border-black bg-black text-white"
+								>
+									<span className="block overflow-hidden text-ellipsis whitespace-nowrap text-left">
+										{resourceDisplayName}
+									</span>
+									<TooltipPrimitive.Arrow className="fill-black" />
+								</TooltipContent>
+							</TooltipPrimitive.Portal>
 						</Tooltip>
 					) : (
 						slotItemNode

@@ -21,7 +21,7 @@ import type {
 import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
-import { resolveDesignCanvasResourceApiUri } from "../utils/designResourceReferenceResolver"
+import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
 import {
 	calculateUploadDirectory,
@@ -77,19 +77,17 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const officialModels = officialGroups.flatMap((groupItem) =>
-			(groupItem.models || []).map(
-				(model): VideoModelItem => ({
-					...model,
-					model_source: "official",
-					model_group: {
-						id: groupItem.group.id,
-						name: normalizeVideoModelGroupLabel(groupItem.group.name),
-						icon: groupItem.group.icon,
-						sort: groupItem.group.sort,
-						source: "official",
-					},
-				}),
-			),
+			(groupItem.models || []).map((model): VideoModelItem => ({
+				...model,
+				model_source: "official",
+				model_group: {
+					id: groupItem.group.id,
+					name: normalizeVideoModelGroupLabel(groupItem.group.name),
+					icon: groupItem.group.icon,
+					sort: groupItem.group.sort,
+					source: "official",
+				},
+			})),
 		)
 		const officialModelIds = new Set(officialModels.map((model) => model.model_id))
 		const customModels = getRepresentativeModelsByModelId(
@@ -347,7 +345,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					frames: inputs.frames.map((frame) => ({
 						...frame,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							frame.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -360,7 +358,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_images: inputs.reference_images.map((item) => ({
 						...item,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -373,7 +371,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_videos: inputs.reference_videos.map((item) => ({
 						...item,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -386,7 +384,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_audios: inputs.reference_audios.map((item) => ({
 						...item,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -399,7 +397,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					video: {
 						...inputs.video,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							inputs.video.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -412,7 +410,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					mask: {
 						...inputs.mask,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							inputs.mask.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -425,7 +423,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					audio: inputs.audio.map((item) => ({
 						...item,
-						uri: ensureDesignResourceUri(
+						uri: ensureDesignAbsolutePath(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -437,14 +435,14 @@ function normalizeGenerateVideoInputs(
 	}
 }
 
-function ensureDesignResourceUri(
+function ensureDesignAbsolutePath(
 	path: string,
 	designProjectBasePath?: string,
 	flatAttachments?: FileItem[],
 	pathUnresolvedMessage?: string,
 ): string {
 	if (!path) return path
-	const resolved = resolveDesignCanvasResourceApiUri(path, {
+	const resolved = toWorkspaceAbsoluteApiPathForOperation(path, {
 		designProjectBasePath,
 		flatAttachments,
 	})

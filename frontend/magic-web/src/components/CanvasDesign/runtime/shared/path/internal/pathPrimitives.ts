@@ -27,15 +27,9 @@ export function normalizePathSeparators(path: string): string {
 	return path.replace(/\\/g, "/")
 }
 
-/** Opaque asset references come from an upstream asset service and must not be path-normalized. */
-export function isOpaqueAssetReference(path: string): boolean {
-	return /^asset:\/\/[^\s]+$/i.test(path.trim())
-}
-
 export function isRemoteOrSpecialPath(path: string): boolean {
 	const trimmed = path.trim()
 	if (!trimmed) return false
-	if (isOpaqueAssetReference(trimmed)) return true
 	if (/^https?:\/\//i.test(trimmed)) return true
 	if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return true
 	if (/^\/\/[^/]+/.test(trimmed)) return true
@@ -209,9 +203,6 @@ export function areCanvasResourcePathsSame(
 export function normalizeUploadResultPath(path: string): string {
 	const trimmed = path.trim()
 	if (!trimmed) {
-		return trimmed
-	}
-	if (isOpaqueAssetReference(trimmed)) {
 		return trimmed
 	}
 	if (/^https?:\/\//i.test(trimmed)) {

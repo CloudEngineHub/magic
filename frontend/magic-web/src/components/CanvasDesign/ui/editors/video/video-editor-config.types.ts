@@ -1,6 +1,6 @@
 import type React from "react"
 import type { VideoElement } from "../../../runtime/document/types"
-import type { MessageEditorMentionChangeContext, MessageEditorRef } from "../message/MessageEditor"
+import type { MessageEditorRef } from "../message/MessageEditor"
 import type {
 	GenerateVideoRequest,
 	StoredLinkedFrameBinding,
@@ -13,12 +13,9 @@ import type {
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
-	ReferenceResourceAssetType,
 	ReferenceResourceType,
 } from "../message/reference-assets/reference-resource.types"
 import type { ReferenceBindingMode } from "../message/reference-assets/referenceBinding"
-import type { ReferenceResourceMetadataCandidate } from "../message/reference-assets/referenceResourceDescriptor"
-import type { MatchableMentionItem } from "../message/tiptap/contentUtils"
 
 /** useVideoEditorConfig 的入参 */
 export interface UseVideoEditorConfigOptions {
@@ -58,7 +55,7 @@ export interface VideoInputSlotInfo {
 	path?: string
 }
 
-export type VideoReferenceAssetKind = ReferenceResourceAssetType
+export type VideoReferenceAssetKind = "image" | "video" | "audio"
 
 export interface VideoReferenceAssetInfo extends UploadFileResponse {
 	assetType: VideoReferenceAssetKind
@@ -109,7 +106,7 @@ export interface VideoEditorConfig {
 		path: string
 		assetType: VideoReferenceAssetKind
 	}>
-	matchableItems: MatchableMentionItem[]
+	matchableItems: Array<{ name: string; path?: string; disabled?: boolean }>
 	modelOptions: VideoModelOption[]
 	modelOptionGroups: VideoModelOptionGroup[]
 	selectedModelOption: VideoModelOption | undefined
@@ -212,12 +209,7 @@ export interface VideoEditorConfig {
 		handleInputModeChange: (value: VideoInputMode) => void
 		/** 切换首尾帧 / 参考图 Tab，仅切换 UI 展示 */
 		handleInputTabChange: (value: "frame" | "reference") => void
-		handleReferenceMentionPathsChange: (
-			paths: string[],
-			currentPrompt?: string,
-			context?: MessageEditorMentionChangeContext,
-			metadataCandidates?: readonly ReferenceResourceMetadataCandidate[],
-		) => void
+		handleReferenceMentionPathsChange: (paths: string[]) => void
 		prepareResourceSlotSelection: (
 			inputTab: "frame" | "reference",
 			slotIndex: number,
@@ -235,7 +227,7 @@ export interface VideoEditorConfig {
 		) => void
 		replaceReferenceImageAt: (
 			slotIndex: number,
-			fileInfo: UploadFileResponse & { assetType?: VideoReferenceAssetKind },
+			fileInfo: UploadFileResponse,
 			options?: {
 				retainResourceSlot?: boolean
 				mentionPlacement?: "cursor" | "documentEnd"

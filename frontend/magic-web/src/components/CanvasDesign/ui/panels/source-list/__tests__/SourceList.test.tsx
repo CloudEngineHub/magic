@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import type { ReactElement } from "react"
 import { describe, expect, it, vi } from "vitest"
-import { CanvasDesignI18nProvider } from "../../../../app/providers/I18nProvider"
 import { TooltipProvider } from "../../../primitives/shadcn/tooltip"
 import SourceList from "../index"
 
@@ -10,11 +9,7 @@ vi.mock("../../../previews/reference-media/index", () => ({
 }))
 
 function renderSourceList(ui: ReactElement) {
-	return render(
-		<CanvasDesignI18nProvider>
-			<TooltipProvider>{ui}</TooltipProvider>
-		</CanvasDesignI18nProvider>,
-	)
+	return render(<TooltipProvider>{ui}</TooltipProvider>)
 }
 
 describe("SourceList selection", () => {
@@ -82,33 +77,5 @@ describe("SourceList selection", () => {
 		fireEvent.click(checkbox.parentElement as HTMLElement)
 
 		expect(onCheckedChange).not.toHaveBeenCalled()
-	})
-
-	it("shows and copies the path tooltip for opaque resources", async () => {
-		const writeText = vi.fn().mockResolvedValue(undefined)
-		Object.assign(navigator, { clipboard: { writeText } })
-
-		renderSourceList(
-			<SourceList
-				options={[
-					{
-						kind: "slot",
-						label: "参考图",
-						value: "opaque-asset",
-						slotIndex: 0,
-						resourcePath: "asset://virtual-human-asset-id",
-					},
-				]}
-			/>,
-		)
-
-		fireEvent.pointerMove(screen.getByTestId("reference-media-preview"), {
-			pointerType: "mouse",
-		})
-
-		const tooltip = await screen.findByRole("tooltip")
-		expect(tooltip).toHaveTextContent("asset://virtual-human-asset-id")
-		fireEvent.click(screen.getByRole("button", { name: "复制资源路径" }))
-		expect(writeText).toHaveBeenCalledWith("asset://virtual-human-asset-id")
 	})
 })

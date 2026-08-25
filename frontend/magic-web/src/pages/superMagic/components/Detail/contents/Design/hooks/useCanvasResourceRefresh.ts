@@ -10,10 +10,6 @@ import {
 	type LayerElement,
 	type VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
-import {
-	isRemoteOrSpecialPath,
-	normalizePathSeparators,
-} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -200,9 +196,6 @@ function addCanvasResourceSnapshot(params: {
 	const { src, mediaType, flatAttachments, attachmentIndex, designProjectBasePath, snapshot } =
 		params
 	if (!src) return
-	// Opaque/provider-managed references have no workspace attachment to watch; keeping them out
-	// of this index avoids attachment lookups and refreshes that can never resolve the URI.
-	if (isRemoteOrSpecialPath(src)) return
 
 	const resourcePath = normalizeCanvasResourcePath(src)
 	if (!resourcePath) return
@@ -325,7 +318,7 @@ function findCanvasResourceAttachment(
 
 function normalizeCanvasResourcePath(path?: string): string {
 	if (!path) return ""
-	return normalizePathSeparators(path).replace(/^\/+|\/+$/g, "")
+	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")
 }
 
 function isDesignMediaResourcePath(path: string): boolean {

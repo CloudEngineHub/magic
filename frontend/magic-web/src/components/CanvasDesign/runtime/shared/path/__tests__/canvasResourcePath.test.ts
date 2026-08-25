@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest"
-import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import {
-	areCanvasResourceReferencesSame,
 	areCanvasResourcePathsSame,
-	getCanvasResourceReferenceIdentity,
 	getCanvasResourceFileName,
-	isOpaqueAssetReference,
 	normalizeCanvasUploadFileResponsePath,
 	normalizeCanvasUploadStoragePath,
 	toCanvasUploadStoragePath,
@@ -27,20 +23,6 @@ function resolveAbsolutePath(path: string): string {
 }
 
 describe("canvasResourcePath", () => {
-	it("keeps opaque asset references unchanged", () => {
-		expect(isOpaqueAssetReference("asset://virtual-human-asset-id")).toBe(true)
-		expect(isOpaqueAssetReference("asset:/virtual-human-asset-id")).toBe(false)
-		expect(toWeakCanvasResourcePath("asset://virtual-human-asset-id")).toBe(
-			"asset://virtual-human-asset-id",
-		)
-		expect(normalizeCanvasUploadStoragePath("asset://virtual-human-asset-id")).toBe(
-			"asset://virtual-human-asset-id",
-		)
-		expect(
-			normalizeCanvasUploadFileResponsePath({ path: "asset://virtual-human-asset-id" }),
-		).toEqual({ path: "asset://virtual-human-asset-id" })
-	})
-
 	it("normalizes current-canvas weak and canonical paths", () => {
 		expect(toWeakCanvasResourcePath("./images/a.png")).toBe("images/a.png")
 		expect(toWeakCanvasResourcePath("images/a.png")).toBe("images/a.png")
@@ -64,39 +46,6 @@ describe("canvasResourcePath", () => {
 		expect(toCanonicalCanvasResourcePath("/画布B/images/a.png", resolveAbsolutePath)).toBe(
 			"画布B/images/a.png",
 		)
-	})
-
-	it("uses the host resolver identity for cross-namespace aliases", () => {
-		const resolveResourceReference: ResolveCanvasResourceReference = (input) => {
-			const rawPath =
-				"path" in input
-					? input.path
-					: input.namespace === "external-url"
-						? input.url
-						: input.fileId
-			return {
-				status: "resolved" as const,
-				resourceKind: "workspace-file" as const,
-				rawReference: rawPath,
-				workspacePath: "/images/a.png",
-				storagePath: "./images/a.png",
-				identity: "workspace:/images/a.png",
-				candidates: ["/images/a.png"],
-				legacyRecovered: false,
-				resolutionSource: "strict-path" as const,
-			}
-		}
-
-		expect(getCanvasResourceReferenceIdentity("./images/a.png", resolveResourceReference)).toBe(
-			"workspace:/images/a.png",
-		)
-		expect(
-			areCanvasResourceReferencesSame(
-				"./images/a.png",
-				"/images/a.png",
-				resolveResourceReference,
-			),
-		).toBe(true)
 	})
 
 	it("keeps remote load deferral keys stable for canvas-relative aliases", () => {
