@@ -36,6 +36,15 @@ When using reference assets, bind them inside `prompt` by list order:
 
 Use these tokens next to the subject, action, or source media they control. Do not put file paths in `prompt`; file paths still belong in the reference path arrays.
 
+## Provider-managed reference assets
+
+The current backend allows provider-managed assets for the Volcengine Ark provider (currently used by the Seedance video models). When the selected model supports it, a reference array may contain a controlled URI such as `asset://virtual-human-asset-id` for a virtual human portrait or another provider-managed asset.
+
+- Keep the URI in the appropriate reference array, such as `reference_image_paths`.
+- Bind it by array order in the prompt, for example `[image1]`.
+- Do not call `visual_understanding` for the URI, read it as a workspace file, copy it into the project, or create a Canvas Element only for the URI.
+- Use a workspace-relative media path for video models that do not support provider-managed assets.
+
 ## Priority Parameters
 - the generation goal itself
 - user-requested resolution/aspect-ratio intent
@@ -68,6 +77,26 @@ result = tool.call('generate_canvas_videos', {
     }]
 })
 print(result)
+```
+
+## Virtual human asset example
+
+```python
+from sdk.tool import tool
+
+result = tool.call('generate_canvas_videos', {
+    "project_path": "virtual-human-product-video",
+    "model_id": "model-from-media-model-info",
+    "tasks": [{
+        "name": "Virtual human product introduction",
+        "prompt": "The virtual human in [image1] faces the camera and introduces the product with natural hand gestures, stable framing, clear facial expression, and no added text.",
+        "reference_image_paths": ["asset://virtual-human-asset-id"],
+        "aspect_ratio": "16:9",
+        "resolution": "720p",
+        "duration_seconds": 5
+    }]
+})
+print(result.content)
 ```
 
 ## Video Edit Mode Example
