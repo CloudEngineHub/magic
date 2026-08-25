@@ -48,10 +48,7 @@ import {
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
-import {
-	resolveMobileAudioShareCreatedByBadgeBottom,
-	resolveMobileAudioShareTopbarOffset,
-} from "./utils/audio-share-topbar-offset"
+import { resolveMobileAudioShareCreatedByBadgeBottom } from "./utils/audio-share-topbar-offset"
 import usePureShareDocumentFlow from "./hooks/usePureShareDocumentFlow"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
@@ -628,15 +625,8 @@ function Share() {
 	const isShareDataReady = !isEmpty(data)
 	// 检查是否隐藏 header。pure_mode 优先，URL 参数作为老链接兼容。
 	const shouldHideHeader = shareDisplayOptions.hideHeader || (isFileShare && !isShareDataReady)
-	const mobileAudioShareTopbarOffset = useMemo(
-		() =>
-			resolveMobileAudioShareTopbarOffset({
-				isMobile,
-				shouldHideHeader,
-				shouldRenderAudioShareShell,
-			}),
-		[isMobile, shouldHideHeader, shouldRenderAudioShareShell],
-	)
+	// The recording detail owns its mobile header, so the outer share shell must not reserve a second header row.
+	const isMobileAudioShare = isMobile && shouldRenderAudioShareShell
 	const createdByBadgeBottom = useMemo(() => {
 		// Keep the default share footer behavior for every scene except the readonly mobile audio shell.
 		const defaultBottom = routeInfo.isFileShare || !hasStarted ? "12px" : "64px"
@@ -727,6 +717,17 @@ function Share() {
 		}
 		console.log("登录过了")
 		openCopyProjectModal()
+	})
+
+	/** Starts the existing share login flow while preserving the current URL for post-login return. */
+	const handleShareLogin = useMemoizedFn(() => {
+		clearWindowData()
+		authEventBus.emit(AuthEventName.RequestLogin, {
+			reason: "manual",
+			source: "share",
+			returnTo: window.location.href,
+			preserveQuery: true,
+		})
 	})
 
 	useEffect(() => {
@@ -872,7 +873,7 @@ function Share() {
 				onComplete={() => setCopiedFilesProjectInfo(null)}
 				position="top"
 			/>
-			{!isImmersiveFullscreen && !shouldHideHeader && (
+			{!isMobileAudioShare && !isImmersiveFullscreen && !shouldHideHeader && (
 				<div className={topicContainerBase} data-testid="share-topbar">
 					{showSuperMagicIcon ? <Logo className="h-[42px] shrink-0 max-md:h-9" /> : null}
 					{isMobile && hasStarted && !isFileShare && (
@@ -981,15 +982,7 @@ function Share() {
 								variant="outline"
 								size="sm"
 								className="h-8 rounded-lg px-5 py-1.5"
-								onClick={() => {
-									clearWindowData()
-									authEventBus.emit(AuthEventName.RequestLogin, {
-										reason: "manual",
-										source: "share",
-										returnTo: window.location.href,
-										preserveQuery: true,
-									})
-								}}
+								onClick={handleShareLogin}
 								data-testid="share-login-button"
 							>
 								{t("share.login")}
@@ -1044,7 +1037,12 @@ function Share() {
 								projectId={projectId}
 								resourceName={data?.data?.project_name || data?.resource_name}
 								allowDownloadProjectFile={allowDownloadProjectFile}
-								topbarOffset={mobileAudioShareTopbarOffset}
+								showCopyProject={showCopyProjectButton}
+								copyProjectLabel={t("share.copyProject")}
+								showLogin={!isLogined}
+								loginLabel={t("share.login")}
+								onCopyProject={handleCopyProject}
+								onLogin={handleShareLogin}
 								attachments={attachments}
 							/>
 						) : (

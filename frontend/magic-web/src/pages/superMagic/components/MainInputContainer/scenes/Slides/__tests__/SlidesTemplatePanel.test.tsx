@@ -445,12 +445,26 @@ describe("SlidesTemplatePanel", () => {
 				filters={[]}
 				onFilterChange={vi.fn()}
 				onTemplatePickerContainerChange={vi.fn()}
+				compactLayout
 			/>,
 		)
 		const chooseTemplateButton = screen
 			.getAllByTestId("slides-template-home-choose-template")
 			.at(-1)
 		expect(chooseTemplateButton).toBeDefined()
+		expect(chooseTemplateButton).toHaveClass("md:h-11")
+		expect(chooseTemplateButton?.querySelector("p")).toHaveClass("md:whitespace-nowrap")
+		expect(chooseTemplateButton?.parentElement).toHaveClass("md:flex-none")
+		expect(
+			chooseTemplateButton?.closest('[data-testid="slides-template-home-selected-template"]'),
+		).toHaveClass("md:flex-nowrap")
+		expect(
+			chooseTemplateButton?.closest('[data-testid="slides-template-home-selected-template"]'),
+		).not.toHaveClass("md:justify-center")
+		expect(
+			chooseTemplateButton?.closest('[data-testid="slides-template-home-selected-template"]')
+				?.children[1],
+		).toHaveClass("md:ml-auto")
 		expect(chooseTemplateButton).toHaveTextContent(
 			"playbook.edit.presets.form.selectOrAutoSelectTemplate",
 		)

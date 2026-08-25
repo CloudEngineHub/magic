@@ -164,6 +164,7 @@ function ConversationPanelScaffold({
 		availableRef: bodyRef,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
+	const effectiveInputMinHeight = inputHeight.minHeight ?? 200
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,
@@ -461,7 +462,7 @@ function ConversationPanelScaffold({
 					{inputHeight.enabled ? (
 						<ConversationInputResizeHandle
 							value={inputHeight.effectiveHeight}
-							min={200}
+							min={effectiveInputMinHeight}
 							max={inputHeight.maxHeight}
 							positionClassName={resizeHandlePositionClassName}
 							onResizeStart={inputHeight.startPointerResize}
@@ -489,7 +490,11 @@ function ConversationPanelScaffold({
 								inputHeight.fillHeight && "h-full min-h-0",
 							)}
 						>
-							<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
+							<div
+								className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"
+								data-conversation-input-accessory
+							>
+								{/* Keep task and queue chrome measurable and non-shrinking in fixed-height mode. */}
 								{editorNodes?.taskDataNode}
 								{editorNodes?.messageQueueNode}
 							</div>

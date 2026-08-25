@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import type { RecordingDetailFileMap, RecordingDetailFileRef } from "../../types/recording-detail"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
@@ -16,6 +17,8 @@ interface RecordingDetailRightPanelProps {
 	fileMap: RecordingDetailFileMap | null
 	summaryContent: Record<string, string | undefined>
 	notesContent?: string
+	attachmentTree?: AttachmentFile[]
+	notesFilePath?: string
 	attachmentList: AttachmentItem[]
 	summaryReady: boolean
 	summarizing: boolean
@@ -32,6 +35,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	fileMap,
 	summaryContent,
 	notesContent,
+	attachmentTree = [],
+	notesFilePath,
 	attachmentList,
 	summaryReady,
 	summarizing,
@@ -109,6 +114,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 						file={activeTab.file}
 						content={activeTab.content}
 						attachmentList={attachmentList}
+						attachmentTree={attachmentTree}
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={onOpenSpeakerSettings}
 						onTimeClick={onTimeClick}
@@ -134,6 +140,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 								<RecordingMarkdownContent
 									content={notesContent}
 									layout="desktop"
+									attachments={attachmentTree}
+									relativeFilePath={notesFilePath}
 									speakerNameMap={speakerNameMap}
 									onSpeakerClick={onOpenSpeakerSettings}
 									onTimeClick={(time) => onTimeClick(time)}
@@ -149,6 +157,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 							file={activeTab.file}
 							content={activeTab.content}
 							attachmentList={attachmentList}
+							attachmentTree={attachmentTree}
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onTimeClick={onTimeClick}

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react"
+import {
+	useEffect,
+	useMemo,
+	useState,
+	type CSSProperties,
+	type ReactNode,
+	type RefObject,
+} from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
@@ -18,7 +25,7 @@ interface MobileRecordingSummaryPanelProps {
 	summaryFiles: RecordingDetailFileRef[]
 	summaryContent: Record<string, string | undefined>
 	attachmentList: AttachmentItem[]
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
@@ -181,7 +188,7 @@ function SummaryContent({
 	content?: string
 	attachmentList: AttachmentItem[]
 	emptyText: string
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
 	searchActive: boolean
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
@@ -294,7 +301,7 @@ function MindmapContent({
 	onTimeClick,
 }: {
 	content: string
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
 	searchActive: boolean
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void

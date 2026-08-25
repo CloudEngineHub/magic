@@ -185,6 +185,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 								onTemplatePickerOpenChange={setIsSlidesTemplatePickerOpen}
 								showTemplateActions={isProjectScene}
 								isTemplatePreviewOpen={isSlidesTemplatePreviewOpen}
+								compactLayout={isProjectScene}
 							/>
 						) : null}
 					</div>
