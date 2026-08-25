@@ -1,5 +1,6 @@
 import { Suspense, lazy, useRef } from "react"
 import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
 import MagicSplitter from "@/components/base/MagicSplitter"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/shadcn-ui/sheet"
 import ChatSubSider from "../ChatSubSider"
@@ -22,6 +23,7 @@ const GroupSeenPanel = lazy(() => import("../GroupSeenPanel"))
  * 包含完整的聊天界面布局
  */
 const ChatContainer = observer(function ChatContainer() {
+	const { t } = useTranslation("chat")
 	const containerRef = useRef<HTMLDivElement>(null)
 	const workspaceLayout = useChatWorkspaceLayout(containerRef, chatWorkspaceSpec)
 	const previewInDrawer = workspaceLayout.mode !== "three-column"
@@ -61,7 +63,7 @@ const ChatContainer = observer(function ChatContainer() {
 						size={sizes[2]}
 					>
 						<Suspense fallback={null}>
-							<ChatFilePreviewPanel className={styles.previewPanel} />
+							<ChatFilePreviewPanel />
 						</Suspense>
 					</MagicSplitter.Panel>
 				)}
@@ -77,9 +79,9 @@ const ChatContainer = observer(function ChatContainer() {
 					showClose={false}
 					className="!inset-y-0 !right-0 !h-full !w-[clamp(320px,80vw,480px)] !max-w-none !gap-0 !overflow-hidden !p-0"
 				>
-					<SheetTitle className="sr-only">文件预览</SheetTitle>
+					<SheetTitle className="sr-only">{t("preview.filePreview")}</SheetTitle>
 					<SheetDescription className="sr-only">
-						低分辨率桌面下展示文件内容的右侧抽屉
+						{t("preview.fileDrawerDesc")}
 					</SheetDescription>
 					<Suspense fallback={null}>
 						<ChatFilePreviewPanel className="h-full" />

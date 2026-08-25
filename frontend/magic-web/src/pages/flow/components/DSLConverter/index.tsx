@@ -4,6 +4,7 @@ import { Button, Card, Input, Select, Spin, Space, Typography, Tabs } from "antd
 import { IconArrowRight } from "@tabler/icons-react"
 import { createStyles } from "antd-style"
 import { convertDSLToJSONString, convertJSONStringToDSL } from "../../utils/api/dslConverter"
+import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 const { TextArea } = Input
@@ -58,6 +59,7 @@ const useStyles = createStyles(({ css }) => ({
  * 提供DSL和JSON之间互相转换的UI界面
  */
 const DSLConverter: React.FC = () => {
+	const { t } = useTranslation("flow")
 	const { styles } = useStyles()
 	const [sourceText, setSourceText] = useState<string>("")
 	const [resultText, setResultText] = useState<string>("")
@@ -81,7 +83,7 @@ const DSLConverter: React.FC = () => {
 	// 下载结果
 	const handleDownload = () => {
 		if (!resultText) {
-			magicToast.warning("没有可下载的内容")
+			magicToast.warning(t("converter.noDownloadableContent"))
 			return
 		}
 
@@ -98,7 +100,7 @@ const DSLConverter: React.FC = () => {
 	// 执行转换
 	const handleConvert = () => {
 		if (!sourceText) {
-			magicToast.warning("请输入需要转换的内容")
+			magicToast.warning(t("converter.pleaseEnterContent"))
 			return
 		}
 
@@ -119,13 +121,17 @@ const DSLConverter: React.FC = () => {
 
 			if (result) {
 				setResultText(result)
-				magicToast.success("转换成功")
+				magicToast.success(t("converter.success"))
 			} else {
-				magicToast.error("转换失败")
+				magicToast.error(t("converter.failed"))
 			}
 		} catch (error) {
 			console.error("转换错误:", error)
-			magicToast.error(`转换失败: ${error instanceof Error ? error.message : String(error)}`)
+			magicToast.error(
+				t("converter.failedWithReason", {
+					message: error instanceof Error ? error.message : String(error),
+				}),
+			)
 		} finally {
 			setLoading(false)
 		}

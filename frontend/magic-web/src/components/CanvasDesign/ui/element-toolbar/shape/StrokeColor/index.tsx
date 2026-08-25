@@ -264,9 +264,15 @@ export default function StrokeColor() {
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="inside">内部</SelectItem>
-								<SelectItem value="center">居中</SelectItem>
-								<SelectItem value="outside">外部</SelectItem>
+								<SelectItem value="inside">
+									{t("elementTools.strokeColor.inside")}
+								</SelectItem>
+								<SelectItem value="center">
+									{t("elementTools.strokeColor.center")}
+								</SelectItem>
+								<SelectItem value="outside">
+									{t("elementTools.strokeColor.outside")}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>

@@ -160,7 +160,7 @@ function BindOpenApiAccount({ flowId, open, onClose }: BindOpenApiAccountProps) 
 	})
 	return (
 		<MagicModal
-			title="授权应用"
+			title={t("openapi.authorizeApp", { ns: "flow" })}
 			open={open}
 			onOk={handleOk}
 			onCancel={handleCancel}
