@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import dayjs from "dayjs"
+import dayjs from "@admin/infrastructure/vendors/dayjs"
 import { CircleHelp, Download } from "lucide-react"
 import { MagicAvatar, MagicButton } from "@admin-components"
 import { Table, Tabs, Tooltip } from "antd"

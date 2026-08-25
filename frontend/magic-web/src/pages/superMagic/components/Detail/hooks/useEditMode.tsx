@@ -7,7 +7,7 @@ import { type MenuProps } from "antd"
 import { ChevronDown } from "lucide-react"
 import { MagicDropdown } from "@/components/base"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 const SAVE_INTERVAL = 2 * 60 * 1000

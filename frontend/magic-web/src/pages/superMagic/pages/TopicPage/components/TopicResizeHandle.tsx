@@ -5,7 +5,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import ReactDOM from "react-dom"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 
 interface TopicResizeHandleProps {
 	className?: string

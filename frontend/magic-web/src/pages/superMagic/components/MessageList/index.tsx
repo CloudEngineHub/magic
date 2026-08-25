@@ -19,7 +19,7 @@ import Empty from "./components/Empty"
 import BackToLatestButton from "./components/BackToLatestButton"
 import MessageListFallback from "./components/MessageListFallback"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { TaskStatus, Topic } from "../../pages/Workspace/types"
 import { useTranslation } from "react-i18next"
 import { IconArrowBackUp, IconChevronsDown, IconChevronsUp } from "@tabler/icons-react"
@@ -81,7 +81,10 @@ interface MessageListProps {
 	className?: string
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
-	handlePullMoreMessage?: (selectedTopic: Topic | null, callback?: () => void) => void
+	handlePullMoreMessage?: (
+		selectedTopic: Topic | null,
+		callback?: () => void,
+	) => void | Promise<unknown>
 	showLoading?: boolean
 	currentTopicStatus?: TaskStatus
 	handleSendMsg?: (content: string, options?: any) => void
@@ -105,6 +108,8 @@ interface MessageListProps {
 	exportTitle?: string
 	/** Optional ref to the ScrollArea viewport (mobile TopicPage scroll coordination). */
 	viewportRef?: Ref<HTMLDivElement | null>
+	/** Distance from the top at which a fresh upward gesture may load one history page. */
+	historyLoadThresholdPx?: number
 	/**
 	 * Top/bottom scroll edge fade on mobile (prototype ChatScreen).
 	 * Pass `false` to disable; default enables on mobile when not share.
@@ -168,6 +173,7 @@ const MessageList = observer(
 		viewportRef,
 		scrollEdgeFade,
 		isMessagesLoading,
+		historyLoadThresholdPx,
 	}: MessageListProps) => {
 		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
@@ -175,6 +181,13 @@ const MessageList = observer(
 		const exportStore = useExportSelectionStore()
 
 		const nodesPanelRef = useRef<HTMLDivElement | null>(null)
+		/**
+		 * ScrollArea viewport commits after VirtualMessageList's first render.
+		 * Keep the element in state so that mount triggers a re-render and
+		 * TanStack Virtualizer can bind a real getScrollElement (ref-only
+		 * assignment would leave memoized VirtualMessageList stuck on null).
+		 */
+		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
 		const virtualizerRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null)
 		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
 		const scrollEdgeFadeConfig = useMemo(() => {
@@ -321,7 +334,8 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				{ status?: TaskStatus } | undefined
+				| { status?: TaskStatus }
+				| undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -451,11 +465,17 @@ const MessageList = observer(
 				nodesPanelRef.current = element
 				if (scrollEdgeFadeConfig) fadeScrollRef.current = element
 				assignScrollViewportRef(element, viewportRef)
+				// Only update when the node identity changes to avoid extra renders.
+				setScrollViewport((prev) => (prev === element ? prev : element))
 			},
 			[viewportRef, scrollEdgeFadeConfig, fadeScrollRef],
 		)
 
-		const getScrollElement = useCallback(() => nodesPanelRef.current, [])
+		/** Prefer state so callback identity updates when the viewport mounts. */
+		const getScrollElement = useCallback(
+			() => scrollViewport ?? nodesPanelRef.current,
+			[scrollViewport],
+		)
 		const { showBackToLatest, scrollToBottom, notifyPullMoreStarted, onVirtualizerChange } =
 			useVirtualMessageScroll({
 				containerRef: nodesPanelRef,
@@ -463,8 +483,9 @@ const MessageList = observer(
 				items: virtualMessageItems,
 				topicKey: currentTopicKey,
 				onPullMore: () => {
-					handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
+					return handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
 				},
+				minTopDistance: historyLoadThresholdPx,
 			})
 
 		const checkIsLastMessage = useMemoizedFn(createCheckIsLastMessage(messages))

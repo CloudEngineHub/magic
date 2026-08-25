@@ -17,7 +17,7 @@ import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { RoutePath } from "@/constants/routes"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
@@ -604,8 +604,9 @@ function ProjectResourceSelectorModal({
 			try {
 				const res = await loadProjectAttachments({
 					projectId: project.id,
-					temporaryToken:
-						(window as Window & { temporary_token?: string }).temporary_token || "",
+					// This selector is loading the signed-in user's target project. Do not
+					// inherit the source share token, which rewrites the project ID to 0.
+					temporaryToken: null,
 				})
 				setCurrentProject(project)
 				setViewMode("directory")
@@ -659,8 +660,8 @@ function ProjectResourceSelectorModal({
 				// 5. 获取项目文件树
 				const res = await loadProjectAttachments({
 					projectId: project.id,
-					temporaryToken:
-						(window as Window & { temporary_token?: string }).temporary_token || "",
+					// Claw projects selected as a destination use the current user's auth.
+					temporaryToken: null,
 				})
 
 				setAttachments(res?.tree || [])
@@ -1096,8 +1097,8 @@ function ProjectResourceSelectorModal({
 				try {
 					const res = await loadProjectAttachments({
 						projectId: selectedProject.id,
-						temporaryToken:
-							(window as Window & { temporary_token?: string }).temporary_token || "",
+						// The preselected destination project must not inherit a share token.
+						temporaryToken: null,
 					})
 					setAttachments(res?.tree || [])
 					const dirs = getDirectoriesFromPath(res?.tree || [], initialPath)

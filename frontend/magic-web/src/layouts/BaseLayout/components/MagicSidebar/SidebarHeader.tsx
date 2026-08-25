@@ -1,6 +1,6 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { SidebarHeaderProps } from "./types"
 import Logo from "../Header/components/Logo"
 import { observer } from "mobx-react-lite"

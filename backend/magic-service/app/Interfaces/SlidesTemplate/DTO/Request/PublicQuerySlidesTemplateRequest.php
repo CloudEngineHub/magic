@@ -21,9 +21,11 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'scope' => 'nullable|string|in:official,user,all',
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:200',
             'keyword' => 'nullable|string|max:100',
+            'code' => 'nullable|string|max:64',
             'category_code' => 'nullable|string|max:64',
             'tag_codes' => 'nullable',
             'tag_match' => 'nullable|string|in:any,all',
@@ -41,7 +43,13 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'keyword.max' => __('slides_template.keyword_max'),
             'category_code.max' => __('slides_template.category_code_max'),
             'tag_match.in' => __('slides_template.tag_match_in'),
+            'scope.in' => __('slides_template.scope_in'),
         ];
+    }
+
+    public function getScope(): string
+    {
+        return (string) $this->input('scope', 'official');
     }
 
     public function getPage(): int
@@ -58,6 +66,12 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
     {
         $keyword = trim((string) $this->input('keyword', ''));
         return $keyword === '' ? null : $keyword;
+    }
+
+    public function getCode(): ?string
+    {
+        $code = trim((string) $this->input('code', ''));
+        return $code === '' ? null : $code;
     }
 
     public function getCategoryCode(): ?string

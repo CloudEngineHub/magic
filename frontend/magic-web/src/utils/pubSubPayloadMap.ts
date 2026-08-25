@@ -196,10 +196,12 @@ export interface PubSubTypedPayloadMap {
 	/** 详情页刷新：无参数。 */
 	[PubSubEvents.Super_Magic_Detail_Refresh]: []
 	/** 追加 JSONContent 到输入框末尾（不覆盖已有内容）：传入 JSONContent。 */
-	[PubSubEvents.Append_Content_To_Editor]: [content: import("@tiptap/react").JSONContent]
+	[PubSubEvents.Append_Content_To_Editor]: [
+		content: import("@/infrastructure/editors/tiptap/react").JSONContent,
+	]
 	/** 追加建议内容到输入框末尾：传入文本字符串或 JSONContent。 */
 	[PubSubEvents.Append_Suggestion_To_Editor]: [
-		content: string | import("@tiptap/core").JSONContent,
+		content: string | import("@/infrastructure/editors/tiptap/core").JSONContent,
 	]
 	/** 幻灯片添加后设置编辑器内容。 */
 	[PubSubEvents.Set_Content_When_Slide_Added]: SuperMagicSetContentWhenSlideAddedArgs

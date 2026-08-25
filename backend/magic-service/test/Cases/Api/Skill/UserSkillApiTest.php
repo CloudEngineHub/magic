@@ -17,6 +17,7 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\DbConnection\Db;
 use HyperfTest\Cases\Api\SuperAgent\AbstractApiTest;
+use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 use ZipArchive;
 
@@ -1949,6 +1950,66 @@ class UserSkillApiTest extends AbstractApiTest
         $item = $response['data']['list'][0];
         $this->assertSame($storeSkill['skill_code'], $item['skill_code'] ?? null);
         $this->assertSame('1.0.0', $item['latest_version'] ?? null);
+    }
+
+    public function testOfficialBuiltinSkillDetailDoesNotRequireMagicSkillsRecord(): void
+    {
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+        $organizationCode = $headers['organization-code'];
+        $skillCode = 'builtin-' . strtolower(IdGenerator::getUniqueId32());
+        $versionId = IdGenerator::getSnowId();
+        $marketId = IdGenerator::getSnowId();
+        $publishedAt = date('Y-m-d H:i:s');
+
+        SkillVersionModel::query()->create([
+            'id' => $versionId,
+            'code' => $skillCode,
+            'organization_code' => $organizationCode,
+            'creator_id' => 'official-builtin-user',
+            'package_name' => 'builtin-package',
+            'package_description' => 'Official builtin package',
+            'version' => '1.0.0',
+            'name_i18n' => ['zh_CN' => '内置技能', 'en_US' => 'Builtin Skill'],
+            'description_i18n' => ['zh_CN' => '内置技能描述', 'en_US' => 'Builtin skill description'],
+            'source_i18n' => [],
+            'file_key' => 'skills/builtin.zip',
+            'skill_file_key' => 'skills/builtin/SKILL.md',
+            'publish_status' => 'PUBLISHED',
+            'review_status' => 'APPROVED',
+            'publish_target_type' => 'MARKET',
+            'publisher_user_id' => 'official-builtin-user',
+            'published_at' => $publishedAt,
+            'is_current_version' => true,
+            'source_type' => 'LOCAL_UPLOAD',
+            'created_at' => $publishedAt,
+            'updated_at' => $publishedAt,
+        ]);
+
+        SkillMarketModel::query()->create([
+            'id' => $marketId,
+            'organization_code' => $organizationCode,
+            'skill_code' => $skillCode,
+            'skill_version_id' => $versionId,
+            'name_i18n' => ['zh_CN' => '内置技能', 'en_US' => 'Builtin Skill'],
+            'description_i18n' => ['zh_CN' => '内置技能描述', 'en_US' => 'Builtin skill description'],
+            'publisher_id' => 'official-builtin-user',
+            'publisher_type' => 'OFFICIAL_BUILTIN',
+            'publish_status' => 'PUBLISHED',
+            'is_featured' => false,
+            'is_hidden' => false,
+            'created_at' => $publishedAt,
+            'updated_at' => $publishedAt,
+        ]);
+
+        di(CacheInterface::class)->delete('super_magic:skill_market:official_builtin:entities:v2');
+
+        $response = $this->get(self::BASE_URI . '/' . $skillCode, $headers);
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertSame($skillCode, $response['data']['code'] ?? null);
+        $this->assertSame('builtin-package', $response['data']['package_name'] ?? null);
+        $this->assertSame('1.0.0', $response['data']['version_code'] ?? null);
     }
 
     /**

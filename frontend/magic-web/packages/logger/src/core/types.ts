@@ -5,7 +5,7 @@
 /**
  * 追踪平台类型
  */
-export type ProviderType = "Volcengine" | "Aliyun"
+export type ProviderType = "Volcengine" | "Aliyun" | "DataFlux"
 
 /**
  * 日志级别
@@ -118,6 +118,8 @@ export interface IProvider {
 	stop(): void
 	/** 设置实例信息（应用版本、用户ID、设备ID） */
 	setConfig(config: Record<string, string | null | undefined>): void
+	/** 设置用户信息（Provider 可选能力） */
+	setUser?(user: IUserInfo): void
 	/** 异常上报 */
 	error(...error: unknown[]): void
 	/** 自定义上报方法 */
@@ -160,6 +162,8 @@ export interface ILogger {
 	track(event: ICustomEvent): void
 	/** 设置配置 */
 	setConfig(config: Record<string, string>): void
+	/** 设置用户信息 */
+	setUser(user: IUserInfo): void
 	/** 获取当前 Provider */
 	getProvider(): IProvider | null
 	// /** 设置用户信息 */

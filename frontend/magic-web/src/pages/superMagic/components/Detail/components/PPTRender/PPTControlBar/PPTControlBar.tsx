@@ -11,7 +11,7 @@ import {
 	Plus,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { MagicTooltip } from "@/components/base"
 

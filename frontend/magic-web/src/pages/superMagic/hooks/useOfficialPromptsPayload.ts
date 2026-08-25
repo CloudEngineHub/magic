@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { RefObject, useEffect } from "react"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { MessageEditorRef } from "../components/MessageEditor/MessageEditor"

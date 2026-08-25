@@ -26,7 +26,7 @@ import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import {
 	SidebarGroup,
@@ -344,6 +344,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			const workspaceElement = workspaceListRef.current?.querySelector<HTMLElement>(
 				`[data-workspace-id-segment="${workspaceIdSegment}"]`,
 			)
+			// Workspace items use scroll-margin-top for the sticky list header.
+			// Without it, block:start tucks the first project under the workspace title.
 			workspaceElement?.scrollIntoView({
 				behavior: "smooth",
 				block: "start",

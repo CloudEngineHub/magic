@@ -3,7 +3,7 @@ import { CanvasMarkerMentionData } from "@/components/business/MentionPanel/type
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Input } from "@/components/shadcn-ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useDebounceFn } from "ahooks"
 import type { ComponentProps } from "react"
 import { memo, useCallback, useRef, useState } from "react"

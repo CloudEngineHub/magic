@@ -88,20 +88,15 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             ],
             'generation' => [
                 'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
-                'durations' => self::SUPPORTED_DURATIONS,
+                'duration_type' => 'range',
+                'durations' => ['min' => 3, 'max' => 15, 'step' => 1],
                 'default_duration_seconds' => 5,
                 'resolutions' => self::SUPPORTED_RESOLUTIONS,
                 'sizes' => self::SUPPORTED_SIZES,
                 'default_resolution' => self::MODE_TO_RESOLUTION[self::DEFAULT_MODE],
-                'supports_seed' => false,
                 'supports_watermark' => true,
                 'supports_negative_prompt' => true,
                 'supports_generate_audio' => true,
-                'supports_person_generation' => false,
-                'supports_enhance_prompt' => false,
-                'supports_compression_quality' => false,
-                'supports_resize_mode' => false,
-                'supports_sample_count' => false,
             ],
             'input_modes' => [
                 'standard' => [
@@ -231,7 +226,7 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException(
+            throw ProviderVideoException::nonRetriable(
                 $this->extractProviderMessage($response, 'cloudsway keling submit succeeded but task id missing')
             );
         }

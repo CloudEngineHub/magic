@@ -1,6 +1,6 @@
 import { memo, useState } from "react"
 import ReactDOM from "react-dom"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ResizableDividerProps } from "./types"
 
 function ResizableDivider({

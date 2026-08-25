@@ -11,6 +11,8 @@ class AdminSlidesTemplateCategoryItemDTO extends SlidesTemplateCategoryItemDTO
 {
     public string $organizationCode = '';
 
+    public int $templateCount = 0;
+
     public int $status = 0;
 
     public ?string $createdUid = null;
@@ -29,6 +31,16 @@ class AdminSlidesTemplateCategoryItemDTO extends SlidesTemplateCategoryItemDTO
     public function setOrganizationCode(?string $organizationCode): void
     {
         $this->organizationCode = $organizationCode ?? '';
+    }
+
+    public function getTemplateCount(): int
+    {
+        return $this->templateCount;
+    }
+
+    public function setTemplateCount(null|int|string $templateCount): void
+    {
+        $this->templateCount = $templateCount === null ? 0 : (int) $templateCount;
     }
 
     public function getStatus(): int

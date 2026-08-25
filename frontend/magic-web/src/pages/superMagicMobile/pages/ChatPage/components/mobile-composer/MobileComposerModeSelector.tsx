@@ -11,7 +11,7 @@ import {
 	X,
 } from "lucide-react"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Trans, useTranslation } from "react-i18next"
 import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
@@ -134,10 +134,10 @@ function MobileComposerModeSelectorComponent({
 
 	useFeaturedModeListRefreshOnFirstOpen(open)
 
-	const currentMode = useMemo(() => {
-		if (!topicMode) return null
-		return superMagicModeService.getModeConfigWithLegacy(topicMode, undefined, false, agentCode)
-	}, [agentCode, topicMode])
+	// Resolve during each observed render so an asynchronously loaded mode list can restore the avatar.
+	const currentMode = topicMode
+		? superMagicModeService.getModeConfigWithLegacy(topicMode, undefined, false, agentCode)
+		: null
 	const allowChangeMode = (messagesLength ?? 0) > 0 ? false : true
 	const selectedModeIdentifier = topicMode === "custom_agent" && agentCode ? agentCode : topicMode
 

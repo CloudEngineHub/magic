@@ -11,6 +11,7 @@ use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
+use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillMarketRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillMarketModel;
@@ -21,6 +22,7 @@ use App\Infrastructure\SuperMagic\Utils\DateFormatUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Codec\Json;
+use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 
 /**
@@ -28,10 +30,52 @@ use RuntimeException;
  */
 class SkillMarketRepository extends AbstractRepository implements SkillMarketRepositoryInterface
 {
+    private const OFFICIAL_BUILTIN_SKILLS_CACHE_KEY = 'super_magic:skill_market:official_builtin:entities:v2';
+
+    private const OFFICIAL_BUILTIN_SKILLS_CACHE_TTL = 300;
+
     public function __construct(
         protected SkillRepositoryInterface $skillRepository,
         protected SkillMarketModel $skillMarketModel,
+        protected SkillCategoryRepositoryInterface $skillCategoryRepository,
+        protected CacheInterface $cache
     ) {
+    }
+
+    /**
+     * 获取已发布的官方内置 Skill 实体。
+     *
+     * @return array<int, SkillMarketEntity>
+     */
+    public function getOfficialBuiltinSkillEntities(): array
+    {
+        $cachedRows = $this->cache->get(self::OFFICIAL_BUILTIN_SKILLS_CACHE_KEY);
+        if (is_array($cachedRows)) {
+            return $this->toEntities($cachedRows);
+        }
+
+        $marketTable = $this->skillMarketModel->getTable();
+        $versionTable = $this->resolveSkillVersionTable();
+        $models = $this->skillMarketModel::query()
+            ->leftJoin($versionTable . ' as skill_versions', $marketTable . '.skill_version_id', '=', 'skill_versions.id')
+            ->select($marketTable . '.*', 'skill_versions.package_name')
+            ->where($marketTable . '.publisher_type', PublisherType::OFFICIAL_BUILTIN->value)
+            ->where($marketTable . '.publish_status', PublishStatus::PUBLISHED->value)
+            ->orderBy($marketTable . '.id')
+            ->get();
+
+        $rows = [];
+        foreach ($models as $model) {
+            $rows[] = $model->toArray();
+        }
+
+        $this->cache->set(
+            self::OFFICIAL_BUILTIN_SKILLS_CACHE_KEY,
+            $rows,
+            self::OFFICIAL_BUILTIN_SKILLS_CACHE_TTL
+        );
+
+        return $this->toEntities($rows);
     }
 
     /**
@@ -518,6 +562,20 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
                 ->whereIn('skill_category_relations.category_id', $categoryIds)
                 ->whereNull('skill_category_relations.deleted_at');
         });
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, SkillMarketEntity>
+     */
+    private function toEntities(array $rows): array
+    {
+        $entities = [];
+        foreach ($rows as $row) {
+            $entities[] = $this->toEntity($row);
+        }
+
+        return $entities;
     }
 
     private function resolveSkillVersionTable(): string

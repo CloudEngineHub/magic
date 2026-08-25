@@ -157,6 +157,12 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 		expect(screen.getByText("Mock Share Recording")).toBeInTheDocument()
 		expect(screen.getByLabelText("More actions")).toBeInTheDocument()
 		expect(screen.queryByLabelText("detail.exportSection")).not.toBeInTheDocument()
+		expect(screen.getByTestId("mock-summary-panel").parentElement).toHaveClass(
+			"flex",
+			"min-h-0",
+			"flex-1",
+			"overflow-hidden",
+		)
 	})
 
 	it("applies the external share topbar offset to the page root and sticky header", () => {

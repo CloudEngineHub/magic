@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
@@ -33,12 +34,12 @@ readonly class CloudswayVideoClient
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
-        $sanitizedLogContext = $this->sanitizeForLog($logContext);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
         $this->logger->info('cloudsway video post request', [
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
             'context' => $sanitizedLogContext,
-            'payload' => $this->sanitizeForLog($payload),
+            'payload' => PayloadLogSanitizer::sanitizeValue($payload),
         ]);
 
         try {
@@ -69,7 +70,7 @@ readonly class CloudswayVideoClient
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
             'context' => $sanitizedLogContext,
-            'response' => $this->sanitizeForLog($data),
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
@@ -79,7 +80,7 @@ readonly class CloudswayVideoClient
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
-        $sanitizedLogContext = $this->sanitizeForLog($logContext);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
         $this->logger->info('cloudsway video get request', [
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
@@ -113,7 +114,7 @@ readonly class CloudswayVideoClient
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
             'context' => $sanitizedLogContext,
-            'response' => $this->sanitizeForLog($data),
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
@@ -136,14 +137,20 @@ readonly class CloudswayVideoClient
                 ],
             ]);
         } catch (RequestException $exception) {
-            throw new ProviderVideoException($this->formatRequestExceptionMessage($exception, 'download media'), $exception);
+            throw ProviderVideoException::retriable(
+                $this->formatRequestExceptionMessage($exception, 'download media'),
+                $exception,
+            );
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(sprintf('cloudsway video download media failed: %s', $throwable->getMessage()), $throwable);
+            throw ProviderVideoException::retriable(
+                sprintf('cloudsway video download media failed: %s', $throwable->getMessage()),
+                $throwable,
+            );
         }
 
         $content = (string) $response->getBody();
         if ($content === '') {
-            throw new ProviderVideoException('cloudsway video download media failed: empty response body');
+            throw ProviderVideoException::retriable('cloudsway video download media failed: empty response body');
         }
 
         $mimeType = $this->resolveMediaMimeType($response->getHeaderLine('Content-Type'), $safeUrl);
@@ -174,13 +181,19 @@ readonly class CloudswayVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw new ProviderVideoException($this->formatRequestExceptionMessage($exception, $action), $exception);
+            throw ProviderVideoException::retriable(
+                $this->formatRequestExceptionMessage($exception, $action),
+                $exception,
+            );
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(sprintf('cloudsway video %s failed: %s', $action, $throwable->getMessage()), $throwable);
+            throw ProviderVideoException::retriable(
+                sprintf('cloudsway video %s failed: %s', $action, $throwable->getMessage()),
+                $throwable,
+            );
         }
 
         if (! is_array($data)) {
-            throw new ProviderVideoException(sprintf('cloudsway video %s returned invalid json', $action));
+            throw ProviderVideoException::retriable(sprintf('cloudsway video %s returned invalid json', $action));
         }
 
         return $data;
@@ -207,65 +220,8 @@ readonly class CloudswayVideoClient
             $action,
             $statusCode,
             $reason,
-            $this->sanitizeResponseBody($body),
+            PayloadLogSanitizer::sanitizeResponseBody($body),
         );
-    }
-
-    private function sanitizeForLog(mixed $value, ?string $fieldName = null): mixed
-    {
-        if (is_array($value)) {
-            $sanitized = [];
-            foreach ($value as $key => $item) {
-                $sanitized[$key] = $this->sanitizeForLog($item, is_string($key) ? $key : null);
-            }
-            return $sanitized;
-        }
-
-        if (! is_string($value)) {
-            return $value;
-        }
-
-        $trimmedValue = trim($value);
-        if ($trimmedValue === '') {
-            return $value;
-        }
-
-        if (in_array($fieldName, ['bytesBase64Encoded', 'bytes_base64_encoded', 'b64_json'], true)) {
-            return $this->summarizeString($trimmedValue, 'base64');
-        }
-
-        if (preg_match('#^data:(?<mime>[-\w.+/]+);base64,(?<data>.+)$#is', $trimmedValue, $matches) === 1) {
-            return sprintf(
-                '[data-uri base64 omitted mime=%s len=%d preview=%s...%s]',
-                $matches['mime'],
-                strlen($matches['data']),
-                substr($matches['data'], 0, 24),
-                substr($matches['data'], -24),
-            );
-        }
-
-        if ($this->looksLikeLargeBase64($trimmedValue)) {
-            return $this->summarizeString($trimmedValue, 'base64');
-        }
-
-        if (strlen($trimmedValue) > 1024) {
-            return $this->summarizeString($trimmedValue, 'string');
-        }
-
-        return $value;
-    }
-
-    private function sanitizeResponseBody(string $body): string
-    {
-        try {
-            $decoded = Json::decode($body);
-            if (is_array($decoded)) {
-                return Json::encode($this->sanitizeForLog($decoded), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            }
-        } catch (Throwable) {
-        }
-
-        return $this->sanitizeForLog($body);
     }
 
     private function extractProviderMessageFromBody(string $body): ?string
@@ -294,24 +250,6 @@ readonly class CloudswayVideoClient
         }
 
         return null;
-    }
-
-    private function looksLikeLargeBase64(string $value): bool
-    {
-        if (strlen($value) < 512) {
-            return false;
-        }
-
-        return preg_match('/^[A-Za-z0-9+\/=\r\n]+$/', $value) === 1;
-    }
-
-    private function summarizeString(string $value, string $type): string
-    {
-        $length = strlen($value);
-        $prefix = substr($value, 0, 24);
-        $suffix = substr($value, -24);
-
-        return sprintf('[%s omitted len=%d preview=%s...%s]', $type, $length, $prefix, $suffix);
     }
 
     private function resolveMediaMimeType(?string $contentType, string $url): string

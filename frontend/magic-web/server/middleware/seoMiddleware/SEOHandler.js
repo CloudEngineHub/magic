@@ -4,6 +4,7 @@ const getGlobalPlatformInfo = require("../../apis/getGlobalPlatformInfo")
 const SEORoutes = require("../../routes/seo.route")
 const { getAdminSeoRoutes, getAdminSeoRoutesWithClusterCode } = require("../../routes/admin.route")
 const { cleanSEOString, getPlatformInfo, processHtmlContent } = require("./html-utils")
+const buildInstallLinks = require("./micro-app-install-links")
 
 const seoRoutes = new SEORoutes()
 
@@ -19,7 +20,7 @@ const routes = [
 	["/share/:topicId", seoRoutes.shareTopic],
 	["/share/:topicId/file/:fileId", seoRoutes.shareTopic],
 	// 微应用分享页
-	["/micro-app/:appId", seoRoutes.microApp],
+	["/micro-app/:appId", seoRoutes.microApp, { installable: true }],
 	// 登录
 	["/login", seoRoutes.login],
 	// 微应用编辑页；必须位于 /:clusterCode/super/:projectId/:topicId 之前，避免被通用项目路由匹配。
@@ -75,7 +76,7 @@ const routes = [
 ]
 
 module.exports = (app) => {
-	routes.forEach(([routePath, routeHandler]) => {
+	routes.forEach(([routePath, routeHandler, routeOptions = {}]) => {
 		app.get(routePath, async (req, res, next) => {
 			let htmlTemplate
 			try {
@@ -123,15 +124,17 @@ module.exports = (app) => {
 				)
 
 				const ogUrl = `${baseUrl}${req.originalUrl}`
+				const installableLinks = buildInstallLinks(routeOptions, req.params.appId)
 
 				// 处理 HTML（一次性替换）
 				const htmlContent = processHtmlContent(htmlTemplate, {
-					favicon: platformInfo.favicon,
+					favicon: installableLinks.faviconUrl || platformInfo.favicon,
 					minimal_logo: platformInfo.minimal_logo,
 					title: ogTitle,
 					keywords: ogKeywords,
 					description: ogDescription,
 					ogUrl,
+					...installableLinks,
 				})
 
 				// 设置响应头并返回
@@ -155,6 +158,7 @@ module.exports = (app) => {
 					keywords: "",
 					description: "",
 					ogUrl,
+					...buildInstallLinks(routeOptions, req.params.appId),
 				})
 
 				// 设置响应头并返回

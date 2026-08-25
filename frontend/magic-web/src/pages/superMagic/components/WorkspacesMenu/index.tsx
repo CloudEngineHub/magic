@@ -17,7 +17,7 @@ import workspaceStore from "../../stores/core/workspace"
 import SuperMagicService from "../../services"
 import { Workspace } from "../../pages/Workspace/types"
 import { preloadCreateWorkspaceModal, preloadCollaborationProjectsPanel } from "./preload"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { useCreateWorkspace } from "../CreateWorkspaceModal/useCreateWorkspace"
 import { useWorkspaceDelete } from "./useWorkspaceDelete"
 
@@ -207,90 +207,90 @@ function WorkspacesMenu() {
 					<div className="mx-[10px] mt-[10px] max-h-[275px] overflow-y-auto rounded bg-muted p-[5px] [scrollbar-color:rgb(var(--fill-secondary-rgb)_/_var(--fill-secondary-alpha))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:border-none [&::-webkit-scrollbar-thumb]:bg-fill-secondary hover:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:rounded-sm [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1">
 						{loading
 							? Array.from({ length: 3 }).map((_, index) => (
-								<SkeletonInput
-									key={index}
-									active
-									className="!mt-1 !h-[18px] !w-full first:!mt-0 last:!mb-0"
-								/>
-							))
+									<SkeletonInput
+										key={index}
+										active
+										className="!mt-1 !h-[18px] !w-full first:!mt-0 last:!mb-0"
+									/>
+								))
 							: workspaces.map((workspace, index) => {
-								const isEditing = editingWorkspaceId === workspace.id
-								const isActive = selectedWorkspace?.id === workspace.id
-								return (
-									<a
-										key={workspace.id}
-										href={getWorkspaceRouteUrl(workspace.id)}
-										className={cn(
-											"mb-1 flex h-8 w-full cursor-pointer select-none items-center justify-between gap-1 rounded px-2.5 py-1.5 font-normal leading-5 text-foreground [--actions-display:none] last:mb-0",
-											"hover:bg-gray-200 hover:text-foreground hover:[--actions-display:flex]",
-											"active:bg-muted active:text-foreground",
-											isActive &&
-											"bg-blue-100 bg-opacity-50 font-semibold text-primary",
-										)}
-										onClick={(e) =>
-											handleInnerWorkspaceMenuClick(e, workspace)
-										}
-										draggable={false}
-										data-testid={`super-workspace-menu-item-${index}`}
-										data-workspace-id={workspace.id}
-										data-workspace-name={
-											workspace.name || t("workspace.unnamedWorkspace")
-										}
-									>
-										<div className="flex min-w-0 flex-1 items-center gap-1">
-											<StatusIcon status={workspace.workspace_status} />
-											{isEditing ? (
-												<input
-													ref={inputRef}
-													type="text"
-													className="h-full w-full rounded border border-primary bg-background px-1.5 py-0.5 text-foreground outline-none focus:border-primary"
-													value={editingWorkspaceName}
-													onChange={handleWorkspaceInputChange}
-													onKeyDown={handleInputKeyDown}
-													onBlur={handleWorkspaceInputBlur}
-													autoFocus
-													onClick={(e) => {
-														e.preventDefault()
-														e.stopPropagation()
-													}}
-													onDragStart={(e) => {
-														e.preventDefault()
-														e.stopPropagation()
-													}}
-													onMouseDown={(e) => {
-														e.stopPropagation()
-													}}
-													style={{ userSelect: "text" }}
-													data-testid="handle-workspace-input-change"
-												/>
-											) : (
-												<SmartTooltip maxWidth={320} placement="bottom">
-													{workspace.name ||
-														t("workspace.unnamedWorkspace")}
-												</SmartTooltip>
+									const isEditing = editingWorkspaceId === workspace.id
+									const isActive = selectedWorkspace?.id === workspace.id
+									return (
+										<a
+											key={workspace.id}
+											href={getWorkspaceRouteUrl(workspace.id)}
+											className={cn(
+												"mb-1 flex h-8 w-full cursor-pointer select-none items-center justify-between gap-1 rounded px-2.5 py-1.5 font-normal leading-5 text-foreground [--actions-display:none] last:mb-0",
+												"hover:bg-gray-200 hover:text-foreground hover:[--actions-display:flex]",
+												"active:bg-muted active:text-foreground",
+												isActive &&
+													"bg-blue-100 bg-opacity-50 font-semibold text-primary",
 											)}
-										</div>
-										{!isEditing && (
-											<WorkspaceActionButtons
-												workspace={workspace}
-												selectedWorkspace={selectedWorkspace}
-												onEdit={(e) => {
-													handleStartEditWorkspace(workspace, e)
-												}}
-												onDelete={openDeleteModal}
-												onRename={() =>
-													handleStartEditWorkspace(
-														workspace,
-														{} as React.MouseEvent<HTMLDivElement>,
-													)
-												}
-												onMenuClose={() => setOpen(false)}
-												onTransferStart={() => setOpen(false)}
-											/>
-										)}
-									</a>
-								)
-							})}
+											onClick={(e) =>
+												handleInnerWorkspaceMenuClick(e, workspace)
+											}
+											draggable={false}
+											data-testid={`super-workspace-menu-item-${index}`}
+											data-workspace-id={workspace.id}
+											data-workspace-name={
+												workspace.name || t("workspace.unnamedWorkspace")
+											}
+										>
+											<div className="flex min-w-0 flex-1 items-center gap-1">
+												<StatusIcon status={workspace.workspace_status} />
+												{isEditing ? (
+													<input
+														ref={inputRef}
+														type="text"
+														className="h-full w-full rounded border border-primary bg-background px-1.5 py-0.5 text-foreground outline-none focus:border-primary"
+														value={editingWorkspaceName}
+														onChange={handleWorkspaceInputChange}
+														onKeyDown={handleInputKeyDown}
+														onBlur={handleWorkspaceInputBlur}
+														autoFocus
+														onClick={(e) => {
+															e.preventDefault()
+															e.stopPropagation()
+														}}
+														onDragStart={(e) => {
+															e.preventDefault()
+															e.stopPropagation()
+														}}
+														onMouseDown={(e) => {
+															e.stopPropagation()
+														}}
+														style={{ userSelect: "text" }}
+														data-testid="handle-workspace-input-change"
+													/>
+												) : (
+													<SmartTooltip maxWidth={320} placement="bottom">
+														{workspace.name ||
+															t("workspace.unnamedWorkspace")}
+													</SmartTooltip>
+												)}
+											</div>
+											{!isEditing && (
+												<WorkspaceActionButtons
+													workspace={workspace}
+													selectedWorkspace={selectedWorkspace}
+													onEdit={(e) => {
+														handleStartEditWorkspace(workspace, e)
+													}}
+													onDelete={openDeleteModal}
+													onRename={() =>
+														handleStartEditWorkspace(
+															workspace,
+															{} as React.MouseEvent<HTMLDivElement>,
+														)
+													}
+													onMenuClose={() => setOpen(false)}
+													onTransferStart={() => setOpen(false)}
+												/>
+											)}
+										</a>
+									)
+								})}
 					</div>
 				),
 			},

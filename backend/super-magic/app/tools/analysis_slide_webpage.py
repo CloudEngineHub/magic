@@ -19,6 +19,7 @@ from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import truncate_text_by_token
 from app.i18n import i18n
 from app.service.browser.browser_config_adapter import BrowserConfigAdapter
+from app.service.browser.workspace_page_loader import load_workspace_page
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_read_text, async_stat
@@ -137,21 +138,15 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
         except Exception:
             return False
 
-    def _prepare_file_url(self, file_path: str) -> str:
-        """将本地文件路径转换为file:// URL"""
-        # 确保路径是绝对路径
-        if not Path(file_path).is_absolute():
-            file_path = str(self.base_dir / file_path)
-
-        # 转换为file:// URL
-        file_url = Path(file_path).as_uri()
-        logger.debug(f"本地文件转换为URL: {file_path} -> {file_url}")
-        return file_url
-
-    async def _create_browser(self) -> BrowserClient:
+    async def _create_browser(self, *, viewport_width: int, viewport_height: int) -> BrowserClient:
         """创建浏览器实例"""
         # 创建适合页面分析的浏览器实例
-        config = await BrowserConfigAdapter.build_playwright(str(self.base_dir))
+        config = await BrowserConfigAdapter.build_playwright(
+            str(self.base_dir),
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            device_scale_factor=1,
+        )
         browser = await create_browser(config)
         logger.debug("创建浏览器实例用于网页元素分析")
         return browser
@@ -204,9 +199,9 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
             truncated_analysis, is_analysis_truncated = truncate_text_by_token(browser_analysis, DEFAULT_MAX_TOKENS // 2)
 
             if is_html_truncated:
-                logger.warning(f"HTML content was truncated for AI analysis")
+                logger.warning("HTML content was truncated for AI analysis")
             if is_analysis_truncated:
-                logger.warning(f"Browser analysis was truncated for AI analysis")
+                logger.warning("Browser analysis was truncated for AI analysis")
 
             # Get current time context
             current_time_str = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
@@ -275,7 +270,7 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
 
         except Exception as e:
             logger.exception(f"AI analysis failed: {e}")
-            return f"AI分析失败: {str(e)}"
+            return f"AI analysis failed: {e!s}"
 
     async def execute(self, tool_context: ToolContext, params: AnalysisSlideWebpageParams) -> ToolResult:
         """执行网页元素分析"""
@@ -289,41 +284,49 @@ class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
         browser = None
         try:
             # 创建浏览器实例
-            browser = await self._create_browser()
+            browser = await self._create_browser(
+                viewport_width=params.max_width,
+                viewport_height=params.max_height,
+            )
 
-            # 准备目标URL
+            pages = await browser.list_pages()
+            if not pages:
+                return ToolResult.error("无法获取活跃页面ID")
+            page_id = pages[0].id
+
+            # 准备并加载目标页面
             if self._is_url(target):
                 target_url = target
+                await browser.navigate(page_id, target_url)
                 logger.debug(f"使用远程URL: {target_url}")
             else:
-                # 验证本地文件是否存在
                 local_file_path = self.base_dir / target
                 if not await async_exists(local_file_path):
                     return ToolResult.error(f"本地文件不存在: {target}")
                 if not stat.S_ISREG((await async_stat(local_file_path)).st_mode):
                     return ToolResult.error(f"指定路径不是文件: {target}")
-
-                target_url = self._prepare_file_url(str(local_file_path))
-                logger.debug(f"使用本地文件: {target} -> {target_url}")
-
-            # 导航到目标页面
-            logger.debug(f"导航到页面: {target_url}")
-            pages = await browser.list_pages()
-            if not pages:
-                return ToolResult.error("无法获取活跃页面ID")
-            page_id = pages[0].id
-            await browser.navigate(page_id, target_url)
+                target_url = await load_workspace_page(
+                    browser,
+                    page_id,
+                    Path(self.base_dir),
+                    local_file_path,
+                )
+                logger.debug(f"使用自包含工作区页面: {target} -> {target_url}")
 
             # 等待页面加载完成
             await asyncio.sleep(2)
 
-            # 获取活跃页面ID
             # 注入并执行分析脚本
             analyzer_script = await self._get_analyzer_script()
             logger.debug("执行网页元素分析脚本")
 
             # 替换占位符为实际参数值
-            full_script = analyzer_script.replace('{MAX_WIDTH}', str(params.max_width)).replace('{MAX_HEIGHT}', str(params.max_height)).replace('{TOP_ELEMENTS_OFFSET}', str(params.top_elements_offset)).replace('{TOP_ELEMENTS_LIMIT}', str(params.top_elements_limit))
+            full_script = (
+                analyzer_script.replace("{MAX_WIDTH}", str(params.max_width))
+                .replace("{MAX_HEIGHT}", str(params.max_height))
+                .replace("{TOP_ELEMENTS_OFFSET}", str(params.top_elements_offset))
+                .replace("{TOP_ELEMENTS_LIMIT}", str(params.top_elements_limit))
+            )
 
             analysis_result = await browser.evaluate(page_id, full_script)
 

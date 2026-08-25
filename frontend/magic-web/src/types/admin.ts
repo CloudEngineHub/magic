@@ -317,6 +317,8 @@ export namespace Admin {
 		topic_id: string
 		label: string
 		description: string
+		/** 备注说明；历史数据可能缺失。 */
+		remark?: string | null
 		created_at: string
 		updated_at: string
 	}

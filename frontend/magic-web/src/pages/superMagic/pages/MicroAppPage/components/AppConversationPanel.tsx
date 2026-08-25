@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
-import { JSONContent } from "@tiptap/react"
+import { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import ConversationEmptyState from "@/pages/superMagic/components/ConversationPanelScaffold/ConversationEmptyState"
@@ -17,7 +17,10 @@ import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSe
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
-import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicWaitingForUser,
+	type ProjectListItem,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { userStore } from "@/models/user"
@@ -115,6 +118,7 @@ function AppConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
@@ -292,7 +296,8 @@ function AppConversationPanel({
 			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
-				<div className="flex flex-col gap-1.5">
+				<div className="flex h-full min-h-0 w-full flex-col gap-1.5">
+					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					{/* <div className="flex px-1">
 						<MicroAppIssuePromptPanel variant="desktop" />
 					</div> */}

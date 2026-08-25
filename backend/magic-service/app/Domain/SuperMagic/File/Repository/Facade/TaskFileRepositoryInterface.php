@@ -476,9 +476,10 @@ interface TaskFileRepositoryInterface
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array;
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array;
 
     /**
      * 获取目录下所有后代节点的ID（包含文件和目录）.

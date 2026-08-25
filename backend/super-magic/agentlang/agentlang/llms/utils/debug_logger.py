@@ -164,7 +164,11 @@ async def _prune_llm_request_logs(llm_request_dir: Path, max_files: int) -> None
         return
 
     try:
-        from app.utils.async_file_utils import async_scandir, async_unlink
+        from app.utils.async_file_utils import async_exists, async_scandir, async_unlink
+
+        # 调试日志目录按需创建；目录尚不存在时没有需要清理的内容
+        if not await async_exists(llm_request_dir):
+            return
 
         entries = await async_scandir(llm_request_dir)
         log_entries = [

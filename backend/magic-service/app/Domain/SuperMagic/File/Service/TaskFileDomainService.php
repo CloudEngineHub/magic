@@ -386,11 +386,12 @@ class TaskFileDomainService
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array
     {
-        return $this->taskFileRepository->getAllChildrenFileIdsByDirectoryIds($directoryIds, $projectId, $maxDepth);
+        return $this->taskFileRepository->getAllChildrenFileIdsByDirectoryIds($directoryIds, $projectId, $maxDepth, $includeDirectories);
     }
 
     /**
@@ -2132,12 +2133,11 @@ class TaskFileDomainService
      */
     public function getFileUrls(string $projectOrganizationCode, int $projectId, array $fileIds, string $downloadMode, array $options = [], array $fileVersions = [], bool $addWatermark = true): array
     {
-        $result = [];
         $useCache = $options['cache'] ?? true;
 
         $fileEntities = $this->taskFileRepository->getTaskFilesByIds($fileIds, $projectId);
         if (empty($fileEntities)) {
-            return $result;
+            return [];
         }
 
         // Collect non-directory file IDs for batch latest-version query (1 SQL for all files)
@@ -2149,6 +2149,8 @@ class TaskFileDomainService
         }
         $latestVersionMap = $this->taskFileVersionRepository->batchGetLatestVersionNumbers($nonDirectoryFileIds);
 
+        $preparedFiles = [];
+        $resultByFileId = [];
         foreach ($fileEntities as $fileEntity) {
             // 跳过目录
             if ($fileEntity->getIsDirectory()) {
@@ -2175,41 +2177,90 @@ class TaskFileDomainService
                 }
 
                 if ($useCache) {
-                    $urlData = $this->getFileUrlWithCache(
+                    $cachedData = $this->getCachedFileUrl(
                         $projectOrganizationCode,
                         $fileEntity,
-                        $downloadMode,
-                        $specifiedVersion,
-                        $addWatermark
-                    );
-                } else {
-                    $urlData = $this->generateFileUrlForEntity(
-                        $projectOrganizationCode,
-                        $fileEntity,
-                        $downloadMode,
-                        (string) $fileEntity->getFileId(),
-                        $addWatermark,
-                        false
-                    );
-                    // cache=false means bypass cache read and force refresh, then update cache to latest URL.
-                    $cacheKey = $this->buildFileUrlCacheKey(
-                        $projectOrganizationCode,
-                        $fileEntity->getFileId(),
                         $specifiedVersion,
                         $downloadMode,
                         $addWatermark
                     );
-                    $this->writeFileUrlCache($cacheKey, $urlData['url']);
+                    if ($cachedData !== null) {
+                        $cachedData['version'] = $latestVersionMap[$fileEntity->getFileId()] ?? null;
+                        $cachedData['updated_at'] = $fileEntity->getUpdatedAt();
+                        $resultByFileId[(string) $fileEntity->getFileId()] = $cachedData;
+                        continue;
+                    }
                 }
 
-                $urlData['version'] = $latestVersionMap[$fileEntity->getFileId()] ?? null;
-                $urlData['updated_at'] = $fileEntity->getUpdatedAt();
-
-                $result[] = $urlData;
+                $urlOptions = $this->prepareFileUrlOptions(
+                    $fileEntity->getFileName(),
+                    $downloadMode,
+                    $addWatermark,
+                    $fileEntity
+                );
+                $urlOptions['method'] = 'GET';
+                $urlOptions['expires'] = self::URL_EXPIRES;
+                $preparedFiles[] = [
+                    'file_id' => (string) $fileEntity->getFileId(),
+                    'object_key' => $fileEntity->getFileKey(),
+                    'version' => $latestVersionMap[$fileEntity->getFileId()] ?? null,
+                    'updated_at' => $fileEntity->getUpdatedAt(),
+                    'specified_version' => $specifiedVersion,
+                    'options' => $urlOptions,
+                ];
             } catch (Throwable $e) {
                 // 获取URL失败，记录日志并跳过
                 $this->logger->error(sprintf('获取文件URL失败, file_id:%d, err：%s', $fileEntity->getFileId(), $e->getMessage()));
-                continue;
+            }
+        }
+
+        if ($preparedFiles !== []) {
+            try {
+                $urls = $this->cloudFileRepository->getPreSignedUrlsByCredential(
+                    $projectOrganizationCode,
+                    array_map(static fn (array $file): array => [
+                        'object_key' => $file['object_key'],
+                        'options' => $file['options'],
+                    ], $preparedFiles),
+                    StorageBucketType::SandBox,
+                    7200,
+                    ['cache' => false]
+                );
+
+                foreach ($preparedFiles as $preparedFile) {
+                    $url = $urls[$preparedFile['object_key']] ?? null;
+                    if (! is_string($url) || $url === '') {
+                        continue;
+                    }
+
+                    $urlData = [
+                        'file_id' => $preparedFile['file_id'],
+                        'url' => $url,
+                        'expires_at' => date('Y-m-d H:i:s', time() + self::URL_EXPIRES),
+                        'version' => $preparedFile['version'],
+                        'updated_at' => $preparedFile['updated_at'],
+                    ];
+                    $resultByFileId[$preparedFile['file_id']] = $urlData;
+
+                    $cacheKey = $this->buildFileUrlCacheKey(
+                        $projectOrganizationCode,
+                        (int) $preparedFile['file_id'],
+                        $preparedFile['specified_version'],
+                        $downloadMode,
+                        $addWatermark
+                    );
+                    $this->writeFileUrlCache($cacheKey, $url);
+                }
+            } catch (Throwable $e) {
+                $this->logger->error(sprintf('批量获取文件URL失败, project_id:%d, err：%s', $projectId, $e->getMessage()));
+            }
+        }
+
+        $result = [];
+        foreach ($fileEntities as $fileEntity) {
+            $fileId = (string) $fileEntity->getFileId();
+            if (isset($resultByFileId[$fileId])) {
+                $result[] = $resultByFileId[$fileId];
             }
         }
 
@@ -2238,7 +2289,7 @@ class TaskFileDomainService
             return [];
         }
 
-        $result = [];
+        $preparedFiles = [];
         foreach ($fileEntities as $fileEntity) {
             // 跳过目录
             if ($fileEntity->getIsDirectory()) {
@@ -2264,19 +2315,58 @@ class TaskFileDomainService
                     $fileEntity->setFileKey($versionEntity->getFileKey());
                 }
 
-                $result[] = $this->generateFileUrlForEntity(
-                    $projectEntity->getUserOrganizationCode(),
-                    $fileEntity,
+                $urlOptions = $this->prepareFileUrlOptions(
+                    $fileEntity->getFileName(),
                     $downloadMode,
-                    (string) $fileEntity->getFileId(),
                     $addWatermark,
-                    false
+                    $fileEntity
                 );
+                $urlOptions['method'] = 'GET';
+                $urlOptions['expires'] = self::URL_EXPIRES;
+
+                $preparedFiles[] = [
+                    'file_id' => (string) $fileEntity->getFileId(),
+                    'object_key' => $fileEntity->getFileKey(),
+                    'options' => $urlOptions,
+                ];
             } catch (Throwable $e) {
                 // 获取URL失败，记录日志并跳过
                 $this->logger->error(sprintf('获取文件URL失败, file_id:%d, err：%s', $fileEntity->getFileId(), $e->getMessage()));
+            }
+        }
+
+        if ($preparedFiles === []) {
+            return [];
+        }
+
+        try {
+            $urls = $this->cloudFileRepository->getPreSignedUrlsByCredential(
+                $projectEntity->getUserOrganizationCode(),
+                array_map(static fn (array $file): array => [
+                    'object_key' => $file['object_key'],
+                    'options' => $file['options'],
+                ], $preparedFiles),
+                StorageBucketType::SandBox,
+                7200,
+                ['cache' => false]
+            );
+        } catch (Throwable $e) {
+            $this->logger->error(sprintf('批量获取文件URL失败, project_id:%d, err：%s', $projectId, $e->getMessage()));
+            return [];
+        }
+
+        $result = [];
+        foreach ($preparedFiles as $preparedFile) {
+            $url = $urls[$preparedFile['object_key']] ?? null;
+            if (! is_string($url) || $url === '') {
                 continue;
             }
+
+            $result[] = [
+                'file_id' => $preparedFile['file_id'],
+                'url' => $url,
+                'expires_at' => date('Y-m-d H:i:s', time() + self::URL_EXPIRES),
+            ];
         }
 
         return $result;
@@ -3579,10 +3669,7 @@ class TaskFileDomainService
 
         $updatedFile = $this->taskFileRepository->updateById($originalFile);
 
-        $parentId = $originalFile->getParentId();
-        if ($parentId !== null) {
-            $this->incrementVersionChain((string) $parentId);
-        }
+        $this->incrementVersionChain((string) $fileId);
 
         return $updatedFile;
     }
@@ -4313,15 +4400,15 @@ class TaskFileDomainService
     }
 
     /**
-     * Get file URL with cache support.
+     * Read a valid cached URL without generating a new URL on cache miss.
      */
-    private function getFileUrlWithCache(
+    private function getCachedFileUrl(
         string $projectOrganizationCode,
         TaskFileEntity $fileEntity,
-        string $downloadMode,
         ?int $version,
+        string $downloadMode,
         bool $addWatermark
-    ): array {
+    ): ?array {
         $fileId = $fileEntity->getFileId();
         $cacheKey = $this->buildFileUrlCacheKey(
             $projectOrganizationCode,
@@ -4330,39 +4417,32 @@ class TaskFileDomainService
             $downloadMode,
             $addWatermark
         );
-
         $cachedData = $this->cache->get($cacheKey);
-        if ($cachedData !== null && is_array($cachedData)) {
-            $cachedAt = $cachedData['cached_at'] ?? 0;
-            $expiresAt = $cachedData['expires_at'] ?? 0;
-            $updatedAtStr = $fileEntity->getUpdatedAt();
-            $fileUpdatedAt = ! empty($updatedAtStr) ? strtotime($updatedAtStr) : 0;
-            $currentTime = time();
-
-            // Hit when file not updated and url won't expire immediately.
-            if ($fileUpdatedAt <= $cachedAt && ($currentTime + self::URL_EXPIRY_BUFFER) < $expiresAt) {
-                return [
-                    'file_id' => (string) $fileId,
-                    'url' => $cachedData['url'],
-                    'expires_at' => date('Y-m-d H:i:s', $expiresAt),
-                ];
-            }
+        if (! is_array($cachedData)) {
+            return null;
         }
 
-        // Refresh URL and force underlying STS credential refresh when URL cache misses.
-        $urlData = $this->generateFileUrlForEntity(
-            $projectOrganizationCode,
-            $fileEntity,
-            $downloadMode,
-            (string) $fileId,
-            $addWatermark,
-            false,
-            self::URL_EXPIRES
-        );
+        $cachedAt = $cachedData['cached_at'] ?? 0;
+        $expiresAt = $cachedData['expires_at'] ?? 0;
+        $updatedAtStr = $fileEntity->getUpdatedAt();
+        $fileUpdatedAt = ! empty($updatedAtStr) ? strtotime($updatedAtStr) : 0;
+        $currentTime = time();
 
-        $this->writeFileUrlCache($cacheKey, $urlData['url']);
+        // Hit when file not updated and url won't expire immediately.
+        if ($fileUpdatedAt > $cachedAt || ($currentTime + self::URL_EXPIRY_BUFFER) >= $expiresAt) {
+            return null;
+        }
 
-        return $urlData;
+        $url = $cachedData['url'] ?? null;
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        return [
+            'file_id' => (string) $fileId,
+            'url' => $url,
+            'expires_at' => date('Y-m-d H:i:s', $expiresAt),
+        ];
     }
 
     /**

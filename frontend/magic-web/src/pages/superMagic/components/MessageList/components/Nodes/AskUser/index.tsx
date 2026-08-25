@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 import questionIcon from "@/assets/logos/question.svg"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	ASK_USER_CARD_STATUS,
 	ASK_USER_INTERACTION_TYPE,
@@ -72,7 +72,8 @@ function AskUser(props: NodeProps) {
 			? "askUser.answersTitle"
 			: "askUser.title"
 	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		{ tool?: { action?: string } } | undefined
+		| { tool?: { action?: string } }
+		| undefined
 	const askUserAction = messageNode?.tool?.action
 	const askUserLocale = useMemo(
 		() => resolveAskUserLocaleFromAction(askUserAction),

@@ -30,7 +30,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import StatusIcon from "@/pages/superMagic/components/MessageHeader/components/StatusIcon"
 import TopicHistoryDropdown from "@/pages/superMagic/components/MessageHeader/components/TopicHistoryDropdown"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"

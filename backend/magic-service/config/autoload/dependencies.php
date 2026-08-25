@@ -188,8 +188,10 @@ use App\Domain\ModelGateway\Repository\Facade\ModelConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\MsgLogRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\OrganizationConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\UserConfigRepositoryInterface;
+use App\Domain\ModelGateway\Repository\ImageGenerationTaskRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Persistence\AccessTokenRepository;
 use App\Domain\ModelGateway\Repository\Persistence\ApplicationRepository;
+use App\Domain\ModelGateway\Repository\Persistence\ImageGenerationTaskRepository;
 use App\Domain\ModelGateway\Repository\Persistence\ModelConfigRepository;
 use App\Domain\ModelGateway\Repository\Persistence\MsgLogRepository;
 use App\Domain\ModelGateway\Repository\Persistence\OrganizationConfigRepository;
@@ -231,10 +233,12 @@ use App\Domain\Provider\Service\ModelFilter\DefaultPackageFilter;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateFavoriteRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateFavoriteRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRelationRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRepository;
@@ -351,6 +355,7 @@ $dependencies = [
     SmsInterface::class => VolceApiClient::class,
     LockerInterface::class => RedisLocker::class,
     QueueCoreRepositoryInterface::class => RedisQueueCoreRepository::class,
+    ImageGenerationTaskRepositoryInterface::class => ImageGenerationTaskRepository::class,
     QueueExecutorConfigRepositoryInterface::class => QueueExecutorConfigRepository::class,
     VideoQueueOperationRepositoryInterface::class => RedisVideoQueueOperationRepository::class,
     QueueOperationExecutorInterface::class => VideoProviderOperationExecutor::class,
@@ -597,6 +602,7 @@ $dependencies = [
 
     // slides template
     SlidesTemplateCategoryRepositoryInterface::class => SlidesTemplateCategoryRepository::class,
+    SlidesTemplateFavoriteRepositoryInterface::class => SlidesTemplateFavoriteRepository::class,
     SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
     SlidesTemplateTagRepositoryInterface::class => SlidesTemplateTagRepository::class,
     SlidesTemplateTagRelationRepositoryInterface::class => SlidesTemplateTagRelationRepository::class,

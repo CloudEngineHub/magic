@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import { isObservable, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"

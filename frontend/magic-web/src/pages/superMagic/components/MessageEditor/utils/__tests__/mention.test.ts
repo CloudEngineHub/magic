@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import {
 	MentionItemType,
 	type DataService,

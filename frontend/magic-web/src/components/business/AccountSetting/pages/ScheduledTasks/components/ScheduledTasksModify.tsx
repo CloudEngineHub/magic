@@ -8,15 +8,15 @@ import {
 	useState,
 	type ReactNode,
 } from "react"
-import { useMemoizedFn, useUpdateEffect } from "ahooks"
+import { useDebounceFn, useMemoizedFn, useUpdateEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { resolveToString } from "@dtyq/es6-template-strings"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { MagicDatePicker } from "@/components/base"
 import { MagicSwitch } from "@/components/base/MagicSwitch"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { parseContent } from "@/pages/superMagic/components/MessageList/components/Text/components/RichText/utils"
 import {
 	type ProjectListItem,
@@ -79,8 +79,10 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 		const isMobile = useIsMobile()
 		const tiptapEditorRef = useRef<MessageEditorRef>(null)
 		const timeRef = useRef<NodeJS.Timeout | null>(null)
+		const isSubmittingRef = useRef(false)
 		const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 		const [loading, setLoading] = useState(mode === "edit" || !!initialValues)
+		const [submitting, setSubmitting] = useState(false)
 		const [promptRequired, setPromptRequired] = useState(false)
 		const [topicMode, setTopicMode] = useState<TopicMode>(
 			() => resolveDefaultAgentSelection().modeIdentifier as TopicMode,
@@ -141,6 +143,8 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 			: undefined
 
 		const isAgentUnavailable = useMemo(() => {
+			// Recompute availability when the external mode service publishes a refresh.
+			void agentValidationTick
 			if (superMagicModeService.modeList.length === 0) return false
 
 			return !isAgentSelectionAvailable(topicMode, agentCode)
@@ -157,7 +161,12 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 			</div>
 		)
 
-		const onOk = useMemoizedFn(async () => {
+		const submitTask = useMemoizedFn(async () => {
+			if (isSubmittingRef.current) return
+
+			isSubmittingRef.current = true
+			setSubmitting(true)
+
 			try {
 				if (isAgentUnavailable) {
 					magicToast.error(t("accountPanel.timedTasks.agentUnavailable"))
@@ -194,7 +203,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 					},
 				}
 
-				onSubmit?.({
+				await onSubmit?.({
 					task_name: values.task_name,
 					workspace_id: values.workspace_id,
 					project_id: values.project_id ?? "",
@@ -224,7 +233,16 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				const firstErrorField = errorFields?.find((field) => field.errors.length > 0)
 				if (firstErrorField?.name?.length) form.scrollToField(firstErrorField.name)
 				if (firstErrorField?.errors?.[0]) magicToast.error(firstErrorField.errors[0])
+			} finally {
+				isSubmittingRef.current = false
+				setSubmitting(false)
 			}
+		})
+
+		const { run: onOk } = useDebounceFn(submitTask, {
+			wait: 300,
+			leading: true,
+			trailing: false,
 		})
 
 		function onCancel() {
@@ -410,7 +428,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 					colon={false}
 					requiredMark={customRequiredMark}
 				>
-					<div className="max-h-[65vh] overflow-y-auto p-5">
+					<div className="max-h-[76dvh] overflow-y-auto p-5">
 						<Form.Item
 							label={t("accountPanel.timedTasks.name")}
 							name="task_name"
@@ -425,6 +443,8 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 						>
 							<Input
 								data-testid="scheduled-task-name"
+								// Match the mobile task form typography with the other 14px controls.
+								className={isMobile ? "text-sm" : undefined}
 								placeholder={t("accountPanel.timedTasks.namePlaceholder")}
 							/>
 						</Form.Item>
@@ -455,6 +475,9 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								ref={tiptapEditorRef}
 								className={cn(
 									"rounded-md border border-border",
+									// Target ProseMirror directly so typography styles cannot restore the 13px mobile variant.
+									isMobile &&
+										"text-sm leading-5 [&_.ProseMirror]:!text-sm [&_.ProseMirror]:!leading-5",
 									promptRequired && "border-destructive",
 								)}
 								placeholder={tSuper("messageEditor.placeholderTask")}
@@ -467,6 +490,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								showModeToggle
 								enableAiCompletion
 								allowChangeMode
+								modeToggleMobilePosition="bottom"
 								attachments={attachments}
 								size={isMobile ? "mobile" : "default"}
 								containerClassName="border-none"
@@ -500,6 +524,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								mode="topic"
 								workspaceId={workspaceId}
 								projectId={projectId}
+								autoSelectFirstOption={isMobile && mode === "create"}
 								onSelect={handleTopicSelect}
 							/>
 						) : null}
@@ -565,7 +590,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 							</Button>
 							<Button
 								onClick={onOk}
-								disabled={isAgentUnavailable}
+								disabled={isAgentUnavailable || submitting}
 								data-testid="scheduled-task-submit"
 							>
 								{mode === "create"

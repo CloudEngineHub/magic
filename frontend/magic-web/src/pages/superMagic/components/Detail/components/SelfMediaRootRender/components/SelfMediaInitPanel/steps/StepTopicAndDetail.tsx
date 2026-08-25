@@ -10,7 +10,7 @@ import { buildDefaultArticleFolderName } from "../../../services/selfMediaPrompt
 import type { GeneratedTopic } from "../../../services/selfMediaAiGenerate"
 import type { SelfMediaPlatform } from "../../../../../types"
 import type { SelfMediaFileStorageService } from "../../../services/SelfMediaFileStorageService"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import AiTopicAssistant from "../components/ai/AiTopicAssistant"
 import ArticleCard from "../components/article/ArticleCard"
 import StepTopicArticleNavigator from "./StepTopicArticleNavigator"

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import PhoneStateCodeSelect from "@/components/other/PhoneStateCodeSelect"
 import type { Rule } from "antd/es/form"
 import { Input as ShadcnInput } from "@/components/shadcn-ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface PhoneInputFormItemProps extends FormItemProps {
 	hidden?: boolean

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 export type MicroAppWorkspaceView =
 	"preview" | "files" | "database" | "scheduledTasks" | "shareManagement" | "longMemory"

@@ -9,7 +9,7 @@ import type {
 	StrokePosition,
 } from "../../../../runtime/document/types"
 import ColorPickerPopover from "../../../primitives/custom/ColorPickerPopover/index"
-import classNames from "classnames"
+import { cn } from "../../../../runtime/shared/lib/utils"
 import { Input } from "../../../primitives/shadcn/input"
 import {
 	Select,
@@ -272,7 +272,7 @@ export default function StrokeColor() {
 					</div>
 				}
 			>
-				<div className={classNames(styles.strokeColor, { [styles.active]: isPopoverOpen })}>
+				<div className={cn(styles.strokeColor, { [styles.active]: isPopoverOpen })}>
 					<div className={styles.strokeColorContent}>
 						<div className={styles.colorBackground}>
 							<img src={transparentIcon} alt="transparent" />

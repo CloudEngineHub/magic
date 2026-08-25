@@ -1,8 +1,8 @@
-import { mergeAttributes } from "@tiptap/react"
-import { Table } from "@tiptap/extension-table"
-import { TextSelection } from "@tiptap/pm/state"
+import { mergeAttributes } from "@/infrastructure/editors/tiptap/react"
+import { Table } from "@/infrastructure/editors/tiptap/extension-table"
+import { TextSelection } from "@/infrastructure/editors/tiptap/pm-state"
 
-import type { Editor } from "@tiptap/react"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 
 const TABLE_CELL_NODE_NAMES = new Set(["tableCell", "tableHeader"])
 

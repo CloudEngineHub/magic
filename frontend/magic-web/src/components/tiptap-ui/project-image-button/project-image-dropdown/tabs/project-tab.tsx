@@ -1,6 +1,6 @@
 import { Spin, Empty } from "antd"
 import { useTranslation } from "react-i18next"
-import type { Editor } from "@tiptap/react"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import { useProjectImages } from "../hooks/use-project-images"
 import { useLazyImage } from "../hooks/use-lazy-image"
 import { useStyles } from "../styles"
@@ -48,10 +48,14 @@ export function ProjectTab({ editor, projectId, onSuccess }: ProjectTabProps) {
 		try {
 			if (image.relative_file_path) {
 				// Insert the image directly using the URL
-				const inserted = runActiveEditor(editor, (activeEditor) => {
-					activeEditor.commands.insertProjectImageFromPath(image.relative_file_path)
-					return true
-				}, false)
+				const inserted = runActiveEditor(
+					editor,
+					(activeEditor) => {
+						activeEditor.commands.insertProjectImageFromPath(image.relative_file_path)
+						return true
+					},
+					false,
+				)
 				if (inserted) onSuccess?.()
 			} else {
 				magicToast.error(t("projectImage.errors.pathNotFound"))

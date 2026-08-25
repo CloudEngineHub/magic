@@ -39,7 +39,7 @@ import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordin
 import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
 import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
 import recordingSummaryStore from "@/stores/recordingSummary"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 /**
  * Mobile recordings list panel: toolbar, pull-to-refresh list, sheets, and FAB placeholder.

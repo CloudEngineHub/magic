@@ -1,5 +1,5 @@
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"

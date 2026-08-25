@@ -7,7 +7,7 @@ import {
 	ConversationMessageType,
 	AggregateAISearchCardV2Status,
 } from "@/types/chat/conversation_message"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import type {
 	AIImagesMessage,
 	FileConversationMessage,
@@ -49,7 +49,7 @@ import { userStore } from "@/models/user"
 import { UpdateSpec } from "dexie"
 import { getStringSizeInBytes } from "@/utils/size"
 import MessageFileService from "./MessageFileService"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import MessageEditService from "./MessageEditService"
 import ChatFileService from "../file/ChatFileService"
 import { BroadcastChannelSender } from "@/broadcastChannel"

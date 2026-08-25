@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, ReactNode, RefObject } from "react"
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { DataService } from "@/components/business/MentionPanel/types"

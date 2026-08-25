@@ -5,7 +5,7 @@ import { useMemoizedFn } from "ahooks"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MagicIcon from "@/components/base/MagicIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
 import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/type"
 import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
@@ -43,7 +43,8 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			Record<string, unknown> | undefined
+			| Record<string, unknown>
+			| undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		return prevContent ? buildFilePathAttachments(prevContent) : []

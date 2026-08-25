@@ -27,7 +27,7 @@ import {
 	SearchModeHeader,
 } from "./components"
 import { useFileReplace } from "./hooks/useFileReplace"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
@@ -39,7 +39,10 @@ import MobileProjectDetailFilesView from "./components/MobileProjectDetailFilesV
 import { SelectDirectoryModal } from "../SelectPathModal"
 import { useBatchDownload } from "./hooks/useBatchDownload"
 import { useProjectDetailFilesController } from "./hooks/useProjectDetailFilesController"
-import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import {
+	useCrossProjectFileOperation,
+	type CrossProjectOperationSuccessResult,
+} from "./hooks/useCrossProjectFileOperation"
 import { useCrossProjectMoveCompensation } from "./hooks/useCrossProjectMoveCompensation"
 import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDownload"
 import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
@@ -57,6 +60,9 @@ interface TopicFilesPanelProps {
 	onFileClick?: (fileItem: any) => void
 	topicId?: string
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -77,9 +83,13 @@ interface TopicFilesPanelProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读场景复制文件到当前用户的项目
+	allowCopyTo?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
@@ -117,6 +127,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			setUserSelectDetail,
 			onFileClick,
 			projectId,
+			shareCode,
+			sharePassword,
+			onCrossProjectOperationSuccess,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -131,9 +144,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			filterMenuItems,
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
+			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			onSaveSlidesTemplate,
+			onConvertToSlidesTemplate,
 			headerTrailingAction,
 			spaceConfig,
 			isItemSelectable,
@@ -257,6 +273,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const crossProjectOperation = useCrossProjectFileOperation({
 			projectId,
+			shareCode,
+			sharePassword,
 			selectedWorkspace: selectedWorkspace || null,
 			selectedProject: selectedProject || null,
 			projects,
@@ -264,6 +282,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				setIsSelectMode(false)
 				projectDetailFilesController.resetMobileSelection()
 				handleProjectDetailCrossProjectSuccess(result)
+				if (result) onCrossProjectOperationSuccess?.(result)
 			},
 		})
 
@@ -706,6 +725,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								setUserSelectDetail={setUserSelectDetail}
 								onFileClick={onFileClick}
 								projectId={projectId}
+								shareCode={shareCode}
+								sharePassword={sharePassword}
+								onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
 								fileFilters={fileFilters}
 								handleDownloadAll={handleDownloadAll}
 								allLoading={allLoading}
@@ -738,9 +760,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									filterBatchDownloadLayerMenuItems
 								}
 								allowDownload={allowDownload}
+								allowCopyTo={allowCopyTo}
 								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
+								onSaveSlidesTemplate={onSaveSlidesTemplate}
+								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
 								spaceConfig={spaceConfig}
 								isItemSelectable={isItemSelectable}
 								operationRoot={operationRoot}
@@ -799,6 +824,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					onCancel={sharedDuplicateHandler.handleFolderConflictCancel}
 					onMerge={sharedDuplicateHandler.handleFolderConflictMerge}
 					onKeepBoth={sharedDuplicateHandler.handleFolderConflictKeepBoth}
+					onReplace={sharedDuplicateHandler.handleFolderConflictReplace}
 				/>
 				{shouldUseProjectDetailMobileView ? (
 					<DuplicateFileModal

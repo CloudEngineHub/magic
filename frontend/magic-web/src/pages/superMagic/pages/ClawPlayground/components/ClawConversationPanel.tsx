@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { merge } from "lodash-es"
@@ -24,7 +24,7 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { shouldCheckAttachmentsOnTaskStatus } from "@/pages/superMagic/services/topicStatusSyncService"
-import { type TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
@@ -99,6 +99,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode: clawCode,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
@@ -329,7 +330,8 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 				/>
 			}
 			editor={
-				<div className="flex w-full flex-col gap-2">
+				<div className="flex h-full min-h-0 w-full flex-col gap-2">
+					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					<ClawPlaygroundInputToolbar
 						variant="desktop"
 						isTaskRunning={showLoading}
@@ -344,10 +346,13 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 			messages={messages as SuperMagicMessageItem[]}
 			selectedTopic={selectedTopic}
 			handlePullMoreMessage={handlePullMoreMessage}
+			historyLoadThresholdPx={30}
 			showLoading={showLoading}
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
+			// Lower the claw-only resize handle so it aligns with the message editor edge.
+			resizeHandlePositionClassName="top-6"
 			// stickyMessageClassName="top-0"
 		/>
 	)

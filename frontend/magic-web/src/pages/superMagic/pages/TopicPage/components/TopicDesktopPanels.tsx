@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { TOPIC_HISTORY_PANEL_WIDTH } from "../../../constants/resizablePanel"
 import TopicResizeHandle from "./TopicResizeHandle"
 import { useTopicDesktopLayout } from "../hooks/useTopicDesktopLayout"

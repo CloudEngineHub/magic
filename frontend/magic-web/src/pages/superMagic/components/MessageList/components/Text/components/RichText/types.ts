@@ -1,5 +1,5 @@
 import { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MarkerClickScene } from "@/pages/superMagic/components/MessageEditor/hooks/useMarkerClickHandler"
 
 // Mention node structure for ProseMirror

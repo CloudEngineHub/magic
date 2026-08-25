@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { MemoryFileTreePanel } from "../MemoryFileTreePanel"

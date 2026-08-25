@@ -11,7 +11,7 @@ import { type MouseEvent, useCallback, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { formatNumber } from "@/utils/format"
 import { useCenteredHorizontalScroll } from "@/pages/superMagic/components/MainInputContainer/hooks/useCenteredHorizontalScroll"
 import {

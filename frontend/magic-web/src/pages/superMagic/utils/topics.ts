@@ -1,6 +1,6 @@
 // 话题相关行为
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { MentionItemType, ProjectFileMentionData } from "@/components/business/MentionPanel/types"
 import { getFolderMentionData } from "@/components/business/MentionPanel/utils/directoryMention"

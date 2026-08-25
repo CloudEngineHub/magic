@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Award, CircleUserRound, ShieldCheck } from "lucide-react"
-import dayjs from "dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import type { SkillPublisherType } from "@/apis/modules/skills"
@@ -109,7 +109,7 @@ function SkillCard({ skill, onAdd, onOpenDetail }: SkillCardProps) {
 					/>
 					<div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
 						<div className="flex items-start justify-between gap-2">
-							<p className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-foreground transition-colors duration-300">
+							<p className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-foreground transition-colors duration-300" data-testid="skill-card-name">
 								{skill.name}
 							</p>
 							{skill.isFeatured ? (

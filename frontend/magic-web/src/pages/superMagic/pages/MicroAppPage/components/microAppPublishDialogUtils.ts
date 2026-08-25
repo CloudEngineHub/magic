@@ -20,7 +20,9 @@ export interface MicroAppPublishFormState {
 }
 
 export type MicroAppPublishValidationError =
-	"projectNameRequired" | "projectNameTooLong" | "passwordInvalid"
+	| "projectNameRequired"
+	| "projectNameTooLong"
+	| "passwordInvalid"
 
 export function normalizeMicroAppPublishShareType(
 	shareType: MicroAppPublishShareType,

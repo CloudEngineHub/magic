@@ -91,8 +91,12 @@ vi.mock("@/pages/superMagic/components/ProjectPageInputContainer", () => ({
 	default: (props: {
 		createTopic?: () => Promise<unknown>
 		onSendSuccess?: (params: { currentTopic: unknown }) => void
+		allowRecordingMode?: boolean
 	}) => (
-		<div data-testid="mock-recording-ai-composer">
+		<div
+			data-testid="mock-recording-ai-composer"
+			data-allow-recording-mode={String(props.allowRecordingMode)}
+		>
 			<button
 				type="button"
 				onClick={async () => {
@@ -706,6 +710,11 @@ describe("MobileAudioRecordingDetailPage", () => {
 		await waitFor(() => {
 			expect(screen.getByTestId("mock-recording-ai-composer")).toBeInTheDocument()
 		})
+		// Detail Ask AI must stay in text-editing mode even for the recording-summary agent.
+		expect(screen.getByTestId("mock-recording-ai-composer")).toHaveAttribute(
+			"data-allow-recording-mode",
+			"false",
+		)
 		const composerContainer = screen.getByTestId("mobile-recording-detail-ai-composer")
 		expect(composerContainer.className).not.toContain("mt-4")
 		expect(composerContainer.className).not.toContain("pt-2")
@@ -829,7 +838,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 
 		fireEvent.click(screen.getByText("Summary"))
 		const latestSummaryPanelProps = summaryPanelPropsMock.mock.calls.at(-1)?.[0] as
-			{ onTimeClick?: (start: number, end?: number) => void } | undefined
+			| { onTimeClick?: (start: number, end?: number) => void }
+			| undefined
 
 		act(() => {
 			latestSummaryPanelProps?.onTimeClick?.(12, 24)
