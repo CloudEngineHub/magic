@@ -135,6 +135,9 @@ class AsrTaskStatusDTO
 
     public ?string $expectedAudioFileName = null; // finish 预期生成的音频文件名
 
+    // 客户端声明的最终音频分片总数；历史客户端未提供时保持 null
+    public ?int $fileShardCount = null;
+
     // ===== 新增：异步阶段管理字段 =====
     public ?string $currentPhase = null; // 当前阶段：merging|summarizing
 
@@ -207,6 +210,7 @@ class AsrTaskStatusDTO
         $this->uploadGeneratedTitle = self::getStringValue($data, ['upload_generated_title', 'uploadGeneratedTitle']);
         $this->finishOutputFilename = self::getStringValue($data, ['finish_output_filename', 'finishOutputFilename']);
         $this->expectedAudioFileName = self::getStringValue($data, ['expected_audio_file_name', 'expectedAudioFileName']);
+        $this->fileShardCount = self::getIntValue($data, ['file_shard_count', 'fileShardCount']);
 
         // 异步阶段管理字段
         $this->currentPhase = self::getStringValue($data, ['current_phase', 'currentPhase']);
@@ -277,6 +281,7 @@ class AsrTaskStatusDTO
             'upload_generated_title' => $this->uploadGeneratedTitle,
             'finish_output_filename' => $this->finishOutputFilename,
             'expected_audio_file_name' => $this->expectedAudioFileName,
+            'file_shard_count' => $this->fileShardCount,
             // 异步阶段管理字段
             'current_phase' => $this->currentPhase,
             'phase_status' => $this->phaseStatus,

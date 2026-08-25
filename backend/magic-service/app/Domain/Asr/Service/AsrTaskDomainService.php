@@ -20,7 +20,6 @@ use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Throwable;
 
 use function sprintf;
@@ -158,18 +157,27 @@ readonly class AsrTaskDomainService
         }
 
         if (! empty($taskStatus->projectId)) {
-            $this->audioProjectRepository->setAudioFormatIfUnset((int) $taskStatus->projectId, $format);
             $audioProject = $this->audioProjectRepository->findByProjectId((int) $taskStatus->projectId);
             if ($audioProject === null) {
-                throw new RuntimeException('Audio project not found while persisting audio format');
-            }
-            $persisted = $audioProject->getAudioFormat();
-            if ($persisted !== null && $persisted !== $format) {
-                throw new InvalidArgumentException(sprintf(
-                    'Persisted ASR audio format conflict: existing=%s, requested=%s',
-                    $persisted,
+                $this->logger->debug('Skip audio project audio format persistence', [
+                    'project_id' => $taskStatus->projectId,
+                    'task_key' => $taskStatus->taskKey,
+                    'reason' => 'audio_project_not_exists',
+                ]);
+            } else {
+                $persisted = $audioProject->getAudioFormat();
+                if ($persisted !== null && $persisted !== $format) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Persisted ASR audio format conflict: existing=%s, requested=%s',
+                        $persisted,
+                        $format
+                    ));
+                }
+
+                $this->audioProjectRepository->setAudioFormatIfUnset(
+                    (int) $taskStatus->projectId,
                     $format
-                ));
+                );
             }
         }
 
@@ -586,6 +594,7 @@ readonly class AsrTaskDomainService
             'marker_file_name' => $resultFiles['marker_file_name'] ?? null,
             'finish_output_filename' => $finish['output_filename'] ?? null,
             'expected_audio_file_name' => $finish['expected_audio_file_name'] ?? null,
+            'file_shard_count' => $finish['file_shard_count'] ?? null,
         ]);
     }
 

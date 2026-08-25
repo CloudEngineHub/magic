@@ -398,7 +398,8 @@ class AsrSandboxService extends AbstractAppService
         $audioConfig = new AsrAudioConfig(
             sourceDir: $taskStatus->tempHiddenDirectory,  // 如: .asr_recordings/session_xxx
             targetDir: $taskStatus->displayDirectory,     // 如: 录音总结_20251027_230949
-            outputFilename: $intelligentTitle              // 如: 被讨厌的勇气
+            outputFilename: $intelligentTitle,             // 如: 被讨厌的勇气
+            fileShardCount: $taskStatus->fileShardCount
         );
 
         // 构建笔记文件配置对象（需要重命名）

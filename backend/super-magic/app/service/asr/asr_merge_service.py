@@ -156,7 +156,17 @@ class AsrMergeService(AsrServiceBase):
             if terminal:
                 return
 
-            if await task_manager.check_should_complete(
+            progress = await task_manager.get_progress(task.task_key)
+            finish_ready = True
+            if progress and progress.upload_completed:
+                ready, terminal_failed = await task_manager.update_finish_shard_stability(
+                    task.task_key, all_files
+                )
+                if terminal_failed:
+                    return
+                finish_ready = ready
+
+            if finish_ready and await task_manager.check_should_complete(
                 task.task_key, task.source_dir, len(all_files)
             ):
                 await self.task_finalizer.complete_task(task.task_key, task.source_dir)

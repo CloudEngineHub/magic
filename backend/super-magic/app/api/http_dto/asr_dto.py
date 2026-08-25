@@ -60,7 +60,9 @@ class AsrAudioConfig(BaseModel):
     output_filename: str = Field(..., description="输出文件名（不含扩展名），通常为智能标题")
     file_shard_count: Optional[int] = Field(
         default=None,
-        description="客户端已上传分片总数（可选）。不传时服务端会按 scan 口径扫描目录计算"
+        strict=True,
+        ge=1,
+        description="客户端已上传分片总数（可选）。不传时保持历史客户端兼容模式，不固化目录扫描数量"
     )
 
 

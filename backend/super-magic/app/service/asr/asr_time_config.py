@@ -66,9 +66,17 @@ class AsrTimeConfig:
     # ==================== FFmpeg 操作配置 ====================
 
     OGG_REENCODE_BITRATE: str = os.getenv("ASR_OGG_REENCODE_BITRATE", "32k")
-    # Opus finish 使用独立阶段超时，不复用录音期间的无新分片超时。
-    OPUS_FINISH_DEADLINE_TIMEOUT: int = int(
-        os.getenv("ASR_OPUS_FINISH_DEADLINE_TIMEOUT", "3600")
+    # finish 后等待分片可见/稳定的最长时间，WAV/Opus 统一使用。
+    FINISH_SHARD_TIMEOUT_SECONDS: int = int(
+        os.getenv("ASR_FINISH_SHARD_TIMEOUT_SECONDS", "300")
+    )
+    # 兼容已有调用方；新逻辑统一使用 FINISH_SHARD_TIMEOUT_SECONDS。
+    OPUS_FINISH_DEADLINE_TIMEOUT: int = FINISH_SHARD_TIMEOUT_SECONDS
+    FINISH_SHARD_POLL_INTERVAL_SECONDS: int = int(
+        os.getenv("ASR_FINISH_SHARD_POLL_INTERVAL_SECONDS", "5")
+    )
+    FINISH_SHARD_STABLE_SCAN_COUNT: int = int(
+        os.getenv("ASR_FINISH_SHARD_STABLE_SCAN_COUNT", "3")
     )
     OPUS_SHARD_SYNC_TIMEOUT: int = int(os.getenv("ASR_OPUS_SHARD_SYNC_TIMEOUT", "900"))
     OPUS_STAGING_UPLOAD_TIMEOUT: int = int(

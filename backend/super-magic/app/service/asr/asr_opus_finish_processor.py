@@ -54,6 +54,17 @@ class AsrOpusFinishProcessor(AsrServiceBase):
 
         if not self.should_run(progress.upload_completed, progress.opus_merge_status):
             return False
+        ready, terminal_failed = await task_manager.update_finish_shard_stability(
+            task.task_key, all_files
+        )
+        if terminal_failed:
+            return True
+        if not ready:
+            logger.info(
+                f"{self.LOG_PREFIX} ⏳ task_key={task.task_key} 等待分片稳定: "
+                f"count={len(all_files)}, declared={progress.file_shard_count}"
+            )
+            return False
         if not await task_manager.claim_opus_merge(task.task_key):
             return False
 

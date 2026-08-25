@@ -132,6 +132,16 @@ class AsrApi extends AbstractApi
         $userId = $userAuthorization->getId();
         $summaryRequest = $this->validateAndBuildSummaryRequest($request, $userAuthorization);
 
+        // 新客户端可声明最终分片数；保存到任务状态后会同步写入 audio_project.extra
+        if (! $summaryRequest->hasFileId() && ! empty($summaryRequest->taskKey)) {
+            $taskStatus = $this->asrFileAppService->getTaskStatusFromRedis($summaryRequest->taskKey, $userId);
+            $fileShardCount = $this->parseFileShardCount($request->input('file_shard_count'));
+            if ($fileShardCount !== null && ! $taskStatus->isEmpty()) {
+                $this->applyFileShardCount($taskStatus, $fileShardCount);
+                $this->asrFileAppService->saveTaskStatusToRedis($taskStatus);
+            }
+        }
+
         // 状态检查：如果不是通过 file_id 发起的总结，需要检查任务状态
         if (! $summaryRequest->hasFileId()) {
             $taskStatus = $this->asrFileAppService->getTaskStatusFromRedis($summaryRequest->taskKey, $userId);
@@ -385,6 +395,7 @@ class AsrApi extends AbstractApi
         $asrStreamContent = $request->input('asr_stream_content', '');
         $noteData = $request->input('note');
         $markerData = $request->input('marker');
+        $fileShardCount = null;
 
         // 获取语种
         $language = CoContext::getLanguage();
@@ -411,6 +422,12 @@ class AsrApi extends AbstractApi
 
         // 状态检查：获取当前任务状态
         $taskStatus = $this->asrFileAppService->getTaskStatusFromRedis($taskKey, $userId);
+        if ($statusEnum === AsrRecordingStatusEnum::STOPPED) {
+            $fileShardCount = $this->parseFileShardCount($request->input('file_shard_count'));
+            if ($fileShardCount !== null && ! $taskStatus->isEmpty()) {
+                $this->applyFileShardCount($taskStatus, $fileShardCount);
+            }
+        }
         if (! $taskStatus->isEmpty()) {
             if ($taskStatus->hasServerSummaryLock()) {
                 $this->logger->info('reportStatus 服务端总结进行中，拒绝状态上报', [
@@ -469,7 +486,8 @@ class AsrApi extends AbstractApi
             $markerContent,
             $language,
             $userId,
-            $organizationCode
+            $organizationCode,
+            $fileShardCount
         );
 
         return ['success' => $success];
@@ -499,6 +517,7 @@ class AsrApi extends AbstractApi
         $userId = $userAuthorization->getId();
         $organizationCode = $userAuthorization->getOrganizationCode();
         $generatedTitle = $this->request->input('generated_title');
+        $fileShardCount = $this->parseFileShardCount($this->request->input('file_shard_count'));
         $asrStreamContent = $this->request->input('asr_stream_content', '');
         $asrStreamContent = is_string($asrStreamContent) ? $asrStreamContent : '';
         if (! empty($asrStreamContent)) {
@@ -517,7 +536,11 @@ class AsrApi extends AbstractApi
             ExceptionBuilder::throw(AsrErrorCode::TaskAlreadyCanceled);
         }
 
-        $shouldSaveTaskStatus = false;
+        if ($fileShardCount !== null) {
+            $this->applyFileShardCount($taskStatus, $fileShardCount);
+        }
+
+        $shouldSaveTaskStatus = $fileShardCount !== null;
         $shouldDeleteHeartbeat = false;
         if (! empty($asrStreamContent)) {
             $taskStatus->asrStreamContent = $asrStreamContent;
@@ -1286,6 +1309,40 @@ class AsrApi extends AbstractApi
         $types = array_filter($types, static fn (string $type) => $type !== '');
 
         return array_values(array_unique($types));
+    }
+
+    private function parseFileShardCount(mixed $rawCount): ?int
+    {
+        if ($rawCount === null || $rawCount === '') {
+            return null;
+        }
+
+        $isInteger = is_int($rawCount)
+            || (is_string($rawCount) && preg_match('/^[0-9]+$/', $rawCount) === 1);
+        if (! $isInteger || (int) $rawCount <= 0) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'file_shard_count must be a positive integer'
+            );
+        }
+
+        return (int) $rawCount;
+    }
+
+    private function applyFileShardCount(AsrTaskStatusDTO $taskStatus, int $fileShardCount): void
+    {
+        if ($taskStatus->fileShardCount !== null && $taskStatus->fileShardCount !== $fileShardCount) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                sprintf(
+                    'file_shard_count conflicts with the existing value: existing=%d, requested=%d',
+                    $taskStatus->fileShardCount,
+                    $fileShardCount
+                )
+            );
+        }
+
+        $taskStatus->fileShardCount = $fileShardCount;
     }
 
     /**

@@ -76,9 +76,12 @@ class TaskProgress(BaseModel):
     max_processed_index: int = -1  # 最大文件索引
     file_count: int = 0  # 当前文件数量
     upload_completed: bool = False  # 用户是否告知上传完成（通过 finish 接口）
-    file_shard_count: int = -1  # 客户端声明/服务端兜底的分片总数（首次 finish 固定基线）
+    file_shard_count: int = -1  # 客户端声明的分片总数；-1 表示历史客户端未声明
     upload_completed_at: Optional[float] = None  # 首次 finish 时间戳（unix seconds）
     completion_deadline_at: Optional[float] = None  # 完成等待截止时间（unix seconds）
+    finish_scan_signature: Optional[str] = None  # finish 阶段最近一次分片集合/文件状态签名
+    finish_stable_count: int = 0  # 连续稳定扫描次数
+    last_stable_shard_indices: list[int] = Field(default_factory=list)
     opus_merge_status: str = "pending"  # Opus finish 合并状态：pending/merging/completed/failed
     opus_merge_error: Optional[str] = None
     opus_merge_attempt_id: Optional[str] = None
@@ -866,10 +869,17 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         def updater(state: TaskState) -> TaskState:
             """设置upload_completed标志"""
-            # 分片总数只增不减，避免重复 finish 被旧值回退
+            # 首次声明后固定分片总数，重复请求只能携带相同值
             final_shard_count = state.progress.file_shard_count
-            if file_shard_count is not None and file_shard_count >= 0:
-                final_shard_count = max(final_shard_count, file_shard_count)
+            if file_shard_count is not None:
+                if file_shard_count <= 0:
+                    raise ValueError("file_shard_count must be a positive integer")
+                if final_shard_count >= 0 and final_shard_count != file_shard_count:
+                    raise ValueError(
+                        f"file_shard_count conflicts with existing value: "
+                        f"existing={final_shard_count}, requested={file_shard_count}"
+                    )
+                final_shard_count = file_shard_count
 
             progress_updates: dict = {
                 "upload_completed": True,
@@ -880,11 +890,7 @@ class AsrMergeTaskManager(AsrServiceBase):
             if not state.progress.upload_completed:
                 now_ts = datetime.now().timestamp()
                 progress_updates["upload_completed_at"] = now_ts
-                deadline_timeout = (
-                    asr_time_config.OPUS_FINISH_DEADLINE_TIMEOUT
-                    if state.task.audio_format == "opus"
-                    else asr_time_config.NO_NEW_FILE_TIMEOUT
-                )
+                deadline_timeout = asr_time_config.FINISH_SHARD_TIMEOUT_SECONDS
                 progress_updates["completion_deadline_at"] = now_ts + deadline_timeout
 
             state = self._apply_state_updates(state, progress_updates=progress_updates)
@@ -938,10 +944,17 @@ class AsrMergeTaskManager(AsrServiceBase):
             if transcript_file_config is not None:
                 update_fields["transcript_file_config"] = transcript_file_config
 
-            # 分片总数只增不减，避免重复 finish 被旧值回退
+            # 首次声明后固定分片总数，重复请求只能携带相同值
             final_shard_count = state.progress.file_shard_count
-            if file_shard_count is not None and file_shard_count >= 0:
-                final_shard_count = max(final_shard_count, file_shard_count)
+            if file_shard_count is not None:
+                if file_shard_count <= 0:
+                    raise ValueError("file_shard_count must be a positive integer")
+                if final_shard_count >= 0 and final_shard_count != file_shard_count:
+                    raise ValueError(
+                        f"file_shard_count conflicts with existing value: "
+                        f"existing={final_shard_count}, requested={file_shard_count}"
+                    )
+                final_shard_count = file_shard_count
 
             progress_updates: dict = {
                 "upload_completed": True,
@@ -952,11 +965,7 @@ class AsrMergeTaskManager(AsrServiceBase):
             if not state.progress.upload_completed:
                 now_ts = datetime.now().timestamp()
                 progress_updates["upload_completed_at"] = now_ts
-                deadline_timeout = (
-                    asr_time_config.OPUS_FINISH_DEADLINE_TIMEOUT
-                    if state.task.audio_format == "opus"
-                    else asr_time_config.NO_NEW_FILE_TIMEOUT
-                )
+                deadline_timeout = asr_time_config.FINISH_SHARD_TIMEOUT_SECONDS
                 progress_updates["completion_deadline_at"] = now_ts + deadline_timeout
 
             state = self._apply_state_updates(
@@ -1008,6 +1017,73 @@ class AsrMergeTaskManager(AsrServiceBase):
         if not state:
             return None
         return state.progress
+
+    async def update_finish_shard_stability(
+        self, task_key: str, files: list[tuple[int, Path]]
+    ) -> tuple[bool, bool]:
+        """Record finish scans and decide whether the shard set is ready.
+
+        Returns ``(ready, terminal_failed)``.  A declared shard count must be
+        complete and stable for the configured number of scans; legacy tasks
+        without a declaration use a contiguous, stable set and may fall back
+        to the last stable set when the deadline is reached.
+        """
+        state = await self._read_task_state(task_key)
+        if not state or not state.progress.upload_completed:
+            return False, False
+
+        indices = sorted(index for index, _ in files)
+        signature_parts: list[tuple[int, int]] = []
+        for index, path in files:
+            try:
+                stat = await asyncio.to_thread(path.stat)
+                signature_parts.append((index, stat.st_size))
+            except OSError:
+                signature_parts.append((index, -1))
+        signature = json.dumps(signature_parts, separators=(",", ":"))
+
+        expected = state.progress.file_shard_count
+        expected_indices = list(range(expected)) if expected >= 0 else list(range(indices[-1] + 1)) if indices else []
+        complete = bool(indices) and indices == expected_indices
+
+        def updater(current: TaskState) -> TaskState:
+            previous_signature = current.progress.finish_scan_signature
+            stable_count = current.progress.finish_stable_count + 1 if previous_signature == signature else 1
+            progress_updates = {
+                "finish_scan_signature": signature,
+                "finish_stable_count": stable_count,
+            }
+            if complete and stable_count >= asr_time_config.FINISH_SHARD_STABLE_SCAN_COUNT:
+                progress_updates["last_stable_shard_indices"] = indices
+            return self._apply_state_updates(current, progress_updates=progress_updates)
+
+        updated = await self._atomic_update_state(task_key, updater, "记录 finish 分片稳定状态失败")
+        progress = updated.progress
+        stable_ready = complete and progress.finish_stable_count >= asr_time_config.FINISH_SHARD_STABLE_SCAN_COUNT
+        if stable_ready:
+            return True, False
+
+        deadline_reached = (
+            progress.completion_deadline_at is not None
+            and datetime.now().timestamp() >= progress.completion_deadline_at
+        )
+        if not deadline_reached:
+            return False, False
+
+        if expected < 0 and progress.last_stable_shard_indices:
+            logger.warning(
+                f"{self.LOG_PREFIX} task_key={task_key} 历史客户端达到 finish 超时，使用最后稳定分片集合: "
+                f"indices={progress.last_stable_shard_indices}"
+            )
+            return True, False
+
+        message = (
+            f"finish 等待分片超时: declared={expected}, scanned={indices}, "
+            f"stable_count={progress.finish_stable_count}"
+        )
+        await self.fail_task(task_key, message)
+        logger.error(f"{self.LOG_PREFIX} ❌ task_key={task_key} {message}")
+        return False, True
 
     async def start_monitoring(self, task_key: str) -> bool:
         """

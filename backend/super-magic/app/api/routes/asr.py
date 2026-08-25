@@ -47,60 +47,28 @@ def _build_task_response(task: AsrTaskResult) -> AsrTaskResponse:
     )
 
 
-async def _resolve_finish_file_shard_count(audio_config, workspace_dir: str, task_key: str | None = None) -> int:
+async def _resolve_finish_file_shard_count(audio_config, workspace_dir: str, task_key: str | None = None) -> int | None:
     """
     获取 finish 使用的分片总数（file_shard_count）。
 
-    策略：
-    1. 客户端传了合法 file_shard_count（>=0）则优先使用
-    2. 未传或非法时，复用现有 scan 逻辑（AsrFileDetector.scan_audio_files）
-       按 include_merged=False 统计分片数量（wav/opus，按探测格式过滤）
+    只接受客户端明确声明的数量。历史客户端不传时返回 None，
+    由后续稳定扫描逻辑兼容处理，不能把某次目录扫描结果固化成声明数量。
 
     Args:
         audio_config: finish 请求中的 audio 配置
         workspace_dir: 工作区目录
 
     Returns:
-        int: 分片总数；失败时返回 -1
+        int | None: 客户端声明的分片总数；历史客户端返回 None
     """
     incoming_count = getattr(audio_config, "file_shard_count", None)
-    if incoming_count is not None:
-        if incoming_count >= 0:
-            logger.info(f"[asrmerge] finish 使用客户端 file_shard_count: {incoming_count}")
-            return incoming_count
-        logger.warning(
-            f"[asrmerge] finish file_shard_count 非法({incoming_count})，将回退为目录扫描结果"
-        )
-
-    # 复用循环中的扫描逻辑，避免维护两套口径
-    try:
-        from app.service.asr.asr_file_detector import AsrFileDetector
-        from app.service.asr.asr_utils import resolve_path, validate_audio_format_for_write
-        task_state = await AsrMergeTaskManager.instance().get_task(task_key) if task_key else None
-
-        scan_dir = resolve_path(audio_config.source_dir, workspace_dir)
-        detector = AsrFileDetector()
-        _, conflicts = await asyncio.to_thread(detector.scan_audio_files_with_conflicts, scan_dir, False)
-        if conflicts and task_key:
-            conflict_message = AsrMergeService._format_conflict_message(conflicts)
-            await AsrMergeTaskManager.instance().set_audio_format_error(task_key, conflict_message)
-            logger.warning(f"[asrmerge] task_key={task_key} {conflict_message}")
-
-        scanned_files = await asyncio.to_thread(detector.scan_audio_files, scan_dir, False)
-        detected_format = task_state.audio_format if task_state and task_state.audio_format else AsrFileDetector.detect_audio_format(scanned_files)
-        if detected_format:
-            detected_format = validate_audio_format_for_write(detected_format)
-        if detected_format is not None:
-            scanned_files = AsrFileDetector.filter_by_format(scanned_files, detected_format)
-        scanned_count = len(scanned_files)
-        logger.info(
-            f"[asrmerge] finish 使用目录扫描 file_shard_count: {scanned_count}, "
-            f"source_dir={scan_dir}, format={detected_format}"
-        )
-        return scanned_count
-    except Exception as e:
-        logger.warning(f"[asrmerge] finish 获取 file_shard_count 失败: {e}")
-        return -1
+    if incoming_count is None:
+        logger.info("[asrmerge] finish 未声明 file_shard_count，使用历史客户端兼容模式")
+        return None
+    if isinstance(incoming_count, bool) or not isinstance(incoming_count, int) or incoming_count <= 0:
+        raise ValueError("file_shard_count must be a positive integer")
+    logger.info(f"[asrmerge] finish 使用客户端 file_shard_count: {incoming_count}")
+    return incoming_count
 
 
 async def _get_task_and_check_completed_or_error(
@@ -625,6 +593,13 @@ async def finish_asr_task(
             intelligent_title=request.audio.output_filename
         )
 
+    except ValueError as e:
+        logger.warning(f"[asrmerge] finish 参数校验失败: {e}")
+        return create_error_response(
+            message=str(e),
+            data={"task_key": request.task_key},
+            code=4001,
+        )
     except Exception as e:
         logger.error(f"[asrmerge] finish 接口失败: {e}")
         logger.error(traceback.format_exc())

@@ -518,7 +518,8 @@ class AsrFileAppService extends AbstractAppService
         ?string $markerContent,
         string $language,
         string $userId,
-        string $organizationCode
+        string $organizationCode,
+        ?int $fileShardCount = null
     ): bool {
         $taskStatus = $this->getTaskStatusFromRedis($taskKey, $userId);
 
@@ -528,6 +529,11 @@ class AsrFileAppService extends AbstractAppService
 
         // 保存 model_id、ASR 内容、笔记内容、标记内容和语种
         $this->updateTaskStatusFromReport($taskStatus, $modelId, $asrStreamContent, $noteContent, $noteFileType, $markerContent, $language);
+        if ($status === AsrRecordingStatusEnum::STOPPED && $fileShardCount !== null) {
+            $taskStatus->fileShardCount = $fileShardCount;
+            // 先持久化分片数，覆盖“任务此前已 stopped、handleStopRecording 幂等返回”的场景。
+            $this->saveTaskStatusToRedis($taskStatus);
+        }
 
         // Per-call DataIsolation. DataIsolation::create() auto-fetches the
         // user-authorization token from the magic_tokens stable user-token
@@ -1844,6 +1850,7 @@ class AsrFileAppService extends AbstractAppService
                 'target_dir' => $taskStatus->displayDirectory,
                 'output_filename' => $taskStatus->finishOutputFilename,
                 'expected_audio_file_name' => $taskStatus->expectedAudioFileName,
+                'file_shard_count' => $taskStatus->fileShardCount,
             ],
             'preset_files' => [
                 'note_file_id' => $taskStatus->presetNoteFileId,
