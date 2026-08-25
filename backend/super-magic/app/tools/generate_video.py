@@ -626,7 +626,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
                                 raise ValueError("Video file is too large")
                             await file.write(chunk)
             async with self._file_versioning_context(
-                tool_context, target, update_timestamp=False
+                tool_context, target, track_in_horizon=False
             ):
                 await async_replace(temporary, target)
         except Exception:
