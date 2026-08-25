@@ -5,9 +5,11 @@ import {
 } from "./promptPlaceholderTokenConfig"
 import {
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
-import { getMatchablePathsFromValue } from "../tiptap/contentUtils"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
+import { getMatchablePathsFromValue, promptContainsMentionForFile } from "../tiptap/contentUtils"
+import { createReferenceResourceDescriptor } from "./referenceResourceDescriptor"
 
 export type ReferenceBindingMode = "prompt-linked" | "detached-legacy" | "mixed"
 
@@ -23,8 +25,11 @@ export interface ReferenceBindingState {
 	protectedReferencePaths: string[]
 }
 
-function resolveAssetType(info: ReferenceBindingResourceInfo): PromptPlaceholderTokenKind {
-	return info.assetType ?? "image"
+function resolveAssetType(
+	info: ReferenceBindingResourceInfo,
+	defaultAssetType: PromptPlaceholderTokenKind = "image",
+): PromptPlaceholderTokenKind {
+	return info.assetType ?? defaultAssetType
 }
 
 function buildPromptMatchableItems(referenceFileInfos: ReferenceBindingResourceInfo[]) {
@@ -34,11 +39,93 @@ function buildPromptMatchableItems(referenceFileInfos: ReferenceBindingResourceI
 	}))
 }
 
-export function areOrderedPathsEqual(left: string[], right: string[]): boolean {
+function promptContainsReferenceMention(
+	prompt: string | undefined,
+	info: ReferenceBindingResourceInfo,
+): boolean {
+	if (!prompt) return false
+	const candidateNames = new Set([info.fileName, info.path].filter(Boolean))
+	return Array.from(candidateNames).some((name) => promptContainsMentionForFile(prompt, name))
+}
+
+/** 保留 opaque 参考资源，同时允许用户显式删除已有 mention。 */
+export function reconcileProtectedReferencePaths(params: {
+	referenceFileInfos: ReferenceBindingResourceInfo[]
+	protectedReferencePaths: string[]
+	currentPrompt?: string
+	previousPrompt?: string
+	source?: "user" | "sync"
+	resolveResourceReference?: ResolveCanvasResourceReference
+}): string[] {
+	const {
+		referenceFileInfos,
+		protectedReferencePaths,
+		currentPrompt,
+		previousPrompt,
+		source = "sync",
+		resolveResourceReference,
+	} = params
+	const infoByIdentity = new Map(
+		referenceFileInfos.map((info) => [
+			getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
+			info,
+		]),
+	)
+	const nextProtectedPaths: string[] = []
+	const protectedIdentities = new Set<string>()
+
+	for (const path of protectedReferencePaths) {
+		const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
+		const info = infoByIdentity.get(identity)
+		const wasMentioned =
+			source === "user" &&
+			Boolean(previousPrompt) &&
+			Boolean(info && promptContainsReferenceMention(previousPrompt, info))
+		const isStillMentioned =
+			Boolean(currentPrompt) &&
+			Boolean(info && promptContainsReferenceMention(currentPrompt, info))
+		if (wasMentioned && !isStillMentioned) continue
+		if (!identity || protectedIdentities.has(identity)) continue
+		protectedIdentities.add(identity)
+		nextProtectedPaths.push(path)
+	}
+
+	for (const info of referenceFileInfos) {
+		const descriptor = createReferenceResourceDescriptor({
+			path: info.path,
+			fileName: info.fileName,
+			assetType: info.assetType,
+			resolveResourceReference,
+		})
+		if (!descriptor || descriptor.resourceKind !== "opaque-asset") continue
+		if (protectedIdentities.has(descriptor.identity)) continue
+		const wasMentioned = Boolean(
+			previousPrompt && promptContainsReferenceMention(previousPrompt, info),
+		)
+		const isCurrentlyMentioned = Boolean(
+			currentPrompt && promptContainsReferenceMention(currentPrompt, info),
+		)
+		if (isCurrentlyMentioned || !wasMentioned || source !== "user") {
+			protectedIdentities.add(descriptor.identity)
+			nextProtectedPaths.push(info.path)
+		}
+	}
+
+	return nextProtectedPaths
+}
+
+export function areOrderedPathsEqual(
+	left: string[],
+	right: string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
 	if (left === right) return true
 	if (left.length !== right.length) return false
 	for (let index = 0; index < left.length; index += 1) {
-		if (getCanvasResourceIdentity(left[index]) !== getCanvasResourceIdentity(right[index])) {
+		if (
+			getCanvasResourceReferenceIdentity(left[index], resolveResourceReference) !==
+			getCanvasResourceReferenceIdentity(right[index], resolveResourceReference)
+		) {
 			return false
 		}
 	}
@@ -56,19 +143,24 @@ export function resolveExplicitPromptReferencePaths(params: {
 	prompt: string
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	tokenConfig: PromptPlaceholderTokenConfig
+	defaultAssetType?: PromptPlaceholderTokenKind
+	resolveResourceReference?: ResolveCanvasResourceReference
 }): string[] {
-	const { prompt, referenceFileInfos, tokenConfig } = params
+	const { prompt, referenceFileInfos, tokenConfig, defaultAssetType, resolveResourceReference } =
+		params
 	if (!prompt || referenceFileInfos.length === 0) return []
 
 	const explicitPathIdentities = new Set<string>()
 	const placeholderMatches = parsePromptPlaceholderTokenMatches(prompt, tokenConfig)
 	for (const match of placeholderMatches) {
 		const matchingResources = referenceFileInfos.filter(
-			(info) => resolveAssetType(info) === match.kind,
+			(info) => resolveAssetType(info, defaultAssetType) === match.kind,
 		)
 		const referencedInfo = matchingResources[match.index - 1]
 		if (referencedInfo?.path) {
-			explicitPathIdentities.add(getCanvasResourceIdentity(referencedInfo.path))
+			explicitPathIdentities.add(
+				getCanvasResourceReferenceIdentity(referencedInfo.path, resolveResourceReference),
+			)
 		}
 	}
 
@@ -77,31 +169,52 @@ export function resolveExplicitPromptReferencePaths(params: {
 		buildPromptMatchableItems(referenceFileInfos),
 	)
 	for (const path of mentionPaths) {
-		explicitPathIdentities.add(getCanvasResourceIdentity(path))
+		explicitPathIdentities.add(
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		)
 	}
 
 	return referenceFileInfos
 		.map((info) => info.path)
-		.filter((path) => path && explicitPathIdentities.has(getCanvasResourceIdentity(path)))
+		.filter(
+			(path) =>
+				path &&
+				explicitPathIdentities.has(
+					getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+				),
+		)
 }
 
 export function resolveReferenceBindingState(params: {
 	prompt: string
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	tokenConfig: PromptPlaceholderTokenConfig
+	defaultAssetType?: PromptPlaceholderTokenKind
+	resolveResourceReference?: ResolveCanvasResourceReference
 }): ReferenceBindingState {
-	const { prompt, referenceFileInfos, tokenConfig } = params
+	const { prompt, referenceFileInfos, tokenConfig, defaultAssetType, resolveResourceReference } =
+		params
 	const explicitPromptReferencePaths = resolveExplicitPromptReferencePaths({
 		prompt,
 		referenceFileInfos,
 		tokenConfig,
+		defaultAssetType,
+		resolveResourceReference,
 	})
 	const explicitPathIdentities = new Set(
-		explicitPromptReferencePaths.map(getCanvasResourceIdentity),
+		explicitPromptReferencePaths.map((path) =>
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		),
 	)
 	const protectedReferencePaths = referenceFileInfos
 		.map((info) => info.path)
-		.filter((path) => path && !explicitPathIdentities.has(getCanvasResourceIdentity(path)))
+		.filter(
+			(path) =>
+				path &&
+				!explicitPathIdentities.has(
+					getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+				),
+		)
 
 	if (protectedReferencePaths.length === 0) {
 		return {
@@ -129,24 +242,37 @@ export function resolveReferenceBindingState(params: {
 export function pruneProtectedReferencePaths(
 	currentReferencePaths: string[],
 	protectedReferencePaths: string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): string[] {
-	const currentPathIdentities = new Set(currentReferencePaths.map(getCanvasResourceIdentity))
+	const currentPathIdentities = new Set(
+		currentReferencePaths.map((path) =>
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		),
+	)
 	return protectedReferencePaths.filter((path) =>
-		currentPathIdentities.has(getCanvasResourceIdentity(path)),
+		currentPathIdentities.has(
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		),
 	)
 }
 
 export function unprotectPromptBoundReferencePaths(
 	protectedReferencePaths: string[],
 	explicitPromptReferencePaths: string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
 ): string[] {
 	if (protectedReferencePaths.length === 0 || explicitPromptReferencePaths.length === 0) {
 		return protectedReferencePaths
 	}
 	const explicitPathIdentities = new Set(
-		explicitPromptReferencePaths.map(getCanvasResourceIdentity),
+		explicitPromptReferencePaths.map((path) =>
+			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+		),
 	)
 	return protectedReferencePaths.filter(
-		(path) => !explicitPathIdentities.has(getCanvasResourceIdentity(path)),
+		(path) =>
+			!explicitPathIdentities.has(
+				getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+			),
 	)
 }

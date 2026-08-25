@@ -263,7 +263,6 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         $categoryIds = $payload['category_ids'] ?? null;
         if ($categoryIds !== null) {
             $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
-            $payload['category_id'] = $categoryIds[0] ?? null;
         }
 
         Db::transaction(function () use ($dataIsolation, $id, $payload): void {
@@ -398,7 +397,6 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
         $dataIsolation->disabled();
         if (! $this->updateMarketInfo($dataIsolation, $id, [
-            'category_id' => $categoryIds[0] ?? null,
             'category_ids' => $categoryIds,
         ])) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);

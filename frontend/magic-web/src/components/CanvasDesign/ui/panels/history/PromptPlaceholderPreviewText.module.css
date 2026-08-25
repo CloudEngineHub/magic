@@ -1,4 +1,5 @@
-.placeholderButton {
+.placeholderButton,
+.opaquePlaceholder {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -8,10 +9,17 @@
 	font-size: inherit;
 	line-height: 20px;
 	vertical-align: baseline;
+}
+
+.placeholderButton {
 	border: none;
 	border-radius: 0;
 	outline: none;
 	cursor: pointer;
+}
+
+.opaquePlaceholder {
+	cursor: default;
 }
 
 /* .placeholderButton:hover {

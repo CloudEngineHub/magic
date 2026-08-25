@@ -31,7 +31,8 @@ import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
-import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
+import { scrollToAnchor } from "@/utils/slug"
+import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "./utils/html-navigation"
 import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -464,7 +465,12 @@ export default memo(function HTML(props: HTMLProps) {
 			...displayData,
 			content: fileData || displayData?.content,
 		}
-		if (data.content !== newData.content) {
+		const contentChanged = data.content !== newData.content
+		const navigationChanged =
+			getHtmlNavigationKey(data?.htmlNavigation) !==
+			getHtmlNavigationKey(newData?.htmlNavigation)
+
+		if (contentChanged || navigationChanged) {
 			setData(newData)
 		}
 	})
@@ -476,7 +482,7 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 		updateDataContent(htmlFileData)
-	}, [htmlFileData])
+	}, [displayData, htmlFileData])
 
 	/** 处理代码预览模式 */
 	useUpdateEffect(() => {
@@ -1123,11 +1129,13 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 
-		// Parse anchor from path
-		const { filePath, anchor } = parseAnchorLink(path)
+		const navigationTarget = parseHtmlNavigationRequest(path, window.location.href)
+		if (!navigationTarget) return
+
+		const { filePath, anchor } = navigationTarget
 
 		// Handle pure anchor link (navigation within current document)
-		if (!filePath && anchor) {
+		if (!filePath && !navigationTarget.search && anchor) {
 			scrollToAnchor(anchor, 80) // 80px offset for fixed headers
 			return
 		}
@@ -1144,10 +1152,14 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 
 		const relativePath = fileItem.relative_file_path.replace(fileItem.file_name, "")
-		const newPath = resolveRelativePath(relativePath, filePath)
+		const newPath = filePath
+			? filePath.startsWith("/")
+				? filePath.replace(/^\/+/, "")
+				: resolveRelativePath(relativePath, filePath)
+			: fileItem.relative_file_path
 		const item = attachmentList?.find((item: any) => item.relative_file_path === newPath)
 		if (item) {
-			openFileTab?.(item, autoEdit)
+			openFileTab?.({ ...item, htmlNavigation: navigationTarget }, autoEdit)
 
 			// If there's an anchor, scroll to it after document loads
 			if (anchor) {
@@ -1559,6 +1571,7 @@ export default memo(function HTML(props: HTMLProps) {
 									saveEditContent={saveEditContent}
 									onSaveReady={onSaveReady}
 									fileId={displayData?.file_id}
+									htmlNavigation={data?.htmlNavigation}
 									virtualStorageMarkerId={virtualStorageMarkerId}
 									filePathMapping={filePathMapping}
 									openNewTab={openNewTab}
@@ -1678,6 +1691,7 @@ export default memo(function HTML(props: HTMLProps) {
 					onUseServerVersion={handleAcceptServerVersion}
 					filePathMapping={filePathMapping}
 					fileId={displayData?.file_id}
+					htmlNavigation={data?.htmlNavigation}
 					openNewTab={openNewTab}
 					selectedProject={selectedProject}
 					attachmentList={attachmentList}

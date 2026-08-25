@@ -16,6 +16,7 @@ use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillMarketsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ReviewSkillVersionRequestDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketCategoryRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketSortOrderRequestAdminDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
@@ -94,6 +95,15 @@ class AdminSkillApi extends AbstractApi
         $requestDTO = UpdateSkillMarketRequestAdminDTO::fromRequest($this->request);
         $this->adminSkillAppService->updateMarket($requestContext, $id, $requestDTO);
 
+        return [];
+    }
+
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SKILL_MARKET, MagicOperationEnum::EDIT)]
+    public function updateMarketCategory(RequestContext $requestContext, int $id): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $requestDTO = UpdateSkillMarketCategoryRequestAdminDTO::fromRequest($this->request);
+        $this->adminSkillAppService->updateMarketCategory($requestContext, $id, $requestDTO->getCategoryIds());
         return [];
     }
 

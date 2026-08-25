@@ -6,6 +6,7 @@ import {
 	IconLayoutSidebarRightExpand,
 	IconMicrophone,
 	IconPlayerStopFilled,
+	IconSubtitlesAi,
 	IconWindowMaximize,
 	IconWindowMinimize,
 	IconWritingSign,
@@ -50,6 +51,7 @@ import { Editor } from "@/infrastructure/editors/tiptap/core"
 import NoteUpdateStatus from "../NoteUpdateStatus"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { isDev } from "@/utils/env"
+import { Switch } from "@/components/shadcn-ui/switch"
 
 export interface PcFloatPanelProps {
 	isWaitingSummarize: boolean
@@ -106,8 +108,8 @@ export interface PcFloatPanelProps {
 	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
 	requireImagesFolderParentId?: boolean
 	transcriptionEnabled?: boolean
-	isEnablingTranscription?: boolean
-	onEnableTranscription?: () => void | Promise<void>
+	isTranscriptionToggling?: boolean
+	onTranscriptionEnabledChange?: (enabled: boolean) => void | Promise<void>
 }
 
 const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
@@ -157,12 +159,13 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		resolveImagesFolderParentId,
 		requireImagesFolderParentId,
 		transcriptionEnabled = true,
-		isEnablingTranscription = false,
-		onEnableTranscription,
+		isTranscriptionToggling = false,
+		onTranscriptionEnabledChange,
 	} = props
 
 	const isEditMode = mode === "edit"
-	const shouldShowTranscriptionDisabledState = isEditMode && transcriptionEnabled === false
+	const shouldShowTranscriptionDisabledState =
+		isEditMode && transcriptionEnabled === false && messages.length === 0
 
 	const [enableAnimation, setEnableAnimation] = useState(false)
 	// 用于存储动画定时器引用，便于清理
@@ -356,12 +359,8 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		}
 	})
 
-	/**
-	 * Delegates the PC CTA click to the container so the view only owns button
-	 * state and keeps default_audio persistence in the shared orchestration layer.
-	 */
-	const handleEnableTranscription = useMemoizedFn(() => {
-		void onEnableTranscription?.()
+	const handleTranscriptionEnabledChange = useMemoizedFn((enabled: boolean) => {
+		void onTranscriptionEnabledChange?.(enabled)
 	})
 
 	// 获取展开样式（支持全屏状态）
@@ -608,7 +607,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 									{/* Messages - 动画容器 */}
 									<div
 										data-testid="record-summary-pc-float-panel-messages"
-										style={{ position: "relative", height: "100%" }}
+										className={styles.transcriptionContent}
 									>
 										{shouldShowTranscriptionDisabledState ? (
 											<div
@@ -636,24 +635,6 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 														"mobile.recordingEntry.active.transcriptionDisabledDescription",
 													)}
 												</div>
-												<button
-													type="button"
-													className={styles.transcriptionEnableButton}
-													disabled={
-														isEnablingTranscription ||
-														!onEnableTranscription
-													}
-													onClick={handleEnableTranscription}
-													data-testid="record-summary-pc-float-panel-enable-transcription"
-												>
-													{isEnablingTranscription
-														? t(
-																"mobile.recordingEntry.active.enablingTranscription",
-															)
-														: t(
-																"mobile.recordingEntry.active.enableTranscription",
-															)}
-												</button>
 											</div>
 										) : (
 											<>
@@ -669,6 +650,34 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 												/>
 											</>
 										)}
+									</div>
+									<div className={styles.transcriptionToolbar}>
+										<span className={styles.transcriptionToolbarLabel}>
+											<MagicIcon
+												component={IconSubtitlesAi}
+												size={14}
+												color="currentColor"
+												aria-hidden
+											/>
+											{t(
+												"mobile.recordingEntry.settings.transcriptionToggle.label",
+											)}
+										</span>
+										<Switch
+											checked={transcriptionEnabled}
+											loading={isTranscriptionToggling}
+											disabled={
+												!isEditMode ||
+												isWaitingSummarize ||
+												isTranscriptionToggling ||
+												!onTranscriptionEnabledChange
+											}
+											onCheckedChange={handleTranscriptionEnabledChange}
+											aria-label={t(
+												"mobile.recordingEntry.settings.transcriptionToggle.label",
+											)}
+											data-testid="record-summary-pc-float-panel-transcription-switch"
+										/>
 									</div>
 								</MagicSplitter.Panel>
 								{isEditMode && (

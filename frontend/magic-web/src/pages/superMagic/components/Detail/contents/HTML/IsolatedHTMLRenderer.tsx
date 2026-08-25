@@ -112,6 +112,11 @@ import {
 import { logger as Logger } from "@/utils/log"
 import { useFetchInterceptionCache } from "./hooks/useFetchInterceptionCache"
 import { POST_MESSAGE_TARGET_STRATEGIES, type OnFetchIntercepted } from "./utils/fetchInterceptor"
+import { getHtmlNavigationKey } from "./utils/html-navigation"
+import {
+	HtmlNavigationRuntimeService,
+	type HtmlNavigationRuntimeRequest,
+} from "./utils/html-navigation-runtime"
 import { useIframeFS } from "./iframe-api/hooks/useIframeFS"
 import { useIframeLLM } from "./iframe-api/hooks/useIframeLLM"
 import { useIframeDatabase } from "./iframe-api/hooks/useIframeDatabase"
@@ -137,6 +142,7 @@ import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
 import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
+import type { HtmlNavigationRequest } from "./utils/html-navigation"
 
 interface IsolatedHTMLRendererProps {
 	content: string
@@ -161,6 +167,8 @@ interface IsolatedHTMLRendererProps {
 	) => Promise<void>
 	onSaveReady?: (triggerSave: () => Promise<SaveResult | undefined>) => void
 	fileId?: string
+	/** HTML 内部导航请求的运行时 URL 状态。 */
+	htmlNavigation?: HtmlNavigationRequest
 	/** 跨多个 HTML 文件共享存储时使用的稳定标记；未传时继续按当前文件隔离。 */
 	virtualStorageMarkerId?: string
 	filePathMapping: Map<string, string>
@@ -371,6 +379,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			saveEditContent,
 			onSaveReady,
 			fileId,
+			htmlNavigation,
 			virtualStorageMarkerId,
 			filePathMapping,
 			openNewTab,
@@ -451,6 +460,35 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const contentWrapperRef = useRef<HTMLDivElement>(null)
 		const scrollContainerRef = useRef<HTMLDivElement>(null)
 		const iframeRef = useRef<HTMLIFrameElement>(null)
+		const navigationRequestSequenceRef = useRef(0)
+		const lastPreparedContentKeyRef = useRef<string | null>(null)
+		const navigationRuntimeService = useMemo(
+			() =>
+				new HtmlNavigationRuntimeService({
+					send: (request: HtmlNavigationRuntimeRequest) => {
+						const contentWindow = iframeRef.current?.contentWindow
+						if (!contentWindow) {
+							throw new Error("iframe contentWindow is unavailable")
+						}
+
+						contentWindow.postMessage(
+							{
+								type: "setContent",
+								content: request.content,
+								locationSearch: request.locationSearch,
+								locationAnchor: request.locationAnchor,
+								navigationRequestId: request.requestId,
+							},
+							iframeTargetOrigin,
+						)
+					},
+				}),
+			[iframeTargetOrigin],
+		)
+		const htmlNavigationKey = useMemo(
+			() => getHtmlNavigationKey(htmlNavigation),
+			[htmlNavigation],
+		)
 		useEffect(() => {
 			const iframe = iframeRef.current
 			if (!iframe) return
@@ -1137,15 +1175,17 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 				setIframeLoaded(false)
 				setContentInjected(false)
-
-				// 同源和跨域统一通过 URL shell 自举，避免维护两套 shell 初始化流程。
+				navigationRuntimeService.resetShell()
+				lastPreparedContentKeyRef.current = null
+				// 业务 query/hash 不拼接到远程 shell URL：远程 shell 可能对 query 做签名校验。
+				// 导航状态变化时通过 key 创建新的 shell 实例，避免复用旧 document 的 History 状态。
 				if (iframe.getAttribute("src") !== htmlSandboxShellUrl) {
 					iframe.src = htmlSandboxShellUrl
 				}
 			} catch (error) {
 				console.error("初始化iframe内容时出错:", error)
 			}
-		}, [htmlSandboxShellUrl])
+		}, [htmlNavigationKey, htmlSandboxShellUrl, navigationRuntimeService])
 
 		const getMarkerId = useMemoizedFn(() => {
 			if (!attachmentList || !fileId) return fileId
@@ -1247,7 +1287,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			})
 		})
 
-		const refreshIframeContent = useMemoizedFn(() => {
+		const refreshIframeContent = useMemoizedFn((options?: { force?: boolean }) => {
 			if (!virtualStorageContext) return
 			hasIframeI18nSubscriberRef.current = false
 			// 解码HTML实体
@@ -1260,6 +1300,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 			// 根据HTML文件上下文确定标记ID：如果父目录存在metadata则使用父目录ID，否则使用文件ID
 			const markerId = getStorageMarkerId()
+			const contentKey = [
+				content,
+				htmlNavigationKey,
+				markerId || "",
+				virtualStorageContext.renderId || "",
+			].join("\u0000")
+
+			if (!options?.force && lastPreparedContentKeyRef.current === contentKey) {
+				return
+			}
+
+			navigationRequestSequenceRef.current += 1
+			const navigationRequestId = `${fileId || "html"}:${navigationRequestSequenceRef.current}`
 			// 创建完整HTML内容
 			const fullContent = getFullContent(decodedContent, markerId, {
 				dynamicInterception: dynamicResourceInterceptionConfig,
@@ -1271,18 +1324,21 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
 				virtualStorage: virtualStorageContext,
+				locationSearch: htmlNavigation?.search || "",
+				locationAnchor: htmlNavigation?.hash || "",
+				navigationRequestId,
 			})
-
-			// 发送内容到iframe
+			const request = {
+				requestId: navigationRequestId,
+				content: fullContent,
+				locationSearch: htmlNavigation?.search || "",
+				locationAnchor: htmlNavigation?.hash || "",
+			}
+			lastPreparedContentKeyRef.current = contentKey
+			// shell 未 ready 时只保存最新请求，ready 后再发送。
 			try {
-				if (iframeRef.current && iframeRef.current.contentWindow) {
-					iframeRef.current.contentWindow.postMessage(
-						{
-							type: "setContent",
-							content: fullContent,
-						},
-						iframeTargetOrigin,
-					)
+				const sendResult = navigationRuntimeService.submit(request)
+				if (sendResult === "sent") {
 					reportRenderLifecycleStage("set_content_sent", {
 						fullContentLength: fullContent.length,
 						markerId,
@@ -1290,12 +1346,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							dynamicResourceInterceptionConfig?.enable,
 						),
 					})
-					setProcessedSourceCode(fullContent)
-				} else {
-					reportRenderLifecycleStage("set_content_failed", {
-						reason: "iframe_or_content_window_unavailable",
-					})
-					console.error("iframe或contentWindow不可用")
 				}
 			} catch (postError) {
 				reportRenderLifecycleStage("set_content_failed", {
@@ -1306,6 +1356,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				})
 				console.error("发送消息到iframe时出错:", postError)
 			}
+			setProcessedSourceCode(fullContent)
 		})
 
 		// 使用 fetch 拦截缓存 hook（必须在 refreshIframeContent 定义之后）
@@ -1391,6 +1442,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					// 根据HTML文件上下文确定标记ID
 					const markerId = getStorageMarkerId()
 					if (!virtualStorageContext) return
+					navigationRequestSequenceRef.current += 1
+					const navigationRequestId = `${fileId || "html"}:${navigationRequestSequenceRef.current}`
 					// 创建完整HTML内容
 					const fullContent = getFullContent(decodedContent, markerId, {
 						dynamicInterception: dynamicResourceInterceptionConfig,
@@ -1402,18 +1455,21 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
 						virtualStorage: virtualStorageContext,
+						locationSearch: htmlNavigation?.search || "",
+						locationAnchor: htmlNavigation?.hash || "",
+						navigationRequestId,
 					})
-					// 发送内容到iframe
+					const request = {
+						requestId: navigationRequestId,
+						content: fullContent,
+						locationSearch: htmlNavigation?.search || "",
+						locationAnchor: htmlNavigation?.hash || "",
+					}
+
 					try {
-						if (iframeRef.current && iframeRef.current.contentWindow) {
+						if (iframeRef.current?.contentWindow) {
 							console.log("更新html内容为新版本")
-							iframeRef.current.contentWindow.postMessage(
-								{
-									type: "setContent",
-									content: fullContent,
-								},
-								iframeTargetOrigin,
-							)
+							navigationRuntimeService.submit(request)
 
 							// Re-enter selection mode after iframe content is replaced
 							// Wait for iframe runtime to be ready, then restore edit mode
@@ -1459,18 +1515,22 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}),
 			[
 				containIframeOverscroll,
+				contentMetricsTargetOrigin,
 				disableIframeDocumentClickBridge,
 				documentFlowFullscreen,
 				dynamicResourceInterceptionConfig,
+				fileId,
 				getStorageMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
 				isEditMode,
 				isMediaScenario,
+				htmlNavigation?.hash,
+				htmlNavigation?.search,
 				refreshIframeContent,
 				editorRef,
 				handleFetchIntercepted,
-				iframeTargetOrigin,
+				navigationRuntimeService,
 				postMessageTargetStrategy,
 				devConsole.toggle,
 				elementInspector,
@@ -1694,6 +1754,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const handleMessage = useMemoizedFn(async (event: MessageEvent) => {
 			const messageType = typeof event.data?.type === "string" ? event.data.type : ""
+			const messageRequestId =
+				typeof event.data?.navigationRequestId === "string"
+					? event.data.navigationRequestId
+					: ""
 			const isExpectedSource = event.source === iframeRef.current?.contentWindow
 			const isExpectedOrigin = event.origin === iframeTargetOrigin
 			const isAllowedType = messageType ? iframeMessageTypes.has(messageType) : false
@@ -1730,6 +1794,27 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (shouldStrictlyValidatePreviewSource && (!isExpectedSource || !isExpectedOrigin))
 				return
 
+			// Nested HTML documents may report through the cross-origin parent, so their
+			// source window is not always the top-level iframe. The origin remains a
+			// required boundary for navigation messages.
+			if (messageType === "linkClicked" && !isExpectedOrigin) return
+
+			const requestBoundMessageTypes = [
+				"contentLoaded",
+				"domReady",
+				"renderComplete",
+				"pageFullyLoaded",
+				"contentMetrics",
+			]
+			if (
+				requestBoundMessageTypes.includes(messageType) &&
+				messageRequestId &&
+				navigationRuntimeService.getCurrentRequestId() &&
+				!navigationRuntimeService.acceptsMessage(messageRequestId)
+			) {
+				return
+			}
+
 			// 检查是否是 EditorBridge 协议消息（由 MessageBridge 处理）
 			// MessageBridge 的监听器会先处理新协议消息（有 version 字段的）
 			// 这里只处理旧协议消息（没有 version 字段的）
@@ -1764,6 +1849,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					reportRenderLifecycleStage("iframe_ready", {
 						origin: event.origin,
 					})
+					navigationRuntimeService.markShellReady()
 					setIframeLoaded(true)
 				} else if (event.data && event.data.type === "pageLoaded") {
 					// Shell load 后再次兜底置为 ready，避免早期 iframeReady 丢失。
@@ -1771,6 +1857,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						origin: event.origin,
 						isExpectedSource,
 					})
+					navigationRuntimeService.markShellReady()
 					setIframeLoaded(true)
 				} else if (event.data && event.data.type === "contentLoaded") {
 					// 内容已写入iframe，但可能还未完成渲染
@@ -1892,7 +1979,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 					const href = typeof event.data?.href === "string" ? event.data.href : ""
 					const autoEdit = event.data?.autoEdit === true
-
 					try {
 						openNewTab(fileId || "", href, autoEdit)
 					} catch (error) {
@@ -2065,6 +2151,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			injectIframeContent("content_changed")
 		}, [
 			content,
+			htmlNavigation,
 			iframeLoaded,
 			htmlSandboxShellUrl,
 			injectIframeContent,
@@ -2257,7 +2344,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					>
 						{sandboxType === "iframe" ? (
 							<>
+								{/*
+								 * 远程 shell URL 不能携带业务 query，因为 shell 服务可能会校验这些参数。
+								 * 每次导航状态变化时重新创建 shell：复用同一个 iframe 并调用
+								 * document.open/document.write 可能保留旧的 History URL，导致下一个
+								 * HTML 文档仍然读取到之前的 query。
+								 */}
 								<iframe
+									key={`${htmlSandboxShellUrl}:${htmlNavigationKey}`}
 									ref={iframeRef}
 									className={cn(
 										styles.iframe,

@@ -172,6 +172,13 @@ class AutoReadFileService:
         rule: AutoReadFileRule,
         workspace_entries: list["WorkspaceEntry"] | None,
     ) -> list[AutoReadFileCandidate]:
+        if (
+            rule.rule_id in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY}
+            and not agent_context.is_magiclaw()
+            and not agent_context.get_personal_preferences().long_term_memory_enabled
+        ):
+            return []
+
         workspace_dir = Path(agent_context.get_workspace_dir()).absolute()
         memory_root = PathManager.get_memory_root_dir().expanduser().absolute()
 

@@ -18,6 +18,7 @@ const fs = require("node:fs")
 const path = require("node:path")
 const cors = require("cors")
 const { rootPath } = require("../config")
+const noIndexMiddleware = require("../middleware/noIndexMiddleware")
 
 const hasLoginPopupTemplate = fs.existsSync(
 	path.join(rootPath, "../dist/login-popup-callback.html"),
@@ -31,6 +32,10 @@ const configureRoutes = (app) => {
 	/**
 	 * ======================== 前置中间件初始化 ========================
 	 */
+	// This server is an application/share surface, not an SEO surface.
+	// Set the directive before every route so it also covers CORS responses,
+	// static assets, and errors.
+	app.use(noIndexMiddleware)
 	// CORS 开启
 	app.use(cors())
 

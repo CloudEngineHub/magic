@@ -12,12 +12,14 @@ import RoleSwitcher from "./components/RoleSwitcher"
 import EditorLayout from "./scenes/EditorLayout"
 import { roleStore } from "../../stores"
 import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import { createSceneStateStore } from "./stores"
 import { useMemoizedFn } from "ahooks"
 import useAgentCodeModeFromSearch from "../../hooks/useAgentCodeModeFromSearch"
 
 const Container = observer(function Container() {
+	const { t } = useTranslation()
 	const { currentRole, setCurrentRole } = roleStore
 	const [sceneStateStore] = useState(() => createSceneStateStore())
 	const [shouldAutoFocusEditor, setShouldAutoFocusEditor] = useState(false)
@@ -102,7 +104,7 @@ const Container = observer(function Container() {
 					type="button"
 					size="icon"
 					className="absolute bottom-6 right-6 z-[60] size-11 rounded-full shadow-lg"
-					aria-label="回到顶部"
+					aria-label={t("backToTop")}
 					data-testid="ppt-back-to-top"
 					onClick={handleBackToTop}
 				>

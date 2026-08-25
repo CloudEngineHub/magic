@@ -16,6 +16,7 @@ use App\Application\SuperMagic\File\Service\FileProcessAppService;
 use App\Application\SuperMagic\Message\Chat\Service\ChatAppService;
 use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
+use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
@@ -70,6 +71,7 @@ class HandleTaskMessageAppService extends AbstractAppService
         private readonly TopicTaskAppService $topicTaskAppService,
         private readonly FileProcessAppService $fileProcessAppService,
         private readonly AgentDomainService $agentDomainService,
+        private readonly AgentAppService $agentAppService,
         private readonly AccessTokenDomainService $accessTokenDomainService,
         private readonly MagicUserDomainService $userDomainService,
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
@@ -331,7 +333,7 @@ class HandleTaskMessageAppService extends AbstractAppService
         $this->applyAiAbilitiesOverride((string) $taskEntity->getId(), $userMessageDTO->getAiAbilities());
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
+        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
         $taskEntity->setTaskId((string) $taskEntity->getId());
         return $taskEntity;
     }
@@ -520,7 +522,7 @@ class HandleTaskMessageAppService extends AbstractAppService
 
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
+        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
 
         return $sandboxId;
     }

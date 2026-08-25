@@ -5,6 +5,7 @@ import {
 	type PromptPlaceholderTokenKind,
 } from "../../editors/message/reference-assets/promptPlaceholderTokenConfig"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import { isOpaqueAssetReference } from "../../../runtime/shared/path/canvasResourcePath"
 import { buildPreviewMediaResourceItem } from "./mediaPreviewItem"
 import styles from "./PromptPlaceholderPreviewText.module.css"
 
@@ -25,13 +26,18 @@ type PromptSegment =
 			key: string
 			type: "placeholder"
 			value: string
+			path?: string
 			previewItem: MediaResourceFullscreenPreviewItem | null
 	  }
 
 function getPlaceholderDisplayValue(
 	segment: Extract<PromptSegment, { type: "placeholder" }>,
 ): string {
-	return segment.previewItem?.fileName ? `@${segment.previewItem.fileName}` : segment.value
+	return segment.previewItem?.fileName
+		? `@${segment.previewItem.fileName}`
+		: segment.path && isOpaqueAssetReference(segment.path)
+			? `@${segment.path}`
+			: segment.value
 }
 
 export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewTextProps) {
@@ -59,6 +65,7 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 				key: `placeholder:${match.start}`,
 				type: "placeholder",
 				value: match.rawText,
+				path,
 				previewItem: path ? buildPreviewMediaResourceItem(path) : null,
 			})
 			cursor = match.end
@@ -80,12 +87,18 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 			return <Fragment key={segment.key}>{segment.value}</Fragment>
 		}
 
+		const displayValue = getPlaceholderDisplayValue(segment)
 		if (!segment.previewItem) {
-			return <Fragment key={segment.key}>{segment.value}</Fragment>
+			return segment.path && isOpaqueAssetReference(segment.path) ? (
+				<span key={segment.key} className={styles.opaquePlaceholder}>
+					{displayValue}
+				</span>
+			) : (
+				<Fragment key={segment.key}>{segment.value}</Fragment>
+			)
 		}
 
 		const previewItem = segment.previewItem
-		const displayValue = getPlaceholderDisplayValue(segment)
 
 		return (
 			<button

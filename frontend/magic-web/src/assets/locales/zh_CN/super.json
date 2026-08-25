@@ -233,6 +233,14 @@
 		"workspaceSwitcherPrefix": "工作空间",
 		"workspaceSwitcherRefresh": "刷新工作区列表"
 	},
+	"attachmentList": {
+		"downloadAll": "下载全部文件",
+		"empty": "暂无相关文件",
+		"noMatch": "未找到相关文件",
+		"previewUnsupported": "暂不支持预览该文件,请下载该文件",
+		"projectFiles": "项目文件",
+		"searchFiles": "搜索文件"
+	},
 	"browserDetail": {
 		"addressUnavailable": "地址不可用",
 		"detail": "详情",
@@ -541,9 +549,64 @@
 		"chatting": "正在与",
 		"conversation": "对话"
 	},
+	"dataSource": {
+		"add": "添加数据源",
+		"addToCurrentChat": "添加到当前对话",
+		"addToNewChat": "添加到新对话",
+		"auth": "认证",
+		"basicInfo": "基础信息",
+		"connectDatabase": "连接数据库",
+		"connectNewDatabase": "连接新数据库",
+		"database": "数据库名称",
+		"databasePlaceholder": "请输入数据库名称",
+		"databaseRequired": "请输入数据库名称",
+		"dbConfig": "数据库配置",
+		"dbInfo": "数据库信息",
+		"dbType": "数据库类型",
+		"dbTypeRequired": "请选择数据库类型",
+		"delete": "删除",
+		"description": "描述",
+		"descriptionPlaceholder": "请输入数据源描述",
+		"empty": "暂无数据源",
+		"fillConfig": "请填写完整的配置信息",
+		"fillConnectionInfo": "请填写完整的连接信息",
+		"host": "数据库地址",
+		"hostPlaceholder": "请输入数据库 Url 或 IP 地址",
+		"hostRequired": "请输入数据库地址",
+		"ipCopied": "IP 已复制到剪贴板",
+		"ipWhitelistTip": "确保以下 IP 在您数据库的 IP 白名单中：",
+		"name": "名称",
+		"namePlaceholder": "请输入数据源名称",
+		"nameRequired": "请输入数据源名称",
+		"password": "数据库密码",
+		"passwordPlaceholder": "请输入数据库密码",
+		"passwordRequired": "请输入数据库密码",
+		"port": "端口",
+		"portPlaceholder": "请输入端口",
+		"portRequired": "请输入端口",
+		"save": "保存",
+		"saveSuccess": "数据源配置保存成功！",
+		"testConnection": "测试连接",
+		"testFailed": "连接测试失败，请检查配置信息",
+		"testSuccess": "连接测试成功！",
+		"uploadFile": "上传文件",
+		"username": "数据库账号",
+		"usernamePlaceholder": "请输入数据库账号",
+		"usernameRequired": "请输入数据库账号"
+	},
 	"deletedFile": {
 		"message": "文件已被删除，无法预览",
 		"status": "已删除"
+	},
+	"deployedWebsites": {
+		"delete": "删除",
+		"empty": "暂无创建的网站",
+		"fetchFailed": "获取部署网站列表失败",
+		"openLink": "打开链接",
+		"searchPlaceholder": "搜索网站",
+		"setPermission": "设置权限",
+		"subtitle": "管理您通过超级麦吉生成的网站",
+		"title": "创建的网站"
 	},
 	"design": {
 		"actions": {
@@ -658,6 +721,8 @@
 				"defaultModel": "默认模型",
 				"defaultVideoModel": "默认视频模型",
 				"editTitle": "编辑配置",
+				"enableSchedule": "启用定时执行",
+				"enableScheduleHint": "开启后将按设定频率自动更新观察结果",
 				"generate": "生成观察结果",
 				"imageModel": "生图模型",
 				"languageModel": "语言模型",
@@ -2921,6 +2986,16 @@
 		"untitledDocument": "未命名文档",
 		"wordCount": "{{count}} 字"
 	},
+	"markedFiles": {
+		"action": "操作",
+		"fetchFailed": "获取标记文件列表失败",
+		"fileName": "文件名",
+		"markedTime": "标记时间",
+		"relatedTopic": "对应话题",
+		"searchPlaceholder": "搜索文件",
+		"subtitle": "您可以在这里查看所有标记的文件，并进行管理。",
+		"title": "标记的文件"
+	},
 	"messageEditor": {
 		"addAttachment": "添加附件",
 		"addModel": {
@@ -3895,6 +3970,9 @@
 				"transcriptionEnabled": {
 					"description": "录制开始时自动启用转写",
 					"label": "自动转写"
+				},
+				"transcriptionToggle": {
+					"label": "开启实时转写"
 				}
 			},
 			"startMissingWorkspace": "暂时无法开始录音，请先进入一个工作区",
@@ -4046,7 +4124,7 @@
 			"menuAria": "打开菜单",
 			"navApps": "应用",
 			"navChats": "对话",
-			"navMagiClaw": "超级龙虾",
+			"navMagiClaw": "{{clawBrand}}",
 			"navMicroApps": "微应用",
 			"navMyCrew": "数字员工",
 			"navRecording": "录音与纪要",
@@ -5142,6 +5220,40 @@
 		"uploadFolderTip": "请选择文件夹的存储位置，整个文件夹结构将保持完整并保存到所选位置。",
 		"workspace": "工作空间"
 	},
+	"selfMedia": {
+		"avgInteractionRate": "平均互动率",
+		"avgReads": "篇均阅读 {{value}}",
+		"comments": "评论",
+		"likes": "点赞",
+		"opsAiCalculating": "AI 计算中",
+		"opsCommentsHandled": "评论已处理",
+		"opsHealth": "运营健康度",
+		"opsPipelineCompletion": "链路完成度 {{score}}%",
+		"opsProgressHint": "发布 / 数据 / 评论 / 复盘",
+		"opsProgressTitle": "运营链路进度",
+		"opsPublished": "已发布",
+		"opsReadingMetrics": "正在读取发布后数据",
+		"opsReviewDone": "复盘已完成",
+		"opsReviewIntro": "用真实阅读、互动和评论信号，判断这篇文章下一步该放大、修正还是沉淀。",
+		"opsSummaryTitle": "发布后数据汇总",
+		"opsSynced": "已同步",
+		"opsTodayComplete": "今天的发布、数据、评论和复盘都已经齐了，可以继续新建文章或做二次分发。",
+		"opsTodaySignals": "今日重点信号",
+		"opsUpdateAdvice": "更新建议",
+		"opsUpdateTodayAdvice": "更新今日建议",
+		"opsUpdating": "更新中",
+		"opsViewBreakdown": "查看拆解",
+		"polish": "润色",
+		"polishing": "润色中…",
+		"readingData": "读取数据",
+		"saves": "收藏",
+		"shares": "分享",
+		"syncedProgress": "已同步 {{synced}}/{{total}}",
+		"syncing": "同步中",
+		"totalInteractions": "总互动",
+		"totalReads": "总阅读",
+		"waitingSync": "等待发布后同步"
+	},
 	"share": {
 		"accessCount": "访问次数",
 		"accessPassword": "访问密码",
@@ -5537,6 +5649,29 @@
 		"unknownCreator": "未知分享人",
 		"unknownTime": "未知时间"
 	},
+	"sharedTopics": {
+		"action": "操作",
+		"batchAction": "批量操作",
+		"batchUnmarkContent": "确定要取消选中的 {{count}} 个文件的标记吗？",
+		"batchUnmarkSuccess": "已批量取消标记",
+		"batchUnmarkTitle": "批量取消标记",
+		"cancel": "取消",
+		"confirm": "确定",
+		"emptyMarked": "暂无标记的文件",
+		"fetchFailed": "获取标记文件列表失败",
+		"markedTime": "标记时间",
+		"searchPlaceholder": "搜索话题",
+		"selectMarkedFirst": "请先选择标记文件",
+		"setPermission": "设置权限",
+		"shareMethod": "分享方式",
+		"subtitle": "管理对外分享的话题",
+		"title": "分享的话题",
+		"topicName": "话题名称",
+		"unmarkFailed": "取消失败",
+		"unselect": "取消选中",
+		"unshare": "取消分享",
+		"workspace": "工作区"
+	},
 	"shortcut": {
 		"addToConversation": "内容添加到对话",
 		"addToTaskQueue": "添加到任务队列",
@@ -5564,6 +5699,27 @@
 		"updateCurrentQueueMessage": "更新当前队列消息",
 		"uploadingFiles": "正在上传文件，请稍后...",
 		"viewShortcuts": "查看快捷键"
+	},
+	"siderDashboard": {
+		"addDirectory": "添加目录",
+		"addFavorite": "添加收藏",
+		"addToCurrentChat": "添加到当前会话",
+		"addToNewChat": "添加到新会话",
+		"copyToCloud": "复制至云盘",
+		"delete": "删除",
+		"downloadFile": "下载文件",
+		"downloadOriginal": "下载原始文件",
+		"downloadPdf": "下载 PDF 格式",
+		"emptyBoard": "暂无数据看板",
+		"emptyDefault": "暂无数据",
+		"noMatch": "无匹配结果",
+		"openBoard": "打开看板",
+		"openFile": "打开文件",
+		"removeFavorite": "从收藏中移除",
+		"rename": "重命名",
+		"replaceFile": "替换文件",
+		"searchBoard": "搜索看板",
+		"shareBoard": "分享看板"
 	},
 	"slidesTemplatePreview": {
 		"save": {

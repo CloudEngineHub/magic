@@ -17,7 +17,7 @@ function getAttachmentFileName(item: FileItem | AttachmentItem): string {
 	return item.display_filename || item.file_name || item.filename || ""
 }
 
-/** 附件树刷新时保留只存在于 Tab 内存中的模板预览类型。 */
+/** 附件树刷新时保留 Tab 内存中的模板预览类型和 HTML 导航状态。 */
 export function mergeAttachmentFileForTab(tab: TabItem, updatedFile: FileItem): FileItem {
 	const displayConfig =
 		tab.fileData.display_config?.type === "slide-template"
@@ -26,6 +26,7 @@ export function mergeAttachmentFileForTab(tab: TabItem, updatedFile: FileItem): 
 	return {
 		...updatedFile,
 		display_config: displayConfig,
+		htmlNavigation: tab.fileData.htmlNavigation,
 	}
 }
 
@@ -65,7 +66,8 @@ function resolveSlidesTemplateTabFile(
 		isSlidesTemplateFolder(asAttachmentItem(parentDirectory))
 	) {
 		return toSlidesTemplatePreviewItem(asAttachmentItem(parentDirectory)) as
-			FileItem | AttachmentItem
+			| FileItem
+			| AttachmentItem
 	}
 
 	return null

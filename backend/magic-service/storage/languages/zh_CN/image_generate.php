@@ -104,4 +104,10 @@ return [
     ],
     # 水印相关
     'image_watermark' => 'website/static/img/watermark_zh.png',
+    'gcs_bucket_not_configured' => '请求处理失败',
+    'gcs_upload_failed' => '操作失败',
+    'image_convert_high_model_not_configured' => '请求处理失败',
+    'invalid_response_type' => '参数无效',
+    'upload_failed' => '操作失败',
+    'vertex_ai_does_not_support_file_upload' => '请求处理失败',
 ];

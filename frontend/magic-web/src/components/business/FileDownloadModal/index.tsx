@@ -9,6 +9,7 @@ import MagicPopup from "@/components/base-mobile/MagicPopup"
 import type { OpenableProps } from "@/utils/react"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
+import DownloadAction from "./DownloadAction"
 
 interface FileDownloadModalProps {
 	open: boolean
@@ -18,6 +19,10 @@ interface FileDownloadModalProps {
 	onDownload?: () => void
 	onCopyLink?: () => void
 	onAfterClose?: () => void
+	/** Render the retry as a native link instead of a programmatic download. */
+	nativeDownload?: boolean
+	/** Target used by the native retry link. */
+	downloadTarget?: string
 	/** Raises only this detached desktop dialog when it is opened from another modal. */
 	modalZIndex?: number
 }
@@ -32,6 +37,8 @@ export default memo(function FileDownloadModal(props: OpenableProps<FileDownload
 		onDownload,
 		onCopyLink,
 		onAfterClose,
+		nativeDownload = false,
+		downloadTarget,
 		modalZIndex,
 	} = props
 
@@ -124,10 +131,16 @@ export default memo(function FileDownloadModal(props: OpenableProps<FileDownload
 
 					{/* Action Buttons */}
 					<div className="flex w-full flex-col gap-3">
-						<Button onClick={handleDownloadClick} className="w-full" size="lg">
-							{/* <Download className="mr-2 h-4 w-4" /> */}
-							{t("share.download.downloadFile")}
-						</Button>
+						<DownloadAction
+							nativeDownload={nativeDownload}
+							downloadUrl={downloadUrl}
+							fileName={fileName}
+							downloadTarget={downloadTarget}
+							onDownload={handleDownloadClick}
+							label={t("share.download.downloadFile")}
+							className="w-full"
+							size="lg"
+						/>
 						<Button
 							onClick={handleCopyLinkClick}
 							variant="outline"
@@ -203,14 +216,16 @@ export default memo(function FileDownloadModal(props: OpenableProps<FileDownload
 
 					{/* Action Buttons */}
 					<div className="flex w-full flex-col gap-3">
-						<Button
-							variant="default"
+						<DownloadAction
+							nativeDownload={nativeDownload}
+							downloadUrl={downloadUrl}
+							fileName={fileName}
+							downloadTarget={downloadTarget}
+							onDownload={handleDownloadClick}
+							label={t("share.download.downloadFile")}
 							className="w-full gap-2 shadow-xs"
-							onClick={handleDownloadClick}
-						>
-							{/* <Download className="h-4 w-4" /> */}
-							{t("share.download.downloadFile")}
-						</Button>
+							size="lg"
+						/>
 						<Button
 							variant="outline"
 							className="w-full gap-2 shadow-xs"

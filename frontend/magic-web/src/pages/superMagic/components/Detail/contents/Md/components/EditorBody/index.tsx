@@ -18,6 +18,8 @@ import {
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
 import { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
+import { SafeHtmlDiv, SafeHtmlSpan, SafeHtmlTextBlockStyles } from "./extensions/safe-html-style"
+import { SafeVideo } from "./extensions/safe-video"
 
 interface EditorBodyProps {
 	isLoading: boolean
@@ -171,7 +173,14 @@ function EditorBody({
 	}, [content, isEditMode, viewMode])
 
 	// Combine all extensions
-	const allExtensions = [...projectImageExtensions, customLinkNode]
+	const allExtensions = [
+		...projectImageExtensions,
+		customLinkNode,
+		SafeHtmlDiv,
+		SafeHtmlSpan,
+		SafeHtmlTextBlockStyles,
+		SafeVideo,
+	]
 
 	// 创建内部的 editorRef（如果外部没有传入）
 	const internalEditorRef = useRef<SimpleEditorRef>(null)

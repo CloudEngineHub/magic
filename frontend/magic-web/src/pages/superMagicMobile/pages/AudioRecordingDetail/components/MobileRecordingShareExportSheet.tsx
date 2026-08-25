@@ -10,6 +10,8 @@ import {
 	Search as SearchIcon,
 	X,
 	Check,
+	Copy,
+	LogIn,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -27,11 +29,17 @@ interface MobileRecordingShareExportSheetProps {
 	projectId?: string
 	allowDownload?: boolean
 	showShareSection?: boolean
+	showCopyProject?: boolean
+	copyProjectLabel?: string
+	showLogin?: boolean
+	loginLabel?: string
 	mainHeaderTitle?: string
 	onOpenChange: (open: boolean) => void
 	onShareLink: () => void
 	onDownloadRecording: () => void
 	onSearch?: () => void
+	onCopyProject?: () => void
+	onLogin?: () => void
 }
 
 interface ActionRowProps {
@@ -40,6 +48,7 @@ interface ActionRowProps {
 	onClick?: () => void
 	disabled?: boolean
 	showDivider?: boolean
+	testId?: string
 }
 
 /** Individual list items inside the action sheet menu groups. */
@@ -133,13 +142,19 @@ export function MobileRecordingShareExportSheet({
 	projectId,
 	allowDownload = true,
 	showShareSection = true,
+	showCopyProject = false,
+	copyProjectLabel,
+	showLogin = false,
+	loginLabel,
 	mainHeaderTitle,
 	onOpenChange,
 	onShareLink,
 	onDownloadRecording,
 	onSearch,
+	onCopyProject,
+	onLogin,
 }: MobileRecordingShareExportSheetProps) {
-	const { t } = useTranslation("audioRecordings")
+	const { t } = useTranslation(["audioRecordings", "super"])
 	const [view, setView] = useState<"main" | "exportSummary">("main")
 	const [selectedSummaryTypes, setSelectedSummaryTypes] = useState<Set<string>>(new Set())
 
@@ -273,13 +288,45 @@ export function MobileRecordingShareExportSheet({
 							<div className="overflow-hidden rounded-[22px] bg-card">
 								<ActionRow
 									label={t("detail.searchContent")}
-									data-testid="mobile-recording-share-search-action"
+									testId="mobile-recording-share-search-action"
 									icon={<SearchIcon />}
 									onClick={() => {
 										onSearch()
 										onOpenChange(false)
 									}}
 								/>
+							</div>
+						</div>
+					) : null}
+					{showCopyProject || showLogin ? (
+						<div className="flex flex-col gap-2">
+							<div className="overflow-hidden rounded-[22px] bg-card">
+								{showCopyProject ? (
+									<ActionRow
+										label={
+											copyProjectLabel ??
+											t("audioRecordings:card.copyToProject")
+										}
+										testId="mobile-recording-share-copy-project-action"
+										icon={<Copy />}
+										onClick={() => {
+											onOpenChange(false)
+											onCopyProject?.()
+										}}
+										showDivider={showLogin}
+									/>
+								) : null}
+								{showLogin ? (
+									<ActionRow
+										label={loginLabel ?? t("super:share.login")}
+										testId="mobile-recording-share-login-action"
+										icon={<LogIn />}
+										onClick={() => {
+											onOpenChange(false)
+											onLogin?.()
+										}}
+									/>
+								) : null}
 							</div>
 						</div>
 					) : null}
@@ -291,7 +338,7 @@ export function MobileRecordingShareExportSheet({
 							<div className="overflow-hidden rounded-[22px] bg-card">
 								<ActionRow
 									label={t("detail.shareLink")}
-									data-testid="mobile-recording-share-share-link-action"
+									testId="mobile-recording-share-share-link-action"
 									icon={<Link2 />}
 									onClick={onShareLink}
 								/>
@@ -307,7 +354,7 @@ export function MobileRecordingShareExportSheet({
 							<div className="overflow-hidden rounded-[22px] bg-card">
 								<ActionRow
 									label={t("detail.exportRecording")}
-									data-testid="mobile-recording-share-export-recording-action"
+									testId="mobile-recording-share-export-recording-action"
 									icon={<Music />}
 									onClick={onDownloadRecording}
 									disabled={!fileMap?.audio}
@@ -315,7 +362,7 @@ export function MobileRecordingShareExportSheet({
 								/>
 								<ActionRow
 									label={t("detail.exportTranscript")}
-									data-testid="mobile-recording-share-export-transcript-action"
+									testId="mobile-recording-share-export-transcript-action"
 									icon={<FileText />}
 									onClick={handleDownloadTranscript}
 									disabled={!fileMap?.transcript}
@@ -323,7 +370,7 @@ export function MobileRecordingShareExportSheet({
 								/>
 								<ActionRow
 									label={t("detail.exportNotes")}
-									data-testid="mobile-recording-share-export-notes-action"
+									testId="mobile-recording-share-export-notes-action"
 									icon={<NotebookPen />}
 									onClick={handleDownloadNotes}
 									disabled={!fileMap?.notes}
@@ -331,7 +378,7 @@ export function MobileRecordingShareExportSheet({
 								/>
 								<ActionRow
 									label={t("detail.exportSummary")}
-									data-testid="mobile-recording-share-export-summary-action"
+									testId="mobile-recording-share-export-summary-action"
 									icon={<Sparkles />}
 									onClick={() => setView("exportSummary")}
 									disabled={!hasSummaryFiles}

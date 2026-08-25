@@ -7,16 +7,18 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Skill\Entity;
 
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Infrastructure\Core\AbstractEntity;
-use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * 市场 Skill 实体.
  */
 class SkillMarketEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /**
      * @var int 主键 ID
      */
@@ -72,10 +74,8 @@ class SkillMarketEntity extends AbstractEntity
      */
     protected PublisherType $publisherType = PublisherType::USER;
 
-    /**
-     * @var null|int 分类 ID
-     */
-    protected ?int $categoryId = null;
+    /** @var int[] */
+    protected array $categoryIds = [];
 
     /**
      * @var PublishStatus 发布状态
@@ -86,6 +86,8 @@ class SkillMarketEntity extends AbstractEntity
      * @var int 安装次数
      */
     protected int $installCount = 0;
+
+    protected int $baseInstallCount = 0;
 
     /**
      * @var null|int 排序值，数值越大越靠前；NULL 表示按创建时间排序
@@ -139,9 +141,10 @@ class SkillMarketEntity extends AbstractEntity
             'logo' => $this->logo,
             'publisher_id' => $this->publisherId,
             'publisher_type' => $this->publisherType->value,
-            'category_id' => $this->categoryId,
+            'category_ids' => $this->categoryIds,
             'publish_status' => $this->publishStatus->value,
             'install_count' => $this->installCount,
+            'base_install_count' => $this->baseInstallCount,
             'sort_order' => $this->sortOrder,
             'is_featured' => $this->isFeatured,
             'is_hidden' => $this->isHidden,
@@ -274,27 +277,25 @@ class SkillMarketEntity extends AbstractEntity
         return $this->publisherType;
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        return $this->categoryIds;
+    }
+
+    /** @param array<int, int|string> $categoryIds */
+    public function setCategoryIds(array $categoryIds): self
+    {
+        $this->categoryIds = array_values(array_unique(array_map('intval', $categoryIds)));
+        return $this;
+    }
+
     public function setPublisherType(PublisherType|string $publisherType): self
     {
         if ($publisherType instanceof PublisherType) {
             $this->publisherType = $publisherType;
         } else {
             $this->publisherType = PublisherType::from($publisherType);
-        }
-        return $this;
-    }
-
-    public function getCategoryId(): ?int
-    {
-        return $this->categoryId;
-    }
-
-    public function setCategoryId(null|int|string $categoryId): self
-    {
-        if ($categoryId === null) {
-            $this->categoryId = null;
-        } else {
-            $this->categoryId = is_string($categoryId) ? (int) $categoryId : $categoryId;
         }
         return $this;
     }
@@ -329,6 +330,22 @@ class SkillMarketEntity extends AbstractEntity
     {
         $this->installCount = is_string($installCount) ? (int) $installCount : $installCount;
         return $this;
+    }
+
+    public function getBaseInstallCount(): int
+    {
+        return $this->baseInstallCount;
+    }
+
+    public function setBaseInstallCount(int|string $baseInstallCount): self
+    {
+        $this->baseInstallCount = is_string($baseInstallCount) ? (int) $baseInstallCount : $baseInstallCount;
+        return $this;
+    }
+
+    public function getTotalInstallCount(): int
+    {
+        return $this->installCount + $this->baseInstallCount;
     }
 
     public function getSortOrder(): ?int
@@ -419,19 +436,7 @@ class SkillMarketEntity extends AbstractEntity
      */
     public function getI18nName(string $language): string
     {
-        if (empty($this->nameI18n)) {
-            return '';
-        }
-
-        if (! empty($this->nameI18n[$language])) {
-            return $this->nameI18n[$language];
-        }
-
-        if (! empty($this->nameI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->nameI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->nameI18n, $language);
     }
 
     /**
@@ -442,18 +447,6 @@ class SkillMarketEntity extends AbstractEntity
      */
     public function getI18nDescription(string $language): string
     {
-        if (empty($this->descriptionI18n)) {
-            return '';
-        }
-
-        if (! empty($this->descriptionI18n[$language])) {
-            return $this->descriptionI18n[$language];
-        }
-
-        if (! empty($this->descriptionI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->descriptionI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->descriptionI18n, $language);
     }
 }

@@ -10,10 +10,12 @@ import {
 	TYPOGRAPHY_DECIMAL_PLACES,
 } from "../../../../runtime/text/typographyMetrics"
 import { useTextToolController } from "../useTextToolController"
+import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 
 const FONT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
 
 export default function RichTextFontSize() {
+	const { t } = useCanvasDesignI18n()
 	const { state, isEditingText, resolvedDefaultStyle, restoreSelection, setFontSize } =
 		useTextToolController()
 	const [inputValue, setInputValue] = useState("")
@@ -86,7 +88,7 @@ export default function RichTextFontSize() {
 					className={`${styles.input} text-sm`}
 					inputMode="decimal"
 					value={inputValue}
-					placeholder="字号"
+					placeholder={t("elementTools.fontSize.placeholder")}
 					onChange={handleInputChange}
 					onBlur={handleInputBlur}
 					onKeyDown={handleInputKeyDown}
@@ -95,8 +97,8 @@ export default function RichTextFontSize() {
 					<button
 						type="button"
 						className={styles.triggerButton}
-						aria-label="打开字号列表"
-						title="打开字号列表"
+						aria-label={t("elementTools.fontSize.openList")}
+						title={t("elementTools.fontSize.openList")}
 					>
 						<ChevronDown size={16} />
 					</button>

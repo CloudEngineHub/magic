@@ -279,18 +279,6 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return true;
     }
 
-    public function clearCategoryIdByIds(SuperMagicAgentDataIsolation $dataIsolation, array $ids): int
-    {
-        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
-        if ($ids === []) {
-            return 0;
-        }
-
-        return $this->createBuilder($dataIsolation, $this->agentMarketModel::query())
-            ->whereIn('id', $ids)
-            ->update(['category_id' => null]);
-    }
-
     public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
     {
         $builder = $this->createBuilder($dataIsolation, $this->agentMarketModel::query());
@@ -507,10 +495,6 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
 
         if (array_key_exists('is_hidden', $payload)) {
             $model->is_hidden = $payload['is_hidden'];
-        }
-
-        if (array_key_exists('category_id', $payload)) {
-            $model->category_id = $payload['category_id'];
         }
 
         if (array_key_exists('name_i18n', $payload)) {

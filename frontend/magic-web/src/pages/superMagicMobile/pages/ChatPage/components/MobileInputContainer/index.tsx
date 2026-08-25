@@ -15,6 +15,7 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import MobileComposer from "../mobile-composer/MobileComposer"
 import useMobileEditorType from "../mobile-composer/useMobileEditorType"
 import MobileRecordSummaryRoute from "../record-summary/MobileRecordSummaryRoute"
+import { clearMobileSceneSelectionOnSendSuccess } from "./sceneSelection"
 
 export interface MobileInputContainerRef {
 	closeRealInput: () => void
@@ -96,6 +97,8 @@ const MobileInputContainer = observer(
 		})
 
 		const handleSendSuccess = useMemoizedFn((params: SendSuccessParams) => {
+			// Clear the one-time scene choice before switching topics so the next mobile chat starts fresh.
+			clearMobileSceneSelectionOnSendSuccess(sceneStateStore)
 			handleCloseRealInput()
 			editorContext.onSendSuccess?.(params)
 		})

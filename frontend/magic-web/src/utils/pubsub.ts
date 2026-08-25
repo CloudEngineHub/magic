@@ -248,4 +248,6 @@ export const PubSubEvents = {
 	Playback_End: "super_magic_playback_end",
 	/** 超级麦吉 - 向编辑器插入拖拽数据（当前由外部/原生层触发，无 TypeScript publish 侧） */
 	Insert_Drag_Data_To_Editor: "super_magic_insert_drag_data_to_editor",
+	/** 当前用户的完整个人偏好已更新 */
+	Personal_Preferences_Updated: "personal_preferences_updated",
 } as const

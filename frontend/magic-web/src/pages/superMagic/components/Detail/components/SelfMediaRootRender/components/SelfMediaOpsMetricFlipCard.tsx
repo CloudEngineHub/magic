@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type {
 	SelfMediaOpsMetricDrillDown,
@@ -35,6 +36,7 @@ function SelfMediaOpsMetricFlipCard({
 	comfortable = false,
 	onToggle,
 }: SelfMediaOpsMetricFlipCardProps) {
+	const { t } = useTranslation("super")
 	return (
 		<button
 			type="button"
@@ -75,7 +77,7 @@ function SelfMediaOpsMetricFlipCard({
 					</div>
 					<div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-[680] leading-[1.2] text-[#71717a]">
 						<span>{statusLabel}</span>
-						<span className="text-[#18181b]">查看拆解</span>
+						<span className="text-[#18181b]">{t("selfMedia.opsViewBreakdown")}</span>
 					</div>
 				</div>
 				<div

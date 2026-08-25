@@ -3,7 +3,7 @@ import { memo, useMemo } from "react"
 import { IconStack2, IconWand } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { Flex } from "antd"
-import { TopMenu } from "@dtyq/magic-admin/components"
+import { TopMenu, AdminAuthContentLoading } from "@dtyq/magic-admin/components"
 import {
 	useAdminStore,
 	withAuthMiddleware,
@@ -27,13 +27,11 @@ import BaseLayoutMobile from "../BaseLayoutMobile"
 import { observer } from "mobx-react-lite"
 import HeaderLogo from "./components/HeaderLogo"
 import { useBaseLayoutPcEffects } from "./hooks"
-import { i18nStore } from "@/models/config/stores/i18n.store"
+import { useMainTranslation } from "@/hooks/i18n/useMainTranslation"
 
-const BaseLayoutPc = () => {
+const BaseLayoutPc = ({ authLoading }: { authLoading?: boolean }) => {
 	const { t } = useTranslation("admin/common")
-	const { t: tMainCommon } = useTranslation("common", {
-		i18n: i18nStore.i18n.instance,
-	})
+	const { t: tMainCommon } = useMainTranslation("common")
 	const { styles, cx } = useStyles()
 
 	const location = useLocation()
@@ -104,7 +102,7 @@ const BaseLayoutPc = () => {
 				</div>
 			)}
 			<div className={cx(!hiddenMenu ? styles.wrapper : styles.wrapperWithoutMenu)}>
-				<Outlet />
+				{authLoading ? <AdminAuthContentLoading /> : <Outlet />}
 			</div>
 		</div>
 	)

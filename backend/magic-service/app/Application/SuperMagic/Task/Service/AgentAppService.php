@@ -7,8 +7,11 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Task\Service;
 
+use App\Application\Contact\UserSetting\PersonalPreferencesKeys;
+use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\SuperMagic\Task\DTO\SandboxInfoDTO;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
 use App\Domain\SuperMagic\Message\Event\CheckpointRollbackMessagesChangedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
@@ -46,6 +49,7 @@ readonly class AgentAppService
         private readonly TopicDomainService $topicDomainService,
         private readonly TaskDomainService $taskDomainService,
         private readonly SandboxVersionDomainService $sandboxVersionDomainService,
+        private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
         private readonly EventDispatcherInterface $eventDispatcher,
     ) {
         $this->logger = $this->loggerFactory->get('sandbox');
@@ -257,7 +261,11 @@ readonly class AgentAppService
     {
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
+        $this->agentDomainService->sendChatMessage(
+            dataIsolation: $dataIsolation,
+            taskContext: $taskContext,
+            personalPreferences: $this->getAgentPersonalPreferences($dataIsolation)
+        );
     }
 
     /**
@@ -667,6 +675,42 @@ readonly class AgentAppService
         }
 
         return $response;
+    }
+
+    /**
+     * 获取本次 CHAT 需要透传给 Super Magic 的个人偏好。
+     *
+     * Application 层负责读取 Contact Domain 的设置并筛选跨服务协议允许的字段，
+     * Super Magic Domain 不直接依赖 Contact Domain，也不解析个人偏好的具体语义。
+     *
+     * @return array<string, mixed> 本次 CHAT 的个人偏好
+     */
+    private function getAgentPersonalPreferences(DataIsolation $dataIsolation): array
+    {
+        try {
+            $setting = $this->magicUserSettingDomainService->get(
+                $dataIsolation,
+                UserSettingKey::PersonalPreferences->value
+            );
+            $preferences = $setting?->getValue() ?? [];
+            $longTermMemoryEnabled = $preferences[PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED] ?? true;
+
+            return [
+                PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => is_bool($longTermMemoryEnabled)
+                    ? $longTermMemoryEnabled
+                    : true,
+            ];
+        } catch (Throwable $throwable) {
+            // 个人偏好是可选配置，读取失败时必须保持聊天主链路可用。
+            $this->logger->warning('[Sandbox][App] Failed to load personal preferences, using defaults', [
+                'exception_class' => $throwable::class,
+                'user_id' => $dataIsolation->getCurrentUserId(),
+            ]);
+
+            return [
+                PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => true,
+            ];
+        }
     }
 
     private function dispatchRollbackAffectedFileChanges(
