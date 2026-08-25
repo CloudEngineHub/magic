@@ -48,7 +48,7 @@ class OfficialSkillImportRequestDTOTest extends TestCase
             'description_i18n' => ['default' => 'Description'],
             'source_i18n' => ['default' => 'Official'],
             'category_ids' => ['1', '2'],
-            'publisher_type' => 'USER',
+            'publisher_type' => 'OFFICIAL',
             'publish_status' => 'OFFLINE',
             'is_hidden' => true,
             'is_featured' => false,
@@ -58,8 +58,21 @@ class OfficialSkillImportRequestDTOTest extends TestCase
         $this->assertSame('official/demo.zip', $dto->getFileKey());
         $this->assertSame('1.0.0', $dto->getVersion());
         $this->assertSame(['1', '2'], $dto->getCategoryIdList());
-        $this->assertSame('USER', $dto->getPublisherType());
+        $this->assertSame('OFFICIAL', $dto->getPublisherType());
         $this->assertTrue($dto->isHidden());
+    }
+
+    public function testImportRejectsUserPublisherType(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        ImportOfficialSkillRequestDTO::fromRequest($this->createRequest([
+            'file_key' => 'official/demo.zip',
+            'version' => '1.0.0',
+            'name_i18n' => ['default' => 'Official skill'],
+            'description_i18n' => ['default' => 'Description'],
+            'publisher_type' => 'USER',
+        ]));
     }
 
     public function testImportRejectsUnsupportedPublisherType(): void

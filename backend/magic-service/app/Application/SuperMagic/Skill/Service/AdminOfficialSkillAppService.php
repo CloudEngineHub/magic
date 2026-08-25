@@ -186,7 +186,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $code = $market?->getSkillCode() ?? $package->skillCode ?? SkillEntity::generateNewCode();
         // 先保存版本，再将市场记录指向当前版本。
         $version = $this->saveOfficialSkillVersion($organizationCode, $authorization, $package, $requestDTO, $market, $code);
-        $market = $this->saveOfficialSkillMarket($organizationCode, $authorization, $requestDTO, $version, $market, $code);
+        $market = $this->saveOfficialSkillMarket($authorization, $requestDTO, $version, $market, $code);
 
         // 用本次提交的分类完整替换旧关系。
         $this->officialSkillCategoryRelationDomainService->replaceMarketCategories(
@@ -255,7 +255,6 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
     }
 
     private function saveOfficialSkillMarket(
-        string $organizationCode,
         MagicUserAuthorization $authorization,
         ImportOfficialSkillRequestDTO $requestDTO,
         SkillVersionEntity $version,
@@ -264,16 +263,16 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
     ): SkillMarketEntity {
         // 保存市场展示信息、发布状态和发布方信息。
         $market ??= new SkillMarketEntity();
-        $market->setOrganizationCode($organizationCode);
+        $market->setOrganizationCode($authorization->getOrganizationCode());
         $market->setSkillCode($code);
         $market->setSkillVersionId((int) $version->getId());
         $market->setNameI18n($requestDTO->getNameI18n());
         $market->setDescriptionI18n($requestDTO->getDescriptionI18n());
         $market->setSearchText($version->getSearchText());
         $market->setLogo($requestDTO->getLogo() !== '' ? $requestDTO->getLogo() : null);
-        $publisherType = PublisherType::from($requestDTO->getPublisherType());
-        $market->setPublisherId($publisherType->isUser() ? $authorization->getId() : OfficialOrganizationUtil::getOfficialOrganizationCode());
-        $market->setPublisherType($publisherType);
+        // 官方导入只能创建或更新官方发布的 Skill，不使用请求中的发布者身份。
+        $market->setPublisherId($authorization->getOrganizationCode());
+        $market->setPublisherType(PublisherType::OFFICIAL);
         $market->setPublishStatus($requestDTO->getPublishStatus());
         $market->setIsHidden($requestDTO->isHidden());
         $market->setIsFeatured($requestDTO->isFeatured());

@@ -131,7 +131,7 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
             'logo' => 'nullable|string',
             'category_ids' => 'nullable|array|max:100',
             'category_ids.*' => 'required|string|regex:/^\d+$/',
-            'publisher_type' => 'sometimes|string|in:' . PublisherType::USER->value . ',' . PublisherType::OFFICIAL->value,
+            'publisher_type' => 'sometimes|string|in:' . PublisherType::OFFICIAL->value,
             'publish_status' => 'nullable|string|in:' . implode(',', [PublishStatus::OFFLINE->value, PublishStatus::PUBLISHED->value]),
             'is_hidden' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',
