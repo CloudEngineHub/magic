@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'accepted' => 'The :attribute must be accepted.',
     'accepted_if' => 'The :attribute must be accepted when :other is :value.',
     'active_url' => 'The :attribute is not a valid URL.',
@@ -223,4 +223,12 @@ return [
             'values_required' => 'Values are required for week and month units in custom_repeat type',
         ],
     ],
-];
+], [
+    'project' => [
+        'permission' => [
+            'in' => 'In',
+            'required' => 'Value is required',
+            'string' => 'String',
+        ],
+    ],
+    ]);

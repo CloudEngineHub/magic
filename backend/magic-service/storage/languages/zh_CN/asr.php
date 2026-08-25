@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'success' => [
         'success' => '成功',
     ],
@@ -238,4 +238,10 @@ return [
         'status_report_not_allowed' => '当前任务状态不允许报告状态',
         'summary_not_allowed' => '当前任务状态不允许发起总结',
     ],
-];
+], [
+    'sts_token' => [
+        'missing_jwt_token' => '请求处理失败',
+        'parse_response_failed' => '操作失败',
+        'request_failed' => '操作失败',
+    ],
+    ]);

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'agent' => [
         'fields' => [
             'code' => 'Code',
@@ -172,4 +172,16 @@ return [
     'magic_claw' => [
         'create_system_error' => 'A system error occurred. Please try again later.',
     ],
-];
+], [
+    'agent' => [
+        'description_i18n_en_must_be_string' => 'Description i18n en must be string',
+    ],
+    'operation_failed' => 'Operation failed',
+    'skill' => [
+        'export_failed' => 'Operation failed',
+    ],
+
+    'delete_failed' => 'Operation failed',
+    'not_found' => 'Resource not found',
+    'save_failed' => 'Operation failed',
+    'validate_failed' => 'Operation failed',]);

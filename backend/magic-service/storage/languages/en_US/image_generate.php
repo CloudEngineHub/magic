@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'general_error' => 'Image generation service error',
     'response_format_error' => 'Invalid response format from image generation service',
     'missing_image_data' => 'Generated image data is invalid',
@@ -103,4 +103,12 @@ return [
     ],
     # watermark
     'image_watermark' => 'website/static/img/watermark_en.png',
-];
+], [
+    'gcs_bucket_not_configured' => 'Gcs bucket not configured',
+    'gcs_upload_failed' => 'Operation failed',
+    'image_convert_high_model_not_configured' => 'Image convert high model not configured',
+    'invalid_response_type' => 'Invalid value',
+    'upload_failed' => 'Operation failed',
+    'vertex_ai_does_not_support_file_upload' => 'Vertex ai does not support file upload',
+
+    'unsupported_image_format' => 'Unsupported image format',]);

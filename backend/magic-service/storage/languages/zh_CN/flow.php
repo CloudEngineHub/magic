@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'error' => [
         'common' => '通用错误',
         'common_validate_failed' => '通用参数验证失败',
@@ -341,4 +341,13 @@ return [
             'invalid_format' => '缓存前缀格式无效',
         ],
     ],
-];
+], [
+    'mode' => [
+        'not_found' => '资源不存在：:model_name',
+    ],
+    'node' => [
+        'end' => [
+            'must_exist' => '请求处理失败',
+        ],
+    ],
+    ]);

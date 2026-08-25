@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'image_generation' => [
         'file_dir_invalid' => 'File directory must be in the current project workspace',
         'file_dir_not_exists' => 'File directory does not exist: :file_dir',
@@ -85,4 +85,21 @@ return [
         'mark_size' => 'Mark position must contain exactly 2 coordinates (x, y)',
         'mark_coordinate_range' => 'Mark coordinate must be between 0 and 1',
     ],
-];
+], [
+    'attributes' => [
+        'area' => 'Area',
+        'area_coordinate' => 'Area coordinate',
+        'image_generation_config' => 'Image generation config',
+        'number' => 'Number',
+        'resolution' => 'Resolution',
+        'type' => 'Type',
+    ],
+    'validation' => [
+        'area_coordinate_range' => 'Area coordinate range',
+        'area_size' => 'Area size',
+        'type_invalid' => 'Invalid value',
+    ],
+    'video_generation' => [
+        'estimate_failed' => 'Operation failed',
+    ],
+    ]);

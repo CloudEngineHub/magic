@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'agent' => [
         'user_call_agent_fail_notice' => '不好意思，刚才处理有些异常，你可以换种表述重新问一下哦，以便我能准确为你解答',
     ],
@@ -116,4 +116,8 @@ return [
         'message_not_found' => '流式消息未找到',
         'receive_message_id_not_found' => '流式消息的接收方消息 ID 未找到',
     ],
-];
+], [
+    'group' => [
+        'group_cannot_kick_owner' => '请求处理失败',
+    ],
+    ]);

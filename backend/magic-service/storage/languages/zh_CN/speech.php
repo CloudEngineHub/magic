@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'volcengine' => [
         'invalid_response_format' => '火山引擎响应格式无效',
         'submit_failed' => '调用火山引擎API提交任务失败',
@@ -19,4 +19,14 @@ return [
             'query_exception' => '调用大模型ASR查询结果时发生异常',
         ],
     ],
-];
+], [
+    'volcengine' => [
+        'bigmodel' => [
+            'api_error' => '操作失败：:error_message、:request_id、:status_code',
+        ],
+        'flash' => [
+            'get_text_exception' => '请求处理失败：:original_error',
+            'invalid_response_format' => '参数无效',
+        ],
+    ],
+    ]);

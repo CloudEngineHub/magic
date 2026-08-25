@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'volcengine' => [
         'invalid_response_format' => 'Invalid response format from Volcengine',
         'submit_failed' => 'Failed to submit task to Volcengine API',
@@ -19,4 +19,14 @@ return [
             'query_exception' => 'Exception occurred while querying result from BigModel ASR',
         ],
     ],
-];
+], [
+    'volcengine' => [
+        'bigmodel' => [
+            'api_error' => 'Operation failed: :error_message, :request_id, :status_code',
+        ],
+        'flash' => [
+            'get_text_exception' => 'Get text exception: :original_error',
+            'invalid_response_format' => 'Invalid value',
+        ],
+    ],
+    ]);

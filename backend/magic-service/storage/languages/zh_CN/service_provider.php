@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'system_error' => '系统错误',
     'model_not_found' => '模型未找到',
     'invalid_model_type' => '无效的模型类型',
@@ -80,4 +80,10 @@ return [
             'string' => '模型版本必须为字符串',
         ],
     ],
-];
+], [
+    'model_id_required' => '参数不能为空',
+    'model_version_required' => '参数不能为空',
+    'name_max_length' => '请求处理失败',
+    'office_organization' => '请求处理失败：:label',
+
+    'model_operation_locked' => '请求处理失败',]);

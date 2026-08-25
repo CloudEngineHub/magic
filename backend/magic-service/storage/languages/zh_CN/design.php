@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'image_generation' => [
         'file_dir_invalid' => '文件目录必须是当前项目工作区路径',
         'file_dir_not_exists' => '文件目录不存在: :file_dir',
@@ -85,4 +85,21 @@ return [
         'mark_size' => '标记位置必须包含恰好2个坐标 (x, y)',
         'mark_coordinate_range' => '标记坐标必须在0到1之间',
     ],
-];
+], [
+    'attributes' => [
+        'area' => '请求处理失败',
+        'area_coordinate' => '请求处理失败',
+        'image_generation_config' => '请求处理失败',
+        'number' => '请求处理失败',
+        'resolution' => '请求处理失败',
+        'type' => '请求处理失败',
+    ],
+    'validation' => [
+        'area_coordinate_range' => '请求处理失败',
+        'area_size' => '请求处理失败',
+        'type_invalid' => '参数无效',
+    ],
+    'video_generation' => [
+        'estimate_failed' => '操作失败',
+    ],
+    ]);

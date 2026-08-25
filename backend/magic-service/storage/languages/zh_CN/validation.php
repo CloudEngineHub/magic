@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'accepted' => ':attribute 必须接受',
     'active_url' => ':attribute 必须是一个合法的 URL',
     'after' => ':attribute 必须是 :date 之后的一个日期',
@@ -204,4 +204,12 @@ return [
             'values_required' => '自定义重复类型的周和月单位必须指定值',
         ],
     ],
-];
+], [
+    'project' => [
+        'permission' => [
+            'in' => '请求处理失败',
+            'required' => '参数不能为空',
+            'string' => '请求处理失败',
+        ],
+    ],
+    ]);

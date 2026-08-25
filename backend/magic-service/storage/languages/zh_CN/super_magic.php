@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'agent' => [
         'fields' => [
             'code' => '编码',
@@ -172,4 +172,16 @@ return [
     'magic_claw' => [
         'create_system_error' => '系统出现异常，请稍后重试。',
     ],
-];
+], [
+    'agent' => [
+        'description_i18n_en_must_be_string' => '请求处理失败',
+    ],
+    'operation_failed' => '操作失败',
+    'skill' => [
+        'export_failed' => '操作失败',
+    ],
+
+    'delete_failed' => '操作失败',
+    'not_found' => '资源不存在',
+    'save_failed' => '操作失败',
+    'validate_failed' => '操作失败',]);

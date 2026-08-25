@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'account_not_found' => '账号不存在',
     'password_error' => '密码错误',
     'user_not_found' => '用户不存在',
@@ -25,4 +25,8 @@ return [
         'conversation_id' => '会话ID',
         'enabled' => '是否启用',
     ],
-];
+], [
+    'fields' => [
+        'api_key_name' => '请求处理失败：:label',
+    ],
+    ]);

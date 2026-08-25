@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'general_error' => '长期记忆操作失败',
     'prompt_file_not_found' => '提示词文件未找到：:path',
     'not_found' => '记忆不存在',
@@ -47,4 +47,11 @@ return [
         'action_reject' => '拒绝',
         'content_length_exceeded' => '内容长度不能超过5000个字符',
     ],
-];
+], [
+    'api' => [
+        'at_least_one_content_field_required' => '参数不能为空',
+        'cannot_update_both_content_fields' => '请求处理失败',
+        'magic_message_id_required_for_memory_card_quick' => '参数不能为空',
+        'pending_content_length_exceeded' => '请求处理失败',
+    ],
+    ]);

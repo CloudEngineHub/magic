@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'resource' => [
         'admin' => '管理后台',
         'admin_ai' => 'AI管理',
@@ -164,4 +164,12 @@ return [
         'only_organization_admin_can_configure_visibility' => '只有组织管理员可以配置可见性',
         'visibility_type_2_requires_users_or_departments' => '部分可见时，必须至少指定一个用户或部门',
     ],
-];
+], [
+    'generic_error' => '权限异常',
+    'error' => [
+        'user_not_in_organization' => '用户不在当前组织中',
+        'user_not_organization_admin' => '请求处理失败：:userId',
+    ],
+    'invalid_is_display' => '参数无效',
+    'invalid_status' => '参数无效',
+    ]);

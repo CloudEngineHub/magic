@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'invalid' => '参数不合法',
     'not_found' => '任务未找到',
     'already_exists' => '相同名字和类型的任务已存在',
@@ -23,4 +23,10 @@ return [
     'agent_stopped' => '任务已终止',
     'finished_task_action' => '已完成结果文件的输出',
     'access_token_not_found' => '访问令牌未找到',
-];
+], [
+    'id_required' => '参数不能为空',
+
+    'access_token' => [
+        'not_found' => '资源不存在',
+    ],
+    'create_workspace_version_failed' => '操作失败',]);

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'account_not_found' => 'Account not found',
     'password_error' => 'Password error',
     'user_not_found' => 'User not found',
@@ -25,4 +25,8 @@ return [
         'conversation_id' => 'Conversation ID',
         'enabled' => 'Enabled',
     ],
-];
+], [
+    'fields' => [
+        'api_key_name' => 'Api key name: :label',
+    ],
+    ]);

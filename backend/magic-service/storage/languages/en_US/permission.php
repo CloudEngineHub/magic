@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'resource' => [
         'admin' => 'Admin',
         'admin_ai' => 'AI Management',
@@ -133,4 +133,12 @@ return [
         'only_organization_admin_can_configure_visibility' => 'Only organization admin can configure visibility',
         'visibility_type_2_requires_users_or_departments' => 'When visibility type is 2 (partial visibility), at least one user or department must be specified',
     ],
-];
+], [
+    'generic_error' => 'Permission error',
+    'error' => [
+        'user_not_in_organization' => 'User is not in the organization',
+        'user_not_organization_admin' => 'User not organization admin: :userId',
+    ],
+    'invalid_is_display' => 'Invalid value',
+    'invalid_status' => 'Invalid value',
+    ]);

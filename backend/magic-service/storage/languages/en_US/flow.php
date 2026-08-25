@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'error' => [
         'common' => 'Common error',
         'common_validate_failed' => 'Common parameter validation failed',
@@ -328,4 +328,27 @@ return [
             'invalid_format' => 'Invalid cache prefix format',
         ],
     ],
-];
+], [
+    'content' => [
+        'empty' => 'Value is required',
+    ],
+    'mode' => [
+        'not_found' => 'Resource not found: :model_name',
+    ],
+    'model' => [
+        'invalid_implementation_interface' => 'Invalid value: :interface',
+    ],
+    'node' => [
+        'cannot_enable_empty_nodes' => 'Cannot enable empty nodes',
+        'knowledge' => [
+            'knowledge_code_empty' => 'Value is required',
+        ],
+        'start' => [
+            'interval_valid' => 'Interval valid',
+        ],
+        'validation_failed' => 'Operation failed: :error, :node_id, :node_type',
+    ],
+    'node_output' => [
+        'empty' => 'Value is required: :label',
+    ],
+    ]);

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'import_concurrent_error' => 'Skill import concurrent error, please try again later',
     'invalid_file_format' => 'Invalid file format, only .skill or .zip formats are supported',
     'file_too_large' => 'File too large, file size cannot exceed :max_size bytes',
@@ -82,4 +82,11 @@ return [
     'query_codes_item_must_be_string' => 'each item in codes must be a string',
     'query_codes_item_too_long' => 'each code must not exceed 64 characters',
     'export_failed' => 'Skill export failed. Please try again later',
-];
+], [
+    'keyword' => 'Keyword',
+    'page' => 'Page',
+    'page_size' => 'Page size',
+    'publisher_type' => 'Publisher type',
+    'source_type' => 'Source type',
+
+    'skill_source_type_error' => 'Operation failed',]);

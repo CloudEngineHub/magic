@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'common' => [
         'not_found' => ':label 未找到',
         'empty' => ':label 不能为空',
@@ -31,4 +31,6 @@ return [
     'conversation_error' => '用户会话异常',
     'user_type_error' => '用户类型异常',
     'organization_not_authorize' => '组织没有授权',
-];
+], [
+    'not_exist' => '用户不存在',
+    ]);

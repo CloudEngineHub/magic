@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return [
+return array_replace_recursive([
     'common' => [
         'param_error' => ':param is invalid',
     ],
@@ -114,4 +114,15 @@ return [
         'message_not_found' => 'Stream message not found',
         'receive_message_id_not_found' => 'Stream message receiver message ID not found',
     ],
-];
+], [
+    'group' => [
+        'group_cannot_kick_owner' => 'Group cannot kick owner',
+    ],
+    'topic' => [
+        'id_not_found' => 'Resource not found',
+        'message' => [
+            'not_found' => 'Resource not found',
+        ],
+        'not_found' => 'Resource not found',
+    ],
+    ]);
