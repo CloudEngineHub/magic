@@ -512,7 +512,7 @@ class UserSkillApiTest extends AbstractApiTest
             $this->assertEquals(2, $page2Response['data']['page']);
             $this->assertEquals(1, $page2Response['data']['page_size']);
             // 验证不同页的数据不同（如果有数据）
-            if (count($pageResponse['data']['list']) > 0 && count($page2Response['data']['list']) > 0) {
+            if (count($page2Response['data']['list']) > 0) {
                 $this->assertNotEquals(
                     $pageResponse['data']['list'][0]['id'],
                     $page2Response['data']['list'][0]['id'],
@@ -1704,10 +1704,8 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
         $this->assertArrayHasKey('data', $response);
         $this->assertArrayHasKey('list', $response['data']);
-        $this->assertArrayHasKey('total', $response['data']);
         $this->assertArrayHasKey('page', $response['data']);
         $this->assertArrayHasKey('page_size', $response['data']);
-        $this->assertIsInt($response['data']['total']);
         $this->assertIsArray($response['data']['list']);
         $this->assertIsInt($response['data']['page']);
         $this->assertIsInt($response['data']['page_size']);
@@ -1764,9 +1762,8 @@ class UserSkillApiTest extends AbstractApiTest
             $this->getCommonHeaders()
         );
         $this->assertEquals(1000, $keywordResponse['code']);
-        $this->assertIsInt($keywordResponse['data']['total']);
         // 如果找到结果，验证结果中包含关键词
-        if ($keywordResponse['data']['total'] > 0) {
+        if ($keywordResponse['data']['list'] !== []) {
             $found = false;
             foreach ($keywordResponse['data']['list'] as $item) {
                 $nameZh = $item['name_i18n']['zh_CN'] ?? '';
@@ -1790,9 +1787,8 @@ class UserSkillApiTest extends AbstractApiTest
             $this->getCommonHeaders()
         );
         $this->assertEquals(1000, $keywordEnResponse['code']);
-        $this->assertIsInt($keywordEnResponse['data']['total']);
         // 如果找到结果，验证结果中包含关键词
-        if ($keywordEnResponse['data']['total'] > 0) {
+        if ($keywordEnResponse['data']['list'] !== []) {
             $foundEn = false;
             foreach ($keywordEnResponse['data']['list'] as $item) {
                 $nameEn = $item['name_i18n']['en_US'] ?? '';
@@ -1816,7 +1812,7 @@ class UserSkillApiTest extends AbstractApiTest
             $this->getCommonHeaders()
         );
         $this->assertEquals(1000, $notFoundKeywordResponse['code']);
-        $this->assertIsInt($notFoundKeywordResponse['data']['total']);
+        $this->assertSame([], $notFoundKeywordResponse['data']['list']);
 
         // 测试发布者类型筛选 - OFFICIAL
         $publisherTypeResponse = $this->post(
@@ -1829,7 +1825,6 @@ class UserSkillApiTest extends AbstractApiTest
             $this->getCommonHeaders()
         );
         $this->assertEquals(1000, $publisherTypeResponse['code']);
-        $this->assertIsInt($publisherTypeResponse['data']['total']);
         // 验证筛选结果中的 publisher_type 都是 OFFICIAL
         foreach ($publisherTypeResponse['data']['list'] as $item) {
             $this->assertEquals('OFFICIAL', $item['publisher_type']);
@@ -1846,7 +1841,6 @@ class UserSkillApiTest extends AbstractApiTest
             $this->getCommonHeaders()
         );
         $this->assertEquals(1000, $userPublisherResponse['code']);
-        $this->assertIsInt($userPublisherResponse['data']['total']);
         // 验证筛选结果中的 publisher_type 都是 USER（如果有结果）
         foreach ($userPublisherResponse['data']['list'] as $item) {
             $this->assertEquals('USER', $item['publisher_type']);
@@ -1864,7 +1858,6 @@ class UserSkillApiTest extends AbstractApiTest
             $this->getCommonHeaders()
         );
         $this->assertEquals(1000, $combinedResponse['code']);
-        $this->assertIsInt($combinedResponse['data']['total']);
         // 验证结果同时满足关键词和发布者类型条件
         foreach ($combinedResponse['data']['list'] as $item) {
             $this->assertEquals('OFFICIAL', $item['publisher_type']);
@@ -1885,7 +1878,7 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertEquals(1, $pageResponse['data']['page_size']);
 
         // 测试分页 - 第二页
-        if ($pageResponse['data']['total'] > 1) {
+        if (count($pageResponse['data']['list']) === 1) {
             $page2Response = $this->post(
                 '/api/v1/skill-market/queries',
                 [
@@ -1928,9 +1921,20 @@ class UserSkillApiTest extends AbstractApiTest
         );
         $this->assertEquals(1000, $defaultResponse['code']);
         $this->assertArrayHasKey('list', $defaultResponse['data']);
-        $this->assertArrayHasKey('total', $defaultResponse['data']);
         $this->assertArrayHasKey('page', $defaultResponse['data']);
         $this->assertArrayHasKey('page_size', $defaultResponse['data']);
+
+        // 测试字符串分类 ID 筛选
+        $stringCategoryResponse = $this->post(
+            '/api/v1/skill-market/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'category_ids' => ['1', '2'],
+            ],
+            $this->getCommonHeaders()
+        );
+        $this->assertEquals(1000, $stringCategoryResponse['code']);
 
         // 测试排序：已添加的技能应该排在最前面
         $sortedResponse = $this->post(
@@ -2051,7 +2055,6 @@ class UserSkillApiTest extends AbstractApiTest
             $headers
         );
         $this->assertEquals(1000, $publicQueryResponse['code'], $publicQueryResponse['message'] ?? '');
-        $this->assertSame(0, $publicQueryResponse['data']['total']);
         $this->assertSame([], $publicQueryResponse['data']['list']);
     }
 
@@ -2106,7 +2109,6 @@ class UserSkillApiTest extends AbstractApiTest
         );
 
         $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
-        $this->assertSame(1, $response['data']['total']);
         $this->assertCount(1, $response['data']['list']);
 
         $item = $response['data']['list'][0];

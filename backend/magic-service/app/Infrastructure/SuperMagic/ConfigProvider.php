@@ -88,11 +88,13 @@ use App\Domain\SuperMagic\Project\Repository\Persistence\ProjectOperationLogRepo
 use App\Domain\SuperMagic\Project\Repository\Persistence\ProjectRepository;
 use App\Domain\SuperMagic\Project\Repository\Persistence\TransferLogRepository;
 use App\Domain\SuperMagic\Project\Service\ProjectOperationLogDomainService;
+use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRelationRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillMarketRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillVersionRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\UserSkillRepositoryInterface;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\SkillCategoryRelationRepository;
 use App\Domain\SuperMagic\Skill\Repository\Persistence\SkillCategoryRepository;
 use App\Domain\SuperMagic\Skill\Repository\Persistence\SkillMarketRepository;
 use App\Domain\SuperMagic\Skill\Repository\Persistence\SkillRepository;
@@ -210,6 +212,7 @@ class ConfigProvider
                 SkillVersionRepositoryInterface::class => SkillVersionRepository::class,
                 SkillMarketRepositoryInterface::class => SkillMarketRepository::class,
                 SkillCategoryRepositoryInterface::class => SkillCategoryRepository::class,
+                SkillCategoryRelationRepositoryInterface::class => SkillCategoryRelationRepository::class,
                 UserSkillRepositoryInterface::class => UserSkillRepository::class,
 
                 // recycle bin 回收站

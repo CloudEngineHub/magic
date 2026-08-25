@@ -182,7 +182,7 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         $categoryIdsMap = $this->marketCategoryRelationDomainService->getMarketCategoryIdsMap($marketIds);
         foreach ($agentMarkets as $market) {
             if ($market->getId() !== null) {
-                $market->setCategoryIds($categoryIdsMap[$market->getId()] ?? $market->getCategoryIds());
+                $market->setCategoryIds($categoryIdsMap[$market->getId()] ?? []);
             }
         }
     }

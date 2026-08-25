@@ -286,7 +286,6 @@ class SuperMagicAgentAssembler
             publishTargetType: $version->getPublishTargetType()->value,
             isCurrentVersion: $version->isCurrentVersion(),
             publishedAt: $version->getPublishedAt(),
-            categoryId: $version->getCategoryId() ? (string) $version->getCategoryId() : null,
             categoryIds: $version->getCategoryIds(),
         );
     }
@@ -426,8 +425,8 @@ class SuperMagicAgentAssembler
                 publishedAt: $version->getPublishedAt(),
                 isCurrentVersion: $version->isCurrentVersion(),
                 versionDescriptionI18n: $version->getVersionDescriptionI18n(),
+                versionDescription: $version->getI18nVersionDescription(CoContext::getLanguage()),
                 publishTargetValue: $enrichedPublishTargetValue,
-                category: self::buildCategoryInfoDTO($version, $categoryMap),
                 categories: self::buildCategoryInfoDTOs($version, $categoryMap),
             );
         }
@@ -474,27 +473,6 @@ class SuperMagicAgentAssembler
             'users' => $users,
             'departments' => $departments,
         ];
-    }
-
-    /**
-     * @param array<int, AgentCategoryEntity> $categoryMap
-     */
-    private static function buildCategoryInfoDTO(AgentVersionEntity $version, array $categoryMap): ?CategoryInfoDTO
-    {
-        $categoryId = $version->getCategoryId();
-        if ($categoryId === null) {
-            return null;
-        }
-
-        $category = $categoryMap[$categoryId] ?? null;
-        if ($category === null) {
-            return null;
-        }
-
-        return new CategoryInfoDTO(
-            id: (string) $categoryId,
-            name: $category->getI18nName(CoContext::getLanguage()),
-        );
     }
 
     /**
