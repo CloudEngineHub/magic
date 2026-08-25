@@ -44,6 +44,22 @@ describe("getFullContent", () => {
 		)
 	})
 
+	it("normalizes nested HTML links to project-root paths without forwarding file identity", async () => {
+		const { getFullContent } = await import("../full-content")
+		const result = getFullContent(
+			"<!DOCTYPE html><html><body><a href='../shared.html?mode=preview'>Open</a></body></html>",
+			"nested-file",
+			{ navigationBasePath: "pages/detail.html" },
+		)
+
+		const linkMessageStart = result.indexOf('type: "linkClicked"')
+		const linkMessageEnd = result.indexOf('}, "*");', linkMessageStart)
+		const linkMessage = result.slice(linkMessageStart, linkMessageEnd)
+
+		expect(result).toContain('var navigationBasePath = "pages/detail.html"')
+		expect(linkMessage).not.toContain("fileId:")
+	})
+
 	it("injects hidden scrollbar styles without disabling vertical scrolling", async () => {
 		const { getFullContent } = await import("../full-content")
 		const result = getFullContent(

@@ -799,10 +799,11 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 }
 
 // 链接处理脚本
-const getLinkHandlingScript = () => {
+const getLinkHandlingScript = (navigationBasePath = "") => {
 	return `
 		(function() {
 			${MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER}
+			var navigationBasePath = ${JSON.stringify(navigationBasePath)};
 
 			var navigationRuntime = window.__MAGIC_HTML_NAVIGATION_RUNTIME__;
 			if (!navigationRuntime) {
@@ -814,7 +815,19 @@ const getLinkHandlingScript = () => {
 					if (raw.indexOf('//') === 0) return null;
 
 					var isAbsoluteUrl = /^[a-z][a-z\\d+.-]*:/i.test(raw);
-					if (!isAbsoluteUrl) return raw;
+					if (!isAbsoluteUrl) {
+						if (!navigationBasePath) return raw;
+
+						try {
+							var basePath = "/" + navigationBasePath.replace(/^\\/+/, "");
+							var baseUrl = new URL(basePath, "https://magic-html.invalid/");
+							var targetUrl = new URL(raw, baseUrl);
+							return targetUrl.pathname + targetUrl.search + targetUrl.hash;
+						} catch (error) {
+							console.warn("linkClicked relative URL parse failed", error);
+							return null;
+						}
+					}
 
 					try {
 						var destination = new URL(raw, document.baseURI || window.location.href);
@@ -852,8 +865,7 @@ const getLinkHandlingScript = () => {
 						originalHref: originalHref,
 						text: text || "",
 						target: target || "_self",
-						autoEdit: autoEdit === true,
-						fileId: window.__MAGIC_FILE_ID__ || ""
+						autoEdit: autoEdit === true
 					}, "*");
 				}
 
@@ -2105,7 +2117,7 @@ export const getFullContent = (
 		${getIndexedDBMockScript()}
 		${getServiceWorkerMockScript(serviceWorkerMockMode)}
 		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
-		${getLinkHandlingScript()}
+		${getLinkHandlingScript(options.navigationBasePath)}
 		${getNestedIframeInterceptorScript()}
 		${
 			options.reportContentMetrics
@@ -2206,4 +2218,6 @@ interface GetFullContentOptions {
 	locationAnchor?: string
 	/** Request identifier echoed by sandbox lifecycle messages. */
 	navigationRequestId?: string
+	/** Host-resolved file path used to normalize nested HTML navigation. */
+	navigationBasePath?: string
 }

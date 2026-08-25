@@ -560,6 +560,7 @@ export function createNestedIframeContentHandler(
 					virtualStorage: virtualStorageContext,
 					locationSearch: navigationTarget.search,
 					locationAnchor: navigationTarget.hash,
+					navigationBasePath: matchedFile.relative_file_path || relativePath,
 				},
 			)
 

@@ -383,11 +383,12 @@ function dispatchIframeMessage(
 	iframe: HTMLIFrameElement,
 	type: string,
 	origin = window.location.origin,
+	extraData: Record<string, unknown> = {},
 ) {
 	act(() => {
 		window.dispatchEvent(
 			new MessageEvent("message", {
-				data: { type },
+				data: { type, ...extraData },
 				origin,
 				source: iframe.contentWindow,
 			}),
@@ -639,5 +640,34 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		expect(getSetContentCalls(nextPostMessage)[0][0]).toMatchObject({
 			locationSearch: "?value=456",
 		})
+	})
+
+	it("keeps the renderer file identity when a link message contains a forged fileId", async () => {
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "current-file" }
+		render(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "/target.html",
+			autoEdit: true,
+			fileId: "forged-file",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("current-file", "/target.html", true)
+	})
+
+	it("ignores link messages from an unexpected origin", async () => {
+		const openNewTab = vi.fn()
+		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", "https://untrusted.example", {
+			href: "/target.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).not.toHaveBeenCalled()
 	})
 })

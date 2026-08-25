@@ -1794,6 +1794,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (shouldStrictlyValidatePreviewSource && (!isExpectedSource || !isExpectedOrigin))
 				return
 
+			// Nested HTML documents may report through the cross-origin parent, so their
+			// source window is not always the top-level iframe. The origin remains a
+			// required boundary for navigation messages.
+			if (messageType === "linkClicked" && !isExpectedOrigin) return
+
 			const requestBoundMessageTypes = [
 				"contentLoaded",
 				"domReady",
@@ -1974,13 +1979,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 					const href = typeof event.data?.href === "string" ? event.data.href : ""
 					const autoEdit = event.data?.autoEdit === true
-					const navigationFileId =
-						typeof event.data?.fileId === "string" && event.data.fileId
-							? event.data.fileId
-							: fileId
-
 					try {
-						openNewTab(navigationFileId || "", href, autoEdit)
+						openNewTab(fileId || "", href, autoEdit)
 					} catch (error) {
 						logger.error({
 							eventKey: "process_iframe_failed",
