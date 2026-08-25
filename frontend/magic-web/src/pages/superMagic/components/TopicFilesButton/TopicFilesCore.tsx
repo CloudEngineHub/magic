@@ -1341,6 +1341,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
+						decoration?.className,
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
 					data-testid="file-item-virtual"
@@ -1549,6 +1550,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
+						decoration?.className,
 						(shouldHighlightFolder || isActiveFile) && styles.activeFileItemWrapper,
 						isActiveFile && "bg-blue-500/10",
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
@@ -1823,6 +1825,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			<div
 				className={cx(
 					styles.fileItem,
+					decoration?.className,
 					isLocating && styles.locatingFileItem,
 					isActiveFile && "bg-blue-500/10",
 					contextMenuItemId === itemId && styles.contextMenuActiveItem,

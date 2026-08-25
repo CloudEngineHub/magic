@@ -41,6 +41,7 @@
 			"globalNotes": "Global Notes",
 			"memoryRoot": "Memory Space",
 			"project": "Project Directory",
+			"currentProject": "Current Project Records",
 			"projectMemory": "Project Memory",
 			"projectNotes": "Project Notes",
 			"projects": "Projects"
