@@ -244,7 +244,7 @@ const OfficialSkillImportDialog = memo(
 						parsedResult.package_description,
 					),
 					source_i18n: getLocalizedValue(
-						parsedResult.source_i18n,
+						undefined,
 						t("officialSkillImport.defaultSource"),
 					),
 					logo: parsedResult.logo || "",
@@ -344,8 +344,8 @@ const OfficialSkillImportDialog = memo(
 					version: String(values.version).trim(),
 					name_i18n: ensureLocalizedDefault(values.name_i18n),
 					description_i18n: ensureLocalizedDefault(values.description_i18n),
-					source_i18n: ensureLocalizedDefault(
-						values.source_i18n,
+					source_i18n: getLocalizedValue(
+						undefined,
 						t("officialSkillImport.defaultSource"),
 					),
 					logo,
@@ -543,12 +543,6 @@ const OfficialSkillImportDialog = memo(
 									)}
 									required
 									textarea
-								/>
-								<LocalizedField
-									form={form}
-									field="source_i18n"
-									label={t("officialSkillImport.fields.source")}
-									placeholder={t("officialSkillImport.fields.sourcePlaceholder")}
 								/>
 								<Flex gap={12}>
 									<Form.Item
