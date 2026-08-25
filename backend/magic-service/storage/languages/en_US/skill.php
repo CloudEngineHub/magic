@@ -82,4 +82,11 @@ return [
     'query_codes_item_must_be_string' => 'each item in codes must be a string',
     'query_codes_item_too_long' => 'each code must not exceed 64 characters',
     'export_failed' => 'Skill export failed. Please try again later',
+    'keyword' => 'Keyword',
+    'page' => 'Page',
+    'page_size' => 'Page size',
+    'publisher_type' => 'Publisher type',
+    'source_type' => 'Source type',
+
+    'skill_source_type_error' => 'Operation failed',
 ];
