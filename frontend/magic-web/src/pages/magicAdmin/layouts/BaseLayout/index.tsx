@@ -27,13 +27,11 @@ import BaseLayoutMobile from "../BaseLayoutMobile"
 import { observer } from "mobx-react-lite"
 import HeaderLogo from "./components/HeaderLogo"
 import { useBaseLayoutPcEffects } from "./hooks"
-import { i18nStore } from "@/models/config/stores/i18n.store"
+import { useMainTranslation } from "@/hooks/i18n/useMainTranslation"
 
 const BaseLayoutPc = ({ authLoading }: { authLoading?: boolean }) => {
 	const { t } = useTranslation("admin/common")
-	const { t: tMainCommon } = useTranslation("common", {
-		i18n: i18nStore.i18n.instance,
-	})
+	const { t: tMainCommon } = useMainTranslation("common")
 	const { styles, cx } = useStyles()
 
 	const location = useLocation()
