@@ -9,6 +9,8 @@ const hookState = vi.hoisted(() => ({
 	shouldApplyScaling: false,
 }))
 
+const envMock = vi.hoisted(() => vi.fn(() => ""))
+
 const virtualStorageMocks = vi.hoisted(() => ({
 	buildNamespace: vi.fn(() => "magic-html-storage:test"),
 	createContext: vi.fn(async () => ({
@@ -44,7 +46,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/utils/env", () => ({
-	env: vi.fn(() => ""),
+	env: envMock,
 	isDev: false,
 	isCommercial: vi.fn(() => true),
 	isPrivateDeployment: vi.fn(() => false),
@@ -377,12 +379,16 @@ function getSetContentCalls(postMessage: ReturnType<typeof vi.fn>) {
 	return postMessage.mock.calls.filter(([message]) => message?.type === "setContent")
 }
 
-function dispatchIframeMessage(iframe: HTMLIFrameElement, type: string) {
+function dispatchIframeMessage(
+	iframe: HTMLIFrameElement,
+	type: string,
+	origin = window.location.origin,
+) {
 	act(() => {
 		window.dispatchEvent(
 			new MessageEvent("message", {
 				data: { type },
-				origin: window.location.origin,
+				origin,
 				source: iframe.contentWindow,
 			}),
 		)
@@ -400,6 +406,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		vi.clearAllMocks()
+		envMock.mockReturnValue("")
 		hookState.editorContentInjectedValues = []
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
@@ -473,6 +480,8 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
 			projectId: "project-1",
+			topicId: "topic-1",
+			fileId: "index-file",
 		})
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
@@ -572,13 +581,60 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		rerender(<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={secondNavigation} />)
 		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		await flushReactEffects()
+
+		expect(nextIframe).not.toBe(iframe)
+		expect(nextIframe.src).toBe(iframe.src)
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
 		const nextPostMessage = vi
 			.spyOn(nextIframe.contentWindow as Window, "postMessage")
 			.mockImplementation(vi.fn())
 		dispatchIframeMessage(nextIframe, "iframeReady")
 		await flushReactEffects()
 
-		expect(nextIframe.src).toContain("/husky.html?value=456")
+		expect(getSetContentCalls(nextPostMessage)).toHaveLength(1)
+		expect(getSetContentCalls(nextPostMessage)[0][0]).toMatchObject({
+			locationSearch: "?value=456",
+		})
+	})
+
+	it("recreates a cross-origin sandbox shell for query updates", async () => {
+		const externalShellUrl = "https://husky.example/husky.html"
+		envMock.mockReturnValue(externalShellUrl)
+
+		const firstNavigation = {
+			filePath: "index.html",
+			search: "?value=123",
+			hash: "",
+			anchor: "",
+		}
+		const secondNavigation = { ...firstNavigation, search: "?value=456" }
+		const { rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={firstNavigation} />,
+		)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady", "https://husky.example")
+		await flushReactEffects()
+
+		rerender(<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={secondNavigation} />)
+		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		await flushReactEffects()
+
+		expect(nextIframe).not.toBe(iframe)
+		expect(nextIframe.src).toBe(externalShellUrl)
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		const nextPostMessage = vi
+			.spyOn(nextIframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(nextIframe, "iframeReady", "https://husky.example")
+		await flushReactEffects()
+
 		expect(getSetContentCalls(nextPostMessage)).toHaveLength(1)
 		expect(getSetContentCalls(nextPostMessage)[0][0]).toMatchObject({
 			locationSearch: "?value=456",

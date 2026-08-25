@@ -673,6 +673,51 @@ describe("HTML", () => {
 		})
 	})
 
+	it("should update the isolated renderer when only the query changes", async () => {
+		const oldNavigation = {
+			filePath: "page1.html",
+			search: "?mode=old",
+			hash: "",
+			anchor: "",
+		}
+		const newNavigation = {
+			filePath: "page1.html",
+			search: "?mode=new",
+			hash: "",
+			anchor: "",
+		}
+
+		const { rerender } = render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: oldNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: oldNavigation }),
+			)
+		})
+
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: newNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: newNavigation }),
+			)
+		})
+	})
+
 	it("should require an exact relative path match for bundled template entry html", () => {
 		expect(
 			resolveHtmlPreviewBundledTemplate({

@@ -13,6 +13,10 @@
 		</script>
 		<script>
 			function setupMessageListener() {
+				// setContent 会替换文档并重新初始化 shell 处理逻辑。
+				// 保留一个 window 级监听器，避免 FilesViewer 复用 iframe 时
+				// 同一个导航请求被重复处理。
+				window.removeEventListener("message", handleMessage)
 				window.addEventListener("message", handleMessage)
 			}
 
@@ -760,6 +764,20 @@
 						var sanitizedContent = sanitizeContentForSandbox(event.data.content)
 						resetTelemetryDedupe()
 						document.open()
+						window.__MAGIC_HTML_NAVIGATION__ = {
+							search: locationSearch,
+							hash: locationAnchor,
+							requestId: navigationRequestId,
+						}
+						try {
+							window.history.replaceState(
+								null,
+								"",
+								window.location.pathname + locationSearch + locationAnchor,
+							)
+						} catch (error) {
+							console.warn("Failed to update sandbox navigation state:", error)
+						}
 						document.write(sanitizedContent)
 						document.close()
 						window.__MAGIC_HTML_NAVIGATION__ = {

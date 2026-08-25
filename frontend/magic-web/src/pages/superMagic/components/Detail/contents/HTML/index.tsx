@@ -32,7 +32,7 @@ import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
 import { scrollToAnchor } from "@/utils/slug"
-import { parseHtmlNavigationRequest } from "./utils/html-navigation"
+import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "./utils/html-navigation"
 import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -465,7 +465,12 @@ export default memo(function HTML(props: HTMLProps) {
 			...displayData,
 			content: fileData || displayData?.content,
 		}
-		if (data.content !== newData.content) {
+		const contentChanged = data.content !== newData.content
+		const navigationChanged =
+			getHtmlNavigationKey(data?.htmlNavigation) !==
+			getHtmlNavigationKey(newData?.htmlNavigation)
+
+		if (contentChanged || navigationChanged) {
 			setData(newData)
 		}
 	})
@@ -477,7 +482,7 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 		updateDataContent(htmlFileData)
-	}, [htmlFileData])
+	}, [displayData, htmlFileData])
 
 	/** 处理代码预览模式 */
 	useUpdateEffect(() => {
@@ -1566,7 +1571,7 @@ export default memo(function HTML(props: HTMLProps) {
 									saveEditContent={saveEditContent}
 									onSaveReady={onSaveReady}
 									fileId={displayData?.file_id}
-									htmlNavigation={displayData?.htmlNavigation}
+									htmlNavigation={data?.htmlNavigation}
 									virtualStorageMarkerId={virtualStorageMarkerId}
 									filePathMapping={filePathMapping}
 									openNewTab={openNewTab}
@@ -1686,7 +1691,7 @@ export default memo(function HTML(props: HTMLProps) {
 					onUseServerVersion={handleAcceptServerVersion}
 					filePathMapping={filePathMapping}
 					fileId={displayData?.file_id}
-					htmlNavigation={displayData?.htmlNavigation}
+					htmlNavigation={data?.htmlNavigation}
 					openNewTab={openNewTab}
 					selectedProject={selectedProject}
 					attachmentList={attachmentList}

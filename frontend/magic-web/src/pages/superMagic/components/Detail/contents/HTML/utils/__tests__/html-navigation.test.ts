@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-	getHtmlNavigationKey,
-	getHtmlSandboxNavigationUrl,
-	parseHtmlNavigationRequest,
-} from "../html-navigation"
+import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "../html-navigation"
 
 describe("parseHtmlNavigationRequest", () => {
 	it("separates a relative path, query, hash, and normalized anchor", () => {
@@ -61,20 +57,5 @@ describe("parseHtmlNavigationRequest", () => {
 
 		expect(getHtmlNavigationKey(first)).not.toBe(getHtmlNavigationKey(second))
 		expect(getHtmlNavigationKey()).toBe("")
-	})
-
-	it("puts the latest query and hash on the sandbox shell URL", () => {
-		expect(
-			getHtmlSandboxNavigationUrl("/husky.html", {
-				search: "?value=456",
-				hash: "#detail",
-			}),
-		).toBe("/husky.html?value=456#detail")
-		expect(
-			getHtmlSandboxNavigationUrl("https://husky.example/husky.html?old=1", {
-				search: "?value=789",
-				hash: "",
-			}),
-		).toBe("https://husky.example/husky.html?value=789")
 	})
 })

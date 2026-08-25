@@ -112,7 +112,7 @@ import {
 import { logger as Logger } from "@/utils/log"
 import { useFetchInterceptionCache } from "./hooks/useFetchInterceptionCache"
 import { POST_MESSAGE_TARGET_STRATEGIES, type OnFetchIntercepted } from "./utils/fetchInterceptor"
-import { getHtmlNavigationKey, getHtmlSandboxNavigationUrl } from "./utils/html-navigation"
+import { getHtmlNavigationKey } from "./utils/html-navigation"
 import {
 	HtmlNavigationRuntimeService,
 	type HtmlNavigationRuntimeRequest,
@@ -167,7 +167,7 @@ interface IsolatedHTMLRendererProps {
 	) => Promise<void>
 	onSaveReady?: (triggerSave: () => Promise<SaveResult | undefined>) => void
 	fileId?: string
-	/** Runtime-only URL state requested by navigation inside the HTML app. */
+	/** HTML 内部导航请求的运行时 URL 状态。 */
 	htmlNavigation?: HtmlNavigationRequest
 	/** 跨多个 HTML 文件共享存储时使用的稳定标记；未传时继续按当前文件隔离。 */
 	virtualStorageMarkerId?: string
@@ -417,10 +417,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			() => externalRenderSiteUrl || "/husky.html",
 			[externalRenderSiteUrl],
 		)
-		const htmlSandboxNavigationUrl = useMemo(
-			() => getHtmlSandboxNavigationUrl(htmlSandboxShellUrl, htmlNavigation),
-			[htmlNavigation, htmlSandboxShellUrl],
-		)
 		const externalRenderSiteOrigin = useMemo(() => {
 			if (!externalRenderSiteUrl) return ""
 
@@ -491,12 +487,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		)
 		const htmlNavigationKey = useMemo(
 			() => getHtmlNavigationKey(htmlNavigation),
-			[
-				htmlNavigation?.anchor,
-				htmlNavigation?.filePath,
-				htmlNavigation?.hash,
-				htmlNavigation?.search,
-			],
+			[htmlNavigation],
 		)
 		useEffect(() => {
 			const iframe = iframeRef.current
@@ -1186,15 +1177,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				setContentInjected(false)
 				navigationRuntimeService.resetShell()
 				lastPreparedContentKeyRef.current = null
-
-				// shell 负责启动 runtime，业务 HTML 通过 setContent 传递，导航状态放在 shell src。
-				if (iframe.getAttribute("src") !== htmlSandboxNavigationUrl) {
-					iframe.src = htmlSandboxNavigationUrl
+				// 业务 query/hash 不拼接到远程 shell URL：远程 shell 可能对 query 做签名校验。
+				// 导航状态变化时通过 key 创建新的 shell 实例，避免复用旧 document 的 History 状态。
+				if (iframe.getAttribute("src") !== htmlSandboxShellUrl) {
+					iframe.src = htmlSandboxShellUrl
 				}
 			} catch (error) {
 				console.error("初始化iframe内容时出错:", error)
 			}
-		}, [htmlSandboxNavigationUrl])
+		}, [htmlNavigationKey, htmlSandboxShellUrl, navigationRuntimeService])
 
 		const getMarkerId = useMemoizedFn(() => {
 			if (!attachmentList || !fileId) return fileId
@@ -1344,7 +1335,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				locationAnchor: htmlNavigation?.hash || "",
 			}
 			lastPreparedContentKeyRef.current = contentKey
-
 			// shell 未 ready 时只保存最新请求，ready 后再发送。
 			try {
 				const sendResult = navigationRuntimeService.submit(request)
@@ -1525,18 +1515,22 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}),
 			[
 				containIframeOverscroll,
+				contentMetricsTargetOrigin,
 				disableIframeDocumentClickBridge,
 				documentFlowFullscreen,
 				dynamicResourceInterceptionConfig,
+				fileId,
 				getStorageMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
 				isEditMode,
 				isMediaScenario,
+				htmlNavigation?.hash,
+				htmlNavigation?.search,
 				refreshIframeContent,
 				editorRef,
 				handleFetchIntercepted,
-				iframeTargetOrigin,
+				navigationRuntimeService,
 				postMessageTargetStrategy,
 				devConsole.toggle,
 				elementInspector,
@@ -2159,7 +2153,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			content,
 			htmlNavigation,
 			iframeLoaded,
-			htmlSandboxNavigationUrl,
+			htmlSandboxShellUrl,
 			injectIframeContent,
 			sandboxType,
 			virtualStorageContext,
@@ -2350,8 +2344,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					>
 						{sandboxType === "iframe" ? (
 							<>
+								{/*
+								 * 远程 shell URL 不能携带业务 query，因为 shell 服务可能会校验这些参数。
+								 * 每次导航状态变化时重新创建 shell：复用同一个 iframe 并调用
+								 * document.open/document.write 可能保留旧的 History URL，导致下一个
+								 * HTML 文档仍然读取到之前的 query。
+								 */}
 								<iframe
-									key={htmlSandboxNavigationUrl}
+									key={`${htmlSandboxShellUrl}:${htmlNavigationKey}`}
 									ref={iframeRef}
 									className={cn(
 										styles.iframe,
@@ -2361,7 +2361,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 										iframeClassName,
 									)}
 									title="Isolated HTML Content"
-									src={htmlSandboxNavigationUrl}
+									src={htmlSandboxShellUrl}
 									onLoad={handleIframeElementLoad}
 									onError={handleIframeElementError}
 									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"

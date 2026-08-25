@@ -149,9 +149,25 @@ const getVitestBaseConfig = () => {
 	}
 }
 
+const vitestBaseConfig = getVitestBaseConfig()
+const overlayConfig = getOverlayViteConfig({
+	projectRoot: __dirname,
+	mode: "test",
+	loadEnv: false,
+})
+const baseAliases = vitestBaseConfig.resolve?.alias
+const overlayAliases = overlayConfig.resolve?.alias
+
 export default defineConfig(
-	mergeConfig(getVitestBaseConfig(), {
-		resolve: getOverlayViteConfig({ projectRoot: __dirname, mode: "test", loadEnv: false })
-			.resolve,
+	mergeConfig(vitestBaseConfig, {
+		...overlayConfig,
+		resolve: {
+			...overlayConfig.resolve,
+			// overlay 配置包含自定义别名时，同时保留测试环境专用别名。
+			alias: [
+				...(Array.isArray(baseAliases) ? baseAliases : []),
+				...(Array.isArray(overlayAliases) ? overlayAliases : []),
+			],
+		},
 	}),
 )

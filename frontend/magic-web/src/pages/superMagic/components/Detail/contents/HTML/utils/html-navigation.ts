@@ -25,31 +25,6 @@ export function getHtmlNavigationKey(navigation?: HtmlNavigationRequest): string
 	)
 }
 
-/**
- * Adds the runtime query/hash to the sandbox shell URL.
- *
- * The shell URL is the browser-visible URL of the iframe. Keeping the
- * navigation state here lets user HTML read the current values from the
- * native Location object instead of relying on a history API shim.
- */
-export function getHtmlSandboxNavigationUrl(
-	shellUrl: string,
-	navigation?: Pick<HtmlNavigationRequest, "search" | "hash">,
-): string {
-	if (!navigation) return shellUrl
-
-	try {
-		const url = new URL(shellUrl, "https://magic-html-sandbox.invalid")
-		url.search = navigation.search || ""
-		url.hash = navigation.hash || ""
-
-		if (/^[a-z][a-z\d+.-]*:/i.test(shellUrl)) return url.toString()
-		return `${url.pathname}${url.search}${url.hash}`
-	} catch {
-		return `${shellUrl}${navigation.search || ""}${navigation.hash || ""}`
-	}
-}
-
 function normalizeAnchor(hash: string): string {
 	if (!hash) return ""
 
