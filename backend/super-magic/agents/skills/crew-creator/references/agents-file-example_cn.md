@@ -11,11 +11,8 @@
 **输入：** 用户提供的原始资料（如文件、图片、文本等）
 
 **执行：**
-加载并调用分析类 skill：
-
-```
-read_skills(skill_names=["analyze-input-content"])
-```
+调用分析类 skill：
+- Skill：`analyze-input-content`
 
 按照 skill 的工作流程，对输入内容进行系统性分析和特征提取。
 
@@ -27,11 +24,8 @@ read_skills(skill_names=["analyze-input-content"])
 **输入：** 基于第一步的分析结果，确定需要查询的知识领域
 
 **执行：**
-加载并调用知识检索类 skill：
-
-```
-read_skills(skill_names=["search-domain-knowledge"])
-```
+调用知识检索类 skill：
+- Skill：`search-domain-knowledge`
 
 按照 skill 的工作流程，在工作区或知识库中检索相关参考资料和规范。
 
@@ -43,11 +37,8 @@ read_skills(skill_names=["search-domain-knowledge"])
 **输入：** 第一步的分析结果 + 第二步的知识总结 + 工作区中的参考模板
 
 **执行：**
-加载并调用生成类 skill：
-
-```
-read_skills(skill_names=["generate-intermediate-output"])
-```
+调用生成类 skill：
+- Skill：`generate-intermediate-output`
 
 按照 skill 的工作流程，参照模板生成中间产物。
 
@@ -59,11 +50,8 @@ read_skills(skill_names=["generate-intermediate-output"])
 **输入：** 前面步骤的所有输出 + 工作区中的最终模板
 
 **执行：**
-加载并调用最终输出类 skill：
-
-```
-read_skills(skill_names=["generate-final-deliverable"])
-```
+调用最终输出类 skill：
+- Skill：`generate-final-deliverable`
 
 按照 skill 的工作流程，整合所有信息生成最终交付物。
 

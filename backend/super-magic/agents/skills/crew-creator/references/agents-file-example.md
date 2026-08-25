@@ -11,11 +11,8 @@ The following example demonstrates an employee `AGENTS.md` file structure that u
 **Input:** Raw materials provided by the user (such as files, images, text, etc.)
 
 **Execution:**
-Load and call an analysis-type skill:
-
-```
-read_skills(skill_names=["analyze-input-content"])
-```
+Call the analysis skill:
+- Skill: `analyze-input-content`
 
 Follow the skill workflow to systematically analyze the input and extract key features.
 
@@ -27,11 +24,8 @@ Follow the skill workflow to systematically analyze the input and extract key fe
 **Input:** Based on the analysis results from Step 1, determine the knowledge domains to query
 
 **Execution:**
-Load and call a knowledge-retrieval skill:
-
-```
-read_skills(skill_names=["search-domain-knowledge"])
-```
+Call the knowledge-retrieval skill:
+- Skill: `search-domain-knowledge`
 
 Follow the skill workflow to search the workspace or knowledge base for relevant references and specifications.
 
@@ -43,11 +37,8 @@ Follow the skill workflow to search the workspace or knowledge base for relevant
 **Input:** Analysis results from Step 1 + knowledge summary from Step 2 + reference templates in the workspace
 
 **Execution:**
-Load and call a generation-type skill:
-
-```
-read_skills(skill_names=["generate-intermediate-output"])
-```
+Call the generation skill:
+- Skill: `generate-intermediate-output`
 
 Follow the skill workflow to generate intermediate output based on templates.
 
@@ -59,11 +50,8 @@ Follow the skill workflow to generate intermediate output based on templates.
 **Input:** All outputs from previous steps + final template in the workspace
 
 **Execution:**
-Load and call a final-output skill:
-
-```
-read_skills(skill_names=["generate-final-deliverable"])
-```
+Call the final-output skill:
+- Skill: `generate-final-deliverable`
 
 Follow the skill workflow to integrate all information and generate the final deliverable.
 

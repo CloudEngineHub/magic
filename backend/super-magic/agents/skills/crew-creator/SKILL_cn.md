@@ -105,7 +105,7 @@ shell_exec(
 
 ### 初始化完成后
 
-1. 写入前，读取并按照 `references/crew-file-format_cn.md` 中的 `AGENTS.md` 规范检查工作流。
+1. 写入前，读取 `references/crew-file-format_cn.md`（`AGENTS.md` 部分）和 `references/agents-file-example_cn.md`，并按该结构检查工作流：概述、有序 SOP 步骤、输入、输出、工具/技能调用、失败分支、完成标准均需具备。
 2. 如果检查不通过，先修订工作流并重新检查，不能把普通清单直接写入 `AGENTS.md`；不得自行补充用户未指定的特殊规则。
 3. 使用 `read_files` 向用户展示生成的文件。
 4. 如果用户选择拆分 skill，先确认每个 skill 都已在 `AGENTS.md` 中声明调用流程或调用规则，再按 `skill-creator` 流程创建并验证所有独立 skill，最后报告初始化完成。
@@ -223,3 +223,4 @@ shell_exec(
 - **crew-file-format**：每种定义文件的完整格式规范和示例
 - **prompt-engineering-guide**：提示词工程最佳实践（结构模板、质量检查清单、反模式检测）
 - **available-tools**：按职能提供工具组合建议（备用参考；优先使用 `scripts/tools.py` 动态查询）
+- **agents-file-example**：提供 AGENTS.md 的完整多技能协作工作流示例
