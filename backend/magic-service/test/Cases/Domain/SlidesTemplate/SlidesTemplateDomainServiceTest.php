@@ -110,13 +110,6 @@ class SlidesTemplateDomainServiceTest extends TestCase
         self::$originalContainer = null;
     }
 
-    public function testVectorSearchEnabledReadsFeatureConfiguration(): void
-    {
-        $service = $this->makeService(new CapturingSlidesTemplateRepository());
-
-        self::assertFalse($service->isVectorSearchEnabled());
-    }
-
     public function testCreateBuildsSearchTextBeforeSaving(): void
     {
         $repository = new CapturingSlidesTemplateRepository();

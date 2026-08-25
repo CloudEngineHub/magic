@@ -134,13 +134,6 @@ class SlidesTemplateDomainService
         return $this->slidesTemplateRepository->queries($dataIsolation, $query, $page);
     }
 
-    /** Centralize the feature switch so every application and sync path uses one rule. */
-    public function isVectorSearchEnabled(): bool
-    {
-        return (bool) config('vector_index.enabled', false)
-            && (bool) config('vector_index.resources.slides_template.enabled', false);
-    }
-
     /**
      * @return array{total: int, list: SlidesTemplateEntity[]}
      */

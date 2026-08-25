@@ -24,6 +24,7 @@ use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateFavoriteDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateSearchTextBuilder;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateVectorIndexDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -55,6 +56,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         private readonly SlidesTemplateTagDomainService $slidesTemplateTagDomainService,
         private readonly SlidesTemplateColorExtractor $slidesTemplateColorExtractor,
         private readonly SlidesTemplateFavoriteDomainService $slidesTemplateFavoriteDomainService,
+        private readonly SlidesTemplateVectorIndexDomainService $slidesTemplateVectorIndexDomainService,
         ?LoggerFactory $loggerFactory = null,
     ) {
         parent::__construct($slidesTemplateDomainService);
@@ -290,7 +292,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         if (! in_array($organizationCode, $dataIsolation->getOfficialOrganizationCodes(), true)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::ONLY_OFFICIAL_ORGANIZATION_CAN_MANAGE);
         }
-        if (! $this->slidesTemplateDomainService->isVectorSearchEnabled()) {
+        if (! $this->slidesTemplateVectorIndexDomainService->isVectorSearchEnabled()) {
             // Local/private deployments may not provide Qdrant; the request remains a no-op.
             $this->logger->info('Slides template full vector sync skipped because vector search is disabled', [
                 'organization_code' => $organizationCode,

@@ -1061,12 +1061,15 @@ class SlidesTemplateAppServiceTest extends TestCase
         $colorExtractor->method('extractColors')->willReturn([]);
         /** @var SlidesTemplateFavoriteDomainService $favoriteDomainService */
         $favoriteDomainService = (new ReflectionClass(SlidesTemplateFavoriteDomainService::class))->newInstanceWithoutConstructor();
+        /** @var SlidesTemplateVectorIndexDomainService $vectorIndexDomainService */
+        $vectorIndexDomainService = (new ReflectionClass(SlidesTemplateVectorIndexDomainService::class))->newInstanceWithoutConstructor();
         $service = new TestableAdminSlidesTemplateAppService(
             $domainService,
             $categoryDomainService,
             $tagDomainService,
             $colorExtractor,
             $favoriteDomainService,
+            $vectorIndexDomainService,
         );
         $service->missingPublicFileKeys = $missingPublicFileKeys;
         $service->missingPrivateFileKeys = $missingPrivateFileKeys;

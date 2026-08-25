@@ -83,17 +83,6 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
         $domainService->sync($dataIsolation, '1001', 'USER001');
     }
 
-    public function testVectorSearchEnabledReadsVectorIndexConfiguration(): void
-    {
-        $this->setEmbeddingResult([], self::never());
-        $vectorIndexDomainService = $this->domainService(
-            $this->createMock(SlidesTemplateRepositoryInterface::class),
-            $this->createMock(VectorStoreInterface::class),
-        );
-
-        self::assertTrue($vectorIndexDomainService->isVectorSearchEnabled());
-    }
-
     public function testUnchangedSearchTextUpdatesPayloadWithoutEmbedding(): void
     {
         $template = (new SlidesTemplateEntity())

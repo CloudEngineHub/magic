@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\SlidesTemplate\Service;
 
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
@@ -19,6 +20,7 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
+use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -215,8 +217,7 @@ final class SlidesTemplateVectorIndexDomainService
     /** Return whether vector indexing is enabled for SlidesTemplate. */
     public function isVectorSearchEnabled(): bool
     {
-        return (bool) config('vector_index.enabled', false)
-            && (bool) config('vector_index.resources.slides_template.enabled', false);
+        return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
     }
 
     /** Return whether Qdrant rejected creation because another consumer won the race. */
