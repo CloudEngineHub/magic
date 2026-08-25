@@ -26,6 +26,7 @@ use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ImportOfficialSkillRequestDTO;
@@ -93,7 +94,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             isUpdate: $isUpdate,
             nameI18n: $market?->getNameI18n() ?: $this->buildDefaultNameI18n($package->packageName),
             descriptionI18n: $market?->getDescriptionI18n() ?: $this->buildDefaultDescriptionI18n($package->packageDescription),
-            logo: $market?->getLogo() ?? '',
+            logo: $this->resolveLogoUrl($organizationCode, $market?->getLogo()),
             id: $market === null ? '' : (string) $market->getId(),
             publisherType: $market?->getPublisherType()->value ?? PublisherType::OFFICIAL->value,
             isFeatured: $market?->isFeatured() ?? false,
@@ -245,7 +246,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $version->setNameI18n($requestDTO->getNameI18n());
         $version->setDescriptionI18n($requestDTO->getDescriptionI18n());
         $version->setSourceI18n($requestDTO->getSourceI18n());
-        $version->setLogo($requestDTO->getLogo() !== '' ? $requestDTO->getLogo() : null);
+        $version->setLogo($this->normalizeLogoPath($requestDTO->getLogo()));
         $version->setFileKey($package->fileKey);
         $version->setPublishStatus($requestDTO->getPublishStatus());
         $version->setReviewStatus(ReviewStatus::APPROVED);
@@ -277,7 +278,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $market->setNameI18n($requestDTO->getNameI18n());
         $market->setDescriptionI18n($requestDTO->getDescriptionI18n());
         $market->setSearchText($version->getSearchText());
-        $market->setLogo($requestDTO->getLogo() !== '' ? $requestDTO->getLogo() : null);
+        $market->setLogo($this->normalizeLogoPath($requestDTO->getLogo()));
         // 官方导入只能创建或更新官方发布的 Skill，不使用请求中的发布者身份。
         $market->setPublisherId($authorization->getOrganizationCode());
         $market->setPublisherType(PublisherType::OFFICIAL);
@@ -287,6 +288,31 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $market->setSortOrder($requestDTO->getSortOrder());
 
         return $this->officialSkillMarketDomainService->saveStoreSkill($market);
+    }
+
+    private function normalizeLogoPath(string $logo): ?string
+    {
+        if ($logo === '') {
+            return null;
+        }
+
+        $logoPath = EasyFileTools::formatPath($logo);
+        return $logoPath !== '' ? $logoPath : null;
+    }
+
+    private function resolveLogoUrl(string $organizationCode, ?string $logo): string
+    {
+        if ($logo === null || $logo === '') {
+            return '';
+        }
+
+        $logoPath = EasyFileTools::formatPath($logo);
+        if ($logoPath === '') {
+            return '';
+        }
+
+        $fileLink = $this->getIcons($organizationCode, [$logoPath])[$logoPath] ?? null;
+        return $fileLink?->getUrl() ?? $logo;
     }
 
     private function resolveImportVersion(
