@@ -87,7 +87,7 @@ export function RecordingSummaryFloatPanel() {
 	const [attachmentList, _setAttachmentList] = useState<any[]>([])
 	/** Hidden-inclusive tree used only for note image path lookup. */
 	const [imageLookupAttachments, setImageLookupAttachments] = useState<AttachmentItem[]>([])
-	const [isEnablingTranscription, setIsEnablingTranscription] = useState(false)
+	const [isTranscriptionToggling, setIsTranscriptionToggling] = useState(false)
 	/** Project id whose attachments fetch has settled; gates note image URL resolution after refresh. */
 	const [attachmentsReadyProjectId, setAttachmentsReadyProjectId] = useState("")
 	/** Cache the folder id together with its scope so project switches cannot reuse it. */
@@ -543,18 +543,19 @@ export function RecordingSummaryFloatPanel() {
 	})
 
 	/**
-	 * Enables realtime transcription for the active PC session and persists the
-	 * default_audio setting so future recordings start with ASR enabled.
+	 * Toggles realtime transcription for the active PC session and persists the
+	 * default_audio setting so the next recording uses the same preference.
 	 */
-	const handleEnableTranscription = useMemoizedFn(async () => {
-		if (isEnablingTranscription) return
+	const handleTranscriptionEnabledChange = useMemoizedFn(async (enabled: boolean) => {
+		if (isTranscriptionToggling) return
 
-		setIsEnablingTranscription(true)
+		setIsTranscriptionToggling(true)
 		try {
+			await recordSummaryService.setTranscriptionEnabledForCurrentSession(enabled)
 			const apiResponse = await getRecordingTopicModel()
 			const cachedSettings = getCachedRecordingSettings()
 			const nextSettings = {
-				transcription_enabled: true,
+				transcription_enabled: enabled,
 				auto_summary_enabled: resolveAutoSummaryEnabled(cachedSettings, apiResponse),
 				model_id:
 					cachedSettings?.model_id ||
@@ -565,12 +566,11 @@ export function RecordingSummaryFloatPanel() {
 			}
 
 			await saveRecordingTopicModel(settingsToApiPayload(nextSettings, apiResponse))
-			patchCachedRecordingSettings({ transcription_enabled: true })
-			await recordSummaryService.enableTranscriptionForCurrentSession()
+			patchCachedRecordingSettings({ transcription_enabled: enabled })
 		} catch {
-			magicToast.error(t("mobile.recordingEntry.active.enableTranscriptionFailed"))
+			magicToast.error(t("mobile.recordingEntry.settings.saveFailed"))
 		} finally {
-			setIsEnablingTranscription(false)
+			setIsTranscriptionToggling(false)
 		}
 	})
 
@@ -723,8 +723,8 @@ export function RecordingSummaryFloatPanel() {
 				requireImagesFolderParentId
 				isAudioProjectMode={isAudioRecordingProject}
 				transcriptionEnabled={recordingSummaryStore.businessData.transcriptionEnabled}
-				isEnablingTranscription={isEnablingTranscription}
-				onEnableTranscription={handleEnableTranscription}
+				isTranscriptionToggling={isTranscriptionToggling}
+				onTranscriptionEnabledChange={handleTranscriptionEnabledChange}
 			/>
 		</>
 	)
