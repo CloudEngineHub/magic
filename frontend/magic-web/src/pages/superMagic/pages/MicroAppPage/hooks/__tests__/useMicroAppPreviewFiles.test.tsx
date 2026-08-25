@@ -68,4 +68,50 @@ describe("useMicroAppPreviewFiles", () => {
 
 		await waitFor(() => expect(result.current.previewEntryFile).toBe(defaultEntry))
 	})
+
+	it("keeps and clears HTML navigation context when opening a preview file", () => {
+		const defaultEntry = file("entry-1", "index.html")
+		const targetFile = file("page-1", "page1.html")
+		const { result } = renderHook(() =>
+			useMicroAppPreviewFiles({
+				attachmentList: [defaultEntry, targetFile],
+				defaultEntryFile: defaultEntry,
+			}),
+		)
+		const navigation = {
+			filePath: "page1.html",
+			search: "?value=123",
+			hash: "#details",
+			anchor: "details",
+		}
+		const updatedNavigation = {
+			...navigation,
+			search: "?value=456",
+		}
+
+		act(() => {
+			result.current.handlePreviewOpenFile({ ...targetFile, htmlNavigation: navigation })
+		})
+		expect(result.current.previewEntryFile).toEqual({
+			...targetFile,
+			htmlNavigation: navigation,
+		})
+
+		act(() => {
+			result.current.handlePreviewOpenFile({
+				...targetFile,
+				htmlNavigation: updatedNavigation,
+			})
+		})
+		expect(result.current.previewEntryFile).toEqual({
+			...targetFile,
+			htmlNavigation: updatedNavigation,
+		})
+
+		act(() => {
+			result.current.handlePreviewOpenFile(targetFile)
+		})
+		expect(result.current.previewEntryFile).toEqual(targetFile)
+		expect(result.current.previewEntryFile?.htmlNavigation).toBeUndefined()
+	})
 })

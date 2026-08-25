@@ -721,6 +721,8 @@
 				"defaultModel": "默认模型",
 				"defaultVideoModel": "默认视频模型",
 				"editTitle": "编辑配置",
+				"enableSchedule": "启用定时执行",
+				"enableScheduleHint": "开启后将按设定频率自动更新观察结果",
 				"generate": "生成观察结果",
 				"imageModel": "生图模型",
 				"languageModel": "语言模型",

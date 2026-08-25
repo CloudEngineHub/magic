@@ -440,6 +440,10 @@ const FilesViewer = memo(
 					String(isDocumentFlowFullscreen),
 					String(otherProps.type || ""),
 					String(otherProps.updatedAt || ""),
+					currentTab.fileData.htmlNavigation?.filePath || "",
+					currentTab.fileData.htmlNavigation?.search || "",
+					currentTab.fileData.htmlNavigation?.hash || "",
+					currentTab.fileData.htmlNavigation?.anchor || "",
 					props.activeFileId || "",
 					props.showFileFooter ? "1" : "0",
 				].join("|")
@@ -449,6 +453,10 @@ const FilesViewer = memo(
 				isDocumentFlowFullscreen,
 				otherProps.type,
 				otherProps.updatedAt,
+				currentTab?.fileData.htmlNavigation?.filePath,
+				currentTab?.fileData.htmlNavigation?.search,
+				currentTab?.fileData.htmlNavigation?.hash,
+				currentTab?.fileData.htmlNavigation?.anchor,
 				props.activeFileId,
 				props.showFileFooter,
 			])

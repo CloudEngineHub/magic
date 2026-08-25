@@ -720,6 +720,8 @@
 				"defaultModel": "Default model",
 				"defaultVideoModel": "Default video model",
 				"editTitle": "Edit Configuration",
+				"enableSchedule": "Enable Scheduled Execution",
+				"enableScheduleHint": "Observation results will update at the set frequency",
 				"generate": "Generate Observation",
 				"imageModel": "Image Model",
 				"languageModel": "Language Model",

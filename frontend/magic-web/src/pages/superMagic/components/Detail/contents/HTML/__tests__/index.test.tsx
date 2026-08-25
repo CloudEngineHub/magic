@@ -649,6 +649,75 @@ describe("HTML", () => {
 		)
 	})
 
+	it("should pass HTML navigation state to the isolated renderer", async () => {
+		const htmlNavigation = {
+			filePath: "page1.html",
+			search: "?name=%E5%BC%A0%E4%B8%89&mode=preview",
+			hash: "#summary",
+			anchor: "summary",
+		}
+
+		render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation }),
+			)
+		})
+	})
+
+	it("should update the isolated renderer when only the query changes", async () => {
+		const oldNavigation = {
+			filePath: "page1.html",
+			search: "?mode=old",
+			hash: "",
+			anchor: "",
+		}
+		const newNavigation = {
+			filePath: "page1.html",
+			search: "?mode=new",
+			hash: "",
+			anchor: "",
+		}
+
+		const { rerender } = render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: oldNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: oldNavigation }),
+			)
+		})
+
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: newNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: newNavigation }),
+			)
+		})
+	})
+
 	it("should require an exact relative path match for bundled template entry html", () => {
 		expect(
 			resolveHtmlPreviewBundledTemplate({
