@@ -362,6 +362,9 @@ describe("SlidesTemplatePanel", () => {
 		expect(
 			screen.getByTestId("slides-template-home-clear-selected-template"),
 		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("slides-template-home-selected-template").children[1],
+		).toHaveClass("md:ml-auto")
 
 		fireEvent.click(screen.getByTestId("slides-template-home-preview-selected-template"))
 		expect(screen.getByTestId("slides-preset-preview-dialog-content")).toBeInTheDocument()

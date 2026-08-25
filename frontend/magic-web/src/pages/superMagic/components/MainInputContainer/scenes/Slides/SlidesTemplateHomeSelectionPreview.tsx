@@ -419,7 +419,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 					compactLayout
 						? `md:ml-auto md:min-w-0 md:flex-[0_1_auto] ${template ? "pt-2 md:pl-4 md:pt-0" : "px-3 py-2 md:py-0 md:pl-2 md:pr-3"}`
 						: template
-							? "pt-2 md:pt-0"
+							? "pt-2 md:ml-auto md:pt-0"
 							: "px-3 py-2 md:py-0 md:pl-2 md:pr-3"
 				}`}
 			>
