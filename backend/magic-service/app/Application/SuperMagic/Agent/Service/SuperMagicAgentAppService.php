@@ -962,12 +962,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $code);
 
-        $versionRecordCount = $this->superMagicAgentVersionDomainService->countVersionsByCode($dataIsolation, $code);
         $descriptionI18n = $agentEntity->getDescriptionI18n();
-        $version = sprintf('%d.0.0', $versionRecordCount + 1);
         $versionDescriptionI18n = is_array($descriptionI18n) ? $descriptionI18n : [];
 
         $latestVersion = $this->superMagicAgentVersionDomainService->findLatestVersionByCreatedAt($dataIsolation, $code);
+        $version = $this->superMagicAgentVersionDomainService->getNextAvailableVersion(
+            $dataIsolation,
+            $code,
+            $latestVersion?->getVersion(),
+        );
         if ($latestVersion !== null) {
             $publishTargetType = $latestVersion->getPublishTargetType()->value;
             $publishTargetValue = $latestVersion->getPublishTargetType()->requiresTargetValue()

@@ -30,6 +30,7 @@ use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\DataIsolation\ValueObject\OrganizationType;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\VersionUtil;
 use Hyperf\DbConnection\Annotation\Transactional;
 
 /**
@@ -68,6 +69,24 @@ class SuperMagicAgentVersionDomainService
     public function findLatestVersionByCreatedAt(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?AgentVersionEntity
     {
         return $this->agentVersionRepository->findLatestByCreatedAtDesc($dataIsolation, $code);
+    }
+
+    public function existsByCodeAndVersion(SuperMagicAgentDataIsolation $dataIsolation, string $code, string $version): bool
+    {
+        return $this->agentVersionRepository->existsByCodeAndVersion($dataIsolation, $code, $version);
+    }
+
+    public function getNextAvailableVersion(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code,
+        ?string $latestVersion
+    ): string {
+        $nextVersion = VersionUtil::getNextVersion($latestVersion);
+        while ($this->existsByCodeAndVersion($dataIsolation, $code, $nextVersion)) {
+            $nextVersion = VersionUtil::getNextVersion($nextVersion);
+        }
+
+        return $nextVersion;
     }
 
     public function getCurrentOrLatestByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?AgentVersionEntity

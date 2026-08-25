@@ -820,12 +820,15 @@ class SkillAppService extends AbstractSkillAppService
         $dataIsolation->disabled();
         $skillEntity = $this->skillDomainService->findSkillByCode($dataIsolation, $code);
 
-        $versionRecordCount = $this->skillVersionDomainService->countSkillVersionsByCode($dataIsolation, $code);
         $descriptionI18n = $skillEntity->getDescriptionI18n();
-        $version = sprintf('%d.0.0', $versionRecordCount + 1);
         $versionDescriptionI18n = is_array($descriptionI18n) ? $descriptionI18n : [];
 
         $latestVersion = $this->skillVersionDomainService->findLatestSkillVersionByCode($dataIsolation, $code);
+        $version = $this->skillVersionDomainService->getNextAvailableVersion(
+            $dataIsolation,
+            $code,
+            $latestVersion?->getVersion(),
+        );
         if ($latestVersion !== null) {
             $publishTargetType = $latestVersion->getPublishTargetType()->value;
             $publishTargetValue = $latestVersion->getPublishTargetType()->requiresTargetValue()

@@ -71,7 +71,12 @@ interface SkillVersionRepositoryInterface
     /**
      * 检查同一个 Skill 下版本号是否已存在.
      */
-    public function existsByCodeAndVersion(SkillDataIsolation $dataIsolation, string $code, string $version): bool;
+    public function existsByCodeAndVersion(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        string $version,
+        ?int $excludedId = null
+    ): bool;
 
     /**
      * 根据 code 查找最新已发布版本的 Skill 版本.

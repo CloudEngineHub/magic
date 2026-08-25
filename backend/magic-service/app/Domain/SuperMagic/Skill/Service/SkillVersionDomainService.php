@@ -26,6 +26,7 @@ use App\Infrastructure\Core\DataIsolation\ValueObject\OrganizationType;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\File\EasyFileTools;
+use App\Infrastructure\Util\VersionUtil;
 use Hyperf\DbConnection\Db;
 use Throwable;
 use ValueError;
@@ -186,6 +187,28 @@ class SkillVersionDomainService
     public function findLatestSkillVersionByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity
     {
         return $this->skillVersionRepository->findLatestByCode($dataIsolation, $code);
+    }
+
+    public function existsByCodeAndVersion(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        string $version,
+        ?int $excludedId = null
+    ): bool {
+        return $this->skillVersionRepository->existsByCodeAndVersion($dataIsolation, $code, $version, $excludedId);
+    }
+
+    public function getNextAvailableVersion(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        ?string $latestVersion
+    ): string {
+        $nextVersion = VersionUtil::getNextVersion($latestVersion);
+        while ($this->existsByCodeAndVersion($dataIsolation, $code, $nextVersion)) {
+            $nextVersion = VersionUtil::getNextVersion($nextVersion);
+        }
+
+        return $nextVersion;
     }
 
     public function findLatestMarketSkillVersionByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity

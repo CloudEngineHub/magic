@@ -87,6 +87,7 @@ return [
     'query_codes_item_too_long' => '单个 code 长度不能超过 64',
     'export_failed' => '技能导出失败，请稍后重试',
     'version_required' => '版本号不能为空',
+    'invalid_version_format' => '版本号格式不正确，仅支持 1.0、1.0.0、v1.0、v1.0.0、V1.0 或 V1.0.0',
     'official_organization_required' => '仅官方组织允许维护官方 Skill',
     'official_import_source_required' => 'import_token 和 file_key 必须传入一个',
     'official_import_source_conflict' => 'import_token 和 file_key 只能传入一个',

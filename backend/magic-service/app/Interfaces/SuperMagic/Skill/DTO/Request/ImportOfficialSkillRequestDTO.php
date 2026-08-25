@@ -10,6 +10,7 @@ namespace App\Interfaces\SuperMagic\Skill\DTO\Request;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Infrastructure\Core\AbstractRequestDTO;
+use App\Infrastructure\Util\VersionUtil;
 use Hyperf\Validation\ValidationException;
 
 use function Hyperf\Translation\__;
@@ -121,7 +122,7 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
         return [
             'import_token' => 'nullable|string',
             'file_key' => 'nullable|string',
-            'version' => 'required|string|max:32',
+            'version' => ['required', 'string', 'max:32', VersionUtil::getValidationRule()],
             'name_i18n' => 'required|array',
             'name_i18n.default' => 'required|string',
             'description_i18n' => 'required|array',
@@ -142,6 +143,7 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
     {
         return [
             'version.required' => __('skill.version_required'),
+            'version.regex' => __('skill.invalid_version_format'),
             'name_i18n.default.required' => __('skill.name_i18n_default_required'),
             'description_i18n.default.required' => __('skill.description_i18n_default_required'),
         ];

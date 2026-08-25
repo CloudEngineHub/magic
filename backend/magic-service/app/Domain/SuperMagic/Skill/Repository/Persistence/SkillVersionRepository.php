@@ -268,15 +268,24 @@ class SkillVersionRepository extends AbstractRepository implements SkillVersionR
         return $result;
     }
 
-    public function existsByCodeAndVersion(SkillDataIsolation $dataIsolation, string $code, string $version): bool
-    {
+    public function existsByCodeAndVersion(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        string $version,
+        ?int $excludedId = null
+    ): bool {
         $builder = $this->createBuilder($dataIsolation, $this->skillVersionModel::query());
 
-        return $builder
+        $builder = $builder
             ->where('code', $code)
             ->where('version', $version)
-            ->whereNull('deleted_at')
-            ->exists();
+            ->whereNull('deleted_at');
+
+        if ($excludedId !== null) {
+            $builder->where('id', '<>', $excludedId);
+        }
+
+        return $builder->exists();
     }
 
     /**

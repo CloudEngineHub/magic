@@ -88,6 +88,7 @@ return [
         'agent_version_not_found' => 'Agent version not found',
         'can_only_review_pending_version' => 'Can only review pending versions',
         'version_already_exists' => 'Version already exists',
+        'invalid_version_format' => 'Invalid version format. Supported formats: 1.0, 1.0.0, v1.0, v1.0.0, V1.0, or V1.0.0',
         'publish_target_type_invalid' => 'Invalid publish target type',
         'publish_target_value_should_be_empty' => 'publish_target_value must be empty for current publish target type',
         'publish_target_value_required' => 'publish_target_value is required for current publish target type',

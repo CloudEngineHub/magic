@@ -9,6 +9,7 @@ namespace App\Interfaces\SuperMagic\Agent\DTO\Request;
 
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishTargetValue;
 use App\Infrastructure\Core\AbstractRequestDTO;
+use App\Infrastructure\Util\VersionUtil;
 use Hyperf\Validation\Rule;
 
 use function Hyperf\Translation\__;
@@ -85,7 +86,7 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'version' => 'required|string|max:32',
+            'version' => ['required', 'string', 'max:32', VersionUtil::getValidationRule()],
             'version_description_i18n' => 'required|array',
             'version_description_i18n.zh_CN' => 'nullable|string|max:1000',
             'version_description_i18n.en_US' => 'nullable|string|max:1000',
@@ -106,6 +107,7 @@ class PublishAgentRequestDTO extends AbstractRequestDTO
             'version.required' => __('common.parameter_required', ['label' => 'version']),
             'version.string' => __('validation.string', ['attribute' => 'version']),
             'version.max' => __('validation.max.string', ['attribute' => 'version', 'max' => 32]),
+            'version.regex' => __('super_magic.agent.invalid_version_format'),
             'version_description_i18n.required' => __('common.parameter_required', ['label' => 'version_description_i18n']),
             'version_description_i18n.array' => __('validation.array', ['attribute' => 'version_description_i18n']),
             'version_description_i18n.zh_CN.string' => __('validation.string', ['attribute' => 'version_description_i18n.zh_CN']),

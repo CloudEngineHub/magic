@@ -75,6 +75,18 @@ class OfficialSkillImportRequestDTOTest extends TestCase
         ]));
     }
 
+    public function testImportRejectsInvalidVersionFormat(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        ImportOfficialSkillRequestDTO::fromRequest($this->createRequest([
+            'file_key' => 'official/demo.zip',
+            'version' => 'adasd',
+            'name_i18n' => ['default' => 'Official skill'],
+            'description_i18n' => ['default' => 'Description'],
+        ]));
+    }
+
     public function testImportDefaultsToOfficialPublisher(): void
     {
         $dto = ImportOfficialSkillRequestDTO::fromRequest($this->createRequest([

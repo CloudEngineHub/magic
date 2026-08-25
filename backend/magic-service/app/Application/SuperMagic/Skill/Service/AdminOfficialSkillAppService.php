@@ -82,6 +82,9 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             'package_description' => $package->packageDescription,
         ]);
 
+        $dataIsolation = SkillDataIsolation::create($organizationCode, $authorization->getId());
+        $dataIsolation->disabled();
+
         return new OfficialSkillImportPreviewDTO(
             importToken: $token,
             code: $code,
@@ -96,7 +99,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             isFeatured: $market?->isFeatured() ?? false,
             isHidden: $market?->isHidden() ?? false,
             sortOrder: $market?->getSortOrder() ?? 0,
-            version: $this->resolveImportVersion($market, $version),
+            version: $this->resolveImportVersion($dataIsolation, $code, $market, $version),
             categories: $this->buildCategories($categoryIds),
         );
     }
@@ -214,6 +217,14 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $dataIsolation->disabled();
         $version = $market === null ? new SkillVersionEntity() : $this->officialSkillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($market->getSkillVersionId());
         $version ??= new SkillVersionEntity();
+        if ($this->officialSkillVersionDomainService->existsByCodeAndVersion(
+            $dataIsolation,
+            $code,
+            $requestDTO->getVersion(),
+            $version->getId(),
+        )) {
+            ExceptionBuilder::throw(SkillErrorCode::VERSION_ALREADY_EXISTS, 'skill.version_already_exists');
+        }
         if ($version->getId() !== null) {
             $this->officialSkillVersionDomainService->clearCurrentVersionByCode($dataIsolation, $code);
         }
@@ -271,9 +282,17 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         return $this->officialSkillMarketDomainService->saveStoreSkill($market);
     }
 
-    private function resolveImportVersion(?SkillMarketEntity $market, ?SkillVersionEntity $version): string
-    {
-        return $market === null ? '1.0.0' : ($version?->getVersion() ?? '');
+    private function resolveImportVersion(
+        SkillDataIsolation $dataIsolation,
+        string $code,
+        ?SkillMarketEntity $market,
+        ?SkillVersionEntity $version
+    ): string {
+        return $this->officialSkillVersionDomainService->getNextAvailableVersion(
+            $dataIsolation,
+            $code,
+            $market === null ? null : ($version?->getVersion() ?? ''),
+        );
     }
 
     /** @param array<int, int> $categoryIds @return array<int, array{id: string, name: string}> */

@@ -87,6 +87,7 @@ return [
     'query_codes_item_too_long' => 'each code must not exceed 64 characters',
     'export_failed' => 'Skill export failed. Please try again later',
     'version_required' => 'Version is required',
+    'invalid_version_format' => 'Invalid version format. Supported formats: 1.0, 1.0.0, v1.0, v1.0.0, V1.0, or V1.0.0',
     'official_organization_required' => 'Only the official organization can manage official Skills',
     'official_import_source_required' => 'Exactly one of import_token or file_key is required',
     'official_import_source_conflict' => 'import_token and file_key cannot be used together',
