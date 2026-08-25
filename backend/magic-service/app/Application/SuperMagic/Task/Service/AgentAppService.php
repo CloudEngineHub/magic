@@ -687,18 +687,30 @@ readonly class AgentAppService
      */
     private function getAgentPersonalPreferences(DataIsolation $dataIsolation): array
     {
-        $setting = $this->magicUserSettingDomainService->get(
-            $dataIsolation,
-            UserSettingKey::PersonalPreferences->value
-        );
-        $preferences = $setting?->getValue() ?? [];
-        $longTermMemoryEnabled = $preferences[PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED] ?? true;
+        try {
+            $setting = $this->magicUserSettingDomainService->get(
+                $dataIsolation,
+                UserSettingKey::PersonalPreferences->value
+            );
+            $preferences = $setting?->getValue() ?? [];
+            $longTermMemoryEnabled = $preferences[PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED] ?? true;
 
-        return [
-            PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => is_bool($longTermMemoryEnabled)
-                ? $longTermMemoryEnabled
-                : true,
-        ];
+            return [
+                PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => is_bool($longTermMemoryEnabled)
+                    ? $longTermMemoryEnabled
+                    : true,
+            ];
+        } catch (Throwable $throwable) {
+            // 个人偏好是可选配置，读取失败时必须保持聊天主链路可用。
+            $this->logger->warning('[Sandbox][App] Failed to load personal preferences, using defaults', [
+                'exception_class' => $throwable::class,
+                'user_id' => $dataIsolation->getCurrentUserId(),
+            ]);
+
+            return [
+                PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => true,
+            ];
+        }
     }
 
     private function dispatchRollbackAffectedFileChanges(
