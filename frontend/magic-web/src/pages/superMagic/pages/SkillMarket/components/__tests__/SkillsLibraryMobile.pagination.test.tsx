@@ -186,7 +186,7 @@ describe("SkillsLibraryMobile pagination", () => {
 		})
 		expect(getStoreSkillsMock.mock.calls[1]?.[0]).toEqual({
 			page: 1,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(getStoreSkillsMock.mock.calls[1]?.[0]).not.toHaveProperty("category_ids")

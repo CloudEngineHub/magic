@@ -150,14 +150,14 @@ describe("StoreSkillsStore", () => {
 		const store = new StoreSkillsStore()
 		const featuredSkill = createSkill("featured", { isFeatured: true })
 		vi.mocked(skillsService.getStoreSkills).mockResolvedValueOnce(
-			createPage([featuredSkill], 1, 3),
+			createPage([featuredSkill], 1, 6),
 		)
 
 		await store.fetchFeaturedSkills()
 
 		expect(skillsService.getStoreSkills).toHaveBeenCalledWith({
 			page: 1,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(store.featuredList).toEqual([featuredSkill])
@@ -169,7 +169,7 @@ describe("StoreSkillsStore", () => {
 
 	it("requests the next featured page and wraps after a short last page", async () => {
 		const store = new StoreSkillsStore()
-		const firstPage = Array.from({ length: 3 }, (_, index) =>
+		const firstPage = Array.from({ length: 6 }, (_, index) =>
 			createSkill(`featured-first-${index}`, { isFeatured: true }),
 		)
 		const secondPage = [
@@ -177,16 +177,16 @@ describe("StoreSkillsStore", () => {
 			createSkill("featured-second-2", { isFeatured: true }),
 		]
 		vi.mocked(skillsService.getStoreSkills)
-			.mockResolvedValueOnce(createPage(firstPage, 1, 3))
-			.mockResolvedValueOnce(createPage(secondPage, 2, 3))
-			.mockResolvedValueOnce(createPage(firstPage, 1, 3))
+			.mockResolvedValueOnce(createPage(firstPage, 1, 6))
+			.mockResolvedValueOnce(createPage(secondPage, 2, 6))
+			.mockResolvedValueOnce(createPage(firstPage, 1, 6))
 
 		await store.fetchFeaturedSkills()
 		await store.fetchNextFeaturedSkills()
 
 		expect(skillsService.getStoreSkills).toHaveBeenNthCalledWith(2, {
 			page: 2,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(store.featuredList).toEqual(secondPage)
@@ -197,7 +197,7 @@ describe("StoreSkillsStore", () => {
 
 		expect(skillsService.getStoreSkills).toHaveBeenNthCalledWith(3, {
 			page: 1,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(store.featuredList).toEqual(firstPage)
@@ -206,17 +206,17 @@ describe("StoreSkillsStore", () => {
 
 	it("probes an empty next page and wraps without exposing an empty list", async () => {
 		const store = new StoreSkillsStore()
-		const firstPage = Array.from({ length: 3 }, (_, index) =>
+		const firstPage = Array.from({ length: 6 }, (_, index) =>
 			createSkill(`featured-first-${index}`, { isFeatured: true }),
 		)
-		const secondPage = Array.from({ length: 3 }, (_, index) =>
+		const secondPage = Array.from({ length: 6 }, (_, index) =>
 			createSkill(`featured-second-${index}`, { isFeatured: true }),
 		)
 		vi.mocked(skillsService.getStoreSkills)
-			.mockResolvedValueOnce(createPage(firstPage, 1, 3))
-			.mockResolvedValueOnce(createPage(secondPage, 2, 3))
-			.mockResolvedValueOnce(createPage([], 3, 3))
-			.mockResolvedValueOnce(createPage(firstPage, 1, 3))
+			.mockResolvedValueOnce(createPage(firstPage, 1, 6))
+			.mockResolvedValueOnce(createPage(secondPage, 2, 6))
+			.mockResolvedValueOnce(createPage([], 3, 6))
+			.mockResolvedValueOnce(createPage(firstPage, 1, 6))
 
 		await store.fetchFeaturedSkills()
 		await store.fetchNextFeaturedSkills()
@@ -224,12 +224,12 @@ describe("StoreSkillsStore", () => {
 
 		expect(skillsService.getStoreSkills).toHaveBeenNthCalledWith(3, {
 			page: 3,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(skillsService.getStoreSkills).toHaveBeenNthCalledWith(4, {
 			page: 1,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(store.featuredList).toEqual(firstPage)
@@ -239,15 +239,15 @@ describe("StoreSkillsStore", () => {
 
 	it("deduplicates concurrent featured page requests", async () => {
 		const store = new StoreSkillsStore()
-		const firstPage = Array.from({ length: 3 }, (_, index) =>
+		const firstPage = Array.from({ length: 6 }, (_, index) =>
 			createSkill(`featured-first-${index}`, { isFeatured: true }),
 		)
-		const secondPage = Array.from({ length: 3 }, (_, index) =>
+		const secondPage = Array.from({ length: 6 }, (_, index) =>
 			createSkill(`featured-second-${index}`, { isFeatured: true }),
 		)
 		const deferred = createDeferred<StoreSkillsPage<StoreSkillView>>()
 		vi.mocked(skillsService.getStoreSkills)
-			.mockResolvedValueOnce(createPage(firstPage, 1, 3))
+			.mockResolvedValueOnce(createPage(firstPage, 1, 6))
 			.mockReturnValueOnce(deferred.promise)
 
 		await store.fetchFeaturedSkills()
@@ -256,7 +256,7 @@ describe("StoreSkillsStore", () => {
 		const duplicateRefresh = store.fetchNextFeaturedSkills()
 
 		expect(skillsService.getStoreSkills).toHaveBeenCalledTimes(2)
-		deferred.resolve(createPage(secondPage, 2, 3))
+		deferred.resolve(createPage(secondPage, 2, 6))
 		await Promise.all([firstRefresh, duplicateRefresh])
 
 		expect(store.featuredList).toEqual(secondPage)
@@ -265,11 +265,11 @@ describe("StoreSkillsStore", () => {
 
 	it("keeps the current featured page when the next request fails", async () => {
 		const store = new StoreSkillsStore()
-		const firstPage = Array.from({ length: 3 }, (_, index) =>
+		const firstPage = Array.from({ length: 6 }, (_, index) =>
 			createSkill(`featured-first-${index}`, { isFeatured: true }),
 		)
 		vi.mocked(skillsService.getStoreSkills)
-			.mockResolvedValueOnce(createPage(firstPage, 1, 3))
+			.mockResolvedValueOnce(createPage(firstPage, 1, 6))
 			.mockRejectedValueOnce(new Error("failed"))
 
 		await store.fetchFeaturedSkills()
@@ -287,7 +287,7 @@ describe("StoreSkillsStore", () => {
 		const featuredPage = [createSkill("featured-retry", { isFeatured: true })]
 		vi.mocked(skillsService.getStoreSkills)
 			.mockRejectedValueOnce(new Error("failed"))
-			.mockResolvedValueOnce(createPage(featuredPage, 1, 3))
+			.mockResolvedValueOnce(createPage(featuredPage, 1, 6))
 
 		await store.fetchFeaturedSkills()
 
@@ -301,7 +301,7 @@ describe("StoreSkillsStore", () => {
 
 		expect(skillsService.getStoreSkills).toHaveBeenNthCalledWith(2, {
 			page: 1,
-			page_size: 3,
+			page_size: 6,
 			is_featured: 1,
 		})
 		expect(store.featuredList).toEqual(featuredPage)

@@ -11,7 +11,7 @@ import {
 } from "@/pages/superMagic/utils/paged-list-store"
 
 const DEFAULT_PAGE_SIZE = 20
-const FEATURED_PAGE_SIZE = 3
+const FEATURED_PAGE_SIZE = 6
 type FeaturedFilter = boolean | 0 | 1 | null
 
 function getUniqueSkillCopies(

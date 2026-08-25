@@ -216,7 +216,7 @@ describe("SkillsLibrary", () => {
 			},
 		])
 		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
-			Promise.resolve(createPage([], 1, is_featured === 1 ? 3 : 20)),
+			Promise.resolve(createPage([], 1, is_featured === 1 ? 6 : 20)),
 		)
 
 		render(<SkillsLibrary />)
@@ -253,7 +253,7 @@ describe("SkillsLibrary", () => {
 		])
 		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
 			Promise.resolve(
-				createPage(is_featured === 1 ? [featuredSkill] : [], 1, is_featured === 1 ? 3 : 20),
+				createPage(is_featured === 1 ? [featuredSkill] : [], 1, is_featured === 1 ? 6 : 20),
 			),
 		)
 
@@ -289,7 +289,7 @@ describe("SkillsLibrary", () => {
 		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
 			Promise.resolve(
 				is_featured === 1
-					? createPage([featuredSkill], 1, 3)
+					? createPage([featuredSkill], 1, 6)
 					: createPage([mainListSkill], 1, 20),
 			),
 		)
@@ -349,7 +349,7 @@ describe("SkillsLibrary", () => {
 
 			featuredRequestCount += 1
 			if (featuredRequestCount === 1) return Promise.reject(new Error("featured failed"))
-			return Promise.resolve(createPage([recoveredSkill], 1, 3))
+			return Promise.resolve(createPage([recoveredSkill], 1, 6))
 		})
 
 		render(<SkillsLibrary />)

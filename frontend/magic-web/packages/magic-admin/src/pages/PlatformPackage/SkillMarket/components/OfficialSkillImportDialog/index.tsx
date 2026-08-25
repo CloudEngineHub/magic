@@ -237,7 +237,7 @@ const OfficialSkillImportDialog = memo(
 				setParsed(parsedResult)
 				setLogoPreviewUrl(parsedResult.logo || "")
 				form.setFieldsValue({
-					version: "1.0.0",
+					version: parsedResult.version || "1.0.0",
 					name_i18n: getLocalizedValue(parsedResult.name_i18n, parsedResult.package_name),
 					description_i18n: getLocalizedValue(
 						parsedResult.description_i18n,
@@ -248,10 +248,10 @@ const OfficialSkillImportDialog = memo(
 						t("officialSkillImport.defaultSource"),
 					),
 					logo: parsedResult.logo || "",
-					category_ids: [],
-					is_hidden: false,
-					is_featured: false,
-					sort_order: 0,
+					category_ids: parsedResult.categories?.map((category) => String(category.id)) ?? [],
+					is_hidden: parsedResult.is_hidden ?? false,
+					is_featured: parsedResult.is_featured ?? false,
+					sort_order: parsedResult.sort_order ?? 0,
 				})
 				if (parsedResult.is_update) {
 					MagicModal.confirm({
