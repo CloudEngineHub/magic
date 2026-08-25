@@ -165,6 +165,7 @@ class AsrSandboxResponseHandler extends AbstractAppService
 
         // 先保留沙箱实际返回的路径；即使文件记录尚未同步，失败日志与下次恢复仍有真实路径可用。
         $taskStatus->filePath = $relativePath !== '' ? $relativePath : $expectedFileName;
+        $lookupFileName = '';
 
         try {
             // 显示目录在 ASR 启动录音时已经创建并把 file_id 持久化到 Redis（displayDirectoryId）。
