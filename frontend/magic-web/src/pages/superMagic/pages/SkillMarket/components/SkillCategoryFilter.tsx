@@ -1,6 +1,6 @@
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { SkillMarketCategoryView } from "@/services/skills/SkillsService"
 
 interface SkillCategoryFilterProps {
