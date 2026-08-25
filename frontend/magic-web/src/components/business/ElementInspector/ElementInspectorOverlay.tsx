@@ -11,7 +11,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
 import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"

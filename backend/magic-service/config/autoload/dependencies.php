@@ -233,10 +233,12 @@ use App\Domain\Provider\Service\ModelFilter\DefaultPackageFilter;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateFavoriteRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateFavoriteRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRelationRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRepository;
@@ -600,6 +602,7 @@ $dependencies = [
 
     // slides template
     SlidesTemplateCategoryRepositoryInterface::class => SlidesTemplateCategoryRepository::class,
+    SlidesTemplateFavoriteRepositoryInterface::class => SlidesTemplateFavoriteRepository::class,
     SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
     SlidesTemplateTagRepositoryInterface::class => SlidesTemplateTagRepository::class,
     SlidesTemplateTagRelationRepositoryInterface::class => SlidesTemplateTagRelationRepository::class,

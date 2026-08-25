@@ -43,7 +43,11 @@ from app.tools.design.video_production.service.media_generation_service import (
 from app.tools.media_generator.factory import get_video_generator
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
-from app.tools.video_generation_utils import VideoInputPayloadBuilder, is_provider_asset_uri
+from app.tools.video_generation_utils import (
+    VideoInputPayloadBuilder,
+    is_provider_asset_uri,
+    normalize_provider_asset_uri,
+)
 from app.utils.async_file_utils import async_is_file, async_mkdir
 from app.utils.video_logger import get_video_logger
 
@@ -561,8 +565,9 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         normalized = str(path or "").strip()
         if not normalized or normalized.startswith(("http://", "https://")):
             return path
-        if is_provider_asset_uri(normalized):
-            return normalized
+        normalized_provider_asset_uri = normalize_provider_asset_uri(normalized)
+        if normalized_provider_asset_uri is not None:
+            return normalized_provider_asset_uri
         return await MediaGenerationService.materialize_reference_path(
             normalized,
             media_type,
@@ -913,9 +918,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if not path or path.startswith(("http://", "https://")):
             return path
 
-        if is_provider_asset_uri(path):
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
             # 供应商素材 URI 不对应本地文件，保留原值供后端 provider 解析。
-            return str(path).strip()
+            return normalized_provider_asset_uri
 
         normalized = str(path).strip().replace("\\", "/")
         while normalized.startswith("./"):
@@ -1305,9 +1311,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         path = (path or "").strip()
         if not path:
             raise ValueError("参考素材路径不能为空")
-        if is_provider_asset_uri(path):
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
             # provider 资产不是 workspace 文件，不能附加项目路径或转换为文件 URL。
-            return path
+            return normalized_provider_asset_uri
         if path.startswith(("http://", "https://")):
             raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
 

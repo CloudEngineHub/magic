@@ -104,7 +104,8 @@ export function withAssistantCard<
 
 			const resolveModel = (
 				modelData:
-					{ model_id?: string; model_name?: string; model_icon?: string } | undefined,
+					| { model_id?: string; model_name?: string; model_icon?: string }
+					| undefined,
 				getModelList: () => ModelItem[],
 			) => {
 				if (!modelData?.model_id) return
@@ -220,8 +221,7 @@ export function withAssistantCard<
 			}
 		})
 
-		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
-		})
+		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {})
 
 		const handleLike = useMemoizedFn(() => {
 			if (rating === "like") {
@@ -290,7 +290,7 @@ export function withAssistantCard<
 							<StatusBadge status={messageNode?.status} />
 						</div>
 						{messageNode?.status === "finished" && (
-							<div className="mt-[6px] flex items-center justify-between gap-[4px]">
+							<div className="mt-[6px] mb-[6px] flex items-center justify-between gap-[4px]">
 								<div className="flex items-center gap-1"></div>
 
 								<div className="flex items-center gap-1">

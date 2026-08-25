@@ -3,7 +3,7 @@ import { isValidElement, memo } from "react"
 import type { ForwardRefExoticComponent, RefAttributes } from "react"
 import type { Icon, IconProps } from "@tabler/icons-react"
 import MagicIcon from "@/components/base/MagicIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ConditionalTooltip from "../../EditToolbar/ConditionalTooltip"
 
 interface ActionButtonProps {

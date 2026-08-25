@@ -25,7 +25,7 @@ vi.mock("@/components/base/MagicSpin", () => ({
 	default: () => <div data-testid="magic-spin" />,
 }))
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/utils/cn", () => ({
 	cn: (...classNames: Array<string | false | null | undefined>) =>
 		classNames.filter(Boolean).join(" "),
 }))
@@ -55,6 +55,7 @@ vi.mock("../../PPTRender", () => ({
 		isFullscreen,
 		onSortSave,
 		openNewTab,
+		slideStructureAdapter,
 	}: {
 		slidePaths?: string[]
 		attachments?: Array<{ file_id?: string; relative_file_path?: string }>
@@ -63,6 +64,7 @@ vi.mock("../../PPTRender", () => ({
 		isFullscreen?: boolean
 		onSortSave?: (slidePaths: string[]) => void
 		openNewTab?: (fileId: string, path: string) => void
+		slideStructureAdapter?: unknown
 	}) => (
 		<div
 			data-testid="ppt-render"
@@ -76,6 +78,7 @@ vi.mock("../../PPTRender", () => ({
 			data-attachment-list-ids={JSON.stringify(
 				attachmentList?.map((item) => item.file_id) || [],
 			)}
+			data-has-structure-adapter={String(Boolean(slideStructureAdapter))}
 			data-is-fullscreen={String(Boolean(isFullscreen))}
 		>
 			<button
@@ -460,5 +463,78 @@ describe("PPTRootRender", () => {
 		fireEvent.click(screen.getByTestId("open-slide-new-tab"))
 
 		expect(openFileTab).toHaveBeenCalledWith(slideFile)
+	})
+
+	it("renders template slide paths without reading magic.project.js", async () => {
+		const slideStructureAdapter = {} as never
+		render(
+			<PPTRootRender
+				data={
+					{
+						file_id: "template-root",
+						file_name: "PPT-template",
+						is_directory: true,
+						relative_file_path: "PPT-template",
+					} as never
+				}
+				attachments={createDeckFiles("v1")}
+				attachmentList={createDeckFiles("v1")}
+				displayConfig={{ type: "slide", slides: ["slides/slide-1.html"] }}
+				disableMagicProjectLookup
+				slideStructureAdapter={slideStructureAdapter}
+			/>,
+		)
+
+		expect(await screen.findByTestId("ppt-render")).toHaveAttribute(
+			"data-slide-paths",
+			JSON.stringify(["slides/slide-1.html"]),
+		)
+		expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+			"data-has-structure-adapter",
+			"true",
+		)
+		expect(mockState.getFileContentById).not.toHaveBeenCalled()
+	})
+
+	it("preserves the attachment tree while providing a flat lookup list", async () => {
+		const childFile = {
+			file_id: "image-file",
+			file_name: "image.png",
+			parent_id: "images-folder",
+		}
+		const childFolder = {
+			file_id: "images-folder",
+			file_name: "images",
+			parent_id: "template-root",
+			is_directory: true,
+			children: [childFile],
+		}
+		const templateRoot = {
+			file_id: "template-root",
+			file_name: "PPT-template",
+			is_directory: true,
+			relative_file_path: "PPT-template",
+			children: [childFolder],
+		}
+
+		render(
+			<PPTRootRender
+				data={templateRoot}
+				attachments={[templateRoot]}
+				attachmentList={[templateRoot, childFolder, childFile]}
+				displayConfig={{ type: "slide", slides: ["slides/slide-1.html"] }}
+				disableMagicProjectLookup
+			/>,
+		)
+
+		const pptRender = await screen.findByTestId("ppt-render")
+		expect(pptRender).toHaveAttribute(
+			"data-attachment-root-ids",
+			JSON.stringify(["template-root"]),
+		)
+		expect(pptRender).toHaveAttribute(
+			"data-attachment-list-ids",
+			JSON.stringify(["template-root", "images-folder", "image-file"]),
+		)
 	})
 })

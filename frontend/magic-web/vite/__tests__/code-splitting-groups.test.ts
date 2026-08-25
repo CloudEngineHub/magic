@@ -34,4 +34,61 @@ describe("locale code-splitting groups", () => {
 		expect(zhCNGroup.test("/project/src/assets/locales/zh_CN/readme.ts")).toBe(false)
 		expect(zhCNGroup.test("/project/src/config/common.json")).toBe(false)
 	})
+
+	it("groups custom Tabler React icons into one cacheable chunk", () => {
+		const group = getGroup("tabler-icons-custom")
+
+		expect(group.entriesAware).toBe(false)
+		expect(group.priority).toBe(100)
+		expect(group.test("/project/src/enhance/tabler/icons-react/icons/IconMagicLogo.tsx")).toBe(
+			true,
+		)
+		expect(
+			group.test(
+				"/project/enterprise/src/enhance/tabler/icons-react/icons/IconMagicLogo.tsx",
+			),
+		).toBe(true)
+		expect(group.test("/project/src/enhance/tabler/icons-react/index.ts")).toBe(true)
+		expect(group.test("/project/src/enhance/lucide-react/icons/Search.tsx")).toBe(false)
+		expect(
+			group.test("/project/node_modules/@tabler/icons-react/dist/esm/icons/IconX.js"),
+		).toBe(false)
+	})
+
+	it("separates static and dynamic Lucide modules into two aggregate chunks", () => {
+		const staticGroup = getGroup("lucide-icons-static")
+		const dynamicGroup = getGroup("lucide-icons-dynamic")
+
+		expect(staticGroup.entriesAware).toBe(false)
+		expect(dynamicGroup.entriesAware).toBe(false)
+		expect(
+			staticGroup.test(
+				"/project/node_modules/lucide-react/dist/esm/icons/search.js?lucide-static",
+			),
+		).toBe(true)
+		expect(
+			dynamicGroup.test("/project/node_modules/lucide-react/dist/esm/dynamicIconImports.js"),
+		).toBe(true)
+		expect(
+			dynamicGroup.test("/project/node_modules/lucide-react/dist/esm/DynamicIcon.js"),
+		).toBe(true)
+		expect(
+			dynamicGroup.test("/project/node_modules/lucide-react/dist/esm/icons/search.js"),
+		).toBe(false)
+		expect(
+			dynamicGroup.test(
+				"/project/node_modules/lucide-react/dist/esm/icons/search.js?lucide-static",
+			),
+		).toBe(false)
+		expect(
+			dynamicGroup.test(
+				"/project/node_modules/lucide-react/dist/esm/icons/search.js?lucide-dynamic",
+			),
+		).toBe(true)
+		expect(
+			staticGroup.test(
+				"/project/node_modules/lucide-react/dist/esm/icons/search.js?lucide-dynamic",
+			),
+		).toBe(false)
+	})
 })

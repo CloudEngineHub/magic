@@ -12,7 +12,7 @@ import MessageFilePreviewService from "@/services/chat/message/MessageFilePrevie
 import MessageFilePreviewStore from "@/stores/chatNew/messagePreview/FilePreviewStore"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { AntdSkeleton } from "@/components/base"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const UniverComponent = lazy(() => import("@/components/UniverComponent"))
 const MagicPdfRender = lazy(() => import("@/components/base/MagicPdfRender"))

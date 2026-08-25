@@ -1,11 +1,11 @@
-import { EditorContent, type Editor } from "@tiptap/react"
+import { EditorContent, type Editor } from "@/infrastructure/editors/tiptap/react"
 import FlexBox from "@/components/base/FlexBox"
 import DragOverlay from "./components/DragOverlay"
 import { memo } from "react"
 import type { RefObject, DragEvent, ClipboardEvent, ReactNode } from "react"
 import type { MessageEditorSize } from "./types"
 import TabIcon from "./assets/tab.svg"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useEditorPortalSync } from "./hooks/useEditorPortalSync"
 import {
 	messageEditorContainerVariants,

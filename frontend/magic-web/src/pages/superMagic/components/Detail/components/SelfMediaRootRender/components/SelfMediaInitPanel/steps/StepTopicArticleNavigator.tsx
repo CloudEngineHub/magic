@@ -1,7 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, FileDown, Layers, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { ArticleDetail } from "../types"
 import PlatformBrandIcon from "../../PlatformBrandIcon"

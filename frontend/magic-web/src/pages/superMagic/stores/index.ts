@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
 	createWebSocketRecordMetadata,
@@ -53,6 +53,7 @@ export type {
 	MessageItem,
 	RawSuperMagicMessageNode,
 	RawSuperMagicMessageEnvelope,
+	SuperMagicStoreMessageNode,
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
@@ -111,6 +112,7 @@ import type {
 	RawSuperMagicIMMessage,
 	RawSuperMagicMessageSequence,
 	RawSuperMagicMessageEnvelope,
+	SuperMagicStoreMessageNode,
 	PendingUserMessageEnvelope,
 	ServerMessagesConfirmedPayload,
 	SuperMagicStoreCallbackRegistrar,
@@ -410,7 +412,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** Parent projections subscribe only to Topic membership, never to streamed row payloads. */
 	private topicMessageMembershipRevisions = new Map<string, number>()
 	/** Topic-scoped canonical node sidecar prevents same SuperMessage IDs colliding across Topics. */
-	private topicMessageNodes = new Map<string, Map<string, unknown>>()
+	private topicMessageNodes = new Map<string, Map<string, SuperMagicStoreMessageNode>>()
 	// 消息
 	messages: Map<SuperMagicStoreTopicId, MessageItem[]> = new Map()
 	// 消息缓冲区
@@ -419,7 +421,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		{ isProcessing: boolean; messages: RawSuperMagicMessageEnvelope[] }
 	> = new Map()
 	// 消息内容（卡片形式）
-	messageMap: Map<string, unknown> = new Map()
+	messageMap: Map<string, SuperMagicStoreMessageNode> = new Map()
 	// 工具调用响应最新态（key: <topic_id, tool.id>）
 	toolResponseMap: Map<string, Map<string, ToolResponseState>> = new Map()
 	/** 话题消息元数据 */
@@ -547,14 +549,22 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return `${topicId}\u0000${superMessageId}`
 	}
 
-	private setTopicMessageNode(topicId: string, superMessageId: string, node: unknown) {
+	private setTopicMessageNode(
+		topicId: string,
+		superMessageId: string,
+		node: SuperMagicStoreMessageNode,
+	) {
 		if (!topicId || !superMessageId) return
-		const nodes = this.topicMessageNodes.get(topicId) || new Map<string, unknown>()
+		const nodes =
+			this.topicMessageNodes.get(topicId) || new Map<string, SuperMagicStoreMessageNode>()
 		nodes.set(superMessageId, node)
 		this.topicMessageNodes.set(topicId, nodes)
 	}
 
-	getTopicMessageNode(topicId: string, superMessageId?: string) {
+	getTopicMessageNode(
+		topicId: string,
+		superMessageId?: string,
+	): SuperMagicStoreMessageNode | undefined {
 		if (!topicId || !superMessageId) return undefined
 		return this.topicMessageNodes.get(topicId)?.get(superMessageId)
 	}
@@ -649,7 +659,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const removedToolIds = new Set<string>()
 		removedSuperMessageIds.forEach((superMessageId) => {
 			const messageNode = this.messageMap.get(superMessageId) as
-				RawSuperMagicMessageNode | undefined
+				| RawSuperMagicMessageNode
+				| undefined
 			this.getMessageNodeToolIds(messageNode).forEach((toolId) => removedToolIds.add(toolId))
 			this.messageMap.delete(superMessageId)
 			this.topicMessageNodes.get(topicId)?.delete(superMessageId)
@@ -2274,7 +2285,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private getTopicBufferedAssistantCorrelationIds(topicId: string) {
 		const buffer = this.buffer.get(topicId) as
-			{ messages: RawSuperMagicMessageEnvelope[] } | undefined
+			| { messages: RawSuperMagicMessageEnvelope[] }
+			| undefined
 		if (!buffer) return []
 		return buffer.messages.flatMap((envelope) => {
 			const imMessage = envelope?.seq?.message
@@ -3441,14 +3453,16 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const retainedToolIds = new Set(
 			nextMessages.flatMap((message) => {
 				const node = this.messageMap.get(this.getMessageSuperMessageId(message)) as
-					RawSuperMagicMessageNode | undefined
+					| RawSuperMagicMessageNode
+					| undefined
 				return this.getMessageNodeToolIds(node)
 			}),
 		)
 		const removedToolIds = new Set(
 			removedMessages.flatMap((message) => {
 				const node = this.messageMap.get(this.getMessageSuperMessageId(message)) as
-					RawSuperMagicMessageNode | undefined
+					| RawSuperMagicMessageNode
+					| undefined
 				return this.getMessageNodeToolIds(node)
 			}),
 		)
@@ -4073,7 +4087,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						revisionMessages,
 					)
 					const currentNode = this.messageMap.get(superMessageId) as
-						RawSuperMagicMessageNode | undefined
+						| RawSuperMagicMessageNode
+						| undefined
 					const isAuthoritativeAssistantFinal =
 						rawNode.role === "assistant" &&
 						this.isAuthoritativeHttpAssistantFinal(
@@ -4242,7 +4257,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 					if (isAuthoritativeAssistantFinal && !isRevokedAssistant) {
 						const canonicalNode = this.messageMap.get(superMessageId) as
-							RawSuperMagicMessageNode | undefined
+							| RawSuperMagicMessageNode
+							| undefined
 						// Finalization must retain the already-reconciled nested tool fields;
 						// storing the raw HTTP payload here would erase inherited arguments later.
 						const topicCanonicalNode =
@@ -5435,7 +5451,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	getRenderedMessageNode(superMessageId?: string, topicId?: string) {
 		const canonical = this.messageMap.get(superMessageId || "") as
-			RawSuperMagicMessageNode | undefined
+			| RawSuperMagicMessageNode
+			| undefined
 		if (!superMessageId) return canonical
 		const renderState = Array.from(this.finalRenderStates.values()).find(
 			(state) =>
@@ -7313,7 +7330,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		if (superMessageId) {
 			const completedNode = this.getAssistantMessageNode(topicId, superMessageId) as
-				RawSuperMagicMessageNode | undefined
+				| RawSuperMagicMessageNode
+				| undefined
 			if (completedNode?.role === "assistant" && completedNode.status === "finished") {
 				// finished assistant 是逐工具完成屏障。已有 canonical 或 buffer response
 				// 会按 tool.id 被跳过，只为同轮真正缺失的工具生成弱终态。
@@ -7467,7 +7485,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		;(this.messages.get(topicId) || []).forEach((message) => {
 			if (message.role !== "assistant") return
 			const node = this.messageMap.get(this.getMessageSuperMessageId(message)) as
-				RawSuperMagicMessageNode | undefined
+				| RawSuperMagicMessageNode
+				| undefined
 			if (!node) return
 			if (
 				excludedAssistantIds.has(this.getMessageSuperMessageId(message)) ||
@@ -7509,7 +7528,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (msg.role !== "assistant") continue
 
 			const node = this.messageMap.get(this.getMessageSuperMessageId(msg)) as
-				RawSuperMagicMessageNode | undefined
+				| RawSuperMagicMessageNode
+				| undefined
 			const toolCalls = (node?.tool_calls as ToolCall[]) || []
 			if (toolCalls.length === 0) continue
 
@@ -8133,7 +8153,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * @param superMessageId Store/UI 统一消息身份
 	 * @returns 消息节点
 	 */
-	getMessageNode(superMessageId?: string) {
+	getMessageNode(superMessageId?: string): SuperMagicStoreMessageNode | undefined {
 		return this.messageMap.get(superMessageId || "")
 	}
 

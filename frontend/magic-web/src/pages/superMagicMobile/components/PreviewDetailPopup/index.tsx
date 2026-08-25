@@ -24,7 +24,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicModal from "@/components/base/MagicModal"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { getPreviewDetailDisplayName } from "./headerMeta"
 import {
 	MOBILE_PREVIEW_BODY_CLASSNAME,
@@ -105,6 +105,15 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		[],
 	)
 
+	/** Keeps an open preview aligned with project attachment data loaded after first render. */
+	const updateAttachments = useCallback(
+		(attachmentTree: AttachmentItem[], nextAttachmentList: AttachmentItem[]) => {
+			setAttachments(attachmentTree || [])
+			setAttachmentList(nextAttachmentList || [])
+		},
+		[],
+	)
+
 	const onlyUpdateDetail = useCallback(
 		(
 			options: PreviewDetail,
@@ -174,6 +183,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		return {
 			open,
 			onlyUpdateDetail,
+			updateAttachments,
 		}
 	})
 

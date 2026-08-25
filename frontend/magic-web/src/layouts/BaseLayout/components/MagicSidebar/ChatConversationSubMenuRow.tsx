@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Ellipsis } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import { ProjectStatus } from "@/pages/superMagic/pages/Workspace/types"

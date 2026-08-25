@@ -285,7 +285,11 @@ class MicroAppProjectAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
         }
 
-        return $this->responseFormatter->formatPublishedResolution(...$publishedMicroApp);
+        [$record, $shareEntity] = $publishedMicroApp;
+        $response = $this->responseFormatter->formatPublishedResolution($record, $shareEntity);
+        $response['icon_url'] = $this->publishedMicroAppResolver->getInstallIconUrl($record);
+
+        return $response;
     }
 
     public function publishedList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array

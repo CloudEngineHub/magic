@@ -8,7 +8,7 @@ import {
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import FlexBox from "@/components/base/FlexBox"
 import ModelIcon from "./components/ModelIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { userStore } from "@/models/user"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"

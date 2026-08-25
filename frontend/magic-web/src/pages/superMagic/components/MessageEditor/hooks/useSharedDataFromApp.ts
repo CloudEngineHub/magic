@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { getNativePort } from "@/platform/native"
-import { Editor } from "@tiptap/react"
+import { Editor } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
 import { logger as Logger } from "@/utils/log"
 import StreamChunkManager from "../services/streamChunkManager"

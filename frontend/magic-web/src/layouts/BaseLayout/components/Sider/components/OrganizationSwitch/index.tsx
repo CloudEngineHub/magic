@@ -7,7 +7,7 @@ import { useCurrentMagicOrganization, useOrganization } from "@/models/user/hook
 import PersonalOrganizationAvatar from "@/assets/resources/personal-organization-avatar.svg"
 import { userStore } from "@/models/user"
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 export interface OrganizationSwitchProps {
 	className?: string

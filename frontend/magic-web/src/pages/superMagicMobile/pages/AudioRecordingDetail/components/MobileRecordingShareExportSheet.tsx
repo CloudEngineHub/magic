@@ -14,7 +14,7 @@ import {
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { downloadRecordingAttachmentFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-attachment"
 import { downloadRecordingFilesBatch } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"
@@ -49,6 +49,7 @@ function ActionRow({
 	onClick,
 	disabled = false,
 	showDivider = false,
+	testId = "mobile-recording-share-action",
 }: ActionRowProps) {
 	// Normalize icon size and color to match prototype standard (17px, strokeWidth 1.8)
 	const normalizedIcon = React.isValidElement(icon)
@@ -65,6 +66,7 @@ function ActionRow({
 				disabled={disabled}
 				onClick={onClick}
 				className="flex h-12 w-full items-center gap-3 bg-card px-[14px] text-left transition-opacity active:opacity-60 disabled:opacity-40"
+				data-testid={testId}
 			>
 				<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
 					{normalizedIcon}
@@ -271,6 +273,7 @@ export function MobileRecordingShareExportSheet({
 							<div className="overflow-hidden rounded-[22px] bg-card">
 								<ActionRow
 									label={t("detail.searchContent")}
+									data-testid="mobile-recording-share-search-action"
 									icon={<SearchIcon />}
 									onClick={() => {
 										onSearch()
@@ -288,6 +291,7 @@ export function MobileRecordingShareExportSheet({
 							<div className="overflow-hidden rounded-[22px] bg-card">
 								<ActionRow
 									label={t("detail.shareLink")}
+									data-testid="mobile-recording-share-share-link-action"
 									icon={<Link2 />}
 									onClick={onShareLink}
 								/>
@@ -303,6 +307,7 @@ export function MobileRecordingShareExportSheet({
 							<div className="overflow-hidden rounded-[22px] bg-card">
 								<ActionRow
 									label={t("detail.exportRecording")}
+									data-testid="mobile-recording-share-export-recording-action"
 									icon={<Music />}
 									onClick={onDownloadRecording}
 									disabled={!fileMap?.audio}
@@ -310,6 +315,7 @@ export function MobileRecordingShareExportSheet({
 								/>
 								<ActionRow
 									label={t("detail.exportTranscript")}
+									data-testid="mobile-recording-share-export-transcript-action"
 									icon={<FileText />}
 									onClick={handleDownloadTranscript}
 									disabled={!fileMap?.transcript}
@@ -317,6 +323,7 @@ export function MobileRecordingShareExportSheet({
 								/>
 								<ActionRow
 									label={t("detail.exportNotes")}
+									data-testid="mobile-recording-share-export-notes-action"
 									icon={<NotebookPen />}
 									onClick={handleDownloadNotes}
 									disabled={!fileMap?.notes}
@@ -324,6 +331,7 @@ export function MobileRecordingShareExportSheet({
 								/>
 								<ActionRow
 									label={t("detail.exportSummary")}
+									data-testid="mobile-recording-share-export-summary-action"
 									icon={<Sparkles />}
 									onClick={() => setView("exportSummary")}
 									disabled={!hasSummaryFiles}
@@ -343,6 +351,7 @@ export function MobileRecordingShareExportSheet({
 								<CheckRow
 									key={fileRef.type}
 									label={getSummaryTabLabel(fileRef.type)}
+									data-testid={`mobile-recording-share-export-summary-${fileRef.type}-action`}
 									checked={selectedSummaryTypes.has(fileRef.type)}
 									onToggle={() => toggleSummaryType(fileRef.type)}
 									showDivider={i < fileMap.summaryFiles.length - 1}
@@ -357,6 +366,7 @@ export function MobileRecordingShareExportSheet({
 							onClick={handleDownloadSummary}
 							disabled={selectedSummaryTypes.size === 0}
 							className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-[16px] font-medium text-primary-foreground transition-opacity active:opacity-80 disabled:opacity-40"
+							data-testid="mobile-recording-share-export-summary-button"
 						>
 							{t("detail.exportSummary")}
 						</button>

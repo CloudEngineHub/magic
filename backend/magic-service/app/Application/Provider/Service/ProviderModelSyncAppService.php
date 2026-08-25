@@ -316,6 +316,7 @@ class ProviderModelSyncAppService
 
         $saveDTO->setId($existingModel->getId());
         $saveDTO->setStatus($existingModel->getStatus()); // 保持原有状态
+        $saveDTO->setLoadBalancingWeight($existingModel->getLoadBalancingWeight()); // 保持后台配置的负载权重
 
         // 保存模型
         $this->providerModelDomainService->saveModel($dataIsolation, $saveDTO);

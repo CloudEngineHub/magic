@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import type { QueueMessageInput } from "./types"
 

@@ -4,7 +4,7 @@ import { useMemoizedFn } from "ahooks"
 import { PanelRightClose, PanelRightOpen } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { MagicTooltip } from "@/components/base"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import StatusIcon from "@/pages/superMagic/components/MessageHeader/components/StatusIcon"
 import type { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 

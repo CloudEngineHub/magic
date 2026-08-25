@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { SendMessageByContentPayload } from "@/pages/superMagic/components/MessageEditor/types"
 import {
 	MentionItemType,

@@ -121,6 +121,8 @@ import {
 	shouldEnableTopicFileSelection,
 	shouldShowMobileBatchActions,
 } from "./utils/batch-selection"
+import { isSlidesTemplateFolder, toSlidesTemplatePreviewItem } from "./utils/slides-template-folder"
+import { SlidesTemplateFolderIcon } from "./components/SlidesTemplateFolderIcon"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 import { getAttachmentKey } from "./utils/getAttachmentKey"
 
@@ -183,6 +185,8 @@ interface TopicFilesCoreProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	// 刷新加载状态
 	refreshLoading?: boolean
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -251,6 +255,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
+		onSaveSlidesTemplate,
+		onConvertToSlidesTemplate,
 		spaceConfig,
 		isItemSelectable = DEFAULT_ITEM_SELECTABLE,
 		operationRoot,
@@ -927,6 +933,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					onCancel: sharedDuplicateHandler.handleFolderConflictCancel,
 					onMerge: sharedDuplicateHandler.handleFolderConflictMerge,
 					onKeepBoth: sharedDuplicateHandler.handleFolderConflictKeepBoth,
+					onReplace: sharedDuplicateHandler.handleFolderConflictReplace,
 				}
 			: moveFileHook.folderConflictModalVisible
 				? {
@@ -1080,6 +1087,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isFolderContentsExpanded: externalSearchValue ? undefined : isFolderContentsExpanded,
 		handleToggleFolderContents: externalSearchValue ? undefined : handleToggleFolderContents,
 		attachments,
+		handleSaveSlidesTemplate: onSaveSlidesTemplate,
+		handleConvertToSlidesTemplate: onConvertToSlidesTemplate,
 	})
 
 	// 重置所有状态的方法
@@ -1128,8 +1137,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	// 选择处理
 	const handleSelect = useMemoizedFn((selectedKeys: React.Key[]) => {
 		handleTreeSelect(selectedKeys)
-		// 处理文件选择逻辑
-		if (selectedKeys.length > 0) {
+		// In browse mode, tree clicks only update the tree state and must not
+		// add files or folders to the batch selection.
+		if (isSelectMode && selectedKeys.length > 0) {
 			const item = treeIndex.getItemByKey(selectedKeys[0] as string)
 			if (item) {
 				handleItemSelect(item)
@@ -1218,6 +1228,21 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setUserSelectDetail,
 	})
 
+	const openSlidesTemplate = useMemoizedFn((item: AttachmentItem) => {
+		const previewItem = toSlidesTemplatePreviewItem(item)
+		onFileClick?.(previewItem)
+		setUserSelectDetail?.({
+			type: DetailType.SlidesTemplate,
+			data: {
+				...previewItem,
+				file_id: item.file_id,
+				file_name: item.file_name || item.name || item.display_filename,
+			},
+			currentFileId: item.file_id,
+			attachments,
+		})
+	})
+
 	// 检查文件是否在文件夹的直接子项中（只检查一级，不递归）
 	const isFileInFolder = useMemoizedFn(
 		(folderItem: AttachmentItem, targetFileId: string): boolean => {
@@ -1235,6 +1260,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item || {}
 		const itemId = node.key
 		const { display_config } = item
+		const isSlidesTemplate = isSlidesTemplateFolder(item)
 		const isActiveFile = activeTreeSelectionKey === String(itemId)
 		const hasChildren = !node.isLeaf
 		const isExpanded = expandedKeySet.has(String(node.key))
@@ -1537,6 +1563,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 						if (tryOpenSelfMediaFromPostRootFolder(item)) return
 						if (tryOpenAICardFromSubFolder(item)) return
+						if (isSlidesTemplateFolder(item)) {
+							openSlidesTemplate(item)
+							return
+						}
 
 						if (isEmpty(item.display_config)) {
 							// 普通文件夹，没有 display_config，直接展开/折叠
@@ -1660,6 +1690,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								/>
 							) : !isFolderBusy && isMagicSystemFolder(item) ? (
 								<MagicSystemFolderIcon size={16} />
+							) : isSlidesTemplate ? (
+								<SlidesTemplateFolderIcon size={16} />
 							) : display_config?.type ? (
 								["custom", "micro-app"].includes(display_config?.type) &&
 								(display_config?.type === "custom" || item?.is_directory) ? (

@@ -18,7 +18,7 @@ import { Field, FieldError, FieldLabel } from "@/components/shadcn-ui/field"
 import { Input } from "@/components/shadcn-ui/input"
 import MagicModal from "@/components/base/MagicModal"
 import PhoneStateCodeSelect from "@/components/other/PhoneStateCodeSelect"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface ChangePhoneModalProps {
 	open: boolean

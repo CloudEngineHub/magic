@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Domain\ModelGateway\Entity\ValueObject;
 
+use RuntimeException;
+
 readonly class QueueExecutorConfig
 {
     public function __construct(
@@ -18,9 +20,33 @@ readonly class QueueExecutorConfig
     ) {
     }
 
+    /**
+     * 根据服务商配置创建队列执行配置，兼容 url/base_url 与 api_key/apiKey 两种写法。
+     */
+    public static function fromProviderConfig(
+        array $providerConfig,
+        int $pollIntervalSeconds = 3,
+        int $maxPollTimes = 200,
+    ): self {
+        $baseUrl = self::firstNonEmptyString($providerConfig, ['url', 'base_url']);
+        $apiKey = self::firstNonEmptyString($providerConfig, ['api_key', 'apiKey']);
+        // 配置字段缺失时提前失败，避免后续请求拿着空地址或空密钥执行。
+        if ($baseUrl === '' || $apiKey === '') {
+            throw new RuntimeException('video service provider config missing');
+        }
+
+        return new self(
+            baseUrl: $baseUrl,
+            apiKey: $apiKey,
+            pollIntervalSeconds: max(1, $pollIntervalSeconds),
+            maxPollTimes: max(20, $maxPollTimes),
+            extraConfig: $providerConfig,
+        );
+    }
+
     public function getBaseUrl(): string
     {
-        return $this->baseUrl;
+        return rtrim($this->baseUrl, '/');
     }
 
     public function getApiKey(): string
@@ -47,5 +73,20 @@ readonly class QueueExecutorConfig
 
         $normalized = trim((string) $value);
         return $normalized !== '' ? $normalized : $default;
+    }
+
+    /**
+     * 按优先级返回第一个非空字符串配置项。
+     */
+    private static function firstNonEmptyString(array $config, array $keys): string
+    {
+        foreach ($keys as $key) {
+            $value = $config[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return '';
     }
 }

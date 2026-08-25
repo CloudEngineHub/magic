@@ -25,6 +25,8 @@ export interface RecordSummaryEditorPanelProps {
 	messageQueueNode?: ReactNode
 	className?: string
 	containerClassName?: string
+	/** Fill the negotiated conversation height while the editor is in the idle state. */
+	fillHeight?: boolean
 }
 
 export interface RecordSummaryEditorPanelRef {

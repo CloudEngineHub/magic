@@ -98,6 +98,10 @@ class DesignVideoPollConsumer extends ConsumerMessage
 
         $deadlineAt = $entity->getPollDeadlineAt();
         if ($deadlineAt !== null && strtotime($deadlineAt) !== false && time() > strtotime($deadlineAt)) {
+            $businessParams = [
+                'organization_code' => $entity->getOrganizationCode(),
+                'user_id' => $entity->getUserId(),
+            ];
             $this->logger->error('design video poll mark failed', [
                 'reason' => 'timeout',
                 'video_id' => $entity->getGenerationId(),
@@ -109,6 +113,17 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'deadline_at' => $deadlineAt,
                 'error' => trans('design.video_generation.timeout'),
             ]);
+            try {
+                $this->videoGatewayClient->timeoutVideo($operationId, $businessParams);
+            } catch (Throwable $throwable) {
+                $this->logger->warning('design video poll timeout compensation failed', [
+                    'video_id' => $entity->getGenerationId(),
+                    'project_id' => $entity->getProjectId(),
+                    'organization_code' => $entity->getOrganizationCode(),
+                    'operation_id' => $operationId,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
             $this->domainService->markAsFailed($dataIsolation, $entity, trans('design.video_generation.timeout'));
             return Result::ACK;
         }

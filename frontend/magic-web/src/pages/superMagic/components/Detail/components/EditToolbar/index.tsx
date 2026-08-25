@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, Maximize, Minimize, RefreshCw, Share2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ViewModeSwitcher from "../ViewModeSwitcher"
 import AIEditButton from "./AIEditButton"
 import FileEditButtons from "./FileEditButtons"
@@ -754,7 +754,12 @@ function EditToolbar({
 							onExportSpecificPages={(
 								filePaths: string[],
 								format:
-									"source" | "pdf" | "ppt" | "pptx" | "image_png" | "image_jpeg",
+									| "source"
+									| "pdf"
+									| "ppt"
+									| "pptx"
+									| "image_png"
+									| "image_jpeg",
 							) => {
 								if (!filePaths.length) return
 

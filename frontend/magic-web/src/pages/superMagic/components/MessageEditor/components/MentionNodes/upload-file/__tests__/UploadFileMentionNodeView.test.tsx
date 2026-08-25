@@ -10,7 +10,7 @@ const storeMocks = vi.hoisted(() => ({
 	getFileById: vi.fn(),
 }))
 
-vi.mock("@tiptap/react", () => ({
+vi.mock("@/infrastructure/editors/tiptap/react", () => ({
 	NodeViewWrapper: ({
 		as: Component = "div",
 		children,

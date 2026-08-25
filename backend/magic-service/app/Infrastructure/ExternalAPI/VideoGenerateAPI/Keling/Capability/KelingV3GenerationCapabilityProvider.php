@@ -30,11 +30,6 @@ readonly class KelingV3GenerationCapabilityProvider implements KelingGenerationC
     private const array SUPPORTED_ASPECT_RATIOS = ['16:9', '9:16', '1:1'];
 
     /**
-     * @var list<int>
-     */
-    private const array SUPPORTED_DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-
-    /**
      * @var list<string>
      */
     private const array SUPPORTED_RESOLUTIONS = ['720p', '1080p', '4k'];
@@ -94,7 +89,8 @@ readonly class KelingV3GenerationCapabilityProvider implements KelingGenerationC
         return new VideoGenerationConfig([
             'generation' => [
                 'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
-                'durations' => self::SUPPORTED_DURATIONS,
+                'duration_type' => 'range',
+                'durations' => ['min' => 3, 'max' => 15, 'step' => 1],
                 'default_duration_seconds' => self::DEFAULT_DURATION_SECONDS,
                 'resolutions' => self::SUPPORTED_RESOLUTIONS,
                 'sizes' => self::SUPPORTED_SIZES,

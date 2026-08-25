@@ -17,6 +17,35 @@ export function buildVideoPointsEstimateSignaturePayload(
 	}
 }
 
+/**
+ * Stable deep serialization for estimate cache keys.
+ * Sorts object keys and drops undefined so equivalent request params share one signature.
+ */
+function stableStringify(value: unknown): string {
+	if (value === undefined) return "undefined"
+	if (value === null || typeof value !== "object") {
+		return JSON.stringify(value) ?? "null"
+	}
+	if (Array.isArray(value)) {
+		return `[${value.map(stableStringify).join(",")}]`
+	}
+	const entries = Object.entries(value as Record<string, unknown>)
+		.filter(([, entryValue]) => entryValue !== undefined)
+		.sort(([left], [right]) => left.localeCompare(right))
+	return `{${entries
+		.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`)
+		.join(",")}}`
+}
+
 export function buildVideoPointsEstimateSignature(request: Partial<GenerateVideoRequest>): string {
-	return JSON.stringify(buildVideoPointsEstimateSignaturePayload(request))
+	return stableStringify(buildVideoPointsEstimateSignaturePayload(request))
+}
+
+export function areVideoPointsEstimateRequestsEqual(
+	left: Partial<GenerateVideoRequest> | null | undefined,
+	right: Partial<GenerateVideoRequest> | null | undefined,
+): boolean {
+	if (left === right) return true
+	if (!left || !right) return false
+	return buildVideoPointsEstimateSignature(left) === buildVideoPointsEstimateSignature(right)
 }

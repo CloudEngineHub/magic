@@ -14,7 +14,7 @@ import {
 	useRef,
 	useState,
 } from "react"
-import classNames from "classnames"
+import { cn } from "../../../../runtime/shared/lib/utils"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import type { TextListTypeValue } from "../../../../runtime/text/editorFormatting"
 import {
@@ -354,7 +354,7 @@ export default function RichTextAdvancedButton() {
 									step={0.1}
 									min={0.1}
 									stepBaseValue={displayedLineHeight ?? DEFAULT_TEXT_LINE_HEIGHT}
-									inputClassName={classNames(styles.input, styles.metricInput)}
+									inputClassName={cn(styles.input, styles.metricInput)}
 									value={lineHeightInputValue}
 									placeholder={autoMetricPlaceholder}
 									formatValue={(value) =>
@@ -401,7 +401,7 @@ export default function RichTextAdvancedButton() {
 									stepBaseValue={
 										displayedLetterSpacing ?? DEFAULT_TEXT_LETTER_SPACING
 									}
-									inputClassName={classNames(styles.input, styles.metricInput)}
+									inputClassName={cn(styles.input, styles.metricInput)}
 									value={letterSpacingInputValue}
 									placeholder={autoMetricPlaceholder}
 									formatValue={(value) =>
@@ -456,7 +456,7 @@ export default function RichTextAdvancedButton() {
 										<ToggleGroupItem
 											key={option.value}
 											value={option.value}
-											className={classNames(
+											className={cn(
 												styles.toggleGroupItem,
 												isActive && styles.toggleGroupItemActive,
 											)}
@@ -481,7 +481,7 @@ export default function RichTextAdvancedButton() {
 										<ToggleGroupItem
 											key={option.value}
 											value={option.value}
-											className={classNames(
+											className={cn(
 												styles.toggleGroupItem,
 												isActive && styles.toggleGroupItemActive,
 											)}
@@ -508,7 +508,7 @@ export default function RichTextAdvancedButton() {
 										<ToggleGroupItem
 											key={option.value}
 											value={option.value}
-											className={classNames(
+											className={cn(
 												styles.toggleGroupItem,
 												isActive && styles.toggleGroupItemActive,
 											)}
@@ -532,7 +532,7 @@ export default function RichTextAdvancedButton() {
 										<ToggleGroupItem
 											key={option.value}
 											value={option.value}
-											className={classNames(
+											className={cn(
 												styles.toggleGroupItem,
 												isActive && styles.toggleGroupItemActive,
 											)}

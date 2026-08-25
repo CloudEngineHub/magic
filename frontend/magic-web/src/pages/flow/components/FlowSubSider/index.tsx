@@ -12,7 +12,7 @@ import { RouteName } from "@/routes/constants"
 import { baseHistory } from "@/routes/history"
 import { getRoutePath } from "@/routes/history/helpers"
 import type { MagicListItemData as MagicListItemItemType } from "@/components/MagicList/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const useStyles = createStyles(({ css }) => {
 	return {

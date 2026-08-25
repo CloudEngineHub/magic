@@ -21,7 +21,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX,
 	DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX,

@@ -1,10 +1,10 @@
-import { EditorContent } from "@tiptap/react"
+import { EditorContent } from "@/infrastructure/editors/tiptap/react"
 import { ArrowUp, Check, Loader2, Plus, Square, X } from "lucide-react"
 import { useDebounceFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { VoiceInputStatus } from "@/components/business/VoiceInput"
 import type {
 	SceneEditorContext,

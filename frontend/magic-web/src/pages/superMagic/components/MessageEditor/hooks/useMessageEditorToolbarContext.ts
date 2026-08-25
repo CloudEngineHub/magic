@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import type { RefObject } from "react"
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"

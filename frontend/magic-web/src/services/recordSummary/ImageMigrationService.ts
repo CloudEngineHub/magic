@@ -1,6 +1,10 @@
-import type { Editor, JSONContent } from "@tiptap/core"
-import type { Node as ProseMirrorNode, Fragment, NodeType } from "@tiptap/pm/model"
-import { loadTipTapModules, type TipTapModules } from "@/lib/tiptap"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
+import type {
+	Node as ProseMirrorNode,
+	Fragment,
+	NodeType,
+} from "@/infrastructure/editors/tiptap/pm-model"
+import { loadTipTapModules, type TipTapModules } from "@/infrastructure/editors/tiptap"
 import { ImageStorageDatabase } from "@/services/tiptap-image-storage"
 import { projectImageStorage } from "@/services/tiptap-image-project"
 import { logger as Logger } from "@/utils/log"

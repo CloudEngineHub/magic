@@ -1,7 +1,7 @@
 import { useEffect, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import MarkdownComponent from "../../../Text/components/Markdown"
 import { ReasoningPanel } from "../../shared/ReasoningPanel"
 import { useScrollAreaAutoScroll } from "../../shared/hooks/useScrollAreaAutoScroll"

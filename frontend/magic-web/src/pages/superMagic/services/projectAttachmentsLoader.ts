@@ -34,10 +34,18 @@ import {
 
 export type ProjectAttachmentsSourceVersion = "v1" | "v2"
 export type ProjectAttachmentsLoadStrategy =
-	"force_v1" | "force_v2" | "count_v1" | "count_v2" | "fallback_v1"
+	| "force_v1"
+	| "force_v2"
+	| "count_v1"
+	| "count_v2"
+	| "fallback_v1"
 
 export type ProjectAttachmentsFallbackReason =
-	"count_failed" | "count_below_threshold" | "v2_fetch_failed" | "bfs_anomaly" | "forced_v1"
+	| "count_failed"
+	| "count_below_threshold"
+	| "v2_fetch_failed"
+	| "bfs_anomaly"
+	| "forced_v1"
 
 export interface ProjectAttachmentsDiagnostics extends Partial<ProjectAttachmentsV2Diagnostics> {
 	fallback_reason?: ProjectAttachmentsFallbackReason
@@ -78,6 +86,11 @@ export interface ProjectAttachmentsLoaderOptions {
 	pageSize?: number
 	signal?: AbortSignal
 	onBatchSnapshot?: (payload: ProjectAttachmentsBatchSnapshotPayload) => void
+	/**
+	 * Keep is_hidden files in the processed tree/list for path lookup.
+	 * Default false preserves the visible-only contract for file panels.
+	 */
+	includeHidden?: boolean
 }
 
 class ProjectAttachmentsBfsAnomalyError extends Error {
@@ -412,9 +425,12 @@ async function loadAttachmentsViaV2(params: {
 	rawTotal?: number
 	onBatchSnapshot?: ProjectAttachmentsLoaderOptions["onBatchSnapshot"]
 	signal?: AbortSignal
+	includeHidden?: boolean
 }): Promise<ProjectAttachmentsLoadResult> {
 	// V2 uses backend cursors for BFS paging; builder emits optional page snapshots.
-	const builder = createProjectAttachmentsV2Builder()
+	const builder = createProjectAttachmentsV2Builder({
+		includeHidden: params.includeHidden,
+	})
 	const batchSnapshotScheduler = createProjectAttachmentsBatchSnapshotScheduler(
 		params.onBatchSnapshot,
 		{ signal: params.signal },
@@ -575,6 +591,7 @@ export async function loadProjectAttachments(
 				rawTotal,
 				onBatchSnapshot: options.onBatchSnapshot,
 				signal: options.signal,
+				includeHidden: options.includeHidden,
 			})
 		} catch (error) {
 			// Abort is normal on user switches; do not swallow it and fallback to V1.

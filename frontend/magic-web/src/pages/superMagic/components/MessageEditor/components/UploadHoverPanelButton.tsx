@@ -5,7 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shad
 import { Badge } from "@/components/shadcn-ui/badge"
 import MagicIcon from "@/components/base/MagicIcon"
 import UploadAction from "@/components/base/UploadAction"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { GuideTourElementId } from "../../LazyGuideTour"
 import type { FileData, MessageEditorSize } from "../types"
 import type { FileUploadStore } from "../stores/FileUploadStore"

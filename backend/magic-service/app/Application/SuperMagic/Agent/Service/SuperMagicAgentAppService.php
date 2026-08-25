@@ -56,7 +56,6 @@ use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\BuiltinSkill;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillMentionSource;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
@@ -71,6 +70,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SuperMagic\Agent\DTO\Request\GetMyAvailableAgentsRequestDTO;
@@ -1370,7 +1370,10 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         return array_values(array_unique(array_merge(
             $accessibleSkillCodes,
-            array_values(array_intersect(BuiltinSkill::values(), $skillCodes ?? []))
+            array_values(array_intersect(
+                $this->skillMarketDomainService->getOfficialBuiltinSkillCodes(),
+                $skillCodes ?? []
+            ))
         )));
     }
 
@@ -2404,14 +2407,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     private function buildSystemMentionSkills(): array
     {
         $items = [];
-        foreach (BuiltinSkill::getAllBuiltinSkills() as $builtinSkill) {
+        $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
+        foreach ($this->skillMarketDomainService->getOfficialBuiltinSkillEntities() as $builtinSkill) {
             $items[] = [
-                'id' => $builtinSkill->value,
-                'code' => $builtinSkill->value,
-                'name' => $builtinSkill->getSkillName(),
-                'package_name' => $builtinSkill->value,
-                'description' => $builtinSkill->getSkillDescription(),
-                'logo' => $builtinSkill->getSkillIcon() !== '' ? $builtinSkill->getSkillIcon() : null,
+                'id' => $builtinSkill->getSkillCode(),
+                'code' => $builtinSkill->getSkillCode(),
+                'name' => $builtinSkill->getI18nName($language),
+                'package_name' => $builtinSkill->getPackageName(),
+                'description' => $builtinSkill->getI18nDescription($language),
+                'logo' => $builtinSkill->getLogo() ?: null,
                 'mention_source' => SkillMentionSource::SYSTEM->value,
             ];
         }

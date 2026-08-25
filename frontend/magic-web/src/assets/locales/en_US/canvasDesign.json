@@ -508,6 +508,7 @@
 		"frameResourceAlreadyUsed": "This resource is already used for another frame",
 		"frames": "First & last frame",
 		"generateAgain": "Generate again",
+		"generateAudio": "Audio",
 		"generationSettings": "Generation settings",
 		"generationSettingsAria": "Video generation parameters",
 		"lastFrame": "Last frame",
@@ -543,7 +544,8 @@
 		"useAsEndFrame": "Use as end frame",
 		"useAsStartFrame": "Use as start frame",
 		"videoEdit": "Video Edit",
-		"videoEditRequiresOneVideo": "Video edit mode requires exactly 1 reference video"
+		"videoEditRequiresOneVideo": "Video edit mode requires exactly 1 reference video",
+		"webSearch": "Web Search"
 	},
 	"zoom": {
 		"fitToScreen": "Fit to Screen",

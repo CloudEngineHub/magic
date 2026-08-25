@@ -1,4 +1,4 @@
-import type { Editor } from "@tiptap/react"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ReactNode } from "react"
 import type { MessageEditorStore } from "../stores"
 import { MessageEditorStoreProvider } from "../stores"

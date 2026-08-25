@@ -1,0 +1,193 @@
+import { act, fireEvent, renderHook, waitFor } from "@testing-library/react"
+import type { RefObject } from "react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const storeMocks = vi.hoisted(() => ({
+	getChatInputHeightPreference: vi.fn(),
+	setChatInputHeightPreference: vi.fn(),
+}))
+
+vi.mock("@/stores/interface", () => ({
+	interfaceStore: {
+		getChatInputHeightPreference: storeMocks.getChatInputHeightPreference,
+		setChatInputHeightPreference: storeMocks.setChatInputHeightPreference,
+	},
+}))
+
+import { useConversationInputHeight } from "../useConversationInputHeight"
+
+class MockResizeObserver {
+	/** Match the browser observer API without producing unrelated resize notifications. */
+	observe() {
+		return undefined
+	}
+
+	/** Release mock observer resources. */
+	disconnect() {
+		return undefined
+	}
+}
+
+/** Build the minimal DOMRect fields used by layout measurements. */
+function createRect(height: number): DOMRect {
+	return {
+		x: 0,
+		y: 0,
+		width: 800,
+		height,
+		top: 0,
+		right: 800,
+		bottom: height,
+		left: 0,
+		toJSON: () => ({}),
+	}
+}
+
+describe("useConversationInputHeight", () => {
+	let containerHeight: number
+	let availableHeight: number
+	let container: HTMLDivElement
+	let available: HTMLDivElement
+
+	beforeEach(() => {
+		containerHeight = 240
+		availableHeight = 800
+		container = document.createElement("div")
+		available = document.createElement("div")
+		Object.defineProperty(container, "offsetHeight", {
+			configurable: true,
+			get: () => containerHeight,
+		})
+		Object.defineProperty(container, "scrollHeight", {
+			configurable: true,
+			get: () => containerHeight,
+		})
+		available.getBoundingClientRect = () => createRect(availableHeight)
+		container.getBoundingClientRect = () => createRect(containerHeight)
+		storeMocks.getChatInputHeightPreference.mockReset()
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "auto", height: 240 })
+		storeMocks.setChatInputHeightPreference.mockReset()
+		vi.stubGlobal("ResizeObserver", MockResizeObserver)
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			return window.setTimeout(() => callback(performance.now()), 0)
+		})
+		vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle))
+	})
+
+	it("automatically grows, clamps at fifty percent, and shrinks again", async () => {
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "test-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		expect(result.current.effectiveHeight).toBe(240)
+		expect(result.current.fillHeight).toBe(false)
+
+		containerHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+		expect(result.current.fillHeight).toBe(true)
+
+		containerHeight = 260
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(260))
+		expect(result.current.fillHeight).toBe(false)
+	})
+
+	it("lets manual Splitter resizing override automatic measurements until restored", async () => {
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "test-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		act(() => {
+			result.current.onSplitterResizeStart([560, 240])
+			result.current.onSplitterResize([480, 320])
+			result.current.onSplitterResizeEnd([480, 320])
+		})
+
+		expect(result.current.effectiveHeight).toBe(320)
+		expect(result.current.fillHeight).toBe(true)
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"test-conversation",
+			{ mode: "manual", height: 320 },
+		)
+
+		containerHeight = 360
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(320))
+		expect(result.current.effectiveHeight).toBe(320)
+
+		act(() => result.current.restoreAutoHeight())
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(360))
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"test-conversation",
+			{ mode: "auto", height: 320 },
+		)
+	})
+
+	it("uses upward pointer movement to increase and persist manual height", async () => {
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "test-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		act(() => {
+			result.current.startPointerResize()
+			result.current.resizeByPointerDelta(-80)
+			result.current.finishPointerResize()
+		})
+
+		expect(result.current.effectiveHeight).toBe(320)
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"test-conversation",
+			{ mode: "manual", height: 320 },
+		)
+	})
+
+	it("keeps automatic growth at fifty percent while allowing a larger manual ceiling", async () => {
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "test-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+				maxRatio: 0.5,
+				manualMaxRatio: 0.7,
+				manualMinAvailableHeight: 240,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(560))
+		containerHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+
+		act(() => {
+			result.current.startPointerResize()
+			result.current.resizeByPointerDelta(-500)
+		})
+
+		expect(result.current.effectiveHeight).toBe(560)
+
+		availableHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.maxHeight).toBe(260))
+		expect(result.current.effectiveHeight).toBe(260)
+	})
+})

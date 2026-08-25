@@ -29,7 +29,7 @@ import {
 } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import {
 	loadMagicProjectJsContent,
-	parseMagicProjectJsContent,
+	parseMagicProjectJsContentSafely,
 	resolveDesignProjectBasePathFromAttachments,
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
@@ -255,6 +255,8 @@ export class DesignRemoteListener {
 		this.options = { ...this.options, ...options }
 		this.projectKey = this.getProjectKey(this.options)
 		if (prevProjectKey !== this.projectKey) {
+			this.latestRemoteApplyToken += 1
+			this.fileId = null
 			this.hasPendingFileChangeDuringSave = false
 			this.pendingFileChangeUpdatedAtMs = null
 			this.pendingFileChangeVersion = null
@@ -690,7 +692,7 @@ export class DesignRemoteListener {
 		let parsed: DesignData | null = null
 		try {
 			const content = await loadMagicProjectJsContent(fid)
-			parsed = parseMagicProjectJsContent(content)
+			parsed = parseMagicProjectJsContentSafely(content)
 		} catch {
 			return null
 		}
@@ -735,7 +737,7 @@ export class DesignRemoteListener {
 
 		try {
 			const content = await loadMagicProjectJsContent(fid)
-			const again = parseMagicProjectJsContent(content)
+			const again = parseMagicProjectJsContentSafely(content)
 			if (again) {
 				if (dslBase) {
 					normalizeDesignDataPathsAfterLoad(again, dslBase, {
@@ -779,6 +781,9 @@ export class DesignRemoteListener {
 		options?: { refreshVersionsAfterApply?: boolean; fileUpdatedAtMs?: number | null },
 	): Promise<void> {
 		if (!this.isMounted) return
+		const applyToken = this.latestRemoteApplyToken + 1
+		this.latestRemoteApplyToken = applyToken
+		const isLatestApply = () => this.isMounted && this.latestRemoteApplyToken === applyToken
 
 		if (this.options.getIsViewingHistory()) {
 			if (this.options.isShareRoute) return
@@ -788,13 +793,16 @@ export class DesignRemoteListener {
 			} catch {
 				// ignore
 			}
+			if (!isLatestApply()) return
 			return
 		}
 
 		const didApplyRemote = await this.options.loadAndApplyRemote(updateType)
+		if (!isLatestApply()) return
 		if (didApplyRemote) {
 			this.markMagicProjectJsUpdatedAtApplied(options?.fileUpdatedAtMs)
 			await this.markRemoteVersionApplied(null)
+			if (!isLatestApply()) return
 		}
 
 		if (!options?.refreshVersionsAfterApply || this.options.isShareRoute) return

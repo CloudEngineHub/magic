@@ -203,6 +203,110 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
+    "create_slide_template_project.before": {
+        "zh_CN": "正在创建模板结构 {{template_id}}",
+        "en_US": "Creating template structure {{template_id}}"
+    },
+    "create_slide_template_project.after_success": {
+        "zh_CN": "已创建模板结构 {{template_id}}",
+        "en_US": "Created template structure {{template_id}}"
+    },
+    "create_slide_template_project.after_failed": {
+        "zh_CN": "模板结构 {{template_id}} 创建失败",
+        "en_US": "Failed to create template structure {{template_id}}"
+    },
+    "finalize_slide_template.before": {
+        "zh_CN": "正在渲染模板预览 {{template_dir}}",
+        "en_US": "Rendering template previews {{template_dir}}"
+    },
+    "finalize_slide_template.after_success": {
+        "zh_CN": "已生成模板预览 {{template_id}}",
+        "en_US": "Generated template previews {{template_id}}"
+    },
+    "finalize_slide_template.after_failed": {
+        "zh_CN": "模板预览 {{template_id}} 生成失败",
+        "en_US": "Failed to generate template previews {{template_id}}"
+    },
+    "prepare_slide_template_source.before": {
+        "zh_CN": "正在准备模板视觉重建素材 {{template_dir}}",
+        "en_US": "Preparing reconstruction source {{template_dir}}"
+    },
+    "prepare_slide_template_source.after_success": {
+        "zh_CN": "已准备模板视觉重建素材 {{template_dir}}",
+        "en_US": "Prepared reconstruction source {{template_dir}}"
+    },
+    "prepare_slide_template_source.after_failed": {
+        "zh_CN": "模板视觉重建素材 {{template_dir}} 准备失败",
+        "en_US": "Failed to prepare reconstruction source {{template_dir}}"
+    },
+    "select_slide_template_source_assets.before": {
+        "zh_CN": "正在审核并筛选模板原始素材 {{template_dir}}",
+        "en_US": "Reviewing and selecting source assets {{template_dir}}"
+    },
+    "select_slide_template_source_assets.after_success": {
+        "zh_CN": "已完成模板原始素材筛选 {{template_dir}}",
+        "en_US": "Selected source assets for {{template_dir}}"
+    },
+    "select_slide_template_source_assets.after_failed": {
+        "zh_CN": "模板原始素材筛选失败 {{template_dir}}",
+        "en_US": "Failed to select source assets for {{template_dir}}"
+    },
+    "query_slide_template_taxonomy.before": {
+        "zh_CN": "正在获取可用的模板分类和标签",
+        "en_US": "Fetching available template categories and tags"
+    },
+    "query_slide_template_taxonomy.after_success": {
+        "zh_CN": "已列出可用的模板分类和标签",
+        "en_US": "Listed available template categories and tags"
+    },
+    "query_slide_template_taxonomy.after_failed": {
+        "zh_CN": "模板分类或标签不可用",
+        "en_US": "Template category or tags are not available"
+    },
+    "review_slide_template_source.before": {
+        "zh_CN": "正在回顾模板源页视觉 {{template_dir}}",
+        "en_US": "Reviewing source pages for {{template_dir}}"
+    },
+    "review_slide_template_source.after_success": {
+        "zh_CN": "已完成模板源页视觉回顾 {{template_dir}}",
+        "en_US": "Reviewed source pages for {{template_dir}}"
+    },
+    "review_slide_template_source.after_failed": {
+        "zh_CN": "模板源页视觉回顾失败 {{template_dir}}",
+        "en_US": "Failed to review source pages for {{template_dir}}"
+    },
+    "install_slides_template.before": {
+        "zh_CN": "正在安装模板 {{template_code}}",
+        "en_US": "Installing template {{template_code}}"
+    },
+    "install_slides_template.after_success": {
+        "zh_CN": "已安装模板 {{template_code}}",
+        "en_US": "Installed template {{template_code}}"
+    },
+    "install_slides_template.after_failed": {
+        "zh_CN": "模板 {{template_code}} 安装失败",
+        "en_US": "Failed to install template {{template_code}}"
+    },
+    "install_slides_template.detail_title": {
+        "zh_CN": "幻灯片模板安装结果",
+        "en_US": "Slide Template Install Result"
+    },
+    "install_slides_template.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "install_slides_template.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "install_slides_template.detail_directory": {
+        "zh_CN": "安装目录",
+        "en_US": "Installed directory"
+    },
+    "install_slides_template.detail_error": {
+        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
+        "en_US": "Install failed. Check the template code or try again later"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"
@@ -5059,38 +5163,6 @@
         "zh_CN": "PPTX 转幻灯片模板失败",
         "en_US": "PPTX to Slide Template Failed"
     },
-    "install_slides_template.before": {
-        "zh_CN": "正在安装模板 {{template_code}}",
-        "en_US": "Installing template {{template_code}}"
-    },
-    "install_slides_template.after_success": {
-        "zh_CN": "已安装模板 {{template_code}}",
-        "en_US": "Installed template {{template_code}}"
-    },
-    "install_slides_template.after_failed": {
-        "zh_CN": "模板 {{template_code}} 安装失败",
-        "en_US": "Failed to install template {{template_code}}"
-    },
-    "install_slides_template.detail_title": {
-        "zh_CN": "幻灯片模板安装结果",
-        "en_US": "Slide Template Install Result"
-    },
-    "install_slides_template.detail_code": {
-        "zh_CN": "模板 code",
-        "en_US": "Template code"
-    },
-    "install_slides_template.detail_label": {
-        "zh_CN": "模板名称",
-        "en_US": "Template name"
-    },
-    "install_slides_template.detail_directory": {
-        "zh_CN": "安装目录",
-        "en_US": "Installed directory"
-    },
-    "install_slides_template.detail_error": {
-        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
-        "en_US": "Install failed. Check the template code or try again later"
-    },
     "audio_understanding.file_corrupted": {
         "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
         "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
@@ -5342,30 +5414,6 @@
     "scheduled_task.detail.empty": {
         "zh_CN": "-",
         "en_US": "-"
-    },
-    "call_simple_tool.calling": {
-        "zh_CN": "正在调用工具流",
-        "en_US": "Calling tool flow"
-    },
-    "call_simple_tool.called": {
-        "zh_CN": "工具流调用完成",
-        "en_US": "Tool flow call completed"
-    },
-    "call_simple_tool.failed": {
-        "zh_CN": "工具流调用失败",
-        "en_US": "Tool flow call failed"
-    },
-    "call_simple_agent.calling": {
-        "zh_CN": "正在调用助理",
-        "en_US": "Consulting agent"
-    },
-    "call_simple_agent.called": {
-        "zh_CN": "已收到助理回复",
-        "en_US": "Agent reply received"
-    },
-    "call_simple_agent.failed": {
-        "zh_CN": "助理调用失败",
-        "en_US": "Agent consultation failed"
     },
     "magicbase.current_micro_app": {
         "zh_CN": "当前微应用",

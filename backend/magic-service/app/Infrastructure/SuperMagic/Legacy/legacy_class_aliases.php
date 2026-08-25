@@ -710,7 +710,6 @@ spl_autoload_register(static function (string $class): void {
         'Dtyq\SuperMagic\Infrastructure\Utils\UnicodeSortUtil' => 'App\Infrastructure\SuperMagic\Utils\UnicodeSortUtil',
         'Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil' => 'App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil',
         'Dtyq\SuperMagic\Infrastructure\Utils\WorkFileUtil' => 'App\Infrastructure\SuperMagic\Utils\WorkFileUtil',
-        'Dtyq\SuperMagic\Interfaces\Agent\Assembler\BuiltinSkillAssembler' => 'App\Interfaces\SuperMagic\Agent\Assembler\BuiltinSkillAssembler',
         'Dtyq\SuperMagic\Interfaces\Agent\Assembler\BuiltinToolAssembler' => 'App\Interfaces\SuperMagic\Agent\Assembler\BuiltinToolAssembler',
         'Dtyq\SuperMagic\Interfaces\Agent\Assembler\MagicClawAssembler' => 'App\Interfaces\SuperMagic\Agent\Assembler\MagicClawAssembler',
         'Dtyq\SuperMagic\Interfaces\Agent\Assembler\MentionSkillAssembler' => 'App\Interfaces\SuperMagic\Agent\Assembler\MentionSkillAssembler',

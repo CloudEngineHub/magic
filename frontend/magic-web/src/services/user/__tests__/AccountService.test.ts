@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => {
 		accountLoggerError: vi.fn(),
 		userStore: {
 			user: {
+				userInfo: { magic_id: "current-account" },
 				setAuthorization: vi.fn(),
+				setUserInfo: vi.fn(),
 			},
 			account: {
 				accounts: [] as Array<{ magic_id: string }>,
@@ -182,5 +184,50 @@ describe("AccountService.deleteAccount", () => {
 
 		expect(mocks.clearHtmlPermissionGrants).toHaveBeenCalledTimes(1)
 		expect(service.get).not.toHaveBeenCalled()
+	})
+
+	it("invalidates a local session without remote logout", async () => {
+		const service = {
+			get: vi.fn((key: string) => {
+				if (key === "configService") return { setClusterCode: mocks.setClusterCode }
+				if (key === "userService")
+					return {
+						setUserInfo: mocks.setUserInfo,
+						removeOrganization: mocks.removeOrganization,
+					}
+				if (key === "loginService") return { logout: mocks.logout }
+				throw new Error(`Unexpected service lookup: ${key}`)
+			}),
+		}
+		const accountService = new AccountService({} as never, service as never)
+
+		const result = await accountService.invalidateSession({ accountId: "current-account" })
+
+		expect(result).toEqual({ cleanupStatus: "completed" })
+		expect(mocks.logout).not.toHaveBeenCalled()
+		expect(mocks.deleteAccountRepository).toHaveBeenCalledWith("current-account")
+		expect(mocks.setAuthorization).toHaveBeenCalledWith("")
+		expect(mocks.destroyMessageService).toHaveBeenCalled()
+	})
+
+	it("reports partial cleanup when permission storage cannot be cleared", async () => {
+		mocks.clearHtmlPermissionGrants.mockRejectedValueOnce(new Error("IndexedDB failed"))
+		const service = {
+			get: vi.fn((key: string) => {
+				if (key === "configService") return { setClusterCode: mocks.setClusterCode }
+				if (key === "userService")
+					return {
+						setUserInfo: mocks.setUserInfo,
+						removeOrganization: mocks.removeOrganization,
+					}
+				throw new Error(`Unexpected service lookup: ${key}`)
+			}),
+		}
+		const accountService = new AccountService({} as never, service as never)
+
+		const result = await accountService.invalidateSession({ accountId: "current-account" })
+
+		expect(result).toEqual({ cleanupStatus: "partial" })
+		expect(mocks.setAuthorization).toHaveBeenCalledWith("")
 	})
 })

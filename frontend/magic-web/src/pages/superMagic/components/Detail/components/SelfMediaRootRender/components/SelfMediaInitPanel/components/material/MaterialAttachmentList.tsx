@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useMemo, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import projectFilesStore from "@/stores/projectFiles"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import {

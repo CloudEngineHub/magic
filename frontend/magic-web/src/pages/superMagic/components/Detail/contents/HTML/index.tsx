@@ -62,7 +62,7 @@ import {
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { env } from "@/utils/env"
 import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"

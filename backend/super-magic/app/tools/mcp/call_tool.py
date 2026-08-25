@@ -97,8 +97,8 @@ class McpCallTool(BaseMcpTool[McpCallToolParams]):
         target_tool = args.get("tool_name", "") or "-"
         tool_params_raw = args.get("tool_params", "") or ""
 
-        status_icon = "✅" if result.ok else "❌"
-        header = f"**{server_name}** · `{target_tool}` {status_icon}"
+        status_label = "Success" if result.ok else "Error"
+        header = f"**{server_name}** · `{target_tool}` · {status_label}"
 
         meta_parts: list[str] = []
         execution_time = getattr(result, "execution_time", None)

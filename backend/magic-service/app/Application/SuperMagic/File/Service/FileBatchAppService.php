@@ -132,7 +132,11 @@ class FileBatchAppService extends AbstractAppService
             return $cachedResponse;
         }
 
-        $targetName = $this->buildBatchDownloadTargetName($projectEntity->getProjectName());
+        $targetName = $this->buildBatchDownloadTargetName(
+            $projectEntity->getProjectName(),
+            $selectedEntities,
+            empty($fileIds),
+        );
         $organizationCode = $projectEntity->getUserOrganizationCode();
         $sandboxId = $this->initializeBatchPackSandbox(
             $requestContext,
@@ -273,7 +277,11 @@ class FileBatchAppService extends AbstractAppService
             return $cachedResponse;
         }
 
-        $targetName = $this->buildBatchDownloadTargetName($projectEntity->getProjectName());
+        $targetName = $this->buildBatchDownloadTargetName(
+            $projectEntity->getProjectName(),
+            $selectedEntities,
+            empty($fileIds),
+        );
         $organizationCode = $projectEntity->getUserOrganizationCode();
         $sandboxId = $this->initializeBatchPackSandbox(
             $requestContext,
@@ -445,12 +453,33 @@ class FileBatchAppService extends AbstractAppService
         return 'batch_' . md5($data);
     }
 
-    private function buildBatchDownloadTargetName(string $projectName): string
-    {
+    /**
+     * @param TaskFileEntity[] $selectedEntities original user selections
+     */
+    private function buildBatchDownloadTargetName(
+        string $projectName,
+        array $selectedEntities,
+        bool $isWholeProject,
+    ): string {
         $timestamp = date('YmdHi');
+        $baseName = $projectName;
+
+        if (! $isWholeProject && count($selectedEntities) === 1) {
+            $selectedEntity = $selectedEntities[0];
+            $resourceName = $selectedEntity->getFileName();
+            if (! $selectedEntity->getIsDirectory()) {
+                $extension = $selectedEntity->getFileExtension();
+                if ($extension !== '' && str_ends_with($resourceName, '.' . $extension)) {
+                    $resourceName = substr($resourceName, 0, -strlen($extension) - 1);
+                } else {
+                    $resourceName = pathinfo($resourceName, PATHINFO_FILENAME);
+                }
+            }
+            $baseName = $resourceName . '_' . $projectName;
+        }
 
         return WorkFileUtil::sanitizeFileName(
-            sprintf('%s_%s.zip', $projectName, $timestamp),
+            sprintf('%s_%s.zip', $baseName, $timestamp),
             sprintf('batch_download_%s.zip', $timestamp)
         );
     }

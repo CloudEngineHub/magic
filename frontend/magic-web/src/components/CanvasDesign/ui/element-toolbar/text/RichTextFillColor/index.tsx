@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import styles from "./index.module.css"
 import transparentIcon from "../../../../assets/svg/transparent.svg"
 import ColorPickerPopover from "../../../primitives/custom/ColorPickerPopover/index"
-import classNames from "classnames"
+import { cn } from "../../../../runtime/shared/lib/utils"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useTextToolController } from "../useTextToolController"
 
@@ -65,7 +65,7 @@ export default function RichTextFillColor() {
 			onContentPreserveSelection={restoreSelection}
 		>
 			<div
-				className={classNames(styles.fillColor, { [styles.active]: isPopoverOpen })}
+				className={cn(styles.fillColor, { [styles.active]: isPopoverOpen })}
 				onPointerDown={handleTriggerPointerDown}
 				onMouseDown={handleTriggerMouseDown}
 			>

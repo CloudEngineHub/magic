@@ -11,8 +11,8 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import { MonacoEditor } from "@/lib/monacoEditor"
-import type { editor } from "@/lib/monacoEditor"
+import { MonacoEditor } from "@/infrastructure/editors/monaco"
+import type { editor } from "@/infrastructure/editors/monaco"
 import { useTheme } from "@/models/config/hooks"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { flattenAttachments } from "../../../../contents/HTML/utils"

@@ -263,6 +263,9 @@ function pushLog(entry) {
 function clearChatLog() {
     chatLog = [];
     chatLogGeneration += 1;
+    latestTokenUsage = null;
+    closeTokenContextPopover();
+    updateTokenContextPreview();
     if (chatLogSaveTimer) {
         clearTimeout(chatLogSaveTimer);
         chatLogSaveTimer = null;
@@ -409,6 +412,15 @@ const clientContextModal = document.getElementById('clientContextModal');
 const clientContextModalCount = document.getElementById('clientContextModalCount');
 const clientContextModalClearBtn = document.getElementById('clientContextModalClearBtn');
 const clientContextModalCloseBtn = document.getElementById('clientContextModalCloseBtn');
+const tokenContextPreview = document.getElementById('tokenContextPreview');
+const tokenContextUsage = document.getElementById('tokenContextUsage');
+const tokenContextRing = document.getElementById('tokenContextRing');
+const tokenContextPopover = document.getElementById('tokenContextPopover');
+const tokenContextPopoverPercentage = document.getElementById('tokenContextPopoverPercentage');
+const tokenContextPopoverProgress = document.getElementById('tokenContextPopoverProgress');
+const tokenContextPopoverCount = document.getElementById('tokenContextPopoverCount');
+const tokenContextPopoverBreakdown = document.getElementById('tokenContextPopoverBreakdown');
+const tokenContextWarning = document.getElementById('tokenContextWarning');
 const languageSelect = document.getElementById('languageSelect');
 const messageVersionSelect = document.getElementById('messageVersionSelect');
 const executionSourceSelect = document.getElementById('executionSourceSelect');
@@ -422,6 +434,10 @@ const messageInputPanel = document.getElementById('messageInputPanel');
 
 const INIT_CONFIG_PANEL_OPEN_KEY = 'httpClient.initConfigPanelOpen';
 const MCP_CONFIG_PANEL_OPEN_KEY = 'httpClient.mcpConfigPanelOpen';
+const TOKEN_CONTEXT_DEFAULT_LIMIT = 200_000;
+const TOKEN_CONTEXT_WARNING_THRESHOLD = 0.7;
+const TOKEN_CONTEXT_RING_CIRCUMFERENCE = 42.41;
+let latestTokenUsage = null;
 
 function getStoredPanelOpen(storageKey, defaultOpen) {
     const saved = localStorage.getItem(storageKey);
@@ -489,6 +505,153 @@ function refreshClientContextDebugState() {
     if (clientContextModalCount) clientContextModalCount.textContent = `${length} 字符`;
     if (clientContextClearBtn) clientContextClearBtn.style.display = hasManualContext ? '' : 'none';
     if (clientContextModalClearBtn) clientContextModalClearBtn.disabled = !hasManualContext;
+}
+
+function formatTokenCount(value) {
+    const count = Number(value);
+    if (!Number.isFinite(count) || count < 0) return '';
+    if (count >= 1_000) return `${Math.round(count / 1_000)}K`;
+    return String(Math.round(count));
+}
+
+function formatTokenPercentage(ratio) {
+    const percentage = ratio * 100;
+    return percentage < 10 ? `${percentage.toFixed(1)}%` : `${Math.round(percentage)}%`;
+}
+
+function getSelectedModelContextLimit() {
+    const modelId = modelIdSelect && modelIdSelect.style.display !== 'none'
+        ? modelIdSelect.value.trim()
+        : modelIdInput?.value.trim();
+    if (!modelId) return null;
+
+    let textModels = [];
+    try {
+        textModels = JSON.parse(localStorage.getItem('availableModels') || '[]');
+    } catch (e) {
+        return null;
+    }
+    const model = textModels.find(item => item && item.id === modelId);
+    const maxTokens = model?.info?.options?.max_tokens;
+    return Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0 ? Number(maxTokens) : null;
+}
+
+function normalizeTokenUsage(tokenUsage) {
+    if (!tokenUsage || typeof tokenUsage !== 'object') return null;
+    const inputTokens = tokenUsage.input_tokens ?? tokenUsage.prompt_tokens;
+    const outputTokens = tokenUsage.output_tokens ?? tokenUsage.completion_tokens;
+    const explicitTotalTokens = tokenUsage.total_tokens;
+    const hasInputTokens = inputTokens !== null && inputTokens !== undefined && inputTokens !== ''
+        && Number.isFinite(Number(inputTokens));
+    const hasOutputTokens = outputTokens !== null && outputTokens !== undefined && outputTokens !== ''
+        && Number.isFinite(Number(outputTokens));
+    const hasExplicitTotalTokens = explicitTotalTokens !== null && explicitTotalTokens !== undefined
+        && explicitTotalTokens !== '' && Number.isFinite(Number(explicitTotalTokens));
+    const derivedTotalTokens = hasInputTokens && hasOutputTokens
+        ? Number(inputTokens) + Number(outputTokens)
+        : null;
+    const totalTokens = hasExplicitTotalTokens ? Number(explicitTotalTokens) : derivedTotalTokens;
+    const maxContextTokens = tokenUsage.max_context_tokens ?? tokenUsage.context_window;
+    if (!Number.isFinite(totalTokens)) return null;
+    return {
+        input_tokens: hasInputTokens ? Number(inputTokens) : null,
+        output_tokens: hasOutputTokens ? Number(outputTokens) : null,
+        total_tokens: totalTokens,
+        max_context_tokens: Number.isFinite(Number(maxContextTokens)) ? Number(maxContextTokens) : null,
+        model_id: tokenUsage.model_id || tokenUsage.model_name || '',
+        input_tokens_details: tokenUsage.input_tokens_details || null,
+    };
+}
+
+function setTokenContextPopoverOpen(isOpen) {
+    if (!tokenContextPopover || !tokenContextPreview) return;
+    tokenContextPopover.style.display = isOpen ? 'block' : 'none';
+    tokenContextPreview.setAttribute('aria-expanded', String(isOpen));
+    if (isOpen) positionTokenContextPopover();
+}
+
+function closeTokenContextPopover() {
+    setTokenContextPopoverOpen(false);
+}
+
+function positionTokenContextPopover() {
+    if (!tokenContextPopover || !tokenContextPreview || tokenContextPopover.style.display === 'none') return;
+    const triggerRect = tokenContextPreview.getBoundingClientRect();
+    const popoverRect = tokenContextPopover.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const left = Math.min(
+        Math.max(12, triggerRect.right - popoverRect.width),
+        viewportWidth - popoverRect.width - 12,
+    );
+    const openAbove = triggerRect.top >= popoverRect.height + 20;
+    const top = openAbove
+        ? triggerRect.top - popoverRect.height - 8
+        : Math.min(triggerRect.bottom + 8, viewportHeight - popoverRect.height - 12);
+    tokenContextPopover.style.left = `${left}px`;
+    tokenContextPopover.style.top = `${Math.max(12, top)}px`;
+}
+
+function initTokenContextPreview() {
+    if (tokenContextPopover && tokenContextPopover.parentElement !== document.body) {
+        document.body.appendChild(tokenContextPopover);
+    }
+    tokenContextPreview?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const isOpen = tokenContextPopover?.style.display !== 'none';
+        setTokenContextPopoverOpen(!isOpen);
+    });
+    document.addEventListener('click', (event) => {
+        if (tokenContextPopover?.contains(event.target) || tokenContextPreview?.contains(event.target)) return;
+        closeTokenContextPopover();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeTokenContextPopover();
+    });
+    window.addEventListener('resize', positionTokenContextPopover);
+    window.addEventListener('scroll', positionTokenContextPopover, true);
+}
+
+function updateTokenContextPreview(tokenUsage = null) {
+    if (!tokenContextPreview) return;
+    const normalized = normalizeTokenUsage(tokenUsage);
+    if (normalized) latestTokenUsage = normalized;
+
+    const usage = latestTokenUsage;
+    const totalTokens = usage?.total_tokens;
+    if (!usage || !Number.isFinite(totalTokens)) {
+        tokenContextPreview.style.display = 'none';
+        closeTokenContextPopover();
+        return;
+    }
+
+    const contextLimit = usage.max_context_tokens || getSelectedModelContextLimit() || TOKEN_CONTEXT_DEFAULT_LIMIT;
+    const ratio = Math.min(Math.max(totalTokens / contextLimit, 0), 1);
+    const percentageLabel = formatTokenPercentage(ratio);
+    const isHighUsage = ratio >= TOKEN_CONTEXT_WARNING_THRESHOLD;
+    const usedLabel = formatTokenCount(totalTokens);
+    const maxLabel = formatTokenCount(contextLimit);
+    const inputLabel = Number.isFinite(usage.input_tokens) ? formatTokenCount(usage.input_tokens) : '';
+    const outputLabel = Number.isFinite(usage.output_tokens) ? formatTokenCount(usage.output_tokens) : '';
+
+    tokenContextPreview.style.display = 'inline-flex';
+    tokenContextPreview.classList.toggle('is-high', isHighUsage);
+    tokenContextPreview.setAttribute('aria-label', `上下文用量 ${percentageLabel}`);
+    tokenContextPreview.title = `上下文用量 ${percentageLabel}`;
+    tokenContextUsage.textContent = percentageLabel;
+    tokenContextRing.style.strokeDashoffset = String(TOKEN_CONTEXT_RING_CIRCUMFERENCE * (1 - ratio));
+    tokenContextPopoverPercentage.textContent = percentageLabel;
+    tokenContextPopoverProgress.style.width = `${ratio * 100}%`;
+    tokenContextPopoverProgress.parentElement.classList.toggle('is-high', isHighUsage);
+    tokenContextPopoverCount.textContent = `${usedLabel} / ${maxLabel} Tokens`;
+
+    const breakdown = [];
+    if (inputLabel) breakdown.push(`输入 ${inputLabel}`);
+    if (outputLabel) breakdown.push(`输出 ${outputLabel}`);
+    if (usage.model_id) breakdown.push(usage.model_id);
+    tokenContextPopoverBreakdown.textContent = breakdown.join(' · ');
+    tokenContextWarning.style.display = isHighUsage ? 'flex' : 'none';
+    positionTokenContextPopover();
 }
 
 function clearManualClientContext() {
@@ -1248,10 +1411,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 初始化输入栏自定义选择器
     initCustomSelects();
+    window.HttpClientModelPicker?.init();
     initClientContextModal();
+    initTokenContextPreview();
 
     restoreInputDrafts();
     refreshClientContextDebugState();
+    updateTokenContextPreview();
 
     // 原始事件默认隐藏，用户打开后才展示调试事件盒
     initRawEventsToggle();
@@ -1361,6 +1527,8 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshClientContextDebugState();
         });
     }
+
+    modelIdInput?.addEventListener('input', () => updateTokenContextPreview());
 
     // 先加载历史记录
     loadMessageHistory();
@@ -1563,6 +1731,8 @@ function clearModelList() {
     const videoModelGroup = document.getElementById('videoModelGroup');
     if (videoModelGroup) videoModelGroup.style.display = 'none';
     refreshCustomSelect(modelIdSelect);
+    updateTokenContextPreview();
+    window.HttpClientModelPicker?.refresh();
 
     showSystemMessage('模型列表已清理');
 }
@@ -1660,8 +1830,11 @@ function populateModelSelects(textModels, imageModels, videoModels) {
         // 记住选择变更
         modelIdSelect.onchange = () => {
             localStorage.setItem('selectedModelId', modelIdSelect.value);
+            updateTokenContextPreview();
+            window.HttpClientModelPicker?.refresh();
         };
         refreshCustomSelect(modelIdSelect);
+        updateTokenContextPreview();
     }
 
     // 图片模型
@@ -1686,6 +1859,7 @@ function populateModelSelects(textModels, imageModels, videoModels) {
         // 记住选择变更
         imageModelSelect.onchange = () => {
             localStorage.setItem('selectedImageModelId', imageModelSelect.value);
+            window.HttpClientModelPicker?.refresh();
         };
         refreshCustomSelect(imageModelSelect);
     }
@@ -1710,6 +1884,7 @@ function populateModelSelects(textModels, imageModels, videoModels) {
 
         videoModelSelect.onchange = () => {
             localStorage.setItem('selectedVideoModelId', videoModelSelect.value);
+            window.HttpClientModelPicker?.refresh();
         };
         refreshCustomSelect(videoModelSelect);
     }
@@ -1723,6 +1898,7 @@ function populateModelSelects(textModels, imageModels, videoModels) {
     if (videoModelGroup && !isImMode) {
         videoModelGroup.style.display = videoModels.length > 0 ? '' : 'none';
     }
+    window.HttpClientModelPicker?.refresh();
 }
 
 // 设置默认配置
@@ -2151,6 +2327,7 @@ function toggleImMode() {
         if (imageModelGroup) imageModelGroup.style.display = 'none';
         const videoModelGroup = document.getElementById('videoModelGroup');
         if (videoModelGroup) videoModelGroup.style.display = 'none';
+        window.HttpClientModelPicker?.setVisible(false);
         // IM 模式与高级模式互斥
         if (isAdvancedMode) {
             advancedModeToggle.checked = false;
@@ -2162,6 +2339,7 @@ function toggleImMode() {
         agentModeGroup.style.display = '';
         modelIdGroup.style.display = '';
         languageGroup.style.display = '';
+        window.HttpClientModelPicker?.setVisible(true);
         // agentCodeGroup 的显示由 agent mode 决定，重新同步一次
         changeAgentMode();
         // 若模型列表已加载则恢复图片/视频模型选择器
@@ -3847,6 +4025,7 @@ function handleWebSocketMessage(event) {
         const eventType = payload && payload.event;
         const contentType = payload && payload.content_type;
         const content = payload && payload.content;
+        updateTokenContextPreview(payload && (payload.token_usage || payload.usage));
 
         // v2 消息格式：type=super_magic_message，内容在 raw_content.super_magic_message 里
         if (payload && payload.type === 'super_magic_message' && payload.raw_content) {
@@ -3908,17 +4087,18 @@ function handleWebSocketMessage(event) {
 }
 
 function handleSuperMagicChunkMessage(data) {
-    const envelope = extractSuperMagicChunkEnvelope(data);
-    if (!envelope || !envelope.chunk) return false;
+	const envelope = extractSuperMagicChunkEnvelope(data);
+	if (!envelope || !envelope.chunk) return false;
 
-    const chunk = envelope.chunk;
-    const messageKey = resolveSuperMagicMessageKey(
-        chunk.super_message_id,
+	const chunk = envelope.chunk;
+	updateTokenContextPreview(chunk.token_usage || chunk.usage);
+	const messageKey = resolveSuperMagicMessageKey(
+		chunk.super_message_id,
         envelope.appMessageId,
         chunk.app_message_id,
-        chunk.id,
-        chunk.correlation_id,
-    );
+		chunk.id,
+		chunk.correlation_id,
+	);
     const choices = Array.isArray(chunk.choices) ? chunk.choices : [];
     for (const choice of choices) {
         const delta = choice && choice.delta ? choice.delta : {};
@@ -4191,13 +4371,14 @@ function resolveSuperMagicMessageKey(superMessageId, ...fallbackIds) {
 }
 
 function handleSuperMagicMessage(smsg, payload) {
-    const messageKey = resolveSuperMagicMessageKey(
+	updateTokenContextPreview(smsg && (smsg.token_usage || smsg.usage));
+	const messageKey = resolveSuperMagicMessageKey(
         smsg.super_message_id,
         smsg.message_id,
         payload.message_id,
         smsg.correlation_id,
-        payload.correlation_id,
-    );
+		payload.correlation_id,
+	);
     const isToolRole = smsg.role === 'tool';
     let hasVisibleContent = false;
     let hasReplyContent = false;

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { useMemoizedFn } from "ahooks"
-import { Editor } from "@tiptap/react"
+import { Editor } from "@/infrastructure/editors/tiptap/react"
 import { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	getMentionUniqueId,
