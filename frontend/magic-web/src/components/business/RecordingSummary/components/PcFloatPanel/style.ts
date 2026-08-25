@@ -182,7 +182,9 @@ export const useStyles = createStyles(({ token, css, prefixCls }) => {
 			box-sizing: border-box;
 			flex-shrink: 0;
 			margin-bottom: 2px;
-			border-bottom: 1px solid ${token.colorBorder};
+			border: 1px solid ${token.colorBorder};
+			border-radius: 10px;
+			margin: 8px;
 		`,
 
 		transcriptionToolbarLabel: css`
