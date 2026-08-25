@@ -197,7 +197,9 @@ final class SlidesTemplateVectorIndexDomainService
             return [];
         }
 
-        $templates = $this->slidesTemplateRepository->findByIds($dataIsolation, $ids);
+        // Qdrant only provides ranked candidates; MySQL re-applies authoritative
+        // organization isolation and enabled status before returning entities.
+        $templates = $this->slidesTemplateRepository->findVisibleByIds($dataIsolation, $ids);
         $templatesById = [];
         foreach ($templates as $template) {
             $templatesById[(string) $template->getId()] = $template;

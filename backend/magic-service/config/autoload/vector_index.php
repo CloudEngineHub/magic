@@ -20,7 +20,7 @@ return [
             // 幻灯片模板向量搜索开关，必须同时打开通用开关和本业务开关。
             'enabled' => (bool) env('SLIDES_TEMPLATE_VECTOR_SEARCH_ENABLED', false),
             'collection' => (string) env('SLIDES_TEMPLATE_VECTOR_COLLECTION', 'slides_templates'),
-            'score_threshold' => (float) env('SLIDES_TEMPLATE_VECTOR_SCORE_THRESHOLD', 0.6),
+            'score_threshold' => (float) env('SLIDES_TEMPLATE_VECTOR_SCORE_THRESHOLD', 0.4),
         ],
     ],
 ];

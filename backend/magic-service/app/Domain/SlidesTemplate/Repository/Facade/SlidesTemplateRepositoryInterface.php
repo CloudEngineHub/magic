@@ -30,6 +30,12 @@ interface SlidesTemplateRepositoryInterface
     /** @return SlidesTemplateEntity[] */
     public function findByIds(SlidesTemplateDataIsolation $dataIsolation, array $ids): array;
 
+    /** @return SlidesTemplateEntity[] */
+    public function findVisibleByIds(
+        SlidesTemplateDataIsolation $dataIsolation,
+        array $ids,
+    ): array;
+
     /** @return string[] */
     public function findIdsForSync(
         SlidesTemplateDataIsolation $dataIsolation,

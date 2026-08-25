@@ -317,13 +317,16 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
     {
         $template1 = $this->template()->setId(1)->setCode('PPT-1');
         $template2 = $this->template()->setId(2)->setCode('PPT-2');
+        $query = new SlidesTemplateQuery();
+        $query->setKeyword('business report');
         $templateRepository = $this->createMock(SlidesTemplateRepositoryInterface::class);
-        $templateRepository->expects(self::once())->method('findByIds')->with(self::anything(), ['2', '1'])
+        $templateRepository->expects(self::once())->method('findVisibleByIds')->with(
+            self::anything(),
+            ['2', '1'],
+        )
             ->willReturn([$template1, $template2]);
         $this->setEmbeddingResult([0.1, 0.2, 0.3]);
 
-        $query = new SlidesTemplateQuery();
-        $query->setKeyword('business report');
         $vectorStore = $this->createMock(VectorStoreInterface::class);
         $vectorStore->expects(self::once())->method('searchPoints')->with(
             'slides_templates',
@@ -344,6 +347,34 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
         );
 
         self::assertSame([2, 1], array_map(static fn (SlidesTemplateEntity $template): ?int => $template->getId(), $result));
+    }
+
+    public function testSearchUsesDatabaseVisibilityQueryForVectorCandidates(): void
+    {
+        $query = new SlidesTemplateQuery();
+        $query->setKeyword('stale template');
+        $query->setScope(SlidesTemplateQueryScope::Official);
+
+        $templateRepository = $this->createMock(SlidesTemplateRepositoryInterface::class);
+        $templateRepository->expects(self::once())->method('findVisibleByIds')->with(
+            self::anything(),
+            ['1001', '1002'],
+        )->willReturn([$this->template()->setId(1001)]);
+        $this->setEmbeddingResult([0.1, 0.2, 0.3]);
+
+        $vectorStore = $this->createMock(VectorStoreInterface::class);
+        $vectorStore->expects(self::once())->method('searchPoints')->willReturn([
+            new PointInfo('1001', '', 0.9),
+            new PointInfo('1002', '', 0.8),
+        ]);
+
+        $result = $this->domainService($templateRepository, $vectorStore)->search(
+            $this->dataIsolation(),
+            $query,
+            new Page(1, 20),
+        );
+
+        self::assertSame([1001], array_map(static fn (SlidesTemplateEntity $template): ?int => $template->getId(), $result));
     }
 
     public function testSearchBuildsStrictAnyTagAndOfficialFilters(): void
@@ -407,7 +438,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
     private function assertSearchFilter(SlidesTemplateQuery $query, callable $assertion): void
     {
         $templateRepository = $this->createMock(SlidesTemplateRepositoryInterface::class);
-        $templateRepository->expects(self::never())->method('findByIds');
+        $templateRepository->expects(self::never())->method('findVisibleByIds');
         $this->setEmbeddingResult([0.1, 0.2, 0.3]);
         $vectorStore = $this->createMock(VectorStoreInterface::class);
         $vectorStore->expects(self::once())->method('searchPoints')->with(

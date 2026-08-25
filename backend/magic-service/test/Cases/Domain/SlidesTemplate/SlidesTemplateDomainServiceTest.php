@@ -397,10 +397,20 @@ class CapturingSlidesTemplateRepository implements SlidesTemplateRepositoryInter
         return $this->entityToFind ? [$this->entityToFind] : [];
     }
 
+    public function findVisibleByIds(
+        SlidesTemplateDataIsolation $dataIsolation,
+        array $ids,
+    ): array {
+        return $this->entityToFind ? [$this->entityToFind] : [];
+    }
+
     public function findIdsForSync(
         SlidesTemplateDataIsolation $dataIsolation,
         string $organizationCode,
         array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
         string $afterId,
         int $limit
     ): array {
