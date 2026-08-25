@@ -29,7 +29,6 @@ interface VideoProductionConfigPanelProps {
 	topicMode?: string
 	agentCode?: string | null
 	selectedTopic?: { id?: string; agent_code?: string | null } | null
-	messagesLength?: number
 }
 
 interface VideoProductionConfigScrollProps {
@@ -434,7 +433,6 @@ function VideoProductionConfigPanel({
 	topicMode,
 	agentCode,
 	selectedTopic,
-	messagesLength,
 }: VideoProductionConfigPanelProps) {
 	const { t } = useTranslation("super")
 	const store = useOptionalMessageEditorStore()
@@ -468,10 +466,9 @@ function VideoProductionConfigPanel({
 		configStore.setContext({
 			model: selectedVideoModel,
 			inputScopeKey,
-			initializeWithDefaults: (messagesLength ?? 0) === 0,
 		})
 		return () => configStore.deactivate()
-	}, [configStore, inputScopeKey, isVisible, messagesLength, selectedVideoModel, store])
+	}, [configStore, inputScopeKey, isVisible, selectedVideoModel, store])
 
 	useEffect(() => {
 		if (!sceneStateStore) return

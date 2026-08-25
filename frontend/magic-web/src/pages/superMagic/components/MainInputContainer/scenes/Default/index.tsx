@@ -166,7 +166,6 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 							topicMode={editorContext.topicMode}
 							agentCode={editorContext.agentCode}
 							selectedTopic={editorContext.selectedTopic}
-							messagesLength={editorContext.messagesLength}
 						/>
 						{isSlidesMode ? (
 							<SlidesTemplateHomeSelectionPreview

@@ -62,7 +62,6 @@ function MobileScenePanelsComponent({
 					topicMode={editorContext.topicMode}
 					agentCode={editorContext.agentCode}
 					selectedTopic={editorContext.selectedTopic}
-					messagesLength={editorContext.messagesLength}
 				/>
 			) : null}
 		</div>

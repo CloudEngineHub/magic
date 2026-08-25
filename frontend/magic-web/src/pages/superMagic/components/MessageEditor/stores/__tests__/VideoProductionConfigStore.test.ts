@@ -25,7 +25,7 @@ function createModel(
 }
 
 describe("VideoProductionConfigStore", () => {
-	it("resolves sizes, defaults, and range durations", () => {
+	it("resolves sizes and range durations without initializing defaults", () => {
 		const model = createModel("range-model", {
 			aspect_ratios: ["16:9", "9:16"],
 			durations: { min: 4, max: 30, step: 1 },
@@ -40,11 +40,6 @@ describe("VideoProductionConfigStore", () => {
 		const capabilities = resolveVideoProductionCapabilities({ model, inputMode: "standard" })
 
 		expect(capabilities.showAspectRatio).toBe(true)
-		expect(capabilities.defaults).toMatchObject({
-			aspectRatio: "16:9",
-			resolution: "720p",
-			durationSeconds: 5,
-		})
 		expect(capabilities.duration).toMatchObject({ type: "range", min: 4, max: 30, step: 1 })
 		expect(capabilities.aspectRatioOptions.map((item) => item.value)).toEqual(["16:9"])
 	})
@@ -98,7 +93,7 @@ describe("VideoProductionConfigStore", () => {
 		expect(capabilities.duration).toMatchObject({ type: "options", options: [15] })
 	})
 
-	it("resets to the active model defaults when switching models", () => {
+	it("keeps only explicit selections that remain valid when switching models", () => {
 		const modelA = createModel("model-a", {
 			aspect_ratios: ["16:9"],
 			durations: [4, 8],
@@ -106,20 +101,16 @@ describe("VideoProductionConfigStore", () => {
 		})
 		const modelB = createModel("model-b", {
 			aspect_ratios: ["9:16"],
-			durations: [6],
+			durations: [6, 8],
 			resolutions: ["1080p"],
 		})
 		const store = new VideoProductionConfigStore()
 		store.setContext({ model: modelA })
 		store.setConfig({ durationSeconds: 8 })
 		store.setContext({ model: modelB })
-		expect(store.config).toMatchObject({
-			aspectRatio: "9:16",
-			durationSeconds: 6,
-			resolution: "1080p",
-		})
+		expect(store.config).toEqual({ durationSeconds: 8 })
 		store.setContext({ model: modelA })
-		expect(store.config.durationSeconds).toBe(4)
+		expect(store.config.durationSeconds).toBe(8)
 	})
 
 	it("does not restore a prior selection after recreating the store", () => {
@@ -134,13 +125,13 @@ describe("VideoProductionConfigStore", () => {
 
 		const nextStore = new VideoProductionConfigStore()
 		nextStore.setContext({ model })
-		expect(nextStore.config).toMatchObject({ generationMode: "normal", durationSeconds: 5 })
+		expect(nextStore.config).toEqual({})
 
 		store.clearCurrentConfig()
 		expect(store.config).toEqual({})
 	})
 
-	it("only initializes model defaults for the first message in a topic", () => {
+	it("starts empty for every input scope", () => {
 		const model = createModel("model-a", {
 			aspect_ratios: ["16:9"],
 			durations: [5, 10],
@@ -148,22 +139,17 @@ describe("VideoProductionConfigStore", () => {
 		})
 		const store = new VideoProductionConfigStore()
 
-		store.setContext({ model, inputScopeKey: "topic-a", initializeWithDefaults: true })
-		expect(store.config).toMatchObject({
-			generationMode: "normal",
-			aspectRatio: "16:9",
-			durationSeconds: 5,
-			resolution: "720p",
-		})
+		store.setContext({ model, inputScopeKey: "topic-a" })
+		expect(store.config).toEqual({})
 
 		store.clearCurrentConfig()
-		store.setContext({ model, inputScopeKey: "topic-a", initializeWithDefaults: true })
+		store.setContext({ model, inputScopeKey: "topic-a" })
 		expect(store.config).toEqual({})
 
 		store.setConfig({ durationSeconds: 10 })
 		expect(store.config).toEqual({ durationSeconds: 10 })
 
-		store.setContext({ model, inputScopeKey: "topic-b", initializeWithDefaults: false })
+		store.setContext({ model, inputScopeKey: "topic-b" })
 		expect(store.config).toEqual({})
 	})
 })

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest"
 import { buildVideoProductionPresetContent } from "../videoProductionConfig"
 
 describe("videoProductionConfig", () => {
+	it("does not build a suffix when no configuration was selected", () => {
+		expect(buildVideoProductionPresetContent({})).toBeUndefined()
+	})
+
 	it("builds a natural-language message suffix from stable config values", () => {
 		const payload = buildVideoProductionPresetContent({
 			generationMode: "normal",
