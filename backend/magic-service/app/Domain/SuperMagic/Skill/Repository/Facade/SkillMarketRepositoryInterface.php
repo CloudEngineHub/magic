@@ -48,6 +48,10 @@ interface SkillMarketRepositoryInterface
      */
     public function findBySkillCode(string $skillCode): ?SkillMarketEntity;
 
+    public function findOfficialBySkillCode(string $organizationCode, string $skillCode): ?SkillMarketEntity;
+
+    public function findOfficialByPackageName(string $packageName): ?SkillMarketEntity;
+
     /**
      * Find the latest published market skill by skill code.
      */
@@ -66,7 +70,7 @@ interface SkillMarketRepositoryInterface
      *
      * @param SkillQuery $query 查询对象
      * @param Page $page 分页对象
-     * @return array{total: int, list: SkillMarketEntity[]} 总数和市场技能实体数组
+     * @return array{total: ?int, list: SkillMarketEntity[]} 总数（未请求时为 null）和市场技能实体数组
      */
     public function queries(
         SkillQuery $query,
@@ -87,6 +91,7 @@ interface SkillMarketRepositoryInterface
         ?string $packageName,
         ?string $startTime,
         ?string $endTime,
+        array $categoryIds,
         string $orderBy,
         Page $page
     ): array;
@@ -122,6 +127,8 @@ interface SkillMarketRepositoryInterface
      */
     public function incrementInstallCount(int $id): bool;
 
+    public function updateBaseInstallCountById(int $id, int $baseInstallCount): bool;
+
     /**
      * 更新市场技能排序值.
      *
@@ -135,7 +142,6 @@ interface SkillMarketRepositoryInterface
      * 按传入字段部分更新市场技能信息.
      *
      * @param array{
-     *     category_id?: null|int,
      *     sort_order?: null|int,
      *     is_featured?: bool,
      *     is_hidden?: bool
