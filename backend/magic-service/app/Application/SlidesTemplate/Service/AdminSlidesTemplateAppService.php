@@ -119,7 +119,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $template->setCreatedUid($dataIsolation->getCurrentUserId());
         $template->setUpdatedUid($dataIsolation->getCurrentUserId());
 
-        $template = $this->transaction(function () use ($dataIsolation, $request, $template, $category, $tags): SlidesTemplateEntity {
+        $template = Db::transaction(function () use ($dataIsolation, $request, $template, $category, $tags): SlidesTemplateEntity {
             $saved = $this->slidesTemplateDomainService->create($dataIsolation, $template, $category, $tags);
             if ($request->hasTagCodes()) {
                 $this->slidesTemplateTagDomainService->syncTemplateTagsByCodes(
@@ -170,7 +170,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$existing]);
             $tags = $existing->getTags();
         }
-        $template = $this->transaction(function () use ($dataIsolation, $request, $template, $category, $tags): SlidesTemplateEntity {
+        $template = Db::transaction(function () use ($dataIsolation, $request, $template, $category, $tags): SlidesTemplateEntity {
             $saved = $this->slidesTemplateDomainService->update($dataIsolation, $template, $category, $tags);
             if ($request->hasTagCodes()) {
                 $this->slidesTemplateTagDomainService->syncTemplateTagsByCodes(
@@ -201,7 +201,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
-        $template = $this->transaction(function () use ($dataIsolation, $id, $request): SlidesTemplateEntity {
+        $template = Db::transaction(function () use ($dataIsolation, $id, $request): SlidesTemplateEntity {
             $template = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
             $this->slidesTemplateTagDomainService->syncTemplateTagsByCodes(
                 $dataIsolation,
@@ -292,27 +292,67 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         if (! in_array($organizationCode, $dataIsolation->getOfficialOrganizationCodes(), true)) {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::ONLY_OFFICIAL_ORGANIZATION_CAN_MANAGE);
         }
+        return $this->queueVectorReindex(
+            $dataIsolation,
+            $organizationCode,
+            $request->getTemplateIds(),
+            $request->getCategoryCode(),
+            $request->getTagCodes(),
+            $request->getTagMatch(),
+            $request->getAfterId(),
+            $request->getBatchSize(),
+            $request->isForce(),
+        );
+    }
+
+    /** Queue a full official-template vector rebuild for an internal system event. */
+    public function reindexOfficialVectorIndex(string $organizationCode): array
+    {
+        $dataIsolation = new SlidesTemplateDataIsolation();
+        $dataIsolation->setCurrentOrganizationCode($organizationCode);
+        $dataIsolation->setCurrentUserId('system');
+        $dataIsolation->setOfficialOrganizationCodes([$organizationCode]);
+        $dataIsolation->setContainOfficialOrganization(true);
+
+        return $this->queueVectorReindex(
+            $dataIsolation,
+            $organizationCode,
+            [],
+            null,
+            [],
+            'any',
+            '0',
+            self::VECTOR_REINDEX_EVENT_BATCH_SIZE,
+            true,
+        );
+    }
+
+    /** Queue vector rebuild batches for both HTTP requests and internal events. */
+    private function queueVectorReindex(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $organizationCode,
+        array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
+        string $afterId,
+        int $batchSize,
+        bool $force,
+    ): array {
         if (! $this->slidesTemplateVectorIndexDomainService->isVectorSearchEnabled()) {
-            // Local/private deployments may not provide Qdrant; the request remains a no-op.
             $this->logger->info('Slides template full vector sync skipped because vector search is disabled', [
                 'organization_code' => $organizationCode,
-                'after_id' => $request->getAfterId(),
-                'force' => $request->isForce(),
+                'after_id' => $afterId,
+                'force' => $force,
             ]);
-            return ['task_id' => bin2hex(random_bytes(12)), 'queued' => 0, 'after_id' => $request->getAfterId()];
+            return ['task_id' => bin2hex(random_bytes(12)), 'queued' => 0, 'after_id' => $afterId];
         }
 
-        // Cursor pagination prevents a full synchronization from loading all template IDs into memory.
-        $afterId = $request->isForce() ? '0' : $request->getAfterId();
-        $batchSize = $request->getBatchSize();
-        $templateIds = $request->getTemplateIds();
-        $categoryCode = $request->getCategoryCode();
-        $tagCodes = $request->getTagCodes();
-        $tagMatch = $request->getTagMatch();
+        $afterId = $force ? '0' : $afterId;
         $context = [
             'organization_code' => $organizationCode,
             'after_id' => $afterId,
-            'force' => $request->isForce(),
+            'force' => $force,
             'batch_size' => $batchSize,
             'template_ids_count' => count($templateIds),
             'category_code' => $categoryCode,
@@ -340,7 +380,6 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
                     break;
                 }
 
-                // Each technical reindex event contains at most 100 template IDs.
                 foreach (array_chunk($ids, self::VECTOR_REINDEX_EVENT_BATCH_SIZE) as $batchIds) {
                     AsyncEventUtil::dispatch(new SlidesTemplateBatchReindexRequestedEvent(
                         $batchIds,
@@ -377,16 +416,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             'next_after_id' => $nextAfterId,
         ]);
 
-        return [
-            'task_id' => bin2hex(random_bytes(12)),
-            'queued' => $queued,
-            'after_id' => $nextAfterId,
-        ];
-    }
-
-    protected function transaction(callable $callback): mixed
-    {
-        return Db::transaction($callback);
+        return ['task_id' => bin2hex(random_bytes(12)), 'queued' => $queued, 'after_id' => $nextAfterId];
     }
 
     private function assertOfficialOrganization(SlidesTemplateDataIsolation $dataIsolation): void
