@@ -47,6 +47,21 @@ def test_build_public_video_request_accepts_legacy_reference_image_paths():
     assert "reference_image_paths" not in request
 
 
+def test_build_public_video_request_normalizes_provider_asset_uri():
+    """Canvas 公共视频请求应统一 provider URI 的前导斜杠。"""
+    request = ContentMetadataService.build_public_generation_request(
+        {
+            "prompt": "虚拟人像 [image1] 介绍产品",
+            "reference_images": ["/asset://asset-20260401123823-6d4x2"],
+        },
+        "video",
+    )
+
+    assert request["inputs"]["reference_images"] == [
+        {"uri": "asset://asset-20260401123823-6d4x2"}
+    ]
+
+
 def test_get_restores_generation_parameters_from_new_video_request():
     """只有新公共 sidecar 时，也应恢复可用于重试的规范参考图参数。"""
     metadata = {

@@ -70,6 +70,25 @@ def test_design_video_payload_maps_canvas_parameters_and_provider_uri(tmp_path: 
     }
 
 
+def test_design_video_payload_normalizes_provider_uri_with_leading_slash(tmp_path: Path) -> None:
+    """Canvas Design 请求应去掉 provider URI 误加的前导斜杠。"""
+    payload = DesignVideoPayloadBuilder(tmp_path).build(
+        "mock-project",
+        GenerationParameters(
+            prompt="animate [image1]",
+            model_id="video-model",
+            reference_images=("/asset://asset-20260401123823-6d4x2",),
+        ),
+        "",
+        "",
+        _ToolContext(),
+    )
+
+    assert payload["inputs"]["reference_images"] == [
+        {"uri": "asset://asset-20260401123823-6d4x2"}
+    ]
+
+
 def test_default_canvas_video_capability_uses_design_adapter(tmp_path: Path, monkeypatch) -> None:
     """非 fake 模式的默认视频能力应注册 Design API 适配器。"""
     monkeypatch.delenv("CANVAS_FAKE_GENERATION", raising=False)
@@ -177,6 +196,18 @@ async def test_canvas_video_transport_converts_images_to_base64_when_enabled(
     assert persisted_payload["inputs"]["reference_images"] == [
         {"uri": "/mock-project/images/source.png"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_canvas_video_transport_normalizes_provider_uri_without_local_file_access(
+    tmp_path: Path,
+) -> None:
+    """Base64 开启时 provider URI 应直接透传，不读取本地文件。"""
+    payload = await VideoInputPayloadBuilder(tmp_path).build_image_input(
+        "/asset://asset-20260401123823-6d4x2"
+    )
+
+    assert payload == {"uri": "asset://asset-20260401123823-6d4x2"}
 
 
 @pytest.mark.asyncio

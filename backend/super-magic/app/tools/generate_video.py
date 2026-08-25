@@ -22,7 +22,7 @@ from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams
 from app.tools.media_utils.presigned_url import generate_presigned_url
-from app.tools.video_generation_utils import is_provider_asset_uri
+from app.tools.video_generation_utils import normalize_provider_asset_uri
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_mkdir, async_replace, async_unlink
 
@@ -590,9 +590,10 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         return self._magic_service_client
 
     async def _resolve_input_uri(self, value: str) -> str:
-        if is_provider_asset_uri(value):
+        normalized_provider_uri = normalize_provider_asset_uri(value)
+        if normalized_provider_uri is not None:
             # Provider 素材 URI 不属于工作区文件，必须原样透传给视频服务。
-            return value.strip()
+            return normalized_provider_uri
         if value.startswith(("http://", "https://")):
             return value
         path = self.resolve_path(value)

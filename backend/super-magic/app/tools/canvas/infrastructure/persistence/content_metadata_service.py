@@ -11,6 +11,7 @@ from app.tools.canvas.domain.content_fields.generated_media_protocol import (
     generated_request_fields,
 )
 from app.tools.canvas.domain.errors import CanvasDomainError
+from app.tools.video_generation_utils.provider_asset_uri import normalize_provider_asset_uri
 
 RUNTIME_METADATA_KEY = "__canvas_runtime__"
 RUNTIME_SIDECAR_FILENAME = "element-details-runtime.json"
@@ -308,6 +309,9 @@ def _clean_generation_parameters(data: dict[str, Any]) -> dict[str, Any]:
 def _normalize_project_path(value: str) -> str:
     """将 Canvas 项目相对路径规范为 ./ 开头。"""
     normalized = value.replace("\\", "/")
+    normalized_provider_uri = normalize_provider_asset_uri(normalized)
+    if normalized_provider_uri is not None:
+        return normalized_provider_uri
     if normalized.startswith("./") or "://" in normalized or normalized.startswith("data:"):
         return normalized
     return f"./{normalized.lstrip('/')}"

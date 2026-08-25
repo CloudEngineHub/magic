@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
+from app.tools.video_generation_utils.provider_asset_uri import normalize_provider_asset_uri
 
 
 class ProjectAssetPathResolver:
@@ -52,6 +53,10 @@ class ProjectAssetPathResolver:
     def to_workspace_reference_path(self, project_path: str, asset_path: str) -> str:
         """把 Canvas 项目相对参考素材转换为工作区相对路径。"""
         raw = str(asset_path).replace("\\", "/").strip()
+        normalized_provider_uri = normalize_provider_asset_uri(raw)
+        if normalized_provider_uri is not None:
+            # provider 素材不属于 Canvas 工作区，统一保留规范 URI 并禁止本地路径解析。
+            return normalized_provider_uri
         if not raw or "://" in raw or raw.startswith("data:"):
             return raw
 
