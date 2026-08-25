@@ -35,6 +35,8 @@ return [
     'keyword_must_be_string' => 'Keyword must be a string',
     'keyword_too_long' => 'Keyword too long',
     'invalid_source_type' => 'Invalid source type',
+    'scope' => 'Skill list scope',
+    'invalid_scope' => 'Invalid skill list scope',
     'skill_not_found' => 'Skill not found',
     'store_skill_cannot_update' => 'Store source skills cannot be updated',
     'store_skill_cannot_publish' => 'Store source skills cannot be published again',

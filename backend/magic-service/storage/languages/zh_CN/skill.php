@@ -35,6 +35,8 @@ return [
     'keyword_must_be_string' => '关键词必须是字符串',
     'keyword_too_long' => '关键词过长',
     'invalid_source_type' => '无效的来源类型',
+    'scope' => '技能列表范围',
+    'invalid_scope' => '无效的技能列表范围',
     'skill_not_found' => '技能不存在',
     'store_skill_cannot_update' => '商店来源的技能不允许修改',
     'store_skill_cannot_publish' => '商店来源的技能不能再次发布',
