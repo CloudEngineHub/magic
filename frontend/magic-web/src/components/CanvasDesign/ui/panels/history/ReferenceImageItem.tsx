@@ -6,13 +6,18 @@ import { useReferenceVideoPoster } from "../../previews/reference-media/useRefer
 import { computeReferenceImageCroppedDisplayLayout } from "../../../runtime/resources/image/imageCropUtils"
 import type { CropConfig } from "../../../runtime/document/types"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceFileName,
+	isOpaqueAssetReference,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import {
 	CanvasFileIcon,
 	ReferenceSlotAudioIcon,
 	ReferenceSlotVideoIcon,
 } from "../../primitives/icons/index"
+import { Tooltip, TooltipTrigger } from "../../primitives/shadcn/tooltip"
+import ResourcePathTooltipContent from "../../primitives/custom/ResourcePathTooltipContent"
 import { buildPreviewMediaResourceItem } from "./mediaPreviewItem"
 
 interface ReferenceImageItemProps {
@@ -159,6 +164,19 @@ export default function ReferenceImageItem({
 		},
 		[openPreview],
 	)
+
+	if (isOpaqueAssetReference(path)) {
+		return (
+			<Tooltip delayDuration={200}>
+				<TooltipTrigger asChild>
+					<div className={styles.image} role="img" aria-label={path}>
+						<CanvasFileIcon size={28} className="text-muted-foreground" />
+					</div>
+				</TooltipTrigger>
+				<ResourcePathTooltipContent path={path} />
+			</Tooltip>
+		)
+	}
 
 	if (fileType === "video") {
 		return (
