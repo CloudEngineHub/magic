@@ -708,17 +708,22 @@ export function useWorkspaceListDnd({
 						active.workspaceId,
 						active.projectId,
 						preProjectId,
+						pinAction ? pinAction === "pin" : undefined,
 					)
 					return
 				}
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
-				const preProjectId = getPredecessorId(
-					[project, ...targetProjects],
-					active.projectId,
-					preview.type === "project" ? preview.projectId : undefined,
-					preview.position || "after",
-				)
+				// Dropping on the workspace row means inserting at the beginning.
+				const preProjectId =
+					preview.type === "workspace"
+						? null
+						: getPredecessorId(
+								[project, ...targetProjects],
+								active.projectId,
+								preview.projectId,
+								preview.position || "after",
+							)
 				const pinAction = getProjectPinBoundaryAction(
 					[project, ...targetProjects],
 					active.projectId,
@@ -738,6 +743,7 @@ export function useWorkspaceListDnd({
 					targetWorkspaceId: preview.workspaceId,
 					targetWorkspaceName: targetWorkspace?.name,
 					preProjectId,
+					isPinned: pinAction ? pinAction === "pin" : undefined,
 				})
 			} catch (error) {
 				console.error("Failed to persist sidebar drag result:", error)

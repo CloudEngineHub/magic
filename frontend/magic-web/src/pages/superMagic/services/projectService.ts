@@ -229,15 +229,25 @@ class ProjectService {
 		workspaceId: string,
 		projectId: string,
 		preProjectId: string | null,
+		isPinned?: boolean,
 	): Promise<void> => {
 		const projects = projectStore.getProjectsByWorkspace(workspaceId)
 		const previousIds = projects.map((project) => project.id)
+		const previousProject = projects.find((project) => project.id === projectId)
 		const sourceIndex = previousIds.indexOf(projectId)
 		if (sourceIndex === -1) return
 		const nextIds = previousIds.filter((id) => id !== projectId)
 		const insertIndex = preProjectId ? nextIds.indexOf(preProjectId) + 1 : 0
 		nextIds.splice(Math.max(0, insertIndex), 0, projectId)
 		runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, nextIds))
+		if (isPinned !== undefined) {
+			const movedProject = projectStore
+				.getProjectsByWorkspace(workspaceId)
+				.find((project) => project.id === projectId)
+			if (movedProject) {
+				projectStore.updateProject({ ...movedProject, is_pinned: isPinned })
+			}
+		}
 
 		try {
 			await SuperMagicApi.moveProject({
@@ -253,6 +263,9 @@ class ProjectService {
 			)
 		} catch (error) {
 			runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, previousIds))
+			if (previousProject && isPinned !== undefined) {
+				projectStore.updateProject(previousProject)
+			}
 			throw error
 		}
 	}
@@ -570,11 +583,13 @@ class ProjectService {
 		targetWorkspaceId,
 		targetWorkspaceName,
 		preProjectId,
+		isPinned,
 	}: {
 		project: ProjectListItem
 		targetWorkspaceId: string
 		targetWorkspaceName?: string
 		preProjectId?: string | null
+		isPinned?: boolean
 	}): Promise<void> => {
 		const sourceWorkspaceId = project.workspace_id
 		if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
@@ -590,6 +605,7 @@ class ProjectService {
 				targetWorkspaceId,
 				targetWorkspaceName,
 				targetIndex,
+				isPinned,
 			)
 		})
 

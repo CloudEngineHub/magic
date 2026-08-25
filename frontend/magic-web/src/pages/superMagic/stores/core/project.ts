@@ -185,6 +185,7 @@ class ProjectStore {
 		targetWorkspaceId: string,
 		targetWorkspaceName?: string,
 		targetIndex?: number,
+		isPinned?: boolean,
 	) {
 		const sourceProjects = (this.projectsByWorkspace.get(sourceWorkspaceId) || []).filter(
 			(item) => item.id !== project.id,
@@ -196,6 +197,7 @@ class ProjectStore {
 			...project,
 			workspace_id: targetWorkspaceId,
 			workspace_name: targetWorkspaceName || project.workspace_name || "",
+			...(isPinned === undefined ? {} : { is_pinned: isPinned }),
 		}
 		const insertAt = Math.max(
 			0,
