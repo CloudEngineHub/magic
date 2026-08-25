@@ -172,6 +172,7 @@ function createHarness(options?: {
 			disable: vi.fn(),
 			enable: vi.fn(),
 			recordHistoryImmediate: vi.fn(),
+			runAsyncTransaction: vi.fn(async (callback: () => Promise<unknown>) => callback()),
 		},
 		magicConfigManager: {
 			config: {
@@ -303,6 +304,7 @@ describe("StoryboardGenerationController", () => {
 		expect(outputFrame?.y).toBe(200 + 1360 / 2 - (outputFrame?.height ?? 0) / 2)
 		expect(harness.submissions).toHaveLength(2)
 		expect(harness.submissions.map((item) => item.kind)).toEqual(["initial", "initial"])
+		expect(harness.canvas.historyManager.runAsyncTransaction).toHaveBeenCalledOnce()
 		expect(harness.connections).toHaveLength(2)
 		const outputIds = getStoryboardContent(harness.storyboard).shots?.map(
 			(shot) => shot.outputImageElementId,

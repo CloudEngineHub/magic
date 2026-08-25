@@ -211,7 +211,10 @@ export class VideoPollingManager {
 			status: undefined,
 			errorMessage: undefined,
 		})
-		this.config.canvas.elementManager.update(this.config.elementId, next, { silent: false })
+		this.config.canvas.elementManager.update(this.config.elementId, next, {
+			silent: false,
+			historyPolicy: "exclude",
+		})
 		this.config.canvas.eventEmitter.emit({
 			type: "element:video:generate-submit-failed",
 			data: { elementId: this.config.elementId },
@@ -265,7 +268,7 @@ export class VideoPollingManager {
 			this.config.canvas.elementManager.update(
 				this.config.elementId,
 				name ? { ...next, name } : next,
-				{ silent: false },
+				{ silent: false, historyPolicy: "exclude" },
 			)
 			return true
 		} catch {

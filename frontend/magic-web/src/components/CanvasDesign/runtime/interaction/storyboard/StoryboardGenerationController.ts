@@ -186,31 +186,35 @@ export class StoryboardGenerationController {
 		shotIndexes: number[],
 		context: StoryboardGenerationContext,
 	): Promise<void> {
-		const outputs = this.ensureOutputStructure(
-			storyboard,
-			storyboardContent,
-			shots,
-			shotIndexes,
-		)
-		const requests = shotIndexes.map((index) =>
-			this.buildRequest(
-				shots[index],
-				storyboardContent.generationConfig,
-				context.modelId,
-				context.model,
-				context.references,
-			),
-		)
+		await this.canvas.historyManager.runAsyncTransaction(async () => {
+			const outputs = this.ensureOutputStructure(
+				storyboard,
+				storyboardContent,
+				shots,
+				shotIndexes,
+				{ deferHistory: true },
+			)
+			const requests = shotIndexes.map((index) =>
+				this.buildRequest(
+					shots[index],
+					storyboardContent.generationConfig,
+					context.modelId,
+					context.model,
+					context.references,
+				),
+			)
 
-		await Promise.allSettled(
-			outputs.imageElementIds.map(async (imageElementId, index) => {
-				const imageElement = this.canvas.elementManager.getElementInstance(imageElementId)
-				if (!(imageElement instanceof ImageElement)) return false
-				return imageElement.submitGeneration(requests[index])
-			}),
-		)
+			await Promise.allSettled(
+				outputs.imageElementIds.map(async (imageElementId, index) => {
+					const imageElement =
+						this.canvas.elementManager.getElementInstance(imageElementId)
+					if (!(imageElement instanceof ImageElement)) return false
+					return imageElement.submitGeneration(requests[index])
+				}),
+			)
 
-		this.canvas.contentLayer.batchDraw()
+			this.canvas.contentLayer.batchDraw()
+		})
 	}
 
 	private getStoryboard(elementId: string): StoryboardElement | undefined {
@@ -299,6 +303,7 @@ export class StoryboardGenerationController {
 		storyboardContent: StoryboardElementContent,
 		shots: StoryboardShot[],
 		requestedShotIndexes = shots.map((_shot, index) => index),
+		options: { deferHistory?: boolean } = {},
 	): EnsureOutputsResult {
 		const requestedShotIndexSet = new Set(requestedShotIndexes)
 		const resolvedImageIds = shots.map((shot) =>
@@ -324,7 +329,8 @@ export class StoryboardGenerationController {
 		)
 		const needsMutation = missingIndexes.length > 0 || needsConnectionMutation
 		const history = this.canvas.historyManager
-		if (needsMutation) history?.disable()
+		const shouldRecordStructureHistory = needsMutation && !options.deferHistory
+		if (shouldRecordStructureHistory) history?.disable()
 
 		try {
 			if (!existingFrame && existingOutputIds.length === 0) {
@@ -434,7 +440,7 @@ export class StoryboardGenerationController {
 				frameId: existingFrame?.id,
 			}
 		} finally {
-			if (needsMutation) {
+			if (shouldRecordStructureHistory) {
 				history?.enable()
 				history?.recordHistoryImmediate()
 			}

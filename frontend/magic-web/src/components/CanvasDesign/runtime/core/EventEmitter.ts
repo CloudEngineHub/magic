@@ -90,6 +90,7 @@ export interface CanvasEventMap {
 		data: LayerElement
 		previousData?: LayerElement
 		nameChange?: CanvasElementNameChange
+		historyPolicy?: "include" | "exclude"
 	}
 	"element:rerendered": { elementId: string; data: LayerElement } // 元素节点重新渲染（不记录历史）
 	"element:deleted": { elementId: string; persistence?: "runtime-only" }

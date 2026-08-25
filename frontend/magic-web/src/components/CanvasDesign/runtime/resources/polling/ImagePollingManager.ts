@@ -375,7 +375,7 @@ export class ImagePollingManager {
 						contents: nextElement.contents,
 						...(shouldActivate ? { activeContentId: target.contentId } : {}),
 					},
-					{ silent: false },
+					{ silent: false, historyPolicy: "exclude" },
 				)
 			}
 
@@ -466,7 +466,7 @@ export class ImagePollingManager {
 				this.config.canvas.elementManager.update(
 					this.config.elementId,
 					{ contents: nextElement.contents },
-					{ silent: false },
+					{ silent: false, historyPolicy: "exclude" },
 				)
 				this.config.canvas.eventEmitter.emit({
 					type: "element:image:resultUpdated",
@@ -501,7 +501,7 @@ export class ImagePollingManager {
 		this.config.canvas.elementManager.update(
 			this.config.elementId,
 			{ contents: next.contents },
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 		this.config.onContentSettled?.(target.contentId)
 		this.config.canvas.eventEmitter.emit({

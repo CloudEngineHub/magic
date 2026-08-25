@@ -136,7 +136,7 @@ export class ImageBatchPollingManager {
 					this.canvas.elementManager.update(
 						elementId,
 						{ contents: next.contents },
-						{ silent: false },
+						{ silent: false, historyPolicy: "exclude" },
 					)
 					this.canvas.eventEmitter.emit({
 						type: "element:image:generate-submit-failed",
@@ -241,7 +241,10 @@ export class ImageBatchPollingManager {
 			if (element?.type !== ElementTypeEnum.Image) continue
 			const updateData = this.buildCompletedElementUpdate(element, result, image, contentId)
 			// 更新元素数据
-			this.canvas.elementManager.update(elementId, updateData.patch, { silent: false })
+			this.canvas.elementManager.update(elementId, updateData.patch, {
+				silent: false,
+				historyPolicy: "exclude",
+			})
 			if (updateData.resourcePath && image.file_url) {
 				this.canvas.imageResourceManager.loadResource(updateData.resourcePath, {
 					variant: "preview",
@@ -276,7 +279,7 @@ export class ImageBatchPollingManager {
 						},
 						{ contentId },
 					),
-					{ silent: false },
+					{ silent: false, historyPolicy: "exclude" },
 				)
 				this.canvas.eventEmitter.emit({
 					type: "element:image:generate-submit-failed",
@@ -309,7 +312,7 @@ export class ImageBatchPollingManager {
 						},
 						{ contentId },
 					),
-					{ silent: false },
+					{ silent: false, historyPolicy: "exclude" },
 				)
 			})
 		}

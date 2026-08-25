@@ -49,6 +49,8 @@ export type UpdateMode = "full" | "data-only" | "node-only"
 export interface ElementOperationOptions {
 	/** 不触发 element:updated 事件（不记录历史） */
 	silent?: boolean
+	/** 触发持久化更新事件，但不将本次更新加入用户撤回栈 */
+	historyPolicy?: "include" | "exclude"
 	/** 强制重新渲染 */
 	forceRerender?: boolean
 	/** 批量操作模式（延迟事件触发，需要手动调用 flush） */
@@ -966,6 +968,7 @@ export class ElementManager {
 					data: newData,
 					previousData: currentData,
 					nameChange,
+					...(options?.historyPolicy ? { historyPolicy: options.historyPolicy } : {}),
 				},
 			})
 			this.emitElementChange([element.getId()], {
@@ -1117,7 +1120,13 @@ export class ElementManager {
 		if (!options.silent) {
 			this.emitEvent({
 				type: "element:updated",
-				data: { elementId, data: newData, previousData: currentData, nameChange },
+				data: {
+					elementId,
+					data: newData,
+					previousData: currentData,
+					nameChange,
+					...(options.historyPolicy ? { historyPolicy: options.historyPolicy } : {}),
+				},
 			})
 			this.emitElementChange([elementId], {
 				nameChanges: nameChange ? [nameChange] : undefined,

@@ -100,10 +100,11 @@ export class HistoryManager {
 
 		// 监听需要防抖记录历史的事件（更新）
 		this.canvas.eventEmitter.on("element:updated", ({ data }) => {
-			if (
+			const excluded =
+				data.historyPolicy === "exclude" ||
 				this.canvas.elementManager.getTemporaryElementMetadata(data.elementId)
 					?.historyPolicy === "exclude"
-			) {
+			if (excluded) {
 				return
 			}
 			this.recordHistoryDebounced()
@@ -188,14 +189,45 @@ export class HistoryManager {
 			return result
 		} finally {
 			this.transactionDepth -= 1
-			if (this.transactionDepth === 0) {
-				const shouldCommit = completed && (shouldRecord ? shouldRecord(result) : true)
-				const shouldRecordHistory = shouldCommit && this.transactionDirty
-				this.transactionDirty = false
-				if (shouldRecordHistory) {
-					this.recordHistoryImmediate()
-				}
-			}
+			this.completeTransaction(result, completed, shouldRecord)
+		}
+	}
+
+	/**
+	 * 将跨异步边界的一组元素/连接变更合并成一条历史记录。
+	 *
+	 * 生成提交会在请求完成后异步确认，普通 runTransaction 无法覆盖 await
+	 * 之后触发的事件，因此提供异步版本复用同一事务语义。
+	 */
+	public async runAsyncTransaction<T>(
+		callback: () => Promise<T>,
+		shouldRecord?: (result: T) => boolean,
+	): Promise<T> {
+		this.transactionDepth += 1
+		let result!: T
+		let completed = false
+		try {
+			result = await callback()
+			completed = true
+			return result
+		} finally {
+			this.transactionDepth -= 1
+			this.completeTransaction(result, completed, shouldRecord)
+		}
+	}
+
+	private completeTransaction<T>(
+		result: T,
+		completed: boolean,
+		shouldRecord?: (result: T) => boolean,
+	): void {
+		if (this.transactionDepth !== 0) return
+
+		const shouldCommit = completed && (shouldRecord ? shouldRecord(result) : true)
+		const shouldRecordHistory = shouldCommit && this.transactionDirty
+		this.transactionDirty = false
+		if (shouldRecordHistory) {
+			this.recordHistoryImmediate()
 		}
 	}
 

@@ -237,7 +237,7 @@ describe("ImageBatchPollingManager", () => {
 						}),
 					],
 				}),
-				{ silent: false },
+				{ silent: false, historyPolicy: "exclude" },
 			)
 			expect(emit).toHaveBeenCalledWith({
 				type: "element:image:resultUpdated",
@@ -326,7 +326,7 @@ describe("ImageBatchPollingManager", () => {
 					},
 				],
 			},
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 	})
 
@@ -380,7 +380,7 @@ describe("ImageBatchPollingManager", () => {
 					}),
 				],
 			},
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 	})
 
@@ -496,7 +496,7 @@ describe("ImageBatchPollingManager", () => {
 					},
 				],
 			},
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 		expect(emit).toHaveBeenCalledWith({
 			type: "element:image:generate-submit-failed",

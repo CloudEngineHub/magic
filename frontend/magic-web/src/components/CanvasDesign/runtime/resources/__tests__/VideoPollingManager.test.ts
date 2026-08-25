@@ -92,7 +92,7 @@ describe("VideoPollingManager", () => {
 						}),
 					],
 				}),
-				{ silent: false },
+				{ silent: false, historyPolicy: "exclude" },
 			)
 		},
 	)
@@ -217,7 +217,7 @@ describe("VideoPollingManager", () => {
 					}),
 				],
 			}),
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 		expect(emit).toHaveBeenCalledWith({
 			type: "element:video:generate-submit-failed",

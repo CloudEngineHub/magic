@@ -34,7 +34,7 @@ function createHistoryManager() {
 	}
 }
 
-function createUpdatedEventData(elementId: string) {
+function createUpdatedEventData(elementId: string, historyPolicy?: "include" | "exclude") {
 	const data = {
 		id: elementId,
 		type: "rectangle",
@@ -43,7 +43,7 @@ function createUpdatedEventData(elementId: string) {
 		width: 100,
 		height: 100,
 	} as LayerElement
-	return { elementId, data, previousData: data }
+	return { elementId, data, previousData: data, historyPolicy }
 }
 
 describe("HistoryManager runtime-only generation elements", () => {
@@ -69,6 +69,20 @@ describe("HistoryManager runtime-only generation elements", () => {
 		eventEmitter.emit({
 			type: "element:updated",
 			data: createUpdatedEventData("runtime-result"),
+		})
+		vi.advanceTimersByTime(301)
+
+		expect(manager.getSnapshot().pendingDebounce).toBe(false)
+		expect(exportDocument).not.toHaveBeenCalled()
+	})
+
+	it("does not debounce updates explicitly marked as non-history", () => {
+		vi.useFakeTimers()
+		const { manager, eventEmitter, exportDocument } = createHistoryManager()
+
+		eventEmitter.emit({
+			type: "element:updated",
+			data: createUpdatedEventData("image-1", "exclude"),
 		})
 		vi.advanceTimersByTime(301)
 
@@ -111,5 +125,21 @@ describe("HistoryManager runtime-only generation elements", () => {
 		expect(result).toBeNull()
 		expect(exportDocument).not.toHaveBeenCalled()
 		expect(manager.getSnapshot().historyStackSize).toBe(0)
+	})
+
+	it("records one history snapshot for a successful async transaction", async () => {
+		const { manager, eventEmitter, exportDocument } = createHistoryManager()
+
+		await manager.runAsyncTransaction(async () => {
+			eventEmitter.emit({ type: "element:created", data: { elementId: "image-1" } })
+			await Promise.resolve()
+			eventEmitter.emit({
+				type: "element:batchupdated",
+				data: undefined,
+			})
+		})
+
+		expect(exportDocument).toHaveBeenCalledTimes(1)
+		expect(manager.getSnapshot().historyStackSize).toBe(1)
 	})
 })

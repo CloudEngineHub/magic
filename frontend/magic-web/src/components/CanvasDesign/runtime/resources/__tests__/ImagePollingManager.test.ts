@@ -648,7 +648,7 @@ describe("ImagePollingManager", () => {
 					}),
 				],
 			},
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 		expect(primeCache).toHaveBeenCalledWith("./images/image-task-1.png", {
 			src: "https://example.test/image-task-1.png",
@@ -914,7 +914,7 @@ describe("ImagePollingManager", () => {
 						}),
 					],
 				},
-				{ silent: false },
+				{ silent: false, historyPolicy: "exclude" },
 			),
 		)
 		firstFileInfo.resolve({
@@ -1145,7 +1145,7 @@ describe("ImagePollingManager", () => {
 					}),
 				],
 			},
-			{ silent: false },
+			{ silent: false, historyPolicy: "exclude" },
 		)
 		expect(deleteElement).not.toHaveBeenCalled()
 		expect(emit).toHaveBeenCalledWith({
