@@ -9,7 +9,6 @@ import type {
 } from "@/apis/modules/skills"
 import type { CrewI18nText } from "@/apis/modules/crew"
 import { buildCrewI18nText } from "@/apis/modules/crew"
-import { resolveLocalizedText as resolveLocaleText } from "@/utils/locale"
 import { CREW_SKILLS_TAB, type CrewSkillsTab } from "../../../store"
 
 const SKILLS_PANEL_PAGE_SIZE = 20
@@ -80,6 +79,7 @@ interface UseSkillsPanelOptions {
 	onRemoveSkillFromAgent: (skillCode: string) => Promise<void>
 	/** Refresh bound crew skills from backend after persistence succeeds. */
 	onRefreshSkills?: () => Promise<void>
+	/** Resolved list fields follow the request locale; changes must refresh the API data. */
 	language: string
 	/**
 	 * Optional full replacement for install (after list item click).
@@ -93,21 +93,14 @@ interface UseSkillsPanelOptions {
 	overrideUninstall?: (skillCode: string) => Promise<void>
 }
 
-function resolveLocalizedText(
-	textObj: Record<string, string> | undefined,
-	language: string,
-): string {
-	return resolveLocaleText(textObj, language)
-}
-
-function mapStoreSkill(item: StoreSkillItem, language: string): SkillPanelItem {
+function mapStoreSkill(item: StoreSkillItem): SkillPanelItem {
 	return {
 		id: item.id,
 		skillCode: item.skill_code,
 		userSkillCode: item.user_skill_code ?? undefined,
 		isInUserLibrary: item.is_added,
-		name: resolveLocalizedText(item.name_i18n, language),
-		description: resolveLocalizedText(item.description_i18n, language),
+		name: item.name || item.package_name || item.skill_code,
+		description: item.description || "",
 		logo: item.logo,
 		sourceType: undefined,
 		status: "not-installed",
@@ -115,15 +108,14 @@ function mapStoreSkill(item: StoreSkillItem, language: string): SkillPanelItem {
 	}
 }
 
-function mapLatestPublishedSkill(item: SkillLastVersionItem, language: string): SkillPanelItem {
+function mapLatestPublishedSkill(item: SkillLastVersionItem): SkillPanelItem {
 	return {
 		id: item.id,
 		skillCode: item.code,
 		userSkillCode: item.code,
 		isInUserLibrary: true,
-		name: resolveLocalizedText(item.name_i18n, language) || item.name || "",
-		description:
-			resolveLocalizedText(item.description_i18n, language) || item.description || "",
+		name: item.name || item.package_name || item.code,
+		description: item.description || "",
 		logo: item.logo,
 		sourceType: item.source_type,
 		status: "not-installed",
@@ -227,7 +219,7 @@ export function useSkillsPanel({
 					page,
 					page_size: SKILLS_PANEL_PAGE_SIZE,
 				})
-				const nextItems = res.list.map((item) => mapStoreSkill(item, language))
+				const nextItems = res.list.map((item) => mapStoreSkill(item))
 				setRawLibrary((prev) => (append ? [...prev, ...nextItems] : nextItems))
 				updatePaginationState("library", (state) => ({
 					...state,
@@ -244,7 +236,7 @@ export function useSkillsPanel({
 				}))
 			}
 		},
-		[language, updatePaginationState],
+		[updatePaginationState],
 	)
 
 	const fetchMySkills = useCallback(
@@ -260,7 +252,7 @@ export function useSkillsPanel({
 					page,
 					page_size: SKILLS_PANEL_PAGE_SIZE,
 				})
-				const nextItems = res.list.map((item) => mapLatestPublishedSkill(item, language))
+				const nextItems = res.list.map((item) => mapLatestPublishedSkill(item))
 				setRawMySkills((prev) => (append ? [...prev, ...nextItems] : nextItems))
 				updatePaginationState("mySkills", (state) => ({
 					...state,
@@ -277,7 +269,7 @@ export function useSkillsPanel({
 				}))
 			}
 		},
-		[language, updatePaginationState],
+		[updatePaginationState],
 	)
 
 	useEffect(() => {
@@ -286,7 +278,7 @@ export function useSkillsPanel({
 		setIsSearchComposing(false)
 		if (activeTab === CREW_SKILLS_TAB.Library) return
 		void fetchMySkills({ page: 1 })
-	}, [activeTab, fetchMySkills])
+	}, [activeTab, fetchMySkills, language])
 
 	// Library: debounce + throttle; skip while IME is composing (CJK input).
 	useEffect(() => {
@@ -295,7 +287,7 @@ export function useSkillsPanel({
 		const kw = throttledSearchQuery.trim()
 		appliedKeywordRef.current = kw
 		void fetchLibrary({ keyword: kw || undefined, page: 1 })
-	}, [activeTab, throttledSearchQuery, fetchLibrary, isSearchComposing])
+	}, [activeTab, throttledSearchQuery, fetchLibrary, isSearchComposing, language])
 
 	const onSearchCompositionStart = useCallback(() => setIsSearchComposing(true), [])
 	const onSearchCompositionEnd = useCallback(() => setIsSearchComposing(false), [])
@@ -376,9 +368,7 @@ export function useSkillsPanel({
 						page_size: SKILLS_PANEL_PAGE_SIZE,
 						keyword: appliedKeywordRef.current || undefined,
 					})
-					const refreshedPageItems = refreshed.list.map((item) =>
-						mapStoreSkill(item, language),
-					)
+					const refreshedPageItems = refreshed.list.map((item) => mapStoreSkill(item))
 
 					setRawLibrary((prev) =>
 						replacePageItems({
@@ -422,7 +412,6 @@ export function useSkillsPanel({
 			activeTab,
 			busySkills,
 			displayItems,
-			language,
 			onAddSkill,
 			onAddSkillToAgent,
 			onRefreshSkills,

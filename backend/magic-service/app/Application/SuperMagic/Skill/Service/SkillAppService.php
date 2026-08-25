@@ -465,7 +465,7 @@ class SkillAppService extends AbstractSkillAppService
                 $query,
                 $page,
                 $this->getCollaboratedSkillCodes($dataIsolation),
-                true
+                false
             ),
             SkillListScope::MARKET_INSTALLED => $this->queriesMarketInstalled($requestContext, $query, $page),
         };

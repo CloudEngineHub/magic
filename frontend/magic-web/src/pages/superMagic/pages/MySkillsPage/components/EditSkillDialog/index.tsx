@@ -37,12 +37,12 @@ const INITIAL_IDENTITY: SkillIdentityData = createInitialSkillIdentityData()
 function mapDetailToIdentity(detail: SkillDetailResponse): SkillIdentityData {
 	return {
 		iconUrl: detail.logo || undefined,
-		name: normalizeSkillI18nText(detail.name_i18n, detail.package_name),
+		name: normalizeSkillI18nText(detail.name_i18n, detail.name || detail.package_name),
 		description: normalizeSkillI18nText(
 			detail.description_i18n,
-			detail.package_description ?? "",
+			(detail.description || detail.package_description) ?? "",
 		),
-		source: normalizeSkillI18nText(detail.source_i18n),
+		source: normalizeSkillI18nText(detail.source_i18n, detail.source),
 	}
 }
 

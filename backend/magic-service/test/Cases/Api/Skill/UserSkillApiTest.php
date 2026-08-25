@@ -849,8 +849,8 @@ class UserSkillApiTest extends AbstractApiTest
         }
         $this->assertNotNull($collaboratedSkill);
         $this->assertSame('viewer', $collaboratedSkill['user_role'] ?? null);
-        $this->assertSame('协作已发布名称', $collaboratedSkill['name_i18n']['zh_CN'] ?? null);
-        $this->assertSame('Collaborated Published Name', $collaboratedSkill['name_i18n']['en_US'] ?? null);
+        $this->assertSame('协作草稿名称', $collaboratedSkill['name'] ?? null);
+        $this->assertSame('协作草稿描述', $collaboratedSkill['description'] ?? null);
         $this->assertSame('1.0.0', $collaboratedSkill['latest_version'] ?? null);
 
         $teamSharedResponse = $this->post(

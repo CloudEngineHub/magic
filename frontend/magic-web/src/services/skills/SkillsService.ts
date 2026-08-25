@@ -1,8 +1,7 @@
 import dayjs from "@/infrastructure/vendors/dayjs"
-import i18n from "i18next"
 import { SkillsApi } from "@/apis"
+import { SupportLocales } from "@/constants/locale"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
-import { resolveLocalizedText } from "@/utils/locale"
 import type {
 	CreateSkillResponse,
 	GetSkillVersionsParams,
@@ -212,14 +211,17 @@ export class SkillsService {
 	}
 
 	private mapStoreSkill(item: StoreSkillItem): StoreSkillView {
+		const name = item.name?.trim() || item.package_name?.trim() || item.skill_code
+		const description = item.description?.trim() || ""
+
 		return {
 			id: String(item.id),
 			storeSkillId: item.id,
 			skillCode: item.skill_code,
 			packageName: item.package_name?.trim() || undefined,
 			userSkillCode: item.user_skill_code,
-			name: this.mapI18nText(item.name_i18n),
-			description: this.mapI18nText(item.description_i18n),
+			name,
+			description,
 			thumbnail: item.logo || undefined,
 			isFeatured: Boolean(item.is_featured),
 			latestVersion: item.latest_version || undefined,
@@ -232,17 +234,21 @@ export class SkillsService {
 	}
 
 	private mapUserSkill(item: SkillItem): UserSkillView {
+		const name = item.name?.trim() || item.package_name?.trim() || item.code
+		const description = item.description?.trim() || ""
+
 		return {
 			id: String(item.id),
 			userSkillId: item.id,
 			userRole: item.user_role,
 			skillCode: item.code,
 			packageName: item.package_name?.trim() || undefined,
-			name: item.name || this.mapI18nText(item.name_i18n),
-			description: item.description || this.mapI18nText(item.description_i18n),
+			name,
+			description,
 			thumbnail: item.logo || undefined,
-			nameI18n: item.name_i18n,
-			descriptionI18n: item.description_i18n,
+			// Keep the edit/import payload shape while list cards use resolved fields.
+			nameI18n: this.ensureSkillI18nText(item.name_i18n, name),
+			descriptionI18n: this.ensureSkillI18nText(item.description_i18n, description),
 			logo: item.logo,
 			sourceType: item.source_type,
 			creatorName: item.creator_info?.name,
@@ -258,16 +264,20 @@ export class SkillsService {
 	}
 
 	private mapLatestPublishedSkill(item: SkillLastVersionItem): UserSkillView {
+		const name = item.name?.trim() || item.package_name?.trim() || item.code
+		const description = item.description?.trim() || ""
+
 		return {
 			id: item.code,
 			userSkillId: item.code,
 			skillCode: item.code,
 			packageName: item.package_name?.trim() || undefined,
-			name: item.name || this.mapI18nText(item.name_i18n),
-			description: item.description || this.mapI18nText(item.description_i18n),
+			name,
+			description,
 			thumbnail: item.logo || undefined,
-			nameI18n: item.name_i18n,
-			descriptionI18n: item.description_i18n,
+			// Keep the edit/import payload shape while list cards use resolved fields.
+			nameI18n: this.ensureSkillI18nText(item.name_i18n, name),
+			descriptionI18n: this.ensureSkillI18nText(item.description_i18n, description),
 			logo: item.logo,
 			sourceType: item.source_type,
 			latestVersion: item.version || undefined,
@@ -281,14 +291,13 @@ export class SkillsService {
 	private mapUserSkillDetail(detail: SkillDetailResponse): SkillDetailView {
 		return {
 			code: detail.code,
-			name: this.mapI18nText(detail.name_i18n) || detail.package_name || detail.code,
-			description:
-				this.mapI18nText(detail.description_i18n) || detail.package_description || "",
+			name: detail.name?.trim() || detail.package_name || detail.code,
+			description: detail.description?.trim() || detail.package_description || "",
 			logo: detail.logo,
 			packageName: detail.package_name?.trim() || undefined,
 			versionCode: detail.version_code?.trim() || undefined,
 			updatedAt: detail.updated_at,
-			sourceLabel: this.mapI18nText(detail.source_i18n) || undefined,
+			sourceLabel: detail.source?.trim() || undefined,
 			skillFileUrl: detail.skill_file_url?.trim() || undefined,
 			isFeatured: Boolean(detail.is_featured),
 		}
@@ -299,17 +308,13 @@ export class SkillsService {
 
 		return {
 			code: detail.code,
-			name:
-				detail.name ||
-				this.mapI18nText(detail.name_i18n) ||
-				detail.package_name ||
-				detail.code,
-			description: detail.description || this.mapI18nText(detail.description_i18n) || "",
+			name: detail.name?.trim() || detail.package_name || detail.code,
+			description: detail.description?.trim() || "",
 			logo: detail.logo,
 			packageName: detail.package_name?.trim() || undefined,
 			versionCode: detail.version_code?.trim() || undefined,
 			updatedAt: detail.version_created_at,
-			sourceLabel: detail.source || this.mapI18nText(detail.source_i18n) || undefined,
+			sourceLabel: detail.source?.trim() || undefined,
 			publisherType: detail.publisher_type,
 			publisherName: publisherName || undefined,
 			skillFileUrl: detail.skill_file_url?.trim() || undefined,
@@ -345,8 +350,15 @@ export class SkillsService {
 		}
 	}
 
-	private mapI18nText(text: SkillI18nText | Record<string, string> | null | undefined) {
-		return resolveLocalizedText(text as Record<string, string>, i18n.language)
+	private ensureSkillI18nText(
+		text: SkillI18nText | Record<string, string> | null | undefined,
+		fallback: string,
+	): SkillI18nText {
+		return {
+			[SupportLocales.fallback]: text?.[SupportLocales.fallback] || fallback,
+			[SupportLocales.enUS]: text?.[SupportLocales.enUS] || fallback,
+			[SupportLocales.zhCN]: text?.[SupportLocales.zhCN] || fallback,
+		}
 	}
 
 	private formatDateTime(value: string) {
