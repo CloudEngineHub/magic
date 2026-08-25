@@ -68,9 +68,11 @@ function SkillCard({
 	const isAdded = skill.status === "added"
 	const isOfficialPublisher = isOfficialStoreSkillPublisher(skill.publisherType)
 	const sourceLabel = skill.publisherType
-		? isOfficialPublisher
-			? t("skillsLibrary.official")
-			: t("skillsLibrary.community")
+		? skill.publisherType === "OFFICIAL_BUILTIN"
+			? t("employeeCard.officialBuiltin")
+			: isOfficialPublisher
+				? t("skillsLibrary.official")
+				: t("skillsLibrary.community")
 		: null
 	const actionLabel = isAdding
 		? t("skillsLibrary.adding")
