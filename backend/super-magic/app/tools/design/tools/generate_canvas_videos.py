@@ -30,7 +30,7 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
-from app.tools.video_generation_utils import is_provider_asset_uri
+from app.tools.video_generation_utils import normalize_provider_asset_uri
 from app.utils.async_file_utils import async_exists, async_mkdir
 from app.utils.video_logger import get_video_logger
 
@@ -726,12 +726,13 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         workspace_root: Path,
         project_prefix: str,
     ) -> str:
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
+            # 供应商素材 URI 不对应本地文件，兼容历史路径拼接产生的前导斜杠。
+            return normalized_provider_asset_uri
+
         if not path or path.startswith(("http://", "https://")) or Path(path).is_absolute():
             return path
-
-        if is_provider_asset_uri(path):
-            # 供应商素材 URI 不对应本地文件，保留原值供后端 provider 解析。
-            return str(path).strip()
 
         normalized = path.lstrip("/")
         if await async_exists(workspace_root / normalized):
@@ -1020,9 +1021,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if path.startswith(("http://", "https://")):
             raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
 
-        if is_provider_asset_uri(path):
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
             # 供应商素材 URI 不属于项目文件树，不能附加项目路径或斜杠。
-            return str(path).strip()
+            return normalized_provider_asset_uri
 
         if path.startswith("./"):
             if not relative_project_path:
