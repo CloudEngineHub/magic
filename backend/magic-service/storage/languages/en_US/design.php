@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'image_generation' => [
         'file_dir_invalid' => 'File directory must be in the current project workspace',
         'file_dir_not_exists' => 'File directory does not exist: :file_dir',
@@ -57,6 +57,7 @@ return array_replace_recursive([
         'timeout' => 'Video generation timed out',
         'invalid_status' => 'Video generation status is abnormal',
         'first_poll_dispatch_failed' => 'Video task dispatch failed',
+        'estimate_failed' => 'Operation failed',
     ],
     'third_party_service_error' => 'Third party service error',
     'attributes' => [
@@ -77,16 +78,6 @@ return array_replace_recursive([
         'canvas_path' => 'Expanded Canvas Image Path',
         'mark' => 'Mark Position',
         'mark_coordinate' => 'Mark Coordinate',
-    ],
-    'validation' => [
-        'reference_images_max' => 'You can upload up to 20 reference images',
-        'reference_images_max_10' => 'You can upload up to 10 reference images',
-        'reference_image_options_max_10' => 'You can provide up to 10 reference image option items',
-        'mark_size' => 'Mark position must contain exactly 2 coordinates (x, y)',
-        'mark_coordinate_range' => 'Mark coordinate must be between 0 and 1',
-    ],
-], [
-    'attributes' => [
         'area' => 'Area',
         'area_coordinate' => 'Area coordinate',
         'image_generation_config' => 'Image generation config',
@@ -95,11 +86,13 @@ return array_replace_recursive([
         'type' => 'Type',
     ],
     'validation' => [
+        'reference_images_max' => 'You can upload up to 20 reference images',
+        'reference_images_max_10' => 'You can upload up to 10 reference images',
+        'reference_image_options_max_10' => 'You can provide up to 10 reference image option items',
+        'mark_size' => 'Mark position must contain exactly 2 coordinates (x, y)',
+        'mark_coordinate_range' => 'Mark coordinate must be between 0 and 1',
         'area_coordinate_range' => 'Area coordinate range',
         'area_size' => 'Area size',
         'type_invalid' => 'Invalid value',
     ],
-    'video_generation' => [
-        'estimate_failed' => 'Operation failed',
-    ],
-    ]);
+];

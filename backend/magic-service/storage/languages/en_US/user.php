@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'common' => [
         'not_found' => ':label not found',
         'empty' => ':label cannot be empty',
@@ -38,7 +38,6 @@ return array_replace_recursive([
     'mobile_not_found' => 'Mobile not found',
     'unregister_duplicate' => 'Unregister duplicate',
     'device_not_found' => 'Device not found',
-], [
     'not_exist' => 'User does not exist',
 
     'account_error' => 'Operation failed',
@@ -58,4 +57,5 @@ return array_replace_recursive([
     'user_not_exist' => 'Resource not found',
     'user_type_error' => 'Operation failed',
     'verify_code_error' => 'Operation failed',
-    'verify_code_has_expired' => 'Verify code has expired',]);
+    'verify_code_has_expired' => 'Verify code has expired',
+];

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'agent_not_found' => 'Agent not found',
     'agent_name_cannot_be_empty' => 'Agent name cannot be empty',
     'organization_code_cannot_be_empty' => 'Organization code cannot be empty',
@@ -106,9 +106,8 @@ return array_replace_recursive([
     'create_group_user_not_exist' => 'Creator user not found',
     'create_group_user_account_not_exist' => 'Creator user account not found',
     'get_third_platform_user_id_failed' => 'Failed to get third-party platform user ID',
-], [
     'initialize_error' => 'Operation failed',
     'instruct_type_chat' => 'Instruct type chat',
     'instruct_type_flow' => 'Instruct type flow',
     'invalid_visibility_type' => 'Invalid value',
-    ]);
+];

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'parameter_check_failure' => 'Parameter check failure',
     'resource_type_not_supported' => 'Resource type not supported',
     'resource_not_found' => 'Resource not found',
@@ -21,7 +21,6 @@ return array_replace_recursive([
     'copy_project_files_not_allowed' => 'Copying this project is not allowed',
     'cannot_update_across_resource_types' => 'Cannot update share across different resource types',
     'download_not_allowed' => 'No permission to download',
-], [
     'cancel_failed' => 'Operation failed',
     'cannot_modify_other_organization_file_collection' => 'Cannot modify other organization file collection',
     'cannot_modify_other_user_file_collection' => 'Cannot modify other user file collection',
@@ -49,4 +48,5 @@ return array_replace_recursive([
     'toggle_status_failed' => 'Operation failed',
 
     'share_project_only_for_file_collection' => 'Share project only for file collection',
-    'target_ids_required' => 'Value is required',]);
+    'target_ids_required' => 'Value is required',
+];

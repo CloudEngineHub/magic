@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'parameter_check_failure' => '参数校验失败',
     'resource_type_not_supported' => '不支持的资源类型',
     'resource_not_found' => '资源未找到',
@@ -29,7 +29,6 @@ return array_replace_recursive([
     'copy_project_files_not_allowed' => '该项目不允许复制',
     'cannot_update_across_resource_types' => '不能跨资源类型更新分享',
     'download_not_allowed' => '没有权限下载',
-], [
     'cannot_modify_other_organization_file_collection' => '请求处理失败',
     'cannot_modify_other_user_file_collection' => '请求处理失败',
     'file_ids_must_be_single_for_file' => '请求处理失败',
@@ -54,4 +53,5 @@ return array_replace_recursive([
     'toggle_status_failed' => '操作失败',
 
     'share_project_only_for_file_collection' => '请求处理失败',
-    'target_ids_required' => '参数不能为空',]);
+    'target_ids_required' => '参数不能为空',
+];

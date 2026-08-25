@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'file_not_found' => 'File not found',
     'file_exist' => 'File already exists',
     'illegal_file_key' => 'Illegal file key',
@@ -66,7 +66,6 @@ return array_replace_recursive([
     'batch_move_failed' => 'Batch move operation failed',
     'batch_copy_failed' => 'Batch copy operation failed',
     'directory_copy_not_supported_yet' => 'Directory copy is not supported yet, please use batch copy instead',
-], [
     'batch_save_failed' => 'Operation failed',
     'batch_save_locked' => 'Batch save locked',
     'cannot_generate_url_for_directory' => 'Cannot generate url for directory',
@@ -93,4 +92,5 @@ return array_replace_recursive([
     'delete_failed' => 'Operation failed',
     'multiple_projects_not_allowed' => 'Multiple projects not allowed',
     'sandbox_not_ready' => 'Sandbox not ready',
-    'sandbox_save_failed' => 'Operation failed',]);
+    'sandbox_save_failed' => 'Operation failed',
+];

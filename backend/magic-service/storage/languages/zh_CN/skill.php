@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'import_concurrent_error' => '技能导入并发错误，请稍后重试',
     'invalid_file_format' => '无效的文件格式，仅支持 .skill 或 .zip 格式',
     'file_too_large' => '文件过大，文件大小不能超过 :max_size 字节',
@@ -82,11 +82,11 @@ return array_replace_recursive([
     'query_codes_item_must_be_string' => 'codes 中的每一项必须是字符串',
     'query_codes_item_too_long' => '单个 code 长度不能超过 64',
     'export_failed' => '技能导出失败，请稍后重试',
-], [
     'keyword' => '请求处理失败',
     'page' => '请求处理失败',
     'page_size' => '请求处理失败',
     'publisher_type' => '请求处理失败',
     'source_type' => '请求处理失败',
 
-    'skill_source_type_error' => '操作失败',]);
+    'skill_source_type_error' => '操作失败',
+];

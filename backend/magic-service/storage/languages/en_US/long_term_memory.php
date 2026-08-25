@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'general_error' => 'Long-term memory operation failed',
     'prompt_file_not_found' => 'Prompt file not found: :path',
     'not_found' => 'Memory not found',
@@ -46,12 +46,9 @@ return array_replace_recursive([
         'action_accept' => 'accept',
         'action_reject' => 'reject',
         'content_length_exceeded' => 'Content length cannot exceed 5000 characters',
-    ],
-], [
-    'api' => [
         'at_least_one_content_field_required' => 'Value is required',
         'cannot_update_both_content_fields' => 'Cannot update both content fields',
         'magic_message_id_required_for_memory_card_quick' => 'Value is required',
         'pending_content_length_exceeded' => 'Pending content length exceeded',
     ],
-    ]);
+];

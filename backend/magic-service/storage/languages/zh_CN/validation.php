@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'accepted' => ':attribute 必须接受',
     'active_url' => ':attribute 必须是一个合法的 URL',
     'after' => ':attribute 必须是 :date 之后的一个日期',
@@ -137,8 +137,7 @@ return array_replace_recursive([
             'rule-name' => 'custom-message',
         ],
     ],
-    'attributes' => [
-    ],
+    'attributes' => [],
     'phone_number' => ':attribute 必须为一个有效的电话号码',
     'telephone_number' => ':attribute 必须为一个有效的手机号码',
     'chinese_word' => ':attribute 必须包含以下有效字符 (中文/英文，数字, 下划线)',
@@ -166,6 +165,11 @@ return array_replace_recursive([
             'required' => '成员ID不能为空',
             'string' => '成员ID必须是字符串',
             'max' => '成员ID长度不能超过:max个字符',
+        ],
+        'permission' => [
+            'in' => '请求处理失败',
+            'required' => '参数不能为空',
+            'string' => '请求处理失败',
         ],
     ],
     'schedule_time' => [
@@ -204,12 +208,4 @@ return array_replace_recursive([
             'values_required' => '自定义重复类型的周和月单位必须指定值',
         ],
     ],
-], [
-    'project' => [
-        'permission' => [
-            'in' => '请求处理失败',
-            'required' => '参数不能为空',
-            'string' => '请求处理失败',
-        ],
-    ],
-    ]);
+];

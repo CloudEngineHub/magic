@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'error' => 'error',
     'validate_failed' => 'validate failed',
     'not_found' => ':label not found',
@@ -27,7 +27,6 @@ return array_replace_recursive([
     'access_denied' => 'Access denied',
     'recommended' => 'Recommended',
     'too_many_requests' => 'Too many requests, please try again later',
-], [
     'file_not_found' => 'Resource not found: :file',
     'file_read_failed' => 'Operation failed: :file',
     'invalid_format' => 'Invalid format: :label',
@@ -35,4 +34,4 @@ return array_replace_recursive([
     'parameter_invalid' => 'Invalid value: :label',
     'too_long' => 'Too long: :label, :max',
     'unsupported_format' => 'Unsupported format: :file, :supported_extensions',
-    ]);
+];

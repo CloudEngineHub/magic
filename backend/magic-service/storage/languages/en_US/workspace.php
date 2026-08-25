@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'default_workspace_name' => 'Default Workspace',
     'parameter_check_failure' => 'Parameter check failure',
     'access_denied' => 'Access denied',
@@ -13,7 +13,6 @@ return array_replace_recursive([
     'untitled_workspace' => 'Untitled Workspace',
     'unknown_user' => 'Unknown User',
     'transferred_from' => 'Transferred from',
-], [
     'archived' => 'Archived',
     'conversation_id_not_found' => 'Resource not found',
     'ids_required' => 'Value is required',
@@ -22,4 +21,5 @@ return array_replace_recursive([
     'not_owner' => 'Not owner',
     'super_magic_user_not_found' => 'Resource not found',
 
-    'invalid_workspace_type' => 'Invalid value',]);
+    'invalid_workspace_type' => 'Invalid value',
+];

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'default_project_name' => 'New Project',
     'project_not_found' => 'Project not found',
     'project_name_already_exists' => 'Project name already exists',
@@ -65,7 +65,6 @@ return array_replace_recursive([
     'collaboration_updated' => 'Project collaboration settings updated',
     'batch_permission_updated' => 'Batch permission updated successfully',
     'batch_members_deleted' => 'Batch members deleted successfully',
-], [
     'access_denied' => 'Access denied',
     'cannot_modify_creator_permission' => 'Cannot modify creator permission',
     'create_project_too_frequent' => 'Create project too frequent',
@@ -84,4 +83,5 @@ return array_replace_recursive([
     'special_key_required' => 'Value is required',
 
     'fork_access_denied' => 'Access denied',
-    'fork_not_found' => 'Resource not found',]);
+    'fork_not_found' => 'Resource not found',
+];

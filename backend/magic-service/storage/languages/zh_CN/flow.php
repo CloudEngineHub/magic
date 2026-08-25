@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'error' => [
         'common' => '通用错误',
         'common_validate_failed' => '通用参数验证失败',
@@ -222,6 +222,9 @@ return array_replace_recursive([
                 'invalid_format' => '工具名称只能包含字母、数字、下划线',
             ],
         ],
+        'end' => [
+            'must_exist' => '请求处理失败',
+        ],
     ],
     'model_config' => [
         'max_record_error' => '最大记录数 只能是 0-500 之间的整数',
@@ -341,13 +344,7 @@ return array_replace_recursive([
             'invalid_format' => '缓存前缀格式无效',
         ],
     ],
-], [
     'mode' => [
         'not_found' => '资源不存在：:model_name',
     ],
-    'node' => [
-        'end' => [
-            'must_exist' => '请求处理失败',
-        ],
-    ],
-    ]);
+];

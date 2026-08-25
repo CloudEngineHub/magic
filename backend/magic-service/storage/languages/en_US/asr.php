@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'success' => [
         'success' => 'Success',
     ],
@@ -238,10 +238,9 @@ return array_replace_recursive([
         'status_report_not_allowed' => 'Current task status does not allow status report',
         'summary_not_allowed' => 'Current task status does not allow initiating summary',
     ],
-], [
     'sts_token' => [
         'missing_jwt_token' => 'Missing jwt token',
         'parse_response_failed' => 'Operation failed',
         'request_failed' => 'Operation failed',
     ],
-    ]);
+];

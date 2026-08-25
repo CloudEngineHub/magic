@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'cannot_modify_message' => '当前状态下无法修改消息',
     'status_not_modifiable' => '消息状态不允许修改',
     'update_failed' => '更新消息失败',
@@ -12,6 +12,5 @@ return array_replace_recursive([
     'consume_failed' => '消费消息失败',
     'message_not_found' => '消息未找到或访问被拒绝',
     'operation_locked' => '操作被其他进程锁定，请稍后重试',
-], [
     'invalid_message_type' => '参数无效：:type',
-    ]);
+];

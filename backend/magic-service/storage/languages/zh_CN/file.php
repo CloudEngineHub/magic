@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'file_not_found' => '文件未找到',
     'file_exist' => '文件已存在',
     'illegal_file_key' => '非法的文件键',
@@ -66,7 +66,6 @@ return array_replace_recursive([
     'batch_move_failed' => '批量移动操作失败',
     'batch_copy_failed' => '批量复制操作失败',
     'directory_copy_not_supported_yet' => '目录复制功能暂未支持，请使用批量复制',
-], [
     'batch_save_failed' => '操作失败',
     'batch_save_locked' => '请求处理失败',
     'cannot_generate_url_for_directory' => '请求处理失败',
@@ -93,4 +92,5 @@ return array_replace_recursive([
     'delete_failed' => '操作失败',
     'multiple_projects_not_allowed' => '请求处理失败',
     'sandbox_not_ready' => '请求处理失败',
-    'sandbox_save_failed' => '操作失败',]);
+    'sandbox_save_failed' => '操作失败',
+];

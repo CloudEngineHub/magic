@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'agent' => [
         'user_call_agent_fail_notice' => '不好意思，刚才处理有些异常，你可以换种表述重新问一下哦，以便我能准确为你解答',
     ],
@@ -84,6 +84,7 @@ return array_replace_recursive([
         'transfer_owner_before_leave' => '请先转让群主再退出群聊',
         'only_owner_can_disband' => '只有群主才能解散群聊',
         'only_owner_can_transfer' => '只有群主才能转让群组',
+        'group_cannot_kick_owner' => '请求处理失败',
     ],
     'department' => [
         'not_found' => '部门不存在',
@@ -116,8 +117,4 @@ return array_replace_recursive([
         'message_not_found' => '流式消息未找到',
         'receive_message_id_not_found' => '流式消息的接收方消息 ID 未找到',
     ],
-], [
-    'group' => [
-        'group_cannot_kick_owner' => '请求处理失败',
-    ],
-    ]);
+];

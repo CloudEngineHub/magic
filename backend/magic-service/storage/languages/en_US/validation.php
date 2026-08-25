@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'accepted' => 'The :attribute must be accepted.',
     'accepted_if' => 'The :attribute must be accepted when :other is :value.',
     'active_url' => 'The :attribute is not a valid URL.',
@@ -156,8 +156,7 @@ return array_replace_recursive([
             'rule-name' => 'custom-message',
         ],
     ],
-    'attributes' => [
-    ],
+    'attributes' => [],
     'phone_number' => 'The :attribute must be a valid phone number',
     'telephone_number' => 'The :attribute must be a valid telephone number',
     'chinese_word' => 'The :attribute must contain valid characters(chinese/english character, number, underscore)',
@@ -185,6 +184,11 @@ return array_replace_recursive([
             'required' => 'Member ID is required',
             'string' => 'Member ID must be a string',
             'max' => 'Member ID cannot exceed :max characters',
+        ],
+        'permission' => [
+            'in' => 'In',
+            'required' => 'Value is required',
+            'string' => 'String',
         ],
     ],
     'schedule_time' => [
@@ -223,12 +227,4 @@ return array_replace_recursive([
             'values_required' => 'Values are required for week and month units in custom_repeat type',
         ],
     ],
-], [
-    'project' => [
-        'permission' => [
-            'in' => 'In',
-            'required' => 'Value is required',
-            'string' => 'String',
-        ],
-    ],
-    ]);
+];

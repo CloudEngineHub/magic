@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'invalid' => 'Invalid parameter',
     'not_found' => 'Task not found',
     'already_exists' => 'Same name and type task already exists',
@@ -22,10 +22,10 @@ return array_replace_recursive([
     'initialize_error' => 'The system is currently busy, please try again later.',
     'agent_stopped' => 'Task has been terminated',
     'finished_task_action' => 'Output of completed result file',
-], [
     'id_required' => 'Value is required',
 
     'access_token' => [
         'not_found' => 'Resource not found',
     ],
-    'create_workspace_version_failed' => 'Operation failed',]);
+    'create_workspace_version_failed' => 'Operation failed',
+];

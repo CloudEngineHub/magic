@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'error' => '错误',
     'validate_failed' => '验证失败',
     'not_found' => ':label 未找到',
@@ -27,7 +27,6 @@ return array_replace_recursive([
     'not_implemented' => '功能暂未实现',
     'access_denied' => '访问被拒绝',
     'too_many_requests' => '请求频繁，请稍后再试',
-], [
     'file_not_found' => '资源不存在：:file',
     'file_read_failed' => '操作失败：:file',
     'invalid_format' => '格式无效：:label',
@@ -35,4 +34,4 @@ return array_replace_recursive([
     'parameter_invalid' => '参数无效：:label',
     'too_long' => '请求处理失败：:label、:max',
     'unsupported_format' => '请求处理失败：:file、:supported_extensions',
-    ]);
+];

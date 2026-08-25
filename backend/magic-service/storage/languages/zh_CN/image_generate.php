@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'general_error' => '文生图服务异常',
     'response_format_error' => '文生图响应格式错误',
     'missing_image_data' => '生成图片数据异常',
@@ -104,11 +104,10 @@ return array_replace_recursive([
     ],
     # 水印相关
     'image_watermark' => 'website/static/img/watermark_zh.png',
-], [
     'gcs_bucket_not_configured' => '请求处理失败',
     'gcs_upload_failed' => '操作失败',
     'image_convert_high_model_not_configured' => '请求处理失败',
     'invalid_response_type' => '参数无效',
     'upload_failed' => '操作失败',
     'vertex_ai_does_not_support_file_upload' => '请求处理失败',
-    ]);
+];

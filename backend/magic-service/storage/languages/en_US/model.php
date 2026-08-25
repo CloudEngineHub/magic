@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-return array_replace_recursive([
+return [
     'system_error' => 'System Error',
     'model_not_found' => 'Model Not Found',
     'invalid_model_type' => 'Invalid Model Type',
@@ -14,7 +14,6 @@ return array_replace_recursive([
     'response_parse_error' => 'Response Parse Error',
     'quota_exceeded' => 'Quota Exceeded',
     'invalid_parameter' => 'Invalid Parameter',
-], [
     'image_model_not_available' => 'Image model not available',
     'model_not_available' => 'Model not available',
-    ]);
+];
