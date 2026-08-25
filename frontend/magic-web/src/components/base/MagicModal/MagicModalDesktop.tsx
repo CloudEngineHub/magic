@@ -11,7 +11,7 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { convertButtonProps } from "./utils"
 import { useStyles } from "./styles"
 import { Modal as AntdModal } from "antd"

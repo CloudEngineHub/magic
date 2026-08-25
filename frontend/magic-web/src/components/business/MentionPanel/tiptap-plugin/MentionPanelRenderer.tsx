@@ -8,7 +8,7 @@ import type {
 	MentionPanelRendererRef,
 	MentionSelectHandler,
 } from "./types"
-import type { SuggestionKeyDownProps } from "@tiptap/suggestion"
+import type { SuggestionKeyDownProps } from "@/infrastructure/editors/tiptap/suggestion"
 import { PanelState } from "../types"
 
 // Components

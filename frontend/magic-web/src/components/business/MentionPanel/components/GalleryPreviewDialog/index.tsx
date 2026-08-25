@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/shadcn-ui/dialog"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { MentionItemType, type MentionItem, type ProjectFileMentionData } from "../../types"
 import { useMentionItemRenderContextValue } from "../../renderers/context"
 import {

@@ -1,6 +1,6 @@
 import { MCPType } from "../types"
 import { get, set } from "lodash-es"
-import { highlight, languages } from "@/lib/prismjs"
+import { highlight, languages } from "@/infrastructure/vendors/prismjs"
 
 /** Form fields */
 export const enum MCPFormField {

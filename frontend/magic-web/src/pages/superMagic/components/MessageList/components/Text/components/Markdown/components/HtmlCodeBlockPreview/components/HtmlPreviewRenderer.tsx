@@ -27,6 +27,8 @@ interface HtmlPreviewRendererProps {
 	content: string
 	onReady: () => void
 	onMetrics: (metrics: HtmlPreviewRendererMetrics) => void
+	onContentCommitted?: (content: string) => void
+	isPreviewActive?: boolean
 	containIframeOverscroll?: boolean
 	hideVerticalScroll?: boolean
 }

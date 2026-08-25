@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { AnchorHTMLAttributes, ComponentProps, MouseEvent } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { resolveSingleImageUrl } from "@/pages/superMagic/utils/image-url-resolver"
 import {

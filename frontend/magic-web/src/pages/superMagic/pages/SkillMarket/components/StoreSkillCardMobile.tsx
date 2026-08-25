@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import dayjs from "dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { Award, CircleUserRound, ShieldCheck } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"

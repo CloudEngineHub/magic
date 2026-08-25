@@ -42,7 +42,7 @@ import {
 } from "@dtyq/html-sandbox/telemetry"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { StylePanel } from "./components/StylePanel"
 import type { HTMLEditorV2Ref, SaveResult } from "./iframe-bridge/types/props"
 import type {

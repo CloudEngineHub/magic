@@ -3,10 +3,10 @@ import { ListFilter, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
 import SlidesTemplateMobileFilterOption from "./SlidesTemplateMobileFilterOption"
-import type { SlidesTemplateTagGroupItem } from "./slidesTemplateState"
+import { getSlidesTemplateName, type SlidesTemplateTagGroupItem } from "./slidesTemplateState"
 import SlidesTemplateMobileFilterPopup from "./SlidesTemplateMobileFilterPopup"
 import SlidesTemplateTagGroupSelect from "./SlidesTemplateTagGroupSelect"
 
@@ -156,7 +156,9 @@ function SlidesTemplateMobileTagFilters({
 									{isActive ? (
 										<span className="absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-primary" />
 									) : null}
-									<span className="line-clamp-2">{lt(tagGroup.name_i18n)}</span>
+									<span className="line-clamp-2">
+										{lt(getSlidesTemplateName(tagGroup))}
+									</span>
 								</button>
 							)
 						})}
@@ -167,7 +169,7 @@ function SlidesTemplateMobileTagFilters({
 						data-testid="slides-template-mobile-all-filters-values"
 					>
 						<h2 className="mb-3 px-0.5 text-[14px] leading-5 text-muted-foreground">
-							{activeTagGroup ? lt(activeTagGroup.name_i18n) : null}
+							{activeTagGroup ? lt(getSlidesTemplateName(activeTagGroup)) : null}
 						</h2>
 						<div className="grid grid-cols-2 content-start gap-2">
 							{activeTagGroup?.tags.map((tag) => {
@@ -176,7 +178,7 @@ function SlidesTemplateMobileTagFilters({
 								return (
 									<SlidesTemplateMobileFilterOption
 										key={tag.code}
-										label={lt(tag.name_i18n)}
+										label={lt(getSlidesTemplateName(tag))}
 										selected={isSelected}
 										variant="splitSheet"
 										onClick={() => toggleSelectedTag(tag.code)}

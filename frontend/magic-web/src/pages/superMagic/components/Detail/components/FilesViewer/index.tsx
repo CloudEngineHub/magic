@@ -13,7 +13,7 @@ import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import {

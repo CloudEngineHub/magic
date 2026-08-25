@@ -1,5 +1,5 @@
 import { LinkNode, type LinkNodeOptions } from "@/components/tiptap-node/link-node"
-import { Plugin, TextSelection, PluginKey } from "@tiptap/pm/state"
+import { Plugin, TextSelection, PluginKey } from "@/infrastructure/editors/tiptap/pm-state"
 import {
 	TabDragData,
 	AttachmentDragData,
@@ -119,9 +119,7 @@ export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
 
 						try {
 							const parsedData = JSON.parse(customData) as
-								| TabDragData
-								| AttachmentDragData
-								| MultipleFilesDragData
+								TabDragData | AttachmentDragData | MultipleFilesDragData
 
 							// Check if it's a valid custom drag data type
 							if (!Object.values(DRAG_TYPE).includes(parsedData.type as DRAG_TYPE)) {
@@ -198,9 +196,9 @@ export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
 											// Calculate relative path from document to file
 											const href = documentPath
 												? calculateRelativePath(
-													documentPath,
-													fileRelativePath,
-												)
+														documentPath,
+														fileRelativePath,
+													)
 												: fileRelativePath
 											links.push({ href, title: fileName })
 										}
@@ -216,45 +214,49 @@ export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
 							}
 
 							return (
-								runActiveEditor(this.editor, (editor) => {
-									// Insert links sequentially
-									links.forEach((link, index) => {
-										if (index > 0) {
-											// Add space between multiple links
-											editor.chain().insertContent(" ").run()
-										}
+								runActiveEditor(
+									this.editor,
+									(editor) => {
+										// Insert links sequentially
+										links.forEach((link, index) => {
+											if (index > 0) {
+												// Add space between multiple links
+												editor.chain().insertContent(" ").run()
+											}
 
-										// Encode URL if it contains spaces to ensure markdown parsing works correctly
-										// According to Markdown spec, URLs with spaces should be URL-encoded
-										// We use encodeURI to preserve path structure while encoding spaces
-										let encodedHref = link.href
-										if (link.href && /[\s<>]/.test(link.href)) {
-											// Use encodeURI to encode spaces while preserving path separators and other valid characters
-											// This ensures markdown parsing works while maintaining valid URLs for HTML rendering
-											encodedHref = encodeURI(link.href)
-										}
+											// Encode URL if it contains spaces to ensure markdown parsing works correctly
+											// According to Markdown spec, URLs with spaces should be URL-encoded
+											// We use encodeURI to preserve path structure while encoding spaces
+											let encodedHref = link.href
+											if (link.href && /[\s<>]/.test(link.href)) {
+												// Use encodeURI to encode spaces while preserving path separators and other valid characters
+												// This ensures markdown parsing works while maintaining valid URLs for HTML rendering
+												encodedHref = encodeURI(link.href)
+											}
 
-										// Insert link with title
-										editor
-											.chain()
-											.insertContent({
-												type: "text",
-												text: link.title,
-												marks: [
-													{
-														type: "link",
-														attrs: {
-															href: encodedHref,
-															title: link.title,
+											// Insert link with title
+											editor
+												.chain()
+												.insertContent({
+													type: "text",
+													text: link.title,
+													marks: [
+														{
+															type: "link",
+															attrs: {
+																href: encodedHref,
+																title: link.title,
+															},
 														},
-													},
-												],
-											})
-											.run()
-									})
+													],
+												})
+												.run()
+										})
 
-									return true
-								}, false) ?? false
+										return true
+									},
+									false,
+								) ?? false
 							)
 						} catch (error) {
 							console.error("Error parsing drag data:", error)

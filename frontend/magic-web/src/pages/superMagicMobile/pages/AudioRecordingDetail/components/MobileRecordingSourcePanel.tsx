@@ -1,7 +1,7 @@
 import { useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { RecordingSpeakerFilterControl } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingSpeakerFilterControl"
 import { RecordingDetailRegionEmptySlot } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRegionEmptySlot"
 import {

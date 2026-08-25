@@ -39,12 +39,13 @@ class _FakeMagicServiceSession:
         self.response = response
         self.requests = []
 
-    def request(self, method, url, json=None, headers=None):
+    def request(self, method, url, json=None, headers=None, params=None):
         self.requests.append({
             "method": method,
             "url": url,
             "json": json,
             "headers": headers or {},
+            "params": params,
         })
         return self.response
 
@@ -85,6 +86,141 @@ async def test_magic_service_client_generate_design_video_forwards_user_auth_and
     assert headers["User-Authorization"] == "test-user-token"
     assert headers["organization-code"] == "test-org"
     assert headers["Magic-Task-Id"] == "task-1"
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_estimate_design_video_points_uses_estimate_endpoint():
+    class RecordingMagicServiceClient(MagicServiceClient):
+        def __init__(self):
+            self.requests = []
+
+        async def _request_json(
+            self,
+            method,
+            path,
+            payload=None,
+            operation_name="Magic Service API",
+            params=None,
+        ):
+            self.requests.append(
+                {
+                    "method": method,
+                    "path": path,
+                    "payload": payload,
+                    "operation_name": operation_name,
+                }
+            )
+            return {"points": 12}
+
+    client = RecordingMagicServiceClient()
+    payload = {
+        "project_id": "project-1",
+        "model_id": "MiniMax-H3",
+        "generation": {"duration_seconds": 5, "resolution": "768p"},
+    }
+
+    result = await client.estimate_design_video_points(payload)
+
+    assert result == {"points": 12}
+    assert client.requests == [
+        {
+            "method": "POST",
+            "path": "/api/v1/design/estimate-video-points",
+            "payload": payload,
+            "operation_name": "设计视频积分预估",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_uses_existing_parent_id_for_duplicate_directory():
+    class RecordingMagicServiceClient(MagicServiceClient):
+        def __init__(self):
+            self.requests = []
+            self.responses = [
+                {"file_id": "existing-project-dir"},
+                {"file_id": "videos-dir"},
+            ]
+
+        async def _request_json(
+            self,
+            method,
+            path,
+            payload=None,
+            operation_name="Magic Service API",
+            params=None,
+        ):
+            self.requests.append((method, path, payload, operation_name))
+            return self.responses.pop(0)
+
+    client = RecordingMagicServiceClient()
+
+    parent_id = await client.ensure_project_directories(
+        project_id="project-1",
+        directory_parts=["demo-project", "videos"],
+    )
+
+    assert parent_id == "videos-dir"
+    assert client.requests == [
+        (
+            "POST",
+            "/api/v1/super-agent/file",
+            {
+                "project_id": "project-1",
+                "parent_id": "",
+                "file_name": "demo-project",
+                "is_directory": True,
+                "ignore_duplicate": True,
+                "pre_file_id": -1,
+            },
+            "创建项目目录",
+        ),
+        (
+            "POST",
+            "/api/v1/super-agent/file",
+            {
+                "project_id": "project-1",
+                "parent_id": "existing-project-dir",
+                "file_name": "videos",
+                "is_directory": True,
+                "ignore_duplicate": True,
+                "pre_file_id": -1,
+            },
+            "创建项目目录",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_estimate_design_video_points_forwards_auth_headers(monkeypatch):
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.add_magic_and_user_authorization_headers",
+        lambda headers: headers.update({"User-Authorization": "test-user-token"}),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.get_llm_request_headers",
+        lambda: {"Magic-Task-Id": "task-1"},
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.get_metadata",
+        lambda: {"organization_code": "test-org"},
+    )
+
+    client = MagicServiceClient(config=MagicServiceConfig(api_base_url="http://magic-service.test"))
+    client.session = _FakeMagicServiceSession(
+        _FakeMagicServiceResponse({"code": 1000, "data": {"points": 12}})
+    )
+
+    result = await client.estimate_design_video_points({"project_id": "123"})
+
+    assert result == {"points": 12}
+    request = client.session.requests[0]
+    assert request["method"] == "POST"
+    assert request["url"] == "http://magic-service.test/api/v1/design/estimate-video-points"
+    assert request["json"] == {"project_id": "123"}
+    assert request["headers"]["User-Authorization"] == "test-user-token"
+    assert request["headers"]["organization-code"] == "test-org"
+    assert request["headers"]["Magic-Task-Id"] == "task-1"
 
 
 def test_video_task_spec_normalizes_input_mode_aliases_from_llm():
@@ -223,6 +359,55 @@ async def test_generate_canvas_videos_does_not_create_placeholder_when_prepare_f
     assert not result.ok
     assert "缺少 project_id" in result.content
     assert "雨夜电车橘猫" not in project_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_prepare_registers_remote_videos_directory(
+    monkeypatch,
+    tmp_path,
+):
+    project_dir = tmp_path / "group" / "subproject"
+    (project_dir / "videos").mkdir(parents=True)
+    registrations = []
+
+    class FakeMagicServiceClient:
+        async def ensure_project_directories(self, project_id, directory_parts):
+            registrations.append((project_id, directory_parts))
+            return "videos-dir-id"
+
+    tool = GenerateCanvasVideos(base_dir=str(tmp_path))
+    tool._magic_service_client = FakeMagicServiceClient()
+    monkeypatch.setattr(tool, "_resolve_project_id", lambda: "project-1")
+
+    kwargs = await tool._prepare_task_kwargs(ToolContext(), project_dir)
+
+    assert registrations == [("project-1", ["group", "subproject", "videos"])]
+    assert kwargs["design_file_dir"] == "/group/subproject/videos/"
+    assert (project_dir / "videos").is_dir()
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_prepare_rejects_parent_traversal(
+    monkeypatch,
+    tmp_path,
+):
+    registrations = []
+
+    class FakeMagicServiceClient:
+        async def ensure_project_directories(self, project_id, directory_parts):
+            registrations.append((project_id, directory_parts))
+
+    tool = GenerateCanvasVideos(base_dir=str(tmp_path))
+    tool._magic_service_client = FakeMagicServiceClient()
+    monkeypatch.setattr(tool, "_resolve_project_id", lambda: "project-1")
+
+    with pytest.raises(ValueError, match="不安全"):
+        await tool._prepare_task_kwargs(
+            ToolContext(),
+            tmp_path / "group" / ".." / "outside",
+        )
+
+    assert registrations == []
 
 
 def test_generate_canvas_videos_params_uses_resolution_and_aspect_ratio_for_canvas_dimensions():
@@ -627,3 +812,92 @@ def test_generate_canvas_videos_preserves_provider_asset_uri_in_payload():
     assert payload["inputs"]["reference_images"] == [
         {"uri": "asset://virtual-human-asset-id"}
     ]
+def test_generate_canvas_videos_builds_shared_task_request_fields_once():
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="参考图片 [image1] 生成小猫游泳视频。",
+        name="共享请求字段",
+        reference_image_paths=["demo/images/cat.png"],
+        duration_seconds=6,
+        resolution="1080p",
+        seed=9,
+        extensions={"provider_option": "value"},
+    )
+
+    fields = tool._build_design_video_task_fields(
+        task,
+        relative_project_path="demo",
+    )
+
+    assert fields == {
+        "prompt": "参考图片 [image1] 生成小猫游泳视频。",
+        "input_mode": "omni_reference",
+        "task": "generate",
+        "inputs": {
+            "reference_images": [{"uri": "/demo/images/cat.png"}],
+            "reference_videos": [],
+            "reference_audios": [],
+            "frames": [],
+        },
+        "generation": {
+            "duration_seconds": 6,
+            "resolution": "1080p",
+            "seed": 9,
+        },
+        "extensions": {"provider_option": "value"},
+    }
+
+
+def test_generate_canvas_videos_initial_and_common_requests_keep_exact_structure():
+    tool = GenerateCanvasVideos()
+    tool._model_id = "requested-model"
+    task = VideoTaskSpec(
+        prompt="把参考视频 [video1] 改成水彩风格。",
+        name="结构等价",
+        input_mode="video_edit",
+        task="edit",
+        reference_video_paths=["demo/videos/source.mp4"],
+        aspect_ratio="9:16",
+        fps=24,
+        watermark=False,
+        extensions={"provider_option": "value"},
+    )
+
+    initial = tool._build_initial_design_video_request(task, "video-1")
+    common = tool._build_common_design_video_request(
+        task=task,
+        project_id="project-1",
+        model_id="resolved-model",
+        relative_project_path="demo",
+    )
+
+    assert initial == {
+        "video_id": "video-1",
+        "model_id": "requested-model",
+        "prompt": "把参考视频 [video1] 改成水彩风格。",
+        "input_mode": "video_edit",
+        "task": "edit",
+        "generation": {"aspect_ratio": "9:16", "fps": 24, "watermark": False},
+        "inputs": {
+            "reference_images": [],
+            "reference_videos": [{"uri": "/demo/videos/source.mp4"}],
+            "reference_audios": [],
+            "frames": [],
+        },
+        "extensions": {"provider_option": "value"},
+    }
+    assert common == {
+        "project_id": "project-1",
+        "model_id": "resolved-model",
+        "prompt": "把参考视频 [video1] 改成水彩风格。",
+        "input_mode": "video_edit",
+        "task": "edit",
+        "inputs": {
+            "reference_images": [],
+            "reference_videos": [{"uri": "/demo/videos/source.mp4"}],
+            "reference_audios": [],
+            "frames": [],
+        },
+        "generation": {"aspect_ratio": "9:16", "fps": 24, "watermark": False},
+        "extensions": {"provider_option": "value"},
+    }

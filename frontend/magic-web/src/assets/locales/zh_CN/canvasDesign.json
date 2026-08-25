@@ -508,6 +508,7 @@
 		"frameResourceAlreadyUsed": "该资源已用于其他帧",
 		"frames": "首尾帧",
 		"generateAgain": "再次生成",
+		"generateAudio": "音频",
 		"generationSettings": "生成设置",
 		"generationSettingsAria": "视频生成参数",
 		"lastFrame": "尾帧",
@@ -543,7 +544,8 @@
 		"useAsEndFrame": "设为尾帧",
 		"useAsStartFrame": "设为首帧",
 		"videoEdit": "视频编辑",
-		"videoEditRequiresOneVideo": "视频编辑模式需上传 1 个参考视频"
+		"videoEditRequiresOneVideo": "视频编辑模式需上传 1 个参考视频",
+		"webSearch": "网络搜索"
 	},
 	"zoom": {
 		"fitToScreen": "适配屏幕",

@@ -17,7 +17,7 @@ import { ResourceType, ShareType } from "../Share/types"
 import { generateSharePassword, generateTopicShareMessageText } from "../Share/utils"
 import { SharePasswordField } from "../Share/ShareFields"
 import { useStyles } from "./styles"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ShareListRefreshType } from "@/pages/superMagic/components/ShareManagement/types"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -700,9 +700,9 @@ function TopicSharePopover({
 					}
 				}}
 				onFocusOutside={(e) => {
-					// Touch-first desktop layouts can move focus outside during a tap without
-					// expressing a user dismissal intent, so keep the PC popover open.
-					if (isMagicApp || isNoHoverCoarsePointer()) {
+					// Embedded SDK iframes can move focus to the host document during a tap,
+					// which is not an intentional dismissal of the desktop popover.
+					if (isMagicApp || isNoHoverCoarsePointer() || window.parent !== window) {
 						e.preventDefault()
 					}
 				}}

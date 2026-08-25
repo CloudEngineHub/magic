@@ -26,7 +26,7 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import type { MicroAppEntryPreviewMode } from "./MicroAppEntryPreview"
 

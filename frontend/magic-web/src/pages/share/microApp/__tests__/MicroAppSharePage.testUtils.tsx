@@ -2,6 +2,7 @@ import { render } from "@testing-library/react"
 import { useEffect, useState, type ReactNode } from "react"
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router"
 import { vi } from "vitest"
+import { resetMicroAppInstallPromptCapture } from "@/services/microAppInstallPrompt"
 import MicroAppSharePage from "../index"
 
 interface TestUserInfo {
@@ -268,6 +269,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 }))
 
 export function renderPage(path = "/micro-app/app-1") {
+	window.history.replaceState({}, "", path)
 	function TestRouteControls() {
 		const navigate = useNavigate()
 		return (
@@ -293,7 +295,11 @@ export function renderPage(path = "/micro-app/app-1") {
 
 export function resetMicroAppSharePageMocks() {
 	vi.clearAllMocks()
-	window.localStorage.clear()
+	localStorage.clear()
+	sessionStorage.clear()
+	resetMicroAppInstallPromptCapture()
+	window.history.replaceState({}, "", "/")
+	document.head.querySelectorAll("link[data-micro-app-install]").forEach((link) => link.remove())
 	mocks.authorization.current = ""
 	mocks.isMobile.current = false
 	mocks.hasHtmlPermissionDeclarations.current = false

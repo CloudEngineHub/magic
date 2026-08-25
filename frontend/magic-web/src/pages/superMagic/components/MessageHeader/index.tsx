@@ -38,7 +38,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import recordSummaryStore from "@/stores/recordingSummary"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import StatusIcon from "./components/StatusIcon"
 import TopicHistoryPanelContent from "./components/TopicHistoryPanelContent"
 import { MessageHeaderHistoryControl } from "./components/MessageHeaderHistoryControl"

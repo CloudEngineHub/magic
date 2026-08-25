@@ -10,8 +10,7 @@ import { interfaceStore } from "@/stores/interface"
 import MessageFilePreviewStore from "@/stores/chatNew/messagePreview/FilePreviewStore"
 import { ChatDomId } from "../../constants"
 import { usePanelSizes } from "../../hooks/usePanelSizes"
-import { useChatWorkspaceLayout } from "../../hooks/useChatWorkspaceLayout"
-import { chatWorkspaceSpec } from "./workspaceSpec"
+import { useChatWorkspaceLayout, chatWorkspaceSpec } from "../../layout"
 import MessageFilePreviewService from "@/services/chat/message/MessageFilePreview"
 
 // 懒加载组件

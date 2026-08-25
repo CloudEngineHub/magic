@@ -1,4 +1,4 @@
-import { JSONContent, Editor } from "@tiptap/react"
+import { JSONContent, Editor } from "@/infrastructure/editors/tiptap/react"
 import { ReportFileUploadsResponse } from "@/apis/modules/file"
 import { UploadResponse } from "@/hooks/useUploadFiles/types"
 import { ProjectListItem, Topic, Workspace } from "../../pages/Workspace/types"

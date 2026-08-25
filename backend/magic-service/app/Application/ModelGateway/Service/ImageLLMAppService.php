@@ -178,6 +178,7 @@ class ImageLLMAppService extends LLMAppService
 
         return $response;
     }
+
     private function uploadBase64ImageInput(
         ModelGatewayDataIsolation $dataIsolation,
         ImageInput $imageInput,

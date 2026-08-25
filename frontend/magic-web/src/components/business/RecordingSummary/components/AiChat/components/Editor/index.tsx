@@ -21,7 +21,7 @@ import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/h
 import { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { initializeService } from "@/services/recordSummary/serviceInstance"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 

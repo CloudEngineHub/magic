@@ -11,4 +11,6 @@ export const enum BUSINESS_API_ERROR_CODE {
 	ACCOUNT_ACTIVATED = 2201,
 	/** Account has no permission(No token carried) */
 	ACCOUNT_NO_PERMISSION = 2179,
+	/** User does not exist */
+	USER_NOT_EXIST = 2155
 }

@@ -1,5 +1,5 @@
 import MagicIcon from "@/components/base/MagicIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	IconChevronDown,
 	IconChevronUp,

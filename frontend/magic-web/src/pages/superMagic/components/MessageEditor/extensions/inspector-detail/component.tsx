@@ -1,9 +1,9 @@
 import { Fragment, useState } from "react"
-import { NodeViewWrapper } from "@tiptap/react"
-import type { NodeViewProps } from "@tiptap/react"
+import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
+import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { ChevronRight, ChevronDown, Crosshair } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	MentionItemType,
 	type ProjectFileMentionData,

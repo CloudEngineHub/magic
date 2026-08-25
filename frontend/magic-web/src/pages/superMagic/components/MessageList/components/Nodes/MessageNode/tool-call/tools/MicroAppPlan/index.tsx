@@ -2,7 +2,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { Textarea } from "@/components/shadcn-ui/textarea"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import DefaultTool from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/tools/DefaultTool"
 import type {
 	DefaultToolProps,
@@ -66,7 +66,8 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 	const [pendingAction, setPendingAction] = useState<PlanResponseStatus | null>(null)
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
-		{ tool?: ToolDataLike } | undefined
+		| { tool?: ToolDataLike }
+		| undefined
 	const tool = props.toolData || node?.tool
 	const deferredRawArguments = useDeferredValue(tool?.rawArguments)
 	const plan = resolvePlan(

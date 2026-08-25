@@ -108,11 +108,15 @@ class Wan27GenerationCapabilityProviderTest extends TestCase
         $this->assertTrue($data['generation']['supports_watermark']);
         $this->assertTrue($data['generation']['supports_negative_prompt']);
         $this->assertTrue($data['generation']['supports_generate_audio']);
-        $this->assertFalse($data['generation']['supports_person_generation']);
         $this->assertTrue($data['generation']['supports_enhance_prompt']);
-        $this->assertFalse($data['generation']['supports_compression_quality']);
-        $this->assertFalse($data['generation']['supports_resize_mode']);
-        $this->assertFalse($data['generation']['supports_sample_count']);
+        foreach ([
+            'supports_person_generation',
+            'supports_compression_quality',
+            'supports_resize_mode',
+            'supports_sample_count',
+        ] as $unsupportedCapability) {
+            $this->assertArrayNotHasKey($unsupportedCapability, $data['generation']);
+        }
         $this->assertSame([
             ['label' => '16:9', 'value' => '1280x720', 'width' => 1280, 'height' => 720, 'resolution' => '720p'],
             ['label' => '9:16', 'value' => '720x1280', 'width' => 720, 'height' => 1280, 'resolution' => '720p'],

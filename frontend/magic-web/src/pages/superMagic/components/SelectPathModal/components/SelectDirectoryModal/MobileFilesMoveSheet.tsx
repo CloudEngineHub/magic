@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { Sheet, SheetContent, SheetTitle } from "@/components/shadcn-ui/sheet"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MY_CLAW_WORKSPACE_ID,

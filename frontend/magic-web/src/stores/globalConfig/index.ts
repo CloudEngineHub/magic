@@ -28,6 +28,8 @@ export class GlobalConfigStore {
 	 */
 	updateFavicon(favicon: string) {
 		const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement
+		// Micro-app share pages pin favicon to the install icon route.
+		if (link?.dataset.microAppInstall) return
 		if (link) link.href = favicon
 	}
 

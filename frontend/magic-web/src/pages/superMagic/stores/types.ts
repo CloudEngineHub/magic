@@ -108,6 +108,9 @@ export interface SharedMessageItem {
 	[key: string]: unknown
 }
 
+/** Store canonical nodes include live raw nodes and the heterogeneous share payload. */
+export type SuperMagicStoreMessageNode = RawSuperMagicMessageNode | SharedMessageItem
+
 // ─── 消息项 ──────────────────────────────────────────────────
 
 export interface MessageItem {

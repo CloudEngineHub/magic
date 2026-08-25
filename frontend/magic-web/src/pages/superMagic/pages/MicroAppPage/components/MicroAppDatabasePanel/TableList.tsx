@@ -9,7 +9,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface TableListProps {
 	tables: MagicBaseTable[]

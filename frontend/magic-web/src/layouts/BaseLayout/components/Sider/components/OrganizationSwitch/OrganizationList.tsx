@@ -14,7 +14,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useAccount as useAccountHook } from "@/models/user/hooks"
 import openAccountModal from "@/pages/login/AccountModal"
 import { useClusterConfig } from "@/models/config/hooks"

@@ -31,6 +31,7 @@ enum BillingType: string
     case VideoResolutionReferenceVideoTokens = 'VideoResolutionReferenceVideoTokens'; // 视频 token 计费：分辨率 + 参考视频
     case KelingVideoResolutionMediaConditionDurationPricing = 'KelingVideoResolutionMediaConditionDurationPricing'; // 可灵视频按分辨率、音频与参考视频时长计费
     case VolcengineArkVideoResolutionReferenceVideoTokenMatrix = 'VolcengineArkVideoResolutionReferenceVideoTokenMatrix'; // 火山视频按分辨率与参考视频 token 矩阵计费
+    case MiniMaxH3VideoMediaUsagePricing = 'MiniMaxH3VideoMediaUsagePricing'; // MiniMax H3 输出、参考视频与超额参考图片计费
 
     public function isTokens(): bool
     {

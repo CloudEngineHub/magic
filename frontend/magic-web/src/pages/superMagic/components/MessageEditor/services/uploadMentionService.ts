@@ -1,4 +1,4 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {

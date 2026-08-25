@@ -158,4 +158,30 @@ describe("HttpClient interceptors", () => {
 
 		expect(callOrder).toEqual(["head", "tail"])
 	})
+
+	it("routes response parsing failures through error interceptors", async () => {
+		const client = new HttpClient({
+			baseURL: "https://default.example.com",
+			getBaseURL(clusterCode: string) {
+				return `https://${clusterCode}.example.com`
+			},
+		})
+		const errors: unknown[] = []
+
+		client.addErrorInterceptor((error) => {
+			errors.push(error)
+			return error
+		})
+		globalThis.fetch = vi.fn().mockResolvedValue(
+			new Response("<html>bad gateway</html>", {
+				status: 502,
+				headers: { "Content-Type": "application/json" },
+			}),
+		) as typeof fetch
+
+		await expect(client.get("/parse-error")).rejects.toMatchObject({
+			name: "ResponseParseError",
+		})
+		expect(errors).toHaveLength(1)
+	})
 })

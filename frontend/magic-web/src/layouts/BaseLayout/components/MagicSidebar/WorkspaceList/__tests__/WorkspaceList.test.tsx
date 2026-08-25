@@ -88,7 +88,7 @@ vi.mock("@/components/shadcn-ui/sidebar", () => ({
 	),
 }))
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/utils/cn", () => ({
 	cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" "),
 }))
 

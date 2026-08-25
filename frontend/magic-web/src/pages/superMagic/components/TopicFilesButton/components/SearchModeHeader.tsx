@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Search, X } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface SearchModeHeaderProps {

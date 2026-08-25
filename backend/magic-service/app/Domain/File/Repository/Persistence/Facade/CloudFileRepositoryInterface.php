@@ -244,6 +244,20 @@ interface CloudFileRepositoryInterface
     ): string;
 
     /**
+     * Generate multiple pre-signed URLs with one temporary credential request.
+     *
+     * @param array<int, array{object_key:string, options?:array}> $items
+     * @return array<string, string> URLs indexed by object key
+     */
+    public function getPreSignedUrlsByCredential(
+        string $organizationCode,
+        array $items,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        int $credentialExpires = 7200,
+        array $options = []
+    ): array;
+
+    /**
      * Delete multiple objects by credential.
      *
      * @param string $prefix Prefix for the operation

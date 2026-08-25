@@ -9,7 +9,7 @@ import MagicPopup from "@/components/base-mobile/MagicPopup"
 import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
 import type { ActionGroup } from "@/pages/superMagicMobile/components/ActionSheet"
 import { Input } from "@/components/shadcn-ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import type { AudioProjectListItem, AudioRecordingCardStatus } from "@/types/audioProject"
@@ -1038,6 +1038,8 @@ export default function MobileAudioRecordingDetailPage() {
 									isEmptyStatus
 									createTopic={createTopicForComposer}
 									onSendSuccess={handleComposerSendSuccess}
+									// Detail Ask AI stays in text-editing mode even for the recording-summary agent.
+									allowRecordingMode={false}
 								/>
 							</div>
 						) : null}

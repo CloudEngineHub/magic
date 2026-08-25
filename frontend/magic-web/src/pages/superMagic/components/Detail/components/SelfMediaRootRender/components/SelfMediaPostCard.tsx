@@ -2,7 +2,7 @@ import { type CSSProperties, useCallback, useEffect, useState } from "react"
 import { BarChart3, ClipboardCheck, MoreHorizontal } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ScheduledTask } from "@/types/scheduledTask"
 import type { SelfMediaPlatform } from "../../../types"
 import type {

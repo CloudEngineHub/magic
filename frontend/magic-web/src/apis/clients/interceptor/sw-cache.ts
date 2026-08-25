@@ -7,7 +7,7 @@ import type { RequestConfig } from "../../core/HttpClient"
  * Appends `swCache=api-runtime` query parameter to whitelisted GET requests
  * when the SW cache feature toggle is enabled.
  */
-export function swCacheRequestInterceptor(config: RequestConfig): RequestConfig {
+export function swCacheRequestInterceptor(config: RequestConfig<Headers>): RequestConfig<Headers> {
 	// 默认开启 API 缓存，除非在环境变量中显式配置为 "false"
 	const enableApiCache = env("MAGIC_ENABLE_API_CACHE") !== "false"
 	const method = config.method ? config.method.toUpperCase() : "GET"

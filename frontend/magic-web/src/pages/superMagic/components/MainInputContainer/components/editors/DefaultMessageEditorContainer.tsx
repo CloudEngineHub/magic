@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
@@ -17,7 +17,11 @@ import {
 	preparePanelSend,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { roleStore } from "@/pages/superMagic/stores"
-import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import {
+	projectStore,
+	topicStore,
+	workspaceStore,
+} from "@/pages/superMagic/stores/core"
 import useSharedProjectMode from "@/pages/superMagic/hooks/useSharedProjectMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm"
@@ -26,12 +30,13 @@ import useTopicExamplesPortal from "@/pages/superMagic/hooks/useTopicExamplesPor
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import type { SceneEditorContext, SceneEditorNodes } from "./types"
 import { useOptionalSceneStateStore } from "../../stores"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import { buildQueueMessageInput } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import { useConversationInputLayout } from "../../../ConversationInputResize/context"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -47,6 +52,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const lt = useLocaleText()
 	const isMobile = useIsMobile()
 	const sceneStateStore = useOptionalSceneStateStore()
+	const inputLayout = useConversationInputLayout()
+	// Only fixed conversation panels ask the shared editor to occupy all available height.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 
 	const internalEditorRef = useRef<MessageEditorRef>(null)
 	const tiptapEditorRef = (editorRef ??
@@ -433,14 +441,20 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		() =>
 			editorContext
 				? {
-						className: editorContext.className,
+						className: cn(
+							editorContext.className,
+							shouldFillHeight && "h-full min-h-0",
+						),
 						containerClassName: cn(
 							editorContext.containerClassName,
+							shouldFillHeight && "h-full min-h-0",
+							// Let the shared resize controller own the desktop editor ceiling.
+							shouldFillHeight && "!max-h-none",
 							"border border-border",
 						),
 					}
 				: {},
-		[editorContext],
+		[editorContext, shouldFillHeight],
 	)
 
 	return (

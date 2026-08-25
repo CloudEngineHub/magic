@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"

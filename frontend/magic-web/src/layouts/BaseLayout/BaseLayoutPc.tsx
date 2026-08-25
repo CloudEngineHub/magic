@@ -16,7 +16,7 @@ import {
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
 import MagicSidebar from "./components/MagicSidebar"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useSidebarAnimation, useSidebarResponsive } from "./hooks"
 import { globalShareManagementStore } from "@/pages/superMagic/components/ShareManagement/stores"
 import { magic } from "@/enhance/magicElectron"

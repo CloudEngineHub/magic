@@ -16,7 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import FileMenuDropdown from "./FileMenuDropdown"
 import UploadMenuDropdown from "./UploadMenuDropdown"
 import { type PresetFileType } from "../constant"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface NormalModeHeaderProps {

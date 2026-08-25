@@ -14,7 +14,7 @@ import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
 	useTopicHistoryLayoutState,
 } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,

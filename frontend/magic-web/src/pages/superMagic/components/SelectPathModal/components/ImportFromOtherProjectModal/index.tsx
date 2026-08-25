@@ -13,7 +13,7 @@ import { Box, Mic, UsersRound } from "lucide-react"
 import { isEmpty } from "lodash-es"
 import { useTranslation } from "react-i18next"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"

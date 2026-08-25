@@ -1,5 +1,5 @@
 import { Topic } from "@/pages/superMagic/pages/Workspace/types"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 

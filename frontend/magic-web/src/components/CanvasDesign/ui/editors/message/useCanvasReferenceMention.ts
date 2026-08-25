@@ -1,5 +1,5 @@
 import { createElement, useMemo, useRef } from "react"
-import { NodeViewWrapper } from "@tiptap/react"
+import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type {
 	CanvasMentionAttributes,

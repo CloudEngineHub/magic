@@ -230,7 +230,8 @@ export const useUpload = <F extends FileUploadData>({
 						files: rejectedData
 							.map((r) => {
 								const reason = (r as PromiseRejectedResult).reason as
-									{ uploadFile?: { name?: string } } | undefined
+									| { uploadFile?: { name?: string } }
+									| undefined
 								return reason?.uploadFile?.name
 							})
 							.filter(Boolean),

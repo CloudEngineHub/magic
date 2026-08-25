@@ -5,7 +5,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import type { ScrollEdgeFadeColor } from "@/components/base-mobile/ScrollEdgeFade"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { OverlayZIndexScope } from "@/utils/overlayZIndex/overlayStackManager"
 
 import {

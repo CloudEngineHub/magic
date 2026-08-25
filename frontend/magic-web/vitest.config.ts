@@ -36,6 +36,14 @@ const getVitestBaseConfig = () => {
 		resolve: {
 			alias: [
 				{
+					find: "@customer/",
+					replacement: `${resolve(__dirname, "customer/src")}/`,
+				},
+				{
+					find: "@enterprise/",
+					replacement: `${resolve(__dirname, "enterprise/src")}/`,
+				},
+				{
 					find: "@admin/",
 					replacement: `${resolve(__dirname, "packages/magic-admin/src")}/`,
 				},

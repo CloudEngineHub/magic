@@ -20,10 +20,10 @@ use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as 
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\BuiltinSkill;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
+use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Util\File\EasyFileTools;
@@ -47,6 +47,9 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
 
     #[Inject]
     protected ResourceAccessPolicyService $resourceAccessPolicyService;
+
+    #[Inject]
+    protected SkillMarketDomainService $skillMarketDomainService;
 
     /**
      * 创建 Skill 数据隔离对象.
@@ -157,7 +160,10 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
         $currentUserSkillCodes = $this->skillDomainService->findCurrentUserSkillCodes($dataIsolation);
 
         $sharedSkillCodes = array_values(array_diff($accessibleSkillCodes, $currentUserSkillCodes));
-        $sharedSkillCodes = array_values(array_diff($sharedSkillCodes, BuiltinSkill::values()));
+        $sharedSkillCodes = array_values(array_diff(
+            $sharedSkillCodes,
+            $this->skillMarketDomainService->getOfficialBuiltinSkillCodes()
+        ));
 
         return [
             'codes' => $sharedSkillCodes,
@@ -190,7 +196,7 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
      */
     protected function mergeBuiltinSkillCodes(array $skillCodes, ?array $resourceCode = null): array
     {
-        $builtinSkillCodes = BuiltinSkill::values();
+        $builtinSkillCodes = $this->skillMarketDomainService->getOfficialBuiltinSkillCodes();
         if ($resourceCode !== null) {
             $builtinSkillCodes = array_values(array_intersect($builtinSkillCodes, $resourceCode));
         }

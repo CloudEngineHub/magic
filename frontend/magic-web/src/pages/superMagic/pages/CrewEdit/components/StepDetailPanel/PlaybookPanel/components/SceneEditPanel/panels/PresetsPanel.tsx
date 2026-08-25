@@ -46,7 +46,7 @@ import { Separator } from "@/components/shadcn-ui/separator"
 import { Switch } from "@/components/shadcn-ui/switch"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import type {
 	FieldItem,
 	LocaleText,

@@ -9,6 +9,7 @@ import {
 } from "react"
 import { createPPTEventBus, type PPTEventBus } from "../events/PPTEventBus"
 import { createPPTStore, type PPTStore, type PPTStoreConfig } from "../stores"
+import { getFolderScopedAttachmentSignature } from "./attachmentListSignature"
 import { usePPTStoreDisposal } from "./usePPTStoreDisposal"
 
 interface PPTContextValue {
@@ -29,24 +30,6 @@ function getJsonSignature(value: unknown): string {
 	} catch {
 		return String(value)
 	}
-}
-
-function getAttachmentListSignature(attachmentList: any[] | undefined): string {
-	if (!Array.isArray(attachmentList)) return ""
-
-	const normalize = (items: any[]): any[] =>
-		items.map((item) => ({
-			file_id: item?.file_id,
-			file_name: item?.file_name,
-			parent_id: item?.parent_id,
-			relative_file_path: item?.relative_file_path,
-			updated_at: item?.updated_at,
-			file_version: item?.file_version,
-			display_config: item?.display_config,
-			children: Array.isArray(item?.children) ? normalize(item.children) : undefined,
-		}))
-
-	return getJsonSignature(normalize(attachmentList))
 }
 
 /**
@@ -80,7 +63,10 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 	useLayoutEffect(() => {
 		const prev = prevConfigRef.current
 		const displayConfigSlidesSignature = getJsonSignature(storeConfig.displayConfig?.slides)
-		const attachmentListSignature = getAttachmentListSignature(storeConfig.attachmentList)
+		const attachmentListSignature = getFolderScopedAttachmentSignature(
+			storeConfig.attachmentList,
+			storeConfig.mainFileId,
+		)
 		const slidesChanged =
 			!prev || prev.displayConfigSlidesSignature !== displayConfigSlidesSignature
 		const attachmentListChanged =

@@ -10,7 +10,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuLabel,
 } from "@/components/shadcn-ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import ConditionalTooltip from "../../EditToolbar/ConditionalTooltip"
 import { TOOLBAR_Z_INDEX } from "../../../constants/z-index"
@@ -86,6 +86,7 @@ export function VersionHistorySelector({
 						<Button
 							variant="outline"
 							size="sm"
+							data-testid="ppt-version-history-trigger"
 							onClick={() => {
 								fetchFileVersions(fileId)
 							}}
@@ -123,6 +124,7 @@ export function VersionHistorySelector({
 							return (
 								<DropdownMenuItem
 									key={item.version}
+									data-testid="ppt-version-history-item"
 									onClick={() => handleVersionItemClick(item.version, isLatest)}
 									className={cn(
 										"flex items-start gap-3 px-3 py-2",

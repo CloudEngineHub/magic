@@ -1,5 +1,5 @@
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useHover, useMemoizedFn } from "ahooks"
 import { useMemo, useRef, lazy } from "react"
 import useProjectRename from "@/pages/superMagic/hooks/useProjectRename"
