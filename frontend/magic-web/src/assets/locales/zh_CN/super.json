@@ -233,6 +233,14 @@
 		"workspaceSwitcherPrefix": "工作空间",
 		"workspaceSwitcherRefresh": "刷新工作区列表"
 	},
+	"attachmentList": {
+		"downloadAll": "下载全部文件",
+		"empty": "暂无相关文件",
+		"noMatch": "未找到相关文件",
+		"previewUnsupported": "暂不支持预览该文件,请下载该文件",
+		"projectFiles": "项目文件",
+		"searchFiles": "搜索文件"
+	},
 	"browserDetail": {
 		"addressUnavailable": "地址不可用",
 		"detail": "详情",
@@ -544,6 +552,16 @@
 	"deletedFile": {
 		"message": "文件已被删除，无法预览",
 		"status": "已删除"
+	},
+	"deployedWebsites": {
+		"delete": "删除",
+		"empty": "暂无创建的网站",
+		"fetchFailed": "获取部署网站列表失败",
+		"openLink": "打开链接",
+		"searchPlaceholder": "搜索网站",
+		"setPermission": "设置权限",
+		"subtitle": "管理您通过超级麦吉生成的网站",
+		"title": "创建的网站"
 	},
 	"design": {
 		"actions": {
@@ -2921,6 +2939,16 @@
 		"untitledDocument": "未命名文档",
 		"wordCount": "{{count}} 字"
 	},
+	"markedFiles": {
+		"action": "操作",
+		"fetchFailed": "获取标记文件列表失败",
+		"fileName": "文件名",
+		"markedTime": "标记时间",
+		"relatedTopic": "对应话题",
+		"searchPlaceholder": "搜索文件",
+		"subtitle": "您可以在这里查看所有标记的文件，并进行管理。",
+		"title": "标记的文件"
+	},
 	"messageEditor": {
 		"addAttachment": "添加附件",
 		"addModel": {
@@ -5142,6 +5170,23 @@
 		"uploadFolderTip": "请选择文件夹的存储位置，整个文件夹结构将保持完整并保存到所选位置。",
 		"workspace": "工作空间"
 	},
+	"selfMedia": {
+		"avgInteractionRate": "平均互动率",
+		"avgReads": "篇均阅读 {{value}}",
+		"comments": "评论",
+		"likes": "点赞",
+		"opsSummaryTitle": "发布后数据汇总",
+		"polish": "润色",
+		"polishing": "润色中…",
+		"readingData": "读取数据",
+		"saves": "收藏",
+		"shares": "分享",
+		"syncedProgress": "已同步 {{synced}}/{{total}}",
+		"syncing": "同步中",
+		"totalInteractions": "总互动",
+		"totalReads": "总阅读",
+		"waitingSync": "等待发布后同步"
+	},
 	"share": {
 		"accessCount": "访问次数",
 		"accessPassword": "访问密码",
@@ -5537,6 +5582,29 @@
 		"unknownCreator": "未知分享人",
 		"unknownTime": "未知时间"
 	},
+	"sharedTopics": {
+		"action": "操作",
+		"batchAction": "批量操作",
+		"batchUnmarkContent": "确定要取消选中的 {{count}} 个文件的标记吗？",
+		"batchUnmarkSuccess": "已批量取消标记",
+		"batchUnmarkTitle": "批量取消标记",
+		"cancel": "取消",
+		"confirm": "确定",
+		"emptyMarked": "暂无标记的文件",
+		"fetchFailed": "获取标记文件列表失败",
+		"markedTime": "标记时间",
+		"searchPlaceholder": "搜索话题",
+		"selectMarkedFirst": "请先选择标记文件",
+		"setPermission": "设置权限",
+		"shareMethod": "分享方式",
+		"subtitle": "管理对外分享的话题",
+		"title": "分享的话题",
+		"topicName": "话题名称",
+		"unmarkFailed": "取消失败",
+		"unselect": "取消选中",
+		"unshare": "取消分享",
+		"workspace": "工作区"
+	},
 	"shortcut": {
 		"addToConversation": "内容添加到对话",
 		"addToTaskQueue": "添加到任务队列",
@@ -5564,6 +5632,27 @@
 		"updateCurrentQueueMessage": "更新当前队列消息",
 		"uploadingFiles": "正在上传文件，请稍后...",
 		"viewShortcuts": "查看快捷键"
+	},
+	"siderDashboard": {
+		"addDirectory": "添加目录",
+		"addFavorite": "添加收藏",
+		"addToCurrentChat": "添加到当前会话",
+		"addToNewChat": "添加到新会话",
+		"copyToCloud": "复制至云盘",
+		"delete": "删除",
+		"downloadFile": "下载文件",
+		"downloadOriginal": "下载原始文件",
+		"downloadPdf": "下载 PDF 格式",
+		"emptyBoard": "暂无数据看板",
+		"emptyDefault": "暂无数据",
+		"noMatch": "无匹配结果",
+		"openBoard": "打开看板",
+		"openFile": "打开文件",
+		"removeFavorite": "从收藏中移除",
+		"rename": "重命名",
+		"replaceFile": "替换文件",
+		"searchBoard": "搜索看板",
+		"shareBoard": "分享看板"
 	},
 	"slidesTemplatePreview": {
 		"save": {
