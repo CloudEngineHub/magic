@@ -3,6 +3,7 @@ import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
 import type { Canvas } from "../runtime/core/Canvas"
 import type { MagicConfig } from "./magic-types"
+import type { ResolveCanvasResourceReference } from "./resource-reference"
 import type {
 	CanvasDeviceInfo,
 	CanvasDesignPluginModuleConfig,
@@ -118,6 +119,8 @@ export interface ReferenceResourcePanelLimitInfo {
 	}>
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	/** 宿主资源解析器，用于区分工作区路径、画布路径与 opaque URI。 */
+	resolveResourceReference?: ResolveCanvasResourceReference
 	/** 面包屑等展示用文案前缀（如「当前项目文件」） */
 	projectFilesPathPrefix?: string
 	/**

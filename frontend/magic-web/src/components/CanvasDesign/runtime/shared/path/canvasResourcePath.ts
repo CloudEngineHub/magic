@@ -1,4 +1,9 @@
 import type { UploadFileResponse } from "../../../public/magic-types"
+import type {
+	CanvasResourceReferenceResolution,
+	CanvasResourceReferenceResolveOptions,
+	ResolveCanvasResourceReference,
+} from "../../../public/resource-reference"
 import {
 	CANVAS_RESOURCE_ROOTS,
 	buildVirtualResourceScope,
@@ -6,6 +11,7 @@ import {
 	getCanonicalResourcePathInfo as getCanonicalResourcePathInfoInternal,
 	hasCurrentDirectoryPrefix,
 	isCanvasRelativeResourcePath as isCanvasRelativeResourcePathInternal,
+	isOpaqueAssetReference,
 	isRemoteOrSpecialPath,
 	joinUploadStoragePath as joinUploadStoragePathInternal,
 	normalizePathSeparators,
@@ -22,6 +28,7 @@ export {
 	buildVirtualResourceScope,
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
+	isOpaqueAssetReference,
 	isRemoteOrSpecialPath,
 	normalizePathSeparators,
 	stripCurrentDirectoryPrefix,
@@ -89,6 +96,52 @@ export function areCanvasResourcePathsSame(
 /** 用于跨编辑器、关联媒体与参考资源状态比较的稳定资源身份。 */
 export function getCanvasResourceIdentity(path?: string): string {
 	return path ? toCanonicalCanvasResourcePath(path) : ""
+}
+
+/** Resolve a Canvas-stored path through the host's namespace-aware resolver when available. */
+export function resolveCanvasStorageResourceReference(
+	path: string,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+	options?: CanvasResourceReferenceResolveOptions,
+): CanvasResourceReferenceResolution | undefined {
+	if (!resolveResourceReference) return undefined
+	const trimmedPath = path.trim()
+	const isLegacyBareResource =
+		!trimmedPath.startsWith("/") &&
+		!hasCurrentDirectoryPrefix(trimmedPath) &&
+		!isRemoteOrSpecialPath(trimmedPath) &&
+		isCanvasResourceRootPath(trimmedPath)
+	return resolveResourceReference(
+		{
+			namespace: "canvas-storage",
+			path: trimmedPath,
+			mode: isLegacyBareResource ? "legacy-recovery" : "strict-current-canvas",
+		},
+		options,
+	)
+}
+
+/** Resolver-aware identity; falls back to legacy path identity when no host resolver is injected. */
+export function getCanvasResourceReferenceIdentity(
+	path?: string,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): string {
+	const trimmedPath = path?.trim() ?? ""
+	if (!trimmedPath) return ""
+	const resolution = resolveCanvasStorageResourceReference(trimmedPath, resolveResourceReference)
+	if (resolution?.status === "resolved") return resolution.identity
+	return getCanvasResourceIdentity(trimmedPath)
+}
+
+export function areCanvasResourceReferencesSame(
+	left: string,
+	right: string,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	return (
+		getCanvasResourceReferenceIdentity(left, resolveResourceReference) ===
+		getCanvasResourceReferenceIdentity(right, resolveResourceReference)
+	)
 }
 
 export function toCanvasUploadStoragePath(fileDir: string, fileName: string): string {

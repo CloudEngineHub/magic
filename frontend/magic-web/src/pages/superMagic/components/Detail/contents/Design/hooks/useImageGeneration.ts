@@ -26,7 +26,7 @@ import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { toCanvasGenerateHightImageResponse } from "./useHighImageGeneration"
-import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
+import { resolveDesignCanvasResourceApiUri } from "../utils/designResourceReferenceResolver"
 import {
 	syncFileInfoAfterGenerationComplete,
 	syncFileInfosAfterGenerationComplete,
@@ -381,7 +381,7 @@ function resolveReferenceImagePath(params: {
 	getErrorMessage: () => string
 }): string {
 	const { imagePath, designProjectBasePath, flatAttachments, getErrorMessage } = params
-	const resolved = toWorkspaceAbsoluteApiPathForOperation(imagePath, {
+	const resolved = resolveDesignCanvasResourceApiUri(imagePath, {
 		designProjectBasePath,
 		flatAttachments,
 	})
