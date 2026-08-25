@@ -248,7 +248,8 @@ const OfficialSkillImportDialog = memo(
 						t("officialSkillImport.defaultSource"),
 					),
 					logo: parsedResult.logo || "",
-					category_ids: parsedResult.categories?.map((category) => String(category.id)) ?? [],
+					category_ids:
+						parsedResult.categories?.map((category) => String(category.id)) ?? [],
 					is_hidden: parsedResult.is_hidden ?? false,
 					is_featured: parsedResult.is_featured ?? false,
 					sort_order: parsedResult.sort_order ?? 0,
@@ -476,54 +477,6 @@ const OfficialSkillImportDialog = memo(
 					{parsed ? (
 						<>
 							<MagicForm form={form} layout="vertical" afterRequiredMask>
-								<LocalizedField
-									form={form}
-									field="name_i18n"
-									label={t("officialSkillImport.fields.name")}
-									placeholder={t("officialSkillImport.fields.namePlaceholder")}
-									required
-								/>
-								<LocalizedField
-									form={form}
-									field="description_i18n"
-									label={t("officialSkillImport.fields.description")}
-									placeholder={t(
-										"officialSkillImport.fields.descriptionPlaceholder",
-									)}
-									required
-									textarea
-								/>
-								<LocalizedField
-									form={form}
-									field="source_i18n"
-									label={t("officialSkillImport.fields.source")}
-									placeholder={t("officialSkillImport.fields.sourcePlaceholder")}
-								/>
-								<Flex gap={12}>
-									<Form.Item
-										label={t("officialSkillImport.fields.version")}
-										name="version"
-										rules={[{ required: true, message: "" }]}
-										style={{ flex: 1 }}
-									>
-										<MagicInput placeholder="1.0.0" maxLength={32} />
-									</Form.Item>
-								</Flex>
-								<Form.Item
-									label={t("officialSkillImport.fields.category")}
-									name="category_ids"
-								>
-									<Select
-										mode="multiple"
-										allowClear
-										loading={categoriesLoading}
-										options={categoryOptions}
-										placeholder={t(
-											"officialSkillImport.fields.categoryPlaceholder",
-										)}
-										maxTagCount="responsive"
-									/>
-								</Form.Item>
 								<Form.Item label={t("officialSkillImport.fields.logo")}>
 									{/* Match the frontend Skill import affordance: square preview with upload below. */}
 									<Flex vertical align="center" gap={8} style={{ width: 128 }}>
@@ -573,6 +526,54 @@ const OfficialSkillImportDialog = memo(
 								</Form.Item>
 								<Form.Item name="logo" hidden>
 									<MagicInput />
+								</Form.Item>
+								<LocalizedField
+									form={form}
+									field="name_i18n"
+									label={t("officialSkillImport.fields.name")}
+									placeholder={t("officialSkillImport.fields.namePlaceholder")}
+									required
+								/>
+								<LocalizedField
+									form={form}
+									field="description_i18n"
+									label={t("officialSkillImport.fields.description")}
+									placeholder={t(
+										"officialSkillImport.fields.descriptionPlaceholder",
+									)}
+									required
+									textarea
+								/>
+								<LocalizedField
+									form={form}
+									field="source_i18n"
+									label={t("officialSkillImport.fields.source")}
+									placeholder={t("officialSkillImport.fields.sourcePlaceholder")}
+								/>
+								<Flex gap={12}>
+									<Form.Item
+										label={t("officialSkillImport.fields.version")}
+										name="version"
+										rules={[{ required: true, message: "" }]}
+										style={{ flex: 1 }}
+									>
+										<MagicInput placeholder="1.0.0" maxLength={32} />
+									</Form.Item>
+								</Flex>
+								<Form.Item
+									label={t("officialSkillImport.fields.category")}
+									name="category_ids"
+								>
+									<Select
+										mode="multiple"
+										allowClear
+										loading={categoriesLoading}
+										options={categoryOptions}
+										placeholder={t(
+											"officialSkillImport.fields.categoryPlaceholder",
+										)}
+										maxTagCount="responsive"
+									/>
 								</Form.Item>
 								<Flex align="center" gap={16} wrap="nowrap">
 									<Form.Item
