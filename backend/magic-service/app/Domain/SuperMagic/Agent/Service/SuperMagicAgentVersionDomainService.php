@@ -30,6 +30,7 @@ use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\DataIsolation\ValueObject\OrganizationType;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\VersionUtil;
 use Hyperf\DbConnection\Annotation\Transactional;
 
 /**
@@ -68,6 +69,24 @@ class SuperMagicAgentVersionDomainService
     public function findLatestVersionByCreatedAt(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?AgentVersionEntity
     {
         return $this->agentVersionRepository->findLatestByCreatedAtDesc($dataIsolation, $code);
+    }
+
+    public function existsByCodeAndVersion(SuperMagicAgentDataIsolation $dataIsolation, string $code, string $version): bool
+    {
+        return $this->agentVersionRepository->existsByCodeAndVersion($dataIsolation, $code, $version);
+    }
+
+    public function getNextAvailableVersion(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code,
+        ?string $latestVersion
+    ): string {
+        $nextVersion = VersionUtil::getNextVersion($latestVersion);
+        while ($this->existsByCodeAndVersion($dataIsolation, $code, $nextVersion)) {
+            $nextVersion = VersionUtil::getNextVersion($nextVersion);
+        }
+
+        return $nextVersion;
     }
 
     public function getCurrentOrLatestByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?AgentVersionEntity
@@ -336,7 +355,7 @@ class SuperMagicAgentVersionDomainService
         $marketEntity->setIcon($versionEntity->getIcon());
         $marketEntity->setPublisherId($versionEntity->getCreator());
         $marketEntity->setPublisherType(PublisherType::USER);
-        $marketEntity->setCategoryId($versionEntity->getCategoryId());
+        $marketEntity->setCategoryIds($this->categoryRelationDomainService->getVersionCategoryIds((int) $versionEntity->getId()));
         $marketEntity->setPublishStatus(PublishStatus::PUBLISHED);
         $marketEntity->setOrganizationCode($versionEntity->getOrganizationCode());
         $marketEntity->setMarketType(AgentMarketType::ORGANIZATION);
@@ -439,7 +458,8 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setIcon($versionEntity->getIcon());
             $storeAgentEntity->setPublisherId($versionEntity->getCreator());
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
-            $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
+            $categoryIds = $this->categoryRelationDomainService->getVersionCategoryIds((int) $versionEntity->getId());
+            $storeAgentEntity->setCategoryIds($categoryIds);
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
             // 归属组织用于文件等资源上下文，公开性质由 market_type 明确定义。
             $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
@@ -465,10 +485,6 @@ class SuperMagicAgentVersionDomainService
 
             $storeAgentEntity = $this->storeAgentRepository->saveOrUpdate($dataIsolation, $storeAgentEntity);
             if ($storeAgentEntity->getId() !== null) {
-                $categoryIds = $this->categoryRelationDomainService->getVersionCategoryIds(
-                    (int) $versionEntity->getId(),
-                    $versionEntity->getCategoryId()
-                );
                 $this->categoryRelationDomainService->replaceMarketCategories(
                     $dataIsolation,
                     $storeAgentEntity->getId(),

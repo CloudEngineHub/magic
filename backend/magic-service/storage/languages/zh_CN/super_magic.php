@@ -78,6 +78,7 @@ return [
         'agent_version_not_found' => 'Agent 版本未找到',
         'can_only_review_pending_version' => '只能审核待审核的版本',
         'version_already_exists' => '版本号已存在',
+        'invalid_version_format' => '版本号格式不正确，仅支持 1.0、1.0.0、v1.0、v1.0.0、V1.0 或 V1.0.0',
         'publish_target_type_invalid' => '发布对象类型无效',
         'publish_target_value_should_be_empty' => '当前发布对象不允许传 publish_target_value',
         'publish_target_value_required' => '当前发布对象必须传 publish_target_value',
