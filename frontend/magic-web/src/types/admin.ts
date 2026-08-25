@@ -251,6 +251,72 @@ export namespace Admin {
 		refunded_at: string
 		expired_at: string
 		product_name: string
+		/** 是否允许申请发票；字段缺失时兼容旧接口，按可开票处理。 */
+		invoiceable?: boolean
+		/** 列表返回的开票状态：NONE 未申请、PENDING 开票中、ISSUED 已开具。 */
+		invoice_status?: string | null
+	}
+
+	/** 获取最近一次开票资料 */
+	export interface InvoiceRequestLatest {
+		title_type: string
+		invoice_type: string
+		title: string | null
+		tax_no: string | null
+		registered_address: string | null
+		registered_phone: string | null
+		bank_name: string | null
+		bank_account: string | null
+		email: string | null
+		phone: string | null
+	}
+
+	/** 提交开票申请 */
+	export interface SubmitInvoiceRequestParams {
+		order_ids: string[]
+		title_type: "ENTERPRISE" | "PERSONAL"
+		invoice_type: "NORMAL" | "SPECIAL"
+		title: string
+		tax_no: string
+		registered_address?: string
+		registered_phone?: string
+		bank_name?: string
+		bank_account?: string
+		email: string
+	}
+
+	export interface InvoiceRequestItem {
+		id: string
+		order_id: string
+		order_no: string
+		product_name: string
+		amount: number
+	}
+
+	export interface InvoiceRequestDetail {
+		id: string
+		organization_code: string
+		organization_name: string
+		user_id: string
+		nick_name: string
+		mobile: string
+		amount: number
+		currency: string
+		title_type: string
+		invoice_type: string
+		title: string | null
+		tax_no: string | null
+		registered_address: string | null
+		registered_phone: string | null
+		bank_name: string | null
+		bank_account: string | null
+		email: string | null
+		phone: string | null
+		status: string
+		issued_at: string | null
+		issuer_id: string | null
+		created_at: string
+		items: InvoiceRequestItem[]
 	}
 
 	/** 组织当前订阅的套餐 */
