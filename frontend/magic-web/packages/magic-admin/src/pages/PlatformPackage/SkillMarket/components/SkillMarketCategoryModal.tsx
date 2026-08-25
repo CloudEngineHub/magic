@@ -337,6 +337,7 @@ export const SkillMarketCategoryModal = memo(
 						columns={columns}
 						dataSource={data}
 						rowKey="id"
+						childrenColumnName="__categoryChildren"
 						loading={loading}
 						scroll={{ x: "max-content", y: 420 }}
 						pagination={false}

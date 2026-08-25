@@ -12,6 +12,8 @@ vi.mock("react-i18next", () => ({
 					return "已添加"
 				case "skillsLibrary.official":
 					return "官方"
+				case "employeeCard.officialBuiltin":
+					return "官方内置"
 				case "skillsLibrary.community":
 					return "社区"
 				case "skillsLibrary.updatedAt":
@@ -59,6 +61,12 @@ describe("SkillCard", () => {
 		expect(screen.getByTestId("skill-card-install-count")).toHaveTextContent("1,234 次安装")
 		expect(screen.queryByTestId("skill-card-featured")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("skill-card-category")).not.toBeInTheDocument()
+	})
+
+	it("shows official built-in skills with the dedicated publisher label", () => {
+		render(<SkillCard skill={createSkill({ publisherType: "OFFICIAL_BUILTIN" })} />)
+
+		expect(screen.getByTestId("skill-card-source-badge")).toHaveTextContent("官方内置")
 	})
 
 	it("shows the featured tag only when rendered inside the featured section", () => {
