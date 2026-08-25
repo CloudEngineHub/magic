@@ -19,6 +19,7 @@ use App\Application\Speech\Enum\AsrRecordingStatusEnum;
 use App\Application\Speech\Enum\AsrTaskStatusEnum;
 use App\Application\Speech\Event\AsrSummaryMessage;
 use App\Application\Speech\Event\Publish\AsrSummaryPublisher;
+use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Asr\Constants\AsrConfig;
 use App\Domain\Asr\Constants\AsrRedisKeys;
 use App\Domain\Asr\Service\AsrTaskDomainService;
@@ -28,27 +29,27 @@ use App\Domain\Chat\Service\MagicChatDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\SuperMagic\File\Entity\AudioProjectEntity;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Message\Service\MessageQueueDomainService;
+use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Event\ProjectDeletedEvent;
+use App\Domain\SuperMagic\Project\Event\ProjectHiddenStatusUpdatedEvent;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus as SuperAgentTaskStatus;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\ErrorCode\AsrErrorCode;
 use App\ErrorCode\GenericErrorCode;
+use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\AudioProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus as SuperAgentTaskStatus;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\ProjectHiddenStatusUpdatedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\AudioProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageQueueDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
-use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
-use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Hyperf\Amqp\Producer;
 use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Coroutine\Coroutine;
@@ -3080,7 +3081,14 @@ class AsrFileAppService extends AbstractAppService
 
             // 删除项目
             try {
-                $this->projectDomainService->deleteProject((int) $taskStatus->projectId, $taskStatus->userId);
+                $project = $this->projectDomainService->getProjectNotUserId((int) $taskStatus->projectId);
+                $deleted = $this->projectDomainService->deleteProject((int) $taskStatus->projectId, $taskStatus->userId);
+                if ($deleted && $project !== null) {
+                    $authorization = (new MagicUserAuthorization())
+                        ->setId($taskStatus->userId)
+                        ->setOrganizationCode((string) $taskStatus->organizationCode);
+                    $this->eventDispatcher->dispatch(new ProjectDeletedEvent($project, $authorization));
+                }
                 $this->logger->info('删除空项目成功', [
                     'task_key' => $taskStatus->taskKey,
                     'project_id' => $taskStatus->projectId,

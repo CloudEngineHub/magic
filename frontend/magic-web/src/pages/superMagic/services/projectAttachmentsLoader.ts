@@ -86,6 +86,11 @@ export interface ProjectAttachmentsLoaderOptions {
 	pageSize?: number
 	signal?: AbortSignal
 	onBatchSnapshot?: (payload: ProjectAttachmentsBatchSnapshotPayload) => void
+	/**
+	 * Keep is_hidden files in the processed tree/list for path lookup.
+	 * Default false preserves the visible-only contract for file panels.
+	 */
+	includeHidden?: boolean
 }
 
 class ProjectAttachmentsBfsAnomalyError extends Error {
@@ -102,7 +107,7 @@ class ProjectAttachmentsAbortError extends Error {
 	}
 }
 
-const DEFAULT_THRESHOLD = 1000
+const DEFAULT_THRESHOLD = 0
 const DEFAULT_PAGE_SIZE = 1000
 const MIDDLE_BATCH_SNAPSHOT_MIN_GAP_MS = 2500
 const MIDDLE_BATCH_SNAPSHOT_IDLE_TIMEOUT_MS = 1200
@@ -420,9 +425,12 @@ async function loadAttachmentsViaV2(params: {
 	rawTotal?: number
 	onBatchSnapshot?: ProjectAttachmentsLoaderOptions["onBatchSnapshot"]
 	signal?: AbortSignal
+	includeHidden?: boolean
 }): Promise<ProjectAttachmentsLoadResult> {
 	// V2 uses backend cursors for BFS paging; builder emits optional page snapshots.
-	const builder = createProjectAttachmentsV2Builder()
+	const builder = createProjectAttachmentsV2Builder({
+		includeHidden: params.includeHidden,
+	})
 	const batchSnapshotScheduler = createProjectAttachmentsBatchSnapshotScheduler(
 		params.onBatchSnapshot,
 		{ signal: params.signal },
@@ -583,6 +591,7 @@ export async function loadProjectAttachments(
 				rawTotal,
 				onBatchSnapshot: options.onBatchSnapshot,
 				signal: options.signal,
+				includeHidden: options.includeHidden,
 			})
 		} catch (error) {
 			// Abort is normal on user switches; do not swallow it and fallback to V1.

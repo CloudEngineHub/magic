@@ -67,7 +67,8 @@ export class VoiceClientProxy {
 			this.worker.postMessage(message)
 			logger.log(`[Proxy] Packet logging ${enabled ? "enabled" : "disabled"}`)
 			console.log(
-				`[VoiceClientProxy] Packet logging to IndexedDB has been ${enabled ? "enabled" : "disabled"
+				`[VoiceClientProxy] Packet logging to IndexedDB has been ${
+					enabled ? "enabled" : "disabled"
 				}`,
 			)
 		}
@@ -75,14 +76,14 @@ export class VoiceClientProxy {
 		// Add to window object with proper typing
 		if (typeof window !== "undefined") {
 			// Extend window interface for better type checking
-			; (window as any).voiceClientDebug = {
+			;(window as any).voiceClientDebug = {
 				exportPacketLogs,
 				setPacketLoggingEnabled,
 			}
 
-				// Backward compatibility - keep direct methods on window
-				; (window as any).exportPacketLogs = exportPacketLogs
-				; (window as any).setPacketLoggingEnabled = setPacketLoggingEnabled
+			// Backward compatibility - keep direct methods on window
+			;(window as any).exportPacketLogs = exportPacketLogs
+			;(window as any).setPacketLoggingEnabled = setPacketLoggingEnabled
 		}
 	}
 
@@ -101,7 +102,12 @@ export class VoiceClientProxy {
 			await this.waitForWorkerReady()
 			logger.log("[Proxy] Worker initialization completed successfully")
 		} catch (error) {
-			logger.error(`[Proxy] Failed to initialize Voice Worker: ${(error as Error).message}`)
+			logger.error({
+				eventKey: "voice_worker_initialization_failed",
+				errorKind: "worker",
+				error,
+				message: "[Proxy] Failed to initialize Voice Worker",
+			})
 			throw new Error(`Failed to initialize Voice Worker: ${(error as Error).message}`)
 		}
 	}
@@ -109,8 +115,14 @@ export class VoiceClientProxy {
 	private waitForWorkerReady(): Promise<void> {
 		return new Promise((resolve, reject) => {
 			const timeout = setTimeout(() => {
-				logger.error("[Proxy] Worker initialization timeout after 5 seconds")
-				reject(new Error("Worker initialization timeout"))
+				const error = new Error("Worker initialization timeout")
+				logger.error({
+					eventKey: "voice_worker_initialization_timeout",
+					errorKind: "timeout",
+					error,
+					message: "[Proxy] Worker initialization timeout after 5 seconds",
+				})
+				reject(error)
 			}, 5000)
 
 			const checkReady = (event: MessageEvent<MainThreadMessage>) => {
@@ -128,7 +140,11 @@ export class VoiceClientProxy {
 			if (this.worker) {
 				this.worker.addEventListener("message", checkReady)
 			} else {
-				logger.error("[Proxy] Worker not initialized when waiting for ready state")
+				logger.error({
+					eventKey: "voice_worker_not_ready",
+					errorKind: "worker",
+					message: "[Proxy] Worker not initialized when waiting for ready state",
+				})
 				reject(new Error("Worker not initialized"))
 			}
 		})
@@ -192,12 +208,22 @@ export class VoiceClientProxy {
 	}
 
 	private handleWorkerError(error: ErrorEvent): void {
-		logger.error("[Proxy] Worker error:", error)
+		logger.error({
+			eventKey: "proxy_worker_failed",
+			errorKind: "worker",
+			error: error,
+			message: "[Proxy] Worker error:",
+		})
 		this.emit("error", `Worker error: ${error.message}`, "WORKER_ERROR")
 	}
 
 	private handleWorkerMessageError(error: MessageEvent): void {
-		logger.error("[Proxy] Worker message error:", error)
+		logger.error({
+			eventKey: "proxy_worker_message_failed",
+			errorKind: "worker",
+			error: error,
+			message: "[Proxy] Worker message error:",
+		})
 		this.emit("error", "Worker message error", "WORKER_MESSAGE_ERROR")
 	}
 
@@ -235,12 +261,12 @@ export class VoiceClientProxy {
 					"status",
 					typedPayload.message as string,
 					typedPayload.state as
-					| "connecting"
-					| "connected"
-					| "recording"
-					| "error"
-					| "reconnecting"
-					| "stop",
+						| "connecting"
+						| "connected"
+						| "recording"
+						| "error"
+						| "reconnecting"
+						| "stop",
 				)
 				break
 			case "open":
@@ -308,7 +334,7 @@ export class VoiceClientProxy {
 	): void {
 		const callback = this.events[event]
 		if (callback) {
-			; (
+			;(
 				callback as unknown as (
 					...args: Parameters<NonNullable<VoiceClientEvents[K]>>
 				) => void
@@ -318,7 +344,11 @@ export class VoiceClientProxy {
 
 	async connect(recordingId?: string): Promise<void> {
 		if (this.disposed) {
-			logger.error("[Proxy] Cannot connect: VoiceClient has been disposed")
+			logger.error({
+				eventKey: "disposed_voice_client_connect_failed",
+				errorKind: "network",
+				message: "[Proxy] Cannot connect: VoiceClient has been disposed",
+			})
 			throw new Error("VoiceClient has been disposed")
 		}
 
@@ -339,7 +369,12 @@ export class VoiceClientProxy {
 			await this.sendMessage(message)
 			logger.log("[Proxy] Connect message sent successfully")
 		} catch (error) {
-			logger.error(`[Proxy] Connection failed: ${(error as Error).message}`)
+			logger.error({
+				eventKey: "voice_worker_connection_failed",
+				errorKind: "network",
+				error,
+				message: "[Proxy] Connection failed",
+			})
 			throw error
 		}
 	}
@@ -356,7 +391,12 @@ export class VoiceClientProxy {
 			await this.sendMessage(message)
 			logger.log("[Proxy] Disconnect message sent successfully")
 		} catch (error) {
-			logger.error(`[Proxy] Disconnect failed: ${(error as Error).message}`)
+			logger.error({
+				eventKey: "voice_worker_disconnect_failed",
+				errorKind: "network",
+				error,
+				message: "[Proxy] Disconnect failed",
+			})
 			throw error
 		}
 	}
@@ -410,14 +450,22 @@ export class VoiceClientProxy {
 				}
 			})
 		} else {
-			logger.error("[Proxy] Cannot queue audio: Worker not available")
+			logger.error({
+				eventKey: "audio_queue_worker_unavailable",
+				errorKind: "worker",
+				message: "[Proxy] Cannot queue audio: Worker not available",
+			})
 			throw new Error("Worker not available")
 		}
 	}
 
 	async batchQueueAudio(audioDataList: ArrayBuffer[]): Promise<void> {
 		if (!audioDataList || audioDataList.length === 0) {
-			logger.error("[Proxy] Cannot batch queue: No audio data provided")
+			logger.error({
+				eventKey: "batch_audio_queue_empty",
+				errorKind: "unknown",
+				message: "[Proxy] Cannot batch queue: No audio data provided",
+			})
 			throw new Error("No audio data provided for batch queueing")
 		}
 
@@ -455,7 +503,11 @@ export class VoiceClientProxy {
 				}
 			})
 		} else {
-			logger.error("[Proxy] Cannot batch queue audio: Worker not available")
+			logger.error({
+				eventKey: "batch_audio_queue_worker_unavailable",
+				errorKind: "worker",
+				message: "[Proxy] Cannot batch queue audio: Worker not available",
+			})
 			throw new Error("Worker not available")
 		}
 	}
@@ -472,7 +524,12 @@ export class VoiceClientProxy {
 			await this.sendMessage(message)
 			logger.log("[Proxy] Audio sending started successfully")
 		} catch (error) {
-			logger.error(`[Proxy] Failed to start sending: ${(error as Error).message}`)
+			logger.error({
+				eventKey: "start_audio_sending_failed",
+				errorKind: "unknown",
+				error,
+				message: "[Proxy] Failed to start sending",
+			})
 			throw error
 		}
 	}
@@ -489,7 +546,12 @@ export class VoiceClientProxy {
 			await this.sendMessage(message)
 			logger.log("[Proxy] Audio sending stopped successfully")
 		} catch (error) {
-			logger.error(`[Proxy] Failed to stop sending: ${(error as Error).message}`)
+			logger.error({
+				eventKey: "stop_audio_sending_failed",
+				errorKind: "unknown",
+				error,
+				message: "[Proxy] Failed to stop sending",
+			})
 			throw error
 		}
 	}

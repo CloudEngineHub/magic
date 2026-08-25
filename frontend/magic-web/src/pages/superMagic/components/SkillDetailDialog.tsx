@@ -27,7 +27,7 @@ import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
 import { downloadFileContent } from "@/pages/superMagic/utils/api"
 import {

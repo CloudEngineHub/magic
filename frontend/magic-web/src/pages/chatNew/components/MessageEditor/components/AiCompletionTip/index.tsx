@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite"
 import AiCompletionTipStore from "@/stores/chatNew/editor/AiCompletionTip"
 import image from "./ai-completion-tip.svg"
 import { useMemo } from "react"
+import { createPortal } from "react-dom"
 
 const useStyles = createStyles(({ token }) => ({
 	tip: {
@@ -37,7 +38,7 @@ const AiCompletionTip = observer(({ icon }: { icon?: string }) => {
 		}
 	}, [position.left, position.top, visible])
 
-	return (
+	const tip = (
 		<div className={styles.tip} style={divStyles}>
 			<img
 				src={icon || image}
@@ -46,6 +47,8 @@ const AiCompletionTip = observer(({ icon }: { icon?: string }) => {
 			/>
 		</div>
 	)
+
+	return createPortal(tip, document.body)
 })
 
 export default AiCompletionTip

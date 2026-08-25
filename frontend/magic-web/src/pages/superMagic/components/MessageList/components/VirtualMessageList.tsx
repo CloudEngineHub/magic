@@ -1,7 +1,7 @@
 import { memo, type MutableRefObject, type ReactNode, useMemo } from "react"
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import MessageRenderErrorBoundary from "./MessageRenderErrorBoundary"
@@ -18,6 +18,7 @@ import {
 	findActiveStickyIndex,
 	type VirtualMessageItem,
 } from "../virtual-message-items"
+import { shouldAdjustVirtualMessageScrollPosition } from "../virtual-scroll-position"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
@@ -31,6 +32,8 @@ export interface VirtualMessageListProps {
 	getScrollElement: () => HTMLDivElement | null
 	renderNode: (args: { item: VirtualMessageItem }) => ReactNode
 	stickyMessageClassName?: string
+	/** Disable the shared mobile mask when a caller needs the desktop mask appearance. */
+	useMobileStickyOverlay?: boolean
 	exportMode?: boolean
 	selectedKeys?: ReadonlySet<string>
 	onToggleSelect?: (key: string) => void
@@ -59,7 +62,8 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 		? (((topicId
 				? superMagicStore.getTopicMessageNode?.(topicId, superMessageId)
 				: undefined) || superMagicStore.getMessageNode(superMessageId)) as
-				Record<string, unknown> | undefined)
+				| Record<string, unknown>
+				| undefined)
 		: undefined
 	if (item.isTool && !terminalToolStatuses.has(String(canonicalNode?.status || ""))) {
 		// Keep a measured zero-height anchor in the virtualizer. Removing the row
@@ -113,6 +117,7 @@ function VirtualMessageListInner({
 	getScrollElement,
 	renderNode,
 	stickyMessageClassName,
+	useMobileStickyOverlay = true,
 	exportMode,
 	selectedKeys,
 	onToggleSelect,
@@ -131,6 +136,8 @@ function VirtualMessageListInner({
 		useAnimationFrameWithResizeObserver: true,
 		onChange: onVirtualizerChange,
 	})
+	virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+		shouldAdjustVirtualMessageScrollPosition
 
 	if (virtualizerRef) virtualizerRef.current = virtualizer
 
@@ -142,7 +149,7 @@ function VirtualMessageListInner({
 	const nextStickyIndex =
 		activeStickyPosition >= 0 ? userIndices[activeStickyPosition + 1] : undefined
 	const stickyTopClass = getUserMessageStickyTopClass(isMobile)
-	const stickyTop = isMobile ? 10 : 40
+	const stickyTop = isMobile ? 0 : 40
 
 	return (
 		<div
@@ -225,6 +232,7 @@ function VirtualMessageListInner({
 								? cn(
 										USER_MESSAGE_STICKY_POSITION_CLASS,
 										stickyTopClass,
+										isMobile && "z-40",
 										stickyMessageClassName,
 									)
 								: "absolute top-0",
@@ -264,7 +272,9 @@ function VirtualMessageListInner({
 										className={cn(
 											"relative",
 											USER_MESSAGE_STICKY_MASK_CLASS,
-											isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
+											isMobile &&
+												useMobileStickyOverlay &&
+												USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 											stickyMessageClassName,
 										)}
 									>

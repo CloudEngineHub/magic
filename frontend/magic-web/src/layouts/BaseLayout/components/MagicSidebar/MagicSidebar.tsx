@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { observer } from "mobx-react-lite"
 import { sidebarStore } from "@/stores/layout"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/shadcn-ui/sheet"
 import {
 	SidebarProvider,
@@ -65,7 +65,13 @@ const MagicSidebar = observer(() => {
 				</ShadcnSidebarFooter>
 			</div>
 
-			<Sheet open={workspaceDrawerOpen} onOpenChange={setWorkspaceDrawerOpen}>
+			<Sheet
+				open={workspaceDrawerOpen}
+				onOpenChange={setWorkspaceDrawerOpen}
+				// Body-portalled workspace panels (such as organization switching) must remain
+				// scrollable while this low-resolution drawer is open.
+				modal={false}
+			>
 				<SheetContent
 					side="left"
 					showClose={false}

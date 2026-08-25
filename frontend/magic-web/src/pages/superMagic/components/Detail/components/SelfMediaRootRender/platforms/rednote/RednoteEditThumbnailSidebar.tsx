@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import CardFrame from "../../components/CardFrame"
 import { CardActionStrip } from "../../components/CardActionStrip"
 import { CARD_THUMBNAIL_IMAGE_PROCESS } from "../../constants/imageProcess"

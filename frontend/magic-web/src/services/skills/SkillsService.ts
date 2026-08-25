@@ -1,4 +1,4 @@
-import dayjs from "dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { SkillsApi } from "@/apis"
 import { SupportLocales } from "@/constants/locale"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
@@ -119,7 +119,7 @@ export interface SkillDetailView {
 	isCreator?: boolean
 }
 
-export type UserSkillsListScope = "created" | "team-shared" | "market-installed"
+export type UserSkillsListScope = "created" | "team-shared" | "collaborated" | "market-installed"
 
 export class SkillsService {
 	async getSkillMarketCategories(
@@ -146,6 +146,10 @@ export class SkillsService {
 
 	async getTeamSharedSkills(params: GetSkillsParams = {}): Promise<PagedSkills<UserSkillView>> {
 		return this.getUserSkillsByScope("team-shared", params)
+	}
+
+	async getCollaboratedSkills(params: GetSkillsParams = {}): Promise<PagedSkills<UserSkillView>> {
+		return this.getUserSkillsByScope("collaborated", params)
 	}
 
 	async getMarketInstalledSkills(
@@ -247,19 +251,22 @@ export class SkillsService {
 	}
 
 	private mapStoreSkill(item: StoreSkillItem): StoreSkillView {
+		const name =
+			item.name?.trim() ||
+			item.package_name?.trim() ||
+			item.code ||
+			item.skill_code ||
+			""
+		const description = item.description?.trim() || ""
+
 		return {
 			id: String(item.id),
 			storeSkillId: item.id,
 			skillCode: item.code || item.skill_code || item.package_name || String(item.id),
 			packageName: item.package_name?.trim() || undefined,
 			userSkillCode: item.user_skill_code,
-			name:
-				item.name?.trim() ||
-				item.package_name?.trim() ||
-				item.code ||
-				item.skill_code ||
-				"",
-			description: item.description?.trim() || "",
+			name,
+			description,
 			source: item.source?.trim() || undefined,
 			thumbnail: item.logo || undefined,
 			isFeatured: Boolean(item.is_featured),
@@ -396,11 +403,13 @@ export class SkillsService {
 	private fetchUserSkillsByScope(scope: UserSkillsListScope, params: GetSkillsParams = {}) {
 		switch (scope) {
 			case "created":
-				return SkillsApi.getCreatedSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "created" })
 			case "team-shared":
-				return SkillsApi.getTeamSharedSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "team_shared" })
+			case "collaborated":
+				return SkillsApi.getUserSkills({ ...params, scope: "collaborated" })
 			case "market-installed":
-				return SkillsApi.getMarketInstalledSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "market_installed" })
 		}
 	}
 

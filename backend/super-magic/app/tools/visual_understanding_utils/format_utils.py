@@ -42,7 +42,7 @@ def extract_image_source_name(image_source: str) -> str:
     result = extract_media_source_name(image_source)
     # URL 无法提取到文件名时使用图片专属 fallback
     if result == image_source and image_source.startswith("http"):
-        return "网络图片"
+        return "remote image"
     return result
 
 
@@ -56,18 +56,18 @@ def build_dimension_info_text(image_dimensions: ImageDimensionInfo) -> str:
         str: 格式化的尺寸信息文本
     """
     if not image_dimensions or not image_dimensions.size:
-        return "尺寸信息不可用"
+        return "dimensions unavailable"
 
     width, height = image_dimensions.size
-    size_info = f"{width}×{height}像素"
+    size_info = f"{width}×{height} pixels"
 
     # Format aspect ratio
     if image_dimensions.aspect_ratio:
-        size_info += f"，{calculate_and_format_aspect_ratio(width, height)}"
+        size_info += calculate_and_format_aspect_ratio(width, height, format_style="symbol")
 
     # Format file size
     if image_dimensions.file_size:
-        size_info += f"，文件大小 {format_file_size(image_dimensions.file_size)}"
+        size_info += f", file size {format_file_size(image_dimensions.file_size)}"
 
     return size_info
 
@@ -91,17 +91,17 @@ def format_image_dimensions_info(image_dimensions_list: List[Optional[ImageDimen
     if not has_any_info:
         return ""
 
-    info_parts = ["## 图片尺寸信息"]
+    info_parts = ["## Image dimensions"]
 
     if len(images) == 1:
         # Single image format
         if image_dimensions_list and image_dimensions_list[0] and image_dimensions_list[0].size:
             image_name = extract_image_source_name(images[0])
             dimension_text = build_dimension_info_text(image_dimensions_list[0])
-            info_parts.append(f"[图片1] {image_name}: {dimension_text}")
+            info_parts.append(f"[Image 1] {image_name}: {dimension_text}")
         else:
             image_name = extract_image_source_name(images[0])
-            info_parts.append(f"[图片1] {image_name}: 尺寸信息不可用")
+            info_parts.append(f"[Image 1] {image_name}: dimensions unavailable")
     else:
         # Multiple images format - image_dimensions_list now matches images list 1:1
         for i, image_source in enumerate(images):
@@ -113,9 +113,9 @@ def format_image_dimensions_info(image_dimensions_list: List[Optional[ImageDimen
 
             if current_dimensions and current_dimensions.size:
                 dimension_text = build_dimension_info_text(current_dimensions)
-                info_parts.append(f"[图片{i+1}] {image_name}: {dimension_text}")
+                info_parts.append(f"[Image {i+1}] {image_name}: {dimension_text}")
             else:
-                info_parts.append(f"[图片{i+1}] {image_name}: 尺寸信息不可用")
+                info_parts.append(f"[Image {i+1}] {image_name}: dimensions unavailable")
 
     return "\n".join(info_parts)
 
@@ -140,10 +140,10 @@ def format_download_info_for_content(
     # 统计下载状态详情
     download_error_info = []
     status_desc_map = {
-        ImageDownloadStatus.DOWNLOAD_ERROR: "下载失败",
-        ImageDownloadStatus.TIMEOUT: "下载超时",
-        ImageDownloadStatus.INVALID_CONTENT: "内容无效",
-        ImageDownloadStatus.SIZE_TOO_LARGE: "图片过大"
+        ImageDownloadStatus.DOWNLOAD_ERROR: "download failed",
+        ImageDownloadStatus.TIMEOUT: "download timed out",
+        ImageDownloadStatus.INVALID_CONTENT: "invalid content",
+        ImageDownloadStatus.SIZE_TOO_LARGE: "image too large"
     }
 
     # 收集真正失败的图片（不包括下载失败但识别成功的）
@@ -155,37 +155,37 @@ def format_download_info_for_content(
 
             # 只有下载失败且最终也没有成功识别的，才算真正的处理失败
             if download_result.status in status_desc_map and download_result.status != ImageDownloadStatus.SUCCESS:
-                error_desc = status_desc_map.get(download_result.status, '未知错误')
+                error_desc = status_desc_map.get(download_result.status, "unknown error")
                 image_name = extract_image_source_name(image_source)
 
                 # 这里需要判断这个图片是否在最终的失败列表中（通过检查是否有成功的image_data来判断）
                 # 如果下载失败但最终有输出，说明使用原URL成功了
-                download_error_info.append(f"• 图{i+1} ({image_name}): {error_desc}")
+                download_error_info.append(f"- Image {i+1} ({image_name}): {error_desc}")
 
     # 使用实际的成功/失败数量
     actual_success_count = batch_results.success_count
     actual_failed_count = batch_results.failed_count
 
     # 构建信息文本
-    info_parts = ["## 图片处理状态"]
+    info_parts = ["## Image processing status"]
 
     if len(images) == 1:
         # Single image format
         if actual_failed_count > 0:
             info_parts.extend(true_failed_info)
         elif actual_success_count > 0:
-            info_parts.append("✅ 处理成功")
+            info_parts.append("Processing succeeded")
     else:
         # Multiple images format - 使用实际的成功/失败统计
         if actual_success_count > 0:
-            info_parts.append(f"✅ 成功处理: {actual_success_count}张")
+            info_parts.append(f"Successfully processed: {actual_success_count}")
         if actual_failed_count > 0:
-            info_parts.append(f"⚠️ 处理失败: {actual_failed_count}张")
+            info_parts.append(f"Failed to process: {actual_failed_count}")
 
         # 显示失败详情（只显示真正处理失败的图片）
         if actual_failed_count > 0:
-            info_parts.append("\n详细情况:")
+            info_parts.append("\nDetails:")
             for failed_result in batch_results.failed_results:
-                info_parts.append(f"• 图{failed_result.index} ({failed_result.name}): {failed_result.error}")
+                info_parts.append(f"- Image {failed_result.index} ({failed_result.name}): {failed_result.error}")
 
     return "\n".join(info_parts)

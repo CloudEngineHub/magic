@@ -6,7 +6,7 @@ vi.mock("@/apis", () => ({
 	SkillsApi: {
 		getSkillMarketCategories: vi.fn(),
 		getStoreSkills: vi.fn(),
-		getCreatedSkills: vi.fn(),
+		getUserSkills: vi.fn(),
 		getSkillLastVersions: vi.fn(),
 		getSkillDetail: vi.fn(),
 	},
@@ -81,7 +81,7 @@ describe("SkillsService", () => {
 	})
 
 	it("uses resolved fields for user skill lists instead of legacy i18n values", async () => {
-		vi.mocked(SkillsApi.getCreatedSkills).mockResolvedValue({
+		vi.mocked(SkillsApi.getUserSkills).mockResolvedValue({
 			list: [
 				{
 					id: "skill-1",
@@ -103,8 +103,8 @@ describe("SkillsService", () => {
 					source_type: "LOCAL_UPLOAD",
 					is_enabled: 1,
 					pinned_at: null,
-					updated_at: "2026-08-22T10:00:00Z",
-					created_at: "2026-08-22T09:00:00Z",
+					updated_at: "2026-08-25T10:00:00Z",
+					created_at: "2026-08-25T09:00:00Z",
 				},
 			],
 			page: 1,
@@ -126,8 +126,8 @@ describe("SkillsService", () => {
 		})
 	})
 
-	it("keeps edit payload compatibility after legacy i18n fields are removed", async () => {
-		vi.mocked(SkillsApi.getCreatedSkills).mockResolvedValue({
+	it("keeps edit payload compatibility when legacy i18n fields are absent", async () => {
+		vi.mocked(SkillsApi.getUserSkills).mockResolvedValue({
 			list: [
 				{
 					id: "skill-1",
@@ -139,8 +139,8 @@ describe("SkillsService", () => {
 					source_type: "LOCAL_UPLOAD",
 					is_enabled: 1,
 					pinned_at: null,
-					updated_at: "2026-08-22T10:00:00Z",
-					created_at: "2026-08-22T09:00:00Z",
+					updated_at: "2026-08-25T10:00:00Z",
+					created_at: "2026-08-25T09:00:00Z",
 				},
 			],
 			page: 1,

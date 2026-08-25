@@ -9,6 +9,7 @@ const {
 	publishMock,
 	shouldSuppressInputAutoFocusOnIPadMock,
 	preventOpenAutoFocusMock,
+	useIsMobileMock,
 } = vi.hoisted(() => {
 	const modeList = [
 		{
@@ -55,6 +56,7 @@ const {
 		publishMock: vi.fn(),
 		shouldSuppressInputAutoFocusOnIPadMock: vi.fn(() => false),
 		preventOpenAutoFocusMock: vi.fn(),
+		useIsMobileMock: vi.fn(() => false),
 	}
 })
 
@@ -112,8 +114,12 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 }))
 
 vi.mock("@/components/base", () => ({
-	MagicIcon: ({ component: Component, ...props }: { component: (props: any) => ReactNode }) =>
-		Component ? <Component {...props} /> : null,
+	MagicIcon: ({
+		component: Component,
+		...props
+	}: {
+		component: (props: Record<string, unknown>) => ReactNode
+	}) => (Component ? <Component {...props} /> : null),
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -157,13 +163,12 @@ vi.mock("@/components/shadcn-ui/popover", () => ({
 	PopoverTrigger: ({ children }: { children: React.ReactElement }) => {
 		const context = useContext(popoverContext)
 		return (
-			<button
-				type="button"
+			<div
 				onClick={() => context?.onOpenChange?.(!context.open)}
 				data-testid="mock-popover-trigger"
 			>
 				{children}
-			</button>
+			</div>
 		)
 	},
 	PopoverContent: ({
@@ -203,7 +208,11 @@ vi.mock("@/components/shadcn-ui/input", () => ({
 }))
 
 vi.mock("@/components/base-mobile/MagicPopup", () => ({
-	default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	default: ({ children, position }: { children: ReactNode; position?: string }) => (
+		<div data-testid="mock-magic-popup" data-position={position}>
+			{children}
+		</div>
+	),
 }))
 
 vi.mock("../../MessageEditor/components/ModelSwitch/components/CollapsibleDescription", () => ({
@@ -243,7 +252,7 @@ vi.mock("../../MessageEditor/components/ModelSwitch/components/CollapsibleDescri
 }))
 
 vi.mock("@/hooks/use-mobile", () => ({
-	useIsMobile: () => false,
+	useIsMobile: useIsMobileMock,
 }))
 
 vi.mock("@/components/shadcn-ui/drawer", () => ({
@@ -263,6 +272,24 @@ describe("ModeToggle", () => {
 		vi.clearAllMocks()
 		vi.useRealTimers()
 		shouldSuppressInputAutoFocusOnIPadMock.mockReturnValue(false)
+		useIsMobileMock.mockReturnValue(false)
+	})
+
+	it("opens the mobile crew selector from the bottom when configured", () => {
+		useIsMobileMock.mockReturnValue(true)
+
+		render(
+			<ModeToggle
+				topicMode={"mode-a" as never}
+				allowChangeMode
+				mobilePopupPosition="bottom"
+				onModeChange={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("set-open"))
+
+		expect(screen.getByTestId("mock-magic-popup")).toHaveAttribute("data-position", "bottom")
 	})
 
 	it("prevents the search input from receiving automatic focus on iPad", () => {

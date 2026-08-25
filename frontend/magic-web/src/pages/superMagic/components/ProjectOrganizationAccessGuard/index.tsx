@@ -1,9 +1,8 @@
 import { Loader2 } from "lucide-react"
-import { useParams } from "react-router"
 import { useTranslation } from "react-i18next"
 import OrganizationSwitchState from "@/components/business/OrganizationSwitchState"
 import FolderIcon from "@/pages/share/assets/icon/folder_empty.svg"
-import { useProjectOrganizationAccess } from "../../hooks/useProjectOrganizationAccess"
+import { useProjectOrganizationAccessContext } from "../../contexts/ProjectOrganizationAccessContext"
 import type { ReactNode } from "react"
 
 interface ProjectOrganizationAccessGuardProps {
@@ -13,9 +12,8 @@ interface ProjectOrganizationAccessGuardProps {
 export default function ProjectOrganizationAccessGuard({
 	children,
 }: ProjectOrganizationAccessGuardProps) {
-	const { projectId } = useParams<{ projectId?: string }>()
 	const { t } = useTranslation("super")
-	const organizationAccess = useProjectOrganizationAccess(projectId)
+	const organizationAccess = useProjectOrganizationAccessContext()
 
 	if (organizationAccess.status === "ready") return <>{children}</>
 

@@ -17,4 +17,9 @@ return [
     'access_denied' => 'You do not have permission to access this task',
     'agent_id_required' => 'Agent ID is required',
     'topic_id_required' => 'Topic ID is required',
+    'work_dir_not_found' => 'Work directory not found',
+    'continue' => 'Continue',
+    'initialize_error' => 'The system is currently busy, please try again later.',
+    'agent_stopped' => 'Task has been terminated',
+    'finished_task_action' => 'Output of completed result file',
 ];

@@ -2,7 +2,7 @@ import React, { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { IconSearch } from "@tabler/icons-react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import {

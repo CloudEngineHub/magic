@@ -2,13 +2,18 @@ import { useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useCrewConversationStore } from "./context"
 import CrewConversationPanel from "./components/CrewConversationPanel"
 import CrewStateView from "./components/CrewStateView"
 import CrewTopicList from "./components/CrewTopicList"
 
-function CrewConversationMobile() {
+interface CrewConversationMobileProps {
+	widgetContext?: { instanceId: string; hostOrigin: string } | null
+}
+
+/** Renders the mobile Crew layout and forwards optional widget bridge metadata. */
+function CrewConversationMobile({ widgetContext = null }: CrewConversationMobileProps) {
 	const { t } = useTranslation("crew/market")
 	const store = useCrewConversationStore()
 	const [isTopicDrawerOpen, setIsTopicDrawerOpen] = useState(false)
@@ -20,23 +25,24 @@ function CrewConversationMobile() {
 	})
 
 	if (store.status !== "ready" || !store.selectedProject) {
-		return (
-			<CrewStateView
-				status={store.status}
-				onRetry={() => void store.bootstrap(store.agentCode)}
-			/>
-		)
+		return <CrewStateView status={store.status} onRetry={() => void store.retryBootstrap()} />
 	}
 
 	return (
 		<div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent">
 			<CrewConversationPanel
+				widgetContext={widgetContext}
 				variant="mobile"
 				detailPanelVisible={false}
 				onOpenTopics={() => setIsTopicDrawerOpen(true)}
 			/>
 			{isTopicDrawerOpen ? (
-				<div className="fixed inset-0 z-50" role="dialog" aria-modal="true" data-testid="dialog-div">
+				<div
+					className="fixed inset-0 z-50"
+					role="dialog"
+					aria-modal="true"
+					data-testid="dialog-div"
+				>
 					<button
 						type="button"
 						className="absolute inset-0 bg-black/30"

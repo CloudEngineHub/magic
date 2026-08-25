@@ -81,7 +81,12 @@ export class AppConversationStore {
 
 			this.setSelectedProject(refreshedProject)
 		} catch (error) {
-			logger.error("Failed to refresh project after topic rename", error)
+			logger.error({
+				eventKey: "refresh_project_after_topic_rename_failed",
+				errorKind: "network",
+				error,
+				message: "Failed to refresh project after topic rename",
+			})
 		}
 	}
 

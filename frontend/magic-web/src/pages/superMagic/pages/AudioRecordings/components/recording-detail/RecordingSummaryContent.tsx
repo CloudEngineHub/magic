@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
 import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
@@ -17,7 +17,10 @@ import { RecordingMarkdownContent } from "./RecordingMarkdownContent"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
 import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
-import { useHorizontalScrollWithFade } from "../../hooks/useHorizontalScrollWithFade"
+import {
+	centerHorizontalItemInContainer,
+	useHorizontalScrollWithFade,
+} from "../../hooks/useHorizontalScrollWithFade"
 import { RecordingTokenText } from "./RecordingTokenText"
 
 export interface RecordingSummaryContentProps {
@@ -316,10 +319,10 @@ function TopicsContent({
 	// Keep the active topic pill visible when the strip overflows horizontally.
 	useEffect(() => {
 		const activeButton = topicRefs.current[activeTopicId]
-		if (typeof activeButton?.scrollIntoView === "function") {
-			activeButton.scrollIntoView({ block: "nearest", inline: "center" })
-		}
-	}, [activeTopicId])
+		const bar = scrollRef.current
+		if (!activeButton || !bar) return
+		centerHorizontalItemInContainer(bar, activeButton)
+	}, [activeTopicId, scrollRef])
 
 	if (topics.length === 0 || !activeTopic) {
 		return <SummaryTabEmptyState />

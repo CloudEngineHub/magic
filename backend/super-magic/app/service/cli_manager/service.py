@@ -58,14 +58,16 @@ class CliManagerService:
 
     @classmethod
     async def initialize_from_environment(cls, agent_context: AgentContext | None = None) -> None:
-        """初始化沙箱内的 CLI 持久化能力，失败时降级为记录日志。"""
+        """初始化沙箱内的 CLI 持久化能力，失败时降级为记录日志。
+
+        CLI 状态探测会读写 Horizon，必须由持久 Agent 状态准备完成后的调用方
+        通过 `schedule_initial_status_detection()` 显式启动。
+        """
         try:
             restore_result = await cls().restore()
             logger.info(f"持久化 CLI 恢复完成: {restore_result}")
         except Exception as e:
             logger.warning(f"持久化 CLI 恢复失败，继续初始化流程: {e}")
-
-        cls._schedule_initial_cli_status_detection(agent_context)
 
     @staticmethod
     def default_paths() -> CliManagerPaths:
@@ -86,8 +88,8 @@ class CliManagerService:
             logger.warning(f"注入持久化 CLI PATH 失败: {e}")
 
     @staticmethod
-    def _schedule_initial_cli_status_detection(agent_context: AgentContext | None) -> None:
-        """调度 CLI 状态探测，失败时不影响工作区初始化。"""
+    def schedule_initial_status_detection(agent_context: AgentContext | None) -> None:
+        """在持久 Agent 状态准备完成后调度 CLI 状态探测。"""
         try:
             from app.service.cli_status import CliStatusFactory
 

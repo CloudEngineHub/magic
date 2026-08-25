@@ -1,5 +1,4 @@
-import { useDeepCompareEffect, useMemoizedFn, useUpdateEffect } from "ahooks"
-import { throttle } from "lodash-es"
+import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import {
 	useMemo,
 	useRef,
@@ -49,10 +48,9 @@ import PreviewDetailPopup, {
 	PreviewDetailPopupRef,
 } from "../../components/PreviewDetailPopup"
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
-import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
 import ChatActions from "../ProjectPage/ProjectPageMain/components/ChatActions"
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
@@ -90,6 +88,7 @@ import {
 import { useProjectFirstAttachmentRender } from "@/pages/superMagic/hooks/useProjectFirstAttachmentRender"
 import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
+import { buildMobileFilePreviewDetail } from "./mobileFilePreview"
 
 interface TopicPageProps {
 	onHistoryClick?: () => void
@@ -182,10 +181,6 @@ function TopicPage({
 
 	// Refs
 	const footerRef = useRef<HTMLDivElement>(null)
-	const nodesPanelRef = useRef<HTMLDivElement | null>(null)
-	const [isProgrammaticScroll, setIsProgrammaticScroll] = useState(false)
-	const scrollHeightRef = useRef<number>(0)
-	const scrollTopRef = useRef<number>(0)
 	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
 		useProjectFirstAttachmentRender()
 	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
@@ -432,24 +427,10 @@ function TopicPage({
 	})
 
 	// Callback functions
-	const onFileClick = useMemoizedFn((fileItem?: any) => {
-		const fileId = fileItem?.file_id
-		setTimeout(() => {
-			// Also open in preview popup for mobile
-			const fileAttachment = attachmentList.find((item) => item.file_id === fileId)
-			if (fileAttachment) {
-				const fileExtension = fileAttachment.file_extension ?? ""
-				const type = getFileType(fileExtension)
-				setUserSelectDetail({
-					type,
-					data: {
-						file_id: fileId,
-						file_name: fileItem?.file_name || fileAttachment.file_name,
-					},
-					currentFileId: fileId,
-				} as any)
-			}
-		}, 100)
+	const onFileClick = useMemoizedFn((fileItem?: unknown) => {
+		// Open immediately from message metadata; project metadata is merged when available.
+		const previewDetail = buildMobileFilePreviewDetail(fileItem, attachmentList)
+		if (previewDetail) setUserSelectDetail(previewDetail)
 	})
 
 	const onNewTopicClick = useMemoizedFn(() => {
@@ -503,103 +484,6 @@ function TopicPage({
 		messages,
 		userInfo,
 	})
-
-	// 保存滚动位置的函数
-	const saveScrollPosition = () => {
-		if (!nodesPanelRef.current) return
-		const element = nodesPanelRef.current
-		scrollHeightRef.current = element.scrollHeight
-		scrollTopRef.current = element.scrollTop
-	}
-
-	// 优化滚动逻辑，使用 RAF 确保平滑滚动，并根据滚动条位置决定是否保持位置
-	useDeepCompareEffect(() => {
-		if (!nodesPanelRef.current || !messages || messages.length === 0) return
-
-		const element = nodesPanelRef.current
-		// 判断滚动条是否在底部或接近底部（距离底部50px以内）
-		const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= 50
-
-		if (isAtBottom) {
-			// 如果在底部，则自动滚动到新内容
-			setIsProgrammaticScroll(true)
-			requestAnimationFrame(() => {
-				element.scrollTo({
-					top: element.scrollHeight,
-					behavior: "smooth", // 可选
-				})
-				setIsProgrammaticScroll(false)
-				saveScrollPosition()
-			})
-		} else if (scrollHeightRef.current > 0) {
-			// 如果不在底部，且有之前的滚动高度记录
-			// 计算滚动位置的偏移量以保持相对位置
-			const heightDiff = element.scrollHeight - scrollHeightRef.current
-			if (heightDiff > 0) {
-				setIsProgrammaticScroll(true)
-				requestAnimationFrame(() => {
-					element.scrollTo({
-						top: scrollTopRef.current + heightDiff,
-						behavior: "auto", // 可选
-					})
-					setIsProgrammaticScroll(false)
-					saveScrollPosition()
-					// setTimeout(() => {
-
-					// }, 100)
-				})
-			}
-		}
-
-		// 初次加载时保存滚动位置
-		if (scrollHeightRef.current === 0) {
-			saveScrollPosition()
-		}
-	}, [messages.length])
-
-	// 当selectedNodeId变化时，滚动到底部
-	useDeepCompareEffect(() => {
-		if (!nodesPanelRef.current || !selectedTopic?.id) return
-
-		const element = nodesPanelRef.current
-		setIsProgrammaticScroll(true)
-		setTimeout(() => {
-			element.scrollTo({
-				top: element.scrollHeight,
-				behavior: "smooth", // 可选
-			})
-			setTimeout(() => {
-				setIsProgrammaticScroll(false)
-				saveScrollPosition()
-			}, 100)
-		}, 300)
-	}, [selectedTopic])
-
-	// 添加滚动监听，当滚动到顶部时触发handlePullMoreMessage
-	useDeepCompareEffect(() => {
-		const handleScroll = throttle(() => {
-			console.log("触发了handleScroll", nodesPanelRef.current?.scrollTop)
-			if (!nodesPanelRef.current || isProgrammaticScroll) return
-
-			// 保存用户手动滚动后的位置
-			saveScrollPosition()
-
-			if (nodesPanelRef.current.scrollTop <= 300 && handlePullMoreMessage) {
-				handlePullMoreMessage(selectedTopic)
-			}
-		}, 500)
-
-		const element = nodesPanelRef.current
-		if (element) {
-			element.addEventListener("scroll", handleScroll)
-		}
-
-		return () => {
-			if (element) {
-				element.removeEventListener("scroll", handleScroll)
-			}
-		}
-	}, [isProgrammaticScroll, nodesPanelRef, handlePullMoreMessage, selectedTopic])
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
@@ -660,6 +544,11 @@ function TopicPage({
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 
+	useEffect(() => {
+		// A direct message click may open before the project tree arrives; enrich it afterwards.
+		previewDetailPopupRef.current?.updateAttachments(attachments, attachmentList)
+	}, [attachments, attachmentList])
+
 	// 移动端统一订阅消息节点中的文件预览 / 路径打开事件
 	useMobileFilePreviewPubSub({
 		attachmentList,
@@ -699,12 +588,12 @@ function TopicPage({
 			)}
 			<div className={cn(styles.body, bodyClassName)} data-testid="topic-page-message-panel">
 				<MessageListProvider value={value}>
+					{/* MessageList owns pagination, anchor restoration, and auto-follow for this viewport. */}
 					<MessageList
 						data={messages as any}
 						setSelectedDetail={setUserSelectDetail}
 						selectedTopic={selectedTopic}
 						className={cx(messageListClassName)}
-						viewportRef={nodesPanelRef}
 						handlePullMoreMessage={handlePullMoreMessage}
 						showLoading={showLoading}
 						onFileClick={onFileClick}

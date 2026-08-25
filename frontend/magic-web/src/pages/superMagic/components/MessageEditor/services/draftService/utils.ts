@@ -1,6 +1,6 @@
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { formatTime } from "@/utils/string"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { userStore } from "@/models/user"
 import { DraftKey } from "../../types"
 import { isEqual } from "lodash-es"

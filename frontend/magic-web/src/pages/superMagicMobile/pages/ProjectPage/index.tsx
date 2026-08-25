@@ -19,7 +19,7 @@ import TopicFilesButton, {
 	type TopicFilesButtonRef,
 } from "@/pages/superMagic/components/TopicFilesButton"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
 import { PORTAL_IDS } from "@/constants"
@@ -33,8 +33,12 @@ import ProjectPageMain from "./ProjectPageMain"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
 import { resolveProjectDetailHeaderActions } from "@/pages/superMagicMobile/utils/sharedProjectActionPolicy"
-
-type ProjectDetailTab = "topics" | "topicFiles"
+import MobileScheduledTasksPanel from "./components/MobileScheduledTasksPanel"
+import {
+	getProjectDetailTabs,
+	shouldKeepScheduledTasksPanelMounted,
+	type ProjectDetailTab,
+} from "./tab-config"
 
 function ProjectPage() {
 	return <ObservedLegacyProjectPage />
@@ -48,36 +52,43 @@ function LegacyProjectPage() {
 	const { createTopicForProjectSend, handleSendComplete, handleSendSuccess } =
 		useProjectPageComposerContext()
 
-	// 首页只保留“话题 / 文件”两个 tab，先完成项目详情 UI 收敛。
+	// 首页使用“话题 / 文件 / 定时任务”三个 tab，统一承载项目级内容入口。
 	const [activeSiderTab, setActiveSiderTab] = useState<ProjectDetailTab>("topics")
-
-	/** 项目详情 tab 配置：复用 SmoothTabs 的滑块测量能力，并保留稳定测试选择器。 */
-	const projectDetailTabs = useMemo<Tab<ProjectDetailTab>[]>(
-		() => [
-			{
-				value: "topics",
-				label: t("projectDetail.tabTopics"),
-				testId: "project-detail-topics-tab",
-			},
-			{
-				value: "topicFiles",
-				label: t("projectDetail.tabFiles"),
-				testId: "project-detail-files-tab",
-			},
-		],
-		[t],
-	)
+	const [hasOpenedScheduledTasks, setHasOpenedScheduledTasks] = useState(false)
 
 	// Get state from stores
 	const selectedProject = projectStore.selectedProject
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedTopic = topicStore.selectedTopic
+	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
+
+	/** 项目详情 tab 配置：复用 SmoothTabs 的滑块测量能力，并保留稳定测试选择器。 */
+	const projectDetailTabs = useMemo<Tab<ProjectDetailTab>[]>(
+		() => getProjectDetailTabs(t, isReadonly),
+		[isReadonly, t],
+	)
+
+	/** Returns users to the topics tab when the current project no longer permits task access. */
+	useEffect(() => {
+		if (isReadonly && activeSiderTab === "scheduledTasks") {
+			setActiveSiderTab("topics")
+		}
+	}, [activeSiderTab, isReadonly])
+
+	/** Remembers the first visit so later tab switches can hide the panel instead of unmounting it. */
+	useEffect(() => {
+		if (activeSiderTab === "scheduledTasks") {
+			setHasOpenedScheduledTasks(true)
+		}
+	}, [activeSiderTab])
+
+	const keepScheduledTasksMounted =
+		!isReadonly && shouldKeepScheduledTasksPanelMounted(activeSiderTab, hasOpenedScheduledTasks)
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const topicFilesButtonRef = useRef<TopicFilesButtonRef>(null)
 
-	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 	const { canManageCollaborators } = useCollaboratorUpdatePanel({ selectedProject })
 	const projectDetailHeaderActions = useMemo(
 		() => resolveProjectDetailHeaderActions(selectedProject, { canManageCollaborators }),
@@ -284,7 +295,7 @@ function LegacyProjectPage() {
 			{/* 与 MobileShell 面板、ProjectDetailHeader 及原型一致：整页使用主题 background，避免头部与内容区硬编码暖色分层 */}
 			<div className={cn("relative flex h-full min-h-0 flex-auto flex-col overflow-hidden")}>
 				{/* 与原型一致：tab 条单独 shrink-0 + px-3 pt-4，主内容区 flex-1 再各自 px-3，避免整块同一列 padding 与原型分层不一致 */}
-				<div className="flex shrink-0 justify-start px-3 pt-4">
+				<div className="relative z-40 flex shrink-0 justify-start px-3 pt-4">
 					<SmoothTabs
 						tabs={projectDetailTabs}
 						value={activeSiderTab}
@@ -326,9 +337,30 @@ function LegacyProjectPage() {
 								showMobileActions
 							/>
 						</div>
-					) : (
+					) : null}
+					{keepScheduledTasksMounted ? (
 						<div
-							className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2"
+							className={cn(
+								"flex h-full min-h-0 flex-col overflow-hidden pb-2",
+								activeSiderTab !== "scheduledTasks" && "hidden",
+							)}
+							aria-hidden={activeSiderTab !== "scheduledTasks"}
+							data-testid="project-detail-scheduled-tasks-panel"
+						>
+							<MobileScheduledTasksPanel
+								key={selectedProject?.id}
+								className="h-full"
+								selectWorkspaceId={
+									selectedWorkspace?.id ?? selectedProject?.workspace_id
+								}
+								selectProjectId={selectedProject?.id}
+								selectTopicId={selectedTopic?.id}
+							/>
+						</div>
+					) : null}
+					{activeSiderTab === "topics" ? (
+						<div
+							className="flex h-full min-h-0 flex-1 flex-col overflow-hidden pb-2"
 							data-testid="project-detail-topics-panel"
 						>
 							<ProjectPageMain
@@ -340,7 +372,7 @@ function LegacyProjectPage() {
 								onTopicDelete={(topic) => deleteTopicDirect(topic, selectedProject)}
 							/>
 						</div>
-					)}
+					) : null}
 				</div>
 				<div
 					className={cn(

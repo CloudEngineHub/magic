@@ -11,8 +11,8 @@ import type {
 import type { MarkerClickScene } from "../../hooks/useMarkerClickHandler"
 import { useMemoizedFn, useDebounceFn, useMount, useUnmount, useUpdateEffect } from "ahooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/utils"
-import type { JSONContent } from "@tiptap/core"
+import { cn } from "@/utils/cn"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useTranslation } from "react-i18next"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 

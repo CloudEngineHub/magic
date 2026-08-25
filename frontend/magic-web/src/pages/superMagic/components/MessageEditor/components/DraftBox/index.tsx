@@ -35,7 +35,7 @@ import {
 	draftBoxModalBodyVariants,
 } from "./variants"
 import type { DraftStore } from "../../stores"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface DraftBoxProps {
 	draftStore: DraftStore

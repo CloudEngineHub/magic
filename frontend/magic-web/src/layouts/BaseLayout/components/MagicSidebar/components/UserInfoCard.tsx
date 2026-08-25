@@ -1,7 +1,7 @@
 import { ChevronsUpDown } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { lazy } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avatar"
 import { preloadUserMenus } from "../../Header/utils/preloadUserMenus"
 import DropdownLazyLoadWrapper from "../DropdownLazyLoadWrapper"

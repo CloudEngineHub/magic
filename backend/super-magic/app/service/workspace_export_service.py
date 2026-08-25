@@ -18,6 +18,7 @@ import yaml
 from loguru import logger
 
 from app.path_manager import PathManager
+from app.service.slides_template_export_service import export_slides_template
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +300,7 @@ async def export_workspace(
     export_type: str,
     code: str,
     upload_config: Dict[str, Any],
+    public_upload_config: Optional[Dict[str, Any]] = None,
     source_path: str = "",
     archive_root: str = "",
     file_name: str = "",
@@ -306,7 +308,7 @@ async def export_workspace(
     """Package the workspace, upload it, and return the file key with extracted metadata.
 
     Args:
-        export_type: "agent_creator" or "skill_creator".
+        export_type: "agent_creator", "skill_creator", or "slides_template_creator".
         code: agent/skill identifier used in the archive filename (e.g. "SMA_XXXXXX").
         upload_config: upload_config block from the API request body.
         source_path: relative path within the workspace root to export.
@@ -351,6 +353,18 @@ async def export_workspace(
     else:
         workspace_dir = workspace_root
 
+    if normalized_export_type == "slides_template_creator":
+        if not public_upload_config:
+            raise ValueError("public_upload_config is required for slides_template_creator.")
+        return await export_slides_template(
+            workspace_dir=workspace_dir,
+            code=code,
+            private_upload_config=upload_config,
+            public_upload_config=public_upload_config,
+            archive_root=archive_root or code,
+            file_name=file_name or f"{code}.zip",
+        )
+
     # Build the object key.
     # ZIP filename : {code}_{timestamp}.zip  (e.g. SMA-abc_20260319205908.zip)
     # Folder inside ZIP: {code}              (e.g. SMA-abc/)
@@ -381,7 +395,7 @@ async def export_workspace(
         metadata["files_count"] = _count_descendants(workspace_dir)
     else:
         raise ValueError(
-            f"Unknown export type: {export_type!r}. Expected 'agent_creator' or 'skill_creator'."
+            f"Unknown export type: {export_type!r}. Expected 'agent_creator', 'skill_creator', or 'slides_template_creator'."
         )
 
     # Package and upload.

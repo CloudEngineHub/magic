@@ -570,6 +570,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'content_type' => $result['content_type'] ?? null,
                 'content_length' => $result['content_length'] ?? null,
                 'last_modified' => $result['last_modified'] ?? null,
             ]);
@@ -628,6 +629,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'content_type' => $metadata['content_type'] ?? null,
                 'metadata_count' => count($metadata),
             ]);
         } catch (Throwable $exception) {
@@ -704,6 +706,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'object_key' => $objectKey,
                 'object_type' => $isFolder ? 'folder' : 'file',
                 'bucket_type' => $bucketType->value,
+                'content_type' => $createOptions['content_type'] ?? null,
                 'content_length' => strlen($createOptions['content'] ?? ''),
             ]);
         } catch (Throwable $exception) {
@@ -833,6 +836,75 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+            throw $exception;
+        }
+    }
+
+    /**
+     * Generate multiple pre-signed URLs with one temporary credential request.
+     *
+     * @param array<int, array{object_key:string, options?:array}> $items
+     * @return array<string, string> URLs indexed by object key
+     */
+    public function getPreSignedUrlsByCredential(
+        string $organizationCode,
+        array $items,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        int $credentialExpires = 7200,
+        array $options = []
+    ): array {
+        $validItems = [];
+        foreach ($items as $item) {
+            $objectKey = $item['object_key'] ?? '';
+            if (! is_string($objectKey) || $objectKey === '') {
+                continue;
+            }
+            if (! Str::startsWith($objectKey, $organizationCode)) {
+                $this->logger->warning('Batch pre-signed URL skipped: object key does not belong to specified organization', [
+                    'organization_code' => $organizationCode,
+                    'object_key' => $objectKey,
+                ]);
+                continue;
+            }
+
+            $itemOptions = $item['options'] ?? [];
+            $itemOptions['method'] ??= 'GET';
+            $validItems[] = [
+                'object_key' => $objectKey,
+                'options' => $itemOptions,
+            ];
+        }
+
+        if ($validItems === []) {
+            return [];
+        }
+
+        $imageProcess = ImageProcessFactory::getByHeader();
+        if ($imageProcess) {
+            $options['image'] = $imageProcess;
+        }
+
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => true,
+            'role_session_name' => 'magic',
+            'dir' => '',
+            'expires' => $credentialExpires,
+        ]);
+
+        try {
+            return $this->getFilesystem($bucketType->value)->getPreSignedUrlsByCredential(
+                $credentialPolicy,
+                $validItems,
+                $this->getOptions($organizationCode, $options)
+            );
+        } catch (Throwable $exception) {
+            $this->logger->error('get_presigned_urls_by_credential_failed', [
+                'organization_code' => $organizationCode,
+                'bucket_type' => $bucketType->value,
+                'item_count' => count($validItems),
                 'error' => $exception->getMessage(),
                 'trace' => $exception->getTraceAsString(),
             ]);

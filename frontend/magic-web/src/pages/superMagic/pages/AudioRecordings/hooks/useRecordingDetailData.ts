@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { SuperMagicApi } from "@/apis"
 import { getFileContentById, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
+import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { audioRecordingsService } from "@/services/audioRecordings"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -38,6 +37,7 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 	const [audioUrl, setAudioUrl] = useState<string>("")
 	const [attachmentTree, setAttachmentTree] = useState<AttachmentItem[]>([])
 	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
+	const attachmentRequestRef = useRef<AbortController | null>(null)
 
 	const activeProjectIdRef = useRef(projectId)
 	useEffect(() => {
@@ -53,6 +53,9 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 		}
 
 		const currentProjectId = projectId
+		attachmentRequestRef.current?.abort()
+		const controller = new AbortController()
+		attachmentRequestRef.current = controller
 		setLoading(true)
 		setError(false)
 		setTexts({ summary: {} })
@@ -61,20 +64,18 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 		setAttachmentList([])
 
 		try {
-			const [attachmentsResponse, item] = await Promise.all([
-				SuperMagicApi.getAttachmentsByProjectId({ projectId, temporaryToken: "" }),
+			const [processed, item] = await Promise.all([
+				loadProjectAttachments({ projectId, signal: controller.signal }),
 				loadSingleProject(projectId),
 			])
-			if (currentProjectId !== activeProjectIdRef.current) return
-
-			const processed = AttachmentDataProcessor.processAttachmentData(attachmentsResponse)
+			if (controller.signal.aborted || currentProjectId !== activeProjectIdRef.current) return
 
 			const bundleRootPath = resolveRecordingBundleRootPath(processed.tree, processed.list)
 			const magicProjectFile = findMagicProjectFile(processed.list, bundleRootPath)
 			const magicProjectContent = magicProjectFile
 				? await readTextFile(magicProjectFile.file_id)
 				: undefined
-			if (currentProjectId !== activeProjectIdRef.current) return
+			if (controller.signal.aborted || currentProjectId !== activeProjectIdRef.current) return
 
 			const magicProjectConfig = magicProjectContent
 				? parseMagicProjectConfig(magicProjectContent.content)
@@ -90,7 +91,7 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 				loadTextFiles(nextFileMap),
 				loadAudioUrl(nextFileMap.audio),
 			])
-			if (currentProjectId !== activeProjectIdRef.current) return
+			if (controller.signal.aborted || currentProjectId !== activeProjectIdRef.current) return
 
 			setAttachmentTree(processed.tree)
 			setAttachmentList(processed.list)
@@ -99,15 +100,19 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 			setTexts(nextTexts)
 			setAudioUrl(nextAudioUrl)
 		} catch (loadError) {
+			if (controller.signal.aborted) return
 			console.error("Failed to load recording detail:", loadError)
 			if (currentProjectId === activeProjectIdRef.current) setError(true)
 		} finally {
-			if (currentProjectId === activeProjectIdRef.current) setLoading(false)
+			if (!controller.signal.aborted && currentProjectId === activeProjectIdRef.current) {
+				setLoading(false)
+			}
 		}
 	}, [projectId])
 
 	useEffect(() => {
 		void loadDetail()
+		return () => attachmentRequestRef.current?.abort()
 	}, [loadDetail])
 
 	// Polls summary task status every 10s while summarizing; stops when summary is ready.

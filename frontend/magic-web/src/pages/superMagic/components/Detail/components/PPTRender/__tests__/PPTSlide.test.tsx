@@ -41,7 +41,7 @@ vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
 }))
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/utils/cn", () => ({
 	cn: (...classNames: Array<string | false | null | undefined>) =>
 		classNames.filter(Boolean).join(" "),
 }))

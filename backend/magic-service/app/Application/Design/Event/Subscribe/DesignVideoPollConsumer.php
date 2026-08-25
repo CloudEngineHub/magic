@@ -16,18 +16,18 @@ use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Factory\PathFactory;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
+use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Design\Contract\VideoGatewayClientInterface;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileType;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Amqp\Annotation\Consumer;
 use Hyperf\Amqp\Message\ConsumerMessage;
 use Hyperf\Amqp\Producer;
@@ -94,6 +94,10 @@ class DesignVideoPollConsumer extends ConsumerMessage
 
         $deadlineAt = $entity->getPollDeadlineAt();
         if ($deadlineAt !== null && strtotime($deadlineAt) !== false && time() > strtotime($deadlineAt)) {
+            $businessParams = [
+                'organization_code' => $entity->getOrganizationCode(),
+                'user_id' => $entity->getUserId(),
+            ];
             $this->logger->error('design video poll mark failed', [
                 'reason' => 'timeout',
                 'video_id' => $entity->getGenerationId(),
@@ -104,6 +108,17 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'deadline_at' => $deadlineAt,
                 'error' => trans('design.video_generation.timeout'),
             ]);
+            try {
+                $this->videoGatewayClient->timeoutVideo($operationId, $businessParams);
+            } catch (Throwable $throwable) {
+                $this->logger->warning('design video poll timeout compensation failed', [
+                    'video_id' => $entity->getGenerationId(),
+                    'project_id' => $entity->getProjectId(),
+                    'organization_code' => $entity->getOrganizationCode(),
+                    'operation_id' => $operationId,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
             $this->domainService->markAsFailed($dataIsolation, $entity, trans('design.video_generation.timeout'));
             return Result::ACK;
         }

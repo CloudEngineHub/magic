@@ -5,7 +5,7 @@ import { formatLongCurlDataRawForPreview } from "./preview-content"
 
 const monacoEditorProps = vi.hoisted(() => vi.fn())
 
-vi.mock("@/lib/monacoEditor", () => ({
+vi.mock("@/infrastructure/editors/monaco", () => ({
 	MonacoEditor: (props: Record<string, unknown>) => {
 		monacoEditorProps(props)
 		return <div data-testid="monaco-editor" />

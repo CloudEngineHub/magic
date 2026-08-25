@@ -15,7 +15,7 @@ import {
 import { Image } from "@/components/base/MagicRichEditor/extensions/image"
 import type { FileData } from "../components/InputFiles/types"
 import { genFileData } from "../components/InputFiles/utils"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { ReportFileUploadsResponse } from "@/apis/modules/file"
 import { FileApi } from "@/apis"
 import type { UploadResult } from "@/hooks/useUploadFiles/types"
@@ -236,13 +236,13 @@ export function useFileUpload({
 		const reportedFiles: ReportFileUploadsResponse[] =
 			fullfilled.length > 0
 				? await FileApi.reportFileUploads(
-					fullfilled.map((d) => ({
-						file_extension: d.value.name.split(".").pop() ?? "",
-						file_key: d.value.key,
-						file_size: d.value.size,
-						file_name: d.value.name,
-					})),
-				)
+						fullfilled.map((d) => ({
+							file_extension: d.value.name.split(".").pop() ?? "",
+							file_key: d.value.key,
+							file_size: d.value.size,
+							file_name: d.value.name,
+						})),
+					)
 				: []
 
 		// Collect image nodes without file_id for batch upload

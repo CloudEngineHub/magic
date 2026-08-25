@@ -3,7 +3,7 @@ import { useMessageSend } from "@/pages/chatNew/components/MessageEditor/hooks/u
 import useConversationDraft from "@/pages/chatNew/components/MessageEditor/hooks/useConversationDraft"
 import DragOverlay from "@/pages/superMagic/components/MessageEditor/components/DragOverlay"
 import { useMemoizedFn, useMount, useUpdateEffect } from "ahooks"
-import { Editor, EditorContent, JSONContent } from "@tiptap/react"
+import { Editor, EditorContent, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import AiCompletionService from "@/services/chat/editor/AiCompletionService"
 import { useMessageEditor } from "./hooks/useMessageEditor"
 import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
@@ -43,7 +43,7 @@ import TabIcon from "@/pages/superMagic/components/MessageEditor/assets/tab.svg"
 import AiCompletionTip from "@/pages/chatNew/components/MessageEditor/components/AiCompletionTip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { MagicTooltip } from "@/components/base"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	isEditorActive,
 	runActiveEditor,
@@ -273,10 +273,7 @@ function MessageEditor(
 
 	handleSendRef.current = () => {
 		const content = runActiveEditor(activeEditorRef.current, (editor) => editor.getJSON())
-		handleSend(
-			content as JSONContent,
-			content ? isOnlyText(content as JSONContent) : true,
-		)
+		handleSend(content as JSONContent, content ? isOnlyText(content as JSONContent) : true)
 	}
 
 	ConversationBotDataService.updateProps({

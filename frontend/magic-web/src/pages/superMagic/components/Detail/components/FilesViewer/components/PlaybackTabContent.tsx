@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { isEmpty } from "lodash-es"
 import { Flex, Tooltip } from "antd"
 import { IconExternalLink } from "@tabler/icons-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import Render from "../../../Render"
 import PlaybackControl from "../../../components/PlaybackControl"
 import StatusIcon from "../../../../MessageHeader/components/StatusIcon"
@@ -20,6 +20,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { correctDetailType } from "../utils/preview"
 import { ToolIconBadge } from "../../../../MessageList/components/shared/ToolIconConfig"
 import { DetailType, type DetailBrowserAttachment } from "../../../types"
+import type { FileItem } from "../types"
 
 interface PlaybackDetailWithAttachments {
 	type?: DetailType
@@ -31,7 +32,8 @@ export interface PlaybackTabContentProps {
 	setUserSelectDetail?: (detail: unknown) => void
 	userSelectDetail?: unknown
 	attachments?: unknown[]
-	attachmentList?: any[]
+	attachmentList?: FileItem[]
+	isAwaitingProjectAttachments?: boolean
 	topicId?: string
 	baseShareUrl?: string
 	currentTopicStatus?: TaskStatus
@@ -61,6 +63,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		userSelectDetail,
 		attachments,
 		attachmentList,
+		isAwaitingProjectAttachments,
 		topicId,
 		baseShareUrl,
 		currentTopicStatus,
@@ -136,8 +139,9 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 	const correctedDisPlayDetail = useMemo(() => {
 		return correctDetailType(disPlayDetail, {
 			attachmentList,
+			isAttachmentListReady: isAwaitingProjectAttachments === false,
 		})
-	}, [attachmentList, disPlayDetail])
+	}, [attachmentList, disPlayDetail, isAwaitingProjectAttachments])
 	const browserAttachments = useMemo(() => {
 		const detail = correctedDisPlayDetail as PlaybackDetailWithAttachments | undefined
 		if (detail?.type !== DetailType.Browser) return undefined

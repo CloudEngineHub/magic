@@ -11,6 +11,7 @@
 
 import time
 import traceback
+from collections.abc import Mapping
 from typing import Any, Dict, List
 
 from pydantic import ValidationError
@@ -18,6 +19,7 @@ from pydantic import ValidationError
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
+from app.tools.core.base_tool_params import BaseToolParams
 from app.tools.core.tool_factory import tool_factory
 
 logger = get_logger(__name__)
@@ -261,6 +263,23 @@ class ToolExecutor:
         except Exception as e:
             logger.error(f"获取工具 {tool_name} 实例失败: {e}")
             return None
+
+    @staticmethod
+    def get_tool_parameter_names(arguments: Mapping[str, object]) -> tuple[str, ...]:
+        """返回稳定排序后的参数字段名，避免日志记录参数值。"""
+        return tuple(sorted(str(key) for key in arguments))
+
+    def sanitize_tool_arguments_for_log(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, object],
+    ) -> dict[str, object]:
+        """按工具参数模型生成日志/遥测副本，失败时只保留脱敏占位符。"""
+        tool_info = tool_factory.get_tool(tool_name)
+        params_class = tool_info.params_class if tool_info is not None else None
+        if isinstance(params_class, type) and issubclass(params_class, BaseToolParams):
+            return params_class.sanitize_log_arguments(arguments)
+        return {str(key): "<redacted>" for key in arguments}
 
     def get_all_tools(self):
         """获取所有工具实例

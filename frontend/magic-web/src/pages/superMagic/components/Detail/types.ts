@@ -23,6 +23,7 @@ export enum DetailType {
 	Design = "design",
 	SelfMedia = "self-media",
 	AICard = "ai-card",
+	SlidesTemplate = "slides-template",
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -73,6 +74,7 @@ export interface DetailData {
 	[DetailType.Empty]: any
 	[DetailType.Excel]: DetailUniverData
 	[DetailType.PowerPoint]: DetailUniverData
+	[DetailType.SlidesTemplate]: DetailHTMLData
 	[DetailType.FileTree]: DetailFileTreeData
 }
 
@@ -102,6 +104,12 @@ export interface DetailBrowserData {
 	file_key?: string | null
 	screenshot?: string
 	preview?: string
+	action?: string
+	summary?: string
+	detail?: string
+	page_title?: string
+	target?: string
+	status?: "succeeded" | "failed"
 }
 
 /** MD文件 TextEditor */

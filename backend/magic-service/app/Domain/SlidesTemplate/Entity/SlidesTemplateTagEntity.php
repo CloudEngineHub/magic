@@ -148,6 +148,15 @@ class SlidesTemplateTagEntity extends AbstractEntity
         return $this;
     }
 
+    public function getI18nName(string $language): string
+    {
+        if (! empty($this->nameI18n[$language])) {
+            return (string) $this->nameI18n[$language];
+        }
+
+        return '';
+    }
+
     public function getDescriptionI18n(): array
     {
         return $this->descriptionI18n;

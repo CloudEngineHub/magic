@@ -50,7 +50,6 @@ interface UseBatchDownloadOptions {
 	attachments?: AttachmentItem[]
 	selectedWorkspace?: any
 	selectedProject?: any
-	projects?: any[]
 	crossProjectOperation?: {
 		openMoveModal: (fileIds: string[], parentPath: AttachmentItem[]) => void
 		openCopyModal: (fileIds: string[], parentPath?: AttachmentItem[]) => void
@@ -64,6 +63,7 @@ interface UseBatchDownloadOptions {
 	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
 	allowEdit?: boolean
+	allowCopyTo?: boolean
 	allowDownload?: boolean
 	/** 是否允许批量移动。 */
 	allowMove?: boolean
@@ -92,7 +92,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		attachments = [],
 		selectedWorkspace,
 		selectedProject,
-		projects = [],
 		crossProjectOperation,
 		moveFileHook,
 		onUpdateAttachments,
@@ -100,6 +99,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		getParentPathByFileId,
 		isMoving = false,
 		allowEdit,
+		allowCopyTo = false,
 		allowDownload,
 		allowMove = true,
 		allowCopy = true,
@@ -490,7 +490,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		}
 	}
 
-	// 批量移动处理函数
+	// Open the appropriate selector for batch moves.
 	const handleBatchMove = () => {
 		if (!selectedItems || selectedItems.size === 0) return
 
@@ -498,11 +498,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		const firstFileId = fileIds[0]
 		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
-		// 只有桌面普通项目继续走跨项目 Modal；移动端和 chat 项目回退到目录选择器。
-		if (projects.length > 0 && crossProjectOperation && !isMobile && !isChatProject) {
+		if (crossProjectOperation && !isMobile && !isChatProject) {
 			crossProjectOperation.openMoveModal(fileIds, parentPath)
 		} else if (moveFileHook) {
-			// 否则使用原来的 SelectDirectoryModal
+			// Mobile and chat projects keep the directory selector.
 			moveFileHook.openBatchMove()
 		}
 	}
@@ -648,8 +647,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					},
 				]
 			: []),
-		// 批量复制（仅在允许编辑且当前空间开放复制能力时显示）
-		...(isInProject && allowEdit && allowCopy && !hideCopyTo
+		// 批量复制（仅在允许编辑时显示）
+		...(((isInProject && allowEdit) || allowCopyTo) && !hideCopyTo
 			? [
 					{
 						key: "copy",

@@ -61,10 +61,12 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const elementInstance = canvas.elementManager.getElementInstance(elementId)
-			if (!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)) {
+			if (
+				!(
+					elementInstance instanceof ImageElementClass ||
+					elementInstance instanceof VideoElementClass
+				)
+			) {
 				return
 			}
 

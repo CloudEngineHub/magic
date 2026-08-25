@@ -9,12 +9,12 @@ namespace App\Application\MCP\SupperMagicMCP;
 
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
-use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
-use Dtyq\SuperMagic\Domain\Skill\Entity\SkillEntity;
-use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\SkillDataIsolation;
-use Dtyq\SuperMagic\Domain\Skill\Service\SkillDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
+use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentDomainService;
+use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
+use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;

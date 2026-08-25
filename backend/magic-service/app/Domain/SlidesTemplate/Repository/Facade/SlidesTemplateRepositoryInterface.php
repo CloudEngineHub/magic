@@ -20,10 +20,22 @@ interface SlidesTemplateRepositoryInterface
 
     public function findByCodeWithTrashed(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity;
 
+    public function findGloballyByCodeWithTrashed(string $code): ?SlidesTemplateEntity;
+
+    public function findOfficialByCode(SlidesTemplateDataIsolation $dataIsolation, string $code): ?SlidesTemplateEntity;
+
+    /** @return SlidesTemplateEntity[] */
+    public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array;
+
     /**
      * @return array{total: int, list: SlidesTemplateEntity[]}
      */
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array;
+
+    /**
+     * @return array{total: int, list: SlidesTemplateEntity[]}
+     */
+    public function queriesFavorites(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array;
 
     public function count(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): int;
 

@@ -1,5 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
 import { AttachmentSection } from "./sections/AttachmentSection"
@@ -13,7 +13,8 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 		props.node?.super_message_id,
 		props.node?.topic_id,
 	) ?? superMagicStore.getMessageNode(props.node?.super_message_id)) as
-		Record<string, unknown> | undefined
+		| Record<string, unknown>
+		| undefined
 	const topicId = props.node?.topic_id || ""
 	const correlationId = props.node?.correlation_id || ""
 	const messageId = props.node?.app_message_id || ""

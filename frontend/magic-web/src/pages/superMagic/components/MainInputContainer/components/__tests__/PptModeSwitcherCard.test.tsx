@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
+import { createRef } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
 import {
@@ -10,11 +11,11 @@ import PptModeSwitcherCard from "../PptModeSwitcherCard"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, values?: { count?: string }) =>
+		t: (key: string, values?: { marker?: string }) =>
 			key === "pptEmployee.delivered"
-				? `已制作 ${values?.count} 页`
+				? `已制作 ${values?.marker} 页`
 				: key === "pptEmployee.deliveredPrivate"
-					? `已制作 ${values?.count} 套`
+					? `已制作 ${values?.marker} 套`
 					: key,
 	}),
 }))
@@ -134,6 +135,43 @@ describe("PptModeSwitcherCard", () => {
 		fireEvent.mouseLeave(trigger)
 
 		expect(trigger).toHaveAttribute("data-accent-state", "idle")
+	})
+
+	it("folds the preview into the pill when the card leaves the horizontal safe area", () => {
+		useElementVisibilityMock.mockReturnValueOnce(true).mockReturnValueOnce(false)
+		const scrollContainerRef = createRef<HTMLDivElement>()
+
+		render(
+			<PptModeSwitcherCard
+				modeItem={modeItem}
+				isSelected
+				onSelect={vi.fn()}
+				scrollContainerRef={scrollContainerRef}
+			/>,
+		)
+
+		const card = screen.getByTestId("ppt-mode-switcher-card")
+		const preview = screen.getByTestId("ppt-mode-switcher-preview")
+		const previewFrames = screen.getAllByTestId("ppt-mode-switcher-preview-frame")
+
+		expect(card).toHaveAttribute("data-preview-hidden", "true")
+		expect(preview).toHaveClass(
+			"pointer-events-none",
+			"translate-y-5",
+			"scale-[0.56]",
+			"opacity-0",
+		)
+		expect(previewFrames.every((frame) => frame.dataset.active === "false")).toBe(true)
+		expect(useElementVisibilityMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({ current: expect.anything() }),
+			expect.objectContaining({
+				enabled: true,
+				initialVisible: true,
+				minimumIntersectionRatio: 0.8,
+				rootMargin: "0px -32px",
+				rootRef: scrollContainerRef,
+			}),
+		)
 	})
 
 	it("marks each preview slide as a random-template drag source", () => {

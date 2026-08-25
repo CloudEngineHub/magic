@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Check, Loader2, Plus } from "lucide-react"
-import dayjs from "dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import type { SkillPublisherType } from "@/apis/modules/skills"
@@ -115,7 +115,10 @@ function SkillCard({
 					/>
 					<div className="min-w-0 flex-1 pr-10">
 						<div className="flex min-w-0 items-center gap-2">
-							<p className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+							<p
+								className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground"
+								data-testid="skill-card-name"
+							>
 								{skill.name}
 							</p>
 							{sourceLabel ? (

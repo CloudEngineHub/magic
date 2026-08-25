@@ -1,6 +1,6 @@
 import { useRef, useLayoutEffect, useState, useCallback, memo } from "react"
 import { motion } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	Tooltip,
 	TooltipContent,

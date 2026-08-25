@@ -43,7 +43,7 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
 		return flattenAttachmentsList(attachments)
 	}, [attachments, attachmentList])
 
-	if (flatAttachments.length > 0) {
+	if (Array.isArray(attachmentList) || Array.isArray(attachments)) {
 		hasObservedAttachmentSnapshotRef.current = true
 	}
 

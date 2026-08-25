@@ -11,7 +11,7 @@ import {
 	Workflow,
 } from "lucide-react"
 import { useRef, type ReactNode, type RefObject } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 gsap.registerPlugin(useGSAP, ScrollTrigger)
 

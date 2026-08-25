@@ -137,8 +137,8 @@ class GrepSearch(WorkspaceTool[GrepSearchParams]):
             path=params.path
         )
 
-        # 更新匹配文件的时间戳
-        await self._update_file_timestamps(tool_context, search_result.matched_files)
+        # 记录搜索结果涉及的文件版本，供 Horizon 检测后续变化
+        await self._record_matched_file_observations(tool_context, search_result.matched_files)
 
         # 准备 extra_info 用于前端展示
         extra_info = {
@@ -313,8 +313,12 @@ class GrepSearch(WorkspaceTool[GrepSearchParams]):
             content += WARNINGS_SECTION + stderr_str
         return content
 
-    async def _update_file_timestamps(self, tool_context: ToolContext, matched_files: List[Path]) -> None:
-        """更新匹配文件的时间戳
+    async def _record_matched_file_observations(
+        self,
+        tool_context: ToolContext,
+        matched_files: List[Path],
+    ) -> None:
+        """记录搜索结果涉及的文件版本
 
         Args:
             tool_context: 工具上下文
@@ -326,10 +330,13 @@ class GrepSearch(WorkspaceTool[GrepSearchParams]):
         horizon = self.get_horizon(tool_context)
         for file_path in matched_files:
             try:
-                await horizon.update_timestamp(file_path)
-                logger.debug(f"已更新搜索结果文件时间戳: {file_path}")
+                await horizon.record_file_observation(
+                    file_path,
+                    tool_name="grep_search",
+                )
+                logger.debug(f"已记录搜索结果文件状态: {file_path}")
             except Exception as e:
-                logger.warning(f"更新文件时间戳失败 {file_path}: {e}")
+                logger.warning(f"记录搜索结果文件状态失败 {file_path}: {e}")
 
     async def _count_matching_files(self, include: str, search_dir: Path) -> Optional[int]:
         """预检：统计将被搜索的文件数，超限时提前中止，避免 S3 大量下载。

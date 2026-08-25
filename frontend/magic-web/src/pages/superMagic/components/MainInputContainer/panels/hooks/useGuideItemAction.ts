@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { openNewTab } from "@/routes/helpers"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"

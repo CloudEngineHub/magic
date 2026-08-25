@@ -79,6 +79,7 @@ interface UseSkillsPanelOptions {
 	onRemoveSkillFromAgent: (skillCode: string) => Promise<void>
 	/** Refresh bound crew skills from backend after persistence succeeds. */
 	onRefreshSkills?: () => Promise<void>
+	/** Resolved list fields follow the request locale; changes must refresh the API data. */
 	language: string
 	/**
 	 * Optional full replacement for install (after list item click).
@@ -119,7 +120,7 @@ function mapLatestPublishedSkill(item: SkillLastVersionItem): SkillPanelItem {
 		userSkillCode: item.code,
 		isInUserLibrary: true,
 		// Latest-version responses expose the localized display fields directly.
-		name: item.name || "",
+		name: item.name?.trim() || item.package_name || item.code,
 		description: item.description || "",
 		logo: item.logo,
 		sourceType: item.source_type,

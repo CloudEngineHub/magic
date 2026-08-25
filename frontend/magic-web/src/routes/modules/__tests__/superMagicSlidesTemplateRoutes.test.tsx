@@ -1,10 +1,14 @@
+import { isValidElement } from "react"
 import { describe, expect, it, vi } from "vitest"
 import type { RouteObject } from "react-router"
 import { RoutePath } from "@/constants/routes"
 import { RouteName } from "@/routes/constants"
 import { getRoutePath } from "@/routes/history/helpers"
 import { registerRoutes } from "@/routes/routes"
+import ProjectOrganizationAccessGuard from "@/pages/superMagic/components/ProjectOrganizationAccessGuard"
 import { superMagicSlidesTemplateRoutes } from "../superMagicSlidesTemplateRoutes"
+
+vi.mock("@/routes/modules/admin/routes", () => ({ default: [] }))
 
 vi.mock("antd", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("antd")>()
@@ -62,14 +66,25 @@ describe("superMagicSlidesTemplateRoutes", () => {
 		expect(legacyRoute?.path).toBe("/:clusterCode/super/slides-templates")
 	})
 
-	it("keeps static slide routes separate from guarded dynamic project routes", () => {
+	it("keeps guarded project routes inside the persistent Super layout", () => {
 		const routes = registerRoutes()
 		const superRoute = findRouteByName(routes, RouteName.Super)
 		const projectRoute = findRouteByName(routes, RouteName.SuperWorkspaceProjectState)
+		const topicRoute = findRouteByName(routes, RouteName.SuperWorkspaceProjectTopicState)
 		const childNames = superRoute?.children?.map((route) => route.name)
 
 		expect(childNames).toContain(RouteName.SuperSlidesTemplates)
-		expect(childNames).not.toContain(RouteName.SuperWorkspaceProjectState)
-		expect(projectRoute?.children?.[0]?.index).toBe(true)
+		expect(childNames).toContain(RouteName.SuperWorkspaceProjectState)
+		expect(childNames).toContain(RouteName.SuperWorkspaceProjectTopicState)
+		expect(isValidElement(projectRoute?.element)).toBe(true)
+		expect(isValidElement(topicRoute?.element)).toBe(true)
+		expect((projectRoute?.element as { type?: unknown }).type).toBe(
+			ProjectOrganizationAccessGuard,
+		)
+		expect((topicRoute?.element as { type?: unknown }).type).toBe(
+			ProjectOrganizationAccessGuard,
+		)
+		expect(projectRoute?.children).toBeUndefined()
+		expect(topicRoute?.children).toBeUndefined()
 	})
 })

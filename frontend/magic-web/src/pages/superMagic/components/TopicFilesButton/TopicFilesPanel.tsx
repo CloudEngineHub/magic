@@ -8,7 +8,10 @@ import {
 	type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
-import TopicFilesCore, { type TopicFilesCoreRef } from "./TopicFilesCore"
+import TopicFilesCore, {
+	type TopicFilesCoreRef,
+	type TopicFilesExpansionState,
+} from "./TopicFilesCore"
 import { useDownloadAll } from "./useDownloadAll"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import useShareRoute from "../../hooks/useShareRoute"
@@ -24,7 +27,7 @@ import {
 	SearchModeHeader,
 } from "./components"
 import { useFileReplace } from "./hooks/useFileReplace"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
@@ -36,7 +39,10 @@ import MobileProjectDetailFilesView from "./components/MobileProjectDetailFilesV
 import { SelectDirectoryModal } from "../SelectPathModal"
 import { useBatchDownload } from "./hooks/useBatchDownload"
 import { useProjectDetailFilesController } from "./hooks/useProjectDetailFilesController"
-import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import {
+	useCrossProjectFileOperation,
+	type CrossProjectOperationSuccessResult,
+} from "./hooks/useCrossProjectFileOperation"
 import { useCrossProjectMoveCompensation } from "./hooks/useCrossProjectMoveCompensation"
 import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDownload"
 import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
@@ -54,6 +60,9 @@ interface TopicFilesPanelProps {
 	onFileClick?: (fileItem: any) => void
 	topicId?: string
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -74,9 +83,13 @@ interface TopicFilesPanelProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读场景复制文件到当前用户的项目
+	allowCopyTo?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
@@ -94,6 +107,16 @@ export interface TopicFilesPanelRef {
 	openBatchMoveByFileIds: (fileIds: string[]) => void
 }
 
+const EMPTY_TOPIC_FILES_EXPANSION_STATE: TopicFilesExpansionState = {
+	hasExpandableFolders: false,
+	allFoldersExpanded: false,
+}
+
+interface TopicFilesExpansionSnapshot {
+	ownerId: string
+	state: TopicFilesExpansionState
+}
+
 const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 	function TopicFilesPanel(
 		{
@@ -104,6 +127,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			setUserSelectDetail,
 			onFileClick,
 			projectId,
+			shareCode,
+			sharePassword,
+			onCrossProjectOperationSuccess,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -118,9 +144,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			filterMenuItems,
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
+			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			onSaveSlidesTemplate,
+			onConvertToSlidesTemplate,
 			headerTrailingAction,
 			spaceConfig,
 			isItemSelectable,
@@ -244,6 +273,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const crossProjectOperation = useCrossProjectFileOperation({
 			projectId,
+			shareCode,
+			sharePassword,
 			selectedWorkspace: selectedWorkspace || null,
 			selectedProject: selectedProject || null,
 			projects,
@@ -251,6 +282,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				setIsSelectMode(false)
 				projectDetailFilesController.resetMobileSelection()
 				handleProjectDetailCrossProjectSuccess(result)
+				if (result) onCrossProjectOperationSuccess?.(result)
 			},
 		})
 
@@ -353,6 +385,22 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const coreRef = useRef<TopicFilesCoreRef>(null)
 		const [selectedCount, setSelectedCount] = useState(0)
 		const [totalCount, setTotalCount] = useState(0)
+		const expansionOwnerId = String(selectedProject?.id || projectId || "")
+		const [expansionSnapshot, setExpansionSnapshot] = useState<TopicFilesExpansionSnapshot>({
+			ownerId: expansionOwnerId,
+			state: EMPTY_TOPIC_FILES_EXPANSION_STATE,
+		})
+		// owner 不一致时立即隐藏按钮，等待当前文件树重新上报，避免显示上一个项目的状态。
+		const expansionState =
+			expansionSnapshot.ownerId === expansionOwnerId
+				? expansionSnapshot.state
+				: EMPTY_TOPIC_FILES_EXPANSION_STATE
+		const handleExpansionStateChange = useMemoizedFn((state: TopicFilesExpansionState) => {
+			setExpansionSnapshot({ ownerId: expansionOwnerId, state })
+		})
+		const handleToggleAllFolders = useMemoizedFn(() => {
+			coreRef.current?.toggleAllFolders()
+		})
 
 		// 处理搜索功能 - 切换到搜索模式
 		const handleSearch = () => {
@@ -644,6 +692,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 											: undefined
 									}
 									onAddFolder={handleAddFolder}
+									allFoldersExpanded={expansionState.allFoldersExpanded}
+									onToggleAllFolders={
+										expansionState.hasExpandableFolders
+											? handleToggleAllFolders
+											: undefined
+									}
 									onUploadFile={
 										capabilities.upload ? handleUploadFile : undefined
 									}
@@ -671,12 +725,18 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								setUserSelectDetail={setUserSelectDetail}
 								onFileClick={onFileClick}
 								projectId={projectId}
+								shareCode={shareCode}
+								sharePassword={sharePassword}
+								onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
 								fileFilters={fileFilters}
 								handleDownloadAll={handleDownloadAll}
 								allLoading={allLoading}
 								activeFileId={activeFileId}
 								selectedTopic={selectedTopic}
 								isSelectMode={isSelectMode}
+								onExpansionStateChange={
+									isSearchMode ? undefined : handleExpansionStateChange
+								}
 								onSelectionChange={(selectedCount, totalCount) => {
 									setSelectedCount(selectedCount)
 									setTotalCount(totalCount)
@@ -700,9 +760,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									filterBatchDownloadLayerMenuItems
 								}
 								allowDownload={allowDownload}
+								allowCopyTo={allowCopyTo}
 								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
+								onSaveSlidesTemplate={onSaveSlidesTemplate}
+								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
 								spaceConfig={spaceConfig}
 								isItemSelectable={isItemSelectable}
 								operationRoot={operationRoot}
@@ -761,6 +824,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					onCancel={sharedDuplicateHandler.handleFolderConflictCancel}
 					onMerge={sharedDuplicateHandler.handleFolderConflictMerge}
 					onKeepBoth={sharedDuplicateHandler.handleFolderConflictKeepBoth}
+					onReplace={sharedDuplicateHandler.handleFolderConflictReplace}
 				/>
 				{shouldUseProjectDetailMobileView ? (
 					<DuplicateFileModal

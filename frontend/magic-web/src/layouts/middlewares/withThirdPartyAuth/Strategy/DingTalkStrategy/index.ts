@@ -1,4 +1,4 @@
-import { compareVersions } from "@/lib/dingTalkAPI"
+import { compareVersions } from "@/infrastructure/external-sdk/ding-talk"
 import { Login } from "@/types/login"
 import { configStore } from "@/models/config"
 import type { ThirdPartyLoginStrategy } from "../../types"

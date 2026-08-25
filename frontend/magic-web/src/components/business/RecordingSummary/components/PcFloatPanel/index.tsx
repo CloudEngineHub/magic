@@ -46,7 +46,7 @@ import {
 	RecorderInitializationError,
 	AudioSourceSwitchError,
 } from "@/services/recordSummary/MediaRecorderService/types/RecorderErrors"
-import { Editor } from "@tiptap/core"
+import { Editor } from "@/infrastructure/editors/tiptap/core"
 import NoteUpdateStatus from "../NoteUpdateStatus"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { isDev } from "@/utils/env"
@@ -100,10 +100,11 @@ export interface PcFloatPanelProps {
 	urlResolver: (relativePath: string) => Promise<string>
 	currentDocumentPath: string
 	folderPath: string
-	onImageUploadSuccess?: (relativePath: string) => void
+	onImageUploadSuccess?: (relativePath: string) => void | Promise<void>
 	editorRef?: React.RefObject<SimpleEditorRef>
 	onSave?: (editor: Editor | null) => void
 	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
+	requireImagesFolderParentId?: boolean
 	transcriptionEnabled?: boolean
 	isEnablingTranscription?: boolean
 	onEnableTranscription?: () => void | Promise<void>
@@ -150,9 +151,11 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		urlResolver,
 		currentDocumentPath,
 		folderPath,
+		onImageUploadSuccess,
 		editorRef,
 		onSave,
 		resolveImagesFolderParentId,
+		requireImagesFolderParentId,
 		transcriptionEnabled = true,
 		isEnablingTranscription = false,
 		onEnableTranscription,
@@ -546,7 +549,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 													? t("recordingSummary.ui.minimize")
 													: t("recordingSummary.ui.expand")}
 											</button>
-											{isExpanded && !isAudioProjectMode ? (
+											{isExpanded ? (
 												<button
 													type="button"
 													data-testid="record-summary-pc-float-panel-ai-chat-toggle"
@@ -713,9 +716,12 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 													urlResolver={urlResolver}
 													className={styles.editorBody}
 													folderPath={folderPath}
-													onImageUploadSuccess={checkNowDebounced}
+													onImageUploadSuccess={onImageUploadSuccess}
 													resolveImagesFolderParentId={
 														resolveImagesFolderParentId
+													}
+													requireImagesFolderParentId={
+														requireImagesFolderParentId
 													}
 													editorRef={editorRef}
 													placeholder={t(
@@ -748,7 +754,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 								)}
 							</MagicSplitter>
 						</MagicSplitter.Panel>
-						{expandedAiChat && isExpanded && !isAudioProjectMode ? (
+						{expandedAiChat && isExpanded ? (
 							<MagicSplitter.Panel
 								defaultSize={380}
 								max="50%"

@@ -9,7 +9,7 @@ import {
 	IconChevronDown,
 	IconEdit,
 } from "@tabler/icons-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { QueuedMessage } from "../../hooks/useMessageQueue"
 import CollapsibleText from "./components/CollapsibleText"

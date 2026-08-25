@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useControllableValue } from "ahooks"
 import { Button, DatePicker, Empty, Popover, Segmented, Select, Space, Typography } from "antd"
-import dayjs, { type Dayjs } from "dayjs"
+import dayjs, { type Dayjs } from "@admin/infrastructure/vendors/dayjs"
 import { IconCalendarClock, IconTrash, IconX } from "@tabler/icons-react"
 import { useAdminComponents } from "../AdminComponentsProvider"
 import MagicButton from "../MagicButton"

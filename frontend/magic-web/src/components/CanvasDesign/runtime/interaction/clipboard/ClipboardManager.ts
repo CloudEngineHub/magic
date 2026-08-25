@@ -1505,6 +1505,12 @@ export class ClipboardManager {
 			sourceCanvasId,
 		} = options
 		const metadata = metadataByElementId.get(sourceElement.id)
+		if (!sourceElement.src) {
+			return {
+				element: finalElement,
+				sourceReferenceFailureCount: 0,
+			}
+		}
 
 		if (metadata?.role === "generation-resource") {
 			const completedTransfer =
@@ -2006,6 +2012,7 @@ export class ClipboardManager {
 						const elementId =
 							await this.canvas.canvasFileUploadManager.uploadFileElement({
 								file,
+								dimensions: mediaDimensions[i],
 								position,
 								manageHistory: false,
 								onUploadComplete: () => {

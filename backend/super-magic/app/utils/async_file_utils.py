@@ -265,6 +265,66 @@ async def async_mkstemp(
     return fd, path
 
 
+async def async_create_temp_text_file(
+    content: str,
+    *,
+    suffix: str = "",
+    prefix: str = "",
+    directory: Union[str, Path],
+    encoding: str = "utf-8",
+) -> Path:
+    """排他创建临时文本文件，并通过 mkstemp 返回的文件描述符完成写入。"""
+    import tempfile
+
+    def _create_and_write() -> Path:
+        fd = -1
+        path: str | None = None
+        try:
+            fd, path = tempfile.mkstemp(
+                suffix=suffix,
+                prefix=prefix,
+                dir=str(directory),
+                text=True,
+            )
+            file_object = os.fdopen(fd, "w", encoding=encoding)
+            fd = -1
+            with file_object:
+                file_object.write(content)
+                file_object.flush()
+            return Path(path)
+        except BaseException:
+            if fd >= 0:
+                os.close(fd)
+            if path is not None:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+            raise
+
+    create_task = asyncio.create_task(asyncio.to_thread(_create_and_write))
+    try:
+        file_path = await asyncio.shield(create_task)
+    except asyncio.CancelledError as cancellation:
+        try:
+            file_path = await create_task
+        except BaseException:
+            raise cancellation
+        try:
+            await async_unlink(file_path)
+        finally:
+            raise cancellation
+    logger.debug(f"创建并写入临时文本文件: {file_path}")
+    return file_path
+
+
+async def async_gettempdir() -> Path:
+    """异步获取当前运行环境选择的系统临时目录。"""
+    import tempfile
+
+    return Path(await asyncio.to_thread(tempfile.gettempdir))
+
+
 async def async_close_fd(fd: int) -> None:
     """
     异步关闭文件描述符，是 os.close 的异步封装。

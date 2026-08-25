@@ -8,15 +8,16 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Api\Skill;
 
 use App\Application\File\Service\FileAppService;
+use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillMarketModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillVersionModel;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillMarketModel;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillModel;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillVersionModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TaskFileModel;
 use Hyperf\DbConnection\Db;
 use HyperfTest\Cases\Api\SuperAgent\AbstractApiTest;
+use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 use ZipArchive;
 
@@ -757,6 +758,147 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
+
+    }
+
+    public function testQueriesCollaboratedScope(): void
+    {
+        $collaboratorUserId = $this->switchUserTest1();
+
+        $this->switchUserTest2();
+        $ownerHeaders = $this->getCommonHeaders();
+        $collaboratedSkillCode = $this->createTestSkill();
+        $publishedInfoResponse = $this->put(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/info',
+            [
+                'name_i18n' => [
+                    'zh_CN' => '协作已发布名称',
+                    'en_US' => 'Collaborated Published Name',
+                ],
+                'description_i18n' => [
+                    'zh_CN' => '协作已发布描述',
+                    'en_US' => 'Collaborated Published Description',
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $publishedInfoResponse['code'], $publishedInfoResponse['message'] ?? '');
+        $publishCollaboratedResponse = $this->publishSkillVersion($collaboratedSkillCode, '1.0.0', 'ORGANIZATION');
+        $this->assertEquals(1000, $publishCollaboratedResponse['code'], $publishCollaboratedResponse['message'] ?? '');
+        $draftInfoResponse = $this->put(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/info',
+            [
+                'name_i18n' => [
+                    'zh_CN' => '协作草稿名称',
+                    'en_US' => 'Collaborated Draft Name',
+                ],
+                'description_i18n' => [
+                    'zh_CN' => '协作草稿描述',
+                    'en_US' => 'Collaborated Draft Description',
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $draftInfoResponse['code'], $draftInfoResponse['message'] ?? '');
+        $visibilityOnlySkillCode = $this->createTestSkill();
+
+        $addCollaboratorResponse = $this->post(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                        'role' => 'viewer',
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $addCollaboratorResponse['code'], $addCollaboratorResponse['message'] ?? '');
+
+        $publishResponse = $this->publishSkillVersion($visibilityOnlySkillCode, '1.0.0', 'ORGANIZATION');
+        $this->assertEquals(1000, $publishResponse['code'], $publishResponse['message'] ?? '');
+
+        $this->switchUserTest1();
+        $collaboratorHeaders = $this->getCommonHeaders();
+        $createdSkillCode = $this->createTestSkill();
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'collaborated',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $collaboratorHeaders
+        );
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $skillCodes = array_column($response['data']['list'], 'code');
+        $this->assertContains($collaboratedSkillCode, $skillCodes, '协作者技能应出现在 collaborated 列表中');
+        $this->assertNotContains($visibilityOnlySkillCode, $skillCodes, '仅可见技能不应出现在 collaborated 列表中');
+        $this->assertNotContains($createdSkillCode, $skillCodes, '本人创建技能不应出现在 collaborated 列表中');
+
+        $collaboratedSkill = null;
+        foreach ($response['data']['list'] as $item) {
+            if (($item['code'] ?? null) === $collaboratedSkillCode) {
+                $collaboratedSkill = $item;
+                break;
+            }
+        }
+        $this->assertNotNull($collaboratedSkill);
+        $this->assertSame('viewer', $collaboratedSkill['user_role'] ?? null);
+        $this->assertSame('协作草稿名称', $collaboratedSkill['name'] ?? null);
+        $this->assertSame('协作草稿描述', $collaboratedSkill['description'] ?? null);
+        $this->assertSame('1.0.0', $collaboratedSkill['latest_version'] ?? null);
+
+        $teamSharedResponse = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'team_shared',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $collaboratorHeaders
+        );
+        $this->assertEquals(1000, $teamSharedResponse['code'], $teamSharedResponse['message'] ?? '');
+        $this->assertContains(
+            $visibilityOnlySkillCode,
+            array_column($teamSharedResponse['data']['list'], 'code'),
+            '仅可见技能应出现在 team_shared 列表中'
+        );
+        $this->assertNotContains(
+            $collaboratedSkillCode,
+            array_column($teamSharedResponse['data']['list'], 'code'),
+            '仅协作授权技能不应出现在 team_shared 列表中'
+        );
+
+        $removeCollaboratorResponse = $this->delete(
+            self::BASE_URI . '/' . $collaboratedSkillCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $removeCollaboratorResponse['code'], $removeCollaboratorResponse['message'] ?? '');
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'collaborated',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $collaboratorHeaders
+        );
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertNotContains($collaboratedSkillCode, array_column($response['data']['list'], 'code'));
     }
 
     public function testQueriesMarketInstalled(): void
@@ -818,6 +960,29 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
+
+        $unifiedResponse = $this->post(
+            self::BASE_URI . '/queries',
+            [
+                'scope' => 'market_installed',
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $this->getCommonHeaders()
+        );
+
+        $this->assertEquals(1000, $unifiedResponse['code'], $unifiedResponse['message'] ?? '');
+        $this->assertArrayHasKey('list', $unifiedResponse['data']);
+        $this->assertSame(1, $unifiedResponse['data']['page']);
+        $this->assertSame(20, $unifiedResponse['data']['page_size']);
+        $this->assertGreaterThanOrEqual(1, $unifiedResponse['data']['total']);
+        $this->assertArrayNotHasKey('code', $unifiedResponse['data']);
+        $this->assertArrayNotHasKey('message', $unifiedResponse['data']);
+        $this->assertContains(
+            $storeSkillData['skill_code'],
+            array_column($unifiedResponse['data']['list'], 'code'),
+            '统一技能查询接口的 market_installed scope 应该返回市场安装技能'
+        );
     }
 
     /**
@@ -1947,6 +2112,66 @@ class UserSkillApiTest extends AbstractApiTest
         $item = $response['data']['list'][0];
         $this->assertSame($storeSkill['skill_code'], $item['skill_code'] ?? null);
         $this->assertSame('1.0.0', $item['latest_version'] ?? null);
+    }
+
+    public function testOfficialBuiltinSkillDetailDoesNotRequireMagicSkillsRecord(): void
+    {
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+        $organizationCode = $headers['organization-code'];
+        $skillCode = 'builtin-' . strtolower(IdGenerator::getUniqueId32());
+        $versionId = IdGenerator::getSnowId();
+        $marketId = IdGenerator::getSnowId();
+        $publishedAt = date('Y-m-d H:i:s');
+
+        SkillVersionModel::query()->create([
+            'id' => $versionId,
+            'code' => $skillCode,
+            'organization_code' => $organizationCode,
+            'creator_id' => 'official-builtin-user',
+            'package_name' => 'builtin-package',
+            'package_description' => 'Official builtin package',
+            'version' => '1.0.0',
+            'name_i18n' => ['zh_CN' => '内置技能', 'en_US' => 'Builtin Skill'],
+            'description_i18n' => ['zh_CN' => '内置技能描述', 'en_US' => 'Builtin skill description'],
+            'source_i18n' => [],
+            'file_key' => 'skills/builtin.zip',
+            'skill_file_key' => 'skills/builtin/SKILL.md',
+            'publish_status' => 'PUBLISHED',
+            'review_status' => 'APPROVED',
+            'publish_target_type' => 'MARKET',
+            'publisher_user_id' => 'official-builtin-user',
+            'published_at' => $publishedAt,
+            'is_current_version' => true,
+            'source_type' => 'LOCAL_UPLOAD',
+            'created_at' => $publishedAt,
+            'updated_at' => $publishedAt,
+        ]);
+
+        SkillMarketModel::query()->create([
+            'id' => $marketId,
+            'organization_code' => $organizationCode,
+            'skill_code' => $skillCode,
+            'skill_version_id' => $versionId,
+            'name_i18n' => ['zh_CN' => '内置技能', 'en_US' => 'Builtin Skill'],
+            'description_i18n' => ['zh_CN' => '内置技能描述', 'en_US' => 'Builtin skill description'],
+            'publisher_id' => 'official-builtin-user',
+            'publisher_type' => 'OFFICIAL_BUILTIN',
+            'publish_status' => 'PUBLISHED',
+            'is_featured' => false,
+            'is_hidden' => false,
+            'created_at' => $publishedAt,
+            'updated_at' => $publishedAt,
+        ]);
+
+        di(CacheInterface::class)->delete('super_magic:skill_market:official_builtin:entities:v2');
+
+        $response = $this->get(self::BASE_URI . '/' . $skillCode, $headers);
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertSame($skillCode, $response['data']['code'] ?? null);
+        $this->assertSame('builtin-package', $response['data']['package_name'] ?? null);
+        $this->assertSame('1.0.0', $response['data']['version_code'] ?? null);
     }
 
     /**

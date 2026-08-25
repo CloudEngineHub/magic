@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { RecordingDetailTabStrip } from "../RecordingDetailTabStrip"
 
@@ -107,31 +107,6 @@ describe("RecordingDetailTabStrip", () => {
 	})
 
 	describe("overflow edge fades", () => {
-		let scrollIntoViewMock: ReturnType<typeof vi.fn>
-		let originalScrollIntoView: PropertyDescriptor | undefined
-
-		beforeEach(() => {
-			scrollIntoViewMock = vi.fn()
-			originalScrollIntoView = Object.getOwnPropertyDescriptor(
-				HTMLElement.prototype,
-				"scrollIntoView",
-			)
-			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-				configurable: true,
-				value: scrollIntoViewMock,
-			})
-		})
-
-		afterEach(() => {
-			if (originalScrollIntoView) {
-				Object.defineProperty(
-					HTMLElement.prototype,
-					"scrollIntoView",
-					originalScrollIntoView,
-				)
-			}
-		})
-
 		it("shows start and end fades when content overflows and is partially scrolled", () => {
 			const scrollWidthDescriptor = Object.getOwnPropertyDescriptor(
 				HTMLElement.prototype,
@@ -163,6 +138,9 @@ describe("RecordingDetailTabStrip", () => {
 				get() {
 					return 120
 				},
+				set() {
+					// Allow components to update their local scroller while this test pins the observed state.
+				},
 			})
 
 			render(
@@ -178,16 +156,22 @@ describe("RecordingDetailTabStrip", () => {
 
 			if (scrollWidthDescriptor) {
 				Object.defineProperty(HTMLElement.prototype, "scrollWidth", scrollWidthDescriptor)
+			} else {
+				delete (HTMLElement.prototype as Partial<HTMLElement>).scrollWidth
 			}
 			if (clientWidthDescriptor) {
 				Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidthDescriptor)
+			} else {
+				delete (HTMLElement.prototype as Partial<HTMLElement>).clientWidth
 			}
 			if (scrollLeftDescriptor) {
 				Object.defineProperty(HTMLElement.prototype, "scrollLeft", scrollLeftDescriptor)
+			} else {
+				delete (HTMLElement.prototype as Partial<HTMLElement>).scrollLeft
 			}
 		})
 
-		it("scrolls the active tab into view when activeKey changes", () => {
+		it("centers the active tab inside only the local scroll container", () => {
 			const { rerender } = render(
 				<RecordingDetailTabStrip
 					tabs={manyTabs}
@@ -195,6 +179,17 @@ describe("RecordingDetailTabStrip", () => {
 					onChange={() => undefined}
 				/>,
 			)
+			const scrollContainer = screen.getByTestId("recording-detail-tab-scroll")
+			const notesTab = screen.getByTestId("recording-detail-tab-notes")
+			Object.defineProperties(scrollContainer, {
+				scrollWidth: { configurable: true, value: 640 },
+				clientWidth: { configurable: true, value: 240 },
+				scrollLeft: { configurable: true, writable: true, value: 0 },
+			})
+			Object.defineProperties(notesTab, {
+				offsetLeft: { configurable: true, value: 360 },
+				offsetWidth: { configurable: true, value: 80 },
+			})
 
 			rerender(
 				<RecordingDetailTabStrip
@@ -204,10 +199,7 @@ describe("RecordingDetailTabStrip", () => {
 				/>,
 			)
 
-			expect(scrollIntoViewMock).toHaveBeenCalledWith({
-				block: "nearest",
-				inline: "center",
-			})
+			expect(scrollContainer.scrollLeft).toBe(280)
 		})
 	})
 })

@@ -296,11 +296,18 @@ class DragLogger {
 
 			// 🔥 关键错误：数据解析失败可能是代码 bug，上报到线上
 			if (this.reportToServer) {
-				logger.error("[DragLogger] 拖拽数据解析失败", {
-					sessionId: this.sessionId,
-					time: log.time,
-					rawData: data.rawData?.substring(0, 200),
+				logger.error({
+					eventKey: "drag_logger_parse_failed",
+					errorKind: "parse",
 					error: data.error,
+					message: "[DragLogger] 拖拽数据解析失败",
+					context: {
+						sessionId: this.sessionId,
+						time: log.time,
+						// 原始拖拽数据是解析失败的关键依据；沿用历史 200 字符上限，避免无界上报。
+						rawData: data.rawData?.substring(0, 200),
+						rawDataLength: data.rawData?.length,
+					},
 				})
 			}
 		}
@@ -347,11 +354,16 @@ class DragLogger {
 			// ⚠️ 编辑器未就绪通常是用户操作太快或页面未加载完成，不一定需要上报
 			// 但如果启用了上报，也可以记录以便分析用户行为
 			if (this.reportToServer && !data.hasEditor) {
-				logger.error("[DragLogger] 拖拽时编辑器未就绪", {
-					sessionId: this.sessionId,
-					time: log.time,
-					hasEditor: data.hasEditor,
-					isDestroyed: data.isDestroyed,
+				logger.error({
+					eventKey: "drag_logger_failed",
+					errorKind: "unknown",
+					message: "[DragLogger] 拖拽时编辑器未就绪",
+					context: {
+						sessionId: this.sessionId,
+						time: log.time,
+						hasEditor: data.hasEditor,
+						isDestroyed: data.isDestroyed,
+					},
 				})
 			}
 		}
@@ -397,11 +409,16 @@ class DragLogger {
 
 			// 🔥 关键错误：Mention 插入失败可能影响用户体验，应该上报
 			if (this.reportToServer) {
-				logger.error("[DragLogger] Mention 插入失败", {
-					sessionId: this.sessionId,
-					time: log.time,
-					mentionType: data.mentionType,
+				logger.error({
+					eventKey: "drag_logger_mention_failed",
+					errorKind: "unknown",
 					error: data.error,
+					message: "[DragLogger] Mention 插入失败",
+					context: {
+						sessionId: this.sessionId,
+						time: log.time,
+						mentionType: data.mentionType,
+					},
 				})
 			}
 		}
@@ -464,12 +481,12 @@ class DragLogger {
 
 		// 🔥 所有通过 logError 记录的错误都是关键错误，应该上报
 		if (this.reportToServer) {
-			logger.error(`[DragLogger] ${stage} 发生错误`, {
-				sessionId: this.sessionId,
-				time: log.time,
-				stage,
-				...extraData,
-				error,
+			logger.error({
+				eventKey: "drag_logger_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `[DragLogger] ${stage} 发生错误`,
+				context: { sessionId: this.sessionId, time: log.time, stage, ...extraData },
 			})
 		}
 	}

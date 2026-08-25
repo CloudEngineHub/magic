@@ -14,7 +14,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import { useLocaleText } from "./hooks/useLocaleText"
 import type { FieldItem, OptionItem } from "./types"
@@ -186,7 +186,10 @@ function FilterSelectItem({
 			<div className={cn("flex flex-col items-start gap-1", isCompactMobile && "block")}>
 				{isCompactMobile ? null : (
 					<Label
-						className="text-xs font-medium text-muted-foreground"
+						className={cn(
+							"text-xs font-medium text-muted-foreground",
+							!isCompactMobile && "ml-3",
+						)}
 						onClick={handleOpenDrawer}
 					>
 						{lt(filter.label)}

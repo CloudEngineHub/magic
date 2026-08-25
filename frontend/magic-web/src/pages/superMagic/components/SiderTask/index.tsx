@@ -17,7 +17,7 @@ import { ScheduledTask } from "@/types/scheduledTask"
 import { useScheduleTask } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduleTask"
 import { useUpdateEffect } from "ahooks"
 import { useRef } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 type TaskItemData = ScheduledTask.Task
 

@@ -15,6 +15,11 @@ interface ConversationPanelState {
 	lastExpandedSize?: number | null
 }
 
+interface TopicLayoutStoreOptions {
+	/** Controls whether the conversation collapse state is shared across page mounts. */
+	persistConversationPanelState?: boolean
+}
+
 const CONVERSATION_PANEL_STORAGE_KEY = "supermagic-topic-conversation-panel"
 
 export class TopicLayoutStore {
@@ -36,8 +41,11 @@ export class TopicLayoutStore {
 	private dragStartMessagePanelWidthPx = 0
 	private minSizeReachedPointerX: number | null = null
 	private minSizeReachedPanelWidthPx: number | null = null
+	private readonly persistConversationPanelState: boolean
 
-	constructor() {
+	/** Creates one layout state container with optional conversation-state persistence. */
+	constructor({ persistConversationPanelState = true }: TopicLayoutStoreOptions = {}) {
+		this.persistConversationPanelState = persistConversationPanelState
 		makeAutoObservable(this, {}, { autoBind: true })
 		this.initFromStorage()
 	}
@@ -61,7 +69,9 @@ export class TopicLayoutStore {
 			minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
 			maxWidth: DEFAULT_MAX_WIDTH.MESSAGE_PANEL,
 		})
-		this.loadConversationPanelState()
+		if (this.persistConversationPanelState) {
+			this.loadConversationPanelState()
+		}
 	}
 
 	setContainerWidth(width: number) {
@@ -259,6 +269,7 @@ export class TopicLayoutStore {
 	}
 
 	private saveConversationPanelState() {
+		if (!this.persistConversationPanelState) return
 		try {
 			localStorage.setItem(
 				CONVERSATION_PANEL_STORAGE_KEY,

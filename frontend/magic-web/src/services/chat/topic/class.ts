@@ -1,9 +1,5 @@
 import { isAiConversation } from "@/stores/chatNew/helpers/conversation"
-import type {
-	CreateTopicMessage,
-	DeleteTopicMessage,
-	UpdateTopicMessage,
-} from "@/types/chat/topic"
+import type { CreateTopicMessage, DeleteTopicMessage, UpdateTopicMessage } from "@/types/chat/topic"
 import type { SeqResponse } from "@/types/request"
 import { nanoid } from "nanoid"
 import { logger as Logger } from "@/utils/log"
@@ -311,7 +307,11 @@ class ChatTopicService {
 		const conversationId = conversationStore.currentConversation?.id
 
 		if (!conversationId) {
-			logger.error("conversationId 不存在")
+			logger.error({
+				eventKey: "conversation_id_missing",
+				errorKind: "invalid_state",
+				message: "conversationId 不存在",
+			})
 			return Promise.reject()
 		}
 
@@ -365,7 +365,8 @@ class ChatTopicService {
 	setCurrentConversationTopic(topicId: string | undefined) {
 		const conversationId = conversationStore.currentConversation?.id
 		logger.log(
-			`[setCurrentConversationTopic] 开始设置当前话题，会话ID=${conversationId}，话题ID=${topicId || "空"
+			`[setCurrentConversationTopic] 开始设置当前话题，会话ID=${conversationId}，话题ID=${
+				topicId || "空"
 			}`,
 		)
 
@@ -406,7 +407,8 @@ class ChatTopicService {
 	createTopic(topicName?: string) {
 		const conversationId = conversationStore.currentConversation?.id
 		logger.log(
-			`[createTopic] 开始创建话题，会话ID=${conversationId}，话题名称=${topicName || "未命名"
+			`[createTopic] 开始创建话题，会话ID=${conversationId}，话题名称=${
+				topicName || "未命名"
 			}`,
 		)
 
@@ -472,7 +474,11 @@ class ChatTopicService {
 		const conversationId = conversationStore.currentConversation?.id
 
 		if (!conversationId) {
-			logger.error("conversationId 不存在")
+			logger.error({
+				eventKey: "conversation_id_missing",
+				errorKind: "invalid_state",
+				message: "conversationId 不存在",
+			})
 			return
 		}
 

@@ -27,7 +27,8 @@ from app.tools.shell_exec_utils.bg_task_models import (
     BackgroundTask,
     TaskStatus,
 )
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_scandir
+from app.utils.runtime_storage import ensure_runtime_directory, trigger_opportunistic_cleanup
 
 logger = get_logger(__name__)
 
@@ -89,9 +90,11 @@ class BackgroundProcessManager:
             try:
                 from app.path_manager import PathManager
                 bg_shell_dir = PathManager.get_bg_shell_dir()
+                await ensure_runtime_directory(bg_shell_dir)
                 store = BgOutputStore(bg_shell_dir)
                 instance = cls(store)
                 await instance._load_history()
+                instance._trigger_eviction()
                 instance._start_reaper()
                 cls._instance = instance
             finally:
@@ -114,13 +117,14 @@ class BackgroundProcessManager:
         if not await async_exists(bg_shell_dir):
             return
 
-        import aiofiles.os
-        entries = []
         try:
-            with await aiofiles.os.scandir(str(bg_shell_dir)) as scanner:  # type: ignore[attr-defined]
-                for entry in scanner:
-                    if entry.is_file() and entry.name.endswith(".log"):
-                        entries.append(entry)
+            entries = [
+                entry
+                for entry in await async_scandir(bg_shell_dir)
+                if not entry.is_symlink()
+                and entry.is_file(follow_symlinks=False)
+                and entry.name.endswith(".log")
+            ]
         except Exception as e:
             logger.warning("扫描 bg_shell 目录失败，跳过历史任务恢复: %s", e)
             return
@@ -271,6 +275,7 @@ class BackgroundProcessManager:
         )
         self._tasks[task_id] = task
         logger.info("注册后台任务: task_id=%s pid=%d command=%s", task_id, pid, command[:80])
+        self._trigger_eviction()
 
         asyncio.ensure_future(self._monitor_process(task_id, process, file_writer_task))
 
@@ -315,7 +320,7 @@ class BackgroundProcessManager:
         task.exit_code = exit_code
         task.finished_at = time.time()
         await self._store.write_status(task_id, TaskStatus.COMPLETED, exit_code)
-        await self._store.evict_if_needed(self._finished_task_ids())
+        self._trigger_eviction()
 
     async def mark_error(self, task_id: str, exit_code: Optional[int] = None) -> None:
         """将任务标记为 ERROR，写 footer，触发文件淘汰检查。"""
@@ -326,7 +331,7 @@ class BackgroundProcessManager:
         task.exit_code = exit_code
         task.finished_at = time.time()
         await self._store.write_status(task_id, TaskStatus.ERROR, exit_code)
-        await self._store.evict_if_needed(self._finished_task_ids())
+        self._trigger_eviction()
 
     async def kill_task(self, task_id: str) -> None:
         """
@@ -348,7 +353,7 @@ class BackgroundProcessManager:
         task.status = TaskStatus.KILLED
         task.finished_at = time.time()
         await self._store.write_status(task.task_id, TaskStatus.KILLED, None)
-        await self._store.evict_if_needed(self._finished_task_ids())
+        self._trigger_eviction()
         logger.info("任务已 kill: task_id=%s", task.task_id)
 
     # ── 查询接口 ──────────────────────────────────────────────────────────────
@@ -363,6 +368,13 @@ class BackgroundProcessManager:
 
     def _finished_task_ids(self) -> set[str]:
         return {t.task_id for t in self._tasks.values() if t.status != TaskStatus.RUNNING}
+
+    def _trigger_eviction(self) -> None:
+        """异步触发日志淘汰，不阻塞任务注册或终态返回。"""
+        trigger_opportunistic_cleanup(
+            "bg_shell",
+            lambda: self._store.evict_if_needed(self._finished_task_ids()),
+        )
 
     # ── I/O 接口 ──────────────────────────────────────────────────────────────
 

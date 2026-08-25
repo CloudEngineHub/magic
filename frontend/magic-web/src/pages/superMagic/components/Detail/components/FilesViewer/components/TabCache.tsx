@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"

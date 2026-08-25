@@ -25,6 +25,7 @@ import { generateMagicClawApi } from "./modules/magicClaw"
 import { generateFunctionPermissionApi } from "./modules/function-permission"
 import { generateMagicFSApi } from "./modules/magicFS"
 import { generateMagicBaseApi } from "./modules/magicBase"
+import { generateSlidesTemplateUploadApi } from "./modules/slidesTemplateUpload"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -48,6 +49,7 @@ export const RecycleBinApi = generateRecycleBinApi(magicClient)
 
 /** 超级麦吉 */
 export const SuperMagicApi = generateSuperMagicApi(magicClient)
+export const SlidesTemplateUploadApi = generateSlidesTemplateUploadApi(magicClient)
 /** Skills */
 export const SkillsApi = generateSkillsApi(magicClient)
 /** Crew */

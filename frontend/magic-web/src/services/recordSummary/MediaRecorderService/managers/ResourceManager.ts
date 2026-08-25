@@ -64,7 +64,12 @@ export class ResourceManager {
 
 			this.logger.log(`Resource cleaned up: ${resource.type} (${id})`)
 		} catch (error) {
-			this.logger.error(`Error cleaning up resource "${id}":`, error)
+			this.logger.error({
+				eventKey: "cleaning_up_resource_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `Error cleaning up resource "${id}":`,
+			})
 			// Still remove it from tracking to avoid memory leaks
 			this.resources.delete(id)
 			const index = this.cleanupOrder.indexOf(id)

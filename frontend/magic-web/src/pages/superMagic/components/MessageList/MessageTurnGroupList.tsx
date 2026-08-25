@@ -1,5 +1,5 @@
 import { memo, type PropsWithChildren, type ReactNode } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
@@ -30,10 +30,8 @@ export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 
 export function getUserMessageStickyTopClass(
 	isMobile: boolean,
-): "top-[10px] [--sticky-message-top:10px]" | "top-[40px] [--sticky-message-top:40px]" {
-	return isMobile
-		? "top-[10px] [--sticky-message-top:10px]"
-		: "top-[40px] [--sticky-message-top:40px]"
+): "top-0 [--sticky-message-top:0px]" | "top-[40px] [--sticky-message-top:40px]" {
+	return isMobile ? "top-0 [--sticky-message-top:0px]" : "top-[40px] [--sticky-message-top:40px]"
 }
 
 /** Extra classes applied to the row wrapper when the message is from the user */
@@ -132,7 +130,8 @@ function MessageTurnGroupListInner({
 	function row(node: SuperMagicMessageItem, index: number) {
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
 		const card = superMagicStore.getMessageNode(node?.super_message_id) as
-			{ status?: string } | undefined
+			| { status?: string }
+			| undefined
 		if (!statusList.has(card?.status as string) && node?.role === "tool") {
 			return null
 		}
@@ -249,7 +248,7 @@ function MessageTurnGroupListInner({
 								isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 								userMessageStickyTopClass,
 								stickyMessageClassName,
-								"mb-2",
+								isMobile ? "z-40 bg-mobile-background pb-2" : "mb-2",
 							)}
 						>
 							{row(stickyItem.node, stickyItem.index)}

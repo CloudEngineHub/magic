@@ -59,7 +59,12 @@ class DataContextDatabaseManager {
 			await Promise.race([fn(), timeoutPromise])
 			return true
 		} catch (error) {
-			logger.error("Database availability check failed", error)
+			logger.error({
+				eventKey: "database_availability_check_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Database availability check failed",
+			})
 			return false
 		}
 	}
@@ -80,7 +85,12 @@ class DataContextDatabaseManager {
 
 		// Check if IndexedDB is available
 		if (!isIndexedDBAvailable()) {
-			logger.error("IndexedDB not available for data context", { magicId, userId })
+			logger.error({
+				eventKey: "indexed_db_unavailable",
+				errorKind: "storage",
+				message: "IndexedDB not available for data context",
+				context: { magicId, userId },
+			})
 			this.dbStatus.set(dbKey, false)
 			throw new DataContextDBUnavailableError(
 				"IndexedDB is not available. This may happen in private browsing mode or after browser updates.",
@@ -112,14 +122,21 @@ class DataContextDatabaseManager {
 			return db
 		} catch (error) {
 			this.dbStatus.set(dbKey, false)
-			logger.error("Failed to initialize data context database", { magicId, userId }, error)
+			logger.error({
+				eventKey: "initialize_data_context_database_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to initialize data context database",
+				context: { magicId, userId },
+			})
 
 			if (error instanceof DataContextDBUnavailableError) {
 				throw error
 			}
 
 			throw new DataContextDBUnavailableError(
-				`Failed to initialize data context database: ${error instanceof Error ? error.message : "Unknown error"
+				`Failed to initialize data context database: ${
+					error instanceof Error ? error.message : "Unknown error"
 				}`,
 			)
 		}
@@ -139,7 +156,13 @@ class DataContextDatabaseManager {
 			// Retry initialization
 			return await this.initDataContextDb(magicId, userId)
 		} catch (error) {
-			logger.error("Database retry initialization failed", { magicId, userId }, error)
+			logger.error({
+				eventKey: "database_retry_initialization_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Database retry initialization failed",
+				context: { magicId, userId },
+			})
 			return null
 		}
 	}

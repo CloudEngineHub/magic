@@ -2,6 +2,7 @@
 	"aiSearch": "搜索",
 	"aiSearchPlaceholder": "输入关键词或描述您的需求，获取所需的数字员工",
 	"back": "返回",
+	"backToTop": "回到顶部",
 	"categories": {
 		"adminOps": "行政运营",
 		"allCrew": "全部",
@@ -20,10 +21,12 @@
 		"closeTopics": "关闭话题列表",
 		"emptyHint": "开始一次新的员工专属对话。",
 		"invalidCode": "员工不存在或已不可用。",
-		"loadFailed": "员工对话加载失败，请稍后重试。",
+		"loadFailed": "员工对话加载失败，请稍后重试；如果您有多个账号，请选择有权限访问该员工的账号进行登录。",
 		"newConversation": "新建对话",
+		"relogin": "重新登录",
 		"retry": "重试",
 		"topics": "话题",
+		"unavailable": "当前员工暂不可用，请稍后重试。",
 		"unknownCrew": "数字员工"
 	},
 	"detailDialog": {
@@ -308,6 +311,7 @@
 		"subscribe": "订阅",
 		"subtitle": "您的专属专业技能集合。",
 		"tabs": {
+			"collaborated": "我协作的",
 			"createdByMe": "我创建的",
 			"fromSkillsLibrary": "来自技能库",
 			"sharedByTeam": "团队共享"
@@ -395,8 +399,8 @@
 		}
 	},
 	"pptEmployee": {
-		"delivered": "已制作 {{count}} 页",
-		"deliveredPrivate": "已制作 {{count}} 套"
+		"delivered": "已制作 {{marker}} 页",
+		"deliveredPrivate": "已制作 {{marker}} 套"
 	},
 	"skillDetailDialog": {
 		"collapse": "收起",

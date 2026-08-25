@@ -143,7 +143,12 @@ export class DatabaseManager {
 					event.reason?.name?.includes("Database") ||
 					event.reason?.message?.includes("IndexedDB")
 				) {
-					logger.error("unhandledDatabaseError", event.reason)
+					logger.error({
+						eventKey: "unhandled_database_failed",
+						errorKind: "storage",
+						error: event.reason,
+						message: "unhandledDatabaseError",
+					})
 				}
 			})
 		}
@@ -167,20 +172,31 @@ export class DatabaseManager {
 	private async performDatabaseCheck(): Promise<void> {
 		// 检查 IndexedDB 是否可用
 		if (!isIndexedDBAvailable()) {
-			logger.error("indexedDBNotAvailable")
-			throw new IndexedDBUnavailableError("IndexedDB is not available")
+			const error = new IndexedDBUnavailableError("IndexedDB is not available")
+			logger.error({
+				eventKey: "indexed_db_unavailable",
+				errorKind: "storage",
+				error,
+				message: "indexedDBNotAvailable",
+			})
+			throw error
 		}
 
 		// 检查存储配额
 		const storageStatus = await checkStorageQuota()
 		if (!storageStatus.available) {
-			logger.error("storageQuotaInsufficient", {
-				usage: storageStatus.usage,
-				quota: storageStatus.quota,
-				usageRatio:
-					storageStatus.quota > 0
-						? ((storageStatus.usage / storageStatus.quota) * 100).toFixed(2) + "%"
-						: "unknown",
+			logger.error({
+				eventKey: "storage_quota_insufficient_failed",
+				errorKind: "quota",
+				message: "storageQuotaInsufficient",
+				context: {
+					usage: storageStatus.usage,
+					quota: storageStatus.quota,
+					usageRatio:
+						storageStatus.quota > 0
+							? ((storageStatus.usage / storageStatus.quota) * 100).toFixed(2) + "%"
+							: "unknown",
+				},
 			})
 			// 不抛出错误，而是记录警告，让应用继续运行
 		}
@@ -197,8 +213,14 @@ export class DatabaseManager {
 		const timeoutPromise = () =>
 			new Promise<never>((_, reject) => {
 				setTimeout(() => {
-					logger.error("indexedDBConnectionFailed")
-					reject(new Error("indexedDBConnectionFailed"))
+					const error = new Error("indexedDBConnectionFailed")
+					logger.error({
+						eventKey: "indexed_db_connection_timeout",
+						errorKind: "timeout",
+						error,
+						message: "indexedDBConnectionFailed",
+					})
+					reject(error)
 				}, 10000)
 			})
 

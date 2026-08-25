@@ -1,4 +1,4 @@
-import { Node } from "@tiptap/core"
+import { Node } from "@/infrastructure/editors/tiptap/core"
 import { act, render, waitFor } from "@testing-library/react"
 import { createRef } from "react"
 import { describe, expect, it, vi } from "vitest"

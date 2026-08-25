@@ -146,7 +146,7 @@ describe("VirtualMessageList", () => {
 		})
 	})
 
-	it("mounts the visible range plus one active User and keeps mobile sticky offset", () => {
+	it("mounts the visible range plus one active User flush to the mobile header", () => {
 		const projection = buildVirtualMessageProjection([
 			message("user-0", "user"),
 			message("assistant-1", "assistant"),
@@ -168,7 +168,7 @@ describe("VirtualMessageList", () => {
 		expect(container.querySelectorAll("[data-testid='virtual-message-row']")).toHaveLength(3)
 		const sticky = container.querySelector<HTMLElement>('[data-sticky-message-id="user-0"]')
 		expect(sticky).not.toBeNull()
-		expect(sticky).toHaveClass("top-[10px]")
+		expect(sticky).toHaveClass("top-0", "z-40", "bg-mobile-background")
 		expect(sticky).not.toHaveClass("!-top-[2px]")
 		expect(sticky).toHaveStyle({ position: "sticky", transform: "translateY(0px)" })
 
@@ -205,7 +205,38 @@ describe("VirtualMessageList", () => {
 		expect(container.querySelectorAll('[data-message-id="user-0"]')).toHaveLength(1)
 		expect(container.querySelector('[data-sticky-message-id="user-0"]')).toHaveClass(
 			"top-[40px]",
+			"z-20",
 		)
+	})
+
+	it("allows mobile callers to keep mobile positioning without the mobile mask", () => {
+		const projection = buildVirtualMessageProjection([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+			message("assistant-2", "assistant"),
+			message("assistant-3", "assistant"),
+			message("user-4", "user"),
+		])
+
+		const { container } = render(
+			<VirtualMessageList
+				items={projection.items}
+				userIndices={projection.userIndices}
+				isMobile
+				useMobileStickyOverlay={false}
+				getScrollElement={() => null}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+		)
+
+		const sticky = container.querySelector<HTMLElement>('[data-sticky-message-id="user-0"]')
+		const stickyMask = container.querySelector<HTMLElement>(
+			'[data-message-id="user-0"]',
+		)?.parentElement
+
+		expect(sticky).toHaveClass("top-0", "z-40")
+		expect(stickyMask).not.toHaveClass("before:bg-[rgb(var(--mobile-background-rgb))]")
+		expect(stickyMask).not.toHaveClass("after:bg-none")
 	})
 
 	it("measures a non-terminal top-level Tool as zero height instead of leaving an estimate gap", () => {

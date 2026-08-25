@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { SelfMediaOpsOverview } from "../services/selfMediaOpsOverview"
 
 const PROGRESS_ANIMATION_MS = 620

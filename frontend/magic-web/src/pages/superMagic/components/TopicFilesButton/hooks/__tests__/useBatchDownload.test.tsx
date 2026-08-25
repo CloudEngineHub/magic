@@ -142,6 +142,40 @@ function makeFolderWithFile(): AttachmentItem[] {
 }
 
 describe("useBatchDownload", () => {
+	it("opens the cross-project selector before the project list is loaded", () => {
+		const openMoveModal = vi.fn()
+		const openBatchMove = vi.fn()
+
+		const { result } = renderHook(() =>
+			useBatchDownload({
+				projectId: "project-1",
+				getItemId: (item) => item.file_id || "",
+				selectedItems: new Set(["file-1"]),
+				setSelectedItems: vi.fn(),
+				filteredFiles: [],
+				removeFile: vi.fn(),
+				selectedProject: { workspace_id: "workspace-1" },
+				allowEdit: true,
+				isInProject: true,
+				crossProjectOperation: {
+					openMoveModal,
+					openCopyModal: vi.fn(),
+				},
+				moveFileHook: { openBatchMove },
+			}),
+		)
+		const moveItem = result.current.batchMenuItems?.find(
+			(item) => item && "key" in item && item.key === "move",
+		) as { onClick?: () => void } | undefined
+
+		act(() => {
+			moveItem?.onClick?.()
+		})
+
+		expect(openMoveModal).toHaveBeenCalledWith(["file-1"], [])
+		expect(openBatchMove).not.toHaveBeenCalled()
+	})
+
 	it("PC 批量分享选中文件夹时应保留文件夹自身 ID", () => {
 		const attachments = makeFolderWithFile()
 		const handleBatchShareClick = vi.fn()
