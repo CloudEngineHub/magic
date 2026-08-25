@@ -11,6 +11,8 @@ interface ChatProjectMessageLayoutProps {
 	input: ReactNode
 	isConversationPanelCollapsed: boolean
 	scope?: string
+	/** Identifies employee/mode changes that should preserve an already expanded input. */
+	layoutKey?: string
 	/** Allow callers with extra input controls to raise the shared minimum height. */
 	inputMinHeight?: number
 }
@@ -24,12 +26,14 @@ export default function ChatProjectMessageLayout({
 	input,
 	isConversationPanelCollapsed,
 	scope = "topic-page",
+	layoutKey,
 	inputMinHeight = DEFAULT_INPUT_MIN_HEIGHT,
 }: ChatProjectMessageLayoutProps) {
 	const layoutRef = useRef<HTMLDivElement>(null)
 	const inputRef = useRef<HTMLDivElement>(null)
 	const inputHeight = useConversationInputHeight({
 		scope,
+		layoutKey,
 		enabled: !isConversationPanelCollapsed,
 		containerRef: inputRef,
 		availableRef: layoutRef,

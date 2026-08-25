@@ -397,6 +397,7 @@ function TopicMessagePanel({
 					input={inputNode}
 					isConversationPanelCollapsed={isConversationPanelCollapsed}
 					inputMinHeight={inputMinHeight}
+					layoutKey={`${String(topicMode)}:${selectedTopic?.agent_code ?? ""}`}
 				/>
 			)}
 		</div>

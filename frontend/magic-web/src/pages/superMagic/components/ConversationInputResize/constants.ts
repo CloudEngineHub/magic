@@ -1,18 +1,16 @@
 /** Shared desktop conversation bounds used by every resize entry point. */
 /**
- * Keep specialized composer controls inside the smallest supported panel.
+ * Keep standard composer controls inside the smallest supported panel.
  * Add a mode-specific constant below when a new composer contains extra or specialized UI;
  * do not raise this shared value unless every consumer has the same layout contract.
  */
-export const SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT = 260
+export const DEFAULT_COMPOSER_MIN_INPUT_HEIGHT = 260
+/** Keep the legacy name available for specialized composer consumers. */
+export const SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT = DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
 /** Reserve enough vertical space for the PPT editor and its template controls. */
 export const PPT_COMPOSER_MIN_INPUT_HEIGHT = 320
 
-/**
- * Resolve the minimum height from explicit mode capabilities instead of a generic mode fallback.
- * Modes with extra controls must add a boolean here and a regression case so their minimum height
- * is reviewed deliberately rather than silently inheriting an unsafe default.
- */
+/** Resolve the shared minimum height while keeping PPT's larger control set explicit. */
 export function resolveComposerMinInputHeight({
 	isPptMode,
 	isSelfMediaMode,
@@ -24,9 +22,9 @@ export function resolveComposerMinInputHeight({
 }) {
 	// PPT has the most vertically demanding controls and must win if multiple flags are true.
 	if (isPptMode) return PPT_COMPOSER_MIN_INPUT_HEIGHT
-	// Keep existing specialized modes stable until their own layout requirements are reevaluated.
+	// All non-PPT composers share the same floor so scene presets cannot overlap the editor.
 	if (isSelfMediaMode || isRecordSummaryMode) return SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT
-	return undefined
+	return DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
 }
 
 export const CONVERSATION_INPUT_HEIGHT_CONFIG = {

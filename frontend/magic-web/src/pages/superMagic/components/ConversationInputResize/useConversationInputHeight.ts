@@ -20,6 +20,8 @@ const ACCESSORY_SELECTOR = "[data-conversation-input-accessory]"
 
 interface UseConversationInputHeightOptions {
 	scope: string
+	/** Identifies the employee/mode layout whose current height should be preserved. */
+	layoutKey?: string
 	enabled: boolean
 	containerRef: RefObject<HTMLDivElement | null>
 	availableRef: RefObject<HTMLDivElement | null>
@@ -80,6 +82,7 @@ function measureAccessoryHeight(container: HTMLDivElement) {
 /** Manage automatic growth, manual override, and scoped persistence for a conversation input. */
 export function useConversationInputHeight({
 	scope,
+	layoutKey,
 	enabled,
 	containerRef,
 	availableRef,
@@ -98,6 +101,7 @@ export function useConversationInputHeight({
 	const [availableHeight, setAvailableHeight] = useState(0)
 	const [accessoryHeight, setAccessoryHeight] = useState(0)
 	const manualHeightRef = useRef(initialPreference.height)
+	const previousLayoutKeyRef = useRef(layoutKey)
 	const pointerStartHeightRef = useRef(initialPreference.height)
 	const measureFrameRef = useRef<number | null>(null)
 
@@ -138,6 +142,34 @@ export function useConversationInputHeight({
 		},
 		[accessoryHeight, manualMaxHeight, minHeight, scope],
 	)
+
+	useEffect(() => {
+		if (!enabled || previousLayoutKeyRef.current === layoutKey) return
+
+		previousLayoutKeyRef.current = layoutKey
+		if (effectiveHeight <= effectiveMinHeight) return
+
+		// Freeze a larger user-visible height during employee/mode switches so new content measurements do not shrink it.
+		const preservedHeight = clampHeight(effectiveHeight, effectiveMinHeight, manualMaxHeight)
+		const preservedEditorHeight = clampHeight(
+			preservedHeight - accessoryHeight,
+			minHeight,
+			Math.max(minHeight, manualMaxHeight - accessoryHeight),
+		)
+		setHeightMode("manual")
+		manualHeightRef.current = preservedEditorHeight
+		setManualHeight(preservedEditorHeight)
+		persistPreference("manual", preservedEditorHeight)
+	}, [
+		accessoryHeight,
+		effectiveHeight,
+		effectiveMinHeight,
+		enabled,
+		layoutKey,
+		manualMaxHeight,
+		minHeight,
+		persistPreference,
+	])
 
 	// Recalculate available space and accessory chrome before updating automatic editor height.
 	const measure = useCallback(() => {

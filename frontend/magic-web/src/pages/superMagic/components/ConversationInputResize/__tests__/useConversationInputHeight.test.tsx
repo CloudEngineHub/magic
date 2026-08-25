@@ -160,6 +160,36 @@ describe("useConversationInputHeight", () => {
 		)
 	})
 
+	it("freezes an expanded height when the employee or mode layout changes", async () => {
+		const { result, rerender } = renderHook(
+			({ layoutKey }: { layoutKey: string }) =>
+				useConversationInputHeight({
+					scope: "test-conversation",
+					layoutKey,
+					enabled: true,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+				}),
+			{ initialProps: { layoutKey: "general:employee-a" } },
+		)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(240))
+		containerHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+
+		rerender({ layoutKey: "general:employee-b" })
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"test-conversation",
+			{ mode: "manual", height: 400 },
+		)
+
+		containerHeight = 200
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+	})
+
 	it("keeps automatic growth at fifty percent while allowing a larger manual ceiling", async () => {
 		const { result } = renderHook(() =>
 			useConversationInputHeight({
