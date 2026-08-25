@@ -31,7 +31,6 @@
 			"platformSubMenu": {
 				"audit": "AI Content Audit",
 				"infoManagement": "Maintenance Info Management",
-				"invoiceManagement": "Invoice Management",
 				"modeManagement": "Mode Management",
 				"orderManagement": "Order Management",
 				"organizationList": "Organization List",
