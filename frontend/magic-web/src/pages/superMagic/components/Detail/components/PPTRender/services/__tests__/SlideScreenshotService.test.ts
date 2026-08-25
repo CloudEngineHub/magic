@@ -10,6 +10,8 @@ vi.mock("../../../../contents/HTML/utils/full-content", () => ({
 
 const snapdomMocks = vi.hoisted(() => {
 	let counter = 0
+	let capturedImageSources: string[] = []
+	let fallbackCaptureCount = 0
 
 	return {
 		toWebp: vi.fn(async () => {
@@ -18,20 +20,41 @@ const snapdomMocks = vi.hoisted(() => {
 		}),
 		resetCounter: () => {
 			counter = 0
+			capturedImageSources = []
+			fallbackCaptureCount = 0
 		},
+		triggerFallbackOnNextCapture: () => {
+			fallbackCaptureCount = 1
+		},
+		shouldTriggerFallback: () => {
+			if (fallbackCaptureCount === 0) return false
+			fallbackCaptureCount -= 1
+			return true
+		},
+		captureImageSources: (target: Element) => {
+			capturedImageSources = Array.from(target.querySelectorAll<HTMLImageElement>("img")).map(
+				(image) => image.src,
+			)
+		},
+		getCapturedImageSources: () => capturedImageSources,
 	}
 })
 
 // Mock snapdom
 vi.mock("@zumer/snapdom", () => ({
-	snapdom: vi.fn().mockResolvedValue({
-		toWebp: snapdomMocks.toWebp,
+	snapdom: vi.fn(async (target: Element, options: { fallbackURL?: () => string }) => {
+		snapdomMocks.captureImageSources(target)
+		if (snapdomMocks.shouldTriggerFallback()) options.fallbackURL?.()
+		return {
+			toWebp: snapdomMocks.toWebp,
+		}
 	}),
 }))
 
 // Mock URL.createObjectURL and revokeObjectURL
 global.URL.createObjectURL = vi.fn(() => "blob:mock-url-" + Math.random())
 global.URL.revokeObjectURL = vi.fn()
+const originalFetch = global.fetch
 
 describe("SlideScreenshotService", () => {
 	let service: SlideScreenshotService
@@ -44,6 +67,7 @@ describe("SlideScreenshotService", () => {
 
 	afterEach(() => {
 		service.dispose()
+		global.fetch = originalFetch
 	})
 
 	describe("generateScreenshot", () => {
@@ -84,6 +108,120 @@ describe("SlideScreenshotService", () => {
 				backgroundColor: "#ffffff",
 				embedFonts: true,
 			})
+		})
+
+		it("refreshes cross-origin images before snapDOM reads their pixels", async () => {
+			const imageBlob = new window.Blob(["image-data"], { type: "image/webp" })
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				blob: vi.fn().mockResolvedValue(imageBlob),
+			} as unknown as Response)
+			const imageUrl = "https://cdn.example.com/image.webp"
+			snapdomMocks.triggerFallbackOnNextCapture()
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).toHaveBeenCalledWith(imageUrl, {
+				cache: "reload",
+				credentials: "omit",
+				mode: "cors",
+				signal: expect.any(AbortSignal),
+			})
+			expect(snapdomMocks.getCapturedImageSources()).toEqual([
+				expect.stringMatching(/^data:image\/webp;base64,/),
+			])
+			expect(snapdom).toHaveBeenCalledTimes(2)
+		})
+
+		it("does not refresh cross-origin images when the first capture succeeds", async () => {
+			global.fetch = vi.fn()
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).not.toHaveBeenCalled()
+			expect(snapdom).toHaveBeenCalledTimes(1)
+		})
+
+		it("keeps the first fallback when cross-origin refresh fails", async () => {
+			global.fetch = vi.fn().mockRejectedValue(new TypeError("CORS request failed"))
+			snapdomMocks.triggerFallbackOnNextCapture()
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).toHaveBeenCalledTimes(1)
+			expect(snapdom).toHaveBeenCalledTimes(1)
+		})
+
+		it("does not inline a non-image response", async () => {
+			const responseBlob = new window.Blob(["not-an-image"], { type: "text/html" })
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				blob: vi.fn().mockResolvedValue(responseBlob),
+			} as unknown as Response)
+			snapdomMocks.triggerFallbackOnNextCapture()
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).toHaveBeenCalledTimes(1)
+			expect(snapdom).toHaveBeenCalledTimes(1)
+		})
+
+		it("aborts FileReader when the image refresh is cancelled", async () => {
+			type ReaderHandler = (() => void) | null
+			const abortReader = vi.fn()
+			const originalFileReader = global.FileReader
+			class ControlledFileReader {
+				result: string | ArrayBuffer | null = null
+				error: DOMException | null = null
+				onload: ReaderHandler = null
+				onerror: ReaderHandler = null
+				onabort: ReaderHandler = null
+
+				readAsDataURL(blob: Blob): void {
+					void blob
+				}
+
+				abort(): void {
+					abortReader()
+					this.onabort?.()
+				}
+			}
+
+			vi.stubGlobal("FileReader", ControlledFileReader as unknown as typeof FileReader)
+			try {
+				const controller = new AbortController()
+				const readBlobAsDataUrl = (
+					service as unknown as {
+						readBlobAsDataUrl: (blob: Blob, signal: AbortSignal) => Promise<string>
+					}
+				).readBlobAsDataUrl.bind(service)
+				const reading = readBlobAsDataUrl(
+					new window.Blob(["image-data"], { type: "image/webp" }),
+					controller.signal,
+				)
+
+				controller.abort()
+
+				await expect(reading).rejects.toMatchObject({ name: "AbortError" })
+				expect(abortReader).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.stubGlobal("FileReader", originalFileReader)
+			}
 		})
 
 		it("uses the slide container dimensions for portrait thumbnails", async () => {

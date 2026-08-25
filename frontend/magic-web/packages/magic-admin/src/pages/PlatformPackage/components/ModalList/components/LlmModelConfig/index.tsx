@@ -14,7 +14,6 @@ interface LlmModelConfigProps {
 }
 const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 	const { t } = useTranslation("admin/ai/model")
-	const { t: tCommon } = useTranslation("admin/common")
 	const { styles, cx } = useStyles()
 
 	const { isOfficialOrg } = useAdminStore()
@@ -129,19 +128,21 @@ const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 					))}
 				</Checkbox.Group>
 			</Form.Item>
-			<Form.Item
-				label="extra_header"
-				className={styles.formItem}
-				name={["extra", "extra_header"]}
-			>
-				<Input.TextArea placeholder={tCommon("pleaseInput")} rows={4} />
+			<Form.Item label={t("form.extraHeader")} className={styles.formItem}>
+				<Flex gap={6} vertical>
+					<Form.Item name={["extra", "extra_header"]} noStyle>
+						<Input.TextArea placeholder={t("form.extraHeaderPlaceholder")} rows={4} />
+					</Form.Item>
+					<div className={styles.desc}>{t("form.extraHeaderDesc")}</div>
+				</Flex>
 			</Form.Item>
-			<Form.Item
-				label="extra_body"
-				className={styles.formItem}
-				name={["extra", "extra_body"]}
-			>
-				<Input.TextArea placeholder={tCommon("pleaseInput")} rows={4} />
+			<Form.Item label={t("form.extraBody")} className={styles.formItem}>
+				<Flex gap={6} vertical>
+					<Form.Item name={["extra", "extra_body"]} noStyle>
+						<Input.TextArea placeholder={t("form.extraBodyPlaceholder")} rows={4} />
+					</Form.Item>
+					<div className={styles.desc}>{t("form.extraBodyDesc")}</div>
+				</Flex>
 			</Form.Item>
 		</>
 	)

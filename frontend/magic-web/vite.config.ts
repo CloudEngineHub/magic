@@ -18,6 +18,7 @@ import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
 import { externalGlobalsPlugin } from "./plugins/vite-plugin-external-globals"
 import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
+import { resolveMicroAppInstallDevProxy } from "./vite/micro-app-install-proxy"
 import Inspect from "vite-plugin-inspect"
 import { codeInspectorPlugin } from "code-inspector-plugin"
 
@@ -90,7 +91,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 		server: {
 			host: "0.0.0.0", // 监听所有地址
 			allowedHosts,
-			proxy: {},
+			proxy: isDev ? resolveMicroAppInstallDevProxy(env) : {},
 		},
 		preview: {
 			host: "0.0.0.0",

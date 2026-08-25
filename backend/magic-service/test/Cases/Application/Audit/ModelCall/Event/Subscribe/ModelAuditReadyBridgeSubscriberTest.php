@@ -41,7 +41,18 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $event->setOriginalModelId('keling-video');
         $event->setProviderModelId('provider-model');
         $event->setDurationSeconds(5);
+        $event->setResolution('768p');
+        $event->setSize('1344x768');
+        $event->setWidth(1344);
+        $event->setHeight(768);
         $event->setHasAudioOutput(false);
+        $event->setVideoReferenceMaterial([
+            'input_mode' => 'omni_reference',
+            'reference_image_count' => 2,
+            'reference_video_count' => 1,
+            'reference_audio_count' => 1,
+            'input_video_duration_seconds' => 10,
+        ]);
         $event->setBusinessParams([
             'event_id' => '10001',
             'model_id' => 'keling-video',
@@ -51,7 +62,17 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $subscriber->process($event);
 
         $this->assertCount(1, $repository->entities);
-        $this->assertFalse($repository->entities[0]->getUsage()['has_audio_output']);
+        $usage = $repository->entities[0]->getUsage();
+        $this->assertFalse($usage['has_audio_output']);
+        $this->assertSame(1, $usage['video_count']);
+        $this->assertSame('768p', $usage['resolution']);
+        $this->assertSame('1344x768', $usage['size']);
+        $this->assertSame(1344, $usage['width']);
+        $this->assertSame(768, $usage['height']);
+        $this->assertSame(2, $usage['reference_image_count']);
+        $this->assertSame(1, $usage['reference_video_count']);
+        $this->assertSame(1, $usage['reference_audio_count']);
+        $this->assertSame(10, $usage['input_video_duration_seconds']);
     }
 
     public function testImageGeneratedEventBuiltFromImageFlowCarriesImageSize(): void
@@ -97,6 +118,8 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $event->setModel('gpt-image');
         $event->setProviderModelId('provider-model');
         $event->setImageCount(1);
+        $event->setResolution('2k');
+        $event->setImageSize('2048x2048');
         $event->setBusinessParams([
             'event_id' => '10002',
             'model_id' => 'gpt-image',
@@ -110,7 +133,11 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $subscriber->process($event);
 
         $this->assertCount(1, $repository->entities);
-        $this->assertSame(2, $repository->entities[0]->getUsage()['reference_image_count']);
+        $usage = $repository->entities[0]->getUsage();
+        $this->assertSame(2, $usage['reference_image_count']);
+        $this->assertSame(1, $usage['image_count']);
+        $this->assertSame('2k', $usage['resolution']);
+        $this->assertSame('2048x2048', $usage['size']);
     }
 }
 

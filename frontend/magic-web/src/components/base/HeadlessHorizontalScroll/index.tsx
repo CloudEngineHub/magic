@@ -32,6 +32,8 @@ interface HeadlessHorizontalScrollProps {
 	className?: string
 	style?: React.CSSProperties
 	controlBackground?: string
+	/** Allow descendants to render outside the rounded horizontal-scroll surface vertically. */
+	allowVerticalOverflow?: boolean
 	"data-testid"?: string
 	scrollContainerClassName?: string
 	scrollContainerProps?: Omit<
@@ -97,6 +99,7 @@ function HeadlessHorizontalScroll({
 	className,
 	style,
 	controlBackground = "rgb(var(--background-rgb))",
+	allowVerticalOverflow = false,
 	"data-testid": dataTestId,
 	scrollContainerClassName,
 	scrollContainerProps,
@@ -306,7 +309,11 @@ function HeadlessHorizontalScroll({
 
 	return (
 		<div
-			className={cn("relative overflow-hidden rounded-full", className)}
+			className={cn(
+				"relative rounded-full",
+				allowVerticalOverflow ? "overflow-visible" : "overflow-hidden",
+				className,
+			)}
 			style={
 				{
 					"--control-background": controlBackground,

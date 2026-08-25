@@ -181,6 +181,13 @@ const MessageList = observer(
 		const exportStore = useExportSelectionStore()
 
 		const nodesPanelRef = useRef<HTMLDivElement | null>(null)
+		/**
+		 * ScrollArea viewport commits after VirtualMessageList's first render.
+		 * Keep the element in state so that mount triggers a re-render and
+		 * TanStack Virtualizer can bind a real getScrollElement (ref-only
+		 * assignment would leave memoized VirtualMessageList stuck on null).
+		 */
+		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
 		const virtualizerRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null)
 		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
 		const scrollEdgeFadeConfig = useMemo(() => {
@@ -458,11 +465,17 @@ const MessageList = observer(
 				nodesPanelRef.current = element
 				if (scrollEdgeFadeConfig) fadeScrollRef.current = element
 				assignScrollViewportRef(element, viewportRef)
+				// Only update when the node identity changes to avoid extra renders.
+				setScrollViewport((prev) => (prev === element ? prev : element))
 			},
 			[viewportRef, scrollEdgeFadeConfig, fadeScrollRef],
 		)
 
-		const getScrollElement = useCallback(() => nodesPanelRef.current, [])
+		/** Prefer state so callback identity updates when the viewport mounts. */
+		const getScrollElement = useCallback(
+			() => scrollViewport ?? nodesPanelRef.current,
+			[scrollViewport],
+		)
 		const { showBackToLatest, scrollToBottom, notifyPullMoreStarted, onVirtualizerChange } =
 			useVirtualMessageScroll({
 				containerRef: nodesPanelRef,

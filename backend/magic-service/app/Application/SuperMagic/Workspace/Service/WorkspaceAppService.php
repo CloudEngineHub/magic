@@ -24,6 +24,7 @@ use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DeleteDataType;
 use App\Domain\SuperMagic\Common\RecycleBin\Enum\RecycleBinResourceType;
 use App\Domain\SuperMagic\Common\RecycleBin\Service\RecycleBinDomainService;
+use App\Domain\SuperMagic\Project\Event\ProjectsBatchMovedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Task\Constant\AgentConstant;
@@ -53,6 +54,7 @@ use App\Interfaces\SuperMagic\Workspace\DTO\Response\WorkspaceListResponseDTO;
 use Hyperf\Amqp\Producer;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -81,7 +83,8 @@ class WorkspaceAppService extends AbstractAppService
         protected FileCleanupAppService $fileCleanupAppService,
         protected FileDomainService $fileDomainService,
         protected LongTermMemoryDomainService $longTermMemoryDomainService,
-        protected RecycleBinDomainService $recycleBinDomainService
+        protected RecycleBinDomainService $recycleBinDomainService,
+        protected EventDispatcherInterface $eventDispatcher
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
     }
@@ -463,8 +466,18 @@ class WorkspaceAppService extends AbstractAppService
         $dataIsolation = $this->createDataIsolation($userAuthorization);
 
         // Execute detach within transaction
+        $projects = [];
         Db::beginTransaction();
         try {
+            $projectIds = $this->projectDomainService->getProjectIdsByWorkspaceId($dataIsolation, $workspaceId);
+            $projects = $projectIds === []
+                ? []
+                : $this->projectDomainService->getProjectsWithAuth(
+                    $projectIds,
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode()
+                );
+
             // Delete workspace (with permission validation inside)
             $this->workspaceDomainService->deleteWorkspace($dataIsolation, $workspaceId);
 
@@ -481,6 +494,13 @@ class WorkspaceAppService extends AbstractAppService
             Db::rollBack();
             $this->logger->error('Detach workspace failed: ' . $e->getMessage());
             throw $e;
+        }
+
+        foreach ($projects as $project) {
+            $project->setWorkspaceId(null);
+        }
+        if ($projects !== []) {
+            $this->eventDispatcher->dispatch(new ProjectsBatchMovedEvent($projects, $userAuthorization));
         }
 
         return true;

@@ -1,5 +1,6 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
+import { SlidesTemplateFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/SlidesTemplateFolderIcon"
 import { findFileInTree } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
 import {
 	getChildrenForCustomMetadataIconPath,
@@ -52,6 +53,10 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 
 	if (isWebsiteTab(tab)) {
 		return <Globe2 size={size} className={className} />
+	}
+
+	if (fd.display_config?.type === "slide-template") {
+		return <SlidesTemplateFolderIcon size={size} className={className} />
 	}
 
 	if (fd.display_config?.type === "custom" || fd.display_config?.type === "micro-app") {

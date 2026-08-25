@@ -18,6 +18,7 @@ import {
 	findActiveStickyIndex,
 	type VirtualMessageItem,
 } from "../virtual-message-items"
+import { shouldAdjustVirtualMessageScrollPosition } from "../virtual-scroll-position"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
@@ -61,7 +62,8 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 		? (((topicId
 				? superMagicStore.getTopicMessageNode?.(topicId, superMessageId)
 				: undefined) || superMagicStore.getMessageNode(superMessageId)) as
-				Record<string, unknown> | undefined)
+				| Record<string, unknown>
+				| undefined)
 		: undefined
 	if (item.isTool && !terminalToolStatuses.has(String(canonicalNode?.status || ""))) {
 		// Keep a measured zero-height anchor in the virtualizer. Removing the row
@@ -134,6 +136,8 @@ function VirtualMessageListInner({
 		useAnimationFrameWithResizeObserver: true,
 		onChange: onVirtualizerChange,
 	})
+	virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+		shouldAdjustVirtualMessageScrollPosition
 
 	if (virtualizerRef) virtualizerRef.current = virtualizer
 

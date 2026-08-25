@@ -540,6 +540,7 @@
 		"rechargePointsTip1": "Free users are temporarily unable to recharge points. Please",
 		"rechargePointsTip2": "first before recharging.",
 		"recordId": "Record ID",
+		"remark": "Remark",
 		"redirecting": "Redirecting...",
 		"refundTime": "Refund time",
 		"refundedTag": "Refunded",
@@ -2242,6 +2243,13 @@
 		"openSystemNotificationSettings": "System notification settings",
 		"orderRecords": "Order History",
 		"personalInfo": "Personal Information",
+		"personalQuota": "Personal quota",
+		"personalQuotaSheet": {
+			"cta": "Got it",
+			"hint": "This is your personal available limit within the current organization. After reaching it, wait for a refill or contact an admin to adjust it.",
+			"usageFraction": "Used {{used}} / {{total}}"
+		},
+		"personalQuotaZeroDescription": "Your personal quota is currently 0. Contact a team administrator to request an adjustment.",
 		"phoneAreaCode": {
 			"china": "Mainland China(86)",
 			"malaysia": "Malaysia(60)"
@@ -2287,6 +2295,13 @@
 		"standard": "Standard",
 		"system": "System",
 		"systemSetting": "System settings",
+		"teamPoints": "Team points",
+		"teamPointsSheet": {
+			"balanceLabel": "Points Balance",
+			"cta": "Got it",
+			"hint": "All team members share the team points balance. Once exhausted, personal quota limits will no longer function.",
+			"title": "Team Points"
+		},
 		"thirdPartyPlatform": "Link To Platforms",
 		"timezone": "time zone",
 		"timezoneDescription": "The system displays relevant times based on this time zone setting",

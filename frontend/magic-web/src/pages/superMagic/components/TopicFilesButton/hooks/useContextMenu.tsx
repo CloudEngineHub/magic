@@ -20,6 +20,7 @@ import {
 	IconChevronsDown,
 	IconChevronsUp,
 } from "@tabler/icons-react"
+import { Presentation } from "lucide-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
 import { Flex } from "antd"
@@ -49,6 +50,10 @@ import {
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 } from "../utils/canvasProjectOperationRisk"
+import {
+	isConvertiblePresentationFile,
+	isSlidesTemplateFolder,
+} from "../utils/slides-template-folder"
 
 type MenuItem = TopicFilesMenuItem
 
@@ -109,6 +114,10 @@ interface UseContextMenuOptions {
 	handleToggleFolderContents?: (item: AttachmentItem) => void
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
+	/** Desktop-only action for a recognized standard slide template folder. */
+	handleSaveSlidesTemplate?: (item: AttachmentItem) => void
+	/** Desktop-only action for converting a slide folder or PPT/PPTX/POTX file. */
+	handleConvertToSlidesTemplate?: (item: AttachmentItem) => void
 }
 
 interface MapDownloadMenuToContextOptions {
@@ -142,6 +151,19 @@ function mapDownloadMenuToContextItems(
 			? mapDownloadMenuToContextItems(entry.children, options)
 			: undefined,
 	}))
+}
+
+function createConvertToSlidesTemplateMenuItem(
+	item: AttachmentItem,
+	onConvert: (item: AttachmentItem) => void,
+	label: string,
+): MenuItem {
+	return {
+		key: "convertToSlidesTemplate",
+		label,
+		icon: <Presentation className="size-4" aria-hidden="true" data-testid="ppt-menu-icon" />,
+		onClick: () => onConvert(item),
+	}
 }
 
 /** Append download entries from the shared builder onto a context menu list. */
@@ -315,6 +337,8 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		isFolderContentsExpanded,
 		handleToggleFolderContents,
 		attachments = [],
+		handleSaveSlidesTemplate,
+		handleConvertToSlidesTemplate,
 	} = options
 
 	const openDeleteConfirmWithCanvasRisk = async (item: AttachmentItem) => {
@@ -480,6 +504,29 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
+			const isSlidesTemplate = isSlidesTemplateFolder(item)
+			const slidesTemplateMenuItem: MenuItem | undefined = !isMobile
+				? isSlidesTemplate && handleSaveSlidesTemplate
+					? {
+							key: "saveSlidesTemplate",
+							label: t("topicFiles.contextMenu.saveSlidesTemplate"),
+							icon: (
+								<Presentation
+									className="size-4"
+									aria-hidden="true"
+									data-testid="ppt-menu-icon"
+								/>
+							),
+							onClick: () => handleSaveSlidesTemplate(item),
+						}
+					: item.display_config?.type === "slide" && handleConvertToSlidesTemplate
+						? createConvertToSlidesTemplateMenuItem(
+								item,
+								handleConvertToSlidesTemplate,
+								t("topicFiles.contextMenu.convertToSlidesTemplate"),
+							)
+						: undefined
+				: undefined
 			const folderEntry =
 				treeIndex?.getEntryById(item.file_id) ||
 				treeIndex?.getEntryByKey(getAttachmentKey(item))
@@ -552,6 +599,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 								onClick: () => handleImportFromOtherProject(item),
 							},
 						]
+					: []),
+				...(slidesTemplateMenuItem
+					? [{ type: "divider" as const }, slidesTemplateMenuItem]
 					: []),
 				{ type: "divider" as const },
 				{
@@ -778,6 +828,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
 
 			return normalizeMenuItems(filterMenuItems?.(menuItems, item) || menuItems)
 		} else {
+			const convertPresentationMenuItem: MenuItem | undefined =
+				!isMobile && handleConvertToSlidesTemplate && isConvertiblePresentationFile(item)
+					? createConvertToSlidesTemplateMenuItem(
+							item,
+							handleConvertToSlidesTemplate,
+							t("topicFiles.contextMenu.convertToSlidesTemplate"),
+						)
+					: undefined
 			// 文件菜单
 			menuItems.push(
 				{
@@ -786,6 +844,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					icon: <MagicIcon component={IconOpenWindow} stroke={2} size={18} />,
 					onClick: () => handleOpenFile(item),
 				},
+				...(convertPresentationMenuItem
+					? [{ type: "divider" as const }, convertPresentationMenuItem]
+					: []),
 				{ type: "divider" as const },
 				{
 					key: "rename",

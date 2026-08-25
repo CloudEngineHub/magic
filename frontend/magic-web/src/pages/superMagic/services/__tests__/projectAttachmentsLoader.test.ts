@@ -187,4 +187,55 @@ describe("loadProjectAttachments scope", () => {
 		)
 		expect(superMagicApiMock.getAttachmentsByProjectId).not.toHaveBeenCalled()
 	})
+
+	it("keeps hidden recording images in the V2 tree only when includeHidden is true", async () => {
+		const hiddenImagePage = {
+			list: [
+				{
+					file_id: "hidden-root",
+					parent_id: "",
+					file_name: "/",
+					is_directory: true,
+					is_hidden: true,
+				},
+				{
+					file_id: "session-folder",
+					parent_id: "hidden-root",
+					file_name: "session-folder",
+					is_directory: true,
+					is_hidden: true,
+				},
+				{
+					file_id: "image-1",
+					parent_id: "session-folder",
+					file_name: "image-1.png",
+					is_hidden: true,
+				},
+			],
+			next_parent_ids: null,
+			has_more: false,
+		}
+		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 3 })
+		superMagicApiMock.getProjectAttachmentsV2Page.mockResolvedValue(hiddenImagePage)
+
+		const defaultResult = await loadProjectAttachments({
+			projectId: "project-id",
+			temporaryToken: null,
+		})
+		const includeHiddenResult = await loadProjectAttachments({
+			projectId: "project-id",
+			temporaryToken: null,
+			includeHidden: true,
+		})
+
+		expect(defaultResult.list.map((item) => item.file_id)).toEqual([])
+		expect(includeHiddenResult.list.map((item) => item.file_id)).toEqual([
+			"session-folder",
+			"image-1",
+		])
+		expect(includeHiddenResult.list.find((item) => item.file_id === "image-1")).toMatchObject({
+			relative_file_path: "/session-folder/image-1.png",
+			is_hidden: true,
+		})
+	})
 })

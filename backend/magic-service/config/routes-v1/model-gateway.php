@@ -22,6 +22,7 @@ Router::addGroup('/v1', function () {
     Router::post('/images/generations', [OpenAIProxyApi::class, 'textGenerateImageV2']);
     Router::post('/images/edits', [OpenAIProxyApi::class, 'imageEditV2']);
     Router::post('/videos', [VideoApi::class, 'create']);
+    Router::post('/videos/estimate-points', [VideoApi::class, 'estimatePoints']);
     Router::get('/videos/{id}', [VideoApi::class, 'get']);
     // @deprecated Use /v2/search instead - supports multiple search engines
     Router::get('/search', [OpenAIProxyApi::class, 'bingSearch']);

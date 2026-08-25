@@ -254,4 +254,29 @@ describe("PPTIncrementalUpdateService", () => {
 		expect(updatedFileIds.has("outside-file")).toBe(false)
 		expect(updatedFileIds.has("folder-1")).toBe(false)
 	})
+
+	it("does not treat the whole project as updated when the folder index is empty", () => {
+		pathMappingService.getPPTFolderFileIds.mockReturnValue(new Set())
+
+		const updatedFileIds = incrementalUpdateService.detectUpdatedFiles(
+			[
+				{
+					file_id: "other-folder",
+					file_name: "SLIDE-other",
+					updated_at: "1",
+					children: [{ file_id: "other-slide", updated_at: "1" }],
+				},
+			] as never,
+			[
+				{
+					file_id: "other-folder",
+					file_name: "SLIDE-other",
+					updated_at: "2",
+					children: [{ file_id: "other-slide", updated_at: "2" }],
+				},
+			] as never,
+		)
+
+		expect(updatedFileIds.size).toBe(0)
+	})
 })

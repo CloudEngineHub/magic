@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-use-before-define */
 import { useArgsModalContext } from "@/MagicExpressionWidget/context/ArgsModalContext/useArgsModalContext"
 import { Splitor } from "@/common/BaseUI/DropdownRenderer/Reference/constants"
-import { ExpandAltOutlined } from "@ant-design/icons"
-import { IconClose } from "@douyinfe/semi-icons"
+import { IconArrowsMaximize, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
 import { uniqueId } from "lodash-es"
 import React from "react"
@@ -89,7 +88,9 @@ export function LabelFunc({ config, disabled, selected, deleteFn }: LabelFuncPro
 									{index !== 0 && ", "}
 									{flatStringifyFunArg(arg)}
 									{!disabled && (
-										<ExpandAltOutlined
+										<IconArrowsMaximize
+											size={16}
+											stroke={1.8}
 											key={uniqueId("label-func-icon-")}
 											onClick={(e) =>
 												onPopoverModalClick(e, config, arg, index)
@@ -102,7 +103,7 @@ export function LabelFunc({ config, disabled, selected, deleteFn }: LabelFuncPro
 					{"  )"}
 				</div>
 
-				{!disabled && <IconClose onClick={() => deleteFn(config)} />}
+				{!disabled && <IconX size={16} stroke={1.8} onClick={() => deleteFn(config)} />}
 			</LabelFuncStyle>
 		</Tooltip>
 	)

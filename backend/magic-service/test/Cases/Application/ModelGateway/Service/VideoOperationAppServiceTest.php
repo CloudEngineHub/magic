@@ -61,6 +61,10 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmni
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelingTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
@@ -626,7 +630,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operationRepository = new InMemoryVideoQueueOperationRepository();
         $executor = new RecordingQueueOperationExecutor(
             submitResult: 'unused',
-            submitThrowable: new ProviderVideoException('provider submit failed'),
+            submitThrowable: ProviderVideoException::nonRetriable('provider submit failed'),
         );
         $service = $this->createVideoOperationAppService($operationRepository, $executor);
 
@@ -649,7 +653,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operationRepository = new InMemoryVideoQueueOperationRepository();
         $failingExecutor = new RecordingQueueOperationExecutor(
             submitResult: 'unused',
-            submitThrowable: new ProviderVideoException('provider submit failed'),
+            submitThrowable: ProviderVideoException::nonRetriable('provider submit failed'),
         );
         $failingService = $this->createVideoOperationAppService(
             $operationRepository,
@@ -1333,6 +1337,10 @@ class VideoOperationAppServiceTest extends TestCase
                         new Wan27GenerationCapabilityProvider(),
                         $this->createMock(DashScopeTransportInterface::class),
                     )),
+                    new MiniMaxH3VideoAdapter(
+                        new MiniMaxH3GenerationCapabilityProvider(),
+                        new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                    ),
                 ),
             ),
         );
@@ -1998,7 +2006,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    submitThrowable: new ProviderVideoException('provider says duration_seconds=9 is invalid'),
+                    submitThrowable: ProviderVideoException::nonRetriable('provider says duration_seconds=9 is invalid'),
                 ),
             ),
             $pointComponent,
@@ -2041,7 +2049,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    queryThrowable: new ProviderVideoException('provider says operationName is invalid'),
+                    queryThrowable: ProviderVideoException::nonRetriable('provider says operationName is invalid'),
                 ),
             ),
             $this->createMock(PointComponentInterface::class),
@@ -2062,7 +2070,79 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
     }
 
-    public function testManagedPollKeepsOperationRunningWhenProviderQueryThrows(): void
+    public function testGetOperationKeepsOperationRunningWhenProviderQueryIsRetriable(): void
+    {
+        $dataIsolation = $this->createDataIsolation();
+        $operation = $this->createOperation('op-provider-query-retry-get');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-retry-get');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+
+        $llmAppService = $this->createMock(LLMAppService::class);
+        $llmAppService->expects($this->once())
+            ->method('createModelGatewayDataIsolationByAccessToken')
+            ->with('token-provider-query-retry', ['organization_id' => 'org-test'])
+            ->willReturn($dataIsolation);
+
+        $service = new VideoOperationAppService(
+            $llmAppService,
+            new VideoQueueDomainService($operationRepository),
+            new QueueOperationExecutionDomainService(
+                new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
+                new RecordingQueueOperationExecutor(
+                    submitResult: 'unused',
+                    queryThrowable: ProviderVideoException::retriable('temporary provider query error'),
+                ),
+            ),
+            $this->createMock(PointComponentInterface::class),
+            $this->createMock(ModelGatewayMapper::class),
+            $this->createVideoGenerationConfigDomainService(),
+            new FileDomainService(new InMemoryCloudFileRepository()),
+            $this->createVideoBillingDetailsResolver(),
+            $this->createFallbackProbe(),
+            $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
+        );
+
+        $this->expectException(ProviderVideoException::class);
+        $this->expectExceptionMessage('temporary provider query error');
+
+        try {
+            $service->getOperation('token-provider-query-retry', $operation->getId(), ['organization_id' => 'org-test']);
+        } finally {
+            $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$operation->getId()]->getStatus());
+        }
+    }
+
+    public function testManagedPollMarksOperationFailedWhenProviderQueryIsNonRetriable(): void
+    {
+        $operation = $this->createOperation('op-provider-query-final');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-final');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryThrowable: ProviderVideoException::nonRetriable('provider task id is invalid'),
+            ),
+        );
+
+        $isDone = $service->pollOperationById($operation->getId(), ['organization_id' => 'org-test']);
+
+        $this->assertTrue($isDone);
+        $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
+        $this->assertSame('provider task id is invalid', $operationRepository->operations[$operation->getId()]->getErrorMessage());
+    }
+
+    public function testManagedPollKeepsOperationRunningWhenProviderQueryIsRetriable(): void
     {
         $operation = $this->createOperation('op-provider-query-retry');
         $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
@@ -2075,7 +2155,7 @@ class VideoOperationAppServiceTest extends TestCase
             $operationRepository,
             new RecordingQueueOperationExecutor(
                 submitResult: 'unused',
-                queryThrowable: new ProviderVideoException('temporary provider query error'),
+                queryThrowable: ProviderVideoException::retriable('temporary provider query error'),
             ),
         );
 
@@ -2357,6 +2437,10 @@ class VideoOperationAppServiceTest extends TestCase
                     new Wan27GenerationCapabilityProvider(),
                     $this->createMock(DashScopeTransportInterface::class),
                 )),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
             )
         );
     }
@@ -2747,6 +2831,25 @@ final class InMemoryCloudFileRepository implements CloudFileRepositoryInterface
     public function getPreSignedUrlByCredential(string $organizationCode, string $objectKey, StorageBucketType $bucketType = StorageBucketType::Private, array $options = []): string
     {
         return 'https://cdn.example.com/' . ltrim($objectKey, '/');
+    }
+
+    public function getPreSignedUrlsByCredential(
+        string $organizationCode,
+        array $items,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        int $credentialExpires = 7200,
+        array $options = []
+    ): array {
+        $urls = [];
+        foreach ($items as $item) {
+            $objectKey = is_array($item) ? (string) ($item['object_key'] ?? '') : (string) $item;
+            if ($objectKey === '') {
+                continue;
+            }
+            $urls[$objectKey] = $this->getPreSignedUrlByCredential($organizationCode, $objectKey, $bucketType, $options);
+        }
+
+        return $urls;
     }
 
     public function deleteObjectsByCredential(string $prefix, string $organizationCode, array $objectKeys, StorageBucketType $bucketType = StorageBucketType::Private, array $options = []): array

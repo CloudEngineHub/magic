@@ -1,7 +1,7 @@
 {
 	"name": "@magic-web/logger",
 	"version": "1.0.0",
-	"description": "Unified logging and tracing solution for Aliyun ARMS and Volcengine APMPlus",
+	"description": "Unified logging and tracing solution for DataFlux, Aliyun ARMS, and Volcengine APMPlus",
 	"keywords": [
 		"logger",
 		"tracking",
@@ -9,6 +9,8 @@
 		"aliyun",
 		"volcengine",
 		"arms",
+		"dataflux",
+		"guance",
 		"apmplus"
 	],
 	"type": "module",
@@ -56,13 +58,17 @@
 	"peerDependencies": {
 		"@apmplus/web": "^1.0.0",
 		"@arms/rum-browser": "^1.0.0",
-		"lodash-es": "^4.17.21"
+		"lodash-es": "^4.17.21",
+		"@cloudcare/browser-rum": "3.3.6"
 	},
 	"peerDependenciesMeta": {
 		"@apmplus/web": {
 			"optional": true
 		},
 		"@arms/rum-browser": {
+			"optional": true
+		},
+		"@cloudcare/browser-rum": {
 			"optional": true
 		}
 	}

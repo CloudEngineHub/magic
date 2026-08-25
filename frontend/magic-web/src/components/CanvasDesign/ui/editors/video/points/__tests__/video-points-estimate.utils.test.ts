@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { GenerateVideoRequest } from "../../../../../public/magic-types"
 import {
+	areVideoPointsEstimateRequestsEqual,
 	buildVideoPointsEstimateSignature,
 	buildVideoPointsEstimateSignaturePayload,
 } from "../video-points-estimate.utils"
@@ -59,5 +60,33 @@ describe("video-points-estimate.utils", () => {
 		expect(buildVideoPointsEstimateSignature(request)).toBe(
 			buildVideoPointsEstimateSignature(sameQuoteRequest),
 		)
+	})
+
+	it("treats deep-equal generation params as the same signature regardless of key order", () => {
+		const left: Partial<GenerateVideoRequest> = {
+			model_id: "video-model",
+			input_mode: "standard",
+			task: "generate",
+			generation: {
+				duration_seconds: 8,
+				generate_audio: true,
+				web_search: false,
+			},
+		}
+		const right: Partial<GenerateVideoRequest> = {
+			model_id: "video-model",
+			task: "generate",
+			input_mode: "standard",
+			generation: {
+				web_search: false,
+				generate_audio: true,
+				duration_seconds: 8,
+			},
+		}
+
+		expect(buildVideoPointsEstimateSignature(left)).toBe(
+			buildVideoPointsEstimateSignature(right),
+		)
+		expect(areVideoPointsEstimateRequestsEqual(left, right)).toBe(true)
 	})
 })

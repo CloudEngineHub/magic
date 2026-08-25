@@ -87,6 +87,7 @@
 		"@apmplus/integrations": "^2.3.0",
 		"@apmplus/web": "^2.10.0",
 		"@arms/rum-browser": "^0.0.37",
+		"@cloudcare/browser-rum": "3.3.6",
 		"@dnd-kit/core": "^6.3.1",
 		"@dnd-kit/sortable": "^10.0.0",
 		"@dnd-kit/utilities": "^3.2.2",

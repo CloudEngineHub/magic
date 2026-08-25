@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter;
 
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
@@ -17,7 +17,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactor
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\KelingPromptReferenceFormatter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 
-readonly class KelingOmniVideoAdapter implements VideoGenerationProviderAdapterInterface
+readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
     public function __construct(
         private KelingOmniGenerationCapabilityProvider $capabilityProvider,
@@ -104,10 +104,46 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationProviderAdapterI
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException($this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
+            throw ProviderVideoException::nonRetriable($this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
         }
 
         return $taskId;
+    }
+
+    /**
+     * 执行连通性测试。
+     *
+     * 通过非法时长触发 Keling 参数校验，只有命中 400 才视为连通成功。
+     */
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $transport = $this->transportFactory->create($config);
+
+        try {
+            $transport->submitOmniVideo(
+                $config,
+                [
+                    'model_name' => $modelVersion,
+                    'prompt' => 'connectivity-test',
+                    'duration' => '0',
+                    'mode' => 'std',
+                    'aspect_ratio' => '16:9',
+                    'sound' => 'on',
+                ],
+                ['connectivity_test' => true],
+            );
+        } catch (ProviderVideoException $exception) {
+            if ($exception->getHttpStatus() === 400) {
+                return true;
+            }
+
+            throw $exception;
+        }
+
+        // 未返回预期校验错误说明请求可能被接受，不能视为连通性测试成功。
+        throw ProviderVideoException::nonRetriable(
+            'Keling connectivity test did not receive the expected validation error',
+        );
     }
 
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array

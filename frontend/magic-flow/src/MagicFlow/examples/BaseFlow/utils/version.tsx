@@ -1,5 +1,13 @@
 import { NodeSchema, NodeWidget } from "@/MagicFlow/register/node"
-import { IconArrowLeftFromArc, IconArrowsSplit2, IconBrain, IconRepeat, IconRepeatOff, IconTimeline, IconVariable } from "@tabler/icons-react"
+import {
+	IconArrowsSplit2,
+	IconBrain,
+	IconLogin2,
+	IconRepeat,
+	IconRepeatOff,
+	IconTimeline,
+	IconVariable,
+} from "@tabler/icons-react"
 import { get, pick } from "lodash-es"
 import React from "react"
 import { customNodeType, templateMap } from "../constants"
@@ -8,7 +16,7 @@ import { nodeComponentVersionMap } from "../nodes"
 const commonSchemaConfigMap: Record<string, NodeSchema> = {
 	[customNodeType.Start]: {
 		label: "开始节点",
-		icon: <IconArrowLeftFromArc color="#fff" stroke={2} size={18} />,
+		icon: <IconLogin2 color="#fff" stroke={2} size={18} />,
 		color: "#315CEC",
 		id: customNodeType.Start,
 		desc: "当以下事件被触发时，流程将会从这个模块开始执行",
@@ -152,7 +160,7 @@ export const generateNodeVersionSchema = () => {
 				[nodeType]: Object.entries(versionMap).reduce(
 					(versionTemplate, [version, nodeSchema]) => {
 						/** 需要进行版本化的配置 */
-                        // @ts-ignore
+						// @ts-ignore
 						const versionConfig = pick(nodeSchema as NodeSchema, [
 							"input",
 							"output",

@@ -34,17 +34,15 @@ class VolcengineArkVideoClientTest extends TestCase
         $clientFactory = $this->createMock(ClientFactory::class);
         $clientFactory->expects($this->once())
             ->method('create')
-            ->with([
-                'timeout' => 180,
-                'verify' => false,
-            ])
+            ->with(['timeout' => 180])
             ->willReturn($httpClient);
 
+        $logger = new VolcengineArkRecordingLogger();
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->expects($this->once())
             ->method('get')
             ->with(VolcengineArkVideoClient::class)
-            ->willReturn(new VolcengineArkRecordingLogger());
+            ->willReturn($logger);
 
         $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
@@ -56,6 +54,8 @@ class VolcengineArkVideoClientTest extends TestCase
         );
 
         $this->assertSame('task-1', $response['id']);
+        $this->assertSame(['model' => 'doubao-seedance-2-0-fast-260128'], $logger->records[0]['context']['payload']);
+        $this->assertSame(['id' => 'task-1'], $logger->records[1]['context']['response']);
     }
 
     public function testPostReturnsGenericFriendlyMessageForUnmappedArkError(): void
@@ -161,6 +161,60 @@ class VolcengineArkVideoClientTest extends TestCase
         );
     }
 
+    public function testPostPreservesRequestExceptionResponseBodyForDownstreamHandling(): void
+    {
+        $errorResponse = json_encode([
+            'error' => [
+                'code' => 'InputImageSensitiveContentDetected.PrivacyInformation',
+                'message' => "The request failed because the input image 'content[1]' may contain real person. Request id: 0217870408693852d028257773b48b117f8c4bedc94f46b62987e",
+                'param' => '',
+                'type' => 'BadRequest',
+            ],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        $httpClient = $this->createMock(Client::class);
+        $httpClient
+            ->expects($this->once())
+            ->method('post')
+            ->willThrowException(new RequestException(
+                'bad request',
+                new Request('POST', 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'),
+                new Response(400, [], $errorResponse),
+            ));
+
+        $logger = new VolcengineArkRecordingLogger();
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory
+            ->expects($this->once())
+            ->method('get')
+            ->with(VolcengineArkVideoClient::class)
+            ->willReturn($logger);
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory
+            ->expects($this->once())
+            ->method('create')
+            ->with(['timeout' => 180])
+            ->willReturn($httpClient);
+
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
+
+        try {
+            $client->post(
+                'https://ark.cn-beijing.volces.com/api/v3',
+                'secret-api-key',
+                '/contents/generations/tasks',
+                ['model' => 'doubao-seedance-2-0-260128'],
+                ['operation_id' => 'bcbecba1-17f9-4f38-8ac3-f518cf279a0c'],
+            );
+            self::fail('Expected ProviderVideoException was not thrown.');
+        } catch (ProviderVideoException $exception) {
+            $previous = $exception->getPrevious();
+            self::assertInstanceOf(RequestException::class, $previous);
+            self::assertSame($errorResponse, $previous->getResponse()?->getBody()->getContents());
+        }
+    }
+
     public function testPostReturnsFriendlyMessageForInvalidParameterCode(): void
     {
         $httpClient = $this->createMock(Client::class);
@@ -246,6 +300,10 @@ class VolcengineArkVideoClientTest extends TestCase
         $this->assertSame('req-ark-200', $logger->records[1]['context']['provider_request_id']);
         $this->assertIsInt($logger->records[1]['context']['elapsed_ms']);
         $this->assertGreaterThanOrEqual(0, $logger->records[1]['context']['elapsed_ms']);
+        $this->assertSame([
+            'id' => 'task-1',
+            'status' => 'running',
+        ], $logger->records[1]['context']['response']);
     }
 
     /**

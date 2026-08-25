@@ -1,6 +1,9 @@
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
-import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicWaitingForUser,
+	type ProjectListItem,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../../Workspace/TopicMode"
 import { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
@@ -109,6 +112,7 @@ function CrewTopicPanel({
 		topicId: selectedTopic?.id,
 		agentCode: crewId,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})

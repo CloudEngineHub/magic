@@ -2102,6 +2102,158 @@ textarea:focus {
     justify-content: center;
 }
 
+.token-context-preview {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    gap: 5px;
+    height: 36px;
+    min-width: 50px;
+    padding: 5px 8px;
+    border: 1px solid var(--wechat-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--wechat-text-dark);
+    cursor: pointer;
+    transition: background-color 0.14s ease, transform 0.14s ease, border-color 0.14s ease;
+}
+
+.token-context-preview:hover {
+    border-color: rgba(60, 60, 67, 0.22);
+    background: rgba(248, 248, 250, 0.96);
+}
+
+.token-context-preview:active {
+    transform: scale(0.96);
+}
+
+.token-context-preview:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--apple-focus-ring);
+}
+
+.token-context-preview-usage {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 14px;
+    color: currentColor;
+    white-space: nowrap;
+}
+
+.token-context-ring {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+.token-context-ring circle {
+    fill: none;
+    stroke-width: 1.5;
+}
+
+.token-context-ring-track {
+    stroke: rgba(60, 60, 67, 0.16);
+}
+
+.token-context-ring-value {
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-dasharray: 42.41;
+    stroke-dashoffset: 42.41;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    transition: stroke-dashoffset 0.2s ease, color 0.2s ease;
+}
+
+.token-context-preview.is-high {
+    color: #c66a00;
+}
+
+.token-context-popover {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 60;
+    width: 300px;
+    overflow: hidden;
+    border: 1px solid var(--wechat-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+.token-context-popover-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 9px;
+}
+
+.token-context-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--wechat-text-dark);
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.token-context-popover-header strong {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.token-context-popover-description,
+.token-context-popover-count,
+.token-context-popover-detail {
+    color: var(--wechat-text-gray);
+    font-size: 11px;
+    line-height: 15px;
+}
+
+.token-context-popover-progress {
+    position: relative;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(60, 60, 67, 0.1);
+}
+
+.token-context-popover-progress span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: inherit;
+    background: var(--wechat-text-dark);
+    transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+.token-context-popover-progress.is-high span {
+    background: #f59e0b;
+}
+
+.token-context-popover-divider {
+    height: 1px;
+    background: var(--wechat-border);
+}
+
+.token-context-popover-detail {
+    gap: 7px;
+}
+
+.token-context-warning {
+    display: flex;
+    padding: 6px;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #c66a00;
+}
+
 .primary-actions {
     flex-shrink: 0;
 }

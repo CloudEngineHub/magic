@@ -87,14 +87,25 @@ class UploadConfigRequest(BaseModel):
 class WorkspaceExportRequest(BaseModel):
     """Request body for workspace export endpoint."""
 
-    type: Literal["agent_creator", "skill_creator", "custom_agent", "custom_skill"] = Field(
-        ..., description="Export type: 'agent_creator' or 'skill_creator' (legacy: 'custom_agent' or 'custom_skill')"
+    type: Literal[
+        "agent_creator",
+        "skill_creator",
+        "slides_template_creator",
+        "custom_agent",
+        "custom_skill",
+    ] = Field(
+        ...,
+        description="Export type: agent, skill, or slides template (legacy: custom_agent/custom_skill)",
     )
     code: str = Field(
         ..., description="Unique identifier for the agent/skill (e.g. 'SMA_XXXXXX')"
     )
     upload_config: Dict[str, Any] = Field(
         ..., description="Object storage credentials and configuration (platform-specific)"
+    )
+    public_upload_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Public object storage credentials for slides template preview assets",
     )
     source_path: str = Field(
         "",

@@ -161,6 +161,7 @@ function SlidesTemplateFloatingSelector({
 					slidesState={slidesState}
 					selectedTemplate={selectedTemplate}
 					onTemplateClick={handleTemplateClick}
+					showMyTemplates
 					className="h-full"
 					toolbarClassName={isMobile ? "px-2 pt-0" : "px-0 pt-0"}
 					gridClassName={cn(

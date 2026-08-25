@@ -105,6 +105,15 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		[],
 	)
 
+	/** Keeps an open preview aligned with project attachment data loaded after first render. */
+	const updateAttachments = useCallback(
+		(attachmentTree: AttachmentItem[], nextAttachmentList: AttachmentItem[]) => {
+			setAttachments(attachmentTree || [])
+			setAttachmentList(nextAttachmentList || [])
+		},
+		[],
+	)
+
 	const onlyUpdateDetail = useCallback(
 		(
 			options: PreviewDetail,
@@ -174,6 +183,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		return {
 			open,
 			onlyUpdateDetail,
+			updateAttachments,
 		}
 	})
 

@@ -47,9 +47,21 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
         $this->assertNotNull($config);
         $generation = $config->toArray()['generation'];
         $this->assertSame(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'], $generation['aspect_ratios']);
-        $this->assertSame([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], $generation['durations']);
-        $this->assertSame(['480p', '720p', '1080p'], $generation['resolutions']);
-        $this->assertCount(18, $generation['sizes']);
+        $this->assertSame(['min' => 4, 'max' => 15, 'step' => 1], $generation['durations']);
+        $this->assertSame(['480p', '720p', '1080p', '4k'], $generation['resolutions']);
+        $this->assertTrue($generation['supports_seed']);
+        $this->assertTrue($generation['supports_generate_audio']);
+        foreach ([
+            'supports_negative_prompt',
+        ] as $unsupportedCapability) {
+            $this->assertArrayNotHasKey($unsupportedCapability, $generation);
+        }
+        $this->assertFalse($generation['supports_person_generation']);
+        $this->assertFalse($generation['supports_enhance_prompt']);
+        $this->assertFalse($generation['supports_compression_quality']);
+        $this->assertFalse($generation['supports_resize_mode']);
+        $this->assertFalse($generation['supports_sample_count']);
+        $this->assertCount(24, $generation['sizes']);
         $this->assertSame([
             'label' => '16:9',
             'value' => '864x496',
@@ -71,6 +83,33 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
             'height' => 945,
             'resolution' => '1080p',
         ], $generation['sizes'][17]);
+        $this->assertSame([
+            'label' => '16:9',
+            'value' => '3840x2160',
+            'width' => 3840,
+            'height' => 2160,
+            'resolution' => '4k',
+        ], $generation['sizes'][18]);
+        $this->assertSame([
+            'label' => '21:9',
+            'value' => '4410x1890',
+            'width' => 4410,
+            'height' => 1890,
+            'resolution' => '4k',
+        ], $generation['sizes'][23]);
+    }
+
+    public function testResolveGenerationConfigAdds1080pForSeedanceTwoPointFiveWithout4k(): void
+    {
+        $adapter = new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class)));
+
+        $config = $adapter->resolveGenerationConfig('doubao-seedance-2-5-260xxx', 'doubao-seedance-2-5-260xxx');
+
+        $this->assertNotNull($config);
+        $generation = $config->toArray()['generation'];
+        $this->assertSame(['480p', '720p', '1080p'], $generation['resolutions']);
+        $this->assertCount(18, $generation['sizes']);
+        $this->assertSame('1080p', $generation['sizes'][17]['resolution']);
     }
 
     public function testResolveGenerationConfigOmits1080pForFastModel(): void
@@ -90,6 +129,19 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
             'height' => 630,
             'resolution' => '720p',
         ], $generation['sizes'][11]);
+    }
+
+    public function testResolveGenerationConfigDoesNotExpose4kForOtherVideoModels(): void
+    {
+        $adapter = new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class)));
+
+        $config = $adapter->resolveGenerationConfig('doubao-other-video-001', 'doubao-other-video-001');
+
+        $this->assertNotNull($config);
+        $generation = $config->toArray()['generation'];
+        $this->assertSame(['480p', '720p', '1080p'], $generation['resolutions']);
+        $this->assertCount(18, $generation['sizes']);
+        $this->assertNotContains('4k', array_column($generation['sizes'], 'resolution'));
     }
 
     public function testBuildProviderPayloadMapsGenerateEditAndReferenceInputsWithoutServiceTierForProModel(): void

@@ -49,4 +49,6 @@ interface MagicClawRepositoryInterface
      * Update the project_id field for a given claw ID.
      */
     public function updateProjectId(int $id, int $projectId): bool;
+
+    public function getByProjectId(int $projectId): ?MagicClawEntity;
 }

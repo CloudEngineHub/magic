@@ -15,7 +15,7 @@ logger = get_video_logger(__name__)
 class VideoModelConfigService:
     """视频模型配置服务类"""
 
-    _GENERATION_CONSTRAINT_KEYS = ("durations", "resolutions", "aspect_ratios")
+    _GENERATION_CONSTRAINT_KEYS = ("duration_type", "durations", "resolutions", "aspect_ratios")
 
     _INPUT_FIELD_MAP = {
         "reference_images": "reference_image_paths",
@@ -48,28 +48,29 @@ class VideoModelConfigService:
         return escape(value, quote=True)
 
     @staticmethod
-    def _build_duration_attr(video_generation_config: Dict[str, Any]) -> str:
-        """构建 `duration` 属性值：所有支持的秒数用 `|` 拼接。示例：`4|6|8`"""
+    def _build_duration_attrs(video_generation_config: Dict[str, Any]) -> dict[str, str]:
+        """只输出模型时长元数据：duration_type 与 durations。"""
         generation = VideoModelConfigService._get_generation_config(video_generation_config)
+        duration_type = generation.get("duration_type")
         durations = generation.get("durations")
-        if not isinstance(durations, list):
-            return ""
-        normalized = [
-            str(value)
-            for value in durations
-            if isinstance(value, (int, float))
-        ]
-        return "|".join(normalized)
-
-    @staticmethod
-    def _get_default_duration(video_generation_config: Dict[str, Any]) -> str:
-        """取工具调用的默认时长（秒）字符串。优先读 default_duration_seconds，缺失则取 durations 第一项。"""
-        generation = VideoModelConfigService._get_generation_config(video_generation_config)
-        default_duration = generation.get("default_duration_seconds")
-        if isinstance(default_duration, (int, float)):
-            return str(int(default_duration))
-        durations_attr = VideoModelConfigService._build_duration_attr(video_generation_config)
-        return durations_attr.split("|")[0] if durations_attr else ""
+        if duration_type not in {"options", "range"}:
+            duration_type = "options" if isinstance(durations, list) else None
+        attrs: dict[str, str] = {}
+        if duration_type:
+            attrs["duration_type"] = duration_type
+        if duration_type == "range" and isinstance(durations, dict):
+            parts = []
+            for key in ("min", "max", "step"):
+                value = durations.get(key)
+                if isinstance(value, (int, float)):
+                    parts.append(f"{key}={int(value)}")
+            if parts:
+                attrs["durations"] = ",".join(parts)
+        elif duration_type == "options" and isinstance(durations, list):
+            values = [str(int(value)) for value in durations if isinstance(value, (int, float))]
+            if values:
+                attrs["durations"] = "|".join(values)
+        return attrs
 
     @staticmethod
     def _build_unsupported_attr(video_generation_config: Dict[str, Any]) -> str:
@@ -211,8 +212,19 @@ class VideoModelConfigService:
             return {}
 
         attrs: dict[str, str] = {}
+        duration_type = constraints.get("duration_type")
+        durations = constraints.get("durations")
+        if duration_type in {"options", "range"}:
+            attrs["duration_type"] = duration_type
+            if duration_type == "range" and isinstance(durations, dict):
+                parts = [f"{key}={int(durations[key])}" for key in ("min", "max", "step") if isinstance(durations.get(key), (int, float))]
+                if parts:
+                    attrs["durations"] = ",".join(parts)
+            elif duration_type == "options":
+                formatted = VideoModelConfigService._format_constraint_list(durations)
+                if formatted:
+                    attrs["durations"] = formatted
         mapping = {
-            "durations": ("duration", "no_duration"),
             "resolutions": ("resolution", "no_resolution"),
             "aspect_ratios": ("aspect_ratio", "no_aspect_ratio"),
         }
@@ -231,7 +243,7 @@ class VideoModelConfigService:
         return attrs
 
     @staticmethod
-    def _extract_generation_constraints(config: Any) -> dict[str, list[Any]]:
+    def _extract_generation_constraints(config: Any) -> dict[str, Any]:
         """安全取出 generation_constraints；字段类型错误时按未声明处理。"""
         if not isinstance(config, dict):
             return {}
@@ -240,20 +252,34 @@ class VideoModelConfigService:
         if not isinstance(constraints, dict):
             return {}
 
-        return {
-            key: values
-            for key, values in constraints.items()
-            if key in VideoModelConfigService._GENERATION_CONSTRAINT_KEYS and isinstance(values, list)
-        }
+        result: dict[str, Any] = {}
+        for key in VideoModelConfigService._GENERATION_CONSTRAINT_KEYS:
+            if key not in constraints:
+                continue
+            value = constraints[key]
+            if key == "duration_type" and value in {"options", "range"}:
+                result[key] = value
+            elif key == "durations" and isinstance(value, (list, dict)):
+                result[key] = value
+            elif key in {"resolutions", "aspect_ratios"} and isinstance(value, list):
+                result[key] = value
+        return result
 
     @staticmethod
-    def _build_global_generation_constraints(video_generation_config: Dict[str, Any]) -> dict[str, list[Any]]:
+    def _build_global_generation_constraints(video_generation_config: Dict[str, Any]) -> dict[str, Any]:
         """把顶层 generation 配置转换成可继承的通用约束。"""
         generation = VideoModelConfigService._get_generation_config(video_generation_config)
-        constraints: dict[str, list[Any]] = {}
+        constraints: dict[str, Any] = {}
+
+        duration_attrs = VideoModelConfigService._build_duration_attrs(video_generation_config)
+        if duration_attrs:
+            constraints["duration_type"] = duration_attrs["duration_type"]
+            generation = VideoModelConfigService._get_generation_config(video_generation_config)
+            if "durations" in generation:
+                constraints["durations"] = generation["durations"]
 
         durations = generation.get("durations")
-        if isinstance(durations, list):
+        if isinstance(durations, list) and "durations" not in constraints:
             constraints["durations"] = durations
 
         resolutions = generation.get("resolutions")
@@ -283,15 +309,21 @@ class VideoModelConfigService:
         return constraints
 
     @staticmethod
-    def _merge_generation_constraints(*candidates: dict[str, list[Any]]) -> dict[str, list[Any]]:
+    def _merge_generation_constraints(*candidates: dict[str, Any]) -> dict[str, Any]:
         """按传入优先级合并约束，空数组也视为有效声明。"""
-        merged: dict[str, list[Any]] = {}
+        merged: dict[str, Any] = {}
         for key in VideoModelConfigService._GENERATION_CONSTRAINT_KEYS:
             for candidate in candidates:
                 if not isinstance(candidate, dict):
                     continue
                 values = candidate.get(key)
-                if isinstance(values, list):
+                if key == "duration_type" and values in {"options", "range"}:
+                    merged[key] = values
+                    break
+                if key == "durations" and isinstance(values, (list, dict)):
+                    merged[key] = values
+                    break
+                if key in {"resolutions", "aspect_ratios"} and isinstance(values, list):
                     merged[key] = values
                     break
         return merged
@@ -409,8 +441,8 @@ class VideoModelConfigService:
                 lines.append(f'    {name}="{VideoModelConfigService._xml_attr(value)}"')
 
         _attr("input", VideoModelConfigService._join_string_list(video_generation_config.get("supported_inputs")))
-        _attr("default_duration", VideoModelConfigService._get_default_duration(video_generation_config))
-        _attr("duration", VideoModelConfigService._build_duration_attr(video_generation_config))
+        for attr_name, attr_value in VideoModelConfigService._build_duration_attrs(video_generation_config).items():
+            _attr(attr_name, attr_value)
         _attr("ref", VideoModelConfigService._build_reference_attr(video_generation_config))
         _attr("unsupported", VideoModelConfigService._build_unsupported_attr(video_generation_config))
 

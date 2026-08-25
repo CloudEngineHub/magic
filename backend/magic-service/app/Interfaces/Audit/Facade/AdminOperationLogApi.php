@@ -91,6 +91,7 @@ class AdminOperationLogApi extends AbstractPermissionApi
         $productCode = (string) $this->request->input('product_code', '');
         $modelVersion = trim((string) $this->request->input('model_version', ''));
         $providerName = trim((string) $this->request->input('provider_name', ''));
+        $serviceProviderConfigId = trim((string) $this->request->input('service_provider_config_id', ''));
         $userId = (string) $this->request->input('user_id', '');
         $accessScope = trim((string) $this->request->input('access_scope', ''));
         $magicTopicId = trim((string) $this->request->input('magic_topic_id', ''));
@@ -121,6 +122,9 @@ class AdminOperationLogApi extends AbstractPermissionApi
         }
         if ($providerName !== '') {
             $filters['provider_name'] = $providerName;
+        }
+        if ($serviceProviderConfigId !== '') {
+            $filters['service_provider_config_id'] = $serviceProviderConfigId;
         }
         if ($userId !== '') {
             $filters['user_id'] = $userId;
