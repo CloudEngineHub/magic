@@ -131,4 +131,49 @@ describe("Markdown raw HTML rendering", () => {
 		expect(html).not.toContain("position")
 		expect(html).not.toContain("inset")
 	})
+
+	it("revalidates HTML style nodes and marks when the document comes from JSON", () => {
+		editor = new Editor({
+			extensions: [
+				StarterKit,
+				Markdown.configure({ html: true }),
+				SafeHtmlDiv,
+				SafeHtmlSpan,
+				SafeHtmlTextBlockStyles,
+			],
+			content: {
+				type: "doc",
+				content: [
+					{
+						type: "safeHtmlDiv",
+						attrs: { style: "position:fixed;inset:0;z-index:2147483647" },
+						content: [{ type: "paragraph", content: [{ type: "text", text: "div" }] }],
+					},
+					{
+						type: "paragraph",
+						attrs: { style: "position:fixed;inset:0;z-index:2147483647" },
+						content: [
+							{
+								type: "text",
+								text: "span",
+								marks: [
+									{
+										type: "safeHtmlSpan",
+										attrs: { style: "position:fixed;inset:0!important" },
+									},
+								],
+							},
+						],
+					},
+				],
+			},
+		})
+
+		const html = editor.getHTML()
+		expect(html).toContain("div")
+		expect(html).toContain("span")
+		expect(html).not.toContain("position")
+		expect(html).not.toContain("inset")
+		expect(html).not.toContain("z-index")
+	})
 })

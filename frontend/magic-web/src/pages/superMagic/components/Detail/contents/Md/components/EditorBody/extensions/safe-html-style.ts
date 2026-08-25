@@ -7,6 +7,16 @@ function parseSafeStyle(element: HTMLElement): string | null {
 }
 
 /**
+ * Attributes can enter the editor through ProseMirror JSON, bypassing
+ * parseHTML. Re-check style at serialization time so persisted or
+ * collaborative content cannot inject unsafe CSS into the preview DOM.
+ */
+function getSafeStyleAttributes(attributes: Record<string, unknown>) {
+	const style = attributes.style
+	return typeof style === "string" && isSafeInlineStyle(style) ? { style } : {}
+}
+
+/**
  * ProseMirror unwraps unknown div/span elements while parsing Markdown's raw
  * HTML. These extensions retain presentation-only inline styles after the
  * Markdown safety pass, without making arbitrary CSS part of the schema.
@@ -40,7 +50,11 @@ export const SafeHtmlDiv = Node.create({
 	},
 
 	renderHTML({ HTMLAttributes }) {
-		return ["div", mergeAttributes(HTMLAttributes), 0]
+		return [
+			"div",
+			mergeAttributes(getSafeStyleAttributes(HTMLAttributes as Record<string, unknown>)),
+			0,
+		]
 	},
 })
 
@@ -67,7 +81,11 @@ export const SafeHtmlSpan = Mark.create({
 	},
 
 	renderHTML({ HTMLAttributes }) {
-		return ["span", mergeAttributes(HTMLAttributes), 0]
+		return [
+			"span",
+			mergeAttributes(getSafeStyleAttributes(HTMLAttributes as Record<string, unknown>)),
+			0,
+		]
 	},
 })
 
@@ -90,7 +108,7 @@ export const SafeHtmlTextBlockStyles = Extension.create({
 						default: null,
 						parseHTML: (element) => parseSafeStyle(element),
 						renderHTML: (attributes) =>
-							attributes.style ? { style: attributes.style } : {},
+							getSafeStyleAttributes(attributes as Record<string, unknown>),
 					},
 				},
 			},
