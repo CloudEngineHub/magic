@@ -123,6 +123,7 @@
 		"husky": "^9.1.7",
 		"i18next": "^24.2.2",
 		"i18next-resources-to-backend": "^1.2.1",
+		"jszip": "^3.10.1",
 		"less": "^4.3.0",
 		"libphonenumber-js": "^1.12.7",
 		"lint-staged": "^15.4.3",

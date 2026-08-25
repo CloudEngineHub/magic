@@ -720,6 +720,8 @@
 				"defaultModel": "Default model",
 				"defaultVideoModel": "Default video model",
 				"editTitle": "Edit Configuration",
+				"enableSchedule": "Enable Scheduled Execution",
+				"enableScheduleHint": "Observation results will update at the set frequency",
 				"generate": "Generate Observation",
 				"imageModel": "Image Model",
 				"languageModel": "Language Model",
@@ -3968,6 +3970,9 @@
 				"transcriptionEnabled": {
 					"description": "Automatically start transcription when recording begins",
 					"label": "Auto Transcribe"
+				},
+				"transcriptionToggle": {
+					"label": "Enable real-time transcription"
 				}
 			},
 			"startMissingWorkspace": "Recording is unavailable right now. Please enter a workspace first.",

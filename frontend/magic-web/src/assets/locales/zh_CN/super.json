@@ -721,6 +721,8 @@
 				"defaultModel": "默认模型",
 				"defaultVideoModel": "默认视频模型",
 				"editTitle": "编辑配置",
+				"enableSchedule": "启用定时执行",
+				"enableScheduleHint": "开启后将按设定频率自动更新观察结果",
 				"generate": "生成观察结果",
 				"imageModel": "生图模型",
 				"languageModel": "语言模型",
@@ -3968,6 +3970,9 @@
 				"transcriptionEnabled": {
 					"description": "录制开始时自动启用转写",
 					"label": "自动转写"
+				},
+				"transcriptionToggle": {
+					"label": "开启实时转写"
 				}
 			},
 			"startMissingWorkspace": "暂时无法开始录音，请先进入一个工作区",

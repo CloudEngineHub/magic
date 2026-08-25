@@ -8,6 +8,7 @@ import type {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
 
 // Base interfaces
 export interface BaseComponentProps {
@@ -45,7 +46,6 @@ export interface WebsitePreset {
 	url: string
 	description?: string
 	descriptionKey?: string
-	icon?: "nano-banana-pro" | "gpt-image-2"
 	iconSrc?: string
 }
 
@@ -80,6 +80,8 @@ export interface FileItem {
 	source?: AttachmentSource
 	project_id?: string
 	is_hidden?: boolean
+	/** Runtime-only navigation context for HTML previews; never persist this field. */
+	htmlNavigation?: HtmlNavigationRequest
 }
 
 // Tab item interface

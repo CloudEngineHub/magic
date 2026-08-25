@@ -799,67 +799,190 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 }
 
 // 链接处理脚本
-const getLinkHandlingScript = () => {
+const getLinkHandlingScript = (navigationBasePath = "") => {
 	return `
+		(function() {
+			${MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER}
+			var navigationBasePath = ${JSON.stringify(navigationBasePath)};
 
-		if (window.navigation && typeof window.navigation.addEventListener === "function") {
-			window.navigation.addEventListener("navigate", function(e) {
-				var url = e.destination && e.destination.url;
-				var href = url;
-				if (!url) return;
-				try {
-					var destination = new URL(url, window.location.href);
-					var isSameDocument =
-						destination.pathname === window.location.pathname &&
-						destination.search === window.location.search;
-					var isHashRouter =
-						destination.hash.indexOf("#?") === 0 ||
-						destination.hash.indexOf("#/") === 0;
+			var navigationRuntime = window.__MAGIC_HTML_NAVIGATION_RUNTIME__;
+			if (!navigationRuntime) {
+				function getInternalNavigationHref(rawUrl) {
+					if (rawUrl == null) return null;
+					var raw = String(rawUrl).trim();
+					if (!raw) return null;
+					if (/^(mailto:|tel:|javascript:|data:|blob:|about:)/i.test(raw)) return null;
+					if (raw.indexOf('//') === 0) return null;
 
-					if (isSameDocument && isHashRouter) {
-						return;
+					var isAbsoluteUrl = /^[a-z][a-z\\d+.-]*:/i.test(raw);
+					if (!isAbsoluteUrl) {
+						if (!navigationBasePath) return raw;
+
+						try {
+							var basePath = "/" + navigationBasePath.replace(/^\\/+/, "");
+							var baseUrl = new URL(basePath, "https://magic-html.invalid/");
+							var targetUrl = new URL(raw, baseUrl);
+							return targetUrl.pathname + targetUrl.search + targetUrl.hash;
+						} catch (error) {
+							console.warn("linkClicked relative URL parse failed", error);
+							return null;
+						}
 					}
-				} catch (error) {
-					console.warn("linkClicked navigate URL parse failed", error);
+
+					try {
+						var destination = new URL(raw, document.baseURI || window.location.href);
+						var currentOrigin = window.location.origin;
+						if (!currentOrigin || currentOrigin === 'null') {
+							var currentWindow = window;
+							while (currentWindow.parent && currentWindow.parent !== currentWindow) {
+								try {
+									var parentOrigin = currentWindow.parent.location.origin;
+									if (parentOrigin && parentOrigin !== 'null') {
+										currentOrigin = parentOrigin;
+										break;
+									}
+								} catch (error) {
+									break;
+								}
+								currentWindow = currentWindow.parent;
+							}
+							if (!currentOrigin || currentOrigin === 'null') {
+								currentOrigin = new URL(document.baseURI || window.location.href).origin;
+							}
+						}
+						if (destination.origin !== currentOrigin) return null;
+						return destination.pathname + destination.search + destination.hash;
+					} catch (error) {
+						console.warn('linkClicked URL parse failed', error);
+						return null;
+					}
 				}
 
-				var currentOrigin = window.location.origin;
-				if (url.indexOf(currentOrigin) === 0) {
-					href = href.replace(currentOrigin, "");
-					e.preventDefault();
-				} else {
-					return
-				}
-				try {
-					window.parent.postMessage({
+				function postHtmlNavigation(href, originalHref, target, autoEdit, text) {
+					__magicGetFetchPostMessageTarget().postMessage({
 						type: "linkClicked",
 						href: href,
-						originalHref: url,
-						text: "",
-						target: "_self",
-						autoEdit: false,
-						fileId: window.__MAGIC_FILE_ID__ || ""
-					}, "*")
-				} catch (err) { console.warn("linkClicked postMessage failed", err); }
-			});
-		}
-		// 处理非HTTP链接的点击事件
-		document.addEventListener("DOMContentLoaded", function() {
+						originalHref: originalHref,
+						text: text || "",
+						target: target || "_self",
+						autoEdit: autoEdit === true
+					}, "*");
+				}
+
+				function createNavigationResult() {
+					var completed = Promise.resolve();
+					return { committed: completed, finished: completed };
+				}
+
+				navigationRuntime = {
+					getInternalNavigationHref: getInternalNavigationHref,
+					postHtmlNavigation: postHtmlNavigation,
+					createNavigationResult: createNavigationResult,
+				};
+				window.__MAGIC_HTML_NAVIGATION_RUNTIME__ = navigationRuntime;
+
+				if (window.navigation && typeof window.navigation.addEventListener === "function") {
+					var nativeNavigationNavigate = window.navigation.navigate.bind(window.navigation);
+					try {
+						window.navigation.navigate = function(url, options) {
+							var href = navigationRuntime.getInternalNavigationHref(url);
+							if (href) {
+								navigationRuntime.postHtmlNavigation(href, String(url), "_self", false, "");
+								return navigationRuntime.createNavigationResult();
+							}
+							return nativeNavigationNavigate(url, options);
+						};
+					} catch (error) {
+						console.warn("Navigation API hook installation failed", error);
+					}
+
+					window.navigation.addEventListener("navigate", function(e) {
+						var url = e.destination && e.destination.url;
+						if (!url) return;
+						try {
+							var destination = new URL(url, window.location.href);
+							var isSameDocument =
+								destination.pathname === window.location.pathname &&
+								destination.search === window.location.search;
+							var isHashRouter =
+								destination.hash.indexOf("#?") === 0 ||
+								destination.hash.indexOf("#/") === 0;
+
+							if (isSameDocument && isHashRouter) return;
+						} catch (error) {
+							console.warn("linkClicked navigate URL parse failed", error);
+						}
+
+						var href = navigationRuntime.getInternalNavigationHref(url);
+						if (!href) return;
+						e.preventDefault();
+						try {
+							navigationRuntime.postHtmlNavigation(href, url, "_self", false, "");
+						} catch (err) { console.warn("linkClicked postMessage failed", err); }
+					});
+				}
+
+				function patchLocationMethod(methodName) {
+					try {
+						var nativeMethod = window.location[methodName].bind(window.location);
+						window.location[methodName] = function(url) {
+							var href = navigationRuntime.getInternalNavigationHref(url);
+							if (href) {
+								navigationRuntime.postHtmlNavigation(href, String(url), "_self", false, "");
+								return;
+							}
+							return nativeMethod(url);
+						};
+					} catch (error) {
+						console.warn("Location navigation hook installation failed", methodName, error);
+					}
+				}
+
+				patchLocationMethod("assign");
+				patchLocationMethod("replace");
+
+				// Install window.open before user-authored head scripts execute.
+				var nativeWindowOpen = window.open;
+				window.open = function(url, target, features) {
+					var href = navigationRuntime.getInternalNavigationHref(url);
+					if (href) {
+						if (window.slideSelector && window.slideSelector.isEditMode) {
+							console.log('编辑模式下不触发 window.open 通信');
+							return null;
+						}
+
+						try {
+							console.log("劫持的 window.open:", url);
+							navigationRuntime.postHtmlNavigation(href, String(url), target || "_blank", false, "");
+						} catch (error) {
+							console.error("发送 window.open 消息时出错:", error);
+						}
+						return null;
+					}
+
+					return nativeWindowOpen.call(this, url, target, features);
+				};
+			}
+
+			// document is replaced by setContent, so this listener must be installed for each document.
+			document.addEventListener("DOMContentLoaded", function() {
 			// 监听所有 a 标签的点击事件
 			document.addEventListener("click", function(event) {
 				// 检查点击的元素是否是 a 标签或其子元素
 				let linkElement = event.target.closest("a");
 
 				if (linkElement && linkElement.href) {
-					const href = linkElement.getAttribute("href");
+					const originalHref = linkElement.getAttribute("href");
 
 					// 检查是否为锚点链接（以#开头）
-					if (href && href.startsWith("#")) {
+					if (originalHref && originalHref.startsWith("#")) {
 						return;
 					}
 
-					// 检查 href 是否不是以 http 或 https 开头
-					if (href && !href.startsWith("http://") && !href.startsWith("https://")&& !href.startsWith("blob:") && !href.startsWith("data:")) {
+					const href = navigationRuntime.getInternalNavigationHref(
+						originalHref || linkElement.href,
+					);
+					if (href) {
 						// 阻止默认行为
 						event.preventDefault();
 						event.stopPropagation();
@@ -873,60 +996,24 @@ const getLinkHandlingScript = () => {
 						// 检查是否有 data-auto-edit 属性
 					const autoEdit = linkElement.getAttribute("data-auto-edit") === "true";
 
-					// 通过 postMessage 通知主窗口
-					try {
-						console.log(href)
-						window.parent.postMessage({
-							type: "linkClicked",
-							href: href,
-							originalHref: linkElement.href,
-							text: linkElement.textContent || linkElement.innerText || "",
-							target: linkElement.target || "",
-							autoEdit: autoEdit,
-							fileId: window.__MAGIC_FILE_ID__ || ""
-						}, "*");
+						// 通过 postMessage 通知主窗口
+						try {
+							navigationRuntime.postHtmlNavigation(
+								href,
+							linkElement.href,
+							linkElement.target || "",
+							autoEdit,
+							linkElement.textContent || linkElement.innerText || ""
+						);
 					} catch (error) {
 						console.error("发送链接点击消息时出错:", error);
 					}
 					}
 				}
-			});
-
-			// 劫持 window.open 方法
-			const originalWindowOpen = window.open;
-			window.open = function(url, target, features) {
-				// 检查 URL 是否不是以 http 或 https 开头
-				if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
-					// 如果当前是编辑模式，不触发通信
-					if (window.slideSelector && window.slideSelector.isEditMode) {
-						console.log('编辑模式下不触发 window.open 通信');
-						return null;
-					}
-
-					// 阻止默认行为，不调用原始的 window.open
-					try {
-						console.log("劫持的 window.open:", url);
-						window.parent.postMessage({
-							type: "linkClicked",
-							href: url,
-							originalHref: url,
-							text: "",
-							target: target || "_blank",
-							autoEdit: false, // window.open 不支持 data-auto-edit 属性
-							fileId: window.__MAGIC_FILE_ID__ || ""
-						}, "*");
-					} catch (error) {
-						console.error("发送 window.open 消息时出错:", error);
-					}
-					// 返回一个空的窗口对象引用，防止脚本报错
-					return null;
-				} else {
-					// 对于 HTTP/HTTPS 链接，调用原始的 window.open
-					return originalWindowOpen.call(this, url, target, features);
-				}
-			};
-		});
-	`
+					});
+				});
+			})();
+		`
 }
 
 /**
@@ -1948,6 +2035,9 @@ export const getFullContent = (
 		POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR
 	const virtualStorageContext =
 		options.virtualStorage ?? createEphemeralVirtualStorageContext(markerId || "default")
+	// Explicit host contexts use the virtual storage bridge; keep the legacy mock for
+	// standalone callers that rely on marker-based browser storage isolation.
+	const shouldInjectLegacyStorageMock = !options.virtualStorage
 
 	// 使用DOMParser解析原始HTML
 	const parser = new DOMParser()
@@ -1971,6 +2061,30 @@ export const getFullContent = (
 	const initialLang = normalizeLocale(configStore.i18n.language)
 	const firstHeadChild = doc.head.firstChild
 	const injectedHeadFragment = doc.createDocumentFragment()
+	const locationSearch = options.locationSearch || ""
+	const locationAnchor = options.locationAnchor || ""
+
+	// Nested srcdoc pages do not receive the outer shell's setContent message. Apply their
+	// requested URL state before any user-authored head script reads window.location.
+	const navigationBootstrapScript = doc.createElement("script")
+	navigationBootstrapScript.setAttribute("data-injected", "html-navigation")
+	navigationBootstrapScript.textContent = `
+		window.__MAGIC_HTML_NAVIGATION__ = {
+			search: ${JSON.stringify(locationSearch)},
+			hash: ${JSON.stringify(locationAnchor)},
+			requestId: ${JSON.stringify(options.navigationRequestId || "")}
+		};
+		try {
+			window.history.replaceState(
+				null,
+				"",
+				window.location.pathname + ${JSON.stringify(locationSearch)} + ${JSON.stringify(locationAnchor)}
+			);
+		} catch (error) {
+			// about:srcdoc and restricted WebViews may reject URL replacement.
+		}
+	`
+	injectedHeadFragment.appendChild(navigationBootstrapScript)
 
 	// 创建防翻译meta标签
 	const metaNoTranslate = doc.createElement("meta")
@@ -1999,11 +2113,11 @@ export const getFullContent = (
 		${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
 		${getVirtualStorageBridgeScript(virtualStorageContext)}
 		${getCookieMockScript()}
-		${getStorageMockScript(markerId)}
+		${shouldInjectLegacyStorageMock ? getStorageMockScript(markerId) : ""}
 		${getIndexedDBMockScript()}
 		${getServiceWorkerMockScript(serviceWorkerMockMode)}
 		${getDOMContentLoadedScript(options.disableParentClickBridge === true)}
-		${getLinkHandlingScript()}
+		${getLinkHandlingScript(options.navigationBasePath)}
 		${getNestedIframeInterceptorScript()}
 		${
 			options.reportContentMetrics
@@ -2098,4 +2212,12 @@ interface GetFullContentOptions {
 	enableInlineInspectorFallback?: boolean
 	postMessageTargetStrategy?: PostMessageTargetStrategy
 	virtualStorage?: VirtualStorageRuntimeContext
+	/** Query string exposed to user HTML through window.location.search. */
+	locationSearch?: string
+	/** Hash exposed to user HTML through window.location.hash. */
+	locationAnchor?: string
+	/** Request identifier echoed by sandbox lifecycle messages. */
+	navigationRequestId?: string
+	/** Host-resolved file path used to normalize nested HTML navigation. */
+	navigationBasePath?: string
 }

@@ -87,6 +87,36 @@ describe("template tab attachment sync", () => {
 		})
 	})
 
+	it("keeps HTML navigation context when the attachment tree refreshes", () => {
+		const updatedFile: FileItem = {
+			file_id: "detail",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const tab = {
+			...createTab("html"),
+			id: "detail",
+			title: "detail.html",
+			fileData: {
+				file_id: "detail",
+				file_name: "detail.html",
+				htmlNavigation: {
+					filePath: "detail.html",
+					search: "?mode=edit",
+					hash: "#section",
+					anchor: "section",
+				},
+			},
+		}
+
+		expect(mergeAttachmentFileForTab(tab, updatedFile).htmlNavigation).toEqual({
+			filePath: "detail.html",
+			search: "?mode=edit",
+			hash: "#section",
+			anchor: "section",
+		})
+	})
+
 	it("uses the latest attachment metadata for persistent render types", () => {
 		const updatedFile: FileItem = {
 			file_id: "root",
