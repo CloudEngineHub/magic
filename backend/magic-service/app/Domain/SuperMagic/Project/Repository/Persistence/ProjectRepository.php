@@ -226,11 +226,14 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
                 Db::raw('COALESCE(pms.is_pinned, 0) as is_pinned'),
                 Db::raw('pms.pinned_at as pinned_at'),
                 Db::raw('pms.sort_order as sort_order'),
+                Db::raw('pms.pinned_sort_order as pinned_sort_order'),
             ]);
             if ($pinPriority) {
                 $dynamicOrderBy = $orderBy === 'created_at' ? 'id' : $orderBy;
                 $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC')
-                    ->orderByRaw('pms.pinned_at DESC')
+                    ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NULL THEN 0 ELSE 1 END ASC')
+                    ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NULL THEN pms.pinned_at END DESC')
+                    ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NOT NULL THEN pms.pinned_sort_order END ASC')
                     ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN 0 ELSE 1 END ASC')
                     ->orderByRaw("CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN p.{$dynamicOrderBy} END {$orderDirection}")
                     ->orderByRaw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN p.id END DESC')

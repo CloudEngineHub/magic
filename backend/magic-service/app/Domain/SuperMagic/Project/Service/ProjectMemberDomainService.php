@@ -211,7 +211,6 @@ class ProjectMemberDomainService
             $this->projectMemberSettingRepository->create($userId, $projectId, $organizationCode);
         }
 
-        // 2. 更新置顶状态
         return $this->projectMemberSettingRepository->updatePinStatus($userId, $projectId, $isPinned);
     }
 

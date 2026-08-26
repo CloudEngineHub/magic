@@ -265,11 +265,21 @@ class WorkspaceAppService extends AbstractAppService
             );
         }
 
-        if ($requestDTO->preWorkspaceIdProvided) {
+        // Keep the legacy `pre_workspace_id: null` first-position behavior,
+        // while treating an explicitly null `next_workspace_id` as a no-op.
+        if ($requestDTO->preWorkspaceIdProvided && $requestDTO->nextWorkspaceIdProvided) {
+            $this->logger->warning('Both pre_workspace_id and next_workspace_id were provided; pre_workspace_id wins', [
+                'workspace_id' => $workspaceId,
+            ]);
+        }
+        if ($requestDTO->preWorkspaceIdProvided
+            || ($requestDTO->nextWorkspaceIdProvided && $requestDTO->getNextWorkspaceId() !== null)
+        ) {
             $this->workspaceDomainService->moveWorkspace(
                 $dataIsolation,
                 $workspaceId,
-                $requestDTO->getPreWorkspaceId()
+                $requestDTO->getPreWorkspaceId(),
+                $requestDTO->preWorkspaceIdProvided ? null : $requestDTO->getNextWorkspaceId()
             );
         }
 

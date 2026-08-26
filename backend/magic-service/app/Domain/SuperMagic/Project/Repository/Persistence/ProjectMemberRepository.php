@@ -508,7 +508,11 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             Db::raw('COALESCE(pms.bind_workspace_id, 0) as bind_workspace_id'),
             Db::raw('COALESCE(pms.last_active_at, p.created_at) as last_active_at'),
             Db::raw('pms.sort_order as sort_order'),
+            Db::raw('pms.pinned_sort_order as pinned_sort_order'),
             'pms.pinned_at',
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NULL THEN 0 ELSE 1 END as pinned_sort_group'),
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NULL THEN pms.pinned_at END as dynamic_pinned_sort'),
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NOT NULL THEN pms.pinned_sort_order END as pinned_manual_sort_value'),
             Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN 0 ELSE 1 END as manual_sort_group'),
             // Snowflake IDs are monotonic by creation order and avoid sorting
             // the dynamic segment by a timestamp column.
@@ -529,7 +533,9 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         } else {
             // 置顶优先，其次是动态项目，最后是手工排序项目。
             $query->orderByDesc('is_pinned')
-                ->orderByDesc('pinned_at')
+                ->orderBy('pinned_sort_group', 'asc')
+                ->orderByDesc('dynamic_pinned_sort')
+                ->orderBy('pinned_manual_sort_value', 'asc')
                 ->orderBy('manual_sort_group', 'asc')
                 ->orderByDesc('dynamic_created_sort')
                 ->orderBy('manual_sort_value', 'asc')
@@ -549,7 +555,10 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             unset(
                 $project['manual_sort_group'],
                 $project['dynamic_created_sort'],
-                $project['manual_sort_value']
+                $project['manual_sort_value'],
+                $project['pinned_sort_group'],
+                $project['dynamic_pinned_sort'],
+                $project['pinned_manual_sort_value']
             );
             return $project;
         }, $projects);

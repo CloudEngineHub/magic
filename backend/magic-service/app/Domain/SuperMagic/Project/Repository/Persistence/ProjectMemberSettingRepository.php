@@ -55,6 +55,8 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             'organization_code' => $organizationCode,
             'is_pinned' => 0,
             'pinned_at' => null,
+            'sort_order' => null,
+            'pinned_sort_order' => null,
             'last_active_at' => $now,
             'created_at' => $now,
             'updated_at' => $now,
@@ -84,6 +86,8 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             $this->model::query()->insertOrUpdate($attributes, [
                 'is_pinned' => $attributes['is_pinned'],
                 'pinned_at' => $attributes['pinned_at'] ?? null,
+                'sort_order' => $attributes['sort_order'] ?? null,
+                'pinned_sort_order' => $attributes['pinned_sort_order'] ?? null,
                 'last_active_at' => $attributes['last_active_at'],
                 'updated_at' => $now,
             ]);
@@ -96,6 +100,8 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
                 ->update([
                     'is_pinned' => $attributes['is_pinned'],
                     'pinned_at' => $attributes['pinned_at'] ?? null,
+                    'sort_order' => $attributes['sort_order'] ?? null,
+                    'pinned_sort_order' => $attributes['pinned_sort_order'] ?? null,
                     'last_active_at' => $attributes['last_active_at'],
                     'updated_at' => $now,
                 ]);
@@ -113,6 +119,8 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
         $attributes = [
             'is_pinned' => $isPinned ? 1 : 0,
             'pinned_at' => $isPinned ? $now : null,
+            'sort_order' => null,
+            'pinned_sort_order' => null,
             'last_active_at' => $now,
             'updated_at' => $now,
         ];
@@ -128,6 +136,9 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
 
     public function updateSortOrder(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool
     {
+        // Writing the non-pinned segment also makes the segment transition
+        // explicit: a project cannot carry an active pinned state and a
+        // non-pinned manual position at the same time.
         $existing = $this->model::query()
             ->where('user_id', $userId)
             ->where('project_id', $projectId)
@@ -137,7 +148,12 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             return $this->model::query()
                 ->where('user_id', $userId)
                 ->where('project_id', $projectId)
-                ->update(['sort_order' => $sortOrder]) > 0;
+                ->update([
+                    'is_pinned' => 0,
+                    'pinned_at' => null,
+                    'sort_order' => $sortOrder,
+                    'pinned_sort_order' => null,
+                ]) > 0;
         }
 
         $now = date('Y-m-d H:i:s');
@@ -154,6 +170,92 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             'is_bind_workspace' => 0,
             'bind_workspace_id' => 0,
             'sort_order' => $sortOrder,
+            'pinned_sort_order' => null,
+            'last_active_at' => $projectCreatedAt ?: $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    public function updateSortOrderForMove(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool
+    {
+        $updated = $this->model::query()
+            ->where('user_id', $userId)
+            ->where('project_id', $projectId)
+            ->update([
+                'sort_order' => $sortOrder,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+
+        if ($updated > 0) {
+            return true;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $projectCreatedAt = Db::table('magic_super_agent_project')->where('id', $projectId)->value('created_at');
+        return $this->model::query()->insert([
+            'id' => IdGenerator::getSnowId(),
+            'user_id' => $userId,
+            'project_id' => $projectId,
+            'organization_code' => $organizationCode,
+            'is_pinned' => 0,
+            'pinned_at' => null,
+            'is_bind_workspace' => 0,
+            'bind_workspace_id' => 0,
+            'sort_order' => $sortOrder,
+            'pinned_sort_order' => null,
+            'last_active_at' => $projectCreatedAt ?: $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    public function clearManualSortOrders(string $userId, int $projectId): bool
+    {
+        return $this->model::query()
+            ->where('user_id', $userId)
+            ->where('project_id', $projectId)
+            ->update([
+                'sort_order' => null,
+                'pinned_sort_order' => null,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]) > 0;
+    }
+
+    public function updatePinnedSortOrder(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool
+    {
+        $existing = $this->model::query()
+            ->where('user_id', $userId)
+            ->where('project_id', $projectId)
+            ->first();
+
+        if ($existing) {
+            return $this->model::query()
+                ->where('user_id', $userId)
+                ->where('project_id', $projectId)
+                ->update([
+                    'is_pinned' => 1,
+                    'pinned_at' => $existing->pinned_at ?: date('Y-m-d H:i:s'),
+                    'sort_order' => null,
+                    'pinned_sort_order' => $sortOrder,
+                ]) > 0;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $projectCreatedAt = Db::table('magic_super_agent_project')
+            ->where('id', $projectId)
+            ->value('created_at');
+        return $this->model::query()->insert([
+            'id' => IdGenerator::getSnowId(),
+            'user_id' => $userId,
+            'project_id' => $projectId,
+            'organization_code' => $organizationCode,
+            'is_pinned' => 1,
+            'pinned_at' => $now,
+            'is_bind_workspace' => 0,
+            'bind_workspace_id' => 0,
+            'sort_order' => null,
+            'pinned_sort_order' => $sortOrder,
             'last_active_at' => $projectCreatedAt ?: $now,
             'created_at' => $now,
             'updated_at' => $now,
@@ -196,6 +298,7 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
                 'is_bind_workspace' => 0,
                 'bind_workspace_id' => 0,
                 'sort_order' => null,
+                'pinned_sort_order' => null,
                 // A sorting operation must not make a legacy project look recently used.
                 'last_active_at' => $lastActiveAt,
                 'created_at' => $now,
@@ -207,13 +310,13 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
         return count($insertData);
     }
 
-    public function getSortOrderRows(string $userId, ?int $workspaceId = null, ?int $excludeProjectId = null): array
+    public function getSortOrderRows(string $userId, ?int $workspaceId = null, ?int $excludeProjectId = null, bool $isPinned = false): array
     {
         $query = $this->model::query()
             ->from($this->model->getTable() . ' as pms')
             ->join('magic_super_agent_project as p', 'p.id', '=', 'pms.project_id')
             ->where('pms.user_id', $userId)
-            ->whereRaw('COALESCE(pms.is_pinned, 0) = 0')
+            ->where('pms.is_pinned', $isPinned ? 1 : 0)
             ->whereNull('p.deleted_at')
             ->where('p.is_hidden', 0);
         if ($workspaceId !== null) {
@@ -223,31 +326,56 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             $query->where('p.id', '<>', $excludeProjectId);
         }
 
-        return $query->select(['p.id', 'pms.sort_order'])
-            ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN 0 ELSE 1 END ASC')
-            ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN p.id END DESC')
-            ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN p.id END DESC')
-            ->orderByRaw('CASE WHEN pms.sort_order IS NOT NULL THEN pms.sort_order END ASC')
+        return $query->select(['p.id', 'pms.sort_order', 'pms.pinned_sort_order', 'pms.pinned_at'])
+            ->when($isPinned, function ($query) {
+                return $query->orderByRaw('CASE WHEN pms.pinned_sort_order IS NULL THEN 0 ELSE 1 END ASC')
+                    ->orderByRaw('CASE WHEN pms.pinned_sort_order IS NULL THEN pms.pinned_at END DESC')
+                    ->orderByRaw('CASE WHEN pms.pinned_sort_order IS NULL THEN p.id END DESC')
+                    ->orderByRaw('CASE WHEN pms.pinned_sort_order IS NOT NULL THEN pms.pinned_sort_order END ASC');
+            }, function ($query) {
+                return $query->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN 0 ELSE 1 END ASC')
+                    ->orderByRaw('CASE WHEN pms.sort_order IS NULL THEN p.id END DESC')
+                    ->orderByRaw('CASE WHEN pms.sort_order IS NOT NULL THEN pms.sort_order END ASC');
+            })
             ->lockForUpdate()
             ->get()
             ->map(fn ($row) => [
                 'id' => (int) $row->id,
                 'sort_order' => $row->sort_order !== null ? (int) $row->sort_order : null,
+                'pinned_sort_order' => $row->pinned_sort_order !== null ? (int) $row->pinned_sort_order : null,
             ])
             ->all();
     }
 
     public function batchUpdateSortOrders(string $userId, array $sortOrders): int
     {
-        $updated = 0;
-        foreach ($sortOrders as $projectId => $sortOrder) {
-            $updated += (int) $this->model::query()
-                ->where('user_id', $userId)
-                ->where('project_id', (int) $projectId)
-                ->update(['sort_order' => $sortOrder]);
-        }
+        return $this->batchUpdateOrderValues($userId, $sortOrders, false);
+    }
 
-        return $updated;
+    public function batchUpdateSortOrdersForMove(string $userId, array $sortOrders): int
+    {
+        if ($sortOrders === []) {
+            return 0;
+        }
+        $caseParts = [];
+        $projectIds = [];
+        foreach ($sortOrders as $projectId => $sortOrder) {
+            $projectId = (int) $projectId;
+            $projectIds[] = $projectId;
+            $caseParts[] = 'WHEN ' . $projectId . ' THEN ' . (int) $sortOrder;
+        }
+        return (int) $this->model::query()
+            ->where('user_id', $userId)
+            ->whereIn('project_id', $projectIds)
+            ->update([
+                'sort_order' => Db::raw('CASE project_id ' . implode(' ', $caseParts) . ' END'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+    }
+
+    public function batchUpdatePinnedSortOrders(string $userId, array $sortOrders): int
+    {
+        return $this->batchUpdateOrderValues($userId, $sortOrders, true);
     }
 
     /**
@@ -573,5 +701,46 @@ class ProjectMemberSettingRepository implements ProjectMemberSettingRepositoryIn
             ->where('user_id', $userId)
             ->whereIn('project_id', $projectIds)
             ->delete();
+    }
+
+    /**
+     * Update a complete ordering segment in one SQL statement. Reordering a
+     * large collaboration list must not issue one UPDATE per project.
+     */
+    private function batchUpdateOrderValues(string $userId, array $sortOrders, bool $pinned): int
+    {
+        if ($sortOrders === []) {
+            return 0;
+        }
+
+        $normalized = [];
+        foreach ($sortOrders as $projectId => $sortOrder) {
+            $normalized[(int) $projectId] = (int) $sortOrder;
+        }
+        $caseParts = [];
+        foreach ($normalized as $projectId => $sortOrder) {
+            $caseParts[] = 'WHEN ' . $projectId . ' THEN ' . $sortOrder;
+        }
+        $caseExpression = 'CASE project_id ' . implode(' ', $caseParts) . ' END';
+        $projectIds = array_keys($normalized);
+
+        $attributes = $pinned
+            ? [
+                'is_pinned' => 1,
+                'pinned_at' => Db::raw("COALESCE(pinned_at, '" . date('Y-m-d H:i:s') . "')"),
+                'sort_order' => null,
+                'pinned_sort_order' => Db::raw($caseExpression),
+            ]
+            : [
+                'is_pinned' => 0,
+                'pinned_at' => null,
+                'sort_order' => Db::raw($caseExpression),
+                'pinned_sort_order' => null,
+            ];
+
+        return (int) $this->model::query()
+            ->where('user_id', $userId)
+            ->whereIn('project_id', $projectIds)
+            ->update($attributes);
     }
 }

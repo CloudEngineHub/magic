@@ -43,7 +43,11 @@ class SaveWorkspaceRequestDTO extends AbstractRequestDTO
      */
     public ?string $preWorkspaceId = null;
 
+    public ?string $nextWorkspaceId = null;
+
     public bool $preWorkspaceIdProvided = false;
+
+    public bool $nextWorkspaceIdProvided = false;
 
     /**
      * Get workspace ID (if exists).
@@ -83,6 +87,15 @@ class SaveWorkspaceRequestDTO extends AbstractRequestDTO
         return (int) $this->preWorkspaceId;
     }
 
+    public function getNextWorkspaceId(): ?int
+    {
+        if ($this->nextWorkspaceId === null || $this->nextWorkspaceId === '') {
+            return null;
+        }
+
+        return (int) $this->nextWorkspaceId;
+    }
+
     /**
      * Check if this is an update operation.
      */
@@ -104,6 +117,7 @@ class SaveWorkspaceRequestDTO extends AbstractRequestDTO
             'workspace_type' => 'nullable|string|in:' . $validTypes,
             'is_pinned' => 'nullable|boolean',
             'pre_workspace_id' => 'nullable|string',
+            'next_workspace_id' => 'nullable|string',
         ];
     }
 

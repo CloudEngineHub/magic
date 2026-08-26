@@ -348,9 +348,10 @@ class ProjectDomainService
         ?string $targetProjectName = null,
         ?string $projectMode = null,
         ?int $preProjectId = null,
+        ?int $nextProjectId = null,
         bool $sortProvided = false
     ): ProjectEntity {
-        return Db::transaction(function () use ($sourceProjectId, $targetWorkspaceId, $userId, $targetProjectName, $projectMode, $preProjectId, $sortProvided) {
+        return Db::transaction(function () use ($sourceProjectId, $targetWorkspaceId, $userId, $targetProjectName, $projectMode, $preProjectId, $nextProjectId, $sortProvided) {
             $currentTime = date('Y-m-d H:i:s');
 
             // Get the source project first to return updated entity
@@ -400,6 +401,10 @@ class ProjectDomainService
             }
 
             if ($workspaceChanged) {
+                // Manual positions are scoped to the source workspace. Clear
+                // them without changing the project's pin state; the pin API
+                // can assign a precise position in the destination workspace.
+                $this->projectMemberSettingRepository->clearManualSortOrders($userId, $sourceProjectId);
                 // Update topics workspace_id
                 $topicUpdateResult = $this->topicRepository->updateTopicByCondition(
                     [
@@ -441,7 +446,8 @@ class ProjectDomainService
                     $sourceProject->getUserOrganizationCode(),
                     $sourceProjectId,
                     $targetWorkspaceId,
-                    $preProjectId
+                    $preProjectId,
+                    $nextProjectId
                 );
             }
 
@@ -462,15 +468,45 @@ class ProjectDomainService
         string $organizationCode,
         int $projectId,
         ?int $workspaceId,
-        ?int $preProjectId
+        ?int $preProjectId,
+        ?int $nextProjectId = null
     ): void {
-        if ($workspaceId === null || $preProjectId === null) {
-            $this->projectMemberSettingRepository->updateSortOrder($userId, $projectId, $organizationCode, null);
+        $this->applyProjectSortOrderForGroup($userId, $organizationCode, $projectId, $workspaceId, $preProjectId, $nextProjectId, false);
+    }
+
+    public function applyProjectSortOrderForGroup(
+        string $userId,
+        string $organizationCode,
+        int $projectId,
+        ?int $workspaceId,
+        ?int $preProjectId,
+        ?int $nextProjectId = null,
+        bool $targetPinned = false
+    ): void {
+        if ($workspaceId === null) {
+            if ($preProjectId !== null || $nextProjectId !== null) {
+                throw new RuntimeException('Cannot set relative project order without a target workspace');
+            }
             return;
         }
 
-        if ($preProjectId === $projectId) {
-            throw new RuntimeException('Previous project cannot be the current project');
+        // `pre_project_id` wins when both relative-position parameters are supplied.
+        $targetProjectId = $preProjectId ?? $nextProjectId;
+        $insertAfter = $preProjectId !== null;
+        if ($targetProjectId === null) {
+            // An explicit null relative-position value is a no-op. Omitting
+            // both fields is handled by the application service and never
+            // enters this method.
+            return;
+        }
+
+        if ($targetProjectId === $projectId) {
+            throw new RuntimeException('Relative project cannot be the current project');
+        }
+
+        $targetProject = $this->projectRepository->findById($targetProjectId);
+        if ($targetProject === null || $targetProject->getWorkspaceId() !== $workspaceId) {
+            throw new RuntimeException('Relative project is not in the target workspace');
         }
 
         $workspaceProjectIds = $this->projectRepository->getProjectIdsByWorkspaceId(
@@ -478,32 +514,48 @@ class ProjectDomainService
             $userId,
             $organizationCode
         );
+        // The target may be a collaboration project that is visible to the
+        // current user but is not owned by them, so include it explicitly
+        // when lazily creating the user's settings row.
+        $workspaceProjectIds[] = (string) $targetProjectId;
         $this->projectMemberSettingRepository->ensureSettingsForSorting(
             $userId,
             array_map('intval', $workspaceProjectIds),
             $organizationCode
         );
 
-        $previousSetting = $this->projectMemberSettingRepository->findByUserAndProject($userId, $preProjectId);
-        if ($previousSetting === null || $previousSetting->isPinned()) {
-            throw new RuntimeException('Previous project is invalid or pinned');
+        $targetSetting = $this->projectMemberSettingRepository->findByUserAndProject($userId, $targetProjectId);
+        if ($targetSetting === null) {
+            throw new RuntimeException('Relative project setting is invalid');
+        }
+        if ($targetSetting->isPinned() !== $targetPinned) {
+            throw new RuntimeException('Relative project is not in the target ordering group');
         }
 
-        $rows = $this->projectMemberSettingRepository->getSortOrderRows($userId, $workspaceId, $projectId);
+        $rows = $this->projectMemberSettingRepository->getSortOrderRows(
+            $userId,
+            $workspaceId,
+            $projectId,
+            $targetPinned
+        );
         $orderedIds = array_map(static fn (array $row): int => $row['id'], $rows);
         $sortOrderMap = [];
         foreach ($rows as $row) {
-            if ($row['sort_order'] !== null) {
-                $sortOrderMap[$row['id']] = $row['sort_order'];
+            $value = $targetPinned ? $row['pinned_sort_order'] : $row['sort_order'];
+            if ($value !== null) {
+                $sortOrderMap[$row['id']] = $value;
             }
         }
-        if (! in_array($preProjectId, $orderedIds, true)) {
-            throw new RuntimeException('Previous project is not in the target workspace');
+        if (! in_array($targetProjectId, $orderedIds, true)) {
+            throw new RuntimeException('Relative project is not in the target ordering group');
         }
 
         $allHaveSortOrder = $rows !== [] && array_reduce(
             $rows,
-            static fn (bool $carry, array $row): bool => $carry && $row['sort_order'] !== null,
+            static function (bool $carry, array $row) use ($targetPinned): bool {
+                $value = $targetPinned ? $row['pinned_sort_order'] : $row['sort_order'];
+                return $carry && $value !== null;
+            },
             true
         );
         if (! $allHaveSortOrder) {
@@ -513,16 +565,19 @@ class ProjectDomainService
                 $initial[$id] = $rank;
                 $rank += 1_000_000;
             }
-            $this->projectMemberSettingRepository->batchUpdateSortOrders($userId, $initial);
+            if ($targetPinned) {
+                $this->projectMemberSettingRepository->batchUpdatePinnedSortOrders($userId, $initial);
+            } else {
+                $this->projectMemberSettingRepository->batchUpdateSortOrdersForMove($userId, $initial);
+            }
             $sortOrderMap = $initial;
         }
 
-        $index = array_search($preProjectId, $orderedIds, true);
-        $orderedIds[] = $projectId;
-        array_splice($orderedIds, count($orderedIds) - 1, 1);
-        array_splice($orderedIds, $index + 1, 0, [$projectId]);
+        $index = array_search($targetProjectId, $orderedIds, true);
+        $insertPosition = $insertAfter ? $index + 1 : $index;
+        array_splice($orderedIds, $insertPosition, 0, [$projectId]);
 
-        $position = $index + 1;
+        $position = $insertPosition;
         $previousSortOrder = $position > 0 ? $sortOrderMap[$orderedIds[$position - 1]] : null;
         $nextSortOrder = $position + 1 < count($orderedIds) ? $sortOrderMap[$orderedIds[$position + 1]] : null;
 
@@ -541,11 +596,19 @@ class ProjectDomainService
                 $sortOrders[$id] = $rank;
                 $rank += 1_000_000;
             }
-            $this->projectMemberSettingRepository->batchUpdateSortOrders($userId, $sortOrders);
+            if ($targetPinned) {
+                $this->projectMemberSettingRepository->batchUpdatePinnedSortOrders($userId, $sortOrders);
+            } else {
+                $this->projectMemberSettingRepository->batchUpdateSortOrdersForMove($userId, $sortOrders);
+            }
             $newSortOrder = $sortOrders[$projectId];
         }
 
-        $this->projectMemberSettingRepository->updateSortOrder($userId, $projectId, $organizationCode, $newSortOrder);
+        if ($targetPinned) {
+            $this->projectMemberSettingRepository->updatePinnedSortOrder($userId, $projectId, $organizationCode, $newSortOrder);
+        } else {
+            $this->projectMemberSettingRepository->updateSortOrderForMove($userId, $projectId, $organizationCode, $newSortOrder);
+        }
     }
 
     /**

@@ -223,15 +223,16 @@ class WorkspaceDomainService
     }
 
     /**
-     * Move a workspace in the manual ordering segment without touching
-     * updated_at. A null predecessor moves it to the first position.
+     * Move a workspace before or after another workspace without touching
+     * updated_at. `pre` wins when both relative-position IDs are supplied.
      */
     public function moveWorkspace(
         DataIsolation $dataIsolation,
         int $workspaceId,
-        ?int $preWorkspaceId
+        ?int $preWorkspaceId,
+        ?int $nextWorkspaceId = null
     ): bool {
-        return Db::transaction(function () use ($dataIsolation, $workspaceId, $preWorkspaceId): bool {
+        return Db::transaction(function () use ($dataIsolation, $workspaceId, $preWorkspaceId, $nextWorkspaceId): bool {
             $workspace = $this->workspaceRepository->getWorkspaceById($workspaceId);
             if (! $workspace
                 || $workspace->getUserId() !== $dataIsolation->getCurrentUserId()
@@ -240,62 +241,36 @@ class WorkspaceDomainService
                 throw new RuntimeException('Workspace not found or access denied');
             }
 
-            if ($preWorkspaceId !== null) {
-                $previous = $this->workspaceRepository->getWorkspaceById($preWorkspaceId);
-                if (! $previous
-                    || $previous->getUserId() !== $dataIsolation->getCurrentUserId()
-                    || $previous->getIsArchived() !== 0
-                    || $previous->getId() === $workspaceId
-                ) {
-                    throw new RuntimeException('Invalid previous workspace');
-                }
-            }
-
-            // A null predecessor means moving to the first position of the
-            // manual-ordering segment. It must not clear sort_order, otherwise
-            // the request would have the opposite meaning from "move first".
-            if ($preWorkspaceId === null) {
+            $targetWorkspaceId = $preWorkspaceId ?? $nextWorkspaceId;
+            $insertAfter = $preWorkspaceId !== null;
+            if ($targetWorkspaceId === null) {
+                // Legacy explicit-null behavior: move to the first manual position.
                 $rows = $this->workspaceRepository->getUserWorkspaceSortOrders(
                     $dataIsolation->getCurrentUserId(),
                     $workspaceId
                 );
-
                 $orderedIds = array_map(static fn (array $row): int => $row['id'], $rows);
-                $allHaveSortOrder = $rows !== [] && array_reduce(
-                    $rows,
-                    static fn (bool $carry, array $row): bool => $carry && $row['sort_order'] !== null,
-                    true
-                );
-
-                if (! $allHaveSortOrder) {
-                    $initialSortOrders = [];
-                    $rank = 1_000_000;
-                    foreach ($orderedIds as $id) {
-                        $initialSortOrders[$id] = $rank;
-                        $rank += 1_000_000;
-                    }
-                    $this->workspaceRepository->batchUpdateSortOrders($initialSortOrders);
-                }
-
                 array_unshift($orderedIds, $workspaceId);
-                $sortOrders = [];
-                $rank = 1_000_000;
-                foreach ($orderedIds as $id) {
-                    $sortOrders[$id] = $rank;
-                    $rank += 1_000_000;
+            } else {
+                $targetWorkspace = $this->workspaceRepository->getWorkspaceById($targetWorkspaceId);
+                if (! $targetWorkspace
+                    || $targetWorkspace->getUserId() !== $dataIsolation->getCurrentUserId()
+                    || $targetWorkspace->getIsArchived() !== 0
+                    || $targetWorkspace->getId() === $workspaceId
+                ) {
+                    throw new RuntimeException('Invalid relative workspace');
                 }
 
-                return $this->workspaceRepository->batchUpdateSortOrders($sortOrders) > 0;
-            }
-
-            $rows = $this->workspaceRepository->getUserWorkspaceSortOrders(
-                $dataIsolation->getCurrentUserId(),
-                $workspaceId
-            );
-            $orderedIds = array_map(static fn (array $row): int => $row['id'], $rows);
-
-            if (! in_array($preWorkspaceId, $orderedIds, true)) {
-                throw new RuntimeException('Previous workspace is not in the current list');
+                $rows = $this->workspaceRepository->getUserWorkspaceSortOrders(
+                    $dataIsolation->getCurrentUserId(),
+                    $workspaceId
+                );
+                $orderedIds = array_map(static fn (array $row): int => $row['id'], $rows);
+                $index = array_search($targetWorkspaceId, $orderedIds, true);
+                if ($index === false) {
+                    throw new RuntimeException('Relative workspace is not in the current list');
+                }
+                array_splice($orderedIds, $insertAfter ? $index + 1 : $index, 0, [$workspaceId]);
             }
 
             $allHaveSortOrder = $rows !== [] && array_reduce(
@@ -303,23 +278,15 @@ class WorkspaceDomainService
                 static fn (bool $carry, array $row): bool => $carry && $row['sort_order'] !== null,
                 true
             );
-
             if (! $allHaveSortOrder) {
                 $initialSortOrders = [];
                 $rank = 1_000_000;
-                foreach ($orderedIds as $id) {
+                foreach (array_values(array_diff($orderedIds, [$workspaceId])) as $id) {
                     $initialSortOrders[$id] = $rank;
                     $rank += 1_000_000;
                 }
                 $this->workspaceRepository->batchUpdateSortOrders($initialSortOrders);
             }
-
-            $orderedIds = array_values(array_diff($orderedIds, [$workspaceId]));
-            $index = array_search($preWorkspaceId, $orderedIds, true);
-            if ($index === false) {
-                throw new RuntimeException('Previous workspace is not in the current list');
-            }
-            array_splice($orderedIds, $index + 1, 0, [$workspaceId]);
 
             $sortOrders = [];
             $rank = 1_000_000;
@@ -327,7 +294,6 @@ class WorkspaceDomainService
                 $sortOrders[$id] = $rank;
                 $rank += 1_000_000;
             }
-            $sortOrders[$workspaceId] = $sortOrders[$workspaceId] ?? null;
 
             return $this->workspaceRepository->batchUpdateSortOrders($sortOrders) > 0;
         });

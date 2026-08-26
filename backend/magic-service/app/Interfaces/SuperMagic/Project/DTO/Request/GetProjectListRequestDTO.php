@@ -152,7 +152,7 @@ class GetProjectListRequestDTO extends AbstractRequestDTO
             'page_size' => 'integer|min:1|max:100',
             'workspace_id' => 'nullable|string',
             'project_name' => 'nullable|string|max:255',
-            'order_by' => 'nullable|string|in:id,updated_at',
+            'order_by' => 'nullable|string|in:id,created_at,updated_at',
             'sort' => 'nullable|string|in:asc,desc',
             'pin_priority' => 'nullable|boolean',
         ];

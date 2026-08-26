@@ -87,7 +87,6 @@ class WorkspaceRepository extends AbstractRepository implements WorkspaceReposit
 
         return $query->orderByRaw('CASE WHEN sort_order IS NULL THEN 0 ELSE 1 END ASC')
             ->orderByRaw('CASE WHEN sort_order IS NULL THEN id END DESC')
-            ->orderByRaw('CASE WHEN sort_order IS NULL THEN id END DESC')
             ->orderByRaw('CASE WHEN sort_order IS NOT NULL THEN sort_order END ASC')
             ->lockForUpdate()
             ->get(['id', 'sort_order'])

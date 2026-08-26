@@ -1410,6 +1410,18 @@ class ProjectAppService extends AbstractAppService
             $dataIsolation->getCurrentUserId()
         );
 
+        // `pre_project_id` has priority when both fields are present. An
+        // explicitly null value therefore suppresses `next_project_id` too.
+        if ($requestDTO->preProjectIdProvided && $requestDTO->nextProjectIdProvided) {
+            $this->logger->warning('Both pre_project_id and next_project_id were provided; pre_project_id wins', [
+                'project_id' => $requestDTO->getSourceProjectId(),
+            ]);
+        }
+        $preProjectId = $requestDTO->getPreProjectId();
+        $nextProjectId = $requestDTO->preProjectIdProvided ? null : $requestDTO->getNextProjectId();
+        // An explicitly null project relative-position value is a no-op.
+        $sortProvided = ($preProjectId !== null || $nextProjectId !== null);
+
         // Call domain service to handle the move
         $movedProjectEntity = $this->projectDomainService->moveProject(
             $requestDTO->getSourceProjectId(),
@@ -1417,8 +1429,9 @@ class ProjectAppService extends AbstractAppService
             $userAuthorization->getId(),
             $requestDTO->getTargetProjectName(),
             $requestDTO->getProjectMode(),
-            $requestDTO->getPreProjectId(),
-            $requestDTO->preProjectIdProvided
+            $preProjectId,
+            $nextProjectId,
+            $sortProvided
         );
 
         $this->logger->info(sprintf(
@@ -1508,7 +1521,10 @@ class ProjectAppService extends AbstractAppService
                 $project = $projectMap[$projectIdInt];
                 // A same-workspace request is valid when it explicitly carries a
                 // sorting parameter; otherwise preserve the legacy no-op rejection.
-                if ($project->getWorkspaceId() === $targetWorkspaceId && ! $requestDTO->preProjectIdProvided) {
+                if ($project->getWorkspaceId() === $targetWorkspaceId
+                    && ! $requestDTO->preProjectIdProvided
+                    && ! $requestDTO->nextProjectIdProvided
+                ) {
                     $invalidResults[] = [
                         'project_id' => $projectId,
                         'success' => false,
@@ -1536,12 +1552,17 @@ class ProjectAppService extends AbstractAppService
         if (! empty($validProjectIds)) {
             try {
                 $successResults = Db::transaction(function () use ($validProjectIds, $workspaceChangeProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode, $requestDTO) {
+                    if ($requestDTO->preProjectIdProvided && $requestDTO->nextProjectIdProvided) {
+                        $this->logger->warning('Both pre_project_id and next_project_id were provided in batch move; pre_project_id wins');
+                    }
                     $preProjectId = $requestDTO->getPreProjectId();
-                    if ($requestDTO->preProjectIdProvided
-                        && $preProjectId !== null
-                        && in_array($preProjectId, $validProjectIds, true)
+                    $nextProjectId = $requestDTO->preProjectIdProvided ? null : $requestDTO->getNextProjectId();
+                    $relativeProjectId = $preProjectId ?? $nextProjectId;
+                    if (($requestDTO->preProjectIdProvided || $requestDTO->nextProjectIdProvided)
+                        && $relativeProjectId !== null
+                        && in_array($relativeProjectId, $validProjectIds, true)
                     ) {
-                        throw new RuntimeException('Previous project cannot be included in the moved project list');
+                        throw new RuntimeException('Relative project cannot be included in the moved project list');
                     }
 
                     // Step 4.1: Batch update projects only when workspace changes.
@@ -1591,16 +1612,28 @@ class ProjectAppService extends AbstractAppService
                         'updated_count' => $settingUpdatedCount,
                     ]);
 
-                    if ($requestDTO->preProjectIdProvided) {
-                        foreach ($validProjectIds as $projectId) {
+                    if ($preProjectId !== null || $nextProjectId !== null) {
+                        // For a `next_*_id` anchor, reverse processing keeps
+                        // the caller's project order in the final list.
+                        $sortProjectIds = $preProjectId !== null
+                            ? $validProjectIds
+                            : array_reverse($validProjectIds);
+                        $currentPreProjectId = $preProjectId;
+                        $currentNextProjectId = $nextProjectId;
+                        foreach ($sortProjectIds as $projectId) {
                             $this->projectDomainService->applyProjectSortOrderForBatch(
                                 $userId,
                                 $organizationCode,
                                 $projectId,
                                 $targetWorkspaceId,
-                                $preProjectId
+                                $currentPreProjectId,
+                                $currentNextProjectId
                             );
-                            $preProjectId = $projectId;
+                            if ($currentPreProjectId !== null) {
+                                $currentPreProjectId = $projectId;
+                            } else {
+                                $currentNextProjectId = $projectId;
+                            }
                         }
                     }
 

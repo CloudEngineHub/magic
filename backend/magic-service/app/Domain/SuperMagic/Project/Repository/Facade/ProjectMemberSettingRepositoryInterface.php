@@ -55,9 +55,21 @@ interface ProjectMemberSettingRepositoryInterface
 
     public function updateSortOrder(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool;
 
-    public function getSortOrderRows(string $userId, ?int $workspaceId = null, ?int $excludeProjectId = null): array;
+    /** Update the ordinary move sort value without changing pin state. */
+    public function updateSortOrderForMove(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool;
+
+    /** Clear workspace-scoped manual positions when a project changes workspace. */
+    public function clearManualSortOrders(string $userId, int $projectId): bool;
+
+    public function updatePinnedSortOrder(string $userId, int $projectId, string $organizationCode, ?int $sortOrder): bool;
+
+    public function getSortOrderRows(string $userId, ?int $workspaceId = null, ?int $excludeProjectId = null, bool $isPinned = false): array;
 
     public function batchUpdateSortOrders(string $userId, array $sortOrders): int;
+
+    public function batchUpdateSortOrdersForMove(string $userId, array $sortOrders): int;
+
+    public function batchUpdatePinnedSortOrders(string $userId, array $sortOrders): int;
 
     /**
      * 批量获取用户的置顶项目ID列表.

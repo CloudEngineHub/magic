@@ -21,7 +21,7 @@ return new class extends Migration {
         if (Schema::hasTable('magic_super_agent_project_member_settings')
             && ! Schema::hasColumn('magic_super_agent_project_member_settings', 'sort_order')) {
             Schema::table('magic_super_agent_project_member_settings', function (Blueprint $table): void {
-                $table->bigInteger('sort_order')->nullable()->comment('当前用户视角的手工排序值，NULL表示未手工排序');
+                $table->bigInteger('sort_order')->nullable()->comment('当前用户视角的非置顶项目手工排序值，NULL表示未手工排序');
             });
         }
     }
