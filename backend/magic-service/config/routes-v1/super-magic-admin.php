@@ -7,7 +7,9 @@ declare(strict_types=1);
 use App\Infrastructure\Util\Middleware\RequestContextMiddleware;
 use App\Interfaces\Admin\SuperMagic\Agent\AdminSuperMagicAgentApi;
 use App\Interfaces\Admin\SuperMagic\Agent\AdminSuperMagicCategoryApi;
+use App\Interfaces\Admin\SuperMagic\Skill\AdminOfficialSkillApi;
 use App\Interfaces\Admin\SuperMagic\Skill\AdminSkillApi;
+use App\Interfaces\Admin\SuperMagic\Skill\AdminSkillCategoryApi;
 use Hyperf\HttpServer\Router\Router;
 
 Router::addGroup('/api/v2/admin', static function () {
@@ -39,11 +41,25 @@ Router::addGroup('/api/v2/admin', static function () {
 Router::addGroup('/api/v1/admin', static function () {
     // Admin 路由组
     Router::addGroup('/skills', static function () {
+        Router::addGroup('/categories', static function () {
+            Router::post('/queries', [AdminSkillCategoryApi::class, 'queries']);
+            Router::post('', [AdminSkillCategoryApi::class, 'create']);
+            Router::get('/{id:\d+}', [AdminSkillCategoryApi::class, 'show']);
+            Router::put('/{id:\d+}', [AdminSkillCategoryApi::class, 'update']);
+            Router::delete('/{id:\d+}', [AdminSkillCategoryApi::class, 'delete']);
+        });
+
         Router::post('/versions/queries', [AdminSkillApi::class, 'queryVersions']);
         Router::post('/markets/queries', [AdminSkillApi::class, 'queryMarkets']);
         Router::put('/markets/{id}', [AdminSkillApi::class, 'updateMarket']);
+        Router::put('/markets/{id}/category', [AdminSkillApi::class, 'updateMarketCategory']);
         Router::put('/markets/{id}/sort-order', [AdminSkillApi::class, 'updateMarketSortOrder']);
         Router::put('/markets/{id}/offline', [AdminSkillApi::class, 'offlineMarket']);
         Router::put('/versions/{id}/review', [AdminSkillApi::class, 'reviewSkillVersion']);
+    });
+
+    Router::addGroup('/official-skills/import', static function () {
+        Router::post('/parse/file', [AdminOfficialSkillApi::class, 'parseImport']);
+        Router::post('', [AdminOfficialSkillApi::class, 'import']);
     });
 }, ['middleware' => [RequestContextMiddleware::class]]);

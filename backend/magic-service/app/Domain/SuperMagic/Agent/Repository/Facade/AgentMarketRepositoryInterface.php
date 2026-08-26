@@ -164,7 +164,6 @@ interface AgentMarketRepositoryInterface
      * 按传入字段部分更新市场员工信息.
      *
      * @param array{
-     *     category_id?: null|int,
      *     name_i18n?: null|array,
      *     description_i18n?: null|array,
      *     role_i18n?: null|array,

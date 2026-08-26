@@ -22,4 +22,10 @@ return [
     'initialize_error' => 'The system is currently busy, please try again later.',
     'agent_stopped' => 'Task has been terminated',
     'finished_task_action' => 'Output of completed result file',
+    'id_required' => 'Value is required',
+
+    'access_token' => [
+        'not_found' => 'Resource not found',
+    ],
+    'create_workspace_version_failed' => 'Operation failed',
 ];

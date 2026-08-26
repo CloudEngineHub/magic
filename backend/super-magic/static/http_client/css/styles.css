@@ -249,6 +249,36 @@ h1 {
     -webkit-backdrop-filter: blur(18px);
 }
 
+/* 调试偏好保持在连接配置内，确保发送 INIT 前即可明确当前开关状态。 */
+.debug-preference-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0 10px;
+    border-bottom: 1px solid var(--wechat-border);
+}
+
+.debug-preference-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.debug-preference-copy label {
+    margin: 0;
+    color: var(--wechat-text-dark);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.debug-preference-copy small {
+    color: var(--wechat-text-gray);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
 .form-group {
     width: 100%;
     display: flex;
@@ -1398,10 +1428,33 @@ input[type="checkbox"] {
     border-radius: 8px;
 }
 
-.tool-call-attachments-title {
+.tool-call-attachments-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 6px;
+}
+
+.tool-call-attachments-title {
     font-size: 12px;
     font-weight: 600;
+}
+
+.tool-call-attachments-toggle {
+    flex: 0 0 auto;
+    padding: 2px 5px;
+    border: 0;
+    border-radius: 4px;
+    color: #2471a3;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+}
+
+.tool-call-attachments-toggle:hover {
+    background: rgba(41, 128, 185, 0.1);
 }
 
 .tool-call-attachments-list {
@@ -1415,6 +1468,10 @@ input[type="checkbox"] {
 
 .tool-call-attachment-item {
     min-width: 0;
+}
+
+.tool-call-attachments:not(.is-expanded) .tool-call-attachment-item:nth-child(n + 6) {
+    display: none;
 }
 
 .tool-call-attachment-content {
@@ -3787,6 +3844,37 @@ input[type="file"] {
     color: #0066cc;
 }
 
+.file-preview-mode-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid #d1d1d6;
+    border-radius: var(--radius-control);
+    background: #f5f5f7;
+}
+
+.file-preview-mode-btn {
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--wechat-text-gray);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 3px 9px;
+}
+
+.file-preview-mode-btn:hover {
+    color: var(--wechat-text-dark);
+}
+
+.file-preview-mode-btn.active {
+    background: #fff;
+    color: #0066cc;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 .file-preview-save-btn {
     background: #007aff;
     border-color: #007aff;
@@ -3993,6 +4081,165 @@ input[type="file"] {
     word-break: break-all;
 }
 
+/* 文件夹预览 */
+.file-preview-directory {
+    box-sizing: border-box;
+    width: min(1120px, 100%);
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 4px;
+}
+
+.file-preview-directory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 12px;
+}
+
+.file-preview-directory-item {
+    min-width: 0;
+    min-height: 142px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(60, 60, 67, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.94);
+    color: var(--wechat-text-dark);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.file-preview-directory-item:hover {
+    transform: translateY(-1px);
+    border-color: rgba(0, 122, 255, 0.28);
+    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.08);
+}
+
+.file-preview-directory-item:focus-visible {
+    outline: 2px solid rgba(0, 122, 255, 0.5);
+    outline-offset: 2px;
+}
+
+.file-preview-directory-visual {
+    height: 78px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #f5f5f7, #ececf1);
+    color: #636366;
+}
+
+.file-preview-directory-visual svg {
+    width: 48px;
+    height: 48px;
+}
+
+.file-preview-directory-visual.is-folderClosed {
+    background: linear-gradient(145deg, #fff7d8, #f8df85);
+    color: #b77900;
+}
+
+.file-preview-directory-visual.is-image {
+    color: #2f855a;
+}
+
+.file-preview-directory-visual.is-video,
+.file-preview-directory-visual.is-audio {
+    color: #7c3aed;
+}
+
+.file-preview-directory-visual.is-pdf {
+    color: #d70015;
+}
+
+.file-preview-directory-visual.is-code,
+.file-preview-directory-visual.is-markdown {
+    color: #0066cc;
+}
+
+.file-preview-directory-visual.is-archive {
+    color: #8a5a00;
+}
+
+.file-preview-directory-visual.is-spreadsheet {
+    color: #198754;
+}
+
+.file-preview-directory-thumbnail {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.file-preview-directory-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.file-preview-directory-name {
+    overflow: hidden;
+    color: var(--wechat-text-dark);
+    font-size: 12.5px;
+    font-weight: 580;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-preview-directory-detail {
+    overflow: hidden;
+    color: var(--wechat-text-gray);
+    font-size: 11px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-preview-directory-empty {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: var(--wechat-text-gray);
+    text-align: center;
+}
+
+.file-preview-directory-empty-icon {
+    width: 68px;
+    height: 68px;
+    margin-bottom: 4px;
+    color: #b77900;
+}
+
+.file-preview-directory-empty-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+@media (max-width: 720px) {
+    .file-preview-directory-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 8px;
+    }
+
+    .file-preview-directory-item {
+        min-height: 126px;
+        padding: 9px;
+    }
+}
+
 .file-preview-markdown {
     box-sizing: border-box;
     width: min(900px, 100%);
@@ -4010,6 +4257,28 @@ input[type="file"] {
     background:
         radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 30%),
         rgba(242, 242, 247, 0.82);
+}
+
+.file-preview-body-markdown-source {
+    padding: 16px;
+    background: rgba(248, 248, 250, 0.76);
+}
+
+.file-preview-markdown-source {
+    box-sizing: border-box;
+    width: min(1000px, 100%);
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 18px;
+    border: 1px solid #e5e5ea;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--wechat-text-dark);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .file-preview-body-tool-detail {

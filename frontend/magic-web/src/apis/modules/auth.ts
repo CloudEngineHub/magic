@@ -154,6 +154,13 @@ export const generateAuthApi = (fetch: HttpClient) => ({
 		)
 	},
 
+	/** 获取当前用户的真实权限 key */
+	getMyPermissionList() {
+		return fetch.get<{ permission_key: string[] }>(genRequestUrl("/api/v1/permissions/me"), {
+			enableRequestUnion: true,
+		})
+	},
+
 	/**
 	 * @description 判断当前用户是否有超级麦吉权限
 	 */

@@ -5,6 +5,10 @@ import type {
 	MarkerTypeEnum,
 	CropConfig,
 } from "../runtime/document/types"
+import type {
+	CanvasResourceReferenceResolverSnapshot,
+	ResolveCanvasResourceReference,
+} from "./resource-reference"
 
 // 附件来源
 export const AttachmentSource = {
@@ -172,18 +176,11 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	| "standard"
-	| "image_reference"
-	| "omni_reference"
-	| "video_edit"
-	| "keyframe_guided"
+	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	| "reference_images"
-	| "reference_videos"
-	| "reference_audios"
-	| "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -370,13 +367,13 @@ export type GenerateVideoTask = "generate" | "extend" | "edit" | "upscale"
 export interface GenerateVideoFrameInput {
 	/** 帧角色：首帧或尾帧 */
 	role: "start" | "end"
-	/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
+	/** 资源 URI；工作区路径发请求时还原为绝对路径，opaque asset URI 原样透传 */
 	uri: string
 }
 
 /** 参考图输入项 */
 export interface GenerateVideoReferenceImageInput {
-	/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
+	/** 资源 URI；工作区路径发请求时还原为绝对路径，opaque asset URI 原样透传 */
 	uri: string
 	/** 参考图类型，如 asset / style */
 	reference_type?: VideoReferenceImageType
@@ -384,13 +381,13 @@ export interface GenerateVideoReferenceImageInput {
 
 /** 参考视频输入项 */
 export interface GenerateVideoReferenceVideoInput {
-	/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
+	/** 资源 URI；工作区路径发请求时还原为绝对路径，opaque asset URI 原样透传 */
 	uri: string
 }
 
 /** 参考音频输入项 */
 export interface GenerateVideoReferenceAudioInput {
-	/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
+	/** 资源 URI；工作区路径发请求时还原为绝对路径，opaque asset URI 原样透传 */
 	uri: string
 }
 
@@ -1260,8 +1257,7 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	| IdentifyImageMarkPointResponse
-	| IdentifyImageMarkAreaResponse
+	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1533,11 +1529,13 @@ export interface CanvasDesignMethods {
 		path: string,
 		options?: { useImageProcess?: boolean },
 	) => Promise<CanvasFileResourceMeta>
-	/**
-	 * 将画布中记录的资源路径（如 ./xxx/xx）解析为宿主可识别的绝对路径（必选；画布资源同一性与此对齐）
-	 * @param path 原始资源路径（相对或绝对）
-	 * @returns 解析后的绝对路径，例如：/workspace/xxx/xx
-	 */
+	/** 通过宿主权威的命名空间资源模型解析路径、附件和资源身份。 */
+	resolveResourceReference?: ResolveCanvasResourceReference
+	/** Resolver 与语义 revision 的原子快照；Canvas 运行时可用此入口。 */
+	resourceReferenceResolverSnapshot?: CanvasResourceReferenceResolverSnapshot
+	/** @deprecated 兼容旧宿主；新实现应使用 resourceReferenceResolverSnapshot。 */
+	resourceReferenceResolverVersion?: string
+	/** 将画布中记录的资源路径解析为宿主可识别的绝对路径（兼容旧宿主）。 */
 	resolveAbsolutePath: (path: string) => string
 	/**
 	 * 返回与原始资源路径指向同一文件的宿主安全候选路径。

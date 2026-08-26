@@ -81,7 +81,11 @@ function DesktopInputContainer({
 					id={GuideTourElementId.MessagePanel}
 					className={cn(containerClassName, "bg-muted")}
 				>
-					<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
+					<div
+						className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"
+						data-conversation-input-accessory
+					>
+						{/* Keep fixed task chrome outside the editor's shrinkable flex region. */}
 						{editorNodes?.taskDataNode}
 						{editorNodes?.messageQueueNode}
 					</div>
@@ -125,7 +129,11 @@ function DesktopInputContainer({
 				id={GuideTourElementId.MessagePanel}
 				className={containerClassName}
 			>
-				<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
+				<div
+					className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"
+					data-conversation-input-accessory
+				>
+					{/* Keep fixed task chrome outside the editor's shrinkable flex region. */}
 					{editorNodes?.taskDataNode}
 					{editorNodes?.messageQueueNode}
 				</div>

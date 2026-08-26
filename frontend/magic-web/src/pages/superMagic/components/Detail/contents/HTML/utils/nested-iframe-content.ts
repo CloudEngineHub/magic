@@ -29,6 +29,7 @@ import {
 	type FileItem,
 	type PostMessageTargetStrategy,
 } from "./fetchInterceptor"
+import { parseHtmlNavigationRequest } from "./html-navigation"
 
 // --------------------------------------------------------------------------
 // Message type constants
@@ -455,8 +456,18 @@ export function createNestedIframeContentHandler(
 				htmlRelativeFolderPath,
 			)
 
-			// 1. Locate the target file by its relative path
-			const matchedFile = findMatchingFile(allFiles, relativePath, requesterFolderPath)
+			const navigationTarget = parseHtmlNavigationRequest(relativePath)
+			if (!navigationTarget?.filePath) {
+				sendResponse(false, undefined, "Invalid iframe path: " + relativePath)
+				return
+			}
+
+			// 1. Locate the target file using only its path; query/hash belong to runtime state.
+			const matchedFile = findMatchingFile(
+				allFiles,
+				navigationTarget.filePath,
+				requesterFolderPath,
+			)
 
 			if (!matchedFile?.file_id) {
 				reportNestedIframeFailure("not_found", "File not found: " + relativePath, {
@@ -547,6 +558,9 @@ export function createNestedIframeContentHandler(
 					},
 					postMessageTargetStrategy,
 					virtualStorage: virtualStorageContext,
+					locationSearch: navigationTarget.search,
+					locationAnchor: navigationTarget.hash,
+					navigationBasePath: matchedFile.relative_file_path || relativePath,
 				},
 			)
 

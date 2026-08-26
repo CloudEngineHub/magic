@@ -14,7 +14,11 @@ describe("clipboardResourceReferences", () => {
 			src: "./images/visible.png",
 			generateImageRequest: {
 				prompt: "plain text source/ref.png should not matter",
-				reference_images: ["source/ref.png", "https://example.test/remote.png"],
+				reference_images: [
+					"source/ref.png",
+					"https://example.test/remote.png",
+					"asset://virtual-human-asset-id",
+				],
 				reference_image_options: [{ path: "source/ref.png" }],
 			},
 			imageGenerationTaskMeta: {

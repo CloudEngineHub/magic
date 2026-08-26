@@ -72,5 +72,8 @@ class MemoryListenerService:
 
     @staticmethod
     def _is_enabled(agent_context: "AgentContext") -> bool:
-        """限定文件记忆生命周期只服务主 Agent，包括 Claw 主 Agent。"""
-        return agent_context.is_main_agent_context()
+        """仅为主 Agent 启用；通用 Agent 尊重开关，Claw 保持原有行为。"""
+        return agent_context.is_main_agent_context() and (
+            agent_context.is_magiclaw()
+            or agent_context.get_personal_preferences().long_term_memory_enabled
+        )

@@ -24,6 +24,7 @@ from app.core.config.communication_config import STSTokenRefreshConfig
 from app.core.entity.agent_profile import AgentProfile, DEFAULT_AGENT_PROFILE
 from app.core.entity.attachment import Attachment
 from app.core.entity.message.client_message import AgentMode, ChatClientMessage, InitClientMessage, Metadata, User
+from app.core.entity.message.personal_preferences import PersonalPreferences
 from app.core.entity.project_archive import ProjectArchiveInfo
 from agentlang.event.event import Event, EventType, StoppableEvent
 from agentlang.event.common import BaseEventData
@@ -464,6 +465,18 @@ class AgentContext(BaseAgentContext):
         if isinstance(msg.agent_mode, AgentMode):
             return msg.agent_mode == AgentMode.MAGICLAW
         return str(msg.agent_mode or "").strip() == AgentMode.MAGICLAW.value
+
+    def get_personal_preferences(self) -> PersonalPreferences:
+        """获取当前 CHAT 的个人偏好，缺失或异常时返回默认配置。"""
+        try:
+            chat_message = self.get_chat_client_message()
+        except Exception as error:
+            logger.debug(f"读取当前 CHAT 个人偏好失败，使用默认配置: {error}")
+            return PersonalPreferences()
+
+        if chat_message is None or chat_message.metadata is None:
+            return PersonalPreferences()
+        return chat_message.metadata.personal_preferences
 
     def set_sandbox_id(self, sandbox_id: str) -> None:
         """设置沙盒ID

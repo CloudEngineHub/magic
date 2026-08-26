@@ -35,6 +35,13 @@ interface SkillRepositoryInterface
     public function findByCodes(SkillDataIsolation $dataIsolation, array $codes): array;
 
     /**
+     * 查询当前用户创建的技能 code。
+     *
+     * @return array<string>
+     */
+    public function findCodesByCreator(SkillDataIsolation $dataIsolation): array;
+
+    /**
      * 保存 Skill.
      *
      * @param SkillDataIsolation $dataIsolation 数据隔离对象

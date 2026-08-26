@@ -962,12 +962,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $code);
 
-        $versionRecordCount = $this->superMagicAgentVersionDomainService->countVersionsByCode($dataIsolation, $code);
         $descriptionI18n = $agentEntity->getDescriptionI18n();
-        $version = sprintf('%d.0.0', $versionRecordCount + 1);
         $versionDescriptionI18n = is_array($descriptionI18n) ? $descriptionI18n : [];
 
         $latestVersion = $this->superMagicAgentVersionDomainService->findLatestVersionByCreatedAt($dataIsolation, $code);
+        $version = $this->superMagicAgentVersionDomainService->getNextAvailableVersion(
+            $dataIsolation,
+            $code,
+            $latestVersion?->getVersion(),
+        );
         if ($latestVersion !== null) {
             $publishTargetType = $latestVersion->getPublishTargetType()->value;
             $publishTargetValue = $latestVersion->getPublishTargetType()->requiresTargetValue()
@@ -983,12 +986,10 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             versionDescriptionI18n: $versionDescriptionI18n,
             publishTargetType: $publishTargetType,
             publishTargetValue: $publishTargetValue,
-            categoryId: $latestVersion?->getCategoryId(),
             categoryIds: $latestVersion === null || $latestVersion->getId() === null
                 ? []
                 : $this->superMagicAgentCategoryRelationDomainService->getVersionCategoryIds(
                     $latestVersion->getId(),
-                    $latestVersion->getCategoryId()
                 ),
         );
     }
@@ -1627,7 +1628,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 continue;
             }
 
-            $version->setCategoryIds($categoryIdsMap[$versionId] ?? $version->getCategoryIds());
+            $version->setCategoryIds($categoryIdsMap[$versionId] ?? []);
         }
     }
 

@@ -47,6 +47,23 @@ export class UserStore {
 	/** 是否是管理员 */
 	isAdmin: boolean = false
 
+	/** 当前用户的真实权限 key */
+	userPermissions: string[] = []
+
+	get canAccessAdmin(): boolean {
+		return (
+			this.isAdmin ||
+			this.userPermissions.some(
+				(permission) =>
+					permission === "MAGIC_ALL_PERMISSIONS" ||
+					permission === "MAGIC_PLATFORM_PERMISSIONS" ||
+					permission.startsWith("admin.") ||
+					permission.startsWith("workspace.") ||
+					permission.startsWith("platform."),
+			)
+		)
+	}
+
 	/** 当前组织是否是个人组织 */
 	isPersonalOrganization: boolean = false
 
@@ -79,6 +96,10 @@ export class UserStore {
 
 	setUserInfo = (userInfo: User.UserInfo | null) => {
 		this.userInfo = userInfo
+		if (!userInfo) {
+			this.setIsAdmin(false)
+			this.setUserPermissions([])
+		}
 	}
 
 	setOrganizationCode = (organizationCode: string) => {
@@ -133,6 +154,10 @@ export class UserStore {
 
 	setIsAdmin = (isAdmin: boolean) => {
 		this.isAdmin = isAdmin
+	}
+
+	setUserPermissions = (permissions: string[]) => {
+		this.userPermissions = Array.from(new Set(permissions))
 	}
 
 	setOrganizationSubscriptionInfo = (

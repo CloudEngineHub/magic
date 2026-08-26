@@ -16,9 +16,12 @@ import type {
 
 const DEFAULT_MIN_HEIGHT = 200
 const DEFAULT_MAX_RATIO = 0.5
+const ACCESSORY_SELECTOR = "[data-conversation-input-accessory]"
 
 interface UseConversationInputHeightOptions {
 	scope: string
+	/** Identifies the employee/mode layout whose current height should be preserved. */
+	layoutKey?: string
 	enabled: boolean
 	containerRef: RefObject<HTMLDivElement | null>
 	availableRef: RefObject<HTMLDivElement | null>
@@ -68,9 +71,18 @@ function measureNaturalHeight(container: HTMLDivElement) {
 	return baseHeight + overflowHeight
 }
 
+/** Measure only fixed task/queue chrome so manual editor height remains user-controlled. */
+function measureAccessoryHeight(container: HTMLDivElement) {
+	return Array.from(container.querySelectorAll<HTMLElement>(ACCESSORY_SELECTOR)).reduce(
+		(total, element) => total + Math.ceil(element.getBoundingClientRect().height),
+		0,
+	)
+}
+
 /** Manage automatic growth, manual override, and scoped persistence for a conversation input. */
 export function useConversationInputHeight({
 	scope,
+	layoutKey,
 	enabled,
 	containerRef,
 	availableRef,
@@ -87,34 +99,79 @@ export function useConversationInputHeight({
 	const [manualHeight, setManualHeight] = useState(initialPreference.height)
 	const [autoHeight, setAutoHeight] = useState(initialPreference.height)
 	const [availableHeight, setAvailableHeight] = useState(0)
+	const [accessoryHeight, setAccessoryHeight] = useState(0)
 	const manualHeightRef = useRef(initialPreference.height)
+	const previousLayoutKeyRef = useRef(layoutKey)
 	const pointerStartHeightRef = useRef(initialPreference.height)
 	const measureFrameRef = useRef<number | null>(null)
 
-	const autoMaxHeight = getMaxHeight(availableHeight, minHeight, maxRatio)
+	const effectiveMinHeight = minHeight + accessoryHeight
+	const autoMaxHeight = getMaxHeight(availableHeight, effectiveMinHeight, maxRatio)
 	const manualMaxHeight = getMaxHeight(
 		availableHeight,
-		minHeight,
+		effectiveMinHeight,
 		manualMaxRatio,
 		manualMinAvailableHeight,
 	)
-	const safeAutoHeight = clampHeight(autoHeight, minHeight, autoMaxHeight)
-	const safeManualHeight = clampHeight(manualHeight, minHeight, manualMaxHeight)
+	const safeAutoHeight = clampHeight(
+		autoHeight + accessoryHeight,
+		effectiveMinHeight,
+		autoMaxHeight,
+	)
+	const safeManualHeight = clampHeight(
+		manualHeight + accessoryHeight,
+		effectiveMinHeight,
+		manualMaxHeight,
+	)
 	const effectiveHeight = heightMode === "manual" ? safeManualHeight : safeAutoHeight
 	const fillHeight =
 		enabled &&
 		(heightMode === "manual" || (availableHeight > 0 && safeAutoHeight >= autoMaxHeight))
 
+	// Persist only the editor portion so temporary task chrome is measured again when it changes.
 	const persistPreference = useCallback(
 		(mode: ChatInputHeightMode, height: number) => {
 			interfaceStore.setChatInputHeightPreference(scope, {
 				mode,
-				height: clampHeight(height, minHeight, manualMaxHeight),
+				height: clampHeight(
+					height,
+					minHeight,
+					Math.max(minHeight, manualMaxHeight - accessoryHeight),
+				),
 			})
 		},
-		[manualMaxHeight, minHeight, scope],
+		[accessoryHeight, manualMaxHeight, minHeight, scope],
 	)
 
+	useEffect(() => {
+		if (!enabled || previousLayoutKeyRef.current === layoutKey) return
+
+		previousLayoutKeyRef.current = layoutKey
+		if (effectiveHeight <= effectiveMinHeight) return
+
+		// Freeze a larger user-visible height during employee/mode switches so new content measurements do not shrink it.
+		const preservedHeight = clampHeight(effectiveHeight, effectiveMinHeight, manualMaxHeight)
+		const preservedEditorHeight = clampHeight(
+			preservedHeight - accessoryHeight,
+			minHeight,
+			Math.max(minHeight, manualMaxHeight - accessoryHeight),
+		)
+		setHeightMode("manual")
+		manualHeightRef.current = preservedEditorHeight
+		setManualHeight(preservedEditorHeight)
+		persistPreference("manual", preservedEditorHeight)
+	}, [
+		accessoryHeight,
+		effectiveHeight,
+		effectiveMinHeight,
+		enabled,
+		layoutKey,
+		manualMaxHeight,
+		minHeight,
+		persistPreference,
+	])
+
+	// Recalculate available space and accessory chrome before updating automatic editor height.
 	const measure = useCallback(() => {
 		if (!enabled) return
 
@@ -123,12 +180,21 @@ export function useConversationInputHeight({
 		if (!container || !available) return
 
 		const nextAvailableHeight = available.getBoundingClientRect().height
-		const nextMaxHeight = getMaxHeight(nextAvailableHeight, minHeight, maxRatio)
+		const nextAccessoryHeight = measureAccessoryHeight(container)
+		const nextMinHeight = minHeight + nextAccessoryHeight
+		const nextMaxHeight = getMaxHeight(nextAvailableHeight, nextMinHeight, maxRatio)
 		const naturalHeight = measureNaturalHeight(container)
-		const nextAutoHeight = clampHeight(naturalHeight, minHeight, nextMaxHeight)
+		const nextAutoHeight = clampHeight(
+			naturalHeight - nextAccessoryHeight,
+			minHeight,
+			Math.max(minHeight, nextMaxHeight - nextAccessoryHeight),
+		)
 
 		setAvailableHeight((previous) =>
 			Math.abs(previous - nextAvailableHeight) < 1 ? previous : nextAvailableHeight,
+		)
+		setAccessoryHeight((previous) =>
+			Math.abs(previous - nextAccessoryHeight) < 1 ? previous : nextAccessoryHeight,
 		)
 		if (heightMode === "manual") return
 
@@ -164,10 +230,17 @@ export function useConversationInputHeight({
 		})
 		resizeObserver.observe(available)
 		if (heightMode === "auto") resizeObserver.observe(container)
+		container.querySelectorAll<HTMLElement>(ACCESSORY_SELECTOR).forEach((element) => {
+			resizeObserver.observe(element)
+		})
 
-		const mutationObserver =
-			heightMode === "auto" ? new MutationObserver(scheduleMeasure) : null
-		mutationObserver?.observe(container, {
+		const mutationObserver = new MutationObserver(() => {
+			container.querySelectorAll<HTMLElement>(ACCESSORY_SELECTOR).forEach((element) => {
+				resizeObserver.observe(element)
+			})
+			scheduleMeasure()
+		})
+		mutationObserver.observe(container, {
 			childList: true,
 			characterData: true,
 			subtree: true,
@@ -198,12 +271,16 @@ export function useConversationInputHeight({
 
 	const updateManualHeight = useCallback(
 		(nextHeight: number) => {
-			const safeHeight = clampHeight(nextHeight, minHeight, manualMaxHeight)
+			const safeHeight = clampHeight(
+				nextHeight - accessoryHeight,
+				minHeight,
+				Math.max(minHeight, manualMaxHeight - accessoryHeight),
+			)
 			setHeightMode("manual")
 			manualHeightRef.current = safeHeight
 			setManualHeight(safeHeight)
 		},
-		[manualMaxHeight, minHeight],
+		[accessoryHeight, manualMaxHeight, minHeight],
 	)
 
 	const startPointerResize = useCallback(() => {
@@ -254,7 +331,7 @@ export function useConversationInputHeight({
 			const nextHeight = getSplitterHeight(sizes)
 			if (isValidHeight(nextHeight)) {
 				updateManualHeight(nextHeight)
-				persistPreference("manual", nextHeight)
+				persistPreference("manual", manualHeightRef.current)
 				return
 			}
 			persistPreference("manual", manualHeightRef.current)
@@ -272,6 +349,7 @@ export function useConversationInputHeight({
 	return {
 		enabled,
 		effectiveHeight,
+		minHeight: effectiveMinHeight,
 		maxHeight: manualMaxHeight,
 		fillHeight,
 		startPointerResize,
