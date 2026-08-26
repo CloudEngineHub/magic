@@ -680,6 +680,10 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计容器 ref
 	const containerRef = useRef<HTMLDivElement>(null)
+	const [floatingBoundary, setFloatingBoundary] = useState<HTMLElement | null>(null)
+	const floatingBoundaryRef = useCallback((node: HTMLDivElement | null) => {
+		setFloatingBoundary(node)
+	}, [])
 
 	// 获取显示名称，优先使用目录名称
 	const displayName = directoryInfo.name || designData.name
@@ -1633,7 +1637,7 @@ function DesignViewer(props: DesignViewerProps) {
 								<CanvasDesignHeaderV2 {...headerProps} />
 							</>
 						)}
-						<div className={styles.designCanvasContainer}>
+						<div ref={floatingBoundaryRef} className={styles.designCanvasContainer}>
 							{shouldShowCanvasConflictNotice && (
 								<div
 									className={styles.conflictNotice}
@@ -1766,6 +1770,7 @@ function DesignViewer(props: DesignViewerProps) {
 									plugins={canvasPluginConfig}
 									viewport={{
 										autoLoadCacheViewport: !isPlaybackMode && !isMobile,
+										floatingBoundary,
 									}}
 									data={{
 										defaultData: designData.canvas,

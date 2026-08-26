@@ -9,6 +9,7 @@ import {
 	PRESERVE_TEXT_EDITOR_FOCUS_ATTR,
 	PreserveTextEditorFocusProvider,
 } from "../../../runtime/shared/dom/preserveTextEditorFocus"
+import { FloatingSurfaceScope } from "../../primitives/shadcn/popover"
 
 interface ElementToolsRenderProps {
 	tools: readonly ElementToolResolution[]
@@ -59,30 +60,32 @@ export default function ElementToolsRender(props: ElementToolsRenderProps) {
 	}
 
 	return (
-		<PreserveTextEditorFocusProvider value>
-			<div
-				ref={setRefs}
-				className={styles.elementTools}
-				data-canvas-ui-component
-				{...{ [PRESERVE_TEXT_EDITOR_FOCUS_ATTR]: "" }}
-			>
-				{groups.map((group, groupIndex) => (
-					<Fragment key={groupIndex}>
-						<div className={styles.group}>
-							{group.map((item) =>
-								item.presentation.renderKind === "top-custom" ? (
-									<TopCustomToolRenderer key={item.id} tool={item} />
-								) : (
-									<TopToolRenderer key={item.id} tool={item} />
-								),
+		<FloatingSurfaceScope id="element-tools">
+			<PreserveTextEditorFocusProvider value>
+				<div
+					ref={setRefs}
+					className={styles.elementTools}
+					data-canvas-ui-component
+					{...{ [PRESERVE_TEXT_EDITOR_FOCUS_ATTR]: "" }}
+				>
+					{groups.map((group, groupIndex) => (
+						<Fragment key={groupIndex}>
+							<div className={styles.group}>
+								{group.map((item) =>
+									item.presentation.renderKind === "top-custom" ? (
+										<TopCustomToolRenderer key={item.id} tool={item} />
+									) : (
+										<TopToolRenderer key={item.id} tool={item} />
+									),
+								)}
+							</div>
+							{groupIndex < groups.length - 1 && (
+								<div key={`divider-${groupIndex}`} className={styles.divider} />
 							)}
-						</div>
-						{groupIndex < groups.length - 1 && (
-							<div key={`divider-${groupIndex}`} className={styles.divider} />
-						)}
-					</Fragment>
-				))}
-			</div>
-		</PreserveTextEditorFocusProvider>
+						</Fragment>
+					))}
+				</div>
+			</PreserveTextEditorFocusProvider>
+		</FloatingSurfaceScope>
 	)
 }

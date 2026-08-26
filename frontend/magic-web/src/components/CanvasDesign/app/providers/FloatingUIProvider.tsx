@@ -22,6 +22,8 @@ interface FloatingComponentEntry {
 }
 
 interface FloatingUIContextValue {
+	/** Host-provided collision boundary for floating surfaces. */
+	floatingBoundary: HTMLElement | null
 	// 注册悬浮组件
 	registerFloatingComponent: (
 		id: string,
@@ -45,9 +47,14 @@ const FloatingUIContext = createContext<FloatingUIContextValue | undefined>(unde
 interface FloatingUIProviderProps {
 	children: ReactNode
 	canvas: Canvas | null
+	floatingBoundary?: HTMLElement | null
 }
 
-export function FloatingUIProvider({ children, canvas }: FloatingUIProviderProps) {
+export function FloatingUIProvider({
+	children,
+	canvas,
+	floatingBoundary = null,
+}: FloatingUIProviderProps) {
 	// 存储所有悬浮组件的引用
 	const floatingComponentsRef = useRef<Map<string, FloatingComponentEntry>>(new Map())
 	const activeFloatingComponentRef = useRef<string | null>(null)
@@ -186,6 +193,7 @@ export function FloatingUIProvider({ children, canvas }: FloatingUIProviderProps
 	)
 
 	const value: FloatingUIContextValue = {
+		floatingBoundary,
 		registerFloatingComponent,
 		unregisterFloatingComponent,
 		activateFloatingComponent,
@@ -203,4 +211,13 @@ export function useFloatingUI() {
 		throw new Error("useFloatingUI must be used within a FloatingUIProvider")
 	}
 	return context
+}
+
+/**
+ * Reads the host-provided collision boundary without requiring callers to be
+ * mounted under a FloatingUIProvider. This keeps primitive Popover usage
+ * backwards-compatible in isolated tests and standalone consumers.
+ */
+export function useFloatingBoundary() {
+	return useContext(FloatingUIContext)?.floatingBoundary ?? null
 }

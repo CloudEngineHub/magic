@@ -67,7 +67,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerRestored,
 	} = marker
 
-	const { autoLoadCacheViewport = true } = viewport
+	const { autoLoadCacheViewport = true, floatingBoundary = null } = viewport
 
 	const { canvas, setCanvas } = useCanvas()
 
@@ -232,7 +232,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [layersCollapsed, layersWidth, canvas, updatePadding])
 
 	return (
-		<FloatingUIProvider canvas={canvas}>
+		<FloatingUIProvider canvas={canvas} floatingBoundary={floatingBoundary}>
 			<div ref={canvasContainerRef} className={styles.canvasContainer} />
 			<ElementActionHints
 				hints={elementActionHints}

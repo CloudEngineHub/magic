@@ -485,6 +485,11 @@ export interface CanvasDesignProps {
 	viewport?: {
 		/** 自动加载缓存的 viewport */
 		autoLoadCacheViewport?: boolean
+		/**
+		 * 浮层碰撞边界；Popover 等悬浮面板会以该元素作为可用区域，
+		 * 但 Portal 仍挂载在 CanvasDesign 自身的 UI 容器中。
+		 */
+		floatingBoundary?: HTMLElement | null
 	}
 	/** 翻译函数 */
 	t?: TFunction

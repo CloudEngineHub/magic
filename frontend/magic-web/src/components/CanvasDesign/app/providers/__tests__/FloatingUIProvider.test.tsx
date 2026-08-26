@@ -1,7 +1,7 @@
 import { act, fireEvent, render } from "@testing-library/react"
 import { useEffect, useRef } from "react"
 import { describe, expect, it } from "vitest"
-import { FloatingUIProvider, useFloatingUI } from "../FloatingUIProvider"
+import { FloatingUIProvider, useFloatingBoundary, useFloatingUI } from "../FloatingUIProvider"
 
 function FloatingHarness(props: { onReady: (api: ReturnType<typeof useFloatingUI>) => void }) {
 	const api = useFloatingUI()
@@ -27,7 +27,32 @@ function FloatingHarness(props: { onReady: (api: ReturnType<typeof useFloatingUI
 	)
 }
 
+function FloatingBoundaryHarness(props: { onReady: (boundary: HTMLElement | null) => void }) {
+	const boundary = useFloatingBoundary()
+
+	useEffect(() => {
+		props.onReady(boundary)
+	}, [boundary, props])
+
+	return null
+}
+
 describe("FloatingUIProvider interactive surfaces", () => {
+	it("exposes the host-provided floating boundary", () => {
+		const boundary = document.createElement("div")
+		let observedBoundary: HTMLElement | null | undefined
+
+		render(
+			<FloatingUIProvider canvas={null} floatingBoundary={boundary}>
+				<FloatingBoundaryHarness
+					onReady={(nextBoundary) => (observedBoundary = nextBoundary)}
+				/>
+			</FloatingUIProvider>,
+		)
+
+		expect(observedBoundary).toBe(boundary)
+	})
+
 	it("promotes one surface and restores the previous surface when switching", () => {
 		let api: ReturnType<typeof useFloatingUI> | undefined
 		const { getByTestId } = render(
