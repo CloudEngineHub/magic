@@ -314,6 +314,8 @@ export interface VideoGenerationSwitchConfig {
  * 视频模型元数据：能力、可选生成参数与约束
  */
 export interface VideoGenerationConfig {
+	/** 模型支持的原始输入能力标识（用于保留后端元数据） */
+	supported_inputs?: string[]
 	/** 后端下发的输入模式与每模式下的字段约束 */
 	input_modes?: VideoInputModesMap
 	/** 参考图能力与限制 */

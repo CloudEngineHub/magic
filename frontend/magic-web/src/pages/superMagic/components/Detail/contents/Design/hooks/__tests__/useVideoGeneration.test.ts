@@ -135,6 +135,17 @@ describe("useVideoGeneration model grouping", () => {
 
 	it("includes personal video models in the canvas model list", async () => {
 		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([])
+		const videoGenerationConfig = {
+			supported_inputs: ["text_prompt", "image", "reference_images"],
+			generation: {
+				aspect_ratios: ["16:9"],
+				resolutions: ["720p"],
+				durations: [5],
+			},
+			input_modes: {
+				standard: { supported_fields: [] },
+			},
+		}
 		vi.mocked(superMagicCustomModelService.getMyModelsByType).mockResolvedValue([
 			{
 				id: "custom-video-1",
@@ -144,6 +155,7 @@ describe("useVideoGeneration model grouping", () => {
 				category: "vgmm",
 				service_provider_config_id: "provider-1",
 				service_provider_config: { id: "provider-1", name: "自定义服务商" },
+				video_generation_config: videoGenerationConfig,
 			},
 		])
 
@@ -160,10 +172,69 @@ describe("useVideoGeneration model grouping", () => {
 				model_name: "MiniMax-H3",
 				model_source: "custom",
 				model_group: expect.objectContaining({ source: "custom" }),
+				video_generation_config: videoGenerationConfig,
 			}),
 		])
 		expect(superMagicCustomModelService.getMyModelsByType).toHaveBeenCalledWith(
 			MODEL_TYPE_VIDEO,
 		)
+	})
+
+	it("prefers the provider entry with video generation config for duplicate model ids", async () => {
+		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([])
+		const videoGenerationConfig = {
+			supported_inputs: ["text_prompt", "image"],
+			generation: {
+				aspect_ratios: ["16:9"],
+				resolutions: ["768p"],
+				durations: { min: 4, max: 15, step: 1 },
+			},
+			input_modes: {
+				standard: { supported_fields: [] },
+			},
+		}
+		vi.mocked(superMagicCustomModelService.getMyModelsByType).mockResolvedValue([
+			{
+				id: "custom-video-without-config",
+				name: "MiniMax-H3",
+				model_id: "minimax-h3",
+				model_type: MODEL_TYPE_VIDEO,
+				category: "vgmm",
+				service_provider_config_id: "provider-without-config",
+				service_provider_config: {
+					id: "provider-without-config",
+					name: "空配置服务商",
+				},
+				video_generation_config: null,
+			},
+			{
+				id: "custom-video-with-config",
+				name: "MiniMax-H3",
+				model_id: "minimax-h3",
+				model_type: MODEL_TYPE_VIDEO,
+				category: "vgmm",
+				service_provider_config_id: "provider-with-config",
+				service_provider_config: {
+					id: "provider-with-config",
+					name: "完整配置服务商",
+				},
+				video_generation_config: videoGenerationConfig,
+			},
+		])
+
+		const { result } = renderHook(() =>
+			useVideoGeneration({
+				projectId: "project-1",
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await expect(result.current.getVideoModelList()).resolves.toEqual([
+			expect.objectContaining({
+				id: "custom-video-with-config",
+				model_id: "minimax-h3",
+				video_generation_config: videoGenerationConfig,
+			}),
+		])
 	})
 })

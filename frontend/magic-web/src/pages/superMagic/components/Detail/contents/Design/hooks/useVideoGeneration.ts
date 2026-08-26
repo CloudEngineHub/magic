@@ -312,6 +312,9 @@ function toVideoModelItem(model: ServiceProviderModel, groupName: string): Video
 		model_icon: model.icon ?? "",
 		model_status: "normal",
 		sort: 0,
+		...(model.video_generation_config
+			? { video_generation_config: model.video_generation_config }
+			: {}),
 		model_source: "custom",
 		model_group: {
 			id: MY_MODELS_GROUP_ID,
@@ -324,10 +327,27 @@ function toVideoModelItem(model: ServiceProviderModel, groupName: string): Video
 
 function getRepresentativeModelsByModelId(models: ServiceProviderModel[]): ServiceProviderModel[] {
 	const modelMap = new Map<string, ServiceProviderModel>()
+
 	models.forEach((model) => {
-		if (!modelMap.has(model.model_id)) modelMap.set(model.model_id, model)
+		const existing = modelMap.get(model.model_id)
+		if (!existing) {
+			modelMap.set(model.model_id, model)
+			return
+		}
+
+		// 同一 model_id 可能对应多个服务商，优先保留带视频能力配置的记录，
+		// 避免接口第一条为空配置时覆盖后续可用配置。
+		if (!hasUsableVideoGenerationConfig(existing) && hasUsableVideoGenerationConfig(model)) {
+			modelMap.set(model.model_id, model)
+		}
 	})
+
 	return Array.from(modelMap.values())
+}
+
+function hasUsableVideoGenerationConfig(model: ServiceProviderModel): boolean {
+	const config = model.video_generation_config
+	return Boolean(config && Object.keys(config).length > 0)
 }
 
 function toDesignGenerateVideoRequest(
