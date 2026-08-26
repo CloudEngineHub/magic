@@ -83,7 +83,7 @@ from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
-from app.tools.core.app_tool_validator import AppToolValidator, app_tool_validator
+from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
 from app.utils.file_utils import (
@@ -282,13 +282,9 @@ class Agent(BaseAgent):
         )
 
         # 设置工具验证器，用于过滤无效工具
-        self._tool_validator = (
-            AppToolValidator(
-                ignore_invalid_declarations=True,
-                agent_name=self.agent_name,
-            )
-            if is_user_agent
-            else app_tool_validator
+        self._tool_validator = AppToolValidator(
+            ignore_invalid_declarations=True,
+            agent_name=self.agent_name,
         )
 
         # 存储加载的 skills 列表（必须在 _initialize_agent 之前初始化）
