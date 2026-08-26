@@ -169,6 +169,22 @@ export function getPredecessorId<T extends { id: string }>(
 		: remaining[targetIndex - 1]?.id || null
 }
 
+/** Resolves the item that should follow a dragged item after insertion. */
+export function getSuccessorId<T extends { id: string }>(
+	items: T[],
+	sourceId: string,
+	targetId: string | undefined,
+	position: SidebarDropPosition,
+) {
+	const remaining = items.filter((item) => item.id !== sourceId)
+	if (!targetId) return remaining[0]?.id ?? null
+	const targetIndex = remaining.findIndex((item) => item.id === targetId)
+	if (targetIndex === -1) return remaining[0]?.id ?? null
+	return position === "before"
+		? remaining[targetIndex]?.id || null
+		: remaining[targetIndex + 1]?.id || null
+}
+
 /** Detects a pin-group boundary crossing that requires user confirmation. */
 export function getProjectPinBoundaryAction(
 	items: Array<{ id: string; is_pinned?: boolean }>,

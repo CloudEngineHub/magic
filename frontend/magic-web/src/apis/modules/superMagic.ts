@@ -1433,9 +1433,18 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * 保存侧栏工作区顺序。
 	 */
-	moveWorkspace({ id, pre_workspace_id }: { id: string; pre_workspace_id: string | null }) {
+	moveWorkspace({
+		id,
+		pre_workspace_id,
+		next_workspace_id,
+	}: {
+		id: string
+		pre_workspace_id: string | null
+		next_workspace_id: string | null
+	}) {
 		return fetch.put<{ workspace?: Workspace }>(`/api/v1/super-agent/workspaces/${id}`, {
 			pre_workspace_id,
+			next_workspace_id,
 		})
 	},
 
@@ -2217,17 +2226,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		source_project_id,
 		target_workspace_id,
 		pre_project_id,
+		next_project_id,
 		target_project_name,
 	}: {
 		source_project_id: string
 		target_workspace_id: string
-		pre_project_id: string | null
+		pre_project_id?: string | null
+		next_project_id?: string | null
 		target_project_name?: string
 	}) {
 		return fetch.post("/api/v1/super-agent/projects/move", {
 			source_project_id,
 			target_workspace_id,
-			pre_project_id,
+			...(pre_project_id === undefined ? {} : { pre_project_id }),
+			...(next_project_id === undefined ? {} : { next_project_id }),
 			target_project_name,
 		})
 	},
@@ -2678,19 +2690,22 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_workspace_name,
 		target_project_name,
 		pre_project_id,
+		next_project_id,
 	}: {
 		source_project_id: string
 		target_workspace_id: string
 		target_workspace_name?: string
 		target_project_name?: string
 		pre_project_id?: string | null
+		next_project_id?: string | null
 	}) {
 		return fetch.post("/api/v1/super-agent/projects/move", {
 			source_project_id,
 			target_workspace_id,
 			target_workspace_name,
 			target_project_name,
-			pre_project_id,
+			...(pre_project_id === undefined ? {} : { pre_project_id }),
+			...(next_project_id === undefined ? {} : { next_project_id }),
 		})
 	},
 

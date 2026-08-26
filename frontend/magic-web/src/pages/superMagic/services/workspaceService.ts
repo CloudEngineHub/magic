@@ -146,7 +146,11 @@ class WorkspaceService {
 		}
 	}
 
-	moveWorkspace = async (workspaceId: string, preWorkspaceId: string | null): Promise<void> => {
+	moveWorkspace = async (
+		workspaceId: string,
+		preWorkspaceId: string | null,
+		nextWorkspaceId: string | null,
+	): Promise<void> => {
 		const previousWorkspaceIds = workspaceStore.workspaces.map((workspace) => workspace.id)
 		const sourceIndex = previousWorkspaceIds.indexOf(workspaceId)
 		if (sourceIndex === -1) return
@@ -158,7 +162,11 @@ class WorkspaceService {
 		})
 
 		try {
-			await SuperMagicApi.moveWorkspace({ id: workspaceId, pre_workspace_id: preWorkspaceId })
+			await SuperMagicApi.moveWorkspace({
+				id: workspaceId,
+				pre_workspace_id: preWorkspaceId,
+				next_workspace_id: nextWorkspaceId,
+			})
 		} catch (error) {
 			runInAction(() => {
 				workspaceStore.reorderWorkspaces(previousWorkspaceIds)

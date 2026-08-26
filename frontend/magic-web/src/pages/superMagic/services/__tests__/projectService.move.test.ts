@@ -97,7 +97,8 @@ describe("ProjectService.moveProject", () => {
 			target_workspace_id: "workspace-target",
 			target_workspace_name: "Target Workspace",
 			target_project_name: "新项目名称",
-			pre_project_id: null,
+			pre_project_id: undefined,
+			next_project_id: undefined,
 		})
 	})
 
@@ -127,7 +128,8 @@ describe("ProjectService.moveProject", () => {
 			target_workspace_id: "workspace-target",
 			target_workspace_name: "Target Workspace",
 			target_project_name: undefined,
-			pre_project_id: null,
+			pre_project_id: undefined,
+			next_project_id: undefined,
 		})
 	})
 

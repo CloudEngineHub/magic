@@ -55,6 +55,7 @@ export interface MoveProjectParams {
 	targetWorkspaceId: string
 	sourceWorkspaceId: string
 	preProjectId?: string | null
+	nextProjectId?: string | null
 	/** Optional; resolved from workspace list when omitted. */
 	targetWorkspaceName?: string
 	/** Optional; used by save-as-project flow as API `target_project_name`. */
@@ -229,6 +230,7 @@ class ProjectService {
 		workspaceId: string,
 		projectId: string,
 		preProjectId: string | null,
+		nextProjectId: string | null,
 		isPinned?: boolean,
 	): Promise<void> => {
 		const projects = projectStore.getProjectsByWorkspace(workspaceId)
@@ -254,6 +256,7 @@ class ProjectService {
 				source_project_id: projectId,
 				target_workspace_id: workspaceId,
 				pre_project_id: preProjectId,
+				next_project_id: nextProjectId,
 			})
 			await projectStore.loadProjectsForWorkspace(workspaceId, true, true)
 			this.syncSelectedProjectAfterMove(
@@ -453,6 +456,7 @@ class ProjectService {
 		targetWorkspaceName,
 		targetProjectName,
 		preProjectId,
+		nextProjectId,
 	}: MoveProjectParams): Promise<boolean> => {
 		const operationId = `move_${projectId}_${Date.now()}`
 		const resolvedTargetWorkspaceName =
@@ -467,6 +471,7 @@ class ProjectService {
 			resolvedTargetWorkspaceName,
 			targetProjectName,
 			preProjectId,
+			nextProjectId,
 		})
 
 		const activeProject =
@@ -506,7 +511,8 @@ class ProjectService {
 					target_workspace_id: targetWorkspaceId,
 					target_workspace_name: resolvedTargetWorkspaceName,
 					target_project_name: targetProjectName?.trim() || undefined,
-					pre_project_id: preProjectId ?? null,
+					pre_project_id: preProjectId,
+					next_project_id: nextProjectId,
 				})
 
 				if (res) {
@@ -583,20 +589,25 @@ class ProjectService {
 		targetWorkspaceId,
 		targetWorkspaceName,
 		preProjectId,
+		nextProjectId,
 		isPinned,
 	}: {
 		project: ProjectListItem
 		targetWorkspaceId: string
 		targetWorkspaceName?: string
 		preProjectId?: string | null
+		nextProjectId?: string | null
 		isPinned?: boolean
 	}): Promise<void> => {
 		const sourceWorkspaceId = project.workspace_id
 		if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
 		const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
-		const targetIndex = preProjectId
-			? targetProjects.findIndex((item) => item.id === preProjectId) + 1
-			: 0
+		const targetIndex =
+			preProjectId !== undefined || nextProjectId !== undefined
+				? preProjectId
+					? targetProjects.findIndex((item) => item.id === preProjectId) + 1
+					: 0
+				: undefined
 
 		runInAction(() => {
 			projectStore.moveProjectBetweenWorkspaces(
@@ -614,7 +625,8 @@ class ProjectService {
 				source_project_id: project.id,
 				target_workspace_id: targetWorkspaceId,
 				target_workspace_name: targetWorkspaceName,
-				pre_project_id: preProjectId ?? null,
+				pre_project_id: preProjectId,
+				next_project_id: nextProjectId,
 			})
 			await Promise.all([
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),

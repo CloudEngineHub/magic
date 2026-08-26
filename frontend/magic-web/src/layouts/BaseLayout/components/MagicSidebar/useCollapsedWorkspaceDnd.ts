@@ -18,6 +18,7 @@ import {
 	getPredecessorId,
 	getProjectPinBoundaryAction,
 	getRenderedProjectIds,
+	getSuccessorId,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
 	isNoOpInsertion,
@@ -683,9 +684,16 @@ export function useCollapsedWorkspaceDnd({
 						preview.workspaceId,
 						preview.position || "after",
 					)
+					const nextWorkspaceId = getSuccessorId(
+						currentWorkspaces,
+						active.workspaceId,
+						preview.workspaceId,
+						preview.position || "after",
+					)
 					await superMagicService.workspace.moveWorkspace(
 						active.workspaceId,
 						preWorkspaceId,
+						nextWorkspaceId,
 					)
 					return
 				}
@@ -730,6 +738,12 @@ export function useCollapsedWorkspaceDnd({
 						preview.type === "project" ? preview.projectId : undefined,
 						preview.position || "after",
 					)
+					const nextProjectId = getSuccessorId(
+						decisionOrder.map((id) => ({ id })),
+						active.projectId,
+						preview.type === "project" ? preview.projectId : undefined,
+						preview.position || "after",
+					)
 					const pinAction = getProjectPinBoundaryAction(
 						sourceProjects,
 						active.projectId,
@@ -749,13 +763,14 @@ export function useCollapsedWorkspaceDnd({
 						active.workspaceId,
 						active.projectId,
 						preProjectId,
+						nextProjectId,
 						pinAction ? pinAction === "pin" : undefined,
 					)
 					return
 				}
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
-				// Dropping on the workspace row means inserting at the beginning.
+				// A workspace-row drop moves the project without specifying an order anchor.
 				const renderedTargetOrder = getRenderedProjectIds(
 					preview.target.closest<HTMLElement>(
 						'[data-collapsed-sidebar-dnd-drop-type="project-list"]',
@@ -771,8 +786,17 @@ export function useCollapsedWorkspaceDnd({
 						: targetStoreOrder
 				const preProjectId =
 					preview.type === "workspace"
-						? null
+						? undefined
 						: getPredecessorId(
+								targetDecisionOrder.map((id) => ({ id })),
+								active.projectId,
+								preview.projectId,
+								preview.position || "after",
+							)
+				const nextProjectId =
+					preview.type === "workspace"
+						? undefined
+						: getSuccessorId(
 								targetDecisionOrder.map((id) => ({ id })),
 								active.projectId,
 								preview.projectId,
@@ -799,6 +823,7 @@ export function useCollapsedWorkspaceDnd({
 					targetWorkspaceId: preview.workspaceId,
 					targetWorkspaceName: targetWorkspace?.name,
 					preProjectId,
+					nextProjectId,
 					isPinned: pinAction ? pinAction === "pin" : undefined,
 				})
 			} catch (error) {

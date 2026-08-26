@@ -18,6 +18,7 @@ import {
 	getPredecessorId,
 	getProjectPinBoundaryAction,
 	getRenderedProjectIds,
+	getSuccessorId,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
 	isNoOpInsertion,
@@ -671,9 +672,16 @@ export function useWorkspaceListDnd({
 						preview.workspaceId,
 						preview.position || "after",
 					)
+					const nextWorkspaceId = getSuccessorId(
+						workspaces,
+						active.workspaceId,
+						preview.workspaceId,
+						preview.position || "after",
+					)
 					await superMagicService.workspace.moveWorkspace(
 						active.workspaceId,
 						preWorkspaceId,
+						nextWorkspaceId,
 					)
 					return
 				}
@@ -718,6 +726,12 @@ export function useWorkspaceListDnd({
 						preview.type === "project" ? preview.projectId : undefined,
 						preview.position || "after",
 					)
+					const nextProjectId = getSuccessorId(
+						decisionOrder.map((id) => ({ id })),
+						active.projectId,
+						preview.type === "project" ? preview.projectId : undefined,
+						preview.position || "after",
+					)
 					const pinAction = getProjectPinBoundaryAction(
 						sourceProjects,
 						active.projectId,
@@ -735,13 +749,14 @@ export function useWorkspaceListDnd({
 						active.workspaceId,
 						active.projectId,
 						preProjectId,
+						nextProjectId,
 						pinAction ? pinAction === "pin" : undefined,
 					)
 					return
 				}
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
-				// Dropping on the workspace row means inserting at the beginning.
+				// A workspace-row drop moves the project without specifying an order anchor.
 				const renderedTargetOrder = getRenderedProjectIds(
 					preview.target.closest<HTMLElement>('[data-sidebar-drop-type="project-list"]'),
 					'[data-sidebar-drop-type="project"]',
@@ -755,8 +770,17 @@ export function useWorkspaceListDnd({
 						: targetStoreOrder
 				const preProjectId =
 					preview.type === "workspace"
-						? null
+						? undefined
 						: getPredecessorId(
+								targetDecisionOrder.map((id) => ({ id })),
+								active.projectId,
+								preview.projectId,
+								preview.position || "after",
+							)
+				const nextProjectId =
+					preview.type === "workspace"
+						? undefined
+						: getSuccessorId(
 								targetDecisionOrder.map((id) => ({ id })),
 								active.projectId,
 								preview.projectId,
@@ -781,6 +805,7 @@ export function useWorkspaceListDnd({
 					targetWorkspaceId: preview.workspaceId,
 					targetWorkspaceName: targetWorkspace?.name,
 					preProjectId,
+					nextProjectId,
 					isPinned: pinAction ? pinAction === "pin" : undefined,
 				})
 			} catch (error) {
