@@ -4,7 +4,7 @@ import { cn } from "@/utils/cn"
 import { ResizableDividerProps } from "./types"
 
 function ResizableDivider({
-	onMouseDown,
+	onResizeStart,
 	position = "left",
 	onHoverChange,
 	offsetLeft,
@@ -22,33 +22,34 @@ function ResizableDivider({
 		onHoverChange?.(false)
 	}
 
-	const handleMouseDown = (e: React.MouseEvent) => {
+	const handlePointerDown = (e: React.PointerEvent) => {
+		e.preventDefault()
 		setIsDragging(true)
-		onMouseDown(e)
+		onResizeStart(e.clientX)
 	}
 
-	// 遮罩层上的 mousemove 处理：转发到 document
-	const handleOverlayMouseMove = (e: React.MouseEvent) => {
-		// 创建原生 MouseEvent 并在 document 上触发
-		const mouseEvent = new MouseEvent("mousemove", {
+	// 遮罩层上的 pointermove 处理：转发到 document
+	const handleOverlayMouseMove = (e: React.PointerEvent) => {
+		// 创建原生 PointerEvent 并在 document 上触发
+		const pointerEvent = new PointerEvent("pointermove", {
 			clientX: e.clientX,
 			clientY: e.clientY,
 			bubbles: true,
 			cancelable: true,
 		})
-		document.dispatchEvent(mouseEvent)
+		document.dispatchEvent(pointerEvent)
 	}
 
-	// 遮罩层上的 mouseup 处理：转发到 document
-	const handleOverlayMouseUp = (e: React.MouseEvent) => {
+	// 遮罩层上的 pointerup 处理：转发到 document
+	const handleOverlayMouseUp = (e: React.PointerEvent) => {
 		setIsDragging(false)
-		const mouseEvent = new MouseEvent("mouseup", {
+		const pointerEvent = new PointerEvent("pointerup", {
 			clientX: e.clientX,
 			clientY: e.clientY,
 			bubbles: true,
 			cancelable: true,
 		})
-		document.dispatchEvent(mouseEvent)
+		document.dispatchEvent(pointerEvent)
 	}
 
 	// Calculate inline style for dynamic positioning
@@ -77,7 +78,7 @@ function ResizableDivider({
 						: "before:bg-transparent hover:before:bg-primary",
 				)}
 				style={dividerStyle}
-				onMouseDown={handleMouseDown}
+				onPointerDown={handlePointerDown}
 				onMouseEnter={handleMouseEnter}
 				onMouseLeave={handleMouseLeave}
 				data-testid="handle-mouse-down"
