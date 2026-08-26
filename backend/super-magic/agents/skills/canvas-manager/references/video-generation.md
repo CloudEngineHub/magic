@@ -29,9 +29,9 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 ## Generation inputs
 
-Fill the point-estimate request with the fields listed by the estimate tool. Set `audioPolicy` only in the actual generated video Content when the requested audio behavior must be explicit.
+Fill the point-estimate request with the fields listed by the estimate tool. Do not add `audioPolicy` to the estimate request. For the actual generated video Content, set `content.audioPolicy` only when the requested audio behavior must be explicit; omit it when the user did not specify an audio requirement.
 
-For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
+For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
 
 Before submitting, validate the complete nested shape and keep the operation identity stable:
 
@@ -125,6 +125,7 @@ result = tool.call("add_canvas_elements", {
             "duration_seconds": 5,
             "aspect_ratio": "9:16",
             "resolution": "720p",
+            "audioPolicy": "mute",
         },
     }],
 })
