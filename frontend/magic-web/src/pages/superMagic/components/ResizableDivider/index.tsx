@@ -28,9 +28,9 @@ function ResizableDivider({
 		onResizeStart(e.clientX)
 	}
 
-	// 遮罩层上的 pointermove 处理：转发到 document
+	// Forward pointermove events from the overlay to document.
 	const handleOverlayMouseMove = (e: React.PointerEvent) => {
-		// 创建原生 PointerEvent 并在 document 上触发
+		// Create and dispatch a native PointerEvent on document.
 		const pointerEvent = new PointerEvent("pointermove", {
 			clientX: e.clientX,
 			clientY: e.clientY,
@@ -40,7 +40,7 @@ function ResizableDivider({
 		document.dispatchEvent(pointerEvent)
 	}
 
-	// 遮罩层上的 pointerup 处理：转发到 document
+	// Forward pointerup events from the overlay to document.
 	const handleOverlayMouseUp = (e: React.PointerEvent) => {
 		setIsDragging(false)
 		const pointerEvent = new PointerEvent("pointerup", {
