@@ -8,6 +8,35 @@ return [
     // 是否允许在未命中映射时回退旧版树结构（默认关闭，避免新旧树混出）。
     'fallback_legacy_tree' => false,
 
+    // 仅维护开源资源自己的路径顺序；企业资源在企业包中补充同名配置项。
+    'resource_menu_order' => [
+        'platform.model.text' => [100, 600, 100],
+        'platform.model.image' => [100, 600, 200],
+        'platform.model.video' => [100, 600, 300],
+        'platform.ai.ability' => [100, 500, 100],
+        'platform.agent.official' => [100, 500, 200],
+        'platform.agent.market' => [100, 500, 300, 100],
+        'platform.agent.review' => [100, 500, 400, 100],
+        'platform.skill.market' => [100, 500, 300, 200],
+        'platform.skill.review' => [100, 500, 400, 200],
+        'platform.setting.slides_template' => [100, 500, 500],
+        'platform.setting.platform_info' => [100, 100, 100],
+        'platform.setting.application' => [100, 100, 200],
+        'platform.setting.maintenance' => [100, 200, 500],
+        'workspace.model.text' => [200, 100, 100],
+        'workspace.model.image' => [200, 100, 200],
+        'workspace.model.video' => [200, 100, 300],
+        'workspace.ai.agent_management' => [200, 300, 100, 100],
+        'workspace.ai.skill_management' => [200, 300, 100, 200],
+        'workspace.ai.model_audit_log' => [300, 200, 200],
+        'workspace.ai.model_audit_statistics' => [300, 200, 100],
+        'admin.ai.model_access_role' => [200, 200, 100],
+        'admin.safe.function_permission' => [200, 200, 300],
+        'admin.safe.operation_log' => [300, 200, 300],
+        'admin.safe.admin' => [300, 300, 100],
+        'admin.safe.sub_admin' => [300, 300, 200],
+    ],
+
     /*
      * 菜单映射配置（仅影响权限树展示与 permission_tag，不影响接口鉴权）。
      *
@@ -21,7 +50,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
                 ['key' => 'model_management', 'label' => '模型管理'],
-                ['key' => 'text_model', 'label' => '文本大模型'],
+                ['key' => 'text_model', 'label' => '文本大模型及服务商'],
             ],
             'tag' => '平台模型',
         ],
@@ -29,7 +58,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
                 ['key' => 'model_management', 'label' => '模型管理'],
-                ['key' => 'image_model', 'label' => '生图大模型'],
+                ['key' => 'image_model', 'label' => '生图大模型及服务商'],
             ],
             'tag' => '平台模型',
         ],
@@ -37,7 +66,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理'],
                 ['key' => 'model_management', 'label' => '模型管理'],
-                ['key' => 'video_model', 'label' => '视频大模型'],
+                ['key' => 'video_model', 'label' => '视频大模型及服务商'],
             ],
             'tag' => '平台模型',
         ],
