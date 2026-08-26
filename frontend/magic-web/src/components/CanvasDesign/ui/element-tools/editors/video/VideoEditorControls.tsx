@@ -12,7 +12,6 @@ import type {
 	VideoReferenceAssetKind,
 } from "./video-editor-config.types"
 import type { VideoInputMode } from "../../../../public/magic-types"
-import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import styles from "./index.module.css"
 import sourceListStyles from "../../../panels/source-list/SourceList.module.css"
 import SourceList, {
@@ -45,7 +44,8 @@ import {
 	resolveLinkedMediaDisplay,
 } from "../../../editors/connection/linkedEditorInputs"
 import { useLinkedMediaSourceListOption } from "../../../editors/connection/useLinkedMediaSourceListOption"
-import LinkedFrameAssignmentPopover, { type LinkedFrameRole } from "./LinkedFrameAssignmentPopover"
+import LinkedFrameMediaMenu from "./LinkedFrameMediaMenu"
+import type { LinkedFrameRole } from "./LinkedFrameMediaMenu"
 
 interface VideoEditorEmptyReferenceSlotPopoverProps {
 	inputTab: "frame" | "reference"
@@ -84,6 +84,7 @@ interface VideoEditorEmptyReferenceSlotPopoverProps {
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
 	) => void
+	beforeSourceActions?: ReactNode
 	onProjectSelectPanelOpenChange: (open: boolean) => void
 	enableProjectSelectMultiSelect?: boolean
 	maxProjectSelectBatchCount?: number
@@ -117,6 +118,7 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 		assetLimits,
 		currentAssetCounts,
 		onProjectSelect,
+		beforeSourceActions,
 		onProjectSelectPanelOpenChange,
 		enableProjectSelectMultiSelect,
 		maxProjectSelectBatchCount,
@@ -160,6 +162,7 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 			assetLimits={assetLimits}
 			currentAssetCounts={currentAssetCounts}
 			onProjectSelect={onProjectSelect}
+			beforeSourceActions={beforeSourceActions}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
 			enableProjectSelectMultiSelect={enableProjectSelectMultiSelect}
 			maxProjectSelectBatchCount={maxProjectSelectBatchCount}
@@ -180,31 +183,13 @@ function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }):
 	return item.fileName || getCanvasResourceFileName(item.path) || item.path
 }
 
-export function resolveFrameSlotIndex(
-	role: LinkedFrameRole,
+function resolveFrameRoleForSlotIndex(
+	slotIndex: number,
 	supportsStartFrame: boolean,
 	supportsEndFrame: boolean,
-): number {
-	if (role === "start") return 0
-	return supportsStartFrame && supportsEndFrame ? 1 : 0
-}
-
-function resolveLinkedFrameAssignedRoles(
-	bindings: Array<LinkedFrameBinding | undefined>,
-	item: LinkedEditorMediaItem & { kind: "image"; path: string },
-	resolveResourceReference?: ResolveCanvasResourceReference,
-): LinkedFrameRole[] {
-	return bindings.flatMap((binding) => {
-		if (!binding) return []
-		if (
-			binding.sourceConnectionId !== item.connectionId ||
-			getLinkedMediaReferenceIdentity(binding.sourcePath, resolveResourceReference) !==
-				getLinkedMediaReferenceIdentity(item.path, resolveResourceReference)
-		) {
-			return []
-		}
-		return [binding.frameRole]
-	})
+): LinkedFrameRole {
+	if (supportsStartFrame && slotIndex === 0) return "start"
+	return supportsEndFrame ? "end" : "start"
 }
 
 /** 视频编辑器底部工具区：模型、输入 Tab 与发送区；SourceList 可挂载到顶部。 */
@@ -407,7 +392,10 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					kind: info.assetType,
 					path: info.path,
 				})),
-				linkedActiveReferenceAssetInfos,
+				linkedActiveReferenceAssetInfos.map((info) => ({
+					kind: info.assetType,
+					path: info.path,
+				})),
 				resolveResourceReference,
 			).map((reference) => {
 				const manualInfo = referenceImageInfos.find(
@@ -452,36 +440,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	}, [supportedReferenceKinds, visibleLinkedDisplayMediaItems])
 
 	const frameOptions = useMemo((): SourceListOption[] => {
-		const linkedFrameOptions: SourceListOption[] =
-			supportsStartFrame || supportsEndFrame
-				? linkedFrameMediaItems.map((item, index) => {
-						const assignedRoles = resolveLinkedFrameAssignedRoles(
-							linkedFrameBindings,
-							item,
-							resolveResourceReference,
-						)
-						const resourceStatusLabel = assignedRoles
-							.map((role) =>
-								role === "start"
-									? t("videoEditor.slotLabelFirstFrame", "首帧")
-									: t("videoEditor.slotLabelLastFrame", "尾帧"),
-							)
-							.join(" · ")
-						return {
-							kind: "slot" as const,
-							label: getLinkedMediaFileName(item),
-							value: `linked-frame-${item.connectionId}-${index}`,
-							slotIndex: -1,
-							groupId: "linked-frame",
-							resourcePath: item.path,
-							resourceFileName: getLinkedMediaFileName(item),
-							resourceStatusLabel: resourceStatusLabel || undefined,
-							readOnly: true,
-							isLinked: true,
-						} satisfies SourceListSlotOption
-					})
-				: []
-		const options: SourceListOption[] = [...linkedFrameOptions]
+		const options: SourceListOption[] = []
 		let slotIndex = 0
 		if (supportsStartFrame) {
 			const idx = slotIndex
@@ -556,7 +515,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			options.push({
 				kind: "overlay",
 				value: "frame-pair-swap-overlay",
-				betweenSlotOrdinals: [linkedFrameOptions.length, linkedFrameOptions.length + 1],
+				betweenSlotOrdinals: [0, 1],
 				render: () => (
 					<button
 						type="button"
@@ -581,7 +540,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	}, [
 		supportsStartFrame,
 		supportsEndFrame,
-		linkedFrameMediaItems,
 		resolveResourceReference,
 		currentFrameImages,
 		frameImageInfos,
@@ -809,81 +767,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		) => {
 			return function renderSourceListSlotItem(params: SourceListRenderItemParams) {
 				const { option, className, style, content, onClick, slotRootRef } = params
-				if (inputTab === "frame" && option.groupId === "linked-frame") {
-					const linkedFrameItem = linkedFrameMediaItems.find(
-						(item) =>
-							getLinkedMediaReferenceIdentity(item.path, resolveResourceReference) ===
-							getLinkedMediaReferenceIdentity(
-								option.resourcePath ?? "",
-								resolveResourceReference,
-							),
-					)
-					if (!linkedFrameItem) return null
-					const assignedRoles = resolveLinkedFrameAssignedRoles(
-						linkedFrameBindings,
-						linkedFrameItem,
-						resolveResourceReference,
-					)
-					const assignedRoleSet = new Set(assignedRoles)
-					const frameAlreadyAssignedToOtherRole = (role: LinkedFrameRole) =>
-						assignedRoles.some((assignedRole) => assignedRole !== role)
-					const roleOptions = [
-						...(supportsStartFrame
-							? [
-									{
-										role: "start" as const,
-										label: t("videoEditor.useAsStartFrame", "设为首帧"),
-										selected: assignedRoleSet.has("start"),
-										disabled: frameAlreadyAssignedToOtherRole("start"),
-										title: frameAlreadyAssignedToOtherRole("start")
-											? t(
-													"videoEditor.frameResourceAlreadyUsed",
-													"该资源已用于其他帧",
-												)
-											: undefined,
-									},
-								]
-							: []),
-						...(supportsEndFrame
-							? [
-									{
-										role: "end" as const,
-										label: t("videoEditor.useAsEndFrame", "设为尾帧"),
-										selected: assignedRoleSet.has("end"),
-										disabled: frameAlreadyAssignedToOtherRole("end"),
-										title: frameAlreadyAssignedToOtherRole("end")
-											? t(
-													"videoEditor.frameResourceAlreadyUsed",
-													"该资源已用于其他帧",
-												)
-											: undefined,
-									},
-								]
-							: []),
-					]
-					return (
-						<LinkedFrameAssignmentPopover
-							options={roleOptions}
-							className={cn(className, sourceListStyles.sourceItemSelectable)}
-							style={style}
-							content={content}
-							slotRootRef={slotRootRef}
-							onToggleRole={(role, selected) => {
-								const slotIndex = resolveFrameSlotIndex(
-									role,
-									supportsStartFrame,
-									supportsEndFrame,
-								)
-								if (selected) {
-									handlers.handleFrameImageRemove(slotIndex)
-									return
-								}
-								if (frameAlreadyAssignedToOtherRole(role)) return
-								onLinkedMediaFrameSelect?.(slotIndex, role, linkedFrameItem)
-							}}
-						/>
-					)
-				}
 				const {
 					slotKey,
 					referenceAssetKind,
@@ -896,6 +779,31 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					assetLimits,
 					currentAssetCounts,
 				} = resolvePopoverState(option)
+				const frameRole: LinkedFrameRole | undefined =
+					inputTab === "frame"
+						? resolveFrameRoleForSlotIndex(
+								option.slotIndex,
+								supportsStartFrame,
+								supportsEndFrame,
+							)
+						: undefined
+				const linkedFrameMenu =
+					frameRole && linkedFrameMediaItems.length > 0 ? (
+						<LinkedFrameMediaMenu
+							items={linkedFrameMediaItems}
+							bindings={linkedFrameBindings}
+							slotIndex={option.slotIndex}
+							frameRole={frameRole}
+							resolveResourceReference={resolveResourceReference}
+							onSelect={(item) => {
+								onLinkedMediaFrameSelect?.(option.slotIndex, frameRole, item)
+								handlers.setPopoverOpen(false)
+							}}
+							onClear={() => {
+								handlers.handleFrameImageRemove(option.slotIndex)
+							}}
+						/>
+					) : undefined
 				const isSlotUploading =
 					isUploading &&
 					resourceUploadSlotKey != null &&
@@ -968,7 +876,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 									resolveResourceReference,
 								) ===
 									getLinkedMediaReferenceIdentity(
-										hoveredMentionPath,
+										hoveredMentionPath ?? undefined,
 										resolveResourceReference,
 									) &&
 								sourceListStyles.sourceItemMentionHovered,
@@ -993,6 +901,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						assetLimits={assetLimits}
 						currentAssetCounts={currentAssetCounts}
 						onProjectSelect={onProjectSelect}
+						beforeSourceActions={linkedFrameMenu}
 						onProjectSelectPanelOpenChange={handlers.setReferenceProjectPanelOpen}
 						enableProjectSelectMultiSelect={!option.resourcePath}
 						maxProjectSelectBatchCount={option.resourcePath ? 1 : undefined}

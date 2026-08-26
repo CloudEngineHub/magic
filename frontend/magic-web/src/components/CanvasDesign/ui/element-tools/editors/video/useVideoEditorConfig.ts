@@ -810,34 +810,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			fileInfo: UploadFileResponse,
 			options?: { retainResourceSlot?: boolean },
 		) => {
-			const previousInfo = frameImageInfos[slotIndex]
-			if (
-				Boolean(
-					previousInfo?.path &&
-					areCanvasResourceReferencesSame(
-						previousInfo.path,
-						fileInfo.path,
-						resolveResourceReference,
-					),
-				) ||
-				frameImageInfos.some(
-					(info, index) =>
-						index !== slotIndex &&
-						Boolean(
-							info?.path &&
-							areCanvasResourceReferencesSame(
-								info.path,
-								fileInfo.path,
-								resolveResourceReference,
-							),
-						),
-				)
-			) {
-				if (!options?.retainResourceSlot) {
-					resetSelectedResourceSlot()
-				}
-				return
-			}
 			setFrameImageInfos((prev) => {
 				const next = [...prev]
 				next[slotIndex] = {
@@ -855,7 +827,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				resetSelectedResourceSlot()
 			}
 		},
-		[frameImageInfos, resetSelectedResourceSlot, resolveResourceReference],
+		[resetSelectedResourceSlot],
 	)
 
 	const replaceReferenceImageAt = useCallback(

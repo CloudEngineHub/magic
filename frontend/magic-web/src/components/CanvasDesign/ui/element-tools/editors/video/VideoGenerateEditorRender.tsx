@@ -585,21 +585,6 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			if (!item.path) return
 			const sourceFileName =
 				item.fileName || getCanvasResourceFileName(item.path) || item.path
-			const sourceIdentity = getLinkedMediaReferenceIdentity(
-				item.path,
-				resolveResourceReference,
-			)
-			const duplicateSourceFrameIndex = config.currentFrameImages.findIndex(
-				(path, index) =>
-					index !== slotIndex &&
-					Boolean(path) &&
-					getLinkedMediaReferenceIdentity(path, resolveResourceReference) ===
-						sourceIdentity,
-			)
-			if (duplicateSourceFrameIndex >= 0) {
-				toast.error(t("videoEditor.frameResourceAlreadyUsed", "该资源已用于其他帧"))
-				return
-			}
 			handlers.replaceFrameImageAt(slotIndex, {
 				path: item.path,
 				src: item.path,
@@ -618,7 +603,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				return next
 			})
 		},
-		[config.currentFrameImages, handlers, resolveResourceReference, setLinkedFrameBindings, t],
+		[handlers, setLinkedFrameBindings],
 	)
 
 	const handleProjectSelect = useCallback(

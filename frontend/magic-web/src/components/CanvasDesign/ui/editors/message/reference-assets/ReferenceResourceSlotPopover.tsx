@@ -36,6 +36,7 @@ interface ReferenceResourceSlotPopoverProps {
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
 	) => void
+	beforeSourceActions?: ReactNode
 	onProjectSelectPanelOpenChange?: (open: boolean) => void
 	enableProjectSelectMultiSelect?: boolean
 	maxProjectSelectBatchCount?: number
@@ -63,6 +64,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 		assetLimits,
 		currentAssetCounts,
 		onProjectSelect,
+		beforeSourceActions,
 		onProjectSelectPanelOpenChange,
 		enableProjectSelectMultiSelect,
 		maxProjectSelectBatchCount,
@@ -88,6 +90,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 			assetLimits={assetLimits}
 			currentAssetCounts={currentAssetCounts}
 			onProjectSelect={onProjectSelect}
+			beforeSourceActions={beforeSourceActions}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
 			enableProjectSelectMultiSelect={enableProjectSelectMultiSelect}
 			maxProjectSelectBatchCount={maxProjectSelectBatchCount}

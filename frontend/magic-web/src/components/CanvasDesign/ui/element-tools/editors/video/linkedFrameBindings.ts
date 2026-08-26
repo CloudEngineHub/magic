@@ -77,15 +77,39 @@ export function reconcileLinkedFrameBindings(
 		...(supportsStartFrame ? (["start"] as const) : []),
 		...(supportsEndFrame ? (["end"] as const) : []),
 	]
+	const usedPreviousBindingIndexes = new Set<number>()
 	const next = Array.from({ length: currentFrameImages.length }, (_, index) => {
 		const path = currentFrameImages[index]
 		if (!path) return undefined
 		const pathIdentity = getLinkedMediaReferenceIdentity(path, resolveResourceReference)
-		const binding = previous.find(
-			(item) =>
-				getLinkedMediaReferenceIdentity(item?.framePath, resolveResourceReference) ===
-				pathIdentity,
+		const indexedBinding = previous[index]
+		const indexedBindingIdentity = getLinkedMediaReferenceIdentity(
+			indexedBinding?.framePath,
+			resolveResourceReference,
 		)
+		let bindingIndex =
+			indexedBinding && indexedBindingIdentity === pathIdentity ? index : undefined
+		if (bindingIndex === undefined || usedPreviousBindingIndexes.has(bindingIndex)) {
+			bindingIndex = previous.findIndex(
+				(item, previousIndex) =>
+					!usedPreviousBindingIndexes.has(previousIndex) &&
+					getLinkedMediaReferenceIdentity(item?.framePath, resolveResourceReference) ===
+						pathIdentity,
+			)
+			if (bindingIndex < 0) {
+				// 同一来源允许同时绑定首帧与尾帧；当两个槽位都指向同一路径时，
+				// 第二个槽位可以复用同一份历史绑定快照。
+				bindingIndex = previous.findIndex(
+					(item) =>
+						getLinkedMediaReferenceIdentity(
+							item?.framePath,
+							resolveResourceReference,
+						) === pathIdentity,
+				)
+			}
+		}
+		if (bindingIndex >= 0) usedPreviousBindingIndexes.add(bindingIndex)
+		const binding = bindingIndex >= 0 ? previous[bindingIndex] : undefined
 		return binding
 			? { ...binding, frameRole: frameRoles[index] ?? binding.frameRole }
 			: undefined
@@ -93,14 +117,11 @@ export function reconcileLinkedFrameBindings(
 	return areLinkedFrameBindingsEqual(previous, next, resolveResourceReference) ? previous : next
 }
 
-/**
- * 连接仍存在时让首尾帧跟随源图片更新；连接删除、失效或更新后与另一帧重复时，
- * 保留当前帧快照但解除关联绑定。
- */
+/** 连接仍存在时让各首尾帧槽位跟随自己的来源图片更新。 */
 export function synchronizeLinkedFrameBindings(
 	options: SynchronizeLinkedFrameBindingsOptions,
 ): LinkedFrameBindingSyncResult {
-	const { previous, currentFrameImages, linkedMediaItems, resolveResourceReference } = options
+	const { previous, linkedMediaItems, resolveResourceReference } = options
 	const reconciled = reconcileLinkedFrameBindings(options)
 	const next = [...reconciled]
 	const frameUpdates: LinkedFrameImageUpdate[] = []
@@ -131,17 +152,6 @@ export function synchronizeLinkedFrameBindings(
 			if (binding.sourceFileName !== sourceFileName) {
 				next[slotIndex] = { ...binding, sourceFileName }
 			}
-			return
-		}
-
-		const duplicatesAnotherFrame = currentFrameImages.some(
-			(path, index) =>
-				index !== slotIndex &&
-				Boolean(path) &&
-				getLinkedMediaReferenceIdentity(path, resolveResourceReference) === sourceIdentity,
-		)
-		if (duplicatesAnotherFrame) {
-			next[slotIndex] = undefined
 			return
 		}
 

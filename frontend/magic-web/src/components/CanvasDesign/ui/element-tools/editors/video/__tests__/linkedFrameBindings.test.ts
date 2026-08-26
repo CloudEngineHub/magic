@@ -36,7 +36,7 @@ describe("reconcileLinkedFrameBindings", () => {
 		expect(result).toEqual([undefined, endBinding])
 	})
 
-	it("reconstructs a binding instead of treating a sparse slot as unchanged", () => {
+	it("reuses a binding when the same linked source fills both frame slots", () => {
 		const endBinding = createBinding("./images/shared.png", "end")
 		const previous = new Array<LinkedFrameBinding | undefined>(2)
 		previous[1] = endBinding
@@ -151,7 +151,7 @@ describe("synchronizeLinkedFrameBindings", () => {
 		expect(result.frameUpdates).toEqual([])
 	})
 
-	it("detaches instead of duplicating the same source across both frame roles", () => {
+	it("keeps the linked binding when its source updates to a path used by another manual slot", () => {
 		const startBinding = createBinding("./images/start-a.png", "start")
 		const result = synchronizeLinkedFrameBindings({
 			previous: [startBinding, undefined],
@@ -167,8 +167,18 @@ describe("synchronizeLinkedFrameBindings", () => {
 			],
 		})
 
-		expect(result.bindings).toEqual([undefined, undefined])
-		expect(result.frameUpdates).toEqual([])
+		expect(result.bindings).toEqual([
+			{
+				...startBinding,
+				framePath: "./images/shared.png",
+				sourcePath: "./images/shared.png",
+				sourceFileName: "./images/shared.png",
+			},
+			undefined,
+		])
+		expect(result.frameUpdates).toEqual([
+			{ slotIndex: 0, path: "./images/shared.png", fileName: "./images/shared.png" },
+		])
 	})
 
 	it("stabilizes after the connected source update reaches the frame slot", () => {
@@ -191,6 +201,48 @@ describe("synchronizeLinkedFrameBindings", () => {
 
 		expect(result.bindings).toBe(previous)
 		expect(result.frameUpdates).toEqual([])
+	})
+
+	it("updates both frame slots when one linked source is assigned to both roles", () => {
+		const startBinding = createBinding("./images/source-a.png", "start")
+		const endBinding = {
+			...startBinding,
+			framePath: "./images/source-a.png",
+			frameRole: "end" as const,
+		}
+		const result = synchronizeLinkedFrameBindings({
+			previous: [startBinding, endBinding],
+			currentFrameImages: ["./images/source-a.png", "./images/source-a.png"],
+			supportsStartFrame: true,
+			supportsEndFrame: true,
+			linkedMediaItems: [
+				{
+					connectionId: startBinding.sourceConnectionId,
+					kind: "image",
+					path: "./images/source-b.png",
+					fileName: "source-b.png",
+				},
+			],
+		})
+
+		expect(result.bindings).toEqual([
+			{
+				...startBinding,
+				framePath: "./images/source-b.png",
+				sourcePath: "./images/source-b.png",
+				sourceFileName: "source-b.png",
+			},
+			{
+				...endBinding,
+				framePath: "./images/source-b.png",
+				sourcePath: "./images/source-b.png",
+				sourceFileName: "source-b.png",
+			},
+		])
+		expect(result.frameUpdates).toEqual([
+			{ slotIndex: 0, path: "./images/source-b.png", fileName: "source-b.png" },
+			{ slotIndex: 1, path: "./images/source-b.png", fileName: "source-b.png" },
+		])
 	})
 
 	it("does not rewrite a frame when the source path only changes canonical spelling", () => {
