@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.domain.content_fields import VideoContentFields
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, ElementProperties
 from app.tools.canvas.production.adapters import FakeMediaProbePort, FileMediaProbePort
+from app.tools.canvas.production.ports.media_probe_port import VideoMediaInfo
 
 
 @pytest.mark.asyncio
@@ -51,6 +54,29 @@ async def test_pending_video_dimensions_follow_aspect_ratio_and_resolution(tmp_p
     await sizing.initialize("Demo", element)
 
     assert (element.properties.width, element.properties.height) == (720.0, 1280.0)
+
+
+@pytest.mark.asyncio
+async def test_imported_video_dimensions_are_read_from_media_probe(tmp_path) -> None:
+    """导入视频初始化时应使用媒体探测结果，而不是默认横屏尺寸。"""
+    source = tmp_path / "Demo" / "videos" / "silent-result.mp4"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"mock-video")
+    element = CanvasElement(
+        "video-1",
+        "video",
+        ElementProperties(),
+        [CanvasContent("content-1", VideoContentFields(src="./videos/silent-result.mp4"))],
+        "content-1",
+        "content-1",
+    )
+    media_probe = FakeMediaProbePort()
+    media_probe.inspect_video = AsyncMock(return_value=VideoMediaInfo(720, 1280, 5.0, False))
+    sizing = CanvasElementSizingService(tmp_path, media_probe)
+
+    await sizing.initialize("Demo", element)
+
+    assert (element.properties.width, element.properties.height) == (720, 1280)
 
 
 def test_file_media_probe_parses_mock_ffprobe_video_metadata() -> None:

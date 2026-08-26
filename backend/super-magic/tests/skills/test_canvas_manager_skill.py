@@ -123,6 +123,16 @@ def test_skill_freezes_estimated_request_and_routes_provider_assets() -> None:
     assert "copy those parameters byte-for-byte" in content
 
 
+def test_skill_allows_conditional_waiting_for_async_generation() -> None:
+    """Skill 应允许根据后续依赖决定是否等待异步生成。"""
+    content = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "wait_canvas_generation only when the completed result is needed now" in content
+    assert "preserve the exact `generation_task_id`" in content
+    assert "continue without waiting" in content
+    assert "never submit a duplicate generation request" in content
+
+
 def test_canvas_agent_requires_estimate_before_generation_without_protocol_coupling() -> None:
     """Skill 必须要求生成前估算，但不能把估算凭证耦合到生成协议。"""
     agent = (SKILL_PATH.parent.parent.parent / "canvas.agent").read_text(encoding="utf-8")

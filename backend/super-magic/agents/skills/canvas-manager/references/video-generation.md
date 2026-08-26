@@ -10,7 +10,7 @@ Use this reference for a basic Canvas video request when the user has not asked 
 4. Use the same direct media pattern as basic image generation: the generated video is the result, and no storyboard, initialization image, first frame, `video-edit`, final composition, or professional-production Connection is created.
 5. Use `row_incremental` layout unless the user provides exact coordinates.
 6. Keep reference paths as generation inputs only. Do not convert them into business Connections.
-7. Wait for an asynchronous generation task immediately, preserve its exact IDs on timeout, and query the completed Element before presenting the result.
+7. Decide whether the completed media is needed immediately. Wait for the asynchronous generation task when the next step or the final response depends on the output; otherwise return the submitted state, preserve its exact IDs, and continue independent work without waiting.
 
 Video billing remains in force. Before generating, call `estimate_canvas_content_points`, show the estimated points, and obtain explicit user confirmation. This is a workflow instruction; the estimate tool and generation tool are independent, and generation does not validate an estimate ID.
 
@@ -21,7 +21,7 @@ If the user later asks for professional video production, a storyboard, multiple
 - Point estimate: `estimate_canvas_content_points` with `production_rule="video_generation"`.
 - New logical video: `add_canvas_elements`, `element_type=video`, Content `source=generated`, `content_type=video`.
 - New candidate on an existing Video Element: `add_canvas_contents`.
-- Wait for asynchronous generation: `wait_canvas_generation` with the exact returned `generation_task_id`.
+- Wait for asynchronous generation when the completed result is needed: `wait_canvas_generation` with the exact returned `generation_task_id`.
 - Verify the result: `query_canvas_element_details` with the exact returned `element_id`.
 - The first Content of any Video Element is automatically main. For a later candidate appended to an existing Video Element, call `select_canvas_main_content` only after explicit user confirmation.
 
@@ -133,7 +133,7 @@ print(result.content)
 
 ## Code Mode example: wait and verify
 
-When generation returns a task ID, wait immediately. `timed_out=true`, `pending`, `processing`, `queued`, and `running` only mean that the current wait did not observe completion. Call the same tool again in a bounded follow-up with the same `generation_task_id`; never submit a duplicate generation and never enter retry unless the task or Content is explicitly `failed`.
+When generation returns a task ID, wait only when the completed result is needed for a downstream operation, confirmation, or final response. If the user requested background submission or the next steps are independent, do not call the wait tool yet; report the submitted state and preserve the exact IDs. When waiting, `timed_out=true`, `pending`, `processing`, `queued`, and `running` only mean that the current wait did not observe completion. Continue with the same tool in bounded follow-ups using the same `generation_task_id`; never submit a duplicate generation and never enter retry unless the task or Content is explicitly `failed`.
 
 ```python
 from sdk.tool import tool

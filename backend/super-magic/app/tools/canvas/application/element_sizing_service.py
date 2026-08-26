@@ -47,15 +47,19 @@ class CanvasElementSizingService:
         element.properties.height = height
 
         content = element.get_content(element.active_content_id)
-        if content is None or element.element_type != "image":
+        if content is None:
             return
         fields = content.fields
         if not isinstance(fields, GeneratedMediaContentFields) or not fields.asset_path:
             return
         try:
-            media = await self.media_probe.inspect_image(
-                self.path_resolver.resolve_workspace_path_for_project(project_path, fields.asset_path)
-            )
+            media_path = self.path_resolver.resolve_workspace_path_for_project(project_path, fields.asset_path)
+            if element.element_type == "image":
+                media = await self.media_probe.inspect_image(media_path)
+            elif element.element_type == "video":
+                media = await self.media_probe.inspect_video(media_path)
+            else:
+                return
         except (OSError, ValueError):
             return
         element.properties.width = media.width

@@ -31,7 +31,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
 - A generated Content may be retried at most 2 times, only when its status is explicitly `failed`, and only with the user's explicit consent; never loop retries automatically and never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
-- A timeout or a `pending`, `processing`, `queued`, or `running` state is a waiting state, not a failure. Keep waiting in bounded follow-up calls with the same generation task ID; never submit a duplicate generation request. Only an explicit failed status enters the retry flow.
+- A timeout or a `pending`, `processing`, `queued`, or `running` state is a waiting state, not a failure. Waiting for an asynchronous task is conditional: wait when the next step needs the completed media, its path, dimensions, status, or user preview; otherwise return the submitted state and preserve the exact task ID for later tracking. When waiting, use bounded follow-up calls with the same generation task ID and never submit a duplicate generation request. Only an explicit failed status enters the retry flow.
 - The first Content of any Element is automatically its main Content; never ask whether to make it main and never call the main-selection tool for it. For a later candidate appended to an Element that already has a main Content, show the completed candidate and select it as main only after explicit user confirmation. Revising a Content never overwrites it; create a new candidate instead.
 - Billed video generation requires an independent point-estimation step and explicit user confirmation before submission. The estimate ID is not a generation-tool credential.
 - Re-query after any write when the next step depends on persisted state.
@@ -46,7 +46,7 @@ Before every write-tool call, validate the request against the minimum structure
 - `add_canvas_elements`: every item must have a unique `item_ref` and a valid `element_type`. When `content` is present, it must explicitly provide `source` and `content_type`. Generated image/video Content must have a `name` that describes the actual result. Imported Content must have `asset_path` and the correct `content_type`. Every entry in `connections` must contain `source_element_id`; keep a stable `item_ref` for every item so batch results remain traceable.
 - `add_canvas_contents`: every item must contain `item_ref`, the exact `element_id`, and `content`. Content must explicitly provide `source` and `content_type`; generated image/video Content must have `name`. Never substitute `element_id`, `content_id`, and `item_ref` for one another.
 - `manage_canvas_connections`: every item must have a unique `item_ref`. Creation or replacement requires exact `source_element_id` and `target_element_id`; removal or replacement also requires the exact queried Connection ID and explicit user intent.
-- Generation tasks: when a write result returns `generation_task_id`, wait immediately. A timeout or a `pending`, `processing`, `queued`, or `running` state is not a failure and must not trigger another generation submission. Only an explicit `status=failed` enters controlled retry, using the original `item_ref`, `element_id`, and `content_id`.
+- Generation tasks: when a write result returns `generation_task_id`, decide whether the current workflow needs the completed media immediately. Wait when a downstream operation, confirmation, or final response depends on it; otherwise keep the submitted result and preserve the exact `generation_task_id`, `element_id`, `content_id`, and `item_ref` for later tracking. A timeout or a `pending`, `processing`, `queued`, or `running` state is not a failure and must not trigger another generation submission. Only an explicit `status=failed` enters controlled retry.
 - Paths: Canvas-returned `./images/...`, `./videos/...`, and `./audios/...` paths are for fields scoped to the current Canvas project. Before passing one to a Workspace tool, combine the exact `project_path` with the project-relative path after removing its leading `./`. Without an authoritative returned path, never construct one from a name, directory guess, or file listing.
 
 If the preflight cannot be satisfied, query the current Canvas state or report the missing information to the user. Do not bypass preflight with guessed values, empty strings, placeholder IDs, or extra file operations.
@@ -59,7 +59,7 @@ You can:
 - Create Frames, Storyboards, Video Edits, and media Elements; generate images and videos; import media assets.
 - Create or add the first Content as the automatic main Content; append later candidates, retry failed Content, and select an appended candidate as main after user confirmation.
 - Frame sibling Elements.
-- Wait on async generation tasks.
+- Track async generation tasks and wait only when the current workflow needs a completed result.
 - Process `[@design_marker:...]` annotations into image revisions.
 - Search the curated prompt library for inspiration when the user has no idea (`search_canvas_image_prompts`).
 
@@ -132,7 +132,7 @@ New candidate on an existing element?        → add_canvas_contents
 Failed generated content + user agrees?      → retry_canvas_content_generation
 User picked an appended candidate?           → select_canvas_main_content
 Group sibling elements?                      → frame_canvas_elements
-Async task returned?                         → wait_canvas_generation
+Async task returned?                         → wait_canvas_generation only when the completed result is needed now; otherwise preserve the task ID
 Billed video generation?                    → estimate_canvas_content_points first, then ask for confirmation before generation
 Change layout / wire dependencies?           → layout_canvas_elements, manage_canvas_connections  (see professional-video-production.md)
 Compose existing videos or audio?            → add_canvas_elements with task="compose" and composition.videoSequence/composition.audioSequence
@@ -225,7 +225,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-Read each item's real `element_id`, `content_id`, status, and task ID. If a task ID is returned, call `wait_canvas_generation`. Basic Canvas images and videos use the default `row_incremental` layout and do not wire professional-production Connections. Professional video production is the exception: follow `references/professional-video-production.md` and create only its explicit direct business relations. Before submitting a new item with `layout.strategy="dependency_flow"`, query every existing connection source and inspect its direct parent; a new item is root-level unless the tool explicitly says otherwise, so do not use `dependency_flow` when that would cross a container boundary.
+Read each item's real `element_id`, `content_id`, status, and task ID. If a task ID is returned, wait only when the completed result is needed for the next operation, a confirmation, or the final response; otherwise preserve the task ID and continue independent work. Basic Canvas images and videos use the default `row_incremental` layout and do not wire professional-production Connections. Professional video production is the exception: follow `references/professional-video-production.md` and create only its explicit direct business relations. Before submitting a new item with `layout.strategy="dependency_flow"`, query every existing connection source and inspect its direct parent; a new item is root-level unless the tool explicitly says otherwise, so do not use `dependency_flow` when that would cross a container boundary.
 
 Before calling this tool, validate every nested item against the preflight checklist above. In particular, do not omit `content.name` for generated image/video Content, and do not omit `content.content_type` for imported media. A missing `name` or `content_type` is a request-construction error, not a generation failure.
 
@@ -349,7 +349,7 @@ Use only after the user picks a later candidate on an Element that already has a
 
 ## `wait_canvas_generation`
 
-Wait on any async task ID returned by add, append, or retry.
+Wait on an asynchronous task when the current workflow needs its completed media or final status. Do not wait merely because a task ID was returned; if the user asked to submit work in the background or the next steps are independent, preserve the task ID and continue without waiting.
 
 Parameters: `project_path` and `tasks` are required; `max_wait_seconds` is optional. On timeout or `processing`, continue with the original `generation_task_id`.
 
@@ -368,7 +368,7 @@ result = tool.call("wait_canvas_generation", {
 print(result.content)
 ```
 
-On `completed`, query details as needed. On `pending`, `processing`, `queued`, `running`, or `timed_out=true`, keep waiting in bounded follow-up calls with the same task ID; do not resubmit `add_canvas_elements`, `add_canvas_contents`, or retry. A timeout means that this wait call ended before completion, not that generation failed. Only an explicit `status=failed` enters the controlled retry flow.
+On `completed`, query details when the workflow needs the output. On `pending`, `processing`, `queued`, `running`, or `timed_out=true`, either continue bounded follow-up calls with the same task ID when the result is needed now, or stop waiting and retain the task ID for later tracking. Never resubmit `add_canvas_elements`, `add_canvas_contents`, or retry. A timeout means that this wait call ended before completion, not that generation failed. Only an explicit `status=failed` enters the controlled retry flow.
 
 ## `layout_canvas_elements`
 
