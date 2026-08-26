@@ -199,7 +199,7 @@ return [
         ],
         'admin.safe.sub_admin' => [
             'path' => [
-                ['key' => 'data_security', 'label' => '数据安全', 'order' => 3],
+                ['key' => 'data_security', 'label' => '数据与安全', 'order' => 3],
                 ['key' => 'security_permissions', 'label' => '管理权限', 'order' => 3],
                 ['key' => 'sub_admin', 'label' => '子管理员', 'order' => 2],
             ],
@@ -207,7 +207,7 @@ return [
         ],
         'admin.safe.admin' => [
             'path' => [
-                ['key' => 'data_security', 'label' => '数据安全', 'order' => 3],
+                ['key' => 'data_security', 'label' => '数据与安全', 'order' => 3],
                 ['key' => 'security_permissions', 'label' => '管理权限', 'order' => 3],
                 ['key' => 'admin', 'label' => '企业管理员', 'order' => 1],
             ],
@@ -215,7 +215,7 @@ return [
         ],
         'admin.safe.operation_log' => [
             'path' => [
-                ['key' => 'data_security', 'label' => '数据安全', 'order' => 3],
+                ['key' => 'data_security', 'label' => '数据与安全', 'order' => 3],
                 ['key' => 'logs_analytics', 'label' => '日志及分析', 'order' => 2],
                 ['key' => 'operation_log', 'label' => '后台操作日志', 'order' => 3],
             ],
@@ -249,7 +249,7 @@ return [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理', 'order' => 2],
                 ['key' => 'custom_model', 'label' => '自定义大模型', 'order' => 1],
-                ['key' => 'text_model', 'label' => '文本大模型', 'order' => 1],
+                ['key' => 'text_model', 'label' => '文本大模型及服务商', 'order' => 1],
             ],
             'tag' => '自定义大模型',
         ],
@@ -257,7 +257,7 @@ return [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理', 'order' => 2],
                 ['key' => 'custom_model', 'label' => '自定义大模型', 'order' => 1],
-                ['key' => 'image_model', 'label' => '生图大模型', 'order' => 2],
+                ['key' => 'image_model', 'label' => '生图大模型及服务商', 'order' => 2],
             ],
             'tag' => '自定义大模型',
         ],
@@ -265,7 +265,7 @@ return [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理', 'order' => 2],
                 ['key' => 'custom_model', 'label' => '自定义大模型', 'order' => 1],
-                ['key' => 'video_model', 'label' => '视频大模型', 'order' => 3],
+                ['key' => 'video_model', 'label' => '视频大模型及服务商', 'order' => 3],
             ],
             'tag' => '自定义大模型',
         ],
@@ -305,7 +305,7 @@ return [
         ],
         'workspace.ai.model_audit_log' => [
             'path' => [
-                ['key' => 'data_security', 'label' => '数据安全', 'order' => 3],
+                ['key' => 'data_security', 'label' => '数据与安全', 'order' => 3],
                 ['key' => 'logs_analytics', 'label' => '日志及分析', 'order' => 2],
                 ['key' => 'model_audit', 'label' => '大模型审计', 'order' => 2],
             ],
@@ -313,7 +313,7 @@ return [
         ],
         'workspace.ai.model_audit_statistics' => [
             'path' => [
-                ['key' => 'data_security', 'label' => '数据安全', 'order' => 3],
+                ['key' => 'data_security', 'label' => '数据与安全', 'order' => 3],
                 ['key' => 'logs_analytics', 'label' => '日志及分析', 'order' => 2],
                 ['key' => 'model_monitoring', 'label' => '大模型监控', 'order' => 1],
             ],
