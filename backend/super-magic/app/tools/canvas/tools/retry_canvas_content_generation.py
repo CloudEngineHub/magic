@@ -52,6 +52,11 @@ class GenerationOverrideInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+    audio_policy: Literal["auto", "generate", "mute"] | None = Field(
+        None,
+        alias="audioPolicy",
+        description="统一视频音频策略覆盖：auto、generate 或 mute。",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -90,6 +95,7 @@ class GenerationOverrideInput(BaseToolParams):
             fps=values.get("fps"),
             seed=values.get("seed"),
             watermark=values.get("watermark"),
+            audio_policy=values.get("audio_policy"),
             _provided_fields=provided_fields,
         )
 

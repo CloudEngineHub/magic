@@ -408,7 +408,9 @@ print(result.content)
 
 Perform a side-effect-free point estimate for billed video generation. The estimate phase must not create Elements, Content, or generation tasks; any parameter change that affects billing requires a re-estimate.
 
-Freeze the complete generation request before estimating. This includes the final prompt, every `[imageN]`/`[videoN]`/`[audioN]` binding token, reference arrays, model, duration, aspect ratio, resolution, and all other billable fields. After the user confirms, copy those parameters byte-for-byte into `add_canvas_elements`; the estimate result and `estimate_id` are informational and are not required by the generation tool. Do not add a reference binding token, a watermark constraint, or any other prompt wording after confirmation. If any field or prompt text must change, estimate again and ask for confirmation again before submitting.
+Freeze the complete generation request before estimating. This includes the final prompt, every `[imageN]`/`[videoN]`/`[audioN]` binding token, reference arrays, model, duration, aspect ratio, resolution, `audioPolicy`, and all other billable fields. After the user confirms, copy those parameters byte-for-byte into `add_canvas_elements`; the estimate result and `estimate_id` are informational and are not required by the generation tool. Do not add a reference binding token, a watermark constraint, or any other prompt wording after confirmation. If any field or prompt text must change, estimate again and ask for confirmation again before submitting.
+
+For generated video Content, use the canonical `audioPolicy` value `auto`, `generate`, or `mute`. Do not pass provider-specific fields such as `sound`, `generateAudio`, or `audio`. When the selected model declares `native_mute=false` and `mute_fallback=compose`, generate the source video first and create the final Video Element through Video Edit composition with `output.audioPolicy="mute"`. If `mute_fallback=unsupported`, ask the user to choose another model or accept a non-silent result.
 
 | Parameter | Required | Description |
 |---|---|---|

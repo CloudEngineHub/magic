@@ -4,6 +4,7 @@
 from html import escape
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from app.tools.video_generation_utils import VideoAudioPolicyResolver
 from app.utils.video_logger import get_video_logger
 
 if TYPE_CHECKING:
@@ -82,6 +83,11 @@ class VideoModelConfigService:
         if generation.get("supports_watermark") is False:
             unsupported.append("watermark")
         return "|".join(unsupported)
+
+    @staticmethod
+    def _build_audio_attrs(video_model_id: str) -> dict[str, str]:
+        """构建统一音频策略属性，隐藏供应商的具体参数名。"""
+        return VideoAudioPolicyResolver.prompt_attributes(video_model_id)
 
     @staticmethod
     def _build_reference_attr(video_generation_config: Dict[str, Any]) -> str:
@@ -445,6 +451,8 @@ class VideoModelConfigService:
             _attr(attr_name, attr_value)
         _attr("ref", VideoModelConfigService._build_reference_attr(video_generation_config))
         _attr("unsupported", VideoModelConfigService._build_unsupported_attr(video_generation_config))
+        for attr_name, attr_value in VideoModelConfigService._build_audio_attrs(video_model_id).items():
+            _attr(attr_name, attr_value)
 
         mode_lines = VideoModelConfigService._build_input_mode_lines(video_generation_config)
         if not mode_lines:
@@ -472,6 +480,7 @@ class VideoModelConfigService:
                 lines.extend([
                     "Use video resolution, aspect_ratio, and duration only from declared values; if unspecified by the user, infer legal values when the model rules make the choice clear, otherwise omit them.",
                     "Use video modes to choose reference fields and avoid unsupported combinations.",
+                    "Use generation.audio_policy=auto|generate|mute. For mute, use native_mute=true when declared; when mute_fallback=compose, generate first and compose the final video with output.audioPolicy=mute. Never emit provider-specific audio fields.",
                     "Before passing reference_*_paths, prompt MUST bind assets by list order: reference_image_paths[0]->[image1], reference_video_paths[0]->[video1], reference_audio_paths[0]->[audio1]. Do not submit references without tokens.",
                     "Canvas width/height are layout size, not generation parameters.",
                 ])

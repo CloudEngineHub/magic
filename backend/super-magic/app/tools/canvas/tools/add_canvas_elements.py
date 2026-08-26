@@ -315,6 +315,11 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+    audio_policy: Literal["auto", "generate", "mute"] | None = Field(
+        None,
+        alias="audioPolicy",
+        description="统一视频音频策略：auto 使用模型默认行为，generate 请求生成音频，mute 要求最终视频无音频。",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -462,6 +467,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             fps=self.fps,
             seed=self.seed,
             watermark=self.watermark,
+            audio_policy=self.audio_policy,
             video_edit_element_id=self.video_edit_element_id,
         )
 

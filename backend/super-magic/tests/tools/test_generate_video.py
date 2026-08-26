@@ -128,6 +128,7 @@ def test_video_parameter_descriptions_are_bilingual_and_actionable():
         "frame_start_path",
         "duration_seconds",
         "size",
+        "audio_policy",
     ):
         description = properties[field_name]["description"]
         assert "<!--zh:" in description
@@ -139,6 +140,31 @@ def test_video_parameter_descriptions_are_bilingual_and_actionable():
     assert "通常省略" in properties["output_path"]["description"]
     assert "默认 videos" in properties["output_path"]["description"]
     assert "用户所用的语言" not in properties["output_path"]["description"]
+
+
+def test_audio_policy_is_normalized_and_reaches_generation_payload():
+    params = GenerateVideoParams(prompt="小猫游泳", model_id="veo-3.1", audio_policy="mute")
+    config = {
+        "generation": {
+            "sizes": [{"value": "1366x768", "label": "16:9", "resolution": "768p"}],
+            "durations": [5],
+        }
+    }
+
+    assert GenerateVideo._build_generation(params, config, "veo-3.1")["generate_audio"] is False
+
+
+@pytest.mark.parametrize(
+    ("policy", "capability", "message"),
+    [
+        ("generate", {"supports_generate_audio": False}, "generated audio"),
+        ("mute", {"supports_native_mute": False, "mute_fallback": "compose"}, "Canvas Video Edit"),
+        ("mute", {"supports_native_mute": False, "mute_fallback": "unsupported"}, "Canvas Video Edit"),
+    ],
+)
+def test_audio_policy_rejects_unsupported_regular_video_strategy(policy, capability, message):
+    with pytest.raises(ValueError, match=message):
+        GenerateVideo._validate_audio_policy(policy, capability, "minimax-h3")
 
 
 @pytest.mark.asyncio

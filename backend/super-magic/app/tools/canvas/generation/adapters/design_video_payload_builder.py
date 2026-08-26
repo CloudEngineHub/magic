@@ -9,6 +9,7 @@ from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
+from app.tools.video_generation_utils import VideoAudioPolicyResolver
 
 
 class DesignVideoPayloadBuilder:
@@ -39,7 +40,7 @@ class DesignVideoPayloadBuilder:
             "task": parameters.task or "generate",
             "inputs": self._build_inputs(project_path, parameters),
         }
-        generation = self._build_generation(parameters)
+        generation = self._build_generation(parameters, model_id)
         if generation:
             payload["generation"] = generation
         if parameters.extensions:
@@ -75,8 +76,8 @@ class DesignVideoPayloadBuilder:
         return "/" + normalized.strip("/")
 
     @staticmethod
-    def _build_generation(parameters: GenerationParameters) -> dict[str, Any]:
-        """构造旧 Design API 支持的生成参数。"""
+    def _build_generation(parameters: GenerationParameters, model_id: str = "") -> dict[str, Any]:
+        """构造旧 Design API 支持的生成参数，并转换统一音频策略。"""
         values = {
             "aspect_ratio": parameters.aspect_ratio,
             "duration_seconds": parameters.duration_seconds,
@@ -84,6 +85,10 @@ class DesignVideoPayloadBuilder:
             "fps": parameters.fps,
             "seed": parameters.seed,
             "watermark": parameters.watermark,
+            "generate_audio": VideoAudioPolicyResolver.to_legacy_generate_audio(
+                parameters.audio_policy,
+                model_id or parameters.model_id or "",
+            ),
         }
         return {key: value for key, value in values.items() if value is not None and value != ""}
 

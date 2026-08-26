@@ -37,7 +37,7 @@ def test_design_video_payload_maps_canvas_parameters_and_provider_uri(tmp_path: 
         "mock-project",
         GenerationParameters(
             prompt="animate [image1]",
-            model_id="video-model",
+            model_id="veo-3.1",
             reference_image_paths=("./images/source.png", "asset://provider/image-1"),
             frame_start_path="./images/start.png",
             duration_seconds=4,
@@ -46,6 +46,7 @@ def test_design_video_payload_maps_canvas_parameters_and_provider_uri(tmp_path: 
             fps=24,
             seed=7,
             watermark=False,
+            audio_policy="mute",
         ),
         "vid-1",
         "/mock-project/videos/",
@@ -67,6 +68,7 @@ def test_design_video_payload_maps_canvas_parameters_and_provider_uri(tmp_path: 
         "fps": 24,
         "seed": 7,
         "watermark": False,
+        "generate_audio": False,
     }
 
 

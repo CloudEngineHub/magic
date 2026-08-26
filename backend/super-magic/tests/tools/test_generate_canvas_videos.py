@@ -616,6 +616,18 @@ def test_generate_canvas_videos_builds_generation_without_layout_defaults():
     assert generation == {}
 
 
+def test_generate_canvas_videos_translates_audio_policy_for_legacy_design_api():
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="静音视频",
+        audio_policy="mute",
+    )
+
+    generation = GenerateCanvasVideos._build_design_generation(task, model_id="veo-3.1")
+
+    assert generation == {"generate_audio": False}
+
+
 def test_generate_canvas_videos_params_rejects_size():
     with pytest.raises(ValidationError) as exc:
         GenerateCanvasVideosParams(

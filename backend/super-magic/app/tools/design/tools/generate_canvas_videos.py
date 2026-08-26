@@ -44,8 +44,8 @@ from app.tools.media_generator.factory import get_video_generator
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
 from app.tools.video_generation_utils import (
+    VideoAudioPolicyResolver,
     VideoInputPayloadBuilder,
-    is_provider_asset_uri,
     normalize_provider_asset_uri,
 )
 from app.utils.async_file_utils import async_is_file, async_mkdir
@@ -251,6 +251,10 @@ Video quality/resolution tier, optional. The parameter name must be resolution. 
     fps: Optional[int] = Field(default=None, description="<!--zh: 视频帧率，可选-->Video FPS, optional")
     seed: Optional[int] = Field(default=None, description="<!--zh: 随机种子，可选-->Random seed, optional")
     watermark: Optional[bool] = Field(default=None, description="<!--zh: 是否保留水印，可选-->Keep watermark, optional")
+    audio_policy: Optional[Literal["auto", "generate", "mute"]] = Field(
+        default=None,
+        description="<!--zh: 统一视频音频策略，可选：auto、generate、mute-->Canonical video audio policy: auto, generate, or mute",
+    )
     extensions: Dict[str, Any] = Field(
         default_factory=dict,
         description="<!--zh: 透传扩展参数-->Pass-through extension config"
@@ -1131,7 +1135,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         payload: Dict[str, Any] = {
             "video_id": video_id,
             "model_id": self._model_id or None,
-            **self._build_design_video_task_fields(task),
+            **self._build_design_video_task_fields(task, model_id=self._model_id),
         }
         return self._drop_empty_values(payload)
 
@@ -1175,7 +1179,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         model_id: str,
         relative_project_path: str = "",
     ) -> Dict[str, Any]:
-        task_fields = self._build_design_video_task_fields(task, relative_project_path)
+        task_fields = self._build_design_video_task_fields(
+            task,
+            relative_project_path,
+            model_id=model_id,
+        )
         payload: Dict[str, Any] = {
             "project_id": project_id,
             "model_id": model_id,
@@ -1196,13 +1204,14 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         self,
         task: VideoTaskSpec,
         relative_project_path: str = "",
+        model_id: str = "",
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "prompt": task.prompt,
             "input_mode": self._resolve_design_input_mode(task),
             "task": task.task or "generate",
         }
-        generation = self._build_design_generation(task)
+        generation = self._build_design_generation(task, model_id=model_id)
         if generation:
             payload["generation"] = generation
         payload["inputs"] = self._build_design_video_inputs(task, relative_project_path)
@@ -1296,7 +1305,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         return "standard"
 
     @staticmethod
-    def _build_design_generation(task: VideoTaskSpec) -> Dict[str, Any]:
+    def _build_design_generation(task: VideoTaskSpec, model_id: str = "") -> Dict[str, Any]:
         generation: Dict[str, Any] = {
             "aspect_ratio": task.aspect_ratio or None,
             "duration_seconds": task.duration_seconds,
@@ -1304,6 +1313,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             "fps": task.fps,
             "seed": task.seed,
             "watermark": task.watermark,
+            "generate_audio": VideoAudioPolicyResolver.to_legacy_generate_audio(
+                task.audio_policy,
+                model_id,
+            ),
         }
         return GenerateCanvasVideos._drop_empty_values(generation)
 

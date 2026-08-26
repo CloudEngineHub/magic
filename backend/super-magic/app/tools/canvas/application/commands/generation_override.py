@@ -29,6 +29,7 @@ class GenerationParametersOverride:
     fps: int | None = None
     seed: int | None = None
     watermark: bool | None = None
+    audio_policy: str | None = None
     extensions: JsonObject | None = None
     _provided_fields: frozenset[str] = field(default_factory=frozenset, repr=False)
 
@@ -53,6 +54,7 @@ class GenerationParametersOverride:
             "fps": self.fps,
             "seed": self.seed,
             "watermark": self.watermark,
+            "audio_policy": self.audio_policy,
             "extensions": dict(self.extensions) if self.extensions is not None else None,
         }
         return {key: value for key, value in values.items() if key in self._provided_fields and value is not None}
