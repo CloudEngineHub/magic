@@ -124,9 +124,10 @@ export function useConversationInputHeight({
 		manualMaxHeight,
 	)
 	const effectiveHeight = heightMode === "manual" ? safeManualHeight : safeAutoHeight
+	// Once the available panel has been measured, let automatic layouts fill their controlled panel.
+	// This avoids measuring a fill-height container and toggling the layout in a feedback loop.
 	const fillHeight =
-		enabled &&
-		(heightMode === "manual" || (availableHeight > 0 && safeAutoHeight >= autoMaxHeight))
+		enabled && (heightMode === "manual" || (heightMode === "auto" && availableHeight > 0))
 
 	// Persist only the editor portion so temporary task chrome is measured again when it changes.
 	const persistPreference = useCallback(

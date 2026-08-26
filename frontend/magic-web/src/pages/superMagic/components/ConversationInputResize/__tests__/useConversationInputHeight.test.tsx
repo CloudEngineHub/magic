@@ -86,7 +86,7 @@ describe("useConversationInputHeight", () => {
 
 		await waitFor(() => expect(result.current.maxHeight).toBe(400))
 		expect(result.current.effectiveHeight).toBe(240)
-		expect(result.current.fillHeight).toBe(false)
+		expect(result.current.fillHeight).toBe(true)
 
 		containerHeight = 500
 		fireEvent.input(container)
@@ -95,8 +95,28 @@ describe("useConversationInputHeight", () => {
 
 		containerHeight = 260
 		fireEvent.input(container)
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
 		await waitFor(() => expect(result.current.effectiveHeight).toBe(260))
-		expect(result.current.fillHeight).toBe(false)
+		expect(result.current.fillHeight).toBe(true)
+	})
+
+	it("fills the panel when automatic height is expanded by the minimum bound", async () => {
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "auto", height: 240 })
+		containerHeight = 150
+
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "synthetic-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+				minHeight: 260,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(260))
+		expect(result.current.fillHeight).toBe(true)
 	})
 
 	it("lets manual Splitter resizing override automatic measurements until restored", async () => {
