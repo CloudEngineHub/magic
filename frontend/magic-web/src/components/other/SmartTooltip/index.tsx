@@ -66,18 +66,35 @@ const SmartTooltip = memo(function SmartTooltip({
 			const element = textRef.current
 			let isOverflowing = false
 			const nextTooltipTextContent = element.textContent?.trim() ?? ""
+			const descendantOverflow = Array.from(element.querySelectorAll<HTMLElement>("*")).some(
+				(descendant) => {
+					const computedStyle = window.getComputedStyle(descendant)
+					const clipsVertically = ["hidden", "clip", "scroll", "auto"].includes(
+						computedStyle.overflowY,
+					)
+					const clipsHorizontally = ["hidden", "clip", "scroll", "auto"].includes(
+						computedStyle.overflowX,
+					)
+
+					return (
+						(clipsVertically && descendant.scrollHeight > descendant.clientHeight) ||
+						(clipsHorizontally && descendant.scrollWidth > descendant.clientWidth)
+					)
+				},
+			)
 
 			if (maxLines > 1) {
 				// Multi-line clamp: hidden lines increase scrollHeight
-				isOverflowing = element.scrollHeight > element.clientHeight
+				isOverflowing = element.scrollHeight > element.clientHeight || descendantOverflow
 			} else if (maxLines === 0) {
 				// Wrapped text: overflow when height or width is constrained
 				isOverflowing =
 					element.scrollHeight > element.clientHeight ||
-					element.scrollWidth > element.clientWidth
+					element.scrollWidth > element.clientWidth ||
+					descendantOverflow
 			} else {
 				// Single-line: compare scrollWidth and clientWidth
-				isOverflowing = element.scrollWidth > element.clientWidth
+				isOverflowing = element.scrollWidth > element.clientWidth || descendantOverflow
 			}
 
 			setTooltipTextContent((previousContent) =>
