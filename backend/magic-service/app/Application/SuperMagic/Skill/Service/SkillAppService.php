@@ -39,6 +39,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Domain\SuperMagic\Skill\Event\SkillImportedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
@@ -604,6 +605,15 @@ class SkillAppService extends AbstractSkillAppService
             Db::rollBack();
             throw $throwable;
         }
+
+        $market = $this->skillMarketDomainService->findStoreSkillBySkillCode($code);
+        if ($market !== null && $market->getId() !== null) {
+            AsyncEventUtil::dispatch(new SkillMarketOfflineEvent(
+                (string) $market->getId(),
+                $market->getOrganizationCode(),
+                $authorization->getId(),
+            ));
+        }
     }
 
     /**
@@ -798,11 +808,23 @@ class SkillAppService extends AbstractSkillAppService
         try {
             $publishResult = $this->executePublishSkill($dataIsolation, $skillEntity, $code, $requestDTO);
             Db::commit();
-            return $publishResult;
         } catch (Throwable $throwable) {
             Db::rollBack();
             throw $throwable;
         }
+
+        if ($publishResult->version->getPublishStatus()->isPublished()) {
+            $market = $this->skillMarketDomainService->findStoreSkillBySkillCode($code);
+            if ($market !== null && $market->getId() !== null) {
+                AsyncEventUtil::dispatch(new SkillMarketOfflineEvent(
+                    (string) $market->getId(),
+                    $market->getOrganizationCode(),
+                    $dataIsolation->getCurrentUserId(),
+                ));
+            }
+        }
+
+        return $publishResult;
     }
 
     /**
@@ -930,6 +952,15 @@ class SkillAppService extends AbstractSkillAppService
 
         // 调用领域服务处理业务逻辑
         $this->skillVersionDomainService->offlineSkill($dataIsolation, $code);
+
+        $market = $this->skillMarketDomainService->findStoreSkillBySkillCode($code);
+        if ($market !== null && $market->getId() !== null) {
+            AsyncEventUtil::dispatch(new SkillMarketOfflineEvent(
+                (string) $market->getId(),
+                $market->getOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            ));
+        }
     }
 
     /**

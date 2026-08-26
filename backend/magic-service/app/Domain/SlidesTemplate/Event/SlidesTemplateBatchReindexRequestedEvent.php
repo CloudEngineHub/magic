@@ -16,6 +16,7 @@ final readonly class SlidesTemplateBatchReindexRequestedEvent
         public array $slidesTemplateIds,
         public string $organizationCode,
         public string $operatorId,
+        public bool $forceReEmbedding = false,
     ) {
     }
 }

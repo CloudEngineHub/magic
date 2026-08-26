@@ -12,6 +12,7 @@ use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\Application\SuperMagic\Skill\Service\AdminSkillAppService;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
+use App\Interfaces\Admin\SuperMagic\Skill\DTO\Request\ReindexSkillMarketsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillMarketsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestAdminDTO;
@@ -52,6 +53,15 @@ class AdminSkillApi extends AbstractApi
         $requestDTO = QuerySkillMarketsRequestAdminDTO::fromRequest($this->request);
 
         return $this->adminSkillAppService->queryMarkets($requestContext, $requestDTO)->toArray();
+    }
+
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SKILL_MARKET, MagicOperationEnum::EDIT)]
+    public function reindexMarketVectors(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $requestDTO = ReindexSkillMarketsRequestDTO::fromRequest($this->request);
+
+        return $this->adminSkillAppService->reindexMarketVectors($requestContext, $requestDTO);
     }
 
     /**

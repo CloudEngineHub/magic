@@ -16,12 +16,24 @@ use Hyperf\Qdrant\Struct\Points\VectorStruct;
 use Hyperf\Qdrant\Struct\Points\WithPayload;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use ReflectionMethod;
 
 /**
  * @internal
  */
 final class OdinQdrantVectorStoreTest extends TestCase
 {
+    public function testStructuredFilterKeepsBooleanPayloadConditions(): void
+    {
+        $store = (new ReflectionClass(OdinQdrantVectorStore::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod($store, 'buildConditions');
+        $method->setAccessible(true);
+
+        self::assertCount(1, $method->invoke($store, [
+            ['key' => 'is_hidden', 'value' => false],
+        ]));
+    }
+
     public function testSearchPassesScoreThresholdToQdrantAndPreservesResultOrder(): void
     {
         $qdrantPoints = $this->createMock(Points::class);

@@ -48,7 +48,7 @@ final class SlidesTemplateVectorIndexDomainService
         $this->logger = $loggerFactory?->get('vector-index-sync');
     }
 
-    /** Cache the Qdrant collection probe briefly so an outage does not delay every search request. */
+    /** Cache the collection probe briefly to avoid repeated checks during outages. */
     public function isAvailable(): bool
     {
         $now = time();
@@ -70,16 +70,13 @@ final class SlidesTemplateVectorIndexDomainService
         return $available;
     }
 
-    /** Synchronize one template using the latest MySQL state and the smallest required Qdrant operation. */
+    /** Read the latest template state and apply the smallest required index update. */
     public function sync(
         SlidesTemplateDataIsolation $dataIsolation,
         string $resourceId,
         string $operatorId,
+        bool $forceReEmbedding = false,
     ): void {
-        if (! $this->isVectorSearchEnabled()) {
-            return;
-        }
-
         $template = $this->slidesTemplateRepository->findById($dataIsolation, $resourceId);
         if ($template === null || ! $template->getStatus()->isEnabled()) {
             $this->logger->info('Slides template vector sync skipped and stale point removed', [
@@ -101,6 +98,18 @@ final class SlidesTemplateVectorIndexDomainService
                 'operator_id' => $operatorId,
                 'owner_type' => $template->getOwnerType()->value,
             ]);
+            $this->removePoint($resourceId);
+            return;
+        }
+
+        if (! $this->isVectorSearchEnabled()) {
+            $this->logger->info('Slides template vector sync skipped because vector search is disabled', [
+                'resource_type' => 'slides_template',
+                'resource_id' => $resourceId,
+                'organization_code' => $template->getOrganizationCode(),
+                'operator_id' => $operatorId,
+            ]);
+            $this->removePoint($resourceId);
             return;
         }
 
@@ -124,26 +133,29 @@ final class SlidesTemplateVectorIndexDomainService
         $collectionName = $this->collectionName();
         $existingPoint = $this->vectorStore->getPoint($collectionName, (string) $template->getId());
         if ($existingPoint !== null) {
-            // Only search text changes require a paid embedding call; metadata changes reuse the stored vector.
-            if (($existingPoint->payload['search_text'] ?? null) !== $searchText) {
-                $this->logger->info('Slides template vector re-embedding', ['resource_id' => $resourceId]);
+            // Re-embed only when search text changes or a model migration forces it.
+            if ($forceReEmbedding || ($existingPoint->payload['search_text'] ?? null) !== $searchText) {
+                $this->logger->info('Slides template vector re-embedding', [
+                    'resource_id' => $resourceId,
+                    'forced' => $forceReEmbedding,
+                ]);
                 $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
                 $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
                 return;
             }
 
-            // Metadata writes are cheap and keep Qdrant synchronized with the latest MySQL state.
+            // Keep the existing vector and refresh payload metadata when text is unchanged.
             $this->vectorStore->updatePayload($collectionName, (string) $template->getId(), $payload);
             return;
         }
 
-        // A missing point may mean either a new template or an uncreated collection.
+        // A missing point may indicate a new template or an uncreated collection.
         $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
         if ($this->vectorStore->getCollection($collectionName) === null) {
             try {
                 $this->vectorStore->createCollection($collectionName, count($embedding));
             } catch (ClientException $exception) {
-                // Another consumer may have created the collection between the probe and create.
+                // Another consumer may create the collection between the probe and create call.
                 if (! $this->isCollectionAlreadyExists($exception)) {
                     throw $exception;
                 }
@@ -153,7 +165,7 @@ final class SlidesTemplateVectorIndexDomainService
         $this->logger->info('Slides template vector stored', ['resource_id' => $resourceId]);
     }
 
-    /** Search Qdrant with all public filters applied before returning IDs. */
+    /** Retrieve Qdrant candidates, then apply authoritative MySQL visibility checks. */
     public function search(
         SlidesTemplateDataIsolation $dataIsolation,
         SlidesTemplateQuery $query,
@@ -163,7 +175,7 @@ final class SlidesTemplateVectorIndexDomainService
             return [];
         }
 
-        // Normalize equivalent user input before embedding so cache keys are reused.
+        // Normalize equivalent input so whitespace and case variants share one cache entry.
         $keyword = $this->normalizeSearchKeyword($query->getKeyword());
         if ($keyword === '') {
             return [];
@@ -185,33 +197,66 @@ final class SlidesTemplateVectorIndexDomainService
             return [];
         }
 
-        $points = $this->vectorStore->searchPoints(
-            $this->collectionName(),
-            $embedding,
-            $page->getPageNum(),
-            (float) config('vector_index.resources.slides_template.score_threshold', 0.2),
-            $this->buildFilter($dataIsolation, $query),
-            $page->getSliceStart(),
-        );
+        $pageSize = $page->getPageNum();
+        $matchedOffset = $page->getSliceStart();
+        $candidateOffset = 0;
+        $matchedCount = 0;
+        $results = [];
+        $seenIds = [];
+        $filter = $this->buildFilter($dataIsolation, $query);
+        $scoreThreshold = (float) config('vector_index.resources.slides_template.score_threshold', 0.2);
 
-        $ids = array_values(array_map(static fn ($point): string => (string) $point->id, $points));
-        if ($ids === []) {
-            return [];
-        }
+        // Qdrant paginates candidates; scan until the requested page is filled after MySQL filtering.
+        do {
+            $points = $this->vectorStore->searchPoints(
+                $this->collectionName(),
+                $embedding,
+                $pageSize,
+                $scoreThreshold,
+                $filter,
+                $candidateOffset,
+            );
+            if ($points === []) {
+                break;
+            }
+            $candidateOffset += count($points);
 
-        // Qdrant only provides ranked candidates; MySQL re-applies authoritative
-        // organization isolation and enabled status before returning entities.
-        $templates = $this->slidesTemplateRepository->findVisibleByIds($dataIsolation, $ids);
-        $templatesById = [];
-        foreach ($templates as $template) {
-            $templatesById[(string) $template->getId()] = $template;
-        }
+            $ids = [];
+            foreach ($points as $point) {
+                $id = (string) $point->id;
+                if (! isset($seenIds[$id])) {
+                    $seenIds[$id] = true;
+                    $ids[] = $id;
+                }
+            }
+            if ($ids === []) {
+                continue;
+            }
 
-        // Repository lookup may return rows in database order; restore Qdrant similarity order here.
-        return array_values(array_filter(array_map(
-            static fn (string $id): ?SlidesTemplateEntity => $templatesById[$id] ?? null,
-            $ids,
-        )));
+            // Qdrant ranks candidates; MySQL confirms organization scope and enabled status.
+            $templates = $this->slidesTemplateRepository->findVisibleByIds($dataIsolation, $ids);
+            $templatesById = [];
+            foreach ($templates as $template) {
+                $templatesById[(string) $template->getId()] = $template;
+            }
+
+            // Restore Qdrant similarity order after the repository lookup.
+            foreach ($ids as $id) {
+                $template = $templatesById[$id] ?? null;
+                if (! $template instanceof SlidesTemplateEntity) {
+                    continue;
+                }
+                if ($matchedCount++ < $matchedOffset) {
+                    continue;
+                }
+                $results[] = $template;
+                if (count($results) >= $pageSize) {
+                    break 2;
+                }
+            }
+        } while (count($points) === $pageSize);
+
+        return $results;
     }
 
     /** Return whether vector indexing is enabled for SlidesTemplate. */
@@ -220,7 +265,7 @@ final class SlidesTemplateVectorIndexDomainService
         return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
     }
 
-    /** Return whether Qdrant rejected creation because another consumer won the race. */
+    /** Check whether collection creation lost a race to another consumer. */
     private function isCollectionAlreadyExists(ClientException $exception): bool
     {
         $response = $exception->getResponse();
@@ -231,7 +276,7 @@ final class SlidesTemplateVectorIndexDomainService
         return str_contains(strtolower((string) $response->getBody()), 'already exists');
     }
 
-    /** Remove the point only when the configured collection already exists. */
+    /** Remove the point when the configured collection exists. */
     private function removePoint(string $resourceId): void
     {
         $collectionName = $this->collectionName();
@@ -240,7 +285,7 @@ final class SlidesTemplateVectorIndexDomainService
         }
     }
 
-    /** Generate a vector only when the point is missing or search text changed. */
+    /** Generate a vector for a new point or changed search text. */
     private function generateEmbedding(
         SlidesTemplateDataIsolation $dataIsolation,
         string $searchText,
@@ -283,7 +328,7 @@ final class SlidesTemplateVectorIndexDomainService
         ];
     }
 
-    /** Convert all public query conditions into Qdrant-side strict filters. */
+    /** Convert public query conditions into Qdrant filters. */
     private function buildFilter(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query): array
     {
         $must = [];
@@ -318,21 +363,22 @@ final class SlidesTemplateVectorIndexDomainService
             $must = [...$must, ...$this->currentUserConditions($dataIsolation)];
         } else {
             return [
-                'must' => $must,
-                'should' => [
-                    ['must' => [
-                        ['key' => 'organization_code', 'any' => $dataIsolation->getOfficialOrganizationCodes()],
-                        ['key' => 'status', 'value' => SlidesTemplateStatus::Enabled->value],
-                    ]],
-                    ['must' => $this->currentUserConditions($dataIsolation)],
-                ],
+                'must' => [...$must, [
+                    'should' => [
+                        ['must' => [
+                            ['key' => 'organization_code', 'any' => $dataIsolation->getOfficialOrganizationCodes()],
+                            ['key' => 'status', 'value' => SlidesTemplateStatus::Enabled->value],
+                        ]],
+                        ['must' => $this->currentUserConditions($dataIsolation)],
+                    ],
+                ]],
             ];
         }
 
         return ['must' => $must];
     }
 
-    /** Build the organization and ownership conditions for personal templates. */
+    /** Build organization and ownership conditions for personal templates. */
     private function currentUserConditions(SlidesTemplateDataIsolation $dataIsolation): array
     {
         return [
@@ -348,7 +394,7 @@ final class SlidesTemplateVectorIndexDomainService
         return (string) config('vector_index.resources.slides_template.collection', 'slides_templates');
     }
 
-    /** Normalize search text so whitespace and letter-case variants share one embedding cache entry. */
+    /** Normalize search text so equivalent inputs share one embedding cache entry. */
     private function normalizeSearchKeyword(string $keyword): string
     {
         $keyword = trim($keyword);
@@ -357,7 +403,7 @@ final class SlidesTemplateVectorIndexDomainService
         return mb_strtolower($keyword, 'UTF-8');
     }
 
-    /** Generate an embedding through the shared knowledge-base embedding pipeline. */
+    /** Generate embeddings through the shared knowledge-base pipeline. */
     private function embedText(
         SlidesTemplateDataIsolation $dataIsolation,
         string $text,

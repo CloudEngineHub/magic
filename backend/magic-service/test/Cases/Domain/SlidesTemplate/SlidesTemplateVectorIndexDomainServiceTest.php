@@ -7,6 +7,11 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Domain\SlidesTemplate;
 
+use App\Application\Provider\Service\AiAbilityConfigAppService;
+use App\Domain\Provider\Entity\AiAbilityEntity;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Domain\Provider\Entity\ValueObject\Status;
+use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
@@ -23,9 +28,12 @@ use App\Infrastructure\Core\Embeddings\VectorStores\PointInfo;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Context\ApplicationContext;
+use Hyperf\Context\Context;
 use Hyperf\Contract\ConfigInterface;
+use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\Log\NullLogger;
 use ReflectionClass;
 use RuntimeException;
 
@@ -74,6 +82,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->loggerFactory(),
         );
 
         /** @var SlidesTemplateDataIsolation $dataIsolation */
@@ -130,9 +139,42 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->loggerFactory(),
         );
 
         $domainService->sync($this->dataIsolation(), '1001', 'USER001');
+    }
+
+    public function testForcedReembeddingRegeneratesUnchangedSearchText(): void
+    {
+        $template = $this->template()->setLabel(['zh_CN' => 'Demo template']);
+        $templateRepository = $this->createMock(SlidesTemplateRepositoryInterface::class);
+        $templateRepository->method('findById')->willReturn($template);
+        $tagRelationRepository = $this->createMock(SlidesTemplateTagRelationRepositoryInterface::class);
+        $tagRelationRepository->method('findTagsByTemplateIds')->willReturn([]);
+
+        $embeddingGenerator = $this->createMock(EmbeddingGeneratorInterface::class);
+        $embeddingGenerator->expects(self::once())->method('embedText')->willReturn([0.3, 0.2, 0.1]);
+
+        $vectorStore = $this->createMock(VectorStoreInterface::class);
+        $vectorStore->method('getPoint')->willReturn(new PointInfo(
+            '1001',
+            '',
+            0,
+            ['search_text' => 'ppt-demo custom'],
+        ));
+        $vectorStore->expects(self::once())->method('storePoint');
+        $vectorStore->expects(self::never())->method('updatePayload');
+
+        $domainService = new SlidesTemplateVectorIndexDomainService(
+            $templateRepository,
+            $tagRelationRepository,
+            $vectorStore,
+            $embeddingGenerator,
+            $this->loggerFactory(),
+        );
+
+        $domainService->sync($this->dataIsolation(), '1001', 'USER001', true);
     }
 
     public function testSearchTextChangeRegeneratesEmbedding(): void
@@ -178,30 +220,34 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->loggerFactory(),
         );
 
         $domainService->sync($this->dataIsolation(), '1001', 'USER001');
     }
 
-    public function testDisabledVectorSearchSkipsSynchronization(): void
+    public function testDisabledVectorSearchStillRemovesStalePoint(): void
     {
         $this->setContainer([], ['vector_index.enabled' => false]);
+        $template = $this->template()->setStatus(SlidesTemplateStatus::Disabled);
         $templateRepository = $this->createMock(SlidesTemplateRepositoryInterface::class);
-        $templateRepository->expects(self::never())->method('findById');
+        $templateRepository->expects(self::once())->method('findById')->willReturn($template);
         $tagRelationRepository = $this->createMock(SlidesTemplateTagRelationRepositoryInterface::class);
 
         $embeddingGenerator = $this->createMock(EmbeddingGeneratorInterface::class);
         $embeddingGenerator->expects(self::never())->method('embedText');
 
         $vectorStore = $this->createMock(VectorStoreInterface::class);
-        $vectorStore->expects(self::never())->method('storePoint');
-        $vectorStore->expects(self::never())->method('removePoint');
+        $vectorStore->expects(self::once())->method('getCollection')->with('slides_templates')
+            ->willReturn(new CollectionInfo('slides_templates', 1, 0, 3));
+        $vectorStore->expects(self::once())->method('removePoint')->with('slides_templates', '1001');
 
         $domainService = new SlidesTemplateVectorIndexDomainService(
             $templateRepository,
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->loggerFactory(),
         );
 
         $dataIsolation = (new ReflectionClass(SlidesTemplateDataIsolation::class))->newInstanceWithoutConstructor();
@@ -338,6 +384,51 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
         self::assertSame([2, 1], array_map(static fn (SlidesTemplateEntity $template): ?int => $template->getId(), $result));
     }
 
+    public function testSearchScansAdditionalQdrantCandidatesAfterDatabaseFiltering(): void
+    {
+        $query = new SlidesTemplateQuery();
+        $query->setKeyword('business report');
+        $template1 = $this->template()->setId(1)->setCode('PPT-1');
+        $template2 = $this->template()->setId(2)->setCode('PPT-2');
+
+        $templateRepository = $this->createMock(SlidesTemplateRepositoryInterface::class);
+        $repositoryCalls = 0;
+        $templateRepository->expects(self::exactly(2))->method('findVisibleByIds')
+            ->willReturnCallback(function (SlidesTemplateDataIsolation $dataIsolation, array $ids) use (&$repositoryCalls, $template1, $template2): array {
+                ++$repositoryCalls;
+                if ($repositoryCalls === 1) {
+                    self::assertSame(['stale', '1'], $ids);
+                    return [$template1];
+                }
+                self::assertSame(['2'], $ids);
+                return [$template2];
+            });
+        $this->setEmbeddingResult([0.1, 0.2, 0.3]);
+
+        $vectorStore = $this->createMock(VectorStoreInterface::class);
+        $vectorStore->expects(self::exactly(2))->method('searchPoints')
+            ->willReturnCallback(function (string $collection, array $embedding, int $limit, float $score, array $filter, int $offset): array {
+                self::assertSame('slides_templates', $collection);
+                self::assertSame([0.1, 0.2, 0.3], $embedding);
+                self::assertSame(2, $limit);
+                self::assertSame(0.2, $score);
+                self::assertIsArray($filter);
+                return match ($offset) {
+                    0 => [new PointInfo('stale', '', 0.9), new PointInfo('1', '', 0.8)],
+                    2 => [new PointInfo('2', '', 0.7)],
+                    default => [],
+                };
+            });
+
+        $result = $this->domainService($templateRepository, $vectorStore)->search(
+            $this->dataIsolation(),
+            $query,
+            new Page(1, 2),
+        );
+
+        self::assertSame([1, 2], array_map(static fn (SlidesTemplateEntity $template): ?int => $template->getId(), $result));
+    }
+
     public function testSearchUsesDatabaseVisibilityQueryForVectorCandidates(): void
     {
         $query = new SlidesTemplateQuery();
@@ -455,6 +546,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $this->createMock(SlidesTemplateTagRelationRepositoryInterface::class),
             $vectorStore,
             $this->embeddingGenerator,
+            $this->loggerFactory(),
         );
     }
 
@@ -486,6 +578,20 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             'vector_index.enabled' => true,
             'vector_index.resources.slides_template.enabled' => true,
         ];
+        Context::set(
+            'embedding_generator:ability_model:knowledge_base_embedding_model',
+            ['model_id' => ($config['vector_index.enabled'] ?? true) ? 'test-model' : null],
+        );
+        if (! isset($services[AiAbilityConfigAppService::class])) {
+            $ability = new AiAbilityEntity();
+            $ability->setCode(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+            $ability->setOrganizationCode('OFFICIAL001');
+            $ability->setStatus(($config['vector_index.enabled'] ?? true) ? Status::Enabled : Status::Disabled);
+            $ability->setConfig(['model_id' => 'test-model']);
+            $abilityDomainService = $this->createMock(AiAbilityDomainService::class);
+            $abilityDomainService->method('getByCode')->willReturn($ability);
+            $services[AiAbilityConfigAppService::class] = new AiAbilityConfigAppService($abilityDomainService);
+        }
         ApplicationContext::setContainer(new class($services, $config) implements ContainerInterface {
             public function __construct(
                 private readonly array $services,
@@ -537,5 +643,12 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
         $dataIsolation->setCurrentOrganizationCode('ORG001')->setCurrentUserId('USER001');
         $dataIsolation->setOfficialOrganizationCodes(['OFFICIAL001']);
         return $dataIsolation;
+    }
+
+    private function loggerFactory(): LoggerFactory
+    {
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new NullLogger());
+        return $loggerFactory;
     }
 }

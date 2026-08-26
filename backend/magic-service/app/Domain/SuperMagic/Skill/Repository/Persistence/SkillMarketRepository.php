@@ -380,6 +380,20 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
         return $this->toEntity($model->toArray());
     }
 
+    public function findByIdForVectorIndex(int $id): ?SkillMarketEntity
+    {
+        $marketTable = $this->skillMarketModel->getTable();
+        $versionTable = $this->resolveSkillVersionTable();
+        $model = $this->skillMarketModel::query()
+            ->leftJoin($versionTable . ' as skill_versions', $marketTable . '.skill_version_id', '=', 'skill_versions.id')
+            ->select($marketTable . '.*', 'skill_versions.package_name')
+            ->where($marketTable . '.id', $id)
+            ->whereNull($marketTable . '.deleted_at')
+            ->first();
+
+        return $model === null ? null : $this->toEntity($model->toArray());
+    }
+
     /**
      * 根据 ID 查找市场技能（仅查询已发布的）.
      */
@@ -415,6 +429,58 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
         }
 
         return $result;
+    }
+
+    public function findVisibleByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $models = $this->skillMarketModel::query()
+            ->whereIn('id', array_values(array_unique(array_map('intval', $ids))))
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->whereNull('deleted_at')
+            ->get();
+
+        $result = [];
+        foreach ($models as $model) {
+            $entity = $this->toEntity($model->toArray());
+            $result[(int) $entity->getId()] = $entity;
+        }
+
+        return $result;
+    }
+
+    public function findVectorIndexIds(
+        array $categoryIds = [],
+        array $codes = [],
+        ?string $publisherType = null,
+        string $afterId = '0',
+        int $limit = 100,
+    ): array {
+        $builder = $this->skillMarketModel::query()
+            ->where('id', '>', max(0, (int) $afterId))
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->whereNull('deleted_at');
+
+        $codes = array_values(array_unique(array_filter($codes, static fn (string $code): bool => $code !== '')));
+        if ($codes !== []) {
+            $builder->whereIn('skill_code', $codes);
+        }
+
+        if ($publisherType !== null && trim($publisherType) !== '') {
+            $builder->where('publisher_type', trim($publisherType));
+        }
+
+        $this->applyCategoryFilter($builder, array_values(array_unique(array_map('intval', $categoryIds))), 'magic_skill_market.id');
+
+        return array_map(
+            static fn ($id): int => (int) $id,
+            $builder->orderBy('id')->limit(max(1, min($limit, 100)))->pluck('id')->all()
+        );
     }
 
     /**

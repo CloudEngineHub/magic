@@ -19,6 +19,9 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillVersionAdminQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketBatchReindexRequestedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketUpdatedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
@@ -27,6 +30,7 @@ use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\Admin\SuperMagic\Skill\DTO\Request\ReindexSkillMarketsRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillMarketsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ReviewOrganizationSkillVersionRequestDTO;
@@ -34,6 +38,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Request\ReviewSkillVersionRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\QuerySkillMarketsResponseAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\QuerySkillVersionsResponseAdminDTO;
+use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
 use Throwable;
 
@@ -115,6 +120,61 @@ class AdminSkillAppService extends AbstractSkillAppService
             $result['total'],
             $categoryIdsMap
         );
+    }
+
+    /** Queue one filtered page of market IDs for asynchronous vector reindexing. */
+    public function reindexMarketVectors(
+        RequestContext $requestContext,
+        ReindexSkillMarketsRequestDTO $requestDTO,
+    ): array {
+        $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
+
+        return $this->queueMarketVectorReindex(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+            $requestDTO->getCategoryIds(),
+            $requestDTO->getCodes(),
+            $requestDTO->getPublisherType(),
+            $requestDTO->getAfterId(),
+            $requestDTO->getBatchSize(),
+        );
+    }
+
+    /** Queue one filtered page without requiring an HTTP request context. */
+    public function queueMarketVectorReindex(
+        string $organizationCode,
+        string $operatorId,
+        array $categoryIds = [],
+        array $codes = [],
+        ?string $publisherType = null,
+        string $afterId = '0',
+        int $batchSize = 100,
+        bool $forceReEmbedding = false,
+    ): array {
+        $batchSize = min(100, max(1, $batchSize));
+        $ids = $this->skillMarketDomainService->findVectorIndexIds(
+            $categoryIds,
+            $codes,
+            $publisherType,
+            $afterId,
+            $batchSize,
+        );
+
+        if ($ids !== []) {
+            AsyncEventUtil::dispatch(new SkillMarketBatchReindexRequestedEvent(
+                array_values(array_map('strval', $ids)),
+                $organizationCode,
+                $operatorId,
+                $forceReEmbedding,
+            ));
+        }
+
+        return [
+            'task_id' => bin2hex(random_bytes(12)),
+            'queued' => count($ids),
+            'after_id' => $ids === [] ? $afterId : (string) end($ids),
+            'has_more' => count($ids) === $batchSize,
+        ];
     }
 
     /**
@@ -220,6 +280,15 @@ class AdminSkillAppService extends AbstractSkillAppService
         if (! $this->skillMarketDomainService->updateSortOrderById($id, $sortOrder)) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
         }
+
+        $market = $this->skillMarketDomainService->findByIds([$id])[$id] ?? null;
+        if ($market !== null) {
+            AsyncEventUtil::dispatch(new SkillMarketUpdatedEvent(
+                (string) $id,
+                $market->getOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            ));
+        }
     }
 
     /**
@@ -238,6 +307,11 @@ class AdminSkillAppService extends AbstractSkillAppService
         $categoryIds = $payload['category_ids'] ?? null;
         unset($payload['category_ids']);
 
+        $market = $this->skillMarketDomainService->findByIds([$id])[$id] ?? null;
+        if ($market === null) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+        }
+
         Db::beginTransaction();
         try {
             if ($payload !== [] && ! $this->skillMarketDomainService->updateInfoById($id, $payload)) {
@@ -247,10 +321,6 @@ class AdminSkillAppService extends AbstractSkillAppService
                 ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
             }
             if ($categoryIds !== null) {
-                $market = $this->skillMarketDomainService->findByIds([$id])[$id] ?? null;
-                if ($market === null) {
-                    ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
-                }
                 $this->skillCategoryRelationDomainService->replaceMarketCategories($market->getOrganizationCode(), $id, $categoryIds);
             }
             Db::commit();
@@ -258,6 +328,12 @@ class AdminSkillAppService extends AbstractSkillAppService
             Db::rollBack();
             throw $throwable;
         }
+
+        AsyncEventUtil::dispatch(new SkillMarketUpdatedEvent(
+            (string) $id,
+            $market->getOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        ));
     }
 
     /** @param int[] $categoryIds */
@@ -277,6 +353,12 @@ class AdminSkillAppService extends AbstractSkillAppService
             Db::rollBack();
             throw $throwable;
         }
+
+        AsyncEventUtil::dispatch(new SkillMarketUpdatedEvent(
+            (string) $id,
+            $market->getOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        ));
     }
 
     /**
@@ -319,6 +401,12 @@ class AdminSkillAppService extends AbstractSkillAppService
             Db::rollBack();
             throw $throwable;
         }
+
+        AsyncEventUtil::dispatch(new SkillMarketOfflineEvent(
+            (string) $id,
+            $marketSkill->getOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        ));
     }
 
     /**
@@ -346,6 +434,18 @@ class AdminSkillAppService extends AbstractSkillAppService
         } catch (Throwable $throwable) {
             Db::rollBack();
             throw $throwable;
+        }
+
+        if ($requestDTO->getAction() === ReviewStatus::APPROVED->value) {
+            $version = $this->skillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($id);
+            $market = $version === null ? null : $this->skillMarketDomainService->findStoreSkillBySkillCode($version->getCode());
+            if ($market !== null && $market->getId() !== null) {
+                AsyncEventUtil::dispatch(new SkillMarketUpdatedEvent(
+                    (string) $market->getId(),
+                    $market->getOrganizationCode(),
+                    $dataIsolation->getCurrentUserId(),
+                ));
+            }
         }
     }
 

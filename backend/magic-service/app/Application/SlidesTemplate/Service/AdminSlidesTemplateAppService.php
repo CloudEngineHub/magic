@@ -385,6 +385,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
                         $batchIds,
                         $organizationCode,
                         $dataIsolation->getCurrentUserId(),
+                        $force,
                     ));
                 }
 

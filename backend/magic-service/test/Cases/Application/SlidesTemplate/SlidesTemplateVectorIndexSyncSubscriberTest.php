@@ -27,6 +27,7 @@ use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use ReflectionClass;
 use RuntimeException;
 
@@ -77,6 +78,7 @@ final class SlidesTemplateVectorIndexSyncSubscriberTest extends TestCase
                 $tagRelationRepository,
                 $vectorStore,
                 $embeddingGenerator,
+                $this->domainLoggerFactory(),
             ),
             $loggerFactory,
         );
@@ -116,6 +118,7 @@ final class SlidesTemplateVectorIndexSyncSubscriberTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->domainLoggerFactory(),
         );
         $dispatcher = $this->createMock(EventDispatcherInterface::class);
         $dispatcher->expects(self::once())
@@ -206,5 +209,12 @@ final class SlidesTemplateVectorIndexSyncSubscriberTest extends TestCase
                 $this->services[$name] = $definition;
             }
         });
+    }
+
+    private function domainLoggerFactory(): LoggerFactory
+    {
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new NullLogger());
+        return $loggerFactory;
     }
 }

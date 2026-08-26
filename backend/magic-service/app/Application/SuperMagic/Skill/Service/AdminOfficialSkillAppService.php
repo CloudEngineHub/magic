@@ -18,6 +18,8 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketCreatedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketUpdatedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
@@ -32,6 +34,7 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ImportOfficialSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OfficialSkillImportPreviewDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OfficialSkillImportResultDTO;
+use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
 use Throwable;
 
@@ -134,6 +137,17 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             }
         } finally {
             $this->releaseImportLock($lockKey, $lockOwner);
+        }
+
+        if ($result->getMarketId() !== null) {
+            $eventClass = $result->getAction() === 'created'
+                ? SkillMarketCreatedEvent::class
+                : SkillMarketUpdatedEvent::class;
+            AsyncEventUtil::dispatch(new $eventClass(
+                (string) $result->getMarketId(),
+                $organizationCode,
+                $authorization->getId(),
+            ));
         }
 
         // 事务提交后再删除 Token，避免失败重试时丢失导入信息。

@@ -285,7 +285,11 @@ class OdinQdrantVectorStore implements VectorStoreInterface
             if (! is_string($key) || $key === '') {
                 continue;
             }
-            if (array_key_exists('value', $definition) && (is_string($definition['value']) || is_numeric($definition['value']))) {
+            if (array_key_exists('value', $definition) && (
+                is_string($definition['value'])
+                || is_numeric($definition['value'])
+                || is_bool($definition['value'])
+            )) {
                 $conditions[] = new FieldCondition(key: $key, match: new MatchValue($definition['value']));
                 continue;
             }

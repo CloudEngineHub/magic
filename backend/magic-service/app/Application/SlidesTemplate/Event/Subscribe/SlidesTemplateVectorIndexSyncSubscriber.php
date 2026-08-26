@@ -78,6 +78,7 @@ final readonly class SlidesTemplateVectorIndexSyncSubscriber implements Listener
         string $resourceId,
         string $organizationCode,
         string $operatorId,
+        bool $forceReEmbedding = false,
     ): void {
         $dataIsolation = new SlidesTemplateDataIsolation();
         $dataIsolation->setCurrentOrganizationCode($organizationCode);
@@ -91,11 +92,12 @@ final readonly class SlidesTemplateVectorIndexSyncSubscriber implements Listener
             'resource_id' => $resourceId,
             'organization_code' => $organizationCode,
             'operator_id' => $operatorId,
+            'force_re_embedding' => $forceReEmbedding,
         ];
 
         try {
             $this->logger->info('Vector index sync started', $context);
-            $this->domainService->sync($dataIsolation, $resourceId, $operatorId);
+            $this->domainService->sync($dataIsolation, $resourceId, $operatorId, $forceReEmbedding);
             $this->logger->info('Vector index sync completed', $context);
         } catch (Throwable $throwable) {
             $this->logger->error('Vector index sync failed', $context + [
@@ -114,6 +116,7 @@ final readonly class SlidesTemplateVectorIndexSyncSubscriber implements Listener
                 $event->slidesTemplateIds[0],
                 $event->organizationCode,
                 $event->operatorId,
+                $event->forceReEmbedding,
             );
             return;
         }
@@ -125,6 +128,7 @@ final readonly class SlidesTemplateVectorIndexSyncSubscriber implements Listener
                     $slidesTemplateId,
                     $event->organizationCode,
                     $event->operatorId,
+                    $event->forceReEmbedding,
                 );
             } catch (Throwable) {
                 // Continue so one bad template does not cause successful items in the batch to retry.
@@ -138,6 +142,7 @@ final readonly class SlidesTemplateVectorIndexSyncSubscriber implements Listener
                 [$failedId],
                 $event->organizationCode,
                 $event->operatorId,
+                $event->forceReEmbedding,
             ));
         }
     }
