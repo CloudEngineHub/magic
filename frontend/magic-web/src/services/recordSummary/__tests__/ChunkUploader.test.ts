@@ -95,6 +95,7 @@ vi.mock("../UploadTokenManager", () => ({
 		}),
 		getDirectories: vi.fn(() => ({ asr_hidden_dir: { directory_id: "hidden-dir" } })),
 		getSandboxTaskId: vi.fn(() => "sandbox-task-1"),
+		getSandboxTopicId: vi.fn(() => "sandbox-topic-1"),
 		getHiddenDirectoryPath: vi.fn(() => "/hidden-dir"),
 		forceRefreshToken: vi.fn().mockResolvedValue(undefined),
 		getTokenInfo: vi.fn(),
@@ -236,7 +237,7 @@ describe("ChunkUploader", () => {
 			expect.objectContaining({
 				sessionId: "session-1",
 				projectId: "project-1",
-				topicId: "topic-1",
+				topicId: "sandbox-topic-1",
 				taskId: "sandbox-task-1",
 				fileName: "3.wav",
 				fileSize: 44,

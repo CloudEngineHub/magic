@@ -576,7 +576,12 @@ export class ChunkUploader {
 		uploadUrl: string,
 		options: { requireBatchSave?: boolean } = {},
 	): Promise<void> {
-		const topicId = this.sessionTopicMap.get(chunk.sessionId) || ""
+		// Batch-save belongs to the sandbox task, so use the sandbox topic returned by upload-tokens.
+		// Keep the request topic as a fallback for older cached token responses.
+		const topicId =
+			this.tokenManager.getSandboxTopicId(chunk.sessionId) ||
+			this.sessionTopicMap.get(chunk.sessionId) ||
+			""
 		const projectId = this.sessionProjectMap.get(chunk.sessionId) || ""
 		const hiddenDirectory = this.tokenManager.getDirectories(chunk.sessionId)?.asr_hidden_dir
 		const sandboxTaskId = this.tokenManager.getSandboxTaskId(chunk.sessionId) || ""

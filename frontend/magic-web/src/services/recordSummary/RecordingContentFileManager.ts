@@ -678,11 +678,14 @@ export class RecordingContentFileManager {
 		}
 
 		const taskId = this.tokenManager.getSandboxTaskId(this.sessionId) || ""
+		// Batch-save content files under the sandbox topic returned by upload-tokens.
+		// Fall back to the requested topic for older token responses without that field.
+		const batchSaveTopicId = this.tokenManager.getSandboxTopicId(this.sessionId) || this.topicId
 
 		await this.batchSaveReporter.reportUploadedFile({
 			sessionId: this.sessionId,
 			projectId: this.projectId,
-			topicId: this.topicId,
+			topicId: batchSaveTopicId,
 			taskId,
 			parentId: file.parentId,
 			fileKey: uploadResult.fileKey,
