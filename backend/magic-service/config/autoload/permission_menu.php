@@ -93,7 +93,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
                 ['key' => 'agent_management', 'label' => '智能体管理', 'order' => 5],
-                ['key' => 'official_agent', 'label' => '官方员工', 'order' => 3],
+                ['key' => 'official_agent', 'label' => '官方员工', 'order' => 2],
             ],
             'tag' => '智能体增强',
         ],
@@ -101,7 +101,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
                 ['key' => 'agent_management', 'label' => '智能体管理', 'order' => 5],
-                ['key' => 'publish_review', 'label' => '发布审核', 'order' => 5],
+                ['key' => 'publish_review', 'label' => '发布审核', 'order' => 4],
                 ['key' => 'employee_review', 'label' => '员工审核', 'order' => 1],
             ],
             'tag' => '智能体增强',
@@ -110,7 +110,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
                 ['key' => 'agent_management', 'label' => '智能体管理', 'order' => 5],
-                ['key' => 'official_market', 'label' => '官方市场', 'order' => 4],
+                ['key' => 'official_market', 'label' => '官方市场', 'order' => 3],
                 ['key' => 'employee_market', 'label' => '员工市场', 'order' => 1],
             ],
             'tag' => '智能体增强',
@@ -119,7 +119,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
                 ['key' => 'agent_management', 'label' => '智能体管理', 'order' => 5],
-                ['key' => 'publish_review', 'label' => '发布审核', 'order' => 5],
+                ['key' => 'publish_review', 'label' => '发布审核', 'order' => 4],
                 ['key' => 'skill_review', 'label' => 'Skill 审核', 'order' => 2],
             ],
             'tag' => '智能体增强',
@@ -128,7 +128,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
                 ['key' => 'agent_management', 'label' => '智能体管理', 'order' => 5],
-                ['key' => 'official_market', 'label' => '官方市场', 'order' => 4],
+                ['key' => 'official_market', 'label' => '官方市场', 'order' => 3],
                 ['key' => 'skill_market', 'label' => 'Skill 市场', 'order' => 2],
             ],
             'tag' => '智能体增强',
@@ -193,7 +193,7 @@ return [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
                 ['key' => 'agent_management', 'label' => '智能体管理', 'order' => 5],
-                ['key' => 'slides_template', 'label' => 'PPT 模板', 'order' => 2],
+                ['key' => 'slides_template', 'label' => 'PPT 模板', 'order' => 5],
             ],
             'tag' => '智能体增强',
         ],
