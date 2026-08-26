@@ -730,8 +730,45 @@ class ProjectService {
 			nextProjectId,
 		})
 
-		// Call API and refresh list (no optimistic update to preserve sorting)
 		return this.getOrCreateRequest(requestKey, async () => {
+			const workspaceId = targetWorkspaceId || project.workspace_id
+			const hasOrdering = preProjectId !== undefined || nextProjectId !== undefined
+			const previousProjects = workspaceId
+				? projectStore.getProjectsByWorkspace(workspaceId)
+				: []
+
+			if (workspaceId && hasOrdering) {
+				const nextProjects = previousProjects.filter((item) => item.id !== project.id)
+				const insertIndex =
+					preProjectId !== undefined && preProjectId !== null
+						? Math.max(
+								0,
+								nextProjects.findIndex((item) => item.id === preProjectId) + 1,
+							)
+						: nextProjectId !== undefined && nextProjectId !== null
+							? Math.max(
+									0,
+									nextProjects.findIndex((item) => item.id === nextProjectId),
+								)
+							: nextProjects.length
+				nextProjects.splice(Math.min(insertIndex, nextProjects.length), 0, {
+					...project,
+					workspace_id: workspaceId,
+					is_pinned: isPin,
+				})
+				runInAction(() => {
+					projectStore.reorderProjectsInWorkspace(
+						workspaceId,
+						nextProjects.map((item) => item.id),
+					)
+					projectStore.updateProject({
+						...project,
+						workspace_id: workspaceId,
+						is_pinned: isPin,
+					})
+				})
+			}
+
 			try {
 				// Use appropriate API based on project type
 				if (isOtherCollaborationProject(project)) {
@@ -759,6 +796,11 @@ class ProjectService {
 					})
 				}
 			} catch (error) {
+				if (workspaceId && hasOrdering) {
+					runInAction(() => {
+						projectStore.setProjectsForWorkspace(workspaceId, previousProjects)
+					})
+				}
 				console.error("固定项目失败，失败原因：", error)
 				throw error
 			}

@@ -750,6 +750,11 @@ export function useCollapsedWorkspaceDnd({
 						preview.type === "project" ? preview.projectId : undefined,
 						preview.position || "after",
 					)
+					const pinState = pinAction
+						? pinAction === "pin"
+						: project.is_pinned
+							? true
+							: undefined
 					if (pinAction) {
 						const confirmed = await requestPinBoundaryConfirmation({
 							action: pinAction,
@@ -759,10 +764,10 @@ export function useCollapsedWorkspaceDnd({
 						})
 						if (!confirmed) return
 					}
-					if (pinAction) {
+					if (pinState !== undefined) {
 						await superMagicService.project.pinProject(
 							project,
-							pinAction === "pin",
+							pinState,
 							active.workspaceId,
 							preProjectId,
 							nextProjectId,
@@ -818,6 +823,11 @@ export function useCollapsedWorkspaceDnd({
 					preview.type === "project" ? preview.projectId : undefined,
 					preview.position || "after",
 				)
+				const pinState = pinAction
+					? pinAction === "pin"
+					: project.is_pinned
+						? true
+						: undefined
 				if (pinAction) {
 					const confirmed = await requestPinBoundaryConfirmation({
 						action: pinAction,
@@ -834,7 +844,7 @@ export function useCollapsedWorkspaceDnd({
 					targetWorkspaceName: targetWorkspace?.name,
 					preProjectId,
 					nextProjectId,
-					isPinned: pinAction ? pinAction === "pin" : undefined,
+					isPinned: pinState,
 				})
 			} catch (error) {
 				console.error("Failed to persist collapsed sidebar drag result:", error)
