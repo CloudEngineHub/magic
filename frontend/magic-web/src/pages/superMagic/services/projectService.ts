@@ -301,13 +301,19 @@ class ProjectService {
 					project_name: name,
 				})
 			})
-			const topicIdForOptimistic =
-				options?.topicId ??
-				(topicStore.selectedTopic?.project_id === id
-					? topicStore.selectedTopic.id
-					: undefined)
-			if (topicIdForOptimistic) {
-				topicStore.updateTopicName(topicIdForOptimistic, name)
+
+			// Only chat-workspace projects represent the same display name as their
+			// topic. Ordinary project renames must not mutate the topic optimistically;
+			// their API path only updates the project name.
+			if (shouldSyncChatConversationName(originalProject, getCachedChatWorkspaceId())) {
+				const topicIdForOptimistic =
+					options?.topicId ??
+					(topicStore.selectedTopic?.project_id === id
+						? topicStore.selectedTopic.id
+						: undefined)
+				if (topicIdForOptimistic) {
+					topicStore.updateTopicName(topicIdForOptimistic, name)
+				}
 			}
 		}
 
