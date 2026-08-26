@@ -1058,7 +1058,13 @@ class AsrMergeTaskManager(AsrServiceBase):
             return self._apply_state_updates(current, progress_updates=progress_updates)
 
         updated = await self._atomic_update_state(task_key, updater, "记录 finish 分片稳定状态失败")
-        progress = updated.progress
+        if not updated:
+            return False, False
+
+        latest_state = await self._read_task_state(task_key)
+        if not latest_state:
+            return False, False
+        progress = latest_state.progress
         stable_ready = complete and progress.finish_stable_count >= asr_time_config.FINISH_SHARD_STABLE_SCAN_COUNT
         if stable_ready:
             return True, False
