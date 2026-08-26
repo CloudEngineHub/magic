@@ -97,7 +97,6 @@ class ContentFieldsFactory:
                 return VideoEditContentFields(
                     video_sequence=cls._string_list(data, "videoSequence"),
                     audio_sequence=cls._string_list(data, "audioSequence"),
-                    output=cls._optional_object(data, "output"),
                 )
             except CanvasDomainError as error:
                 raise CanvasProtocolError(error.code, error.message) from error

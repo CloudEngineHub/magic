@@ -16,6 +16,8 @@ from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.production.contracts.composition_output import CompositionOutput
+from app.tools.canvas.production.contracts.video_composition_models import CompositionInputSpec
 
 
 @dataclass(frozen=True)
@@ -25,7 +27,7 @@ class _CompositionRetryRequest:
     item_ref: str
     element_id: str
     content_id: str
-    video_edit_element_id: str
+    input_spec: CompositionInputSpec
     result_name: str
     retry_count: int
     idempotency_key: str
@@ -69,15 +71,13 @@ class RetryContentService:
                 detail = CanvasApplicationOperations.get_content_detail(metadata, element.element_id, item.content_id)
                 original_parameters = detail.get("generationParameters", {})
                 is_composition = self._is_composition(detail, original_parameters)
-                composition_video_edit_element_id = self._composition_video_edit_element_id(detail, original_parameters)
-                if is_composition and not composition_video_edit_element_id:
-                    composition_video_edit_element_id = self._connected_video_edit_element_id(project, element.element_id)
+                composition_input_spec = self._composition_input_spec(detail)
                 if is_composition and self.video_composition_service is None:
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Composition retry is not configured.")
-                if is_composition and not composition_video_edit_element_id:
+                if is_composition and composition_input_spec is None:
                     raise CanvasDomainError(
                         "CONTENT_RETRY_NOT_ALLOWED",
-                        "Composition retry requires the original Video Edit Element.",
+                        "Composition retry requires the original composition input snapshot.",
                     )
                 override = item.generation_override.to_dict() if item.generation_override else None
                 parameters = CanvasApplicationOperations.merge_generation_override(element.element_type, original_parameters, override)
@@ -88,8 +88,19 @@ class RetryContentService:
                             "Composition retry must keep task=compose.",
                         )
                     parameters["task"] = "compose"
-                    parameters.setdefault("video_edit_element_id", composition_video_edit_element_id)
-                idempotency_key = ContentMetadataService.retry_idempotency_key(item.item_ref, element.element_id, content.content_id, parameters)
+                    parameters.pop("video_edit_element_id", None)
+                idempotency_parameters = parameters
+                if is_composition:
+                    idempotency_parameters = {
+                        **parameters,
+                        "__composition_input": self._composition_input_dict(composition_input_spec),
+                    }
+                idempotency_key = ContentMetadataService.retry_idempotency_key(
+                    item.item_ref,
+                    element.element_id,
+                    content.content_id,
+                    idempotency_parameters,
+                )
                 if detail.get("retryIdempotencyKey") == idempotency_key:
                     previous_result = detail.get("retryResult")
                     if isinstance(previous_result, dict):
@@ -167,7 +178,7 @@ class RetryContentService:
                         item_ref=item.item_ref,
                         element_id=element.element_id,
                         content_id=content.content_id,
-                        video_edit_element_id=composition_video_edit_element_id,
+                        input_spec=composition_input_spec,
                         result_name=parameters.get("name") or element.properties.name or "Canvas final video",
                         retry_count=retry_count + 1,
                         idempotency_key=idempotency_key,
@@ -195,12 +206,12 @@ class RetryContentService:
             try:
                 composed = await self.video_composition_service.compose(
                     project_path,
-                    retry.video_edit_element_id,
                     retry.result_name,
                     retry.element_id,
                     tool_context,
                     result_content_id=retry.content_id,
                     retry_count=retry.retry_count,
+                    input_spec=retry.input_spec,
                 )
                 target.status = composed.status
                 target.output_uri = composed.src
@@ -224,33 +235,43 @@ class RetryContentService:
         ) or detail.get("productionRule") == "video_composition"
 
     @staticmethod
-    def _composition_video_edit_element_id(detail: dict[str, Any], parameters: object) -> str | None:
-        """读取合成重试所需的原始 Video Edit Element ID。"""
-        if isinstance(parameters, dict):
-            value = parameters.get("video_edit_element_id")
-            if isinstance(value, str) and value:
-                return value
+    def _composition_input_spec(detail: dict[str, Any]) -> CompositionInputSpec | None:
+        """从合成结果 metadata 恢复完整、独立的合成输入快照。"""
         composition = detail.get("composition")
-        if isinstance(composition, dict):
-            value = composition.get("videoEditElementId")
-            if isinstance(value, str) and value:
-                return value
-        return None
+        if not isinstance(composition, dict):
+            return None
+        output = composition.get("output")
+        video_ids = composition.get("videoContentIds")
+        video_sources = composition.get("videoSources")
+        if not isinstance(output, dict) or not isinstance(video_ids, list) or not isinstance(video_sources, list):
+            return None
+        try:
+            return CompositionInputSpec(
+                video_content_ids=tuple(value for value in video_ids if isinstance(value, str)),
+                video_sources=tuple(value for value in video_sources if isinstance(value, str)),
+                audio_content_id=composition.get("audioContentId") if isinstance(composition.get("audioContentId"), str) else None,
+                audio_source=composition.get("audioSource") if isinstance(composition.get("audioSource"), str) else None,
+                output_width=int(composition["outputWidth"]),
+                output_height=int(composition["outputHeight"]),
+                audio_policy=str(composition.get("audioPolicy", "preserve")),
+                output=CompositionOutput.from_dict(output),
+            )
+        except (KeyError, TypeError, ValueError, CanvasDomainError):
+            return None
 
     @staticmethod
-    def _connected_video_edit_element_id(project: CanvasProject, result_element_id: str) -> str | None:
-        """兼容旧 sidecar，按结果 Element 的直接 Connection 恢复 Video Edit ID。"""
-        for connection in project.canvas.connections:
-            if connection.source_element_id == result_element_id:
-                candidate_id = connection.target_element_id
-            elif connection.target_element_id == result_element_id:
-                candidate_id = connection.source_element_id
-            else:
-                continue
-            candidate = project.canvas.get_element(candidate_id)
-            if candidate is not None and candidate.element_type == "video-edit":
-                return candidate.element_id
-        return None
+    def _composition_input_dict(spec: CompositionInputSpec) -> dict[str, Any]:
+        """将合成输入快照转换为幂等键使用的稳定对象。"""
+        return {
+            "videoContentIds": list(spec.video_content_ids),
+            "videoSources": list(spec.video_sources),
+            "audioContentId": spec.audio_content_id,
+            "audioSource": spec.audio_source,
+            "outputWidth": spec.output_width,
+            "outputHeight": spec.output_height,
+            "audioPolicy": spec.audio_policy,
+            "output": spec.output.to_dict(),
+        }
 
     @staticmethod
     def _composition_retry_result(

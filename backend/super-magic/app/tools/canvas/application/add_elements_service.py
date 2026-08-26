@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -23,8 +24,23 @@ from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasP
 from app.tools.canvas.domain.services import ElementReferenceResolver, VideoEditContentValidator
 from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
 from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
+from app.tools.canvas.production.contracts.composition_output import CompositionOutput
+from app.tools.canvas.production.contracts.video_composition_models import CompositionInputSpec
 from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
+
+
+@dataclass(frozen=True)
+class _CompositionRequest:
+    """保存一次最终视频导出的完整请求，避免依赖后续主 Content 变化。"""
+
+    item_ref: str
+    result_element_id: str
+    result_content_id: str
+    video_edit_element_id: str
+    composition_output: CompositionOutput
+    input_spec: CompositionInputSpec | None
+    result_name: str
 
 
 class AddElementsService:
@@ -49,7 +65,7 @@ class AddElementsService:
     ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[GenerationSubmissionCommand] = []
-        compositions: list[tuple[str, str, str, str, str]] = []
+        compositions: list[_CompositionRequest] = []
         prepared_contents: list[PreparedContentCommand] = []
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
@@ -108,6 +124,7 @@ class AddElementsService:
                             asset_path=content.asset_path,
                             generation_parameters=content.generation_parameters,
                             composition_video_edit_element_id=content.composition_video_edit_element_id,
+                            composition_output=content.composition_output,
                             content_id=new_canvas_id("content"),
                         )
                     prepared = await self.content_preparation.prepare_imported(content, project_path)
@@ -141,12 +158,14 @@ class AddElementsService:
                         generated_content_id = element.contents[0].content_id
                         if content.is_composition:
                             compositions.append(
-                                (
-                                    item.item_ref,
-                                    element.element_id,
-                                    element.contents[0].content_id,
-                                    content.composition_video_edit_element_id or "",
-                                    item.name or "Canvas final video",
+                                _CompositionRequest(
+                                    item_ref=item.item_ref,
+                                    result_element_id=element.element_id,
+                                    result_content_id=element.contents[0].content_id,
+                                    video_edit_element_id=content.composition_video_edit_element_id or "",
+                                    composition_output=content.composition_output,
+                                    input_spec=None,
+                                    result_name=item.name or "Canvas final video",
                                 )
                             )
                         else:
@@ -210,6 +229,33 @@ class AddElementsService:
                     request,
                     batch_index,
                 )
+            for index, request in enumerate(compositions):
+                video_edit = project.canvas.get_element(request.video_edit_element_id)
+                if video_edit is None or video_edit.element_type != "video-edit":
+                    raise CanvasDomainError(
+                        "ELEMENT_NOT_FOUND",
+                        f"The requested Video Edit Element does not exist: {request.video_edit_element_id}.",
+                    )
+                selected_content = video_edit.get_content(video_edit.main_content_id)
+                if selected_content is None or not isinstance(selected_content.fields, VideoEditContentFields):
+                    raise CanvasDomainError(
+                        "VIDEO_COMPOSITION_FAILED",
+                        "Video Edit Content does not exist or is not usable.",
+                    )
+                compositions[index] = _CompositionRequest(
+                    item_ref=request.item_ref,
+                    result_element_id=request.result_element_id,
+                    result_content_id=request.result_content_id,
+                    video_edit_element_id=request.video_edit_element_id,
+                    composition_output=request.composition_output,
+                    input_spec=self.video_composition_service.inspect_inputs(
+                        project,
+                        request.video_edit_element_id,
+                        video_edit_content_id=selected_content.content_id,
+                        composition_output=request.composition_output,
+                    ),
+                    result_name=request.result_name,
+                )
             return AddElementsResult(results, created_element_ids), metadata
 
         try:
@@ -222,16 +268,16 @@ class AddElementsService:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         result = await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
         result_items = {item.item_ref: item for item in result.items}
-        for item_ref, element_id, content_id, video_edit_element_id, result_name in compositions:
-            target = result_items[item_ref]
+        for composition in compositions:
+            target = result_items[composition.item_ref]
             try:
                 composed = await self.video_composition_service.compose(
                     project_path,
-                    video_edit_element_id,
-                    result_name,
-                    element_id,
+                    composition.result_name,
+                    composition.result_element_id,
                     tool_context,
-                    result_content_id=content_id,
+                    result_content_id=composition.result_content_id,
+                    input_spec=composition.input_spec,
                 )
                 target.content_id = composed.result_content_id
                 target.status = composed.status

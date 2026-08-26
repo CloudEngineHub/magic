@@ -30,6 +30,7 @@ from app.tools.canvas.domain.content_fields import (
 )
 from app.tools.canvas.domain.content_fields.generated_media_protocol import generated_media_types
 from app.tools.canvas.domain.types import JsonObject
+from app.tools.canvas.production.contracts.composition_output import CompositionOutput
 from app.tools.canvas.presentation import (
     CanvasGenerationFeedback,
     CanvasToolDetailBuilder,
@@ -207,8 +208,8 @@ class StoryboardShotInput(BaseToolParams):
     output_image_element_id: str | None = Field(None, alias="outputImageElementId")
 
 
-class VideoEditOutputInput(BaseToolParams):
-    """视频剪辑输出配置。"""
+class CompositionOutputInput(BaseToolParams):
+    """单次视频合成的导出配置。"""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -288,7 +289,7 @@ Workspace path of imported media. When the file is outside the current Canvas pr
         alias="videoSequence",
     )
     audio_sequence: list[str] | None = Field(None, max_length=1, alias="audioSequence")
-    output: VideoEditOutputInput | None = None
+    output: CompositionOutputInput | None = None
     model_id: str | None = None
     name: str | None = Field(
         None,
@@ -344,8 +345,10 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                 raise ValueError("video-edit Content requires a non-empty videoSequence")
             self._validate_unique_sequence("videoSequence", self.video_sequence)
             self._validate_unique_sequence("audioSequence", self.audio_sequence or [])
-        elif self.video_sequence is not None or self.audio_sequence is not None or self.output is not None:
-            raise ValueError("videoSequence, audioSequence, and output are only allowed for video-edit Content")
+            if self.output is not None or self.video_edit_element_id is not None:
+                raise ValueError("Video Edit Content only accepts videoSequence and audioSequence")
+        elif self.video_sequence is not None or self.audio_sequence is not None:
+            raise ValueError("videoSequence and audioSequence are only allowed for video-edit Content")
         if self.content_type == "storyboard" and self.source == "user":
             config = self.generation_config
             if config is None or not config.model_id or not config.size or not config.resolution or not config.aspect_ratio:
@@ -362,6 +365,8 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                     raise ValueError("task=compose requires input_mode=video_edit")
                 if self.prompt is not None:
                     raise ValueError("task=compose does not accept prompt")
+                if self.output is None:
+                    raise ValueError("task=compose requires composition output")
             if self.task != "compose" and not self.prompt:
                 raise ValueError("source=generated requires prompt")
             if self.content_type == "image" and (not self.name or not self.name.strip()):
@@ -401,6 +406,11 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             asset_path=self.asset_path,
             generation_parameters=self._build_generation_parameters() if self.source == "generated" else None,
             composition_video_edit_element_id=self.video_edit_element_id,
+            composition_output=(
+                CompositionOutput.from_dict(self._model_object(self.output))
+                if self.task == "compose" and self.output is not None
+                else None
+            ),
             content_id=content_id,
         )
 
@@ -442,7 +452,6 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             return VideoEditContentFields(
                 video_sequence=list(self.video_sequence or []),
                 audio_sequence=list(self.audio_sequence or []),
-                output=self._model_object(self.output or VideoEditOutputInput()),
             )
         return ContentFieldsFactory.empty(self.content_type)
 
@@ -468,7 +477,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             seed=self.seed,
             watermark=self.watermark,
             audio_policy=self.audio_policy,
-            video_edit_element_id=self.video_edit_element_id,
+            video_edit_element_id=self.video_edit_element_id if self.task != "compose" else None,
         )
 
     def _text_paragraphs(self) -> list[JsonObject]:

@@ -17,6 +17,7 @@ from app.tools.canvas.domain.video_resolution import parse_resolution_short_side
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.infrastructure.workspace import CanvasFileReadinessChecker
 from app.tools.canvas.production.contracts import (
+    CompositionOutput,
     CompositionInputSpec,
     CompositionPreparation,
     ContentProductionRuleInterface,
@@ -43,12 +44,12 @@ class VideoCompositionService:
     async def compose(
         self,
         project_path: str,
-        video_edit_element_id: str,
         result_name: str,
         result_element_id: str,
         tool_context=None,
         result_content_id: str | None = None,
         retry_count: int = 0,
+        input_spec: CompositionInputSpec | None = None,
     ) -> CanvasVideoCompositionResult:
         """创建 processing Content、同步合成并写回完成或失败状态。"""
         if not result_content_id:
@@ -64,12 +65,12 @@ class VideoCompositionService:
                 lambda project, metadata: self._prepare(
                     project,
                     metadata,
-                    video_edit_element_id,
                     result_name,
                     result_element_id,
                     output_path,
                     result_content_id,
                     retry_count,
+                    input_spec,
                 ),
             )
             project = await self._unit_of_work.repository.read(project_path)
@@ -128,15 +129,17 @@ class VideoCompositionService:
         self,
         project: CanvasProject,
         metadata: dict,
-        video_edit_element_id: str,
         result_name: str,
         result_element_id: str,
         output_path: str,
         result_content_id: str | None,
         retry_count: int,
+        input_spec: CompositionInputSpec | None,
     ):
         """在事务内解析输入并创建 processing 结果 Content。"""
-        spec = self.inspect_inputs(project, video_edit_element_id)
+        if input_spec is None:
+            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Composition requires a complete input snapshot.")
+        spec = input_spec
         element = project.canvas.get_element(result_element_id)
         if element is None or element.element_type != "video":
             raise CanvasDomainError("ELEMENT_NOT_FOUND", "The result Element must be a video Element.")
@@ -166,6 +169,16 @@ class VideoCompositionService:
                 "outputUri": output_path,
                 "retryCount": retry_count if retry_count > 0 else int(detail.get("retryCount", 0)),
                 "errorMessage": None,
+                "composition": {
+                    "videoContentIds": list(spec.video_content_ids),
+                    "videoSources": list(spec.video_sources),
+                    "audioContentId": spec.audio_content_id,
+                    "audioSource": spec.audio_source,
+                    "outputWidth": spec.output_width,
+                    "outputHeight": spec.output_height,
+                    "audioPolicy": spec.audio_policy,
+                    "output": spec.output.to_dict(),
+                },
             },
         )
         return (CompositionPreparation(element.element_id, content_id, output_path, spec, previous_active_content_id, previous_main_content_id), metadata)
@@ -269,20 +282,27 @@ class VideoCompositionService:
             ContentMetadataService.set(metadata, element.element_id, preparation.result_content_id, {**detail, "generationStatus": "failed", "errorMessage": message})
         return {"status": "failed"}, metadata
 
-    def inspect_inputs(self, project: CanvasProject, video_edit_element_id: str) -> CompositionInputSpec:
-        """从 Video Edit 主 Content 校验并提取媒体顺序。"""
+    def inspect_inputs(
+        self,
+        project: CanvasProject,
+        video_edit_element_id: str,
+        *,
+        video_edit_content_id: str | None = None,
+        composition_output: CompositionOutput | None = None,
+    ) -> CompositionInputSpec:
+        """从指定 Video Edit Content 校验媒体顺序，并解析本次导出规格。"""
         video_edit = project.canvas.get_element(video_edit_element_id)
         if video_edit is None or video_edit.element_type != "video-edit":
             raise CanvasDomainError("ELEMENT_NOT_FOUND", "The requested Video Edit Element does not exist.")
-        main = video_edit.get_content(video_edit.main_content_id)
+        selected_content_id = video_edit_content_id or video_edit.main_content_id
+        main = video_edit.get_content(selected_content_id)
         if main is None or not isinstance(main.fields, VideoEditContentFields):
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Video Edit has no usable main Content.")
         if not main.fields.video_sequence:
             raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "videoSequence must contain at least one Video Element.")
-        output = main.fields.output or {}
-        if str(output.get("format") or "mp4").casefold() != "mp4":
-            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Only MP4 output is supported.")
+        output = composition_output or CompositionOutput()
         sources: list[str] = []
+        video_content_ids: list[str] = []
         for element_id in main.fields.video_sequence:
             self._require_connection(project, element_id, video_edit_element_id)
             element = project.canvas.get_element(element_id)
@@ -293,8 +313,10 @@ class VideoCompositionService:
             if video_content.status != "completed" or not video_content.src:
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Video Element is not completed: {element_id}.")
             sources.append(video_content.src)
+            video_content_ids.append(content.content_id)
         audio_source = None
         audio_element_id = None
+        audio_content_id = None
         if main.fields.audio_sequence:
             if len(main.fields.audio_sequence) > 1:
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "audioSequence supports at most one Audio Element.")
@@ -308,24 +330,22 @@ class VideoCompositionService:
             if not audio_fields.src:
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Audio Element is not usable: {audio_element_id}.")
             audio_source = audio_fields.src
+            audio_content_id = audio_content.content_id
         width, height = self._resolve_dimensions(
-            str(output.get("aspectRatio") or "16:9"),
-            str(output.get("resolution") or "1080p"),
-            output.get("width"),
-            output.get("height"),
+            output.aspect_ratio or "16:9",
+            output.resolution or "1080p",
+            output.width,
+            output.height,
         )
-        audio_policy = str(output.get("audioPolicy") or "preserve").casefold()
-        if audio_policy not in {"preserve", "mute"}:
-            raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", "Unsupported audio policy.")
         return CompositionInputSpec(
-            video_edit_element_id,
-            tuple(main.fields.video_sequence),
-            tuple(sources),
-            audio_element_id,
-            audio_source,
-            width,
-            height,
-            audio_policy,
+            video_content_ids=tuple(video_content_ids),
+            video_sources=tuple(sources),
+            audio_content_id=audio_content_id,
+            audio_source=audio_source,
+            output_width=width,
+            output_height=height,
+            audio_policy=output.audio_policy,
+            output=output,
         )
 
     @staticmethod

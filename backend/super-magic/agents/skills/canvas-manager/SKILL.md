@@ -17,6 +17,10 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Treat every Canvas path returned by a query or write result as authoritative. A path such as `./images/foo.webp` is relative to the current project's `magic.project.js` (project-relative), not automatically relative to the workspace. Reuse it verbatim for Canvas generation fields. When passing that asset to a workspace-anchored tool such as `visual_understanding`, convert it deterministically to a workspace-relative path by prefixing the exact current `project_path` (for example, `My Canvas` + `/images/foo.webp` becomes `My Canvas/images/foo.webp`); do not guess a directory, filename, or Element ID. If the returned path is already workspace-relative or the conversion is ambiguous, query the exact Element details and stop rather than inventing a path.
 - Treat an uploaded image that already appears as a Canvas Image Element as an existing asset, not a new import candidate. Query the Canvas first, then reuse its exact `element_id`, Content ID, and project-relative `src` for visual understanding and generation. Do not call `add_canvas_elements` or `import_canvas_assets` with `source=imported` for that same asset. Import only when the supplied workspace file has no matching Canvas Element.
 - Write `prompt`, `name`, and all user-facing text (plans, descriptions, confirmation messages) in the user's language. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
+- Use one language consistently for user-facing Canvas terminology. Translate product nouns, table labels, action text, confirmation questions, cost summaries, status summaries, and error explanations into the user's language; do not mix translated sentences with English product nouns.
+- In Chinese responses, use the established names `画布` (Canvas), `积分` (Points), `元素` (Element), `内容` (Content), `连接` (Connection), `分镜` (Storyboard), `视频剪辑` (Video Edit), `图片` (Image), `视频` (Video), `音频` (Audio), `项目` (Project), and `预估费用` (Estimated cost). In English responses, use the corresponding English names consistently.
+- Keep exact tool names, parameter names, IDs, paths, code identifiers, and protocol values unchanged inside code or when identifying a returned field. When explaining them in prose, add the localized product name around the exact identifier, for example `元素（Element）` only when needed for clarity.
+- For example, when the user speaks Chinese, write `预估费用：151 积分。确认后提交生成任务。`; when the user speaks English, write `Estimated cost: 151 Points. Confirm to submit the generation task.` Keep the sentence and its product terms in the same language.
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
 - Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit any project file, including `magic.project.js`.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
@@ -431,7 +435,7 @@ After showing the full parameters and estimated points, you must confirm with a 
 
 ## Final video composition through `add_canvas_elements`
 
-Treat the final MP4 as an ordinary generated Video Element. The model must declare the final Element, its `video-edit -> final-video` Connection, and dependency layout in the same request. The Canvas application creates a pending generated Content and runs internal FFmpeg composition against that Content; it does not create Elements, Connections, or layout automatically.
+Create the final MP4 as a generated Video Element. In the same request, provide the final Element, its `video-edit -> final-video` Connection, the layout, and the requested export settings.
 
 ```python
 result = tool.call("add_canvas_elements", {
@@ -449,15 +453,16 @@ result = tool.call("add_canvas_elements", {
             "task": "compose",
             "input_mode": "video_edit",
             "videoEditElementId": "element-740000000000000020",
+            "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4", "audioPolicy": "preserve"},
         },
     }],
 })
 print(result.content)
 ```
 
-Composition is synchronous and does not use `wait_canvas_generation`. After success, query the final Video Element with `query_canvas_element_details`. The final audio state follows the Video Edit `audioPolicy`: `preserve` keeps configured or source-video audio, while `mute` produces a silent MP4.
+After the request completes, query the final Video Element with `query_canvas_element_details`. Specify the export settings in each composition request. Reuse the same Video Edit to create separate 16:9, 9:16, 720p, or other requested versions. Set `output.audioPolicy` to `preserve` for audio or `mute` for a silent MP4.
 
-Video Edit output supports preset or numeric short-side resolutions, such as `1080p` or `768p`. For exact pixel dimensions, provide both `width` and `height` in the Video Edit `output`; explicit dimensions take precedence over `aspectRatio` and `resolution`.
+Use preset or numeric short-side resolutions in `output`, such as `1080p` or `768p`. For exact dimensions, provide both `width` and `height`; these values determine the exported size.
 
 ## Workflow coverage
 

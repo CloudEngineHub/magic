@@ -146,7 +146,7 @@ If the current `<media_model_info>` does not declare a mode, do not use it. A re
 - Every confirmation is a hard gate: tool success is not user approval. Do not continue past a gate until the user confirms or requests a revision.
 - Complete execution confirmation gates are mandatory: confirm the first completed first frame before generating the remaining first frames; confirm the first completed trial shot video before generating the remaining shots; and show the final Video Edit configuration, including `audioPolicy`, for confirmation before composing. A successful tool call, a returned task ID, or a completed query is not confirmation.
 - Infer established facts and reasonable defaults before asking. Ask only about unresolved decisions that materially affect the result.
-- Localize user-facing terminology to the user's language while keeping tool names, parameter names, IDs, paths, and protocol values unchanged.
+- Follow the language and terminology rules in the parent `canvas-manager` Skill. Keep user-facing video-production terms in one language; use the localized names for Canvas, Points, Elements, Content, Connections, Storyboards, Video Edits, audio, status, and estimated cost. Keep exact tool names, parameter names, IDs, paths, and protocol values unchanged in code and field references.
 - Keep each task bound to its current Canvas project. If a tool fails, do not call `initialize_canvas`, invent a new project suffix, or change `project_path` to bypass the error. Recover in the current project: read the failure from `result.content`, inspect the referenced Element or Content, repair it with the available tools, and retry only after the repair is complete. If safe recovery is impossible, tell the user the blocking reason and stop.
 - Do not repeat a paid image or video generation call speculatively. After a failure, first inspect and repair the current Canvas state or correct the referenced workspace path; regenerate only when the user has approved the revised generation or the retry is an exact, safe retry of the failed task.
 - Before using `dependency_flow`, query every endpoint Element and compare its `parent_element_id`. Use this strategy only when all connected endpoints share the same direct parent. For cross-container endpoints, create the Elements with `row_incremental` or another valid non-dependent layout, then maintain the explicit business relation separately with `manage_canvas_connections` when the relation is required. Do not treat a layout validation error as a reason to reinitialize or move the project.
@@ -245,7 +245,7 @@ The confirmation sequence is mandatory: generate the initialization candidate, w
 
 ### 5. Draft, confirm, and save the storyboard
 
-Draft about four shots when no count is specified (fewer for simple tasks). Each shot covers name, scene, framing or camera, action, focus, and duration.
+Draft about four shots when no count is specified (fewer for simple tasks). Each shot covers its name, scene, framing or camera, action, and focus. Keep the storyboard focused on creative direction.
 
 Display and confirm the complete shot plan before saving. Save the confirmed shot descriptions as a storyboard Content:
 
@@ -319,6 +319,8 @@ Generate the first shot video as a trial; wait or query until its state is known
 
 For each shot video, freeze and estimate the exact request first. After confirmation, create one generated `video` Element with a Connection from exactly its corresponding first-frame Element:
 
+Set `duration_seconds` in each generated shot-video request according to the confirmed pacing and the current model's supported values. The storyboard shot object contains the creative description; the video request contains the generation duration.
+
 ```python
 result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
@@ -370,21 +372,20 @@ tool.call("add_canvas_elements", {
             "content_type": "video-edit",
             "videoSequence": ["element-740000000000000010", "element-740000000000000011"],
             "audioSequence": ["element-740000000000000014"],
-            "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4", "audioPolicy": "preserve"},
         },
     }],
 })
 ```
 
-Use `resolution` as the requested short-side value; preset values such as `720p`, `1080p`, `2k`, and `4k` remain supported, and numeric values such as `768p` are also valid. When exact pixel dimensions are required, set both `width` and `height` in `output`; explicit dimensions take precedence over `aspectRatio` and `resolution`.
+Set `resolution` in the final composition request as the target short-side value. Supported examples include `720p`, `1080p`, `2k`, `4k`, and numeric values such as `768p`. For exact pixel dimensions, set both `width` and `height` in `output`.
 
-`audioPolicy` controls the final mix: `preserve` keeps the configured Audio Element or source-video audio, while `mute` removes all audio from the composed MP4. An empty `audioSequence` does not imply silence when the policy is `preserve`. When revising an existing Video Edit, preserve its Element, append or update the appropriate Content, rebuild `videoSequence` from the currently confirmed shot Video Element IDs, and confirm the edit configuration again before composing. Adding, replacing, or removing BGM requires importing or reusing the Audio Element, updating `audioSequence`, confirming the new edit, and composing again. Recalculate the expected total duration after adding, removing, or changing shot durations.
+Set `audioPolicy` to `preserve` to keep the configured Audio Element or source-video audio, or set it to `mute` for a silent MP4. When revising an existing Video Edit, update its ordered video and audio sequences, confirm the edit configuration, and compose the requested version. For BGM changes, update `audioSequence`, confirm the edit, and compose again. Recalculate the expected total duration after changing shot durations or order.
 
 ### 9. Compose and deliver
 
-Create the final Video Element through `add_canvas_elements` only after the user confirms the edit configuration. Declare the `video-edit -> final-video` Connection and `dependency_flow` layout in that request. Use generated Video Content with `task="compose"`, `input_mode="video_edit"`, and `videoEditElementId` set to the confirmed Video Edit Element ID. Then verify the returned final Element with `query_canvas_element_details` and present the MP4 path, duration, dimensions, and audio status.
+After the user confirms the edit configuration, create the final Video Element through `add_canvas_elements`. Include the `video-edit -> final-video` Connection, `dependency_flow` layout, `task="compose"`, `input_mode="video_edit"`, the confirmed `videoEditElementId`, and the requested `output`. Verify the returned Element with `query_canvas_element_details`, then present the MP4 path, duration, dimensions, and audio status. Submit another composition request with a different `output` for each additional export version.
 
-The final output is the current Video Edit's main Content. Composition is synchronous and does not use `wait_canvas_generation`. Do not call `video_understanding` after composition; query Canvas metadata only. If composition fails, preserve the failed Content and active/main pointers, repair the inputs or configuration, ask the user before retrying, and verify the returned result Element after a successful retry.
+The composition result is the final Video Element Content. Query the returned Canvas Element for its status and media details. When a composition fails, inspect the reported inputs or configuration, obtain confirmation for the repair, retry the same final Element, and verify the result after completion.
 
 ## Canvas tool mapping for migrated video-production scenarios
 

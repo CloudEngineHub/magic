@@ -2,19 +2,21 @@
 
 from dataclasses import dataclass
 
+from app.tools.canvas.production.contracts.composition_output import CompositionOutput
+
 
 @dataclass(frozen=True)
 class CompositionInputSpec:
-    """描述 Video Edit 主 Content 解析出的有序媒体输入。"""
+    """描述一次合成冻结后的有序媒体和导出输入。"""
 
-    video_edit_element_id: str
-    video_element_ids: tuple[str, ...]
+    video_content_ids: tuple[str, ...]
     video_sources: tuple[str, ...]
-    audio_element_id: str | None
+    audio_content_id: str | None
     audio_source: str | None
     output_width: int
     output_height: int
     audio_policy: str
+    output: CompositionOutput
 
 
 @dataclass(frozen=True)
