@@ -2953,9 +2953,17 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_id: string,
 		data: {
 			is_pin: boolean
+			pre_project_id?: string | null
+			next_project_id?: string | null
 		},
 	) {
-		return fetch.put(`/api/v1/super-agent/projects/${project_id}/pin`, data)
+		return fetch.put(`/api/v1/super-agent/projects/${project_id}/pin`, {
+			is_pin: data.is_pin,
+			...(data.pre_project_id === undefined ? {} : { pre_project_id: data.pre_project_id }),
+			...(data.next_project_id === undefined
+				? {}
+				: { next_project_id: data.next_project_id }),
+		})
 	},
 
 	/**

@@ -252,12 +252,17 @@ class ProjectService {
 		}
 
 		try {
-			await SuperMagicApi.moveProject({
-				source_project_id: projectId,
-				target_workspace_id: workspaceId,
-				pre_project_id: preProjectId,
-				next_project_id: nextProjectId,
-			})
+			if (isPinned !== undefined && previousProject) {
+				// Pin-boundary moves use the pin endpoint because it owns both pin state and ordering.
+				await this.pinProject(previousProject, isPinned, preProjectId, nextProjectId)
+			} else {
+				await SuperMagicApi.moveProject({
+					source_project_id: projectId,
+					target_workspace_id: workspaceId,
+					pre_project_id: preProjectId,
+					next_project_id: nextProjectId,
+				})
+			}
 			await projectStore.loadProjectsForWorkspace(workspaceId, true, true)
 			this.syncSelectedProjectAfterMove(
 				projectId,
@@ -628,6 +633,9 @@ class ProjectService {
 				pre_project_id: preProjectId,
 				next_project_id: nextProjectId,
 			})
+			if (isPinned !== undefined) {
+				await this.pinProject(project, isPinned, preProjectId, nextProjectId)
+			}
 			await Promise.all([
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
 				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
@@ -695,8 +703,18 @@ class ProjectService {
 	 * @param isPin Whether to pin the project
 	 * @param workspaceId Workspace ID (for refreshing project list)
 	 */
-	pinProject = async (project: ProjectListItem, isPin: boolean): Promise<void> => {
-		const requestKey = this.getRequestKey("pinProject", { projectId: project.id, isPin })
+	pinProject = async (
+		project: ProjectListItem,
+		isPin: boolean,
+		preProjectId?: string | null,
+		nextProjectId?: string | null,
+	): Promise<void> => {
+		const requestKey = this.getRequestKey("pinProject", {
+			projectId: project.id,
+			isPin,
+			preProjectId,
+			nextProjectId,
+		})
 
 		// Call API and refresh list (no optimistic update to preserve sorting)
 		return this.getOrCreateRequest(requestKey, async () => {
@@ -705,10 +723,14 @@ class ProjectService {
 				if (isOtherCollaborationProject(project)) {
 					await SuperMagicApi.updateCollaborationProjectPinStatus(project.id, {
 						is_pin: isPin,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
 					})
 				} else {
 					await SuperMagicApi.updateProjectPinStatus(project.id, {
 						is_pin: isPin,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
 					})
 				}
 

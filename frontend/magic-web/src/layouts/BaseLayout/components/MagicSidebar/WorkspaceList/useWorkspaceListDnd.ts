@@ -745,13 +745,22 @@ export function useWorkspaceListDnd({
 						})
 						if (!confirmed) return
 					}
-					await superMagicService.project.moveProjectInWorkspace(
-						active.workspaceId,
-						active.projectId,
-						preProjectId,
-						nextProjectId,
-						pinAction ? pinAction === "pin" : undefined,
-					)
+					if (pinAction) {
+						await superMagicService.project.pinProject(
+							project,
+							pinAction === "pin",
+							preProjectId,
+							nextProjectId,
+						)
+						await projectStore.loadProjectsForWorkspace(active.workspaceId, true, true)
+					} else {
+						await superMagicService.project.moveProjectInWorkspace(
+							active.workspaceId,
+							active.projectId,
+							preProjectId,
+							nextProjectId,
+						)
+					}
 					return
 				}
 
