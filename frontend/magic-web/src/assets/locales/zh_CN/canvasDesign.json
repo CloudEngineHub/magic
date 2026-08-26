@@ -333,6 +333,7 @@
 		"copyResourcePath": "复制资源路径",
 		"deletedSuffix": "（已删除）",
 		"expandPrompt": "展开",
+		"generationMode": "生成方式",
 		"inputMode": "输入模式",
 		"model": "模型",
 		"noPrompt": "暂无提示词",

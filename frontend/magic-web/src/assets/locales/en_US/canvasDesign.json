@@ -333,6 +333,7 @@
 		"copyResourcePath": "Copy resource path",
 		"deletedSuffix": " (Deleted)",
 		"expandPrompt": "Expand",
+		"generationMode": "Generation method",
 		"inputMode": "Input mode",
 		"model": "Model",
 		"noPrompt": "No prompt",

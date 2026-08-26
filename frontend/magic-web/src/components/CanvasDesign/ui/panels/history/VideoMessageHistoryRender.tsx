@@ -350,7 +350,7 @@ function buildGenerationInfoRows(params: {
 	if (inputModeLabel) {
 		rows.push({
 			key: "generationMode",
-			label: t("messageHistory.generationMode", "生成模式"),
+			label: t("messageHistory.generationMode", "生成方式"),
 			value: inputModeLabel,
 		})
 	}

@@ -336,7 +336,7 @@
 		"expandPrompt": "展开",
 		"finishedAt": "完成时间",
 		"generationElapsed": "生成耗时",
-		"generationMode": "生成模式",
+		"generationMode": "生成方式",
 		"generationSpec": "生成规格",
 		"inputMode": "输入模式",
 		"model": "模型",
