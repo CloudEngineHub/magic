@@ -15,6 +15,7 @@ import SmartTooltip from "@/components/other/SmartTooltip"
 import { QueuedMessage } from "../../hooks/useMessageQueue"
 import CollapsibleText from "./components/CollapsibleText"
 import MobileMessageQueue from "./MobileMessageQueue"
+import { trimQueueContent } from "./utils"
 
 export interface MessageQueueProps {
 	queue: QueuedMessage[]
@@ -147,7 +148,7 @@ function MessageQueue({
 											)}
 										>
 											<CollapsibleText
-												content={message.content}
+												content={trimQueueContent(message.content)}
 												maxLines={1}
 											/>
 										</div>
