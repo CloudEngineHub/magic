@@ -254,7 +254,13 @@ class ProjectService {
 		try {
 			if (isPinned !== undefined && previousProject) {
 				// Pin-boundary moves use the pin endpoint because it owns both pin state and ordering.
-				await this.pinProject(previousProject, isPinned, preProjectId, nextProjectId)
+				await this.pinProject(
+					previousProject,
+					isPinned,
+					workspaceId,
+					preProjectId,
+					nextProjectId,
+				)
 			} else {
 				await SuperMagicApi.moveProject({
 					source_project_id: projectId,
@@ -634,7 +640,13 @@ class ProjectService {
 				next_project_id: nextProjectId,
 			})
 			if (isPinned !== undefined) {
-				await this.pinProject(project, isPinned, preProjectId, nextProjectId)
+				await this.pinProject(
+					project,
+					isPinned,
+					targetWorkspaceId,
+					preProjectId,
+					nextProjectId,
+				)
 			}
 			await Promise.all([
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
@@ -706,12 +718,14 @@ class ProjectService {
 	pinProject = async (
 		project: ProjectListItem,
 		isPin: boolean,
+		targetWorkspaceId?: string,
 		preProjectId?: string | null,
 		nextProjectId?: string | null,
 	): Promise<void> => {
 		const requestKey = this.getRequestKey("pinProject", {
 			projectId: project.id,
 			isPin,
+			targetWorkspaceId,
 			preProjectId,
 			nextProjectId,
 		})
@@ -723,12 +737,14 @@ class ProjectService {
 				if (isOtherCollaborationProject(project)) {
 					await SuperMagicApi.updateCollaborationProjectPinStatus(project.id, {
 						is_pin: isPin,
+						target_workspace_id: targetWorkspaceId,
 						pre_project_id: preProjectId,
 						next_project_id: nextProjectId,
 					})
 				} else {
 					await SuperMagicApi.updateProjectPinStatus(project.id, {
 						is_pin: isPin,
+						target_workspace_id: targetWorkspaceId,
 						pre_project_id: preProjectId,
 						next_project_id: nextProjectId,
 					})

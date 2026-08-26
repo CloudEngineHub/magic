@@ -749,6 +749,7 @@ export function useWorkspaceListDnd({
 						await superMagicService.project.pinProject(
 							project,
 							pinAction === "pin",
+							active.workspaceId,
 							preProjectId,
 							nextProjectId,
 						)

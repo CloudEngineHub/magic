@@ -2953,12 +2953,16 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_id: string,
 		data: {
 			is_pin: boolean
+			target_workspace_id?: string
 			pre_project_id?: string | null
 			next_project_id?: string | null
 		},
 	) {
 		return fetch.put(`/api/v1/super-agent/projects/${project_id}/pin`, {
 			is_pin: data.is_pin,
+			...(data.target_workspace_id === undefined
+				? {}
+				: { target_workspace_id: data.target_workspace_id }),
 			...(data.pre_project_id === undefined ? {} : { pre_project_id: data.pre_project_id }),
 			...(data.next_project_id === undefined
 				? {}
