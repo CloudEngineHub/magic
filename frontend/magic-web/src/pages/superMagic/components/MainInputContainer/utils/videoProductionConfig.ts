@@ -18,6 +18,7 @@ export function isVideoProductionContext(context?: VideoProductionContextLike): 
 
 export interface VideoProductionPresetInput {
 	generationMode?: string
+	generationModeKey?: "normal" | "detailed"
 	aspectRatio?: string
 	durationSeconds?: number
 	resolution?: string
@@ -25,7 +26,7 @@ export interface VideoProductionPresetInput {
 	showDuration?: boolean
 	showResolution?: boolean
 	labels?: {
-		generation?: string
+		generationMode?: string
 		aspectRatio?: string
 		duration?: string
 		resolution?: string
@@ -37,23 +38,29 @@ export function buildVideoProductionPresetContent(
 	input: VideoProductionPresetInput,
 ): JSONContent | undefined {
 	const labels = {
-		generation: "generation",
+		generationMode: "generation mode",
 		aspectRatio: "aspect ratio",
 		duration: "duration",
 		resolution: "resolution",
 		...input.labels,
 	}
+	const generationMode = input.generationMode?.trim() || "normal"
+	const generationModeKey =
+		input.generationModeKey ?? (generationMode === "detailed" ? "detailed" : "normal")
+	const hasAspectRatio = Boolean(input.showAspectRatio && input.aspectRatio?.trim())
+	const hasDuration =
+		Boolean(input.showDuration) &&
+		typeof input.durationSeconds === "number" &&
+		Number.isFinite(input.durationSeconds)
+	const hasResolution = Boolean(input.showResolution && input.resolution?.trim())
+	const hasOtherConfiguration = hasAspectRatio || hasDuration || hasResolution
+	if (generationModeKey === "normal" && !hasOtherConfiguration) return undefined
+
 	const segments = [
-		...(input.generationMode ? [`${labels.generation}: ${input.generationMode}`] : []),
-		...(input.showAspectRatio && input.aspectRatio
-			? [`${labels.aspectRatio}: ${input.aspectRatio}`]
-			: []),
-		...(input.showDuration && typeof input.durationSeconds === "number"
-			? [`${labels.duration}: ${input.durationSeconds}s`]
-			: []),
-		...(input.showResolution && input.resolution
-			? [`${labels.resolution}: ${input.resolution}`]
-			: []),
+		`${labels.generationMode}: ${generationMode}`,
+		...(hasAspectRatio ? [`${labels.aspectRatio}: ${input.aspectRatio?.trim()}`] : []),
+		...(hasDuration ? [`${labels.duration}: ${input.durationSeconds}s`] : []),
+		...(hasResolution ? [`${labels.resolution}: ${input.resolution?.trim()}`] : []),
 	]
 
 	if (segments.length === 0) return undefined

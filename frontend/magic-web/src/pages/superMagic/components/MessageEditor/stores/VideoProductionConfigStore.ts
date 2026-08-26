@@ -45,7 +45,10 @@ export interface ResolveVideoProductionCapabilitiesParams {
 	selectedResolution?: string
 }
 
-const EMPTY_CONFIG: VideoProductionConfig = {}
+const DEFAULT_GENERATION_MODE: VideoProductionGenerationMode = "normal"
+const EMPTY_CONFIG: VideoProductionConfig = {
+	generationMode: DEFAULT_GENERATION_MODE,
+}
 
 function asCanvasVideoModel(model?: ModelItem | null): VideoModelItem | undefined {
 	return model ? (model as VideoModelItem) : undefined
@@ -131,9 +134,9 @@ function mergeValidConfig(
 	current: Partial<VideoProductionConfig> | undefined,
 	capabilities: VideoProductionCapabilities,
 ): VideoProductionConfig {
-	const next: VideoProductionConfig = {}
-	if (current?.generationMode === "normal" || current?.generationMode === "detailed") {
-		next.generationMode = current.generationMode
+	const next: VideoProductionConfig = {
+		generationMode:
+			current?.generationMode === "detailed" ? "detailed" : DEFAULT_GENERATION_MODE,
 	}
 	if (typeof current?.skillId === "string" && current.skillId) next.skillId = current.skillId
 	if (capabilities.showAspectRatio) {
@@ -237,6 +240,10 @@ export class VideoProductionConfigStore {
 	}
 
 	clearCurrentConfig() {
-		this.config = { ...EMPTY_CONFIG }
+		this.config = {
+			...EMPTY_CONFIG,
+			generationMode:
+				this.config.generationMode === "detailed" ? "detailed" : DEFAULT_GENERATION_MODE,
+		}
 	}
 }

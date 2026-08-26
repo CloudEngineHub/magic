@@ -3072,6 +3072,7 @@
 			"detailedDescription": "More planning and refinement for complex creations",
 			"duration": "Duration",
 			"generation": "Generate",
+			"generationMode": "Generation mode",
 			"normal": "Normal",
 			"normalDescription": "Fewer questions and faster output for simple requests",
 			"resolution": "Resolution",

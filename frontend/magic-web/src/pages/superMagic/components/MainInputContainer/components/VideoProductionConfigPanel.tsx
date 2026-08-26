@@ -211,13 +211,13 @@ function MobileVideoProductionConfigPanel({
 	t: (key: string) => string
 }) {
 	const [openKey, setOpenKey] = useState<MobileVideoPopupKey | null>(null)
+	const generationMode = config.generationMode ?? "normal"
 	const closePopup = () => setOpenKey(null)
 	const openPopup = (key: MobileVideoPopupKey) => setOpenKey(key)
 	const clearValue = (key: MobileVideoPopupKey) => {
 		if (key === "aspectRatio") onConfigChange({ aspectRatio: undefined })
 		if (key === "resolution") onConfigChange({ resolution: undefined })
 		if (key === "duration") onConfigChange({ durationSeconds: undefined })
-		if (key === "generation") onConfigChange({ generationMode: undefined })
 	}
 	const selectValue = (key: MobileVideoPopupKey, value: string) => {
 		if (key === "aspectRatio") onConfigChange({ aspectRatio: value })
@@ -249,7 +249,7 @@ function MobileVideoProductionConfigPanel({
 				{value}
 			</span>
 			<span className="absolute right-2.5 top-1/2 inline-flex size-4 -translate-y-1/2 items-center justify-center">
-				{value === selectPlaceholder ? (
+				{key === "generation" || value === selectPlaceholder ? (
 					<ChevronDown className="size-4 text-muted-foreground opacity-50" />
 				) : (
 					<VideoConfigClearButton
@@ -397,14 +397,12 @@ function MobileVideoProductionConfigPanel({
 					{trigger(
 						"generation",
 						generationLabel,
-						config.generationMode
-							? t(`messageEditor.videoProductionConfig.${config.generationMode}`)
-							: selectPlaceholder,
+						t(`messageEditor.videoProductionConfig.${generationMode}`),
 					)}
 					<MobileVideoOptionPopup
 						open={openKey === "generation"}
 						label={generationLabel}
-						value={config.generationMode ?? ""}
+						value={generationMode}
 						options={(["normal", "detailed"] as const).map((mode) => ({
 							value: mode,
 							label: (
@@ -443,6 +441,7 @@ function VideoProductionConfigPanel({
 	const configStore = useMemo(() => new VideoProductionConfigStore(), [])
 	const capabilities = configStore.capabilities
 	const config = configStore.config
+	const generationMode = config.generationMode ?? "normal"
 	const selectPlaceholder = t("messageEditor.videoProductionConfig.selectPlaceholder")
 	const clearText = t("shadcn-ui:select.clear")
 	const [isGenerationPopoverOpen, setIsGenerationPopoverOpen] = useState(false)
@@ -451,7 +450,6 @@ function VideoProductionConfigPanel({
 		if (field === "aspectRatio") configStore.setConfig({ aspectRatio: undefined })
 		if (field === "resolution") configStore.setConfig({ resolution: undefined })
 		if (field === "duration") configStore.setConfig({ durationSeconds: undefined })
-		if (field === "generation") configStore.setConfig({ generationMode: undefined })
 	}
 	const inputScopeKey =
 		sceneStateStore?.inputScopeKey ||
@@ -483,9 +481,8 @@ function VideoProductionConfigPanel({
 		sceneStateStore.setPresetSuffixContentForSource(
 			VIDEO_PRODUCTION_SUFFIX_SOURCE,
 			buildVideoProductionPresetContent({
-				generationMode: config.generationMode
-					? t(`messageEditor.videoProductionConfig.${config.generationMode}`)
-					: undefined,
+				generationMode: t(`messageEditor.videoProductionConfig.${generationMode}`),
+				generationModeKey: generationMode,
 				aspectRatio: config.aspectRatio,
 				durationSeconds: config.durationSeconds,
 				resolution: config.resolution,
@@ -493,7 +490,7 @@ function VideoProductionConfigPanel({
 				showDuration: capabilities.showDuration && config.durationSeconds !== undefined,
 				showResolution: capabilities.showResolution && config.resolution !== undefined,
 				labels: {
-					generation: t("messageEditor.videoProductionConfig.generation"),
+					generationMode: t("messageEditor.videoProductionConfig.generationMode"),
 					aspectRatio: t("messageEditor.videoProductionConfig.aspectRatio"),
 					duration: t("messageEditor.videoProductionConfig.duration"),
 					resolution: t("messageEditor.videoProductionConfig.resolution"),
@@ -507,7 +504,7 @@ function VideoProductionConfigPanel({
 				undefined,
 			)
 		}
-	}, [capabilities, config, isVisible, sceneStateStore, store, t])
+	}, [capabilities, config, generationMode, isVisible, sceneStateStore, store, t])
 
 	const sendCount = sceneStateStore?.sendCount
 	const lastHandledSendCountRef = useRef(sendCount)
@@ -979,42 +976,21 @@ function VideoProductionConfigPanel({
 														"messageEditor.videoProductionConfig.generation",
 													)}
 												</span>
-												<span
-													className={compactValueClass(
-														config.generationMode !== undefined,
+												<span className={compactValueClass(true)}>
+													{t(
+														`messageEditor.videoProductionConfig.${generationMode}`,
 													)}
-												>
-													{config.generationMode
-														? t(
-																`messageEditor.videoProductionConfig.${config.generationMode}`,
-															)
-														: selectPlaceholder}
 												</span>
 											</>
 										) : (
-											<span
-												className={popoverValueClass(
-													config.generationMode !== undefined,
+											<span className={popoverValueClass(true)}>
+												{t(
+													`messageEditor.videoProductionConfig.${generationMode}`,
 												)}
-											>
-												{config.generationMode
-													? t(
-															`messageEditor.videoProductionConfig.${config.generationMode}`,
-														)
-													: selectPlaceholder}
 											</span>
 										)}
 										<span className="relative flex size-4 shrink-0 items-center justify-center">
-											{config.generationMode !== undefined ? (
-												<VideoConfigClearButton
-													field="generation"
-													clearText={clearText}
-													hidden
-													onClear={() => clearConfigValue("generation")}
-												/>
-											) : (
-												<ChevronDown className="size-4 text-muted-foreground opacity-50" />
-											)}
+											<ChevronDown className="size-4 text-muted-foreground opacity-50" />
 										</span>
 									</button>
 								</PopoverTrigger>
@@ -1032,11 +1008,11 @@ function VideoProductionConfigPanel({
 												key={mode}
 												type="button"
 												className={`rounded-2xl border p-4 text-left transition-colors ${
-													config.generationMode === mode
+													generationMode === mode
 														? "border-foreground bg-foreground text-background"
 														: "border-border bg-muted/30 text-foreground hover:bg-muted"
 												}`}
-												aria-pressed={config.generationMode === mode}
+												aria-pressed={generationMode === mode}
 												onClick={() => {
 													configStore.setConfig({
 														generationMode: mode,

@@ -108,12 +108,12 @@ describe("VideoProductionConfigStore", () => {
 		store.setContext({ model: modelA })
 		store.setConfig({ durationSeconds: 8 })
 		store.setContext({ model: modelB })
-		expect(store.config).toEqual({ durationSeconds: 8 })
+		expect(store.config).toEqual({ generationMode: "normal", durationSeconds: 8 })
 		store.setContext({ model: modelA })
 		expect(store.config.durationSeconds).toBe(8)
 	})
 
-	it("does not restore a prior selection after recreating the store", () => {
+	it("defaults to normal and preserves the generation mode after clearing", () => {
 		const model = createModel("model-a", {
 			aspect_ratios: ["16:9"],
 			durations: [5, 10],
@@ -125,13 +125,13 @@ describe("VideoProductionConfigStore", () => {
 
 		const nextStore = new VideoProductionConfigStore()
 		nextStore.setContext({ model })
-		expect(nextStore.config).toEqual({})
+		expect(nextStore.config).toEqual({ generationMode: "normal" })
 
 		store.clearCurrentConfig()
-		expect(store.config).toEqual({})
+		expect(store.config).toEqual({ generationMode: "detailed" })
 	})
 
-	it("starts empty for every input scope", () => {
+	it("starts with normal for every input scope", () => {
 		const model = createModel("model-a", {
 			aspect_ratios: ["16:9"],
 			durations: [5, 10],
@@ -140,16 +140,16 @@ describe("VideoProductionConfigStore", () => {
 		const store = new VideoProductionConfigStore()
 
 		store.setContext({ model, inputScopeKey: "topic-a" })
-		expect(store.config).toEqual({})
+		expect(store.config).toEqual({ generationMode: "normal" })
 
 		store.clearCurrentConfig()
 		store.setContext({ model, inputScopeKey: "topic-a" })
-		expect(store.config).toEqual({})
+		expect(store.config).toEqual({ generationMode: "normal" })
 
 		store.setConfig({ durationSeconds: 10 })
-		expect(store.config).toEqual({ durationSeconds: 10 })
+		expect(store.config).toEqual({ generationMode: "normal", durationSeconds: 10 })
 
 		store.setContext({ model, inputScopeKey: "topic-b" })
-		expect(store.config).toEqual({})
+		expect(store.config).toEqual({ generationMode: "normal" })
 	})
 })

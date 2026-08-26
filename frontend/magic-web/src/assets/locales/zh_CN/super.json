@@ -3073,6 +3073,7 @@
 			"detailedDescription": "多确认、细拆，适合长视频和复杂创作",
 			"duration": "时长",
 			"generation": "生成",
+			"generationMode": "生成模式",
 			"normal": "普通",
 			"normalDescription": "少问、快做，适合短视频和简单需求",
 			"resolution": "清晰度",
