@@ -16,7 +16,10 @@ export async function downloadRecordingAttachmentFile({
 	if (!fileId) return false
 
 	try {
-		const [urlItem] = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+		const [urlItem] = await getTemporaryDownloadUrl({
+			file_ids: [fileId],
+			is_download: true,
+		})
 		if (!urlItem?.url) return false
 
 		await downloadFileWithAnchor(urlItem.url, fileName || undefined)
