@@ -650,7 +650,7 @@ class MagicPermission implements MagicPermissionInterface
         if ($resourceMapping !== null) {
             $path = $resourceMapping['path'] ?? null;
             if (is_array($path)) {
-                $paths[] = $this->applyResourcePathOrder($resource, $path);
+                $paths[] = $path;
             }
         }
 
@@ -671,35 +671,11 @@ class MagicPermission implements MagicPermissionInterface
 
             $path = $resourceAlias['path'] ?? null;
             if (is_array($path)) {
-                $paths[] = $this->applyResourcePathOrder($resource, $path);
+                $paths[] = $path;
             }
         }
 
         return $paths;
-    }
-
-    /**
-     * 将资源所属配置中的路径顺序附加到菜单节点，不感知资源来自哪个扩展包。
-     *
-     * @param array<int, mixed> $path
-     * @return array<int, mixed>
-     */
-    private function applyResourcePathOrder(string $resource, array $path): array
-    {
-        $resourceOrders = config('permission_menu.resource_menu_order', []);
-        $orders = is_array($resourceOrders) ? ($resourceOrders[$resource] ?? []) : [];
-        if (! is_array($orders)) {
-            return $path;
-        }
-
-        foreach ($path as $index => &$node) {
-            if (is_array($node) && isset($orders[$index]) && is_int($orders[$index])) {
-                $node['order'] = $orders[$index];
-            }
-        }
-        unset($node);
-
-        return $path;
     }
 
     private function isResourceHiddenFromTree(string $resource): bool
@@ -811,14 +787,16 @@ class MagicPermission implements MagicPermissionInterface
      */
     private function normalizeTree(array $branch): array
     {
-        foreach ($branch as &$node) {
+        $normalizedBranch = [];
+        foreach ($branch as $key => $node) {
             if (isset($node['children']) && is_array($node['children'])) {
                 $node['children'] = array_values($this->normalizeTree($node['children']));
             }
+            $normalizedBranch[$key] = $node;
         }
 
         $decorated = [];
-        foreach (array_values($branch) as $index => $node) {
+        foreach (array_values($normalizedBranch) as $index => $node) {
             $decorated[] = [
                 'node' => $node,
                 'index' => $index,
