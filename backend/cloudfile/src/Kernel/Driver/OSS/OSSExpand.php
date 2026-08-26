@@ -21,6 +21,7 @@ use Dtyq\CloudFile\Kernel\Struct\CredentialPolicy;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
+use Dtyq\CloudFile\Kernel\Utils\ContentDispositionBuilder;
 use Dtyq\CloudFile\Kernel\Utils\EasyFileTools;
 use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
 use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
@@ -428,8 +429,7 @@ class OSSExpand implements ExpandInterface
     private function signUrl(string $path, int $timeout = 60, string $downloadName = '', array $options = []): string
     {
         if (! empty($downloadName)) {
-            $downloadName = rawurlencode($downloadName);
-            $options['response-content-disposition'] = 'attachment;filename="' . $downloadName . '";filename*=utf-8\'\'' . $downloadName;
+            $options['response-content-disposition'] = ContentDispositionBuilder::build($downloadName);
         }
 
         // 处理图片处理参数

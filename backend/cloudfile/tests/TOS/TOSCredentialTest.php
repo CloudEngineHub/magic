@@ -118,8 +118,8 @@ class TOSCredentialTest extends CloudFileBaseTest
             $this->assertArrayHasKey('X-Tos-Signature', $query);
         }
 
-        $this->assertContentDisposition($urls['easy-file/tos_demo.png'], 'attachment; filename="batch-image.png"');
-        $this->assertContentDisposition($urls['easy-file/test.txt'], 'inline; filename="batch-text.txt"');
+        $this->assertContentDisposition($urls['easy-file/tos_demo.png'], 'attachment; filename="batch-image.png"; filename*=UTF-8\'\'batch-image.png');
+        $this->assertContentDisposition($urls['easy-file/test.txt'], 'inline; filename="batch-text.txt"; filename*=UTF-8\'\'batch-text.txt');
     }
 
     /**
