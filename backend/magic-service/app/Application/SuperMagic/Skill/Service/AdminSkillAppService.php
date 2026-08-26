@@ -21,6 +21,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketBatchReindexRequestedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketPublishedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUpdatedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
@@ -440,7 +441,7 @@ class AdminSkillAppService extends AbstractSkillAppService
             $version = $this->skillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($id);
             $market = $version === null ? null : $this->skillMarketDomainService->findStoreSkillBySkillCode($version->getCode());
             if ($market !== null && $market->getId() !== null) {
-                AsyncEventUtil::dispatch(new SkillMarketUpdatedEvent(
+                AsyncEventUtil::dispatch(new SkillMarketPublishedEvent(
                     (string) $market->getId(),
                     $market->getOrganizationCode(),
                     $dataIsolation->getCurrentUserId(),
