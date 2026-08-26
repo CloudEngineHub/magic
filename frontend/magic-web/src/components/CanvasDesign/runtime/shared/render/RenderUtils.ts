@@ -179,6 +179,42 @@ export class RenderUtils {
 	}
 
 	/**
+	 * 更新图片的 contain 布局：保持原始宽高比并完整显示，剩余空间由容器背景填充。
+	 * 与 updateBackgroundImageLayout 的 cover 语义分开，避免预览图被中心裁剪。
+	 */
+	public static updateContainedImageLayout(
+		imageNode: Konva.Image,
+		width: number,
+		height: number,
+	): void {
+		imageNode.position({ x: 0, y: 0 })
+		imageNode.width(width)
+		imageNode.height(height)
+
+		const image = imageNode.image()
+		const imageSize = image ? RenderUtils.getBackgroundImageSize(image) : undefined
+		if (!imageSize || width <= 0 || height <= 0) {
+			return
+		}
+
+		const scale = Math.min(width / imageSize.width, height / imageSize.height)
+		const renderedWidth = imageSize.width * scale
+		const renderedHeight = imageSize.height * scale
+		imageNode.position({
+			x: (width - renderedWidth) / 2,
+			y: (height - renderedHeight) / 2,
+		})
+		imageNode.width(renderedWidth)
+		imageNode.height(renderedHeight)
+		imageNode.crop({
+			x: 0,
+			y: 0,
+			width: imageSize.width,
+			height: imageSize.height,
+		})
+	}
+
+	/**
 	 * 创建背景图片节点（使用 cover 模式裁剪）
 	 * @param group 父容器
 	 * @param width 容器宽度

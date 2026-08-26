@@ -975,44 +975,43 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		})
 		const previewHeight = Math.max(0, layout.videoCard.height - layout.videoCard.infoHeight)
 		const gradient = VIDEO_CARD_GRADIENTS[index % VIDEO_CARD_GRADIENTS.length]
-		card.add(
-			fill,
-			cardHit,
-			this.previewCanvases.has(videoElementId)
-				? (() => {
-						const image = new Konva.Image({
-							image: this.previewCanvases.get(videoElementId),
-							width: layout.videoCard.width,
-							height: previewHeight,
-							listening: false,
-						})
-						RenderUtils.updateBackgroundImageLayout(
-							image,
-							layout.videoCard.width,
-							previewHeight,
-						)
-						return image
-					})()
-				: new Konva.Rect({
-						width: layout.videoCard.width,
-						height: previewHeight,
-						fill: VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
-						fillLinearGradientStartPoint: { x: 0, y: 0 },
-						fillLinearGradientEndPoint: {
-							x: layout.videoCard.width,
-							y: previewHeight,
-						},
-						fillLinearGradientColorStops: [
-							0,
-							gradient?.[0] ?? VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
-							0.56,
-							gradient?.[1] ?? VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
-							1,
-							gradient?.[2] ?? VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
-						],
-						listening: false,
-					}),
-		)
+		const preview = this.previewCanvases.get(videoElementId)
+		card.add(fill, cardHit)
+		if (preview) {
+			card.add(
+				new Konva.Rect({
+					width: layout.videoCard.width,
+					height: previewHeight,
+					fill: VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
+					listening: false,
+				}),
+			)
+			const image = new Konva.Image({ image: preview, listening: false })
+			RenderUtils.updateContainedImageLayout(image, layout.videoCard.width, previewHeight)
+			card.add(image)
+		} else {
+			card.add(
+				new Konva.Rect({
+					width: layout.videoCard.width,
+					height: previewHeight,
+					fill: VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
+					fillLinearGradientStartPoint: { x: 0, y: 0 },
+					fillLinearGradientEndPoint: {
+						x: layout.videoCard.width,
+						y: previewHeight,
+					},
+					fillLinearGradientColorStops: [
+						0,
+						gradient?.[0] ?? VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
+						0.56,
+						gradient?.[1] ?? VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
+						1,
+						gradient?.[2] ?? VIDEO_EDIT_CONFIG.VIDEO_PREVIEW_BACKGROUND,
+					],
+					listening: false,
+				}),
+			)
+		}
 		if (issue) {
 			card.add(
 				new Konva.Rect({
