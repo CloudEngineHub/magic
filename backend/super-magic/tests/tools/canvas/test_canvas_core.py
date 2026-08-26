@@ -479,7 +479,7 @@ async def test_add_contents_materializes_imported_asset_into_project(tmp_path) -
 
 @pytest.mark.asyncio
 async def test_imported_asset_is_materialized_idempotently_and_reusable(tmp_path) -> None:
-    """imported 素材会物化到项目目录，并允许多个 Content 复用。"""
+    """重复导入同一 imported 素材时复用已有 Element 和项目文件。"""
     asset = tmp_path / "uploads" / "mock.png"
     asset.parent.mkdir(parents=True)
     asset.write_bytes(b"mock-image")
@@ -519,12 +519,16 @@ async def test_imported_asset_is_materialized_idempotently_and_reusable(tmp_path
     first_uri = first.get_content(first.main_content_id).fields.src
     second_uri = second_element.get_content(second_element.main_content_id).fields.src
 
+    assert second["items"][0]["status"] == "reused"
+    assert second["items"][0]["element_id"] == first.element_id
+    assert second["created_element_ids"] == []
     assert first_uri == second_uri
     assert first_uri == "./images/mock.png"
     assert first_result["items"][0]["asset_path"] == first_uri
     assert second["items"][0]["asset_path"] == first_uri
     assert asset.exists()
     assert len(list((tmp_path / "mock-project" / "images").glob("*"))) == 1
+    assert len(project.canvas.elements) == 1
     details = await repository.read_sidecar_runtime("mock-project")
     assert details["elements"][first.element_id]["contentDetails"][first.main_content_id]["assetPath"] == first_uri
 

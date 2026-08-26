@@ -15,6 +15,7 @@ SUCCESS_STATUSES = frozenset(
         "removed",
         "replaced",
         "created",
+        "reused",
         "already_removed",
         "already_replaced",
         "estimated",

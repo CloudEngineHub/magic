@@ -185,7 +185,11 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 
 ### 1. Set up the Canvas
 
-Create or reuse the project with `initialize_canvas`. Import user-supplied images, videos, or audio that need stable Element IDs with `add_canvas_elements` using `source=imported`.
+Create or reuse the project with `initialize_canvas`. Before importing any user-supplied image, video, or audio, query the current Canvas and resolve whether the asset is already represented by an existing Element.
+
+If the uploaded asset already has a matching Canvas Element and Content, reuse the exact Element ID, Content ID, and project-relative media path. Pass that path in the appropriate generation reference array and use the existing Element as a direct Connection only when it materially contributes to the requested output. Do not call `add_canvas_elements` or `import_canvas_assets` to create a second imported Element. If the asset cannot be matched to an existing Canvas Element, import it with `add_canvas_elements` using `source=imported`.
+
+Import user-supplied images, videos, or audio that need stable Element IDs with `add_canvas_elements` using `source=imported`.
 For every imported root Element without an upstream source, pass `layout: {"strategy": "dependency_flow"}` explicitly. This keeps professional-production roots in a vertical root column; omitting `layout` invokes the generic horizontal `row_incremental` layout. After importing, query the returned Elements and verify their Element IDs, Content IDs, status, project-relative paths, and dimensions before continuing.
 
 For imported media, the source file must be passed as `content.asset_path`. This is the tool input path, not the final Canvas `src`; the import service validates and materializes the file into the project's canonical media directory before storing its project-local `src`. Do not use `path`, `media_path`, `file_path`, or `src` as synonyms for `asset_path`.

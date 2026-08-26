@@ -8,7 +8,7 @@ from app.tools.canvas.domain.types import JsonObject
 
 @dataclass
 class AddElementResultItem(CanvasResultItem):
-    """描述一个新增 Element 的结果。"""
+    """描述一个新增或复用 Element 的结果。"""
 
     item_ref: str
     element_id: str
@@ -39,7 +39,7 @@ class AddElementResultItem(CanvasResultItem):
 
 
 class AddElementsResult(CanvasBatchResult[AddElementResultItem]):
-    """描述一批新增 Element 的结果。"""
+    """描述一批新增或复用 Element 的结果。"""
 
     def __init__(self, items: list[AddElementResultItem], created_element_ids: list[str]) -> None:
         """保存新增项和已创建的 Element ID。"""

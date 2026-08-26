@@ -7,8 +7,8 @@ import pytest
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import I18nManager
-from app.tools.canvas.presentation import CanvasGenerationFeedback
 from app.tools.canvas.presentation import (
+    CanvasGenerationFeedback,
     CanvasToolDetailBuilder,
     batch_tool_result,
     canvas_result_remark,
@@ -93,6 +93,14 @@ def test_batch_status_preserves_processing_and_partial_semantics() -> None:
     partial = summarize_items([{"status": "completed"}, {"status": "failed"}])
     assert partial.status == "partial"
     assert not partial.ok
+
+
+def test_batch_status_treats_reused_asset_as_success() -> None:
+    """重复导入复用已有素材时不能被批量结果误报为失败。"""
+    summary = summarize_items([{"status": "reused"}])
+
+    assert summary.status == "succeeded"
+    assert summary.ok
 
 
 def test_batch_tool_result_and_detail_use_the_same_status() -> None:
