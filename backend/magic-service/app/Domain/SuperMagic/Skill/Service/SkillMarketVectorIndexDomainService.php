@@ -242,11 +242,12 @@ final class SkillMarketVectorIndexDomainService
             'skill_version_id' => $market->getSkillVersionId(),
             'semantic_text' => $semanticText,
             'publish_status' => $market->getPublishStatus()->value,
-            'is_hidden' => $market->isHidden(),
+            // Store boolean visibility flags as 0/1 to match the database representation.
+            'is_hidden' => $market->isHidden() ? 1 : 0,
             'publisher_type' => $market->getPublisherType()->value,
             'publisher_id' => $market->getPublisherId(),
             'category_ids' => $market->getCategoryIds(),
-            'is_featured' => $market->isFeatured(),
+            'is_featured' => $market->isFeatured() ? 1 : 0,
             'sort_order' => $market->getSortOrder() ?? 0,
             'install_count' => $market->getTotalInstallCount(),
             'updated_at' => $market->getUpdatedAt() ?? '',
@@ -307,7 +308,7 @@ final class SkillMarketVectorIndexDomainService
     {
         $must = [
             ['key' => 'publish_status', 'value' => 'PUBLISHED'],
-            ['key' => 'is_hidden', 'value' => false],
+            ['key' => 'is_hidden', 'value' => 0],
         ];
         if ($query->getCodes() !== null && $query->getCodes() !== []) {
             $must[] = ['key' => 'skill_code', 'any' => $query->getCodes()];
@@ -320,7 +321,7 @@ final class SkillMarketVectorIndexDomainService
             $must[] = ['key' => 'publisher_type', 'value' => $publisherType];
         }
         if ($query->getIsFeatured() !== null) {
-            $must[] = ['key' => 'is_featured', 'value' => $query->getIsFeatured()];
+            $must[] = ['key' => 'is_featured', 'value' => $query->getIsFeatured() ? 1 : 0];
         }
 
         return ['must' => $must];
