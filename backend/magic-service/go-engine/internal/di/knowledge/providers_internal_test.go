@@ -89,6 +89,36 @@ func TestDocumentResyncRabbitMQSchedulerConfigMaxRequeueAttempts(t *testing.T) {
 	}
 }
 
+func TestResolveDocumentResyncQueueNameUsesPreReleaseQueue(t *testing.T) {
+	t.Setenv("APP_ENV", "saas-pre")
+
+	cfg := &autoloadcfg.Config{}
+	cfg.RabbitMQ.Queues.DocumentResync = "knowledge.document.resync"
+
+	if got := resolveDocumentResyncQueueName(cfg); got != "knowledge.document.resync.saas-pre" {
+		t.Fatalf("expected pre-release document resync queue, got %q", got)
+	}
+}
+
+func TestResolveDocumentResyncQueueNameKeepsConfiguredQueueOutsidePreRelease(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+
+	cfg := &autoloadcfg.Config{}
+	cfg.RabbitMQ.Queues.DocumentResync = "knowledge.document.resync.custom"
+
+	if got := resolveDocumentResyncQueueName(cfg); got != "knowledge.document.resync.custom" {
+		t.Fatalf("expected configured document resync queue, got %q", got)
+	}
+}
+
+func TestResolveDocumentResyncQueueNameHandlesPreReleaseCaseAndWhitespace(t *testing.T) {
+	t.Setenv("APP_ENV", " SaaS-Pre ")
+
+	if got := resolveDocumentResyncQueueName(&autoloadcfg.Config{}); got != "knowledge.document.resync.saas-pre" {
+		t.Fatalf("expected normalized pre-release document resync queue, got %q", got)
+	}
+}
+
 func TestDocumentResyncRabbitMQSchedulerConfigDefaultConsumerConcurrency(t *testing.T) {
 	t.Parallel()
 
