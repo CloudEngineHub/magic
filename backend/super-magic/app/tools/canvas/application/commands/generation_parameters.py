@@ -8,6 +8,35 @@ from app.tools.canvas.domain.types import JsonObject, JsonValue
 
 
 @dataclass(frozen=True)
+class CompositionParameters:
+    """保存一次视频合成请求中的 Element 顺序和导出配置。"""
+
+    video_sequence: tuple[str, ...]
+    audio_sequence: tuple[str, ...] = ()
+    output: JsonObject = field(default_factory=dict)
+
+    def to_dict(self) -> JsonObject:
+        """转换为与 Video Edit 一致的合成请求对象。"""
+        return {
+            "videoSequence": list(self.video_sequence),
+            "audioSequence": list(self.audio_sequence),
+            "output": dict(self.output),
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> "CompositionParameters | None":
+        """从 sidecar 合成请求对象恢复强类型参数。"""
+        if not isinstance(value, dict):
+            return None
+        video_sequence = _string_tuple(value, "videoSequence")
+        audio_sequence = _string_tuple(value, "audioSequence")
+        if not video_sequence:
+            return None
+        output = dict(value.get("output")) if isinstance(value.get("output"), dict) else {}
+        return cls(video_sequence=video_sequence, audio_sequence=audio_sequence, output=output)
+
+
+@dataclass(frozen=True)
 class GenerationParameters:
     """保存图片和视频生成共同及扩展参数。"""
 
@@ -33,7 +62,7 @@ class GenerationParameters:
     seed: int | None = None
     watermark: bool | None = None
     audio_policy: str | None = None
-    video_edit_element_id: str | None = None
+    composition: CompositionParameters | None = None
     extensions: JsonObject = field(default_factory=dict)
 
     def effective_reference_images(self) -> tuple[str, ...]:
@@ -67,9 +96,10 @@ class GenerationParameters:
             "seed": self.seed,
             "watermark": self.watermark,
             "audio_policy": self.audio_policy,
-            "video_edit_element_id": self.video_edit_element_id,
         }
         values.update({key: value for key, value in optional.items() if value is not None})
+        if self.composition is not None:
+            values["composition"] = self.composition.to_dict()
         if self.skip_point_estimate:
             values["skip_point_estimate"] = True
         return values
@@ -102,7 +132,7 @@ class GenerationParameters:
             seed=_optional_integer(values, "seed"),
             watermark=_optional_boolean(values, "watermark"),
             audio_policy=_optional_audio_policy(values, "audio_policy"),
-            video_edit_element_id=_optional_string(values, "video_edit_element_id"),
+            composition=CompositionParameters.from_dict(values.get("composition")),
             extensions=_optional_object(values, "extensions"),
         )
 

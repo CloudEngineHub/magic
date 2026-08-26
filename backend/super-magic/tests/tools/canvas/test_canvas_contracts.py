@@ -258,14 +258,38 @@ def test_storyboard_persists_model_and_nested_aspect_ratio_configuration() -> No
     }
 
 
-def test_composition_content_requires_video_edit_input_mode() -> None:
-    """最终视频生成协议必须显式声明 video_edit 输入模式。"""
-    with pytest.raises(ValidationError, match="input_mode=video_edit"):
+def test_composition_content_persists_element_sequences_and_output_in_generation_parameters() -> None:
+    """最终视频合成参数必须保存 Element 顺序和本次导出配置。"""
+    content = ContentInput(
+        source="generated",
+        content_type="video",
+        task="compose",
+        composition={
+            "videoSequence": ["video-1", "video-2"],
+            "audioSequence": ["audio-1"],
+        },
+        output={"format": "mp4", "aspectRatio": "9:16", "resolution": "720p", "audioPolicy": "preserve"},
+    )
+
+    command = content.to_command()
+    assert command.is_composition
+    assert command.generation_parameters is not None
+    assert command.generation_parameters.to_dict()["composition"] == {
+        "videoSequence": ["video-1", "video-2"],
+        "audioSequence": ["audio-1"],
+        "output": {"format": "mp4", "audioPolicy": "preserve", "aspectRatio": "9:16", "resolution": "720p"},
+    }
+
+
+def test_composition_content_requires_element_sequences() -> None:
+    """最终视频合成必须使用与 Video Edit 一致的 Element 顺序字段。"""
+    with pytest.raises(ValidationError):
         ContentInput(
             source="generated",
             content_type="video",
             task="compose",
-            videoEditElementId="edit-1",
+            composition={"audios": []},
+            output={"format": "mp4"},
         )
 
 
@@ -303,12 +327,11 @@ def test_video_generation_mode_and_task_survive_input_conversions() -> None:
 
 
 def test_video_edit_content_uses_element_id_sequence() -> None:
-    """Video Edit 必须按协议接收有序的 Video Element ID 数组。"""
+    """Video Edit 按协议接收有序的 Video Element ID 数组。"""
     content = ContentInput(
         source="user",
         content_type="video-edit",
         videoSequence=["video-element-1", "video-element-2"],
-        output={"format": "mp4"},
     )
 
     assert content.video_sequence == ["video-element-1", "video-element-2"]
@@ -318,16 +341,15 @@ def test_video_edit_content_uses_element_id_sequence() -> None:
     ]
 
 
-def test_video_edit_content_persists_audio_policy() -> None:
-    """Video Edit 输出配置应显式保存音频策略。"""
+def test_video_edit_content_does_not_store_export_configuration() -> None:
+    """Video Edit 只保存剪辑方案，不保存导出配置。"""
     content = ContentInput(
         source="user",
         content_type="video-edit",
         videoSequence=["video-element-1"],
-        output={"format": "mp4", "audioPolicy": "mute"},
     )
 
-    assert content.model_dump(by_alias=True)["output"]["audioPolicy"] == "mute"
+    assert content.output is None
 
 
 @pytest.mark.parametrize(
@@ -547,6 +569,7 @@ def test_element_details_content_does_not_dump_raw_element_dto() -> None:
                             "status": "completed",
                             "source": "user",
                             "payload": {"content": "Hello"},
+                            "runtime": {"generationStatus": "completed"},
                         }
                     ],
                     "children": [],
@@ -559,6 +582,7 @@ def test_element_details_content_does_not_dump_raw_element_dto() -> None:
 
     assert "Element element-1:" in content
     assert "content=Hello" in content
+    assert "runtime={\"generationStatus\":\"completed\"}" in content
     assert '"element_id"' not in content
     assert '"contents"' not in content
 

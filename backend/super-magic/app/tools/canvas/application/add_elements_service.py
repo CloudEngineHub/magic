@@ -23,9 +23,9 @@ from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
 from app.tools.canvas.domain.services import ElementReferenceResolver, VideoEditContentValidator
 from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
-from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.production.contracts.composition_output import CompositionOutput
 from app.tools.canvas.production.contracts.video_composition_models import CompositionInputSpec
+from app.tools.canvas.production.services.video_composition_service import VideoCompositionService
 from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
 
@@ -37,9 +37,11 @@ class _CompositionRequest:
     item_ref: str
     result_element_id: str
     result_content_id: str
-    video_edit_element_id: str
     composition_output: CompositionOutput
+    video_element_ids: tuple[str, ...]
+    audio_element_ids: tuple[str, ...]
     input_spec: CompositionInputSpec | None
+    preparation_error: str | None
     result_name: str
 
 
@@ -108,10 +110,10 @@ class AddElementsService:
                     element.children = []
                 composition_content = content if content is not None and content.is_composition else None
                 if composition_content is not None:
-                    if element.element_type != "video" or not composition_content.composition_video_edit_element_id:
+                    if element.element_type != "video":
                         raise CanvasDomainError(
                             "CONTENT_INPUT_INVALID",
-                            "Composition Content requires a video Element and video-edit source.",
+                            "Composition Content requires a video result Element.",
                         )
                 generated_content_id = None
                 materialized_asset_path: str | None = None
@@ -123,8 +125,6 @@ class AddElementsService:
                             fields=content.fields,
                             asset_path=content.asset_path,
                             generation_parameters=content.generation_parameters,
-                            composition_video_edit_element_id=content.composition_video_edit_element_id,
-                            composition_output=content.composition_output,
                             content_id=new_canvas_id("content"),
                         )
                     prepared = await self.content_preparation.prepare_imported(content, project_path)
@@ -162,9 +162,13 @@ class AddElementsService:
                                     item_ref=item.item_ref,
                                     result_element_id=element.element_id,
                                     result_content_id=element.contents[0].content_id,
-                                    video_edit_element_id=content.composition_video_edit_element_id or "",
-                                    composition_output=content.composition_output,
+                                    composition_output=CompositionOutput.from_dict(
+                                        content.generation_parameters.composition.output
+                                    ),
+                                    video_element_ids=tuple(content.generation_parameters.composition.video_sequence),
+                                    audio_element_ids=tuple(content.generation_parameters.composition.audio_sequence),
                                     input_spec=None,
+                                    preparation_error=None,
                                     result_name=item.name or "Canvas final video",
                                 )
                             )
@@ -220,6 +224,9 @@ class AddElementsService:
                     element.element_id,
                     video_edit_fields,
                 )
+            for request in compositions:
+                current_item_ref = request.item_ref
+                self._validate_composition_connections(project, request)
             for item_ref, element, layout, batch_index in layout_requests:
                 current_item_ref = item_ref
                 request = layout or LayoutCommand(strategy="row_incremental")
@@ -230,30 +237,27 @@ class AddElementsService:
                     batch_index,
                 )
             for index, request in enumerate(compositions):
-                video_edit = project.canvas.get_element(request.video_edit_element_id)
-                if video_edit is None or video_edit.element_type != "video-edit":
-                    raise CanvasDomainError(
-                        "ELEMENT_NOT_FOUND",
-                        f"The requested Video Edit Element does not exist: {request.video_edit_element_id}.",
+                try:
+                    input_spec = self.video_composition_service.inspect_inputs(
+                        project,
+                        request.video_element_ids,
+                        audio_element_ids=request.audio_element_ids,
+                        composition_output=request.composition_output,
                     )
-                selected_content = video_edit.get_content(video_edit.main_content_id)
-                if selected_content is None or not isinstance(selected_content.fields, VideoEditContentFields):
-                    raise CanvasDomainError(
-                        "VIDEO_COMPOSITION_FAILED",
-                        "Video Edit Content does not exist or is not usable.",
-                    )
+                except CanvasDomainError as error:
+                    input_spec = None
+                    preparation_error = error.message
+                else:
+                    preparation_error = None
                 compositions[index] = _CompositionRequest(
                     item_ref=request.item_ref,
                     result_element_id=request.result_element_id,
                     result_content_id=request.result_content_id,
-                    video_edit_element_id=request.video_edit_element_id,
                     composition_output=request.composition_output,
-                    input_spec=self.video_composition_service.inspect_inputs(
-                        project,
-                        request.video_edit_element_id,
-                        video_edit_content_id=selected_content.content_id,
-                        composition_output=request.composition_output,
-                    ),
+                    video_element_ids=request.video_element_ids,
+                    audio_element_ids=request.audio_element_ids,
+                    input_spec=input_spec,
+                    preparation_error=preparation_error,
                     result_name=request.result_name,
                 )
             return AddElementsResult(results, created_element_ids), metadata
@@ -270,6 +274,16 @@ class AddElementsService:
         result_items = {item.item_ref: item for item in result.items}
         for composition in compositions:
             target = result_items[composition.item_ref]
+            if composition.input_spec is None:
+                target.status = "failed"
+                target.error = composition.preparation_error or "Composition input is invalid."
+                await self.video_composition_service.mark_unprepared_failed(
+                    project_path,
+                    composition.result_element_id,
+                    composition.result_content_id,
+                    target.error,
+                )
+                continue
             try:
                 composed = await self.video_composition_service.compose(
                     project_path,
@@ -286,6 +300,47 @@ class AddElementsService:
                 target.status = "failed"
                 target.error = str(error)
         return result
+
+    @staticmethod
+    def _validate_composition_connections(
+        project: CanvasProject,
+        request: _CompositionRequest,
+    ) -> None:
+        """存在 Video Edit 上游时，保证最终视频只连接该剪辑方案。"""
+        incoming_source_ids = [
+            connection.source_element_id
+            for connection in project.canvas.connections
+            if connection.target_element_id == request.result_element_id
+        ]
+        video_edit_source_ids = [
+            source_id
+            for source_id in incoming_source_ids
+            if (source := project.canvas.get_element(source_id)) is not None
+            and source.element_type == "video-edit"
+        ]
+        if not video_edit_source_ids:
+            return
+        if len(video_edit_source_ids) != 1 or incoming_source_ids != video_edit_source_ids:
+            raise CanvasDomainError(
+                "VIDEO_COMPOSITION_CONNECTION_INVALID",
+                "A final video connected from a Video Edit must use that Video Edit as its only direct predecessor.",
+            )
+        video_edit = project.canvas.get_element(video_edit_source_ids[0])
+        content = video_edit.get_content(video_edit.main_content_id) if video_edit is not None else None
+        fields = content.fields if content is not None else None
+        if not isinstance(fields, VideoEditContentFields):
+            raise CanvasDomainError(
+                "VIDEO_COMPOSITION_CONNECTION_INVALID",
+                "The connected Video Edit must have a usable main Content.",
+            )
+        if (
+            tuple(fields.video_sequence) != request.video_element_ids
+            or tuple(fields.audio_sequence) != request.audio_element_ids
+        ):
+            raise CanvasDomainError(
+                "VIDEO_COMPOSITION_CONNECTION_INVALID",
+                "The connected Video Edit sequences must match the composition sequences.",
+            )
 
     @staticmethod
     def _find_existing_imported_element(

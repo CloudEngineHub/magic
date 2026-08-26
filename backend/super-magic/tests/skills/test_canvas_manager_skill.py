@@ -75,7 +75,7 @@ def test_every_canvas_tool_has_an_independent_guide_and_code_mode_example() -> N
 
         section = content.split(f"## `{tool_name}`", maxsplit=1)[1]
         section = re.split(r"\n## `|\n# ", section, maxsplit=1)[0]
-        assert "参数" in section
+        assert "Parameters:" in section
         assert "print(result.content)" in section
 
 
@@ -84,9 +84,9 @@ def test_skill_covers_unified_design_and_video_production_workflows() -> None:
     content = SKILL_PATH.read_text(encoding="utf-8")
 
     for expected in (
-        "图片设计工作流",
-        "普通视频工作流",
-        "精细视频制作工作流",
+        "Image design workflow",
+        "Ordinary video workflow",
+        "Detailed video production workflow",
         "Storyboard",
         "video-edit",
         "row_incremental",
@@ -106,7 +106,8 @@ def test_skill_states_current_production_capabilities() -> None:
     content = SKILL_PATH.read_text(encoding="utf-8")
 
     assert 'task="compose"' in content
-    assert "videoEditElementId" in content
+    assert "composition.videoSequence" in content
+    assert "composition.audioSequence" in content
     assert "search_canvas_image_candidates" in content
     assert "audioSequence" in content
     assert "asset_path" in content

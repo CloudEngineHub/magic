@@ -78,8 +78,6 @@ class ContentService:
                         fields=command.fields,
                         asset_path=command.asset_path,
                         generation_parameters=command.generation_parameters,
-                        composition_video_edit_element_id=command.composition_video_edit_element_id,
-                        composition_output=command.composition_output,
                         content_id=new_canvas_id("content"),
                     )
                 prepared = await self.content_preparation.prepare_imported(command, project_path)

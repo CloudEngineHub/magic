@@ -7,12 +7,12 @@ from app.tools.canvas.production.contracts.composition_output import Composition
 
 @dataclass(frozen=True)
 class CompositionInputSpec:
-    """描述一次合成冻结后的有序媒体和导出输入。"""
+    """描述一次合成冻结后的 Element 顺序、解析媒体和导出输入。"""
 
-    video_content_ids: tuple[str, ...]
+    video_element_ids: tuple[str, ...]
+    audio_element_ids: tuple[str, ...]
     video_sources: tuple[str, ...]
-    audio_content_id: str | None
-    audio_source: str | None
+    audio_sources: tuple[str, ...]
     output_width: int
     output_height: int
     audio_policy: str

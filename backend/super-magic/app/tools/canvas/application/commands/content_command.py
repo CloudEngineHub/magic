@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from app.tools.canvas.application.commands.generation_parameters import GenerationParameters
 from app.tools.canvas.domain.content_fields import CanvasContentFields
-
-if TYPE_CHECKING:
-    from app.tools.canvas.production.contracts.composition_output import CompositionOutput
 
 
 @dataclass(frozen=True)
@@ -21,8 +18,6 @@ class ContentCommand:
     fields: CanvasContentFields
     asset_path: str | None = None
     generation_parameters: GenerationParameters | None = None
-    composition_video_edit_element_id: str | None = None
-    composition_output: CompositionOutput | None = None
     content_id: str | None = None
 
     @property
@@ -42,8 +37,7 @@ class ContentCommand:
             self.source == "generated"
             and self.generation_parameters is not None
             and self.generation_parameters.task == "compose"
-            and self.composition_video_edit_element_id
-            and self.composition_output is not None
+            and self.generation_parameters.composition is not None
         )
 
     def to_metadata(self) -> dict[str, object]:
@@ -56,8 +50,4 @@ class ContentCommand:
             values["assetPath"] = self.asset_path
         if self.generation_parameters is not None:
             values["generationParameters"] = self.generation_parameters.to_dict()
-        if self.is_composition:
-            values["composition"] = {
-                "output": self.composition_output.to_dict(),
-            }
         return values

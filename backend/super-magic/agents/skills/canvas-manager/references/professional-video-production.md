@@ -187,14 +187,16 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 
 Create or reuse the project with `initialize_canvas`. Before importing any user-supplied image, video, or audio, query the current Canvas and resolve whether the asset is already represented by an existing Element.
 
+When an existing video needs FFmpeg or another media transformation, complete the processing in a system temporary directory before importing the result into Canvas. Keep the Canvas workspace focused on persistent project assets and Canvas state. After processing, use the exact Canvas-importable media reference returned by the runtime capability, create a new Video Element, and connect it to the source video when that relationship is part of the production flow.
+
 If the uploaded asset already has a matching Canvas Element and Content, reuse the exact Element ID, Content ID, and project-relative media path. Pass that path in the appropriate generation reference array and use the existing Element as a direct Connection only when it materially contributes to the requested output. Do not call `add_canvas_elements` or `import_canvas_assets` to create a second imported Element. If the asset cannot be matched to an existing Canvas Element, import it with `add_canvas_elements` using `source=imported`.
 
 Import user-supplied images, videos, or audio that need stable Element IDs with `add_canvas_elements` using `source=imported`.
 For every imported root Element without an upstream source, pass `layout: {"strategy": "dependency_flow"}` explicitly. This keeps professional-production roots in a vertical root column; omitting `layout` invokes the generic horizontal `row_incremental` layout. After importing, query the returned Elements and verify their Element IDs, Content IDs, status, project-relative paths, and dimensions before continuing.
 
-For imported media, the source file must be passed as `content.asset_path`. This is the tool input path, not the final Canvas `src`; the import service validates and materializes the file into the project's canonical media directory before storing its project-local `src`. Do not use `path`, `media_path`, `file_path`, or `src` as synonyms for `asset_path`.
+For imported media, the exact user-provided or runtime-returned import reference must be passed as `content.asset_path`. This is the tool input path, not the final Canvas `src`; the import service validates and materializes the file into the project's canonical media directory before storing its project-local `src`. Do not use `path`, `media_path`, `file_path`, or `src` as synonyms for `asset_path`.
 
-Use this shape for each imported item:
+Use this shape for each imported item. Replace the placeholder with the exact import reference returned by the runtime capability before calling the tool:
 
 ```python
 from sdk.tool import tool
@@ -209,14 +211,20 @@ result = tool.call("add_canvas_elements", {
         "content": {
             "source": "imported",
             "content_type": "image",
-            "asset_path": ".tmp/product.webp",
+            "asset_path": "<exact-import-reference-returned-by-runtime>",
         },
     }],
 })
 print(result.content)
 ```
 
-If validation reports `Unknown parameter`, do not try alternate path field names. Re-read the `add_canvas_elements` schema and retry with `content.asset_path`; do not proceed to asset understanding until the import returns successfully. Never create `Project/imports/` as a manual staging area: the import service writes the returned image, video, or audio Content to `./images/`, `./videos/`, or `./audios/` respectively.
+If validation reports `Unknown parameter`, re-read the `add_canvas_elements` schema and use `content.asset_path`. If the runtime result is not importable, obtain a new import reference from the runtime media-processing capability before retrying. Never create `Project/imports/` as a manual staging area: the import service writes the returned image, video, or audio Content to `./images/`, `./videos/`, or `./audios/` respectively.
+
+For a request such as “Remove the audio from this video,” use this operating instruction:
+
+```text
+Locate the video specified by the user and create a silent copy in a system temporary directory. After processing completes, use the importable media reference returned by the runtime capability to create a new Video Element, then connect the original video as its direct source. Use the new video's returned Canvas media path for later composition and editing while preserving the original video.
+```
 
 ### 2. Understand the assets
 
@@ -350,28 +358,27 @@ print(result.content)
 
 Use `standard` for prompt-only generation, `image_reference` for image references, `omni_reference` for mixed media references, and `keyframe_guided` only when the current model declares it. For `keyframe_guided`, pass `frame_start_path` and optional `frame_end_path`; do not duplicate those files in `reference_image_paths`. Bind every reference token by array order before estimating.
 
-### 8. Configure the edit and optional audio
+### 8. Define ordered media inputs and optional audio
 
-Import user-provided audio when needed. The initial composition accepts zero or one audio track. After the user chooses to create the complete video, build the `video-edit` Content with the confirmed ordered Video Element IDs:
+Import user-provided audio when needed. The composition request carries ordered Video and Audio Element IDs using the same sequence fields as Video Edit:
 
 ```python
 tool.call("add_canvas_elements", {
     "project_path": "Demo",
     "items": [{
-        "item_ref": "final-edit",
-        "element_type": "video-edit",
+        "item_ref": "final-video",
+        "element_type": "video",
         "name": "Product launch final edit",
         "layout": {"strategy": "dependency_flow"},
-        "connections": [
-            {"source_element_id": "element-740000000000000010"},
-            {"source_element_id": "element-740000000000000011"},
-            {"source_element_id": "element-740000000000000014"},
-        ],
         "content": {
-            "source": "user",
-            "content_type": "video-edit",
-            "videoSequence": ["element-740000000000000010", "element-740000000000000011"],
-            "audioSequence": ["element-740000000000000014"],
+            "source": "generated",
+            "content_type": "video",
+            "task": "compose",
+            "composition": {
+                "videoSequence": ["element-shot-01", "element-shot-02"],
+                "audioSequence": ["element-music"],
+            },
+            "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4", "audioPolicy": "preserve"},
         },
     }],
 })
@@ -379,11 +386,13 @@ tool.call("add_canvas_elements", {
 
 Set `resolution` in the final composition request as the target short-side value. Supported examples include `720p`, `1080p`, `2k`, `4k`, and numeric values such as `768p`. For exact pixel dimensions, set both `width` and `height` in `output`.
 
-Set `audioPolicy` to `preserve` to keep the configured Audio Element or source-video audio, or set it to `mute` for a silent MP4. When revising an existing Video Edit, update its ordered video and audio sequences, confirm the edit configuration, and compose the requested version. For BGM changes, update `audioSequence`, confirm the edit, and compose again. Recalculate the expected total duration after changing shot durations or order.
+Set `audioPolicy` to `preserve` to keep source audio or the configured Audio Element, or set it to `mute` for a silent MP4. Reuse the same sequence IDs with a different `output` to create another export version. Recalculate the expected total duration after changing the video order or source sequence.
 
 ### 9. Compose and deliver
 
-After the user confirms the edit configuration, create the final Video Element through `add_canvas_elements`. Include the `video-edit -> final-video` Connection, `dependency_flow` layout, `task="compose"`, `input_mode="video_edit"`, the confirmed `videoEditElementId`, and the requested `output`. Verify the returned Element with `query_canvas_element_details`, then present the MP4 path, duration, dimensions, and audio status. Submit another composition request with a different `output` for each additional export version.
+After the user confirms the ordered media inputs, create the final Video Element through `add_canvas_elements`. Include `composition.videoSequence`, optional `composition.audioSequence`, the `dependency_flow` layout, `task="compose"`, and the requested `output`. Verify the returned Element with `query_canvas_element_details`, then present the MP4 path, duration, dimensions, audio status, and runtime composition summary. Submit another composition request with the same sequence IDs and a different `output` for each additional export version.
+
+When a Video Edit is used, connect only the Video Edit to the final video. The source media remain connected to the Video Edit. For direct composition without a Video Edit, connect the contributing source media directly to the final video.
 
 The composition result is the final Video Element Content. Query the returned Canvas Element for its status and media details. When a composition fails, inspect the reported inputs or configuration, obtain confirmation for the repair, retry the same final Element, and verify the result after completion.
 
@@ -406,8 +415,8 @@ Use the current Canvas tools below; do not call the removed video-production too
 | Estimate billed video generation | `estimate_canvas_content_points` |
 | Change layout | `layout_canvas_elements` |
 | Add, remove, or replace a Connection | `manage_canvas_connections` |
-| Configure an ordered edit | `add_canvas_elements` / `add_canvas_contents` with `video-edit` Content |
-| Compose the final MP4 | `add_canvas_elements` with generated Video Content and `task="compose"` |
+| Configure an ordered edit | `add_canvas_elements` / `add_canvas_contents` with `video-edit` Content when a reusable edit plan is needed |
+| Compose the final MP4 | `add_canvas_elements` with generated Video Content, Element ID sequences, and `task="compose"` |
 
 The table above is authoritative for this workflow. Translate every scenario to the current Canvas tool and Content lifecycle; do not invent alternate tool names or bypass the Canvas business tools.
 
@@ -420,7 +429,7 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 - Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
 - First frame: connect from the storyboard Element.
 - Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
-- Video edit: create direct incoming Connections from every Element listed in `videoSequence` and `audioSequence` in the same `add_canvas_elements` call. Use `manage_canvas_connections` only for later standalone relationship maintenance. Composition validates these Video Edit input Connections before producing the result.
+- Final composition: pass the ordered Element IDs in `composition.videoSequence` and `composition.audioSequence`; record Canvas business relationships separately through `connections`.
 
 For a new direct professional video, create the initial relations in the same `add_canvas_elements` call:
 

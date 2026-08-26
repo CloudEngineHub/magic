@@ -48,7 +48,6 @@ class VideoPointEstimateItemInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
-    audio_policy: Literal["auto", "generate", "mute"] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -82,7 +81,6 @@ class VideoPointEstimateItemInput(BaseToolParams):
             fps=self.fps,
             seed=self.seed,
             watermark=self.watermark,
-            audio_policy=self.audio_policy,
         )
 
 

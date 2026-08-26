@@ -325,6 +325,22 @@ def _build_public_video_request(parameters: dict[str, Any]) -> dict[str, Any]:
         if value not in (None, ""):
             request[key] = value
 
+    composition = parameters.get("composition")
+    if isinstance(composition, dict):
+        request["composition"] = {
+            "videoSequence": [
+                value for value in composition.get("videoSequence", [])
+                if isinstance(value, str) and value
+            ],
+            "audioSequence": [
+                value for value in composition.get("audioSequence", [])
+                if isinstance(value, str) and value
+            ],
+            "output": dict(composition.get("output"))
+            if isinstance(composition.get("output"), dict)
+            else {},
+        }
+
     image_paths = parameters.get("reference_images") or parameters.get("reference_image_paths") or []
     video_paths = parameters.get("reference_video_paths") or []
     audio_paths = parameters.get("reference_audio_paths") or []

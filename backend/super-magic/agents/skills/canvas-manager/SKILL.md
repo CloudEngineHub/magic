@@ -14,15 +14,18 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Act only on a concrete Canvas task from the user.
 - Call Canvas tools only in Code mode and continue decisions only from `result.content`.
 - Preserve the exact `project_path` supplied by the user or runtime; never guess, shorten, or replace it.
-- Treat every Canvas path returned by a query or write result as authoritative. A path such as `./images/foo.webp` is relative to the current project's `magic.project.js` (project-relative), not automatically relative to the workspace. Reuse it verbatim for Canvas generation fields. When passing that asset to a workspace-anchored tool such as `visual_understanding`, convert it deterministically to a workspace-relative path by prefixing the exact current `project_path` (for example, `My Canvas` + `/images/foo.webp` becomes `My Canvas/images/foo.webp`); do not guess a directory, filename, or Element ID. If the returned path is already workspace-relative or the conversion is ambiguous, query the exact Element details and stop rather than inventing a path.
+- Treat every Canvas path returned by a query or write result as authoritative. A path such as `./images/foo.webp` is relative to the current Canvas project, not automatically relative to the workspace. Reuse it verbatim for Canvas generation fields. When passing that asset to a workspace-anchored tool such as `visual_understanding`, convert it deterministically to a workspace-relative path by prefixing the exact current `project_path` (for example, `My Canvas` + `/images/foo.webp` becomes `My Canvas/images/foo.webp`); do not guess a directory, filename, or Element ID. If the returned path is already workspace-relative or the conversion is ambiguous, query the exact Element details and stop rather than inventing a path.
+- When an existing video needs FFmpeg or another media transformation, perform the transformation in a system temporary directory first. Keep the Canvas workspace dedicated to persistent project assets and Canvas state. Import the completed result only after the runtime capability returns an exact Canvas-importable media reference, then use the imported result for later Canvas operations.
 - Treat an uploaded image that already appears as a Canvas Image Element as an existing asset, not a new import candidate. Query the Canvas first, then reuse its exact `element_id`, Content ID, and project-relative `src` for visual understanding and generation. Do not call `add_canvas_elements` or `import_canvas_assets` with `source=imported` for that same asset. Import only when the supplied workspace file has no matching Canvas Element.
 - Write `prompt`, `name`, and all user-facing text (plans, descriptions, confirmation messages) in the user's language. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - Use one language consistently for user-facing Canvas terminology. Translate product nouns, table labels, action text, confirmation questions, cost summaries, status summaries, and error explanations into the user's language; do not mix translated sentences with English product nouns.
-- In Chinese responses, use the established names `画布` (Canvas), `积分` (Points), `元素` (Element), `内容` (Content), `连接` (Connection), `分镜` (Storyboard), `视频剪辑` (Video Edit), `图片` (Image), `视频` (Video), `音频` (Audio), `项目` (Project), and `预估费用` (Estimated cost). In English responses, use the corresponding English names consistently.
-- Keep exact tool names, parameter names, IDs, paths, code identifiers, and protocol values unchanged inside code or when identifying a returned field. When explaining them in prose, add the localized product name around the exact identifier, for example `元素（Element）` only when needed for clarity.
-- For example, when the user speaks Chinese, write `预估费用：151 积分。确认后提交生成任务。`; when the user speaks English, write `Estimated cost: 151 Points. Confirm to submit the generation task.` Keep the sentence and its product terms in the same language.
+- Match Canvas product terminology to the user's language. Use these established term pairs when responding:
+  `画布` = `Canvas`, `积分` = `Points`, `元素` = `Element`, `内容` = `Content`, `连接` = `Connection`, `分镜` = `Storyboard`, `视频剪辑` = `Video Edit`, `图片` = `Image`, `视频` = `Video`, `音频` = `Audio`, `项目` = `Project`, and `预估费用` = `Estimated cost`.
+  Use the Chinese term set consistently in Chinese responses and the English term set consistently in English responses.
+- Keep exact tool names, parameter names, IDs, paths, code identifiers, and protocol values unchanged inside code or when identifying a returned field. In prose, use the product terminology that matches the user's language.
+- Keep each sentence and its product terms in one language. For example, in an English response write `Estimated cost: 151 Points. Confirm to submit the generation task.` For other languages, translate both the sentence and the product terms consistently.
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
-- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit any project file, including `magic.project.js`.
+- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit Canvas project files directly.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
@@ -129,7 +132,7 @@ Group sibling elements?                      → frame_canvas_elements
 Async task returned?                         → wait_canvas_generation
 Billed video generation?                    → estimate_canvas_content_points first, then ask for confirmation before generation
 Change layout / wire dependencies?           → layout_canvas_elements, manage_canvas_connections  (see professional-video-production.md)
-Final MP4 from a video-edit?                 → add_canvas_elements with task="compose" (see professional-video-production.md)
+Compose existing videos or audio?            → add_canvas_elements with task="compose" and composition.videoSequence/composition.audioSequence
 Search and import web images?                → search_canvas_image_candidates  (see image-search.md)
 Design marker ([@design_marker:...])?        → visual_understanding + add_canvas_elements  (see Design marker processing)
 User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (see prompt-library.md)
@@ -160,7 +163,7 @@ Read the created-or-existing status. Next: `query_canvas_overview` when you need
 
 Use when element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. Returns a lightweight Element index with compact relations.
 
-Parameters: `project_path` required; `page` and `limit` optional.
+Parameters: `project_path` is required; `page` and `limit` are optional.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -179,7 +182,7 @@ If it reports a next page, increment `page`. For full Content, hierarchy, or con
 
 Query 1–10 exact element IDs; returns Content, status, media paths, Frame hierarchy, and related Connections.
 
-Parameters: `project_path` and 1–10 exact `element_ids` required. The `asset_path`, status, task ID, and Connection ID in the details must only be used as real inputs to later tools.
+Parameters: `project_path` and 1–10 exact `element_ids` are required. Use the `asset_path`, status, task ID, and Connection ID returned in the details only as real inputs to later tools.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -200,7 +203,7 @@ Query before retrying, selecting a main version, deleting/replacing Connections,
 
 Create new writable logical Elements: `storyboard`, `video-edit`, `image`, `video`, or `audio`. Frames are created with `frame_canvas_elements`. Use `add_canvas_contents` for a candidate on an existing writable Element.
 
-Parameters: `project_path` and `items` required; each item needs at least `item_ref` and `element_type`.
+Parameters: `project_path` and `items` are required; each item needs at least `item_ref` and `element_type`.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -223,15 +226,27 @@ Read each item's real `element_id`, `content_id`, status, and task ID. If a task
 
 Before calling this tool, validate every nested item against the preflight checklist above. In particular, do not omit `content.name` for generated image/video Content, and do not omit `content.content_type` for imported media. A missing `name` or `content_type` is a request-construction error, not a generation failure.
 
-For imported media, set `content.source="imported"` and pass the original workspace path as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
+For imported media, set `content.source="imported"` and pass the exact importable media reference supplied by the user or by the runtime media-processing capability as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
 
-Do not create a manual `imports/` staging directory and do not copy a `.tmp` file into `imports/` with shell commands. Pass the original workspace path in `content.asset_path`; Canvas materializes images into `./images/`, videos into `./videos/`, and audio into `./audios/`, then returns the canonical project-local path. Use only that returned path in later calls.
+Do not create a manual `imports/` staging directory or perform FFmpeg writes against the Canvas workspace. For media processed in a system temporary directory, pass the exact import reference returned by the runtime capability. Canvas materializes images into `./images/`, videos into `./videos/`, and audio into `./audios/`, then returns the canonical project-local path. Use only that returned path in later calls.
+
+When a user requests a transformation of an existing Canvas video, guide the workflow with this pattern:
+
+```text
+1. Locate the requested source video and read its authoritative Canvas media path.
+2. Run the requested media transformation in a system temporary directory.
+3. Wait for the runtime result and obtain its exact Canvas-importable media reference.
+4. Import the result as a new Video Element with source="imported".
+5. Reuse the returned Element, Content, and project-local media path for later operations.
+6. Add a Connection from the source video when the processed video is its direct business result.
+7. Keep the source video available for other versions and future processing.
+```
 
 ## `frame_canvas_elements`
 
 Group exact sibling Elements into a new Frame.
 
-Parameters: `project_path` and `items` required. Selected siblings must all be writable Element types. Never include `text`, `rectangle`, `ellipse`, `triangle`, `star`, or `group`. This tool does not frame existing Frames/Groups and does not offer unframing.
+Parameters: `project_path` and `items` are required. Selected siblings must all be writable Element types. Never include `text`, `rectangle`, `ellipse`, `triangle`, `star`, or `group`. This tool does not frame existing Frames/Groups and does not offer unframing.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -254,7 +269,7 @@ Confirm the exact sibling Element IDs first. Do not pass coordinates, size, or `
 
 Append a new Content candidate to an existing writable Element without overwriting previous candidates. Read-only Element types must only be queried.
 
-Parameters: `project_path` and `items` required; each item uses an exact `element_id` and new Content.
+Parameters: `project_path` and `items` are required; each item uses an exact `element_id` and new Content.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -287,7 +302,7 @@ Retry rules:
 - The failed-content retry tool only retries existing Content and does not receive or validate point-estimation credentials. If the user changes billable parameters, the workflow may independently call `estimate_canvas_content_points`, obtain confirmation, and then call the retry tool; the estimate result is not a retry-tool submission parameter.
 - A failed final video composition is retried in place: reuse the exact final video `element_id` and `content_id`. Do not call `add_canvas_elements` to create `final-video-v2` or another duplicate Element.
 
-Parameters: `project_path` and `items` required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
+Parameters: `project_path` and `items` are required; only failed Content can be retried, at most 2 times. Never loop retries automatically.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -310,7 +325,7 @@ Only with explicit user consent. At most 2 retries per Content. Never retry `pro
 
 Set a confirmed later candidate as the main Content of a writable Element.
 
-Parameters: `project_path` and `items` required; use only the exact `element_id` and `content_id` the user confirmed.
+Parameters: `project_path` and `items` are required; use only the exact `element_id` and `content_id` confirmed by the user.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -333,7 +348,7 @@ Use only after the user picks a later candidate on an Element that already has a
 
 Wait on any async task ID returned by add, append, or retry.
 
-Parameters: `project_path` and `tasks` required; `max_wait_seconds` optional. On timeout or `processing`, reuse the original `generation_task_id`; do not resubmit.
+Parameters: `project_path` and `tasks` are required; `max_wait_seconds` is optional. On timeout or `processing`, continue with the original `generation_task_id`.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -355,6 +370,8 @@ On `completed`, query details as needed. On `pending`, `processing`, `queued`, `
 ## `layout_canvas_elements`
 
 Adjust the layout of an existing writable Element or Frame. Never lay out read-only Element types. Layout only changes position and size; it does not generate new Content or infer Connections automatically.
+
+Parameters: `project_path` and `items` are required; use exact IDs returned by a query when creating, removing, or replacing Connections.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -378,6 +395,8 @@ print(result.content)
 
 Create, remove, or replace a business Connection. A Connection represents an explicit business dependency; do not infer it from visual distance, the same Frame, or array order.
 
+Parameters: `project_path` and `items` are required; use exact IDs returned by a query when creating, removing, or replacing Connections.
+
 | Parameter | Required | Description |
 |---|---|---|
 | `project_path` | Yes | Full Canvas project path |
@@ -392,7 +411,7 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 - First frame: connect from the storyboard Element.
 - Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
 - Video edit: include direct incoming Connections from every `videoSequence` and `audioSequence` Element in the same `add_canvas_elements` call. Use `manage_canvas_connections` only for later standalone relationship maintenance.
-- Final video: composition validates the confirmed Video Edit inputs before producing the result.
+- Final video composition: pass ordered Video and Audio Element IDs in `composition.videoSequence` and `composition.audioSequence`. When a Video Edit is the direct predecessor, connect only the Video Edit to the final video; direct media Connections are used when composing without a Video Edit.
 
 ```python
 result = tool.call("manage_canvas_connections", {
@@ -412,9 +431,11 @@ print(result.content)
 
 Perform a side-effect-free point estimate for billed video generation. The estimate phase must not create Elements, Content, or generation tasks; any parameter change that affects billing requires a re-estimate.
 
-Freeze the complete generation request before estimating. This includes the final prompt, every `[imageN]`/`[videoN]`/`[audioN]` binding token, reference arrays, model, duration, aspect ratio, resolution, `audioPolicy`, and all other billable fields. After the user confirms, copy those parameters byte-for-byte into `add_canvas_elements`; the estimate result and `estimate_id` are informational and are not required by the generation tool. Do not add a reference binding token, a watermark constraint, or any other prompt wording after confirmation. If any field or prompt text must change, estimate again and ask for confirmation again before submitting.
+Parameters: `project_path` and `items` are required; `production_rule` is optional.
 
-For generated video Content, use the canonical `audioPolicy` value `auto`, `generate`, or `mute`. Do not pass provider-specific fields such as `sound`, `generateAudio`, or `audio`. When the selected model declares `native_mute=false` and `mute_fallback=compose`, generate the source video first and create the final Video Element through Video Edit composition with `output.audioPolicy="mute"`. If `mute_fallback=unsupported`, ask the user to choose another model or accept a non-silent result.
+Freeze the complete generation request before estimating. This includes the final prompt, every `[imageN]`/`[videoN]`/`[audioN]` binding token, reference arrays, model, duration, aspect ratio, resolution, and all fields listed for the estimate tool. Set export and audio choices when making the actual generation or composition request. After the user confirms, copy those parameters byte-for-byte into `add_canvas_elements`; the estimate result and `estimate_id` are informational and are not required by the generation tool. Do not add a reference binding token, a watermark constraint, or any other prompt wording after confirmation. If any field or prompt text must change, estimate again and ask for confirmation again before submitting.
+
+For the actual generated video Content request, use the canonical `audioPolicy` value `auto`, `generate`, or `mute`. Do not include this field in the point-estimate request. Do not pass provider-specific fields such as `sound`, `generateAudio`, or `audio`. When the selected model declares `native_mute=false` and `mute_fallback=compose`, generate the source video first and create the final Video Element through explicit video composition with `output.audioPolicy="mute"`. If `mute_fallback=unsupported`, ask the user to choose another model or accept a non-silent result.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -433,9 +454,50 @@ print(result.content)
 
 After showing the full parameters and estimated points, you must confirm with a direct `ask_user`; do not call video generation before confirmation. The generation tool remains independent and does not receive or validate an `estimate_id`.
 
+## `search_canvas_image_candidates`
+
+Search for external image candidates and import successfully validated results into the current Canvas project.
+
+Parameters: `project_path`, `topic_id`, and `tasks` are required; each task contains `item_ref`, `name`, and `query`, with optional `count` and aspect-ratio requirements.
+
+```python
+result = tool.call("search_canvas_image_candidates", {
+    "project_path": "Demo",
+    "topic_id": "product-hero",
+    "tasks": [{
+        "item_ref": "hero-candidates",
+        "name": "Product hero candidates",
+        "query": "premium product studio photography",
+        "count": 3,
+    }],
+})
+print(result.content)
+```
+
+Read each returned Element ID and project-local path; a batch may partially succeed.
+
+## `search_canvas_image_prompts`
+
+Search prompts only when the user explicitly wants inspiration or has no direction, and present candidate directions in the user's language.
+
+Parameters: `query` is required; `category`, `sort_by`, `limit`, `offset`, and `random` are optional.
+
+```python
+result = tool.call("search_canvas_image_prompts", {
+    "query": "product storyboard",
+    "category": "Product & Brand",
+    "limit": 5,
+})
+print(result.content)
+```
+
+Show 3–5 candidate directions first, then generate images only after the user confirms.
+
 ## Final video composition through `add_canvas_elements`
 
-Create the final MP4 as a generated Video Element. In the same request, provide the final Element, its `video-edit -> final-video` Connection, the layout, and the requested export settings.
+Create the final MP4 as a generated Video Element. Provide ordered Element IDs in `composition.videoSequence`, optional `composition.audioSequence`, layout, and requested export settings in the same request. The composition service resolves each ID to the selected media Content.
+
+When a reusable Video Edit is present, connect only that Video Edit to the final video. Connect the source media to the Video Edit when the edit plan is created. For a direct composition without a Video Edit, connect the contributing source media directly to the final video.
 
 ```python
 result = tool.call("add_canvas_elements", {
@@ -445,14 +507,16 @@ result = tool.call("add_canvas_elements", {
         "element_type": "video",
         "name": "Product launch final cut",
         "layout": {"strategy": "dependency_flow"},
-        "connections": [{"source_element_id": "element-740000000000000020"}],
+        "connections": [{"source_element_id": "element-video-edit"}],
         "content": {
             "source": "generated",
             "content_type": "video",
             "name": "Product launch final cut",
             "task": "compose",
-            "input_mode": "video_edit",
-            "videoEditElementId": "element-740000000000000020",
+            "composition": {
+                "videoSequence": ["element-shot-01", "element-shot-02"],
+                "audioSequence": ["element-music"],
+            },
             "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4", "audioPolicy": "preserve"},
         },
     }],
@@ -460,7 +524,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-After the request completes, query the final Video Element with `query_canvas_element_details`. Specify the export settings in each composition request. Reuse the same Video Edit to create separate 16:9, 9:16, 720p, or other requested versions. Set `output.audioPolicy` to `preserve` for audio or `mute` for a silent MP4.
+After the request completes, query the final Video Element with `query_canvas_element_details`. Specify the export settings in each composition request. Reuse the same `composition.videoSequence` and `composition.audioSequence` IDs to create separate 16:9, 9:16, 720p, or other requested versions. Set `output.audioPolicy` to `preserve` for audio or `mute` for a silent MP4.
 
 Use preset or numeric short-side resolutions in `output`, such as `1080p` or `768p`. For exact dimensions, provide both `width` and `height`; these values determine the exported size.
 
@@ -469,7 +533,7 @@ Use preset or numeric short-side resolutions in `output`, such as `1080p` or `76
 - Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation only for appended candidates.
 - Ordinary video workflow: full creative target, point estimate and `ask_user` confirmation, then async generation and waiting.
 - Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
-- `video-edit` Content stores ordered inputs via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call.
+- `video-edit` Content stores an editable ordered plan via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call when a reusable edit plan is needed.
 - Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
 - Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.
 - Version management: the first Content is automatically main; appended candidates require user confirmation before main Content selection, with a retry cap on failures.

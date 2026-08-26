@@ -23,6 +23,21 @@ from app.tools.canvas.domain.types import JsonObject
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
 
+_RUNTIME_DETAIL_FIELDS = frozenset(
+    {
+        "productionRule",
+        "generationStatus",
+        "providerTaskId",
+        "generationTaskId",
+        "outputUri",
+        "outputFilename",
+        "durationSeconds",
+        "hasAudio",
+        "composition",
+        "attemptHistory",
+    }
+)
+
 
 class ElementDetailsQueryService:
     """只负责读取精确 Element、合并 sidecar 并投影详情 DTO。"""
@@ -124,6 +139,7 @@ class ElementDetailsQueryService:
                     else None
                 ),
                 payload=cast(JsonObject, payload) if payload else None,
+                runtime=ElementDetailsQueryService._runtime_detail(detail),
             ))
         return CanvasElementDetailResult(
             element_id=element.element_id,
@@ -154,3 +170,13 @@ class ElementDetailsQueryService:
                 or connection.target_element_id == element.element_id
             ),
         )
+
+    @staticmethod
+    def _runtime_detail(detail: dict[str, Any]) -> JsonObject | None:
+        """提取模型继续决策所需的受控运行态详情。"""
+        runtime = {
+            key: value
+            for key, value in detail.items()
+            if key in _RUNTIME_DETAIL_FIELDS and value is not None
+        }
+        return cast(JsonObject, runtime) if runtime else None

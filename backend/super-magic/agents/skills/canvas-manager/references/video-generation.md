@@ -29,6 +29,8 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 ## Generation inputs
 
+Fill the point-estimate request with the fields listed by the estimate tool. Set `audioPolicy` only in the actual generated video Content when the requested audio behavior must be explicit.
+
 For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark`.
 
 Before submitting, validate the complete nested shape and keep the operation identity stable:

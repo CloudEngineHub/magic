@@ -131,8 +131,15 @@ def elements_content(result: dict[str, Any]) -> str:
             if parameters.get("prompt"):
                 fields.append(f"prompt={parameters['prompt']}")
             payload = content.get("payload")
-            if isinstance(payload, dict) and payload.get("content") is not None:
-                fields.append(f"content={_compact_value(payload['content'])}")
+            if isinstance(payload, dict):
+                for key in ("videoSequence", "audioSequence"):
+                    if payload.get(key) is not None:
+                        fields.append(f"{key}={_compact_value(payload[key])}")
+                if payload.get("content") is not None:
+                    fields.append(f"content={_compact_value(payload['content'])}")
+            runtime = content.get("runtime")
+            if isinstance(runtime, dict):
+                fields.append(f"runtime={_compact_value(runtime, max_length=1200)}")
             lines.append("- content: " + " | ".join(fields))
         for child in children:
             lines.append(f"- child={child['element_id']} | type={child['element_type']}")
@@ -150,11 +157,11 @@ def elements_content(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _compact_value(value: Any) -> str:
+def _compact_value(value: Any, *, max_length: int = 500) -> str:
     """把用户内容压缩成可读单行，避免把内部 DTO 原样注入模型上下文。"""
     if isinstance(value, str):
-        return value.replace("\n", " ")[:500]
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:500]
+        return value.replace("\n", " ")[:max_length]
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:max_length]
 
 
 def items_content(

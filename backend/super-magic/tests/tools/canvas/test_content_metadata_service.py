@@ -62,6 +62,27 @@ def test_build_public_video_request_normalizes_provider_asset_uri():
     ]
 
 
+def test_build_public_video_request_persists_composition_sequences_and_output():
+    """合成公共请求应完整保存 Element 顺序和导出配置。"""
+    request = ContentMetadataService.build_public_generation_request(
+        {
+            "task": "compose",
+            "composition": {
+                "videoSequence": ["video-1", "video-2"],
+                "audioSequence": ["audio-1"],
+                "output": {"aspectRatio": "9:16", "resolution": "720p", "audioPolicy": "preserve"},
+            },
+        },
+        "video",
+    )
+
+    assert request["composition"] == {
+        "videoSequence": ["video-1", "video-2"],
+        "audioSequence": ["audio-1"],
+        "output": {"aspectRatio": "9:16", "resolution": "720p", "audioPolicy": "preserve"},
+    }
+
+
 def test_get_restores_generation_parameters_from_new_video_request():
     """只有新公共 sidecar 时，也应恢复可用于重试的规范参考图参数。"""
     metadata = {

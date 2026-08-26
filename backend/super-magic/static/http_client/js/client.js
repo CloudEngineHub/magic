@@ -11084,11 +11084,6 @@ function createCanvasVideoEditCard(element) {
     });
     card.appendChild(surface);
 
-    const output = element.output && typeof element.output === 'object' ? element.output : {};
-    card.appendChild(createCanvasPreviewText(
-        `输出规格  ${[output.aspectRatio, output.resolution, output.format].filter(Boolean).join(' · ') || '待设置'}`,
-        'canvas-el-video-edit-output',
-    ));
     return card;
 }
 

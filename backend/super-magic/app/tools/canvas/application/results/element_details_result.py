@@ -45,6 +45,7 @@ class CanvasContentDetailResult:
     generation_task_id: str | None
     generation_parameters: JsonObject | None
     payload: JsonObject | None
+    runtime: JsonObject | None
 
     def to_dict(self) -> JsonObject:
         """转换为 Content 详情 JSON 对象。"""
@@ -58,6 +59,7 @@ class CanvasContentDetailResult:
             "generation_task_id": self.generation_task_id,
             "generation_parameters": self.generation_parameters,
             "payload": self.payload,
+            "runtime": self.runtime,
         }
         return {key: value for key, value in values.items() if value is not None}
 

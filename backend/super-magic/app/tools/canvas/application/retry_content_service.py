@@ -15,9 +15,9 @@ from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
-from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.production.contracts.composition_output import CompositionOutput
 from app.tools.canvas.production.contracts.video_composition_models import CompositionInputSpec
+from app.tools.canvas.repository import CanvasUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,6 @@ class RetryContentService:
                             "Composition retry must keep task=compose.",
                         )
                     parameters["task"] = "compose"
-                    parameters.pop("video_edit_element_id", None)
                 idempotency_parameters = parameters
                 if is_composition:
                     idempotency_parameters = {
@@ -241,19 +240,27 @@ class RetryContentService:
         if not isinstance(composition, dict):
             return None
         output = composition.get("output")
-        video_ids = composition.get("videoContentIds")
-        video_sources = composition.get("videoSources")
-        if not isinstance(output, dict) or not isinstance(video_ids, list) or not isinstance(video_sources, list):
+        video_element_ids = composition.get("videoSequence")
+        audio_element_ids = composition.get("audioSequence")
+        video_sources = composition.get("resolvedVideos")
+        audio_sources = composition.get("resolvedAudios")
+        if (
+            not isinstance(output, dict)
+            or not isinstance(video_element_ids, list)
+            or not isinstance(audio_element_ids, list)
+            or not isinstance(video_sources, list)
+            or not isinstance(audio_sources, list)
+        ):
             return None
         try:
             return CompositionInputSpec(
-                video_content_ids=tuple(value for value in video_ids if isinstance(value, str)),
+                video_element_ids=tuple(value for value in video_element_ids if isinstance(value, str)),
+                audio_element_ids=tuple(value for value in audio_element_ids if isinstance(value, str)),
                 video_sources=tuple(value for value in video_sources if isinstance(value, str)),
-                audio_content_id=composition.get("audioContentId") if isinstance(composition.get("audioContentId"), str) else None,
-                audio_source=composition.get("audioSource") if isinstance(composition.get("audioSource"), str) else None,
-                output_width=int(composition["outputWidth"]),
-                output_height=int(composition["outputHeight"]),
-                audio_policy=str(composition.get("audioPolicy", "preserve")),
+                audio_sources=tuple(value for value in audio_sources if isinstance(value, str)),
+                output_width=int(composition["resolvedWidth"]),
+                output_height=int(composition["resolvedHeight"]),
+                audio_policy=CompositionOutput.from_dict(output).audio_policy,
                 output=CompositionOutput.from_dict(output),
             )
         except (KeyError, TypeError, ValueError, CanvasDomainError):
@@ -263,13 +270,12 @@ class RetryContentService:
     def _composition_input_dict(spec: CompositionInputSpec) -> dict[str, Any]:
         """将合成输入快照转换为幂等键使用的稳定对象。"""
         return {
-            "videoContentIds": list(spec.video_content_ids),
-            "videoSources": list(spec.video_sources),
-            "audioContentId": spec.audio_content_id,
-            "audioSource": spec.audio_source,
-            "outputWidth": spec.output_width,
-            "outputHeight": spec.output_height,
-            "audioPolicy": spec.audio_policy,
+            "videoSequence": list(spec.video_element_ids),
+            "audioSequence": list(spec.audio_element_ids),
+            "resolvedVideos": list(spec.video_sources),
+            "resolvedAudios": list(spec.audio_sources),
+            "resolvedWidth": spec.output_width,
+            "resolvedHeight": spec.output_height,
             "output": spec.output.to_dict(),
         }
 

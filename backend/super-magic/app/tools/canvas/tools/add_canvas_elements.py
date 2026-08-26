@@ -13,6 +13,7 @@ from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.canvas.application.commands import (
     AddElementCommand,
+    CompositionParameters,
     ContentCommand,
     CreationConnectionCommand,
     GenerationParameters,
@@ -30,7 +31,6 @@ from app.tools.canvas.domain.content_fields import (
 )
 from app.tools.canvas.domain.content_fields.generated_media_protocol import generated_media_types
 from app.tools.canvas.domain.types import JsonObject
-from app.tools.canvas.production.contracts.composition_output import CompositionOutput
 from app.tools.canvas.presentation import (
     CanvasGenerationFeedback,
     CanvasToolDetailBuilder,
@@ -41,6 +41,7 @@ from app.tools.canvas.presentation import (
     items_content,
     summarize_tool_result,
 )
+from app.tools.canvas.production.contracts.composition_output import CompositionOutput
 from app.tools.canvas.tools.agent_write_policy import CanvasAgentWritePolicy
 from app.tools.canvas.tools.support import _application
 from app.tools.core import BaseToolParams, tool
@@ -237,6 +238,28 @@ Output short-side resolution. Presets such as 480p, 720p, 1080p, 2k, and 4k are 
     )
 
 
+class CompositionInputsInput(BaseToolParams):
+    """直接视频合成的媒体输入列表。"""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    video_sequence: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=VideoEditContentFields.MAX_VIDEO_SEQUENCE_LENGTH,
+        alias="videoSequence",
+        description="Ordered Video Element IDs.",
+    )
+    audio_sequence: list[str] = Field(default_factory=list, max_length=1, alias="audioSequence", description="Optional Audio Element ID.")
+
+    @model_validator(mode="after")
+    def validate_sequences(self) -> "CompositionInputsInput":
+        """校验合成输入中的 Element ID 非空且不重复。"""
+        ContentInput._validate_unique_sequence("composition.videoSequence", self.video_sequence)
+        ContentInput._validate_unique_sequence("composition.audioSequence", self.audio_sequence)
+        return self
+
+
 class ContentInput(BaseToolParams):
     """Canvas 工具公开的确定 Content 输入。"""
 
@@ -258,6 +281,16 @@ class ContentInput(BaseToolParams):
                     "content_type": "image",
                     "asset_path": "Canvas/Demo/images/hero.png",
                 },
+                {
+                    "source": "generated",
+                    "content_type": "video",
+                    "task": "compose",
+                    "composition": {
+                        "videoSequence": ["element-shot-01", "element-shot-02"],
+                        "audioSequence": ["element-music"],
+                    },
+                    "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4"},
+                },
             ]
         },
     )
@@ -272,7 +305,6 @@ class ContentInput(BaseToolParams):
 Workspace path of imported media. When the file is outside the current Canvas project's canonical media directory, the tool copies it into the project and returns the project-local path.""",
     )
     prompt: str | None = Field(None, min_length=1)
-    video_edit_element_id: str | None = Field(None, alias="videoEditElementId")
     default_style: TextStyleInput | None = Field(None, alias="defaultStyle")
     fill: str | None = None
     stroke: str | None = None
@@ -289,6 +321,7 @@ Workspace path of imported media. When the file is outside the current Canvas pr
         alias="videoSequence",
     )
     audio_sequence: list[str] | None = Field(None, max_length=1, alias="audioSequence")
+    composition: CompositionInputsInput | None = None
     output: CompositionOutputInput | None = None
     model_id: str | None = None
     name: str | None = Field(
@@ -336,8 +369,6 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     @model_validator(mode="after")
     def validate_content_contract(self) -> "ContentInput":
         """按来源和 Content 类型拒绝不确定字段组合。"""
-        if self.video_edit_element_id is not None and self.task != "compose":
-            raise ValueError("videoEditElementId is only allowed when task=compose")
         if self.content_type == "video-edit":
             if self.source != "user":
                 raise ValueError("video-edit Content requires source=user")
@@ -345,10 +376,19 @@ Reference image paths inside the current Canvas project. Use paths relative to t
                 raise ValueError("video-edit Content requires a non-empty videoSequence")
             self._validate_unique_sequence("videoSequence", self.video_sequence)
             self._validate_unique_sequence("audioSequence", self.audio_sequence or [])
-            if self.output is not None or self.video_edit_element_id is not None:
+            if self.output is not None:
                 raise ValueError("Video Edit Content only accepts videoSequence and audioSequence")
+        elif self.task == "compose":
+            if self.content_type != "video" or self.composition is None:
+                raise ValueError("task=compose requires video content and composition media inputs")
+            if self.video_sequence is not None or self.audio_sequence is not None:
+                raise ValueError("task=compose uses composition.videoSequence and composition.audioSequence")
+            if self.prompt is not None:
+                raise ValueError("task=compose does not accept prompt")
+            if self.output is None:
+                raise ValueError("task=compose requires composition output")
         elif self.video_sequence is not None or self.audio_sequence is not None:
-            raise ValueError("videoSequence and audioSequence are only allowed for video-edit Content")
+            raise ValueError("videoSequence and audioSequence are only allowed for video-edit Content or task=compose")
         if self.content_type == "storyboard" and self.source == "user":
             config = self.generation_config
             if config is None or not config.model_id or not config.size or not config.resolution or not config.aspect_ratio:
@@ -358,15 +398,6 @@ Reference image paths inside the current Canvas project. Use paths relative to t
         if self.source == "generated":
             if self.content_type not in generated_media_types():
                 raise ValueError(f"source=generated is not configured for content_type={self.content_type}")
-            if self.task == "compose":
-                if self.content_type != "video" or not self.video_edit_element_id:
-                    raise ValueError("task=compose requires video content and videoEditElementId")
-                if self.input_mode != "video_edit":
-                    raise ValueError("task=compose requires input_mode=video_edit")
-                if self.prompt is not None:
-                    raise ValueError("task=compose does not accept prompt")
-                if self.output is None:
-                    raise ValueError("task=compose requires composition output")
             if self.task != "compose" and not self.prompt:
                 raise ValueError("source=generated requires prompt")
             if self.content_type == "image" and (not self.name or not self.name.strip()):
@@ -405,12 +436,6 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             fields=self._build_fields(),
             asset_path=self.asset_path,
             generation_parameters=self._build_generation_parameters() if self.source == "generated" else None,
-            composition_video_edit_element_id=self.video_edit_element_id,
-            composition_output=(
-                CompositionOutput.from_dict(self._model_object(self.output))
-                if self.task == "compose" and self.output is not None
-                else None
-            ),
             content_id=content_id,
         )
 
@@ -477,7 +502,15 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             seed=self.seed,
             watermark=self.watermark,
             audio_policy=self.audio_policy,
-            video_edit_element_id=self.video_edit_element_id if self.task != "compose" else None,
+            composition=(
+                CompositionParameters(
+                    video_sequence=tuple(self.composition.video_sequence),
+                    audio_sequence=tuple(self.composition.audio_sequence),
+                    output=CompositionOutput.from_dict(self._model_object(self.output)).to_dict(),
+                )
+                if self.task == "compose" and self.composition and self.output is not None
+                else None
+            ),
         )
 
     def _text_paragraphs(self) -> list[JsonObject]:
