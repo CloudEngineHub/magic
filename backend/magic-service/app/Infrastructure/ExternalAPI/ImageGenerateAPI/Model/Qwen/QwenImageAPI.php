@@ -21,7 +21,7 @@ class QwenImageAPI
 {
     use ImagePayloadLogSanitizerTrait;
 
-    private const REQUEST_TIMEOUT = 120;
+    private const REQUEST_TIMEOUT = 1200;
 
     protected LoggerInterface $logger;
 

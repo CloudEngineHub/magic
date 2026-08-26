@@ -1,4 +1,3 @@
-import { useTranslation } from "react-i18next"
 import { ErrorBoundary } from "react-error-boundary"
 import { useState } from "react"
 import type { PropsWithChildren } from "react"
@@ -9,7 +8,7 @@ import { logger as Logger } from "@/utils/log"
 import { isDev } from "@/utils/env"
 import UpdateBg from "@/assets/resources/defaultImages/update_bg.svg"
 import { getNativePort } from "@/platform/native"
-import { i18nStore } from "@/models/config/stores/i18n.store"
+import { useMainTranslation } from "@/hooks/i18n/useMainTranslation"
 import { Button } from "../shadcn-ui/button"
 
 const logger = Logger.createLogger("errorBoundary")
@@ -78,9 +77,7 @@ const useStyles = createStyles(({ css, isDarkMode, token }) => {
 })
 
 function GlobalErrorBoundary({ children }: PropsWithChildren) {
-	const { t } = useTranslation("interface", {
-		i18n: i18nStore.i18n.instance,
-	})
+	const { t } = useMainTranslation("interface")
 
 	const { styles } = useStyles()
 	const [targetDate, setTargetDate] = useState<number>()

@@ -1,4 +1,5 @@
 import { memo } from "react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 
 interface DownloadProgressToastProps {
@@ -11,13 +12,18 @@ interface DownloadProgressToastProps {
 
 function DownloadProgressToast({
 	progress = 0,
-	text = "下载中...",
-	cancelText = "终止下载",
+	text,
+	cancelText,
 	onCancel,
 	showPercentage = true,
 }: DownloadProgressToastProps) {
+	const { t } = useTranslation("super")
+	const resolvedText = text ?? t("topicFiles.downloading")
+	const resolvedCancelText = cancelText ?? t("topicFiles.downloadAbort")
 	const normalizedProgress = Math.min(Math.max(progress, 0), 100)
-	const displayText = showPercentage ? `${text} (${Math.round(normalizedProgress)}%)` : text
+	const displayText = showPercentage
+		? `${resolvedText} (${Math.round(normalizedProgress)}%)`
+		: resolvedText
 
 	return (
 		<div className="flex items-center gap-2">
@@ -30,7 +36,7 @@ function DownloadProgressToast({
 					className="h-6 bg-destructive/10 px-2 text-xs text-destructive shadow-none hover:bg-destructive/15 hover:text-destructive"
 					onClick={onCancel}
 				>
-					{cancelText}
+					{resolvedCancelText}
 				</Button>
 			) : null}
 		</div>

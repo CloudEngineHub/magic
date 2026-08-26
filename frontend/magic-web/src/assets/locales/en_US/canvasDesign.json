@@ -74,6 +74,10 @@
 		"fontFamily": {
 			"placeholder": "Font"
 		},
+		"fontSize": {
+			"openList": "Open font size list",
+			"placeholder": "Size"
+		},
 		"fontStyle": {
 			"bold": "Blob",
 			"italic": "Italic",
@@ -116,6 +120,9 @@
 			"title": "Edit Size"
 		},
 		"strokeColor": {
+			"center": "Center",
+			"inside": "Inside",
+			"outside": "Outside",
 			"title": "Stroke"
 		},
 		"textAdvanced": {

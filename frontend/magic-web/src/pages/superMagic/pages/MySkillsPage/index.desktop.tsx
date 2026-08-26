@@ -45,6 +45,7 @@ function MySkillsPage() {
 		setCreatedByMeTab,
 		tabCount,
 		isCreatedByMeTab,
+		isCollaboratedTab,
 		isFromSkillsLibraryTab,
 	} = useMySkillsTabs({ variant: "desktop" })
 	const handleAutoLoadMore = useCallback(() => {
@@ -67,7 +68,6 @@ function MySkillsPage() {
 	const shouldShowLoadingMoreIndicator = useDelayedVisibility({
 		visible: userSkillsStore.loadingMore,
 	})
-	const isTeamSharedTab = !isCreatedByMeTab && !isFromSkillsLibraryTab
 	const cardVariant: MySkillCardVariant = isCreatedByMeTab
 		? "created"
 		: isFromSkillsLibraryTab
@@ -165,7 +165,7 @@ function MySkillsPage() {
 							</p>
 						</div>
 						<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-							{canCreateSkill ? (
+							{isCreatedByMeTab && canCreateSkill ? (
 								<SkillActionDropdown
 									createMenuItems={createSkillMenuItems}
 									onImportSuccess={handleImportSuccess}
@@ -196,7 +196,11 @@ function MySkillsPage() {
 					>
 						<TabsList
 							className={`grid h-9 w-full max-w-[600px] ${
-								tabCount === 2 ? "grid-cols-2" : "grid-cols-3"
+								tabCount === 2
+									? "grid-cols-2"
+									: tabCount === 4
+										? "grid-cols-4"
+										: "grid-cols-3"
 							}`}
 							data-testid="my-skills-tabs-list"
 						>
@@ -245,13 +249,13 @@ function MySkillsPage() {
 										onOpenDetail={handleCardOpen}
 										onEdit={
 											isCreatedByMeTab ||
-											(isTeamSharedTab && teamPermissions.canEdit)
+											(isCollaboratedTab && teamPermissions.canEdit)
 												? handleEdit
 												: undefined
 										}
 										onDelete={
 											isCreatedByMeTab ||
-											(isTeamSharedTab && teamPermissions.canDelete)
+											(isCollaboratedTab && teamPermissions.canDelete)
 												? handleDeleteCreatedSkill
 												: undefined
 										}
@@ -262,7 +266,7 @@ function MySkillsPage() {
 										}
 										canEdit={
 											isCreatedByMeTab ||
-											(isTeamSharedTab && teamPermissions.canEdit)
+											(isCollaboratedTab && teamPermissions.canEdit)
 										}
 										isInteractive
 									/>

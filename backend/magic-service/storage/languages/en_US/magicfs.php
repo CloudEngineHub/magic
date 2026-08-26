@@ -15,4 +15,8 @@ return [
     'parent_not_directory' => 'Parent is not a directory',
     'file_already_exists_in_target' => 'A file with the same name already exists in the target directory',
     'space_type_is_required' => 'Space type is required',
+    'no_updates_provided' => 'No updates provided: :file_id',
+    'project_not_found' => 'Resource not found: :project_id',
+
+    'invalid_file_key' => 'Invalid value',
 ];

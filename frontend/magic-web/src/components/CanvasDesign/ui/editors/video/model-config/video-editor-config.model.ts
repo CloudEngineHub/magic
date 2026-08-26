@@ -4,6 +4,12 @@ import {
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../../../runtime/shared/ids"
 import { getCanvasResourceFileName } from "../../../../runtime/shared/path/canvasResourcePath"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
+import type { ReferenceResourceMetadataCandidate } from "../../message/reference-assets/referenceResourceDescriptor"
+import {
+	createReferenceResourceDescriptor,
+	resolveReferenceResourceAssetType,
+} from "../../message/reference-assets/referenceResourceDescriptor"
 import type {
 	DefaultGenerateVideoConfig,
 	GenerateVideoFrameInput,
@@ -687,9 +693,52 @@ export function createReferenceAssetInfo(
 	}
 }
 
-export function resolveReferenceAssetType(path: string): VideoReferenceAssetKind | null {
+export function resolveReferenceAssetType(
+	path: string,
+	options?: {
+		explicitAssetType?: VideoReferenceAssetKind
+		metadataCandidates?: readonly ReferenceResourceMetadataCandidate[]
+		resolveResourceReference?: ResolveCanvasResourceReference
+	},
+): VideoReferenceAssetKind | undefined {
+	return resolveReferenceResourceAssetType({
+		path,
+		explicitAssetType: options?.explicitAssetType,
+		metadataCandidates: options?.metadataCandidates,
+		resolveResourceReference: options?.resolveResourceReference,
+		inferFromPath: inferReferenceAssetTypeFromPath,
+	})
+}
+
+export function resolveVideoReferenceAssetInfo(options: {
+	path: string
+	src?: string
+	fileName?: string
+	explicitAssetType?: VideoReferenceAssetKind
+	metadataCandidates?: readonly ReferenceResourceMetadataCandidate[]
+	resolveResourceReference?: ResolveCanvasResourceReference
+}): VideoReferenceAssetInfo | undefined {
+	const assetType = resolveReferenceAssetType(options.path, options)
+	if (!assetType) return undefined
+	const descriptor = createReferenceResourceDescriptor({
+		path: options.path,
+		src: options.src,
+		fileName: options.fileName,
+		assetType,
+		resolveResourceReference: options.resolveResourceReference,
+	})
+	if (!descriptor) return undefined
+	return {
+		path: descriptor.path,
+		src: descriptor.src,
+		fileName: descriptor.fileName,
+		assetType,
+	}
+}
+
+function inferReferenceAssetTypeFromPath(path: string): VideoReferenceAssetKind | undefined {
 	const extension = getLowercaseFileExtension(path)
-	if (!extension) return null
+	if (!extension) return undefined
 	if (
 		SUPPORTED_IMAGE_EXTENSIONS.includes(
 			extension as (typeof SUPPORTED_IMAGE_EXTENSIONS)[number],
@@ -708,7 +757,7 @@ export function resolveReferenceAssetType(path: string): VideoReferenceAssetKind
 		)
 	)
 		return "audio"
-	return null
+	return undefined
 }
 
 export function isReferenceAssetTypeAllowed(

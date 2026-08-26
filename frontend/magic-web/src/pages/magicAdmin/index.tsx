@@ -1,12 +1,11 @@
 import { AdminProvider, AppEnv, AdminProviderProps } from "@dtyq/magic-admin/provider"
 import { AdminComponentsProvider, LanguageType, ThemeType } from "@dtyq/magic-admin/components"
 import { Navigate } from "react-router"
-import { useTranslation } from "react-i18next"
 import { useMemo, PropsWithChildren } from "react"
 import { useAreaCodes, useGlobalLanguage, useTheme } from "@/models/config/hooks"
 import { observer } from "mobx-react-lite"
 import magicClient from "@/apis/clients/magic"
-import { i18nStore } from "@/models/config/stores/i18n.store"
+import { useMainTranslation } from "@/hooks/i18n/useMainTranslation"
 import { useClusterCode } from "@/providers/ClusterProvider"
 import { userStore } from "@/models/user"
 import { isPrivateDeployment, env } from "@/utils/env"
@@ -23,9 +22,7 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 	const { clusterCode } = useClusterCode()
 	const { organizationCode } = useOrganization()
 	const navigate = useNavigate()
-	const { t: tMainCommon } = useTranslation("common", {
-		i18n: i18nStore.i18n.instance,
-	})
+	const { t: tMainCommon } = useMainTranslation("common")
 
 	const { userInfo, isPersonalOrganization, authorization } = userStore.user
 

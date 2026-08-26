@@ -43,7 +43,7 @@ use Throwable;
  * Listen to all file change events and push WebSocket notifications to clients.
  * Using async listener to avoid blocking the main business process.
  */
-#[AsyncListener]
+#[AsyncListener(driver: 'coroutine')]
 #[Listener(priority: -100)]
 class FileChangeNotificationSubscriber implements ListenerInterface
 {

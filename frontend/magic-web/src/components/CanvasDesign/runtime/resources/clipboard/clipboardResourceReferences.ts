@@ -1,6 +1,7 @@
 import type { ImageElement, LayerElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import {
+	isRemoteOrSpecialPath,
 	toWeakCanvasResourcePath,
 	stripCurrentDirectoryPrefix,
 } from "../../shared/path/canvasResourcePath"
@@ -22,7 +23,8 @@ function asRecord(value: unknown): MutableRecord | null {
 function normalizeResourcePath(value: unknown): string | null {
 	if (typeof value !== "string") return null
 	const path = value.trim()
-	if (!path || REMOTE_OR_SPECIAL_PATH_PATTERN.test(path)) return null
+	if (!path || isRemoteOrSpecialPath(path) || REMOTE_OR_SPECIAL_PATH_PATTERN.test(path))
+		return null
 	return path
 }
 

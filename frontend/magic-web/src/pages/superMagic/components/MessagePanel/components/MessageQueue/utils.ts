@@ -53,3 +53,66 @@ function collectTextFromContent(node: JSONContent): string {
 export function normalizeQueuePreviewText(content: QueuedMessage["content"]) {
 	return collectTextFromContent(content).replace(/\s+/g, " ").trim()
 }
+
+/** Trim leading/trailing whitespace while preserving rich-text nodes and mentions. */
+export function trimQueueContent(content: QueuedMessage["content"]): JSONContent {
+	const clonedContent = JSON.parse(JSON.stringify(content)) as JSONContent
+	const textNodes: JSONContent[] = []
+
+	const collectTextNodes = (node: JSONContent) => {
+		if (typeof node.text === "string") textNodes.push(node)
+		node.content?.forEach(collectTextNodes)
+	}
+
+	collectTextNodes(clonedContent)
+	if (textNodes.length > 0) {
+		textNodes[0].text = textNodes[0].text?.replace(/^\s+/, "")
+		const lastTextNode = textNodes[textNodes.length - 1]
+		lastTextNode.text = lastTextNode.text?.replace(/\s+$/, "")
+	}
+
+	const isBoundaryBreak = (node: JSONContent): boolean => {
+		return node.type === "hardBreak" || node.type === "hard_break"
+	}
+
+	const trimBoundaryBreaks = (node: JSONContent) => {
+		if (!Array.isArray(node.content)) return
+
+		node.content.forEach(trimBoundaryBreaks)
+		while (
+			node.content[0] &&
+			(isBoundaryBreak(node.content[0]) || !hasContent(node.content[0]))
+		) {
+			node.content.shift()
+		}
+		while (
+			node.content.length > 0 &&
+			(isBoundaryBreak(node.content[node.content.length - 1]) ||
+				!hasContent(node.content[node.content.length - 1]))
+		) {
+			node.content.pop()
+		}
+	}
+
+	const hasContent = (node: JSONContent): boolean => {
+		if (typeof node.text === "string") return node.text.length > 0
+		if (node.type === "mention") return true
+		return node.content?.some(hasContent) ?? false
+	}
+
+	trimBoundaryBreaks(clonedContent)
+
+	if (Array.isArray(clonedContent.content)) {
+		while (clonedContent.content[0] && !hasContent(clonedContent.content[0])) {
+			clonedContent.content.shift()
+		}
+		while (
+			clonedContent.content.length > 0 &&
+			!hasContent(clonedContent.content[clonedContent.content.length - 1])
+		) {
+			clonedContent.content.pop()
+		}
+	}
+
+	return clonedContent
+}

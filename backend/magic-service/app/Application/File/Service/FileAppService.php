@@ -9,6 +9,7 @@ namespace App\Application\File\Service;
 
 use App\Domain\File\Constant\DefaultFileBusinessType;
 use App\Domain\File\Constant\DefaultFileType;
+use App\Domain\File\Constant\FileUploadBusinessCode;
 use App\Domain\File\Entity\DefaultFileEntity;
 use App\Domain\File\Service\DefaultFileDomainService;
 use App\Domain\File\Service\FileDomainService;
@@ -57,6 +58,26 @@ class FileAppService extends AbstractAppService
             $data['temporary_credential']['credential'] = $localCredential;
         }
         return $data;
+    }
+
+    public function getPublicUploadToken(Authenticatable $authorization, string $businessCode, int $expires = 3600): array
+    {
+        return $this->getStsTemporaryCredentialV2(
+            $this->getOrganizationCode($authorization),
+            StorageBucketType::Public->value,
+            FileUploadBusinessCode::from(strtolower($businessCode))->getDir(),
+            $expires,
+        );
+    }
+
+    public function getPrivateUploadToken(Authenticatable $authorization, string $businessCode, int $expires = 3600): array
+    {
+        return $this->getStsTemporaryCredentialV2(
+            $this->getOrganizationCode($authorization),
+            StorageBucketType::Private->value,
+            FileUploadBusinessCode::from(strtolower($businessCode))->getDir(),
+            $expires,
+        );
     }
 
     public function fileUpload(UploadedFile $file, string $key, string $localCredential): array

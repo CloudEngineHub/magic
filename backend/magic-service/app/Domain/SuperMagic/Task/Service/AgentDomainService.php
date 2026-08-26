@@ -618,8 +618,12 @@ class AgentDomainService
 
     /**
      * 发送消息给 agent.
+     *
+     * @param DataIsolation $dataIsolation 数据隔离上下文
+     * @param TaskContext $taskContext 任务上下文
+     * @param array<string, mixed> $personalPreferences 当前 CHAT 的个人偏好
      */
-    public function sendChatMessage(DataIsolation $dataIsolation, TaskContext $taskContext): void
+    public function sendChatMessage(DataIsolation $dataIsolation, TaskContext $taskContext, array $personalPreferences = []): void
     {
         $taskDynamicConfig = $taskContext->getDynamicConfig();
 
@@ -713,7 +717,12 @@ class AgentDomainService
 
         // 构建 metadata（使用公共方法）
         $initMetadata = new InitializationMetadataDTO();
-        $messageMetadata = $this->buildMessageMetadata($dataIsolation, $taskContext, $initMetadata);
+        $messageMetadata = $this->buildMessageMetadata(
+            dataIsolation: $dataIsolation,
+            taskContext: $taskContext,
+            initMetadata: $initMetadata,
+            personalPreferences: $personalPreferences
+        );
 
         $this->logger->info('[Sandbox][App] Built metadata for chat message', [
             'task_id' => $taskContext->getTask()->getId(),
@@ -1686,12 +1695,14 @@ class AgentDomainService
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param TaskContext $taskContext 任务上下文
      * @param InitializationMetadataDTO $initMetadata 初始化元数据（必需）
+     * @param array<string, mixed> $personalPreferences 当前 CHAT 的个人偏好
      * @return MessageMetadata 消息元数据对象
      */
     private function buildMessageMetadata(
         DataIsolation $dataIsolation,
         TaskContext $taskContext,
-        InitializationMetadataDTO $initMetadata
+        InitializationMetadataDTO $initMetadata,
+        array $personalPreferences
     ): MessageMetadata {
         // 获取用户信息
         $userInfoArray = $this->userInfoAppService->getUserInfo($dataIsolation->getCurrentUserId(), $dataIsolation);
@@ -1722,7 +1733,8 @@ class AgentDomainService
             $dataIsolation->getLanguage() ?? '',
             $initMetadata->getAuthorization() ?? $authorization,
             $userInfo,
-            $initMetadata->getSkipInitMessages() ?? false
+            $initMetadata->getSkipInitMessages() ?? false,
+            personalPreferences: $personalPreferences
         );
     }
 

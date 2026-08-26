@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { keyBy } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import { Check, ChevronRight, LogOut, Plus, SquareUserRound } from "lucide-react"
-import { useTranslation } from "react-i18next"
+import { useMainTranslation } from "@/hooks/i18n/useMainTranslation"
 import { useMemoizedFn } from "ahooks"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avatar"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -29,7 +29,6 @@ import PersonalOrganizationAvatar from "@/assets/resources/personal-organization
 import TeamOrganizationAvatar from "@/assets/resources/team-organization-avatar.svg"
 import { getAvatarUrl } from "@/utils/avatar"
 import { toTestIdSegment } from "@/utils/testid"
-import { i18nStore } from "@/models/config/stores/i18n.store"
 
 export interface OrganizationListItemProps {
 	onClose?: () => void
@@ -52,12 +51,8 @@ const getOrganizationOptions = (account: User.UserAccount): OrganizationOption[]
 
 function OrganizationList(props: OrganizationListItemProps) {
 	const { onClose } = props
-	const { t: tSuper } = useTranslation("super", {
-		i18n: i18nStore.i18n.instance,
-	})
-	const { t: tSidebar } = useTranslation("sidebar", {
-		i18n: i18nStore.i18n.instance,
-	})
+	const { t: tSuper } = useMainTranslation("super")
+	const { t: tSidebar } = useMainTranslation("sidebar")
 
 	const { accounts } = useAccountHook()
 	const { clustersConfig } = useClusterConfig()

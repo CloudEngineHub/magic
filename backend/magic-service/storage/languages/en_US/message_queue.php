@@ -12,4 +12,5 @@ return [
     'consume_failed' => 'Failed to consume message',
     'message_not_found' => 'Message not found or access denied',
     'operation_locked' => 'Operation is locked by another process, please try again later',
+    'invalid_message_type' => 'Invalid value: :type',
 ];

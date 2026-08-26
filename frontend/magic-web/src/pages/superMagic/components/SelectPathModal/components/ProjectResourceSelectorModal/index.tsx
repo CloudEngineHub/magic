@@ -106,6 +106,7 @@ function ProjectResourceSelectorModal({
 	workspaces,
 	fileIds,
 	sourceAttachments,
+	sourceAttachmentsLoading = false,
 	initialPath = [],
 	includeFixedWorkspaces = true,
 	closeOnSubmit = true,
@@ -206,8 +207,25 @@ function ProjectResourceSelectorModal({
 	const [fileName, setFileName] = useState("")
 	const [isSearchOpen, setIsSearchOpen] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
+	const pathRef = useRef<AttachmentItem[]>(initialPath)
+	pathRef.current = path
 	// 用于跟踪是否已经初始化，避免重复加载
 	const initializedRef = useRef(false)
+	const attachmentRequestRef = useRef<{
+		controller: AbortController
+		requestId: number
+	} | null>(null)
+	const attachmentRequestIdRef = useRef(0)
+	const beginAttachmentRequest = useMemoizedFn(() => {
+		attachmentRequestRef.current?.controller.abort()
+		const controller = new AbortController()
+		const requestId = ++attachmentRequestIdRef.current
+		attachmentRequestRef.current = { controller, requestId }
+		return { controller, requestId }
+	})
+	const isCurrentProjectTarget = Boolean(
+		selectedProject?.id && currentProject?.id === selectedProject.id,
+	)
 	// 面包屑容器宽度，用于动态计算可显示的项
 	const breadcrumbRef = useRef<HTMLDivElement>(null)
 	const [breadcrumbContainerWidth, setBreadcrumbContainerWidth] = useState(0)
@@ -278,6 +296,11 @@ function ProjectResourceSelectorModal({
 				(isMentionMode || hasEditPermission(project.user_role)),
 		)
 	}, [availableProjects, excludeProjectIds, isMentionMode])
+	const shouldBlockPanelForLoading =
+		loading &&
+		((effectiveViewMode === "workspace" && availableWorkspaces.length === 0) ||
+			(effectiveViewMode === "project" && editableProjects.length === 0) ||
+			(effectiveViewMode === "directory" && directories.length === 0))
 
 	// 获取工作区的显示名称（用于搜索匹配）
 	const getWorkspaceDisplayName = useMemoizedFn((workspace: Workspace) => {
@@ -582,8 +605,10 @@ function ProjectResourceSelectorModal({
 			}
 
 			if (isProjectOnly) {
+				attachmentRequestRef.current?.controller.abort()
 				setCurrentProject(project)
 				setViewMode("project")
+				pathRef.current = []
 				setAttachments([])
 				setPath([])
 				setDirectories([])
@@ -595,6 +620,30 @@ function ProjectResourceSelectorModal({
 				setLoading(false)
 				return
 			}
+
+			// The source page owns the current project's attachment request. Reuse its
+			// streamed snapshots instead of starting a second full-tree request.
+			if (project.id === selectedProject?.id) {
+				attachmentRequestRef.current?.controller.abort()
+				setCurrentProject(project)
+				setViewMode("directory")
+				pathRef.current = []
+				setPath([])
+				setAttachments(sourceAttachments)
+				setDirectories(filesSort(getDirectoriesFromPath(sourceAttachments, [])))
+				setLoading(sourceAttachmentsLoading)
+				return
+			}
+
+			const request = beginAttachmentRequest()
+			setCurrentProject(project)
+			setViewMode("directory")
+			pathRef.current = []
+			setPath([])
+			// Do not keep rendering the previous project's tree while the new
+			// project's first attachment snapshot is still pending.
+			setAttachments([])
+			setDirectories([])
 			setLoading(true)
 			setIsSearch(false)
 			setIsSearchOpen(false)
@@ -607,18 +656,40 @@ function ProjectResourceSelectorModal({
 					// This selector is loading the signed-in user's target project. Do not
 					// inherit the source share token, which rewrites the project ID to 0.
 					temporaryToken: null,
+					signal: request.controller.signal,
+					onBatchSnapshot: (snapshot) => {
+						if (
+							request.controller.signal.aborted ||
+							request.requestId !== attachmentRequestIdRef.current
+						) {
+							return
+						}
+						setAttachments(snapshot.tree)
+						setDirectories(
+							filesSort(getDirectoriesFromPath(snapshot.tree, pathRef.current)),
+						)
+					},
 				})
-				setCurrentProject(project)
-				setViewMode("directory")
+				if (
+					request.controller.signal.aborted ||
+					request.requestId !== attachmentRequestIdRef.current
+				) {
+					return
+				}
 				setAttachments(res?.tree || [])
-				setPath([])
-				const dirs = getDirectoriesFromPath(res?.tree || [], [])
+				const dirs = getDirectoriesFromPath(res?.tree || [], pathRef.current)
 				setDirectories(filesSort(dirs))
 			} catch (error) {
+				if (request.controller.signal.aborted) return
 				console.error("Failed to fetch attachments:", error)
 				magicToast.error(t("selectPathModal.fetchAttachmentsFailed"))
 			}
-			setLoading(false)
+			if (
+				!request.controller.signal.aborted &&
+				request.requestId === attachmentRequestIdRef.current
+			) {
+				setLoading(false)
+			}
 		},
 	)
 
@@ -758,6 +829,12 @@ function ProjectResourceSelectorModal({
 
 	// 测量面包屑容器宽度
 	useEffect(() => {
+		return () => {
+			attachmentRequestRef.current?.controller.abort()
+		}
+	}, [])
+
+	useEffect(() => {
 		if (!visible) {
 			setBreadcrumbContainerWidth(0)
 			return
@@ -873,7 +950,7 @@ function ProjectResourceSelectorModal({
 	})
 
 	const onBreadcrumbClick = useMemoizedFn(async (item: BreadcrumbItem) => {
-		if (loading) return
+		if (shouldBlockPanelForLoading) return
 
 		// 点击"工作空间"回到最初
 		if (item.id === "workspace-root") {
@@ -892,6 +969,7 @@ function ProjectResourceSelectorModal({
 			if (isProjectOnly) {
 				return
 			}
+			pathRef.current = []
 			setPath([])
 			await fetchDirectories({
 				projectId: currentProject.id,
@@ -908,6 +986,7 @@ function ProjectResourceSelectorModal({
 		if (currentProject && effectiveViewMode === "directory") {
 			const index = path.findIndex((o) => getItemId(o) === item.id)
 			const newPath = index >= 0 ? path.slice(0, index + 1) : []
+			pathRef.current = newPath
 			setPath(newPath)
 			await fetchDirectories({
 				projectId: currentProject.id,
@@ -941,9 +1020,16 @@ function ProjectResourceSelectorModal({
 				return
 			}
 
+			const itemId = getItemId(item)
+			// A directory row can remain visible while its children are being
+			// resolved. Ignore repeated clicks on a directory already in the path so
+			// the same node cannot be appended multiple times before the next render.
+			if (path.some((pathItem) => getItemId(pathItem) === itemId)) {
+				return
+			}
+
 			// 仅移动操作时检查是否为禁用的文件夹（复制操作允许复制到自己或子级）
 			if (operationType === "move") {
-				const itemId = getItemId(item)
 				if (disabledFolderIds.includes(itemId)) {
 					magicToast.info(t("selectPathModal.cannotSelectCurrentFolder"))
 					return
@@ -951,6 +1037,7 @@ function ProjectResourceSelectorModal({
 			}
 
 			const newPath = [...path, item]
+			pathRef.current = newPath
 			setPath(newPath)
 			await fetchDirectories({
 				projectId: currentProject.id,
@@ -1077,6 +1164,7 @@ function ProjectResourceSelectorModal({
 			setCurrentWorkspace(selectedWorkspace)
 			setCurrentProject(selectedProject)
 			setViewMode(isProjectOnly ? "project" : "directory")
+			pathRef.current = isProjectOnly ? [] : initialPath
 			setPath(isProjectOnly ? [] : initialPath)
 			setFileName("")
 			setIsSearch(false)
@@ -1092,26 +1180,12 @@ function ProjectResourceSelectorModal({
 				return
 			}
 
-			const loadAttachments = async () => {
-				setLoading(true)
-				try {
-					const res = await loadProjectAttachments({
-						projectId: selectedProject.id,
-						// The preselected destination project must not inherit a share token.
-						temporaryToken: null,
-					})
-					setAttachments(res?.tree || [])
-					const dirs = getDirectoriesFromPath(res?.tree || [], initialPath)
-					setDirectories(filesSort(dirs))
-				} catch (error) {
-					console.error("Failed to fetch attachments:", error)
-					setAttachments([])
-					setDirectories([])
-				}
-				setLoading(false)
-			}
-
-			loadAttachments()
+			// The current project's file tree is already owned by the page and may
+			// still be in first/middle batch snapshot delivery. Render what exists now;
+			// the snapshot-sync effect below will fill in later batches.
+			setAttachments(sourceAttachments)
+			setDirectories(filesSort(getDirectoriesFromPath(sourceAttachments, initialPath)))
+			setLoading(sourceAttachmentsLoading)
 		} else {
 			// 否则重置到工作区选择视图
 			setViewMode("workspace")
@@ -1131,6 +1205,22 @@ function ProjectResourceSelectorModal({
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [visible, isClawContext, clawProjectId])
+
+	useEffect(() => {
+		if (!visible || !isCurrentProjectTarget || isSearch) return
+
+		setAttachments(sourceAttachments)
+		setDirectories(filesSort(getDirectoriesFromPath(sourceAttachments, path)))
+		setLoading(sourceAttachmentsLoading)
+	}, [
+		visible,
+		isCurrentProjectTarget,
+		isSearch,
+		sourceAttachments,
+		sourceAttachmentsLoading,
+		path,
+		filesSort,
+	])
 
 	// 根据 viewMode 动态设置搜索 placeholder
 	const searchPlaceholder = useMemo(() => {
@@ -1861,7 +1951,9 @@ function ProjectResourceSelectorModal({
 											<div
 												className={cn(
 													breadcrumbItemBase,
-													(loading || !item.operation) && "disable",
+													(shouldBlockPanelForLoading ||
+														!item.operation) &&
+														"disable",
 												)}
 												style={{
 													maxWidth:
@@ -2016,7 +2108,7 @@ function ProjectResourceSelectorModal({
 			>
 				{/* MagicSpin 会额外生成一层内容容器；工作区视图必须把高度和 min-h-0 传递到该层，内部滚动区才不会按内容撑开。 */}
 				<MagicSpin
-					spinning={loading}
+					spinning={shouldBlockPanelForLoading}
 					className="h-full min-h-0 w-full"
 					innerClassName={
 						effectiveViewMode === "workspace"
@@ -2024,11 +2116,24 @@ function ProjectResourceSelectorModal({
 							: undefined
 					}
 				>
-					{effectiveViewMode === "workspace" && renderWorkspaceList()}
-					{effectiveViewMode === "project" && renderProjectList()}
+					{effectiveViewMode === "workspace" &&
+						(!shouldBlockPanelForLoading ? (
+							renderWorkspaceList()
+						) : (
+							<div className="h-full min-h-[320px] w-full" />
+						))}
+					{effectiveViewMode === "project" &&
+						(!shouldBlockPanelForLoading ? (
+							renderProjectList()
+						) : (
+							<div className="h-full min-h-[320px] w-full" />
+						))}
 					{effectiveViewMode === "directory" && (
 						<>
-							{!isEmpty(directories) || createDirectoryHook.createDirectoryShown ? (
+							{shouldBlockPanelForLoading ? (
+								<div className="h-full min-h-[320px] w-full" />
+							) : !isEmpty(directories) ||
+							  createDirectoryHook.createDirectoryShown ? (
 								renderDirectoryTree()
 							) : isSearch ? (
 								<EmptyStateBox>

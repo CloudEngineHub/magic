@@ -1,4 +1,4 @@
-import { useMemo, useState, type RefObject } from "react"
+import { useMemo, useState, type CSSProperties, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { cn } from "@/utils/cn"
@@ -23,7 +23,7 @@ interface MobileRecordingSourcePanelProps {
 	notesContent?: string
 	playing: boolean
 	currentTime: number
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
 	availableSpeakerIds?: string[]
 	selectedSpeakerIds?: string[]
 	speakerNameMap: Record<string, string>

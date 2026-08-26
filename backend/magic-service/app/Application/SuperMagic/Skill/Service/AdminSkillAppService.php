@@ -12,12 +12,14 @@ use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as 
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
+use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillVersionAdminQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
+use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
@@ -44,6 +46,7 @@ class AdminSkillAppService extends AbstractSkillAppService
         protected SkillDomainService $skillDomainService,
         protected SkillVersionDomainService $skillVersionDomainService,
         protected SkillMarketDomainService $skillMarketDomainService,
+        protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
         private readonly ResourceVisibilityDomainService $resourceVisibilityDomainService,
         private readonly AdminSkillAssembler $adminSkillAssembler,
     ) {
@@ -97,14 +100,20 @@ class AdminSkillAppService extends AbstractSkillAppService
             $requestDTO->getPackageName(),
             $requestDTO->getStartTime(),
             $requestDTO->getEndTime(),
+            $requestDTO->getCategoryIds(),
             $requestDTO->getOrderBy(),
             $page
+        );
+
+        $categoryIdsMap = $this->skillCategoryRelationDomainService->getMarketCategoryIdsMap(
+            array_map(static fn (SkillMarketEntity $entity) => (int) $entity->getId(), $result['list'])
         );
 
         return $this->adminSkillAssembler->createQueryMarketsResponseDTO(
             $result['list'],
             $page,
-            $result['total']
+            $result['total'],
+            $categoryIdsMap
         );
     }
 
@@ -225,8 +234,48 @@ class AdminSkillAppService extends AbstractSkillAppService
             return;
         }
 
-        if (! $this->skillMarketDomainService->updateInfoById($id, $requestDTO->getUpdatePayload())) {
+        $payload = $requestDTO->getUpdatePayload();
+        $categoryIds = $payload['category_ids'] ?? null;
+        unset($payload['category_ids']);
+
+        Db::beginTransaction();
+        try {
+            if ($payload !== [] && ! $this->skillMarketDomainService->updateInfoById($id, $payload)) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+            }
+            if ($payload === [] && $this->skillMarketDomainService->findByIds([$id]) === []) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+            }
+            if ($categoryIds !== null) {
+                $market = $this->skillMarketDomainService->findByIds([$id])[$id] ?? null;
+                if ($market === null) {
+                    ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+                }
+                $this->skillCategoryRelationDomainService->replaceMarketCategories($market->getOrganizationCode(), $id, $categoryIds);
+            }
+            Db::commit();
+        } catch (Throwable $throwable) {
+            Db::rollBack();
+            throw $throwable;
+        }
+    }
+
+    /** @param int[] $categoryIds */
+    public function updateMarketCategory(RequestContext $requestContext, int $id, array $categoryIds): void
+    {
+        $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
+        $dataIsolation->disabled();
+        $market = $this->skillMarketDomainService->findByIds([$id])[$id] ?? null;
+        if ($market === null) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+        }
+        Db::beginTransaction();
+        try {
+            $this->skillCategoryRelationDomainService->replaceMarketCategories($market->getOrganizationCode(), $id, $categoryIds);
+            Db::commit();
+        } catch (Throwable $throwable) {
+            Db::rollBack();
+            throw $throwable;
         }
     }
 
@@ -280,13 +329,49 @@ class AdminSkillAppService extends AbstractSkillAppService
         // 创建数据隔离对象
         $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
 
-        // 调用领域服务处理业务逻辑
-        $this->skillVersionDomainService->reviewSkillVersion(
-            $dataIsolation,
-            $id,
-            $requestDTO->getAction(),
-            $requestDTO->getPublisherType(),
-            $requestDTO->getReviewRemark()
+        Db::beginTransaction();
+        try {
+            $this->skillVersionDomainService->reviewSkillVersion(
+                $dataIsolation,
+                $id,
+                $requestDTO->getAction(),
+                $requestDTO->getPublisherType(),
+                $requestDTO->getReviewRemark()
+            );
+
+            if ($requestDTO->getAction() === ReviewStatus::APPROVED->value) {
+                $this->syncApprovedVersionCategories($id);
+            }
+            Db::commit();
+        } catch (Throwable $throwable) {
+            Db::rollBack();
+            throw $throwable;
+        }
+    }
+
+    /**
+     * 将审核通过版本的分类关系同步到市场 Skill。
+     *
+     * 版本和市场记录分别维护分类关系，审核通过后需要以版本分类覆盖市场分类。
+     */
+    private function syncApprovedVersionCategories(int $versionId): void
+    {
+        $version = $this->skillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($versionId);
+        if ($version === null) {
+            return;
+        }
+
+        $market = $this->skillMarketDomainService->findStoreSkillBySkillCode($version->getCode());
+        $marketId = $market?->getId();
+        if ($market === null || $marketId === null) {
+            return;
+        }
+
+        $categoryIds = $this->skillCategoryRelationDomainService->getVersionCategoryIds($versionId);
+        $this->skillCategoryRelationDomainService->replaceMarketCategories(
+            $market->getOrganizationCode(),
+            $marketId,
+            $categoryIds
         );
     }
 

@@ -15,6 +15,7 @@ use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Task\DTO\InterruptClientNotification;
+use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Domain\Chat\DTO\Message\ChatMessage\UserToolCallMessage;
@@ -81,6 +82,7 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly MagicDepartmentUserDomainService $departmentUserDomainService,
         private readonly TopicTaskAppService $topicTaskAppService,
         private readonly AgentDomainService $agentDomainService,
+        private readonly AgentAppService $agentAppService,
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ProjectMcpConfigService $projectMcpConfigService,
@@ -630,7 +632,7 @@ class HandleUserMessageAppService extends AbstractAppService
         }
 
         // 发送消息到 agent
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
+        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
 
         return $sandboxId;
     }

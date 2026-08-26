@@ -2313,14 +2313,6 @@ class ResourceShareAppService extends AbstractShareAppService
             // 暂不过滤系统目录（如 .magic 及其子文件）
             // $folderEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($folderEntities, ['.magic']);
 
-            if (empty($folderEntities)) {
-                return [
-                    'list' => [],
-                    'tree' => [],
-                    'total' => 0,
-                ];
-            }
-
             // 转换为TaskFileItemDTO格式
             $list = $this->convertEntitiesToDtoList($folderEntities, $organizationCode);
 
@@ -2372,14 +2364,6 @@ class ResourceShareAppService extends AbstractShareAppService
         $entities = [$fileEntity];
         // 暂不过滤系统目录（如 .magic 及其子文件）
         // $entities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames([$fileEntity], ['.magic']);
-        if (empty($entities)) {
-            return [
-                'list' => [],
-                'tree' => [],
-                'total' => 0,
-            ];
-        }
-
         // 转换为TaskFileItemDTO格式
         $list = $this->convertEntitiesToDtoList([$fileEntity], $organizationCode);
 
@@ -2440,14 +2424,6 @@ class ResourceShareAppService extends AbstractShareAppService
         // 过滤系统目录（如 .magic 及其子文件）
         // 暂不过滤系统目录（如 .magic 及其子文件）
         // $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
-
-        if (empty($allEntities)) {
-            return [
-                'list' => [],
-                'tree' => [],
-                'total' => 0,
-            ];
-        }
 
         $fileIdSet = array_flip($originalFileIds);
 

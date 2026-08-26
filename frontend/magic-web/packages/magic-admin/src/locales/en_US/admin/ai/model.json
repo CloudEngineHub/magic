@@ -17,8 +17,10 @@
 	"deleteModelDesc": "The model is not used by any AI assistant/subprocess/tool, do you confirm deletion?",
 	"deleteModelDesc2": "The {{name}} model may affect AI assistants, subprocesses, and tools that have called this model, please proceed with caution",
 	"deleteModelDesc3": "To ensure data security, if you need to {{operate}}, please enter {{name}} below to confirm",
+	"disable": "Disable",
 	"disableModel": "Disable Model",
 	"embeddingModel": "Embedding Model",
+	"enable": "Enable",
 	"enabledServiceProvider": "Enabled Providers",
 	"form": {
 		"EmbeddingModel": "Embedding (Embedding Model)",

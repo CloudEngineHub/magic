@@ -19,6 +19,7 @@ use Dtyq\CloudFile\Kernel\Struct\CredentialPolicy;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
+use Dtyq\CloudFile\Kernel\Utils\ContentDispositionBuilder;
 use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
 use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
 use Exception;
@@ -419,8 +420,7 @@ class TOSExpand implements ExpandInterface
 
         // 自定义下载文件名
         if ($downloadName) {
-            $downloadName = rawurlencode($downloadName);
-            $query['response-content-disposition'] = 'attachment;filename="' . $downloadName . '";filename*=utf-8\'\'' . $downloadName;
+            $query['response-content-disposition'] = ContentDispositionBuilder::build($downloadName);
         }
 
         if (! empty($query)) {

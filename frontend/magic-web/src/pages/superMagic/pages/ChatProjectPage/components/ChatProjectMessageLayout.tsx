@@ -11,6 +11,8 @@ interface ChatProjectMessageLayoutProps {
 	input: ReactNode
 	isConversationPanelCollapsed: boolean
 	scope?: string
+	/** Identifies employee/mode changes that should preserve an already expanded input. */
+	layoutKey?: string
 	/** Allow callers with extra input controls to raise the shared minimum height. */
 	inputMinHeight?: number
 }
@@ -24,18 +26,21 @@ export default function ChatProjectMessageLayout({
 	input,
 	isConversationPanelCollapsed,
 	scope = "topic-page",
+	layoutKey,
 	inputMinHeight = DEFAULT_INPUT_MIN_HEIGHT,
 }: ChatProjectMessageLayoutProps) {
 	const layoutRef = useRef<HTMLDivElement>(null)
 	const inputRef = useRef<HTMLDivElement>(null)
 	const inputHeight = useConversationInputHeight({
 		scope,
+		layoutKey,
 		enabled: !isConversationPanelCollapsed,
 		containerRef: inputRef,
 		availableRef: layoutRef,
 		minHeight: inputMinHeight,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
+	const effectiveInputMinHeight = inputHeight.minHeight ?? inputMinHeight
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,
@@ -64,7 +69,7 @@ export default function ChatProjectMessageLayout({
 					<div className="flex h-full min-h-0 w-full flex-col">{messageList}</div>
 				</MagicSplitter.Panel>
 				<MagicSplitter.Panel
-					min={inputMinHeight}
+					min={effectiveInputMinHeight}
 					size={inputHeight.effectiveHeight}
 					max={inputHeight.maxHeight}
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}
@@ -82,7 +87,7 @@ export default function ChatProjectMessageLayout({
 							<div className="absolute inset-x-2 top-0 mx-auto h-2 max-w-3xl">
 								<ConversationInputResizeHandle
 									value={inputHeight.effectiveHeight}
-									min={inputMinHeight}
+									min={effectiveInputMinHeight}
 									max={inputHeight.maxHeight}
 									onResizeStart={inputHeight.startPointerResize}
 									onResize={inputHeight.resizeByPointerDelta}

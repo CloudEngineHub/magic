@@ -74,6 +74,10 @@
 		"fontFamily": {
 			"placeholder": "字体"
 		},
+		"fontSize": {
+			"openList": "打开字号列表",
+			"placeholder": "字号"
+		},
 		"fontStyle": {
 			"bold": "粗体",
 			"italic": "斜体",
@@ -116,6 +120,9 @@
 			"title": "编辑尺寸"
 		},
 		"strokeColor": {
+			"center": "居中",
+			"inside": "内部",
+			"outside": "外部",
 			"title": "描边"
 		},
 		"textAdvanced": {

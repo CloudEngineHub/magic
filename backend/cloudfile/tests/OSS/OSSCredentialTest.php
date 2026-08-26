@@ -118,8 +118,8 @@ class OSSCredentialTest extends CloudFileBaseTest
             $this->assertArrayHasKey('x-oss-signature', $query);
         }
 
-        $this->assertContentDisposition($urls['easy-file/easy.jpeg'], 'attachment; filename="batch-image.jpeg"');
-        $this->assertContentDisposition($urls['easy-file/test.txt'], 'inline; filename="batch-test.txt"');
+        $this->assertContentDisposition($urls['easy-file/easy.jpeg'], 'attachment; filename="batch-image.jpeg"; filename*=UTF-8\'\'batch-image.jpeg');
+        $this->assertContentDisposition($urls['easy-file/test.txt'], 'inline; filename="batch-test.txt"; filename*=UTF-8\'\'batch-test.txt');
     }
 
     /**

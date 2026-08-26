@@ -4,6 +4,7 @@ import { IconSearch } from "@tabler/icons-react"
 import MagicIcon from "@/components/base/MagicIcon"
 import { createStyles } from "antd-style"
 import { useMemoizedFn } from "ahooks"
+import { useTranslation } from "react-i18next"
 
 // 样式定义
 const useStyles = createStyles(({ token, css }) => ({
@@ -92,7 +93,7 @@ interface BaseDropdownRendererProps {
 const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 	({
 		options = [],
-		placeholder = "搜索...",
+		placeholder,
 		value,
 		onChange,
 		showSearch = true,
@@ -100,7 +101,9 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 		OptionWrapper,
 		...restProps
 	}) => {
+		const { t } = useTranslation()
 		const { styles } = useStyles()
+		const searchPlaceholder = placeholder ?? t("common.searchPlaceholder", { ns: "flow" })
 		const [searchValue, setSearchValue] = useState("")
 
 		// 过滤选项
@@ -157,7 +160,7 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 				{showSearch && (
 					<div className={styles.searchBox}>
 						<Input
-							placeholder={placeholder}
+							placeholder={searchPlaceholder}
 							value={searchValue}
 							onChange={handleSearchChange}
 							prefix={<MagicIcon component={IconSearch} size={16} />}
@@ -175,7 +178,10 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 						filteredOptions.map(renderOption)
 					) : (
 						<div className={styles.empty}>
-							<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
+							<Empty
+								image={Empty.PRESENTED_IMAGE_SIMPLE}
+								description={t("common.noData", { ns: "flow" })}
+							/>
 						</div>
 					)}
 				</div>

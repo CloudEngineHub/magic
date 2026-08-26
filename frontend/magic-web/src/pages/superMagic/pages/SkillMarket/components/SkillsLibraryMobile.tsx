@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { reaction } from "mobx"
 import { configStore } from "@/models/config"
-import { Check, ChevronLeft, Loader2, Search } from "lucide-react"
+import { Check, ChevronLeft, Loader2, RefreshCw, Search } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { Skills } from "@/enhance/lucide-react"
+import { cn } from "@/utils/cn"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
@@ -16,6 +18,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { StoreSkillCardMobile } from "./StoreSkillCardMobile"
 import { StoreSkillsStore } from "../stores/store-skills"
+import SkillCategoryFilter from "./SkillCategoryFilter"
 import { ViewTransitionPresets } from "@/types/viewTransition"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
 
@@ -25,14 +28,35 @@ function SkillsLibraryMobile() {
 	const skillsStoreRef = useRef(new StoreSkillsStore())
 	const skillsStore = skillsStoreRef.current
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
+	const initialLoadLifecycleRef = useRef({ initialized: false, generation: 0 })
 
 	const [searchOpen, setSearchOpen] = useState(false)
 	const [queryDraft, setQueryDraft] = useState("")
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
+	const hasActiveFilters =
+		Boolean(skillsStore.keyword) ||
+		skillsStore.categoryIds.length > 0 ||
+		skillsStore.publisherType != null ||
+		skillsStore.isFeatured != null
 
 	useEffect(() => {
-		void skillsStore.fetchSkills()
-		return () => skillsStore.reset()
+		const lifecycle = initialLoadLifecycleRef.current
+		const effectGeneration = ++lifecycle.generation
+
+		// React StrictMode replays effects in development. Keep the first request
+		// alive and avoid starting the same initial queries a second time.
+		if (!lifecycle.initialized) {
+			lifecycle.initialized = true
+			void skillsStore.fetchSkills()
+			void skillsStore.fetchFeaturedSkills()
+			void skillsStore.fetchCategories()
+		}
+
+		return () => {
+			queueMicrotask(() => {
+				if (lifecycle.generation === effectGeneration) skillsStore.reset()
+			})
+		}
 	}, [skillsStore])
 
 	useEffect(() => {
@@ -62,7 +86,7 @@ function SkillsLibraryMobile() {
 	}
 
 	function handleApplySearch() {
-		void skillsStore.fetchSkills({ keyword: queryDraft.trim(), page: 1 })
+		void skillsStore.fetchSkills({ keyword: queryDraft.trim(), page: 1 }).catch(() => undefined)
 		setSearchOpen(false)
 	}
 
@@ -75,14 +99,25 @@ function SkillsLibraryMobile() {
 
 	const handleAdd = useCallback(
 		(id: string) => {
-			void skillsStore.addSkill(id)
+			void skillsStore.addSkill(id).catch(() => {
+				toast.error(t("skillsLibrary.addFailed"))
+			})
 		},
-		[skillsStore],
+		[skillsStore, t],
 	)
 
 	const handleUpgrade = useCallback(
 		(id: string) => {
-			void skillsStore.upgradeSkill(id)
+			void skillsStore.upgradeSkill(id).catch(() => {
+				toast.error(t("skillsLibrary.actionFailed"))
+			})
+		},
+		[skillsStore, t],
+	)
+
+	const handleCategoryChange = useCallback(
+		(categoryIds: string[]) => {
+			void skillsStore.setCategoryIds(categoryIds).catch(() => undefined)
 		},
 		[skillsStore],
 	)
@@ -90,6 +125,44 @@ function SkillsLibraryMobile() {
 	const handleOpenDetail = useCallback((skill: StoreSkillView) => {
 		setSelectedSkill(skill)
 	}, [])
+
+	const handleRefreshFeatured = useCallback(() => {
+		void skillsStore.fetchNextFeaturedSkills()
+	}, [skillsStore])
+
+	const handleRetrySkills = useCallback(() => {
+		void skillsStore.retrySkills().catch(() => undefined)
+	}, [skillsStore])
+
+	const selectedSkillId = selectedSkill?.id
+	const selectedSkillStatus = selectedSkill?.status
+	const selectedSkillNeedUpgrade = selectedSkill?.needUpgrade ?? false
+	const detailPrimaryAction = useMemo(
+		() =>
+			selectedSkillId
+				? {
+						label:
+							selectedSkillStatus === "added"
+								? selectedSkillNeedUpgrade
+									? t("skillsLibrary.upgrade")
+									: t("skillsLibrary.added")
+								: t("skillsLibrary.addToMySkills"),
+						onClick: async () => {
+							if (selectedSkillStatus === "added") {
+								if (selectedSkillNeedUpgrade)
+									await skillsStore.upgradeSkill(selectedSkillId)
+								return
+							}
+
+							await skillsStore.addSkill(selectedSkillId)
+						},
+						onError: () => toast.error(t("skillsLibrary.actionFailed")),
+						disabled: selectedSkillStatus === "added" && !selectedSkillNeedUpgrade,
+						testId: "skill-detail-dialog-primary-action",
+					}
+				: undefined,
+		[selectedSkillId, selectedSkillNeedUpgrade, selectedSkillStatus, skillsStore, t],
+	)
 
 	return (
 		<div
@@ -105,30 +178,7 @@ function SkillsLibraryMobile() {
 				skillCode={selectedSkill?.skillCode ?? null}
 				detailSource="market"
 				skillSummary={selectedSkill}
-				primaryAction={
-					selectedSkill
-						? {
-								label:
-									selectedSkill.status === "added"
-										? selectedSkill.needUpgrade
-											? t("skillsLibrary.upgrade")
-											: t("skillsLibrary.added")
-										: t("skillsLibrary.addToMySkills"),
-								onClick: async () => {
-									if (selectedSkill.status === "added") {
-										if (selectedSkill.needUpgrade)
-											await skillsStore.upgradeSkill(selectedSkill.id)
-										return
-									}
-
-									await skillsStore.addSkill(selectedSkill.id)
-								},
-								disabled:
-									selectedSkill.status === "added" && !selectedSkill.needUpgrade,
-								testId: "skill-detail-dialog-primary-action",
-							}
-						: undefined
-				}
+				primaryAction={detailPrimaryAction}
 			/>
 			<header
 				className="flex shrink-0 items-center gap-2 rounded-b-xl bg-background px-2.5 py-2 shadow-xs"
@@ -199,11 +249,97 @@ function SkillsLibraryMobile() {
 			</Sheet>
 
 			<ScrollArea
-				className="min-h-0 flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block"
+				className="min-h-0 flex-1 [&_[data-slot='scroll-area-scrollbar']]:hidden [&_[data-slot='scroll-area-viewport']>div]:!block"
 				viewportRef={scrollViewportRef}
 			>
 				<div className="flex min-w-0 flex-col gap-2.5 px-2 pb-6 pt-2">
-					{skillsStore.loading && skillsStore.list.length === 0 ? (
+					<section
+						className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 shadow-xs"
+						data-testid="featured-skills-mobile-section"
+					>
+						<div className="flex min-h-8 items-center justify-between gap-2 border-b border-border pb-2">
+							<h2 className="text-sm font-semibold text-foreground">
+								{t("skillsLibrary.featuredSkills")}
+							</h2>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs text-muted-foreground"
+								disabled={
+									skillsStore.featuredLoading || !skillsStore.canRefreshFeatured
+								}
+								onClick={handleRefreshFeatured}
+								data-testid="featured-skills-mobile-refresh"
+							>
+								<RefreshCw
+									className={cn(
+										"size-3.5",
+										skillsStore.featuredLoading && "animate-spin",
+									)}
+									aria-hidden
+								/>
+								{skillsStore.featuredError
+									? t("skillsLibrary.retryFeatured")
+									: t("skillsLibrary.refreshFeatured")}
+							</Button>
+						</div>
+
+						{skillsStore.featuredError ? (
+							<div
+								className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
+								role="status"
+								data-testid="featured-skills-mobile-error"
+							>
+								{t("skillsLibrary.featuredLoadFailed")}
+							</div>
+						) : null}
+
+						{skillsStore.featuredLoading && skillsStore.featuredList.length === 0 ? (
+							<div
+								className="flex items-center justify-center py-8"
+								data-testid="featured-skills-mobile-loading"
+							>
+								<Loader2 className="size-5 animate-spin text-muted-foreground" />
+							</div>
+						) : skillsStore.featuredList.length > 0 ? (
+							<div
+								className="flex min-w-0 flex-col gap-2.5"
+								data-testid="featured-skills-mobile-list"
+							>
+								{skillsStore.featuredList.map((skill) => (
+									<StoreSkillCardMobile
+										key={`featured-${skill.id}`}
+										skill={skill}
+										language={i18n.language}
+										showFeaturedTag
+										onAdd={handleAdd}
+										onUpgrade={handleUpgrade}
+										onOpenDetail={handleOpenDetail}
+									/>
+								))}
+							</div>
+						) : null}
+					</section>
+
+					<SkillCategoryFilter
+						categories={skillsStore.categories}
+						selectedCategoryIds={skillsStore.categoryIds}
+						loading={skillsStore.categoriesLoading}
+						error={skillsStore.categoriesError}
+						onChange={handleCategoryChange}
+					/>
+
+					{skillsStore.listError ? (
+						<div
+							className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
+							data-testid="skills-library-mobile-error"
+						>
+							<span>{t("skillsLibrary.loadFailed")}</span>
+							<Button variant="outline" size="sm" onClick={handleRetrySkills}>
+								{t("skillsLibrary.retrySkills")}
+							</Button>
+						</div>
+					) : skillsStore.loading && skillsStore.list.length === 0 ? (
 						<div
 							className="flex items-center justify-center py-16"
 							data-testid="skills-library-mobile-loading"
@@ -215,7 +351,7 @@ function SkillsLibraryMobile() {
 							className="flex items-center justify-center py-16 text-sm text-muted-foreground"
 							data-testid="skills-library-mobile-empty"
 						>
-							{skillsStore.keyword ? t("noResults") : t("skillsLibrary.noMoreData")}
+							{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
 						</div>
 					) : (
 						<div
@@ -241,7 +377,19 @@ function SkillsLibraryMobile() {
 						data-testid="skills-library-mobile-scroll-sentinel"
 					/>
 
-					{shouldShowLoadingMoreIndicator ? (
+					{skillsStore.loadingMoreError ? (
+						<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
+							<span>{t("skillsLibrary.loadFailed")}</span>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-7 px-2"
+								onClick={handleAutoLoadMore}
+							>
+								{t("skillsLibrary.retrySkills")}
+							</Button>
+						</div>
+					) : shouldShowLoadingMoreIndicator ? (
 						<div
 							className="flex items-center justify-center py-2"
 							data-testid="skills-library-mobile-loading-more"
