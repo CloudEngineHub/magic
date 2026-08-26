@@ -74,10 +74,7 @@ print(result.content)
 
 ## Version rules
 
-- Ordinary Content is never overwritten; create a new candidate for a revision.
-- Retry only `failed` Content with explicit user consent.
-- At most 2 retries per Content; never loop.
-- The first Content of any Element is already main. For a later candidate, always show the completed candidate and wait for the user to choose before selecting main.
+Follow the retry, waiting, and version rules in SKILL.md. A failed image Content is retried in place with `retry_canvas_content_generation`, using the exact Element ID and Content ID.
 
 ## Writing a high-quality prompt
 

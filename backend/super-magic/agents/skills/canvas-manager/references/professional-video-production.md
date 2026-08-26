@@ -10,7 +10,7 @@ For a minimal basic Canvas request such as “generate a video” or “animate 
 
 ## Production modes
 
-Select exactly one mode from the user's wording and the current task state:
+Select exactly one mode from the user's wording and the current task state. When the mode is unclear, follow the video-intent decision rules in SKILL.md:
 
 - **Ordinary direct mode**: the user explicitly asks for ordinary, simple, or direct video production. Generate one final video directly with no storyboard, initialization images, first frames, `video-edit`, or separate final composition, while preserving direct business predecessors through explicit Connections.
 - **Direct professional mode**: the user asks for professional video production without a detailed or staged workflow. Generate one final professional video directly, preserving direct business predecessors.
@@ -161,17 +161,13 @@ If the current `<media_model_info>` does not declare a mode, do not use it. A re
 
 ## Content versioning and retries
 
-Use the current Canvas Content lifecycle rather than creating replacement Elements:
+Use the current Canvas Content lifecycle rather than creating replacement Elements. Follow the retry, waiting, and version rules in SKILL.md.
 
 - New logical result: omit `element_id` and `content_id` in `add_canvas_elements`.
 - New candidate for an existing result: pass the existing `element_id` and omit `content_id`; use `add_canvas_contents` when appending to an existing writable Element.
 - Exact retry: use `retry_canvas_content_generation` with the exact `element_id`, `content_id`, and original `item_ref` returned by the latest result or query. Never add `-retry`, `-new`, or a counter to `item_ref`.
 - A failed final composition is an in-place retry of the existing final Video Element and Content. Reuse their exact IDs; do not call `add_canvas_elements` to create a duplicate final-video Element.
-- The first Content of a newly created Element is automatically main and must not be passed to `select_canvas_main_content`. For an appended candidate, select main only after the user confirms the exact candidate, using `select_canvas_main_content` with the exact Element and Content IDs.
 - Never identify an existing result by name alone. Preserve every returned Element ID, Content ID, task ID, video ID, status, and media path.
-- Retry only failed Content with explicit user consent, at most twice. Never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
-- If waiting times out or returns a still-running task, call `wait_canvas_generation` again with the exact returned `generation_task_id`; never submit a duplicate generation request.
-- `timed_out=true`, `pending`, `processing`, `queued`, and `running` are waiting states, not generation failures. Report them as "waiting not completed" and continue with the same task identity in bounded waits. Only an explicit failed status enters the retry flow.
 
 ## Asset and prompt fidelity
 
@@ -466,10 +462,7 @@ Use `dependency_flow` for professional production relations. Basic Canvas image 
 - When a shot video changes, keep its Element ID, append a candidate Content, confirm, and select main before composing again.
 - When changing shot count or order, update the storyboard first, preserve unaffected outputs, rebuild the ordered sequence, confirm the edit, and compose again.
 - When adding, replacing, or removing BGM, import or reuse the Audio Element, update `audio_sequence`, confirm the edit, and compose again.
-- If a video task returns `processing`, keep its IDs and do not submit a duplicate; retry a failed task with its existing IDs.
-- At most 2 retries per Content; never loop.
 - A new direction appends a candidate with `add_canvas_contents`; it does not create a duplicate logical Element.
-- The first Content of a newly created Element is already main. Select main only after the user confirms a completed candidate appended to an existing Element.
 - If the media is correct but a Canvas relation is wrong, repair only the relation with `manage_canvas_connections`: query the exact current Connection IDs first, provide the complete intended endpoints, and do not regenerate media. Remove or replace relations only with explicit user intent.
 
 ## Provider-managed assets

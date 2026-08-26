@@ -156,7 +156,4 @@ print(details.content)
 
 ## Version rules
 
-- Do not overwrite ordinary Content; append a new candidate with `add_canvas_contents` for a revision.
-- Retry only failed Content with explicit user consent.
-- At most 2 retries per Content; never loop.
-- The first Content of any Video Element is already main; do not ask whether to make it main or call `select_canvas_main_content`. For a later candidate, show the completed candidate and select main Content only after user confirmation.
+Follow the retry, waiting, and version rules in SKILL.md. Append a revision as a new candidate with `add_canvas_contents`; the first Content of a Video Element is already main.

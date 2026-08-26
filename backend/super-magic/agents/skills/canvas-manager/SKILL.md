@@ -1,5 +1,6 @@
 ---
 name: canvas-manager
+version: 1.1.0
 description: "Manage a Canvas through its business tools only — initialize and query projects, create Elements and Content candidates, frame Elements, wait on generation, and process design markers. Use when the user asks to create, edit, or generate anything on a Canvas, such as images, videos, storyboards, video edits, or a final composed video, or when the message contains [@design_canvas_project:...] or [@design_marker:...]. Also use when the user says 'generate an image on my canvas', 'make a video from this canvas project', 'add a new element to my design', or 'edit the marked region of this image'. Layout strategies, Connections, video point estimation, video composition, image search, asset reconciliation, and prompt inspiration live in the references."
 ---
 
@@ -29,7 +30,9 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
-- A generated Content may be retried at most 2 times; never loop retries automatically.
+- A generated Content may be retried at most 2 times, only when its status is explicitly `failed`, and only with the user's explicit consent; never loop retries automatically and never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
+- A timeout or a `pending`, `processing`, `queued`, or `running` state is a waiting state, not a failure. Keep waiting in bounded follow-up calls with the same generation task ID; never submit a duplicate generation request. Only an explicit failed status enters the retry flow.
+- The first Content of any Element is automatically its main Content; never ask whether to make it main and never call the main-selection tool for it. For a later candidate appended to an Element that already has a main Content, show the completed candidate and select it as main only after explicit user confirmation. Revising a Content never overwrites it; create a new candidate instead.
 - Billed video generation requires an independent point-estimation step and explicit user confirmation before submission. The estimate ID is not a generation-tool credential.
 - Re-query after any write when the next step depends on persisted state.
 - Provider-managed asset URIs such as `asset://...` are generation references, not workspace files. Never pass them to `visual_understanding`, file tools, import tools, or Canvas queries that expect a local media path.
@@ -596,7 +599,17 @@ Key points: always pass the original image path in `reference_images`; always se
 
 **Image generation:** When the user asks to generate an image — especially multiple views or angles of the same subject (fashion multi-view sheets, character design sheets, product 360° views) — your first tool call must directly read `references/image-generation.md` using the file-reading capability. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until that reference has been read. This is a context-loading requirement only; all image-generation rules, parameters, and the multi-view anchor-then-expand workflow are defined in that reference.
 
-**Video generation:** Distinguish minimal basic Canvas video generation from a video-production task. For a minimal request such as “generate a video” or “animate this image” without uploaded-asset production, an existing Canvas task, continuation, revision, delivery, or professional-production intent, first read `references/video-generation.md`. For ordinary/direct video production, professional video production, uploaded-asset production, continuation, revision, final delivery, or a request naming a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition, first read `references/professional-video-production.md`. Descriptions such as “professional-looking”, “premium”, or “cinematic” express output quality and do not by themselves request the professional production workflow. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until the matching reference has been read.
+**Video generation:** Decide the mode first, then load exactly one reference.
+
+Video-intent decision rules:
+
+1. The request names storyboards, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition → detailed staged production; read `references/professional-video-production.md`.
+2. The request asks for professional or premium production but names none of the above stages → direct professional production; read `references/professional-video-production.md`.
+3. The request only says "generate a video" or "animate this image", with no uploaded-asset production, no existing Canvas production, and no continuation, revision, delivery, or production intent → basic video generation; read `references/video-generation.md`.
+4. The request involves uploaded assets, an existing Canvas production, continuation, revision, or final delivery — even when the user says "simple" or "quick" → video production; read `references/professional-video-production.md`.
+5. The mode is still unclear → ask the user one question: one direct video, or a storyboard with per-shot confirmation.
+
+Quality words such as "professional-looking", "premium", or "cinematic" describe output quality and never by themselves request the production workflow. "Simple" or "quick" never cancels a production workflow that is otherwise present. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until the matching reference has been read.
 
 ## Reference routing
 
