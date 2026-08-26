@@ -62,16 +62,9 @@ function ProjectList({
 					</div>
 				) : (
 					<SidebarMenuSub className="mx-0 w-full translate-x-0 border-0 px-0 py-0">
-						{projects.map((project, index) => {
+						{projects.map((project) => {
 							return (
-								<SidebarMenuSubItem
-									key={project.id}
-									className="relative w-full duration-150 animate-in fade-in slide-in-from-top-2"
-									style={{
-										animationDelay: `${index * 30}ms`,
-										animationFillMode: "backwards",
-									}}
-								>
+								<SidebarMenuSubItem key={project.id} className="relative w-full">
 									<ProjectItem
 										project={project}
 										dndDisabled={dndDisabled}
