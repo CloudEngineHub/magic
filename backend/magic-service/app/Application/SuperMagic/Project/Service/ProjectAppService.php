@@ -562,6 +562,17 @@ class ProjectAppService extends AbstractAppService
             // 获取工作区信息用于写入 extra_data
             $workspaceId = $projectEntity->getWorkspaceId();
             $workspace = $this->workspaceDomainService->getWorkspaceDetail($workspaceId);
+            if ($workspaceId !== null && $workspace === null) {
+                $this->logger->warning('项目关联的工作区不存在', [
+                    'project_id' => $projectId,
+                    'workspace_id' => $workspaceId,
+                ]);
+            }
+
+            $parentInfo = $workspace === null ? null : [
+                'workspace_id' => $workspaceId,
+                'workspace_name' => $workspace->getName(),
+            ];
 
             // 记录到回收站表
             $this->recycleBinDomainService->recordDeletion(
@@ -570,12 +581,9 @@ class ProjectAppService extends AbstractAppService
                 resourceName: $projectEntity->getProjectName(),
                 ownerId: $projectEntity->getUserId(),
                 deletedBy: (string) $dataIsolation->getCurrentUserId(),
-                parentId: $projectEntity->getWorkspaceId(),
+                parentId: $workspaceId,
                 extraData: array_filter([
-                    'parent_info' => [
-                        'workspace_id' => $workspaceId,
-                        'workspace_name' => $workspace ? $workspace->getName() : '',
-                    ],
+                    'parent_info' => $parentInfo,
                     'micro_app' => $microAppRecord === null ? null : [
                         'app_id' => (string) $microAppRecord->getId(),
                         'project_id' => (string) $projectId,

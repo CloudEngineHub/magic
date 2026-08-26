@@ -302,8 +302,12 @@ class WorkspaceDomainService
     /**
      * 获取工作区详情.
      */
-    public function getWorkspaceDetail(int $workspaceId): ?WorkspaceEntity
+    public function getWorkspaceDetail(?int $workspaceId): ?WorkspaceEntity
     {
+        if ($workspaceId === null) {
+            return null;
+        }
+
         return $this->workspaceRepository->getWorkspaceById($workspaceId);
     }
 
