@@ -39,7 +39,11 @@ function createAudio(id: string): LayerElement {
 	} as LayerElement
 }
 
-function createCanvas(elements: LayerElement[], resultInstance?: VideoElement) {
+function createCanvas(
+	elements: LayerElement[],
+	resultInstance?: VideoElement,
+	videoMetadata?: { videoWidth: number; videoHeight: number },
+) {
 	const eventEmitter = new EventEmitter()
 	const elementMap = new Map(elements.map((element) => [element.id, element]))
 	const inputElements = elements.filter(
@@ -80,6 +84,11 @@ function createCanvas(elements: LayerElement[], resultInstance?: VideoElement) {
 		},
 		geometryCacheManager: { getElementBounds: vi.fn(() => null) },
 		historyManager: { runTransaction: vi.fn() },
+		videoResourceManager: {
+			getCachedMetadata: vi.fn(() =>
+				videoMetadata ? { duration: 1, ...videoMetadata } : null,
+			),
+		},
 	} as unknown as Canvas
 	return canvas
 }
@@ -143,6 +152,27 @@ describe("VideoCompositionManager", () => {
 			status: "processing",
 			resultElementId: expect.any(String),
 		})
+		manager.destroy()
+	})
+
+	it("creates the result placeholder with the first video's real aspect ratio", async () => {
+		const editor = createEditor()
+		const source = createVideo("video-1")
+		const resultInstance = Object.create(VideoElement.prototype) as VideoElement
+		resultInstance.generateVideo = vi.fn(async () => true)
+		const canvas = createCanvas([editor, source], resultInstance, {
+			videoWidth: 1080,
+			videoHeight: 1920,
+		})
+		const manager = new VideoCompositionManager({ canvas })
+
+		expect(await manager.start("editor")).toBe(true)
+		const result = vi.mocked(canvas.elementManager.createTemporaryElement).mock.calls[0]?.[0]
+
+		expect(result).toBeDefined()
+		expect(result?.width).toBe(320)
+		expect(result?.height).toBe(569)
+		expect((result?.width ?? 0) / (result?.height ?? 1)).toBeCloseTo(1080 / 1920, 3)
 		manager.destroy()
 	})
 })

@@ -57,6 +57,15 @@ interface CompositionJob {
 	finalized: boolean
 }
 
+const COMPOSITION_PLACEHOLDER_MIN_WIDTH = 320
+const COMPOSITION_PLACEHOLDER_MIN_HEIGHT = 180
+const COMPOSITION_PLACEHOLDER_SCALE = 0.6
+
+interface VideoDimensions {
+	width: number
+	height: number
+}
+
 function cloneSnapshot(snapshot: VideoCompositionSnapshot): VideoCompositionSnapshot {
 	return {
 		...snapshot,
@@ -198,7 +207,11 @@ export class VideoCompositionManager {
 		})
 
 		const resultElementId = generateElementId()
-		const result = this.createPlaceholderResult(editor, resultElementId)
+		const result = this.createPlaceholderResult(
+			editor,
+			resultElementId,
+			inputs.videoElementIds[0],
+		)
 		if (!result) return this.fail(elementId, "composition-failed", "创建合成视频元素失败")
 
 		const connection = this.canvas.connectionManager.connectRuntimeElements({
@@ -330,9 +343,12 @@ export class VideoCompositionManager {
 		this.listeners.clear()
 	}
 
-	private createPlaceholderResult(editor: VideoEditElement, resultElementId: string): boolean {
-		const width = Math.max(320, Math.round((editor.width ?? 640) * 0.6))
-		const height = Math.max(180, Math.round((editor.height ?? 360) * 0.6))
+	private createPlaceholderResult(
+		editor: VideoEditElement,
+		resultElementId: string,
+		firstVideoId?: string,
+	): boolean {
+		const { width, height } = this.resolvePlaceholderSize(editor, firstVideoId)
 		const position = this.resolveResultPlacement(editor, { width, height })
 		const result = ElementFactory.createElementData(
 			ElementTypeEnum.Video,
@@ -360,6 +376,73 @@ export class VideoCompositionManager {
 			"generation-result",
 		)
 		return true
+	}
+
+	/**
+	 * 按后端文件合成服务的尺寸规则计算结果节点占位尺寸。
+	 *
+	 * enterprise-master 的合成任务未显式传输出规格时，会使用首个视频的
+	 * FFprobe 宽高作为输出尺寸。画布侧优先使用同一视频已缓存的真实元数据，
+	 * 再回退到视频元素尺寸，最后才使用编辑节点尺寸，确保占位节点至少保持
+	 * 与最终视频一致的宽高比。
+	 */
+	private resolvePlaceholderSize(
+		editor: VideoEditElement,
+		firstVideoId?: string,
+	): VideoDimensions {
+		const fallback = {
+			width: Math.max(
+				COMPOSITION_PLACEHOLDER_MIN_WIDTH,
+				Math.round((editor.width ?? 640) * COMPOSITION_PLACEHOLDER_SCALE),
+			),
+			height: Math.max(
+				COMPOSITION_PLACEHOLDER_MIN_HEIGHT,
+				Math.round((editor.height ?? 360) * COMPOSITION_PLACEHOLDER_SCALE),
+			),
+		}
+		const source = firstVideoId
+			? this.canvas.elementManager.getElementData(firstVideoId)
+			: undefined
+		if (!source || source.type !== ElementTypeEnum.Video) return fallback
+
+		const sourceContent = getDownstreamContent<VideoElementContent>(source)
+		const metadata = sourceContent?.src
+			? this.canvas.videoResourceManager?.getCachedMetadata?.(sourceContent.src)
+			: null
+		const dimensions =
+			this.normalizeVideoDimensions(metadata?.videoWidth, metadata?.videoHeight) ??
+			this.normalizeVideoDimensions(source.width, source.height)
+		if (!dimensions) return fallback
+
+		return this.fitPlaceholderToAspectRatio(dimensions, fallback)
+	}
+
+	private normalizeVideoDimensions(width: unknown, height: unknown): VideoDimensions | null {
+		if (typeof width !== "number" || !Number.isFinite(width) || width <= 0) return null
+		if (typeof height !== "number" || !Number.isFinite(height) || height <= 0) return null
+		return { width, height }
+	}
+
+	private fitPlaceholderToAspectRatio(
+		dimensions: VideoDimensions,
+		bounds: VideoDimensions,
+	): VideoDimensions {
+		const aspectRatio = dimensions.width / dimensions.height
+		const fitScale = Math.min(
+			bounds.width / dimensions.width,
+			bounds.height / dimensions.height,
+		)
+		const minimumScale = Math.max(
+			COMPOSITION_PLACEHOLDER_MIN_WIDTH / dimensions.width,
+			COMPOSITION_PLACEHOLDER_MIN_HEIGHT / dimensions.height,
+		)
+		const scale = Math.max(fitScale, minimumScale)
+		const width = Math.max(
+			COMPOSITION_PLACEHOLDER_MIN_WIDTH,
+			Math.round(dimensions.width * scale),
+		)
+		const height = Math.max(COMPOSITION_PLACEHOLDER_MIN_HEIGHT, Math.round(width / aspectRatio))
+		return { width, height }
 	}
 
 	private resolveResultPlacement(
