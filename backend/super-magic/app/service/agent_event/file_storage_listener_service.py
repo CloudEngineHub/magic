@@ -36,6 +36,7 @@ from agentlang.logger import get_logger
 from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import Attachment, AttachmentTag
+from app.core.entity.checkpoint import FileSnapshot
 from app.core.entity.event.file_event import FileEventData  # 从业务层导入 FileEventData
 from app.core.entity.project_archive import ArchiveDetail, ProjectArchiveInfo
 from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
