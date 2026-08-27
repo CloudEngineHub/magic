@@ -354,6 +354,30 @@ describe("StoryboardElement", () => {
 		expect(eventEmitter.listenerCount("canvas:readonly")).toBe(0)
 	})
 
+	it("does not recurse when visibility registration synchronously rerenders", () => {
+		const canvas = createCanvasMock()
+		const registerConsumerVisibility = vi.fn((_elementId: string, listener) => {
+			listener("visible")
+			return vi.fn()
+		})
+		Object.assign(canvas, {
+			eventEmitter: new EventEmitter(),
+			visibilityManager: {
+				registerConsumerVisibility,
+			},
+		})
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({ id: "storyboard-visible-rerender", x: 0, y: 0 }),
+			canvas,
+		)
+		element.render()
+		element.onMounted()
+
+		expect(registerConsumerVisibility).toHaveBeenCalledTimes(1)
+		expect(element.getNode()).not.toBeNull()
+		element.destroy()
+	})
+
 	it("gates reference previews by consumer visibility and aborts pending loads", () => {
 		const visibilityListeners: Array<(state: "visible" | "near" | "far") => void> = []
 		const unregister = vi.fn()

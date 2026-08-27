@@ -96,12 +96,28 @@ function readContentId(value: unknown, fallback: string): string {
 		: fallback
 }
 
+/** v1/v2 导出可能把可选字段写成 null；v3 校验只接受 undefined 或合法类型。 */
+function stripNullOptionalFields(record: UnknownRecord, fields: readonly string[]): void {
+	for (const field of fields) {
+		if (record[field] === null) delete record[field]
+	}
+}
+
+function normalizeLegacyElementShell(element: UnknownRecord): void {
+	stripNullOptionalFields(element, ["visible", "locked", "opacity", "scaleX", "scaleY", "name"])
+}
+
+function normalizeLegacyContentFields(content: UnknownRecord): void {
+	stripNullOptionalFields(content, ["src", "status", "errorMessage"])
+}
+
 function migrateContentList(element: UnknownRecord, elementId: string): UnknownRecord[] {
 	const rawContents = Array.isArray(element.contents) ? element.contents : []
 	return rawContents.map((rawContent, index) => {
 		const content =
 			rawContent && typeof rawContent === "object" ? { ...(rawContent as UnknownRecord) } : {}
 		const contentId = readContentId(content, `${elementId}-content-${index + 1}`)
+		normalizeLegacyContentFields(content)
 		if (
 			(element.type === ElementTypeEnum.Image || element.type === ElementTypeEnum.Video) &&
 			content.errorMessage === null
@@ -182,6 +198,7 @@ function migrateElementToV3(
 	}
 
 	const element = cloneValue(rawElement as UnknownRecord)
+	normalizeLegacyElementShell(element)
 	const elementId = typeof element.id === "string" ? element.id : ""
 	if (!elementId || typeof element.type !== "string") {
 		throw new Error("Canvas element id/type is required")
@@ -198,6 +215,10 @@ function migrateElementToV3(
 	const firstContent = contents[0] ?? { contentId: createFirstContentId(elementId) }
 	for (const field of legacyFields) {
 		if (element[field] === undefined) continue
+		if (element[field] === null) {
+			delete element[field]
+			continue
+		}
 		if (firstContent[field] === undefined) firstContent[field] = cloneValue(element[field])
 		delete element[field]
 	}
@@ -226,6 +247,8 @@ function migrateElementToV3(
 	if (element.type === ElementTypeEnum.VideoEdit) {
 		migrateLegacyVideoEditConnections(elementId, contents, context)
 	}
+
+	contents.forEach((content) => normalizeLegacyContentFields(content))
 
 	const contentIds = new Set(contents.map((content) => String(content.contentId)).filter(Boolean))
 	const activeContentId =

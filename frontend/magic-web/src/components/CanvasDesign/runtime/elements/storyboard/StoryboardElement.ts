@@ -174,6 +174,10 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private readonly referencePreviewTokens = new Map<string, number>()
 	private consumerVisibility: CanvasConsumerVisibility = "far"
 	private consumerVisibilityUnsubscribe?: () => void
+	/** 防止 registerConsumerVisibility 同步回调里 rerender 时重复注册。 */
+	private consumerVisibilityRegistering = false
+	/** register 的首次 visible 通知发生在首帧 render 之后，无需再整节点重绘。 */
+	private consumerVisibilityInitialNotificationHandled = false
 
 	constructor(data: StoryboardElementData, canvas: Canvas) {
 		super(normalizeStoryboardDisplayDimensions(data), canvas)
@@ -298,17 +302,29 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	public override onMounted(): void {
 		if (
 			!this.consumerVisibilityUnsubscribe &&
+			!this.consumerVisibilityRegistering &&
 			this.canvas.visibilityManager?.registerConsumerVisibility
 		) {
-			this.consumerVisibilityUnsubscribe =
-				this.canvas.visibilityManager.registerConsumerVisibility(this.data.id, (state) => {
-					this.consumerVisibility = state
-					if (state === "visible") {
-						this.rerenderWhenTransformIdle()
-						return
-					}
-					this.abortReferencePreviewRequests()
-				})
+			this.consumerVisibilityRegistering = true
+			try {
+				this.consumerVisibilityUnsubscribe =
+					this.canvas.visibilityManager.registerConsumerVisibility(
+						this.data.id,
+						(state) => {
+							this.consumerVisibility = state
+							if (state === "visible") {
+								if (this.consumerVisibilityInitialNotificationHandled) {
+									this.rerenderWhenTransformIdle()
+								}
+								return
+							}
+							this.abortReferencePreviewRequests()
+						},
+					)
+			} finally {
+				this.consumerVisibilityRegistering = false
+				this.consumerVisibilityInitialNotificationHandled = true
+			}
 		}
 		if (!this.readonlyChangedUnsubscribe && this.canvas.eventEmitter?.on) {
 			this.readonlyChangedUnsubscribe = this.canvas.eventEmitter.on("canvas:readonly", () => {

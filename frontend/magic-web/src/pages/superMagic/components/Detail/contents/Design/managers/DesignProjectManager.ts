@@ -2022,7 +2022,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const isCurrentLoad = !loadIdentity || this.loadManager.isCurrentLoadIdentity(loadIdentity)
 		if (!loadResult.didLoad || !isCurrentLoad) {
 			if (!loadResult.didLoad && isCurrentLoad) {
-				this.stateBag.setters.setIsInitialLoading(true)
+				this.stateBag.setters.setIsInitialLoading(false)
 			}
 			return false
 		}

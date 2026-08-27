@@ -160,6 +160,48 @@ describe("designDataCodec", () => {
 		})
 	})
 
+	it("strips legacy null optional fields from nested frame children during v3 migration", () => {
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "legacy-null-frame-child",
+			version: "2.0.0",
+			canvas: {
+				elements: [
+					{
+						id: "frame-1",
+						type: ElementTypeEnum.Frame,
+						children: [
+							{
+								id: "image-1",
+								type: ElementTypeEnum.Image,
+								visible: null,
+								locked: null,
+								opacity: null,
+								scaleX: null,
+								scaleY: null,
+								src: "./images/a.png",
+								status: null,
+							},
+						],
+					},
+				],
+			},
+		})
+
+		const child =
+			result.canvas?.elements?.[0] && "children" in result.canvas.elements[0]
+				? result.canvas.elements[0].children?.[0]
+				: undefined
+		expect(child).toMatchObject({
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			contents: [{ contentId: "image-1-content-1", src: "./images/a.png" }],
+		})
+		expect(child).not.toHaveProperty("visible")
+		expect(child).not.toHaveProperty("status")
+		validateV3CanvasDocument(result.canvas)
+	})
+
 	it("drops the legacy high-image request when task metadata already exists", () => {
 		const result = upgradeDesignDataToV3({
 			type: "design",
