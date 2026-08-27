@@ -162,6 +162,7 @@
 			"storeManage": "门店管理",
 			"userGroup": "用户组"
 		},
+		"function": "功能",
 		"iam": "IAM 配置",
 		"platform": "平台管理",
 		"platformSubMenu": {

@@ -83,4 +83,11 @@ return [
             'string' => 'Model version must be a string',
         ],
     ],
+    'api_key_empty' => 'Value is required',
+    'model_id_required' => 'Value is required',
+    'model_version_required' => 'Value is required',
+    'name_max_length' => 'Name max length',
+    'office_organization' => 'Office organization: :label',
+
+    'model_operation_locked' => 'Model operation locked',
 ];

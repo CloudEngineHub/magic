@@ -12,4 +12,5 @@ return [
     'consume_failed' => '消费消息失败',
     'message_not_found' => '消息未找到或访问被拒绝',
     'operation_locked' => '操作被其他进程锁定，请稍后重试',
+    'invalid_message_type' => '参数无效：:type',
 ];

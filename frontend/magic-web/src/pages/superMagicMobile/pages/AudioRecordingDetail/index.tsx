@@ -48,6 +48,11 @@ import { MobileRecordingMoreSheet } from "@/pages/superMagicMobile/pages/AudioRe
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { useMobileRecordingContentSearch } from "./hooks/useMobileRecordingContentSearch"
 import { MobileRecordingMoveGroupSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoveGroupSheet"
+import {
+	getMobileRecordingPlayerScrollPadding,
+	MOBILE_RECORDING_COLLAPSED_PLAYER_HEIGHT,
+	MOBILE_RECORDING_EXPANDED_PLAYER_HEIGHT,
+} from "./utils/mobile-recording-player-layout"
 import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingGroupSheet"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
@@ -65,9 +70,6 @@ import ProjectTopicListView from "@/pages/superMagicMobile/pages/ProjectPage/Pro
 import recordingSummaryStore from "@/stores/recordingSummary"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 
-const COLLAPSED_PLAYER_HEIGHT = 40
-const EXPANDED_PLAYER_HEIGHT = 182
-const FLOATING_PLAYER_BOTTOM = 12
 const SEARCH_BAR_HEIGHT = 72
 
 interface AudioRecordingDetailLocationState {
@@ -524,9 +526,12 @@ export default function MobileAudioRecordingDetailPage() {
 	})
 	const scrollPaddingBottom = contentSearchOpen
 		? SEARCH_BAR_HEIGHT + 20
-		: FLOATING_PLAYER_BOTTOM +
-			(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
-			20
+		: getMobileRecordingPlayerScrollPadding(
+				playerExpanded
+					? MOBILE_RECORDING_EXPANDED_PLAYER_HEIGHT
+					: MOBILE_RECORDING_COLLAPSED_PLAYER_HEIGHT,
+				20,
+			)
 
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 

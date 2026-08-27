@@ -55,9 +55,9 @@ import {
 	type ReferenceBindingMode,
 } from "../message/reference-assets/referenceBinding"
 import {
-	areCanvasResourcePathsSame,
+	areCanvasResourceReferencesSame,
 	getCanvasResourceFileName,
-	getCanvasResourceIdentity,
+	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { resolveImageEditorRequestToRestore } from "./image-editor-request-restore"
 import { createCanvasMentionPathMatcher } from "../connection/linkedMediaMentionMatcher"
@@ -177,6 +177,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		preferCurrentRequestOnRestore = false,
 	} = options
 	const { imageModelList, methods } = useMagic()
+	const resolveResourceReference = methods?.resolveResourceReference
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
 	const referenceResourceType: ReferenceResourceType = "image"
@@ -247,6 +248,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		canvas,
 		imageElementId: imageElement.id,
 		maxReferenceFiles,
+		resolveResourceReference,
 	})
 
 	const {
@@ -344,7 +346,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 			const currentOriginalInfo = elementInstance
 				.getReferenceImageInfos()
-				.find((info) => areCanvasResourcePathsSame(info.path, originalImageSrc))
+				.find((info) =>
+					areCanvasResourceReferencesSame(
+						info.path,
+						originalImageSrc,
+						resolveResourceReference,
+					),
+				)
 
 			elementInstance.setReferenceImageInfos([
 				{
@@ -365,6 +373,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			imageModelList,
 			originalImageName,
 			originalImageSrc,
+			resolveResourceReference,
 			syncFromElement,
 			t,
 		],
@@ -406,11 +415,16 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		[promptPlaceholderTokenConfig],
 	)
 
-	const updateProtectedReferencePaths = useCallback((nextPaths: string[]) => {
-		setProtectedReferencePaths((prev) => {
-			return areOrderedPathsEqual(prev, nextPaths) ? prev : nextPaths
-		})
-	}, [])
+	const updateProtectedReferencePaths = useCallback(
+		(nextPaths: string[]) => {
+			setProtectedReferencePaths((prev) => {
+				return areOrderedPathsEqual(prev, nextPaths, resolveResourceReference)
+					? prev
+					: nextPaths
+			})
+		},
+		[resolveResourceReference],
+	)
 
 	const applyBindingStateFromPromptAndReferences = useCallback(
 		(nextPrompt: string, nextReferenceFileInfos: ReferenceResourceFileInfo[]) => {
@@ -418,11 +432,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				prompt: nextPrompt,
 				referenceFileInfos: nextReferenceFileInfos,
 				tokenConfig: promptPlaceholderTokenConfig,
+				defaultAssetType: "image",
+				resolveResourceReference,
 			})
 			updateProtectedReferencePaths(bindingState.protectedReferencePaths)
 			return bindingState
 		},
-		[promptPlaceholderTokenConfig, updateProtectedReferencePaths],
+		[promptPlaceholderTokenConfig, resolveResourceReference, updateProtectedReferencePaths],
 	)
 
 	const referenceBindingMode = useMemo<ReferenceBindingMode>(() => {
@@ -438,21 +454,22 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			if (!paths || paths.length === 0) return []
 			const pathToFileName = new Map(
 				referenceFileInfos.map((info) => [
-					getCanvasResourceIdentity(info.path),
+					getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 					info.fileName || "",
 				]),
 			)
 			return paths
 				.map((path) => {
 					const fileName =
-						pathToFileName.get(getCanvasResourceIdentity(path)) ||
-						getCanvasResourceFileName(path)
+						pathToFileName.get(
+							getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+						) || getCanvasResourceFileName(path)
 					if (!fileName) return null
 					return { path, fileName }
 				})
 				.filter((item): item is PromptPlaceholderReference => Boolean(item))
 		},
-		[referenceFileInfos],
+		[referenceFileInfos, resolveResourceReference],
 	)
 
 	const appendReferenceFile = useCallback(
@@ -462,7 +479,15 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			if (!(elementInstance instanceof ImageElementClass)) return false
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
-			if (currentInfos.some((info) => areCanvasResourcePathsSame(info.path, fileInfo.path))) {
+			if (
+				currentInfos.some((info) =>
+					areCanvasResourceReferencesSame(
+						info.path,
+						fileInfo.path,
+						resolveResourceReference,
+					),
+				)
+			) {
 				syncFromElement()
 				return false
 			}
@@ -484,7 +509,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			syncFromElement()
 			return true
 		},
-		[canvas, imageElement.id, maxReferenceFiles, syncFromElement],
+		[canvas, imageElement.id, maxReferenceFiles, resolveResourceReference, syncFromElement],
 	)
 
 	const replaceReferenceFileAt = useCallback(
@@ -504,11 +529,20 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			if (
 				Boolean(
 					previousInfo?.path &&
-					areCanvasResourcePathsSame(previousInfo.path, fileInfo.path),
+					areCanvasResourceReferencesSame(
+						previousInfo.path,
+						fileInfo.path,
+						resolveResourceReference,
+					),
 				) ||
 				currentInfos.some(
 					(info, index) =>
-						index !== slotIndex && areCanvasResourcePathsSame(info.path, fileInfo.path),
+						index !== slotIndex &&
+						areCanvasResourceReferencesSame(
+							info.path,
+							fileInfo.path,
+							resolveResourceReference,
+						),
 				)
 			) {
 				if (!options?.retainReferenceSlot) {
@@ -532,7 +566,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 			if (previousInfo?.path) {
 				const nextProtectedReferencePaths = protectedReferencePaths.map((path) =>
-					areCanvasResourcePathsSame(path, previousInfo.path)
+					areCanvasResourceReferencesSame(
+						path,
+						previousInfo.path,
+						resolveResourceReference,
+					)
 						? normalizedInfo.path
 						: path,
 				)
@@ -540,10 +578,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 					pruneProtectedReferencePaths(
 						compactNextInfos.map((info) => info.path),
 						nextProtectedReferencePaths,
+						resolveResourceReference,
 					),
 				)
 				editorFocusRef?.current?.replaceMentionItems(
-					createCanvasMentionPathMatcher(previousInfo.path),
+					createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
 					createReferenceResourcePanelItemFromPath(
 						normalizedInfo.path,
 						normalizedInfo.fileName,
@@ -561,6 +600,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			protectedReferencePaths,
 			syncFromElement,
 			updateProtectedReferencePaths,
+			resolveResourceReference,
 			editorFocusRef,
 			resetSelectedReferenceSlot,
 		],
@@ -635,7 +675,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 		// 检查 matchableItems 中是否包含待添加的资源，避免按同名文件 suffix 猜测。
 		const matchedItem = matchableItems.find(
-			(item) => !!item.path && areCanvasResourcePathsSame(item.path, pendingReference.path),
+			(item) =>
+				!!item.path &&
+				areCanvasResourceReferencesSame(
+					item.path,
+					pendingReference.path,
+					resolveResourceReference,
+				),
 		)
 
 		if (matchedItem && !matchedItem.disabled) {
@@ -649,7 +695,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			// 延迟一帧聚焦，确保 prompt 更新后编辑器已渲染
 			setTimeout(() => editorFocusRef?.current?.focus(), 0)
 		}
-	}, [matchableItems, editorFocusRef])
+	}, [editorFocusRef, matchableItems, resolveResourceReference])
 
 	// 处理模型选择变化
 	const handleModelChange = useCallback(
@@ -838,7 +884,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			removeReferenceFile(path)
 			updateProtectedReferencePaths(
 				protectedReferencePaths.filter(
-					(protectedPath) => !areCanvasResourcePathsSame(protectedPath, path),
+					(protectedPath) =>
+						!areCanvasResourceReferencesSame(
+							protectedPath,
+							path,
+							resolveResourceReference,
+						),
 				),
 			)
 			// 延迟清除删除标记，确保删除操作完成后再允许关闭
@@ -846,7 +897,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				isRemovingReferenceImageRef.current = false
 			}, 200)
 		},
-		[protectedReferencePaths, removeReferenceFile, updateProtectedReferencePaths],
+		[
+			protectedReferencePaths,
+			removeReferenceFile,
+			resolveResourceReference,
+			updateProtectedReferencePaths,
+		],
 	)
 
 	// 从 elementInstance 同步参考文件状态，用于 @ 面板添加后的数据闭环
@@ -857,10 +913,14 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const handlePromptReferencePathsChange = useCallback(
 		(paths: string[]) => {
 			updateProtectedReferencePaths(
-				unprotectPromptBoundReferencePaths(protectedReferencePaths, paths),
+				unprotectPromptBoundReferencePaths(
+					protectedReferencePaths,
+					paths,
+					resolveResourceReference,
+				),
 			)
 		},
-		[protectedReferencePaths, updateProtectedReferencePaths],
+		[protectedReferencePaths, resolveResourceReference, updateProtectedReferencePaths],
 	)
 
 	// 处理 Popover 鼠标进入
@@ -1319,9 +1379,18 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 	useEffect(() => {
 		updateProtectedReferencePaths(
-			pruneProtectedReferencePaths(currentReferenceFiles, protectedReferencePaths),
+			pruneProtectedReferencePaths(
+				currentReferenceFiles,
+				protectedReferencePaths,
+				resolveResourceReference,
+			),
 		)
-	}, [currentReferenceFiles, protectedReferencePaths, updateProtectedReferencePaths])
+	}, [
+		currentReferenceFiles,
+		protectedReferencePaths,
+		resolveResourceReference,
+		updateProtectedReferencePaths,
+	])
 
 	// 当用户填写的内容变化时，防抖写入 tempRequest（使用 useUpdateEffect 避免首次挂载时触发）
 	useUpdateEffect(() => {

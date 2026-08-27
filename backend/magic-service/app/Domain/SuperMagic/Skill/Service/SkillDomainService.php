@@ -102,6 +102,14 @@ class SkillDomainService
     }
 
     /**
+     * @return array<string>
+     */
+    public function findCurrentUserCreatedSkillCodes(SkillDataIsolation $dataIsolation): array
+    {
+        return $this->skillRepository->findCodesByCreator($dataIsolation);
+    }
+
+    /**
      * 查询本地 ZIP 导入的 Skill，用于一次性清理历史多语言数据.
      *
      * @return array{total: int, list: SkillEntity[]}

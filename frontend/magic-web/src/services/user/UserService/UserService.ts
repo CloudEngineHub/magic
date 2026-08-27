@@ -191,9 +191,18 @@ export class UserService {
 				userId: info.user_id,
 				organizationCode: info.organization_code,
 			})
-			AuthApi.getAdminPermission().then((res) => {
-				userStore.user.setIsAdmin(res.is_admin)
-			})
+			Promise.allSettled([AuthApi.getAdminPermission(), AuthApi.getMyPermissionList()]).then(
+				([adminResult, permissionResult]) => {
+					if (adminResult.status === "fulfilled") {
+						userStore.user.setIsAdmin(adminResult.value.is_admin)
+					}
+					if (permissionResult.status === "fulfilled") {
+						userStore.user.setUserPermissions(
+							permissionResult.value.permission_key ?? [],
+						)
+					}
+				},
+			)
 		}
 		return info
 	}

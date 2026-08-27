@@ -148,6 +148,7 @@ describe("ChatProjectMessageLayout", () => {
 				input={<div data-testid="message-input">editor</div>}
 				isConversationPanelCollapsed={false}
 				inputMinHeight={260}
+				layoutKey="general:employee-a"
 			/>,
 		)
 
@@ -158,7 +159,7 @@ describe("ChatProjectMessageLayout", () => {
 			"260",
 		)
 		expect(inputHeightMocks.useConversationInputHeight).toHaveBeenCalledWith(
-			expect.objectContaining({ minHeight: 260 }),
+			expect.objectContaining({ layoutKey: "general:employee-a", minHeight: 260 }),
 		)
 	})
 

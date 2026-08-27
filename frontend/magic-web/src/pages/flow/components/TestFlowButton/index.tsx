@@ -319,7 +319,14 @@ function TestFlowButton({ onFinished, loading, flow, flowInstance }: TestFlowPro
 																	},
 																]}
 															>
-																<MagicInput placeholder="文件名" />
+																<MagicInput
+																	placeholder={t(
+																		"common.fileName",
+																		{
+																			ns: "flow",
+																		},
+																	)}
+																/>
 															</Form.Item>
 															<Form.Item
 																{...field}
@@ -344,7 +351,14 @@ function TestFlowButton({ onFinished, loading, flow, flowInstance }: TestFlowPro
 																	},
 																]}
 															>
-																<MagicInput placeholder="文件地址" />
+																<MagicInput
+																	placeholder={t(
+																		"common.fileUrl",
+																		{
+																			ns: "flow",
+																		},
+																	)}
+																/>
 															</Form.Item>
 															<Button
 																type="text"

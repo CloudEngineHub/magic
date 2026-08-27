@@ -9,6 +9,10 @@ import type {
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
 } from "@/components/CanvasDesign/public/magic-types"
+import type {
+	CanvasResourceReferenceResolverSnapshot,
+	ResolveCanvasResourceReference,
+} from "@/components/CanvasDesign/public/resource-reference"
 import type { GenerateHightImageResponse as ApiGenerateHightImageResponse } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -48,6 +52,10 @@ import { clipboard } from "@/utils/clipboard-helpers"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
+import {
+	buildDesignResourceReferenceResolverRevision,
+	resolveDesignResourceReference,
+} from "../utils/designResourceReferenceResolver"
 
 interface UseDesignMethodsOptions {
 	projectId?: string
@@ -131,6 +139,45 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			designProjectId,
 			attachmentIndex,
 		})
+
+	const resolveResourceReference = useCallback<ResolveCanvasResourceReference>(
+		(input, resolveOptions) =>
+			resolveDesignResourceReference(
+				input,
+				{
+					designProjectBasePath,
+					flatAttachments,
+					attachmentIndex,
+					attachmentsReady,
+				},
+				resolveOptions,
+			),
+		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
+	)
+	const resourceReferenceResolverRevision = useMemo(
+		() =>
+			buildDesignResourceReferenceResolverRevision({
+				projectId,
+				designProjectId,
+				designProjectBasePath,
+				attachmentsReady,
+				resourceReferenceSnapshotKey: attachmentIndex?.attachmentsSnapshotKey,
+			}),
+		[
+			attachmentIndex?.attachmentsSnapshotKey,
+			attachmentsReady,
+			designProjectBasePath,
+			designProjectId,
+			projectId,
+		],
+	)
+	const resourceReferenceResolverSnapshot = useMemo<CanvasResourceReferenceResolverSnapshot>(
+		() => ({
+			revision: resourceReferenceResolverRevision,
+			resolve: resolveResourceReference,
+		}),
+		[resolveResourceReference, resourceReferenceResolverRevision],
+	)
 
 	const getOrCreateImagesDir = useGetOrCreateImagesDir({
 		currentFile,
@@ -712,6 +759,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			uploadFiles,
 			getFileInfo,
 			getFileResourceMeta,
+			resolveResourceReference: resourceReferenceResolverSnapshot.resolve,
+			resourceReferenceResolverSnapshot,
+			resourceReferenceResolverVersion: resourceReferenceResolverSnapshot.revision,
 			resolveAbsolutePath,
 			resolveResourcePathCandidates,
 			normalizeResourcePathForStorage,
@@ -758,6 +808,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		uploadFiles,
 		getFileInfo,
 		getFileResourceMeta,
+		resourceReferenceResolverSnapshot,
 		resolveAbsolutePath,
 		resolveResourcePathCandidates,
 		normalizeResourcePathForStorage,

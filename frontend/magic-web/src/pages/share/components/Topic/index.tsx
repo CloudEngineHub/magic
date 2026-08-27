@@ -203,7 +203,7 @@ function Topic({
 	const {
 		width: projectSiderWidth,
 		isDragging: isProjectSiderDragging,
-		handleMouseDown: handleProjectSiderMouseDown,
+		handleResizeStart: handleProjectSiderResizeStart,
 	} = useResizablePanel({
 		minWidth: DEFAULT_MIN_WIDTH.PROJECT_SIDER,
 		maxWidth: DEFAULT_MAX_WIDTH.PROJECT_SIDER,
@@ -216,7 +216,7 @@ function Topic({
 	const {
 		width: messagePanelWidth,
 		isDragging: isMessagePanelDragging,
-		handleMouseDown: handleMessagePanelMouseDown,
+		handleResizeStart: handleMessagePanelResizeStart,
 	} = useResizablePanel({
 		minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
 		maxWidth: DEFAULT_MAX_WIDTH.MESSAGE_PANEL,
@@ -1077,7 +1077,7 @@ function Topic({
 								<ResizableDivider
 									position="right"
 									offsetLeft={projectSiderWidth}
-									onMouseDown={handleProjectSiderMouseDown}
+									onResizeStart={handleProjectSiderResizeStart}
 									onHoverChange={setIsProjectSiderHovering}
 								/>
 							</>
@@ -1141,7 +1141,7 @@ function Topic({
 						<ResizableDivider
 							position="left"
 							offsetLeft={messagePanelWidth + 5}
-							onMouseDown={handleMessagePanelMouseDown}
+							onResizeStart={handleMessagePanelResizeStart}
 							onHoverChange={setIsMessagePanelHovering}
 						/>
 						<div className={cn("p-2", isMobile ? "w-full" : "")}>

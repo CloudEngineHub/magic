@@ -7,6 +7,8 @@ export interface ConversationInputLayoutContextValue {
 export interface ConversationInputHeightController {
 	enabled: boolean
 	effectiveHeight: number
+	/** Expose the live minimum so every resize entry point shares the same floor. */
+	minHeight: number
 	maxHeight: number
 	fillHeight: boolean
 	/** Start a pointer-driven manual resize. */

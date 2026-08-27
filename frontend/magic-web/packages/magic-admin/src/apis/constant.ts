@@ -71,6 +71,10 @@ export const RequestUrl = {
 	uploadFile: "/api/v1/file/upload-business-file",
 	/** 获取上传凭证 */
 	getUploadCredentials: "/api/v1/file/temporary-credential",
+	/** 获取业务隔离的公有桶上传凭证 */
+	getPublicBusinessUploadToken: "/api/v1/file/public-upload-token",
+	/** 获取业务隔离的私有桶上传凭证 */
+	getPrivateBusinessUploadToken: "/api/v1/file/private-upload-token",
 	/** 删除文件 */
 	deleteFile: "/api/v1/file/delete-business-file",
 	/** 获取文件临时链接 */
@@ -192,6 +196,22 @@ export const RequestUrl = {
 	getSkillMarketList: "/api/v1/admin/skills/markets/queries",
 	/** 更新 Skill 市场信息 */
 	updateSkillMarketInfo: "/api/v1/admin/skills/markets/${id}",
+	/** 更新 Skill 市场分类关系（全量替换） */
+	updateSkillMarketCategoryRelation: "/api/v1/admin/skills/markets/${id}/category",
+	/** Skill 市场分类列表 */
+	getSkillMarketCategoryList: "/api/v1/admin/skills/categories/queries",
+	/** Skill 市场分类详情 */
+	getSkillMarketCategoryDetail: "/api/v1/admin/skills/categories/${id}",
+	/** 创建 Skill 市场分类 */
+	createSkillMarketCategory: "/api/v1/admin/skills/categories",
+	/** 更新 Skill 市场分类 */
+	updateSkillMarketCategory: "/api/v1/admin/skills/categories/${id}",
+	/** 删除 Skill 市场分类 */
+	deleteSkillMarketCategory: "/api/v1/admin/skills/categories/${id}",
+	/** 解析官方 Skill 压缩包（导入第一阶段） */
+	parseOfficialSkillFile: "/api/v1/admin/official-skills/import/parse/file",
+	/** 导入官方 Skill（导入第二阶段） */
+	importOfficialSkill: "/api/v1/admin/official-skills/import",
 	/** 审核 Skill 版本 */
 	reviewSkillVersion: "/api/v1/admin/skills/versions/${id}/review",
 	/** —————— 平台管理 - 能力管理 —————— */

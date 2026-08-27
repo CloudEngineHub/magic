@@ -154,6 +154,43 @@ describe("MobileRecordingShareExportSheet", () => {
 		expect(screen.getByText("Export files")).toBeInTheDocument()
 	})
 
+	it("lists project and login actions below search and closes before invoking them", () => {
+		const onOpenChange = vi.fn()
+		const onCopyProject = vi.fn()
+		const onLogin = vi.fn()
+		render(
+			<MobileRecordingShareExportSheet
+				open
+				recordingName="Prototype recording"
+				fileMap={mockFileMap}
+				showShareSection={false}
+				showCopyProject
+				copyProjectLabel="Copy project"
+				showLogin
+				loginLabel="Log in"
+				onOpenChange={onOpenChange}
+				onShareLink={vi.fn()}
+				onDownloadRecording={vi.fn()}
+				onSearch={vi.fn()}
+				onCopyProject={onCopyProject}
+				onLogin={onLogin}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-recording-share-search-action")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-recording-share-copy-project-action")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-recording-share-login-action")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("mobile-recording-share-copy-project-action"))
+		expect(onOpenChange).toHaveBeenCalledWith(false)
+		expect(onCopyProject).toHaveBeenCalledOnce()
+
+		onOpenChange.mockClear()
+		fireEvent.click(screen.getByTestId("mobile-recording-share-login-action"))
+		expect(onOpenChange).toHaveBeenCalledWith(false)
+		expect(onLogin).toHaveBeenCalledOnce()
+	})
+
 	it("triggers original audio download and transcript/notes downloads directly", async () => {
 		const onDownloadRecording = vi.fn()
 		render(

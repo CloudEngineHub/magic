@@ -84,6 +84,7 @@ return [
         'transfer_owner_before_leave' => '请先转让群主再退出群聊',
         'only_owner_can_disband' => '只有群主才能解散群聊',
         'only_owner_can_transfer' => '只有群主才能转让群组',
+        'group_cannot_kick_owner' => '请求处理失败',
     ],
     'department' => [
         'not_found' => '部门不存在',

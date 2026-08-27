@@ -164,7 +164,7 @@ export function CaseSummary({
 						{t("detail.selfMedia.opsReview.summaryTitle")}
 					</div>
 					<p className="mt-2 max-w-[42rem] text-[13px] leading-relaxed text-[#71717a]">
-						用真实阅读、互动和评论信号，判断这篇文章下一步该放大、修正还是沉淀。
+						{t("selfMedia.opsReviewIntro")}
 					</p>
 				</div>
 				<DeltaBadge delta={readsDelta} />

@@ -1,6 +1,7 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "../reference-assets/canvasReferenceMention.constants"
 import { getCanvasResourceFileName } from "../../../../runtime/shared/path/canvasResourcePath"
+import type { ReferenceResourceAssetType } from "../reference-assets/reference-resource.types"
 
 /** 项目 MentionExtension 使用的 PROJECT_FILE 类型标识 */
 const PROJECT_FILE_TYPE = CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
@@ -10,6 +11,8 @@ export const MENTION_CARET_GUARD_TEXT = "\u200b"
 export interface MatchableMentionItem {
 	name: string
 	path?: string
+	/** 路径无法表达媒体类型时（如 asset://），由资源来源显式提供。 */
+	assetType?: ReferenceResourceAssetType
 	/** 是否禁用（达到参考图数量限制时，未选中的文件会被禁用） */
 	disabled?: boolean
 }

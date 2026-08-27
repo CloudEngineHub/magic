@@ -384,6 +384,7 @@ function renderClientEntry(entry, options = {}) {
 // DOM 元素
 const serverUrlInput = document.getElementById('serverUrl');
 const authTokenInput = document.getElementById('authToken');
+const longTermMemoryToggle = document.getElementById('longTermMemoryToggle');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -434,6 +435,7 @@ const messageInputPanel = document.getElementById('messageInputPanel');
 
 const INIT_CONFIG_PANEL_OPEN_KEY = 'httpClient.initConfigPanelOpen';
 const MCP_CONFIG_PANEL_OPEN_KEY = 'httpClient.mcpConfigPanelOpen';
+const LONG_TERM_MEMORY_ENABLED_KEY = 'httpClient.longTermMemoryEnabled';
 const TOKEN_CONTEXT_DEFAULT_LIMIT = 200_000;
 const TOKEN_CONTEXT_WARNING_THRESHOLD = 0.7;
 const TOKEN_CONTEXT_RING_CIRCUMFERENCE = 42.41;
@@ -1588,6 +1590,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (imModeToggle) {
         imModeToggle.addEventListener('change', toggleImMode);
     }
+    if (longTermMemoryToggle) {
+        const savedLongTermMemoryEnabled = localStorage.getItem(LONG_TERM_MEMORY_ENABLED_KEY);
+        longTermMemoryToggle.checked = savedLongTermMemoryEnabled !== 'false';
+        longTermMemoryToggle.addEventListener('change', () => {
+            localStorage.setItem(LONG_TERM_MEMORY_ENABLED_KEY, String(longTermMemoryToggle.checked));
+        });
+    }
     if (imChannelSelect) {
         imChannelSelect.addEventListener('change', () => {
             currentImChannel = imChannelSelect.value;
@@ -1989,6 +1998,7 @@ async function sendHttpMessage(messageData) {
 
     try {
         injectDebugTaskId(messageData);
+        injectLongTermMemoryPreference(messageData);
         applyLocalDebugOptions(messageData);
         const response = await fetch(`${serverUrl}/api/v1/messages/chat`, {
             method: 'POST',
@@ -2030,6 +2040,22 @@ function injectDebugTaskId(messageData) {
 
     messageData.metadata = messageData.metadata || {};
     messageData.metadata.super_magic_task_id = generateDebugTaskId();
+}
+
+/**
+ * 将调试面板中的长期记忆开关注入每次 CHAT metadata。
+ * system prompt 首次生成时使用当前 CHAT 值，后续 CHAT 只影响运行时功能。
+ */
+function injectLongTermMemoryPreference(messageData) {
+    if (!messageData || messageData.type !== MessageType.CHAT) return;
+
+    messageData.metadata = messageData.metadata || {};
+    messageData.metadata.personal_preferences = {
+        ...(messageData.metadata.personal_preferences || {}),
+        long_term_memory_enabled: longTermMemoryToggle
+            ? longTermMemoryToggle.checked
+            : true,
+    };
 }
 
 /**
@@ -5321,15 +5347,39 @@ function updateToolCallState(toolState, tool, eventType, timeStr, options = {}) 
  */
 function renderToolCallAttachments(container, attachments) {
     if (!container) return;
+    const isExpanded = container.dataset.expanded === 'true';
     container.innerHTML = '';
     if (!Array.isArray(attachments) || attachments.length === 0) {
+        delete container.dataset.expanded;
         container.style.display = 'none';
         return;
     }
 
+    const header = document.createElement('div');
+    header.className = 'tool-call-attachments-header';
+
     const title = document.createElement('div');
     title.className = 'tool-call-attachments-title';
     title.textContent = `附件（${attachments.length}）`;
+    header.appendChild(title);
+
+    if (attachments.length > 5) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'tool-call-attachments-toggle';
+        toggle.setAttribute('aria-expanded', String(isExpanded));
+        toggle.textContent = isExpanded ? '收起' : `展开剩余 ${attachments.length - 5} 个`;
+        toggle.addEventListener('click', () => {
+            const nextExpanded = container.dataset.expanded !== 'true';
+            container.dataset.expanded = String(nextExpanded);
+            container.classList.toggle('is-expanded', nextExpanded);
+            toggle.setAttribute('aria-expanded', String(nextExpanded));
+            toggle.textContent = nextExpanded ? '收起' : `展开剩余 ${attachments.length - 5} 个`;
+        });
+        header.appendChild(toggle);
+    } else {
+        delete container.dataset.expanded;
+    }
 
     const list = document.createElement('ol');
     list.className = 'tool-call-attachments-list';
@@ -5337,7 +5387,8 @@ function renderToolCallAttachments(container, attachments) {
         list.appendChild(createToolCallAttachmentItem(attachment, index));
     });
 
-    container.appendChild(title);
+    container.classList.toggle('is-expanded', isExpanded && attachments.length > 5);
+    container.appendChild(header);
     container.appendChild(list);
     container.style.display = '';
 }
@@ -6346,6 +6397,7 @@ const filePreviewMeta = document.getElementById('filePreviewMeta');
 const filePreviewClose = document.getElementById('filePreviewClose');
 const filePreviewOpenBtn = document.getElementById('filePreviewOpenBtn');
 const filePreviewRenderBtn = document.getElementById('filePreviewRenderBtn');
+const filePreviewMarkdownMode = document.getElementById('filePreviewMarkdownMode');
 const filePreviewEditBtn = document.getElementById('filePreviewEditBtn');
 const filePreviewSaveBtn = document.getElementById('filePreviewSaveBtn');
 const filePreviewCancelBtn = document.getElementById('filePreviewCancelBtn');
@@ -6521,11 +6573,57 @@ function usePreviewImageProxy(img, originalSrc) {
     return true;
 }
 
-function enhanceFilePreviewMarkdownImages(root) {
+/** 解码并规范化工作区相对路径，阻止资源路径逃逸工作区根目录。 */
+function normalizeMarkdownWorkspacePath(path) {
+    let decodedPath;
+    try {
+        decodedPath = decodeURIComponent(String(path || ''));
+    } catch (e) {
+        return '';
+    }
+
+    const parts = [];
+    for (const part of decodedPath.replace(/\\/g, '/').split('/')) {
+        if (!part || part === '.') continue;
+        if (part === '..') {
+            if (!parts.length) return '';
+            parts.pop();
+            continue;
+        }
+        if ([...part].some(char => char.charCodeAt(0) < 32)) return '';
+        parts.push(part);
+    }
+    return parts.join('/');
+}
+
+/** 将 Markdown 文件中的相对资源链接解析为工作区相对路径。 */
+function resolveMarkdownWorkspaceAssetPath(markdownPath, assetSource) {
+    const source = String(assetSource || '').trim();
+    if (!source || source.startsWith('/') || source.startsWith('#')) return '';
+    if (/^[a-z][a-z\d+.-]*:/i.test(source) || source.startsWith('//')) return '';
+
+    const pathOnly = source.split(/[?#]/, 1)[0];
+    const basePath = getWorkspaceParentPath(markdownPath);
+    return normalizeMarkdownWorkspacePath(basePath ? `${basePath}/${pathOnly}` : pathOnly);
+}
+
+/** 将 Markdown 中的远程或工作区相对图片链接转换为可预览地址。 */
+function enhanceFilePreviewMarkdownImages(root, options = {}) {
     if (!root) return;
+    const markdownPath = String(options.baseFilePath || '');
+    const scope = options.scope || getActiveFiletreeScope();
     root.querySelectorAll('img[src]').forEach((img) => {
-        const originalSrc = normalizeRemoteImageUrl(img.getAttribute('src'));
-        if (!originalSrc) return;
+        const source = img.getAttribute('src') || '';
+        const originalSrc = normalizeRemoteImageUrl(source);
+        if (!originalSrc) {
+            const assetPath = resolveMarkdownWorkspaceAssetPath(markdownPath, source);
+            if (!assetPath) return;
+            img.dataset.workspacePath = assetPath;
+            img.decoding = 'async';
+            img.loading = 'lazy';
+            img.src = debugWorkspaceApi.rawUrl(assetPath, scope);
+            return;
+        }
 
         img.dataset.originalSrc = originalSrc;
         img.decoding = 'async';
@@ -7090,6 +7188,7 @@ function appendPreviewMessage(bodyEl, message) {
 const PREVIEW_KIND_LABEL = {
     html: 'HTML',
     'micro-app': '微应用',
+    directory: '文件夹',
     image: '图片',
     video: '视频',
     audio: '音频',
@@ -7532,11 +7631,16 @@ function resetActivePreviewSurface(options = {}) {
     filePreviewMain?.classList.remove('has-canvas-panel');
     if (filePreviewBody) {
         filePreviewBody.innerHTML = '';
-        filePreviewBody.classList.remove('file-preview-body-markdown', 'file-preview-body-tool-detail');
+        filePreviewBody.classList.remove(
+            'file-preview-body-markdown',
+            'file-preview-body-markdown-source',
+            'file-preview-body-tool-detail',
+        );
     }
     if (filePreviewMeta) filePreviewMeta.innerHTML = '';
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = '';
     if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
+    updateMarkdownPreviewModeControls(false, 'rendered');
     currentPreviewCopyText = options.preserveEditState ? preservedCopyText : '';
     currentPreviewEditable = options.preserveEditState ? preservedEditable : false;
     if (!options.preserveEditState) {
@@ -7545,6 +7649,40 @@ function resetActivePreviewSurface(options = {}) {
         filePreviewEditContent = '';
     }
     updateFilePreviewEditActions();
+}
+
+/** 更新 Markdown 渲染/原文模式按钮的显示状态。 */
+function updateMarkdownPreviewModeControls(visible, mode = 'rendered') {
+    if (!filePreviewMarkdownMode) return;
+    filePreviewMarkdownMode.style.display = visible ? '' : 'none';
+    filePreviewMarkdownMode.querySelectorAll('[data-markdown-mode]').forEach((button) => {
+        const isActive = button.dataset.markdownMode === mode;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+    });
+}
+
+/** 渲染 Markdown 文件的渲染结果或原始文本。 */
+function renderMarkdownFileMode(text, mode = 'rendered', filePath = '') {
+    if (!filePreviewBody) return;
+    const normalizedMode = mode === 'source' ? 'source' : 'rendered';
+    filePreviewBody.innerHTML = '';
+    filePreviewBody.classList.toggle('file-preview-body-markdown', normalizedMode === 'rendered');
+    filePreviewBody.classList.toggle('file-preview-body-markdown-source', normalizedMode === 'source');
+
+    if (normalizedMode === 'rendered' && window.marked) {
+        const article = document.createElement('article');
+        article.className = 'file-preview-markdown ai-markdown';
+        article.innerHTML = marked.parse(text);
+        enhanceFilePreviewMarkdownImages(article, { baseFilePath: filePath });
+        filePreviewBody.appendChild(article);
+    } else {
+        const pre = document.createElement('pre');
+        pre.className = 'file-preview-content file-preview-markdown-source';
+        pre.textContent = text;
+        filePreviewBody.appendChild(pre);
+    }
+    updateMarkdownPreviewModeControls(Boolean(window.marked), normalizedMode);
 }
 
 function getStoredToolDetailModelRatio() {
@@ -7958,6 +8096,8 @@ async function activateFilePreviewTab(filePath, options = {}) {
         renderToolDetailPreviewTab(tab);
     } else if (tab.type === 'micro-app') {
         await renderMicroAppPreviewTab(tab);
+    } else if (tab.type === 'api-directory') {
+        await renderApiDirectoryPreviewTab(tab);
     } else if (tab.type === 'api-file') {
         await renderApiFilePreviewTab(tab);
     } else {
@@ -8397,6 +8537,25 @@ async function restorePersistedFilePreviewState() {
                 continue;
             }
             try {
+                if (filePath.endsWith('/')) {
+                    const directoryPath = filePath.replace(/\/+$/, '');
+                    const data = await debugWorkspaceApi.listTree(directoryPath, 1);
+                    filePreviewTabs.set(filePath, {
+                        type: 'api-directory',
+                        path: filePath,
+                        title: getWorkspaceFileBaseName(directoryPath),
+                        entry: {
+                            name: getWorkspaceFileBaseName(directoryPath),
+                            path: directoryPath,
+                            type: 'directory',
+                            size: 0,
+                            updated_at: null,
+                            children: data.entries || [],
+                        },
+                    });
+                    restoredPaths.push(filePath);
+                    continue;
+                }
                 const data = await debugWorkspaceApi.readFile(filePath);
                 filePreviewTabs.set(filePath, {
                     type: 'api-file',
@@ -8431,6 +8590,8 @@ async function restorePersistedFilePreviewState() {
         if (activeTab) {
             if (activeTab.type === 'tool-detail') {
                 renderToolDetailPreviewTab(activeTab);
+            } else if (activeTab.type === 'api-directory') {
+                await renderApiDirectoryPreviewTab(activeTab);
             } else if (activeTab.type === 'api-file') {
                 await renderApiFilePreviewTab(activeTab);
             } else {
@@ -8684,6 +8845,18 @@ if (filePreviewCancelBtn) {
     filePreviewCancelBtn.addEventListener('click', cancelFilePreviewEdits);
 }
 
+if (filePreviewMarkdownMode) {
+    filePreviewMarkdownMode.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-markdown-mode]');
+        if (!button || !activeFilePreviewPath || !currentPreviewPath) return;
+        const mode = button.dataset.markdownMode === 'source' ? 'source' : 'rendered';
+        const tab = filePreviewTabs.get(activeFilePreviewPath);
+        if (!tab || !isMarkdownPreviewFile(currentPreviewPath) || currentPreviewCopyText == null) return;
+        tab.markdownMode = mode;
+        renderMarkdownFileMode(currentPreviewCopyText, mode, currentPreviewPath);
+    });
+}
+
 async function renderCurrentPreviewAsHtml() {
     if (!currentPreviewFile || !filePreviewBody) return;
     filePreviewBody.innerHTML = '';
@@ -8723,6 +8896,161 @@ async function openApiFilePreviewTab(entry) {
         entry,
     });
     await activateFilePreviewTab(entry.path, { resetScroll: true });
+}
+
+/** 将目录路径转换为不会与同名文件冲突的标签页路径。 */
+function buildApiDirectoryPreviewTabPath(directoryPath) {
+    const normalizedPath = String(directoryPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    return normalizedPath ? `${normalizedPath}/` : '/';
+}
+
+/** 打开 API 文件树目录预览标签页。 */
+async function openApiDirectoryPreviewTab(entry) {
+    if (!entry || !entry.path) return;
+    const tabPath = buildApiDirectoryPreviewTabPath(entry.path);
+    filePreviewTabs.set(tabPath, {
+        type: 'api-directory',
+        path: tabPath,
+        title: entry.name || getWorkspaceFileBaseName(entry.path),
+        entry,
+    });
+    await activateFilePreviewTab(tabPath, { resetScroll: true });
+}
+
+/** 根据文件类型生成目录预览卡片使用的图标类型。 */
+function getDirectoryPreviewIconType(entry) {
+    if (entry?.type === 'directory') return 'folderClosed';
+    return getFileIconType(entry?.name || entry?.path || '');
+}
+
+/** 创建目录预览卡片的图标或图片缩略图。 */
+function createDirectoryPreviewVisual(entry) {
+    const visual = document.createElement('span');
+    const iconType = getDirectoryPreviewIconType(entry);
+    visual.className = `file-preview-directory-visual is-${iconType}`;
+
+    if (entry?.type === 'file' && iconType === 'image' && entry.path) {
+        const image = document.createElement('img');
+        image.className = 'file-preview-directory-thumbnail';
+        image.alt = entry.name || entry.path;
+        image.loading = 'lazy';
+        image.addEventListener('error', () => {
+            visual.classList.remove('has-thumbnail');
+            visual.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${FILE_TREE_ICON_PATHS.image}</svg>`;
+        });
+        image.src = debugWorkspaceApi.rawUrl(entry.path);
+        visual.classList.add('has-thumbnail');
+        visual.appendChild(image);
+        return visual;
+    }
+
+    visual.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${FILE_TREE_ICON_PATHS[iconType] || FILE_TREE_ICON_PATHS.file}</svg>`;
+    return visual;
+}
+
+/** 返回目录预览卡片的人类可读类型名称。 */
+function getDirectoryPreviewTypeLabel(entry) {
+    if (entry?.type === 'directory') return '文件夹';
+    const iconType = getDirectoryPreviewIconType(entry);
+    const labels = {
+        markdown: 'Markdown',
+        code: '代码',
+        pdf: 'PDF',
+        image: '图片',
+        audio: '音频',
+        video: '视频',
+        archive: '压缩包',
+        spreadsheet: '表格',
+        file: '文件',
+    };
+    return labels[iconType] || '文件';
+}
+
+/** 创建一个可继续进入目录或打开文件的目录预览卡片。 */
+function createDirectoryPreviewItem(entry) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `file-preview-directory-item ${entry.type === 'directory' ? 'is-directory' : 'is-file'}`;
+    item.title = entry.path || entry.name || '';
+
+    const visual = createDirectoryPreviewVisual(entry);
+    const info = document.createElement('span');
+    info.className = 'file-preview-directory-info';
+
+    const name = document.createElement('span');
+    name.className = 'file-preview-directory-name';
+    name.textContent = entry.name || getWorkspaceFileBaseName(entry.path || '');
+
+    const detail = document.createElement('span');
+    detail.className = 'file-preview-directory-detail';
+    if (entry.type === 'directory') {
+        const childCount = Array.isArray(entry.children) ? entry.children.length : 0;
+        detail.textContent = `${getDirectoryPreviewTypeLabel(entry)} · ${childCount} 项`;
+    } else {
+        detail.textContent = `${getDirectoryPreviewTypeLabel(entry)} · ${formatFileSizeBytes(Number(entry.size) || 0)}`;
+    }
+
+    info.appendChild(name);
+    info.appendChild(detail);
+    item.appendChild(visual);
+    item.appendChild(info);
+    item.addEventListener('click', async () => {
+        if (entry.type === 'directory') {
+            await openApiDirectoryPreviewTab(entry);
+        } else {
+            await openApiFilePreviewTab(entry);
+        }
+    });
+    return item;
+}
+
+/** 渲染 API 文件树目录的文件夹式预览。 */
+async function renderApiDirectoryPreviewTab(tab) {
+    if (!filePreviewBody || !filePreviewWorkbench) return;
+    const directoryPath = String(tab.entry?.path || tab.path || '').replace(/\/+$/, '');
+    resetActivePreviewSurface();
+    currentPreviewFile = null;
+    currentPreviewPath = directoryPath;
+    currentPreviewCopyText = '';
+    if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
+    if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
+
+    try {
+        const data = await debugWorkspaceApi.listTree(directoryPath, 1);
+        const entries = sortFileTreeEntries(data.entries || []);
+        const directoryCount = entries.filter(entry => entry.type === 'directory').length;
+        const fileCount = entries.length - directoryCount;
+        tab.entry = Object.assign({}, tab.entry, { children: entries });
+
+        renderFilePreviewMetaRows(filePreviewMeta, [
+            { label: '文件名', value: tab.title || getWorkspaceFileBaseName(directoryPath) || getActiveFiletreeScopeConfig().rootLabel },
+            { label: '路径', value: directoryPath || getActiveFiletreeScopeConfig().rootLabel },
+            { label: '预览类型', value: PREVIEW_KIND_LABEL.directory },
+            { label: '文件夹', value: String(directoryCount) },
+            { label: '文件', value: String(fileCount) },
+            { label: '总计', value: String(entries.length) },
+        ]);
+
+        const folder = document.createElement('section');
+        folder.className = 'file-preview-directory';
+        if (!entries.length) {
+            const empty = document.createElement('div');
+            empty.className = 'file-preview-directory-empty';
+            empty.innerHTML = '<div class="file-preview-directory-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true">' + FILE_TREE_ICON_PATHS.folderOpen + '</svg></div><div class="file-preview-empty-title">空文件夹</div><div class="file-preview-empty-text">这个目录中还没有文件或子目录。</div>';
+            folder.appendChild(empty);
+        } else {
+            const grid = document.createElement('div');
+            grid.className = 'file-preview-directory-grid';
+            entries.forEach(entry => grid.appendChild(createDirectoryPreviewItem(entry)));
+            folder.appendChild(grid);
+        }
+        filePreviewBody.appendChild(folder);
+        setFilePreviewWorkbenchVisible(true);
+    } catch (error) {
+        console.error('读取 API 工作区目录失败', error);
+        appendPreviewMessage(filePreviewBody, `读取目录失败: ${error.message || error}`);
+        setFilePreviewWorkbenchVisible(true);
+    }
 }
 
 function buildApiFilePreviewDescriptor(entry, kind) {
@@ -8836,13 +9164,8 @@ async function renderApiFilePreviewTab(tab) {
                 { label: '行数', value: String(lineCount) },
                 { label: '字符数', value: String(text.length) },
             ]);
-            if (isMarkdownPreviewFile(filePath) && window.marked) {
-                filePreviewBody.classList.add('file-preview-body-markdown');
-                const article = document.createElement('article');
-                article.className = 'file-preview-markdown ai-markdown';
-                article.innerHTML = marked.parse(text);
-                enhanceFilePreviewMarkdownImages(article);
-                filePreviewBody.appendChild(article);
+            if (isMarkdownPreviewFile(filePath)) {
+                renderMarkdownFileMode(text, tab.markdownMode || 'rendered', filePath);
             } else {
                 const pre = document.createElement('pre');
                 pre.className = 'file-preview-content';
@@ -8911,7 +9234,7 @@ async function buildApiTreeNodes(entries, container, depth) {
         const name = document.createElement('span');
         name.className = 'ft-name';
         name.textContent = entry.name;
-        name.title = microAppConfig ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开` : fullPath;
+        name.title = microAppConfig ? `微应用: ${microAppConfig.name || entry.name}，单击预览并展开/收起，双击打开` : fullPath;
 
         node.appendChild(icon);
         node.appendChild(name);
@@ -8944,6 +9267,7 @@ async function buildApiTreeNodes(entries, container, depth) {
                     childContainer.style.display = 'block';
                     updateFileTreeIcon(icon, entry.name, true, true, { microApp: !!microAppConfig });
                 }
+                await openApiDirectoryPreviewTab(entry);
             });
             if (microAppConfig) {
                 node.addEventListener('dblclick', async (e) => {
@@ -8956,7 +9280,10 @@ async function buildApiTreeNodes(entries, container, depth) {
                 e.preventDefault();
                 e.stopPropagation();
                 const dirPath = normalizeMentionDirectoryPath(fullPath);
-                const menuItems = [];
+                const menuItems = [{
+                    label: '预览目录',
+                    onSelect: () => openApiDirectoryPreviewTab(entry),
+                }];
                 if (microAppConfig) {
                     menuItems.push({
                         label: '打开微应用',
@@ -9710,13 +10037,9 @@ async function previewFile(fileHandle, filePath) {
             }
             currentPreviewCopyText = text;
             setFilePreviewMeta(file, filePath, kind, textExtras);
-            if (isMarkdownPreviewFile(filePath) && window.marked) {
-                filePreviewBody.classList.add('file-preview-body-markdown');
-                const article = document.createElement('article');
-                article.className = 'file-preview-markdown ai-markdown';
-                article.innerHTML = marked.parse(text);
-                enhanceFilePreviewMarkdownImages(article);
-                filePreviewBody.appendChild(article);
+            const previewTab = filePreviewTabs.get(filePath);
+            if (isMarkdownPreviewFile(filePath)) {
+                renderMarkdownFileMode(text, previewTab?.markdownMode || 'rendered', filePath);
             } else {
                 const pre = document.createElement('pre');
                 pre.className = 'file-preview-content';

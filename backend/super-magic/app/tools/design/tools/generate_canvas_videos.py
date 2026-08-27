@@ -19,9 +19,9 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.i18n import i18n
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.exceptions import ApiError
-from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
@@ -30,6 +30,7 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
+from app.tools.video_generation_utils import normalize_provider_asset_uri
 from app.utils.async_file_utils import async_exists, async_mkdir
 from app.utils.video_logger import get_video_logger
 
@@ -171,8 +172,8 @@ class VideoTaskSpec(BaseModel):
 
     prompt: str = Field(
         ...,
-        description="""<!--zh: 视频生成提示词。只描述视频内容、动作、风格和镜头；如果传入参考素材，必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_video_paths[0] 用 [video1]，reference_audio_paths[0] 用 [audio1]。例如：基于黑猫肖像 [image1] 制作动画，黑猫缓缓眨眼。-->
-Video generation prompt. Describe only the video content, motion, style, and camera. When passing reference assets, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_video_paths[0] as [video1], and reference_audio_paths[0] as [audio1]. Example: Animate the black cat portrait [image1] with slow blinking."""
+        description="""<!--zh: 视频生成提示词。只描述视频内容、动作、风格和镜头；如果传入参考素材，必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_video_paths[0] 用 [video1]，reference_audio_paths[0] 用 [audio1]。当前后端仅对 Volcengine Ark provider 放行供应商托管素材，asset:// URI 也按对应数组顺序引用。例如：基于虚拟人像 [image1] 制作产品介绍视频。-->
+Video generation prompt. Describe only the video content, motion, style, and camera. When passing reference assets, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_video_paths[0] as [video1], and reference_audio_paths[0] as [audio1]. The current backend allows provider-managed assets only for the Volcengine Ark provider; cite an asset:// URI in the same way. Example: Animate the virtual human portrait [image1] in a product introduction."""
     )
     name: str = Field(
         ...,
@@ -196,28 +197,28 @@ Video task type, default generate. Use edit with video_edit mode. Do not use gen
     )
     reference_image_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 项目文件树内的参考图相对路径列表，例如 images/cat.png。传入后必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_image_paths[1] 用 [image2]。-->
-Project-relative reference image paths, e.g. images/cat.png. When provided, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_image_paths[1] as [image2]."""
+        description="""<!--zh: 参考图列表，通常填写项目文件树内的相对路径，例如 images/cat.png；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 URI，例如 asset://virtual-human-asset-id。传入后必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_image_paths[1] 用 [image2]。asset:// URI 不要调用 visual_understanding。-->
+Reference image paths or, when the backend allows provider-managed assets for the Volcengine Ark provider, controlled URIs such as asset://virtual-human-asset-id. When provided, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_image_paths[1] as [image2]. Never call visual_understanding for an asset:// URI."""
     )
     reference_video_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 项目文件树内的参考视频相对路径列表，例如 videos/source.mp4。传入后必须在 prompt 中按数组顺序引用：reference_video_paths[0] 用 [video1]，reference_video_paths[1] 用 [video2]。-->
-Project-relative reference video paths, e.g. videos/source.mp4. When provided, the prompt must cite them by list order: reference_video_paths[0] as [video1], reference_video_paths[1] as [video2]."""
+        description="""<!--zh: 参考视频列表，通常填写项目文件树内的相对路径，例如 videos/source.mp4；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。传入后必须在 prompt 中按数组顺序引用：reference_video_paths[0] 用 [video1]，reference_video_paths[1] 用 [video2]。-->
+Reference video paths or, when the backend allows provider-managed assets for the Volcengine Ark provider, controlled asset:// URIs. When provided, the prompt must cite them by list order: reference_video_paths[0] as [video1], reference_video_paths[1] as [video2]."""
     )
     reference_audio_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 项目文件树内的参考音频相对路径列表，例如 audios/source.mp3。传入后必须在 prompt 中按数组顺序引用：reference_audio_paths[0] 用 [audio1]，reference_audio_paths[1] 用 [audio2]。-->
-Project-relative reference audio paths, e.g. audios/source.mp3. When provided, the prompt must cite them by list order: reference_audio_paths[0] as [audio1], reference_audio_paths[1] as [audio2]."""
+        description="""<!--zh: 参考音频列表，通常填写项目文件树内的相对路径，例如 audios/source.mp3；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。传入后必须在 prompt 中按数组顺序引用：reference_audio_paths[0] 用 [audio1]，reference_audio_paths[1] 用 [audio2]。-->
+Reference audio paths or, when the backend allows provider-managed assets for the Volcengine Ark provider, controlled asset:// URIs. When provided, the prompt must cite them by list order: reference_audio_paths[0] as [audio1], reference_audio_paths[1] as [audio2]."""
     )
     frame_start_path: str = Field(
         "",
-        description="""<!--zh: 项目文件树内的起始帧图片相对路径，例如 images/start.png。字段名必须是 frame_start_path。不要使用 start_frame。-->
-Project-relative start frame image path, e.g. images/start.png. The parameter name must be frame_start_path. Do not use start_frame."""
+        description="""<!--zh: 起始帧图片路径，通常填写项目文件树内的相对路径，例如 images/start.png；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。字段名必须是 frame_start_path。不要使用 start_frame。-->
+Start frame image path or, when the backend allows provider-managed assets for the Volcengine Ark provider, a controlled asset:// URI. The parameter name must be frame_start_path. Do not use start_frame."""
     )
     frame_end_path: str = Field(
         "",
-        description="""<!--zh: 项目文件树内的结束帧图片相对路径，例如 images/end.png。字段名必须是 frame_end_path。不要使用 end_frame。-->
-Project-relative end frame image path, e.g. images/end.png. The parameter name must be frame_end_path. Do not use end_frame."""
+        description="""<!--zh: 结束帧图片路径，通常填写项目文件树内的相对路径，例如 images/end.png；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。字段名必须是 frame_end_path。不要使用 end_frame。-->
+End frame image path or, when the backend allows provider-managed assets for the Volcengine Ark provider, a controlled asset:// URI. The parameter name must be frame_end_path. Do not use end_frame."""
     )
     duration_seconds: Optional[int] = Field(
         None,
@@ -377,8 +378,8 @@ Relative path to the design project (folder containing magic.project.js)"""
     )
     tasks: List[VideoTaskSpec] = Field(
         ...,
-        description="""<!--zh: 视频生成任务列表，每个 task 生成一个视频，最多 4 个。每个 task 必须包含 prompt / name。aspect_ratio / duration_seconds / resolution 可选；用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择，不确定时省略。其他字段必须使用本 schema 中的精确字段名。常见正确字段：duration_seconds（不是 duration）、reference_image_paths（不是 images/image）、reference_video_paths（不是 videos/video）、frame_start_path（不是 start_frame）、frame_end_path（不是 end_frame）。使用参考素材时，prompt 必须用 [image1] / [video1] / [audio1] 按数组顺序绑定素材。示例：tasks=[{"prompt":"白色长毛小猫 [image1] 从黑色箱子里探头钻出，黑色短毛小猫 [image2] 从白色箱子里跳出来，橘色虎斑小猫 [image3] 从黄色箱子里爬出。","name":"三色箱子猫咪跳出","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]-->
-Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt and name. aspect_ratio, duration_seconds, and resolution are optional; when the user asks for them, or they can be reasonably inferred from the current video model rules, choose declared values from <media_model_info>; omit when uncertain. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. Example: tasks=[{"prompt":"White long-haired kitten [image1] peeks out of the black box, black short-haired kitten [image2] jumps out of the white box, orange tabby kitten [image3] climbs out of the yellow box.","name":"three_color_box_cats","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]"""
+        description="""<!--zh: 视频生成任务列表，每个 task 生成一个视频，最多 4 个。每个 task 必须包含 prompt / name。aspect_ratio / duration_seconds / resolution 可选；用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择，不确定时省略。其他字段必须使用本 schema 中的精确字段名。常见正确字段：duration_seconds（不是 duration）、reference_image_paths（不是 images/image）、reference_video_paths（不是 videos/video）、frame_start_path（不是 start_frame）、frame_end_path（不是 end_frame）。使用参考素材时，prompt 必须用 [image1] / [video1] / [audio1] 按数组顺序绑定素材；当前后端对 Volcengine Ark provider 放行供应商托管素材时，可在对应参考数组中填写受控 asset:// URI。示例：tasks=[{"prompt":"虚拟人像 [image1] 面向镜头介绍产品。","name":"虚拟人像产品介绍","aspect_ratio":"16:9","duration_seconds":5,"resolution":"720p","reference_image_paths":["asset://virtual-human-asset-id"]}]-->
+Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt and name. aspect_ratio, duration_seconds, and resolution are optional; when the user asks for them, or they can be reasonably inferred from the current video model rules, choose declared values from <media_model_info>; omit when uncertain. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. When the backend allows provider-managed assets for the Volcengine Ark provider, the corresponding reference arrays may contain controlled asset:// URIs. Example: tasks=[{"prompt":"The virtual human [image1] faces the camera and introduces the product.","name":"virtual_human_product_intro","aspect_ratio":"16:9","duration_seconds":5,"resolution":"720p","reference_image_paths":["asset://virtual-human-asset-id"]}]"""
     )
     model_id: str = Field("", description="<!--zh: 可选视频模型 ID，所有任务共用-->Optional video model ID, shared across all tasks")
     action: Literal["estimate_points", "generate"] = Field(
@@ -725,6 +726,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         workspace_root: Path,
         project_prefix: str,
     ) -> str:
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
+            # 供应商素材 URI 不对应本地文件，兼容历史路径拼接产生的前导斜杠。
+            return normalized_provider_asset_uri
+
         if not path or path.startswith(("http://", "https://")) or Path(path).is_absolute():
             return path
 
@@ -1014,6 +1020,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             raise ValueError("参考素材路径不能为空")
         if path.startswith(("http://", "https://")):
             raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
+
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
+            # 供应商素材 URI 不属于项目文件树，不能附加项目路径或斜杠。
+            return normalized_provider_asset_uri
 
         if path.startswith("./"):
             if not relative_project_path:

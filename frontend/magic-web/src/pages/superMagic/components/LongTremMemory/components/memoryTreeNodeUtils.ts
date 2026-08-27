@@ -7,6 +7,7 @@ export type MemoryTreeNodeTagKey =
 	| "globalNotes"
 	| "projects"
 	| "project"
+	| "currentProject"
 	| "projectMemory"
 	| "projectNotes"
 
@@ -42,6 +43,7 @@ export function buildMemoryTreeNodePathIndex(items: AttachmentItem[]): Map<strin
 /** 根据标准记忆目录结构解析节点右侧标签，普通用户文件不返回标签。 */
 export function resolveMemoryTreeNodeTagKey(
 	pathSegments: string[],
+	projectId?: string | null,
 ): MemoryTreeNodeTagKey | undefined {
 	if (isSamePath(pathSegments, MEMORY_ROOT_PATH)) return "memoryRoot"
 	if (isSamePath(pathSegments, GLOBAL_MEMORY_PATH)) return "global"
@@ -61,12 +63,63 @@ export function resolveMemoryTreeNodeTagKey(
 		projectDirectoryName.startsWith(PROJECT_DIRECTORY_PREFIX) &&
 		projectDirectoryName.length > PROJECT_DIRECTORY_PREFIX.length
 	if (!isProjectPath) return
-	if (pathSegments.length === 3) return "project"
+	if (pathSegments.length === 3) {
+		return isCurrentProjectMemoryDirectory(pathSegments, projectId) ? "currentProject" : "project"
+	}
 	if (pathSegments.length !== 4) return
 	if (pathSegments[3] === MEMORY_FILE_NAME) return "projectMemory"
 	if (pathSegments[3] === NOTES_DIRECTORY_NAME) return "projectNotes"
 
 	return
+}
+
+/** 判断节点是否为当前项目对应的记忆目录。 */
+export function isCurrentProjectMemoryDirectory(
+	pathSegments: string[],
+	projectId?: string | null,
+): boolean {
+	return Boolean(
+		projectId &&
+		pathSegments.length === 3 &&
+		pathSegments[0] === MEMORY_ROOT_PATH[0] &&
+		pathSegments[1] === PROJECTS_PATH[1] &&
+		pathSegments[2] === `${PROJECT_DIRECTORY_PREFIX}${projectId}`,
+	)
+}
+
+/** 将当前项目记忆目录移动到 projects 目录的首位，保持原树节点不变。 */
+export function prioritizeCurrentProjectMemoryDirectory(
+	items: AttachmentItem[],
+	projectId?: string | null,
+): AttachmentItem[] {
+	if (!projectId) return items
+
+	const reorderChildren = (nodes: AttachmentItem[], parentPath: string[]): AttachmentItem[] =>
+		nodes.map((item) => {
+			const currentPath = [...parentPath, getMemoryTreeNodeName(item)]
+			if (!item.children?.length) return item
+
+			const children = reorderChildren(item.children, currentPath)
+			const childrenChanged = children.some((child, index) => child !== item.children?.[index])
+			if (isSamePath(currentPath, PROJECTS_PATH)) {
+				const currentIndex = children.findIndex((child) =>
+					isCurrentProjectMemoryDirectory(
+						[...currentPath, getMemoryTreeNodeName(child)],
+						projectId,
+					),
+				)
+				if (currentIndex > 0) {
+					const prioritizedChildren = [...children]
+					const [currentProject] = prioritizedChildren.splice(currentIndex, 1)
+					prioritizedChildren.unshift(currentProject)
+					return { ...item, children: prioritizedChildren }
+				}
+			}
+
+			return childrenChanged ? { ...item, children } : item
+		})
+
+	return reorderChildren(items, [])
 }
 
 /** 判断两个目录层级是否完全一致。 */
