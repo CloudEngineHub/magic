@@ -15,7 +15,7 @@ export const HoverBox = memo(function HoverBox({ rect, isSelectionMode }: HoverB
 
 	return (
 		<div
-			className="absolute border border-dashed border-gray-500 transition-all duration-100 ease-out"
+			className="absolute border border-dashed border-gray-500 transition-[height,width,transform,opacity] duration-150 ease-out motion-reduce:transition-none"
 			style={{
 				top: `${rect.top}px`,
 				left: `${rect.left}px`,

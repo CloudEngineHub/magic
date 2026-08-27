@@ -14,6 +14,8 @@ interface UseSelectionHandlesProps {
 	setSelectedInfoList: React.Dispatch<React.SetStateAction<SelectedInfo[]>>
 	setHoveredRect: React.Dispatch<React.SetStateAction<ElementRect | null>>
 	setIsSelectionMode: React.Dispatch<React.SetStateAction<boolean>>
+	onMoveStart?: () => void
+	onMoveEnd?: () => void
 }
 
 /**
@@ -29,6 +31,8 @@ export function useSelectionHandles({
 	setSelectedInfoList,
 	setHoveredRect,
 	setIsSelectionMode,
+	onMoveStart,
+	onMoveEnd,
 }: UseSelectionHandlesProps) {
 	// Adapter function to convert between single and multi-select state
 	const createStateAdapter = useCallback(
@@ -81,6 +85,8 @@ export function useSelectionHandles({
 		setHoveredRect,
 		setIsSelectionMode,
 		iframeRef,
+		onMoveStart,
+		onMoveEnd,
 	})
 
 	// Refs to prevent duplicate operations

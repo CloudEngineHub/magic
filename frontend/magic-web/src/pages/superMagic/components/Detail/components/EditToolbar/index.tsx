@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, Maximize, Minimize, RefreshCw, Share2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -33,6 +33,8 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import { runGuardedAction } from "../../utils/actionGuard"
+import type { BeforeAction } from "../../utils/actionGuard"
 
 export interface EditToolbarProps {
 	style?: React.CSSProperties
@@ -119,6 +121,8 @@ export interface EditToolbarProps {
 	onStartInspectorAppend?: () => void
 	/** AI 选取是否正在进行中 */
 	isAppendPicking?: boolean
+	/** Optional guard run before actions that leave the current selection flow. */
+	beforeAction?: BeforeAction
 }
 
 function EditToolbar({
@@ -161,6 +165,7 @@ function EditToolbar({
 	onStartInspector,
 	onStartInspectorAppend,
 	isAppendPicking = false,
+	beforeAction,
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
 	const { emitFullscreenToggle } = usePPTEventBus()
@@ -528,6 +533,12 @@ function EditToolbar({
 		showVersionHistory && !isEditMode && fileId && onVersionChange && fetchFileVersions
 	const showRefreshButton = showRefresh && !isEditMode && onRefresh
 	const showShareButton = showShare && !isEditMode && isNewestVersion && allowShare && currentFile
+	const runToolbarAction = useCallback(
+		(action: () => void | Promise<void>) => {
+			void runGuardedAction(beforeAction, action)
+		},
+		[beforeAction],
+	)
 
 	return (
 		<div className={cn("h-12 w-full border-b border-border", className)} style={style}>
@@ -541,6 +552,7 @@ function EditToolbar({
 								fileVersionsList={fileVersionsList}
 								isNewestVersion={isNewestVersion}
 								onVersionChange={onVersionChange}
+								beforeAction={beforeAction}
 								showButtonText={shouldShowButtonText}
 								onRollback={
 									onVersionRollback ||
@@ -563,7 +575,9 @@ function EditToolbar({
 						<>
 							<ViewModeSwitcher
 								viewMode={viewMode}
-								onViewModeChange={onViewModeChange}
+								onViewModeChange={(mode) =>
+									runToolbarAction(() => onViewModeChange?.(mode))
+								}
 								isMobile={false}
 								enableMobileMode={false}
 							/>
@@ -581,7 +595,7 @@ function EditToolbar({
 						<Button
 							variant="secondary"
 							size="sm"
-							onClick={onViewServerUpdate}
+							onClick={() => runToolbarAction(() => onViewServerUpdate?.())}
 							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
 						>
 							<AlertTriangle size={16} className="text-amber-600" />
@@ -606,7 +620,7 @@ function EditToolbar({
 							isEditMode={isEditMode}
 							isSaving={isSaving}
 							showButtonText={shouldShowButtonText}
-							onEdit={onEdit}
+							onEdit={() => runToolbarAction(() => onEdit?.())}
 							onSave={onSave}
 							onSaveAndExit={onSaveAndExit}
 							onCancel={onCancel}
@@ -645,7 +659,7 @@ function EditToolbar({
 									className={cn(isRefreshing && "animate-spin")}
 								/>
 							}
-							onClick={onRefresh}
+							onClick={() => runToolbarAction(() => onRefresh?.())}
 							title={t("ppt.refreshCurrentSlide")}
 							text={t("ppt.refreshCurrentSlide")}
 							showText={shouldShowButtonText}
@@ -661,8 +675,10 @@ function EditToolbar({
 						<ActionButton
 							icon={isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
 							onClick={() => {
-								emitFullscreenToggle()
-								setIsFullscreen(!isFullscreen)
+								void runGuardedAction(beforeAction, () => {
+									emitFullscreenToggle()
+									setIsFullscreen(!isFullscreen)
+								})
 							}}
 							title={
 								isFullscreen
@@ -682,6 +698,7 @@ function EditToolbar({
 						<ExportDropdown
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}
+							beforeAction={beforeAction}
 							supportPPT={true}
 							supportCurrentPage={!!pptStore}
 							supportSpecificPages={!!pptStore}
@@ -811,7 +828,7 @@ function EditToolbar({
 						<ActionButton
 							data-testid="detail-header-action-item-share"
 							icon={<Share2 size={16} />}
-							onClick={() => void handleShare()}
+							onClick={() => runToolbarAction(() => handleShare())}
 							title={t("ppt.share")}
 							text={t("ppt.share")}
 							showText={shouldShowButtonText}

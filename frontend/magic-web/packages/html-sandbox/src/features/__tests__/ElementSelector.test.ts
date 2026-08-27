@@ -118,6 +118,24 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should include editable inline styles", () => {
+			container.innerHTML =
+				'<div id="inline-styled" style="color: red; --card-gap: 12px;">Content</div>'
+			const element = container.querySelector("#inline-styled") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					inlineStyles: {
+						color: "red",
+						"--card-gap": "12px",
+					},
+				}),
+			)
+		})
+
 		it("should include flex item and parent flex context in computed styles", () => {
 			container.innerHTML = `
 				<div id="layout" style="display: flex; flex-direction: row; align-items: stretch;">
@@ -313,6 +331,24 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should emit a host-requested hover without changing selection", () => {
+			container.innerHTML = "<div id='tree-hover-test'>Content</div>"
+			const element = container.querySelector("#tree-hover-test") as HTMLElement
+
+			selector.enable()
+			selector.hoverElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_HOVERED",
+				expect.objectContaining({ rect: expect.any(Object) }),
+			)
+			expect(selector.getSelectedCount()).toBe(0)
+
+			sendEventSpy.mockClear()
+			selector.clearHoveredElement()
+			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENT_HOVER_END", {})
+		})
+
 		it("should not emit hover when disabled", () => {
 			container.innerHTML = "<div id='hover-test'>Content</div>"
 			const element = container.querySelector("#hover-test") as HTMLElement
@@ -409,6 +445,26 @@ describe("ElementSelector", () => {
 			document.dispatchEvent(event)
 
 			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+		})
+
+		it("should keep selection when Escape was already consumed by the host", () => {
+			container.innerHTML = "<div id='test'>Content</div>"
+			const element = container.querySelector("#test") as HTMLElement
+
+			selector.enable()
+			selector.selectElement(element)
+			sendEventSpy.mockClear()
+
+			const event = new KeyboardEvent("keydown", {
+				key: "Escape",
+				bubbles: true,
+				cancelable: true,
+			})
+			event.preventDefault()
+			document.dispatchEvent(event)
+
+			expect(selector.getSelectedCount()).toBe(1)
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
 		})
 	})
 

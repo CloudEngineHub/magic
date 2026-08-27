@@ -289,6 +289,38 @@ describe("ImageManager", () => {
 		expect(mockElementSelector.selectElement).toHaveBeenCalledWith(insertedImage)
 	})
 
+	it("should size inserted document images to half of their parent width", async () => {
+		container.innerHTML = `<section id="image-parent"><p>Content</p></section>`
+
+		const runPromise = imageManager.runImageAction({
+			action: "insert-image-node",
+			parentSelector: "#image-parent",
+		})
+		const [messagePayload] = postMessageSpy.mock.calls[0] as [
+			{ type: string; data: ImageUploadRequestPayload },
+			string,
+		]
+
+		imageManager.handleUploadResult({
+			requestId: messagePayload.data.requestId,
+			action: "insert-image-node",
+			selector: "#image-parent",
+			success: true,
+			previewUrl: "data:image/png;base64,inserted",
+			relativeFilePath: "images/inserted.png",
+		})
+
+		await runPromise
+
+		const insertedImage = container.querySelector(
+			"img[data-original-path='images/inserted.png']",
+		) as HTMLImageElement | null
+		expect(insertedImage).toBeInstanceOf(HTMLImageElement)
+		expect(insertedImage?.style.width).toBe("50%")
+		expect(insertedImage?.style.height).toBe("auto")
+		expect(insertedImage?.style.maxWidth).toBe("100%")
+	})
+
 	it("should support undo and redo for inserted floating image", async () => {
 		const runPromise = imageManager.runImageAction({
 			action: "insert-floating-image",

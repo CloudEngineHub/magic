@@ -9,6 +9,7 @@ import {
 	IframeZoomRequestPayload,
 	ImageActionPayload,
 } from "../iframe-bridge/types/messages"
+import type { DomTreeNode, DomTreeResponse } from "../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../iframe-bridge/types/props"
 import { filterInjectedTags } from "../utils"
 
@@ -34,7 +35,7 @@ interface UseHTMLEditorV2Options {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	/** 文件 ID */
 	fileId?: string
 	/** 文件路径映射 */
@@ -45,6 +46,8 @@ interface UseHTMLEditorV2Options {
 	isPptRender?: boolean
 	/** zoom request callback from iframe */
 	onZoomRequest?: (delta: number) => void
+	/** iframe 内容发生变化时通知宿主刷新依赖内容结构的视图 */
+	onContentChanged?: () => void
 }
 
 /**
@@ -66,12 +69,13 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		editorRef,
 		isPptRender,
 		onZoomRequest,
+		onContentChanged,
 	} = options
 
 	const stylePanelStore = useStylePanelStore()
 	const messageBridgeRef = useRef<MessageBridge | null>(null)
 	const [isRuntimeReady, setIsRuntimeReady] = useState(false)
-	const hasInjectedScriptRef = useRef(false)
+	const activationRetryTimerRef = useRef<number | null>(null)
 	const prevContentInjectedRef = useRef(false)
 	const contentInjectedRef = useRef(contentInjected)
 	// 记录早于 contentInjected 恢复到达的 EDITOR_READY
@@ -80,11 +84,20 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const desiredEditModeRef = useRef(Boolean(isEditMode))
 	const stylePanelStoreRef = useRef(stylePanelStore)
 	const onZoomRequestRef = useRef(onZoomRequest)
+	const onContentChangedRef = useRef(onContentChanged)
 	const editTransitionIdRef = useRef(0)
 	const editLifecycleRef = useRef<"idle" | "activating" | "active" | "deactivating">("idle")
 
+	const clearActivationRetry = useCallback(() => {
+		if (activationRetryTimerRef.current !== null) {
+			window.clearTimeout(activationRetryTimerRef.current)
+			activationRetryTimerRef.current = null
+		}
+	}, [])
+
 	stylePanelStoreRef.current = stylePanelStore
 	onZoomRequestRef.current = onZoomRequest
+	onContentChangedRef.current = onContentChanged
 	desiredEditModeRef.current = Boolean(isEditMode)
 	contentInjectedRef.current = contentInjected
 
@@ -170,8 +183,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		// 监听 EDITOR_READY 事件
 		bridge.on("EDITOR_READY", () => {
 			console.log("[useHTMLEditorV2] iframe-runtime 已准备就绪")
+			clearActivationRetry()
 			// 跨域刷新时，ready 可能早于宿主状态恢复
-			if (!contentInjected || !contentInjectedRef.current) {
+			if (!contentInjectedRef.current) {
 				hasPendingRuntimeReadyRef.current = true
 			}
 			setIsRuntimeReady(true)
@@ -190,6 +204,8 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				intrinsicHeight: payload.intrinsicHeight,
 				intrinsicAspectRatio: payload.intrinsicAspectRatio,
 				isTextElement: payload.isTextElement,
+				textContent: payload.textContent,
+				inlineStyles: payload.inlineStyles,
 				computedStyles: payload.computedStyles,
 			})
 		})
@@ -199,9 +215,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			const store = stylePanelStoreRef.current
 			// Only clear selected elements, but keep selection mode active
 			// This is important during operations like zooming where selection should persist
-			store.selectedElement = null
-			store.selectedElements = []
-			store.textSelection = null
+			store.clearSelectedElements()
 			// Do NOT set isSelectionMode = false here!
 		})
 
@@ -222,6 +236,10 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			})
 		})
 
+		bridge.on(EditorMessageType.CONTENT_CHANGED, () => {
+			onContentChangedRef.current?.()
+		})
+
 		// Listen to zoom requests from iframe (trackpad pinch-to-zoom)
 		bridge.on(EditorMessageType.IFRAME_ZOOM_REQUEST, (message) => {
 			if (onZoomRequestRef.current && message.payload) {
@@ -231,6 +249,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		})
 
 		return () => {
+			clearActivationRetry()
 			if (bridge.isActive()) {
 				console.log("[useHTMLEditorV2] Cleaning up MessageBridge")
 				bridge.destroy()
@@ -243,7 +262,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			setIsRuntimeReady(false)
 			editLifecycleRef.current = "idle"
 		}
-	}, [sandboxType, iframeLoaded, iframeRef, targetOrigin])
+	}, [clearActivationRetry, sandboxType, iframeLoaded, iframeRef, targetOrigin])
 
 	// 创建编辑器 ref 接口（实现 HTMLEditorV2Ref）
 	useImperativeHandle(
@@ -473,9 +492,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 							console.debug("清除选中元素:", error.message || error)
 						})
 				}
-				// Clear only the selected element in StylePanelStore (keep selection mode active)
-				// Note: Don't use clearSelection() as it also sets isSelectionMode to false
-				stylePanelStore.selectedElement = null
+				// Clear all selected items in StylePanelStore while keeping selection mode active.
+				// Note: Don't use clearSelection() as it also sets isSelectionMode to false.
+				stylePanelStore.clearSelectedElements()
 			},
 			selectElement: async (selector: string) => {
 				if (!messageBridgeRef.current) return
@@ -490,6 +509,96 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 						computedStyles: response.styles,
 					})
 				}
+			},
+			getDomTree: async () => {
+				// DOM structure handlers are registered by EditorRuntime. Returning null
+				// before EDITOR_READY lets the panel retry instead of waiting for a bridge
+				// timeout while the iframe is still activating.
+				if (!messageBridgeRef.current || !isRuntimeReady || !contentInjected) return null
+				return await messageBridgeRef.current.request(EditorMessageType.GET_DOM_TREE)
+			},
+			selectDomNode: async (nodeId: string) => {
+				if (!messageBridgeRef.current || !isRuntimeReady || !contentInjected) return
+				await messageBridgeRef.current.request(EditorMessageType.SELECT_ELEMENT, { nodeId })
+			},
+			hoverDomNode: async (nodeId: string) => {
+				if (!messageBridgeRef.current || !isRuntimeReady || !contentInjected) return
+				await messageBridgeRef.current.request(EditorMessageType.HOVER_ELEMENT, { nodeId })
+			},
+			clearHoveredDomNode: async () => {
+				if (!messageBridgeRef.current || !isRuntimeReady || !contentInjected) return
+				await messageBridgeRef.current.request(EditorMessageType.CLEAR_HOVER_ELEMENT)
+			},
+			scrollToDomNode: async (nodeId: string) => {
+				if (!messageBridgeRef.current || !isRuntimeReady || !contentInjected) return
+				await messageBridgeRef.current.request(EditorMessageType.SCROLL_TO_ELEMENT, {
+					nodeId,
+				})
+			},
+			moveDomNode: async (nodeId: string, targetParentId: string, targetIndex: number) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.MOVE_DOM_NODE,
+					{ nodeId, targetParentId, targetIndex },
+					{ description: "调整 DOM 层级", canUndo: true },
+				)
+			},
+			insertTextNode: async (parentNodeId: string, textContent: string, index?: number) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.INSERT_TEXT_NODE,
+					{ parentNodeId, textContent, index },
+					{ description: "新增文字", canUndo: true },
+				)
+			},
+			insertImageNode: async (parentNodeId: string, index?: number) => {
+				if (!messageBridgeRef.current) return
+				const tree = await messageBridgeRef.current.request<DomTreeResponse>(
+					EditorMessageType.GET_DOM_TREE,
+				)
+				const findNode = (node?: DomTreeNode): DomTreeNode | null => {
+					if (node?.nodeId === parentNodeId) return node
+					for (const child of node?.children || []) {
+						const result = findNode(child)
+						if (result) return result
+					}
+					return null
+				}
+				const parent = findNode(tree?.root)
+				if (!parent?.selector) throw new Error("未找到图片插入目标")
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.RUN_IMAGE_ACTION,
+					{ action: "insert-image-node", parentSelector: parent.selector, index },
+					{ description: "新增图片", canUndo: true },
+				)
+			},
+			copyDomNode: async (nodeId: string) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.request(EditorMessageType.COPY_DOM_NODE, { nodeId })
+			},
+			duplicateDomNode: async (nodeId: string) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.DUPLICATE_DOM_NODE,
+					{ nodeId },
+					{ description: "复制 DOM 节点", canUndo: true },
+				)
+			},
+			cutDomNode: async (nodeId: string) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.CUT_DOM_NODE,
+					{ nodeId },
+					{ description: "剪切 DOM 节点", canUndo: true },
+				)
+			},
+			pasteDomNode: async (targetParentId: string, targetIndex?: number) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.PASTE_DOM_NODE,
+					{ targetParentId, targetIndex },
+					{ description: "粘贴 DOM 节点", canUndo: true },
+				)
 			},
 			getElementComputedStyles: async (selector: string) => {
 				if (!messageBridgeRef.current) return {}
@@ -588,6 +697,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 					"set-element-background-image": "设置背景图",
 					"remove-element-background-image": "移除背景图",
 					"insert-floating-image": "新增图片",
+					"insert-image-node": "新增图片",
 				}
 
 				await messageBridgeRef.current.sendCommand(
@@ -632,11 +742,21 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				return response?.styles || {}
 			},
 		}),
-		[iframeRef, fileId, saveEditContent, filePathMapping, isPptRender, stylePanelStore],
+		[
+			iframeRef,
+			fileId,
+			saveEditContent,
+			filePathMapping,
+			isPptRender,
+			stylePanelStore,
+			isRuntimeReady,
+			contentInjected,
+		],
 	)
 
-	// 处理编辑模式变化，动态注入编辑脚本
-	// 确保内容已注入后再启用编辑模式，避免编辑脚本找不到 DOM 元素
+	// 处理编辑模式变化，动态激活编辑 runtime。
+	// setContent 会重建 iframe 文档并重新绑定 shell 监听器，首次 postMessage
+	// 可能落在监听器重建窗口内，因此在 runtime 回报 EDITOR_READY 前做有限次数重试。
 	useEffect(() => {
 		const wasEditMode = prevIsEditModeRef.current
 		const nextIsEditMode = Boolean(isEditMode)
@@ -645,8 +765,13 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		// 当 contentInjected 从 false 变为 true 时，重置激活标记和 runtime 状态。
 		// setContent 会替换 iframe 文档，shell 内联 runtime 会重新安装，需要再次发送激活消息。
 		if (contentInjected && !prevContentInjectedRef.current) {
-			hasInjectedScriptRef.current = false
-			setIsRuntimeReady(false)
+			clearActivationRetry()
+			if (hasPendingRuntimeReadyRef.current) {
+				hasPendingRuntimeReadyRef.current = false
+				setIsRuntimeReady(true)
+			} else {
+				setIsRuntimeReady(false)
+			}
 		}
 		// 更新 prevContentInjectedRef
 		prevContentInjectedRef.current = contentInjected
@@ -669,9 +794,24 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			iframeLoaded &&
 			contentInjected
 		) {
-			try {
-				// The shell already contains the runtime; activate it once per content document.
-				if (!hasInjectedScriptRef.current) {
+			clearActivationRetry()
+			let attempts = 0
+			const maxAttempts = 8
+
+			const activateRuntime = () => {
+				if (
+					isRuntimeReady ||
+					!iframeRef.current?.contentWindow ||
+					!contentInjected ||
+					!desiredEditModeRef.current ||
+					attempts >= maxAttempts
+				) {
+					clearActivationRetry()
+					return
+				}
+
+				attempts += 1
+				try {
 					// iframe-runtime.js 已经通过 shell 内联在 HTML 中，
 					// 这里只需发送激活消息触发 Phase 2 编辑器运行时。
 					iframeRef.current.contentWindow.postMessage(
@@ -681,19 +821,30 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 						},
 						targetOrigin,
 					)
-					hasInjectedScriptRef.current = true
-					console.log("[useHTMLEditorV2] 已发送编辑器激活消息")
+					if (attempts === 1) {
+						console.log("[useHTMLEditorV2] 已发送编辑器激活消息")
+					}
+				} catch (error) {
+					console.error("处理编辑模式变化时出错:", error)
 				}
-			} catch (error) {
-				console.error("处理编辑模式变化时出错:", error)
+
+				if (!isRuntimeReady && attempts < maxAttempts) {
+					activationRetryTimerRef.current = window.setTimeout(activateRuntime, 350)
+				}
 			}
+
+			activateRuntime()
 		}
+
+		return clearActivationRetry
 	}, [
+		clearActivationRetry,
 		isEditMode,
 		sandboxType,
 		iframeLoaded,
 		contentInjected,
 		iframeRef,
+		isRuntimeReady,
 		scaleRatio,
 		runExitEditFlow,
 		targetOrigin,

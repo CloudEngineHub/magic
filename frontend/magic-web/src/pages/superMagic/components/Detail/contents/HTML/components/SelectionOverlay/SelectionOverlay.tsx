@@ -27,6 +27,9 @@ interface SelectionOverlayProps {
 	disabled?: boolean
 	className?: string
 	onSelectedElementChange?: (rect: ElementRect | null) => void
+	onSelectedElementViewportChange?: (rect: (ElementRect & { selector?: string }) | null) => void
+	onElementMoveStart?: () => void
+	onElementMoveEnd?: () => void
 }
 
 export const SelectionOverlay = memo(function SelectionOverlay({
@@ -39,6 +42,9 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	disabled = false,
 	className,
 	onSelectedElementChange,
+	onSelectedElementViewportChange,
+	onElementMoveStart,
+	onElementMoveEnd,
 }: SelectionOverlayProps) {
 	const [selectedInfoList, setSelectedInfoList] = useState<SelectedInfo[]>([])
 	const [hoveredRect, setHoveredRect] = useState<ElementRect | null>(null)
@@ -55,15 +61,44 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 
 	// Notify parent component when selected element changes (with stable callback)
 	const selectedRectRef = useRef<ElementRect | null>(null)
+	const viewportRectRef = useRef<string>("")
 	const selectedRect = useMemo(() => selectedInfo?.rect || null, [selectedInfo])
 
 	useEffect(() => {
 		// Only notify if rect actually changed to prevent unnecessary parent updates
-		if (onSelectedElementChange && selectedRectRef.current !== selectedRect) {
-			selectedRectRef.current = selectedRect
-			onSelectedElementChange(selectedRect)
+		if (onSelectedElementChange || onSelectedElementViewportChange) {
+			const viewportRect = selectedRect
+				? transformRect(
+						selectedRect,
+						iframeRef,
+						isPptRender,
+						scaleRatio,
+						selectedInfo?.selector,
+					)
+				: null
+			if (onSelectedElementChange && selectedRectRef.current !== selectedRect) {
+				selectedRectRef.current = selectedRect
+				onSelectedElementChange(selectedRect)
+			}
+			const anchorKey = viewportRect
+				? `${selectedInfo?.selector ?? ""}:${viewportRect.top}:${viewportRect.left}:${viewportRect.width}:${viewportRect.height}`
+				: ""
+			if (onSelectedElementViewportChange && viewportRectRef.current !== anchorKey) {
+				viewportRectRef.current = anchorKey
+				onSelectedElementViewportChange(
+					viewportRect ? { ...viewportRect, selector: selectedInfo?.selector } : null,
+				)
+			}
 		}
-	}, [selectedRect, onSelectedElementChange])
+	}, [
+		iframeRef,
+		isPptRender,
+		scaleRatio,
+		selectedInfo?.selector,
+		selectedRect,
+		onSelectedElementChange,
+		onSelectedElementViewportChange,
+	])
 
 	// Handle messages from iframe
 	useSelectionMessages({
@@ -154,6 +189,8 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		setSelectedInfoList,
 		setHoveredRect,
 		setIsSelectionMode,
+		onMoveStart: onElementMoveStart,
+		onMoveEnd: onElementMoveEnd,
 	})
 
 	// Transform hover rect (memoized)
@@ -287,6 +324,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	return (
 		<div
 			ref={overlayRef}
+			data-html-selection-overlay="true"
 			className={cn("pointer-events-none", className)}
 			style={{
 				position: "fixed",

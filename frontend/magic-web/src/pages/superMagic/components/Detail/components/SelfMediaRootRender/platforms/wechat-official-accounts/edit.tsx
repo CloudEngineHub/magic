@@ -27,6 +27,7 @@ import { RednoteEditRefreshConfirmDialog } from "../rednote/RednoteEditRefreshCo
 import { RednoteEditSaveStatusIndicator } from "../rednote/RednoteEditSaveStatusIndicator"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import { selfMediaOverlayStyles } from "../../components/selfMediaOverlayStyles"
+import { usePendingActionGuard } from "../../../../utils/usePendingActionGuard"
 
 type SaveStatus = "idle" | "saving" | "saved" | "error"
 
@@ -92,7 +93,7 @@ function WechatEditView({
 	const [showSaveRetryDialog, setShowSaveRetryDialog] = useState(false)
 	const [showUnsavedNavDialog, setShowUnsavedNavDialog] = useState(false)
 	const [showRefreshConfirmDialog, setShowRefreshConfirmDialog] = useState(false)
-	const pendingActionRef = useRef<(() => void) | null>(null)
+	const saveRetryTargetRef = useRef<"navigation" | "refresh" | null>(null)
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
 	const [contentReloadVersion, setContentReloadVersion] = useState(0)
@@ -101,6 +102,31 @@ function WechatEditView({
 		isDirtyRef.current = nextDirty
 		setHasUnsavedChanges((prev) => (prev === nextDirty ? prev : nextDirty))
 	}, [])
+
+	const shouldBlockPendingAction = useCallback(
+		() => isEditMode && isDirtyRef.current,
+		[isEditMode],
+	)
+	const handleNavigationBlocked = useCallback(() => {
+		setShowUnsavedNavDialog(true)
+	}, [])
+	const handleRefreshBlocked = useCallback(() => {
+		setShowRefreshConfirmDialog(true)
+	}, [])
+	const navigationGuard = usePendingActionGuard({
+		shouldBlock: shouldBlockPendingAction,
+		onBlocked: handleNavigationBlocked,
+	})
+	const refreshGuard = usePendingActionGuard({
+		shouldBlock: shouldBlockPendingAction,
+		onBlocked: handleRefreshBlocked,
+	})
+	const {
+		run: runNavigation,
+		resolve: resolveNavigation,
+		cancel: cancelNavigation,
+	} = navigationGuard
+	const { run: runRefresh, resolve: resolveRefresh, cancel: cancelRefresh } = refreshGuard
 
 	const flattenedFiles = useMemo(
 		() =>
@@ -195,15 +221,6 @@ function WechatEditView({
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
-	const runPendingAction = useCallback(() => {
-		pendingActionRef.current?.()
-		pendingActionRef.current = null
-	}, [])
-
-	const clearPendingAction = useCallback(() => {
-		pendingActionRef.current = null
-	}, [])
-
 	const executeSave = useMemoizedFn(async (): Promise<boolean> => {
 		if (!triggerSaveRef) return false
 		setIsSaving(true)
@@ -238,15 +255,14 @@ function WechatEditView({
 	const runNavigationAfterSave = useMemoizedFn(async (action: () => void) => {
 		if (!isEditMode || !isDirtyRef.current) {
 			action()
-			return
+			return true
 		}
-		pendingActionRef.current = () => {
+
+		return runNavigation(() => {
 			setDirtyState(false)
 			setIsEditMode(false)
 			action()
-		}
-		// Show confirm dialog instead of auto-saving
-		setShowUnsavedNavDialog(true)
+		}, undefined)
 	})
 
 	const reloadArticle = useMemoizedFn(() => {
@@ -262,12 +278,7 @@ function WechatEditView({
 	})
 
 	const runRefreshAfterGuard = useMemoizedFn((action: () => void) => {
-		if (!isEditMode || !isDirtyRef.current) {
-			action()
-			return
-		}
-		pendingActionRef.current = action
-		setShowRefreshConfirmDialog(true)
+		return runRefresh(action, undefined)
 	})
 
 	useEffect(() => {
@@ -348,39 +359,48 @@ function WechatEditView({
 		const saved = await executeSave()
 		if (saved) {
 			setShowSaveRetryDialog(false)
-			runPendingAction()
+			const target = saveRetryTargetRef.current
+			saveRetryTargetRef.current = null
+			if (target === "navigation") await resolveNavigation(true)
+			if (target === "refresh") await resolveRefresh(true)
 		}
-	}, [executeSave, runPendingAction])
+	}, [executeSave, resolveNavigation, resolveRefresh])
 
 	const handleDiscardAfterFailedSave = useCallback(() => {
 		setShowSaveRetryDialog(false)
 		setDirtyState(false)
-		reloadArticle()
-		runPendingAction()
-	}, [runPendingAction, setDirtyState, reloadArticle])
+		const target = saveRetryTargetRef.current
+		saveRetryTargetRef.current = null
+		if (target === "navigation") {
+			reloadArticle()
+			void resolveNavigation(true)
+		}
+		if (target === "refresh") void resolveRefresh(true)
+	}, [reloadArticle, resolveNavigation, resolveRefresh, setDirtyState])
 
 	// ===== Unsaved nav dialog handlers =====
 	const handleSaveBeforeNav = useCallback(async () => {
 		setShowUnsavedNavDialog(false)
 		const saved = await executeSave()
 		if (saved) {
-			runPendingAction()
+			await resolveNavigation(true)
 			return
 		}
+		saveRetryTargetRef.current = "navigation"
 		setShowSaveRetryDialog(true)
-	}, [executeSave, runPendingAction])
+	}, [executeSave, resolveNavigation])
 
 	const handleDiscardBeforeNav = useCallback(() => {
 		setShowUnsavedNavDialog(false)
 		setDirtyState(false)
 		reloadArticle()
-		runPendingAction()
-	}, [runPendingAction, setDirtyState, reloadArticle])
+		void resolveNavigation(true)
+	}, [reloadArticle, resolveNavigation, setDirtyState])
 
 	const handleCancelNav = useCallback(() => {
 		setShowUnsavedNavDialog(false)
-		clearPendingAction()
-	}, [clearPendingAction])
+		cancelNavigation()
+	}, [cancelNavigation])
 
 	const handleCancelEdit = useCallback(() => {
 		setDirtyState(false)
@@ -391,23 +411,24 @@ function WechatEditView({
 		const saved = await executeSave()
 		if (saved) {
 			setShowRefreshConfirmDialog(false)
-			runPendingAction()
+			await resolveRefresh(true)
 			return
 		}
 		setShowRefreshConfirmDialog(false)
+		saveRetryTargetRef.current = "refresh"
 		setShowSaveRetryDialog(true)
-	}, [executeSave, runPendingAction])
+	}, [executeSave, resolveRefresh])
 
 	const handleDiscardBeforeRefresh = useCallback(() => {
 		setShowRefreshConfirmDialog(false)
 		setDirtyState(false)
-		runPendingAction()
-	}, [runPendingAction, setDirtyState])
+		void resolveRefresh(true)
+	}, [resolveRefresh, setDirtyState])
 
 	const handleCancelRefreshConfirm = useCallback(() => {
 		setShowRefreshConfirmDialog(false)
-		clearPendingAction()
-	}, [clearPendingAction])
+		cancelRefresh()
+	}, [cancelRefresh])
 
 	const openNewTab = useCallback(() => {
 		// No-op in edit view context

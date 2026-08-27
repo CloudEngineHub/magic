@@ -11,6 +11,12 @@ export interface SelectedElementInfo {
 	tagName: string
 	/** 是否为图片元素 */
 	isImageElement?: boolean
+	/** 是否主要由文字组成 */
+	isTextElement?: boolean
+	/** 元素当前的文本内容 */
+	textContent?: string
+	/** 元素当前的内联 CSS 声明 */
+	inlineStyles?: Record<string, string>
 	/** 图片原始宽度 */
 	intrinsicWidth?: number
 	/** 图片原始高度 */
@@ -37,6 +43,7 @@ export interface SelectedElementInfo {
 		width: string
 		height: string
 		display: string
+		parentDisplay?: string
 		position: string
 
 		// 边距
@@ -62,18 +69,43 @@ export interface SelectedElementInfo {
 		flexDirection: string
 		justifyContent: string
 		alignItems: string
+		alignContent?: string
 		flexWrap: string
+		flexGrow?: string
+		flexShrink?: string
+		flexBasis?: string
+		alignSelf?: string
+		order?: string
 		gap: string
+		rowGap?: string
+		columnGap?: string
 
 		// Grid 布局
 		gridTemplateColumns: string
 		gridTemplateRows: string
+		gridAutoFlow?: string
+		gridAutoColumns?: string
+		gridAutoRows?: string
+		gridColumn?: string
+		gridRow?: string
 		justifyItems: string
+		justifySelf?: string
+
+		// 图片
+		objectFit?: string
+		objectPosition?: string
 
 		// 阴影与效果
 		opacity: string
 		boxShadow: string
 		textShadow: string
+	}
+	/** 当前节点的 HTML 属性，非 CSS 样式 */
+	attributes?: {
+		src?: string
+		alt?: string
+		title?: string
+		href?: string
 	}
 }
 
@@ -81,6 +113,8 @@ export interface SelectedElementInfo {
  * StylePanel 组件 Props
  */
 export interface StylePanelProps {
+	/** 渲染模式：完整工具栏、顶部全局栏或元素上下文栏 */
+	variant?: "full" | "global" | "context"
 	/** HTMLEditorV2 的 ref 引用 */
 	editorRef: React.RefObject<HTMLEditorV2Ref>
 
@@ -95,6 +129,10 @@ export interface StylePanelProps {
 
 	/** Mount node for portaled toolbar actions (e.g. save), shown at far right */
 	toolbarEndRef?: Ref<HTMLDivElement | null>
+	/** Whether the DOM tree panel is open in the HTML editor. */
+	domTreeOpen?: boolean
+	/** Toggle the DOM tree panel from the global toolbar. */
+	onToggleDomTree?: () => void
 
 	/** Whether the element inspector is currently active */
 	inspectorActive?: boolean
@@ -115,6 +153,8 @@ export interface StyleSectionProps {
 
 	/** 样式变化回调 */
 	onStyleChange?: (property: string, value: string) => void
+	/** Hide width and height fields when a parent panel already renders them. */
+	showDimensions?: boolean
 }
 
 /**

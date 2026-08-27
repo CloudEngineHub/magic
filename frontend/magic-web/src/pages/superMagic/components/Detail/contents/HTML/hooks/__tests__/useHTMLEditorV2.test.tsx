@@ -14,6 +14,7 @@ const bridgeState = vi.hoisted(() => ({
 		emit: (type: string, payload?: unknown) => void
 	}>,
 	requests: [] as string[],
+	activationMessages: [] as unknown[],
 }))
 
 vi.mock("@/utils/env", () => ({
@@ -23,6 +24,7 @@ vi.mock("@/utils/env", () => ({
 vi.mock("../../iframe-bridge/contexts/StylePanelContext", () => ({
 	useStylePanelStore: () => ({
 		reset: vi.fn(),
+		clearSelectedElements: vi.fn(),
 		selectElement: vi.fn(),
 		setSelectionMode: vi.fn(),
 		updateHistoryState: vi.fn(),
@@ -62,7 +64,9 @@ function createIframeRef() {
 	const iframe = document.createElement("iframe")
 	Object.defineProperty(iframe, "contentWindow", {
 		value: {
-			postMessage: vi.fn(),
+			postMessage: vi.fn((message: unknown) => {
+				bridgeState.activationMessages.push(message)
+			}),
 		},
 		configurable: true,
 	})
@@ -98,6 +102,32 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 	beforeEach(() => {
 		bridgeState.instances.length = 0
 		bridgeState.requests.length = 0
+		bridgeState.activationMessages.length = 0
+	})
+
+	it("retries runtime activation until the iframe confirms readiness", async () => {
+		vi.useFakeTimers()
+		try {
+			render(<TestHarness isEditMode />)
+
+			await act(async () => {
+				await Promise.resolve()
+			})
+			expect(bridgeState.activationMessages).toHaveLength(1)
+
+			act(() => {
+				vi.advanceTimersByTime(350)
+			})
+			expect(bridgeState.activationMessages).toHaveLength(2)
+
+			act(() => {
+				bridgeState.instances[0].emit("EDITOR_READY")
+				vi.advanceTimersByTime(2_000)
+			})
+			expect(bridgeState.activationMessages).toHaveLength(2)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("re-enters edit and selection mode after cancelling edit without waiting for a second runtime ready event", async () => {

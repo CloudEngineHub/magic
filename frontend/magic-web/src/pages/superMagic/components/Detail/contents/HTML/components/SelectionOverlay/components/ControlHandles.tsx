@@ -48,7 +48,7 @@ export function ControlHandles({
 			<div
 				role="button"
 				aria-label="Move element"
-				className="pointer-events-auto absolute flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-primary shadow-md transition-transform hover:scale-110"
+				className="pointer-events-auto absolute flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-primary shadow-md transition-transform duration-150 ease-out hover:scale-105 active:scale-[0.96] motion-reduce:transition-none"
 				style={{
 					top: -14,
 					left: -14,
@@ -66,7 +66,7 @@ export function ControlHandles({
 				<div
 					role="button"
 					aria-label="Duplicate element"
-					className="pointer-events-auto absolute flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-blue-500 shadow-md transition-transform hover:scale-110"
+					className="pointer-events-auto absolute flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-blue-500 shadow-md transition-transform duration-150 ease-out hover:scale-105 active:scale-[0.96] motion-reduce:transition-none"
 					style={{
 						top: -14,
 						right: 20,
@@ -85,7 +85,7 @@ export function ControlHandles({
 				<div
 					role="button"
 					aria-label="Delete element"
-					className="pointer-events-auto absolute flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-destructive shadow-md transition-transform hover:scale-110"
+					className="pointer-events-auto absolute flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-destructive shadow-md transition-transform duration-150 ease-out hover:scale-105 active:scale-[0.96] motion-reduce:transition-none"
 					style={{
 						top: -14,
 						right: -14,
@@ -132,7 +132,7 @@ export function ControlHandles({
 				<div
 					role="button"
 					aria-label="Rotate element"
-					className="pointer-events-auto flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-primary shadow-md transition-transform hover:scale-110"
+					className="pointer-events-auto flex h-6 w-6 touch-none items-center justify-center rounded-full border-2 border-background bg-primary shadow-md transition-transform duration-150 ease-out hover:scale-105 active:scale-[0.96] motion-reduce:transition-none"
 					style={{
 						cursor: "grab",
 					}}

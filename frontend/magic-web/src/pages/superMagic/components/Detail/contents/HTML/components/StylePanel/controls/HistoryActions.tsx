@@ -7,6 +7,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Undo2, Redo2 } from "lucide-react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 
 interface HistoryActionsProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -89,7 +90,7 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-8 w-8"
+							className="h-7 w-7 rounded-md p-0"
 							onClick={handleUndo}
 							disabled={!canUndo}
 						>
@@ -97,7 +98,9 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 						</Button>
 					</span>
 				</TooltipTrigger>
-				<TooltipContent>{t("stylePanel.undo")}</TooltipContent>
+				<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+					{t("stylePanel.undo")}
+				</TooltipContent>
 			</TooltipPrimitive.Root>
 			<TooltipPrimitive.Root>
 				<TooltipTrigger asChild>
@@ -105,7 +108,7 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-8 w-8"
+							className="h-7 w-7 rounded-md p-0"
 							onClick={handleRedo}
 							disabled={!canRedo}
 						>
@@ -113,7 +116,9 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 						</Button>
 					</span>
 				</TooltipTrigger>
-				<TooltipContent>{t("stylePanel.redo")}</TooltipContent>
+				<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+					{t("stylePanel.redo")}
+				</TooltipContent>
 			</TooltipPrimitive.Root>
 		</div>
 	)

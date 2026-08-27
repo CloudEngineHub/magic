@@ -46,6 +46,8 @@ import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
+import type { BeforeAction } from "../../utils/actionGuard"
+import { runGuardedAction } from "../../utils/actionGuard"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
@@ -121,7 +123,7 @@ interface HTMLProps {
 		fileId?: string,
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	allowEdit?: boolean
 	// New props for ActionButtons functionality
 	viewMode?: "code" | "desktop" | "phone"
@@ -183,6 +185,7 @@ interface HtmlExportActionProps {
 	showExportPptx?: boolean
 	showExportImage?: boolean
 	showExportRasterPdf?: boolean
+	beforeAction?: BeforeAction
 }
 
 const HtmlExportAction = memo(function HtmlExportAction({
@@ -198,6 +201,7 @@ const HtmlExportAction = memo(function HtmlExportAction({
 	showExportPptx,
 	showExportImage,
 	showExportRasterPdf,
+	beforeAction,
 }: HtmlExportActionProps) {
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
@@ -212,6 +216,7 @@ const HtmlExportAction = memo(function HtmlExportAction({
 		showExportPptx,
 		showExportImage,
 		showExportRasterPdf,
+		beforeAction,
 	})
 
 	return ExportDropdownButton
@@ -839,6 +844,10 @@ export default memo(function HTML(props: HTMLProps) {
 			onSave: handleSave,
 			onSaveAndExit: handleSaveAndExit,
 			onCancel: handleCancel,
+			onEscape: () =>
+				htmlRendererRef.current?.consumeInspectorEscape?.() ||
+				htmlRendererRef.current?.closeElementContextPanel?.() ||
+				false,
 		})
 		const virtualStorageMessageHandler = createVirtualStorageMessageHandler()
 
@@ -945,16 +954,19 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	})
 
-	const performSave = useMemoizedFn(async () => {
+	const performSave = useMemoizedFn(async (): Promise<boolean> => {
 		setIsEditingAfter(true)
 		if (viewMode === "code" && editingCodeContent) {
 			// 保存代码编辑内容
-			await saveEditContent?.(
+			const saveResult = await saveEditContent?.(
 				shadow(editingCodeContent),
 				displayData?.file_id,
 				true,
 				fetchHtmlFileVersions,
 			)
+			// Older integrations do not return a value; only an explicit false means
+			// that the persistence request failed.
+			if (saveResult === false) return false
 			// Code mode saves exactly the editor text, so we can cache it directly.
 			lastLocalSavedContentRef.current = editingCodeContent
 			editSessionBaselineContentRef.current = editingCodeContent
@@ -966,6 +978,7 @@ export default memo(function HTML(props: HTMLProps) {
 			const result = await saveFunction()
 			if (result && !result.success) {
 				console.error("[HTML Editor] 保存失败", result)
+				return false
 			}
 			if (result?.success) {
 				// Visual mode returns the cleaned HTML that will be stored on the server.
@@ -976,6 +989,7 @@ export default memo(function HTML(props: HTMLProps) {
 		setShowSaveWithUpdateConfirmDialog(false)
 		clearServerUpdate()
 		// 不再退出编辑模式
+		return true
 	})
 
 	const exitEditModeAfterSave = useMemoizedFn(() => {
@@ -1291,11 +1305,13 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-server-update",
 					zone: "primary",
 					visible: () => Boolean(isEditMode && hasServerUpdate),
-					render: () => (
+					render: (context) => (
 						<Button
 							variant="secondary"
 							size="sm"
-							onClick={handleViewServerUpdate}
+							onClick={() =>
+								void runGuardedAction(context.beforeAction, handleViewServerUpdate)
+							}
 							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
 							data-testid="html-server-update-button"
 						>
@@ -1316,7 +1332,7 @@ export default memo(function HTML(props: HTMLProps) {
 									attachmentList={attachmentList}
 									fileId={displayData?.file_id}
 									onStartInspector={() => {
-										htmlRendererRef.current?.startInspector()
+										htmlRendererRef.current?.startInspectorAppend()
 									}}
 								/>
 							)}
@@ -1326,6 +1342,10 @@ export default memo(function HTML(props: HTMLProps) {
 									isSaving={false}
 									showButtonText
 									onEdit={handleEdit}
+									beforeAction={() =>
+										htmlRendererRef.current?.requestInspectorExit?.() ??
+										Promise.resolve(true)
+									}
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
@@ -1365,7 +1385,12 @@ export default memo(function HTML(props: HTMLProps) {
 					render: (context) => (
 						<ActionButton
 							icon={<ShieldCheck size={16} />}
-							onClick={handleOpenHtmlPermissionManager}
+							onClick={() =>
+								void runGuardedAction(
+									context.beforeAction,
+									handleOpenHtmlPermissionManager,
+								)
+							}
 							title={t("htmlEditor.permissionManager.open")}
 							text={t("htmlEditor.permissionManager.open")}
 							showText={context.showButtonText}
@@ -1392,6 +1417,7 @@ export default memo(function HTML(props: HTMLProps) {
 							showExportPptx={isConvertibleFile(displayData, ["html"])}
 							showExportImage={isConvertibleFile(displayData, ["html"])}
 							showExportRasterPdf
+							beforeAction={context.beforeAction}
 						/>
 					),
 				},
@@ -1443,6 +1469,8 @@ export default memo(function HTML(props: HTMLProps) {
 				displayData?.file_id,
 			),
 		fileContent: fileContent || processedContent,
+		beforeAction: () =>
+			htmlRendererRef.current?.requestInspectorExit?.() ?? Promise.resolve(true),
 		currentFile,
 		detailMode,
 		showDownload: showDownloadButton && !showExportButton,

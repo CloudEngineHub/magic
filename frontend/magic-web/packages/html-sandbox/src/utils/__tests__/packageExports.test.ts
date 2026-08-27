@@ -8,7 +8,7 @@ interface PackageJson {
 describe("package exports", () => {
 	it("exposes parentOrigin for external runtime plugins", () => {
 		const packageJson = JSON.parse(
-			readFileSync(resolve(process.cwd(), "package.json"), "utf8"),
+			readFileSync(resolve(__dirname, "../../../package.json"), "utf8"),
 		) as PackageJson
 
 		expect(packageJson.exports?.["./utils/parentOrigin"]).toEqual({

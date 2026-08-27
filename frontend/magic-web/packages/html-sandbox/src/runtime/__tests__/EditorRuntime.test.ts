@@ -160,6 +160,83 @@ describe("EditorRuntime", () => {
 				"*",
 			)
 		})
+
+		it("should handle GET_DOM_TREE request after runtime initialization", async () => {
+			const message: RequestMessage = {
+				version: MESSAGE_PROTOCOL_VERSION,
+				category: MessageCategory.REQUEST,
+				type: "GET_DOM_TREE",
+				requestId: "req-dom-tree",
+				timestamp: Date.now(),
+				source: "parent",
+				payload: {},
+			}
+
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					data: message,
+					source: window.parent,
+				}),
+			)
+
+			await new Promise((resolve) => setTimeout(resolve, 10))
+
+			expect(postMessageSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					category: MessageCategory.RESPONSE,
+					type: "GET_DOM_TREE",
+					requestId: "req-dom-tree",
+					success: true,
+					payload: expect.objectContaining({
+						root: expect.objectContaining({ tagName: "body" }),
+					}),
+				}),
+				"*",
+			)
+		})
+
+		it("should return flex alignment styles after a style update", async () => {
+			document.body.innerHTML = `
+				<div id="flex-layout" style="display: flex; flex-wrap: wrap; align-content: space-between;">
+					<div>One</div>
+					<div>Two</div>
+				</div>
+			`
+
+			const message: RequestMessage = {
+				version: MESSAGE_PROTOCOL_VERSION,
+				category: MessageCategory.REQUEST,
+				type: "GET_COMPUTED_STYLES",
+				requestId: "req-computed-flex-styles",
+				timestamp: Date.now(),
+				source: "parent",
+				payload: { selector: "div#flex-layout" },
+			}
+
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					data: message,
+					source: window.parent,
+				}),
+			)
+
+			await new Promise((resolve) => setTimeout(resolve, 10))
+
+			expect(postMessageSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "GET_COMPUTED_STYLES",
+					requestId: "req-computed-flex-styles",
+					success: true,
+					payload: expect.objectContaining({
+						styles: expect.objectContaining({
+							alignContent: "space-between",
+							flexWrap: "wrap",
+						}),
+					}),
+				}),
+				"*",
+			)
+		})
 	})
 
 	describe("keyboard shortcuts", () => {
@@ -349,7 +426,8 @@ describe("EditorRuntime", () => {
 			window.dispatchEvent(ctrlEvent)
 
 			await vi.waitFor(() => {
-				expect(document.querySelectorAll("#shortcut-duplicate-target")).toHaveLength(2)
+				expect(document.querySelectorAll("#shortcut-duplicate-target")).toHaveLength(1)
+				expect(document.querySelector("#shortcut-duplicate-target-copy")).toBeTruthy()
 			})
 			expect(ctrlEvent.defaultPrevented).toBe(true)
 		})
@@ -370,7 +448,8 @@ describe("EditorRuntime", () => {
 			window.dispatchEvent(cmdEvent)
 
 			await vi.waitFor(() => {
-				expect(document.querySelectorAll("#shortcut-cmd-duplicate-target")).toHaveLength(2)
+				expect(document.querySelectorAll("#shortcut-cmd-duplicate-target")).toHaveLength(1)
+				expect(document.querySelector("#shortcut-cmd-duplicate-target-copy")).toBeTruthy()
 			})
 			expect(cmdEvent.defaultPrevented).toBe(true)
 		})

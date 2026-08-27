@@ -69,7 +69,7 @@ interface PPTSlideProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	fileId: string
 	projectId?: string
 	filePathMapping: Map<string, string>
@@ -549,13 +549,16 @@ const PPTSlide = observer(function PPTSlide({
 
 	const executeSaveContent = useMemoizedFn(async () => {
 		if (viewMode === "code") {
-			await saveEditContent?.(
+			const saveResult = await saveEditContent?.(
 				shadow(editingCodeContent),
 				fileId,
 				true,
 				fetchFileVersions,
 				true,
 			)
+			// Render returns false when the persistence request fails. Do not mark the
+			// slide as saved or leave edit/fullscreen state in that case.
+			if (saveResult === false) return false
 			await onManualSave?.(
 				{
 					success: true,
@@ -847,6 +850,8 @@ const PPTSlide = observer(function PPTSlide({
 				onStartInspectorAppend: handleStartInspectorAppend,
 				isAppendPicking,
 				showAIOptimization: allowEdit && !fileVersion,
+				beforeAction: () =>
+					rendererRef.current?.requestInspectorExit?.() ?? Promise.resolve(true),
 				showFileEdit: allowEdit && !fileVersion,
 				isEditMode,
 				isSaving,

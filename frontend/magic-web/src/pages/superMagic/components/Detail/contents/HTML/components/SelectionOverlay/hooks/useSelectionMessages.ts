@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
-import type { SelectedInfo } from "../types"
+import type { ElementRect, SelectedInfo } from "../types"
 import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 
 interface UseSelectionMessagesProps {
@@ -8,7 +8,7 @@ interface UseSelectionMessagesProps {
 	editorRef?: React.RefObject<HTMLEditorV2Ref>
 	selectedInfoList: SelectedInfo[]
 	setSelectedInfoList: React.Dispatch<React.SetStateAction<SelectedInfo[]>>
-	setHoveredRect: React.Dispatch<React.SetStateAction<any>>
+	setHoveredRect: React.Dispatch<React.SetStateAction<ElementRect | null>>
 	setIsSelectionMode: React.Dispatch<React.SetStateAction<boolean>>
 }
 
@@ -64,6 +64,8 @@ export function useSelectionMessages({
 					const intrinsicWidth = payload?.intrinsicWidth
 					const intrinsicHeight = payload?.intrinsicHeight
 					const intrinsicAspectRatio = payload?.intrinsicAspectRatio
+					const isTextElement = payload?.isTextElement ?? false
+					const textContent = payload?.textContent
 
 					if (rect && selector) {
 						// Disable text editing on previous elements before switching
@@ -95,6 +97,9 @@ export function useSelectionMessages({
 								computedStyles,
 								rotation,
 								isImageElement,
+								isTextElement,
+								textContent,
+								inlineStyles: payload?.inlineStyles,
 								intrinsicWidth,
 								intrinsicHeight,
 								intrinsicAspectRatio,
@@ -108,10 +113,12 @@ export function useSelectionMessages({
 							selector,
 							tagName,
 							isImageElement,
+							isTextElement,
+							textContent,
 							intrinsicWidth,
 							intrinsicHeight,
 							intrinsicAspectRatio,
-							computedStyles: computedStyles as any,
+							computedStyles,
 						})
 
 						// Note: Text editing is now activated by double-click on selected element
@@ -144,6 +151,9 @@ export function useSelectionMessages({
 							computedStyles: el.computedStyles,
 							rotation: el.rotation ?? 0,
 							isImageElement: el.isImageElement ?? false,
+							isTextElement: el.isTextElement,
+							textContent: el.textContent,
+							inlineStyles: el.inlineStyles,
 							intrinsicWidth: el.intrinsicWidth,
 							intrinsicHeight: el.intrinsicHeight,
 							intrinsicAspectRatio: el.intrinsicAspectRatio,
@@ -154,21 +164,16 @@ export function useSelectionMessages({
 						setIsSelectionMode(true)
 
 						// Update StylePanelStore with multiple elements
-						const selectedElementsInfo: Array<{
-							selector: string
-							tagName: string
-							isImageElement?: boolean
-							intrinsicWidth?: number
-							intrinsicHeight?: number
-							intrinsicAspectRatio?: number
-							computedStyles: any
-						}> = elements.map((el) => ({
+						const selectedElementsInfo = elements.map((el) => ({
 							selector: el.selector,
 							tagName: el.tagName || "div",
 							isImageElement: el.isImageElement ?? false,
 							intrinsicWidth: el.intrinsicWidth,
 							intrinsicHeight: el.intrinsicHeight,
 							intrinsicAspectRatio: el.intrinsicAspectRatio,
+							isTextElement: el.isTextElement,
+							textContent: el.textContent,
+							inlineStyles: el.inlineStyles,
 							computedStyles: el.computedStyles || {},
 						}))
 						stylePanelStore.selectElements(selectedElementsInfo)

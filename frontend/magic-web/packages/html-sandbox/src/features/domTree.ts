@@ -1,0 +1,259 @@
+import { getElementSelector, isInjectedElement } from "../utils/dom"
+import { EditorLogger } from "../utils/EditorLogger"
+
+export const EDITOR_NODE_ID_ATTRIBUTE = "data-magic-editor-node-id"
+
+export interface DuplicatedIdMapping {
+	originalId: string
+	duplicatedId: string
+}
+
+const EXCLUDED_TAGS = new Set([
+	"head",
+	"script",
+	"style",
+	"link",
+	"meta",
+	"title",
+	"template",
+	"noscript",
+])
+
+const VOID_TAGS = new Set([
+	"area",
+	"base",
+	"br",
+	"col",
+	"embed",
+	"hr",
+	"img",
+	"input",
+	"link",
+	"meta",
+	"param",
+	"source",
+	"track",
+	"wbr",
+])
+
+export interface DomTreeNode {
+	nodeId: string
+	selector: string
+	tagName: string
+	label: string
+	textContent?: string
+	resource?: string
+	children: DomTreeNode[]
+	/** Whether the canvas can select this node. Root nodes remain selectable. */
+	canSelect?: boolean
+	editable: boolean
+	canHaveChildren: boolean
+	canDelete: boolean
+	canMove: boolean
+	disabledReason?: string
+	dynamicWarning?: string
+}
+
+let nextNodeId = 1
+
+function createUniqueDuplicateId(originalId: string, usedIds: Set<string>): string {
+	const base = `${originalId}-copy`
+	let candidate = base
+	let suffix = 2
+	while (usedIds.has(candidate)) candidate = `${base}-${suffix++}`
+	usedIds.add(candidate)
+	return candidate
+}
+
+/**
+ * Give cloned elements unique HTML ids while preserving the source markup.
+ * This is used by duplicate and paste commands so selectors never resolve to
+ * the original and duplicated element at the same time.
+ */
+export function assignUniqueIdsToClone(
+	clone: HTMLElement,
+	forcedMappings?: DuplicatedIdMapping[],
+): DuplicatedIdMapping[] {
+	const usedIds = new Set(
+		Array.from(document.querySelectorAll<HTMLElement>("[id]"))
+			.map((element) => element.id)
+			.filter(Boolean),
+	)
+	const mappingByOriginalId = new Map(
+		(forcedMappings ?? []).map((mapping) => [mapping.originalId, mapping]),
+	)
+	const clonedElements = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))]
+
+	return clonedElements.reduce<DuplicatedIdMapping[]>((result, element) => {
+		const originalId = element.id
+		if (!originalId) return result
+
+		const forcedMapping = mappingByOriginalId.get(originalId)
+		const duplicatedId =
+			forcedMapping && !usedIds.has(forcedMapping.duplicatedId)
+				? forcedMapping.duplicatedId
+				: createUniqueDuplicateId(originalId, usedIds)
+		element.id = duplicatedId
+		result.push({ originalId, duplicatedId })
+		return result
+	}, [])
+}
+
+function getNodeId(element: HTMLElement): string {
+	const existing = element.getAttribute(EDITOR_NODE_ID_ATTRIBUTE)
+	if (existing) return existing
+
+	const nodeId = `node-${nextNodeId++}`
+	element.setAttribute(EDITOR_NODE_ID_ATTRIBUTE, nodeId)
+	return nodeId
+}
+
+export function resetEditorNodeIds(root: Element): void {
+	if (root instanceof HTMLElement) root.removeAttribute(EDITOR_NODE_ID_ATTRIBUTE)
+	root.querySelectorAll(`[${EDITOR_NODE_ID_ATTRIBUTE}]`).forEach((element) => {
+		element.removeAttribute(EDITOR_NODE_ID_ATTRIBUTE)
+	})
+}
+
+/** Assign fresh session-only identifiers to a newly inserted subtree. */
+export function assignEditorNodeIds(root: HTMLElement): void {
+	getNodeId(root)
+	root.querySelectorAll<HTMLElement>("*").forEach((element) => getNodeId(element))
+}
+
+function getResource(element: HTMLElement): string | undefined {
+	const value =
+		element.getAttribute("src") ||
+		element.getAttribute("href") ||
+		element.getAttribute("poster") ||
+		element.getAttribute("data-src")
+	return value?.trim() || undefined
+}
+
+function getLabel(element: HTMLElement): string {
+	const tagName = element.tagName.toLowerCase()
+	const id = element.id ? `#${element.id}` : ""
+	const className = element.classList[0] ? `.${element.classList[0]}` : ""
+	return `${tagName}${id}${className}`
+}
+
+function hasDynamicMarker(element: HTMLElement): boolean {
+	return Array.from(element.attributes).some(({ name }) => {
+		return (
+			name.startsWith("data-react") ||
+			name.startsWith("data-v-") ||
+			name === "ng-version" ||
+			name.startsWith("ng-")
+		)
+	})
+}
+
+function getVisibleElementChildren(element: HTMLElement): HTMLElement[] {
+	return Array.from(element.children)
+		.filter((child): child is HTMLElement => child instanceof HTMLElement)
+		.filter(
+			(child) => !isInjectedElement(child) && !EXCLUDED_TAGS.has(child.tagName.toLowerCase()),
+		)
+}
+
+/**
+ * Return text authored directly by the element.
+ *
+ * Do not aggregate descendant text here: every descendant already has its own
+ * tree row. Reading only direct text keeps container summaries useful without
+ * repeating the same content at every ancestor, and preserves mixed content
+ * such as `<div>prefix <strong>emphasis</strong> suffix</div>`.
+ */
+function getDirectTextContent(element: HTMLElement): string | undefined {
+	const parts: string[] = []
+	element.childNodes.forEach((node) => {
+		if (node.nodeType === Node.TEXT_NODE && node.textContent) parts.push(node.textContent)
+	})
+	return parts.join(" ").trim().replace(/\s+/g, " ").slice(0, 80) || undefined
+}
+
+function describeNode(element: HTMLElement, isRoot: boolean) {
+	const tagName = element.tagName.toLowerCase()
+	const selector = getElementSelector(element)
+	const isExcluded = isInjectedElement(element) || EXCLUDED_TAGS.has(tagName)
+	const selectorIsUnique = Boolean(selector) && document.querySelectorAll(selector).length === 1
+	const canHaveChildren = !VOID_TAGS.has(tagName)
+	const isRootElement =
+		isRoot || element === document.documentElement || element === document.body
+
+	let disabledReason: string | undefined
+	if (isExcluded) disabledReason = "运行时或非可视节点"
+	else if (isRootElement) disabledReason = "根节点不可移动或删除"
+	else if (!selectorIsUnique) disabledReason = "节点定位不唯一"
+	return {
+		selector,
+		tagName,
+		label: getLabel(element),
+		// Keep direct text visible even when this node also contains child elements.
+		// Descendant text is rendered by the corresponding child rows.
+		textContent: getDirectTextContent(element),
+		resource: getResource(element),
+		canSelect: !isExcluded && selectorIsUnique,
+		editable: !disabledReason,
+		canHaveChildren,
+		canDelete: !disabledReason && !isRootElement,
+		canMove: !disabledReason && !isRootElement,
+		disabledReason,
+		dynamicWarning: hasDynamicMarker(element)
+			? "该节点可能由脚本重新渲染，修改后可能被覆盖"
+			: undefined,
+	}
+}
+
+function buildNode(element: HTMLElement, isRoot = false): DomTreeNode {
+	const info = describeNode(element, isRoot)
+	const children = getVisibleElementChildren(element).map((child) => buildNode(child))
+
+	return {
+		nodeId: getNodeId(element),
+		...info,
+		children,
+	}
+}
+
+export function buildDomTree(): { root: DomTreeNode } {
+	if (!document.body) {
+		throw new Error("HTML document body is unavailable")
+	}
+
+	return { root: buildNode(document.body, true) }
+}
+
+export function findNodeById(nodeId: string): HTMLElement {
+	const element = Array.from(document.querySelectorAll(`[${EDITOR_NODE_ID_ATTRIBUTE}]`)).find(
+		(candidate) => candidate.getAttribute(EDITOR_NODE_ID_ATTRIBUTE) === nodeId,
+	)
+	if (!(element instanceof HTMLElement)) {
+		throw new Error(`DOM node not found: ${nodeId}`)
+	}
+	return element
+}
+
+export function ensureEditableNode(element: HTMLElement, action: string): void {
+	const info = describeNode(element, false)
+	if (!info.editable) {
+		throw new Error(info.disabledReason || `节点不支持${action}`)
+	}
+}
+
+export function insertAtElementIndex(
+	parent: HTMLElement,
+	child: HTMLElement,
+	index?: number,
+): number {
+	const children = Array.from(parent.children)
+	const targetIndex = Math.max(0, Math.min(index ?? children.length, children.length))
+	const reference = children[targetIndex]
+	if (reference) parent.insertBefore(child, reference)
+	else parent.appendChild(child)
+	return Array.from(parent.children).indexOf(child)
+}
+
+export function logDomTreeError(message: string, error: unknown): void {
+	EditorLogger.error(`[DOMTree] ${message}`, error)
+}

@@ -201,22 +201,21 @@ export default function Render(props: any) {
 		isPPTEditMode?: boolean,
 		// 是否在保存后退出编辑模式，默认为 false（保持编辑状态）
 		shouldExitEditMode: boolean = false,
-	) => {
+	): Promise<boolean> => {
 		const targetFileId = fileId || data.file_id
 		if (!editingPresenceEnabled) {
-			await doSave(
+			return await doSave(
 				targetFileId,
 				newContent,
 				enable_shadow,
 				fetchFileVersions,
 				shouldExitEditMode,
 			)
-			return
 		}
 		const { editing_user_count } = await SuperMagicApi.getFileEditCount(targetFileId)
 		const threshold = isPPTEditMode || isEditMode ? 1 : 0
 		if (editing_user_count > threshold) {
-			await new Promise((resolve, reject) => {
+			return await new Promise<boolean>((resolve) => {
 				const modal = MagicModal.confirm({
 					title: t("detail.editingConflictPrompt"),
 					variant: "default",
@@ -227,25 +226,30 @@ export default function Render(props: any) {
 					maskClosable: false,
 					centered: true,
 					onOk: async () => {
-						await doSave(
+						const didSave = await doSave(
 							targetFileId,
 							newContent,
 							enable_shadow,
 							undefined,
 							shouldExitEditMode,
 						)
-						modal.destroy()
-						resolve(true)
+						if (didSave) modal.destroy()
+						resolve(didSave)
 					},
 					onCancel: () => {
 						modal.destroy()
-						reject("cancel")
+						resolve(false)
 					},
 				})
 			})
-			return
 		}
-		await doSave(targetFileId, newContent, enable_shadow, fetchFileVersions, shouldExitEditMode)
+		return await doSave(
+			targetFileId,
+			newContent,
+			enable_shadow,
+			fetchFileVersions,
+			shouldExitEditMode,
+		)
 	}
 
 	async function doSave(
@@ -259,7 +263,7 @@ export default function Render(props: any) {
 			isSelectNewest?: boolean,
 		) => void,
 		shouldExitEditMode: boolean = false,
-	) {
+	): Promise<boolean> {
 		const key = `save-${targetFileId}`
 		magicToast.loading({
 			content: t("common.saving"),
@@ -317,7 +321,7 @@ export default function Render(props: any) {
 						content: t("common.saveFailed"),
 						key,
 					})
-					return
+					return false
 				}
 			}
 
@@ -329,11 +333,13 @@ export default function Render(props: any) {
 			if (shouldExitEditMode) {
 				setIsEditMode(false)
 			}
+			return true
 		} catch (err) {
 			magicToast.error({
 				content: t("common.saveFailed"),
 				key,
 			})
+			return false
 		}
 	}
 

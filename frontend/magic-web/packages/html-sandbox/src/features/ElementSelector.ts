@@ -26,6 +26,7 @@ interface ElementInfo {
 	rotation?: number
 	isTextElement?: boolean
 	textContent?: string
+	inlineStyles?: Record<string, string>
 }
 
 export class ElementSelector {
@@ -88,6 +89,7 @@ export class ElementSelector {
 		this.selectedElements.forEach((element) => {
 			const selector = getElementSelector(element)
 			const styles = this.getElementStyles(element)
+			const inlineStyles = this.getInlineStyles(element)
 			const { rect, rotation } = this.getElementRectWithRotation(element)
 			const isText = this.isTextElement(element)
 			const textContent = element.textContent?.trim() || ""
@@ -98,6 +100,7 @@ export class ElementSelector {
 				tagName: element.tagName.toLowerCase(),
 				...imageMetadata,
 				computedStyles: styles,
+				inlineStyles,
 				rect,
 				rotation,
 				isTextElement: isText,
@@ -193,6 +196,7 @@ export class ElementSelector {
 			"flexDirection",
 			"justifyContent",
 			"alignItems",
+			"alignContent",
 			"flexWrap",
 			"flexGrow",
 			"flexShrink",
@@ -201,9 +205,19 @@ export class ElementSelector {
 			"minHeight",
 			"alignSelf",
 			"gap",
+			"rowGap",
+			"columnGap",
 			"gridTemplateColumns",
 			"gridTemplateRows",
+			"gridAutoFlow",
+			"gridAutoColumns",
+			"gridAutoRows",
+			"gridColumn",
+			"gridRow",
 			"justifyItems",
+			"justifySelf",
+			"objectFit",
+			"objectPosition",
 		]
 
 		importantProps.forEach((prop) => {
@@ -261,6 +275,19 @@ export class ElementSelector {
 			})
 		}
 
+		return styles
+	}
+
+	private getInlineStyles(element: HTMLElement): Record<string, string> {
+		const styles: Record<string, string> = {}
+		for (let index = 0; index < element.style.length; index += 1) {
+			const property = element.style.item(index)
+			if (!property) continue
+			const value = element.style.getPropertyValue(property).trim()
+			if (!value) continue
+			const priority = element.style.getPropertyPriority(property)
+			styles[property] = priority ? `${value} !${priority}` : value
+		}
 		return styles
 	}
 
@@ -629,6 +656,35 @@ export class ElementSelector {
 		)
 	}
 
+	/**
+	 * Show a hover highlight requested by the host UI without changing selection.
+	 */
+	hoverElement(element: HTMLElement): void {
+		if (!element || element === document.documentElement || element === document.body) return
+		if (isInjectedElement(element)) return
+
+		this.hoveredElement = element
+		if (this.isSelected(element)) return
+
+		const rect = element.getBoundingClientRect()
+		this.bridge.sendEvent("ELEMENT_HOVERED", {
+			rect: {
+				top: rect.top,
+				left: rect.left,
+				width: rect.width,
+				height: rect.height,
+			},
+		})
+	}
+
+	/**
+	 * Clear a host-requested hover highlight without changing selection.
+	 */
+	clearHoveredElement(): void {
+		this.hoveredElement = null
+		this.bridge.sendEvent("ELEMENT_HOVER_END", {})
+	}
+
 	deselectElement() {
 		this.clearSelection()
 	}
@@ -665,6 +721,7 @@ export class ElementSelector {
 			const element = Array.from(this.selectedElements)[0]
 			const selector = getElementSelector(element)
 			const styles = this.getElementStyles(element)
+			const inlineStyles = this.getInlineStyles(element)
 			const { rect, rotation } = this.getElementRectWithRotation(element)
 			const isText = this.isTextElement(element)
 			const textContent = element.textContent?.trim() || ""
@@ -675,6 +732,7 @@ export class ElementSelector {
 				tagName: element.tagName.toLowerCase(),
 				...imageMetadata,
 				computedStyles: styles,
+				inlineStyles,
 				rect,
 				rotation,
 				isTextElement: isText,
@@ -801,9 +859,11 @@ export class ElementSelector {
 								selector,
 							)
 						}
+						// Selection info is refreshed above; the dedicated context-panel event
+						// carries the explicit open intent.
 					} else {
 						// First click or different element - select element (clear others)
-						this.selectElement(selectableElement, false)
+						this.selectElement(selectableElement)
 					}
 				}
 			},
@@ -816,6 +876,10 @@ export class ElementSelector {
 
 			// Escape - deselect all
 			if (e.key === "Escape") {
+				// The parent editor's keyboard bridge handles Escape first. When it
+				// has already consumed the event for a local panel, keep the current
+				// element selection intact.
+				if (e.defaultPrevented) return
 				e.preventDefault()
 				this.deselectElement()
 			}

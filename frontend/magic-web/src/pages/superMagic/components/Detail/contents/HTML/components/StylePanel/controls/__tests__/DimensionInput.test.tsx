@@ -1,10 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react"
+import { forwardRef, type InputHTMLAttributes } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DimensionInput } from "../DimensionInput"
 
 vi.mock("@/components/shadcn-ui/input", () => ({
 	/** Use a plain input so the test can focus on px-only behavior. */
-	Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+	Input: forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>((props, ref) => (
+		<input ref={ref} {...props} />
+	)),
 }))
 
 vi.mock("@/components/shadcn-ui/label", () => ({
@@ -101,5 +104,29 @@ describe("DimensionInput", () => {
 		vi.advanceTimersByTime(300)
 
 		expect(handleChange).toHaveBeenCalledWith("60%")
+	})
+
+	it("should sync the displayed number and unit when the external value changes", () => {
+		const { rerender } = render(
+			<DimensionInput
+				label="Width"
+				value="200px"
+				onChange={vi.fn()}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+
+		rerender(
+			<DimensionInput
+				label="Width"
+				value="50%"
+				onChange={vi.fn()}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+
+		expect(screen.getByTestId("dimension-input-input")).toHaveValue("50")
 	})
 })

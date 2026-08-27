@@ -111,7 +111,7 @@ interface PPTRenderProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	onSortSave?: (newSlidesUrls: string[]) => void
 	openNewTab?: (fileId: string, path: string) => void
 	onDownload?: ({
@@ -230,6 +230,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 	const [manualScale, setManualScale] = useState<number | null>(null)
 	const [activeSlideScaleRatio, setActiveSlideScaleRatio] = useState(1)
+	const activeInspectorPickingRef = useRef(false)
+	const activeInspectorExitRef = useRef<(() => boolean | Promise<boolean>) | null>(null)
 	const activeSlideCloseSaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 	const activeSlideDiscardHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
@@ -259,6 +261,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleCancelNavigation,
 	} = useCheckBeforeNavigate({
 		isAnySlideEditing,
+		isInspectorPicking: () => activeInspectorPickingRef.current,
+		requestInspectorExit: () => activeInspectorExitRef.current?.() ?? Promise.resolve(true),
 		activeIndex: store.activeIndex,
 	})
 
@@ -468,6 +472,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const presentedToolbarModel = scopedPresentedKey
 		? toolbarModels.get(scopedPresentedKey)
 		: undefined
+
+	useLayoutEffect(() => {
+		activeInspectorPickingRef.current = Boolean(presentedToolbarModel?.props.isAppendPicking)
+		activeInspectorExitRef.current = presentedToolbarModel?.props.beforeAction ?? null
+
+		return () => {
+			activeInspectorPickingRef.current = false
+			activeInspectorExitRef.current = null
+		}
+	}, [presentedToolbarModel])
 
 	useLayoutEffect(() => {
 		const host = toolbarHostRef.current as (HTMLDivElement & { inert?: boolean }) | null

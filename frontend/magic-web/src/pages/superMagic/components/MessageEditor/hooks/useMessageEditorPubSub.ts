@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -6,6 +6,10 @@ import type { DraftStore } from "../stores"
 import type { SendMessageByContentPayload } from "../types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { SuperMagicWidgetEditorCommandPayload } from "@/pages/superMagic/events/message"
+import type { HtmlMultiSelectionRequest } from "@/components/business/ElementInspector"
+import { buildHtmlMultiSelectionPromptContent } from "@/components/business/ElementInspector"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
+import { htmlScreenshotUploadService } from "../services/HtmlScreenshotUploadService"
 import {
 	insertMentionFromDroppedData,
 	DRAG_TYPE,
@@ -23,7 +27,9 @@ interface UseMessageEditorPubSubParams {
 	draftStore: DraftStore
 	updateContent: (content: JSONContent | undefined) => void
 	enableMessageSendByContent: boolean
-	onSendMessageByContent: (data: SendMessageByContentPayload) => void
+	onSendMessageByContent: (data: SendMessageByContentPayload) => void | Promise<void>
+	projectId?: string
+	topicId?: string
 }
 
 interface AddContentPayload {
@@ -93,6 +99,11 @@ function appendPlainTextToDocument(currentContent: JSONContent, content: string)
 	return { ...documentContent, content: nodes }
 }
 
+function getScreenshotFileName(targetId: string, index: number) {
+	const safeTargetId = targetId.replace(/[^a-zA-Z0-9_-]/g, "-")
+	return `html-screenshot-${safeTargetId || index + 1}.png`
+}
+
 function useMessageEditorPubSub({
 	editor,
 	isMobile,
@@ -100,8 +111,135 @@ function useMessageEditorPubSub({
 	updateContent,
 	enableMessageSendByContent,
 	onSendMessageByContent,
+	projectId,
+	topicId,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
+	const preparedScreenshotMentionsRef = useRef(new Map<string, TiptapMentionAttributes>())
+	const preparingScreenshotPromisesRef = useRef(
+		new Map<string, Promise<TiptapMentionAttributes>>(),
+	)
+
+	const uploadScreenshot = useMemoizedFn(
+		(targetId: string, dataUrl: string, fileName: string) => {
+			const prepared = preparedScreenshotMentionsRef.current.get(targetId)
+			if (prepared) return Promise.resolve(prepared)
+
+			const preparing = preparingScreenshotPromisesRef.current.get(targetId)
+			if (preparing) return preparing
+
+			const promise = (async () => {
+				if (!projectId) throw new Error("当前项目不可用，无法上传截图")
+				const savedFile = await htmlScreenshotUploadService.uploadScreenshot({
+					dataUrl,
+					fileName,
+					projectId,
+					topicId,
+				})
+				const mention: TiptapMentionAttributes = {
+					type: MentionItemType.PROJECT_FILE,
+					data: {
+						file_id: savedFile.file_id,
+						file_name: savedFile.file_name,
+						file_path: savedFile.relative_file_path ?? savedFile.file_key,
+						file_extension: savedFile.file_name.split(".").pop() ?? "",
+						file_size: savedFile.file_size,
+						is_hidden: true,
+					},
+				}
+				preparedScreenshotMentionsRef.current.set(targetId, mention)
+				return mention
+			})()
+
+			preparingScreenshotPromisesRef.current.set(targetId, promise)
+			void promise.then(
+				() => preparingScreenshotPromisesRef.current.delete(targetId),
+				() => preparingScreenshotPromisesRef.current.delete(targetId),
+			)
+			return promise
+		},
+	)
+
+	useEffect(() => {
+		const handlePrepareHtmlScreenshot = async (request: {
+			targetId: string
+			dataUrl: string
+			fileName?: string
+			onSuccess?: (mention: TiptapMentionAttributes) => void
+			onError?: (error: unknown) => void
+		}) => {
+			try {
+				const mention = await uploadScreenshot(
+					request.targetId,
+					request.dataUrl,
+					request.fileName ?? `html-screenshot-${Date.now()}.png`,
+				)
+				request.onSuccess?.(mention)
+			} catch (error) {
+				request.onError?.(error)
+			}
+		}
+		pubsub.subscribe(PubSubEvents.Prepare_Html_Screenshot, handlePrepareHtmlScreenshot)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, handlePrepareHtmlScreenshot)
+		}
+	}, [uploadScreenshot])
+
+	useEffect(() => {
+		const handleSubmitHtmlMultiSelection = async (request: HtmlMultiSelectionRequest) => {
+			try {
+				const screenshotTargets = request.targets.filter(
+					(target) => target.kind === "screenshot" && Boolean(target.screenshot?.dataUrl),
+				)
+				const screenshotMentions = new Map(
+					await Promise.all(
+						screenshotTargets.map(
+							async (target, index) =>
+								[
+									target.id ?? `screenshot:${index}`,
+									target.screenshot?.mention ??
+										(await uploadScreenshot(
+											target.id ?? `screenshot:${index}`,
+											target.screenshot?.dataUrl ?? "",
+											getScreenshotFileName(
+												target.id ?? `screenshot:${index}`,
+												index,
+											),
+										)),
+								] as const,
+						),
+					),
+				)
+				const content = buildHtmlMultiSelectionPromptContent(
+					{
+						fileId: request.fileId,
+						fileName: request.fileName || "index.html",
+						filePath: request.filePath || request.fileId,
+					},
+					request.targets,
+					"HTML 页面修改目标",
+					screenshotMentions,
+				)
+				await onSendMessageByContent({
+					jsonContent: content,
+					shouldClearEditorAfterSend: true,
+				})
+				screenshotTargets.forEach((target, index) => {
+					preparedScreenshotMentionsRef.current.delete(target.id ?? `screenshot:${index}`)
+				})
+				request.onSuccess?.()
+			} catch (error) {
+				request.onError?.(error)
+			}
+		}
+		pubsub.subscribe(PubSubEvents.Submit_Html_Multi_Selection, handleSubmitHtmlMultiSelection)
+		return () => {
+			pubsub.unsubscribe(
+				PubSubEvents.Submit_Html_Multi_Selection,
+				handleSubmitHtmlMultiSelection,
+			)
+		}
+	}, [onSendMessageByContent, uploadScreenshot])
 
 	useEffect(() => {
 		const handleAddFileToChat = (data: {

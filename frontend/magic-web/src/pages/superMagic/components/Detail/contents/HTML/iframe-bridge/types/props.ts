@@ -1,4 +1,4 @@
-import { HistoryState, ImageActionPayload } from "./messages"
+import { DomTreeResponse, HistoryState, ImageActionPayload } from "./messages"
 import { EditorError } from "./errors"
 
 /**
@@ -250,6 +250,18 @@ export interface HTMLEditorV2Ref {
 
 	/** 选择指定元素 */
 	selectElement: (selector: string) => Promise<void>
+	getDomTree: () => Promise<DomTreeResponse | null>
+	selectDomNode: (nodeId: string) => Promise<void>
+	hoverDomNode: (nodeId: string) => Promise<void>
+	clearHoveredDomNode: () => Promise<void>
+	scrollToDomNode: (nodeId: string) => Promise<void>
+	moveDomNode: (nodeId: string, targetParentId: string, targetIndex: number) => Promise<void>
+	insertTextNode: (parentNodeId: string, textContent: string, index?: number) => Promise<void>
+	insertImageNode: (parentNodeId: string, index?: number) => Promise<void>
+	copyDomNode: (nodeId: string) => Promise<void>
+	duplicateDomNode: (nodeId: string) => Promise<void>
+	cutDomNode: (nodeId: string) => Promise<void>
+	pasteDomNode: (targetParentId: string, targetIndex?: number) => Promise<void>
 
 	/** 获取元素的计算样式 */
 	getElementComputedStyles: (selector: string) => Promise<Record<string, string>>

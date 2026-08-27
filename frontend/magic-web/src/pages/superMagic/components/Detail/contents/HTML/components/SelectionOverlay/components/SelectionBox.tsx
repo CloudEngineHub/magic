@@ -69,8 +69,8 @@ export const SelectionBox = memo(function SelectionBox({
 				}}
 				exit={{ opacity: 0, scale: 0.97 }}
 				transition={{
-					duration: 0.12,
-					ease: [0.4, 0, 0.2, 1], // Custom cubic-bezier for snappy animation
+					duration: 0.25,
+					ease: [0.22, 1, 0.36, 1],
 				}}
 				layout="position"
 				style={{

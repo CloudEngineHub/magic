@@ -19,6 +19,9 @@ function buildRefreshedSelectedElement(
 		intrinsicHeight: previousElement.intrinsicHeight,
 		intrinsicAspectRatio: previousElement.intrinsicAspectRatio,
 		isTextElement: previousElement.isTextElement,
+		textContent: previousElement.textContent,
+		inlineStyles: previousElement.inlineStyles,
+		attributes: previousElement.attributes,
 		computedStyles,
 	}
 }

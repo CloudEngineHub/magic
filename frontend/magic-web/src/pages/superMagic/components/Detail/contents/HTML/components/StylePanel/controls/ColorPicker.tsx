@@ -1,9 +1,10 @@
-import { useRef, useState, useEffect, useCallback } from "react"
+import { useRef, useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useDebounceFn } from "ahooks"
 import { Button } from "@/components/shadcn-ui/button"
 import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 
 interface ColorPickerProps {
 	value: string
@@ -75,7 +76,7 @@ export function ColorPicker({ value, onChange, onChangeComplete, disabled }: Col
 					<Button
 						variant="ghost"
 						size="icon"
-						className="relative h-8 w-8"
+						className="relative h-7 w-7 rounded-md p-0 transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]"
 						disabled={disabled}
 						onClick={handleClick}
 					>
@@ -99,7 +100,9 @@ export function ColorPicker({ value, onChange, onChangeComplete, disabled }: Col
 					</Button>
 				</span>
 			</TooltipTrigger>
-			<TooltipContent>{t("stylePanel.textColor")}</TooltipContent>
+			<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+				{t("stylePanel.textColor")}
+			</TooltipContent>
 		</TooltipPrimitive.Root>
 	)
 }

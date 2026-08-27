@@ -5,7 +5,7 @@ vi.mock("@/pages/superMagic/utils/api", () => ({
 }))
 
 vi.mock("@/utils/env", () => ({
-	env: vi.fn(),
+	env: vi.fn(() => "https://cdn.example.test"),
 }))
 
 vi.mock("@/utils/packageAsset", () => ({
@@ -17,7 +17,11 @@ vi.mock("../index", () => ({
 		new DOMParser().parseFromString(content, "text/html"),
 }))
 
-import { generateFetchInterceptorScript } from "../fetchInterceptor"
+import {
+	createKeyboardMessageHandler,
+	generateFetchInterceptorScript,
+	KEYBOARD_MESSAGE_TYPES,
+} from "../fetchInterceptor"
 
 describe("generateFetchInterceptorScript", () => {
 	let originalFetch: typeof window.fetch
@@ -92,5 +96,51 @@ describe("generateFetchInterceptorScript", () => {
 		await window.fetch("./items/1", init)
 
 		expect(fetchSpy).toHaveBeenCalledWith("https://download.example.test/items/1", init)
+	})
+})
+
+describe("createKeyboardMessageHandler", () => {
+	it("lets a local Escape consumer close its panel before canceling edit mode", () => {
+		const onCancel = vi.fn()
+		const onEscape = vi.fn(() => true)
+		const handler = createKeyboardMessageHandler({
+			onSave: vi.fn(),
+			onSaveAndExit: vi.fn(),
+			onCancel,
+			onEscape,
+		})
+
+		handler(
+			new MessageEvent("message", {
+				data: {
+					type: KEYBOARD_MESSAGE_TYPES.CANCEL,
+					source: KEYBOARD_MESSAGE_TYPES.SOURCE,
+				},
+			}),
+		)
+
+		expect(onEscape).toHaveBeenCalledOnce()
+		expect(onCancel).not.toHaveBeenCalled()
+	})
+
+	it("cancels edit mode when Escape is not consumed", () => {
+		const onCancel = vi.fn()
+		const handler = createKeyboardMessageHandler({
+			onSave: vi.fn(),
+			onSaveAndExit: vi.fn(),
+			onCancel,
+			onEscape: () => false,
+		})
+
+		handler(
+			new MessageEvent("message", {
+				data: {
+					type: KEYBOARD_MESSAGE_TYPES.CANCEL,
+					source: KEYBOARD_MESSAGE_TYPES.SOURCE,
+				},
+			}),
+		)
+
+		expect(onCancel).toHaveBeenCalledOnce()
 	})
 })

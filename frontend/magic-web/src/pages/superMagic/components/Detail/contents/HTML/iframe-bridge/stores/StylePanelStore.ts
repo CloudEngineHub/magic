@@ -30,6 +30,10 @@ export interface SelectedElementInfo {
 	intrinsicAspectRatio?: number
 	/** 是否为文本元素 */
 	isTextElement?: boolean
+	/** 元素当前的文本内容 */
+	textContent?: string
+	/** 元素当前的内联 CSS 声明 */
+	inlineStyles?: Record<string, string>
 	/** 计算后的样式 */
 	computedStyles: {
 		// 文字样式
@@ -50,6 +54,7 @@ export interface SelectedElementInfo {
 		width: string
 		height: string
 		display: string
+		parentDisplay?: string
 		position: string
 
 		// 边距
@@ -75,18 +80,42 @@ export interface SelectedElementInfo {
 		flexDirection: string
 		justifyContent: string
 		alignItems: string
+		alignContent?: string
 		flexWrap: string
+		flexGrow?: string
+		flexShrink?: string
+		flexBasis?: string
+		alignSelf?: string
+		order?: string
 		gap: string
+		rowGap?: string
+		columnGap?: string
 
 		// Grid 布局
 		gridTemplateColumns: string
 		gridTemplateRows: string
+		gridAutoFlow?: string
+		gridAutoColumns?: string
+		gridAutoRows?: string
+		gridColumn?: string
+		gridRow?: string
 		justifyItems: string
+		justifySelf?: string
+
+		// 图片
+		objectFit?: string
+		objectPosition?: string
 
 		// 阴影与效果
 		opacity: string
 		boxShadow: string
 		textShadow: string
+	}
+	attributes?: {
+		src?: string
+		alt?: string
+		title?: string
+		href?: string
 	}
 }
 
@@ -192,6 +221,16 @@ export class StylePanelStore {
 		this.selectedElements = []
 		this.textSelection = null
 		this.isSelectionMode = false
+	}
+
+	/**
+	 * 清除当前选择状态，但保留选择模式。
+	 * 用于 iframe 内容更新或取消选择事件，避免在 strict-mode 下直接修改 observable。
+	 */
+	clearSelectedElements() {
+		this.selectedElement = null
+		this.selectedElements = []
+		this.textSelection = null
 	}
 
 	/**

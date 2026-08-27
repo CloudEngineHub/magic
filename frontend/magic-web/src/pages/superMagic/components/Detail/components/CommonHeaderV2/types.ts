@@ -8,6 +8,7 @@ import type {
 	AttachmentItem,
 	AttachmentSource,
 } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { BeforeAction } from "../../utils/actionGuard"
 
 export type ViewMode = "code" | "desktop" | "phone"
 
@@ -36,6 +37,8 @@ export interface CurrentFileInfo {
 }
 
 export interface ActionContext {
+	/** Optional guard run before toolbar actions. */
+	beforeAction?: BeforeAction
 	type?: string
 	viewMode: ViewMode
 	isMobile: boolean
@@ -128,6 +131,8 @@ export interface CustomComposedAction {
 export type ComposedAction = BuiltinComposedAction | CustomComposedAction
 
 export interface CommonHeaderV2Props {
+	/** Optional guard run before toolbar actions. */
+	beforeAction?: BeforeAction
 	renderMode?: "full" | "actions"
 	type?: string
 	onFullscreen?: () => void

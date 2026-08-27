@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DraftStore } from "../../stores"
 import useMessageEditorPubSub from "../useMessageEditorPubSub"
@@ -14,6 +14,12 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils/drag", () => ({
 		PPTSlide: "ppt-slide",
 	},
 	insertMentionFromDroppedData: vi.fn(),
+}))
+
+const uploadScreenshot = vi.hoisted(() => vi.fn())
+
+vi.mock("../../services/HtmlScreenshotUploadService", () => ({
+	htmlScreenshotUploadService: { uploadScreenshot },
 }))
 
 /** Creates the minimum active editor surface required by the PubSub adapter. */
@@ -44,6 +50,114 @@ function createMockEditor(initialContent: JSONContent) {
 }
 
 describe("useMessageEditorPubSub", () => {
+	beforeEach(() => {
+		uploadScreenshot.mockReset()
+	})
+
+	it("submits HTML selections through the current conversation", async () => {
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		const onSendMessageByContent = vi.fn().mockResolvedValue(undefined)
+		const onSuccess = vi.fn()
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: null,
+				isMobile: false,
+				draftStore,
+				updateContent: vi.fn(),
+				enableMessageSendByContent: false,
+				onSendMessageByContent,
+			}),
+		)
+
+		pubsub.publish(PubSubEvents.Submit_Html_Multi_Selection, {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+			instruction: "",
+			targets: [
+				{
+					kind: "element",
+					selector: "#hero",
+					elementLabel: "section#hero",
+					instruction: "Increase the title size",
+				},
+			],
+			onSuccess,
+		})
+		await vi.waitFor(() => expect(onSendMessageByContent).toHaveBeenCalledTimes(1))
+
+		const payload = onSendMessageByContent.mock.calls[0][0]
+		expect(payload.shouldClearEditorAfterSend).toBe(true)
+		expect(JSON.stringify(payload.jsonContent)).toContain("Increase the title size")
+		expect(onSuccess).toHaveBeenCalledTimes(1)
+
+		unmount()
+	})
+
+	it("reuses a screenshot uploaded after target confirmation", async () => {
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		uploadScreenshot.mockResolvedValue({
+			file_id: "saved-shot-1",
+			file_key: "temporary/screenshot.png",
+			file_name: "screenshot.png",
+			file_size: 3,
+			relative_file_path: ".tmp/screenshot.png",
+			is_hidden: true,
+		})
+		const onSendMessageByContent = vi.fn().mockResolvedValue(undefined)
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: null,
+				isMobile: false,
+				draftStore,
+				updateContent: vi.fn(),
+				enableMessageSendByContent: false,
+				onSendMessageByContent,
+				projectId: "project-1",
+				topicId: "topic-1",
+			}),
+		)
+
+		const targetId = "screenshot:1"
+		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
+			targetId,
+			dataUrl: "data:image/png;base64,AA==",
+		})
+		await vi.waitFor(() => expect(uploadScreenshot).toHaveBeenCalledTimes(1))
+
+		pubsub.publish(PubSubEvents.Submit_Html_Multi_Selection, {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+			instruction: "",
+			targets: [
+				{
+					id: targetId,
+					kind: "screenshot",
+					selector: "",
+					elementLabel: "Screenshot",
+					screenshot: {
+						dataUrl: "data:image/png;base64,AA==",
+						rect: { left: 0, top: 0, width: 100, height: 80 },
+					},
+					instruction: "Move this area",
+				},
+			],
+		})
+
+		await vi.waitFor(() => expect(onSendMessageByContent).toHaveBeenCalledTimes(1))
+		expect(uploadScreenshot).toHaveBeenCalledTimes(1)
+		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).toContain(
+			"screenshot.png",
+		)
+
+		unmount()
+	})
+
 	it("maintains plain-text input through Widget commands", () => {
 		const mockEditor = createMockEditor({
 			type: "doc",

@@ -118,4 +118,100 @@ describe("useMoveHandle", () => {
 			height: 80,
 		})
 	})
+
+	it("starts applying movement before the batch-operation response returns", async () => {
+		let resolveBegin: (() => void) | undefined
+		const beginBatchOperation = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveBegin = resolve
+				}),
+		)
+		const applyStylesTemporary = vi.fn().mockResolvedValue(undefined)
+		editorRef.current = {
+			beginBatchOperation,
+			endBatchOperation: vi.fn().mockResolvedValue(undefined),
+			cancelBatchOperation: vi.fn().mockResolvedValue(undefined),
+			applyStylesTemporary,
+			refreshSelectedElement: vi.fn().mockResolvedValue(undefined),
+		} as unknown as HTMLEditorV2Ref
+
+		const pointerTarget = {
+			setPointerCapture: vi.fn(),
+			releasePointerCapture: vi.fn(),
+		}
+		const { result } = renderHook(() =>
+			useMoveHandle({
+				editorRef,
+				isPptRender: false,
+				scaleRatio: 1,
+				selectedInfo,
+				setSelectedInfo: vi.fn(),
+				setHoveredRect: vi.fn(),
+				setIsSelectionMode: vi.fn(),
+				iframeRef: { current: null },
+			}),
+		)
+
+		await act(async () => {
+			void result.current.onMoveHandleMouseDown({
+				clientX: 100,
+				clientY: 100,
+				pointerId: 1,
+				currentTarget: pointerTarget,
+				preventDefault: vi.fn(),
+				stopPropagation: vi.fn(),
+			})
+			await Promise.resolve()
+		})
+
+		act(() => {
+			document.dispatchEvent(createPointerLikeEvent("pointermove", 120, 130, 1))
+		})
+
+		expect(applyStylesTemporary).toHaveBeenCalledWith("div.move-target", {
+			position: "relative",
+			top: "30px",
+			left: "20px",
+		})
+
+		resolveBegin?.()
+		await act(async () => {
+			await Promise.resolve()
+		})
+	})
+
+	it("notifies the host before starting a drag", async () => {
+		const onMoveStart = vi.fn()
+		const pointerTarget = {
+			setPointerCapture: vi.fn(),
+			releasePointerCapture: vi.fn(),
+		}
+		const { result } = renderHook(() =>
+			useMoveHandle({
+				editorRef,
+				isPptRender: false,
+				scaleRatio: 1,
+				selectedInfo,
+				setSelectedInfo: vi.fn(),
+				setHoveredRect: vi.fn(),
+				setIsSelectionMode: vi.fn(),
+				iframeRef: { current: null },
+				onMoveStart,
+			}),
+		)
+
+		await act(async () => {
+			await result.current.onMoveHandleMouseDown({
+				clientX: 100,
+				clientY: 100,
+				pointerId: 1,
+				currentTarget: pointerTarget,
+				preventDefault: vi.fn(),
+				stopPropagation: vi.fn(),
+			})
+		})
+
+		expect(onMoveStart).toHaveBeenCalledOnce()
+	})
 })

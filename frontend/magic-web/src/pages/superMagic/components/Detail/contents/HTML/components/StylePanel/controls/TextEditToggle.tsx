@@ -5,6 +5,7 @@ import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Type } from "lucide-react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 
 interface TextEditToggleProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -51,13 +52,15 @@ export function TextEditToggle({
 						pressed={isEnabled}
 						onPressedChange={handleToggle}
 						disabled={disabled}
-						className="h-8 w-8 p-0"
+						className="h-7 w-7 rounded-md p-0"
 					>
 						<Type className="h-4 w-4" />
 					</Toggle>
 				</span>
 			</TooltipTrigger>
-			<TooltipContent>{t("stylePanel.editTextContent")}</TooltipContent>
+			<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+				{t("stylePanel.editTextContent")}
+			</TooltipContent>
 		</TooltipPrimitive.Root>
 	)
 }

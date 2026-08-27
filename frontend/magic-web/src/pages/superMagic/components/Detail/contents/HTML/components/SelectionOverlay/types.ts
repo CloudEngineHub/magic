@@ -13,6 +13,9 @@ export interface SelectedInfo {
 	computedStyles: Record<string, string>
 	rotation?: number
 	isImageElement?: boolean
+	isTextElement?: boolean
+	textContent?: string
+	inlineStyles?: Record<string, string>
 	intrinsicWidth?: number
 	intrinsicHeight?: number
 	intrinsicAspectRatio?: number

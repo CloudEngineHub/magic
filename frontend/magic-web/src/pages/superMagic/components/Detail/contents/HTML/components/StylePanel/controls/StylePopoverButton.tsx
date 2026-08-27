@@ -1,8 +1,10 @@
 import type { ReactNode } from "react"
 import { Button } from "@/components/shadcn-ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
+import { Popover, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
+import { EditorPopoverContent } from "../../EditorFloating"
 
 interface StylePopoverButtonProps {
 	icon: ReactNode
@@ -40,7 +42,11 @@ export function StylePopoverButton({
 								<Button
 									variant="ghost"
 									size={showLabel ? "sm" : "icon"}
-									className={showLabel ? "h-8 gap-1.5 px-2" : "h-8 w-8"}
+									className={
+										showLabel
+											? "h-7 gap-1.5 rounded-md px-2"
+											: "h-7 w-7 rounded-md"
+									}
 									disabled={disabled}
 									data-testid={triggerTestId}
 								>
@@ -53,18 +59,22 @@ export function StylePopoverButton({
 						</TooltipTrigger>
 					</span>
 				</PopoverTrigger>
-				{!showLabel && <TooltipContent>{tooltip}</TooltipContent>}
+				{!showLabel && (
+					<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+						{tooltip}
+					</TooltipContent>
+				)}
 			</TooltipPrimitive.Root>
-			<PopoverContent
-				className={`z-popup w-80 ${contentClassName || ""}`.trim()}
+			<EditorPopoverContent
+				className={`w-80 ${contentClassName || ""}`.trim()}
 				align="start"
 				data-testid={contentTestId}
 			>
-				<div className="space-y-3">
-					<h4 className="text-sm font-medium">{title}</h4>
+				<div className="min-w-0 space-y-2">
+					<h4 className="text-xs font-semibold leading-4">{title}</h4>
 					{children}
 				</div>
-			</PopoverContent>
+			</EditorPopoverContent>
 		</Popover>
 	)
 }

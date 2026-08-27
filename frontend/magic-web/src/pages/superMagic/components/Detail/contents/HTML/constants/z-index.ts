@@ -6,8 +6,8 @@
  * 1. Base Layer (1-99): Basic UI elements
  * 2. Toolbar Layer (100-999): Edit toolbars and panels
  * 3. Iframe Internal Layer (1000-1999): Elements inside iframe (V2 editing mechanism)
- * 4. Overlay Layer (9000-9999): Selection and hover highlights
- * 5. Fullscreen Layer (10000+): Fullscreen containers
+ * 4. Overlay Layer (9000-9999): DOM tree and selection highlights
+ * 5. Fullscreen Layer (10000+): Context panels and fullscreen containers
  *
  * @note The old V1 editing script (utils/editing-script.ts) is deprecated and not managed here.
  * It uses hardcoded z-index values (999, 1001, 1002, etc.) for backward compatibility.
@@ -17,8 +17,8 @@ export const HTML_EDITOR_Z_INDEX = {
 	// Base Layer (1-99)
 	// Basic UI elements that should stay behind most content
 	BASE: {
-		/** SelectionOverlay root container - needs to be above iframe but create stacking context */
-		SELECTION_OVERLAY_ROOT: 10,
+		/** SelectionOverlay root container - controls must stay above editor panels */
+		SELECTION_OVERLAY_ROOT: 10030,
 		/** PPT Sidebar and its buttons */
 		SIDEBAR: 10,
 	},
@@ -60,6 +60,21 @@ export const HTML_EDITOR_Z_INDEX = {
 		/** Global floating hint rendered via portal, above split panes and local overlays */
 		FLOATING_HINT: 10010,
 	},
+
+	/**
+	 * Floating controls rendered by the HTML editor in the parent document.
+	 * Keep these values above the selection overlay and the application's
+	 * default popup stack without changing global overlay tokens.
+	 */
+	EDITOR_FLOATING: {
+		DOM_TREE: 9000,
+		CONTEXT_PANEL: 10020,
+		POPOVER: 10040,
+		SELECT: 10050,
+		TOOLTIP: 10060,
+		CONTEXT_MENU: 10070,
+		DROPDOWN: 10080,
+	},
 } as const
 
 /**
@@ -68,7 +83,7 @@ export const HTML_EDITOR_Z_INDEX = {
  */
 export const TAILWIND_Z_INDEX_CLASSES = {
 	BASE: {
-		SELECTION_OVERLAY_ROOT: "z-[10]",
+		SELECTION_OVERLAY_ROOT: "z-[10030]",
 		SIDEBAR: "z-[10]",
 	},
 	TOOLBAR: {
@@ -87,6 +102,15 @@ export const TAILWIND_Z_INDEX_CLASSES = {
 	FULLSCREEN: {
 		CONTAINER: "z-[10000]",
 		FLOATING_HINT: "z-[10010]",
+	},
+	EDITOR_FLOATING: {
+		DOM_TREE: "!z-[9000]",
+		CONTEXT_PANEL: "!z-[10020]",
+		POPOVER: "!z-[10040]",
+		SELECT: "!z-[10050]",
+		TOOLTIP: "!z-[10060]",
+		CONTEXT_MENU: "!z-[10070]",
+		DROPDOWN: "!z-[10080]",
 	},
 } as const
 

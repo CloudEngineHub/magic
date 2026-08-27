@@ -5,21 +5,27 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 interface MagicTooltipProps {
 	title?: ReactNode
 	placement?:
-	| "top"
-	| "bottom"
-	| "left"
-	| "right"
-	| "topLeft"
-	| "topRight"
-	| "bottomLeft"
-	| "bottomRight"
-	| "leftTop"
-	| "leftBottom"
-	| "rightTop"
-	| "rightBottom"
+		| "top"
+		| "bottom"
+		| "left"
+		| "right"
+		| "topLeft"
+		| "topRight"
+		| "bottomLeft"
+		| "bottomRight"
+		| "leftTop"
+		| "leftBottom"
+		| "rightTop"
+		| "rightBottom"
 	children: ReactElement
 	/** 全屏等场景下将 Tooltip 挂载到指定容器内 */
 	getPopupContainer?: () => HTMLElement | null
+	/** Optional local layer class for editor-owned tooltips. */
+	contentClassName?: string
+	/** Explicit layer value for editor-owned tooltips. */
+	contentZIndex?: number
+	/** Disable the tooltip while another menu or popover is open. */
+	disabled?: boolean
 }
 
 /**
@@ -41,11 +47,14 @@ export function MagicTooltip({
 	placement = "top",
 	children,
 	getPopupContainer,
+	contentClassName,
+	contentZIndex,
+	disabled = false,
 }: MagicTooltipProps) {
 	const isMobile = useIsMobile()
 
 	// 移动端不显示 Tooltip
-	if (isMobile || !title) {
+	if (isMobile || !title || disabled) {
 		return children
 	}
 
@@ -63,7 +72,12 @@ export function MagicTooltip({
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>{children}</TooltipTrigger>
-			<TooltipContent side={side} className="z-tooltip" container={container}>
+			<TooltipContent
+				side={side}
+				className={contentClassName || "z-tooltip"}
+				container={container}
+				zIndex={contentZIndex}
+			>
 				{title}
 			</TooltipContent>
 		</Tooltip>

@@ -161,6 +161,10 @@ vi.mock("../utils/fetchInterceptor", () => ({
 	injectFetchInterceptorScript: (content: string) => content,
 	injectKeyboardInterceptorScript: (content: string) => content,
 	createKeyboardMessageHandler: () => vi.fn(),
+	KEYBOARD_MESSAGE_TYPES: {
+		CANCEL: "MAGIC_KEYBOARD_CANCEL",
+		SOURCE: "magic-html-iframe",
+	},
 	POST_MESSAGE_TARGET_STRATEGIES: {
 		CROSS_ORIGIN_PARENT: "cross-origin-parent",
 		SAME_ORIGIN_ANCESTOR: "same-origin-ancestor",
@@ -540,7 +544,7 @@ describe("HTML", () => {
 	})
 
 	it("should stop preview loading when the html file is empty", async () => {
-		render(
+		const { rerender } = render(
 			<HTML
 				{...baseProps}
 				data={{

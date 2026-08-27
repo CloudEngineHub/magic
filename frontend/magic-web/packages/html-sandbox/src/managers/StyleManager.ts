@@ -19,6 +19,12 @@ import type { TextStyleManager } from "./TextStyleManager"
 import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
 import { camelToKebab } from "../utils/css"
+import {
+	assignEditorNodeIds,
+	assignUniqueIdsToClone,
+	resetEditorNodeIds,
+	type DuplicatedIdMapping,
+} from "../features/domTree"
 
 /**
  * Special element state data for Canvas, Video, Audio elements
@@ -55,6 +61,29 @@ type SpecialElementData =
 	| VideoElementData
 	| AudioElementData
 	| ContainerWithCanvasData
+
+function splitPriority(value: string): { value: string; priority: "important" | "" } {
+	const match = value.match(/^(.*?)(?:\s*!important\s*)$/i)
+	return match ? { value: match[1].trim(), priority: "important" } : { value, priority: "" }
+}
+
+function getInlineStyleValue(element: HTMLElement, property: string): string {
+	const kebabProperty = camelToKebab(property)
+	const value = element.style.getPropertyValue(kebabProperty)
+	if (!value) return ""
+	const priority = element.style.getPropertyPriority(kebabProperty)
+	return priority ? `${value.trim()} !${priority}` : value.trim()
+}
+
+function setInlineStyle(element: HTMLElement, property: string, rawValue: string): void {
+	const kebabProperty = camelToKebab(property)
+	if (!rawValue.trim()) {
+		element.style.removeProperty(kebabProperty)
+		return
+	}
+	const { value, priority } = splitPriority(rawValue)
+	element.style.setProperty(kebabProperty, value, priority)
+}
 
 /**
  * Extension point for undo/redo of non-style commands. Register via
@@ -351,14 +380,12 @@ export class StyleManager {
 
 		// Save previous values
 		for (const property of Object.keys(styles)) {
-			const kebabProperty = camelToKebab(property)
-			previousState[property] = element.style.getPropertyValue(kebabProperty) || ""
+			previousState[property] = getInlineStyleValue(element, property)
 		}
 
 		// Apply styles
 		for (const [property, value] of Object.entries(styles)) {
-			const kebabProperty = camelToKebab(property)
-			element.style.setProperty(kebabProperty, value)
+			setInlineStyle(element, property, value)
 		}
 
 		// Record command (only if not in batch mode)
@@ -410,16 +437,14 @@ export class StyleManager {
 
 				// Save previous values
 				for (const property of Object.keys(styles)) {
-					const kebabProperty = camelToKebab(property)
-					previousState[property] = element.style.getPropertyValue(kebabProperty) || ""
+					previousState[property] = getInlineStyleValue(element, property)
 				}
 
 				previousStates.push({ selector, styles: previousState })
 
 				// Apply styles
 				for (const [property, value] of Object.entries(styles)) {
-					const kebabProperty = camelToKebab(property)
-					element.style.setProperty(kebabProperty, value)
+					setInlineStyle(element, property, value)
 				}
 			} catch (error) {
 				EditorLogger.error(`Failed to apply styles to element: ${selector}`, error)
@@ -1001,6 +1026,9 @@ export class StyleManager {
 
 			// Clone the element (deep clone to include all children)
 			const clonedElement = element.cloneNode(true) as HTMLElement
+			const duplicatedIdMappings = assignUniqueIdsToClone(clonedElement)
+			resetEditorNodeIds(clonedElement)
+			assignEditorNodeIds(clonedElement)
 
 			// Handle special elements: copy their runtime state
 			const specialElementData = this.captureSpecialElementState(element)
@@ -1027,12 +1055,13 @@ export class StyleManager {
 			const previousState = {
 				selector,
 				duplicatedSelector,
+				duplicatedIdMappings,
 			}
 
 			// Record command
 			this.commandHistory.push({
 				commandType: "DUPLICATE_ELEMENT",
-				payload: { selector, duplicatedSelector },
+				payload: { selector, duplicatedSelector, duplicatedIdMappings },
 				previousState,
 				timestamp: Date.now(),
 				metadata: {
@@ -1401,12 +1430,7 @@ export class StyleManager {
 						const elem = findElement(elemSelector)
 						// Restore previous style values
 						for (const [property, value] of Object.entries(prevStyles)) {
-							const kebabProperty = camelToKebab(property)
-							if (value) {
-								elem.style.setProperty(kebabProperty, value)
-							} else {
-								elem.style.removeProperty(kebabProperty)
-							}
+							setInlineStyle(elem, property, value)
 						}
 					} catch (error) {
 						EditorLogger.error(
@@ -1716,12 +1740,7 @@ export class StyleManager {
 
 			// Handle style restoration
 			for (const [property, value] of Object.entries(previousState)) {
-				const kebabProperty = camelToKebab(property)
-				if (value) {
-					element.style.setProperty(kebabProperty, value as string)
-				} else {
-					element.style.removeProperty(kebabProperty)
-				}
+				setInlineStyle(element, property, value as string)
 			}
 		} catch (error) {
 			EditorLogger.error("Failed to restore state", error)
@@ -1751,8 +1770,7 @@ export class StyleManager {
 						const elem = findElement(elemSelector)
 						// Apply styles
 						for (const [property, value] of Object.entries(styles)) {
-							const kebabProperty = camelToKebab(property)
-							elem.style.setProperty(kebabProperty, value)
+							setInlineStyle(elem, property, value)
 						}
 					} catch (error) {
 						EditorLogger.error(
@@ -1830,8 +1848,23 @@ export class StyleManager {
 					return
 				}
 
-				// Clone the element
+				// Clone the element and restore the IDs generated by the original
+				// duplication. This keeps undo/redo selectors stable while ensuring
+				// every cloned ID remains unique in the document.
 				const clonedElement = element.cloneNode(true) as HTMLElement
+				const duplicatedIdMappings = (command.payload as any).duplicatedIdMappings as
+					| DuplicatedIdMapping[]
+					| undefined
+				const appliedIdMappings = assignUniqueIdsToClone(
+					clonedElement,
+					duplicatedIdMappings,
+				)
+				resetEditorNodeIds(clonedElement)
+				assignEditorNodeIds(clonedElement)
+				if (duplicatedIdMappings) {
+					;(command.payload as any).duplicatedIdMappings = appliedIdMappings
+					;(command.previousState as any).duplicatedIdMappings = appliedIdMappings
+				}
 
 				// Capture and restore special element state
 				const specialElementData = this.captureSpecialElementState(element)
@@ -1848,6 +1881,10 @@ export class StyleManager {
 				if (specialElementData) {
 					await this.restoreSpecialElementState(clonedElement, specialElementData)
 				}
+
+				const appliedDuplicatedSelector = this.generateSelectorForElement(clonedElement)
+				;(command.payload as any).duplicatedSelector = appliedDuplicatedSelector
+				;(command.previousState as any).duplicatedSelector = appliedDuplicatedSelector
 
 				EditorLogger.info("[StyleManager] Element duplicated during redo")
 
@@ -1891,8 +1928,7 @@ export class StyleManager {
 					break
 				case "BATCH_STYLES":
 					for (const [property, value] of Object.entries(styles)) {
-						const kebabProperty = camelToKebab(property)
-						element.style.setProperty(kebabProperty, value as string)
+						setInlineStyle(element, property, value as string)
 					}
 					break
 				case "ADJUST_FONT_SIZE_RECURSIVE": {

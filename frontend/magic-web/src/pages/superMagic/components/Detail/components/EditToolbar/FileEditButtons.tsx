@@ -6,6 +6,8 @@ import { Kbd } from "@/components/shadcn-ui/kbd"
 import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import ConditionalTooltip from "./ConditionalTooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { runGuardedAction } from "../../utils/actionGuard"
+import type { BeforeAction } from "../../utils/actionGuard"
 
 interface FileEditButtonsProps {
 	/** 是否禁用当前工具栏交互（例如 PPT 冷切页等待目标页 ready 时） */
@@ -17,7 +19,9 @@ interface FileEditButtonsProps {
 	/** 是否显示按钮文字 */
 	showButtonText?: boolean
 	/** 编辑按钮点击回调 */
-	onEdit?: () => void
+	onEdit?: () => void | Promise<void>
+	/** Optional guard run before entering edit mode. */
+	beforeAction?: BeforeAction
 	/** 保存按钮点击回调 */
 	onSave?: () => void | Promise<void>
 	/** 保存并退出按钮点击回调 */
@@ -32,6 +36,7 @@ function FileEditButtons({
 	isSaving = false,
 	showButtonText = false,
 	onEdit,
+	beforeAction,
 	onSave,
 	onSaveAndExit,
 	onCancel,
@@ -67,6 +72,11 @@ function FileEditButtons({
 			onCancel()
 		}
 	}, [interactionDisabled, onCancel])
+
+	const handleEdit = useCallback(() => {
+		if (interactionDisabled || !onEdit) return
+		void runGuardedAction(beforeAction, onEdit)
+	}, [beforeAction, interactionDisabled, onEdit])
 
 	useEffect(() => {
 		if (!isEditMode || interactionDisabled) return
@@ -107,7 +117,7 @@ function FileEditButtons({
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={onEdit}
+						onClick={handleEdit}
 						disabled={interactionDisabled}
 						className={outlineActionButtonClassName}
 					>

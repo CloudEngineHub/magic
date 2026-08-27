@@ -100,6 +100,18 @@ export function useElementInspector({
 			if (!activeRef.current) return
 			const iframe = iframeRef.current
 			if (!iframe) return
+			// Inspector interactions are rendered in the parent document. The
+			// collection panel may be portaled outside the overlay, and screenshot
+			// selection starts on the overlay before continuing with pointer capture;
+			// neither interaction should stop inspection on its initial mousedown.
+			if (
+				e.target instanceof Element &&
+				e.target.closest(
+					"[data-element-inspector-overlay], [data-element-inspector-panel-portal]",
+				)
+			) {
+				return
+			}
 			// If the click target is not the iframe element itself, it's "outside"
 			if (e.target !== iframe && !iframe.contains(e.target as Node)) {
 				stop()
@@ -149,9 +161,10 @@ export function useElementInspector({
 
 	// Clean up on unmount
 	useEffect(() => {
+		const iframe = iframeRef.current
 		return () => {
 			if (activeRef.current) {
-				iframeRef.current?.contentWindow?.postMessage(
+				iframe?.contentWindow?.postMessage(
 					{ type: INSPECTOR_MSG.STOP, timestamp: Date.now() },
 					"*",
 				)

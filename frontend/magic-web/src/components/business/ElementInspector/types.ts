@@ -6,6 +6,8 @@
  * (DevConsole toolbar, PPT editor, etc.).
  */
 
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+
 // ─── Inspected element info ──────────────────────────────────────────────────
 
 export interface InspectedElementRect {
@@ -72,6 +74,75 @@ export interface InspectedElementInfo {
 	/** Number of elements matched by selector in the inspected document. */
 	selectorMatchCount?: number
 }
+
+/** A selected HTML element plus the user instruction waiting for submission. */
+export interface HtmlElementSelectionTarget {
+	id: string
+	kind: "element"
+	info: InspectedElementInfo
+	instruction: string
+}
+
+/** A user-selected screenshot region waiting for submission. */
+export interface HtmlScreenshotSelectionTarget {
+	id: string
+	kind: "screenshot"
+	screenshot: {
+		dataUrl: string
+		rect: InspectedElementRect
+		/** Final image dimensions in the host viewport's CSS pixels. */
+		displaySize?: {
+			width: number
+			height: number
+		}
+		mention?: TiptapMentionAttributes
+	}
+	instruction: string
+}
+
+export type HtmlSelectionTarget = HtmlElementSelectionTarget | HtmlScreenshotSelectionTarget
+
+export interface HtmlMultiSelectionRequestTarget {
+	id?: string
+	kind: "element" | "screenshot"
+	selector: string
+	elementLabel: string
+	textContent?: string
+	domContext?: InspectedElementInfo["domContext"]
+	elementHtml?: string
+	screenshot?: {
+		dataUrl: string
+		rect: InspectedElementRect
+		displaySize?: {
+			width: number
+			height: number
+		}
+		mention?: TiptapMentionAttributes
+	}
+	instruction: string
+}
+
+/** Structured contract for submitting several HTML targets as one Agent request. */
+export interface HtmlMultiSelectionRequest {
+	fileId: string
+	fileName?: string
+	filePath?: string
+	targets: HtmlMultiSelectionRequestTarget[]
+	instruction: string
+	onSuccess?: () => void
+	onError?: (error: unknown) => void
+}
+
+/** Request the message editor to upload a screenshot before final submission. */
+export interface HtmlScreenshotUploadRequest {
+	targetId: string
+	dataUrl: string
+	fileName?: string
+	onSuccess?: (mention: TiptapMentionAttributes) => void
+	onError?: (error: unknown) => void
+}
+
+export type HtmlMultiSelectionSubmitState = "idle" | "submitting" | "succeeded" | "failed"
 
 // ─── Message protocol ────────────────────────────────────────────────────────
 

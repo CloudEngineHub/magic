@@ -212,6 +212,10 @@ export const PubSubEvents = {
 
 	/** 超级麦吉 - 追加建议文本到输入框末尾 */
 	Append_Suggestion_To_Editor: "PubSub_Append_Suggestion_To_Editor",
+	/** HTML 元素多选目标提交；由现有 Agent 话题链路消费。 */
+	Submit_Html_Multi_Selection: "PubSub_Submit_Html_Multi_Selection",
+	/** HTML 截图在确认目标后提前上传到临时目录。 */
+	Prepare_Html_Screenshot: "PubSub_Prepare_Html_Screenshot",
 	/** 超级麦吉 - 追加 JSONContent 到输入框末尾（不覆盖已有内容） */
 	Append_Content_To_Editor: "PubSub_Append_Content_To_Editor",
 	/** 超级麦吉 - 设置内容当幻灯片添加时 */

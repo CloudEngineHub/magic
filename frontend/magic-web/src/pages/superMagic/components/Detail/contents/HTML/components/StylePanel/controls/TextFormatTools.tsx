@@ -3,6 +3,7 @@ import { Toggle } from "@/components/shadcn-ui/toggle"
 import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Bold, Italic, Underline, Strikethrough } from "lucide-react"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 
 interface TextFormatToolsProps {
 	isBold: boolean
@@ -56,13 +57,15 @@ export function TextFormatTools({
 								onFormat("fontWeight", pressed ? "700" : "400")
 							}
 							disabled={disabled}
-							className="h-8 w-8 p-0"
+							className="h-7 w-7 rounded-md p-0"
 						>
 							<Bold className="h-4 w-4" />
 						</Toggle>
 					</span>
 				</TooltipTrigger>
-				<TooltipContent>{t("stylePanel.bold")}</TooltipContent>
+				<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+					{t("stylePanel.bold")}
+				</TooltipContent>
 			</TooltipPrimitive.Root>
 			<TooltipPrimitive.Root>
 				<TooltipTrigger asChild>
@@ -74,13 +77,15 @@ export function TextFormatTools({
 								onFormat("fontStyle", pressed ? "italic" : "normal")
 							}
 							disabled={disabled}
-							className="h-8 w-8 p-0"
+							className="h-7 w-7 rounded-md p-0"
 						>
 							<Italic className="h-4 w-4" />
 						</Toggle>
 					</span>
 				</TooltipTrigger>
-				<TooltipContent>{t("stylePanel.italic")}</TooltipContent>
+				<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+					{t("stylePanel.italic")}
+				</TooltipContent>
 			</TooltipPrimitive.Root>
 			<TooltipPrimitive.Root>
 				<TooltipTrigger asChild>
@@ -92,13 +97,15 @@ export function TextFormatTools({
 								handleTextDecorationChange("underline", pressed)
 							}
 							disabled={disabled}
-							className="h-8 w-8 p-0"
+							className="h-7 w-7 rounded-md p-0"
 						>
 							<Underline className="h-4 w-4" />
 						</Toggle>
 					</span>
 				</TooltipTrigger>
-				<TooltipContent>{t("stylePanel.underline")}</TooltipContent>
+				<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+					{t("stylePanel.underline")}
+				</TooltipContent>
 			</TooltipPrimitive.Root>
 			<TooltipPrimitive.Root>
 				<TooltipTrigger asChild>
@@ -110,13 +117,15 @@ export function TextFormatTools({
 								handleTextDecorationChange("line-through", pressed)
 							}
 							disabled={disabled}
-							className="h-8 w-8 p-0"
+							className="h-7 w-7 rounded-md p-0"
 						>
 							<Strikethrough className="h-4 w-4" />
 						</Toggle>
 					</span>
 				</TooltipTrigger>
-				<TooltipContent>{t("stylePanel.strikethrough")}</TooltipContent>
+				<TooltipContent className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}>
+					{t("stylePanel.strikethrough")}
+				</TooltipContent>
 			</TooltipPrimitive.Root>
 		</div>
 	)

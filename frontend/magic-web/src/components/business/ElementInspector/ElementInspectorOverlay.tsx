@@ -7,20 +7,37 @@
  *
  * Coordinate translation: the iframe reports element rects relative to its
  * own viewport. This overlay converts them to container-relative positions
- * using the iframe's own bounding rect + optional scale ratio.
+ * using live iframe/container geometry. Screenshot mode uses the iframe's
+ * already-transformed visual bounds so the picker is not scaled twice.
  */
 
-import { useRef, useEffect, useState, useCallback, useMemo } from "react"
+import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "react"
+import { createPortal } from "react-dom"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
 import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import type { InspectedElementInfo, InspectedElementRect } from "./types"
-import { getInspectorOverlayScale, toInspectorOverlayRect } from "./geometry"
+import type {
+	HtmlMultiSelectionSubmitState,
+	HtmlSelectionTarget,
+	InspectedElementInfo,
+	InspectedElementRect,
+} from "./types"
+import {
+	fromInspectorOverlayRect,
+	getInspectorOverlayScale,
+	toInspectorOverlayRect,
+	toInspectorOverlayVisualRect,
+} from "./geometry"
 import { buildAgentPromptContent } from "./agentPrompt"
 import { formatElementSize, getShortSelector } from "./format"
+import { ElementEditPopover } from "./ElementEditPopover"
+import { PendingTargetsPanel } from "./PendingTargetsPanel"
+import { ScreenshotSelectionOverlay } from "./ScreenshotSelectionOverlay"
+import { captureIframeRegion, toRenderedSelection } from "./screenshot"
+import { getHtmlSelectionTargetRect } from "./selection"
 
-export { buildAgentPromptContent } from "./agentPrompt"
+export { buildAgentPromptContent, buildHtmlMultiSelectionPromptContent } from "./agentPrompt"
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +60,31 @@ interface ElementInspectorOverlayProps {
 	onSendToAgent?: (content: JSONContent) => void
 	/** When true, suppresses the floating ElementInfoCard after selection (for toolbar-triggered mode) */
 	hideInfoCard?: boolean
+	/** Current target being edited in the multi-selection flow. */
+	activeTarget?: HtmlSelectionTarget | null
+	draftInstruction?: string
+	onDraftInstructionChange?: (instruction: string) => void
+	onConfirmTarget?: () => void
+	onCancelTarget?: () => void
+	/** Confirmed targets waiting for one structured submission. */
+	pendingTargets?: HtmlSelectionTarget[]
+	submitState?: HtmlMultiSelectionSubmitState
+	submitError?: string | null
+	onEditPendingTarget?: (target: HtmlSelectionTarget) => void
+	onRemovePendingTarget?: (targetId: string) => void
+	onSubmitPendingTargets?: () => void
+	selectionMode?: "element" | "screenshot"
+	onSelectionModeChange?: (mode: "element" | "screenshot") => void
+	onCaptureScreenshot?: (
+		dataUrl: string,
+		rect: InspectedElementRect,
+		displaySize?: { width: number; height: number },
+	) => void
+	onExitMultiSelection?: () => void
+	/** Bottom distance for the pending-target panel when another toolbar occupies the canvas edge. */
+	pendingPanelBottomOffset?: number
+	/** Stable canvas viewport used to position the pending-target panel outside scaled content. */
+	panelContainerRef?: React.RefObject<HTMLDivElement | null>
 	/** Scale ratio of the iframe (for coordinate conversion) */
 	scaleRatio?: number
 }
@@ -59,11 +101,45 @@ export function ElementInspectorOverlay({
 	onInsertToConsole,
 	onSendToAgent,
 	hideInfoCard = false,
+	activeTarget = null,
+	draftInstruction = "",
+	onDraftInstructionChange,
+	onConfirmTarget,
+	onCancelTarget,
+	pendingTargets = [],
+	submitState = "idle",
+	submitError = null,
+	onEditPendingTarget,
+	onRemovePendingTarget,
+	onSubmitPendingTargets,
+	selectionMode = "element",
+	onSelectionModeChange,
+	onCaptureScreenshot,
+	onExitMultiSelection,
+	pendingPanelBottomOffset,
+	panelContainerRef,
 	scaleRatio = 1,
 }: ElementInspectorOverlayProps) {
 	const { t } = useTranslation("super")
 	const overlayRef = useRef<HTMLDivElement>(null)
 	const [iframeRect, setIframeRect] = useState<DOMRect | null>(null)
+	const [isScreenshotCapturing, setIsScreenshotCapturing] = useState(false)
+	const [panelPortalHost, setPanelPortalHost] = useState<HTMLDivElement | null>(null)
+
+	// The inspector overlay remains over the scaled content for accurate element geometry,
+	// while the collection bar is mounted in the unscaled canvas viewport.
+	useEffect(() => {
+		setPanelPortalHost(panelContainerRef?.current ?? null)
+	}, [panelContainerRef])
+	const getOverlaySize = useCallback(() => {
+		const overlay = overlayRef.current
+		if (!overlay) return { width: 0, height: 0 }
+		const bounds = overlay.getBoundingClientRect()
+		return {
+			width: overlay.clientWidth || bounds.width,
+			height: overlay.clientHeight || bounds.height,
+		}
+	}, [])
 
 	// Track iframe position for coordinate conversion (ResizeObserver for selected-element case)
 	useEffect(() => {
@@ -143,15 +219,103 @@ export function ElementInspectorOverlay({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[selectedElement, toOverlayRect, iframeRect],
 	)
+	const handleCaptureScreenshot = useCallback(
+		async (overlayRect: InspectedElementRect) => {
+			const geometry = getOverlayGeometry()
+			const iframe = iframeRef.current
+			if (!geometry || !iframe || !onCaptureScreenshot) {
+				throw new Error("HTML screenshot capture is unavailable")
+			}
+			const overlay = overlayRef.current
+			if (!overlay) throw new Error("HTML screenshot overlay is unavailable")
+			const overlayBounds = overlay.getBoundingClientRect()
+			const viewportSelection = toRenderedSelection(
+				{
+					clientWidth: overlay.clientWidth || overlayBounds.width,
+					clientHeight: overlay.clientHeight || overlayBounds.height,
+				},
+				overlayBounds,
+				overlayRect,
+			)
+			const iframeSelection = fromInspectorOverlayRect(overlayRect, geometry)
+			const dataUrl = await captureIframeRegion({
+				iframe,
+				selection: iframeSelection,
+				viewportSelection,
+			})
+			onCaptureScreenshot(dataUrl, iframeSelection, {
+				width: viewportSelection.width,
+				height: viewportSelection.height,
+			})
+		},
+		[getOverlayGeometry, iframeRef, onCaptureScreenshot],
+	)
+	const screenshotSelectionBounds = useMemo(() => {
+		const iframe = iframeRef.current
+		const parent = overlayRef.current?.parentElement
+		if (!iframe || !parent || !iframeRect) return undefined
+
+		const visualIframeRect = iframe.getBoundingClientRect()
+		const visualParentRect = parent.getBoundingClientRect()
+		return toInspectorOverlayVisualRect(visualIframeRect, visualParentRect, {
+			width: parent.clientWidth || visualParentRect.width,
+			height: parent.clientHeight || visualParentRect.height,
+		})
+	}, [iframeRect, iframeRef])
+
 	// Don't render anything if not active and no selection
-	if (!active && !selectedElement) return null
+	if (!active && !selectedElement && !activeTarget && pendingTargets.length === 0) return null
 	const overlayScale = getOverlayScale()
+	const overlaySize = getOverlaySize()
+	const activeTargetBox = activeTarget
+		? toOverlayRect(
+				getHtmlSelectionTargetRect(activeTarget) ?? {
+					left: 0,
+					top: 0,
+					width: 0,
+					height: 0,
+				},
+			)
+		: null
+	const pendingPanel =
+		(pendingTargets.length > 0 || active || activeTarget) &&
+		onEditPendingTarget &&
+		onRemovePendingTarget &&
+		onSubmitPendingTargets ? (
+			<PendingTargetsPanel
+				targets={pendingTargets}
+				submitState={submitState}
+				submitError={submitError}
+				onEdit={onEditPendingTarget}
+				onRemove={onRemovePendingTarget}
+				onSubmit={onSubmitPendingTargets}
+				selectionMode={selectionMode}
+				onSelectionModeChange={onSelectionModeChange}
+				onExit={onExitMultiSelection}
+				bottomOffset={pendingPanelBottomOffset}
+			/>
+		) : null
+	const pendingPanelContent = panelContainerRef
+		? panelPortalHost
+			? createPortal(
+					<div
+						className="pointer-events-none absolute inset-0 z-40"
+						data-element-inspector-panel-portal="true"
+						style={{ visibility: isScreenshotCapturing ? "hidden" : undefined }}
+					>
+						{pendingPanel}
+					</div>,
+					panelPortalHost,
+				)
+			: null
+		: pendingPanel
 
 	return (
 		<div
 			ref={overlayRef}
 			className="pointer-events-none absolute inset-0 z-40"
-			style={{ overflow: "hidden" }}
+			data-element-inspector-overlay="true"
+			style={{ overflow: "hidden", visibility: isScreenshotCapturing ? "hidden" : undefined }}
 		>
 			{/* Transparent event-capture layer when active — allows pointer events through to iframe */}
 			{active && (
@@ -163,63 +327,83 @@ export function ElementInspectorOverlay({
 
 			{/* Hover highlight box */}
 			{active && hoverBox && hoveredElement && (
-				<>
-					{/* Content area highlight */}
-					<div
-						className="pointer-events-none absolute border-2 border-blue-500"
-						style={{
-							left: hoverBox.left,
-							top: hoverBox.top,
-							width: hoverBox.width,
-							height: hoverBox.height,
-							backgroundColor: "rgba(59, 130, 246, 0.1)",
-							transition: "all 50ms ease-out",
-						}}
-					/>
-
-					{/* Padding highlight */}
-					{hoveredElement.padding && (
-						<div
-							className="pointer-events-none absolute"
-							style={{
-								left: hoverBox.left - hoveredElement.padding.left * overlayScale.x,
-								top: hoverBox.top - hoveredElement.padding.top * overlayScale.y,
-								width:
-									hoverBox.width +
-									(hoveredElement.padding.left + hoveredElement.padding.right) *
-										overlayScale.x,
-								height:
-									hoverBox.height +
-									(hoveredElement.padding.top + hoveredElement.padding.bottom) *
-										overlayScale.y,
-								backgroundColor: "rgba(147, 196, 125, 0.3)",
-								transition: "all 50ms ease-out",
-								zIndex: -1,
-							}}
-						/>
-					)}
-
-					{/* Element label tooltip */}
-					<HoverLabel
-						info={hoveredElement}
-						box={hoverBox}
-						containerWidth={overlayRef.current?.clientWidth ?? 0}
-					/>
-				</>
+				<ElementHighlight
+					info={hoveredElement}
+					box={hoverBox}
+					overlayScale={overlayScale}
+					containerWidth={overlaySize.width}
+				/>
 			)}
+
+			{active && selectionMode === "screenshot" && (
+				<ScreenshotSelectionOverlay
+					containerWidth={overlaySize.width}
+					containerHeight={overlaySize.height}
+					selectionBounds={screenshotSelectionBounds}
+					onCapture={handleCaptureScreenshot}
+					onCaptureStateChange={setIsScreenshotCapturing}
+				/>
+			)}
+
+			{/* Keep every confirmed target highlighted while the picker stays open. The
+			    active target is rendered separately so its editor popover can take focus. */}
+			{pendingTargets.map((target) => {
+				if (target.kind === "element") {
+					if (
+						target.info.selector === selectedElement?.selector ||
+						(activeTarget?.kind === "element" &&
+							target.info.selector === activeTarget.info.selector)
+					)
+						return null
+
+					const box = toOverlayRect(target.info.rect)
+					return box ? (
+						<Fragment key={target.id}>
+							<ElementHighlight
+								info={target.info}
+								box={box}
+								overlayScale={overlayScale}
+								containerWidth={overlaySize.width}
+							/>
+							<PendingTargetHighlight
+								box={box}
+								onClick={() => onEditPendingTarget?.(target)}
+							/>
+						</Fragment>
+					) : null
+				}
+
+				if (target.id === activeTarget?.id) return null
+				const box = toOverlayRect(target.screenshot.rect)
+				return box ? (
+					<Fragment key={target.id}>
+						<ScreenshotHighlight
+							box={box}
+							containerWidth={overlaySize.width}
+							label={t("stylePanel.inspector.screenshot")}
+							size={formatElementSize(
+								target.screenshot.displaySize?.width ??
+									target.screenshot.rect.width,
+								target.screenshot.displaySize?.height ??
+									target.screenshot.rect.height,
+							)}
+						/>
+						<PendingTargetHighlight
+							box={box}
+							onClick={() => onEditPendingTarget?.(target)}
+						/>
+					</Fragment>
+				) : null
+			})}
 
 			{/* Selected element highlight */}
 			{selectBox && selectedElement && (
 				<>
-					<div
-						className="pointer-events-none absolute border-2 border-orange-500"
-						style={{
-							left: selectBox.left,
-							top: selectBox.top,
-							width: selectBox.width,
-							height: selectBox.height,
-							backgroundColor: "rgba(249, 115, 22, 0.08)",
-						}}
+					<ElementHighlight
+						info={selectedElement}
+						box={selectBox}
+						overlayScale={overlayScale}
+						containerWidth={overlaySize.width}
 					/>
 
 					{/* Info card */}
@@ -227,8 +411,8 @@ export function ElementInspectorOverlay({
 						<ElementInfoCard
 							info={selectedElement}
 							box={selectBox}
-							containerWidth={overlayRef.current?.clientWidth ?? 0}
-							containerHeight={overlayRef.current?.clientHeight ?? 0}
+							containerWidth={overlaySize.width}
+							containerHeight={overlaySize.height}
 							onClose={onClearSelection}
 							onCopySelector={onCopySelector}
 							onInsertToConsole={onInsertToConsole}
@@ -238,11 +422,158 @@ export function ElementInspectorOverlay({
 					)}
 				</>
 			)}
+
+			{/* A pending target can be edited from the collection bar after the inspector
+			    has cleared selectedElement. Keep the target visibly selected in that state. */}
+			{activeTarget?.kind === "element" &&
+				activeTargetBox &&
+				activeTarget.info &&
+				activeTarget.info.selector !== selectedElement?.selector && (
+					<ElementHighlight
+						info={activeTarget.info}
+						box={activeTargetBox}
+						overlayScale={overlayScale}
+						containerWidth={overlaySize.width}
+					/>
+				)}
+
+			{activeTarget?.kind === "screenshot" && activeTargetBox && (
+				<ScreenshotHighlight
+					box={activeTargetBox}
+					containerWidth={overlaySize.width}
+					label={t("stylePanel.inspector.screenshot")}
+					size={formatElementSize(
+						activeTarget.screenshot.displaySize?.width ??
+							activeTarget.screenshot.rect.width,
+						activeTarget.screenshot.displaySize?.height ??
+							activeTarget.screenshot.rect.height,
+					)}
+				/>
+			)}
+
+			{activeTarget &&
+				activeTargetBox &&
+				onDraftInstructionChange &&
+				onConfirmTarget &&
+				onCancelTarget && (
+					<ElementEditPopover
+						info={activeTarget.kind === "element" ? activeTarget.info : undefined}
+						targetKind={activeTarget.kind}
+						screenshotDataUrl={activeTarget.screenshot?.dataUrl}
+						box={activeTargetBox}
+						containerWidth={overlaySize.width}
+						containerHeight={overlaySize.height}
+						instruction={draftInstruction}
+						onInstructionChange={onDraftInstructionChange}
+						onConfirm={onConfirmTarget}
+						onCancel={onCancelTarget}
+					/>
+				)}
+
+			{pendingPanelContent}
 		</div>
 	)
 }
 
-// ─── Hover Label ─────────────────────────────────────────────────────────────
+// ─── Shared element highlight ────────────────────────────────────────────────
+
+function ElementHighlight({
+	info,
+	box,
+	overlayScale,
+	containerWidth,
+}: {
+	info: InspectedElementInfo
+	box: { left: number; top: number; width: number; height: number }
+	overlayScale: { x: number; y: number }
+	containerWidth: number
+}) {
+	return (
+		<>
+			<div
+				className="pointer-events-none absolute border-2 border-blue-500"
+				style={{
+					left: box.left,
+					top: box.top,
+					width: box.width,
+					height: box.height,
+					backgroundColor: "rgba(59, 130, 246, 0.1)",
+					transition:
+						"left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out",
+				}}
+			/>
+
+			{info.padding && (
+				<div
+					className="pointer-events-none absolute"
+					style={{
+						left: box.left - info.padding.left * overlayScale.x,
+						top: box.top - info.padding.top * overlayScale.y,
+						width:
+							box.width + (info.padding.left + info.padding.right) * overlayScale.x,
+						height:
+							box.height + (info.padding.top + info.padding.bottom) * overlayScale.y,
+						backgroundColor: "rgba(147, 196, 125, 0.3)",
+						transition:
+							"left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out",
+						zIndex: -1,
+					}}
+				/>
+			)}
+
+			<HoverLabel info={info} box={box} containerWidth={containerWidth} />
+		</>
+	)
+}
+
+function PendingTargetHighlight({
+	box,
+	onClick,
+}: {
+	box: { left: number; top: number; width: number; height: number }
+	onClick: () => void
+}) {
+	return (
+		<div
+			className="pointer-events-auto absolute cursor-pointer"
+			style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+			data-testid="element-inspector-pending-target"
+			onClick={(event) => {
+				event.preventDefault()
+				event.stopPropagation()
+				onClick()
+			}}
+		/>
+	)
+}
+
+function ScreenshotHighlight({
+	box,
+	containerWidth,
+	label,
+	size,
+}: {
+	box: { left: number; top: number; width: number; height: number }
+	containerWidth: number
+	label: string
+	size: string
+}) {
+	return (
+		<>
+			<div
+				className="pointer-events-none absolute border-2 border-blue-500"
+				style={{
+					left: box.left,
+					top: box.top,
+					width: box.width,
+					height: box.height,
+					backgroundColor: "rgba(59, 130, 246, 0.1)",
+				}}
+			/>
+			<SelectionLabel label={label} size={size} box={box} containerWidth={containerWidth} />
+		</>
+	)
+}
 
 function HoverLabel({
 	info,
@@ -253,8 +584,27 @@ function HoverLabel({
 	box: { left: number; top: number; width: number; height: number }
 	containerWidth: number
 }) {
-	const label = getShortSelector(info)
-	const size = formatElementSize(info.rect.width, info.rect.height)
+	return (
+		<SelectionLabel
+			label={getShortSelector(info)}
+			size={formatElementSize(info.rect.width, info.rect.height)}
+			box={box}
+			containerWidth={containerWidth}
+		/>
+	)
+}
+
+function SelectionLabel({
+	label,
+	size,
+	box,
+	containerWidth,
+}: {
+	label: string
+	size: string
+	box: { left: number; top: number; width: number; height: number }
+	containerWidth: number
+}) {
 	const labelWidth = 240
 
 	// Position label above the element if there's space, else below
@@ -268,6 +618,7 @@ function HoverLabel({
 	return (
 		<div
 			className="pointer-events-none absolute flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[11px] leading-tight text-white"
+			data-testid="element-inspector-selection-label"
 			style={{
 				left,
 				top: above ? box.top - 24 : box.top + box.height + 4,

@@ -6,16 +6,12 @@ import { ImageUp, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Label } from "@/components/shadcn-ui/label"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { Slider } from "@/components/shadcn-ui/slider"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
+import { EditorSelectContent } from "../../EditorFloating"
 
 type BackgroundType = "solid" | "linear-gradient" | "radial-gradient" | "image"
 
@@ -161,6 +157,16 @@ const BackgroundSection = observer(function BackgroundSection({
 		{ wait: 300 },
 	)
 
+	const handleGradientAngleInput = useCallback(
+		(value: string) => {
+			const nextAngle = Number.parseFloat(value)
+			if (!Number.isFinite(nextAngle)) return
+			setGradientAngle(nextAngle)
+			applyGradientDebounced(bgType, colorStops, nextAngle)
+		},
+		[applyGradientDebounced, bgType, colorStops],
+	)
+
 	const handleBgTypeChange = useCallback(
 		(value: BackgroundType) => {
 			setBgType(value)
@@ -262,24 +268,22 @@ const BackgroundSection = observer(function BackgroundSection({
 	)
 
 	return (
-		<div className="space-y-4" data-testid="html-style-panel-background-section">
-			<div className="space-y-2">
-				<h4 className="text-sm font-medium">{t("stylePanel.backgroundStyles")}</h4>
-			</div>
-
-			<div className="space-y-2">
-				<Label className="text-xs">{t("stylePanel.backgroundType")}</Label>
+		<div className="min-w-0 space-y-3" data-testid="html-style-panel-background-section">
+			<div className="min-w-0 space-y-1">
+				<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
+					{t("stylePanel.backgroundType")}
+				</Label>
 				<Select
 					value={bgType}
 					onValueChange={(value) => handleBgTypeChange(value as BackgroundType)}
 				>
 					<SelectTrigger
-						className="h-9"
+						className="h-7 w-full rounded-md border-border/70 bg-background/70 px-2 text-xs"
 						data-testid="html-style-panel-background-type-trigger"
 					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent data-testid="html-style-panel-background-type-content">
+					<EditorSelectContent data-testid="html-style-panel-background-type-content">
 						<SelectItem value="solid">{t("stylePanel.solidColor")}</SelectItem>
 						<SelectItem value="linear-gradient">
 							{t("stylePanel.linearGradient")}
@@ -288,13 +292,16 @@ const BackgroundSection = observer(function BackgroundSection({
 							{t("stylePanel.radialGradient")}
 						</SelectItem>
 						<SelectItem value="image">{t("stylePanel.imageBackground")}</SelectItem>
-					</SelectContent>
+					</EditorSelectContent>
 				</Select>
 			</div>
 
 			{bgType === "solid" && (
-				<div className="space-y-2">
-					<Label htmlFor="bg-color" className="text-xs">
+				<div className="min-w-0 space-y-1">
+					<Label
+						htmlFor="bg-color"
+						className="text-[11px] font-medium leading-4 text-muted-foreground"
+					>
 						{t("stylePanel.backgroundColor")}
 					</Label>
 					<div className="flex gap-2">
@@ -303,7 +310,7 @@ const BackgroundSection = observer(function BackgroundSection({
 							type="color"
 							value={solidColor === "transparent" ? "#ffffff" : solidColor}
 							onChange={(e) => handleSolidColorChange(e.target.value)}
-							className="h-9 w-16 cursor-pointer p-1"
+							className="h-7 w-12 cursor-pointer rounded-md p-1"
 							data-testid="html-style-panel-background-color-picker"
 						/>
 						<Input
@@ -311,7 +318,7 @@ const BackgroundSection = observer(function BackgroundSection({
 							value={solidColor}
 							onChange={(e) => handleSolidColorChange(e.target.value)}
 							placeholder={t("stylePanel.backgroundColorPlaceholder")}
-							className="flex-1 font-mono text-xs"
+							className="h-7 min-w-0 flex-1 rounded-md font-mono text-xs"
 							data-testid="html-style-panel-background-color-input"
 						/>
 					</div>
@@ -321,12 +328,22 @@ const BackgroundSection = observer(function BackgroundSection({
 			{(bgType === "linear-gradient" || bgType === "radial-gradient") && (
 				<>
 					{bgType === "linear-gradient" && (
-						<div className="space-y-2">
+						<div className="space-y-1.5">
 							<div className="flex items-center justify-between">
-								<Label className="text-xs">{t("stylePanel.gradientAngle")}</Label>
-								<span className="text-xs text-muted-foreground">
-									{gradientAngle}°
-								</span>
+								<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
+									{t("stylePanel.gradientAngle")}
+								</Label>
+								<div className="flex items-center gap-1">
+									<NumericDragInput
+										value={String(gradientAngle)}
+										onChange={handleGradientAngleInput}
+										min={0}
+										max={360}
+										className="h-6 w-14 rounded-md px-1 text-right text-xs"
+										aria-label={t("stylePanel.gradientAngle")}
+									/>
+									<span className="text-xs text-muted-foreground">°</span>
+								</div>
 							</div>
 							<Slider
 								value={[gradientAngle]}
@@ -343,8 +360,10 @@ const BackgroundSection = observer(function BackgroundSection({
 						</div>
 					)}
 
-					<div className="space-y-2">
-						<Label className="text-xs">{t("stylePanel.gradientPreview")}</Label>
+					<div className="space-y-1.5">
+						<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
+							{t("stylePanel.gradientPreview")}
+						</Label>
 						<div
 							className="h-16 w-full rounded-md border"
 							style={{
@@ -354,14 +373,16 @@ const BackgroundSection = observer(function BackgroundSection({
 						/>
 					</div>
 
-					<div className="space-y-2">
+					<div className="space-y-1.5">
 						<div className="flex items-center justify-between">
-							<Label className="text-xs">{t("stylePanel.colorStops")}</Label>
+							<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
+								{t("stylePanel.colorStops")}
+							</Label>
 							<Button
 								size="sm"
 								variant="ghost"
 								onClick={handleAddColorStop}
-								className="h-6 gap-1 px-2 text-xs"
+								className="h-7 gap-1 rounded-md px-2 text-xs"
 								data-testid="html-style-panel-add-color-stop-button"
 							>
 								<Plus className="h-3 w-3" />
@@ -371,7 +392,10 @@ const BackgroundSection = observer(function BackgroundSection({
 
 						<ScrollArea className="h-full max-h-60 space-y-3 overflow-y-auto">
 							{colorStops.map((stop) => (
-								<div key={stop.id} className="space-y-2 rounded-md border p-3">
+								<div
+									key={stop.id}
+									className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2"
+								>
 									<div className="flex gap-2">
 										<Input
 											type="color"
@@ -379,7 +403,7 @@ const BackgroundSection = observer(function BackgroundSection({
 											onChange={(e) =>
 												handleColorStopColorChange(stop.id, e.target.value)
 											}
-											className="h-9 w-16 cursor-pointer p-1"
+											className="h-7 w-12 cursor-pointer rounded-md p-1"
 											data-testid="html-style-panel-color-stop-picker"
 										/>
 										<Input
@@ -388,7 +412,7 @@ const BackgroundSection = observer(function BackgroundSection({
 											onChange={(e) =>
 												handleColorStopColorChange(stop.id, e.target.value)
 											}
-											className="flex-1 font-mono text-xs"
+											className="h-7 min-w-0 flex-1 rounded-md font-mono text-xs"
 											data-testid="html-style-panel-color-stop-input"
 										/>
 										<Button
@@ -396,7 +420,7 @@ const BackgroundSection = observer(function BackgroundSection({
 											variant="ghost"
 											onClick={() => handleRemoveColorStop(stop.id)}
 											disabled={colorStops.length <= 2}
-											className="h-9 w-9 p-0"
+											className="h-7 w-7 rounded-md p-0"
 											data-testid="html-style-panel-remove-color-stop-button"
 										>
 											<Trash2 className="h-4 w-4" />
@@ -432,9 +456,14 @@ const BackgroundSection = observer(function BackgroundSection({
 			)}
 
 			{bgType === "image" && (
-				<div className="space-y-3" data-testid="html-style-panel-background-image-controls">
-					<div className="space-y-2">
-						<Label className="text-xs">{t("stylePanel.currentBackgroundImage")}</Label>
+				<div
+					className="min-w-0 space-y-2"
+					data-testid="html-style-panel-background-image-controls"
+				>
+					<div className="space-y-1.5">
+						<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
+							{t("stylePanel.currentBackgroundImage")}
+						</Label>
 						<div
 							className="flex h-24 items-center justify-center rounded-md border bg-muted/30 bg-cover bg-center text-xs text-muted-foreground"
 							style={

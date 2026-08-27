@@ -35,11 +35,22 @@ interface InsertFloatingImageState extends InsertFloatingImagePendingState {
 	html: string
 }
 
+interface InsertImageNodePendingState {
+	parentSelector: string
+	index?: number
+}
+
+interface InsertImageNodeState extends InsertImageNodePendingState {
+	selector: string
+	html: string
+}
+
 const IMAGE_COMMAND_TYPES = new Set([
 	"REPLACE_ELEMENT_IMAGE",
 	"SET_ELEMENT_BACKGROUND_IMAGE",
 	"REMOVE_ELEMENT_BACKGROUND_IMAGE",
 	"INSERT_FLOATING_IMAGE",
+	"INSERT_IMAGE_NODE",
 ])
 
 type ImageCommandRecord = CommandRecord & {
@@ -48,21 +59,35 @@ type ImageCommandRecord = CommandRecord & {
 		| "SET_ELEMENT_BACKGROUND_IMAGE"
 		| "REMOVE_ELEMENT_BACKGROUND_IMAGE"
 		| "INSERT_FLOATING_IMAGE"
-	payload?: ReplaceElementImageState | BackgroundImageState | InsertFloatingImageState
+		| "INSERT_IMAGE_NODE"
+	payload?:
+		| ReplaceElementImageState
+		| BackgroundImageState
+		| InsertFloatingImageState
+		| InsertImageNodeState
 	previousState?:
 		| ReplaceElementImageState
 		| BackgroundImageState
 		| InsertFloatingImagePendingState
+		| InsertImageNodePendingState
 }
 
 interface PendingImageUploadContext {
 	request: ImageUploadRequestPayload
-	previousState: ReplaceElementImageState | BackgroundImageState | InsertFloatingImagePendingState
+	previousState:
+		| ReplaceElementImageState
+		| BackgroundImageState
+		| InsertFloatingImagePendingState
+		| InsertImageNodePendingState
 	resolve: () => void
 	reject: (error: Error) => void
 }
 
 const DEFAULT_INSERTED_IMAGE_WIDTH = 240
+// Images inserted into the document tree should scale with their target
+// container instead of keeping the uploaded file's intrinsic width. A
+// percentage width also remains useful when the parent is resized later.
+const DEFAULT_INSERTED_IMAGE_NODE_WIDTH = "50%"
 const DEFAULT_INSERTED_IMAGE_OFFSET = 24
 
 export class ImageManager {
@@ -93,6 +118,11 @@ export class ImageManager {
 
 		if (payload.action === "insert-floating-image") {
 			await this.requestInsertFloatingImage()
+			return
+		}
+
+		if (payload.action === "insert-image-node") {
+			await this.requestInsertImageNode(payload.parentSelector, payload.index)
 			return
 		}
 
@@ -158,6 +188,12 @@ export class ImageManager {
 				return
 			}
 
+			if (payload.action === "insert-image-node") {
+				this.applyInsertImageNodeResult(pendingRequest, payload)
+				pendingRequest.resolve()
+				return
+			}
+
 			pendingRequest.reject(new Error(`Unsupported upload result action: ${payload.action}`))
 		} catch (error) {
 			pendingRequest.reject(
@@ -210,6 +246,14 @@ export class ImageManager {
 			return true
 		}
 
+		if (imageCommand.commandType === "INSERT_IMAGE_NODE") {
+			const payload = imageCommand.payload as InsertImageNodeState | undefined
+			if (!payload) return false
+			findElement(payload.selector).remove()
+			this.elementSelector.clearSelection()
+			return true
+		}
+
 		return false
 	}
 
@@ -248,6 +292,23 @@ export class ImageManager {
 			payload.html = restoredElement.outerHTML
 			this.elementSelector.selectElement(restoredElement)
 			this.refreshSelectionWhenImageSettled(restoredElement)
+			return true
+		}
+
+		if (imageCommand.commandType === "INSERT_IMAGE_NODE") {
+			const payload = imageCommand.payload as InsertImageNodeState
+			const parent = findElement(payload.parentSelector)
+			const wrapper = document.createElement("div")
+			wrapper.innerHTML = payload.html
+			const element = wrapper.firstElementChild
+			if (!(element instanceof HTMLImageElement)) throw new Error("Invalid inserted image")
+			const children = Array.from(parent.children)
+			const reference = children[payload.index ?? children.length]
+			if (reference) parent.insertBefore(element, reference)
+			else parent.appendChild(element)
+			payload.selector = getElementSelector(element)
+			this.elementSelector.selectElement(element)
+			this.refreshSelectionWhenImageSettled(element)
 			return true
 		}
 
@@ -300,6 +361,21 @@ export class ImageManager {
 		}
 
 		await this.requestImageUpload(request, previousState)
+	}
+
+	private async requestInsertImageNode(parentSelector?: string, index?: number): Promise<void> {
+		if (!parentSelector) throw new Error("Missing image parent selector")
+		const parent = findElement(parentSelector)
+		if (["img", "input", "br", "hr"].includes(parent.tagName.toLowerCase())) {
+			throw new Error("Selected node cannot contain an image")
+		}
+		const request: ImageUploadRequestPayload = {
+			requestId: this.generateRequestId(),
+			action: "insert-image-node",
+			selector: parentSelector,
+			suggestedPath: this.buildSuggestedPath(),
+		}
+		await this.requestImageUpload(request, { parentSelector, index })
 	}
 
 	private removeElementBackgroundImage(): void {
@@ -429,7 +505,8 @@ export class ImageManager {
 		previousState:
 			| ReplaceElementImageState
 			| BackgroundImageState
-			| InsertFloatingImagePendingState,
+			| InsertFloatingImagePendingState
+			| InsertImageNodePendingState,
 	): Promise<void> {
 		return new Promise((resolve, reject) => {
 			this.pendingUploadRequests.set(request.requestId, {
@@ -588,6 +665,43 @@ export class ImageManager {
 				canUndo: true,
 				description: "Insert floating image",
 			},
+		})
+		this.elementSelector.selectElement(element)
+		this.refreshSelectionWhenImageSettled(element)
+	}
+
+	private applyInsertImageNodeResult(
+		pendingRequest: PendingImageUploadContext,
+		uploadResult: ImageUploadResultPayload,
+	): void {
+		const previousState = pendingRequest.previousState as InsertImageNodePendingState
+		const parent = findElement(previousState.parentSelector)
+		const element = document.createElement("img")
+		element.src = uploadResult.previewUrl || ""
+		element.setAttribute("data-original-path", uploadResult.relativeFilePath || "")
+		element.alt = ""
+		element.style.display = "block"
+		element.style.width = DEFAULT_INSERTED_IMAGE_NODE_WIDTH
+		element.style.height = "auto"
+		element.style.maxWidth = "100%"
+		const children = Array.from(parent.children)
+		const index = Math.max(0, Math.min(previousState.index ?? children.length, children.length))
+		const reference = children[index]
+		if (reference) parent.insertBefore(element, reference)
+		else parent.appendChild(element)
+
+		const payload: InsertImageNodeState = {
+			selector: getElementSelector(element),
+			parentSelector: previousState.parentSelector,
+			index: Array.from(parent.children).indexOf(element),
+			html: element.outerHTML,
+		}
+		this.commandHistory.push({
+			commandType: "INSERT_IMAGE_NODE",
+			payload,
+			previousState,
+			timestamp: Date.now(),
+			metadata: { canUndo: true, description: "Insert image" },
 		})
 		this.elementSelector.selectElement(element)
 		this.refreshSelectionWhenImageSettled(element)

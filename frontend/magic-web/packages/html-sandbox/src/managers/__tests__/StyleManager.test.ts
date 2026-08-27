@@ -71,6 +71,33 @@ describe("StyleManager", () => {
 		})
 	})
 
+	describe("duplicateElement", () => {
+		it("assigns unique ids to the duplicated subtree", async () => {
+			container.innerHTML =
+				"<section id='source'><span id='source-label'>Content</span></section>"
+
+			await styleManager.duplicateElement("#source")
+
+			expect(document.querySelectorAll("#source")).toHaveLength(1)
+			expect(document.querySelector("#source-copy")).toBeTruthy()
+			expect(document.querySelector("#source-label-copy")).toBeTruthy()
+		})
+
+		it("keeps duplicated ids stable across undo and redo", async () => {
+			container.innerHTML = "<section id='source'>Content</section>"
+
+			await styleManager.duplicateElement("#source")
+			expect(document.querySelector("#source-copy")).toBeTruthy()
+
+			await styleManager.undo()
+			expect(document.querySelector("#source-copy")).toBeNull()
+
+			await styleManager.redo()
+			expect(document.querySelector("#source-copy")).toBeTruthy()
+			expect(document.querySelectorAll("[id='source-copy']")).toHaveLength(1)
+		})
+	})
+
 	describe("setTextColor", () => {
 		it("should set text color", async () => {
 			container.innerHTML = "<div id='test'>Content</div>"

@@ -12,6 +12,8 @@ interface UseMoveHandleOptions {
 	setHoveredRect: Dispatch<SetStateAction<ElementRect | null>>
 	setIsSelectionMode: Dispatch<SetStateAction<boolean>>
 	iframeRef: RefObject<HTMLIFrameElement>
+	onMoveStart?: () => void
+	onMoveEnd?: () => void
 }
 
 interface PointerCaptureState {
@@ -28,6 +30,8 @@ export function useMoveHandle({
 	setHoveredRect,
 	setIsSelectionMode,
 	iframeRef,
+	onMoveStart,
+	onMoveEnd,
 }: UseMoveHandleOptions) {
 	const selectedInfoRef = useRef<SelectedInfo | null>(null)
 	const isMovingRef = useRef(false)
@@ -234,7 +238,11 @@ export function useMoveHandle({
 				console.error("[useMoveHandle] Failed to refresh element after move:", error)
 			}
 		}
-	}, [editorRef])
+
+		// A completed move should keep the selection box, but must not open the
+		// contextual style panel automatically.
+		onMoveEnd?.()
+	}, [editorRef, onMoveEnd])
 
 	// Monitor selectedInfo changes - stop moving if element changes
 	useEffect(() => {
@@ -339,6 +347,7 @@ export function useMoveHandle({
 
 			event.preventDefault()
 			event.stopPropagation()
+			onMoveStart?.()
 
 			// Safety: If already moving, stop first to clean up state
 			if (isMovingRef.current) {
@@ -451,7 +460,7 @@ export function useMoveHandle({
 			document.body.style.userSelect = "none"
 			document.body.style.cursor = "grabbing"
 		},
-		[editorRef, setHoveredRect, setIsSelectionMode, stopMove],
+		[editorRef, onMoveStart, setHoveredRect, setIsSelectionMode, stopMove],
 	)
 
 	useEffect(() => {

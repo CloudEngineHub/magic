@@ -808,10 +808,11 @@ function generateKeyboardInterceptorScript(): string {
 			}, '*');
 		}
 		
-		// Escape (退出编辑模式)
+		// Escape (交给父窗口按当前编辑上下文处理)
 		if (e.key === 'Escape') {
 			e.preventDefault();
-			e.stopPropagation();
+			// Keep the iframe selection active while the parent closes its local panel.
+			e.stopImmediatePropagation();
 			
 			window.parent.postMessage({
 				type: '${KEYBOARD_MESSAGE_TYPES.CANCEL}',
@@ -862,6 +863,8 @@ export interface KeyboardHandlers {
 	onSave: () => void | Promise<void>
 	onSaveAndExit: () => void | Promise<void>
 	onCancel: () => void | Promise<void>
+	/** Return true when Escape was consumed by a local editor surface. */
+	onEscape?: () => boolean
 }
 
 /**
@@ -882,6 +885,7 @@ export function createKeyboardMessageHandler(handlers: KeyboardHandlers) {
 				void handlers.onSaveAndExit()
 				break
 			case KEYBOARD_MESSAGE_TYPES.CANCEL:
+				if (handlers.onEscape?.()) break
 				void handlers.onCancel()
 				break
 		}

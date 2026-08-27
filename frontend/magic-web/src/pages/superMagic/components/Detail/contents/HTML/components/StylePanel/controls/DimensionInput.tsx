@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
 import { useDebounceFn } from "ahooks"
-import { Input } from "@/components/shadcn-ui/input"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
+import { NumericDragInput } from "./NumericDragInput"
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { Label } from "@/components/shadcn-ui/label"
+import { EditorSelectContent } from "../../EditorFloating"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface DimensionInputProps {
 	label: string
@@ -19,6 +15,7 @@ interface DimensionInputProps {
 	allowedUnits?: string[]
 	fixedUnit?: string
 	testIdPrefix?: string
+	compact?: boolean
 }
 
 const DEFAULT_UNITS = ["px", "%", "em", "rem", "vw", "vh", "auto"]
@@ -51,6 +48,7 @@ export function DimensionInput({
 	allowedUnits = DEFAULT_UNITS,
 	fixedUnit,
 	testIdPrefix,
+	compact = false,
 }: DimensionInputProps) {
 	const { num, unit } = parseValue(value)
 	const [numValue, setNumValue] = useState(num)
@@ -76,9 +74,7 @@ export function DimensionInput({
 	 * Handle number input change
 	 */
 	const handleNumChange = useCallback(
-		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const newNum = e.target.value
-
+		(newNum: string) => {
 			// Allow empty or valid number
 			if (newNum === "" || /^[\d.]*$/.test(newNum)) {
 				setNumValue(newNum)
@@ -111,30 +107,47 @@ export function DimensionInput({
 	)
 
 	return (
-		<div className="space-y-2" data-testid={testIdPrefix ? `${testIdPrefix}-root` : undefined}>
-			<Label htmlFor={id} className="text-xs">
+		<div
+			className={compact ? "min-w-0 space-y-1" : "min-w-0 space-y-2"}
+			data-testid={testIdPrefix ? `${testIdPrefix}-root` : undefined}
+		>
+			<Label htmlFor={id} className={STYLE_PANEL_STYLES.label}>
 				{label}
 			</Label>
-			<div className="flex gap-2">
-				<Input
+			<div
+				className={
+					compact
+						? "grid min-w-0 grid-cols-[minmax(0,1fr)_3.5rem] gap-1"
+						: "flex min-w-0 gap-2"
+				}
+			>
+				<NumericDragInput
 					id={id}
-					type="text"
 					value={numValue}
 					onChange={handleNumChange}
 					placeholder={placeholder}
 					disabled={unitValue === "auto"}
-					className="flex-1 font-mono text-xs"
+					className={
+						compact
+							? "h-7 w-full min-w-0 rounded-md border-border/70 bg-background/70 px-2 font-mono text-xs transition-[background-color,border-color,box-shadow] duration-150 hover:border-primary/45 hover:bg-primary/5 focus-visible:border-primary/70 focus-visible:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default disabled:bg-muted/40"
+							: `${STYLE_PANEL_STYLES.control} min-w-0 flex-1 font-mono disabled:cursor-default`
+					}
 					data-testid={testIdPrefix ? `${testIdPrefix}-input` : undefined}
 				/>
 				{fixedUnit ? null : (
 					<Select value={unitValue} onValueChange={handleUnitChange}>
 						<SelectTrigger
-							className="w-20"
+							size={compact ? "sm" : "default"}
+							className={
+								compact
+									? `${STYLE_PANEL_STYLES.control} !h-7 w-full`
+									: `${STYLE_PANEL_STYLES.control} w-20`
+							}
 							data-testid={testIdPrefix ? `${testIdPrefix}-unit-trigger` : undefined}
 						>
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<EditorSelectContent>
 							{allowedUnits.map((u) => (
 								<SelectItem
 									key={u}
@@ -146,7 +159,7 @@ export function DimensionInput({
 									{u}
 								</SelectItem>
 							))}
-						</SelectContent>
+						</EditorSelectContent>
 					</Select>
 				)}
 			</div>

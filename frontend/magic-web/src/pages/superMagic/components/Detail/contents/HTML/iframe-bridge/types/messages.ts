@@ -113,6 +113,13 @@ export enum EditorMessageType {
 	SET_ELEMENT_POSITION = "SET_ELEMENT_POSITION",
 	DELETE_ELEMENT = "DELETE_ELEMENT",
 	DUPLICATE_ELEMENT = "DUPLICATE_ELEMENT",
+	DUPLICATE_DOM_NODE = "DUPLICATE_DOM_NODE",
+	MOVE_DOM_NODE = "MOVE_DOM_NODE",
+	INSERT_TEXT_NODE = "INSERT_TEXT_NODE",
+	INSERT_IMAGE_NODE = "INSERT_IMAGE_NODE",
+	COPY_DOM_NODE = "COPY_DOM_NODE",
+	CUT_DOM_NODE = "CUT_DOM_NODE",
+	PASTE_DOM_NODE = "PASTE_DOM_NODE",
 	RUN_IMAGE_ACTION = "RUN_IMAGE_ACTION",
 
 	// ========== 批量操作（用于拖动、旋转、缩放等） ==========
@@ -144,12 +151,16 @@ export enum EditorMessageType {
 	ENTER_EDIT_MODE = "ENTER_EDIT_MODE",
 	EXIT_EDIT_MODE = "EXIT_EDIT_MODE",
 	SELECT_ELEMENT = "SELECT_ELEMENT",
+	HOVER_ELEMENT = "HOVER_ELEMENT",
+	CLEAR_HOVER_ELEMENT = "CLEAR_HOVER_ELEMENT",
 
 	// ========== 元素选择模式 ==========
 	ENTER_SELECTION_MODE = "ENTER_SELECTION_MODE",
 	EXIT_SELECTION_MODE = "EXIT_SELECTION_MODE",
 	CLEAR_SELECTION = "CLEAR_SELECTION",
 	GET_COMPUTED_STYLES = "GET_COMPUTED_STYLES",
+	GET_DOM_TREE = "GET_DOM_TREE",
+	SCROLL_TO_ELEMENT = "SCROLL_TO_ELEMENT",
 	REFRESH_SELECTED_ELEMENT = "REFRESH_SELECTED_ELEMENT",
 	REFRESH_SELECTED_ELEMENTS = "REFRESH_SELECTED_ELEMENTS",
 
@@ -236,12 +247,59 @@ export type ImageActionType =
 	| "set-element-background-image"
 	| "remove-element-background-image"
 	| "insert-floating-image"
+	| "insert-image-node"
 
 /**
  * 执行图片动作的 Payload
  */
 export interface ImageActionPayload {
 	action: ImageActionType
+	parentSelector?: string
+	index?: number
+}
+
+export interface DomTreeNode {
+	nodeId: string
+	selector: string
+	tagName: string
+	label: string
+	textContent?: string
+	resource?: string
+	children: DomTreeNode[]
+	/** Whether the canvas can select this node. Kept optional for older runtimes. */
+	canSelect?: boolean
+	editable: boolean
+	canHaveChildren: boolean
+	canDelete: boolean
+	canMove: boolean
+	disabledReason?: string
+	dynamicWarning?: string
+}
+
+export interface DomTreeResponse {
+	root: DomTreeNode
+	/** Clipboard state is optional for compatibility with older iframe runtimes. */
+	clipboard?: {
+		hasContent: boolean
+		mode?: "copy" | "cut"
+	}
+}
+
+export interface MoveDomNodePayload {
+	nodeId: string
+	targetParentId: string
+	targetIndex: number
+}
+
+export interface InsertTextNodePayload {
+	parentNodeId: string
+	index?: number
+	textContent: string
+}
+
+export interface InsertImageNodePayload {
+	parentNodeId: string
+	index?: number
 }
 
 /**
@@ -251,7 +309,10 @@ export interface ImageUploadRequestPayload {
 	requestId: string
 	action: Extract<
 		ImageActionType,
-		"replace-element-image" | "set-element-background-image" | "insert-floating-image"
+		| "replace-element-image"
+		| "set-element-background-image"
+		| "insert-floating-image"
+		| "insert-image-node"
 	>
 	selector: string
 	suggestedPath: string
@@ -362,6 +423,7 @@ export interface ElementSelectedPayload {
 		width: string
 		height: string
 		display: string
+		parentDisplay?: string
 		position: string
 
 		// 边距
@@ -414,6 +476,8 @@ export interface ElementSelectedPayload {
 	isTextElement?: boolean
 	/** 文本内容 */
 	textContent?: string
+	/** 元素当前的内联 CSS 声明 */
+	inlineStyles?: Record<string, string>
 }
 
 /**
@@ -612,7 +676,7 @@ export interface DragOverPayload {
  * 拖拽离开 Payload（父 → iframe）
  * 通知 iframe 拖拽已离开，应隐藏指示器
  */
-export interface DragLeavePayload { }
+export interface DragLeavePayload {}
 
 /**
  * 拖拽放置图片 Payload（父 → iframe）

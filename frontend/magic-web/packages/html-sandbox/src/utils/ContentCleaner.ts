@@ -44,6 +44,7 @@ export class ContentCleaner {
 	private static cleanEditingAttributes(doc: Document): void {
 		const editingClasses = ["__editor-selected", "__editor-hover"]
 		const editingAttributes = [
+			"data-magic-editor-node-id",
 			"contenteditable",
 			"data-text-editing",
 			"data-previous-content",
