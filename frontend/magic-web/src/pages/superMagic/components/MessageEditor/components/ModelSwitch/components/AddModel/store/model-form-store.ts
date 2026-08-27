@@ -2,20 +2,24 @@ import { makeAutoObservable } from "mobx"
 import {
 	MODEL_TYPE_LLM,
 	MODEL_TYPE_IMAGE,
+	MODEL_TYPE_VIDEO,
+	type ServiceProviderCategory,
 	type SaveAiModelParams,
 } from "@/apis/modules/org-ai-model-provider"
 import type { ModelInfo } from "../types"
 
-export type AddModelType = "text" | "image"
+export type AddModelType = "text" | "image" | "video"
 
-const CATEGORY_MAP: Record<AddModelType, "llm" | "vlm"> = {
+const CATEGORY_MAP: Record<AddModelType, ServiceProviderCategory> = {
 	text: "llm",
 	image: "vlm",
+	video: "vgm",
 }
 
 const MODEL_TYPE_MAP: Record<AddModelType, number> = {
 	text: MODEL_TYPE_LLM,
 	image: MODEL_TYPE_IMAGE,
+	video: MODEL_TYPE_VIDEO,
 }
 
 export class ModelFormStore {
@@ -32,7 +36,7 @@ export class ModelFormStore {
 		makeAutoObservable(this)
 	}
 
-	get category(): "llm" | "vlm" {
+	get category(): ServiceProviderCategory {
 		return CATEGORY_MAP[this.addModelType]
 	}
 
@@ -110,6 +114,7 @@ export class ModelFormStore {
 
 	private inferAddModelType(modelType: number): AddModelType {
 		if (modelType === MODEL_TYPE_IMAGE) return "image"
+		if (modelType === MODEL_TYPE_VIDEO) return "video"
 		return "text"
 	}
 }

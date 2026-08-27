@@ -59,6 +59,12 @@ const ModelDeploymentField = observer(function ModelDeploymentField({
 		const value = e.target.value
 		store.setProviderModelId(value)
 		if (!store.isEditModelOpen) store.clearModelConfig()
+		if (store.addModelType === "video") {
+			if (debounceRef.current) clearTimeout(debounceRef.current)
+			setSuggestions([])
+			setOpen(false)
+			return
+		}
 
 		if (debounceRef.current) clearTimeout(debounceRef.current)
 		debounceRef.current = setTimeout(() => {
@@ -125,6 +131,13 @@ const ModelDeploymentField = observer(function ModelDeploymentField({
 		},
 		[],
 	)
+
+	useEffect(() => {
+		if (store.addModelType !== "video") return
+		if (debounceRef.current) clearTimeout(debounceRef.current)
+		setSuggestions([])
+		setOpen(false)
+	}, [store.addModelType])
 
 	useEffect(() => {
 		if (!open || suggestions.length === 0) {
@@ -202,7 +215,7 @@ const ModelDeploymentField = observer(function ModelDeploymentField({
 										"text-popover-foreground",
 										"hover:bg-secondary/80",
 										highlightedIndex === index &&
-										"bg-secondary text-secondary-foreground",
+											"bg-secondary text-secondary-foreground",
 										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 									)}
 									role="option"
@@ -219,7 +232,7 @@ const ModelDeploymentField = observer(function ModelDeploymentField({
 										className={cn(
 											"block truncate text-xs text-muted-foreground",
 											highlightedIndex === index &&
-											"text-secondary-foreground/80",
+												"text-secondary-foreground/80",
 										)}
 									>
 										{model.id}

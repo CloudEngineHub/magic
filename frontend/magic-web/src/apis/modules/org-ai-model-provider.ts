@@ -7,13 +7,15 @@ export const MODEL_TYPE_LLM = 3
 export const MODEL_TYPE_IMAGE = 0
 export const MODEL_TYPE_VIDEO = 5
 
+export type ServiceProviderCategory = "llm" | "vlm" | "vgm"
+
 /** Response from GET /service-providers */
 export interface ServiceProviderConfig {
 	id: string
 	name: string
 	icon?: string
 	provider_code: string
-	category: "llm" | "vlm"
+	category: ServiceProviderCategory
 	config: Record<string, unknown>
 	alias?: string
 	translate?: { alias?: Record<string, string> }
@@ -39,7 +41,7 @@ export interface ProviderTemplate {
 	name: string
 	icon?: string
 	provider_code: string
-	category: "llm" | "vlm"
+	category: ServiceProviderCategory
 	config_schema?: Record<string, { required?: boolean; type?: string }>
 	[key: string]: unknown
 }
@@ -48,7 +50,7 @@ export interface AddOrgAiModelProviderParams {
 	service_provider_id: string
 	alias?: string
 	config: Record<string, string>
-	category?: "llm" | "vlm"
+	category?: ServiceProviderCategory
 	status?: 0 | 1
 }
 
@@ -122,13 +124,13 @@ export interface ServiceProviderModelsResponse {
 }
 
 export const generateOrgAiModelProviderApi = (fetch: HttpClient) => ({
-	getOrgAiModelProviderList(category: "llm" | "vlm" = "llm") {
+	getOrgAiModelProviderList(category: ServiceProviderCategory = "llm") {
 		return fetch.get<ServiceProviderConfig[]>(
 			genRequestUrl("/api/v1/organization/admin/service-providers", {}, { category }),
 		)
 	},
 
-	getNonOfficialProviderTemplates(category: "llm" | "vlm" = "llm") {
+	getNonOfficialProviderTemplates(category: ServiceProviderCategory = "llm") {
 		return fetch.get<ProviderTemplate[]>(
 			genRequestUrl("/api/v1/service-providers/templates/queries", {}, { category }),
 		)

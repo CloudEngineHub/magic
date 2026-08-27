@@ -62,9 +62,10 @@ function AddModelConnectivityTest({
 						result.message?.trim() || t("messageEditor.addModel.connectivityFailed"),
 				})
 			}
-		} catch (error: any) {
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message.trim() : ""
 			setConnectivityResult({
-				content: error?.message?.trim() || t("messageEditor.addModel.connectivityFailed"),
+				content: errorMessage || t("messageEditor.addModel.connectivityFailed"),
 			})
 		} finally {
 			setIsTestingConnectivity(false)

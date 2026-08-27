@@ -36,7 +36,6 @@ export const ModelListContent = observer(function ModelListContent({
 	const { t } = useTranslation("super")
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
 	const isSearchResultEmpty = !!searchKeyword && visibleGroups.length === 0
-	const shouldShowMyModelsList = modelKey !== "video_models"
 	const EmptyStateIcon = isSearchResultEmpty ? SearchX : Sparkles
 	const emptyStateTitle = isSearchResultEmpty
 		? t("messageEditor.modelSwitch.noModelsFound")
@@ -50,15 +49,13 @@ export const ModelListContent = observer(function ModelListContent({
 
 	return (
 		<>
-			{shouldShowMyModelsList && (
-				<MyModelsList
-					modelKey={modelKey === "image_models" ? "image_models" : "models"}
-					selectedModel={selectedModel}
-					onModelClick={onModelClick}
-					selectedItemRef={selectedItemRef}
-					onModelsLoaded={onModelsLoaded}
-				/>
-			)}
+			<MyModelsList
+				modelKey={modelKey}
+				selectedModel={selectedModel}
+				onModelClick={onModelClick}
+				selectedItemRef={selectedItemRef}
+				onModelsLoaded={onModelsLoaded}
+			/>
 			{visibleGroups.length === 0 && (
 				<ModelEmptyState
 					icon={EmptyStateIcon}
@@ -68,7 +65,7 @@ export const ModelListContent = observer(function ModelListContent({
 							? undefined
 							: t("messageEditor.modelSwitch.noModelsDesc")
 					}
-					className={cn(shouldShowMyModelsList && "mt-2.5", "mb-2.5")}
+					className={cn("mt-2.5", "mb-2.5")}
 					testId="model-list-empty-state"
 				/>
 			)}
