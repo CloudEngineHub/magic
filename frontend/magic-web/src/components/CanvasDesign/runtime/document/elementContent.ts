@@ -57,6 +57,7 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 		"status",
 		"errorMessage",
 		"generateVideoRequest",
+		"videoEditorDraft",
 		"videoGenerationResultMeta",
 	],
 	[ElementTypeEnum.Audio]: ["src"],

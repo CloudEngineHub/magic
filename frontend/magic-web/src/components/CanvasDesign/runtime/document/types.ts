@@ -7,6 +7,7 @@ import type {
 	GenerateVideoRequest,
 	VideoGenerationResultMeta,
 	GenerationStatus,
+	StoredVideoEditorDraft,
 } from "../../public/magic-types"
 import type { TFunction } from "../../public/i18n-types"
 
@@ -369,6 +370,8 @@ export interface VideoElementContent extends ElementContentBase {
 	// poster?: string
 	/** 视频生成请求参数（请求成功后保存） */
 	generateVideoRequest?: GenerateVideoRequest
+	/** 未提交的视频编辑配置，用于重新打开画布后恢复输入。 */
+	videoEditorDraft?: StoredVideoEditorDraft
 	/** 视频生成结果元信息（计费、生成参数与运行时间） */
 	videoGenerationResultMeta?: VideoGenerationResultMeta
 }

@@ -7,6 +7,8 @@ import type {
 import type {
 	GenerateVideoRequest,
 	StoredLinkedFrameBinding,
+	StoredVideoEditorDraft,
+	StoredVideoModeInputDraft,
 	UploadFileResponse,
 	VideoInputMode,
 	VideoInputModeConfig,
@@ -76,20 +78,10 @@ export interface VideoReferenceAssetInfo extends UploadFileResponse {
 /** 首尾帧槽位当前由哪个连线媒体提供，运行时用于展示来源与处理替换。 */
 export type LinkedFrameBinding = StoredLinkedFrameBinding
 
-export interface VideoEditSessionSnapshot {
-	request: Partial<GenerateVideoRequest>
-	modeDrafts: Partial<Record<VideoInputMode, VideoModeInputDraft>>
-}
+export type VideoEditSessionSnapshot = Omit<StoredVideoEditorDraft, "version" | "updatedAt">
 
 /** 各互斥输入模式下的暂存配置（切换 Tab 时恢复，发送时仅使用当前模式） */
-export interface VideoModeInputDraft {
-	prompt?: string
-	activeInputTab?: "frame" | "reference"
-	frameImageInfos?: Array<UploadFileResponse | undefined>
-	linkedFrameBindings?: Array<LinkedFrameBinding | undefined>
-	/** 统一承载参考资源（图片/视频/音频） */
-	referenceAssetInfos?: VideoReferenceAssetInfo[]
-}
+export type VideoModeInputDraft = StoredVideoModeInputDraft
 
 export const VIDEO_INPUT_MODE_ORDER: VideoInputMode[] = [
 	"standard",

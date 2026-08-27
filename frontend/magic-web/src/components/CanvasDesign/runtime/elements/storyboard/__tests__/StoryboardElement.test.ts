@@ -354,6 +354,57 @@ describe("StoryboardElement", () => {
 		expect(eventEmitter.listenerCount("canvas:readonly")).toBe(0)
 	})
 
+	it("gates reference previews by consumer visibility and aborts pending loads", () => {
+		const visibilityListeners: Array<(state: "visible" | "near" | "far") => void> = []
+		const unregister = vi.fn()
+		const getResource = vi.fn(() => new Promise<never>(() => undefined))
+		const canvas = createCanvasMock()
+		Object.assign(canvas, {
+			eventEmitter: new EventEmitter(),
+			visibilityManager: {
+				registerConsumerVisibility: vi.fn((_elementId: string, listener) => {
+					visibilityListeners.push(listener)
+					listener("visible")
+					return unregister
+				}),
+			},
+			imageResourceManager: {
+				getResource,
+				peekResource: vi.fn(() => null),
+			},
+		})
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({ id: "storyboard-preview", x: 0, y: 0 }),
+			canvas,
+		)
+		element.onMounted()
+
+		const loadReferencePreview = (
+			element as unknown as { loadReferencePreview: (path: string) => void }
+		).loadReferencePreview
+		loadReferencePreview.call(element, "./images/reference.png")
+		expect(getResource).toHaveBeenCalledTimes(1)
+		const controllers = (
+			element as unknown as {
+				referencePreviewControllers: Map<string, AbortController>
+			}
+		).referencePreviewControllers
+		const pendingController = controllers.get("./images/reference.png")
+		expect(pendingController).toBeDefined()
+
+		visibilityListeners[0]?.("near")
+		loadReferencePreview.call(element, "./images/near.png")
+		expect(getResource).toHaveBeenCalledTimes(1)
+		visibilityListeners[0]?.("far")
+		expect(pendingController?.signal.aborted).toBe(true)
+
+		visibilityListeners[0]?.("visible")
+		loadReferencePreview.call(element, "./images/reference-again.png")
+		expect(getResource).toHaveBeenCalledTimes(2)
+		element.destroy()
+		expect(unregister).toHaveBeenCalledTimes(1)
+	})
+
 	it("renders the selected model icon from runtime metadata without persisting it", () => {
 		vi.stubGlobal(
 			"Image",

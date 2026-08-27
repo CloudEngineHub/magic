@@ -301,6 +301,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 						? {
 								...content,
 								generateVideoRequest: persistedRequest,
+								videoEditorDraft: undefined,
 								videoGenerationResultMeta: undefined,
 								status: undefined,
 								errorMessage: undefined,

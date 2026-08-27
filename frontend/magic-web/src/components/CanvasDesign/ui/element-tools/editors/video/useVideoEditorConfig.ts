@@ -90,6 +90,7 @@ import type {
 	UseVideoEditorConfigOptions,
 } from "./video-editor-config.types"
 import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
+import { persistVideoEditorDraft } from "../../../../runtime/interaction/media-edit-recovery/videoEditorDraftPersistence"
 import {
 	decodeVideoPromptPlaceholdersToMentions,
 	encodeVideoPromptMentionsToPlaceholders,
@@ -149,9 +150,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const { t } = useCanvasDesignI18n()
 	const { videoModelList, isLoadingVideoModelList, methods } = useMagic()
 	const { canvas } = useCanvas()
-	const savedRequest = getActiveContent(videoElement)?.generateVideoRequest
-	const resolveResourceReference = methods?.resolveResourceReference
 	const activeVideoContent = getActiveContent(videoElement)
+	const savedRequest = activeVideoContent?.generateVideoRequest
+	const persistedEditorDraft =
+		activeVideoContent?.videoEditorDraft?.version === 1
+			? activeVideoContent.videoEditorDraft
+			: undefined
+	const resolveResourceReference = methods?.resolveResourceReference
 	const activeVideoContentId = activeVideoContent?.contentId
 	const recoveryKey = useMemo(
 		() =>
@@ -1694,13 +1699,24 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				return
 			}
 			if (!canvas || !manageRecoverySession || !recoveryKey) return
-			canvas.mediaEditRecoveryManager.saveDraft(recoveryKey, recoverySourceFingerprint, {
+			const snapshot: VideoEditSessionSnapshot = {
 				request,
 				modeDrafts: cloneModeDraftCache(modeDraftCacheRef.current),
+			}
+			canvas.mediaEditRecoveryManager.saveDraft(
+				recoveryKey,
+				recoverySourceFingerprint,
+				snapshot,
+			)
+			persistVideoEditorDraft({
+				canvas,
+				elementId: videoElement.id,
+				contentId: recoveryKey.contentId,
+				snapshot,
 			})
 			pendingDraftRequestRef.current = null
 		},
-		[canvas, manageRecoverySession, recoveryKey, recoverySourceFingerprint],
+		[canvas, manageRecoverySession, recoveryKey, recoverySourceFingerprint, videoElement.id],
 	)
 
 	const cancelPendingDraftPersistence = useCallback(() => {
@@ -1743,13 +1759,20 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 		isRestoringRef.current = true
 		try {
+			const shouldRestoreDraft = restoreOnMount === "preferDraft"
 			const sessionSnapshot =
 				sessionRestoreSnapshotRef.current ??
-				(manageRecoverySession && recoveryKey
+				(shouldRestoreDraft && manageRecoverySession && recoveryKey
 					? canvas.mediaEditRecoveryManager.get<VideoEditSessionSnapshot>(
 							recoveryKey,
 							recoverySourceFingerprint,
 						)?.draft
+					: undefined) ??
+				(shouldRestoreDraft && persistedEditorDraft
+					? {
+							request: persistedEditorDraft.request,
+							modeDrafts: persistedEditorDraft.modeDrafts,
+						}
 					: undefined)
 			sessionRestoreSnapshotRef.current = null
 			const isSessionRestore = Boolean(sessionSnapshot)
@@ -1970,6 +1993,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		manageRecoverySession,
 		recoveryKey,
 		recoverySourceFingerprint,
+		persistedEditorDraft,
 	])
 
 	const restoreOriginalGenerateVideoRequestToUi = useCallback(() => {

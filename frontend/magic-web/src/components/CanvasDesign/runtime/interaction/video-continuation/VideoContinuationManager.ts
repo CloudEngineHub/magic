@@ -8,6 +8,10 @@ import { extractVideoTailFrame } from "../../resources/video/VideoFrameExtractor
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import { buildMediaEditSourceFingerprint } from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import {
+	persistVideoEditorDraft,
+	type VideoEditorDraftSnapshot,
+} from "../media-edit-recovery/videoEditorDraftPersistence"
+import {
 	collectConnectionCreateObstacleRects,
 	resolveConnectionCreateGapForElement,
 } from "../../shared/placement/connectionCreatePlacement"
@@ -332,6 +336,38 @@ export class VideoContinuationManager {
 							markSkipped(item.source.elementId)
 							continue
 						}
+						const frameFileName = `${withoutExtension(item.source.fileName)}-tail-frame.jpg`
+						const editorDraftSnapshot = {
+							request: {
+								model_id: model.model.model_id,
+								input_mode: model.inputMode,
+								task: model.task,
+								inputs: {
+									frames: [{ role: "start", uri: item.uploadedPath }],
+								},
+							},
+							modeDrafts: {
+								[model.inputMode]: {
+									activeInputTab: "frame",
+									frameImageInfos: [
+										{
+											path: item.uploadedPath,
+											src: item.uploadedPath,
+											fileName: frameFileName,
+										},
+									],
+									linkedFrameBindings: [],
+									referenceAssetInfos: [],
+								},
+							},
+						} satisfies VideoEditorDraftSnapshot
+						persistVideoEditorDraft({
+							canvas: this.canvas,
+							elementId: createdElementId,
+							contentId: activeContent.contentId,
+							snapshot: editorDraftSnapshot,
+							includeInHistory: true,
+						})
 						this.canvas.mediaEditRecoveryManager?.saveDraft(
 							{
 								elementId: createdElementId,
@@ -343,15 +379,8 @@ export class VideoContinuationManager {
 								activeContent.src,
 							),
 							{
-								request: {
-									model_id: model.model.model_id,
-									input_mode: model.inputMode,
-									task: model.task,
-									inputs: {
-										frames: [{ role: "start", uri: item.uploadedPath }],
-									},
-								},
-								modeDrafts: {},
+								request: editorDraftSnapshot.request,
+								modeDrafts: editorDraftSnapshot.modeDrafts,
 							},
 						)
 						createdNodes.push({

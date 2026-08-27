@@ -274,7 +274,91 @@ type RequestAudioLoad = (candidate: AudioCandidate, reason: string, force?: bool
 type ShouldRequestImageCandidate = (candidate: ImageCandidate) => boolean
 type UpdateImageRetentionHints = (candidates: ImageCandidate[], lastSeenAt: number) => void
 
+interface ConsumerVisibilityTestCanvas {
+	elementManager: {
+		isElementVisibleInDataTree: () => boolean
+	}
+	geometryCacheManager: {
+		queryElementIdsByExpandedRect: (
+			viewportRect: unknown,
+			padding: number,
+			options: { elementIds: string[] },
+		) => string[]
+	}
+	stage: {
+		width: () => number
+		height: () => number
+		scaleX: () => number
+		getAbsoluteTransform: () => {
+			copy: () => {
+				invert: () => {
+					point: (point: unknown) => unknown
+				}
+			}
+		}
+	}
+	viewportController: {
+		getResolvedDefaultViewportPadding: () => {
+			left: number
+			right: number
+			top: number
+			bottom: number
+		}
+	}
+}
+
 describe("CanvasVisibilityManager video load requests", () => {
+	it("notifies consumer visibility changes independently of registered media", () => {
+		const { manager } = createConstructedManager()
+		let relation: "visible" | "near" | "far" = "visible"
+		const canvas = (manager as unknown as { canvas: ConsumerVisibilityTestCanvas }).canvas
+		canvas.geometryCacheManager = {
+			queryElementIdsByExpandedRect: vi.fn(),
+		}
+		canvas.elementManager.isElementVisibleInDataTree = () => true
+		canvas.geometryCacheManager.queryElementIdsByExpandedRect = (
+			_rect: unknown,
+			padding: number,
+			options: { elementIds: string[] },
+		) => {
+			if (!options.elementIds.includes("consumer")) return []
+			if (padding === 0) return relation === "visible" ? ["consumer"] : []
+			return relation === "far" ? [] : ["consumer"]
+		}
+		canvas.stage = {
+			width: () => 100,
+			height: () => 100,
+			getAbsoluteTransform: () => ({
+				copy: () => ({ invert: () => ({ point: (point: unknown) => point }) }),
+			}),
+			scaleX: () => 1,
+		}
+		canvas.viewportController = {
+			getResolvedDefaultViewportPadding: () => ({ left: 0, right: 0, top: 0, bottom: 0 }),
+		}
+
+		const states: string[] = []
+		const registerConsumerVisibility = (manager as unknown as CanvasVisibilityManager)
+			.registerConsumerVisibility
+		const unsubscribe = registerConsumerVisibility.call(manager, "consumer", (state) => {
+			states.push(state)
+		})
+
+		relation = "near"
+		const refreshConsumerVisibility = (
+			manager as unknown as {
+				refreshConsumerVisibility: (viewportRect: unknown, nearPadding: number) => void
+			}
+		).refreshConsumerVisibility
+		refreshConsumerVisibility.call(manager, { x: 0, y: 0, width: 100, height: 100 }, 200)
+		relation = "far"
+		refreshConsumerVisibility.call(manager, { x: 0, y: 0, width: 100, height: 100 }, 200)
+		refreshConsumerVisibility.call(manager, { x: 0, y: 0, width: 100, height: 100 }, 200)
+
+		expect(states).toEqual(["visible", "near", "far"])
+		unsubscribe()
+	})
+
 	it("binds viewport video requests to the shared path signal", () => {
 		const { ensureFreshOssInfo, manager } = createManager()
 		const requestVideoLoad = (manager as unknown as { requestVideoLoad: RequestVideoLoad })

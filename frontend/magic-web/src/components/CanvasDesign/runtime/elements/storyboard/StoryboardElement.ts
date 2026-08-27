@@ -38,6 +38,7 @@ import {
 import { STORYBOARD_CONFIG } from "./StoryboardElement.config"
 import { getActiveContent } from "../../document/elementContent"
 import type { LoadedResource } from "../../resources/image/ImageResourceManager"
+import type { CanvasConsumerVisibility } from "../../resources/visibility/CanvasVisibilityManager"
 import { getPersistedSourceCrop } from "../../resources/image/imageCropUtils"
 import {
 	resolveStoryboardReferenceImages,
@@ -171,6 +172,8 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private readonly referencePreviewResources = new Map<string, LoadedResource>()
 	private readonly referencePreviewControllers = new Map<string, AbortController>()
 	private readonly referencePreviewTokens = new Map<string, number>()
+	private consumerVisibility: CanvasConsumerVisibility = "far"
+	private consumerVisibilityUnsubscribe?: () => void
 
 	constructor(data: StoryboardElementData, canvas: Canvas) {
 		super(normalizeStoryboardDisplayDimensions(data), canvas)
@@ -293,6 +296,20 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	}
 
 	public override onMounted(): void {
+		if (
+			!this.consumerVisibilityUnsubscribe &&
+			this.canvas.visibilityManager?.registerConsumerVisibility
+		) {
+			this.consumerVisibilityUnsubscribe =
+				this.canvas.visibilityManager.registerConsumerVisibility(this.data.id, (state) => {
+					this.consumerVisibility = state
+					if (state === "visible") {
+						this.rerenderWhenTransformIdle()
+						return
+					}
+					this.abortReferencePreviewRequests()
+				})
+		}
 		if (!this.readonlyChangedUnsubscribe && this.canvas.eventEmitter?.on) {
 			this.readonlyChangedUnsubscribe = this.canvas.eventEmitter.on("canvas:readonly", () => {
 				this.rerenderWhenTransformIdle()
@@ -324,10 +341,11 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	}
 
 	public override destroy(): void {
+		this.consumerVisibilityUnsubscribe?.()
+		this.consumerVisibilityUnsubscribe = undefined
 		this.readonlyChangedUnsubscribe?.()
 		this.readonlyChangedUnsubscribe = undefined
-		this.referencePreviewControllers.forEach((controller) => controller.abort())
-		this.referencePreviewControllers.clear()
+		this.abortReferencePreviewRequests()
 		this.referencePreviewTokens.clear()
 		this.referencePreviewResources.clear()
 		this.referenceSourceEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
@@ -882,6 +900,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	}
 
 	private loadReferencePreview(path: string): void {
+		if (!this.canLoadReferencePreviews()) return
 		if (
 			!path ||
 			this.referencePreviewResources.has(path) ||
@@ -1022,6 +1041,18 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			if (!shotLayout) return
 			this.renderShot(shotListGroup, shotLayout, shot, index)
 		})
+	}
+
+	private abortReferencePreviewRequests(): void {
+		this.referencePreviewControllers.forEach((controller) => controller.abort())
+		this.referencePreviewControllers.clear()
+	}
+
+	private canLoadReferencePreviews(): boolean {
+		return (
+			!this.canvas.visibilityManager?.registerConsumerVisibility ||
+			this.consumerVisibility === "visible"
+		)
 	}
 
 	private hasConnectedOutputImage(shot: StoryboardShot): boolean {

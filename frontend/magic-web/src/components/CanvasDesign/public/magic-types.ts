@@ -1335,6 +1335,26 @@ export interface StoredLinkedFrameBinding {
 	frameRole: "start" | "end"
 }
 
+/** 视频编辑器按输入模式保存的可恢复配置。 */
+export interface StoredVideoModeInputDraft {
+	prompt?: string
+	activeInputTab?: "frame" | "reference"
+	frameImageInfos?: Array<UploadFileResponse | undefined>
+	linkedFrameBindings?: Array<StoredLinkedFrameBinding | undefined>
+	referenceAssetInfos?: Array<UploadFileResponse & { assetType: "image" | "video" | "audio" }>
+}
+
+/**
+ * 未提交的视频编辑草稿。
+ * 与 generateVideoRequest 分离，避免刷新恢复草稿时被误判为已创建的生成任务。
+ */
+export interface StoredVideoEditorDraft {
+	version: 1
+	request: Partial<GenerateVideoRequest>
+	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	updatedAt: number
+}
+
 export interface CanvasMediaPlacementConfig {
 	/** 新建媒体元素之间的最小间距 */
 	spacing?: number

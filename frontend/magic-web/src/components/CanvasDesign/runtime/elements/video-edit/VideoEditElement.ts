@@ -32,6 +32,7 @@ import {
 import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackManager"
 import { VideoEditPlaybackManager } from "../../interaction/video-edit/VideoEditPlaybackManager"
 import { type VideoCompositionSnapshot } from "../../resources/video-composition/VideoCompositionManager"
+import type { CanvasConsumerVisibility } from "../../resources/visibility/CanvasVisibilityManager"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import {
@@ -304,6 +305,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private previewCanvases = new Map<string, HTMLCanvasElement>()
 	private previewControllers = new Map<string, AbortController>()
 	private previewTokens = new Map<string, number>()
+	private consumerVisibility: CanvasConsumerVisibility = "far"
+	private consumerVisibilityUnsubscribe?: () => void
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
 	private readonlyChangedUnsubscribe?: () => void
@@ -420,7 +423,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			previousData.width !== normalizedData.width ||
 			previousData.height !== normalizedData.height ||
 			sequenceChanged
-		if (previousInputs.videoSequence.join(",") !== nextInputs.videoSequence.join(",")) {
+		if (
+			previousInputs.videoSequence.join(",") !== nextInputs.videoSequence.join(",") &&
+			this.canLoadVideoPreviews()
+		) {
 			this.loadVideoPreviews()
 		}
 		if (!needsRerender && this.node) {
@@ -439,7 +445,20 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.syncInteractionHitTargets()
 		this.bindAudioRuntime()
 		this.bindCompositionRuntime()
-		this.loadVideoPreviews()
+		if (
+			!this.consumerVisibilityUnsubscribe &&
+			this.canvas.visibilityManager?.registerConsumerVisibility
+		) {
+			this.consumerVisibilityUnsubscribe =
+				this.canvas.visibilityManager.registerConsumerVisibility(this.data.id, (state) => {
+					this.consumerVisibility = state
+					if (state === "visible") {
+						this.loadVideoPreviews()
+						return
+					}
+					this.abortVideoPreviewRequests()
+				})
+		}
 		if (!this.sourceElementUpdatedUnsubscribe && this.canvas.eventEmitter?.on) {
 			this.sourceElementUpdatedUnsubscribe = this.canvas.eventEmitter.on(
 				"element:updated",
@@ -452,7 +471,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 					) {
 						return
 					}
-					if (inputs.videoSequence.includes(data.elementId)) {
+					if (
+						inputs.videoSequence.includes(data.elementId) &&
+						this.canLoadVideoPreviews()
+					) {
 						this.loadVideoPreview(data.elementId, true)
 					}
 					if (inputs.audioElementId === data.elementId) this.bindAudioRuntime(true)
@@ -502,13 +524,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			if (!connectedVideoIds.has(elementId)) this.previewCanvases.delete(elementId)
 		})
 		this.bindAudioRuntime(true)
-		this.loadVideoPreviews(true)
+		if (this.canLoadVideoPreviews()) this.loadVideoPreviews(true)
 		this.rerenderWhenTransformIdle()
 	}
 
 	public override onResourceReferenceResolverChanged(): void {
 		this.bindAudioRuntime(true)
-		this.loadVideoPreviews(true)
+		if (this.canLoadVideoPreviews()) this.loadVideoPreviews(true)
 		this.rerenderWhenTransformIdle()
 	}
 
@@ -519,8 +541,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.playbackUnsubscribe()
 		this.playbackManager.release(this.data.id)
 		this.compositionUnsubscribe()
-		this.previewControllers.forEach((controller) => controller.abort())
-		this.previewControllers.clear()
+		this.consumerVisibilityUnsubscribe?.()
+		this.consumerVisibilityUnsubscribe = undefined
+		this.abortVideoPreviewRequests()
 		this.previewTokens.clear()
 		this.previewCanvases.clear()
 		this.sourceElementUpdatedUnsubscribe?.()
@@ -1876,11 +1899,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	private loadVideoPreviews(force = false): void {
+		if (!this.canLoadVideoPreviews()) return
 		const { videoSequence } = this.collectInputs()
 		videoSequence.forEach((elementId) => this.loadVideoPreview(elementId, force))
 	}
 
 	private loadVideoPreview(elementId: string, force = false): void {
+		if (!this.canLoadVideoPreviews()) return
 		const source = this.getSourceElement(elementId)
 		const path =
 			source?.type === ElementTypeEnum.Video
@@ -1917,6 +1942,18 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 					this.previewControllers.delete(elementId)
 				}
 			})
+	}
+
+	private abortVideoPreviewRequests(): void {
+		this.previewControllers.forEach((controller) => controller.abort())
+		this.previewControllers.clear()
+	}
+
+	private canLoadVideoPreviews(): boolean {
+		return (
+			!this.canvas.visibilityManager?.registerConsumerVisibility ||
+			this.consumerVisibility === "visible"
+		)
 	}
 
 	private resolveVideoInput(elementId: string): VideoInputView {

@@ -24,6 +24,7 @@ import {
 } from "./CanvasRenderVisibilityController"
 
 type VisibilityState = "visible" | "near" | "far"
+export type CanvasConsumerVisibility = VisibilityState
 export type DecodedImageRetentionVisibilityState = Extract<VisibilityState, "visible" | "near">
 
 export interface DecodedImageRetentionHint {
@@ -334,6 +335,11 @@ function isViewportResourceBoundReason(reason: string): boolean {
 
 export class CanvasVisibilityManager {
 	private readonly canvas: Canvas
+	private readonly consumerVisibilityListeners = new Map<
+		string,
+		Set<(state: CanvasConsumerVisibility) => void>
+	>()
+	private readonly lastConsumerVisibilityState = new Map<string, CanvasConsumerVisibility>()
 	private readonly registeredImages = new Map<string, RegisteredImageElement>()
 	private readonly registeredVideos = new Map<string, RegisteredVideoElement>()
 	private readonly registeredAudios = new Map<string, RegisteredAudioElement>()
@@ -440,6 +446,32 @@ export class CanvasVisibilityManager {
 		this.invalidateContainerRootCache()
 		this.initialVisibleCriticalUntil = now() + INITIAL_VISIBLE_CRITICAL_WINDOW_MS
 		this.scheduleRefresh("document:loaded", true)
+	}
+
+	public registerConsumerVisibility(
+		elementId: string,
+		listener: (state: CanvasConsumerVisibility) => void,
+	): () => void {
+		if (this.destroyed) return () => undefined
+
+		const listeners = this.consumerVisibilityListeners.get(elementId) ?? new Set()
+		listeners.add(listener)
+		this.consumerVisibilityListeners.set(elementId, listeners)
+
+		const state = this.resolveConsumerVisibilityState(elementId)
+		this.lastConsumerVisibilityState.set(elementId, state)
+		listener(state)
+		this.scheduleRefresh("consumer:register", true)
+
+		return () => {
+			const currentListeners = this.consumerVisibilityListeners.get(elementId)
+			if (!currentListeners) return
+			currentListeners.delete(listener)
+			if (currentListeners.size === 0) {
+				this.consumerVisibilityListeners.delete(elementId)
+				this.lastConsumerVisibilityState.delete(elementId)
+			}
+		}
 	}
 
 	private readonly handleImageResourceLoaded = (event: {
@@ -947,6 +979,8 @@ export class CanvasVisibilityManager {
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
 		this.registeredAudios.clear()
+		this.consumerVisibilityListeners.clear()
+		this.lastConsumerVisibilityState.clear()
 		this.lastVisibilityState.clear()
 		this.lastVideoVisibilityState.clear()
 		this.lastAudioVisibilityState.clear()
@@ -1299,7 +1333,8 @@ export class CanvasVisibilityManager {
 			this.destroyed ||
 			(this.registeredImages.size === 0 &&
 				this.registeredVideos.size === 0 &&
-				this.registeredAudios.size === 0)
+				this.registeredAudios.size === 0 &&
+				this.consumerVisibilityListeners.size === 0)
 		) {
 			return
 		}
@@ -1330,6 +1365,7 @@ export class CanvasVisibilityManager {
 				viewportRect,
 				viewportScale,
 			})
+			this.refreshConsumerVisibility(viewportRect, nearPadding)
 			this.statsSnapshot.skippedViewportQueryCount += 1
 			return
 		}
@@ -1347,6 +1383,7 @@ export class CanvasVisibilityManager {
 				{ elementIds: rootElementIds },
 			),
 		)
+		this.refreshConsumerVisibility(viewportRect, nearPadding)
 
 		const registeredImageIds: string[] = []
 		this.registeredImages.forEach((_, elementId) => {
@@ -1946,6 +1983,55 @@ export class CanvasVisibilityManager {
 			pendingAudioLoadCandidateCount,
 			queryCount: previousSnapshot.queryCount + 1,
 		}
+	}
+
+	private resolveConsumerVisibilityState(elementId: string): CanvasConsumerVisibility {
+		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return "far"
+		const viewportRect = getViewportCanvasRect(this.canvas)
+		const nearPadding =
+			Math.max(viewportRect.width, viewportRect.height) * NEAR_VIEWPORT_PADDING_RATIO
+		const visible = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			viewportRect,
+			0,
+			{ elementIds: [elementId] },
+		)
+		if (visible.includes(elementId)) return "visible"
+		const near = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			viewportRect,
+			nearPadding,
+			{ elementIds: [elementId] },
+		)
+		return near.includes(elementId) ? "near" : "far"
+	}
+
+	private refreshConsumerVisibility(viewportRect: Rect, nearPadding: number): void {
+		if (this.consumerVisibilityListeners.size === 0) return
+
+		const elementIds = Array.from(this.consumerVisibilityListeners.keys())
+		const visibleIds = new Set(
+			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
+				elementIds,
+			}),
+		)
+		const nearIds = new Set(
+			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+				viewportRect,
+				nearPadding,
+				{ elementIds },
+			),
+		)
+
+		elementIds.forEach((elementId) => {
+			let state: CanvasConsumerVisibility = "far"
+			if (this.canvas.elementManager.isElementVisibleInDataTree(elementId)) {
+				if (visibleIds.has(elementId)) state = "visible"
+				else if (nearIds.has(elementId)) state = "near"
+			}
+			const previousState = this.lastConsumerVisibilityState.get(elementId)
+			this.lastConsumerVisibilityState.set(elementId, state)
+			if (previousState === state) return
+			this.consumerVisibilityListeners.get(elementId)?.forEach((listener) => listener(state))
+		})
 	}
 
 	private shouldRequestImageCandidate(
