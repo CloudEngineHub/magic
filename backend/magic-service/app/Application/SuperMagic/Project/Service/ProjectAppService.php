@@ -1418,16 +1418,17 @@ class ProjectAppService extends AbstractAppService
             $dataIsolation->getCurrentUserId()
         );
 
-        // `pre_project_id` has priority when both fields are present. An
-        // explicitly null value therefore suppresses `next_project_id` too.
-        if ($requestDTO->preProjectIdProvided && $requestDTO->nextProjectIdProvided) {
+        // `pre_project_id` has priority only when both relative-position IDs
+        // have a value. An explicitly null `pre_project_id` must not suppress
+        // a valid `next_project_id`.
+        $preProjectId = $requestDTO->getPreProjectId();
+        $nextProjectId = $requestDTO->getNextProjectId();
+        if ($preProjectId !== null && $nextProjectId !== null) {
             $this->logger->warning('Both pre_project_id and next_project_id were provided; pre_project_id wins', [
                 'project_id' => $requestDTO->getSourceProjectId(),
             ]);
+            $nextProjectId = null;
         }
-        $preProjectId = $requestDTO->getPreProjectId();
-        $nextProjectId = $requestDTO->preProjectIdProvided ? null : $requestDTO->getNextProjectId();
-        // An explicitly null project relative-position value is a no-op.
         $sortProvided = ($preProjectId !== null || $nextProjectId !== null);
 
         // Call domain service to handle the move
@@ -1560,14 +1561,14 @@ class ProjectAppService extends AbstractAppService
         if (! empty($validProjectIds)) {
             try {
                 $successResults = Db::transaction(function () use ($validProjectIds, $workspaceChangeProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode, $requestDTO) {
-                    if ($requestDTO->preProjectIdProvided && $requestDTO->nextProjectIdProvided) {
-                        $this->logger->warning('Both pre_project_id and next_project_id were provided in batch move; pre_project_id wins');
-                    }
                     $preProjectId = $requestDTO->getPreProjectId();
-                    $nextProjectId = $requestDTO->preProjectIdProvided ? null : $requestDTO->getNextProjectId();
+                    $nextProjectId = $requestDTO->getNextProjectId();
+                    if ($preProjectId !== null && $nextProjectId !== null) {
+                        $this->logger->warning('Both pre_project_id and next_project_id were provided in batch move; pre_project_id wins');
+                        $nextProjectId = null;
+                    }
                     $relativeProjectId = $preProjectId ?? $nextProjectId;
-                    if (($requestDTO->preProjectIdProvided || $requestDTO->nextProjectIdProvided)
-                        && $relativeProjectId !== null
+                    if ($relativeProjectId !== null
                         && in_array($relativeProjectId, $validProjectIds, true)
                     ) {
                         throw new RuntimeException('Relative project cannot be included in the moved project list');

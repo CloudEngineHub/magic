@@ -310,14 +310,19 @@ class ProjectMemberAppService extends AbstractAppService
                 $userAuthorization->getOrganizationCode(),
                 $requestDTO->isPinOperation()
             );
-            if ($requestDTO->preProjectIdProvided || $requestDTO->nextProjectIdProvided) {
+            $preProjectId = $requestDTO->getPreProjectId();
+            $nextProjectId = $requestDTO->getNextProjectId();
+            if ($preProjectId !== null && $nextProjectId !== null) {
+                $nextProjectId = null;
+            }
+            if ($preProjectId !== null || $nextProjectId !== null) {
                 $this->projectDomainService->applyProjectSortOrderForGroup(
                     $userAuthorization->getId(),
                     $userAuthorization->getOrganizationCode(),
                     $projectId,
                     $targetWorkspaceId ?? $projectEntity->getWorkspaceId(),
-                    $requestDTO->preProjectIdProvided ? $requestDTO->getPreProjectId() : null,
-                    $requestDTO->preProjectIdProvided ? null : $requestDTO->getNextProjectId(),
+                    $preProjectId,
+                    $nextProjectId,
                     $requestDTO->isPinOperation()
                 );
             }
