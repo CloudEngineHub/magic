@@ -10,6 +10,7 @@ import type { FileData } from "../../types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import {
 	createUploadFileMentionData,
+	filterPendingCanvasMentionsFromContent,
 	isAllowedMention,
 	stripProjectResourceMentionDisplayMetadata,
 	transformMarkerImagePathsToWorkspaceAbsolute,
@@ -250,6 +251,48 @@ describe("mention utils", () => {
 		expect(result.mentionItems[2].attrs.data).toHaveProperty("project_name", "Other Project")
 	})
 
+	it("removes only pending canvas mentions from persisted content", () => {
+		const content: JSONContent = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{ type: "text", text: "Use " },
+						{
+							type: "mention",
+							attrs: {
+								type: MentionItemType.PROJECT_FILE,
+								data: { file_id: "pending", file_name: "pending.png" },
+								pending: true,
+								pendingId: "canvas-selection:1",
+							},
+						},
+						{
+							type: "mention",
+							attrs: {
+								type: MentionItemType.PROJECT_FILE,
+								data: { file_id: "formal", file_name: "formal.png" },
+							},
+						},
+					],
+				},
+			],
+		}
+
+		const filtered = filterPendingCanvasMentionsFromContent(content)
+		expect(filtered?.content?.[0]?.content).toEqual([
+			{ type: "text", text: "Use " },
+			{
+				type: "mention",
+				attrs: {
+					type: MentionItemType.PROJECT_FILE,
+					data: { file_id: "formal", file_name: "formal.png" },
+				},
+			},
+		])
+	})
+
 	it.each(["./images/cat.png", "images/cat.png"])(
 		"converts marker image path %s to workspace-relative path before send",
 		(imagePath) => {
@@ -263,4 +306,23 @@ describe("mention utils", () => {
 			expect(markerData.image_relative).toBe(imagePath)
 		},
 	)
+
+	it("does not guess when a legacy marker path matches different attachment nodes", () => {
+		const transformed = transformMarkerImagePathsToWorkspaceAbsolute(
+			markerMentionContent("images/cat.png"),
+			[
+				...designAttachments,
+				{
+					file_id: "root-cat-file",
+					file_name: "cat.png",
+					relative_file_path: "images/cat.png",
+					is_directory: false,
+				},
+			],
+		) as ReturnType<typeof markerMentionContent>
+
+		const markerData = getFirstMentionData(transformed)
+		expect(markerData.image).toBe("images/cat.png")
+		expect(markerData).not.toHaveProperty("image_relative")
+	})
 })

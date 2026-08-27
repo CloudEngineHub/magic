@@ -237,6 +237,14 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					"data-data": JSON.stringify(attributes.data || {}),
 				}),
 			},
+			pending: {
+				default: false,
+				rendered: false,
+			},
+			pendingId: {
+				default: null,
+				rendered: false,
+			},
 		}
 	},
 
@@ -447,6 +455,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					oldState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 							oldMentions.set(`${pos}-${uniqueId}`, {
 								item: {
@@ -463,6 +472,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					newState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 
 							const isAllowed = this.options.dataService
@@ -562,6 +572,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					oldState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 							oldMentions.set(`${pos}-${uniqueId}`, {
 								item: {
@@ -578,6 +589,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					newState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 							newMentions.set(`${pos}-${uniqueId}`, {
 								type: attrs.type,

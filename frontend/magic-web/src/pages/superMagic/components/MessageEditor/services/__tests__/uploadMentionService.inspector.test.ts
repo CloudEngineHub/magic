@@ -36,4 +36,27 @@ describe("uploadMentionService inspector-detail mentions", () => {
 
 		expect(items).toEqual([{ type: "mention", attrs: fileMention }])
 	})
+
+	it("does not collect pending canvas mentions as formal mention items", () => {
+		const items = collectMentionItemsFromContent({
+			type: "doc",
+			content: [
+				{
+					type: "mention",
+					attrs: {
+						type: MentionItemType.PROJECT_FILE,
+						data: {
+							file_id: "pending-file",
+							file_name: "pending.png",
+							file_path: "/pending.png",
+						},
+						pending: true,
+						pendingId: "canvas-selection:1",
+					},
+				},
+			],
+		})
+
+		expect(items).toEqual([])
+	})
 })

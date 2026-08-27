@@ -49,6 +49,12 @@ export { MagicSwitch } from "./MagicSwitch"
 // Magic Components - Image & Media
 export { default as MagicImage } from "./MagicImage"
 export { default as MagicImagePreview } from "./MagicImagePreview"
+export { MediaPreviewThumbnail, MediaPreviewTooltip } from "./MediaPreview"
+export type {
+	MediaPreviewThumbnailProps,
+	MediaPreviewTooltipProps,
+	MediaPreviewType,
+} from "./MediaPreview"
 
 // Magic Components - Layout
 export { default as MagicModal } from "./MagicModal"

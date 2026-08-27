@@ -1,5 +1,5 @@
 import { ElementTypeEnum } from "../../document/types"
-import type { UserAction } from "../types"
+import type { FrameCreateActionOptions, UserAction } from "../types"
 
 /**
  * 画框操作相关的用户动作
@@ -37,10 +37,14 @@ export const frameActions: UserAction[] = [
 
 			return !isParentFrame
 		},
-		execute: (canvas) => {
-			canvas.frameManager.createFrame()
+		execute: (canvas, options?: FrameCreateActionOptions) => {
+			if (options?.boundsExpansion === undefined) {
+				canvas.frameManager.createFrame()
+				return
+			}
+			canvas.frameManager.createFrame(options.boundsExpansion)
 		},
-	},
+	} satisfies UserAction<"frame.create", FrameCreateActionOptions>,
 	{
 		id: "frame.remove",
 		category: "frame",

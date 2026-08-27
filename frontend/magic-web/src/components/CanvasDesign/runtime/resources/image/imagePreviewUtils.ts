@@ -13,12 +13,12 @@ export { LOW_DISPLAY_MAX_SIZE, TOOLTIP_PREVIEW_MIN_SIZE } from "./imagePreviewCo
  */
 export function calculateTooltipBoundedPreviewSize(
 	imageInfo: { naturalWidth: number; naturalHeight: number } | undefined,
+	maxSize = TOOLTIP_PREVIEW_MIN_SIZE,
 ): { width?: number; height?: number } {
 	if (!imageInfo) {
 		return {}
 	}
 
-	const maxSize = TOOLTIP_PREVIEW_MIN_SIZE
 	const { naturalWidth, naturalHeight } = imageInfo
 
 	if (naturalWidth <= maxSize && naturalHeight <= maxSize) {

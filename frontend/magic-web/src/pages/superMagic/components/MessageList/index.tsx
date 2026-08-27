@@ -334,8 +334,7 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				| { status?: TaskStatus }
-				| undefined
+				{ status?: TaskStatus } | undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 

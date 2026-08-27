@@ -9,7 +9,7 @@ import {
 	resolveConnectedElementCreateTopLeftPoint,
 	resolveNonOverlappingConnectionCreateTopLeftPoint,
 	type ConnectionCreatePlacementContext,
-} from "../connectionCreatePlacement"
+} from "../../../../runtime/shared/placement/connectionCreatePlacement"
 
 describe("connectionCreatePlacement", () => {
 	const rightHandleContext: ConnectionCreatePlacementContext = {

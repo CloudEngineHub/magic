@@ -13,10 +13,15 @@ export type ReferenceResourceType =
 
 export type ReferenceResourceTypeFilter = ReferenceResourceType | ReferenceResourceType[]
 
-/** 参考资源参与生成请求时的媒体类型。opaque URI 不能从字符串扩展名推断。 */
+/** 参考资源可参与生成请求的媒体类型。 */
 export type ReferenceResourceAssetType = "image" | "video" | "audio"
 
-/** 参考资源的运行时描述；只有 path 需要持久化。 */
+/**
+ * 参考资源的运行时描述。
+ *
+ * `path` 是唯一需要持久化/提交的值；其余字段只用于当前编辑会话中的
+ * identity 比较、展示和类型决策，避免把 opaque URI 当作文件路径处理。
+ */
 export interface ReferenceResourceDescriptor {
 	path: string
 	identity: string

@@ -12,7 +12,16 @@ import {
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { cn } from "@/utils/cn"
 import { showMobileImagePreview } from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MobileImagePreview"
+import MentionMediaIcon from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MentionMediaIcon"
+import {
+	DEFAULT_FILE_MENTION_RENDER_CONFIG,
+	getFileMentionRenderType,
+	isFileMentionFeatureEnabled,
+	type FileMentionRenderConfig,
+} from "@/pages/superMagic/components/MessageEditor/components/MentionMedia/fileMentionRenderConfig"
+import { useMentionMediaSource } from "@/pages/superMagic/components/MessageEditor/components/MentionMedia/useMentionMediaSource"
 import { useMarkerImageUrl } from "@/pages/superMagic/components/MessageEditor/components/MentionNodes/marker/useMarkerImageUrl"
 import { useTransformedMarkerData } from "@/pages/superMagic/components/MessageEditor/components/MentionNodes/marker/useTransformedMarkerData"
 import { MentionTooltipWrapper } from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MentionTooltipWrapper"
@@ -31,6 +40,7 @@ interface InlineMentionProps {
 	markerClickScene?: MarkerClickScene
 	messageContent?: JSONContent | string | Record<string, unknown>
 	projectFilesStore?: ProjectFilesStore
+	fileMentionRenderConfig?: FileMentionRenderConfig
 }
 
 function InlineMarkerMention(props: InlineMentionProps) {
@@ -55,12 +65,32 @@ function InlineDefaultMention(props: InlineMentionProps) {
 		markerClickScene = "messageList",
 		messageContent,
 		projectFilesStore,
+		fileMentionRenderConfig = DEFAULT_FILE_MENTION_RENDER_CONFIG,
 	} = props
 
 	const isMobile = useIsMobile()
 	const displayName = getMentionDisplayName(data)
 	const description = getMentionDescription(data)
 	const isInMessageList = true
+	const isFileMention =
+		data.type === MentionItemType.PROJECT_FILE || data.type === MentionItemType.UPLOAD_FILE
+	const fileData = isFileMention
+		? (data.data as ProjectFileMentionData | UploadFileMentionData)
+		: null
+	const mediaSource = useMentionMediaSource({
+		data,
+		uploadFile:
+			data.type === MentionItemType.UPLOAD_FILE
+				? (data.data as UploadFileMentionData).file
+				: null,
+	})
+	const shouldRenderIcon =
+		isFileMention &&
+		isFileMentionFeatureEnabled(
+			"icon",
+			getFileMentionRenderType(mediaSource.mediaType),
+			fileMentionRenderConfig,
+		)
 
 	const { markerData: transformedMarkerData, loading: markerLoading } = useTransformedMarkerData(
 		data,
@@ -149,14 +179,35 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			transformedMarkerData={transformedMarkerData}
 			markerLoading={markerLoading}
 			markerImageUrl={markerImageUrl}
+			mediaSource={mediaSource}
+			fileMentionRenderConfig={fileMentionRenderConfig}
 		>
 			<span
-				className="magic-mention"
+				className={cn(
+					"magic-mention",
+					shouldRenderIcon && "!inline-flex items-center gap-1 !align-middle",
+				)}
 				data-type={data.type}
 				data-data={JSON.stringify(data.data)}
 				onMouseDown={(event) => event.preventDefault()}
 				onClick={handleClick}
 			>
+				{shouldRenderIcon && fileData ? (
+					<span
+						className="flex shrink-0 items-center"
+						data-testid="inline-file-mention-icon"
+					>
+						<MentionMediaIcon
+							type={
+								data.type as
+									MentionItemType.PROJECT_FILE | MentionItemType.UPLOAD_FILE
+							}
+							data={fileData}
+							size={16}
+							mediaSource={mediaSource}
+						/>
+					</span>
+				) : null}
 				{label}
 			</span>
 		</MentionTooltipWrapper>

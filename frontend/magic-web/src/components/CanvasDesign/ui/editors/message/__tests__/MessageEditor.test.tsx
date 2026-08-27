@@ -1,13 +1,16 @@
 import { Node } from "@/infrastructure/editors/tiptap/core"
-import { act, render, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, waitFor } from "@testing-library/react"
 import { createRef } from "react"
 import { describe, expect, it, vi } from "vitest"
 import MessageEditor, {
 	resolveMentionInsertionRange,
 	type MessageEditorRef,
 } from "../MessageEditor"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import { createReferenceResourcePanelItemFromPath } from "../reference-assets/createReferenceResourcePanelItem"
 import { createCanvasMentionPathMatcher } from "../../connection/linkedMediaMentionMatcher"
+
+const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
 const TestMentionExtension = Node.create({
 	name: "mention",
@@ -36,7 +39,43 @@ function expectCollapsedSelectionInside(editorDom: HTMLElement) {
 	expect(editorDom.contains(selection?.anchorNode ?? null)).toBe(true)
 }
 
+function expectCollapsedSelectionAtDocumentEnd(editorDom: HTMLElement) {
+	expectCollapsedSelectionInside(editorDom)
+	const selection = window.getSelection()
+	const textNode = editorDom.querySelector("p")?.firstChild
+	expect(textNode).toBeTruthy()
+	expect(selection?.anchorNode).toBe(textNode)
+	expect(selection?.anchorOffset).toBe(textNode?.textContent?.length ?? 0)
+	expect(selection?.focusOffset).toBe(textNode?.textContent?.length ?? 0)
+}
+
 describe("MessageEditor mention synchronization", () => {
+	it("does not report deleted mentions as preview hover targets", async () => {
+		const onMentionItemHoverChange = vi.fn()
+		const { container } = render(
+			<MessageEditor
+				value=""
+				mentionExtension={TestMentionExtension}
+				onMentionItemHoverChange={onMentionItemHoverChange}
+			/>,
+		)
+
+		const editorDom = await waitFor(() => {
+			const element = container.querySelector<HTMLElement>("[contenteditable='true']")
+			expect(element).not.toBeNull()
+			return element as HTMLElement
+		})
+		const deletedMention = document.createElement("span")
+		deletedMention.className = "canvas-project-file-mention"
+		deletedMention.dataset.filePath = "./images/deleted.png"
+		deletedMention.dataset.deleted = "true"
+		editorDom.append(deletedMention)
+
+		fireEvent.pointerOver(deletedMention)
+
+		expect(onMentionItemHoverChange).not.toHaveBeenCalled()
+	})
+
 	it("reports mentions that were already parsed during editor initialization", async () => {
 		const onMentionChange = vi.fn()
 
@@ -170,7 +209,10 @@ describe("MessageEditor mention synchronization", () => {
 			act(() => {
 				expect(
 					editorRef.current?.removeMentionItems(
-						createCanvasMentionPathMatcher("/images/source.png"),
+						createCanvasMentionPathMatcher(
+							"/画布A/images/source.png",
+							resolveDesignAResourceReference,
+						),
 					),
 				).toBe(true)
 			})
@@ -209,7 +251,7 @@ describe("MessageEditor mention synchronization", () => {
 				act(() => {
 					expect(
 						editorRef.current?.removeMentionItems(
-							createCanvasMentionPathMatcher("images/source.png"),
+							createCanvasMentionPathMatcher("./images/source.png"),
 						),
 					).toBe(true)
 				})
@@ -244,9 +286,12 @@ describe("MessageEditor mention synchronization", () => {
 			act(() => {
 				expect(
 					editorRef.current?.replaceMentionItems(
-						createCanvasMentionPathMatcher("/images/source.png"),
+						createCanvasMentionPathMatcher(
+							"/画布A/images/source.png",
+							resolveDesignAResourceReference,
+						),
 						createReferenceResourcePanelItemFromPath(
-							"images/updated.png",
+							"./images/updated.png",
 							"updated.png",
 						),
 					),
@@ -261,6 +306,111 @@ describe("MessageEditor mention synchronization", () => {
 			vi.clearAllTimers()
 			vi.useRealTimers()
 			outsideButton.remove()
+		}
+	})
+
+	it("keeps the caret at document end after setContent while autoFocusAtDocumentEnd is pinning", async () => {
+		const rect = {
+			x: 0,
+			y: 0,
+			width: 0,
+			height: 0,
+			top: 0,
+			right: 0,
+			bottom: 0,
+			left: 0,
+			toJSON() {
+				return this
+			},
+		} as DOMRect
+		const previousGetBoundingClientRect = Range.prototype.getBoundingClientRect
+		const previousGetClientRects = Range.prototype.getClientRects
+		const previousTextGetClientRects = Object.getOwnPropertyDescriptor(
+			CharacterData.prototype,
+			"getClientRects",
+		)
+		const previousTextGetBoundingClientRect = Object.getOwnPropertyDescriptor(
+			CharacterData.prototype,
+			"getBoundingClientRect",
+		)
+		Range.prototype.getBoundingClientRect = () => rect
+		Range.prototype.getClientRects = () =>
+			({
+				length: 0,
+				item: () => null,
+				*[Symbol.iterator]() {},
+			}) as DOMRectList
+		Object.defineProperty(CharacterData.prototype, "getClientRects", {
+			configurable: true,
+			value: () =>
+				({
+					length: 0,
+					item: () => null,
+					*[Symbol.iterator]() {},
+				}) as DOMRectList,
+		})
+		Object.defineProperty(CharacterData.prototype, "getBoundingClientRect", {
+			configurable: true,
+			value: () => rect,
+		})
+
+		try {
+			const { container, rerender } = render(
+				<MessageEditor
+					value="hello"
+					autoFocus
+					autoFocusAtDocumentEnd
+					mentionExtension={TestMentionExtension}
+				/>,
+			)
+
+			const editorDom = await waitFor(() => {
+				const element = container.querySelector<HTMLElement>("[contenteditable='true']")
+				expect(element).not.toBeNull()
+				return element as HTMLElement
+			})
+
+			await waitFor(() => {
+				expect(document.activeElement).toBe(editorDom)
+				expect(editorDom.textContent).toContain("hello")
+				expectCollapsedSelectionAtDocumentEnd(editorDom)
+			})
+
+			rerender(
+				<MessageEditor
+					value="hello world"
+					autoFocus
+					autoFocusAtDocumentEnd
+					mentionExtension={TestMentionExtension}
+				/>,
+			)
+
+			await waitFor(() => {
+				expect(editorDom.textContent).toContain("hello world")
+				expect(document.activeElement).toBe(editorDom)
+				expectCollapsedSelectionAtDocumentEnd(editorDom)
+			})
+		} finally {
+			Range.prototype.getBoundingClientRect = previousGetBoundingClientRect
+			Range.prototype.getClientRects = previousGetClientRects
+			if (previousTextGetClientRects) {
+				Object.defineProperty(
+					CharacterData.prototype,
+					"getClientRects",
+					previousTextGetClientRects,
+				)
+			} else {
+				Reflect.deleteProperty(CharacterData.prototype, "getClientRects")
+			}
+			if (previousTextGetBoundingClientRect) {
+				Object.defineProperty(
+					CharacterData.prototype,
+					"getBoundingClientRect",
+					previousTextGetBoundingClientRect,
+				)
+			} else {
+				Reflect.deleteProperty(CharacterData.prototype, "getBoundingClientRect")
+			}
 		}
 	})
 })

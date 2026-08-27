@@ -1,4 +1,5 @@
 import type { HttpClient } from "@/apis/core/HttpClient"
+import type { VideoGenerationConfig } from "@/components/CanvasDesign/public/magic-types"
 
 import { genRequestUrl } from "@/utils/http"
 
@@ -106,6 +107,8 @@ export interface ServiceProviderModel {
 		id: string
 		name: string
 	}
+	/** 视频生成能力配置（个人/服务商模型接口可能返回） */
+	video_generation_config?: VideoGenerationConfig | null
 	/** 生图尺寸与参考图上限等（个人/服务商模型接口可能返回） */
 	image_size_config?: {
 		max_reference_images?: number

@@ -1,3 +1,4 @@
+import type { VideoGenerationConfig } from "@/components/CanvasDesign/public/magic-types"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { MessageEditorSize } from "../../types"
 import type { AddModelType } from "./components/AddModel/store"
@@ -52,6 +53,8 @@ export interface ModelItem {
 	model_status: ModelStatusEnum
 	sort: number
 	tags?: ModelTagEnum[]
+	/** 视频模型下发的生成能力配置。 */
+	video_generation_config?: VideoGenerationConfig
 }
 
 export interface ModelSwitchProps {

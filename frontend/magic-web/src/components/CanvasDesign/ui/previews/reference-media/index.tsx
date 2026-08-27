@@ -17,6 +17,8 @@ export default function ReferenceMediaPreview(props: ReferenceMediaPreviewProps)
 				path={props.path}
 				fillParent={props.fillParent}
 				objectFit={props.objectFit}
+				enableTooltip={props.enableTooltip}
+				tooltipSide={props.tooltipSide}
 			/>
 		)
 	}
@@ -24,9 +26,13 @@ export default function ReferenceMediaPreview(props: ReferenceMediaPreviewProps)
 	if (fileType !== "image") {
 		return (
 			<ReferenceNonImagePreview
+				fileName={props.fileName}
+				path={props.path}
 				fileType={fileType}
 				fillParent={props.fillParent}
 				objectFit={props.objectFit}
+				enableTooltip={props.enableTooltip}
+				tooltipSide={props.tooltipSide}
 			/>
 		)
 	}

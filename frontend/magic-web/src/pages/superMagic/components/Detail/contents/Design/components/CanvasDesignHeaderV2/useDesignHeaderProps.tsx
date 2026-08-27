@@ -30,7 +30,7 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import {
 	getShouldSkipVideoPointsConfirm,
 	setShouldSkipVideoPointsConfirm,
-} from "@/components/CanvasDesign/ui/editors/video/points/video-points-confirm.storage"
+} from "@/components/CanvasDesign/ui/element-tools/editors/video/points/video-points-confirm.storage"
 import { batchExportFile } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
 import { isMagicApp } from "@/utils/devices"
 

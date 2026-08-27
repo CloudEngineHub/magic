@@ -28,6 +28,14 @@ export interface EditActionOptions {
 }
 
 /**
+ * 创建画框操作的选项
+ */
+export interface FrameCreateActionOptions {
+	/** 显式覆盖默认的 10% 内容边距；未传入时由 Frame 创建入口自动计算 */
+	boundsExpansion?: number
+}
+
+/**
  * 视图操作的选项
  */
 export interface ViewActionOptions {
@@ -50,10 +58,12 @@ export interface DownloadActionOptions {
  */
 export interface UserActionOptionsMap {
 	"edit.paste": EditActionOptions
+	"frame.create": FrameCreateActionOptions
 	"view.focus-element": ViewActionOptions
 	"view.locate-project-file": LocateProjectFileActionOptions
 	"download.image": DownloadActionOptions
 	"download.image-no-watermark": DownloadActionOptions
+	"download.frame": DownloadActionOptions
 }
 
 /**

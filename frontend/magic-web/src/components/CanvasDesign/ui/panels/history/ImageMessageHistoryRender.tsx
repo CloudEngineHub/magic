@@ -20,6 +20,8 @@ import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/refer
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { useGenerationRuntime } from "../../../app/hooks/canvas"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
+import { normalizeImageSizeValue } from "../../element-tools/editors/image/image-editor-config.utils"
 
 interface ImageMessageHistoryRenderProps {
 	imageElement: ImageElement
@@ -30,14 +32,16 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { imageElement, onPreviewMediaResource } = props
 	const { selectedElements } = useCanvasSelectionUI()
 	const { setMessageHistoryElementId } = useCanvasPanelUI()
-	const { imageModelList, convertHightConfig } = useMagic()
+	const { imageModelList, convertHightConfig, methods } = useMagic()
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(imageElement.id)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 
 	// 获取请求信息
-	const request = generationRuntime?.generateImageRequest || imageElement.generateImageRequest
+	const request =
+		generationRuntime?.generateImageRequest ||
+		getActiveImageContent(imageElement).generateImageRequest
 
 	const imageGenerationTaskMeta =
 		generationRuntime?.imageGenerationTaskMeta || getImageGenerationTaskMeta(imageElement)
@@ -56,7 +60,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 				? imageGenerationTaskMeta.size
 				: undefined) || request?.size
 		if (result) {
-			return result
+			return normalizeImageSizeValue(result)
 		}
 		const imageInfo = elementInstance?.getImageInfo()
 		if (imageInfo) {
@@ -82,6 +86,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: "image-message-history",
+		interactive: true,
 		enableWheelForwarding: true,
 		enablePointerPanForwarding: true,
 	})
@@ -189,6 +194,8 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 									tokenConfig={promptPlaceholderTokenConfig}
 									placeholderPaths={{ image: referenceImagePaths }}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
+									deletedSuffix={t("messageHistory.deletedSuffix", "（已删除）")}
 								/>
 							}
 							emptyLabel={t("messageHistory.noPrompt", "暂无提示词")}
@@ -216,6 +223,9 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 											path={path}
 											sourceCrop={sourceCrop}
 											onPreviewMediaResource={onPreviewMediaResource}
+											resolveResourceReference={
+												methods?.resolveResourceReference
+											}
 										/>
 									)
 								})}
