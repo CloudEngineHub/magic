@@ -7,14 +7,14 @@ declare(strict_types=1);
 
 namespace App\Application\ModelGateway\Service;
 
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterFactoryInterface;
+use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\DTO\Factory\ProviderConfigFactory;
 use App\Domain\Provider\DTO\Item\ModelConfigItem;
 use App\Domain\Provider\DTO\ProviderConfigDTO;
 use App\Domain\Provider\Entity\ProviderModelEntity;
-use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterFactoryInterface;
-use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ModelType;
 use App\Domain\Provider\Entity\ValueObject\NaturalLanguageProcessing;

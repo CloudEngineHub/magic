@@ -13,29 +13,24 @@ use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\SuperMagic\Common\Service\VideoModelConfigResolver;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
-use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfigCandidate;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
-use App\Domain\Provider\Entity\ProviderConfigEntity;
-use App\Domain\Provider\Entity\ProviderModelEntity;
-use App\Domain\Provider\Entity\ValueObject\Category;
-use App\Domain\Provider\Entity\ValueObject\ModelType;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
-use App\Domain\Provider\Entity\ValueObject\ProviderModelType;
-use App\Domain\Provider\Entity\ValueObject\Status;
-use App\Domain\Provider\Service\ProviderConfigDomainService;
-use App\Domain\Provider\Service\ProviderModelDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
+use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
+use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
+use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
 use DateTime;
-use Hyperf\Context\ApplicationContext;
-use Hyperf\Logger\LoggerFactory;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
+use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
+use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
+use ReflectionProperty;
 use RuntimeException;
 
 /**
@@ -60,7 +55,7 @@ class VideoModelConfigResolverTest extends TestCase
         if ($this->hadContainer && $this->previousContainer instanceof ContainerInterface) {
             ApplicationContext::setContainer($this->previousContainer);
         } else {
-            $property = new \ReflectionProperty(ApplicationContext::class, 'container');
+            $property = new ReflectionProperty(ApplicationContext::class, 'container');
             $property->setAccessible(true);
             $property->setValue(null, null);
         }
@@ -125,7 +120,7 @@ class VideoModelConfigResolverTest extends TestCase
 
         putenv('APP_ENV=testing');
         $dataIsolation = new DataIsolation();
-        $organizationProperty = new \ReflectionProperty(DataIsolation::class, 'currentOrganizationCode');
+        $organizationProperty = new ReflectionProperty(DataIsolation::class, 'currentOrganizationCode');
         $organizationProperty->setAccessible(true);
         $organizationProperty->setValue($dataIsolation, 'dq8ajgpv5lme');
         $this->assertSame('dq8ajgpv5lme', $dataIsolation->getCurrentOrganizationCode());
@@ -187,9 +182,9 @@ final class VideoModelConfigResolverTestContainer implements ContainerInterface
                 {
                 }
             },
-            \App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface::class => new BaseThirdPlatformDataIsolationManager(),
-            \App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface::class => new BaseSubscriptionManager(),
-            \App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface::class => new BaseOrganizationInfoManager(),
+            ThirdPlatformDataIsolationManagerInterface::class => new BaseThirdPlatformDataIsolationManager(),
+            SubscriptionManagerInterface::class => new BaseSubscriptionManager(),
+            OrganizationInfoManagerInterface::class => new BaseOrganizationInfoManager(),
             default => throw new RuntimeException('Unsupported service: ' . $id),
         };
     }

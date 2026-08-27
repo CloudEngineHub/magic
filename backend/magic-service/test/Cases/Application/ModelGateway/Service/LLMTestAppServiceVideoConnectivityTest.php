@@ -20,6 +20,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use ReflectionClass;
 use ReflectionMethod;
+use ReflectionProperty;
 use RuntimeException;
 
 /**
@@ -44,7 +45,7 @@ class LLMTestAppServiceVideoConnectivityTest extends TestCase
         if ($this->hadContainer && $this->previousContainer instanceof ContainerInterface) {
             ApplicationContext::setContainer($this->previousContainer);
         } else {
-            $property = new \ReflectionProperty(ApplicationContext::class, 'container');
+            $property = new ReflectionProperty(ApplicationContext::class, 'container');
             $property->setAccessible(true);
             $property->setValue(null, null);
         }

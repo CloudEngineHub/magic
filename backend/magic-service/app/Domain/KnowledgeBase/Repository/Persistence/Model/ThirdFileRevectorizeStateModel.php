@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\KnowledgeBase\Repository\Persistence\Model;
 
+use Carbon\Carbon;
 use Hyperf\DbConnection\Model\Model;
 
 /**
@@ -15,8 +16,8 @@ use Hyperf\DbConnection\Model\Model;
  * @property string $third_platform_type
  * @property string $third_file_id
  * @property array $latest_payload
- * @property null|\Carbon\Carbon $last_execute_at
- * @property null|\Carbon\Carbon $next_execute_at
+ * @property null|Carbon $last_execute_at
+ * @property null|Carbon $next_execute_at
  * @property string $status
  * @property int $notification_count
  */

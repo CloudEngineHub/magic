@@ -23,25 +23,26 @@ use App\Domain\Design\Factory\DesignGenerationTaskFactory;
 use App\Domain\Design\Repository\Facade\DesignGenerationTaskRepositoryInterface;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
+use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
-use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\BusinessException;
-use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
 use DateTime;
 use Hyperf\Amqp\Producer;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
+use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
-use Hyperf\Context\ApplicationContext;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
+use ReflectionProperty;
 use RuntimeException;
 
 /**
@@ -71,9 +72,9 @@ class DesignVideoAppServiceTest extends TestCase
                         {
                             return match ($key) {
                                 'error_message' => [
-                                    'exception_class' => \App\Infrastructure\Core\Exception\BusinessException::class,
+                                    'exception_class' => BusinessException::class,
                                     'error_code_mapper' => [
-                                        \App\ErrorCode\DesignErrorCode::class => [14000, 14999],
+                                        DesignErrorCode::class => [14000, 14999],
                                     ],
                                 ],
                                 default => $default,
@@ -127,7 +128,7 @@ class DesignVideoAppServiceTest extends TestCase
         if ($this->hadContainer && $this->previousContainer instanceof ContainerInterface) {
             ApplicationContext::setContainer($this->previousContainer);
         } else {
-            $property = new \ReflectionProperty(ApplicationContext::class, 'container');
+            $property = new ReflectionProperty(ApplicationContext::class, 'container');
             $property->setAccessible(true);
             $property->setValue(null, null);
         }
@@ -137,6 +138,7 @@ class DesignVideoAppServiceTest extends TestCase
 
         parent::tearDown();
     }
+
     public function testCanvasCompositionValidatesFilesInBatchesAndDispatchesAsyncSubmission(): void
     {
         $repository = new InMemoryDesignVideoTaskRepository();

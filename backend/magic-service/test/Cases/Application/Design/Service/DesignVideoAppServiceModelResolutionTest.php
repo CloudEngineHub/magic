@@ -16,11 +16,14 @@ use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
 use DateTime;
 use Hyperf\Amqp\Producer;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
+use ReflectionProperty;
 
 /**
  * @internal
@@ -44,8 +47,8 @@ class DesignVideoAppServiceModelResolutionTest extends TestCase
             ),
             new VideoModel([], 'MiniMax-H3', '1001', ProviderCode::MiniMax),
         );
-        $dataIsolation = (new \ReflectionClass(DesignDataIsolation::class))->newInstanceWithoutConstructor();
-        $organizationProperty = new \ReflectionProperty(BaseDataIsolation::class, 'currentOrganizationCode');
+        $dataIsolation = (new ReflectionClass(DesignDataIsolation::class))->newInstanceWithoutConstructor();
+        $organizationProperty = new ReflectionProperty(BaseDataIsolation::class, 'currentOrganizationCode');
         $organizationProperty->setAccessible(true);
         $organizationProperty->setValue($dataIsolation, 'dq8ajgpv5lme');
 
@@ -57,8 +60,8 @@ class DesignVideoAppServiceModelResolutionTest extends TestCase
             )
             ->willReturn($modelEntry);
 
-        $taskDomainService = (new \ReflectionClass(DesignGenerationTaskDomainService::class))->newInstanceWithoutConstructor();
-        $submissionDomainService = (new \ReflectionClass(DesignVideoSubmissionDomainService::class))->newInstanceWithoutConstructor();
+        $taskDomainService = (new ReflectionClass(DesignGenerationTaskDomainService::class))->newInstanceWithoutConstructor();
+        $submissionDomainService = (new ReflectionClass(DesignVideoSubmissionDomainService::class))->newInstanceWithoutConstructor();
 
         $service = new DesignVideoAppService(
             $this->createMock(TaskFileDomainService::class),
@@ -68,7 +71,7 @@ class DesignVideoAppServiceModelResolutionTest extends TestCase
             $this->createMock(Producer::class),
         );
 
-        $method = new \ReflectionMethod(DesignVideoAppService::class, 'findModelOrFail');
+        $method = new ReflectionMethod(DesignVideoAppService::class, 'findModelOrFail');
         $method->setAccessible(true);
 
         $this->assertSame($modelEntry, $method->invoke($service, $dataIsolation, $modelId));
