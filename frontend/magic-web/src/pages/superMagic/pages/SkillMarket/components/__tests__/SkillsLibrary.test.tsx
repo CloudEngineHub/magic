@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
@@ -6,8 +6,6 @@ import type { StoreSkillView } from "@/services/skills/SkillsService"
 const getStoreSkillsMock = vi.fn()
 const getSkillMarketCategoriesMock = vi.fn()
 const useFunctionPermissionMock = vi.hoisted(() => vi.fn())
-const skillCardRenderMock = vi.fn()
-const skillDetailDialogRenderMock = vi.fn()
 
 vi.mock("ahooks", () => ({
 	useDebounce: <T,>(value: T) => value,
@@ -21,6 +19,7 @@ vi.mock("react-i18next", () => ({
 				"skillsLibrary.allSkills": "All Skills",
 				"skillsLibrary.category": "Category",
 				"skillsLibrary.categoriesLoadFailed": "Failed to load categories",
+				"skillsLibrary.featured": "Featured",
 				"skillsLibrary.featuredSkills": "Featured Skills",
 				"skillsLibrary.retryFeatured": "Retry",
 				"skillsLibrary.refreshFeatured": "Refresh",
@@ -99,10 +98,7 @@ vi.mock("@/pages/superMagic/components/SkillDetailDialog", () => ({
 		open: boolean
 		skillCode: string | null
 		skillSummary?: StoreSkillView | null
-	}) => {
-		skillDetailDialogRenderMock(props)
-		return null
-	},
+	}) => null,
 }))
 
 vi.mock("@/pages/superMagic/hooks/useAutoLoadMoreSentinel", () => ({
@@ -146,7 +142,6 @@ vi.mock("../SkillCard", () => ({
 		showFeaturedTag?: boolean
 		onOpenDetail?: (skill: StoreSkillView) => void
 	}) => {
-		skillCardRenderMock(props)
 		return (
 			<button
 				type="button"
@@ -236,7 +231,7 @@ describe("SkillsLibrary", () => {
 		})
 	})
 
-	it("keeps the global featured section visible when switching categories", async () => {
+	it("filters the main list by featured status from the featured tab", async () => {
 		const featuredSkill = createSkill({
 			id: "global-featured",
 			skillCode: "global.featured",
@@ -252,122 +247,23 @@ describe("SkillsLibrary", () => {
 			},
 		])
 		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
-			Promise.resolve(
-				createPage(is_featured === 1 ? [featuredSkill] : [], 1, is_featured === 1 ? 6 : 20),
-			),
+			Promise.resolve(createPage(is_featured === 1 ? [featuredSkill] : [], 1, 20)),
 		)
 
 		render(<SkillsLibrary />)
 
-		const featuredSection = await screen.findByTestId("featured-skills-section")
-		fireEvent.click(await screen.findByRole("tab", { name: "Productivity" }))
+		const featuredTab = await screen.findByRole("tab", { name: "Featured" })
+		fireEvent.click(featuredTab)
 
 		await waitFor(() => {
-			expect(getStoreSkillsMock).toHaveBeenCalledWith(
-				expect.objectContaining({ category_ids: ["10001"] }),
+			expect(getStoreSkillsMock).toHaveBeenLastCalledWith(
+				expect.objectContaining({ category_ids: undefined, is_featured: 1, page: 1 }),
 			)
 		})
-		expect(featuredSection).toBeInTheDocument()
-		expect(screen.getByTestId("featured-skills-section")).toBeInTheDocument()
-	})
-
-	it("opens the clicked featured object when the main list contains another object with the same id", async () => {
-		const featuredSkill = createSkill({
-			id: "shared-id",
-			storeSkillId: "featured-store-id",
-			skillCode: "featured.skill.code",
-			name: "Featured object",
-			isFeatured: true,
-		})
-		const mainListSkill = createSkill({
-			id: "shared-id",
-			storeSkillId: "main-store-id",
-			skillCode: "main.skill.code",
-			name: "Main-list object",
-		})
-
-		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
-			Promise.resolve(
-				is_featured === 1
-					? createPage([featuredSkill], 1, 6)
-					: createPage([mainListSkill], 1, 20),
-			),
+		expect(screen.getByTestId("skill-category-featured")).toHaveAttribute(
+			"aria-selected",
+			"true",
 		)
-
-		render(<SkillsLibrary />)
-
-		const featuredGrid = await screen.findByTestId("featured-skill-card-grid")
-		await screen.findByTestId("skill-card-grid")
-
-		const renderedCards = skillCardRenderMock.mock.calls.map(
-			([props]) =>
-				props as {
-					skill: StoreSkillView
-					showFeaturedTag?: boolean
-				},
-		)
-		const featuredCard = renderedCards.find(
-			({ skill, showFeaturedTag }) => showFeaturedTag && skill.name === "Featured object",
-		)
-		const mainCard = renderedCards.find(
-			({ skill, showFeaturedTag }) => !showFeaturedTag && skill.name === "Main-list object",
-		)
-		if (!featuredCard || !mainCard) throw new Error("Expected both featured and main cards")
-
-		expect(featuredCard.skill.id).toBe(mainCard.skill.id)
-		expect(featuredCard.skill).not.toBe(mainCard.skill)
-
-		fireEvent.click(within(featuredGrid).getByRole("button", { name: "Featured object" }))
-
-		await waitFor(() => {
-			const lastCall =
-				skillDetailDialogRenderMock.mock.calls[
-					skillDetailDialogRenderMock.mock.calls.length - 1
-				]?.[0]
-			expect(lastCall).toMatchObject({
-				open: true,
-				skillCode: "featured.skill.code",
-			})
-		})
-
-		const selectedSkill = skillDetailDialogRenderMock.mock.calls.at(-1)?.[0]?.skillSummary
-		expect(selectedSkill).toBe(featuredCard.skill)
-		expect(selectedSkill).not.toBe(mainCard.skill)
-	})
-
-	it("shows the featured error and retries the initial request successfully", async () => {
-		const recoveredSkill = createSkill({
-			id: "recovered-featured",
-			skillCode: "recovered.featured.code",
-			name: "Recovered featured",
-			isFeatured: true,
-		})
-		let featuredRequestCount = 0
-
-		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) => {
-			if (is_featured !== 1) return Promise.resolve(createPage([], 1, 20))
-
-			featuredRequestCount += 1
-			if (featuredRequestCount === 1) return Promise.reject(new Error("featured failed"))
-			return Promise.resolve(createPage([recoveredSkill], 1, 6))
-		})
-
-		render(<SkillsLibrary />)
-
-		expect(await screen.findByTestId("featured-skills-error")).toHaveTextContent(
-			"Failed to load featured skills",
-		)
-		const retryButton = screen.getByTestId("featured-skills-refresh")
-		expect(retryButton).toHaveTextContent("Retry")
-		expect(retryButton).toBeEnabled()
-
-		fireEvent.click(retryButton)
-
-		const featuredGrid = await screen.findByTestId("featured-skill-card-grid")
-		expect(
-			within(featuredGrid).getByRole("button", { name: "Recovered featured" }),
-		).toBeInTheDocument()
-		expect(screen.queryByTestId("featured-skills-error")).not.toBeInTheDocument()
-		expect(featuredRequestCount).toBe(2)
+		expect(screen.getByRole("button", { name: "Global featured" })).toBeInTheDocument()
 	})
 })
