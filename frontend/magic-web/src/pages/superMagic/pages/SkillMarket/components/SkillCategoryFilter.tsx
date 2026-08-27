@@ -2,6 +2,7 @@ import { LayoutGroup, motion, useReducedMotion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { SkillMarketCategoryView } from "@/services/skills/SkillsService"
+import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 
 interface SkillCategoryFilterProps {
 	categories: SkillMarketCategoryView[]
@@ -36,10 +37,12 @@ function SkillCategoryFilter({
 	)
 
 	return (
-		<div
-			className="no-scrollbar flex min-w-0 items-end overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-border"
+		<HeadlessHorizontalScroll
+			className="w-full rounded-none border-b border-border"
+			scrollContainerClassName="flex min-w-0 items-end overflow-y-hidden overscroll-x-contain pr-8 touch-pan-x"
+			scrollContainerProps={{ "aria-busy": loading }}
+			scrollStep={280}
 			data-testid="skill-category-filter"
-			aria-busy={loading}
 		>
 			<LayoutGroup id="skill-market-category-tabs">
 				<div
@@ -91,7 +94,7 @@ function SkillCategoryFilter({
 					{t("skillsLibrary.categoriesLoadFailed")}
 				</span>
 			) : null}
-		</div>
+		</HeadlessHorizontalScroll>
 	)
 }
 
