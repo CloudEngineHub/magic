@@ -453,6 +453,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
+							resourceStatusLabel: t("videoEditor.slotLabelFirstFrame", "首帧"),
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
 									linkedFrameBindings[idx]?.framePath,
@@ -485,6 +486,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
+							resourceStatusLabel: t("videoEditor.slotLabelLastFrame", "尾帧"),
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
 									linkedFrameBindings[idx]?.framePath,
