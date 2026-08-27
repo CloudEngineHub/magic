@@ -143,7 +143,7 @@ class SkillMarketAppService extends AbstractSkillAppService
     {
         if ($query->getKeyword() !== null && trim($query->getKeyword()) !== '') {
             try {
-                if ($this->skillMarketVectorIndexDomainService->isVectorSearchEnabled()
+                if ($this->skillMarketVectorIndexDomainService->isVectorSearchReady()
                     && $this->skillMarketVectorIndexDomainService->isAvailable()) {
                     return [
                         'total' => null,

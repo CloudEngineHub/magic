@@ -288,10 +288,12 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
     public function reconcileVectorIndex(SlidesTemplateDataIsolation $dataIsolation): array
     {
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $reconcileSucceeded = true;
         $removed = 0;
         try {
             $removed = $this->slidesTemplateVectorIndexDomainService->removeOrphanPoints($dataIsolation, $organizationCode);
         } catch (Throwable $throwable) {
+            $reconcileSucceeded = false;
             $this->logger->error('Slides template orphan vector cleanup failed', [
                 'organization_code' => $organizationCode,
                 'exception' => $throwable::class,
@@ -304,6 +306,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $result = $this->queueOfficialVectorReindex($dataIsolation, forceReEmbedding: false);
             $queued = $result['queued'] ?? 0;
         } catch (Throwable $throwable) {
+            $reconcileSucceeded = false;
             $this->logger->error('Slides template vector reconciliation failed', [
                 'organization_code' => $organizationCode,
                 'exception' => $throwable::class,
@@ -316,6 +319,10 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             'removed_orphans' => $removed,
             'queued' => $queued,
         ]);
+
+        if ($reconcileSucceeded && $this->slidesTemplateVectorIndexDomainService->isVectorSearchEnabled()) {
+            $this->slidesTemplateVectorIndexDomainService->markVectorIndexInitialized();
+        }
 
         return ['removed_orphans' => $removed, 'queued' => $queued];
     }

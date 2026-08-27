@@ -354,7 +354,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         if ($query->getSearchType() !== SlidesTemplateSearchType::Vector
             || $keyword === null
             || trim($keyword) === ''
-            || ! $this->slidesTemplateVectorIndexDomainService->isVectorSearchEnabled()) {
+            || ! $this->slidesTemplateVectorIndexDomainService->isVectorSearchReady()) {
             return $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         }
 

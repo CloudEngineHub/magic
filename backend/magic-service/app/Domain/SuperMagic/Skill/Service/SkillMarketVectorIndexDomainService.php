@@ -23,12 +23,15 @@ use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
 use GuzzleHttp\Exception\ClientException;
 use Hyperf\Logger\LoggerFactory;
+use Hyperf\Redis\Redis;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
 
 final class SkillMarketVectorIndexDomainService
 {
+    private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:skill_market';
+
     private ?bool $availabilityCache = null;
 
     private int $availabilityCacheExpiresAt = 0;
@@ -41,6 +44,7 @@ final class SkillMarketVectorIndexDomainService
         private readonly SkillCategoryRepositoryInterface $skillCategoryRepository,
         private readonly VectorStoreInterface $vectorStore,
         private readonly EmbeddingGeneratorInterface $embeddingGenerator,
+        private readonly Redis $redis,
         LoggerFactory $loggerFactory,
     ) {
         $this->logger = $loggerFactory->get('vector-index-sync');
@@ -248,6 +252,22 @@ final class SkillMarketVectorIndexDomainService
     public function isVectorSearchEnabled(): bool
     {
         return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+    }
+
+    /** Return whether the first full reconciliation has completed. */
+    public function isVectorSearchReady(): bool
+    {
+        if (! $this->isVectorSearchEnabled()) {
+            return false;
+        }
+
+        return (bool) $this->redis->exists(self::VECTOR_INDEX_INITIALIZED_KEY);
+    }
+
+    /** Record a successful full reconciliation for subsequent semantic searches. */
+    public function markVectorIndexInitialized(): void
+    {
+        $this->redis->set(self::VECTOR_INDEX_INITIALIZED_KEY, (string) time());
     }
 
     /** @return array<int, SkillCategoryEntity> */

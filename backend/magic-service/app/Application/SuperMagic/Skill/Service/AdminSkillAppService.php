@@ -140,10 +140,12 @@ class AdminSkillAppService extends AbstractSkillAppService
     public function reconcileMarketVectorIndex(SkillDataIsolation $dataIsolation): array
     {
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $reconcileSucceeded = true;
         $removed = 0;
         try {
             $removed = $this->skillMarketVectorIndexDomainService->removeOrphanPoints();
         } catch (Throwable $throwable) {
+            $reconcileSucceeded = false;
             $this->logger->error('Skill market orphan vector cleanup failed', [
                 'organization_code' => $organizationCode,
                 'exception' => $throwable::class,
@@ -156,6 +158,7 @@ class AdminSkillAppService extends AbstractSkillAppService
             $result = $this->reindexAllMarketVectors($dataIsolation);
             $queued = $result['queued'] ?? 0;
         } catch (Throwable $throwable) {
+            $reconcileSucceeded = false;
             $this->logger->error('Skill market vector reconciliation failed', [
                 'organization_code' => $organizationCode,
                 'exception' => $throwable::class,
@@ -168,6 +171,10 @@ class AdminSkillAppService extends AbstractSkillAppService
             'removed_orphans' => $removed,
             'queued' => $queued,
         ]);
+
+        if ($reconcileSucceeded && $this->skillMarketVectorIndexDomainService->isVectorSearchEnabled()) {
+            $this->skillMarketVectorIndexDomainService->markVectorIndexInitialized();
+        }
 
         return ['removed_orphans' => $removed, 'queued' => $queued];
     }
