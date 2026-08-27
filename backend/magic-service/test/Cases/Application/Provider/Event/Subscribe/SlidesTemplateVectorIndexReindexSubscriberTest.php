@@ -12,7 +12,8 @@ use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\Status;
-use App\Domain\Provider\Event\AiAbilityUpdatedEvent;
+use App\Domain\Provider\Event\KnowledgeBaseEmbeddingModelUpdatedEvent;
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
@@ -25,60 +26,44 @@ final class SlidesTemplateVectorIndexReindexSubscriberTest extends TestCase
 {
     public function testEmbeddingModelChangeQueuesOfficialSlidesTemplateReindex(): void
     {
-        $oldEntity = $this->ability(Status::Enabled, 'old-model');
-        $newEntity = $this->ability(Status::Enabled, 'new-model');
+        $event = $this->event(true, true, 'old-model', 'new-model');
         $slidesTemplateAppService = $this->createMock(AdminSlidesTemplateAppService::class);
         $slidesTemplateAppService->expects(self::once())
             ->method('reindexOfficialVectorIndex')
-            ->with(OfficialOrganizationUtil::getOfficialOrganizationCode());
+            ->with(self::isInstanceOf(SlidesTemplateDataIsolation::class), true);
 
         $listener = new SlidesTemplateVectorIndexReindexSubscriber($slidesTemplateAppService, $this->loggerFactory());
-        $listener->process(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
-    }
-
-    public function testUnrelatedAbilityChangeDoesNotQueueSlidesTemplateReindex(): void
-    {
-        $oldEntity = $this->ability(Status::Enabled, 'old-model');
-        $newEntity = $this->ability(Status::Enabled, 'new-model');
-        $newEntity->setCode(AiAbilityCode::Ocr);
-        $slidesTemplateAppService = $this->createMock(AdminSlidesTemplateAppService::class);
-        $slidesTemplateAppService->expects(self::never())->method('reindexOfficialVectorIndex');
-
-        $listener = new SlidesTemplateVectorIndexReindexSubscriber($slidesTemplateAppService, $this->loggerFactory());
-        $listener->process(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
+        $listener->process($event);
     }
 
     public function testEnablingEmbeddingModelQueuesOfficialSlidesTemplateReindex(): void
     {
-        $oldEntity = $this->ability(Status::Disabled, 'same-model');
-        $newEntity = $this->ability(Status::Enabled, 'same-model');
+        $event = $this->event(false, true, 'same-model', 'same-model');
         $slidesTemplateAppService = $this->createMock(AdminSlidesTemplateAppService::class);
         $slidesTemplateAppService->expects(self::once())->method('reindexOfficialVectorIndex');
 
         $listener = new SlidesTemplateVectorIndexReindexSubscriber($slidesTemplateAppService, $this->loggerFactory());
-        $listener->process(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
+        $listener->process($event);
     }
 
     public function testUnchangedEmbeddingModelDoesNotQueueSlidesTemplateReindex(): void
     {
-        $oldEntity = $this->ability(Status::Enabled, 'same-model');
-        $newEntity = $this->ability(Status::Enabled, 'same-model');
+        $event = $this->event(true, true, 'same-model', 'same-model');
         $slidesTemplateAppService = $this->createMock(AdminSlidesTemplateAppService::class);
         $slidesTemplateAppService->expects(self::never())->method('reindexOfficialVectorIndex');
 
         $listener = new SlidesTemplateVectorIndexReindexSubscriber($slidesTemplateAppService, $this->loggerFactory());
-        $listener->process(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
+        $listener->process($event);
     }
 
     public function testDisablingEmbeddingModelDoesNotQueueSlidesTemplateReindex(): void
     {
-        $oldEntity = $this->ability(Status::Enabled, 'same-model');
-        $newEntity = $this->ability(Status::Disabled, 'same-model');
+        $event = $this->event(true, false, 'same-model', 'same-model');
         $slidesTemplateAppService = $this->createMock(AdminSlidesTemplateAppService::class);
         $slidesTemplateAppService->expects(self::never())->method('reindexOfficialVectorIndex');
 
         $listener = new SlidesTemplateVectorIndexReindexSubscriber($slidesTemplateAppService, $this->loggerFactory());
-        $listener->process(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
+        $listener->process($event);
     }
 
     public function testNonOfficialOrganizationDoesNotQueueSlidesTemplateReindex(): void
@@ -86,11 +71,20 @@ final class SlidesTemplateVectorIndexReindexSubscriberTest extends TestCase
         $oldEntity = $this->ability(Status::Enabled, 'old-model');
         $newEntity = $this->ability(Status::Enabled, 'new-model');
         $newEntity->setOrganizationCode('OTHER_ORG');
+        $event = new KnowledgeBaseEmbeddingModelUpdatedEvent($oldEntity, $newEntity);
         $slidesTemplateAppService = $this->createMock(AdminSlidesTemplateAppService::class);
         $slidesTemplateAppService->expects(self::never())->method('reindexOfficialVectorIndex');
 
         $listener = new SlidesTemplateVectorIndexReindexSubscriber($slidesTemplateAppService, $this->loggerFactory());
-        $listener->process(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
+        $listener->process($event);
+    }
+
+    private function event(bool $oldEnabled, bool $newEnabled, string $oldModelId, string $newModelId): KnowledgeBaseEmbeddingModelUpdatedEvent
+    {
+        return new KnowledgeBaseEmbeddingModelUpdatedEvent(
+            $this->ability($oldEnabled ? Status::Enabled : Status::Disabled, $oldModelId),
+            $this->ability($newEnabled ? Status::Enabled : Status::Disabled, $newModelId),
+        );
     }
 
     private function ability(Status $status, string $modelId): AiAbilityEntity

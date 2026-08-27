@@ -10,7 +10,7 @@ namespace App\Application\Provider\Event\Subscribe;
 use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
-use App\Domain\Provider\Event\AiAbilityUpdatedEvent;
+use App\Domain\Provider\Event\KnowledgeBaseEmbeddingModelUpdatedEvent;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
@@ -35,12 +35,12 @@ final readonly class SlidesTemplateVectorIndexReindexSubscriber implements Liste
 
     public function listen(): array
     {
-        return [AiAbilityUpdatedEvent::class];
+        return [KnowledgeBaseEmbeddingModelUpdatedEvent::class];
     }
 
     public function process(object $event): void
     {
-        if (! $event instanceof AiAbilityUpdatedEvent || ! $this->shouldReindex($event->oldEntity, $event->newEntity)) {
+        if (! $event instanceof KnowledgeBaseEmbeddingModelUpdatedEvent || ! $this->shouldReindex($event->oldEntity, $event->newEntity)) {
             return;
         }
 
