@@ -15,7 +15,7 @@ function SkillMarketDesktopPage() {
 				className="min-h-0 flex-1 [&_[data-slot='scroll-area-scrollbar']]:hidden [&_[data-slot='scroll-area-viewport']>div]:!block"
 				viewportRef={scrollViewportRef}
 			>
-				<div className="mx-auto flex w-full min-w-0 max-w-[1440px] flex-col px-4 py-5 sm:px-7 sm:py-6">
+				<div className="mx-auto flex w-full min-w-0 max-w-6xl flex-col px-4 py-5 sm:px-6 sm:py-6">
 					<div className="w-full min-w-0" data-testid="skill-market-content">
 						<SkillsLibrary scrollViewportRef={scrollViewportRef} />
 					</div>
