@@ -9,9 +9,11 @@ namespace App\Application\SlidesTemplate\Crontab;
 
 use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
-use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Crontab\Annotation\Crontab;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 #[Crontab(
     rule: '0 3 * * *',
@@ -24,11 +26,13 @@ use Hyperf\Crontab\Annotation\Crontab;
 )]
 final class SlidesTemplateVectorIndexDailySyncCrontab
 {
-    use HasLogger;
+    private LoggerInterface $logger;
 
     public function __construct(
         private readonly AdminSlidesTemplateAppService $slidesTemplateAppService,
+        ?LoggerFactory $loggerFactory = null,
     ) {
+        $this->logger = $loggerFactory?->get('slides-template-vector-sync') ?? new NullLogger();
     }
 
     public function execute(): void
