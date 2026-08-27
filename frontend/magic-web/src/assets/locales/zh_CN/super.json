@@ -3644,6 +3644,7 @@
 	},
 	"microAppsPage": {
 		"actions": {
+			"manageCollaborators": "管理协作者",
 			"deleteApp": "删除应用",
 			"deleteDescription": "「{{name}}」及对应项目将移入回收站，30 天内可以恢复。",
 			"deleteFailed": "删除应用失败，请重试。",
@@ -5141,6 +5142,7 @@
 		"title": "回收站"
 	},
 	"scheduleTask": {
+		"agentScope": "执行员工",
 		"clearSearch": "清空搜索",
 		"configTask": "任务配置",
 		"contextLoading": "正在加载当前微应用上下文…",
@@ -5156,6 +5158,7 @@
 		"enableTask": "启用",
 		"enabled": "运行中",
 		"manageTasks": "管理任务",
+		"microAppAgent": "微应用数字员工",
 		"monthlyAt": "每月 {{day}} 日 · {{time}} 执行",
 		"moreActions": "更多操作",
 		"noSchedule": "未设置执行时间",

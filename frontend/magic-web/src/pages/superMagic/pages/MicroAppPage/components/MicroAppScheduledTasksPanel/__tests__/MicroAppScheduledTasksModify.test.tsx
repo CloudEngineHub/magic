@@ -170,6 +170,26 @@ describe("MicroAppScheduledTasksModify", () => {
 		expect(editorProps?.mentionPanelStore).toBe(attachmentOptions.mentionPanelStore)
 	})
 
+	it("keeps the scheduled task editor on the micro-app mode", () => {
+		render(
+			<MicroAppScheduledTasksModify
+				mode="edit"
+				context={{ workspaceId: "workspace-1", projectId: "micro-app-project" }}
+				initialValues={{
+					message_content: {
+						content: "{}",
+						extra: { super_agent: { topic_pattern: "general" } },
+					},
+				}}
+			/>,
+		)
+
+		const editorProps = mocks.messageEditorProps.at(-1)
+		expect(editorProps?.topicMode).toBe("micro-app")
+		expect(editorProps?.setTopicMode).toBeUndefined()
+		expect(editorProps?.showModeToggle).toBeUndefined()
+	})
+
 	it("forces the submitted task to use the current micro app context", () => {
 		const task = {
 			task_name: "每日汇报",

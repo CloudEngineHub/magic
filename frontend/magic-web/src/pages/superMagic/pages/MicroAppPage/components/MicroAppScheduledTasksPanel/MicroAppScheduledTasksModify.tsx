@@ -114,7 +114,8 @@ export function MicroAppScheduledTasksModify({
 	const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 	const [loading, setLoading] = useState(Boolean(initialValues))
 	const [promptRequired, setPromptRequired] = useState(false)
-	const [topicMode, setTopicMode] = useState<TopicMode>(TopicMode.General)
+	// 微应用定时任务始终由微应用数字员工执行，不能切换到其他 topic mode。
+	const topicMode = TopicMode.MicroApp
 	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
 	const [modalStores] = useState(() => {
 		const projectFilesStore = new ProjectFilesStore()
@@ -203,7 +204,8 @@ export function MicroAppScheduledTasksModify({
 									mentions: tiptapEditorRef.current?.mentionItems,
 									input_mode: "plan",
 									chat_mode: "normal",
-									topic_pattern: topicMode,
+									// Ignore legacy values so editing an old task repairs its mode on save.
+									topic_pattern: TopicMode.MicroApp,
 									model: tiptapEditorRef.current?.selectedModel,
 								},
 							},
@@ -251,10 +253,6 @@ export function MicroAppScheduledTasksModify({
 		if (content) tiptapEditorRef.current.setContent?.(content)
 		tiptapEditorRef.current.setSelectedModel?.(
 			initialValues.message_content.extra?.super_agent?.model || null,
-		)
-		setTopicMode(
-			(initialValues.message_content.extra?.super_agent?.topic_pattern as TopicMode) ||
-				TopicMode.General,
 		)
 	}, [initialValues, loading])
 
@@ -345,12 +343,9 @@ export function MicroAppScheduledTasksModify({
 							selectedProject={selectedProject}
 							selectedWorkspace={selectedWorkspace}
 							topicMode={topicMode}
-							setTopicMode={setTopicMode}
 							projectFilesStore={modalStores.projectFilesStore}
 							mentionPanelStore={modalStores.mentionPanelStore}
-							showModeToggle
 							enableAiCompletion
-							allowChangeMode
 							attachments={attachments}
 							size={isMobile ? "mobile" : "default"}
 							containerClassName="border-none"
@@ -360,6 +355,10 @@ export function MicroAppScheduledTasksModify({
 					<ReadonlyContextItem
 						label={tSuper("scheduleTask.projectScope")}
 						value={context.projectName || context.projectId}
+					/>
+					<ReadonlyContextItem
+						label={tSuper("scheduleTask.agentScope")}
+						value={tSuper("scheduleTask.microAppAgent")}
 					/>
 
 					<ProjectTopicItem

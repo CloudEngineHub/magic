@@ -47,12 +47,16 @@ export interface PublishedMicroAppProjectItem {
 
 export interface MicroAppListItem {
 	app_id: string
+	/** Project id used by collaboration APIs when the list contract provides it. */
+	project_id?: string
 	app_name: string
 	app_description: string
 	creator_id: string
 	cover_url: string
 	publish_status: "published" | "unpublished" | string
 	updated_at: string | null
+	/** Server-calculated capability; missing values must not grant access. */
+	can_manage_collaborators?: boolean
 }
 
 export interface MicroAppListResponse {

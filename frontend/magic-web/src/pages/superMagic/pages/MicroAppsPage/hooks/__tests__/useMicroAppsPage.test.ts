@@ -25,7 +25,7 @@ describe("useMicroAppsPage", () => {
 		mocks.getMicroApps.mockResolvedValue({
 			list: [
 				{
-					app_id: "933138305533177857",
+					app_id: "100000000000009001",
 					app_name: "客户跟进助手",
 					app_description: "客户跟进与提醒工具",
 					creator_id: "user-1",
@@ -39,13 +39,13 @@ describe("useMicroAppsPage", () => {
 			page_size: 20,
 		})
 		mocks.updateMicroApp.mockResolvedValue({
-			app_id: "933138305533177857",
+			app_id: "100000000000009001",
 			app_name: "更新后的应用",
 			updated_at: "2026-08-04 12:00:00",
 		})
 		mocks.deleteMicroApp.mockResolvedValue({
-			app_id: "933138305533177857",
-			project_id: "933138305533177858",
+			app_id: "100000000000009001",
+			project_id: "100000000000009002",
 			deleted: true,
 		})
 	})
@@ -62,7 +62,7 @@ describe("useMicroAppsPage", () => {
 			scope: "all",
 		})
 		expect(result.current.apps).toHaveLength(1)
-		expect(result.current.apps[0].app_id).toBe("933138305533177857")
+		expect(result.current.apps[0].app_id).toBe("100000000000009001")
 		expect(result.current.apps[0].can_delete).toBe(true)
 		expect(result.current.hasMore).toBe(true)
 	})
@@ -138,7 +138,7 @@ describe("useMicroAppsPage", () => {
 				data: {
 					list: [
 						{
-							app_id: "933138305533177857",
+							app_id: "100000000000009001",
 							app_name: "App",
 							can_delete: false,
 						},
@@ -151,7 +151,8 @@ describe("useMicroAppsPage", () => {
 		).toEqual({
 			list: [
 				{
-					app_id: "933138305533177857",
+					app_id: "100000000000009001",
+					project_id: "",
 					app_name: "App",
 					app_description: "",
 					creator_id: "",
@@ -159,6 +160,7 @@ describe("useMicroAppsPage", () => {
 					publish_status: "unpublished",
 					updated_at: null,
 					can_delete: false,
+					can_manage_collaborators: false,
 				},
 			],
 			total: 1,
@@ -188,7 +190,7 @@ describe("useMicroAppsPage", () => {
 			.mockResolvedValueOnce({
 				list: [
 					{
-						app_id: "933138305533177857",
+						app_id: "100000000000009001",
 						app_name: "客户跟进助手",
 						app_description: "客户跟进与提醒工具",
 						creator_id: "user-1",
@@ -206,23 +208,23 @@ describe("useMicroAppsPage", () => {
 		await waitFor(() => expect(result.current.loading).toBe(false))
 
 		await act(async () => {
-			await result.current.renameApp("933138305533177857", "更新后的应用")
+			await result.current.renameApp("100000000000009001", "更新后的应用")
 		})
 
-		expect(mocks.updateMicroApp).toHaveBeenCalledWith("933138305533177857", {
+		expect(mocks.updateMicroApp).toHaveBeenCalledWith("100000000000009001", {
 			app_name: "更新后的应用",
 		})
 		expect(result.current.apps[0]).toMatchObject({
-			app_id: "933138305533177857",
+			app_id: "100000000000009001",
 			app_name: "更新后的应用",
 			updated_at: "2026-08-04 12:00:00",
 		})
 
 		await act(async () => {
-			await result.current.deleteApp("933138305533177857")
+			await result.current.deleteApp("100000000000009001")
 		})
 
-		expect(mocks.deleteMicroApp).toHaveBeenCalledWith("933138305533177857")
+		expect(mocks.deleteMicroApp).toHaveBeenCalledWith("100000000000009001")
 		await waitFor(() => expect(mocks.getMicroApps).toHaveBeenCalledTimes(2))
 		await waitFor(() => expect(result.current.loading).toBe(false))
 		expect(result.current.apps).toEqual([])
