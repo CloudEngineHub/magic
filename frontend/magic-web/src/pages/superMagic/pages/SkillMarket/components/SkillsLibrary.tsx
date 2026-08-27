@@ -300,9 +300,10 @@ function SkillsLibrary({
 				/>
 			</MarketStickyHeader>
 
-			{skillsStore.featuredLoading ||
-			skillsStore.featuredError ||
-			skillsStore.featuredList.length > 0 ? (
+			{!skillsStore.keyword &&
+			(skillsStore.featuredLoading ||
+				skillsStore.featuredError ||
+				skillsStore.featuredList.length > 0) ? (
 				<section className="flex min-w-0 flex-col" data-testid="featured-skills-section">
 					<div className="flex items-end justify-between border-b border-border">
 						<h2 className="border-b-2 border-foreground pb-3 text-xl font-semibold tracking-[-0.025em] text-foreground">

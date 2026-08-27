@@ -87,6 +87,7 @@ function SkillCard({
 		[skill.updatedAt, t, i18n.language],
 	)
 	const installCount = formatSkillInstallCount(skill.installCount, i18n.language)
+	const showInstallCount = skill.publisherType !== "OFFICIAL_BUILTIN"
 
 	return (
 		<article
@@ -161,7 +162,7 @@ function SkillCard({
 				</SmartTooltip>
 
 				<div className="mt-auto flex min-w-0 items-center justify-between gap-2">
-					{installCount ? (
+					{showInstallCount && installCount ? (
 						<span
 							className="min-w-0 truncate text-[11px] text-muted-foreground/80"
 							data-testid="skill-card-install-count"

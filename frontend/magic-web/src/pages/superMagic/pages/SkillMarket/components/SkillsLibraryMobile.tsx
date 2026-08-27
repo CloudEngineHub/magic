@@ -253,73 +253,77 @@ function SkillsLibraryMobile() {
 				viewportRef={scrollViewportRef}
 			>
 				<div className="flex min-w-0 flex-col gap-2.5 px-2 pb-6 pt-2">
-					<section
-						className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 shadow-xs"
-						data-testid="featured-skills-mobile-section"
-					>
-						<div className="flex min-h-8 items-center justify-between gap-2 border-b border-border pb-2">
-							<h2 className="text-sm font-semibold text-foreground">
-								{t("skillsLibrary.featuredSkills")}
-							</h2>
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs text-muted-foreground"
-								disabled={
-									skillsStore.featuredLoading || !skillsStore.canRefreshFeatured
-								}
-								onClick={handleRefreshFeatured}
-								data-testid="featured-skills-mobile-refresh"
-							>
-								<RefreshCw
-									className={cn(
-										"size-3.5",
-										skillsStore.featuredLoading && "animate-spin",
-									)}
-									aria-hidden
-								/>
-								{skillsStore.featuredError
-									? t("skillsLibrary.retryFeatured")
-									: t("skillsLibrary.refreshFeatured")}
-							</Button>
-						</div>
-
-						{skillsStore.featuredError ? (
-							<div
-								className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
-								role="status"
-								data-testid="featured-skills-mobile-error"
-							>
-								{t("skillsLibrary.featuredLoadFailed")}
-							</div>
-						) : null}
-
-						{skillsStore.featuredLoading && skillsStore.featuredList.length === 0 ? (
-							<div
-								className="flex items-center justify-center py-8"
-								data-testid="featured-skills-mobile-loading"
-							>
-								<Loader2 className="size-5 animate-spin text-muted-foreground" />
-							</div>
-						) : skillsStore.featuredList.length > 0 ? (
-							<div
-								className="flex min-w-0 flex-col gap-2.5"
-								data-testid="featured-skills-mobile-list"
-							>
-								{skillsStore.featuredList.map((skill) => (
-									<StoreSkillCardMobile
-										key={`featured-${skill.id}`}
-										skill={skill}
-										language={i18n.language}
-										showFeaturedTag
-										onAdd={handleAdd}
-										onUpgrade={handleUpgrade}
-										onOpenDetail={handleOpenDetail}
+					{!skillsStore.keyword ? (
+						<section
+							className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 shadow-xs"
+							data-testid="featured-skills-mobile-section"
+						>
+							<div className="flex min-h-8 items-center justify-between gap-2 border-b border-border pb-2">
+								<h2 className="text-sm font-semibold text-foreground">
+									{t("skillsLibrary.featuredSkills")}
+								</h2>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs text-muted-foreground"
+									disabled={
+										skillsStore.featuredLoading ||
+										!skillsStore.canRefreshFeatured
+									}
+									onClick={handleRefreshFeatured}
+									data-testid="featured-skills-mobile-refresh"
+								>
+									<RefreshCw
+										className={cn(
+											"size-3.5",
+											skillsStore.featuredLoading && "animate-spin",
+										)}
+										aria-hidden
 									/>
-								))}
+									{skillsStore.featuredError
+										? t("skillsLibrary.retryFeatured")
+										: t("skillsLibrary.refreshFeatured")}
+								</Button>
 							</div>
-						) : null}
-					</section>
+
+							{skillsStore.featuredError ? (
+								<div
+									className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
+									role="status"
+									data-testid="featured-skills-mobile-error"
+								>
+									{t("skillsLibrary.featuredLoadFailed")}
+								</div>
+							) : null}
+
+							{skillsStore.featuredLoading &&
+							skillsStore.featuredList.length === 0 ? (
+								<div
+									className="flex items-center justify-center py-8"
+									data-testid="featured-skills-mobile-loading"
+								>
+									<Loader2 className="size-5 animate-spin text-muted-foreground" />
+								</div>
+							) : skillsStore.featuredList.length > 0 ? (
+								<div
+									className="flex min-w-0 flex-col gap-2.5"
+									data-testid="featured-skills-mobile-list"
+								>
+									{skillsStore.featuredList.map((skill) => (
+										<StoreSkillCardMobile
+											key={`featured-${skill.id}`}
+											skill={skill}
+											language={i18n.language}
+											showFeaturedTag
+											onAdd={handleAdd}
+											onUpgrade={handleUpgrade}
+											onOpenDetail={handleOpenDetail}
+										/>
+									))}
+								</div>
+							) : null}
+						</section>
+					) : null}
 
 					<SkillCategoryFilter
 						categories={skillsStore.categories}
