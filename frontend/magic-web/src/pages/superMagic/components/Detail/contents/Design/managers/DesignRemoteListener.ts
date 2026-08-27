@@ -1,12 +1,17 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	ElementTypeEnum,
+	type AudioElement,
 	type FrameElement,
 	type GroupElement,
 	type ImageElement,
 	type LayerElement,
 	type VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import {
+	getContents,
+	getImageContents,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -19,25 +24,14 @@ import {
 	waitForNextAttachmentsRefreshForProject,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import {
-	formatCanvasRelativeResourcePath,
-	hasCurrentDirectoryPrefix,
-	isCanvasResourceRootPath,
-	isRemoteOrSpecialPath,
-	toWeakCanvasResourcePath,
-	stripCurrentDirectoryPrefix,
-	stripPathEdgeSlashes,
-} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
-import {
 	loadMagicProjectJsContent,
-	parseMagicProjectJsContentSafely,
 	resolveDesignProjectBasePathFromAttachments,
-	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
-import { resolveDesignAttachment } from "../utils/designPath"
-import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
-import { isV2Version } from "../utils/magicProjectCompression"
+import { resolveDesignCanvasResourceReference } from "../utils/designResourceReferenceResolver"
 import { SuperMagicApi } from "@/apis"
+import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -64,28 +58,6 @@ interface ToolDesignData {
  * - 工作区路径：`path/to/file` 或 `/path/to/file`（与附件 relative_file_path 对齐时去掉首尾 `/`）
  * 其余（http、blob、data、`//`、file: 等）不参与附件缺失判断。
  */
-function normalizeCanvasMediaSrcForAttachmentWalk(raw: string): string | null {
-	const trimmed = raw.trim()
-	if (!trimmed) return null
-	if (isRemoteOrSpecialPath(trimmed)) return null
-	if (/^file:/i.test(trimmed)) return null
-
-	if (hasCurrentDirectoryPrefix(trimmed)) {
-		const rest = stripCurrentDirectoryPrefix(trimmed)
-		if (!rest) return null
-		return formatCanvasRelativeResourcePath(rest)
-	}
-
-	const local = toWeakCanvasResourcePath(trimmed)
-	if (isCanvasResourceRootPath(local)) {
-		return stripPathEdgeSlashes(local)
-	}
-
-	if (local.includes("/")) return stripPathEdgeSlashes(local)
-
-	return local
-}
-
 function walkCanvasMediaSources(
 	elements: LayerElement[] | undefined,
 	onSrc: (src: string) => void,
@@ -93,13 +65,19 @@ function walkCanvasMediaSources(
 	if (!elements?.length) return
 
 	for (const el of elements) {
-		if (el.type === ElementTypeEnum.Image || el.type === ElementTypeEnum.Video) {
-			const media = el as ImageElement | VideoElement
-			const s = media.src?.trim()
-			if (!s) continue
-			const normalized = normalizeCanvasMediaSrcForAttachmentWalk(s)
-			if (!normalized) continue
-			onSrc(normalized)
+		if (el.type === ElementTypeEnum.Image) {
+			for (const content of getImageContents(el)) {
+				const src = content.src?.trim()
+				if (src && !/^file:/i.test(src)) onSrc(src)
+			}
+			continue
+		}
+		if (el.type === ElementTypeEnum.Video || el.type === ElementTypeEnum.Audio) {
+			for (const content of getContents(el as VideoElement | AudioElement)) {
+				const src = content.src?.trim()
+				if (!src || /^file:/i.test(src)) continue
+				onSrc(src)
+			}
 			continue
 		}
 
@@ -119,21 +97,22 @@ function designDataHasMediaMissingFromAttachments(
 	let missing = false
 	walkCanvasMediaSources(designData.canvas?.elements, (src) => {
 		if (missing) return
-		const resolvedFile = resolveDesignAttachment(
+		const resolution = resolveDesignCanvasResourceReference(
 			src,
 			{
 				flatAttachments: storeFiles,
 				designProjectBasePath,
 				attachmentIndex: index,
+				attachmentsReady: true,
 			},
-			{ mode: "legacy-recovery" },
+			{ requireAttachment: true },
 		)
-		if (resolvedFile.status === "not-found") missing = true
+		if (resolution.status !== "resolved") missing = true
 	})
 	return missing
 }
 
-/** v2 的生成配置位于 sidecar；processing 占位符缺配置时需要等待附件树同步后重读。 */
+/** 生成配置位于 sidecar；任一 processing Content 缺配置时需要等待附件树同步后重读。 */
 export function designDataHasPendingMediaWithoutGenerationRequest(designData: DesignData): boolean {
 	let missing = false
 	const walk = (elements: LayerElement[] | undefined): void => {
@@ -141,22 +120,23 @@ export function designDataHasPendingMediaWithoutGenerationRequest(designData: De
 
 		for (const element of elements) {
 			if (element.type === ElementTypeEnum.Image) {
-				const image = element as ImageElement
-				if (
-					(image.status === "pending" || image.status === "processing") &&
-					!image.generateImageRequest &&
-					!image.imageGenerationTaskMeta &&
-					!image.generateHightImageRequest
-				) {
+				const hasMissingRequest = getImageContents(element as ImageElement).some(
+					(content) =>
+						(content.status === "pending" || content.status === "processing") &&
+						!content.generateImageRequest &&
+						!content.imageGenerationTaskMeta,
+				)
+				if (hasMissingRequest) {
 					missing = true
 					return
 				}
 			} else if (element.type === ElementTypeEnum.Video) {
-				const video = element as VideoElement
-				if (
-					(video.status === "pending" || video.status === "processing") &&
-					!video.generateVideoRequest
-				) {
+				const hasMissingRequest = getContents(element as VideoElement).some(
+					(content) =>
+						(content.status === "pending" || content.status === "processing") &&
+						!content.generateVideoRequest,
+				)
+				if (hasMissingRequest) {
 					missing = true
 					return
 				}
@@ -198,7 +178,10 @@ export type FetchRemoteDesignDataFn = () => Promise<DesignData | null>
 export type ApplyRemoteDesignDataFn = (
 	data: DesignData,
 	updateType: "message" | "revoke" | "restore",
-	options?: { remoteVersion?: number | null },
+	options?: {
+		remoteVersion?: number | null
+		loadResult?: LoadDesignDataToRuntimeResult
+	},
 ) => boolean
 
 export type CheckRemoteUpdateFn = () => Promise<{
@@ -683,33 +666,41 @@ export class DesignRemoteListener {
 	 * file-change 链路：读远端 magic.project.js，媒体或生成配置未同步时等待附件刷新后重读；
 	 * 返回可直接 apply 的数据；返回 null 表示应由 fetchRemoteDesignData（loadLatest）兜底。
 	 */
-	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignData | null> {
+	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<{
+		data: DesignData
+		loadResult: LoadDesignDataToRuntimeResult
+	} | null> {
 		const fid = this.options.getMagicProjectJsFileId()
 		if (!fid) return null
 
 		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 
 		let parsed: DesignData | null = null
+		let parsedLoadResult: LoadDesignDataToRuntimeResult | null = null
 		try {
 			const content = await loadMagicProjectJsContent(fid)
-			parsed = parseMagicProjectJsContentSafely(content)
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				elementDetailsContext: {
+					attachments: this.options.attachments,
+					flatAttachments: this.options.flatAttachments,
+					mainFileId: fid,
+					projectId: this.options.projectId,
+				},
+				pathContext: {
+					projectBasePath: dslBase,
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				},
+				fileId: fid,
+			})
+			parsed = loaded.data
+			parsedLoadResult = loaded
 		} catch {
 			return null
 		}
 
-		if (!parsed) return null
-		if (dslBase) {
-			normalizeDesignDataPathsAfterLoad(parsed, dslBase, {
-				flatAttachments: this.options.flatAttachments,
-				attachmentIndex: this.options.attachmentIndex,
-			})
-		}
-		await hydrateDesignDataDetails(parsed, {
-			attachments: this.options.attachments,
-			flatAttachments: this.options.flatAttachments,
-			mainFileId: fid,
-			projectId: this.options.projectId,
-		})
+		if (!parsed || !parsedLoadResult) return null
 
 		const storeFiles = [
 			...(this.options.flatAttachments ?? []),
@@ -722,37 +713,39 @@ export class DesignRemoteListener {
 			dslBase,
 		)
 		const hasPendingGenerationWithoutInfo =
-			isV2Version(parsed.version) && designDataHasPendingMediaWithoutGenerationRequest(parsed)
-		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo) return parsed
+			designDataHasPendingMediaWithoutGenerationRequest(parsed)
+		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo)
+			return { data: parsed, loadResult: parsedLoadResult }
 
 		const projectId = this.options.projectId
-		if (!projectId) return hasMissingMedia ? null : parsed
+		if (!projectId)
+			return hasMissingMedia ? null : { data: parsed, loadResult: parsedLoadResult }
 
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
 		} catch {
 			// 生成配置同步超时不应阻塞占位符展示；媒体缺失仍沿用原有失败策略。
-			return hasMissingMedia ? null : parsed
+			return hasMissingMedia ? null : { data: parsed, loadResult: parsedLoadResult }
 		}
 
 		try {
 			const content = await loadMagicProjectJsContent(fid)
-			const again = parseMagicProjectJsContentSafely(content)
-			if (again) {
-				if (dslBase) {
-					normalizeDesignDataPathsAfterLoad(again, dslBase, {
-						flatAttachments: this.options.flatAttachments,
-						attachmentIndex: this.options.attachmentIndex,
-					})
-				}
-				await hydrateDesignDataDetails(again, {
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				elementDetailsContext: {
 					attachments: this.options.attachments,
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: fid,
 					projectId: this.options.projectId,
-				})
-			}
-			return again
+				},
+				pathContext: {
+					projectBasePath: dslBase,
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				},
+				fileId: fid,
+			})
+			return { data: loaded.data, loadResult: loaded }
 		} catch {
 			return null
 		}
@@ -901,9 +894,22 @@ export class DesignRemoteListener {
 					const preloaded = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
 					if (!isLatestApply()) return
 					if (preloaded) {
-						const applied = this.options.applyRemoteDesignData(preloaded, "message", {
-							remoteVersion: resolvedFileVersion,
-						})
+						const preloadedData =
+							"data" in preloaded
+								? preloaded.data
+								: (preloaded as unknown as DesignData)
+						const preloadedLoadResult =
+							"loadResult" in preloaded ? preloaded.loadResult : undefined
+						const applied = this.options.applyRemoteDesignData(
+							preloadedData,
+							"message",
+							preloadedLoadResult
+								? {
+										remoteVersion: resolvedFileVersion,
+										loadResult: preloadedLoadResult,
+									}
+								: { remoteVersion: resolvedFileVersion },
+						)
 						if (applied) {
 							this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
 							await this.markRemoteVersionApplied(resolvedFileVersion)

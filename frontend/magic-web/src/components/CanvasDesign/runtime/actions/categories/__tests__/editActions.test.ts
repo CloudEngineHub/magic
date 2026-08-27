@@ -11,6 +11,30 @@ function getDeleteAction() {
 }
 
 describe("editActions", () => {
+	it("blocks PNG copy while a selected media element is replacing", async () => {
+		const action = editActions.find((item) => item.id === "edit.copy-png")
+		if (!action) throw new Error("Expected edit.copy-png action")
+		const copyElementsAsPNG = vi.fn()
+		const canvas = {
+			selectionManager: { getSelectedIds: vi.fn(() => ["image-1"]) },
+			elementManager: {
+				getElementData: vi.fn(() => ({
+					id: "image-1",
+					type: "image",
+					contents: [{ contentId: "image-content", src: "images/image.png" }],
+					activeContentId: "image-content",
+					mainContentId: "image-content",
+				})),
+			},
+			mediaReplaceController: { isReplacing: vi.fn(() => true) },
+			clipboardManager: { copyElementsAsPNG },
+		} as unknown as Canvas
+
+		expect(action.canExecute(canvas)).toBe(false)
+		await action.execute(canvas)
+		expect(copyElementsAsPNG).not.toHaveBeenCalled()
+	})
+
 	it("executes delete through the unified canvas selection deletion API", () => {
 		const action = getDeleteAction()
 		const canvas = {

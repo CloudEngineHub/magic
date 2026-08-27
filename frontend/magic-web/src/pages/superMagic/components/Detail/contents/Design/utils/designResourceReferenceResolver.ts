@@ -487,10 +487,20 @@ export function resolveDesignCanvasResourceApiUri(
 ): string | undefined {
 	const resolution = resolveDesignCanvasResourceReference(path, ctx)
 	if (resolution.status !== "resolved") return undefined
-	if (resolution.resourceKind === "opaque-asset" || resolution.resourceKind === "external") {
-		return resolution.storagePath
-	}
+	if (resolution.resourceKind === "opaque-asset") return resolution.storagePath
 	return resolution.resourceKind === "workspace-file" ? resolution.workspacePath : undefined
+}
+
+/** Resolve an output directory to the canonical workspace API path. */
+export function resolveDesignWorkspaceDirectoryApiPath(
+	path: string,
+	ctx: DesignResourceReferenceResolverContext,
+): string | undefined {
+	const resolution = resolveDesignResourceReference({ namespace: "workspace-path", path }, ctx)
+	if (resolution.status !== "resolved" || resolution.resourceKind !== "workspace-file") {
+		return undefined
+	}
+	return `${resolution.workspacePath.replace(/\/+$/, "")}/`
 }
 
 /** Persist a known workspace path using the same resolver that owns resource identity. */

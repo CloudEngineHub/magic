@@ -60,6 +60,84 @@ describe("GenerationRuntimeManager", () => {
 		expect(manager.getTargetState("video-1")?.attemptId).toBe("newer")
 	})
 
+	it("keeps concurrent image version targets isolated on one element", () => {
+		const manager = new GenerationRuntimeManager()
+		const first = manager.beginAttempt({
+			attemptId: "version-1",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "v1" }],
+		})
+		const second = manager.beginAttempt({
+			attemptId: "version-2",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "v2" }],
+		})
+
+		expect(manager.isCurrent(first, "image-1", "v1")).toBe(true)
+		expect(manager.isCurrent(second, "image-1", "v2")).toBe(true)
+		expect(manager.getTargetState("image-1")).toMatchObject({
+			attemptId: second,
+			contentId: "v2",
+		})
+
+		manager.completeAttempt(first)
+		expect(manager.isCurrent(second, "image-1", "v2")).toBe(true)
+		expect(manager.getTargetState("image-1")?.contentId).toBe("v2")
+	})
+
+	it("reads the runtime state for the requested Content instead of the latest sibling", () => {
+		const manager = new GenerationRuntimeManager()
+		manager.beginAttempt({
+			attemptId: "version-a",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "a" }],
+		})
+		manager.beginAttempt({
+			attemptId: "version-b",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "b" }],
+		})
+
+		expect(manager.getTargetState("image-1", "a")?.attemptId).toBe("version-a")
+		expect(manager.getTargetState("image-1", "b")?.attemptId).toBe("version-b")
+		expect(manager.hasActiveGeneration("image-1", "a")).toBe(true)
+		expect(manager.hasActiveGeneration("image-1", "b")).toBe(true)
+		expect(manager.hasActiveGeneration("image-1", "missing")).toBe(false)
+		expect(manager.hasActiveGeneration("image-1")).toBe(true)
+	})
+
+	it("rejects duplicate attempts for the same Content while allowing sibling Content", () => {
+		const manager = new GenerationRuntimeManager()
+		manager.beginAttempt({
+			attemptId: "content-a-1",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "a" }],
+		})
+
+		expect(() =>
+			manager.beginAttempt({
+				attemptId: "content-a-2",
+				operation: "image-high",
+				failurePolicy: "restore-existing",
+				targets: [{ elementId: "image-1", contentId: "a" }],
+			}),
+		).toThrow("already has an active attempt")
+
+		expect(() =>
+			manager.beginAttempt({
+				attemptId: "content-b-1",
+				operation: "image-generate",
+				failurePolicy: "restore-existing",
+				targets: [{ elementId: "image-1", contentId: "b" }],
+			}),
+		).not.toThrow()
+	})
+
 	it("updates a batch phase and clears all remaining current targets atomically", () => {
 		const manager = new GenerationRuntimeManager()
 		const firstListener = vi.fn()

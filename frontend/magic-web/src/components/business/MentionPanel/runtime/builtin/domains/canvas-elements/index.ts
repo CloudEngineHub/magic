@@ -2,6 +2,7 @@ export {
 	getCanvasElementMentionItemId,
 	isCanvasElementsMentionItemId,
 	MentionPanelCanvasElementsStore,
+	collectCanvasElementMentionItems,
 } from "./store"
 export {
 	CANVAS_ELEMENT_TAG,

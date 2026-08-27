@@ -8,7 +8,11 @@ import TaskList from "../TaskList"
 import ReplayLogo from "@/pages/share/assets/icon/replay_logo.svg"
 import PreviewDetailPopup from "@/pages/superMagicMobile/components/PreviewDetailPopup/index"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import {
+	getAppEntryFile,
+	isMagicProjectConfigFile,
+	resolveMagicProjectAttachment,
+} from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 import { IconFolder, IconLayoutGrid, IconLogin, IconPlayerPlayFilled } from "@tabler/icons-react"
 import { MagicTooltip } from "@/components/base"
@@ -777,14 +781,26 @@ function Topic({
 
 			const targetFile = findFileInAttachments(attachments.tree)
 			if (targetFile) {
+				const targetFileName =
+					targetFile.display_filename || targetFile.file_name || targetFile.filename
+				const magicProjectResolution = isMagicProjectConfigFile(targetFileName)
+					? resolveMagicProjectAttachment(
+							targetFile,
+							attachments.list || [],
+							attachments.tree || [],
+						)
+					: undefined
+				const resolvedProjectDirectory = magicProjectResolution?.projectDirectory
 				// 检查是否是文件夹且有 metadata.type
 				const isFolder =
+					resolvedProjectDirectory?.is_directory ||
+					resolvedProjectDirectory?.children?.length ||
 					targetFile.is_directory ||
 					(targetFile.children && targetFile.children.length > 0)
-				let fileToOpen = targetFile
+				let fileToOpen = resolvedProjectDirectory || targetFile
 
 				// 如果是文件夹且有 metadata.type，获取入口文件
-				if (isFolder && targetFile.display_config?.type) {
+				if (!resolvedProjectDirectory && isFolder && targetFile.display_config?.type) {
 					const entryFile = getAppEntryFile(
 						targetFile.children || [],
 						targetFile.display_config,

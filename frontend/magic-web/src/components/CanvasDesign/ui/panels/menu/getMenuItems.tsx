@@ -86,20 +86,29 @@ export function getMenuItems({
 	const selectedFileElements = getSelectedFileElements(canvas)
 	const hasSelectedImageElement = selectedFileElements.some((element) => element.type === "image")
 	const hasSelectedVideoElement = selectedFileElements.some((element) => element.type === "video")
+	const hasSelectedAudioElement = selectedFileElements.some((element) => element.type === "audio")
+	const selectedFileTypeCount =
+		Number(hasSelectedImageElement) +
+		Number(hasSelectedVideoElement) +
+		Number(hasSelectedAudioElement)
 
 	const selectionKind =
 		downloadMenuContext?.selectionKind ??
-		(hasSelectedVideoElement && hasSelectedImageElement
+		(selectedFileTypeCount > 1
 			? "mixed"
 			: hasSelectedVideoElement
 				? "video-only"
-				: hasSelectedImageElement
-					? "image-only"
-					: "none")
+				: hasSelectedAudioElement
+					? "audio-only"
+					: hasSelectedImageElement
+						? "image-only"
+						: "none")
 	const downloadLabel =
 		selectionKind === "video-only"
 			? translate("menu.downloadVideo", "下载视频")
-			: translate("menu.downloadFile", "下载文件")
+			: selectionKind === "audio-only"
+				? translate("menu.downloadAudio", "下载音频")
+				: translate("menu.downloadFile", "下载文件")
 
 	const useAiImageSubmenu = downloadMenuContext?.useAiImageSubmenu === true
 

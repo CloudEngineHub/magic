@@ -704,12 +704,17 @@
 		"saving": "正在保存",
 		"upgrade": {
 			"autoUpgradingSubtitle": "请勿关闭或刷新页面",
-			"autoUpgradingTitle": "正在升级画布v2.0",
+			"autoUpgradingTitle": "正在升级画布至 v3.0",
 			"failed": "升级失败，请稍后重试",
 			"failedSubtitle": "请检查网络状态后重试，升级完成前暂不可编辑画布",
 			"failedTitle": "画布升级失败",
+			"loadFailedSubtitle": "失败阶段：{{stage}}；原因：{{reason}}",
+			"loadFailedTitle": "画布数据加载失败",
+			"reload": "重新加载",
 			"retry": "重试升级",
-			"success": "升级成功"
+			"success": "升级成功",
+			"unsupportedSidecarDescription": "检测到未发布的图片版本数据。为避免覆盖原数据，当前画布仅支持只读查看。",
+			"unsupportedSidecarTitle": "画布附加数据暂不兼容"
 		}
 	},
 	"detail": {
@@ -3137,6 +3142,19 @@
 		"superPlaceholderEmpty": "请填写必填项：{{placeholders}}",
 		"taskRunningError": "任务进行中，终止后再发新消息",
 		"validationFailed": "验证失败，请重试",
+		"videoProductionConfig": {
+			"aspectRatio": "画幅",
+			"detailed": "精细",
+			"detailedDescription": "多确认、细拆，适合长视频和复杂创作",
+			"duration": "时长",
+			"generation": "生成",
+			"generationMode": "生成模式",
+			"normal": "普通",
+			"normalDescription": "少问、快做，适合短视频和简单需求",
+			"resolution": "清晰度",
+			"selectPlaceholder": "请选择",
+			"skill": "视频技能"
+		},
 		"waitForFileUpload": "请等待文件上传完成",
 		"waitForMarkerLoad": "请等待标记识别完成后再发送"
 	},

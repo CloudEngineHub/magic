@@ -70,6 +70,8 @@ interface ReferenceResourcePopoverProps {
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
 	) => void
+	/** 在本地上传/项目选择入口之前渲染的业务自定义内容。 */
+	beforeSourceActions?: ReactNode
 	hoverContent?: ReactNode
 	clickContent?: ReactNode
 	triggerClassName?: string
@@ -102,6 +104,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		assetLimits,
 		currentAssetCounts,
 		onProjectSelect,
+		beforeSourceActions,
 		hoverContent,
 		clickContent,
 		triggerClassName,
@@ -114,7 +117,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		enableProjectSelectMultiSelect = true,
 	} = props
 	const { t } = useCanvasDesignI18n()
-	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer } = useMagic()
+	const { referenceResourcePanelRenderer: ReferenceResourcePanelRenderer, methods } = useMagic()
 	const [displayMode, setDisplayMode] = useState<"hover" | "click">("click")
 	const [isProjectSelectVisible, setIsProjectSelectVisible] = useState(false)
 	const internalTriggerRef = useRef<HTMLDivElement>(null)
@@ -210,7 +213,11 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		(event: MouseEvent<HTMLElement>) => {
 			const rt = event.relatedTarget
 			if (isProjectSelectVisible) return
-			if (rt instanceof Element && rt.closest("[data-mention-panel]")) return
+			if (
+				rt instanceof Element &&
+				rt.closest("[data-mention-panel], [data-linked-frame-submenu]")
+			)
+				return
 			onMouseLeave()
 		},
 		[isProjectSelectVisible, onMouseLeave],
@@ -218,7 +225,12 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 
 	const handleReferencePopoverInteractOutside = useCallback((event: Event) => {
 		const target = event.target
-		if (target instanceof Element && target.closest("[data-mention-panel]")) {
+		if (
+			target instanceof Element &&
+			target.closest(
+				"[data-mention-panel], [data-linked-frame-submenu], [data-linked-frame-submenu-trigger]",
+			)
+		) {
 			event.preventDefault()
 		}
 	}, [])
@@ -299,6 +311,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 				assetLimits,
 				currentAssetCounts,
 				maxBatchItems: maxProjectSelectBatchCount,
+				resolveResourceReference: methods?.resolveResourceReference,
 			})
 
 			let didReset = false
@@ -329,6 +342,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 			handleProjectSelectClose,
 			maxProjectSelectBatchCount,
 			maxReferenceFiles,
+			methods?.resolveResourceReference,
 			onProjectSelect,
 		],
 	)
@@ -383,6 +397,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 						)}
 					>
 						<div className={bodyClassName}>
+							{beforeSourceActions}
 							{shouldRenderSourceActions && (
 								<div
 									className={cn(

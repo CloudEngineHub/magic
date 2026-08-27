@@ -3,7 +3,6 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import {
 	clearAllFileInfoCache,
-	clearFileInfoCache,
 	cleanupFileInfoCache,
 	flushFileInfoCachePersistenceForTests,
 	getFileInfoById,
@@ -110,7 +109,7 @@ describe("getFileResourceMetaByPath", () => {
 			}),
 		]
 		setFileInfoCache(
-			"images/uploaded.png",
+			"/images/uploaded.png",
 			{
 				src: "https://example.test/uploaded.png?signature=1",
 				fileName: "uploaded.png",
@@ -126,7 +125,7 @@ describe("getFileResourceMetaByPath", () => {
 		)
 
 		await expect(
-			getFileResourceMetaByPath("images/uploaded.png", oldFiles, {
+			getFileResourceMetaByPath("/images/uploaded.png", oldFiles, {
 				designProjectId: "project-1",
 				hasAttachmentSnapshot: true,
 			}),
@@ -157,6 +156,91 @@ describe("getFileResourceMetaByPath", () => {
 				hasAttachmentSnapshot: true,
 			}),
 		).resolves.toEqual({ status: "unknown" })
+	})
+
+	it("does not read an explicit-path cache while a legacy bare path awaits attachment evidence", async () => {
+		setFileInfoCache(
+			"/images/a.png",
+			{
+				src: "https://example.test/root-a.png",
+				fileName: "a.png",
+			},
+			[],
+			"画布A",
+			"project-1",
+			undefined,
+			{ allowMissingAttachment: true },
+		)
+
+		await expect(
+			getFileInfoByPath("images/a.png", [], {
+				designProjectBasePath: "画布A",
+				designProjectId: "project-1",
+				hasAttachmentSnapshot: false,
+			}),
+		).resolves.toBeNull()
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+	})
+
+	it("respects explicit pending readiness even when an incremental attachment batch is non-empty", async () => {
+		const partialFiles = [
+			fileItem({
+				file_id: "unrelated-file",
+				relative_file_path: "画布A/images/unrelated.png",
+				file_name: "unrelated.png",
+			}),
+		]
+
+		await expect(
+			getFileResourceMetaByPath("./images/missing.png", partialFiles, {
+				designProjectBasePath: "画布A",
+				hasAttachmentSnapshot: false,
+			}),
+		).resolves.toEqual({ status: "unknown" })
+	})
+
+	it("does not prime either resource cache from an ambiguous historical bare path", async () => {
+		const files = [
+			fileItem({
+				file_id: "canvas-file",
+				relative_file_path: "画布A/images/a.png",
+				file_name: "a.png",
+			}),
+			fileItem({
+				file_id: "workspace-file",
+				relative_file_path: "images/a.png",
+				file_name: "a.png",
+			}),
+		]
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([
+			{
+				file_id: "canvas-file",
+				url: "https://example.test/canvas-a.png",
+			},
+		])
+
+		setFileInfoCache(
+			"images/a.png",
+			{
+				src: "https://example.test/ambiguous.png",
+				fileName: "a.png",
+			},
+			files,
+			"画布A",
+			"project-1",
+			undefined,
+			{ hasAttachmentSnapshot: true },
+		)
+
+		await expect(
+			getFileInfoByPath("./images/a.png", files, {
+				designProjectBasePath: "画布A",
+				designProjectId: "project-1",
+				hasAttachmentSnapshot: true,
+				priority: "critical",
+			}),
+		).resolves.toMatchObject({ src: "https://example.test/canvas-a.png" })
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
 	it("preserves raw get-file-url version but uses metadata-visible version for comparison", async () => {
@@ -321,7 +405,7 @@ describe("getFileResourceMetaByPath", () => {
 		const cachedSrc = "https://example.test/new.png?signature=uploaded"
 
 		setFileInfoCache(
-			"images/new.png",
+			"/images/new.png",
 			{
 				src: cachedSrc,
 				fileName: "new.png",
@@ -334,7 +418,7 @@ describe("getFileResourceMetaByPath", () => {
 			{ allowMissingAttachment: true },
 		)
 
-		const cachedInfo = await getFileInfoByPath("images/new.png", oldFiles, {
+		const cachedInfo = await getFileInfoByPath("/images/new.png", oldFiles, {
 			designProjectId: "project-1",
 			hasAttachmentSnapshot: true,
 		})
@@ -350,7 +434,7 @@ describe("getFileResourceMetaByPath", () => {
 			}),
 		]
 		await expect(
-			getFileInfoByPath("images/new.png", nextFiles, {
+			getFileInfoByPath("/images/new.png", nextFiles, {
 				designProjectId: "project-1",
 				hasAttachmentSnapshot: true,
 			}),
@@ -468,7 +552,7 @@ describe("getFileResourceMetaByPath", () => {
 		try {
 			nowSpy.mockReturnValue(startTime)
 			setFileInfoCache(
-				"images/new.png",
+				"/images/new.png",
 				{
 					src: cachedSrc,
 					fileName: "new.png",
@@ -482,7 +566,7 @@ describe("getFileResourceMetaByPath", () => {
 			)
 			cleanupFileInfoCache(oldFiles, "project-1", { hasAttachmentSnapshot: true })
 			await expect(
-				getFileInfoByPath("images/new.png", oldFiles, {
+				getFileInfoByPath("/images/new.png", oldFiles, {
 					designProjectId: "project-1",
 					hasAttachmentSnapshot: true,
 				}),
@@ -490,14 +574,14 @@ describe("getFileResourceMetaByPath", () => {
 
 			nowSpy.mockReturnValue(startTime + 15_001)
 			await expect(
-				getFileResourceMetaByPath("images/new.png", oldFiles, {
+				getFileResourceMetaByPath("/images/new.png", oldFiles, {
 					designProjectId: "project-1",
 					hasAttachmentSnapshot: true,
 				}),
 			).resolves.toEqual({ status: "deleted" })
 			cleanupFileInfoCache(oldFiles, "project-1", { hasAttachmentSnapshot: true })
 			await expect(
-				getFileInfoByPath("images/new.png", oldFiles, {
+				getFileInfoByPath("/images/new.png", oldFiles, {
 					designProjectId: "project-1",
 					hasAttachmentSnapshot: true,
 				}),
@@ -1098,7 +1182,7 @@ describe("getFileResourceMetaByPath", () => {
 		})
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 
-		clearFileInfoCache("images/primed-race.png", undefined, "project-1")
+		clearAllFileInfoCache()
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([
 			{
 				file_id: "primed-race-file",

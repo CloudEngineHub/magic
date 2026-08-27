@@ -10,16 +10,20 @@ import type {
 	MediaResourceOfflineCacheMediaType,
 } from "./MediaResourceOfflineCacheManager"
 import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
-import {
-	toCanonicalCanvasResourcePath,
-	toWeakCanvasResourcePath,
-} from "../../shared/path/canvasResourcePath"
+import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
 import {
 	getFailureReasonFromGetFileInfoError,
 	type ResourceLoadFailureReason,
 } from "../media-common/resourceLoadFailure"
 
+const SUPERSEDED_RESOURCE_REQUEST = Symbol("superseded-resource-request")
+type ExchangeResult = string | null | typeof SUPERSEDED_RESOURCE_REQUEST
+
 export interface MediaResourceUrlEntry {
+	/** 可交给宿主 resolver/API 的资源引用路径，不能是 identity。 */
+	referencePath: string
+	/** 仅用于 Map、Set、缓存与去重的稳定资源身份。 */
+	resourceIdentity: string
 	ossSrc: string | null
 	ossSrcFromCachedFallback: boolean
 	sourceUrl: string | null
@@ -29,7 +33,7 @@ export interface MediaResourceUrlEntry {
 	resourceVersion: string | null
 	sourceUpdatedAt: string | null
 	contentLength: number | null
-	exchangePromise: Promise<string | null> | null
+	exchangePromise: Promise<ExchangeResult> | null
 	exchangeToken?: symbol
 	backgroundRefreshPromise: Promise<void> | null
 	/** 最近一次后台 metadata 校验调度时间；用于避免缓存命中热路径反复强制换链 */
@@ -49,11 +53,11 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 	isDestroyed: () => boolean
 	onStaleRequestDrop?: () => void
 	setFailureReason: (entry: TEntry, reason: ResourceLoadFailureReason | null) => void
-	onResourceDeleted: (normalizedPath: string, entry: TEntry) => void
+	onResourceDeleted: (resourceIdentity: string, entry: TEntry) => void
 	refreshResource: (path: string) => Promise<boolean>
-	onResourceMetadataHydrated?: (normalizedPath: string, entry: TEntry) => void
+	onResourceMetadataHydrated?: (resourceIdentity: string, entry: TEntry) => void
 	onResourceVersionChanged?: (
-		normalizedPath: string,
+		resourceIdentity: string,
 		entry: TEntry,
 		previousVersion: string,
 		nextVersion: string,
@@ -78,19 +82,10 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 const BACKGROUND_METADATA_REFRESH_COOLDOWN_MS = 60 * 1000
 
 export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
-	private readonly pathAliasToCanonical = new Map<string, string>()
-
 	constructor(private readonly options: MediaResourceUrlLifecycleOptions<TEntry>) {}
 
-	public canonicalResourcePath(path: string): string {
-		const canonical = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
-		this.rememberPathAlias(path, canonical)
-		return canonical
-	}
-
-	public getCanonicalFromAlias(path: string): string {
-		const weak = toWeakCanvasResourcePath(path)
-		return this.pathAliasToCanonical.get(weak) ?? weak
+	public getResourceIdentity(path: string): string {
+		return getCanvasHostResourceReferenceIdentity(this.options.canvas, path)
 	}
 
 	public clearCachedFallbackOssSrc(entry: TEntry): void {
@@ -182,8 +177,19 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			}
 		}
 
-		const ossSrc = await this.exchangeOssSrc(path, entry, options)
+		const exchangeResult = await this.exchangeOssSrcInternal(path, entry, options)
 		if (this.isDestroyed()) return null
+		if (exchangeResult === SUPERSEDED_RESOURCE_REQUEST) {
+			this.options.setFailureReason(entry, null)
+			if (entry.ossSrc && !isOssExpired(entry.expiresAt)) {
+				return {
+					ossSrc: entry.ossSrc,
+					expiresAt: entry.expiresAt,
+				}
+			}
+			return null
+		}
+		const ossSrc = exchangeResult
 		if (!ossSrc) {
 			this.options.setFailureReason(entry, entry.lastFailureReason ?? "not-found")
 			if (
@@ -218,6 +224,19 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			priority?: FileUrlRequestPriority
 		},
 	): Promise<string | null> {
+		const result = await this.exchangeOssSrcInternal(path, entry, options)
+		return result === SUPERSEDED_RESOURCE_REQUEST ? null : result
+	}
+
+	private async exchangeOssSrcInternal(
+		path: string,
+		entry: TEntry,
+		options?: {
+			forceRefresh?: boolean
+			bypassVirtualResource?: boolean
+			priority?: FileUrlRequestPriority
+		},
+	): Promise<ExchangeResult> {
 		if (this.isDestroyed()) return null
 		const getFileInfo = this.options.canvas.magicConfigManager.config?.methods?.getFileInfo
 		if (!getFileInfo) {
@@ -250,27 +269,25 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					priority: options?.priority,
 				})
 				if (this.isDestroyed()) return null
+				// 一旦请求已被更高代换链或 primeCache 淘汰，后续任何返回形态都只代表旧请求：
+				// 不能继续解析 URL，也不能把空结果补成 not-found 覆盖当前资源状态。
+				if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
 				if (fileInfo?.src) {
-					if (isCurrentExchange()) {
-						this.options.setFailureReason(entry, null)
-						const previousResourceVersion = entry.resourceVersion
-						this.applyFileInfoMetadata(entry, fileInfo)
-						if (!previousResourceVersion) {
-							this.options.onResourceMetadataHydrated?.(
-								this.canonicalResourcePath(path),
-								entry,
-							)
-						} else if (
-							entry.resourceVersion &&
-							entry.resourceVersion !== previousResourceVersion
-						) {
-							this.options.onResourceVersionChanged?.(
-								this.canonicalResourcePath(path),
-								entry,
-								previousResourceVersion,
-								entry.resourceVersion,
-							)
-						}
+					this.options.setFailureReason(entry, null)
+					const previousResourceVersion = entry.resourceVersion
+					this.applyFileInfoMetadata(entry, fileInfo)
+					if (!previousResourceVersion) {
+						this.options.onResourceMetadataHydrated?.(entry.resourceIdentity, entry)
+					} else if (
+						entry.resourceVersion &&
+						entry.resourceVersion !== previousResourceVersion
+					) {
+						this.options.onResourceVersionChanged?.(
+							entry.resourceIdentity,
+							entry,
+							previousResourceVersion,
+							entry.resourceVersion,
+						)
 					}
 					const resourceUrl =
 						await this.options.canvas.mediaResourceOfflineCacheManager.resolveResourceUrl(
@@ -289,21 +306,20 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 							},
 						)
 					if (this.isDestroyed()) return null
-					if (isCurrentExchange()) {
-						entry.ossSrc = resourceUrl
-						entry.ossSrcFromCachedFallback = false
-					}
+					if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
+					entry.ossSrc = resourceUrl
+					entry.ossSrcFromCachedFallback = false
 					return resourceUrl
 				}
-				if (isCurrentExchange()) this.options.setFailureReason(entry, "load-error")
+				this.options.setFailureReason(entry, "load-error")
 				return null
 			} catch (error) {
 				const reason = getFailureReasonFromGetFileInfoError(error)
-				if (isCurrentExchange()) this.options.setFailureReason(entry, reason)
-				if (isCurrentExchange() && reason === "not-found") {
-					const cachePath = this.canonicalResourcePath(path)
+				if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
+				this.options.setFailureReason(entry, reason)
+				if (reason === "not-found") {
 					this.options.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
-						path: cachePath,
+						path,
 						mediaType: this.options.mediaType,
 					})
 				}
@@ -325,7 +341,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 
 	public triggerBackgroundMetadataRefresh(
 		path: string,
-		normalizedPath: string,
+		resourceIdentity: string,
 		entry: TEntry,
 	): void {
 		if (this.isDestroyed()) return
@@ -349,7 +365,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		}
 
 		this.options.incrementDiagnostic("backgroundRefreshQueuedCount")
-		entry.backgroundRefreshPromise = this.refreshResourceMetadata(path, normalizedPath, entry)
+		entry.backgroundRefreshPromise = this.refreshResourceMetadata(path, resourceIdentity, entry)
 			.then(() => undefined)
 			.catch(() => undefined)
 			.finally(() => {
@@ -359,7 +375,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 
 	public async refreshResourceMetadata(
 		path: string,
-		normalizedPath: string,
+		resourceIdentity: string,
 		entry: TEntry,
 	): Promise<void> {
 		if (this.isDestroyed()) return
@@ -388,7 +404,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				if (meta.status === "deleted") {
 					this.options.incrementDiagnostic("metadataDeletedCount")
 					this.options.setFailureReason(entry, "not-found")
-					this.options.onResourceDeleted(normalizedPath, entry)
+					this.options.onResourceDeleted(resourceIdentity, entry)
 					return
 				}
 
@@ -401,7 +417,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					this.options.setFailureReason(entry, null)
 					this.applyResourceMeta(entry, meta)
 					if (!currentVersion) {
-						this.options.onResourceMetadataHydrated?.(normalizedPath, entry)
+						this.options.onResourceMetadataHydrated?.(resourceIdentity, entry)
 					}
 					return
 				}
@@ -434,7 +450,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				const hadResourceVersion = !!entry.resourceVersion
 				this.applyFileInfoMetadata(entry, fileInfo)
 				if (!hadResourceVersion) {
-					this.options.onResourceMetadataHydrated?.(normalizedPath, entry)
+					this.options.onResourceMetadataHydrated?.(resourceIdentity, entry)
 				}
 
 				await this.options.canvas.mediaResourceOfflineCacheManager.resolveResourceUrl(
@@ -460,7 +476,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			this.options.setFailureReason(entry, reason)
 			if (reason !== "not-found") return
 
-			this.options.onResourceDeleted(normalizedPath, entry)
+			this.options.onResourceDeleted(resourceIdentity, entry)
 		} finally {
 			if (isCurrentRefresh()) {
 				entry.exchangeToken = undefined
@@ -510,7 +526,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			previousResourceVersion !== entry.resourceVersion
 		) {
 			this.options.onResourceVersionChanged?.(
-				this.canonicalResourcePath(path),
+				entry.resourceIdentity,
 				entry,
 				previousResourceVersion,
 				entry.resourceVersion,
@@ -571,29 +587,18 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		})
 		entry.ossSrc = fileInfo.src
 		entry.ossSrcFromCachedFallback = false
-		const normalizedPath = this.canonicalResourcePath(path)
 		if (
 			previousResourceVersion &&
 			entry.resourceVersion &&
 			previousResourceVersion !== entry.resourceVersion
 		) {
 			this.options.onResourceVersionChanged?.(
-				normalizedPath,
+				entry.resourceIdentity,
 				entry,
 				previousResourceVersion,
 				entry.resourceVersion,
 			)
 		}
-	}
-
-	private getResolveAbsolutePath(): ((path: string) => string) | undefined {
-		return this.options.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-	}
-
-	private rememberPathAlias(rawPath: string, canonical: string): void {
-		const weak = toWeakCanvasResourcePath(rawPath)
-		this.pathAliasToCanonical.set(weak, canonical)
-		this.pathAliasToCanonical.set(canonical, canonical)
 	}
 
 	private isDestroyed(): boolean {

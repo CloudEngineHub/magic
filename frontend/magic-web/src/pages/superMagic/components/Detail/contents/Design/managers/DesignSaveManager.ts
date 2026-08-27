@@ -6,8 +6,8 @@ import {
 	resolveDesignProjectBasePathFromAttachments,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { writeUserElementDetails } from "../utils/elementDetailsIo"
-import { isV2Version } from "../utils/magicProjectCompression"
+import { getElementDetailsSidecarStatus, writeUserElementDetails } from "../utils/elementDetailsIo"
+import { isContentProjectVersion } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
@@ -36,6 +36,8 @@ export type DesignSaveFailureReason =
 	| "remote-check-unreliable"
 	| "empty-content"
 	| "unsafe-empty-canvas"
+	| "unsupported-sidecar"
+	| "sidecar-persist-failed"
 	| "error"
 
 export type DesignSaveSource =
@@ -43,11 +45,11 @@ export type DesignSaveSource =
 	| "canvas-full-export"
 	| "draft-restore"
 	| "manual-refresh-draft"
-	| "version-upgrade"
 	| "version-switch"
 	| "remote-apply"
 	| "remote-merge"
 	| "conflict-resolution"
+	| "dsl-upgrade"
 	| "manual-save"
 	| "unknown-auto"
 
@@ -58,7 +60,6 @@ export interface DesignSaveMetadata {
 	nextElementCount?: number
 	isRemoteApplying?: boolean
 	fromDraft?: boolean
-	fromUpgrade?: boolean
 }
 
 export interface DesignSaveContext {
@@ -70,7 +71,6 @@ export interface DesignSaveContext {
 	magicProjectJsVersion: number | null
 	isRemoteApplying: boolean
 	fromDraft: boolean
-	fromUpgrade: boolean
 }
 
 export type DesignSaveResult =
@@ -252,7 +252,6 @@ export class DesignSaveManager {
 				nextElementCount: metadata?.nextElementCount,
 				isRemoteApplying: metadata?.isRemoteApplying,
 				fromDraft: metadata?.fromDraft,
-				fromUpgrade: metadata?.fromUpgrade,
 			}).then((result) => this.saveLifecycleHandlers.onAutoSaveResult?.(result))
 		}, AUTO_SAVE_DEBOUNCE_MS)
 	}
@@ -277,12 +276,12 @@ export class DesignSaveManager {
 			magicProjectJsVersion: this.stateBag.getMagicProjectJsVersion(),
 			isRemoteApplying: options?.isRemoteApplying ?? false,
 			fromDraft: options?.fromDraft ?? source === "draft-restore",
-			fromUpgrade: options?.fromUpgrade ?? source === "version-upgrade",
 		}
 	}
 
 	async commitSave(options?: {
 		allowRemoteConflict?: boolean
+		allowReadOnlyRetry?: boolean
 		designData?: DesignData
 		updateCurrentDesignData?: boolean
 		skipRemoteUpdateCheck?: boolean
@@ -292,10 +291,9 @@ export class DesignSaveManager {
 		nextElementCount?: number
 		isRemoteApplying?: boolean
 		fromDraft?: boolean
-		fromUpgrade?: boolean
 	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
-		if (this.stateBag.getIsReadOnly()) {
+		if (this.stateBag.getIsReadOnly() && !options?.allowReadOnlyRetry) {
 			this.stateBag.setters.setIsSaving(false)
 			return { ok: false, reason: "readonly" }
 		}
@@ -358,21 +356,41 @@ export class DesignSaveManager {
 				return { ok: false, reason: "empty-content" }
 			}
 
+			const sidecarContext = {
+				attachments: this.options.attachments,
+				flatAttachments: this.options.flatAttachments,
+				mainFileId: magicProjectJsFileId,
+				projectId: this.options.projectId,
+			}
+			if (isContentProjectVersion(designDataToSave.version)) {
+				const sidecarStatus = await getElementDetailsSidecarStatus(sidecarContext)
+				if (sidecarStatus === "unsupported") {
+					this.stateBag.setters.setIsSaving(false)
+					return { ok: false, reason: "unsupported-sidecar" }
+				}
+			}
+
 			const saveResponse = await SuperMagicApi.saveFileContent([
 				{ file_id: magicProjectJsFileId, content, enable_shadow: true },
 			])
 			didSave = true
 			savedUpdatedAt = saveResponse?.success_files?.[0]?.data?.updated_at ?? null
 
-			// v2：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
+			// v3：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
 			let didPersistDetails = true
-			if (isV2Version(designDataToSave.version)) {
-				didPersistDetails = await writeUserElementDetails(designDataToSave, {
-					attachments: this.options.attachments,
-					flatAttachments: this.options.flatAttachments,
-					mainFileId: magicProjectJsFileId,
-					projectId: this.options.projectId,
-				})
+			if (isContentProjectVersion(designDataToSave.version)) {
+				const sidecarResult = await writeUserElementDetails(
+					designDataToSave,
+					sidecarContext,
+				)
+				didPersistDetails =
+					sidecarResult === "persisted" ||
+					sidecarResult === "unchanged" ||
+					sidecarResult === "skipped"
+				if (sidecarResult === "blocked-unsupported") {
+					this.stateBag.setters.setIsSaving(false)
+					return { ok: false, reason: "unsupported-sidecar" }
+				}
 			}
 			this.lastSaveFullyPersisted = didPersistDetails
 			const shouldUpdateCurrentDesignData = options?.updateCurrentDesignData ?? true

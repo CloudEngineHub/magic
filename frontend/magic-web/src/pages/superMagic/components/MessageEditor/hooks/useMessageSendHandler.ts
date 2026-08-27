@@ -22,6 +22,7 @@ interface UseMessageSendHandlerParams {
 	onSend?: MessageEditorProps["onSend"]
 	topicMode?: MessageEditorProps["topicMode"]
 	collectMentionItemsFromEditor: () => MentionListItem[]
+	promoteCanvasPendingMentions?: () => void
 	isMountedRef: MutableRefObject<boolean>
 }
 
@@ -36,16 +37,20 @@ export default function useMessageSendHandler({
 	onSend,
 	topicMode,
 	collectMentionItemsFromEditor,
+	promoteCanvasPendingMentions,
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
+		// Sending is also an explicit confirmation path when the editor never received focus.
+		promoteCanvasPendingMentions?.()
 
 		if (isEditingQueueItem && isEmptyJSONContent(store.editorStore.value)) {
 			return
 		}
 
 		const selectedModel = store.topicModelStore.selectedLanguageModel
+		const selectedVideoModel = store.topicModelStore.selectedVideoModel
 		if (!isEditingQueueItem && !store.topicModelStore.isLanguageModelReady) {
 			magicToast.error(t("messageEditor.pleaseSelectModel"))
 			return
@@ -112,7 +117,7 @@ export default function useMessageSendHandler({
 			mentionItems,
 			selectedModel: selectedModel ? { ...selectedModel } : null,
 			selectedImageModel: store.topicModelStore.selectedImageModel,
-			selectedVideoModel: store.topicModelStore.selectedVideoModel,
+			selectedVideoModel,
 		})
 
 		store.draftStore.createSentDraft({
