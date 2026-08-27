@@ -67,6 +67,7 @@ describe("SkillCard", () => {
 		render(<SkillCard skill={createSkill({ publisherType: "OFFICIAL_BUILTIN" })} />)
 
 		expect(screen.getByTestId("skill-card-source-badge")).toHaveTextContent("官方内置")
+		expect(screen.queryByTestId("skill-card-install-count")).not.toBeInTheDocument()
 	})
 
 	it("shows the featured tag only when rendered inside the featured section", () => {

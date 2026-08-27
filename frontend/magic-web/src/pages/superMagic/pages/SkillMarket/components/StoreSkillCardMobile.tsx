@@ -69,6 +69,7 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 		[language, skill.updatedAt, t],
 	)
 	const installCount = formatSkillInstallCount(skill.installCount, language)
+	const showInstallCount = skill.publisherType !== "OFFICIAL_BUILTIN"
 
 	const isAdded = skill.status === "added"
 	const buttonLabel = isAdded
@@ -185,7 +186,7 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 					)}
 					<span className="truncate">{publisherLabel}</span>
 				</div>
-				{installCount ? (
+				{showInstallCount && installCount ? (
 					<span
 						className="shrink-0 text-[11px] text-muted-foreground/80"
 						data-testid="skills-library-mobile-card-install-count"
