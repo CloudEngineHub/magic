@@ -205,6 +205,25 @@ export function getProjectPinBoundaryAction(
 	return null
 }
 
+/** Returns true when an unpinned project is inserted exactly at the pin-group boundary. */
+export function isProjectPinGroupBoundaryInsertion(
+	items: Array<{ id: string; is_pinned?: boolean }>,
+	sourceId: string,
+	targetId: string | undefined,
+	position: SidebarDropPosition,
+) {
+	const source = items.find((item) => item.id === sourceId)
+	if (!source || source.is_pinned) return false
+
+	const remaining = items.filter((item) => item.id !== sourceId)
+	const targetIndex = targetId ? remaining.findIndex((item) => item.id === targetId) : -1
+	const pinnedCount = remaining.filter((item) => Boolean(item.is_pinned)).length
+	if (targetIndex === -1) return remaining.length === pinnedCount
+
+	const insertIndex = position === "after" ? targetIndex + 1 : targetIndex
+	return insertIndex === pinnedCount
+}
+
 /** Returns true when the requested insertion leaves the source unchanged. */
 export function isNoOpInsertion(
 	sourceIndex: number,

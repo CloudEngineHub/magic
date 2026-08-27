@@ -239,7 +239,15 @@ class ProjectService {
 		const sourceIndex = previousIds.indexOf(projectId)
 		if (sourceIndex === -1) return
 		const nextIds = previousIds.filter((id) => id !== projectId)
-		const insertIndex = preProjectId ? nextIds.indexOf(preProjectId) + 1 : 0
+		const insertIndex =
+			preProjectId !== null && preProjectId !== undefined
+				? nextIds.indexOf(preProjectId) + 1
+				: nextProjectId !== null && nextProjectId !== undefined
+					? (() => {
+							const nextIndex = nextIds.indexOf(nextProjectId)
+							return nextIndex === -1 ? nextIds.length : nextIndex
+						})()
+					: nextIds.length
 		nextIds.splice(Math.max(0, insertIndex), 0, projectId)
 		runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, nextIds))
 		if (isPinned !== undefined) {
@@ -602,6 +610,7 @@ class ProjectService {
 		preProjectId,
 		nextProjectId,
 		isPinned,
+		usePinApi = false,
 	}: {
 		project: ProjectListItem
 		targetWorkspaceId: string
@@ -609,15 +618,23 @@ class ProjectService {
 		preProjectId?: string | null
 		nextProjectId?: string | null
 		isPinned?: boolean
+		usePinApi?: boolean
 	}): Promise<void> => {
 		const sourceWorkspaceId = project.workspace_id
 		if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
 		const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
 		const targetIndex =
 			preProjectId !== undefined || nextProjectId !== undefined
-				? preProjectId
+				? preProjectId !== null && preProjectId !== undefined
 					? targetProjects.findIndex((item) => item.id === preProjectId) + 1
-					: 0
+					: nextProjectId !== null && nextProjectId !== undefined
+						? (() => {
+								const nextIndex = targetProjects.findIndex(
+									(item) => item.id === nextProjectId,
+								)
+								return nextIndex === -1 ? targetProjects.length : nextIndex
+							})()
+						: targetProjects.length
 				: undefined
 
 		runInAction(() => {
@@ -632,21 +649,25 @@ class ProjectService {
 		})
 
 		try {
-			await SuperMagicApi.moveProjectToNewWorkspace({
-				source_project_id: project.id,
-				target_workspace_id: targetWorkspaceId,
-				target_workspace_name: targetWorkspaceName,
-				pre_project_id: preProjectId,
-				next_project_id: nextProjectId,
-			})
-			if (isPinned !== undefined) {
-				await this.pinProject(
-					project,
-					isPinned,
-					targetWorkspaceId,
-					preProjectId,
-					nextProjectId,
-				)
+			if (usePinApi) {
+				await this.pinProject(project, true, targetWorkspaceId, preProjectId, nextProjectId)
+			} else {
+				await SuperMagicApi.moveProjectToNewWorkspace({
+					source_project_id: project.id,
+					target_workspace_id: targetWorkspaceId,
+					target_workspace_name: targetWorkspaceName,
+					pre_project_id: preProjectId,
+					next_project_id: nextProjectId,
+				})
+				if (isPinned !== undefined) {
+					await this.pinProject(
+						project,
+						isPinned,
+						targetWorkspaceId,
+						preProjectId,
+						nextProjectId,
+					)
+				}
 			}
 			await Promise.all([
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),

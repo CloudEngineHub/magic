@@ -17,6 +17,7 @@ import {
 	getNearestWorkspaceTarget,
 	getPredecessorId,
 	getProjectPinBoundaryAction,
+	isProjectPinGroupBoundaryInsertion,
 	getRenderedProjectIds,
 	getSuccessorId,
 	insertAtPosition,
@@ -734,17 +735,27 @@ export function useWorkspaceListDnd({
 						new Set(renderedOrder).size === storeOrder.length
 							? renderedOrder
 							: storeOrder
-					const preProjectId = getPredecessorId(
-						decisionOrder.map((id) => ({ id })),
+					const projectDropPosition = preview.position || "after"
+					const projectTargetId =
+						preview.type === "project" ? preview.projectId : undefined
+					const preProjectId = isProjectPinGroupBoundaryInsertion(
+						sourceProjects,
 						active.projectId,
-						preview.type === "project" ? preview.projectId : undefined,
-						preview.position || "after",
+						projectTargetId,
+						projectDropPosition,
 					)
+						? null
+						: getPredecessorId(
+								decisionOrder.map((id) => ({ id })),
+								active.projectId,
+								projectTargetId,
+								projectDropPosition,
+							)
 					const nextProjectId = getSuccessorId(
 						decisionOrder.map((id) => ({ id })),
 						active.projectId,
-						preview.type === "project" ? preview.projectId : undefined,
-						preview.position || "after",
+						projectTargetId,
+						projectDropPosition,
 					)
 					const pinAction = getProjectPinBoundaryAction(
 						sourceProjects,
@@ -797,23 +808,32 @@ export function useWorkspaceListDnd({
 					new Set(renderedTargetOrder).size === targetStoreOrder.length
 						? renderedTargetOrder
 						: targetStoreOrder
+				const projectDropPosition = preview.position || "after"
+				const projectTargetId = preview.type === "project" ? preview.projectId : undefined
 				const preProjectId =
 					preview.type === "workspace"
 						? undefined
-						: getPredecessorId(
-								targetDecisionOrder.map((id) => ({ id })),
-								active.projectId,
-								preview.projectId,
-								preview.position || "after",
-							)
+						: isProjectPinGroupBoundaryInsertion(
+									[project, ...targetProjects],
+									active.projectId,
+									projectTargetId,
+									projectDropPosition,
+							  )
+							? null
+							: getPredecessorId(
+									targetDecisionOrder.map((id) => ({ id })),
+									active.projectId,
+									projectTargetId,
+									projectDropPosition,
+								)
 				const nextProjectId =
 					preview.type === "workspace"
 						? undefined
 						: getSuccessorId(
 								targetDecisionOrder.map((id) => ({ id })),
 								active.projectId,
-								preview.projectId,
-								preview.position || "after",
+								projectTargetId,
+								projectDropPosition,
 							)
 				const pinAction = getProjectPinBoundaryAction(
 					[project, ...targetProjects],
@@ -826,6 +846,11 @@ export function useWorkspaceListDnd({
 					: project.is_pinned
 						? true
 						: undefined
+				const usePinApi = Boolean(
+					pinState === true &&
+					preview.type === "project" &&
+					targetProjects.find((item) => item.id === projectTargetId)?.is_pinned,
+				)
 				if (pinAction) {
 					const confirmed = await requestPinBoundaryConfirmation({
 						action: pinAction,
@@ -841,6 +866,7 @@ export function useWorkspaceListDnd({
 					preProjectId,
 					nextProjectId,
 					isPinned: pinState,
+					usePinApi,
 				})
 			} catch (error) {
 				console.error("Failed to persist sidebar drag result:", error)
