@@ -253,6 +253,17 @@ readonly class RoleDomainService
     }
 
     /**
+     * 获取 v1 版本的权限资源树结构。
+     *
+     * @param bool $isPlatformOrganization 是否平台组织
+     */
+    public function getPermissionTreeV1(bool $isPlatformOrganization = false): array
+    {
+        $permissionEnum = di(MagicPermissionInterface::class);
+        return $permissionEnum->getPermissionTreeV1($isPlatformOrganization);
+    }
+
+    /**
      * 为指定用户创建或维护“组织管理员”角色（按组织类型写入对应权限组）。
      *
      * 逻辑：

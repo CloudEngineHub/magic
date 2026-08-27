@@ -99,6 +99,7 @@ Router::addGroup('/api/v1/admin', static function () {
     // 角色权限相关（权限树）
     Router::addGroup('/roles', static function () {
         Router::get('/permissions/tree', [PermissionApi::class, 'getPermissionTree']);
+        Router::get('/permissions/tree-v1', [PermissionApi::class, 'getPermissionTreeV1']);
         Router::get('/sub-admins', [RoleApi::class, 'getSubAdminList']);
         Router::post('/sub-admins', [RoleApi::class, 'createSubAdmin']);
         Router::put('/sub-admins/{id}', [RoleApi::class, 'updateSubAdmin']);
