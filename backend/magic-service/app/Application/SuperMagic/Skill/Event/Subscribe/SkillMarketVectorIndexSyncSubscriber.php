@@ -13,7 +13,6 @@ use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketPublishedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUpdatedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketVectorIndexDomainService;
-use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
@@ -25,6 +24,8 @@ use Throwable;
 #[Listener]
 final readonly class SkillMarketVectorIndexSyncSubscriber implements ListenerInterface
 {
+    private const int MAX_BATCH_ITEM_RETRIES = 3;
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -86,28 +87,22 @@ final readonly class SkillMarketVectorIndexSyncSubscriber implements ListenerInt
 
     private function processBatch(SkillMarketBatchReindexRequestedEvent $event): void
     {
-        // Let the queue apply its bounded retry policy to a single failed item.
-        if (count($event->skillMarketIds) === 1) {
-            $this->syncOne(
-                $event->skillMarketIds[0],
-                $event->operatorId,
-                $event->forceReEmbedding,
-            );
-            return;
-        }
-
-        $failedIds = $this->domainService->reindexBatch(
-            $event->skillMarketIds,
-            $event->operatorId,
-            $event->forceReEmbedding,
-        );
-        foreach (array_values(array_unique($failedIds)) as $failedId) {
-            AsyncEventUtil::dispatch(new SkillMarketBatchReindexRequestedEvent(
-                [$failedId],
-                $event->organizationCode,
-                $event->operatorId,
-                $event->forceReEmbedding,
-            ));
+        foreach (array_values(array_unique(array_map('strval', $event->skillMarketIds))) as $skillMarketId) {
+            for ($attempt = 1; $attempt <= self::MAX_BATCH_ITEM_RETRIES; ++$attempt) {
+                try {
+                    $this->syncOne($skillMarketId, $event->operatorId, $event->forceReEmbedding);
+                    continue 2;
+                } catch (Throwable $throwable) {
+                    if ($attempt === self::MAX_BATCH_ITEM_RETRIES) {
+                        $this->logger->error('Skill market batch item exhausted retries', [
+                            'resource_id' => $skillMarketId,
+                            'attempts' => self::MAX_BATCH_ITEM_RETRIES,
+                            'exception' => $throwable::class,
+                            'message' => $throwable->getMessage(),
+                        ]);
+                    }
+                }
+            }
         }
     }
 }

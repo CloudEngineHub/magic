@@ -33,8 +33,8 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishType;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillListScope;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
@@ -430,76 +430,6 @@ class SkillAppService extends AbstractSkillAppService
             $page,
             $this->getTeamSharedReadableSkillCodes($dataIsolation)
         );
-    }
-
-    /**
-     * 查询按权限集合筛选的共享技能。
-     *
-     * @param array{codes: array<string>, operations: array<string, Operation>} $skillCodeResult
-     * @return array<string, mixed>
-     */
-    private function buildSharedSkillListResult(
-        SkillDataIsolation $dataIsolation,
-        SkillQuery $query,
-        Page $page,
-        array $skillCodeResult,
-        bool $usePublishedSnapshotForOperations = false
-    ): array {
-        $sharedSkillCodes = $skillCodeResult['codes'];
-        $skillOperations = $skillCodeResult['operations'];
-
-        if ($sharedSkillCodes === []) {
-            return [
-                'list' => [],
-                'total' => 0,
-                'creator_user_map' => [],
-                'latest_version_map' => [],
-                'skill_operations' => [],
-            ];
-        }
-
-        $result = $this->skillDomainService->queriesSharedByCodes($dataIsolation, $sharedSkillCodes, $query, $page);
-        if ($result['list'] === []) {
-            return [
-                'list' => [],
-                'total' => $result['total'],
-                'creator_user_map' => [],
-                'latest_version_map' => [],
-                'skill_operations' => [],
-            ];
-        }
-
-        $sharedSkillEntities = $result['list'];
-        $resultCodes = array_values(array_unique(array_map(
-            static fn (SkillEntity $skillEntity): string => $skillEntity->getCode(),
-            $sharedSkillEntities
-        )));
-        $publishedVersionMap = $this->skillVersionDomainService->findCurrentPublishedVersionsByCodes($dataIsolation, $resultCodes);
-
-        foreach ($sharedSkillEntities as $index => $sharedSkillEntity) {
-            $skillCode = $sharedSkillEntity->getCode();
-            if (isset($skillOperations[$skillCode]) && ! $usePublishedSnapshotForOperations) {
-                unset($publishedVersionMap[$skillCode]);
-                continue;
-            }
-            $publishedVersionEntity = $publishedVersionMap[$skillCode] ?? null;
-            if ($publishedVersionEntity) {
-                $sharedSkillEntities[$index] = $this->buildExternalVisibleSkillFromVersion($publishedVersionEntity);
-                if (isset($skillOperations[$skillCode])) {
-                    unset($publishedVersionMap[$skillCode]);
-                }
-            }
-        }
-
-        $this->updateSkillLogoUrl($dataIsolation, $sharedSkillEntities);
-
-        return [
-            'list' => $sharedSkillEntities,
-            'total' => $result['total'],
-            'creator_user_map' => $this->buildCreatorUserMapFromSkillEntities($dataIsolation, $sharedSkillEntities),
-            'latest_version_map' => $publishedVersionMap,
-            'skill_operations' => $skillOperations,
-        ];
     }
 
     /**
@@ -1199,6 +1129,76 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         return array_values(array_unique(array_merge($skillCodes, $builtinSkillCodes)));
+    }
+
+    /**
+     * 查询按权限集合筛选的共享技能。
+     *
+     * @param array{codes: array<string>, operations: array<string, Operation>} $skillCodeResult
+     * @return array<string, mixed>
+     */
+    private function buildSharedSkillListResult(
+        SkillDataIsolation $dataIsolation,
+        SkillQuery $query,
+        Page $page,
+        array $skillCodeResult,
+        bool $usePublishedSnapshotForOperations = false
+    ): array {
+        $sharedSkillCodes = $skillCodeResult['codes'];
+        $skillOperations = $skillCodeResult['operations'];
+
+        if ($sharedSkillCodes === []) {
+            return [
+                'list' => [],
+                'total' => 0,
+                'creator_user_map' => [],
+                'latest_version_map' => [],
+                'skill_operations' => [],
+            ];
+        }
+
+        $result = $this->skillDomainService->queriesSharedByCodes($dataIsolation, $sharedSkillCodes, $query, $page);
+        if ($result['list'] === []) {
+            return [
+                'list' => [],
+                'total' => $result['total'],
+                'creator_user_map' => [],
+                'latest_version_map' => [],
+                'skill_operations' => [],
+            ];
+        }
+
+        $sharedSkillEntities = $result['list'];
+        $resultCodes = array_values(array_unique(array_map(
+            static fn (SkillEntity $skillEntity): string => $skillEntity->getCode(),
+            $sharedSkillEntities
+        )));
+        $publishedVersionMap = $this->skillVersionDomainService->findCurrentPublishedVersionsByCodes($dataIsolation, $resultCodes);
+
+        foreach ($sharedSkillEntities as $index => $sharedSkillEntity) {
+            $skillCode = $sharedSkillEntity->getCode();
+            if (isset($skillOperations[$skillCode]) && ! $usePublishedSnapshotForOperations) {
+                unset($publishedVersionMap[$skillCode]);
+                continue;
+            }
+            $publishedVersionEntity = $publishedVersionMap[$skillCode] ?? null;
+            if ($publishedVersionEntity) {
+                $sharedSkillEntities[$index] = $this->buildExternalVisibleSkillFromVersion($publishedVersionEntity);
+                if (isset($skillOperations[$skillCode])) {
+                    unset($publishedVersionMap[$skillCode]);
+                }
+            }
+        }
+
+        $this->updateSkillLogoUrl($dataIsolation, $sharedSkillEntities);
+
+        return [
+            'list' => $sharedSkillEntities,
+            'total' => $result['total'],
+            'creator_user_map' => $this->buildCreatorUserMapFromSkillEntities($dataIsolation, $sharedSkillEntities),
+            'latest_version_map' => $publishedVersionMap,
+            'skill_operations' => $skillOperations,
+        ];
     }
 
     /**

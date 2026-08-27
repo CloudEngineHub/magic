@@ -191,26 +191,6 @@ final class SkillMarketVectorIndexDomainService
         return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
     }
 
-    /** Process a batch and return failed IDs for isolated retries. */
-    public function reindexBatch(array $skillMarketIds, string $operatorId, bool $forceReEmbedding = false): array
-    {
-        $failedIds = [];
-        foreach (array_values(array_unique(array_map('strval', $skillMarketIds))) as $skillMarketId) {
-            try {
-                $this->sync($skillMarketId, $operatorId, $forceReEmbedding);
-            } catch (Throwable $throwable) {
-                $failedIds[] = $skillMarketId;
-                $this->logger->error('Skill market vector batch item failed', [
-                    'resource_id' => $skillMarketId,
-                    'exception' => $throwable::class,
-                    'message' => $throwable->getMessage(),
-                ]);
-            }
-        }
-
-        return $failedIds;
-    }
-
     /** @return array<int, SkillCategoryEntity> */
     private function findCategories(SkillMarketEntity $market): array
     {

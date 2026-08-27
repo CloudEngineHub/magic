@@ -758,7 +758,6 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
-
     }
 
     public function testQueriesCollaboratedScope(): void

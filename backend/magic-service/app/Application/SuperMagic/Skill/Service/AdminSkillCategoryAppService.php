@@ -11,7 +11,6 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillCategoryQuery;
-use App\Domain\SuperMagic\Skill\Event\SkillMarketBatchReindexRequestedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -21,7 +20,6 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\CreateSkillCategoryRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillCategoriesRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillCategoryRequestAdminDTO;
-use Dtyq\AsyncEvent\AsyncEventUtil;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
@@ -116,7 +114,6 @@ class AdminSkillCategoryAppService extends AbstractSkillAppService
         }
         $category->setModifierId($dataIsolation->getCurrentUserId());
         $this->categoryDomainService->save($category);
-        $this->dispatchMarketReindex($category, $dataIsolation->getCurrentUserId());
         return $this->getDetail($id);
     }
 
@@ -138,23 +135,6 @@ class AdminSkillCategoryAppService extends AbstractSkillAppService
         $tree = $this->buildCategoryTree($categories, ! $includeEmpty, false, true, true);
         $this->updateCategoryLogoUrls($tree);
         return $tree;
-    }
-
-    private function dispatchMarketReindex(SkillCategoryEntity $category, string $operatorId): void
-    {
-        $categoryId = $category->getId();
-        if ($categoryId === null) {
-            return;
-        }
-
-        $marketIds = $this->categoryDomainService->getMarketIdsMap([$categoryId])[$categoryId] ?? [];
-        foreach (array_chunk(array_values(array_unique(array_map('strval', $marketIds))), 100) as $batch) {
-            AsyncEventUtil::dispatch(new SkillMarketBatchReindexRequestedEvent(
-                $batch,
-                $category->getOrganizationCode(),
-                $operatorId,
-            ));
-        }
     }
 
     /** @param SkillCategoryEntity[] $categories @return SkillCategoryEntity[] */

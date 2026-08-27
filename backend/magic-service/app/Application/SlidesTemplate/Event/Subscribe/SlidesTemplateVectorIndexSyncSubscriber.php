@@ -14,7 +14,6 @@ use App\Domain\SlidesTemplate\Event\SlidesTemplateDeletedEvent;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateStatusUpdatedEvent;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUpdatedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateVectorIndexDomainService;
-use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
@@ -26,6 +25,8 @@ use Throwable;
 #[Listener]
 final readonly class SlidesTemplateVectorIndexSyncSubscriber implements ListenerInterface
 {
+    private const int MAX_BATCH_ITEM_RETRIES = 3;
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -110,40 +111,27 @@ final readonly class SlidesTemplateVectorIndexSyncSubscriber implements Listener
 
     private function processBatchReindex(SlidesTemplateBatchReindexRequestedEvent $event): void
     {
-        // A single-item retry must throw so the async-event driver applies its bounded retry policy.
-        if (count($event->slidesTemplateIds) === 1) {
-            $this->syncOne(
-                $event->slidesTemplateIds[0],
-                $event->organizationCode,
-                $event->operatorId,
-                $event->forceReEmbedding,
-            );
-            return;
-        }
-
-        $failedIds = [];
-        foreach ($event->slidesTemplateIds as $slidesTemplateId) {
-            try {
-                $this->syncOne(
-                    $slidesTemplateId,
-                    $event->organizationCode,
-                    $event->operatorId,
-                    $event->forceReEmbedding,
-                );
-            } catch (Throwable) {
-                // Continue so one bad template does not cause successful items in the batch to retry.
-                $failedIds[] = $slidesTemplateId;
+        foreach (array_values(array_unique(array_map('strval', $event->slidesTemplateIds))) as $slidesTemplateId) {
+            for ($attempt = 1; $attempt <= self::MAX_BATCH_ITEM_RETRIES; ++$attempt) {
+                try {
+                    $this->syncOne(
+                        $slidesTemplateId,
+                        $event->organizationCode,
+                        $event->operatorId,
+                        $event->forceReEmbedding,
+                    );
+                    continue 2;
+                } catch (Throwable $throwable) {
+                    if ($attempt === self::MAX_BATCH_ITEM_RETRIES) {
+                        $this->logger->error('Slides template batch item exhausted retries', [
+                            'resource_id' => $slidesTemplateId,
+                            'attempts' => self::MAX_BATCH_ITEM_RETRIES,
+                            'exception' => $throwable::class,
+                            'message' => $throwable->getMessage(),
+                        ]);
+                    }
+                }
             }
-        }
-
-        // Retry failed templates as technical events, never as business update events.
-        foreach (array_values(array_unique($failedIds)) as $failedId) {
-            AsyncEventUtil::dispatch(new SlidesTemplateBatchReindexRequestedEvent(
-                [$failedId],
-                $event->organizationCode,
-                $event->operatorId,
-                $event->forceReEmbedding,
-            ));
         }
     }
 }
