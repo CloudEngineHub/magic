@@ -61,6 +61,7 @@ interface MicroAppCardProps {
 	onRename: () => void
 	onDelete: () => void
 	onManageCollaborators?: () => void
+	managingCollaborators?: boolean
 	canDelete?: boolean
 	canManageCollaborators?: boolean
 }
@@ -80,6 +81,7 @@ export default function MicroAppCard({
 	onRename,
 	onDelete,
 	onManageCollaborators,
+	managingCollaborators = false,
 	canDelete = true,
 	canManageCollaborators = false,
 }: MicroAppCardProps) {
@@ -266,7 +268,10 @@ export default function MicroAppCard({
 						{t("microAppsPage.actions.rename")}
 					</ContextMenuItem>
 					{canManageCollaborators && onManageCollaborators ? (
-						<ContextMenuItem onSelect={onManageCollaborators}>
+						<ContextMenuItem
+							onSelect={onManageCollaborators}
+							disabled={managingCollaborators}
+						>
 							<Users className="size-4" />
 							{t("microAppsPage.actions.manageCollaborators")}
 						</ContextMenuItem>
@@ -310,7 +315,8 @@ export default function MicroAppCard({
 								<div className="ml-12 h-px bg-border/60" />
 								<button
 									type="button"
-									className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60"
+									className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60 disabled:opacity-50"
+									disabled={managingCollaborators}
 									onClick={() => {
 										setMobileMenuOpen(false)
 										onManageCollaborators()

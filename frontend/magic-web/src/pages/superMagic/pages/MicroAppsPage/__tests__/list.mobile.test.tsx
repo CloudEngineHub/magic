@@ -23,6 +23,7 @@ interface MockMicroAppCardProps {
 	coverUrl?: string
 	statusLabel?: string
 	canDelete?: boolean
+	canManageCollaborators?: boolean
 	onClick: () => void
 	testId: string
 }
@@ -47,6 +48,7 @@ vi.mock("../components/MicroAppCard", () => ({
 		coverUrl,
 		statusLabel,
 		canDelete,
+		canManageCollaborators,
 		onClick,
 		testId,
 	}: MockMicroAppCardProps) => (
@@ -55,6 +57,7 @@ vi.mock("../components/MicroAppCard", () => ({
 			data-testid={testId}
 			data-cover-url={coverUrl}
 			data-can-delete={canDelete}
+			data-can-manage-collaborators={canManageCollaborators}
 			onClick={onClick}
 		>
 			{title}
@@ -117,6 +120,7 @@ describe("MicroAppsListPageMobile", () => {
 					publish_status: "unpublished",
 					updated_at: null,
 					can_delete: false,
+					can_manage_collaborators: true,
 				},
 			],
 			scope: "all",
@@ -132,6 +136,15 @@ describe("MicroAppsListPageMobile", () => {
 			renameApp: mocks.renameApp,
 			deleteApp: mocks.deleteApp,
 		})
+	})
+
+	it("hides collaborator management when the public hook is disabled", () => {
+		render(<MicroAppsListPageMobile />)
+
+		expect(screen.getByTestId("micro-apps-mobile-app-app-1")).toHaveAttribute(
+			"data-can-manage-collaborators",
+			"false",
+		)
 	})
 
 	it("opens an app directly by app_id", async () => {
