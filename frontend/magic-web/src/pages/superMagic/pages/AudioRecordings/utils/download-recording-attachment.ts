@@ -1,5 +1,6 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
+import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 
 interface DownloadRecordingAttachmentParams {
 	fileId: string
@@ -19,6 +20,7 @@ export async function downloadRecordingAttachmentFile({
 		const [urlItem] = await getTemporaryDownloadUrl({
 			file_ids: [fileId],
 			is_download: true,
+			download_mode: DownloadImageMode.Download,
 		})
 		if (!urlItem?.url) return false
 

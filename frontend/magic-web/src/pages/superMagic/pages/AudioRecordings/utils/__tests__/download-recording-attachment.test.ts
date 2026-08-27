@@ -32,6 +32,7 @@ describe("downloadRecordingAttachmentFile", () => {
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledWith({
 			file_ids: ["file-alpha"],
 			is_download: true,
+			download_mode: "download",
 		})
 		expect(downloadFileWithAnchorMock).toHaveBeenCalledWith(
 			"https://example.invalid/export/transcript.md",
