@@ -15,7 +15,6 @@ use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
-use App\Interfaces\SlidesTemplate\DTO\Request\SlidesTemplateVectorReindexRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateSortRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateStatusRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateTagsRequest;
@@ -103,9 +102,8 @@ class AdminSlidesTemplateApi extends AbstractApi
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::EDIT)]
-    public function reindexVectorIndex(SlidesTemplateVectorReindexRequest $request): array
+    public function reindexVectorIndex(): array
     {
-        $request->validated();
-        return $this->adminSlidesTemplateAppService->reindexVectorIndex($this->getAuthorization(), $request);
+        return $this->adminSlidesTemplateAppService->reindexVectorIndex($this->getAuthorization());
     }
 }

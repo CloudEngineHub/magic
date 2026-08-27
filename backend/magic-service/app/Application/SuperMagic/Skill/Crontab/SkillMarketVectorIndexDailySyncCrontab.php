@@ -8,11 +8,10 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Skill\Crontab;
 
 use App\Application\SuperMagic\Skill\Service\AdminSkillAppService;
-use App\Domain\SuperMagic\Skill\Service\SkillMarketVectorIndexDomainService;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Crontab\Annotation\Crontab;
-use Throwable;
 
 #[Crontab(
     rule: '0 3 * * *',
@@ -29,7 +28,6 @@ final class SkillMarketVectorIndexDailySyncCrontab
 
     public function __construct(
         private readonly AdminSkillAppService $skillAppService,
-        private readonly SkillMarketVectorIndexDomainService $vectorIndexDomainService,
     ) {
     }
 
@@ -41,33 +39,11 @@ final class SkillMarketVectorIndexDailySyncCrontab
             return;
         }
 
-        $removed = 0;
-        try {
-            $removed = $this->vectorIndexDomainService->removeOrphanPoints();
-        } catch (Throwable $throwable) {
-            $this->logger->error('Skill market orphan vector cleanup failed', [
-                'organization_code' => $organizationCode,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ]);
-        }
-
-        $queued = 0;
-        try {
-            $result = $this->skillAppService->reindexAllMarketVectors($organizationCode, 'system');
-            $queued = $result['queued'] ?? 0;
-        } catch (Throwable $throwable) {
-            $this->logger->error('Skill market vector daily sync failed', [
-                'organization_code' => $organizationCode,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ]);
-        }
-
-        $this->logger->info('Skill market vector daily sync finished', [
-            'organization_code' => $organizationCode,
-            'removed_orphans' => $removed,
-            'queued' => $queued,
-        ]);
+        $dataIsolation = new SkillDataIsolation();
+        $dataIsolation->setCurrentOrganizationCode($organizationCode);
+        $dataIsolation->setCurrentUserId('system');
+        $dataIsolation->setOfficialOrganizationCodes([$organizationCode]);
+        $dataIsolation->setContainOfficialOrganization(true);
+        $this->skillAppService->reconcileMarketVectorIndex($dataIsolation);
     }
 }

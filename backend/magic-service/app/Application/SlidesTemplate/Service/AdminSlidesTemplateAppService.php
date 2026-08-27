@@ -31,7 +31,6 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\SlidesTemplate\DTO\Request\AdminQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveSlidesTemplateRequest;
-use App\Interfaces\SlidesTemplate\DTO\Request\SlidesTemplateVectorReindexRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\UpdateSlidesTemplateTagsRequest;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
@@ -276,47 +275,66 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         ));
     }
 
-    /**
-     * Query templates page by page and queue a resumable or forced full vector rebuild.
-     *
-     * @return array{task_id: string, queued: int, after_id: string}
-     */
-    public function reindexVectorIndex(
-        Authenticatable|BaseDataIsolation $authorization,
-        SlidesTemplateVectorReindexRequest $request
-    ): array {
+    /** Run the complete vector-index reconciliation for the official templates. */
+    public function reindexVectorIndex(Authenticatable|BaseDataIsolation $authorization): array
+    {
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
-        $organizationCode = $request->getOrganizationCode() ?? $dataIsolation->getCurrentOrganizationCode();
-        if (! in_array($organizationCode, $dataIsolation->getOfficialOrganizationCodes(), true)) {
-            ExceptionBuilder::throw(SlidesTemplateErrorCode::ONLY_OFFICIAL_ORGANIZATION_CAN_MANAGE);
+        return $this->reconcileVectorIndex($dataIsolation);
+    }
+
+    /** Clean orphan points and queue every official template for reconciliation. */
+    public function reconcileVectorIndex(SlidesTemplateDataIsolation $dataIsolation): array
+    {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $removed = 0;
+        try {
+            $removed = $this->slidesTemplateVectorIndexDomainService->removeOrphanPoints($dataIsolation, $organizationCode);
+        } catch (Throwable $throwable) {
+            $this->logger->error('Slides template orphan vector cleanup failed', [
+                'organization_code' => $organizationCode,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
         }
-        return $this->queueVectorReindex(
-            $dataIsolation,
-            $organizationCode,
-            $request->getTemplateIds(),
-            $request->getCategoryCode(),
-            $request->getTagCodes(),
-            $request->getTagMatch(),
-            $request->getAfterId(),
-            $request->getBatchSize(),
-            $request->isForce(),
-        );
+
+        $queued = 0;
+        try {
+            $result = $this->queueOfficialVectorReindex($dataIsolation, forceReEmbedding: false);
+            $queued = $result['queued'] ?? 0;
+        } catch (Throwable $throwable) {
+            $this->logger->error('Slides template vector reconciliation failed', [
+                'organization_code' => $organizationCode,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+
+        $this->logger->info('Slides template vector reconciliation finished', [
+            'organization_code' => $organizationCode,
+            'removed_orphans' => $removed,
+            'queued' => $queued,
+        ]);
+
+        return ['removed_orphans' => $removed, 'queued' => $queued];
     }
 
     /** Queue a full official-template vector rebuild for an internal system event. */
-    public function reindexOfficialVectorIndex(string $organizationCode, bool $forceReEmbedding = true): array
-    {
-        $dataIsolation = new SlidesTemplateDataIsolation();
-        $dataIsolation->setCurrentOrganizationCode($organizationCode);
-        $dataIsolation->setCurrentUserId('system');
-        $dataIsolation->setOfficialOrganizationCodes([$organizationCode]);
-        $dataIsolation->setContainOfficialOrganization(true);
+    public function reindexOfficialVectorIndex(
+        SlidesTemplateDataIsolation $dataIsolation,
+        bool $forceReEmbedding = true,
+    ): array {
+        return $this->queueOfficialVectorReindex($dataIsolation, $forceReEmbedding);
+    }
 
+    private function queueOfficialVectorReindex(
+        SlidesTemplateDataIsolation $dataIsolation,
+        bool $forceReEmbedding,
+    ): array {
         return $this->queueVectorReindex(
             $dataIsolation,
-            $organizationCode,
+            $dataIsolation->getCurrentOrganizationCode(),
             [],
             null,
             [],

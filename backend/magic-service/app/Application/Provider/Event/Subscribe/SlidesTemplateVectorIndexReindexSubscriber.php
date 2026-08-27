@@ -11,6 +11,7 @@ use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Event\AiAbilityUpdatedEvent;
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
@@ -54,8 +55,13 @@ final readonly class SlidesTemplateVectorIndexReindexSubscriber implements Liste
         }
 
         try {
+            $dataIsolation = new SlidesTemplateDataIsolation();
+            $dataIsolation->setCurrentOrganizationCode($organizationCode);
+            $dataIsolation->setCurrentUserId('system');
+            $dataIsolation->setOfficialOrganizationCodes([$organizationCode]);
+            $dataIsolation->setContainOfficialOrganization(true);
             $result = $this->adminSlidesTemplateAppService->reindexOfficialVectorIndex(
-                $organizationCode,
+                $dataIsolation,
                 forceReEmbedding: true,
             );
             $this->logger->info('Slides template full vector sync queued after embedding ability update', [

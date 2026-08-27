@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Skill\Service\AdminSkillAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Event\AiAbilityUpdatedEvent;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
@@ -54,11 +55,12 @@ final readonly class SkillMarketVectorIndexReindexSubscriber implements Listener
             return;
         }
         try {
-            $result = $this->adminSkillAppService->reindexAllMarketVectors(
-                $organizationCode,
-                'system',
-                forceReEmbedding: true,
-            );
+            $dataIsolation = new SkillDataIsolation();
+            $dataIsolation->setCurrentOrganizationCode($organizationCode);
+            $dataIsolation->setCurrentUserId('system');
+            $dataIsolation->setOfficialOrganizationCodes([$organizationCode]);
+            $dataIsolation->setContainOfficialOrganization(true);
+            $result = $this->adminSkillAppService->reindexAllMarketVectors($dataIsolation, forceReEmbedding: true);
             $this->logger->info('Skill market full vector sync queued after embedding ability update', [
                 'organization_code' => $organizationCode,
                 'queued' => $result['queued'] ?? 0,

@@ -26,12 +26,13 @@ use App\Domain\SuperMagic\Skill\Event\SkillMarketUpdatedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
+use App\Domain\SuperMagic\Skill\Service\SkillMarketVectorIndexDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
 use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\RequestContext;
-use App\Interfaces\Admin\SuperMagic\Skill\DTO\Request\ReindexSkillMarketsRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillMarketsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ReviewOrganizationSkillVersionRequestDTO;
@@ -48,6 +49,8 @@ use Throwable;
  */
 class AdminSkillAppService extends AbstractSkillAppService
 {
+    use HasLogger;
+
     private const VECTOR_REINDEX_EVENT_BATCH_SIZE = 100;
 
     public function __construct(
@@ -57,6 +60,7 @@ class AdminSkillAppService extends AbstractSkillAppService
         protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
         private readonly ResourceVisibilityDomainService $resourceVisibilityDomainService,
         private readonly AdminSkillAssembler $adminSkillAssembler,
+        private readonly SkillMarketVectorIndexDomainService $skillMarketVectorIndexDomainService,
     ) {
     }
 
@@ -125,45 +129,65 @@ class AdminSkillAppService extends AbstractSkillAppService
         );
     }
 
-    /** Queue all matching market records for asynchronous vector reindexing. */
-    public function reindexMarketVectors(
-        RequestContext $requestContext,
-        ReindexSkillMarketsRequestDTO $requestDTO,
-    ): array {
+    /** Run the complete vector-index reconciliation for the current Skill market. */
+    public function reindexMarketVectors(RequestContext $requestContext): array
+    {
         $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
+        return $this->reconcileMarketVectorIndex($dataIsolation);
+    }
 
-        return $this->reindexAllMarketVectors(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId(),
-            $requestDTO->getCategoryIds(),
-            $requestDTO->getCodes(),
-            $requestDTO->getPublisherType(),
-            $requestDTO->getAfterId(),
-            $requestDTO->getBatchSize(),
-        );
+    /** Clean orphan points and queue every visible market Skill for reconciliation. */
+    public function reconcileMarketVectorIndex(SkillDataIsolation $dataIsolation): array
+    {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $removed = 0;
+        try {
+            $removed = $this->skillMarketVectorIndexDomainService->removeOrphanPoints();
+        } catch (Throwable $throwable) {
+            $this->logger->error('Skill market orphan vector cleanup failed', [
+                'organization_code' => $organizationCode,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+
+        $queued = 0;
+        try {
+            $result = $this->reindexAllMarketVectors($dataIsolation);
+            $queued = $result['queued'] ?? 0;
+        } catch (Throwable $throwable) {
+            $this->logger->error('Skill market vector reconciliation failed', [
+                'organization_code' => $organizationCode,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+
+        $this->logger->info('Skill market vector reconciliation finished', [
+            'organization_code' => $organizationCode,
+            'removed_orphans' => $removed,
+            'queued' => $queued,
+        ]);
+
+        return ['removed_orphans' => $removed, 'queued' => $queued];
     }
 
     /** Queue all matching market records without requiring an HTTP request context. */
     public function reindexAllMarketVectors(
-        string $organizationCode,
-        string $operatorId,
-        array $categoryIds = [],
-        array $codes = [],
-        ?string $publisherType = null,
-        string $afterId = '0',
-        int $batchSize = 100,
+        SkillDataIsolation $dataIsolation,
         bool $forceReEmbedding = false,
     ): array {
-        $batchSize = min(100, max(1, $batchSize));
-        $afterId = $forceReEmbedding ? '0' : $afterId;
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $operatorId = $dataIsolation->getCurrentUserId();
+        $batchSize = self::VECTOR_REINDEX_EVENT_BATCH_SIZE;
         $queued = 0;
-        $nextAfterId = $afterId;
+        $nextAfterId = '0';
 
         while (true) {
             $ids = $this->skillMarketDomainService->findVectorIndexIds(
-                $categoryIds,
-                $codes,
-                $publisherType,
+                [],
+                [],
+                null,
                 $nextAfterId,
                 $batchSize,
             );
@@ -181,12 +205,12 @@ class AdminSkillAppService extends AbstractSkillAppService
             }
 
             $queued += count($ids);
+            $previousAfterId = $nextAfterId;
             $lastId = (string) $ids[array_key_last($ids)];
             $nextAfterId = $lastId;
-            if (count($ids) < $batchSize || $lastId === $afterId) {
+            if (count($ids) < $batchSize || $lastId === $previousAfterId) {
                 break;
             }
-            $afterId = $lastId;
         }
 
         return [
