@@ -194,6 +194,31 @@ class OdinQdrantVectorStore implements VectorStoreInterface
         }, $result, array_keys($result));
     }
 
+    public function scrollPoints(string $collectionName, int $limit = 100, ?string $offset = null): array
+    {
+        $result = $this->points->scrollPoints(
+            collectionName: $collectionName,
+            limit: max(1, $limit),
+            offset: $offset === null ? null : new ExtendedPointId($this->toQdrantPointId($offset)),
+        );
+
+        return [
+            'points' => array_map(
+                static fn (Record $record): PointInfo => new PointInfo(
+                    (string) $record->id->id,
+                    '',
+                    0,
+                    $record->payload ?? [],
+                    $record->vector->vector ?? [],
+                ),
+                $result['points'],
+            ),
+            'next_page_offset' => $result['next_page_offset'] === null
+                ? null
+                : (string) $result['next_page_offset'],
+        ];
+    }
+
     /**
      * Qdrant accepts numeric point IDs only as unsigned JSON integers; numeric strings are rejected.
      * Keep UUIDs as strings so this store remains compatible with non-numeric resources.

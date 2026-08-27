@@ -50,4 +50,7 @@ interface VectorStoreInterface
      * @return array<PointInfo>
      */
     public function queryPoints(string $collectionName, int $limit = 10, array $payloadFilter = []): array;
+
+    /** @return array{points: PointInfo[], next_page_offset: null|int|string} */
+    public function scrollPoints(string $collectionName, int $limit = 100, ?string $offset = null): array;
 }

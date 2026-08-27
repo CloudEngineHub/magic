@@ -70,6 +70,58 @@ final class SlidesTemplateVectorIndexDomainService
         return $available;
     }
 
+    /** Remove Qdrant points that no longer represent enabled official templates. */
+    public function removeOrphanPoints(SlidesTemplateDataIsolation $dataIsolation, string $organizationCode): int
+    {
+        $collectionName = $this->collectionName();
+        if ($this->vectorStore->getCollection($collectionName) === null) {
+            return 0;
+        }
+
+        $removed = 0;
+        $offset = null;
+        while (true) {
+            $page = $this->vectorStore->scrollPoints($collectionName, 200, $offset);
+            $pointIds = array_values(array_unique(array_map(
+                static fn ($point): string => (string) $point->id,
+                $page['points'],
+            )));
+
+            if ($pointIds !== []) {
+                $existingIds = [];
+                foreach ($this->slidesTemplateRepository->findVisibleByIds($dataIsolation, $pointIds) as $template) {
+                    if ($template->getOwnerType()->isOfficial()
+                        && $template->getOrganizationCode() === $organizationCode) {
+                        $existingIds[(string) $template->getId()] = true;
+                    }
+                }
+
+                $orphanIds = array_values(array_filter(
+                    $pointIds,
+                    static fn (string $pointId): bool => ! isset($existingIds[$pointId]),
+                ));
+                if ($orphanIds !== []) {
+                    $this->vectorStore->removePoints($collectionName, $orphanIds);
+                    $removed += count($orphanIds);
+                    $this->logger->info('Slides template orphan vector points removed', [
+                        'collection_name' => $collectionName,
+                        'point_ids' => $orphanIds,
+                        'batch_removed' => count($orphanIds),
+                        'total_removed' => $removed,
+                    ]);
+                }
+            }
+
+            $nextOffset = $page['next_page_offset'];
+            if ($nextOffset === null || $nextOffset === $offset || $pointIds === []) {
+                break;
+            }
+            $offset = $nextOffset;
+        }
+
+        return $removed;
+    }
+
     /** Read the latest template state and apply the smallest required index update. */
     public function sync(
         SlidesTemplateDataIsolation $dataIsolation,

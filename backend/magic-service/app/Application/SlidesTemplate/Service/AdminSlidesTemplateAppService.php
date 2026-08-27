@@ -306,7 +306,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
     }
 
     /** Queue a full official-template vector rebuild for an internal system event. */
-    public function reindexOfficialVectorIndex(string $organizationCode): array
+    public function reindexOfficialVectorIndex(string $organizationCode, bool $forceReEmbedding = true): array
     {
         $dataIsolation = new SlidesTemplateDataIsolation();
         $dataIsolation->setCurrentOrganizationCode($organizationCode);
@@ -323,7 +323,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
             'any',
             '0',
             self::VECTOR_REINDEX_EVENT_BATCH_SIZE,
-            true,
+            $forceReEmbedding,
         );
     }
 
