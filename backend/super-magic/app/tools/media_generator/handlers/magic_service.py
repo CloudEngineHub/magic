@@ -143,6 +143,7 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
 
             deadline = time.monotonic() + self._POLL_TIMEOUT_SECONDS
             query_url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks/{task_id}"
+            last_logged_status: str | None = None
 
             while True:
                 async with session.get(
@@ -155,9 +156,6 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                         )
 
                     task_data = await response.json()
-                    logger.info(
-                        f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
-                    )
                     if not isinstance(task_data, dict):
                         raise Exception(
                             f"Unexpected generation task query response format. "
@@ -165,6 +163,12 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                         )
 
                 status = str(task_data.get("status") or "").strip().lower()
+                if status != last_logged_status:
+                    logger.info(
+                        f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
+                    )
+                    last_logged_status = status
+
                 if status == "failed":
                     error = task_data.get("error") if isinstance(task_data.get("error"), dict) else {}
                     code = error.get("code")
