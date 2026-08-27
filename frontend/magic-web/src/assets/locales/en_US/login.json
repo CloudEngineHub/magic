@@ -41,6 +41,8 @@
 	},
 	"emailLogin": "Email",
 	"enterVerificationCode": "Enter phone number verification code",
+	"feishuLogin": "Feishu Login",
+	"feishuLoginTip": "Sign in with your Feishu account",
 	"findPassword": "Retrieve password",
 	"googleLogin": "Google Login",
 	"hi": "👋 Hi, my friend",
