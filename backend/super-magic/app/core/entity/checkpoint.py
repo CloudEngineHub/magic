@@ -20,6 +20,12 @@ class VirtualCheckpoint:
     """Checkpoint常量定义"""
     INITIAL = "__INITIAL__"  # 初始状态
 
+
+# magicfs 分区布局中的话题空间标识。流水条目的 space 字段等于该值时，
+# 条目属于聊天历史（checkpoint 内部状态）：随 checkpoint 恢复，
+# 但不应进入用户可见的文件变更列表与文件版本链路。
+TOPIC_SPACE = "topic"
+
 class FileOperation(str, Enum):
     """文件操作类型枚举"""
     CREATED = "created"

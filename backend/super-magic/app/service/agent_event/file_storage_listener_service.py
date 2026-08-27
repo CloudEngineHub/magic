@@ -36,7 +36,6 @@ from agentlang.logger import get_logger
 from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import Attachment, AttachmentTag
-from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType
 from app.core.entity.event.file_event import FileEventData  # 从业务层导入 FileEventData
 from app.core.entity.project_archive import ArchiveDetail, ProjectArchiveInfo
 from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
@@ -946,6 +945,7 @@ class FileStorageListenerService:
         FILE_UPDATED 事件。
 
         过滤规则:
+        - 只收集项目空间条目；topic 空间（聊天历史等内部状态）不出现在用户可见变更里
         - 跳过目录快照 (版本与 attachment 都只针对文件)
         - 跳过 DELETED 操作 (文件已不存在，无法构造 attachment)
         - 跳过任一路径段以 "." 开头的隐藏路径，覆盖工具和 Agent 生成的隐藏目录
@@ -1019,54 +1019,24 @@ class FileStorageListenerService:
     @staticmethod
     def _collect_changed_file_paths(file_snapshots: List[FileSnapshot]) -> List[str]:
         """
-        从 checkpoint 的 file_snapshots 中挑出需要构造 attachment 的文件路径。
+        从 checkpoint 流水中挑出需要构造 attachment 的文件路径。
+
+        选择逻辑（含空间过滤：topic/聊天历史条目不呈现给用户、目录与删除跳过、
+        隐藏路径过滤）委托 infrastructure 层纯函数，便于单测直接覆盖；
+        本方法保留仅为调用点稳定。
 
         Args:
-            file_snapshots: checkpoint_info.file_snapshots
+            file_snapshots: 聚合后的 checkpoint_info.file_snapshots
 
         Returns:
             List[str]: 按首次出现顺序去重后的文件路径列表；workspace 内文件为
             相对路径，跨项目挂载（referenced-projects）文件为 agent 视角绝对路径
         """
-        seen: set = set()
-        ordered: List[str] = []
-        for snapshot in file_snapshots:
-            if snapshot.file_type == FileType.DIRECTORY:
-                continue
-            if snapshot.operation == FileOperation.DELETED:
-                continue
-            # rename 不改内容，跳过以避免触发不必要的 create_file_version；
-            # 若同一 file_id 后续在同一 checkpoint 内出现 UPDATED，仍会进列表
-            # （seen 按 file_path 去重，RENAMED 不会提前占用新路径）。
-            if snapshot.operation == FileOperation.RENAMED:
-                continue
+        from app.infrastructure.checkpoint.attachment_candidates import (
+            select_changed_attachment_paths,
+        )
 
-            path = snapshot.file_path
-            if path in seen:
-                continue
-
-            if FileStorageListenerService._is_hidden_path(path):
-                continue
-
-            seen.add(path)
-            ordered.append(path)
-        return ordered
-
-    @staticmethod
-    def _is_hidden_path(path: str) -> bool:
-        """
-        判断路径是否属于隐藏路径 (任一路径段以 "." 开头)。
-
-        用于过滤由工具或 Agent 自动生成、不应出现在"本轮变更附件"列表里的隐藏产物。
-        """
-        normalized = path.replace("\\", "/").lstrip("/")
-        if not normalized:
-            return False
-        for segment in normalized.split("/"):
-            if segment.startswith("."):
-                return True
-        return False
-
+        return select_changed_attachment_paths(file_snapshots)
     @staticmethod
     def _build_attachment(
         filepath: str,
