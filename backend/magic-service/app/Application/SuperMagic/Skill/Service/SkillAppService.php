@@ -743,17 +743,6 @@ class SkillAppService extends AbstractSkillAppService
             throw $throwable;
         }
 
-        if ($publishResult->version->getPublishStatus()->isPublished()) {
-            $market = $this->skillMarketDomainService->findStoreSkillBySkillCode($code);
-            if ($market !== null && $market->getId() !== null) {
-                AsyncEventUtil::dispatch(new SkillMarketOfflineEvent(
-                    (string) $market->getId(),
-                    $market->getOrganizationCode(),
-                    $dataIsolation->getCurrentUserId(),
-                ));
-            }
-        }
-
         return $publishResult;
     }
 

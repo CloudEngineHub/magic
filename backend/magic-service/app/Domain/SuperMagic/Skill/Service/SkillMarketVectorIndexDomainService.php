@@ -142,6 +142,21 @@ final class SkillMarketVectorIndexDomainService
             return;
         }
 
+        $collectionName = $this->collectionName();
+        $collection = $this->vectorStore->getCollection($collectionName);
+        $embeddingModel = $this->embeddingGenerator->getDefaultModel(
+            SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
+        );
+        if ($collection !== null && $collection->vectorSize !== $embeddingModel->getVectorSize()) {
+            $this->logger->error('Skill market vector sync stopped because embedding dimensions do not match', [
+                'resource_id' => $resourceId,
+                'collection_name' => $collectionName,
+                'collection_vector_size' => $collection->vectorSize,
+                'embedding_vector_size' => $embeddingModel->getVectorSize(),
+            ]);
+            throw new RuntimeException('Skill market embedding dimension does not match the vector collection');
+        }
+
         $categories = $this->findCategories($market);
         $semanticText = SkillMarketSearchTextBuilder::buildSemanticText($market, $categories);
         if ($semanticText === '') {
@@ -149,7 +164,6 @@ final class SkillMarketVectorIndexDomainService
         }
 
         $payload = $this->buildPayload($market, $categories, $semanticText);
-        $collectionName = $this->collectionName();
         $pointId = (string) $market->getId();
         $existingPoint = $this->vectorStore->getPoint($collectionName, $pointId);
 
@@ -214,24 +228,58 @@ final class SkillMarketVectorIndexDomainService
             return [];
         }
 
-        $points = $this->vectorStore->searchPoints(
-            $this->collectionName(),
-            $embedding,
-            $page->getPageNum(),
-            (float) config('vector_index.resources.skill_market.score_threshold', 0.4),
-            $this->buildFilter($query),
-            $page->getSliceStart(),
-        );
-        $ids = array_values(array_map(static fn ($point): string => (string) $point->id, $points));
-        if ($ids === []) {
-            return [];
-        }
+        $pageSize = $page->getPageNum();
+        $matchedOffset = $page->getSliceStart();
+        $candidateOffset = 0;
+        $matchedCount = 0;
+        $results = [];
+        $seenIds = [];
+        $filter = $this->buildFilter($query);
+        $scoreThreshold = (float) config('vector_index.resources.skill_market.score_threshold', 0.4);
 
-        $markets = $this->skillMarketRepository->findVisibleByIds($ids);
-        return array_values(array_filter(array_map(
-            static fn (string $id): ?SkillMarketEntity => $markets[(int) $id] ?? null,
-            $ids,
-        )));
+        do {
+            $points = $this->vectorStore->searchPoints(
+                $this->collectionName(),
+                $embedding,
+                $pageSize,
+                $scoreThreshold,
+                $filter,
+                $candidateOffset,
+            );
+            if ($points === []) {
+                break;
+            }
+            $candidateOffset += count($points);
+
+            $ids = [];
+            foreach ($points as $point) {
+                $id = (string) $point->id;
+                if (! isset($seenIds[$id])) {
+                    $seenIds[$id] = true;
+                    $ids[] = $id;
+                }
+            }
+            if ($ids === []) {
+                continue;
+            }
+
+            $markets = $this->skillMarketRepository->findVisibleByIds($ids);
+            foreach ($ids as $id) {
+                $market = $markets[(int) $id] ?? null;
+                if (! $market instanceof SkillMarketEntity) {
+                    continue;
+                }
+                if ($matchedCount++ < $matchedOffset) {
+                    continue;
+                }
+                $results[] = $market;
+                if (count($results) >= $pageSize) {
+                    break 2;
+                }
+            }
+        } while (count($points) === $pageSize);
+
+        return $results;
     }
 
     /** Return whether the shared knowledge-base embedding ability is enabled. */

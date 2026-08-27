@@ -44,12 +44,20 @@ final readonly class SlidesTemplateVectorIndexReindexSubscriber implements Liste
         }
 
         $organizationCode = $event->newEntity->getOrganizationCode();
-        if ($organizationCode !== OfficialOrganizationUtil::getOfficialOrganizationCode()) {
+        $officialOrganizationCode = OfficialOrganizationUtil::getOfficialOrganizationCode();
+        if ($organizationCode !== $officialOrganizationCode) {
+            $this->logger->info('Slides template vector reindex skipped for non-official organization', [
+                'organization_code' => $organizationCode,
+                'official_organization_code' => $officialOrganizationCode,
+            ]);
             return;
         }
 
         try {
-            $result = $this->adminSlidesTemplateAppService->reindexOfficialVectorIndex($organizationCode);
+            $result = $this->adminSlidesTemplateAppService->reindexOfficialVectorIndex(
+                $organizationCode,
+                forceReEmbedding: true,
+            );
             $this->logger->info('Slides template full vector sync queued after embedding ability update', [
                 'organization_code' => $organizationCode,
                 'queued' => $result['queued'] ?? 0,

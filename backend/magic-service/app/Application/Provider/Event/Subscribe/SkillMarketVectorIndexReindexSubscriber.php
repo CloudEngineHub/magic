@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Skill\Service\AdminSkillAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Event\AiAbilityUpdatedEvent;
+use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
@@ -44,6 +45,14 @@ final readonly class SkillMarketVectorIndexReindexSubscriber implements Listener
         }
 
         $organizationCode = $event->newEntity->getOrganizationCode();
+        $officialOrganizationCode = OfficialOrganizationUtil::getOfficialOrganizationCode();
+        if ($organizationCode !== $officialOrganizationCode) {
+            $this->logger->info('Skill market vector reindex skipped for non-official organization', [
+                'organization_code' => $organizationCode,
+                'official_organization_code' => $officialOrganizationCode,
+            ]);
+            return;
+        }
         try {
             $result = $this->adminSkillAppService->reindexAllMarketVectors(
                 $organizationCode,

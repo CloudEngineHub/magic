@@ -165,6 +165,19 @@ final class SlidesTemplateVectorIndexDomainService
             return;
         }
 
+        $collectionName = $this->collectionName();
+        $collection = $this->vectorStore->getCollection($collectionName);
+        $embeddingModel = $this->embeddingGenerator->getDefaultModel($dataIsolation);
+        if ($collection !== null && $collection->vectorSize !== $embeddingModel->getVectorSize()) {
+            $this->logger->error('Slides template vector sync stopped because embedding dimensions do not match', [
+                'resource_id' => $resourceId,
+                'collection_name' => $collectionName,
+                'collection_vector_size' => $collection->vectorSize,
+                'embedding_vector_size' => $embeddingModel->getVectorSize(),
+            ]);
+            throw new RuntimeException('Slides template embedding dimension does not match the vector collection');
+        }
+
         $tagMap = $this->slidesTemplateTagRelationRepository->findTagsByTemplateIds(
             $dataIsolation,
             [(int) $template->getId()],
@@ -182,7 +195,6 @@ final class SlidesTemplateVectorIndexDomainService
             'search_text' => $searchText,
         ]);
 
-        $collectionName = $this->collectionName();
         $existingPoint = $this->vectorStore->getPoint($collectionName, (string) $template->getId());
         if ($existingPoint !== null) {
             // Re-embed only when search text changes or a model migration forces it.
