@@ -61,7 +61,7 @@ checkpoint 数据保存在 `.checkpoints/`，由 magicfs 的 checkpoint hook 统
 
 checkpoint 由主 Agent 创建：每个用户回合开始前登记新 checkpoint 并写入簿记，此后 magicfs 自动对挂载内的变更入账。会话期间的消息追加不触发任何 Python 侧快照复制。
 
-回滚时 `RollbackExecutor` 读聚合后的流水：工作区回放非 topic 条目，聊天历史回放 `space=topic` 条目，共用同一套 operation 感知重放——反向（undo）用 initial 帧、正向（redo）用 latest 帧。文件版本创建只针对非 topic 条目。未被帧追踪的杂散文件保持现状；无分区的旧格式 checkpoint 视为空条目，降级跳过并告警，随 max_count 自然淘汰。
+回滚时 `RollbackExecutor` 读聚合后的流水：工作区回放非 topic 条目，聊天历史回放 `space=topic` 条目，共用同一套 operation 感知重放——反向（undo）用 initial 帧、正向（redo）用 latest 帧。文件版本创建只针对非 topic 条目。未被帧追踪的杂散文件保持现状；某空间没有 operations.json 时视为该空间无条目。
 
 聊天历史帧包括：
 

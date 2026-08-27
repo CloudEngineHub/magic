@@ -224,8 +224,8 @@ async def test_missing_topic_frames_skips_gracefully(world: FrameWorld):
     assert success is True
 
 
-async def test_empty_space_entry_resolves_to_project_partition(world: FrameWorld, monkeypatch, tmp_path):
-    """防御口径：space 为空串的历史残留条目按 project 分区解析帧、按 workspace 根解析恢复目标。"""
+async def test_relative_path_entry_resolves_to_workspace(world: FrameWorld, monkeypatch, tmp_path):
+    """相对路径条目（space 为空串）按 project 分区解析帧、按 workspace 根解析恢复目标。"""
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     monkeypatch.setattr(PathManager, "get_workspace_dir", classmethod(lambda cls: workspace_root), raising=True)
@@ -234,8 +234,8 @@ async def test_empty_space_entry_resolves_to_project_partition(world: FrameWorld
     world.add_frames("C2", [
         _make_snapshot("5555", "legacy.txt", FileOperation.UPDATED, space=""),
     ])
-    # 空串与 None 同样解析到 project 分区（storage 口径），帧写在那里才能命中
     world.write_frame("C2", "5555", initial=b"legacy old", latest=b"legacy new", space="project")
+
     executor = world.build_executor("backward", ["C2"])
     success, _ = await executor.start_rollback("C1")
     assert success is True

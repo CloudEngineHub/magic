@@ -114,7 +114,7 @@ class CheckpointStorage:
         Args:
             checkpoint_id: checkpoint ID
             file_id: 文件稳定 ID（Snowflake），快照目录以 file_id 为名
-            space: 流水条目记录的空间；None 时退回第一个已知空间（旧签名兼容）
+            space: 流水条目记录的空间；None 时按 project 解析
         """
         resolved_space = space if space else KNOWN_SPACES[0]
         return self.get_space_initial_content_file_path(checkpoint_id, file_id, resolved_space)
@@ -125,7 +125,7 @@ class CheckpointStorage:
         Args:
             checkpoint_id: checkpoint ID
             file_id: 文件稳定 ID（Snowflake），快照目录以 file_id 为名
-            space: 流水条目记录的空间；None 时退回第一个已知空间（旧签名兼容）
+            space: 流水条目记录的空间；None 时按 project 解析
         """
         resolved_space = space if space else KNOWN_SPACES[0]
         return self.get_space_latest_content_file_path(checkpoint_id, file_id, resolved_space)
