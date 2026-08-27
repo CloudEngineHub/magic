@@ -47,6 +47,7 @@ return [
 
     // File version related
     'cannot_version_directory' => 'Cannot create version for directory',
+    'cannot_version_file' => 'Cannot create version for this file space',
     'version_create_failed' => 'Failed to create file version',
     'access_denied' => 'Access denied',
 

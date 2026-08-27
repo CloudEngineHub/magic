@@ -82,6 +82,8 @@ return [
     ],
     'task' => [
         'prompt_length_exceeded' => 'Teks input terlalu panjang. Sila muat naik sebagai fail dan rujuk dalam dialog.',
+        'sandbox_init_failed' => 'Ralat persekitaran runtime. Sila cuba lagi kemudian.',
+        'chat_task_start_failed' => 'Gagal memulakan tugas. Sila cuba lagi kemudian.',
     ],
     'magic_claw' => [
         'create_system_error' => 'Ralat sistem berlaku. Sila cuba lagi kemudian.',

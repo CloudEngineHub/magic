@@ -159,6 +159,8 @@ return [
     ],
     'task' => [
         'prompt_length_exceeded' => '输入文本过长，建议以文件形式上传后，在对话框中进行引用。',
+        'sandbox_init_failed' => '运行环境异常，请稍后重试。',
+        'chat_task_start_failed' => '任务启动失败，请稍后重试。',
     ],
     'magic_claw' => [
         'create_system_error' => '系统出现异常，请稍后重试。',

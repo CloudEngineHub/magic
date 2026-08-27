@@ -26,7 +26,7 @@ return [
     'task' => [
         'tool_message' => [
             'object_storage_enabled' => \Hyperf\Support\env('TOOL_MESSAGE_OBJECT_STORAGE_ENABLED', true),
-            'min_content_length' => \Hyperf\Support\env('TOOL_MESSAGE_MIN_CONTENT_LENGTH', 200),
+            'min_content_length' => \Hyperf\Support\env('TOOL_MESSAGE_MIN_CONTENT_LENGTH', 1024),
         ],
         'check_task_crontab' => [
             'enabled' => \Hyperf\Support\env('CHECK_TASK_CRONTAB_ENABLED', true),

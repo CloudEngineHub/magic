@@ -167,7 +167,7 @@ class FileService(Base):
 
         Args:
             file_key: The file path/key to get version history for
-            git_directory: The git directory to use (e.g., '.workspace', '.chat_history').
+            git_directory: The git directory to use (e.g., '.workspace', '.topic/chat_history').
                           If None, uses the project root.
 
         Returns:
@@ -364,7 +364,7 @@ class FileService(Base):
         Args:
             file_key: The file path/key to get content for
             commit_hash: The commit hash to get file from
-            git_directory: The git directory to use (e.g., '.workspace', '.chat_history').
+            git_directory: The git directory to use (e.g., '.workspace', '.topic/chat_history').
                           If None, uses the project root.
 
         Returns:

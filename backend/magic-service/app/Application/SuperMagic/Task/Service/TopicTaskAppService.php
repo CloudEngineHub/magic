@@ -579,9 +579,9 @@ class TopicTaskAppService extends AbstractAppService
                         }
 
                         // Create file record
-                        $storageType = StorageType::tryFrom(
+                        $storageType = StorageType::fromValue(
                             (string) ($fileInfoMap[$missingFileKey]['storage_type'] ?? '')
-                        )->value ?? StorageType::WORKSPACE->value;
+                        )->value;
                         $fileInfoMap[$missingFileKey]['storage_type'] = $storageType;
                         $fallbackFileEntity = $this->taskFileDomainService->convertMessageAttachmentToTaskFileEntity($fileInfoMap[$missingFileKey], $task);
                         $this->logger->debug(sprintf(
@@ -1252,13 +1252,21 @@ class TopicTaskAppService extends AbstractAppService
             $taskMessageEntity->setTool($tool);
         }
 
+        // super-magic may already have persisted the detail on the topic
+        // volume.  A file_id is authoritative; never upload the same tool
+        // detail again even if an older/newer producer accidentally retained
+        // inline content alongside it.
+        if (! empty($tool['detail']['data']['file_id'])) {
+            return;
+        }
+
         // If content is empty, return early
         if (empty($content)) {
             return;
         }
 
         // 检查内容长度是否达到阈值
-        $minContentLength = config('super-magic.task.tool_message.min_content_length', 500);
+        $minContentLength = config('super-magic.task.tool_message.min_content_length', 1024);
         if (strlen($content) < $minContentLength) {
             return;
         }

@@ -78,7 +78,8 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		RetrySendSuperAgentExtra | undefined
+		| RetrySendSuperAgentExtra
+		| undefined
 
 	return {
 		value: retryPayload.content,

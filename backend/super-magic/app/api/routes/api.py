@@ -6,7 +6,9 @@ API路由集中注册模块
 """
 from fastapi import APIRouter
 
-from app.api.routes.chat_history import router as chat_history_router
+# 暂时下线 `/api/chat-history/download`：仓库内未发现调用方，且该接口会导出当前
+# sandbox 的完整聊天历史。观察期内保留实现，确认无反馈后删除 chat_history.py。
+# from app.api.routes.chat_history import router as chat_history_router
 from app.api.routes.messages import router as messages_router
 from app.api.routes.workspace import router as workspace_router
 from app.api.routes.file import router as file_router
@@ -29,8 +31,8 @@ api_router = APIRouter(prefix="/api")
 # 注册消息处理路由
 api_router.include_router(messages_router, tags=["消息处理"])
 
-# 注册聊天历史路由
-api_router.include_router(chat_history_router, tags=["聊天历史"])
+# 暂时不注册聊天历史下载路由。保留上方注释和实现，便于观察期回滚；确认无调用方后删除。
+# api_router.include_router(chat_history_router, tags=["聊天历史"])
 
 # 注册工作区管理路由
 api_router.include_router(workspace_router, tags=["工作区管理"])
