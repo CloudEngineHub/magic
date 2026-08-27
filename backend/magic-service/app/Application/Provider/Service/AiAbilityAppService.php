@@ -13,7 +13,7 @@ use App\Application\Provider\DTO\AiAbilityListDTO;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Query\AiAbilityQuery;
-use App\Domain\Provider\Event\AiAbilityUpdatedEvent;
+use App\Domain\Provider\Event\KnowledgeBaseEmbeddingModelUpdatedEvent;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Domain\Provider\Service\ProviderModelDomainService;
 use App\ErrorCode\ServiceProviderErrorCode;
@@ -118,9 +118,11 @@ class AiAbilityAppService extends AbstractKernelAppService
             return false;
         }
 
-        $newEntity = $this->aiAbilityDomainService->getByCode($dataIsolation, $code);
-        if ($newEntity !== null) {
-            AsyncEventUtil::dispatch(new AiAbilityUpdatedEvent($oldEntity, $newEntity));
+        if ($code === AiAbilityCode::KnowledgeBaseEmbeddingModel) {
+            $newEntity = $this->aiAbilityDomainService->getByCode($dataIsolation, $code);
+            if ($newEntity !== null) {
+                AsyncEventUtil::dispatch(new KnowledgeBaseEmbeddingModelUpdatedEvent($oldEntity, $newEntity));
+            }
         }
 
         return true;
