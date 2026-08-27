@@ -7,11 +7,15 @@ import type {
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import { cloneCanvasConnections } from "@/components/CanvasDesign/runtime/document/connectionIndex"
 import {
+	getElementContentFields,
 	normalizeLegacyHighImageTaskMeta,
 	supportsVisualUnderstanding,
 } from "@/components/CanvasDesign/runtime/document/elementContent"
 import { normalizeStoryboardShot } from "@/components/CanvasDesign/runtime/document/storyboardMigration"
-import { validateElementData } from "@/components/CanvasDesign/runtime/document/validateElement"
+import {
+	V3_ELEMENT_SHELL_FIELDS,
+	validateElementData,
+} from "@/components/CanvasDesign/runtime/document/validateElement"
 import { cloneDeep } from "lodash-es"
 import { MAGIC_PROJECT_VERSION_V3 } from "./magicProjectCompression"
 import type { DesignData } from "../types"
@@ -96,19 +100,88 @@ function readContentId(value: unknown, fallback: string): string {
 		: fallback
 }
 
-/** v1/v2 导出可能把可选字段写成 null；v3 校验只接受 undefined 或合法类型。 */
-function stripNullOptionalFields(record: UnknownRecord, fields: readonly string[]): void {
-	for (const field of fields) {
-		if (record[field] === null) delete record[field]
+function isObjectRecord(value: unknown): value is UnknownRecord {
+	return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value)
+}
+
+function omitNullFields(record: UnknownRecord): void {
+	for (const key of Object.keys(record)) {
+		if (record[key] === null) delete record[key]
 	}
 }
 
-function normalizeLegacyElementShell(element: UnknownRecord): void {
-	stripNullOptionalFields(element, ["visible", "locked", "opacity", "scaleX", "scaleY", "name"])
+function keepAllowedFields(record: UnknownRecord, allowed: Set<string>): void {
+	for (const key of Object.keys(record)) {
+		if (!allowed.has(key)) delete record[key]
+	}
 }
 
-function normalizeLegacyContentFields(content: UnknownRecord): void {
-	stripNullOptionalFields(content, ["src", "status", "errorMessage"])
+function omitIfNot(record: UnknownRecord, field: string, isValid: (value: unknown) => boolean) {
+	if (record[field] !== undefined && !isValid(record[field])) delete record[field]
+}
+
+function sanitizeMigratedContent(content: UnknownRecord, type: string): void {
+	omitNullFields(content)
+	keepAllowedFields(content, new Set(["contentId", ...getElementContentFields(type)]))
+
+	omitIfNot(content, "src", (value) => typeof value === "string")
+	omitIfNot(content, "status", (value) => typeof value === "string")
+	omitIfNot(content, "errorMessage", (value) => typeof value === "string")
+	omitIfNot(content, "crop", (value) => {
+		if (!isObjectRecord(value)) return false
+		return ["width", "height", "x", "y"].every((field) => isFiniteNumber(value[field]))
+	})
+	omitIfNot(content, "fill", (value) => typeof value === "string")
+	omitIfNot(content, "stroke", (value) => typeof value === "string")
+	omitIfNot(content, "strokeWidth", isFiniteNumber)
+	omitIfNot(content, "cornerRadius", isFiniteNumber)
+	omitIfNot(content, "sides", isFiniteNumber)
+	omitIfNot(content, "innerRadiusRatio", isFiniteNumber)
+	omitIfNot(content, "content", Array.isArray)
+	omitIfNot(content, "defaultStyle", isObjectRecord)
+	omitIfNot(content, "generationConfig", isObjectRecord)
+	omitIfNot(content, "shots", Array.isArray)
+	omitIfNot(
+		content,
+		"videoSequence",
+		(value) =>
+			Array.isArray(value) && value.every((id) => typeof id === "string" && id.length > 0),
+	)
+	omitIfNot(
+		content,
+		"audioSequence",
+		(value) =>
+			Array.isArray(value) && value.every((id) => typeof id === "string" && id.length > 0),
+	)
+}
+
+function sanitizeMigratedElementShell(element: UnknownRecord, type: string): void {
+	const activeContentId = element.activeContentId
+	const mainContentId = element.mainContentId
+	omitNullFields(element)
+	element.activeContentId = activeContentId
+	element.mainContentId = mainContentId
+	const allowed = new Set(V3_ELEMENT_SHELL_FIELDS)
+	if (type === ElementTypeEnum.Frame || type === ElementTypeEnum.Group) {
+		allowed.add("children")
+	}
+	keepAllowedFields(element, allowed)
+
+	for (const field of ["x", "y", "width", "height", "scaleX", "scaleY", "zIndex", "opacity"]) {
+		omitIfNot(element, field, isFiniteNumber)
+	}
+	for (const field of ["visible", "locked"]) {
+		omitIfNot(element, field, (value) => typeof value === "boolean")
+	}
+	omitIfNot(element, "name", (value) => typeof value === "string")
+	omitIfNot(element, "interactionConfig", isObjectRecord)
+	if (type === ElementTypeEnum.Frame || type === ElementTypeEnum.Group) {
+		omitIfNot(element, "children", Array.isArray)
+	}
 }
 
 function migrateContentList(element: UnknownRecord, elementId: string): UnknownRecord[] {
@@ -117,14 +190,6 @@ function migrateContentList(element: UnknownRecord, elementId: string): UnknownR
 		const content =
 			rawContent && typeof rawContent === "object" ? { ...(rawContent as UnknownRecord) } : {}
 		const contentId = readContentId(content, `${elementId}-content-${index + 1}`)
-		normalizeLegacyContentFields(content)
-		if (
-			(element.type === ElementTypeEnum.Image || element.type === ElementTypeEnum.Video) &&
-			content.errorMessage === null
-		) {
-			delete content.errorMessage
-		}
-		// 旧版本曾把该字段放在公共 Content；非媒体节点不应继续携带这份无效数据。
 		if (!supportsVisualUnderstanding(String(element.type))) delete content.visualUnderstanding
 		delete content.id
 		delete content.type
@@ -185,7 +250,6 @@ function migrateLegacyVideoEditConnections(
 				})
 			})
 		}
-
 	})
 }
 
@@ -198,7 +262,6 @@ function migrateElementToV3(
 	}
 
 	const element = cloneValue(rawElement as UnknownRecord)
-	normalizeLegacyElementShell(element)
 	const elementId = typeof element.id === "string" ? element.id : ""
 	if (!elementId || typeof element.type !== "string") {
 		throw new Error("Canvas element id/type is required")
@@ -225,7 +288,8 @@ function migrateElementToV3(
 	if (element.type === ElementTypeEnum.Image) {
 		if (firstContent.imageGenerationTaskMeta === undefined) {
 			const legacyHighRequest = firstContent.generateHightImageRequest as
-				Parameters<typeof normalizeLegacyHighImageTaskMeta>[0] | undefined
+				| Parameters<typeof normalizeLegacyHighImageTaskMeta>[0]
+				| undefined
 			const converted = normalizeLegacyHighImageTaskMeta(legacyHighRequest)
 			if (converted) firstContent.imageGenerationTaskMeta = converted
 		}
@@ -248,7 +312,7 @@ function migrateElementToV3(
 		migrateLegacyVideoEditConnections(elementId, contents, context)
 	}
 
-	contents.forEach((content) => normalizeLegacyContentFields(content))
+	contents.forEach((content) => sanitizeMigratedContent(content, String(element.type)))
 
 	const contentIds = new Set(contents.map((content) => String(content.contentId)).filter(Boolean))
 	const activeContentId =
@@ -274,6 +338,7 @@ function migrateElementToV3(
 		migrated.children = migrated.children.map((child) => migrateElementToV3(child, context))
 	}
 
+	sanitizeMigratedElementShell(migrated, String(element.type))
 	validateElementData(migrated)
 	return migrated as unknown as LayerElement
 }

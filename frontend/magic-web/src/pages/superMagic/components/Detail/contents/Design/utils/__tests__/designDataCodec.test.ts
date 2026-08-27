@@ -160,16 +160,17 @@ describe("designDataCodec", () => {
 		})
 	})
 
-	it("strips legacy null optional fields from nested frame children during v3 migration", () => {
+	it("strips nulls, unknown keys, and invalid optional values during v3 migration", () => {
 		const result = upgradeDesignDataToV3({
 			type: "design",
-			name: "legacy-null-frame-child",
+			name: "legacy-dirty-frame-child",
 			version: "2.0.0",
 			canvas: {
 				elements: [
 					{
 						id: "frame-1",
 						type: ElementTypeEnum.Frame,
+						legacyPluginField: true,
 						children: [
 							{
 								id: "image-1",
@@ -179,8 +180,11 @@ describe("designDataCodec", () => {
 								opacity: null,
 								scaleX: null,
 								scaleY: null,
+								x: null,
+								rotation: 15,
 								src: "./images/a.png",
 								status: null,
+								selected: true,
 							},
 						],
 					},
@@ -192,12 +196,16 @@ describe("designDataCodec", () => {
 			result.canvas?.elements?.[0] && "children" in result.canvas.elements[0]
 				? result.canvas.elements[0].children?.[0]
 				: undefined
+		expect(result.canvas?.elements?.[0]).not.toHaveProperty("legacyPluginField")
 		expect(child).toMatchObject({
 			id: "image-1",
 			type: ElementTypeEnum.Image,
 			contents: [{ contentId: "image-1-content-1", src: "./images/a.png" }],
 		})
 		expect(child).not.toHaveProperty("visible")
+		expect(child).not.toHaveProperty("x")
+		expect(child).not.toHaveProperty("rotation")
+		expect(child).not.toHaveProperty("selected")
 		expect(child).not.toHaveProperty("status")
 		validateV3CanvasDocument(result.canvas)
 	})

@@ -42,7 +42,7 @@ function isValidContentContainer(element: Record<string, unknown>): boolean {
 	return true
 }
 
-const BASE_ELEMENT_FIELDS = new Set([
+export const V3_ELEMENT_SHELL_FIELDS = new Set([
 	"id",
 	"name",
 	"type",
@@ -176,7 +176,7 @@ export function isValidElementData(data: unknown): data is LayerElement {
 	}
 	if (!isOptionalString(data.name)) return false
 	if (data.interactionConfig !== undefined && !isObject(data.interactionConfig)) return false
-	const allowedElementFields = new Set(BASE_ELEMENT_FIELDS)
+	const allowedElementFields = new Set(V3_ELEMENT_SHELL_FIELDS)
 	if (data.type === ElementTypeEnum.Frame || data.type === ElementTypeEnum.Group) {
 		allowedElementFields.add("children")
 	}
