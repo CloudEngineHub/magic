@@ -74,6 +74,33 @@ function getFilteredGenerationResolutions(
 	return constraints.resolutions.filter((resolution) => topLevelResolutions.includes(resolution))
 }
 
+type NormalizedVideoGenerationSize = VideoGenerationSizeOption & {
+	width: number
+	height: number
+}
+
+function dedupeVideoGenerationSizesByLabel(
+	sizes: NormalizedVideoGenerationSize[],
+	preferredResolution?: string,
+): NormalizedVideoGenerationSize[] {
+	const sizeByLabel = new Map<string, NormalizedVideoGenerationSize>()
+	for (const size of sizes) {
+		const existing = sizeByLabel.get(size.label)
+		if (!existing) {
+			sizeByLabel.set(size.label, size)
+			continue
+		}
+		if (
+			preferredResolution &&
+			size.resolution === preferredResolution &&
+			existing.resolution !== preferredResolution
+		) {
+			sizeByLabel.set(size.label, size)
+		}
+	}
+	return Array.from(sizeByLabel.values())
+}
+
 function getFilteredGenerationAspectRatios(
 	model: VideoGenerationConfigModel | undefined,
 	constraints?: VideoGenerationConstraints,
@@ -219,7 +246,10 @@ export function buildVideoAspectRatioOptions(
 	if (generationSizes.length > 0) {
 		const filteredSizes = selectedResolution
 			? generationSizes.filter((size) => size.resolution === selectedResolution)
-			: generationSizes
+			: dedupeVideoGenerationSizesByLabel(
+					generationSizes,
+					model?.video_generation_config?.generation?.default_resolution,
+				)
 		return filteredSizes.map((size) => {
 			const previewSize = buildAspectRatioPreviewSize(size.label)
 			return {

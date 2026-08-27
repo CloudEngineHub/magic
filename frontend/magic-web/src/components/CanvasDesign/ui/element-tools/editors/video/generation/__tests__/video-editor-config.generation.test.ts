@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { VideoModelItem } from "../../../../../../public/magic-types"
 import {
+	buildVideoAspectRatioOptions,
 	buildVideoDurationOptions,
 	getVideoDurationConfig,
 	resolveVideoDefaultDuration,
@@ -20,6 +21,46 @@ function createModel(generation: Record<string, unknown>): VideoModelItem {
 		video_generation_config: { generation: generation as never },
 	}
 }
+
+describe("buildVideoAspectRatioOptions", () => {
+	it("dedupes sizes by label when no resolution is selected", () => {
+		const model = createModel({
+			default_resolution: "1080p",
+			sizes: [
+				{ label: "16:9", value: "1280x720", width: 1280, height: 720, resolution: "720p" },
+				{ label: "16:9", value: "1920x1080", width: 1920, height: 1080, resolution: "1080p" },
+				{ label: "9:16", value: "720x1280", width: 720, height: 1280, resolution: "720p" },
+				{ label: "9:16", value: "1080x1920", width: 1080, height: 1920, resolution: "1080p" },
+			],
+		})
+
+		const options = buildVideoAspectRatioOptions(model)
+
+		expect(options.map((item) => item.value)).toEqual(["16:9", "9:16"])
+		expect(options.find((item) => item.value === "16:9")).toMatchObject({
+			originalValue: "1920x1080",
+			originalScale: "1080p",
+		})
+	})
+
+	it("keeps all sizes for the selected resolution", () => {
+		const model = createModel({
+			sizes: [
+				{ label: "16:9", value: "1280x720", width: 1280, height: 720, resolution: "720p" },
+				{ label: "9:16", value: "1080x1920", width: 1080, height: 1920, resolution: "1080p" },
+				{ label: "9:16", value: "720x1280", width: 720, height: 1280, resolution: "720p" },
+			],
+		})
+
+		const options = buildVideoAspectRatioOptions(model, "720p")
+
+		expect(options.map((item) => item.value)).toEqual(["16:9", "9:16"])
+		expect(options.find((item) => item.value === "9:16")).toMatchObject({
+			originalValue: "720x1280",
+			originalScale: "720p",
+		})
+	})
+})
 
 describe("video generation duration configuration", () => {
 	it("keeps discrete duration options", () => {
