@@ -212,77 +212,39 @@ final class SkillMarketVectorIndexDomainService
             return [];
         }
 
-        $embedding = $this->embeddingGenerator->embedText(
-            $this->embeddingGenerator->getDefaultModel($dataIsolation),
-            $keyword,
-            [
-                'business_params' => [
-                    'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
-                    'user_id' => $dataIsolation->getCurrentUserId(),
-                    'business_id' => 'skill-market-search:' . md5($keyword),
-                    'source_id' => SourceId::SEMANTIC_SEARCH,
-                ],
-            ],
-        );
+        $embedding = $this->generateSearchEmbedding($dataIsolation, $keyword);
         if ($embedding === []) {
             return [];
         }
 
-        $pageSize = $page->getPageNum();
-        $matchedOffset = $page->getSliceStart();
-        $candidateOffset = 0;
-        $matchedCount = 0;
-        $results = [];
-        $seenIds = [];
-        $filter = $this->buildFilter($query);
-        $scoreThreshold = (float) config('vector_index.resources.skill_market.score_threshold', 0.4);
+        $points = $this->vectorStore->searchPoints(
+            $this->collectionName(),
+            $embedding,
+            $page->getPageNum(),
+            (float) config('vector_index.resources.skill_market.score_threshold', 0.4),
+            $this->buildFilter($query),
+            $page->getSliceStart(),
+        );
+        $ids = array_values(array_unique(array_map(
+            static fn ($point): string => (string) $point->id,
+            $points,
+        )));
+        if ($ids === []) {
+            return [];
+        }
 
-        do {
-            $points = $this->vectorStore->searchPoints(
-                $this->collectionName(),
-                $embedding,
-                $pageSize,
-                $scoreThreshold,
-                $filter,
-                $candidateOffset,
-            );
-            if ($points === []) {
-                break;
-            }
-            $candidateOffset += count($points);
+        $markets = $this->skillMarketRepository->findVisibleByIds($ids);
+        $marketsById = [];
+        foreach ($markets as $market) {
+            $marketsById[(string) $market->getId()] = $market;
+        }
 
-            $ids = [];
-            foreach ($points as $point) {
-                $id = (string) $point->id;
-                if (! isset($seenIds[$id])) {
-                    $seenIds[$id] = true;
-                    $ids[] = $id;
-                }
-            }
-            if ($ids === []) {
-                continue;
-            }
-
-            $markets = $this->skillMarketRepository->findVisibleByIds($ids);
-            foreach ($ids as $id) {
-                $market = $markets[(int) $id] ?? null;
-                if (! $market instanceof SkillMarketEntity) {
-                    continue;
-                }
-                if ($matchedCount++ < $matchedOffset) {
-                    continue;
-                }
-                $results[] = $market;
-                if (count($results) >= $pageSize) {
-                    break 2;
-                }
-            }
-        } while (count($points) === $pageSize);
-
-        return $results;
+        return array_values(array_filter(array_map(
+            static fn (string $id): ?SkillMarketEntity => $marketsById[$id] ?? null,
+            $ids,
+        )));
     }
 
-    /** Return whether the shared knowledge-base embedding ability is enabled. */
     public function isVectorSearchEnabled(): bool
     {
         return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
@@ -379,6 +341,23 @@ final class SkillMarketVectorIndexDomainService
         $keyword = trim((string) $keyword);
         $keyword = preg_replace('/\s+/u', ' ', $keyword) ?? $keyword;
         return mb_strtolower($keyword, 'UTF-8');
+    }
+
+    /** Generate the query embedding through the shared embedding pipeline. */
+    private function generateSearchEmbedding(SkillDataIsolation $dataIsolation, string $keyword): array
+    {
+        return $this->embeddingGenerator->embedText(
+            $this->embeddingGenerator->getDefaultModel($dataIsolation),
+            $keyword,
+            [
+                'business_params' => [
+                    'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
+                    'user_id' => $dataIsolation->getCurrentUserId(),
+                    'business_id' => 'skill-market-search:' . md5($keyword),
+                    'source_id' => SourceId::SEMANTIC_SEARCH,
+                ],
+            ],
+        );
     }
 
     private function buildFilter(SkillQuery $query): array
