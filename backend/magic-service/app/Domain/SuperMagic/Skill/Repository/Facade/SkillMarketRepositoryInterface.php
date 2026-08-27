@@ -104,6 +104,9 @@ interface SkillMarketRepositoryInterface
      */
     public function findById(int $id): ?SkillMarketEntity;
 
+    /** Find one market record with its published Skill package name for semantic indexing. */
+    public function findByIdForVectorIndex(int $id): ?SkillMarketEntity;
+
     /**
      * 根据 ID 查找市场技能（仅查询已发布的）.
      *
@@ -118,6 +121,29 @@ interface SkillMarketRepositoryInterface
      * @return array<int, SkillMarketEntity>
      */
     public function findByIds(array $ids): array;
+
+    /**
+     * Batch query market skills that are authoritative candidates for public search.
+     *
+     * @param array<int, int|string> $ids
+     * @return array<int, SkillMarketEntity>
+     */
+    public function findVisibleByIds(array $ids): array;
+
+    /**
+     * Query published and visible market IDs for cursor-based vector reindexing.
+     *
+     * @param array<int, int|string> $categoryIds
+     * @param array<int, string> $codes
+     * @return array<int, int>
+     */
+    public function findVectorIndexIds(
+        array $categoryIds = [],
+        array $codes = [],
+        ?string $publisherType = null,
+        string $afterId = '0',
+        int $limit = 100,
+    ): array;
 
     /**
      * 增加市场技能的安装次数.

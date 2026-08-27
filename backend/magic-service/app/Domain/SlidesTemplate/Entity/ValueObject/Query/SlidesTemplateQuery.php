@@ -9,6 +9,7 @@ namespace App\Domain\SlidesTemplate\Entity\ValueObject\Query;
 
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateOwnerType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSearchType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 
 class SlidesTemplateQuery
@@ -30,6 +31,24 @@ class SlidesTemplateQuery
     private array $tagCodes = [];
 
     private SlidesTemplateTagMatch $tagMatch = SlidesTemplateTagMatch::Any;
+
+    private SlidesTemplateSearchType $searchType = SlidesTemplateSearchType::Database;
+
+    public function getSearchType(): SlidesTemplateSearchType
+    {
+        return $this->searchType;
+    }
+
+    public function setSearchType(null|SlidesTemplateSearchType|string $searchType): void
+    {
+        if ($searchType instanceof SlidesTemplateSearchType) {
+            $this->searchType = $searchType;
+            return;
+        }
+
+        $this->searchType = SlidesTemplateSearchType::tryFrom((string) $searchType)
+            ?? SlidesTemplateSearchType::Database;
+    }
 
     public function getKeyword(): ?string
     {

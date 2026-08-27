@@ -94,6 +94,7 @@ class AdminSkillCategoryAppService extends AbstractSkillAppService
     public function update(Authenticatable $authorization, int $id, UpdateSkillCategoryRequestAdminDTO $requestDTO): array
     {
         $authorization = $this->resolveMagicUserAuthorization($authorization);
+        $dataIsolation = $this->createSkillDataIsolation($authorization);
         $category = $this->get($id);
         $payload = $requestDTO->getUpdatePayload();
         if (array_key_exists('parent_id', $payload)) {
@@ -111,7 +112,7 @@ class AdminSkillCategoryAppService extends AbstractSkillAppService
         if (array_key_exists('status', $payload)) {
             $category->setStatus($payload['status']);
         }
-        $category->setModifierId($this->createSkillDataIsolation($authorization)->getCurrentUserId());
+        $category->setModifierId($dataIsolation->getCurrentUserId());
         $this->categoryDomainService->save($category);
         return $this->getDetail($id);
     }

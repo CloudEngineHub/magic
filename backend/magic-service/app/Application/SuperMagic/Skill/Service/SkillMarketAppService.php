@@ -18,22 +18,31 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
+use App\Domain\SuperMagic\Skill\Service\SkillMarketVectorIndexDomainService;
 use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\RequestContext;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * 市场 Skill 应用服务.
  */
 class SkillMarketAppService extends AbstractSkillAppService
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         protected SkillMarketDomainService $skillMarketDomainService,
         protected MagicUserDomainService $magicUserDomainService,
         protected TaskFileDomainService $taskFileDomainService,
         protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
+        protected SkillMarketVectorIndexDomainService $skillMarketVectorIndexDomainService,
+        LoggerFactory $loggerFactory,
     ) {
+        $this->logger = $loggerFactory->get('vector-index-sync');
     }
 
     /**
@@ -117,8 +126,7 @@ class SkillMarketAppService extends AbstractSkillAppService
             $query->setCodes($normalizedCodes);
         }
 
-        // 查询市场技能列表（包含总数）
-        $result = $this->skillMarketDomainService->queries($query, $page);
+        $result = $this->queryMarketSkills($dataIsolation, $query, $page);
 
         $data = $this->resolveMarketListData($dataIsolation, $result['list'], $withFileUrl);
 
@@ -128,6 +136,29 @@ class SkillMarketAppService extends AbstractSkillAppService
         }
 
         return $resultData;
+    }
+
+    /** Use semantic ranking when available; otherwise fall back to MySQL. */
+    private function queryMarketSkills(SkillDataIsolation $dataIsolation, SkillQuery $query, Page $page): array
+    {
+        if ($query->getKeyword() !== null && trim($query->getKeyword()) !== '') {
+            try {
+                if ($this->skillMarketVectorIndexDomainService->isVectorSearchReady()
+                    && $this->skillMarketVectorIndexDomainService->isAvailable()) {
+                    return [
+                        'total' => null,
+                        'list' => $this->skillMarketVectorIndexDomainService->search($dataIsolation, $query, $page),
+                    ];
+                }
+            } catch (Throwable $throwable) {
+                $this->logger->warning('Skill market semantic search fell back to MySQL', [
+                    'exception' => $throwable::class,
+                    'message' => $throwable->getMessage(),
+                ]);
+            }
+        }
+
+        return $this->skillMarketDomainService->queries($query, $page);
     }
 
     /**
