@@ -9,9 +9,11 @@ namespace App\Application\SuperMagic\Skill\Crontab;
 
 use App\Application\SuperMagic\Skill\Service\AdminSkillAppService;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
-use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Crontab\Annotation\Crontab;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 #[Crontab(
     rule: '0 3 * * *',
@@ -24,11 +26,13 @@ use Hyperf\Crontab\Annotation\Crontab;
 )]
 final class SkillMarketVectorIndexDailySyncCrontab
 {
-    use HasLogger;
+    private LoggerInterface $logger;
 
     public function __construct(
         private readonly AdminSkillAppService $skillAppService,
+        ?LoggerFactory $loggerFactory = null,
     ) {
+        $this->logger = $loggerFactory?->get('skill-market-vector-sync') ?? new NullLogger();
     }
 
     public function execute(): void
