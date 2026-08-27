@@ -178,9 +178,14 @@ class SlidesTemplateTagDomainService
 
     /**
      * @param SlidesTemplateEntity[] $templates
+     * @param string[] $tagCodes
      */
-    public function fillTemplateTags(SlidesTemplateDataIsolation $dataIsolation, array $templates, ?SlidesTemplateTagStatus $tagStatus = null): void
-    {
+    public function fillTemplateTags(
+        SlidesTemplateDataIsolation $dataIsolation,
+        array $templates,
+        ?SlidesTemplateTagStatus $tagStatus = null,
+        array $tagCodes = [],
+    ): void {
         $templateIds = [];
         foreach ($templates as $template) {
             $id = $template->getId();
@@ -192,7 +197,8 @@ class SlidesTemplateTagDomainService
         $tagMap = $this->slidesTemplateTagRelationRepository->findTagsByTemplateIds(
             $dataIsolation,
             $templateIds,
-            $tagStatus?->value
+            $tagStatus?->value,
+            $tagCodes,
         );
 
         foreach ($templates as $template) {

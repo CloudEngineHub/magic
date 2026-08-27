@@ -16,6 +16,7 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSearchType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateCreatedEvent;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUpdatedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
@@ -46,6 +47,8 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
 {
     private const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'];
 
+    private const FEATURED_TAG_CODE = 'featured';
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -71,6 +74,12 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
         $page->setTotal(false);
         $result = $this->queryByConfiguredSearch($dataIsolation, $query, $page);
+        $this->slidesTemplateTagDomainService->fillTemplateTags(
+            $dataIsolation,
+            $result['list'],
+            SlidesTemplateTagStatus::Enabled,
+            [self::FEATURED_TAG_CODE],
+        );
         $this->resolveListImageUrls($result['list']);
 
         return [

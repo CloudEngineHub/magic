@@ -299,6 +299,14 @@ class SlidesTemplateAssembler
         $dto->setStatus($template->getStatus()->value);
         $dto->setCreatedAt($template->getCreatedAt());
         $dto->setUpdatedAt($template->getUpdatedAt());
+        $dto->setTags(array_map(
+            static function ($tag): array {
+                $tagData = SlidesTemplateTagAssembler::createSimplePublicItemDTO($tag)->toArray();
+                unset($tagData['name_i18n']);
+                return $tagData;
+            },
+            $template->getTags()
+        ));
     }
 
     private static function isOfficialTemplate(SlidesTemplateEntity $template): bool
