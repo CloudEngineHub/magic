@@ -45,7 +45,11 @@ final readonly class SkillMarketVectorIndexReindexSubscriber implements Listener
 
         $organizationCode = $event->newEntity->getOrganizationCode();
         try {
-            $result = $this->queueAllMarketVectors($organizationCode);
+            $result = $this->adminSkillAppService->reindexAllMarketVectors(
+                $organizationCode,
+                'system',
+                forceReEmbedding: true,
+            );
             $this->logger->info('Skill market full vector sync queued after embedding ability update', [
                 'organization_code' => $organizationCode,
                 'queued' => $result['queued'] ?? 0,
@@ -74,29 +78,5 @@ final readonly class SkillMarketVectorIndexReindexSubscriber implements Listener
     private function modelId(AiAbilityEntity $entity): string
     {
         return trim((string) ($entity->getConfig()['model_id'] ?? ''));
-    }
-
-    /** Queue all visible market records as bounded technical events. */
-    private function queueAllMarketVectors(string $organizationCode): array
-    {
-        $afterId = '0';
-        $queued = 0;
-        while (true) {
-            $result = $this->adminSkillAppService->queueMarketVectorReindex(
-                $organizationCode,
-                'system',
-                afterId: $afterId,
-                batchSize: 100,
-                forceReEmbedding: true,
-            );
-            $queued += $result['queued'];
-            $nextAfterId = (string) $result['after_id'];
-            if (! $result['has_more'] || $nextAfterId === $afterId) {
-                break;
-            }
-            $afterId = $nextAfterId;
-        }
-
-        return ['queued' => $queued];
     }
 }

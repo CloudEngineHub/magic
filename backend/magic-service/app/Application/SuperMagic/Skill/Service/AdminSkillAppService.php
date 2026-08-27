@@ -48,6 +48,8 @@ use Throwable;
  */
 class AdminSkillAppService extends AbstractSkillAppService
 {
+    private const VECTOR_REINDEX_EVENT_BATCH_SIZE = 100;
+
     public function __construct(
         protected SkillDomainService $skillDomainService,
         protected SkillVersionDomainService $skillVersionDomainService,
@@ -123,14 +125,14 @@ class AdminSkillAppService extends AbstractSkillAppService
         );
     }
 
-    /** Queue one filtered page of market IDs for asynchronous vector reindexing. */
+    /** Queue all matching market records for asynchronous vector reindexing. */
     public function reindexMarketVectors(
         RequestContext $requestContext,
         ReindexSkillMarketsRequestDTO $requestDTO,
     ): array {
         $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
 
-        return $this->queueMarketVectorReindex(
+        return $this->reindexAllMarketVectors(
             $dataIsolation->getCurrentOrganizationCode(),
             $dataIsolation->getCurrentUserId(),
             $requestDTO->getCategoryIds(),
@@ -141,8 +143,8 @@ class AdminSkillAppService extends AbstractSkillAppService
         );
     }
 
-    /** Queue one filtered page without requiring an HTTP request context. */
-    public function queueMarketVectorReindex(
+    /** Queue all matching market records without requiring an HTTP request context. */
+    public function reindexAllMarketVectors(
         string $organizationCode,
         string $operatorId,
         array $categoryIds = [],
@@ -153,28 +155,45 @@ class AdminSkillAppService extends AbstractSkillAppService
         bool $forceReEmbedding = false,
     ): array {
         $batchSize = min(100, max(1, $batchSize));
-        $ids = $this->skillMarketDomainService->findVectorIndexIds(
-            $categoryIds,
-            $codes,
-            $publisherType,
-            $afterId,
-            $batchSize,
-        );
+        $afterId = $forceReEmbedding ? '0' : $afterId;
+        $queued = 0;
+        $nextAfterId = $afterId;
 
-        if ($ids !== []) {
-            AsyncEventUtil::dispatch(new SkillMarketBatchReindexRequestedEvent(
-                array_values(array_map('strval', $ids)),
-                $organizationCode,
-                $operatorId,
-                $forceReEmbedding,
-            ));
+        while (true) {
+            $ids = $this->skillMarketDomainService->findVectorIndexIds(
+                $categoryIds,
+                $codes,
+                $publisherType,
+                $nextAfterId,
+                $batchSize,
+            );
+            if ($ids === []) {
+                break;
+            }
+
+            foreach (array_chunk($ids, self::VECTOR_REINDEX_EVENT_BATCH_SIZE) as $batchIds) {
+                AsyncEventUtil::dispatch(new SkillMarketBatchReindexRequestedEvent(
+                    array_values(array_map('strval', $batchIds)),
+                    $organizationCode,
+                    $operatorId,
+                    $forceReEmbedding,
+                ));
+            }
+
+            $queued += count($ids);
+            $lastId = (string) $ids[array_key_last($ids)];
+            $nextAfterId = $lastId;
+            if (count($ids) < $batchSize || $lastId === $afterId) {
+                break;
+            }
+            $afterId = $lastId;
         }
 
         return [
             'task_id' => bin2hex(random_bytes(12)),
-            'queued' => count($ids),
-            'after_id' => $ids === [] ? $afterId : (string) end($ids),
-            'has_more' => count($ids) === $batchSize,
+            'queued' => $queued,
+            'after_id' => $nextAfterId,
+            'has_more' => false,
         ];
     }
 
