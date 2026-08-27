@@ -53,13 +53,17 @@ def checkpoint_key(checkpoint_id: str) -> str:
 
 
 def write_local_checkpoint(checkpoints_root: Path, checkpoint_id: str, extra_files=None) -> None:
+    """按分区契约构造本地 checkpoint：Python 簿记 + project 空间流水。"""
     cp_dir = checkpoints_root / checkpoint_id
-    (cp_dir / "file_snapshots").mkdir(parents=True, exist_ok=True)
+    cp_dir.mkdir(parents=True, exist_ok=True)
     (cp_dir / "checkpoint_info.json").write_text(
-        json.dumps(
-            CheckpointInfo(checkpoint_id=checkpoint_id, created_time=datetime.now()).model_dump(),
-            default=str,
-        ),
+        json.dumps({"checkpoint_id": checkpoint_id, "created_time": datetime.now().isoformat()}),
+        encoding="utf-8",
+    )
+    space_dir = cp_dir / "project"
+    space_dir.mkdir(parents=True, exist_ok=True)
+    (space_dir / "operations.json").write_text(
+        json.dumps({"checkpoint_id": checkpoint_id, "file_snapshots": []}),
         encoding="utf-8",
     )
     for name, content in (extra_files or {}).items():
@@ -93,6 +97,7 @@ async def test_upload_checkpoint_uploads_only_that_checkpoint(tmp_path):
     with zipfile.ZipFile(io.BytesIO(storage.objects[checkpoint_key("cp1")])) as zf:
         names = set(zf.namelist())
         assert "checkpoint_info.json" in names
+        assert "project/operations.json" in names
         assert "snapshot.txt" in names
         assert zf.read("snapshot.txt") == b"hello"
 
@@ -154,16 +159,17 @@ async def test_ensure_checkpoints_available_downloads_missing(tmp_path):
     storage = FakeStorage()
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
-        zf.writestr("checkpoint_info.json", "{}")
-        zf.writestr("file_snapshots/.keep", "")
+        zf.writestr("project/operations.json", "{}")
+        zf.writestr("project/file_snapshots/.keep", "")
     storage.objects[checkpoint_key("cp2")] = buffer.getvalue()
 
     with patch("app.path_manager.PathManager.get_checkpoints_dir", return_value=checkpoints_root):
         sync = CheckpointRemoteSync(storage, TOPIC_ID)
         await sync.ensure_checkpoints_available(["cp2"])
 
-    assert (checkpoints_root / "cp2" / "checkpoint_info.json").exists()
-    assert (checkpoints_root / "cp2" / "file_snapshots" / ".keep").exists()
+    # 下载完成判定走新口径：project 分区的 operations.json 即视为已就位
+    assert (checkpoints_root / "cp2" / "project" / "operations.json").exists()
+    assert (checkpoints_root / "cp2" / "project" / "file_snapshots" / ".keep").exists()
 
 
 @pytest.mark.asyncio

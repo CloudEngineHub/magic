@@ -61,8 +61,19 @@ class FrameWorld:
         """登记一个 checkpoint 的操作流水（内容帧由用例自行写入）。"""
         self.infos[checkpoint_id] = list(snapshots)
 
-    def write_frame(self, checkpoint_id: str, file_id: str, initial: bytes | None = None, latest: bytes | None = None) -> None:
-        frame_dir = self.checkpoints_root / checkpoint_id / "file_snapshots" / file_id
+    def write_frame(self, checkpoint_id: str, file_id: str, initial: bytes | None = None,
+                    latest: bytes | None = None, space: str | None = None) -> None:
+        """按分区布局写内容帧：<checkpoint_id>/<space>/file_snapshots/<fid>/。
+
+        space 缺省时从该 file_id 已登记的流水条目推导。"""
+        if space is None:
+            for snapshot in self.infos.get(checkpoint_id, []):
+                if snapshot.file_id == file_id:
+                    space = snapshot.space or "project"
+                    break
+            else:
+                space = "project"
+        frame_dir = self.checkpoints_root / checkpoint_id / space / "file_snapshots" / file_id
         frame_dir.mkdir(parents=True, exist_ok=True)
         if initial is not None:
             (frame_dir / "initial_content").write_bytes(initial)
@@ -71,12 +82,16 @@ class FrameWorld:
 
     def build_executor(self, direction: str, checkpoint_ids: list[str]) -> RollbackExecutor:
         all_checkpoint_ids = list(self.infos) + [c for c in checkpoint_ids if c not in self.infos]
+        # 与真实 storage 口径一致：空/None 的 space 回落到 project 分区
+        def _partition(space: str | None) -> str:
+            return space or "project"
+
         storage = SimpleNamespace(
-            get_initial_content_file_path=lambda cid, fid: (
-                self.checkpoints_root / cid / "file_snapshots" / fid / "initial_content"
+            get_initial_content_file_path=lambda cid, fid, space=None: (
+                self.checkpoints_root / cid / _partition(space) / "file_snapshots" / fid / "initial_content"
             ),
-            get_latest_content_file_path=lambda cid, fid: (
-                self.checkpoints_root / cid / "file_snapshots" / fid / "latest_content"
+            get_latest_content_file_path=lambda cid, fid, space=None: (
+                self.checkpoints_root / cid / _partition(space) / "file_snapshots" / fid / "latest_content"
             ),
         )
         metadata_manager = SimpleNamespace(
@@ -209,8 +224,8 @@ async def test_missing_topic_frames_skips_gracefully(world: FrameWorld):
     assert success is True
 
 
-async def test_legacy_relative_entry_falls_back_to_workspace(world: FrameWorld, monkeypatch, tmp_path):
-    """旧格式相对路径条目（无 space、相对路径）保持历史行为：按 workspace 根解析。"""
+async def test_empty_space_entry_resolves_to_project_partition(world: FrameWorld, monkeypatch, tmp_path):
+    """防御口径：space 为空串的历史残留条目按 project 分区解析帧、按 workspace 根解析恢复目标。"""
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     monkeypatch.setattr(PathManager, "get_workspace_dir", classmethod(lambda cls: workspace_root), raising=True)
@@ -219,8 +234,8 @@ async def test_legacy_relative_entry_falls_back_to_workspace(world: FrameWorld, 
     world.add_frames("C2", [
         _make_snapshot("5555", "legacy.txt", FileOperation.UPDATED, space=""),
     ])
-    world.write_frame("C2", "5555", initial=b"legacy old", latest=b"legacy new")
-
+    # 空串与 None 同样解析到 project 分区（storage 口径），帧写在那里才能命中
+    world.write_frame("C2", "5555", initial=b"legacy old", latest=b"legacy new", space="project")
     executor = world.build_executor("backward", ["C2"])
     success, _ = await executor.start_rollback("C1")
     assert success is True

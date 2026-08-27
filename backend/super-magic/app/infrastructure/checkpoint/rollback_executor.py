@@ -492,7 +492,7 @@ class RollbackExecutor:
             # 根据文件类型选择创建方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从latest_content恢复
-                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id)
+                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not latest_content_path.exists():
                     logger.warning(f"CREATED操作的latest_content不存在，跳过文件恢复: {file_snapshot.file_path}")
@@ -560,7 +560,7 @@ class RollbackExecutor:
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从latest_content恢复
-                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id)
+                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not latest_content_path.exists():
                     logger.warning(f"UPDATED操作的latest_content不存在，跳过文件恢复: {file_snapshot.file_path}")
@@ -596,7 +596,7 @@ class RollbackExecutor:
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从initial_content恢复
-                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id)
+                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not initial_content_path.exists():
                     logger.error(f"UPDATED操作的initial_content不存在: {file_snapshot.file_path}")
@@ -664,7 +664,7 @@ class RollbackExecutor:
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从initial_content恢复
-                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id)
+                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not initial_content_path.exists():
                     logger.error(f"DELETED操作的initial_content不存在: {file_snapshot.file_path}")

@@ -20,7 +20,7 @@ from typing import List, Optional
 
 from app.core.entity.checkpoint import VirtualCheckpoint
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
-from app.infrastructure.checkpoint.storage import CheckpointStorage
+from app.infrastructure.checkpoint.storage import KNOWN_SPACES, CheckpointStorage
 from app.infrastructure.storage.base import BaseFileProcessor
 from app.path_manager import PathManager
 from app.utils.async_file_utils import (
@@ -77,8 +77,14 @@ class CheckpointRemoteSync:
     async def upload_checkpoint(self, checkpoint_id: str) -> bool:
         """只压缩并上传一个 checkpoint 目录。"""
         checkpoint_dir = self._checkpoint_dir(checkpoint_id)
-        info_file = checkpoint_dir / "checkpoint_info.json"
-        if not await async_exists(info_file):
+        # 目录有效性哨兵：Python 簿记或任一空间的 magicfs 流水存在即可上传
+        has_content = await async_exists(
+            self.storage.get_checkpoint_info_file_path(checkpoint_id)
+        ) or any([
+            await async_exists(self.storage.get_space_operations_file_path(checkpoint_id, space))
+            for space in KNOWN_SPACES
+        ])
+        if not has_content:
             logger.warning(f"checkpoint 目录不完整，跳过上传: {checkpoint_id}")
             return False
 
@@ -158,8 +164,10 @@ class CheckpointRemoteSync:
         for checkpoint_id in checkpoint_ids:
             if checkpoint_id == VirtualCheckpoint.INITIAL:
                 continue
-            info_file = self.storage.get_checkpoint_info_file_path(checkpoint_id)
-            if await async_exists(info_file):
+            if await async_exists(self.storage.get_checkpoint_info_file_path(checkpoint_id)) or any([
+                await async_exists(self.storage.get_space_operations_file_path(checkpoint_id, space))
+                for space in KNOWN_SPACES
+            ]):
                 continue
             await self._download_checkpoint(checkpoint_id)
 

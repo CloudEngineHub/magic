@@ -46,16 +46,22 @@ project_root/
 
 `.topic/` 由基础设施在容器启动阶段通过 agfs-fuse 挂载为当前 topic 的持久卷。应用层不重复判断操作系统挂载点，只检查 `.topic/chat_history/` 是否可用；聊天历史状态未确认或恢复失败时继续使用 zip 下载/上传兜底。
 
-checkpoint 数据保存在 `.checkpoints/`，由 magicfs 的 checkpoint hook 统一维护：project 挂载和 topic 挂载都开启 hook（topic 侧 `exclude_prefixes` 排除 `tool_detail/` 等非历史子树），所有挂载的文件变更记入同一份操作流水和 `file_snapshots/<file_id>/` 帧布局。Python 侧不自行复制任何持久目录。
+checkpoint 数据保存在 `.checkpoints/`，由 magicfs 的 checkpoint hook 统一维护，并按空间分区落盘：
 
-流水条目的两个关键字段由网关挂载配置决定：
+```text
+.checkpoints/checkpoint_manifest.json          共享清单（Python 写、magicfs 读）
+.checkpoints/<checkpoint_id>/checkpoint_info.json      Python 簿记（id/created_time，只写一次）
+.checkpoints/<checkpoint_id>/project/operations.json   project 操作流水 + file_snapshots/
+.checkpoints/<checkpoint_id>/topic/operations.json     topic（聊天历史）流水 + file_snapshots/
+```
 
-- `file_path` 是 agent 可见绝对路径（如 `/mnt/agfs/magicfs/project/a.txt`、`/mnt/agfs/magicfs/topic/chat_history/main.json`），网关为每个挂载下发对应的 `path_prefix`。恢复目标就是路径本身，消费方不需要猜测挂载根。
-- `space` 标记来源空间（`project` / `topic`），用于按空间施加策略；空值是旧格式条目，视为工作区。
+- `checkpoint_info.json` 是 Python 私有的簿记文件；`operations.json` 与内容帧由 magicfs 写入各自空间分区，Python 只读。两个名字不再混用。
+- topic 挂载的 hook 同样开启（`exclude_prefixes` 可选排除非历史子树），`.topic/chat_history/` 的变更自动入账。Python 侧不自行复制任何持久目录。
+- 流水条目带两个协议字段：`file_path` 是 agent 可见绝对路径，恢复目标即路径本身；`space` 标记来源空间，用于按空间施加策略。
 
-checkpoint 由主 Agent 创建：每个用户回合开始前把新的 checkpoint_id 写入 manifest，此后 magicfs 自动对挂载内的变更入账。会话期间的消息追加不再触发任何 Python 侧快照复制。
+checkpoint 由主 Agent 创建：每个用户回合开始前登记新 checkpoint 并写入簿记，此后 magicfs 自动对挂载内的变更入账。会话期间的消息追加不触发任何 Python 侧快照复制。
 
-回滚时 `RollbackExecutor` 重放这些帧：工作区回放非 topic 条目，聊天历史回放 `space=topic` 条目，两者共用同一套 operation 感知恢复实现——反向（undo）用 initial 帧、正向（redo）用 latest 帧（created 反向删除、deleted 反向写回、renamed 原路改名）。目标 checkpoint 之后创建的压缩前历史和子 Agent 文件会被删除，存在变更的内容会被恢复；未被帧追踪的杂散文件保持现状。旧版本沙箱创建的 checkpoint 没有新格式帧，遇到时跳过并告警。文件版本创建只针对非 topic 条目——聊天历史随 checkpoint 恢复，不进用户文件版本链路。
+回滚时 `RollbackExecutor` 读聚合后的流水：工作区回放非 topic 条目，聊天历史回放 `space=topic` 条目，共用同一套 operation 感知重放——反向（undo）用 initial 帧、正向（redo）用 latest 帧。文件版本创建只针对非 topic 条目。未被帧追踪的杂散文件保持现状；无分区的旧格式 checkpoint 视为空条目，降级跳过并告警，随 max_count 自然淘汰。
 
 聊天历史帧包括：
 
