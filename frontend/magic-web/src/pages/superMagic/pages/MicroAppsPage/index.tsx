@@ -23,6 +23,7 @@ import MicroAppKeyboardCable from "./components/MicroAppKeyboardCable"
 import MicroAppListActionDialogs from "./components/MicroAppListActionDialogs"
 import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
+import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
@@ -95,6 +96,7 @@ function MicroAppsPageDesktop() {
 		deleteApp,
 	} = useMicroAppsPage()
 	const itemActions = useMicroAppListItemActions({ renameApp, deleteApp })
+	const collaboratorManagement = useMicroAppCollaboratorManagement()
 	const [promptFocused, setPromptFocused] = useState(false)
 	const reduceMotion = Boolean(useReducedMotion())
 	const [keyboardConnectorReady, setKeyboardConnectorReady] = useState(reduceMotion)
@@ -272,8 +274,17 @@ function MicroAppsPageDesktop() {
 								onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 								onRename={() => itemActions.openRename(app)}
 								onDelete={() => itemActions.openDelete(app)}
+								onManageCollaborators={() =>
+									collaboratorManagement.openCollaboratorManager(app)
+								}
+								managingCollaborators={
+									collaboratorManagement.loadingAppId === app.app_id
+								}
 								canDelete={app.can_delete}
-								canManageCollaborators={app.can_manage_collaborators}
+								canManageCollaborators={
+									collaboratorManagement.canManageCollaborators &&
+									app.can_manage_collaborators
+								}
 								testId={`micro-apps-app-${app.app_id}`}
 							/>
 						))}
@@ -305,6 +316,7 @@ function MicroAppsPageDesktop() {
 				onConfirmRename={itemActions.confirmRename}
 				onConfirmDelete={itemActions.confirmDelete}
 			/>
+			{collaboratorManagement.CollaboratorUpdatePanel}
 		</ScrollArea>
 	)
 }

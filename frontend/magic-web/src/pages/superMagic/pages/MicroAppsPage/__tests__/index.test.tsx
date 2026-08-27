@@ -58,12 +58,22 @@ vi.mock("../components/MicroAppFloatingBackdrop", () => ({
 }))
 
 vi.mock("../components/MicroAppCard", () => ({
-	default: ({ title, description, coverUrl, statusLabel, canDelete, onClick, testId }: any) => (
+	default: ({
+		title,
+		description,
+		coverUrl,
+		statusLabel,
+		canDelete,
+		canManageCollaborators,
+		onClick,
+		testId,
+	}: any) => (
 		<button
 			type="button"
 			data-testid={testId}
 			data-cover-url={coverUrl}
 			data-can-delete={canDelete}
+			data-can-manage-collaborators={canManageCollaborators}
 			onClick={onClick}
 		>
 			{title}
@@ -114,6 +124,7 @@ describe("MicroAppsPage", () => {
 					publish_status: "published",
 					updated_at: "2026-07-24 10:30:00",
 					can_delete: false,
+					can_manage_collaborators: true,
 				},
 			],
 			scope: "all",
@@ -129,6 +140,15 @@ describe("MicroAppsPage", () => {
 			renameApp: mocks.renameApp,
 			deleteApp: mocks.deleteApp,
 		})
+	})
+
+	it("hides collaborator management when the public hook is disabled", () => {
+		render(<MicroAppsPage />)
+
+		expect(screen.getByTestId("micro-apps-app-app-1")).toHaveAttribute(
+			"data-can-manage-collaborators",
+			"false",
+		)
 	})
 
 	it("opens an app directly by app_id", async () => {

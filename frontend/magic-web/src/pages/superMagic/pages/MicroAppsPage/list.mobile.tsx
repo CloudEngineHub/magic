@@ -16,6 +16,7 @@ import MicroAppCard from "./components/MicroAppCard"
 import MicroAppListActionDialogs from "./components/MicroAppListActionDialogs"
 import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
+import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 function formatAppTime(value: string | null | undefined): string {
@@ -59,6 +60,7 @@ export default function MicroAppsListPageMobile() {
 		deleteApp,
 	} = useMicroAppsPage()
 	const itemActions = useMicroAppListItemActions({ renameApp, deleteApp })
+	const collaboratorManagement = useMicroAppCollaboratorManagement()
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
@@ -201,8 +203,17 @@ export default function MicroAppsListPageMobile() {
 									onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 									onRename={() => itemActions.openRename(app)}
 									onDelete={() => itemActions.openDelete(app)}
+									onManageCollaborators={() =>
+										collaboratorManagement.openCollaboratorManager(app)
+									}
+									managingCollaborators={
+										collaboratorManagement.loadingAppId === app.app_id
+									}
 									canDelete={app.can_delete}
-									canManageCollaborators={app.can_manage_collaborators}
+									canManageCollaborators={
+										collaboratorManagement.canManageCollaborators &&
+										app.can_manage_collaborators
+									}
 									testId={`micro-apps-mobile-app-${app.app_id}`}
 								/>
 							))}
@@ -237,6 +248,7 @@ export default function MicroAppsListPageMobile() {
 				onConfirmRename={itemActions.confirmRename}
 				onConfirmDelete={itemActions.confirmDelete}
 			/>
+			{collaboratorManagement.CollaboratorUpdatePanel}
 		</div>
 	)
 }
