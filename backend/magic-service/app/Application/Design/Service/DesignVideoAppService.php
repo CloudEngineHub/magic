@@ -26,6 +26,7 @@ use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\File\ImageBase64DataUriParser;
+use App\Infrastructure\Util\File\ProviderAssetUri;
 use App\Interfaces\Design\DTO\VideoPointEstimateDTO;
 use Hyperf\Amqp\Producer;
 use Hyperf\Database\Exception\QueryException;
@@ -36,6 +37,9 @@ class DesignVideoAppService extends DesignAppService
 {
     // 给 payload builder 的能力标记：支持图片 URL 时就不再转 base64。
     private const string REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL = 'supports_image_input_url';
+
+    // 给 payload builder 的能力标记：允许透传 provider 专用 asset URI。
+    private const string REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI = 'supports_provider_asset_uri';
 
     private const string SOURCE_ID_DESIGN_VIDEO_GENERATION = 'design_video_generation';
 
@@ -56,7 +60,8 @@ class DesignVideoAppService extends DesignAppService
         $designDataIsolation = $this->createDesignDataIsolation($authenticatable);
         $project = $this->assertProjectAccess($designDataIsolation, $entity->getProjectId(), MemberRole::EDITOR);
         $modelDefinition = $this->findModelOrFail($entity->getModelId());
-        $outputDirectory = $this->assertWorkspacePathsExist($project->getId(), $entity);
+        $supportsProviderAssetUri = $this->supportsProviderAssetUri($modelDefinition);
+        $outputDirectory = $this->assertWorkspacePathsExist($project->getId(), $entity, $supportsProviderAssetUri);
         // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
         $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
 
@@ -73,6 +78,7 @@ class DesignVideoAppService extends DesignAppService
         );
         // 先在请求体里写入能力开关，后续 builder 就能无状态地选择图片输入格式。
         $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelDefinition);
+        $requestPayload[self::REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI] = $supportsProviderAssetUri;
         $entity->setOrganizationCode($designDataIsolation->getCurrentOrganizationCode());
         $entity->setUserId($designDataIsolation->getCurrentUserId());
         $entity->setRequestPayload($requestPayload);
@@ -146,12 +152,13 @@ class DesignVideoAppService extends DesignAppService
         // 检查项目权限
         $this->assertProjectAccess($designDataIsolation, $projectId, MemberRole::EDITOR);
 
-        $this->findModelOrFail($dto->getModelId());
+        $modelDefinition = $this->findModelOrFail($dto->getModelId());
         $payload = $dto->toModelGatewayPayload();
         $payload['inputs'] = $this->prepareEstimateInputs(
             $designDataIsolation->getCurrentOrganizationCode(),
             $projectId,
             $dto,
+            $this->supportsProviderAssetUri($modelDefinition),
         );
 
         $payload = $this->prepareGatewayPayloadWithBusinessParams(
@@ -238,10 +245,14 @@ class DesignVideoAppService extends DesignAppService
      *
      * @return array<string, mixed>
      */
-    private function prepareEstimateInputs(string $organizationCode, int $projectId, DesignVideoCreateDTO $dto): array
-    {
+    private function prepareEstimateInputs(
+        string $organizationCode,
+        int $projectId,
+        DesignVideoCreateDTO $dto,
+        bool $supportsProviderAssetUri,
+    ): array {
         $inputs = DesignVideoInputPayloadPreparer::prepareInputs($dto);
-        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputs);
+        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputs, $supportsProviderAssetUri);
 
         return $inputs;
     }
@@ -249,8 +260,11 @@ class DesignVideoAppService extends DesignAppService
     /**
      * 校验输出目录和所有输入素材均在当前项目工作区内存在。
      */
-    private function assertWorkspacePathsExist(int $projectId, DesignGenerationTaskEntity $entity): TaskFileEntity
-    {
+    private function assertWorkspacePathsExist(
+        int $projectId,
+        DesignGenerationTaskEntity $entity,
+        bool $supportsProviderAssetUri,
+    ): TaskFileEntity {
         // Verify target directory exists via tree navigation
         $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath($projectId, $entity->getFileDir());
         if (! $taskFileDir || ! $taskFileDir->getIsDirectory()) {
@@ -258,7 +272,7 @@ class DesignVideoAppService extends DesignAppService
         }
 
         $inputPayload = $entity->getInputPayload();
-        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputPayload);
+        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputPayload, $supportsProviderAssetUri);
 
         return $taskFileDir;
     }
@@ -268,18 +282,21 @@ class DesignVideoAppService extends DesignAppService
      *
      * @param array<string, mixed> $inputPayload
      */
-    private function assertWorkspaceInputPayloadFilesExist(int $projectId, array $inputPayload): void
-    {
+    private function assertWorkspaceInputPayloadFilesExist(
+        int $projectId,
+        array $inputPayload,
+        bool $supportsProviderAssetUri = false,
+    ): void {
         foreach ((array) ($inputPayload['reference_images'] ?? []) as $referenceImage) {
-            $this->assertWorkspaceInputUri($projectId, (string) ($referenceImage['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceImage['uri'] ?? ''), $supportsProviderAssetUri);
         }
 
         foreach ((array) ($inputPayload['reference_videos'] ?? []) as $referenceVideo) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($referenceVideo['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceVideo['uri'] ?? ''), $supportsProviderAssetUri);
         }
 
         foreach ((array) ($inputPayload['reference_audios'] ?? []) as $referenceAudio) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($referenceAudio['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceAudio['uri'] ?? ''), $supportsProviderAssetUri);
         }
 
         $maskUri = (string) ($inputPayload['mask']['uri'] ?? '');
@@ -288,16 +305,16 @@ class DesignVideoAppService extends DesignAppService
         }
 
         foreach ((array) ($inputPayload['frames'] ?? []) as $frame) {
-            $this->assertWorkspaceInputUri($projectId, (string) ($frame['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($frame['uri'] ?? ''), $supportsProviderAssetUri);
         }
     }
 
     /**
      * 仅对工作区路径执行文件存在校验，内联 Base64 图片由入口完成校验。
      */
-    private function assertWorkspaceInputUri(int $projectId, string $uri): void
+    private function assertWorkspaceInputUri(int $projectId, string $uri, bool $supportsProviderAssetUri = false): void
     {
-        if (ImageBase64DataUriParser::isValid($uri)) {
+        if (ImageBase64DataUriParser::isValid($uri) || ($supportsProviderAssetUri && ProviderAssetUri::isValid($uri))) {
             return;
         }
 
@@ -317,6 +334,14 @@ class DesignVideoAppService extends DesignAppService
                 ['file_key' => $relativePath]
             );
         }
+    }
+
+    /**
+     * 判断当前 provider 是否支持将 asset URI 原样传给模型接口。
+     */
+    private function supportsProviderAssetUri(VideoCatalogModelDefinition $modelDefinition): bool
+    {
+        return $modelDefinition->getProviderCode() === ProviderCode::VolcengineArk->value;
     }
 
     /**

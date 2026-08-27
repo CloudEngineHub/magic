@@ -147,8 +147,8 @@ print(result.content)
 **Workflow:**
 - Default to reusing the existing canvas project; only create a new one when the user explicitly asks
 - Never assume file paths — always use paths obtained from query results
-- For image-to-image: use `visual_understanding` to analyze the reference image first — it returns both content description and dimensions. Use the description to inform your prompt; `size` can be omitted when reference images are provided (auto-resolved from the largest one), or set explicitly if the user wants a different output size.
-- When the user references a canvas image, always call `visual_understanding` to understand its content before generating. This ensures your prompt accurately describes what to preserve and what to change.
+- For image-to-image: use `visual_understanding` to analyze an accessible local/workspace reference image first — it returns both content description and dimensions. Use the description to inform your prompt; `size` can be omitted when reference images are provided (auto-resolved from the largest one), or set explicitly if the user wants a different output size.
+- This visual-understanding rule applies to image generation and image editing only. Do not call `visual_understanding` as a prerequisite for video generation. For provider-managed `asset://` references, pass the URI directly to the video tool; never send it to `visual_understanding` or treat it as a workspace file.
 
 **Generation timeout handling:**
 - `run_sdk_snippet` automatically enforces a minimum 10-minute timeout for `generate_canvas_images` calls. You do not need to pass `timeout` unless the task is expected to take longer than 10 minutes.

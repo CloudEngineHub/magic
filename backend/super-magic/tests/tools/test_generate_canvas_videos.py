@@ -5,16 +5,16 @@ from agentlang.context.tool_context import ToolContext
 from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.agent_model_selection import AgentModelSelection
 from app.core.models.media_model import VideoModelSpec
-from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.exceptions import ApiError
+from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
 from app.tools.design.tools.generate_canvas_videos import (
     GenerateCanvasVideos,
     GenerateCanvasVideosParams,
     VideoPlaceholderUpdate,
     VideoTaskSpec,
 )
-from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
 
 
 class _FakeMagicServiceResponse:
@@ -776,6 +776,42 @@ def test_generate_canvas_videos_request_infers_omni_reference_for_references():
     }
 
 
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_preserves_provider_asset_uri_during_normalization(tmp_path):
+    """供应商素材 URI 归一化时不能被当作工作区文件。"""
+    tool = GenerateCanvasVideos(base_dir=str(tmp_path))
+    task = VideoTaskSpec(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像介绍",
+        reference_image_paths=["asset://virtual-human-asset-id"],
+    )
+
+    await tool._normalize_reference_paths([task], tmp_path, "virtual-human-product-video")
+
+    assert task.reference_image_paths == ["asset://virtual-human-asset-id"]
+
+
+def test_generate_canvas_videos_preserves_provider_asset_uri_in_payload():
+    """供应商素材 URI 生成请求中必须保持原值。"""
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像介绍",
+        reference_image_paths=["asset://virtual-human-asset-id"],
+    )
+
+    payload = tool._build_design_video_request(
+        task=task,
+        project_id="123",
+        video_id="video-test-asset",
+        model_id="mock-video-model",
+        file_dir="/virtual-human-product-video/videos/",
+        relative_project_path="virtual-human-product-video",
+    )
+
+    assert payload["inputs"]["reference_images"] == [
+        {"uri": "asset://virtual-human-asset-id"}
+    ]
 def test_generate_canvas_videos_builds_shared_task_request_fields_once():
     tool = GenerateCanvasVideos()
     task = VideoTaskSpec(
