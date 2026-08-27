@@ -27,7 +27,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateFactory;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateModelType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\ImageGenerateRequest;
-use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\ImageGenerateConnectivityTestResponse;
+use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -57,7 +57,7 @@ class LLMTestAppService extends AbstractLLMAppService
         $modelVersion = $request->getModelVersion();
         $serviceProviderConfigId = $request->getServiceProviderConfigId();
         $serviceProviderConfig = $request->getServiceProviderConfig();
-        $modelConfig = $request->getConfig();
+        $modelConfig = null;
         $modelType = $request->getModelType();
         $category = Category::tryFrom($request->getCategory() ?? '');
         $serviceProviderConfigDTO = null;
@@ -67,13 +67,14 @@ class LLMTestAppService extends AbstractLLMAppService
             $serviceProviderConfigDTO = $this->serviceProviderDomainService->getServiceProviderConfigDetail($serviceProviderConfigId, $authorization->getOrganizationCode());
             $category = $serviceProviderConfigDTO->getCategory();
             $serviceProviderConfig = $serviceProviderConfigDTO->getConfig()?->toArray() ?? [];
-            $providerCode = $serviceProviderConfigDTO->getProviderCode()?->value ?? $providerCode;
+            $providerCodeEnum = $serviceProviderConfigDTO->getProviderCode();
+            $providerCode = $providerCodeEnum === null ? $providerCode : $providerCodeEnum->value;
             $providerModelEntity = $this->resolveConnectivityProviderModel(
                 $authorization->getOrganizationCode(),
                 $serviceProviderConfigId,
                 $modelVersion
             );
-            $modelConfig ??= $providerModelEntity?->getConfig();
+            $modelConfig = $providerModelEntity?->getConfig();
         }
 
         // 过滤掉前后空字符串
@@ -224,7 +225,7 @@ class LLMTestAppService extends AbstractLLMAppService
                 $imageGenerateRequest
             );
             $connectResponse->setStatus($response->isSuccess());
-            $connectResponse->setMessage($response->getMessage());
+            $connectResponse->setMessage($response->getProviderErrorMessage() ?? '');
         } catch (Throwable $exception) {
             $connectResponse->setMessage($exception->getMessage());
             $connectResponse->setStatus(false);
@@ -446,7 +447,7 @@ class LLMTestAppService extends AbstractLLMAppService
             'organization_id' => $authorization->getOrganizationCode(),
             'organization_code' => $authorization->getOrganizationCode(),
             'user_id' => $authorization->getId(),
-            'source_id' => SourceId::CRONTAB_CONNECTIVITY_TEST,
+            'source_id' => SourceId::CONNECTIVITY_TEST,
             'app_id' => '',
             'user_name' => '',
             'access_token_id' => '',
@@ -476,7 +477,7 @@ class LLMTestAppService extends AbstractLLMAppService
         ImageGenerateModelType $imageGenerateType,
         array $imageModelConfig,
         ImageGenerateRequest $imageGenerateRequest
-    ): ImageGenerateConnectivityTestResponse {
+    ): OpenAIFormatResponse {
         if (! empty($imageModelConfig['use_proxy'])) {
             $proxyUrl = $this->resolveProxyUrl($imageModelConfig);
             if ($proxyUrl) {
@@ -485,7 +486,7 @@ class LLMTestAppService extends AbstractLLMAppService
         }
 
         $imageGenerateService = ImageGenerateFactory::create($imageGenerateType, $imageModelConfig);
-        return $imageGenerateService->connectivityTest($imageGenerateRequest);
+        return $imageGenerateService->generateImageOpenAIFormat($imageGenerateRequest);
     }
 
     /**
