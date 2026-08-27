@@ -3,7 +3,7 @@ name: lark-cli
 description: "Use when the user wants to interact with Lark/Feishu in any way — including but not limited to: reading, querying, searching, sending, replying to, forwarding, or downloading Lark/Feishu IM messages and chat history; managing group chats; listing, viewing, searching, creating, or editing cloud docs/files, Drive, Markdown, spreadsheets, Base tables, wiki, whiteboards, slides, apps, calendars/events/meeting rooms, contacts/org structure, tasks/todos, approvals, attendance, mail, minutes, VC notes, OKRs, real-time events, or custom Lark CLI skills. Load this skill first to find the right sub-skill."
 ---
 
-# Lark Skill Index
+# Lark/Feishu CLI Skill Index
 
 This skill is a directory. Find the sub-skill that matches the user's intent, load it with `read_skills`, then proceed.
 All sub-skills are pre-installed at `~/.agents/skills/`.
@@ -50,6 +50,55 @@ Load the skill that matches the user's request. Only load what you need for the 
 | Above skills insufficient; need to call native Lark OpenAPI directly | `lark-openapi-explorer` |
 | Summarize meeting notes over a time range into a structured report | `lark-workflow-meeting-summary` |
 | Generate daily/weekly agenda and unfinished task summary (standup/daily report) | `lark-workflow-standup-report` |
+
+---
+
+## Authentication in the Super Magic sandbox
+
+Super Magic runs in an online sandbox. Do not use a blocking browser or
+loopback-callback login flow. For user authentication, use the device split
+flow so the authorization URL is returned to the user before polling:
+
+```bash
+# Start authorization and return immediately.
+lark-cli auth login --domain <domain> --no-wait --json
+
+# After the user completes authorization, finish with the returned device code.
+lark-cli auth login --device-code <device_code>
+```
+
+Use `--scope "<scope>"` instead of `--domain <domain>` when a specific scope
+is required. `auth login` must include `--scope`, `--domain`, or `--recommend`.
+Do not run plain `lark-cli auth login` in the online sandbox: it can block while
+waiting for a callback that the sandbox cannot receive. Check the current
+identity and token state with:
+
+```bash
+lark-cli auth status --json --verify
+```
+
+When starting device authorization, pass the returned `verification_url` to the
+user unchanged. Return the authorization link only. **Super Magic sandbox
+exception: do not generate a QR-code image.** This avoids producing image files or image
+attachments during the sandbox authentication flow. This exception takes
+precedence over the generic QR-code requirement in `lark-shared` and over QR
+code prompts emitted by the CLI. Therefore, do not call `lark-cli auth qrcode`
+in the sandbox and do not use image tags or file attachments to display a
+QR code; return `verification_url` unchanged as a text link. Do not expose
+credentials or tokens.
+
+When starting authorization, explicitly tell the user to open the authorization
+link and return after completing it with "Authorization completed". After the
+user confirms, execute `lark-cli auth login --device-code <device_code>` to
+complete polling, then verify the user identity with
+`lark-cli auth status --json --verify`. Start a new login only when the device
+code has expired or authorization has failed.
+
+If `auth login --device-code` exits with code `3` but the output also contains
+`device-flow: token response received` and indicates that some scopes were not
+granted, do not treat it as a login failure or retry immediately. First run
+`auth status --json --verify` and report: "Authorization completed, but some
+permissions were not granted."
 
 ---
 
