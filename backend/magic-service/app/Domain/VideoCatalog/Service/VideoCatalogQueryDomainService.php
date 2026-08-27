@@ -158,6 +158,17 @@ readonly class VideoCatalogQueryDomainService
         return $definitions;
     }
 
+    public function findModel(string $modelIdOrPrimaryId): ?VideoCatalogModelDefinition
+    {
+        $normalized = trim($modelIdOrPrimaryId);
+        if ($normalized === '') {
+            return null;
+        }
+
+        return array_find($this->getModels(), static fn (VideoCatalogModelDefinition $model): bool => $normalized === (string) $model->getId()
+            || self::canonicalModelId($normalized) === $model->getModelId());
+    }
+
     /**
      * @return VideoCatalogModelDefinition[]
      */
