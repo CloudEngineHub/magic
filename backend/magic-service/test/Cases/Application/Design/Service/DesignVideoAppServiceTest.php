@@ -10,6 +10,9 @@ namespace HyperfTest\Cases\Application\Design\Service;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
 use App\Application\Design\Service\DesignVideoAppService;
+use App\Application\ModelGateway\Mapper\ModelAttributes;
+use App\Application\ModelGateway\Mapper\ModelEntry;
+use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
@@ -20,21 +23,24 @@ use App\Domain\Design\Factory\DesignGenerationTaskFactory;
 use App\Domain\Design\Repository\Facade\DesignGenerationTaskRepositoryInterface;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
-use App\Domain\File\Service\FileDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
-use App\Domain\VideoCatalog\Entity\ValueObject\VideoCatalogModelDefinition;
-use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
+use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
 use DateTime;
-use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Amqp\Producer;
+use Hyperf\Codec\Packer\PhpSerializerPacker;
+use Hyperf\Contract\ConfigInterface;
+use Hyperf\Contract\TranslatorInterface;
+use Hyperf\Context\ApplicationContext;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
 use RuntimeException;
 
@@ -43,6 +49,94 @@ use RuntimeException;
  */
 class DesignVideoAppServiceTest extends TestCase
 {
+    private mixed $previousContainer = null;
+
+    private bool $hadContainer = false;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->hadContainer = ApplicationContext::hasContainer();
+        $this->previousContainer = $this->hadContainer ? ApplicationContext::getContainer() : null;
+
+        ApplicationContext::setContainer(new class implements ContainerInterface {
+            public function get(string $id): mixed
+            {
+                if ($id === PhpSerializerPacker::class) {
+                    return new PhpSerializerPacker();
+                }
+                if ($id === ConfigInterface::class) {
+                    return new class implements ConfigInterface {
+                        public function get(string $key, mixed $default = null): mixed
+                        {
+                            return match ($key) {
+                                'error_message' => [
+                                    'exception_class' => \App\Infrastructure\Core\Exception\BusinessException::class,
+                                    'error_code_mapper' => [
+                                        \App\ErrorCode\DesignErrorCode::class => [14000, 14999],
+                                    ],
+                                ],
+                                default => $default,
+                            };
+                        }
+
+                        public function has(string $keys): bool
+                        {
+                            return $keys === 'error_message';
+                        }
+
+                        public function set(string $key, mixed $value): void
+                        {
+                        }
+                    };
+                }
+                if ($id === TranslatorInterface::class) {
+                    return new class implements TranslatorInterface {
+                        public function trans(string $key, array $replace = [], ?string $locale = null): array|string
+                        {
+                            return $key;
+                        }
+
+                        public function transChoice(string $key, $number, array $replace = [], ?string $locale = null): string
+                        {
+                            return $key;
+                        }
+
+                        public function getLocale(): string
+                        {
+                            return 'en';
+                        }
+
+                        public function setLocale(string $locale)
+                        {
+                        }
+                    };
+                }
+                throw new RuntimeException('Unsupported service: ' . $id);
+            }
+
+            public function has(string $id): bool
+            {
+                return $id === PhpSerializerPacker::class || $id === ConfigInterface::class || $id === TranslatorInterface::class;
+            }
+        });
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->hadContainer && $this->previousContainer instanceof ContainerInterface) {
+            ApplicationContext::setContainer($this->previousContainer);
+        } else {
+            $property = new \ReflectionProperty(ApplicationContext::class, 'container');
+            $property->setAccessible(true);
+            $property->setValue(null, null);
+        }
+
+        $this->previousContainer = null;
+        $this->hadContainer = false;
+
+        parent::tearDown();
+    }
     public function testCanvasCompositionValidatesFilesInBatchesAndDispatchesAsyncSubmission(): void
     {
         $repository = new InMemoryDesignVideoTaskRepository();
@@ -71,11 +165,12 @@ class DesignVideoAppServiceTest extends TestCase
         $producer->expects($this->once())
             ->method('produce')
             ->with($this->isInstanceOf(DesignVideoSubmitPublisher::class));
+        $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
+        $modelGatewayMapper->expects($this->never())->method('getOrganizationVideoModel');
 
         $service = new TestableDesignVideoAppService(
             $taskFileDomainService,
-            new CreateVideoFileDomainService('/org'),
-            new StubVideoCatalogQueryDomainService($this->createModelDefinition()),
+            $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new UnexpectedDesignVideoSubmissionDomainService(),
             $producer,
@@ -103,11 +198,12 @@ class DesignVideoAppServiceTest extends TestCase
             ->willReturn([
                 'a.mp4' => $this->createFile(7101, '/org/project_123/workspace/canvas/videos/a.mp4'),
             ]);
+        $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
+        $modelGatewayMapper->expects($this->never())->method('getOrganizationVideoModel');
 
         $service = new TestableDesignVideoAppService(
             $taskFileDomainService,
-            new CreateVideoFileDomainService('/org'),
-            new StubVideoCatalogQueryDomainService($this->createModelDefinition()),
+            $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new UnexpectedDesignVideoSubmissionDomainService(),
             $this->createMock(Producer::class),
@@ -139,11 +235,15 @@ class DesignVideoAppServiceTest extends TestCase
         $producer->expects($this->once())
             ->method('produce')
             ->with($this->isInstanceOf(DesignVideoPollDelayPublisher::class));
+        $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
+        $modelGatewayMapper->expects($this->once())
+            ->method('getOrganizationVideoModel')
+            ->with($this->anything(), 'video-model')
+            ->willReturn($this->createModelEntry());
 
         $service = new TestableDesignVideoAppService(
             $taskFileDomainService,
-            new CreateVideoFileDomainService('/org'),
-            new StubVideoCatalogQueryDomainService($this->createModelDefinition()),
+            $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new StubDesignVideoSubmissionDomainService(),
             $producer,
@@ -186,10 +286,12 @@ class DesignVideoAppServiceTest extends TestCase
                 'url' => 'https://cdn.example.com/smart-video.mp4',
             ]]);
 
+        $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
+        $modelGatewayMapper->expects($this->never())->method('getOrganizationVideoModel');
+
         $service = new TestableDesignVideoAppService(
             $taskFileDomainService,
-            new CreateVideoFileDomainService('/org'),
-            new StubVideoCatalogQueryDomainService($this->createModelDefinition()),
+            $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new StubDesignVideoSubmissionDomainService(),
             $this->createMock(Producer::class),
@@ -202,20 +304,21 @@ class DesignVideoAppServiceTest extends TestCase
         $this->assertSame('https://cdn.example.com/smart-video.mp4', $result->getFileUrl());
     }
 
-    private function createModelDefinition(): VideoCatalogModelDefinition
+    private function createModelEntry(): ModelEntry
     {
-        return new VideoCatalogModelDefinition(
-            id: 1,
-            serviceProviderConfigId: 'provider-config-1',
-            modelId: 'video-model',
-            name: 'Video Model',
-            modelVersion: 'video-model-version',
-            description: '',
-            icon: '',
-            modelType: 0,
-            category: 'vgm',
-            status: 1,
-            providerCode: 'Cloudsway',
+        return new ModelEntry(
+            new ModelAttributes(
+                key: 'video-model',
+                name: 'Video Model',
+                label: 'Video Model',
+                icon: '',
+                tags: [],
+                createdAt: new DateTime(),
+                owner: 'MagicAI',
+                modelVersion: 'video-model-version',
+                providerCode: 'Cloudsway',
+            ),
+            new VideoModel([], 'video-model-version', 'provider-model', ProviderCode::Cloudsway),
         );
     }
 
@@ -308,7 +411,21 @@ class TestableDesignVideoAppService extends DesignVideoAppService
 {
     protected function createDesignDataIsolation(Authenticatable|BaseDataIsolation $authorization): DesignDataIsolation
     {
-        return DesignDataIsolation::create('org', 'user-1');
+        return new class extends DesignDataIsolation {
+            public function __construct()
+            {
+            }
+
+            public function getCurrentOrganizationCode(): string
+            {
+                return 'org';
+            }
+
+            public function getCurrentUserId(): string
+            {
+                return 'user-1';
+            }
+        };
     }
 
     protected function assertProjectAccess(DesignDataIsolation $dataIsolation, int $projectId, MemberRole $role): ProjectEntity
@@ -319,39 +436,6 @@ class TestableDesignVideoAppService extends DesignVideoAppService
             'user_organization_code' => 'org',
             'created_uid' => 'user-1',
         ]);
-    }
-}
-
-readonly class CreateVideoFileDomainService extends FileDomainService
-{
-    public function __construct(private string $fullPrefix)
-    {
-    }
-
-    public function getFullPrefix(string $organizationCode): string
-    {
-        return $this->fullPrefix;
-    }
-
-    public function uploadByCredential(
-        string $organizationCode,
-        UploadFile $uploadFile,
-        StorageBucketType $storage = StorageBucketType::Private,
-        bool $autoDir = true,
-        ?string $contentType = null
-    ): void {
-    }
-}
-
-readonly class StubVideoCatalogQueryDomainService extends VideoCatalogQueryDomainService
-{
-    public function __construct(private VideoCatalogModelDefinition $modelDefinition)
-    {
-    }
-
-    public function findModel(string $modelIdOrPrimaryId): ?VideoCatalogModelDefinition
-    {
-        return $this->modelDefinition;
     }
 }
 

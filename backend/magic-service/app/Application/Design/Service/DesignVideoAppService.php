@@ -11,6 +11,8 @@ use App\Application\Design\Event\Message\DesignVideoPollMessage;
 use App\Application\Design\Event\Message\DesignVideoSubmitMessage;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
+use App\Application\ModelGateway\Mapper\ModelEntry;
+use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
@@ -23,8 +25,6 @@ use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
-use App\Domain\VideoCatalog\Entity\ValueObject\VideoCatalogModelDefinition;
-use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\File\ImageBase64DataUriParser;
@@ -47,7 +47,7 @@ class DesignVideoAppService extends DesignAppService
 
     public function __construct(
         private readonly TaskFileDomainService $taskFileDomainService,
-        private readonly VideoCatalogQueryDomainService $videoCatalogDomainService,
+        private readonly ModelGatewayMapper $modelGatewayMapper,
         private readonly DesignGenerationTaskDomainService $designGenerationTaskDomainService,
         private readonly DesignVideoSubmissionDomainService $submissionDomainService,
         private readonly Producer $producer,
@@ -61,14 +61,14 @@ class DesignVideoAppService extends DesignAppService
     {
         $designDataIsolation = $this->createDesignDataIsolation($authenticatable);
         $project = $this->assertProjectAccess($designDataIsolation, $entity->getProjectId(), MemberRole::EDITOR);
-        $modelDefinition = null;
+        $modelEntry = null;
         $supportsProviderAssetUri = false;
         if ($entity->isCanvasComposition()) {
             $outputDirectory = $this->assertCanvasCompositionPathsExist($project->getId(), $entity);
             $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
         } else {
-            $modelDefinition = $this->findModelOrFail($entity->getModelId());
-            $supportsProviderAssetUri = $this->supportsProviderAssetUri($modelDefinition);
+            $modelEntry = $this->findModelOrFail($designDataIsolation, $entity->getModelId());
+            $supportsProviderAssetUri = $this->supportsProviderAssetUri($modelEntry);
             $outputDirectory = $this->assertWorkspacePathsExist(
                 $project->getId(),
                 $entity,
@@ -90,8 +90,8 @@ class DesignVideoAppService extends DesignAppService
             $entity->getGenerationId()
         );
         // 先在请求体里写入能力开关，后续 builder 就能无状态地选择图片输入格式。
-        if ($modelDefinition !== null) {
-            $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelDefinition);
+        if ($modelEntry !== null) {
+            $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelEntry);
             $requestPayload[self::REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI] = $supportsProviderAssetUri;
         }
         $entity->setOrganizationCode($designDataIsolation->getCurrentOrganizationCode());
@@ -169,13 +169,13 @@ class DesignVideoAppService extends DesignAppService
         // 检查项目权限
         $this->assertProjectAccess($designDataIsolation, $projectId, MemberRole::EDITOR);
 
-        $modelDefinition = $this->findModelOrFail($dto->getModelId());
+        $modelEntry = $this->findModelOrFail($designDataIsolation, $dto->getModelId());
         $payload = $dto->toModelGatewayPayload();
         $payload['inputs'] = $this->prepareEstimateInputs(
             $designDataIsolation->getCurrentOrganizationCode(),
             $projectId,
             $dto,
-            $this->supportsProviderAssetUri($modelDefinition),
+            $this->supportsProviderAssetUri($modelEntry),
         );
 
         $payload = $this->prepareGatewayPayloadWithBusinessParams(
@@ -232,23 +232,25 @@ class DesignVideoAppService extends DesignAppService
     /**
      * 查询视频模型定义，找不到时统一抛 Design 参数错误。
      */
-    private function findModelOrFail(string $modelId): VideoCatalogModelDefinition
+    private function findModelOrFail(DesignDataIsolation $dataIsolation, string $modelId): ModelEntry
     {
-        $modelDefinition = $this->videoCatalogDomainService->findModel($modelId);
-        if ($modelDefinition === null) {
+        $modelEntry = $this->modelGatewayMapper->getOrganizationVideoModel($dataIsolation, $modelId);
+        if (! $modelEntry instanceof ModelEntry || ! $modelEntry->isVideoModel()) {
             ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.not_found', ['label' => $modelId]);
         }
 
-        return $modelDefinition;
+        return $modelEntry;
     }
 
     /**
      * 判断当前 provider 是否支持直接传图片 URL，用于生成任务 payload 构建。
      */
-    private function supportsImageInputUrl(VideoCatalogModelDefinition $modelDefinition): bool
+    private function supportsImageInputUrl(ModelEntry $modelEntry): bool
     {
+        $providerCode = $modelEntry->getVideoModel()?->getProviderCode();
+
         return in_array(
-            $modelDefinition->getProviderCode(),
+            $providerCode?->value,
             [
                 ProviderCode::VolcengineArk->value,
                 ProviderCode::Keling->value,
@@ -441,9 +443,9 @@ class DesignVideoAppService extends DesignAppService
     /**
      * 判断当前 provider 是否支持将 asset URI 原样传给模型接口。
      */
-    private function supportsProviderAssetUri(VideoCatalogModelDefinition $modelDefinition): bool
+    private function supportsProviderAssetUri(ModelEntry $modelEntry): bool
     {
-        return $modelDefinition->getProviderCode() === ProviderCode::VolcengineArk->value;
+        return $modelEntry->getVideoModel()?->getProviderCode() === ProviderCode::VolcengineArk;
     }
 
     /**
