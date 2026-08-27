@@ -437,7 +437,7 @@ class RecordSummaryService {
 
 		try {
 			// 1. 停止录音服务（不等待上传完成，让上传在后台继续）
-			await this.stopRecordingServices()
+			await this.stopRecordingServices("user_logout")
 
 			// 2. 保存最终会话状态（包含 userId 和组织信息）
 			this.sessionManager.updateSessionStatus("paused") // 标记为暂停状态
@@ -995,7 +995,7 @@ class RecordSummaryService {
 
 			// 停止录音并完全清理资源
 			// Stop recording and fully cleanup resources
-			await this.mediaRecorderService.stopRecordingAndCleanup()
+			await this.mediaRecorderService.stopRecordingAndCleanup({ source: "pause_recording" })
 
 			// 暂停语音识别
 			await this.voiceToTextService.stopRecording().catch((error) => {
@@ -1533,16 +1533,29 @@ class RecordSummaryService {
 	 * @param waitForUploadComplete 是否等待上传完成，默认为true
 	 */
 	cancelRecording = async (
-		options: { waitForUploadComplete?: boolean; notifyServer?: boolean } = {
+		options: {
+			waitForUploadComplete?: boolean
+			notifyServer?: boolean
+			source?: string
+		} = {
 			waitForUploadComplete: true,
 			notifyServer: true,
 		},
 	) => {
-		const { waitForUploadComplete = true, notifyServer = true } = options
+		const {
+			waitForUploadComplete = true,
+			notifyServer = true,
+			source = "user_cancel",
+		} = options
+		const activeSession = this.sessionManager.getCurrentSession()
 
 		logger.report("取消录音", {
+			sessionId: activeSession?.id,
+			previousStatus: activeSession?.status,
+			previousChunkIndex: activeSession?.currentChunkIndex,
 			waitForUploadComplete,
 			notifyServer,
+			source,
 		})
 
 		// Stop duration tracking
@@ -1573,13 +1586,18 @@ class RecordSummaryService {
 		try {
 			// 请求最终数据分片
 			this.mediaRecorderService.requestData()
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({ source: `cancel:${source}` })
+			logger.log("Recording media capture stopped during cancellation", {
+				sessionId: activeSession?.id,
+				source,
+			})
 		} catch (error) {
 			logger.error({
 				eventKey: "stop_media_recorder_failed",
 				errorKind: "unknown",
 				error: error,
 				message: "Failed to stop media recorder",
+				context: { sessionId: activeSession?.id, source },
 			})
 		}
 
@@ -1598,12 +1616,26 @@ class RecordSummaryService {
 					const queueStatus = await this.chunkUploader.getQueueStatus(session.id)
 					const pendingCount = queueStatus.pending || 0
 					const dynamicTimeout = Math.min(30000 + pendingCount * 10000, 120000) // 30s base + 10s/chunk, max 120s
-					logger.log(`剩余分片数: ${pendingCount}, 超时时间: ${dynamicTimeout}ms`)
+					logger.log("Cancellation upload wait started", {
+						sessionId: session.id,
+						source,
+						queueStatus,
+						pendingCount,
+						dynamicTimeout,
+					})
 					await this.chunkUploader.waitForAllUploadsCompleted(session.id, dynamicTimeout)
 
-					logger.log("所有分片上传成功")
+					logger.log("Cancellation upload wait completed", {
+						sessionId: session.id,
+						source,
+						queueStatus: await this.chunkUploader.getQueueStatus(session.id),
+					})
 				} catch (error) {
-					logger.warn("取消录音失败，部分分片可能丢失:", error)
+					logger.warn("Cancellation upload wait failed", {
+						sessionId: session.id,
+						source,
+						errorMessage: error instanceof Error ? error.message : String(error),
+					})
 					// 即使上传失败也继续取消流程
 				} finally {
 					// 隐藏上传等待状态
@@ -1611,11 +1643,20 @@ class RecordSummaryService {
 				}
 			} else {
 				// 如果不等待上传完成，则暂停所有上传
-				this.chunkUploader.clearSessionChunks(session.id)
+				logger.log("Cancellation clearing pending chunks without waiting", {
+					sessionId: session.id,
+					source,
+				})
+				void this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
 			}
 
 			if (notifyServer) {
 				// 上报取消状态
+				logger.log("Recording cancellation status report requested", {
+					sessionId: session.id,
+					source,
+					status: RecordingSummaryStatus.Canceled,
+				})
 				this.statusReporter.reportStatus({
 					task_key: session.id,
 					status: RecordingSummaryStatus.Canceled,
@@ -1631,6 +1672,13 @@ class RecordSummaryService {
 
 		// Cancel current session and clean up persistence data
 		const cancelledSession = this.sessionManager.cancelSession()
+		logger.log("Recording cancellation completed", {
+			sessionId: cancelledSession?.id || activeSession?.id,
+			source,
+			finalStatus: cancelledSession?.status,
+			finalChunkIndex: cancelledSession?.currentChunkIndex,
+			finalDuration: cancelledSession?.totalDuration,
+		})
 
 		// 重置媒体录制器
 		this.mediaRecorderService.reset()
@@ -1770,7 +1818,7 @@ class RecordSummaryService {
 
 		// 停止录音服务
 		this.summaryMessageService.showStageMessage(SummaryStage.StoppingRecording)
-		await this.stopRecordingServices()
+		await this.stopRecordingServices("finish_recording")
 
 		const sessionId = this.sessionManager.getCurrentSession()?.id || ""
 		const sessionForProjectLogic = {
@@ -2209,7 +2257,7 @@ class RecordSummaryService {
 
 			if (needsRecordingStop) {
 				logger.log("目标会话是当前活跃的录音会话，先停止录音")
-				await this.stopRecordingServices()
+				await this.stopRecordingServices("complete_existing_session")
 			}
 
 			// 2. 处理项目和话题创建逻辑，先确保上传分片能 batch-save 到后端
@@ -2299,7 +2347,9 @@ class RecordSummaryService {
 
 		// Stop media recorder
 		if (this.mediaRecorderService) {
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({
+				source: "reset_without_persistence",
+			})
 		}
 
 		// Stop duration tracking and UI updates
@@ -2361,7 +2411,7 @@ class RecordSummaryService {
 
 		// Stop media recorder
 		if (this.mediaRecorderService) {
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({ source: "reset" })
 		}
 
 		// Stop duration tracking
@@ -2463,7 +2513,14 @@ class RecordSummaryService {
 		chunkIndex: number,
 		indexdbSaveSuccess: boolean,
 	) => {
-		logger.log(`${storedChunk.sessionId} 添加了一个分片`, storedChunk)
+		logger.log("Audio chunk persistence result received", {
+			sessionId: storedChunk.sessionId,
+			chunkId: storedChunk.id,
+			chunkIndex,
+			size: storedChunk.size,
+			uploadStatus: storedChunk.uploadStatus,
+			indexdbSaveSuccess,
+		})
 
 		// 标记已收到第一个分片，清除生产监控
 		if (!this.hasReceivedFirstChunk) {
@@ -2522,7 +2579,9 @@ class RecordSummaryService {
 
 			try {
 				// 停止并重启 MediaRecorder，保留同一 session
-				await this.mediaRecorderService.stopRecording()
+				await this.mediaRecorderService.stopRecording({
+					source: "chunk_production_watchdog_recovery",
+				})
 				this.mediaRecorderService.reset()
 				await this.mediaRecorderService.startRecording(sessionId, 0)
 
@@ -2568,7 +2627,10 @@ class RecordSummaryService {
 						type="button"
 						onClick={() => {
 							magicToast.destroy("recording-chunk-production-failed")
-							this.cancelRecording({ notifyServer: true })
+							this.cancelRecording({
+								notifyServer: true,
+								source: "chunk_production_watchdog",
+							})
 						}}
 						style={{
 							flexShrink: 0,
@@ -2675,12 +2737,18 @@ class RecordSummaryService {
 	 * 媒体录制错误需要重置整个录制服务状态
 	 */
 	private handleMediaRecorderError = (error: Error) => {
+		const activeSession = this.sessionManager.getCurrentSession()
 		logger.error({
 			eventKey: "media_recorder_service_failed",
 			errorKind: "unknown",
 			error: error,
 			message: "Media recorder service error",
-			context: { session: this.sessionManager.getCurrentSession() },
+			context: {
+				sessionId: activeSession?.id,
+				status: activeSession?.status,
+				chunkIndex: activeSession?.currentChunkIndex,
+				totalDuration: activeSession?.totalDuration,
+			},
 		})
 
 		// 设置录制错误状态
@@ -2691,7 +2759,7 @@ class RecordSummaryService {
 		this.wakeLockManager.removeVisibilityChangeListener()
 
 		// 执行完整的取消录音流程，但不等待上传完成（因为是错误情况）
-		this.cancelRecording({ notifyServer: false })
+		this.cancelRecording({ notifyServer: false, source: "media_recorder_error" })
 			.then((cancelledSession) => {
 				if (cancelledSession) {
 					this.emit(RECORD_SUMMARY_EVENTS.RECORDING_ERROR, { session: cancelledSession })
@@ -3530,7 +3598,7 @@ class RecordSummaryService {
 		try {
 			// Stop recording services (voice and media recorder)
 			// This includes stopping duration timer
-			await this.stopRecordingServices()
+			await this.stopRecordingServices("task_end")
 
 			// Release wake lock
 			this.wakeLockManager.releaseWakeLock()
@@ -3543,7 +3611,7 @@ class RecordSummaryService {
 			this.statusReporter.stopPeriodicReport()
 
 			// Clear chunk upload queue for this session
-			this.chunkUploader.clearSessionChunks(sessionId)
+			this.chunkUploader.clearSessionChunks(sessionId, "task_end")
 			this.batchSaveReporter.clearSession(sessionId)
 
 			// Cancel session
@@ -3820,7 +3888,14 @@ class RecordSummaryService {
 	/**
 	 * 停止录音服务
 	 */
-	private async stopRecordingServices(): Promise<void> {
+	private async stopRecordingServices(source: string = "service"): Promise<void> {
+		const session = this.sessionManager.getCurrentSession()
+		logger.log("Recording services stop requested", {
+			sessionId: session?.id,
+			source,
+			previousStatus: session?.status,
+			previousChunkIndex: session?.currentChunkIndex,
+		})
 		// 停止语音服务
 		try {
 			await this.voiceToTextService.stopRecording()
@@ -3843,14 +3918,23 @@ class RecordSummaryService {
 		// 停止媒体录制器并请求最终分片
 		try {
 			this.mediaRecorderService.requestData()
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({ source })
 			this.mediaRecorderService.reset()
+			logger.log("Recording services stopped", {
+				sessionId: session?.id,
+				source,
+				sessionStatusAfterStop: this.sessionManager.getCurrentSession()?.status,
+				mediaRecorderStateAfterStop:
+					this.mediaRecorderService.getStatus().mediaRecorderState,
+				chunkIndexAfterStop: this.sessionManager.getCurrentSession()?.currentChunkIndex,
+			})
 		} catch (error) {
 			logger.error({
 				eventKey: "stop_media_recorder_failed",
 				errorKind: "unknown",
 				error: error,
 				message: "停止媒体录制器失败",
+				context: { sessionId: session?.id, source },
 			})
 		}
 
