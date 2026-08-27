@@ -35,6 +35,7 @@ export default function BottomActionRenderer({ tools, t }: BottomActionRendererP
 				<Icon size={14} className={tool.loading ? "animate-spin" : undefined} />
 			) : undefined,
 			label: resolveToolLabel(tool, t),
+			shortcut: tool.presentation.shortcut,
 			disabled: tool.visibility === "disabled" || Boolean(tool.loading),
 			loading: tool.loading,
 			onClick: () => void tool.execute?.(),

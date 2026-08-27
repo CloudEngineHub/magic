@@ -17,18 +17,20 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		scope: "generation",
 		execution: "command",
 		surfaces: {
-			bottom: bottomAction("pencil", "imageEditor.quickEdit", "快捷编辑", "generation", 10),
+			bottom: {
+				...bottomAction("pencil", "imageEditor.quickEdit", "快捷编辑", "generation", 10),
+				shortcut: "Tab",
+			},
 		},
 		isApplicable: (context) =>
 			isGenerationMedia(context) &&
 			(context.runtime.toolsById.get(ElementToolTypeEnum.GenerationQuickEdit)?.available ??
 				true),
 		resolve: (context) =>
-			resolveRuntimeTool(
-				context,
-				ElementToolTypeEnum.GenerationQuickEdit,
-				bottomAction("pencil", "imageEditor.quickEdit", "快捷编辑", "generation", 10),
-			),
+			resolveRuntimeTool(context, ElementToolTypeEnum.GenerationQuickEdit, {
+				...bottomAction("pencil", "imageEditor.quickEdit", "快捷编辑", "generation", 10),
+				shortcut: "Tab",
+			}),
 	},
 	{
 		id: ElementToolTypeEnum.GenerationReEdit,
