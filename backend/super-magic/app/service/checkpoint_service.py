@@ -11,10 +11,9 @@ Checkpoint业务服务
 
 from datetime import datetime
 from typing import Optional, List
-from app.core.entity.checkpoint import CheckpointInfo, ChatHistorySnapshot, VirtualCheckpoint
+from app.core.entity.checkpoint import CheckpointInfo, VirtualCheckpoint
 from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
-from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.path_manager import PathManager
 from agentlang.config.config import config
 from agentlang.logger import get_logger
@@ -30,7 +29,6 @@ class CheckpointService(Base):
     def __init__(self):
         self.storage = CheckpointStorage()
         self.metadata_manager = CheckpointMetadataManager()
-        self.chat_history_snapshot_manager = ChatHistorySnapshotManager()
 
         # 初始化标志
         self._initialized = False

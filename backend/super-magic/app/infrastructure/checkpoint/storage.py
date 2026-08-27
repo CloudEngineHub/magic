@@ -31,17 +31,10 @@ class CheckpointStorage:
         try:
             checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
 
-            # 创建文件快照子目录
+            # 创建文件快照子目录（magicfs checkpoint hook 写入内容帧与流水；
+            # 聊天历史回滚也从这里重放帧，不再有独立的聊天历史快照目录）
             file_snapshots_dir = self.get_file_snapshots_dir(checkpoint_id)
             await async_mkdir(file_snapshots_dir, exist_ok=True)
-
-            # 创建聊天历史初始快照子目录（用于反向回滚）
-            initial_chat_history_dir = self.get_initial_chat_history_snapshots_dir(checkpoint_id)
-            await async_mkdir(initial_chat_history_dir, exist_ok=True)
-
-            # 创建聊天历史最新快照子目录（用于正向回滚）
-            latest_chat_history_dir = self.get_latest_chat_history_snapshots_dir(checkpoint_id)
-            await async_mkdir(latest_chat_history_dir, exist_ok=True)
 
             logger.info(f"创建checkpoint目录: {checkpoint_dir}")
             return str(checkpoint_dir)
@@ -89,16 +82,6 @@ class CheckpointStorage:
         """获取文件快照目录路径"""
         checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
         return checkpoint_dir / "file_snapshots"
-
-    def get_initial_chat_history_snapshots_dir(self, checkpoint_id: str) -> Path:
-        """获取聊天历史初始快照目录路径（执行前的状态）"""
-        checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
-        return checkpoint_dir / "initial_chat_history_snapshots"
-
-    def get_latest_chat_history_snapshots_dir(self, checkpoint_id: str) -> Path:
-        """获取聊天历史最新快照目录路径（执行后的状态）"""
-        checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
-        return checkpoint_dir / "latest_chat_history_snapshots"
 
     def get_initial_content_file_path(self, checkpoint_id: str, file_id: str) -> Path:
         """获取文件快照的初始化内容文件路径

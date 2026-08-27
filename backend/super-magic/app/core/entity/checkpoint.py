@@ -48,12 +48,13 @@ class FileSnapshot(BaseModel):
     """
 
     file_id: str = Field(..., description="文件稳定 ID（Snowflake），快照存储主键")
-    file_path: str = Field(..., description="条目记录时刻的文件路径")
+    file_path: str = Field(..., description="条目记录时刻的文件路径；新格式为 agent 可见绝对路径")
     old_file_path: Optional[str] = Field(None, description="rename 前的旧路径（仅 operation=renamed 时有值）")
     modified_time: datetime = Field(..., description="文件修改时间")
     operation: FileOperation = Field(..., description="文件操作类型")
     file_type: FileType = Field(..., description="文件类型（文件或目录）")
     snapshot_path: Optional[str] = Field(None, description="快照文件路径（删除操作时为None）")
+    space: str = Field("", description="记录该条目的挂载空间类型（project/topic）；空为旧格式条目，视为工作区")
 
     @staticmethod
     def detect_file_type(file_path: str) -> "FileType":
@@ -79,25 +80,12 @@ class FileSnapshot(BaseModel):
         }
 
 
-class ChatHistorySnapshot(BaseModel):
-    """聊天历史快照信息模型"""
-
-    file_path: str = Field(..., description="聊天历史目录路径")
-    snapshot_path: str = Field(..., description="快照存储路径")
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
-
 class CheckpointInfo(BaseModel):
     """Checkpoint信息模型"""
 
     checkpoint_id: str = Field(..., description="Checkpoint ID (通常是message_id)")
     created_time: datetime = Field(..., description="创建时间")
     file_snapshots: List[FileSnapshot] = Field(default_factory=list, description="文件快照列表")
-    chat_history_snapshot: Optional[ChatHistorySnapshot] = Field(None, description="聊天历史快照信息")
 
     class Config:
         json_encoders = {
