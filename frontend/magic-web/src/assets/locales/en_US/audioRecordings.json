@@ -24,6 +24,7 @@
 		"moreActions": "More actions",
 		"moreTags": "+{{count}}",
 		"moveToGroup": "Move to group",
+		"moveToGroupSuccess": "Moved to group",
 		"notSummarized": "Not summarized",
 		"openProject": "View recording project",
 		"processing": "Processing",

@@ -24,6 +24,7 @@
 		"moreActions": "更多操作",
 		"moreTags": "+{{count}}",
 		"moveToGroup": "移动到分组",
+		"moveToGroupSuccess": "已移动到分组",
 		"notSummarized": "未总结",
 		"openProject": "查看录音项目",
 		"processing": "处理中",
