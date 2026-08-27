@@ -5,6 +5,7 @@ import { isNumber, isBoolean, keyBy } from "lodash-es"
 import type { Admin } from "@/types/admin"
 import type { LongMemory } from "@/types/longMemory"
 import { isUnlimitedSubscription } from "../utils/subscription"
+import { hasMagicAdminPermission, hasTeamshareAdminIdentification } from "../utils/adminAccess"
 
 export class UserStore {
 	authorization: string | null = localStorage.getItem(platformKey("store:authentication"))
@@ -50,17 +51,15 @@ export class UserStore {
 	/** 当前用户的真实权限 key */
 	userPermissions: string[] = []
 
+	/**
+	 * 是否展示管理后台入口。
+	 * 麦吉组织管理员 / 麦吉后台权限，或当前组织的天书超管、所有者、子管理员、天书后台子权限均可进入。
+	 */
 	get canAccessAdmin(): boolean {
 		return (
 			this.isAdmin ||
-			this.userPermissions.some(
-				(permission) =>
-					permission === "MAGIC_ALL_PERMISSIONS" ||
-					permission === "MAGIC_PLATFORM_PERMISSIONS" ||
-					permission.startsWith("admin.") ||
-					permission.startsWith("workspace.") ||
-					permission.startsWith("platform."),
-			)
+			hasMagicAdminPermission(this.userPermissions) ||
+			hasTeamshareAdminIdentification(this.getOrganization()?.identifications)
 		)
 	}
 
