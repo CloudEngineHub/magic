@@ -16,7 +16,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.i18n import I18nManager
 from app.tools.canvas.application.commands import AddElementCommand, FrameElementsCommand
 from app.tools.canvas.bootstrap import CanvasApplicationFactory
-from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError
+from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError, CanvasProtocolError
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.generation import (
     GenerationCapability,
@@ -466,6 +466,26 @@ def test_model_content_contains_follow_up_and_specific_error_action() -> None:
     failed = _error_result(CanvasDomainError("CONTENT_NOT_FOUND", "Content content-1 does not exist."))
     assert "content-1" in failed.content
     assert "Action:" in failed.content
+
+
+def test_unsupported_canvas_version_guides_user_to_ui_upgrade() -> None:
+    """不支持的画布版本必须指导模型让用户在画布界面升级。"""
+    failed = _error_result(
+        CanvasProtocolError(
+            "UNSUPPORTED_CANVAS_VERSION",
+            "Only the current Canvas project format is supported.",
+        )
+    )
+
+    assert failed.ok is False
+    assert failed.data == {
+        "error_code": "CANVAS_PROJECT_NOT_SUPPORTED",
+        "error": "Only the current Canvas project format is supported.",
+    }
+    assert "older format" in failed.content
+    assert "open the Canvas in the UI and click Upgrade" in failed.content
+    assert "retry the operation" in failed.content
+    assert "Do not inspect, migrate, or write the project file directly" in failed.content
 
 
 @pytest.mark.asyncio

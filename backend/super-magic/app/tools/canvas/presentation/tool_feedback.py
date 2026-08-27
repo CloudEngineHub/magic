@@ -88,7 +88,11 @@ def _model_action_for_error(code: str) -> str:
     if code in {"CONNECTION_NOT_FOUND", "CONNECTION_ID_REQUIRED"}:
         return "Query the affected Elements to obtain the exact Connection ID, then retry only after explicit user intent."
     if code == "CANVAS_PROJECT_NOT_SUPPORTED":
-        return "Ask the user to open a supported Canvas project; do not inspect or migrate the project file."
+        return (
+            "Tell the user that this Canvas project uses an older format that the current Canvas tools cannot process. "
+            "Ask the user to open the Canvas in the UI and click Upgrade, then retry the operation. "
+            "Do not inspect, migrate, or write the project file directly."
+        )
     if code in {"ELEMENT_NOT_FOUND", "CONTENT_NOT_FOUND"}:
         return "Use the latest Canvas query result to obtain the exact target ID, then retry only the failed item."
     if code == "ELEMENT_MUTATION_NOT_ALLOWED":
