@@ -74,6 +74,14 @@ interface TaskFileRepositoryInterface
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity;
 
     /**
+     * 根据项目、父目录和文件名批量查询直接子节点。
+     *
+     * @param string[] $fileNames
+     * @return array<string, TaskFileEntity> 以文件名为键的文件实体
+     */
+    public function getByProjectParentAndNames(int $projectId, int $parentId, array $fileNames): array;
+
+    /**
      * Get files by project ID and file keys.
      *
      * @param int $projectId Project ID

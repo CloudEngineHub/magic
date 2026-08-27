@@ -3,6 +3,7 @@
 import pytest
 
 from app.service.mention.builder import MentionContextBuilder
+from app.service.mention.handlers.project_directory_handler import ProjectDirectoryHandler
 from app.service.mention.handlers.project_handler import ProjectHandler
 
 PROJECT_PATH = "/mnt/agfs/magicfs/referenced-projects/904730666716749825"
@@ -76,3 +77,26 @@ async def test_builder_renders_project_mention_not_fallback() -> None:
     assert PROJECT_NAME in result
     # 不应出现未知类型的兜底输出
     assert "reference: {" not in result
+
+
+@pytest.mark.asyncio
+async def test_canvas_directory_tip_requires_skill_before_canvas_inspection(monkeypatch) -> None:
+    """画布目录提示必须要求先遵循 canvas-manager Skill，再查看画布。"""
+    async def fake_detect_project_type(directory_path: str) -> str:
+        assert directory_path == "广州夜景/"
+        return "design"
+
+    monkeypatch.setattr(
+        "app.service.mention.handlers.project_directory_handler.detect_project_type",
+        fake_detect_project_type,
+    )
+
+    tip = await ProjectDirectoryHandler().get_tip(
+        {"type": "project_directory", "directory_path": "广州夜景/"},
+        None,
+    )
+
+    assert "canvas-manager" in tip
+    assert "first" in tip
+    assert "inspect the referenced Canvas project" in tip
+    assert "Do not read or edit Canvas project files directly" in tip

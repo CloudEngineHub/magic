@@ -231,6 +231,37 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
+     * 根据项目、父目录和文件名批量查询直接子节点。
+     *
+     * @param string[] $fileNames
+     * @return array<string, TaskFileEntity> 以文件名为键的文件实体
+     */
+    public function getByProjectParentAndNames(int $projectId, int $parentId, array $fileNames): array
+    {
+        $fileNames = array_values(array_unique(array_filter(
+            $fileNames,
+            static fn (string $fileName): bool => $fileName !== ''
+        )));
+        if ($fileNames === []) {
+            return [];
+        }
+
+        $models = $this->model::query()
+            ->where('project_id', $projectId)
+            ->where('parent_id', $parentId)
+            ->whereIn('file_name', $fileNames)
+            ->get();
+
+        $entities = [];
+        foreach ($models as $model) {
+            $entity = new TaskFileEntity($model->toArray());
+            $entities[$entity->getFileName()] = $entity;
+        }
+
+        return $entities;
+    }
+
+    /**
      * Get files by project ID and file keys.
      *
      * @param int $projectId Project ID

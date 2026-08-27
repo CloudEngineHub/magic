@@ -22,6 +22,7 @@ from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams
 from app.tools.media_utils.presigned_url import generate_presigned_url
+from app.tools.video_generation_utils import VideoAudioPolicyResolver, normalize_provider_asset_uri
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_mkdir, async_replace, async_unlink
 
@@ -125,6 +126,11 @@ Random seed. Omit unless explicitly requested.""",
         description="""<!--zh: 是否添加水印；用户未明确指定时省略。-->
 Whether to add a watermark. Omit unless explicitly requested.""",
     )
+    audio_policy: Optional[Literal["auto", "generate", "mute"]] = Field(
+        None,
+        description="""<!--zh: 视频音频策略：auto 使用模型默认行为，generate 请求生成音频，mute 要求最终视频无音频。-->
+Audio policy: auto uses the model default, generate requests generated audio, and mute requires a silent final video.""",
+    )
     extensions: Dict[str, Any] = Field(
         default_factory=dict,
         description="""<!--zh: 透传给视频接口的扩展配置；仅在明确需要时填写。-->
@@ -216,6 +222,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 
 **Prompt 写法**
 - Prompt 是可执行的视频创意简报，至少明确主体、动作、场景、镜头、光线、风格、节奏，以及用户要求时的音频要求
+- 需要控制音频时只使用统一参数 audio_policy=auto、generate 或 mute，不要在 prompt 或 extensions 中传 sound、generateAudio、audio 等供应商字段；普通工具仅支持模型原生静音，需合成静音时改用 Canvas Video Edit
 - 用户需求模糊时扩写为完整描述；用户已有完整 prompt 时保留原文，只补充必要信息
 - 用户要求旁白或对白、配音、音乐或音效时，必须逐字保留，不得概括、改写或遗漏；注明说话人、语言、声音特征、出现时机，以及口型同步和对应动作
 
@@ -376,7 +383,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         model_id, config = self._resolve_model_config(tool_context, params.model_id)
         input_mode = params.input_mode or self._infer_input_mode(params, config)
         self._validate_input_mode(input_mode, params.task, params, config)
-        generation = self._build_generation(params, config)
+        generation = self._build_generation(params, config, model_id)
         payload: Dict[str, Any] = {
             "model_id": model_id,
             "task": params.task,
@@ -522,7 +529,11 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
             raise ValueError("Start/end frames cannot be used with reference media")
 
     @staticmethod
-    def _build_generation(params: GenerateVideoParams, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_generation(
+        params: GenerateVideoParams,
+        config: Dict[str, Any],
+        model_id: str = "",
+    ) -> Dict[str, Any]:
         capability = config.get("generation") or {}
         sizes = capability.get("sizes") or []
         if not isinstance(sizes, list) or not sizes:
@@ -564,6 +575,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         GenerateVideo._validate_choice("分辨率", resolution, capability.get("resolutions"))
         if params.watermark is not None and capability.get("supports_watermark") is False:
             raise ValueError("The current video model does not support watermark")
+        GenerateVideo._validate_audio_policy(params.audio_policy, capability, model_id)
         return {
             key: value
             for key, value in (
@@ -574,9 +586,31 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
                 ("fps", params.fps),
                 ("seed", params.seed),
                 ("watermark", params.watermark),
+                (
+                    "generate_audio",
+                    VideoAudioPolicyResolver.to_legacy_generate_audio(
+                        params.audio_policy,
+                        model_id,
+                    ),
+                ),
             )
             if value is not None and value != ""
         }
+
+    @staticmethod
+    def _validate_audio_policy(
+        policy: Optional[str], capability: Dict[str, Any], model_id: str = ""
+    ) -> None:
+        """校验统一音频策略，避免普通视频工具误产出不符合要求的结果。"""
+        if policy is None or policy == "auto":
+            return
+        if policy == "generate" and capability.get("supports_generate_audio") is not True:
+            raise ValueError("The current video model does not support generated audio")
+        if policy != "mute":
+            return
+        if VideoAudioPolicyResolver.strategy(model_id) == "native":
+            return
+        raise ValueError("Silent output for this model requires Canvas Video Edit composition")
 
     @staticmethod
     def _validate_choice(name: str, value: Any, choices: Any) -> None:
@@ -589,6 +623,10 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         return self._magic_service_client
 
     async def _resolve_input_uri(self, value: str) -> str:
+        normalized_provider_uri = normalize_provider_asset_uri(value)
+        if normalized_provider_uri is not None:
+            # Provider 素材 URI 不属于工作区文件，必须原样透传给视频服务。
+            return normalized_provider_uri
         if value.startswith(("http://", "https://")):
             return value
         path = self.resolve_path(value)

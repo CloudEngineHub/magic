@@ -168,6 +168,17 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据父目录批量获取指定名称的直接子节点，避免逐个文件查询。
+     *
+     * @param string[] $fileNames
+     * @return array<string, TaskFileEntity> 以文件名为键的文件实体
+     */
+    public function getByProjectParentAndNames(int $projectId, int $parentId, array $fileNames): array
+    {
+        return $this->taskFileRepository->getByProjectParentAndNames($projectId, $parentId, $fileNames);
+    }
+
+    /**
      * Find user files by file IDs and user ID.
      *
      * @param array $fileIds File ID array

@@ -77,19 +77,17 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const officialModels = officialGroups.flatMap((groupItem) =>
-			(groupItem.models || []).map(
-				(model): VideoModelItem => ({
-					...model,
-					model_source: "official",
-					model_group: {
-						id: groupItem.group.id,
-						name: normalizeVideoModelGroupLabel(groupItem.group.name),
-						icon: groupItem.group.icon,
-						sort: groupItem.group.sort,
-						source: "official",
-					},
-				}),
-			),
+			(groupItem.models || []).map((model): VideoModelItem => ({
+				...model,
+				model_source: "official",
+				model_group: {
+					id: groupItem.group.id,
+					name: normalizeVideoModelGroupLabel(groupItem.group.name),
+					icon: groupItem.group.icon,
+					sort: groupItem.group.sort,
+					source: "official",
+				},
+			})),
 		)
 		const officialModelIds = new Set(officialModels.map((model) => model.model_id))
 		const customModels = getRepresentativeModelsByModelId(

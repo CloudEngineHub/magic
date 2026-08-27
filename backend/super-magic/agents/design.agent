@@ -18,7 +18,7 @@ tools:
   - ask_user
 skills:
   preload:
-    - name: canvas-designer
+    - name: canvas-manager
   system_skills:
     - name: skill-vetter
     - name: using-mcp

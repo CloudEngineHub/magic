@@ -79,8 +79,7 @@ export interface UnresolvedCanvasResourceReference {
 }
 
 export type CanvasResourceReferenceResolution =
-	| ResolvedCanvasResourceReference
-	| UnresolvedCanvasResourceReference
+	ResolvedCanvasResourceReference | UnresolvedCanvasResourceReference
 
 export type ResolveCanvasResourceReference = (
 	input: CanvasResourceReferenceInput,

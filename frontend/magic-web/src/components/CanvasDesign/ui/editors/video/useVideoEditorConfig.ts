@@ -1780,8 +1780,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				: currentRequest
 			const rootStorage = canvas.magicConfigManager.config?.methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
-				| DefaultGenerateVideoConfig
-				| undefined
+				DefaultGenerateVideoConfig | undefined
 			const config = requestToRestore || defaultConfig
 			const modelId =
 				config?.model_id &&

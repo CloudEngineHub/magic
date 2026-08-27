@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Union
 
 from agentlang.environment import Environment
 from pydantic import BaseModel, Field, root_validator, validator
-
 from app.core.config.communication_config import MessageSubscriptionConfig, STSTokenRefreshConfig
 from app.core.entity.message.message import MessageType
 from app.core.entity.message.personal_preferences import PersonalPreferences
@@ -158,6 +157,8 @@ class AgentMode(str, Enum):
     SUMMARY_CHAT = "summary-chat"  # 音频纪要聊天模式，使用audio-chat.agent
     SUMMARY_VIDEO = "summary-video"  # 视频分析模式，使用video.agent
     DESIGN = "design"         # 画布设计模式，使用design.agent
+    CANVAS = "canvas"         # Canvas 管理模式，使用canvas.agent
+    VIDEO_PRODUCTION = "video-production"  # 视频制作模式，使用video-production.agent
     TEST = "test"  # 工具模式，使用tool.agent
     CREW_CREATOR = "crew-creator"  # Crew管理模式，使用crew-creator.agent
     SKILL_CREATOR = "skill-creator"  # Skill 创作模式，使用skill-creator.agent
@@ -176,6 +177,8 @@ class AgentMode(str, Enum):
             AgentMode.SUMMARY_CHAT: "audio-chat",  # 模式名称保持summary-chat，但使用audio-chat.agent文件
             AgentMode.SUMMARY_VIDEO: "video",  # 模式名称保持summary-video，但使用video.agent文件
             AgentMode.DESIGN: "design",  # 画布设计模式
+            AgentMode.CANVAS: "canvas",  # Canvas 管理模式
+            AgentMode.VIDEO_PRODUCTION: "video-production",  # 视频制作模式
             AgentMode.TEST: "test",
             AgentMode.CREW_CREATOR: "crew-creator",
             AgentMode.SKILL_CREATOR: "skill-creator",

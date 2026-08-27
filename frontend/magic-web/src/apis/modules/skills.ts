@@ -327,8 +327,7 @@ export interface ImportOfficialSkillByFileKeyParams extends OfficialSkillImportF
 }
 
 export type ImportOfficialSkillParams =
-	| ImportOfficialSkillByTokenParams
-	| ImportOfficialSkillByFileKeyParams
+	ImportOfficialSkillByTokenParams | ImportOfficialSkillByFileKeyParams
 
 export interface ImportOfficialSkillResponse {
 	code: string

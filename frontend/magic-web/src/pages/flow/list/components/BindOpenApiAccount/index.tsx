@@ -43,9 +43,9 @@ const useBindOpenApiAccountStyles = createStyles(({ css, isDarkMode, token }) =>
 			border: 1px solid transparent;
 			color: ${isDarkMode ? token.magicColorUsages.white : token.magicColorScales.grey[4]};
 			&:hover {
-				background: ${isDarkMode
-					? token.magicColorScales.grey[3]
-					: token.magicColorScales.grey[0]};
+				background: ${
+					isDarkMode ? token.magicColorScales.grey[3] : token.magicColorScales.grey[0]
+				};
 			}
 		`,
 		avatar: css`

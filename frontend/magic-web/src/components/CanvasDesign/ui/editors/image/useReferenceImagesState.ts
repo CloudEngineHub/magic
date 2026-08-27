@@ -152,12 +152,10 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (
-			!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)
-		) {
+		if (!(
+			elementInstance instanceof ImageElementClass ||
+			elementInstance instanceof VideoElementClass
+		)) {
 			return
 		}
 
@@ -201,12 +199,10 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (
-			!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)
-		) {
+		if (!(
+			elementInstance instanceof ImageElementClass ||
+			elementInstance instanceof VideoElementClass
+		)) {
 			return
 		}
 

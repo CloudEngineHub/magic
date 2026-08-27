@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
-from math import isfinite
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Literal, Optional
 
@@ -18,11 +19,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.metadata import MetadataUtil
+from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.entity.message.server_message import DisplayType, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.core import BaseToolParams, tool
+from app.tools.design.service.local_video_result_sync_service import (
+    LocalVideoResultSyncRequest,
+    LocalVideoResultSyncService,
+)
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
     ElementDetail,
@@ -30,8 +36,19 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
-from app.tools.video_generation_utils import normalize_provider_asset_uri
-from app.utils.async_file_utils import async_exists, async_mkdir
+from app.tools.design.video_production.service.media_generation_service import (
+    MediaGenerationService,
+    MediaSourceType,
+)
+from app.tools.media_generator.factory import get_video_generator
+from app.tools.media_generator.video_base import VideoGenerationRequest
+from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
+from app.tools.video_generation_utils import (
+    VideoAudioPolicyResolver,
+    VideoInputPayloadBuilder,
+    normalize_provider_asset_uri,
+)
+from app.utils.async_file_utils import async_is_file, async_mkdir
 from app.utils.video_logger import get_video_logger
 
 logger = get_video_logger(__name__)
@@ -142,8 +159,9 @@ class VideoPlaceholderUpdate(PlaceholderUpdate):
 
     src: Optional[str] = None
     poster: Optional[str] = None
-    generateVideoRequest: Optional[Dict[str, Any]] = None
-    errorMessage: Optional[str] = None
+    # 保持既有 Canvas DSL 驼峰字段名，避免写回结构变化。
+    generateVideoRequest: Optional[Dict[str, Any]] = None  # noqa: N815
+    errorMessage: Optional[str] = None  # noqa: N815
     width: Optional[float] = None
     height: Optional[float] = None
 
@@ -172,8 +190,8 @@ class VideoTaskSpec(BaseModel):
 
     prompt: str = Field(
         ...,
-        description="""<!--zh: 视频生成提示词。只描述视频内容、动作、风格和镜头；如果传入参考素材，必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_video_paths[0] 用 [video1]，reference_audio_paths[0] 用 [audio1]。当前后端仅对 Volcengine Ark provider 放行供应商托管素材，asset:// URI 也按对应数组顺序引用。例如：基于虚拟人像 [image1] 制作产品介绍视频。-->
-Video generation prompt. Describe only the video content, motion, style, and camera. When passing reference assets, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_video_paths[0] as [video1], and reference_audio_paths[0] as [audio1]. The current backend allows provider-managed assets only for the Volcengine Ark provider; cite an asset:// URI in the same way. Example: Animate the virtual human portrait [image1] in a product introduction."""
+        description="""<!--zh: 视频生成提示词。只描述视频内容、动作、风格和镜头；如果传入参考素材，必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_video_paths[0] 用 [video1]，reference_audio_paths[0] 用 [audio1]。例如：基于黑猫肖像 [image1] 制作动画，黑猫缓缓眨眼。-->
+Video generation prompt. Describe only the video content, motion, style, and camera. When passing reference assets, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_video_paths[0] as [video1], and reference_audio_paths[0] as [audio1]. Example: Animate the black cat portrait [image1] with slow blinking."""
     )
     name: str = Field(
         ...,
@@ -197,28 +215,28 @@ Video task type, default generate. Use edit with video_edit mode. Do not use gen
     )
     reference_image_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考图列表，通常填写项目文件树内的相对路径，例如 images/cat.png；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 URI，例如 asset://virtual-human-asset-id。传入后必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_image_paths[1] 用 [image2]。asset:// URI 不要调用 visual_understanding。-->
-Reference image paths or, when the backend allows provider-managed assets for the Volcengine Ark provider, controlled URIs such as asset://virtual-human-asset-id. When provided, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_image_paths[1] as [image2]. Never call visual_understanding for an asset:// URI."""
+        description="""<!--zh: 项目文件树内的参考图相对路径列表，例如 images/cat.png。传入后必须在 prompt 中按数组顺序引用：reference_image_paths[0] 用 [image1]，reference_image_paths[1] 用 [image2]。-->
+Project-relative reference image paths, e.g. images/cat.png. When provided, the prompt must cite them by list order: reference_image_paths[0] as [image1], reference_image_paths[1] as [image2]."""
     )
     reference_video_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考视频列表，通常填写项目文件树内的相对路径，例如 videos/source.mp4；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。传入后必须在 prompt 中按数组顺序引用：reference_video_paths[0] 用 [video1]，reference_video_paths[1] 用 [video2]。-->
-Reference video paths or, when the backend allows provider-managed assets for the Volcengine Ark provider, controlled asset:// URIs. When provided, the prompt must cite them by list order: reference_video_paths[0] as [video1], reference_video_paths[1] as [video2]."""
+        description="""<!--zh: 项目文件树内的参考视频相对路径列表，例如 videos/source.mp4。传入后必须在 prompt 中按数组顺序引用：reference_video_paths[0] 用 [video1]，reference_video_paths[1] 用 [video2]。-->
+Project-relative reference video paths, e.g. videos/source.mp4. When provided, the prompt must cite them by list order: reference_video_paths[0] as [video1], reference_video_paths[1] as [video2]."""
     )
     reference_audio_paths: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考音频列表，通常填写项目文件树内的相对路径，例如 audios/source.mp3；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。传入后必须在 prompt 中按数组顺序引用：reference_audio_paths[0] 用 [audio1]，reference_audio_paths[1] 用 [audio2]。-->
-Reference audio paths or, when the backend allows provider-managed assets for the Volcengine Ark provider, controlled asset:// URIs. When provided, the prompt must cite them by list order: reference_audio_paths[0] as [audio1], reference_audio_paths[1] as [audio2]."""
+        description="""<!--zh: 项目文件树内的参考音频相对路径列表，例如 audios/source.mp3。传入后必须在 prompt 中按数组顺序引用：reference_audio_paths[0] 用 [audio1]，reference_audio_paths[1] 用 [audio2]。-->
+Project-relative reference audio paths, e.g. audios/source.mp3. When provided, the prompt must cite them by list order: reference_audio_paths[0] as [audio1], reference_audio_paths[1] as [audio2]."""
     )
     frame_start_path: str = Field(
         "",
-        description="""<!--zh: 起始帧图片路径，通常填写项目文件树内的相对路径，例如 images/start.png；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。字段名必须是 frame_start_path。不要使用 start_frame。-->
-Start frame image path or, when the backend allows provider-managed assets for the Volcengine Ark provider, a controlled asset:// URI. The parameter name must be frame_start_path. Do not use start_frame."""
+        description="""<!--zh: 项目文件树内的起始帧图片相对路径，例如 images/start.png。字段名必须是 frame_start_path。不要使用 start_frame。-->
+Project-relative start frame image path, e.g. images/start.png. The parameter name must be frame_start_path. Do not use start_frame."""
     )
     frame_end_path: str = Field(
         "",
-        description="""<!--zh: 结束帧图片路径，通常填写项目文件树内的相对路径，例如 images/end.png；当前后端对 Volcengine Ark provider 放行供应商托管素材时，也可填写受控 asset:// URI。字段名必须是 frame_end_path。不要使用 end_frame。-->
-End frame image path or, when the backend allows provider-managed assets for the Volcengine Ark provider, a controlled asset:// URI. The parameter name must be frame_end_path. Do not use end_frame."""
+        description="""<!--zh: 项目文件树内的结束帧图片相对路径，例如 images/end.png。字段名必须是 frame_end_path。不要使用 end_frame。-->
+Project-relative end frame image path, e.g. images/end.png. The parameter name must be frame_end_path. Do not use end_frame."""
     )
     duration_seconds: Optional[int] = Field(
         None,
@@ -233,16 +251,29 @@ Video quality/resolution tier, optional. The parameter name must be resolution. 
     fps: Optional[int] = Field(default=None, description="<!--zh: 视频帧率，可选-->Video FPS, optional")
     seed: Optional[int] = Field(default=None, description="<!--zh: 随机种子，可选-->Random seed, optional")
     watermark: Optional[bool] = Field(default=None, description="<!--zh: 是否保留水印，可选-->Keep watermark, optional")
+    audio_policy: Optional[Literal["auto", "generate", "mute"]] = Field(
+        default=None,
+        description="<!--zh: 统一视频音频策略，可选：auto、generate、mute-->Canonical video audio policy: auto, generate, or mute",
+    )
     extensions: Dict[str, Any] = Field(
         default_factory=dict,
         description="<!--zh: 透传扩展参数-->Pass-through extension config"
     )
     element_id: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选。传入时复用画布上已有的元素（如上次生成失败的占位符），工具直接在该元素上重新生成并更新，不新建占位符。不传时新建占位符。-->
-Optional. When provided, the tool reuses an existing canvas element (e.g. a failed placeholder from a previous attempt) and regenerates in place without creating a new placeholder. Omit to create a new element."""
+        description="""<!--zh: 可选。已有画布 Element ID。只传该字段时在节点中追加新的 Content；也可仅传 content_id 定位已有 Content。-->
+Optional existing canvas Element ID. Passing it alone appends a new Content to the Element; content_id may also locate an existing Content."""
     )
-
+    content_id: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 可选。要重试或更新的已有 Content ID。Content 必须存在；与 element_id 同时传入时还会校验归属关系。-->
+Optional existing Content ID to retry or update. It must exist; when supplied with element_id, the tool also validates that it belongs to that Element.""",
+    )
+    set_as_main: bool = Field(
+        default=False,
+        description="""<!--zh: 是否在生成完成后立即把新 Content 设为主内容，默认 false。异步视频未完成时不会提前成为主内容，通常由用户在页面确认后再设置。-->
+Whether to make the newly completed Content the main Content immediately. Defaults to false. An asynchronous video is never selected as main before completion; normally let the user confirm it in the UI.""",
+    )
     @model_validator(mode="before")
     @classmethod
     def normalize_common_parameter_aliases(cls, value: Any) -> Any:
@@ -378,8 +409,8 @@ Relative path to the design project (folder containing magic.project.js)"""
     )
     tasks: List[VideoTaskSpec] = Field(
         ...,
-        description="""<!--zh: 视频生成任务列表，每个 task 生成一个视频，最多 4 个。每个 task 必须包含 prompt / name。aspect_ratio / duration_seconds / resolution 可选；用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择，不确定时省略。其他字段必须使用本 schema 中的精确字段名。常见正确字段：duration_seconds（不是 duration）、reference_image_paths（不是 images/image）、reference_video_paths（不是 videos/video）、frame_start_path（不是 start_frame）、frame_end_path（不是 end_frame）。使用参考素材时，prompt 必须用 [image1] / [video1] / [audio1] 按数组顺序绑定素材；当前后端对 Volcengine Ark provider 放行供应商托管素材时，可在对应参考数组中填写受控 asset:// URI。示例：tasks=[{"prompt":"虚拟人像 [image1] 面向镜头介绍产品。","name":"虚拟人像产品介绍","aspect_ratio":"16:9","duration_seconds":5,"resolution":"720p","reference_image_paths":["asset://virtual-human-asset-id"]}]-->
-Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt and name. aspect_ratio, duration_seconds, and resolution are optional; when the user asks for them, or they can be reasonably inferred from the current video model rules, choose declared values from <media_model_info>; omit when uncertain. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. When the backend allows provider-managed assets for the Volcengine Ark provider, the corresponding reference arrays may contain controlled asset:// URIs. Example: tasks=[{"prompt":"The virtual human [image1] faces the camera and introduces the product.","name":"virtual_human_product_intro","aspect_ratio":"16:9","duration_seconds":5,"resolution":"720p","reference_image_paths":["asset://virtual-human-asset-id"]}]"""
+        description="""<!--zh: 视频生成任务列表，每个 task 生成一个视频，最多 4 个。每个 task 必须包含 prompt / name。aspect_ratio / duration_seconds / resolution 可选；用户指定或能根据当前视频模型规则合理推断时，从 <media_model_info> 声明的合法值中选择，不确定时省略。其他字段必须使用本 schema 中的精确字段名。常见正确字段：duration_seconds（不是 duration）、reference_image_paths（不是 images/image）、reference_video_paths（不是 videos/video）、frame_start_path（不是 start_frame）、frame_end_path（不是 end_frame）。使用参考素材时，prompt 必须用 [image1] / [video1] / [audio1] 按数组顺序绑定素材。示例：tasks=[{"prompt":"白色长毛小猫 [image1] 从黑色箱子里探头钻出，黑色短毛小猫 [image2] 从白色箱子里跳出来，橘色虎斑小猫 [image3] 从黄色箱子里爬出。","name":"三色箱子猫咪跳出","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]-->
+Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt and name. aspect_ratio, duration_seconds, and resolution are optional; when the user asks for them, or they can be reasonably inferred from the current video model rules, choose declared values from <media_model_info>; omit when uncertain. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. Example: tasks=[{"prompt":"White long-haired kitten [image1] peeks out of the black box, black short-haired kitten [image2] jumps out of the white box, orange tabby kitten [image3] climbs out of the yellow box.","name":"three_color_box_cats","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]"""
     )
     model_id: str = Field("", description="<!--zh: 可选视频模型 ID，所有任务共用-->Optional video model ID, shared across all tasks")
     action: Literal["estimate_points", "generate"] = Field(
@@ -395,7 +426,7 @@ Action to perform. estimate_points only calculates task points without creating 
                 "generate_canvas_videos 的 tasks 中存在未定义参数。"
                 "请只使用 task schema 里的精确字段名：prompt, name, aspect_ratio, duration_seconds, resolution, input_mode, task, "
                 "reference_image_paths, reference_video_paths, reference_audio_paths, frame_start_path, "
-                "frame_end_path, fps, seed, watermark, extensions, element_id。"
+                "frame_end_path, fps, seed, watermark, extensions, element_id, content_id, set_as_main。"
                 "常见改名：duration -> duration_seconds；images/image/reference_images -> reference_image_paths；"
                 "videos/video/reference_videos -> reference_video_paths；start_frame -> frame_start_path；"
                 "end_frame -> frame_end_path。"
@@ -428,6 +459,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
     def __init__(self, **data):
         super().__init__(**data)
+        self._video_generator = get_video_generator()
         self._magic_service_client: Optional[MagicServiceClient] = None
         self._task_video_ids: Dict[int, str] = {}
         # 全局参数缓存，在 execute() 中写入，供 _prepare_task_kwargs / _execute_task_item 读取
@@ -442,8 +474,22 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             # 缓存全局参数（单事件循环语义下安全）
             self._model_id = params.model_id
             self._task_video_ids = {}
-            workspace_root = Path(self.base_dir)
+            workspace_root = self._get_runtime_workspace_dir(tool_context)
             project_prefix = params.project_path.strip("/")
+            if params.action == "generate":
+                project_path, project_error = await self._ensure_project_ready(
+                    params.project_path,
+                    require_magic_project_js=True,
+                    tool_context=tool_context,
+                )
+                if project_error:
+                    return project_error
+                project_prefix = project_path.relative_to(workspace_root).as_posix()
+                await self._materialize_reference_media(
+                    params.tasks,
+                    project_path,
+                    workspace_root,
+                )
             await self._normalize_reference_paths(params.tasks, workspace_root, project_prefix)
             if params.action == "estimate_points":
                 return await self._estimate_video_points(tool_context, params)
@@ -454,6 +500,84 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 f"生成视频到画布失败: {e!s}",
                 extra_info={"error_type": "design.error_unexpected"},
             )
+
+    async def _materialize_reference_media(
+        self,
+        tasks: List[VideoTaskSpec],
+        project_path: Path,
+        workspace_root: Path,
+    ) -> None:
+        """将本地项目外参考媒体复制到当前项目的类型目录。"""
+        for task in tasks:
+            task.reference_image_paths = await self._materialize_path_list(
+                task.reference_image_paths,
+                MediaSourceType.IMAGE,
+                project_path,
+                workspace_root,
+            )
+            task.reference_video_paths = await self._materialize_path_list(
+                task.reference_video_paths,
+                MediaSourceType.VIDEO,
+                project_path,
+                workspace_root,
+            )
+            task.reference_audio_paths = await self._materialize_path_list(
+                task.reference_audio_paths,
+                MediaSourceType.AUDIO,
+                project_path,
+                workspace_root,
+            )
+            task.frame_start_path = await self._materialize_optional_path(
+                task.frame_start_path,
+                MediaSourceType.IMAGE,
+                project_path,
+                workspace_root,
+            )
+            task.frame_end_path = await self._materialize_optional_path(
+                task.frame_end_path,
+                MediaSourceType.IMAGE,
+                project_path,
+                workspace_root,
+            )
+
+    async def _materialize_path_list(
+        self,
+        paths: List[str],
+        media_type: MediaSourceType,
+        project_path: Path,
+        workspace_root: Path,
+    ) -> List[str]:
+        """物化列表中的本地路径，并保留 URL 与供应商素材 URI。"""
+        return [
+            await self._materialize_optional_path(
+                path,
+                media_type,
+                project_path,
+                workspace_root,
+            )
+            for path in paths
+        ]
+
+    @staticmethod
+    async def _materialize_optional_path(
+        path: str,
+        media_type: MediaSourceType,
+        project_path: Path,
+        workspace_root: Path,
+    ) -> str:
+        """物化单个本地参考路径，非文件引用保持原值。"""
+        normalized = str(path or "").strip()
+        if not normalized or normalized.startswith(("http://", "https://")):
+            return path
+        normalized_provider_asset_uri = normalize_provider_asset_uri(normalized)
+        if normalized_provider_asset_uri is not None:
+            return normalized_provider_asset_uri
+        return await MediaGenerationService.materialize_reference_path(
+            normalized,
+            media_type,
+            project_path,
+            workspace_root,
+        )
 
     async def _estimate_video_points(
         self,
@@ -530,11 +654,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
         project_id = str(kwargs.get("project_id") or "").strip()
         design_file_dir = str(kwargs.get("design_file_dir") or "").strip()
-        if not project_id:
-            raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
-        if not design_file_dir:
-            raise ValueError("缺少 file_dir，无法创建后台托管的视频任务")
-
         video_id = self._ensure_task_video_id(idx)
         try:
             model_id = self._resolve_video_model(self._model_id, tool_context)
@@ -546,8 +665,17 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 file_dir=design_file_dir,
                 relative_project_path=_relative_project_path,
             )
+            persisted_payload = payload
+            payload = await self._build_transport_video_request(
+                payload,
+                task,
+                workspace_root=Path(str(kwargs.get("workspace_root") or project_path.parent)),
+            )
+            width, height = task.canvas_dimensions
+            file_name = f"{self._sanitize_filename(task.name, max_length=120)}-{video_id}.mp4"
+            relative_output_path = f"./videos/{file_name}"
             logger.info(
-                f"设计视频子任务提交后台托管任务: index={idx} name={task.name} "
+                f"设计视频子任务提交生成调度器: index={idx} name={task.name} "
                 f"project_id={project_id} video_id={video_id} file_dir={design_file_dir} "
                 f"reference_image_count={len(payload.get('inputs', {}).get('reference_images', []))} "
                 f"reference_video_count={len(payload.get('inputs', {}).get('reference_videos', []))} "
@@ -557,10 +685,21 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 f"resolution={payload.get('generation', {}).get('resolution') or ''} "
                 f"duration_seconds={payload.get('generation', {}).get('duration_seconds') or ''}"
             )
-            response = await self._get_magic_service_client().generate_design_video(payload)
-        except (ApiError, ValueError) as error:
+            response = await self._video_generator.generate(
+                HANDLER_MAGIC_SERVICE,
+                VideoGenerationRequest(
+                    payload=payload,
+                    output_path=project_path / "videos" / file_name,
+                    relative_output_path=relative_output_path,
+                    width=width,
+                    height=height,
+                    duration_seconds=float(task.duration_seconds or 4),
+                    interruption_event=self._get_interruption_event(tool_context),
+                ),
+            )
+        except (ApiError, OSError, RuntimeError, ValueError) as error:
             error_message = str(error)
-            payload = self._build_initial_design_video_request(task, video_id)
+            payload = persisted_payload if "persisted_payload" in locals() else self._build_initial_design_video_request(task, video_id)
             logger.warning(
                 f"设计视频子任务提交失败: index={idx} name={task.name} "
                 f"video_id={video_id} error={error_message}"
@@ -577,7 +716,23 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 error_message=error_message,
             )
 
-        status = str(response.get("status") or "running")
+        if response.completed:
+            completed_payload = {**persisted_payload, **response.metadata}
+            return TaskExecutionResult(
+                index=idx,
+                success=True,
+                placeholder_update=VideoPlaceholderUpdate(
+                    status="completed",
+                    src=response.src,
+                    width=float(response.width or width),
+                    height=float(response.height or height),
+                    generateVideoRequest=completed_payload,
+                    errorMessage=None,
+                ),
+                metadata=dict(response.metadata),
+            )
+
+        status = response.status
         logger.info(
             f"设计视频子任务已提交后台托管: index={idx} name={task.name} "
             f"video_id={video_id} status={status}"
@@ -585,7 +740,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
         update = VideoPlaceholderUpdate(
             status="processing",
-            generateVideoRequest=payload,
+            generateVideoRequest=persisted_payload,
             errorMessage=None,
         )
         return TaskExecutionResult(
@@ -595,10 +750,42 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             metadata={
                 "is_processing": True,
                 "element_id": placeholder.id,
+                "content_id": placeholder.content_id,
                 "element_name": task.name,
                 "video_id": video_id,
                 "pending_status": status,
+                "project_id": project_id,
+                "relative_output_path": relative_output_path,
+                "output_path": str(project_path / "videos" / file_name),
+                "width": width,
+                "height": height,
             },
+        )
+
+    async def _after_placeholder_updated(
+        self,
+        result: TaskExecutionResult,
+        task: VideoTaskSpec,
+        placeholder: ElementDetail,
+        tool_context: ToolContext,
+        project_path: Path,
+    ) -> None:
+        """本地开发模式下在 processing 状态落盘后启动结果同步。"""
+        if not is_local_debug_mode_enabled() or not result.metadata.get("is_processing"):
+            return
+        LocalVideoResultSyncService.schedule(
+            LocalVideoResultSyncRequest(
+                project_path=project_path,
+                project_id=str(result.metadata["project_id"]),
+                video_id=str(result.metadata["video_id"]),
+                element_id=placeholder.id,
+                content_id=str(placeholder.content_id or placeholder.id),
+                output_path=Path(str(result.metadata["output_path"])),
+                relative_output_path=str(result.metadata["relative_output_path"]),
+                width=int(result.metadata["width"]),
+                height=int(result.metadata["height"]),
+                set_as_main=task.set_as_main,
+            )
         )
 
     # ------------------------------------------------------------------
@@ -611,11 +798,12 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         task_result: TaskExecutionResult,
     ) -> Dict[str, Any]:
         d: Dict[str, Any] = {
-            "id": placeholder.id,
+            "element_id": placeholder.id,
             "type": placeholder.type,
             "name": placeholder.name,
             "width": placeholder.width,
             "height": placeholder.height,
+            "content_id": placeholder.content_id,
         }
         if task_result.is_success:
             update = task_result.placeholder_update
@@ -635,7 +823,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         idx: int,
         element_id: str,
     ) -> Dict[str, Any]:
+        width, height = task.canvas_dimensions
         return {
+            # 预占位阶段就修复或补齐 Element 尺寸，确保 processing/failed 状态也能正常渲染。
+            "width": float(width),
+            "height": float(height),
             "generateVideoRequest": self._build_initial_design_video_request(
                 task,
                 self._ensure_task_video_id(idx),
@@ -647,14 +839,14 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         tool_context: ToolContext,
         project_path: Path,
     ) -> Dict[str, Any]:
-        workspace_path = Path(self.base_dir)
+        workspace_path = self._get_runtime_workspace_dir(tool_context)
         relative_project_path, directory_parts = self._safe_project_directory_parts(
             project_path,
             workspace_path,
         )
+        await async_mkdir(project_path / "videos", parents=True, exist_ok=True)
         design_file_dir = self._format_design_file_dir(str(relative_project_path / "videos"))
         project_id = self._resolve_project_id()
-        await async_mkdir(project_path / "videos", parents=True, exist_ok=True)
         await self._get_magic_service_client().ensure_project_directories(
             project_id,
             [*directory_parts, "videos"],
@@ -663,6 +855,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             "design_file_dir": design_file_dir,
             "project_id": project_id,
             "_relative_project_path": str(relative_project_path),
+            "workspace_root": str(workspace_path),
         }
 
     @staticmethod
@@ -726,20 +919,61 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         workspace_root: Path,
         project_prefix: str,
     ) -> str:
-        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
-        if normalized_provider_asset_uri is not None:
-            # 供应商素材 URI 不对应本地文件，兼容历史路径拼接产生的前导斜杠。
-            return normalized_provider_asset_uri
-
-        if not path or path.startswith(("http://", "https://")) or Path(path).is_absolute():
+        if not path or path.startswith(("http://", "https://")):
             return path
 
-        normalized = path.lstrip("/")
-        if await async_exists(workspace_root / normalized):
-            return normalized
-        if project_prefix and await async_exists(workspace_root / project_prefix / normalized):
-            return f"{project_prefix}/{normalized}"
-        return normalized
+        normalized_provider_asset_uri = normalize_provider_asset_uri(path)
+        if normalized_provider_asset_uri is not None:
+            # 供应商素材 URI 不对应本地文件，保留原值供后端 provider 解析。
+            return normalized_provider_asset_uri
+
+        normalized = str(path).strip().replace("\\", "/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        raw_path = Path(normalized)
+        candidates: list[tuple[Path, str]] = []
+        if raw_path.is_absolute():
+            try:
+                workspace_relative = raw_path.resolve().relative_to(workspace_root.resolve()).as_posix()
+            except ValueError as exc:
+                # 不存在的 /project/file 可能只是模型把 workspace-relative 路径误写成了绝对路径；
+                # 先转为相对路径参与工作区兜底搜索，真实存在的 workspace 外绝对路径仍会被拒绝。
+                if await async_is_file(raw_path):
+                    raise ValueError(f"参考素材必须位于当前 workspace 内: {path}") from exc
+                normalized = normalized.lstrip("/")
+                raw_path = Path(normalized)
+                workspace_relative = normalized
+            candidates.append((raw_path, workspace_relative))
+        else:
+            candidates.extend([
+                (workspace_root / normalized, normalized),
+                (workspace_root / project_prefix / normalized, f"{project_prefix}/{normalized}"),
+            ])
+        for candidate, workspace_relative in candidates:
+            if await async_is_file(candidate):
+                return workspace_relative
+
+        requested_parts = tuple(part for part in normalized.split("/") if part)
+        target_name = requested_parts[-1] if requested_parts else ""
+        suffix_matches: list[Path] = []
+        basename_matches: list[Path] = []
+        for candidate in workspace_root.rglob(target_name):
+            if not await async_is_file(candidate):
+                continue
+            relative_parts = candidate.relative_to(workspace_root).parts
+            if requested_parts and len(relative_parts) >= len(requested_parts):
+                if tuple(relative_parts[-len(requested_parts):]) == requested_parts:
+                    suffix_matches.append(candidate)
+                    continue
+            basename_matches.append(candidate)
+        matches = suffix_matches if len(suffix_matches) == 1 else (
+            basename_matches if len(basename_matches) == 1 else []
+        )
+        if len(matches) == 1:
+            return matches[0].relative_to(workspace_root).as_posix()
+        if suffix_matches or basename_matches:
+            raise ValueError(f"参考素材路径存在多个候选文件，无法安全判断: {path}")
+        raise ValueError(f"参考素材文件不存在于当前 workspace: {path}")
 
     def _build_result_content(
         self,
@@ -765,7 +999,18 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             lines.append("Completed Elements:")
             for r in completed_results:
                 p = placeholders[r.index]
-                lines.append(f"- {p.name} (id: {p.id})")
+                content_suffix = f', content_id="{p.content_id}"' if p.content_id else ""
+                update = r.placeholder_update
+                media_suffix = ""
+                if isinstance(update, VideoPlaceholderUpdate):
+                    if update.src:
+                        media_suffix += f', media_path="{update.src}"'
+                    if update.width is not None and update.height is not None:
+                        media_suffix += f', dimensions="{int(update.width)}x{int(update.height)}"'
+                lines.append(
+                    f'- {p.name} (element_id="{p.id}"{content_suffix}, '
+                    f'status="completed"{media_suffix})'
+                )
 
         if pending_results:
             lines.extend([
@@ -777,17 +1022,24 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             for r in pending_results:
                 m = r.metadata
                 lines.append(
-                    f"- {m['element_name']} (element_id: {m['element_id']}), "
-                    f"video_id: {m['video_id']}, "
-                    f"status: {m['pending_status']}"
+                    f'- {m["element_name"]} (element_id="{m["element_id"]}", '
+                    f'content_id="{m["content_id"]}", video_id="{m["video_id"]}", '
+                    f'status="{m["pending_status"]}")'
                 )
 
         if failed_results:
             lines.append("")
-            lines.append("Failed Elements (pass element_id to retry in place):")
+            lines.append("Failed Elements (pass element_id and/or content_id to retry in place):")
             for r in failed_results:
                 p = placeholders[r.index]
-                lines.append(f'- {p.name} (element_id: "{p.id}")')
+                content_suffix = f', content_id="{p.content_id}"' if p.content_id else ""
+                line = f'- {p.name} (element_id="{p.id}"{content_suffix}, status="failed")'
+                if r.error_message:
+                    short_error = r.error_message[:200]
+                    if len(r.error_message) > 200:
+                        short_error += "..."
+                    line += f" Reason: {short_error}"
+                lines.append(line)
 
         return "\n".join(lines)
 
@@ -800,6 +1052,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         pending_videos = [
             {
                 "element_id": r.metadata["element_id"],
+                "content_id": r.metadata["content_id"],
                 "element_name": r.metadata["element_name"],
                 "video_id": r.metadata["video_id"],
                 "status": r.metadata["pending_status"],
@@ -820,11 +1073,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
     # ------------------------------------------------------------------
     # 私有辅助
     # ------------------------------------------------------------------
-
-    def _get_magic_service_client(self) -> MagicServiceClient:
-        if self._magic_service_client is None:
-            self._magic_service_client = MagicServiceClient()
-        return self._magic_service_client
 
     def _ensure_task_video_id(self, idx: int) -> str:
         video_id = self._task_video_ids.get(idx)
@@ -847,6 +1095,22 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if isinstance(project_id, (str, int)) and str(project_id).strip():
             return str(project_id).strip()
         raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
+
+    def _get_magic_service_client(self) -> MagicServiceClient:
+        """获取复用的 Magic Service 客户端。"""
+        if self._magic_service_client is None:
+            self._magic_service_client = MagicServiceClient()
+        return self._magic_service_client
+
+    @staticmethod
+    def _get_interruption_event(
+        tool_context: Optional[ToolContext],
+    ) -> Optional[asyncio.Event]:
+        """从工具上下文读取当前任务的中断事件。"""
+        if tool_context is None:
+            return None
+        agent_context = tool_context.get_extension("agent_context")
+        return agent_context.get_interruption_event() if agent_context is not None else None
 
     @staticmethod
     def _resolve_video_model(requested_model: str, tool_context: Optional[ToolContext] = None) -> str:
@@ -871,7 +1135,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         payload: Dict[str, Any] = {
             "video_id": video_id,
             "model_id": self._model_id or None,
-            **self._build_design_video_task_fields(task),
+            **self._build_design_video_task_fields(task, model_id=self._model_id),
         }
         return self._drop_empty_values(payload)
 
@@ -915,7 +1179,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         model_id: str,
         relative_project_path: str = "",
     ) -> Dict[str, Any]:
-        task_fields = self._build_design_video_task_fields(task, relative_project_path)
+        task_fields = self._build_design_video_task_fields(
+            task,
+            relative_project_path,
+            model_id=model_id,
+        )
         payload: Dict[str, Any] = {
             "project_id": project_id,
             "model_id": model_id,
@@ -936,13 +1204,14 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         self,
         task: VideoTaskSpec,
         relative_project_path: str = "",
+        model_id: str = "",
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "prompt": task.prompt,
             "input_mode": self._resolve_design_input_mode(task),
             "task": task.task or "generate",
         }
-        generation = self._build_design_generation(task)
+        generation = self._build_design_generation(task, model_id=model_id)
         if generation:
             payload["generation"] = generation
         payload["inputs"] = self._build_design_video_inputs(task, relative_project_path)
@@ -986,6 +1255,39 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
         return inputs
 
+    async def _build_transport_video_request(
+        self,
+        persisted_payload: Dict[str, Any],
+        task: VideoTaskSpec,
+        workspace_root: Path,
+    ) -> Dict[str, Any]:
+        """按配置构建实际发送给视频服务的请求，不改变画布持久化快照。"""
+        builder = VideoInputPayloadBuilder(workspace_root)
+        if not builder.enabled:
+            return persisted_payload
+
+        payload = {
+            **persisted_payload,
+            "inputs": {
+                **persisted_payload.get("inputs", {}),
+                "reference_images": [
+                    await builder.build_image_input(path)
+                    for path in task.reference_image_paths
+                ],
+                "frames": [
+                    {
+                        "role": role,
+                        **await builder.build_image_input(path),
+                    }
+                    for role, path in (
+                        [("start", task.frame_start_path)] if task.frame_start_path else []
+                    )
+                    + ([("end", task.frame_end_path)] if task.frame_end_path else [])
+                ],
+            },
+        }
+        return payload
+
     @staticmethod
     def _resolve_design_input_mode(task: VideoTaskSpec) -> str:
         if task.input_mode:
@@ -1003,7 +1305,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         return "standard"
 
     @staticmethod
-    def _build_design_generation(task: VideoTaskSpec) -> Dict[str, Any]:
+    def _build_design_generation(task: VideoTaskSpec, model_id: str = "") -> Dict[str, Any]:
         generation: Dict[str, Any] = {
             "aspect_ratio": task.aspect_ratio or None,
             "duration_seconds": task.duration_seconds,
@@ -1011,6 +1313,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             "fps": task.fps,
             "seed": task.seed,
             "watermark": task.watermark,
+            "generate_audio": VideoAudioPolicyResolver.to_legacy_generate_audio(
+                task.audio_policy,
+                model_id,
+            ),
         }
         return GenerateCanvasVideos._drop_empty_values(generation)
 
@@ -1018,13 +1324,12 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         path = (path or "").strip()
         if not path:
             raise ValueError("参考素材路径不能为空")
-        if path.startswith(("http://", "https://")):
-            raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
-
         normalized_provider_asset_uri = normalize_provider_asset_uri(path)
         if normalized_provider_asset_uri is not None:
-            # 供应商素材 URI 不属于项目文件树，不能附加项目路径或斜杠。
+            # provider 资产不是 workspace 文件，不能附加项目路径或转换为文件 URL。
             return normalized_provider_asset_uri
+        if path.startswith(("http://", "https://")):
+            raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
 
         if path.startswith("./"):
             if not relative_project_path:

@@ -23,8 +23,9 @@ class ProjectDirectoryHandler(BaseMentionHandler):
 
         if project_type == "design":
             return (
-                "The referenced Canvas design project requires canvas project skill or tools "
-                "for AI image generation, image search, or design marker processing."
+                "Read and follow the `canvas-manager` Skill first (if it is not already preloaded), "
+                "then inspect the referenced Canvas project with the Canvas business tools. "
+                "Do not read or edit Canvas project files directly."
             )
         if project_type == "slide":
             return (

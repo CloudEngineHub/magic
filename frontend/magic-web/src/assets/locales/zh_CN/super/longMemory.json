@@ -19,6 +19,13 @@
 	"editAndAccept": "修改并采纳",
 	"editMemory": "编辑记忆",
 	"enabledSuccess": "记忆已启用",
+	"featureSwitch": {
+		"description": "关闭后将停止自动读取和整理通用长期记忆，已有记忆内容仍会保留并可手动编辑。",
+		"disableSuccess": "已关闭长期记忆",
+		"enableSuccess": "已开启长期记忆",
+		"saveFailed": "长期记忆设置保存失败，请稍后重试",
+		"title": "自动使用长期记忆"
+	},
 	"fileTree": {
 		"createFile": "新建文件",
 		"createFolder": "新建文件夹",
@@ -36,23 +43,16 @@
 		"searchEmpty": "没有匹配的记忆文件",
 		"searchPlaceholder": "搜索记忆文件",
 		"tags": {
+			"currentProject": "当前项目记录",
 			"global": "全局",
 			"globalMemory": "全局记忆",
 			"globalNotes": "全局笔记",
 			"memoryRoot": "记忆空间",
 			"project": "项目目录",
-			"currentProject": "当前项目记录",
 			"projectMemory": "项目记忆",
 			"projectNotes": "项目笔记",
 			"projects": "项目"
 		}
-	},
-	"featureSwitch": {
-		"description": "关闭后将停止自动读取和整理通用长期记忆，已有记忆内容仍会保留并可手动编辑。",
-		"disableSuccess": "已关闭长期记忆",
-		"enableSuccess": "已开启长期记忆",
-		"saveFailed": "长期记忆设置保存失败，请稍后重试",
-		"title": "自动使用长期记忆"
 	},
 	"globalEditor": {
 		"conflict": {
