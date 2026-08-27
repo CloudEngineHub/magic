@@ -387,7 +387,9 @@ function groupSlidesTemplatesByTag(
 	return tags.map((tag) => ({
 		group_key: createSlidesTemplateTagGroupKey(tag.code),
 		group_name: getSlidesTemplateName(tag),
-		// 标签条件由列表接口的 tag_codes 参数在服务端完成，列表响应不包含 tags。
+		// Keep the featured entry visually distinct from ordinary tag filters.
+		...(tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE ? { group_icon: "Sparkles" } : {}),
+		// Tag filtering is handled by the server; preserve template tags for featured rendering.
 		children: templates.map(toTemplateOption),
 	}))
 }
@@ -537,10 +539,9 @@ export function normalizeSlidesTemplateResponse(
 	return {
 		...response,
 		list: (response.list ?? []).map((item) => {
-			const { tags, ...rest } = item
-			void tags
 			return {
-				...rest,
+				...item,
+				tags: item.tags ?? [],
 				label: normalizeSlidesTemplateText(item.label),
 				description: normalizeSlidesTemplateText(item.description),
 			}
