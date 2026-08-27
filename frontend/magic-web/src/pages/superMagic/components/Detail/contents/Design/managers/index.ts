@@ -21,6 +21,7 @@ export {
 } from "./DesignRemoteListener"
 export {
 	type DesignRemoteUpdateListenerMode,
+	type PendingDesignUpgrade,
 	type DesignConflict,
 	type DesignConflictReason,
 	type DesignElementConflict,

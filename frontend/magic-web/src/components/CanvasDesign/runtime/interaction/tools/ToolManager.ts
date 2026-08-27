@@ -8,6 +8,7 @@ import { TextTool } from "./TextTool"
 import { MarkerTool } from "./MarkerTool"
 import { ImageGeneratorTool } from "./ImageGeneratorTool"
 import { VideoGeneratorTool } from "./VideoGeneratorTool"
+import { AudioGeneratorTool } from "./AudioGeneratorTool"
 import type { Canvas } from "../../core/Canvas"
 
 /**
@@ -37,6 +38,7 @@ export class ToolManager {
 	private markerTool: MarkerTool
 	private imageGeneratorTool: ImageGeneratorTool
 	private videoGeneratorTool: VideoGeneratorTool
+	private audioGeneratorTool: AudioGeneratorTool
 
 	/**
 	 * 构造函数
@@ -95,6 +97,10 @@ export class ToolManager {
 			canvas,
 		})
 
+		this.audioGeneratorTool = new AudioGeneratorTool({
+			canvas,
+		})
+
 		// 监听只读状态变化
 		this.canvas.eventEmitter.on("canvas:readonly", () => {
 			// 如果切换到只读模式，强制切换到选择工具
@@ -141,6 +147,8 @@ export class ToolManager {
 				return this.imageGeneratorTool
 			case ToolTypeEnum.VideoGenerator:
 				return this.videoGeneratorTool
+			case ToolTypeEnum.AudioGenerator:
+				return this.audioGeneratorTool
 			default:
 				return null
 		}
@@ -267,6 +275,8 @@ export class ToolManager {
 			toolType = ToolTypeEnum.ImageGenerator
 		} else if (this.activeTool === this.videoGeneratorTool) {
 			toolType = ToolTypeEnum.VideoGenerator
+		} else if (this.activeTool === this.audioGeneratorTool) {
+			toolType = ToolTypeEnum.AudioGenerator
 		}
 
 		this.canvas.eventEmitter.emit({ type: "tool:change", data: { tool: toolType } })
@@ -349,6 +359,13 @@ export class ToolManager {
 		return this.videoGeneratorTool
 	}
 
+	/**
+	 * 获取音频生成工具
+	 */
+	public getAudioGeneratorTool(): AudioGeneratorTool {
+		return this.audioGeneratorTool
+	}
+
 	/** Magic 配置或语言变化时，避免工具内仍使用旧的模型列表缓存 */
 	public invalidateMagicModelListCaches(): void {
 		this.imageGeneratorTool.clearModelListCache()
@@ -408,5 +425,6 @@ export class ToolManager {
 		this.markerTool.destroy()
 		this.imageGeneratorTool.destroy()
 		this.videoGeneratorTool.destroy()
+		this.audioGeneratorTool.destroy()
 	}
 }

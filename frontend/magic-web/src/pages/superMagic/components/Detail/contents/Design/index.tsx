@@ -23,7 +23,7 @@ import {
 	resolveActualDesignCurrentFile,
 	resolveDesignProjectBasePathFromAttachments,
 } from "./utils/utils"
-import { resolveDesignAttachment } from "./utils/designPath"
+import { resolveDesignCanvasResourceFileItem } from "./utils/designResourceReferenceResolver"
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -55,7 +55,6 @@ import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
 import { AlertTriangle, CloudOff } from "lucide-react"
-import { needsUpgrade, upgradeCanvasToV2, type UpgradeProgress } from "./utils/canvasVersionUpgrade"
 import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
 import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/runtime/document"
@@ -67,6 +66,7 @@ import type { DesignSaveMetadata } from "./managers"
 import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
 import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
+import { useCanvasSelectionMentionPublisher } from "./hooks/useCanvasSelectionMentionPublisher"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -252,6 +252,8 @@ function resolveDesignPluginDirectories(options: {
 interface DesignViewerProps {
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
+	/** 当前项目附件快照是否已完成首次加载。 */
+	attachmentsReady?: boolean
 	/** Project id forwarded by standalone/native preview when no selected topic exists. */
 	projectId?: string
 	currentFile?: {
@@ -264,6 +266,8 @@ interface DesignViewerProps {
 	}
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
+	/** 独立预览场景传入的项目 ID */
+	projectId?: string
 	/** 是否为话题回放模式 */
 	isPlaybackMode?: boolean
 	allowEdit: boolean
@@ -468,12 +472,17 @@ function DesignViewer(props: DesignViewerProps) {
 		updateDesignData,
 		updateDesignDataAndScheduleSave,
 		persistLocalDraft,
-		syncDesignData,
 		magicProjectJsFileId,
 		isInitialLoading,
+		pendingDesignUpgrade,
+		designLoadIssue,
+		sidecarStatus,
+		clearDesignLoadIssue,
+		persistPendingDesignUpgrade,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
 		loadFromRemote,
 		reloadPreservingLocalDraft,
+		reloadCurrentVersion,
 		reloadDiscardingLocalDraft,
 		isReadOnly: isReadOnlyState,
 		setIsReadOnly: setIsReadOnlyState,
@@ -506,94 +515,94 @@ function DesignViewer(props: DesignViewerProps) {
 	useEffect(() => {
 		isInitialLoadingRef.current = isInitialLoading
 	}, [isInitialLoading])
-
-	// v1 → v2 升级相关状态
 	const [isUpgrading, setIsUpgrading] = useState(false)
 	const [autoUpgradeFailed, setAutoUpgradeFailed] = useState(false)
-	const [upgradeProgress, setUpgradeProgress] = useState<UpgradeProgress>({
-		step: "backup",
-		percent: 0,
-	})
+	const [upgradeProgress, setUpgradeProgress] = useState(0)
 	const autoUpgradeTaskKeyRef = useRef<string | null>(null)
+	const upgradeProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-	const shouldAutoUpgrade = useMemo(
-		() =>
-			!isInitialLoading &&
-			allowEdit &&
-			!isPlaybackMode &&
-			!isShareRoute &&
-			isNewestVersion &&
-			needsUpgrade(designData),
-		[allowEdit, designData, isInitialLoading, isNewestVersion, isPlaybackMode, isShareRoute],
-	)
+	const clearUpgradeProgressTimer = useCallback(() => {
+		if (!upgradeProgressTimerRef.current) return
+		clearInterval(upgradeProgressTimerRef.current)
+		upgradeProgressTimerRef.current = null
+	}, [])
+
+	useEffect(() => clearUpgradeProgressTimer, [clearUpgradeProgressTimer])
+
+	const shouldAutoUpgrade =
+		!isInitialLoading &&
+		!!pendingDesignUpgrade &&
+		allowEdit &&
+		!isPlaybackMode &&
+		!isShareRoute &&
+		!isMobile &&
+		isNewestVersion &&
+		(!isReadOnlyState || pendingDesignUpgrade.reason === "sidecar-retry") &&
+		sidecarStatus !== "unsupported" &&
+		!conflictState
 
 	const automaticUpgradeKey = useMemo(() => {
-		if (!shouldAutoUpgrade || !projectId || !magicProjectJsFileId) return null
+		if (!shouldAutoUpgrade || !projectId || !magicProjectJsFileId || !pendingDesignUpgrade) {
+			return null
+		}
 		return [
 			projectId,
 			magicProjectJsFileId,
-			designData.version,
+			pendingDesignUpgrade.sourceVersion,
+			pendingDesignUpgrade.targetVersion,
 			designProjectBasePath ?? "",
 		].join(":")
 	}, [
-		designData.version,
 		designProjectBasePath,
 		magicProjectJsFileId,
+		pendingDesignUpgrade,
 		projectId,
 		shouldAutoUpgrade,
 	])
 
 	useEffect(() => {
 		setAutoUpgradeFailed(false)
+		if (!automaticUpgradeKey) autoUpgradeTaskKeyRef.current = null
 	}, [automaticUpgradeKey])
 
 	const handleUpgrade = useCallback(async () => {
-		if (!magicProjectJsFileId || !projectId || isUpgrading) return
+		if (!pendingDesignUpgrade || isUpgrading) return
+
 		setIsUpgrading(true)
 		setAutoUpgradeFailed(false)
-		setUpgradeProgress({ step: "backup", percent: 0 })
+		setUpgradeProgress(8)
+		clearUpgradeProgressTimer()
+		upgradeProgressTimerRef.current = setInterval(() => {
+			setUpgradeProgress((current) => {
+				if (current >= 92) return current
+				return Math.min(92, current + Math.max(1, Math.ceil((92 - current) * 0.12)))
+			})
+		}, 350)
+
 		try {
-			const upgradedData = await upgradeCanvasToV2(
-				designData,
-				{
-					magicProjectJsFileId,
-					projectId,
-					attachments,
-					flatAttachments,
-					designProjectBasePath,
-				},
-				(progress) => setUpgradeProgress(progress),
-			)
-			// 升级函数已经写入远端；这里只同步内存态和可信基线，避免二次自动保存。
-			const nextDesignData: DesignData = {
-				...latestDesignDataRef.current,
-				version: upgradedData.version,
-				canvas: upgradedData.canvas,
-			}
-			latestDesignDataRef.current = nextDesignData
-			updateDesignData(() => nextDesignData)
-			syncDesignData(nextDesignData)
+			const didPersist = await persistPendingDesignUpgrade()
+			if (!didPersist) throw new Error("Canvas DSL upgrade was not fully persisted")
+
+			clearUpgradeProgressTimer()
+			setUpgradeProgress(100)
+			await new Promise((resolve) => setTimeout(resolve, 300))
 			updateAttachments()
 			toast.success(t("design.upgrade.success"))
-		} catch (error) {
-			console.error("[Design] upgrade failed:", error)
-			toast.error(t("design.upgrade.failed"))
+		} catch {
+			clearUpgradeProgressTimer()
+			setUpgradeProgress(0)
 			setAutoUpgradeFailed(true)
+			toast.error(t("design.upgrade.failed"))
 		} finally {
 			setIsUpgrading(false)
 		}
 	}, [
-		magicProjectJsFileId,
-		projectId,
-		designData,
-		attachments,
-		flatAttachments,
-		designProjectBasePath,
-		updateDesignData,
-		syncDesignData,
-		updateAttachments,
+		clearUpgradeProgressTimer,
 		isUpgrading,
+		pendingDesignUpgrade,
+		persistPendingDesignUpgrade,
 		t,
+		updateAttachments,
 	])
 
 	useEffect(() => {
@@ -604,12 +613,28 @@ function DesignViewer(props: DesignViewerProps) {
 		void handleUpgrade()
 	}, [autoUpgradeFailed, automaticUpgradeKey, handleUpgrade, isOffline, isUpgrading])
 
-	const isUpgradeBlockingCanvas =
-		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
+	const isUpgradeBlockingCanvas = shouldAutoUpgrade && !isOffline
 	const shouldShowUpgradeProgress =
 		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
 	const shouldShowUpgradeFailed =
 		shouldAutoUpgrade && !isOffline && autoUpgradeFailed && !isUpgrading
+	const isBlockingDesignLoadIssue =
+		!!designLoadIssue &&
+		designLoadIssue.kind !== "unsupported-sidecar" &&
+		designLoadIssue.kind !== "sidecar-persist-failed"
+	const shouldShowUnsupportedSidecarNotice =
+		designLoadIssue?.kind === "unsupported-sidecar" || sidecarStatus === "unsupported"
+	const [isReloadingDesignIssue, setIsReloadingDesignIssue] = useState(false)
+	const handleReloadDesignIssue = useCallback(async () => {
+		if (isReloadingDesignIssue) return
+		setIsReloadingDesignIssue(true)
+		clearDesignLoadIssue()
+		try {
+			await reloadPreservingLocalDraft()
+		} finally {
+			setIsReloadingDesignIssue(false)
+		}
+	}, [clearDesignLoadIssue, isReloadingDesignIssue, reloadPreservingLocalDraft])
 
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
@@ -655,12 +680,42 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计容器 ref
 	const containerRef = useRef<HTMLDivElement>(null)
+	const [floatingBoundary, setFloatingBoundary] = useState<HTMLElement | null>(null)
+	const floatingBoundaryRef = useCallback((node: HTMLDivElement | null) => {
+		setFloatingBoundary(node)
+	}, [])
 
 	// 获取显示名称，优先使用目录名称
 	const displayName = directoryInfo.name || designData.name
 
 	// 设计项目 ID
 	const designProjectId = directoryInfo.id || currentFile?.id || ""
+	const isCanvasSelectionMentionsEnabled =
+		allowEdit && !isPlaybackMode && !isShareRoute && !isReadOnlyState && isTabActive !== false
+	const resolveCanvasResourceFile = useCallback(
+		(src: string) =>
+			resolveDesignCanvasResourceFileItem(src, {
+				flatAttachments,
+				designProjectBasePath,
+				attachmentIndex,
+			}) ?? null,
+		[attachmentIndex, designProjectBasePath, flatAttachments],
+	)
+	const getLatestCanvasDocument = useCallback(() => latestDesignDataRef.current.canvas, [])
+	const publishCanvasSelectionMentions = useCanvasSelectionMentionPublisher({
+		canvasDesignRef,
+		designProjectId,
+		enabled: isCanvasSelectionMentionsEnabled,
+		scope: {
+			workspaceId: selectedWorkspace?.id,
+			projectId,
+			topicId: selectedTopic?.id,
+			designProjectId,
+		},
+		getFallbackDocument: getLatestCanvasDocument,
+		resolveFileBySrc: resolveCanvasResourceFile,
+	})
+
 	const videoPointsEstimateCacheScope = useMemo(
 		() =>
 			[
@@ -694,18 +749,7 @@ function DesignViewer(props: DesignViewerProps) {
 				canvasDesignRef.current?.exportCurrentDocument?.() ??
 				latestDesignDataRef.current.canvas ??
 				null,
-			resolveFileBySrc: (src) => {
-				const resolvedFile = resolveDesignAttachment(
-					src,
-					{
-						flatAttachments,
-						designProjectBasePath,
-						attachmentIndex,
-					},
-					{ mode: "strict-current-canvas" },
-				)
-				return resolvedFile.status === "found" ? resolvedFile.fileItem : null
-			},
+			resolveFileBySrc: resolveCanvasResourceFile,
 		})
 		setCanvasElementResourceGetter(
 			designProjectId,
@@ -716,14 +760,7 @@ function DesignViewer(props: DesignViewerProps) {
 			mentionPanelStore.clearActiveCanvasElementsContext(designProjectId)
 			setCanvasElementResourceGetter(designProjectId, null)
 		}
-	}, [
-		attachmentIndex,
-		designProjectBasePath,
-		designProjectId,
-		displayName,
-		flatAttachments,
-		isTabActive,
-	])
+	}, [designProjectId, displayName, isTabActive, resolveCanvasResourceFile])
 
 	const downloadPolicy = useDesignDownloadPolicy()
 
@@ -965,13 +1002,19 @@ function DesignViewer(props: DesignViewerProps) {
 	const handleReinitialize = useCallback(async () => {
 		// 先更新 markersForCanvas，并保留当前画布内尚未落远端的编辑。
 		setMarkersForCanvas(markerManager.getMarkers(designProjectId ?? ""))
-		persistCurrentCanvasDraftImmediately("manual-refresh")
-		await reloadPreservingLocalDraft()
+		if (fileVersion !== undefined) {
+			await reloadCurrentVersion()
+		} else {
+			persistCurrentCanvasDraftImmediately("manual-refresh")
+			await reloadPreservingLocalDraft()
+		}
 		refreshCanvasDesign()
 		if (magicProjectJsFileId && fetchFileVersions && !isShareRoute) {
 			await fetchFileVersions()
 		}
 	}, [
+		fileVersion,
+		reloadCurrentVersion,
 		reloadPreservingLocalDraft,
 		refreshCanvasDesign,
 		magicProjectJsFileId,
@@ -1038,6 +1081,7 @@ function DesignViewer(props: DesignViewerProps) {
 			canvasDesignRef,
 			currentCanvasData: designData.canvas,
 			flatAttachments,
+			attachmentsReady,
 			attachmentIndex,
 			designProjectBasePath,
 			projectId,
@@ -1126,6 +1170,7 @@ function DesignViewer(props: DesignViewerProps) {
 		canvasDesignRef,
 		canvas: designData.canvas,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		designProjectBasePath,
 		projectId,
@@ -1592,7 +1637,7 @@ function DesignViewer(props: DesignViewerProps) {
 								<CanvasDesignHeaderV2 {...headerProps} />
 							</>
 						)}
-						<div className={styles.designCanvasContainer}>
+						<div ref={floatingBoundaryRef} className={styles.designCanvasContainer}>
 							{shouldShowCanvasConflictNotice && (
 								<div
 									className={styles.conflictNotice}
@@ -1651,9 +1696,45 @@ function DesignViewer(props: DesignViewerProps) {
 									</div>
 								</div>
 							)}
+							{shouldShowUnsupportedSidecarNotice && (
+								<div
+									className={styles.conflictNotice}
+									style={
+										shouldShowCanvasConflictNotice
+											? { top: "104px" }
+											: undefined
+									}
+									role="status"
+									aria-live="polite"
+								>
+									<AlertTriangle className={styles.conflictIcon} size={20} />
+									<div className={styles.conflictContent}>
+										<div className={styles.conflictTitle}>
+											{t("design.upgrade.unsupportedSidecarTitle")}
+										</div>
+										<div className={styles.conflictDescription}>
+											{t("design.upgrade.unsupportedSidecarDescription")}
+										</div>
+									</div>
+								</div>
+							)}
+							{isBlockingDesignLoadIssue && (
+								<CanvasUpgradeOverlay
+									percent={0}
+									status="error"
+									title={t("design.upgrade.loadFailedTitle")}
+									subtitle={t("design.upgrade.loadFailedSubtitle", {
+										stage: designLoadIssue.stage,
+										reason: designLoadIssue.message,
+									})}
+									actionLabel={t("design.upgrade.reload")}
+									actionDisabled={isReloadingDesignIssue}
+									onAction={() => void handleReloadDesignIssue()}
+								/>
+							)}
 							{shouldShowUpgradeProgress && (
 								<CanvasUpgradeOverlay
-									percent={upgradeProgress.percent}
+									percent={upgradeProgress}
 									title={t("design.upgrade.autoUpgradingTitle")}
 									subtitle={t("design.upgrade.autoUpgradingSubtitle")}
 								/>
@@ -1677,6 +1758,7 @@ function DesignViewer(props: DesignViewerProps) {
 									readonly={
 										isReadOnlyState ||
 										isUpgradeBlockingCanvas ||
+										isBlockingDesignLoadIssue ||
 										shouldBlockCanvasForConflict
 									}
 									magic={{
@@ -1688,6 +1770,7 @@ function DesignViewer(props: DesignViewerProps) {
 									plugins={canvasPluginConfig}
 									viewport={{
 										autoLoadCacheViewport: !isPlaybackMode && !isMobile,
+										floatingBoundary,
 									}}
 									data={{
 										defaultData: designData.canvas,
@@ -1707,6 +1790,9 @@ function DesignViewer(props: DesignViewerProps) {
 										defaultProjectAttachmentFolderName,
 										mentionDataServiceCtor: CanvasDesignMentionDataService,
 										mentionExtension: MentionExtension,
+										onSelectionChange: isCanvasSelectionMentionsEnabled
+											? publishCanvasSelectionMentions
+											: undefined,
 										referenceResourcePanelRenderer:
 											CanvasDesignReferenceResourcePanel,
 									}}

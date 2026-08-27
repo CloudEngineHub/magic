@@ -1,8 +1,10 @@
+import { Blob as NodeBlob } from "node:buffer"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	CANVAS_MEDIA_CACHE_NAME,
 	CANVAS_MEDIA_DB_NAME,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
+	cleanupLegacyCanvasMediaStorage,
 	handleCanvasMediaMessage,
 	handleCanvasMediaRequest,
 	parseVirtualResourceRequest,
@@ -12,7 +14,7 @@ type StoredCanvasEntry = {
 	id: string
 	namespace: string
 	path: string
-	mediaType: "image" | "video"
+	mediaType: "image" | "video" | "audio"
 	url?: string
 	cacheKey?: string
 	sourceUrl?: string
@@ -25,14 +27,15 @@ type StoredCanvasEntry = {
 	contentType?: string | null
 }
 
+const TEST_ORIGIN = "https://canvas.test"
+
 class FakeIdbRequest<T> {
 	public result!: T
 	public error: Error | null = null
 	public onsuccess: ((this: IDBRequest<T>, ev: Event) => unknown) | null = null
 	public onerror: ((this: IDBRequest<T>, ev: Event) => unknown) | null = null
 	public onupgradeneeded:
-		| ((this: IDBOpenDBRequest, ev: IDBVersionChangeEvent) => unknown)
-		| null = null
+		((this: IDBOpenDBRequest, ev: IDBVersionChangeEvent) => unknown) | null = null
 
 	public succeed(result: T): void {
 		this.result = result
@@ -158,8 +161,11 @@ class FakeCacheStorage {
 	}
 }
 
-function buildVirtualUrl(path: string): string {
-	return `${window.location.origin}/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/${path}`
+function buildVirtualUrl(
+	path: string,
+	mediaType: StoredCanvasEntry["mediaType"] = "image",
+): string {
+	return `${TEST_ORIGIN}/sw/canvas-design-media/workspace/project/design/demo/${mediaType}/design-resource/${path}`
 }
 
 async function saveCanvasEntry(
@@ -197,9 +203,51 @@ describe("canvasMediaShared", () => {
 	})
 
 	it("uses a new cache namespace when path key semantics change", () => {
-		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(2)
-		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v2")
-		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v2")
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(3)
+		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v3")
+		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v3")
+	})
+
+	it("deletes only legacy Canvas media IndexedDB and CacheStorage namespaces", async () => {
+		const deletedDatabases: string[] = []
+		const indexedDBFactory = {
+			deleteDatabase: vi.fn((name: string) => {
+				deletedDatabases.push(name)
+				const request = new FakeIdbRequest<undefined>()
+				request.succeed(undefined)
+				return request as unknown as IDBOpenDBRequest
+			}),
+		} as unknown as IDBFactory
+		const cacheStorage = {
+			delete: vi.fn().mockResolvedValue(true),
+		} as unknown as CacheStorage
+
+		await cleanupLegacyCanvasMediaStorage({ indexedDBFactory, cacheStorage })
+
+		expect(deletedDatabases).toEqual([
+			"canvas-media-resource-offline-cache-v1",
+			"canvas-media-resource-offline-cache-v2",
+		])
+		expect(cacheStorage.delete).toHaveBeenCalledTimes(2)
+		expect(cacheStorage.delete).toHaveBeenNthCalledWith(1, "canvas-media-resources-v1")
+		expect(cacheStorage.delete).toHaveBeenNthCalledWith(2, "canvas-media-resources-v2")
+		expect(deletedDatabases).not.toContain(CANVAS_MEDIA_DB_NAME)
+		expect(cacheStorage.delete).not.toHaveBeenCalledWith(CANVAS_MEDIA_CACHE_NAME)
+	})
+
+	it("does not reject cache initialization when legacy cleanup fails", async () => {
+		const indexedDBFactory = {
+			deleteDatabase: vi.fn(() => {
+				throw new Error("deleteDatabase unavailable")
+			}),
+		} as unknown as IDBFactory
+		const cacheStorage = {
+			delete: vi.fn().mockRejectedValue(new Error("cache delete failed")),
+		} as unknown as CacheStorage
+
+		await expect(
+			cleanupLegacyCanvasMediaStorage({ indexedDBFactory, cacheStorage }),
+		).resolves.toBeUndefined()
 	})
 
 	it("does not read metadata from the incompatible v1 path-key namespace", async () => {
@@ -223,7 +271,7 @@ describe("canvasMediaShared", () => {
 
 	it("parses canvas virtual urls with unicode paths", () => {
 		const result = parseVirtualResourceRequest(
-			`${window.location.origin}/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/%E6%B5%8B%E8%AF%95%E7%94%BB%E5%B8%83/images/%E7%8C%AB.jpg`,
+			`${TEST_ORIGIN}/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/%E6%B5%8B%E8%AF%95%E7%94%BB%E5%B8%83/images/%E7%8C%AB.jpg`,
 		)
 
 		expect(result).toEqual({
@@ -231,6 +279,15 @@ describe("canvasMediaShared", () => {
 			mediaType: "image",
 			resourcePath: "测试画布/images/猫.jpg",
 		})
+	})
+
+	it("parses audio virtual urls without changing the v3 cache namespace", () => {
+		expect(parseVirtualResourceRequest(buildVirtualUrl("audios/voice.mp3", "audio"))).toEqual({
+			namespace: "workspace/project/design/demo",
+			mediaType: "audio",
+			resourcePath: "audios/voice.mp3",
+		})
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(3)
 	})
 
 	it("returns cached canvas response when cache entry exists", async () => {
@@ -264,12 +321,15 @@ describe("canvasMediaShared", () => {
 			sourceUrl: "https://oss.example.com/images/example.png",
 		}
 		await saveCanvasEntry(entry)
-		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response("network-image", {
-				status: 200,
-				headers: { "Content-Type": "image/png", ETag: "etag-1" },
-			}),
-		)
+		const networkBlob = new NodeBlob(["network-image"], { type: "image/png" })
+		const networkResponse = new Response(networkBlob, {
+			status: 200,
+			headers: { "Content-Type": "image/png", ETag: "etag-1" },
+		})
+		Object.defineProperty(networkResponse, "blob", {
+			value: vi.fn(async () => networkBlob),
+		})
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(networkResponse)
 
 		const response = await handleCanvasMediaRequest(new Request(requestUrl))
 		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
@@ -280,6 +340,40 @@ describe("canvasMediaShared", () => {
 		})
 		expect(await response?.text()).toBe("network-image")
 		expect(await cachedResponse?.text()).toBe("network-image")
+	})
+
+	it("caches an audio body and serves byte ranges for playback seeking", async () => {
+		const requestUrl = buildVirtualUrl("audios/voice.mp3", "audio")
+		const entry: StoredCanvasEntry = {
+			id: "workspace/project/design/demo/audio/audios/voice.mp3",
+			namespace: "workspace/project/design/demo",
+			path: "audios/voice.mp3",
+			mediaType: "audio",
+			cacheKey: requestUrl,
+			sourceUrl: "https://oss.example.com/audios/voice.mp3",
+		}
+		await saveCanvasEntry(entry)
+		const networkBlob = new NodeBlob(["0123456789"], { type: "audio/mpeg" })
+		const networkResponse = new Response(networkBlob, {
+			status: 200,
+			headers: { "Content-Type": "audio/mpeg" },
+		})
+		Object.defineProperty(networkResponse, "blob", {
+			value: vi.fn(async () => networkBlob),
+		})
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(networkResponse)
+		const rangeResponse = await handleCanvasMediaRequest(
+			new Request(requestUrl, { headers: { Range: "bytes=2-5" } }),
+		)
+		expect(rangeResponse?.status).toBe(206)
+		expect(rangeResponse?.headers.get("Content-Range")).toBe("bytes 2-5/10")
+		expect(await rangeResponse?.text()).toBe("2345")
+		expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+		const invalidRangeResponse = await handleCanvasMediaRequest(
+			new Request(requestUrl, { headers: { Range: "bytes=20-30" } }),
+		)
+		expect(invalidRangeResponse?.status).toBe(416)
 	})
 
 	it("handles cache register message and writes resource metadata", async () => {

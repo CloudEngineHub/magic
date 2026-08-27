@@ -32,6 +32,7 @@ import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 export interface QueueMessageInput {
 	content: JSONContent
 	mentionItems: MentionListItem[]
+	dynamicParams?: Record<string, unknown>
 	selectedModel?: ModelItem | null
 	selectedImageModel?: ModelItem | null
 	selectedVideoModel?: ModelItem | null

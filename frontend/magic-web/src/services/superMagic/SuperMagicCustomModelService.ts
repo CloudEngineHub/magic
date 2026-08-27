@@ -31,6 +31,9 @@ export function serviceProviderModelToModelItem(model: ServiceProviderModel): Mo
 		model_icon: model.icon ?? "",
 		model_status: ModelStatusEnum.Normal,
 		sort: 0,
+		...(model.video_generation_config
+			? { video_generation_config: model.video_generation_config }
+			: {}),
 	}
 }
 

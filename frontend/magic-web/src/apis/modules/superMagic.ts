@@ -571,9 +571,19 @@ export interface ImageGenerationResultsResponse {
 	images: GeneratedImageResultItem[]
 }
 
-/**
- * 发起视频生成请求参数
- */
+/** 视频生成参数；画布合成暂不使用，保留为后续输出配置扩展。 */
+export interface GenerateVideoGeneration {
+	/** 宽高比，如 16:9 */
+	aspect_ratio?: string
+	/** 分辨率，如 1080p */
+	resolution?: string
+	/** 时长（秒） */
+	duration_seconds?: number
+	/** 预留扩展字段 */
+	[key: string]: unknown
+}
+
+/** 发起视频生成请求参数 */
 export interface GenerateVideoRequest {
 	/** 项目 id */
 	project_id?: string
@@ -601,6 +611,22 @@ export interface GenerateVideoRequest {
 	reference_images?: string[]
 	/** 帧 */
 	frames?: Array<{ role: "start" | "end"; uri: string }>
+	/** 生成参数；画布合成当前可省略，保留为后续输出配置扩展 */
+	generation?: GenerateVideoGeneration
+	/** 画布合成输入快照；数组顺序即合并顺序 */
+	composition?: {
+		videos: Array<{ path: string }>
+		audios?: Array<{ path: string }>
+	}
+	/** 当前话题 id（普通视频生成使用） */
+	topic_id?: string
+	/** 扩展配置 */
+	extensions?: {
+		output_file_name?: string
+		[key: string]: unknown
+	}
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**
@@ -633,6 +659,8 @@ export interface GenerateVideoResponse {
 	updated_at: string
 	/** 文件 URL */
 	file_url: string | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 	/** ID */
 	id: string
 }
@@ -668,13 +696,13 @@ export interface VideoGenerationResultResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 类型 */
 	type: unknown
 	/** 状态：pending 待处理，processing 处理中，completed 已完成，failed 失败 */
@@ -686,7 +714,7 @@ export interface VideoGenerationResultResponse {
 	/** 更新时间 */
 	updated_at: string
 	/** 文件 URL */
-	file_url: string
+	file_url: string | null
 	/** 文件 ID */
 	file_id: string
 	/** 海报文件 ID */
@@ -711,6 +739,8 @@ export interface VideoGenerationResultResponse {
 		finished_at?: string | null
 		elapsed_seconds?: number | null
 	} | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**

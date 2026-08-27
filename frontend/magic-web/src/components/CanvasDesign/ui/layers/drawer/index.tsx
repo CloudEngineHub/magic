@@ -4,13 +4,16 @@ import IconButton from "../../primitives/custom/IconButton/index"
 import {
 	Eye,
 	EyeClosed,
+	Film,
 	Folder,
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
+	Mic,
 	Search,
 	Type,
 	Video,
+	Workflow,
 	X,
 } from "lucide-react"
 import { FolderIcon } from "../../primitives/icons/index"
@@ -271,6 +274,15 @@ export default function LayersDrawer() {
 					break
 				case ElementTypeEnum.Video:
 					iconContent = <Video size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.VideoEdit:
+					iconContent = <Film size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.Audio:
+					iconContent = <Mic size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.Storyboard:
+					iconContent = <Workflow size={16} className={styles.layerNodeVideoIcon} />
 					break
 				default:
 					iconContent = <div className={styles.layerNodeElementIcon}></div>

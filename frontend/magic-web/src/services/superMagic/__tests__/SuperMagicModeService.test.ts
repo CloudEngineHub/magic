@@ -78,6 +78,9 @@ vi.mock("../SuperMagicCustomModelService", () => ({
 			model_icon: model.icon ?? "",
 			model_status: ModelStatusEnum.Normal,
 			sort: 0,
+			...(model.video_generation_config
+				? { video_generation_config: model.video_generation_config }
+				: {}),
 		})),
 	},
 }))
@@ -403,12 +406,20 @@ describe("SuperMagicModeService", () => {
 	})
 
 	it("prefers custom video model over official video model", async () => {
+		const videoGenerationConfig = {
+			supported_inputs: ["text_prompt", "image"],
+			generation: {
+				aspect_ratios: ["16:9"],
+				resolutions: ["720p"],
+				durations: [5],
+			},
+		}
 		vi.mocked(superMagicCustomModelService.findMyModelById).mockResolvedValue({
 			id: "custom-video-1",
 			name: "Custom Shared Video Model",
 			model_id: "shared-video-model",
 			model_type: MODEL_TYPE_VIDEO,
-			category: "video",
+			category: "vgm",
 			service_provider_config_id: "provider-3",
 			service_provider_config: {
 				id: "provider-3",
@@ -416,6 +427,7 @@ describe("SuperMagicModeService", () => {
 			},
 			description: "Custom video description",
 			icon: "custom-video-icon",
+			video_generation_config: videoGenerationConfig,
 		})
 
 		const resolved = await superMagicModeService.resolveModelByMode({
@@ -430,6 +442,7 @@ describe("SuperMagicModeService", () => {
 		})
 		expect(resolved?.id).toBe("custom-video-1")
 		expect(resolved?.model_name).toBe("Custom Shared Video Model")
+		expect(resolved?.video_generation_config).toEqual(videoGenerationConfig)
 	})
 
 	it("uses default model groups to organize all supported image and video models", () => {

@@ -33,6 +33,7 @@ vi.mock("../../hooks", () => ({
 
 vi.mock("../../stores", () => ({
 	useOptionalScenePanelVariant: () => ScenePanelVariant.TopicPage,
+	useOptionalSceneStateStore: () => null,
 }))
 
 vi.mock("../../components/editors/DefaultMessageEditorContainer", () => ({
@@ -56,6 +57,10 @@ vi.mock("../../components/ScenePanelContainer", () => ({
 			选择模板
 		</button>
 	),
+}))
+
+vi.mock("../../components/VideoProductionConfigPanel", () => ({
+	default: () => null,
 }))
 
 vi.mock("../Slides/SlidesTemplateHomeSelectionPreview", () => ({

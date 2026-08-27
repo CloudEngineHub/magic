@@ -3,8 +3,8 @@ import {
 	SUPPORTED_IMAGE_EXTENSIONS,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../../../runtime/shared/ids"
-import { getCanvasResourceReferenceIdentity } from "../../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
+import { getCanvasResourceReferenceIdentity } from "../../../../runtime/shared/path/canvasResourcePath"
 import type {
 	ReferenceAssetFileClass,
 	ReferenceAssetPerTypeLimits,

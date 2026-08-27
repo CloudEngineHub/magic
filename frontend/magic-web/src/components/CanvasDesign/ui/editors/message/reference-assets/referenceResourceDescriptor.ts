@@ -1,3 +1,4 @@
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import {
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
@@ -5,7 +6,6 @@ import {
 	isRemoteOrSpecialPath,
 	resolveCanvasStorageResourceReference,
 } from "../../../../runtime/shared/path/canvasResourcePath"
-import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import type {
 	ReferenceResourceAssetType,
 	ReferenceResourceDescriptor,
@@ -33,17 +33,17 @@ export function createReferenceResourceDescriptor(
 	const identity = getCanvasResourceReferenceIdentity(path, options.resolveResourceReference)
 	if (!identity) return null
 
+	const resourceKind = resolveResourceKind(path, options.resolveResourceReference)
 	return {
 		path,
 		identity,
-		resourceKind: resolveResourceKind(path, options.resolveResourceReference),
+		resourceKind,
 		fileName: options.fileName || getCanvasResourceFileName(path) || path,
 		src: options.src || path,
 		...(options.assetType ? { assetType: options.assetType } : {}),
 	}
 }
 
-/** 显式类型和同身份元数据优先；opaque URI 永不按后缀猜测。 */
 export function resolveReferenceResourceAssetType(options: {
 	path: string
 	explicitAssetType?: ReferenceResourceAssetType
@@ -57,14 +57,19 @@ export function resolveReferenceResourceAssetType(options: {
 		options.path,
 		options.resolveResourceReference,
 	)
-	const metadataMatch = options.metadataCandidates?.find(
-		(candidate) =>
-			candidate.assetType &&
-			getCanvasResourceReferenceIdentity(candidate.path, options.resolveResourceReference) ===
-				identity,
-	)
-	if (metadataMatch?.assetType) return metadataMatch.assetType
+	if (identity) {
+		const metadataMatch = options.metadataCandidates?.find(
+			(candidate) =>
+				candidate.assetType &&
+				getCanvasResourceReferenceIdentity(
+					candidate.path,
+					options.resolveResourceReference,
+				) === identity,
+		)
+		if (metadataMatch?.assetType) return metadataMatch.assetType
+	}
 
+	// Opaque URIs intentionally never use extension inference or a default image type.
 	if (isOpaqueAssetReference(options.path)) return undefined
 	return options.inferFromPath?.(options.path)
 }
@@ -75,7 +80,7 @@ function resolveResourceKind(
 ): ReferenceResourceDescriptor["resourceKind"] {
 	if (resolveResourceReference) {
 		const resolution = resolveCanvasStorageResourceReference(path, resolveResourceReference)
-		if (resolution?.status === "resolved") return resolution.resourceKind
+		if (resolution.status === "resolved") return resolution.resourceKind
 	}
 	if (isOpaqueAssetReference(path)) return "opaque-asset"
 	if (isRemoteOrSpecialPath(path)) return "external"

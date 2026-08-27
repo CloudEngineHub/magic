@@ -10,6 +10,9 @@ describe("Canvas destroy", () => {
 		const canvas = Object.create(Canvas.prototype) as Canvas
 
 		Object.assign(canvas, {
+			mediaEditRecoveryManager: {
+				clearAll: vi.fn(() => destroyOrder.push("mediaEditRecoveryManager")),
+			},
 			visibilityManager: destroyable("visibilityManager"),
 			imagePresentationScheduler: destroyable("imagePresentationScheduler"),
 			resourceUrlWarmupManager: destroyable("resourceUrlWarmupManager"),
@@ -18,12 +21,22 @@ describe("Canvas destroy", () => {
 			resizeObserver: null,
 			containerContextMenuHandler: null,
 			stageContextMenuHandler: null,
+			stageBlankClickHandler: null,
+			stageDoubleClickHandler: null,
 			handleWindowClick: null,
 			cropManager: destroyable("cropManager"),
 			extendManager: destroyable("extendManager"),
 			eraserManager: destroyable("eraserManager"),
 			imageEditingCoordinator: destroyable("imageEditingCoordinator"),
 			generationRuntimeManager: destroyable("generationRuntimeManager"),
+			mediaPlaybackCoordinator: destroyable("mediaPlaybackCoordinator"),
+			videoEditPlaybackManager: destroyable("videoEditPlaybackManager"),
+			audioPlaybackManager: destroyable("audioPlaybackManager"),
+			audioReplaceController: destroyable("audioReplaceController"),
+			imageReplaceController: destroyable("imageReplaceController"),
+			storyboardInteractionManager: destroyable("storyboardInteractionManager"),
+			videoEditInteractionManager: destroyable("videoEditInteractionManager"),
+			videoContinuationManager: destroyable("videoContinuationManager"),
 			eventEmitter: {
 				removeAllListeners: vi.fn(() => destroyOrder.push("eventEmitter")),
 			},
@@ -61,6 +74,8 @@ describe("Canvas destroy", () => {
 			submitImageWorkerManager: destroyable("submitImageWorkerManager"),
 			videoPlaybackManager: destroyable("videoPlaybackManager"),
 			videoResourceManager: destroyable("videoResourceManager"),
+			audioResourceManager: destroyable("audioResourceManager"),
+			audioWaveformManager: destroyable("audioWaveformManager"),
 			mediaResourceOfflineCacheManager: destroyable("mediaResourceOfflineCacheManager"),
 			pluginManager: destroyable("pluginManager"),
 			stage: destroyable("stage"),
@@ -69,6 +84,7 @@ describe("Canvas destroy", () => {
 		canvas.destroy()
 
 		const eventEmitterIndex = destroyOrder.indexOf("eventEmitter")
+		expect(destroyOrder.indexOf("mediaEditRecoveryManager")).toBeLessThan(eventEmitterIndex)
 		const dependencyIndexes = [
 			"cursorManager",
 			"elementManager",

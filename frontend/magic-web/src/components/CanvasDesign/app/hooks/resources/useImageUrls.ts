@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useCanvas } from "../../providers/CanvasProvider"
 import { useCanvasEvent } from "../canvas"
 import { ElementTypeEnum } from "../../../runtime/document/types"
-import { toCanonicalCanvasResourcePath } from "../../../runtime/shared/path/canvasResourcePath"
+import { areCanvasHostResourceReferencesSame } from "../../../runtime/shared/path/canvasResourcePath"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import type { ImageInfo } from "../../../runtime/resources/image/ImageResourceManager"
 
 export interface UseImageLowUrlOptions {
@@ -82,7 +83,7 @@ export function useImageLowUrl(options: UseImageLowUrlOptions): UseImageLowUrlRe
 			({ data }) => {
 				if (!enabled || data.elementId !== elementId) return
 				if (data.data?.type !== ElementTypeEnum.Image) return
-				if (data.data.src !== src) return
+				if (getActiveImageContent(data.data).src !== src) return
 				void syncLoadedLowUrl()
 			},
 			[elementId, enabled, src, syncLoadedLowUrl],
@@ -118,9 +119,7 @@ export function useImageLowUrl(options: UseImageLowUrlOptions): UseImageLowUrlRe
 		useCallback(
 			({ data }) => {
 				if (!canvas || !enabled || !src) return
-				const resolveAbs = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-				const normalizedPath = toCanonicalCanvasResourcePath(data.path, resolveAbs)
-				if (toCanonicalCanvasResourcePath(src, resolveAbs) !== normalizedPath) return
+				if (!areCanvasHostResourceReferencesSame(canvas, src, data.path)) return
 
 				const currentRequestId = requestIdRef.current + 1
 				requestIdRef.current = currentRequestId

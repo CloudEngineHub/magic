@@ -1,4 +1,4 @@
-import SizeInput from "../../element-toolbar/size/Size/SizeInput"
+import SizeInput from "../../element-tools/shared/size/Size/SizeInput"
 import { Button } from "../../primitives/shadcn/button"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import styles from "./index.module.css"

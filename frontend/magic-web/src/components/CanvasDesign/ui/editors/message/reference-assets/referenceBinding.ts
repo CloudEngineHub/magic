@@ -27,8 +27,8 @@ export interface ReferenceBindingState {
 
 function resolveAssetType(
 	info: ReferenceBindingResourceInfo,
-	defaultAssetType: PromptPlaceholderTokenKind = "image",
-): PromptPlaceholderTokenKind {
+	defaultAssetType?: PromptPlaceholderTokenKind,
+): PromptPlaceholderTokenKind | undefined {
 	return info.assetType ?? defaultAssetType
 }
 
@@ -37,6 +37,24 @@ function buildPromptMatchableItems(referenceFileInfos: ReferenceBindingResourceI
 		name: info.fileName || getCanvasResourceFileName(info.path) || info.path,
 		path: info.path,
 	}))
+}
+
+export function areOrderedPathsEqual(
+	left: string[],
+	right: string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	if (left === right) return true
+	if (left.length !== right.length) return false
+	for (let index = 0; index < left.length; index += 1) {
+		if (
+			getCanvasResourceReferenceIdentity(left[index], resolveResourceReference) !==
+			getCanvasResourceReferenceIdentity(right[index], resolveResourceReference)
+		) {
+			return false
+		}
+	}
+	return true
 }
 
 function promptContainsReferenceMention(
@@ -48,7 +66,13 @@ function promptContainsReferenceMention(
 	return Array.from(candidateNames).some((name) => promptContainsMentionForFile(prompt, name))
 }
 
-/** 保留 opaque 参考资源，同时允许用户显式删除已有 mention。 */
+/**
+ * Preserve detached references during prompt reconciliation without masking explicit user deletion.
+ *
+ * Existing protected references remain detached unless a user edit removes a mention that was
+ * present in the previous prompt. Opaque resources are identified by the shared resource
+ * descriptor rather than by filename/extension assumptions.
+ */
 export function reconcileProtectedReferencePaths(params: {
 	referenceFileInfos: ReferenceBindingResourceInfo[]
 	protectedReferencePaths: string[]
@@ -71,8 +95,8 @@ export function reconcileProtectedReferencePaths(params: {
 			info,
 		]),
 	)
-	const nextProtectedPaths: string[] = []
 	const protectedIdentities = new Set<string>()
+	const nextProtectedPaths: string[] = []
 
 	for (const path of protectedReferencePaths) {
 		const identity = getCanvasResourceReferenceIdentity(path, resolveResourceReference)
@@ -98,7 +122,8 @@ export function reconcileProtectedReferencePaths(params: {
 			resolveResourceReference,
 		})
 		if (!descriptor || descriptor.resourceKind !== "opaque-asset") continue
-		if (protectedIdentities.has(descriptor.identity)) continue
+		const identity = descriptor.identity
+		if (!identity || protectedIdentities.has(identity)) continue
 		const wasMentioned = Boolean(
 			previousPrompt && promptContainsReferenceMention(previousPrompt, info),
 		)
@@ -106,30 +131,12 @@ export function reconcileProtectedReferencePaths(params: {
 			currentPrompt && promptContainsReferenceMention(currentPrompt, info),
 		)
 		if (isCurrentlyMentioned || !wasMentioned || source !== "user") {
-			protectedIdentities.add(descriptor.identity)
+			protectedIdentities.add(identity)
 			nextProtectedPaths.push(info.path)
 		}
 	}
 
 	return nextProtectedPaths
-}
-
-export function areOrderedPathsEqual(
-	left: string[],
-	right: string[],
-	resolveResourceReference?: ResolveCanvasResourceReference,
-): boolean {
-	if (left === right) return true
-	if (left.length !== right.length) return false
-	for (let index = 0; index < left.length; index += 1) {
-		if (
-			getCanvasResourceReferenceIdentity(left[index], resolveResourceReference) !==
-			getCanvasResourceReferenceIdentity(right[index], resolveResourceReference)
-		) {
-			return false
-		}
-	}
-	return true
 }
 
 /**
