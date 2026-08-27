@@ -152,6 +152,7 @@ describe("useMicroAppsPage", () => {
 			list: [
 				{
 					app_id: "933138305533177857",
+					project_id: "",
 					app_name: "App",
 					app_description: "",
 					creator_id: "",
@@ -159,6 +160,7 @@ describe("useMicroAppsPage", () => {
 					publish_status: "unpublished",
 					updated_at: null,
 					can_delete: false,
+					can_manage_collaborators: false,
 				},
 			],
 			total: 1,

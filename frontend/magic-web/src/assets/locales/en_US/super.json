@@ -3626,6 +3626,7 @@
 	},
 	"microAppsPage": {
 		"actions": {
+			"manageCollaborators": "Manage collaborators",
 			"deleteApp": "Delete app",
 			"deleteDescription": "“{{name}}” and its project will be moved to the recycle bin and can be restored within 30 days.",
 			"deleteFailed": "Failed to delete the app. Please retry.",
@@ -5117,6 +5118,7 @@
 		"title": "Recycle Bin"
 	},
 	"scheduleTask": {
+		"agentScope": "Execution agent",
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
 		"contextLoading": "Loading the current micro app context…",
@@ -5132,6 +5134,7 @@
 		"enableTask": "Enable",
 		"enabled": "Active",
 		"manageTasks": "Manage tasks",
+		"microAppAgent": "Micro-app agent",
 		"monthlyAt": "Runs monthly on day {{day}} · {{time}}",
 		"moreActions": "More actions",
 		"noSchedule": "No schedule configured",

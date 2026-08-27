@@ -12,6 +12,8 @@ const SEARCH_DEBOUNCE_MS = 250
 
 interface MicroAppListItem extends ApiMicroAppListItem {
 	can_delete: boolean
+	project_id: string
+	can_manage_collaborators: boolean
 }
 
 interface MicroAppListResponse extends Omit<ApiMicroAppListResponse, "list"> {
@@ -27,6 +29,7 @@ function normalizeMicroAppItem(item: unknown): MicroAppListItem | null {
 
 	return {
 		app_id: String(item.app_id),
+		project_id: String(item.project_id ?? ""),
 		app_name: String(item.app_name ?? ""),
 		app_description: String(item.app_description ?? ""),
 		creator_id: String(item.creator_id ?? ""),
@@ -34,6 +37,8 @@ function normalizeMicroAppItem(item: unknown): MicroAppListItem | null {
 		publish_status: String(item.publish_status ?? "unpublished"),
 		updated_at: item.updated_at == null ? null : String(item.updated_at),
 		can_delete: item.can_delete !== false,
+		// Unknown capability must remain hidden until the server explicitly grants it.
+		can_manage_collaborators: item.can_manage_collaborators === true,
 	}
 }
 
