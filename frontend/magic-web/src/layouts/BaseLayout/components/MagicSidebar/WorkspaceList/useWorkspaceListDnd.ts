@@ -388,11 +388,11 @@ export function useWorkspaceListDnd({
 			const targetIndex = projects.findIndex((item) => item.id === projectId)
 			const position = getProjectDropPosition(dropTarget, clientY, sourceIndex, targetIndex)
 			if (workspaceId === active.workspaceId) {
-				if (
+				const noOp =
 					sourceIndex !== -1 &&
 					targetIndex !== -1 &&
 					isNoOpInsertion(sourceIndex, targetIndex, position, projects.length)
-				) {
+				if (noOp) {
 					return null
 				}
 			}
@@ -645,10 +645,20 @@ export function useWorkspaceListDnd({
 			// The release decision must be the same decision represented by the
 			// indicator. Never submit an older cached target when release hit-testing
 			// produced no valid target.
-			const preview = releasePreview
-			if (preview) applyPreview(preview)
+			const cachedPreview = previewRef.current
+			const cachedTargetStillContainsRelease =
+				cachedPreview?.target &&
+				releaseTarget instanceof Node &&
+				(cachedPreview.target === releaseTarget ||
+					cachedPreview.target.contains(releaseTarget))
+			const preview =
+				releasePreview ||
+				(cachedTargetStillContainsRelease && cachedPreview ? cachedPreview : null)
+			applyPreview(preview)
 			terminateDrag()
-			if (!preview || disabled) return
+			if (!preview || disabled) {
+				return
+			}
 
 			try {
 				if (active.type === "workspace") {
@@ -665,7 +675,9 @@ export function useWorkspaceListDnd({
 						targetIndex,
 						preview.position || "after",
 					)
-					if (next.every((item, index) => item.id === workspaces[index]?.id)) return
+					if (next.every((item, index) => item.id === workspaces[index]?.id)) {
+						return
+					}
 					const preWorkspaceId = getPredecessorId(
 						workspaces,
 						active.workspaceId,
@@ -706,7 +718,9 @@ export function useWorkspaceListDnd({
 						targetIndex === -1 ? sourceProjects.length : targetIndex,
 						preview.position || "after",
 					)
-					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) return
+					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) {
+						return
+					}
 					const renderedOrder = getRenderedProjectIds(
 						preview.target.closest<HTMLElement>(
 							'[data-sidebar-drop-type="project-list"]',

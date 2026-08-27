@@ -377,6 +377,9 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			ref={dndRootRef}
 			onDragStart={handleDragStart}
 			onDrag={handleDragMove}
+			onDragEnter={(event) => {
+				if (event.currentTarget.contains(event.target as Node)) event.preventDefault()
+			}}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}

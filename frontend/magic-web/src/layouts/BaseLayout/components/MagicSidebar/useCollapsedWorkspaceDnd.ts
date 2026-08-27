@@ -614,6 +614,12 @@ export function useCollapsedWorkspaceDnd({
 			})
 		}
 
+		const handleDragEnter = (event: Event) => {
+			if (!activeDragRef.current) return
+			const dragEvent = event as DragEvent
+			dragEvent.preventDefault()
+		}
+
 		const handleDrag = (event: Event) => {
 			if (!activeDragRef.current) return
 			const dragEvent = event as DragEvent
@@ -658,7 +664,9 @@ export function useCollapsedWorkspaceDnd({
 			const preview = releasePreview
 			latestApplyPreviewRef.current?.(preview)
 			latestResetRef.current?.()
-			if (!preview || preview.disabled) return
+			if (!preview || preview.disabled) {
+				return
+			}
 
 			try {
 				if (active.type === "workspace") {
@@ -676,8 +684,9 @@ export function useCollapsedWorkspaceDnd({
 						targetIndex,
 						preview.position || "after",
 					)
-					if (next.every((item, index) => item.id === currentWorkspaces[index]?.id))
+					if (next.every((item, index) => item.id === currentWorkspaces[index]?.id)) {
 						return
+					}
 					const preWorkspaceId = getPredecessorId(
 						currentWorkspaces,
 						active.workspaceId,
@@ -718,7 +727,9 @@ export function useCollapsedWorkspaceDnd({
 						targetIndex === -1 ? sourceProjects.length : targetIndex,
 						preview.position || "after",
 					)
-					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) return
+					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) {
+						return
+					}
 					const renderedOrder = getRenderedProjectIds(
 						preview.target.closest<HTMLElement>(
 							'[data-collapsed-sidebar-dnd-drop-type="project-list"]',
@@ -858,6 +869,7 @@ export function useCollapsedWorkspaceDnd({
 
 		document.addEventListener("dragstart", handleDragStart, true)
 		document.addEventListener("dragover", handleDragOver, true)
+		document.addEventListener("dragenter", handleDragEnter, true)
 		document.addEventListener("drag", handleDrag, true)
 		document.addEventListener("drop", handleDrop, true)
 		document.addEventListener("dragend", handleDragEnd, true)
@@ -871,6 +883,7 @@ export function useCollapsedWorkspaceDnd({
 		return () => {
 			document.removeEventListener("dragstart", handleDragStart, true)
 			document.removeEventListener("dragover", handleDragOver, true)
+			document.removeEventListener("dragenter", handleDragEnter, true)
 			document.removeEventListener("drag", handleDrag, true)
 			document.removeEventListener("drop", handleDrop, true)
 			document.removeEventListener("dragend", handleDragEnd, true)
