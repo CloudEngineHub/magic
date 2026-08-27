@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -49,7 +50,11 @@ import (
 	"magic/internal/pkg/tokenizer"
 )
 
-const defaultDocumentResyncTaskTimeout = 30 * time.Minute
+const (
+	defaultDocumentResyncTaskTimeout = 30 * time.Minute
+	preReleaseAppEnv                 = "saas-pre"
+	preReleaseDocumentResyncQueue    = "knowledge.document.resync.saas-pre"
+)
 
 // ProvideEmbeddingCacheCleanupService 提供缓存清理服务
 // 使用默认配置自动启动定时清理任务
@@ -497,7 +502,7 @@ func newDocumentResyncRabbitMQSchedulerConfig(
 	defaults documentsync.RabbitMQSchedulerConfig,
 ) documentsync.RabbitMQSchedulerConfig {
 	return documentsync.RabbitMQSchedulerConfig{
-		QueueName: strings.TrimSpace(cfg.RabbitMQ.Queues.DocumentResync),
+		QueueName: resolveDocumentResyncQueueName(cfg),
 		ConsumerPrefetch: intOrDefault(
 			cfg.RabbitMQ.DocumentResync.ConsumerPrefetch,
 			defaults.ConsumerPrefetch,
@@ -514,7 +519,25 @@ func newDocumentResyncRabbitMQSchedulerConfig(
 			cfg.RabbitMQ.DocumentResync.MaxRequeueAttempts,
 			defaults.MaxRequeueAttempts,
 		),
+		UnexpectedEOFBackoffBase: millisDurationOrDefault(
+			cfg.RabbitMQ.DocumentResync.UnexpectedEOFBackoffBaseMillis,
+			defaults.UnexpectedEOFBackoffBase,
+		),
+		UnexpectedEOFBackoffMax: millisDurationOrDefault(
+			cfg.RabbitMQ.DocumentResync.UnexpectedEOFBackoffMaxMillis,
+			defaults.UnexpectedEOFBackoffMax,
+		),
 	}
+}
+
+func resolveDocumentResyncQueueName(cfg *autoloadcfg.Config) string {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), preReleaseAppEnv) {
+		return preReleaseDocumentResyncQueue
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.RabbitMQ.Queues.DocumentResync)
 }
 
 func documentSyncResourceLimitsFromConfig(cfg *autoloadcfg.Config) documentdomain.ResourceLimits {

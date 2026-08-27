@@ -150,9 +150,11 @@ use App\Domain\KnowledgeBase\Port\KnowledgeBaseGateway;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseDocumentRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseFragmentRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseRepositoryInterface;
+use App\Domain\KnowledgeBase\Repository\Facade\ThirdFileRevectorizeStateRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseBaseRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseDocumentRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseFragmentRepository;
+use App\Domain\KnowledgeBase\Repository\Persistence\ThirdFileRevectorizeStateRepository;
 use App\Domain\LongTermMemory\Repository\LongTermMemoryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMetadataCleanupRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
@@ -425,6 +427,7 @@ $dependencies = [
     ThirdPlatformDocumentProviderPort::class => UnsupportedThirdPlatformDocumentProvider::class,
     KnowledgeBaseDocumentRepositoryInterface::class => KnowledgeBaseDocumentRepository::class,
     KnowledgeBaseFragmentRepositoryInterface::class => KnowledgeBaseFragmentRepository::class,
+    ThirdFileRevectorizeStateRepositoryInterface::class => ThirdFileRevectorizeStateRepository::class,
 
     // vector
     SemanticSimilaritySearchInterface::class => BaseSemanticSimilaritySearch::class,
