@@ -59,6 +59,14 @@ describe("ElementToolResolver", () => {
 			]),
 		)
 		expect(bottom.some((tool) => tool.id === ElementToolTypeEnum.VersionDelete)).toBe(false)
+		const generationToolIds = new Set<string>([
+			ElementToolTypeEnum.GenerationQuickEdit,
+			ElementToolTypeEnum.GenerationReEdit,
+			ElementToolTypeEnum.GenerationGenerateAgain,
+		])
+		for (const tool of bottom.filter((item) => generationToolIds.has(item.id))) {
+			expect(tool.target.contentId).toBe("content-a")
+		}
 	})
 
 	it("limits an active processing Content to safe operations", () => {
@@ -100,6 +108,74 @@ describe("ElementToolResolver", () => {
 		expect(tool.target).toEqual({ elementId: "image-1", contentId: "content-a" })
 	})
 
+	it("uses the legacy image groups and global order", () => {
+		const { top } = resolve(createImage(), { convertHightSupported: true })
+		const imageToolIds = new Set<string>([
+			ElementToolTypeEnum.ElementResize,
+			ElementToolTypeEnum.ContentCrop,
+			ElementToolTypeEnum.ContentExtend,
+			ElementToolTypeEnum.ContentRemoveBackground,
+			ElementToolTypeEnum.ContentEraser,
+			ElementToolTypeEnum.ContentEnhance,
+			ElementToolTypeEnum.ContentPromptExtraction,
+			ElementToolTypeEnum.ContentReplace,
+			ElementToolTypeEnum.ContentDownload,
+		])
+		const imageTools = top.filter((tool) => imageToolIds.has(tool.id))
+
+		expect(imageTools.map((tool) => tool.id)).toEqual([
+			ElementToolTypeEnum.ElementResize,
+			ElementToolTypeEnum.ContentCrop,
+			ElementToolTypeEnum.ContentExtend,
+			ElementToolTypeEnum.ContentRemoveBackground,
+			ElementToolTypeEnum.ContentEraser,
+			ElementToolTypeEnum.ContentEnhance,
+			ElementToolTypeEnum.ContentPromptExtraction,
+			ElementToolTypeEnum.ContentReplace,
+			ElementToolTypeEnum.ContentDownload,
+		])
+		expect(imageTools.map((tool) => tool.presentation.group)).toEqual([
+			"element",
+			"image-edit",
+			"image-edit",
+			"image-edit",
+			"image-edit",
+			"image-edit",
+			"image-edit",
+			"media",
+			"media",
+		])
+	})
+
+	it("exposes media original size for images and videos", () => {
+		const video = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			activeContentId: "content-a",
+			mainContentId: "content-a",
+			contents: [{ contentId: "content-a", src: "a.mp4", status: "completed" }],
+		} as never
+		const { top } = resolve(video, { showMediaOriginalSize: true })
+		const originalSize = top.find(
+			(tool) => tool.id === ElementToolTypeEnum.ContentMediaOriginalSize,
+		)
+		const replace = top.find((tool) => tool.id === ElementToolTypeEnum.ContentReplace)
+
+		expect(originalSize?.presentation.group).toBe("element")
+		expect(replace?.presentation.group).toBe("media")
+
+		const image = createImage()
+		const imageTools = resolve(image, { showMediaOriginalSize: true }).top
+		const imageResize = imageTools.find((tool) => tool.id === ElementToolTypeEnum.ElementResize)
+		const imageOriginalSize = imageTools.find(
+			(tool) => tool.id === ElementToolTypeEnum.ContentMediaOriginalSize,
+		)
+		expect(imageOriginalSize?.presentation.group).toBe(imageResize?.presentation.group)
+		expect(imageOriginalSize?.presentation.order).toBeGreaterThan(
+			imageResize?.presentation.order ?? Number.MAX_SAFE_INTEGER,
+		)
+	})
+
 	it("does not attach a Content target to element-scoped tools", () => {
 		const frame = {
 			id: "frame-1",
@@ -133,9 +209,63 @@ describe("ElementToolResolver", () => {
 		expect(bottom).toEqual([])
 	})
 
-	it("hides the bottom surface while a media editor is mounted", () => {
-		const { bottom } = resolve(createImage(), { isEditing: true })
+	it("keeps the complete version set while an image editor is mounted", () => {
+		const { bottom } = resolve(
+			createImage({
+				contents: [
+					{ contentId: "content-a", src: "a.png", status: "completed" },
+					{ contentId: "content-b", src: "b.png", status: "completed" },
+				],
+			}),
+			{ isEditing: true },
+		)
 
+		expect(bottom.map((tool) => tool.id)).toEqual([
+			ElementToolTypeEnum.VersionPrevious,
+			ElementToolTypeEnum.VersionNext,
+			ElementToolTypeEnum.VersionCount,
+			ElementToolTypeEnum.VersionSetMain,
+			ElementToolTypeEnum.VersionDelete,
+		])
+	})
+
+	it("keeps the complete version set while a video editor is mounted", () => {
+		const { bottom } = resolve(
+			{
+				id: "video-1",
+				type: ElementTypeEnum.Video,
+				activeContentId: "content-a",
+				mainContentId: "content-a",
+				contents: [
+					{ contentId: "content-a", src: "a.mp4", status: "completed" },
+					{ contentId: "content-b", src: "b.mp4", status: "completed" },
+				],
+			} as never,
+			{ isEditing: true },
+		)
+
+		expect(bottom.map((tool) => tool.id)).toEqual([
+			ElementToolTypeEnum.VersionPrevious,
+			ElementToolTypeEnum.VersionNext,
+			ElementToolTypeEnum.VersionCount,
+			ElementToolTypeEnum.VersionSetMain,
+			ElementToolTypeEnum.VersionDelete,
+		])
+	})
+
+	it("keeps the existing empty bottom surface for audio editors", () => {
+		const audio = {
+			id: "audio-1",
+			type: ElementTypeEnum.Audio,
+			activeContentId: "content-a",
+			mainContentId: "content-a",
+			contents: [
+				{ contentId: "content-a", src: "a.mp3", status: "completed" },
+				{ contentId: "content-b", src: "b.mp3", status: "completed" },
+			],
+		} as never
+
+		const { bottom } = resolve(audio, { isEditing: true })
 		expect(bottom).toEqual([])
 	})
 

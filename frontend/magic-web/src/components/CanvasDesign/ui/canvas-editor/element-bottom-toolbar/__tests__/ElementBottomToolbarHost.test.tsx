@@ -99,7 +99,7 @@ describe("ElementBottomToolbarHost replacement gating", () => {
 		expect(screen.getByRole("toolbar", { hidden: true })).toHaveAttribute("aria-hidden", "true")
 	})
 
-	it("hides the bottom toolbar while the selected media editor is active", () => {
+	it("keeps only version controls while the selected image editor is active", () => {
 		const { rerender } = render(<ElementBottomToolbarHost />)
 
 		expect(screen.getByRole("button", { name: "重新编辑" })).toBeInTheDocument()
@@ -108,7 +108,49 @@ describe("ElementBottomToolbarHost replacement gating", () => {
 		rerender(<ElementBottomToolbarHost />)
 
 		expect(screen.queryByRole("button", { name: "重新编辑" })).toBeNull()
-		expect(screen.getByRole("toolbar", { hidden: true })).toHaveAttribute("aria-hidden", "true")
+		expect(screen.getByRole("toolbar", { hidden: true })).toBeInTheDocument()
+	})
+
+	it("shows image version controls while the editor is active", () => {
+		mocks.state.editingElementId = "image-1"
+		mocks.state.selectedElements = [
+			{
+				id: "image-1",
+				type: ElementTypeEnum.Image,
+				contents: [
+					{ contentId: "image-content-1", src: "/images/current.png" },
+					{ contentId: "image-content-2", src: "/images/previous.png" },
+				],
+				activeContentId: "image-content-1",
+				mainContentId: "image-content-1",
+			},
+		]
+
+		render(<ElementBottomToolbarHost />)
+
+		expect(screen.getByTestId("element-version-controls")).toBeInTheDocument()
+		expect(screen.queryByRole("button", { name: "重新编辑" })).toBeNull()
+	})
+
+	it("shows video version controls while the editor is active", () => {
+		mocks.state.editingElementId = "video-1"
+		mocks.state.selectedElements = [
+			{
+				id: "video-1",
+				type: ElementTypeEnum.Video,
+				contents: [
+					{ contentId: "video-content-1", src: "/videos/current.mp4" },
+					{ contentId: "video-content-2", src: "/videos/previous.mp4" },
+				],
+				activeContentId: "video-content-1",
+				mainContentId: "video-content-1",
+			},
+		]
+
+		render(<ElementBottomToolbarHost />)
+
+		expect(screen.getByTestId("element-version-controls")).toBeInTheDocument()
+		expect(screen.queryByRole("button", { name: "重新编辑" })).toBeNull()
 	})
 
 	it("does not hide the selected element toolbar for a stale edit state from another element", () => {

@@ -81,12 +81,13 @@ export default function MediaReplaceButton() {
 			void tool.execute({ anchorElement: event.currentTarget })
 			return
 		}
+		if (!activeContent) return
 		canvas.eventEmitter.emit({
 			type: "element:media:replaceClick",
 			data: {
 				elementId: selectedMedia.id,
 				mediaType: selectedMedia.type,
-				contentId: activeContent?.contentId ?? null,
+				contentId: activeContent.contentId,
 				anchorElement: event.currentTarget,
 			},
 		})

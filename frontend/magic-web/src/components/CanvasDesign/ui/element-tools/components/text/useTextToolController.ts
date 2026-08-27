@@ -3,9 +3,12 @@ import type { TextAlignValue, TextListTypeValue } from "../../../../runtime/text
 import { createInactiveTextFormattingToolbarState } from "../../../../runtime/interaction/text-editing/TextFormattingManager"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasEvent } from "../../../../app/hooks/canvas"
+import { ElementToolTypeEnum } from "../../../../public/props"
+import { useElementToolResolution } from "../../model/ElementToolResolutionContext"
 
 export function useTextToolController() {
 	const { canvas } = useCanvas()
+	const tool = useElementToolResolution()
 	const [revision, setRevision] = useState(0)
 
 	useCanvasEvent(
@@ -29,86 +32,110 @@ export function useTextToolController() {
 
 	const setFillColor = useCallback(
 		(color: string): boolean => {
-			return canvas?.textFormattingManager.setFillColor(color) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextFillColor) return false
+			void tool.execute?.({ color })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setFontFamily = useCallback(
 		(fontFamily: string): boolean => {
-			return canvas?.textFormattingManager.setFontFamily(fontFamily) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextFontFamily) return false
+			void tool.execute?.({ fontFamily })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setFontWeight = useCallback(
 		(fontWeight: number): boolean => {
-			return canvas?.textFormattingManager.setFontWeight(fontWeight) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextFontStyle) return false
+			void tool.execute?.({ fontWeight })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setBold = useCallback(
 		(bold: boolean): boolean => {
-			return canvas?.textFormattingManager.setBold(bold) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextFontStyle) return false
+			void tool.execute?.({ bold })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setItalic = useCallback(
 		(italic: boolean): boolean => {
-			return canvas?.textFormattingManager.setItalic(italic) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextFontStyle) return false
+			void tool.execute?.({ italic })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setUnderline = useCallback(
 		(underline: boolean): boolean => {
-			return canvas?.textFormattingManager.setUnderline(underline) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextAdvanced) return false
+			void tool.execute?.({ underline })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setStrikethrough = useCallback(
 		(strikethrough: boolean): boolean => {
-			return canvas?.textFormattingManager.setStrikethrough(strikethrough) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextAdvanced) return false
+			void tool.execute?.({ strikethrough })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setFontSize = useCallback(
 		(fontSize: number): boolean => {
-			return canvas?.textFormattingManager.setFontSize(fontSize) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextFontSize) return false
+			void tool.execute?.({ fontSize })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setLetterSpacing = useCallback(
 		(letterSpacing: number | undefined): boolean => {
-			return canvas?.textFormattingManager.setLetterSpacing(letterSpacing) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextAdvanced) return false
+			void tool.execute?.({ letterSpacing })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setLineHeight = useCallback(
 		(lineHeight: number | undefined): boolean => {
-			return canvas?.textFormattingManager.setLineHeight(lineHeight) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextAdvanced) return false
+			void tool.execute?.({ lineHeight })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setTextAlign = useCallback(
 		(textAlign: TextAlignValue): boolean => {
-			return canvas?.textFormattingManager.setTextAlign(textAlign) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextAlign) return false
+			void tool.execute?.({ textAlign })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	const setListType = useCallback(
 		(listType: TextListTypeValue | null): boolean => {
-			return canvas?.textFormattingManager.setListType(listType) ?? false
+			if (tool?.id !== ElementToolTypeEnum.TextAdvanced) return false
+			void tool.execute?.({ listType })
+			return true
 		},
-		[canvas],
+		[tool],
 	)
 
 	return {

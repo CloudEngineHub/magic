@@ -60,8 +60,9 @@ export interface BeginGenerationAttemptOptions {
  * Canvas 级生成任务运行时状态。
  *
  * 这里只保存后端尚未确认的提交尝试，绝不修改 Element data，也不会进入 DSL、历史或剪贴板。
- * 普通操作仍按元素独占 attempt；图片 Content 生成则按 elementId + contentId 隔离，
- * 允许同一图片的多个 Content 同时提交，并由各自的 contentId 防止异步结果串写。
+ * 未绑定 Content 的历史/批量操作仍按元素聚合；绑定 Content 的图片、视频任务则按
+ * elementId + contentId 隔离，允许同一元素的多个 Content 同时提交，并由各自的
+ * contentId 防止异步结果串写。
  */
 export class GenerationRuntimeManager {
 	private attempts = new Map<string, GenerationAttempt>()
@@ -101,6 +102,9 @@ export class GenerationRuntimeManager {
 			const targetKey = this.getTargetKey(target.elementId, target.contentId)
 			if (targetKeys.has(targetKey)) {
 				throw new Error(`Duplicate generation target ${targetKey}`)
+			}
+			if (target.contentId !== undefined && this.targetStates.has(targetKey)) {
+				throw new Error(`Generation target ${targetKey} already has an active attempt`)
 			}
 			targetKeys.add(targetKey)
 		}
@@ -162,6 +166,14 @@ export class GenerationRuntimeManager {
 		}
 		const targetKey = this.latestTargetKeyByElementId.get(elementId)
 		return targetKey ? (this.targetStates.get(targetKey) ?? null) : null
+	}
+
+	/** 判断指定 Element/Content 是否存在尚未收口的生成任务。 */
+	public hasActiveGeneration(elementId: string, contentId?: string): boolean {
+		if (contentId !== undefined) {
+			return this.targetStates.has(this.getTargetKey(elementId, contentId))
+		}
+		return Array.from(this.targetStates.values()).some((state) => state.elementId === elementId)
 	}
 
 	/** 返回元素当前所有 Content 目标，避免多版本并发时只读取最后一个 attempt。 */

@@ -214,7 +214,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 						...generateVideoRequest,
 						video_id: generateUUID(),
 					})
-					if (submitted) sessionStore?.clearElement(videoElement.id)
+					if (submitted) sessionStore?.clearContent(videoElement.id, sessionContentId)
 				} finally {
 					setIsGeneratingAgain(false)
 				}
@@ -229,6 +229,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		isPreparingGenerateAgain,
 		methods?.estimateVideoPoints,
 		savedGenerateVideoRequest,
+		sessionContentId,
 		sessionStore,
 		videoElement,
 	])
@@ -276,8 +277,8 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	useEffect(() => {
 		if (!isReplacing) return
 		setEditingMode(null)
-		sessionStore?.clearElement(videoElement.id)
-	}, [isReplacing, sessionStore, videoElement.id])
+		sessionStore?.clearContent(videoElement.id, sessionContentId)
+	}, [isReplacing, sessionContentId, sessionStore, videoElement.id])
 
 	useElementToolCommand(
 		useMemo(

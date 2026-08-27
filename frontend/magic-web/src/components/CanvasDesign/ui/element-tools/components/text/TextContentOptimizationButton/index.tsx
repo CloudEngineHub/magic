@@ -22,6 +22,7 @@ import IconButton from "../../../../primitives/custom/IconButton"
 import { Button } from "../../../../primitives/shadcn/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../../primitives/shadcn/popover"
 import useElementToolPopoverAlign from "../../../shared/hooks/useElementToolPopoverAlign"
+import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
 import { useTextToolController } from "../useTextToolController"
 import {
 	buildRichTextContentFromPlainText,
@@ -42,6 +43,7 @@ export default function TextContentOptimizationButton() {
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
 	const { selectedTextElement, isEditingText } = useTextToolController()
+	const tool = useElementToolResolution()
 	const [open, setOpen] = useState(false)
 	const [hasBodyScrollbar, setHasBodyScrollbar] = useState(false)
 	const bodyRef = useRef<HTMLDivElement>(null)
@@ -58,9 +60,10 @@ export default function TextContentOptimizationButton() {
 		() =>
 			buildTextContentOptimizationRequestKey({
 				elementId: selectedTextElement?.id,
+				contentId: tool?.target.contentId,
 				text: currentText,
 			}),
-		[currentText, selectedTextElement?.id],
+		[currentText, selectedTextElement?.id, tool?.target.contentId],
 	)
 	const { state: storedToolState, setState: setToolState } =
 		useElementToolState<TextContentOptimizationToolState>(
@@ -221,15 +224,26 @@ export default function TextContentOptimizationButton() {
 
 	const handleApply = useCallback(() => {
 		const text = optimizedText.trim()
-		if (!canvas || !selectedTextElement || !text) return
+		if (
+			!selectedTextElement ||
+			!text ||
+			tool?.id !== ElementToolTypeEnum.TextContentOptimization
+		)
+			return
 		const content = buildRichTextContentFromPlainText(
 			text,
 			selectedTextContent?.content,
 			selectedTextContent?.defaultStyle,
 		)
-		canvas.elementManager.update(selectedTextElement.id, { content })
+		void tool.execute?.({ action: "apply", content })
 		setOpen(false)
-	}, [canvas, optimizedText, selectedTextElement])
+	}, [
+		optimizedText,
+		selectedTextElement,
+		selectedTextContent?.content,
+		selectedTextContent?.defaultStyle,
+		tool,
+	])
 
 	const handleCopy = useCallback(() => {
 		const text = optimizedText.trim()
@@ -352,10 +366,12 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 function buildTextContentOptimizationRequestKey(params: {
 	elementId?: string
+	contentId?: string
 	text: string
 }): string {
 	return JSON.stringify({
 		elementId: params.elementId ?? "",
+		contentId: params.contentId ?? "",
 		text: params.text,
 	})
 }

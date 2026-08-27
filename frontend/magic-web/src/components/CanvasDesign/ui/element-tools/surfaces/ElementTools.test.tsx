@@ -74,7 +74,7 @@ vi.mock("../../../app/hooks/canvas", () => ({
 	),
 }))
 
-vi.mock("../shared/hooks/useShowVideoOriginalSizeButton", () => ({
+vi.mock("../shared/hooks/useShowMediaOriginalSizeButton", () => ({
 	default: () => false,
 }))
 
@@ -103,6 +103,59 @@ describe("ElementTools image replacement ordering", () => {
 		render(<ElementTools />)
 
 		expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
+	})
+
+	it("keeps the legacy text tool order and groups", () => {
+		mocks.selectedElements = [
+			{
+				id: "text-1",
+				type: ElementTypeEnum.Text,
+				contents: [{ contentId: "text-content" }],
+				activeContentId: "text-content",
+				mainContentId: "text-content",
+			},
+		]
+
+		render(<ElementTools />)
+
+		expect(
+			Array.from(screen.getByTestId("element-tools").children).map(
+				(node) => node.textContent,
+			),
+		).toEqual([
+			ElementToolTypeEnum.TextFillColor,
+			ElementToolTypeEnum.TextFontFamily,
+			ElementToolTypeEnum.TextFontSize,
+			ElementToolTypeEnum.TextFontStyle,
+			ElementToolTypeEnum.TextAlign,
+			ElementToolTypeEnum.TextAdvanced,
+			ElementToolTypeEnum.TextDownload,
+			ElementToolTypeEnum.TextContentOptimization,
+		])
+	})
+
+	it("keeps the legacy frame tool order", () => {
+		mocks.selectedElements = [
+			{
+				id: "frame-1",
+				type: ElementTypeEnum.Frame,
+				contents: [],
+			},
+		]
+
+		render(<ElementTools />)
+
+		expect(
+			Array.from(screen.getByTestId("element-tools").children).map(
+				(node) => node.textContent,
+			),
+		).toEqual([
+			ElementToolTypeEnum.FrameRemove,
+			ElementToolTypeEnum.ElementResize,
+			ElementToolTypeEnum.FrameDownload,
+			ElementToolTypeEnum.ElementAlign,
+			ElementToolTypeEnum.ElementDistribute,
+		])
 	})
 
 	it("moves pending multi-version deletion out of the top toolbar", () => {
@@ -384,6 +437,26 @@ describe("ElementTools image replacement ordering", () => {
 		)
 
 		expect(labels).toEqual([ElementToolTypeEnum.ContentReplace])
+	})
+
+	it("keeps shape controls in the unified top tool surface", () => {
+		mocks.selectedElements = [
+			{
+				id: "shape-1",
+				type: ElementTypeEnum.Rectangle,
+				contents: [{ contentId: "shape-content", stroke: "#000000", strokeWidth: 1 }],
+				activeContentId: "shape-content",
+				mainContentId: "shape-content",
+			},
+		]
+
+		render(<ElementTools />)
+
+		expect(
+			Array.from(screen.getByTestId("element-tools").children).map(
+				(node) => node.textContent,
+			),
+		).toEqual([ElementToolTypeEnum.ShapeStrokeColor, ElementToolTypeEnum.ShapeStyle])
 	})
 
 	it("hides the audio toolbar while the selected empty node uploads", () => {

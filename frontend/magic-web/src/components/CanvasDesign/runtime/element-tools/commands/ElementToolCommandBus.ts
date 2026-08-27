@@ -31,7 +31,14 @@ const CONTENT_INVOCATION_TOOLS = new Set<ElementToolType>([
 	ElementToolTypeEnum.ContentRemoveBackground,
 	ElementToolTypeEnum.ContentEnhance,
 	ElementToolTypeEnum.ContentPromptExtraction,
-	ElementToolTypeEnum.ContentVideoOriginalSize,
+	ElementToolTypeEnum.ContentMediaOriginalSize,
+	ElementToolTypeEnum.TextFillColor,
+	ElementToolTypeEnum.TextFontFamily,
+	ElementToolTypeEnum.TextFontStyle,
+	ElementToolTypeEnum.TextFontSize,
+	ElementToolTypeEnum.TextAlign,
+	ElementToolTypeEnum.TextAdvanced,
+	ElementToolTypeEnum.TextContentOptimization,
 ])
 const CONTENT_INTERACTION_TOOLS = new Set<ElementToolType>([
 	ElementToolTypeEnum.ContentCrop,
@@ -49,12 +56,37 @@ const VERSION_MUTATION_TOOLS = new Set<ElementToolType>([
 	ElementToolTypeEnum.VersionSetMain,
 	ElementToolTypeEnum.VersionDelete,
 ])
+const TEXT_FORMATTING_TOOLS = new Set<ElementToolType>([
+	ElementToolTypeEnum.TextFillColor,
+	ElementToolTypeEnum.TextFontFamily,
+	ElementToolTypeEnum.TextFontStyle,
+	ElementToolTypeEnum.TextFontSize,
+	ElementToolTypeEnum.TextAlign,
+	ElementToolTypeEnum.TextAdvanced,
+	ElementToolTypeEnum.TextContentOptimization,
+])
+const SHAPE_TOOLS = new Set<ElementToolType>([
+	ElementToolTypeEnum.ShapeStrokeColor,
+	ElementToolTypeEnum.ShapeStyle,
+])
 
 interface CommandRegistration {
 	handler: CommandHandler
 	state: ElementToolRuntimeState
 	contentId?: string
 	operationId?: string
+}
+
+function areRuntimeStatesEqual(
+	left: ElementToolRuntimeState,
+	right: ElementToolRuntimeState,
+): boolean {
+	return (
+		left.available === right.available &&
+		left.disabled === right.disabled &&
+		left.loading === right.loading &&
+		left.disabledReason === right.disabledReason
+	)
 }
 
 /**
@@ -70,6 +102,8 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 		string,
 		ReadonlyMap<ElementToolType, ElementToolRuntimeState>
 	>()
+	private readonly pendingNotificationElementIds = new Set<string>()
+	private notificationScheduled = false
 	private readonly fallbackHandlers: ReadonlyMap<ElementToolType, FallbackCommandHandler>
 
 	public constructor(private readonly canvas: Canvas) {
@@ -85,14 +119,23 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				this.executeStoryboardBatchCommand.bind(this),
 			],
 			[ElementToolTypeEnum.TextDownload, this.executeActionCommand.bind(this)],
+			[ElementToolTypeEnum.TextFillColor, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.TextFontFamily, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.TextFontStyle, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.TextFontSize, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.TextAlign, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.TextAdvanced, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.TextContentOptimization, this.executeTextCommand.bind(this)],
+			[ElementToolTypeEnum.ShapeStrokeColor, this.executeShapeCommand.bind(this)],
+			[ElementToolTypeEnum.ShapeStyle, this.executeShapeCommand.bind(this)],
 			[ElementToolTypeEnum.ContentDownload, this.executeActionCommand.bind(this)],
 			[ElementToolTypeEnum.ContentCrop, this.executeContentInteractionCommand.bind(this)],
 			[ElementToolTypeEnum.ContentExtend, this.executeContentInteractionCommand.bind(this)],
 			[ElementToolTypeEnum.ContentEraser, this.executeContentInteractionCommand.bind(this)],
 			[ElementToolTypeEnum.ContentReplace, this.executeMediaCommand.bind(this)],
 			[
-				ElementToolTypeEnum.ContentVideoOriginalSize,
-				this.executeVideoOriginalSizeCommand.bind(this),
+				ElementToolTypeEnum.ContentMediaOriginalSize,
+				this.executeMediaOriginalSizeCommand.bind(this),
 			],
 			[ElementToolTypeEnum.GenerationQuickEdit, this.executeGenerationCommand.bind(this)],
 			[ElementToolTypeEnum.GenerationReEdit, this.executeGenerationCommand.bind(this)],
@@ -115,18 +158,44 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 		state: Omit<ElementToolRuntimeState, "available"> & { available?: boolean } = {},
 	): () => void {
 		const handlerKey = this.getHandlerKey(key.elementId, key.toolId, key.contentId)
+		const nextState = { available: state.available ?? true, ...state }
+		const previous = this.registrations.get(handlerKey)
+		if (
+			previous &&
+			previous.contentId === key.contentId &&
+			previous.operationId === key.operationId &&
+			areRuntimeStatesEqual(previous.state, nextState)
+		) {
+			// Handler closures are intentionally refreshed without invalidating the
+			// external-store snapshot. This prevents a render-only callback change
+			// from synchronously notifying React during a layout effect.
+			previous.handler = handler
+			return () => {
+				if (this.registrations.get(handlerKey) !== previous) return
+				this.registrations.delete(handlerKey)
+				this.notify(key.elementId, key.contentId)
+			}
+		}
+
 		const registration = {
 			handler,
-			state: { available: state.available ?? true, ...state },
+			state: nextState,
 			contentId: key.contentId,
 			operationId: key.operationId,
 		}
 		this.registrations.set(handlerKey, registration)
-		this.notify(key.elementId)
+		if (
+			!previous ||
+			previous.contentId !== registration.contentId ||
+			previous.operationId !== registration.operationId ||
+			!areRuntimeStatesEqual(previous.state, registration.state)
+		) {
+			this.notify(key.elementId, key.contentId)
+		}
 		return () => {
 			if (this.registrations.get(handlerKey) !== registration) return
 			this.registrations.delete(handlerKey)
-			this.notify(key.elementId)
+			this.notify(key.elementId, key.contentId)
 		}
 	}
 
@@ -232,12 +301,21 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				this.snapshotsByTarget.delete(key)
 			}
 		}
+		this.pendingNotificationElementIds.add(elementId)
+		if (this.notificationScheduled) return
+		this.notificationScheduled = true
+		queueMicrotask(() => {
+			this.notificationScheduled = false
+			const elementIds = [...this.pendingNotificationElementIds]
+			this.pendingNotificationElementIds.clear()
+			for (const pendingElementId of elementIds) this.notifyListeners(pendingElementId)
+		})
+	}
+
+	private notifyListeners(elementId: string): void {
 		for (const [key, listeners] of this.listenersByElementId) {
-			if (
-				key === this.getTargetKey(elementId, contentId) ||
-				key.startsWith(`${elementId}\u0000`)
-			) {
-				listeners.forEach((listener) => listener())
+			if (key === this.getTargetKey(elementId) || key.startsWith(`${elementId}\u0000`)) {
+				for (const listener of [...listeners]) listener()
 			}
 		}
 	}
@@ -276,6 +354,93 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				},
 			})
 			return true
+		}
+		return true
+	}
+
+	private executeTextCommand(
+		command: ElementToolCommand,
+		element: LayerElement | undefined,
+	): boolean {
+		if (!TEXT_FORMATTING_TOOLS.has(command.toolId)) return false
+		if (element?.type !== "text") return true
+		if (!command.contentId || getActiveContentId(element as never) !== command.contentId)
+			return true
+
+		const payload =
+			command.payload && typeof command.payload === "object"
+				? (command.payload as Record<string, unknown>)
+				: {}
+		const toolbarState = this.canvas.textFormattingManager.getToolbarState()
+		if (toolbarState.selectedTextElement?.id !== command.elementId) return true
+		if (command.toolId === ElementToolTypeEnum.TextContentOptimization) {
+			if (payload.action !== "apply" || !Array.isArray(payload.content)) return true
+			this.canvas.elementManager.update(command.elementId, { content: payload.content })
+			return true
+		}
+
+		const manager = this.canvas.textFormattingManager
+		switch (command.toolId) {
+			case ElementToolTypeEnum.TextFillColor:
+				if (typeof payload.color === "string") manager.setFillColor(payload.color)
+				return true
+			case ElementToolTypeEnum.TextFontFamily:
+				if (typeof payload.fontFamily === "string")
+					manager.setFontFamily(payload.fontFamily)
+				return true
+			case ElementToolTypeEnum.TextFontSize:
+				if (typeof payload.fontSize === "number") manager.setFontSize(payload.fontSize)
+				return true
+			case ElementToolTypeEnum.TextAlign:
+				if (typeof payload.textAlign === "string")
+					manager.setTextAlign(payload.textAlign as never)
+				return true
+			case ElementToolTypeEnum.TextFontStyle:
+				if (typeof payload.bold === "boolean") manager.setBold(payload.bold)
+				if (typeof payload.italic === "boolean") manager.setItalic(payload.italic)
+				if (typeof payload.fontWeight === "number")
+					manager.setFontWeight(payload.fontWeight)
+				return true
+			case ElementToolTypeEnum.TextAdvanced:
+				if (typeof payload.underline === "boolean") manager.setUnderline(payload.underline)
+				if (typeof payload.strikethrough === "boolean")
+					manager.setStrikethrough(payload.strikethrough)
+				if (typeof payload.lineHeight === "number" || payload.lineHeight === undefined)
+					if ("lineHeight" in payload) manager.setLineHeight(payload.lineHeight as never)
+				if (
+					typeof payload.letterSpacing === "number" ||
+					payload.letterSpacing === undefined
+				)
+					if ("letterSpacing" in payload)
+						manager.setLetterSpacing(payload.letterSpacing as never)
+				if (typeof payload.listType === "string" || payload.listType === null)
+					manager.setListType(payload.listType as never)
+				return true
+		}
+		return true
+	}
+
+	private executeShapeCommand(
+		command: ElementToolCommand,
+		element: LayerElement | undefined,
+	): boolean {
+		if (!SHAPE_TOOLS.has(command.toolId)) return false
+		if (!element || !["rectangle", "ellipse", "triangle", "star"].includes(element.type))
+			return true
+		const payload =
+			command.payload && typeof command.payload === "object"
+				? (command.payload as { updates?: Record<string, unknown> })
+				: undefined
+		if (!payload?.updates || typeof payload.updates !== "object") return true
+		const allowedKeys =
+			command.toolId === ElementToolTypeEnum.ShapeStrokeColor
+				? new Set(["stroke", "strokeWidth", "interactionConfig"])
+				: new Set(["cornerRadius", "sides", "opacity", "innerRadiusRatio"])
+		const updates = Object.fromEntries(
+			Object.entries(payload.updates).filter(([key]) => allowedKeys.has(key)),
+		)
+		if (Object.keys(updates).length > 0) {
+			this.canvas.elementManager.update(command.elementId, updates as never)
 		}
 		return true
 	}
@@ -342,12 +507,12 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 		return true
 	}
 
-	private executeVideoOriginalSizeCommand(
+	private executeMediaOriginalSizeCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
 	): boolean {
-		if (command.toolId !== ElementToolTypeEnum.ContentVideoOriginalSize) return false
-		if (element?.type !== "video") return true
+		if (command.toolId !== ElementToolTypeEnum.ContentMediaOriginalSize) return false
+		if (element?.type !== "image" && element?.type !== "video") return true
 		const payload =
 			command.payload && typeof command.payload === "object"
 				? (command.payload as { width?: number; height?: number })
@@ -419,6 +584,10 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				return "align.left"
 			case ElementToolTypeEnum.ElementDistribute:
 				return "distribute.horizontal"
+			case ElementToolTypeEnum.FrameCreate:
+				return "frame.create"
+			case ElementToolTypeEnum.FrameRemove:
+				return "frame.remove"
 			case ElementToolTypeEnum.ContentDownload:
 				return "download.image"
 			case ElementToolTypeEnum.FrameDownload:
@@ -442,8 +611,9 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				? (command.payload as { actionId?: string; [key: string]: unknown })
 				: undefined
 		const actionId = payload?.actionId ?? this.getUserActionId(command.toolId)
+		if (!actionId) return true
 		const canExecute = this.canvas.userActionRegistry.canExecute?.(actionId) ?? true
-		if (!actionId || !canExecute) return true
+		if (!canExecute) return true
 		const actionPayload = { ...(payload ?? {}) }
 		delete actionPayload.actionId
 		void this.canvas.userActionRegistry.execute(actionId, actionPayload)

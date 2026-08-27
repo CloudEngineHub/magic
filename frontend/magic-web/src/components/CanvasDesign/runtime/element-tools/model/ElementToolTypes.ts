@@ -124,7 +124,7 @@ export interface ElementToolContext {
 	}
 	flags: {
 		readonly convertHightSupported: boolean
-		readonly showVideoOriginalSize: boolean
+		readonly showMediaOriginalSize: boolean
 		readonly isStoryboardOutputFrame: boolean
 	}
 }

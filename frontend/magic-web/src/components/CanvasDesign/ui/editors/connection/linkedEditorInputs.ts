@@ -528,7 +528,6 @@ export function resolveLinkedEditorInputs(
 		resolveResourceReference:
 			canvas?.magicConfigManager?.config?.methods?.resolveResourceReference,
 	})
-
 	return {
 		connectedSourceElementIds,
 		textConnections,

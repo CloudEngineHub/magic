@@ -110,8 +110,20 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
 
-	// 生成相关
-	private isGenerating: boolean = false
+	// 生成相关：Runtime manager 是并发状态的唯一事实来源；legacy 标记只兼容
+	// 尚未建立 Runtime target 的测试和初始化生命周期。
+	private legacyIsGenerating = false
+
+	private get isGenerating(): boolean {
+		return (
+			this.canvas?.generationRuntimeManager?.hasActiveGeneration?.(this.data.id) ??
+			this.legacyIsGenerating
+		)
+	}
+
+	private set isGenerating(value: boolean) {
+		this.legacyIsGenerating = value
+	}
 
 	// 渲染相关
 	private isLoadingState: boolean = false // 加载中状态（图片已生成，等待 ossSrc）
@@ -589,8 +601,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!this.canvas.magicConfigManager.config?.methods?.generateImage) {
 			return false
 		}
+		const contentId = getActiveImageContentId(this.data)
 
-		if (this.isGenerating) {
+		if (this.hasActiveGeneration(contentId)) {
 			return false
 		}
 
@@ -608,7 +621,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isErrorState = false
 		this.isRetryEditing = false
 		const recoveryContent = this.getActiveContentData()
-		const contentId = getActiveImageContentId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -688,7 +700,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		recoveryIntent: MediaEditIntent = "generate",
 	): Promise<boolean> {
 		const generateImage = this.canvas.magicConfigManager.config?.methods?.generateImage
-		if (!generateImage || this.isGenerating) return false
+		if (!generateImage) return false
 		if (!request.model_id || !request.prompt?.trim()) return false
 
 		const contentId = createImageContentId()
@@ -796,7 +808,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					contentId,
 					persistedPatch: {
 						contents: next.contents,
-						activeContentId: contentId,
+						// A successfully submitted generation becomes the active version so
+						// "再次生成"/"重新编辑" immediately show the newly created Content.
+						// Failed submissions are persisted for recovery, but must not replace
+						// the currently visible version.
+						activeContentId:
+							status === GenerationStatus.Processing
+								? contentId
+								: currentElement.activeContentId,
 						mainContentId: next.mainContentId,
 					},
 				},
@@ -812,12 +831,20 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * @param request 请求参数
 	 * @returns 请求是否成功发起
 	 */
-	async generateHightImage(request: GenerateHightImageRequest): Promise<boolean> {
+	async generateHightImage(
+		request: GenerateHightImageRequest,
+		options?: { attemptId?: string },
+	): Promise<boolean> {
 		if (!this.canvas.magicConfigManager.config?.methods?.generateHightImage) {
 			return false
 		}
+		const contentId = getActiveImageContentId(this.data)
 
-		if (this.isGenerating) {
+		const currentAttempt = this.canvas.generationRuntimeManager.getTargetState(
+			this.data.id,
+			contentId,
+		)
+		if (currentAttempt && currentAttempt.attemptId !== options?.attemptId) {
 			return false
 		}
 
@@ -833,7 +860,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		this.isGenerating = true
-		const contentId = getActiveImageContentId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-high", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -897,12 +923,20 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * @param request 请求参数
 	 * @returns 请求是否成功发起
 	 */
-	async removeBackground(request: RemoveBackgroundRequest): Promise<boolean> {
+	async removeBackground(
+		request: RemoveBackgroundRequest,
+		options?: { attemptId?: string },
+	): Promise<boolean> {
 		if (!this.canvas.magicConfigManager.config?.methods?.removeBackground) {
 			return false
 		}
+		const contentId = getActiveImageContentId(this.data)
 
-		if (this.isGenerating) {
+		const currentAttempt = this.canvas.generationRuntimeManager.getTargetState(
+			this.data.id,
+			contentId,
+		)
+		if (currentAttempt && currentAttempt.attemptId !== options?.attemptId) {
 			return false
 		}
 
@@ -917,7 +951,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
-		const contentId = getActiveImageContentId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-remove-background", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -969,12 +1002,17 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * @param request 请求参数
 	 * @returns 请求是否成功发起
 	 */
-	async eraser(request: EraserRequest): Promise<boolean> {
+	async eraser(request: EraserRequest, options?: { attemptId?: string }): Promise<boolean> {
 		if (!this.canvas.magicConfigManager.config?.methods?.eraser) {
 			return false
 		}
+		const contentId = getActiveImageContentId(this.data)
 
-		if (this.isGenerating) {
+		const currentAttempt = this.canvas.generationRuntimeManager.getTargetState(
+			this.data.id,
+			contentId,
+		)
+		if (currentAttempt && currentAttempt.attemptId !== options?.attemptId) {
 			return false
 		}
 
@@ -989,7 +1027,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
-		const contentId = getActiveImageContentId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-eraser", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -1041,12 +1078,20 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * @param request 请求参数
 	 * @returns 请求是否成功发起
 	 */
-	async expandImage(request: GenerateExtendedImageRequest): Promise<boolean> {
+	async expandImage(
+		request: GenerateExtendedImageRequest,
+		options?: { attemptId?: string },
+	): Promise<boolean> {
 		if (!this.canvas.magicConfigManager.config?.methods?.expandImage) {
 			return false
 		}
+		const contentId = getActiveImageContentId(this.data)
 
-		if (this.isGenerating) {
+		const currentAttempt = this.canvas.generationRuntimeManager.getTargetState(
+			this.data.id,
+			contentId,
+		)
+		if (currentAttempt && currentAttempt.attemptId !== options?.attemptId) {
 			return false
 		}
 
@@ -1061,7 +1106,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
-		const contentId = getActiveImageContentId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-extend", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -1113,14 +1157,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private getActiveImageGenerationTaskMeta(): ImageGenerationTaskMeta | undefined {
-		const runtimeTarget = this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
 		const activeContentId = getActiveImageContentId(this.data)
-		const runtimeTargetsActiveContent =
-			!runtimeTarget?.contentId || runtimeTarget.contentId === activeContentId
-		return (
-			(runtimeTargetsActiveContent ? runtimeTarget?.imageGenerationTaskMeta : undefined) ||
-			this.getImageGenerationTaskMeta()
-		)
+		const runtimeTarget = activeContentId
+			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
+			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
+		return runtimeTarget?.imageGenerationTaskMeta || this.getImageGenerationTaskMeta()
 	}
 
 	private beginOrReuseGenerationAttempt(
@@ -1129,7 +1170,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		options?: { allowConcurrent?: boolean },
 	): string {
 		const runtimeManager = this.canvas.generationRuntimeManager
-		const current = runtimeManager.getTargetState(this.data.id)
+		const current = runtimeManager.getTargetState(this.data.id, target.contentId)
 		if (!options?.allowConcurrent && current?.operation === operation) {
 			runtimeManager.updateAttemptPhase(current.attemptId, "submitting")
 			return current.attemptId
@@ -1160,27 +1201,29 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (contentId !== undefined) {
 			const content = getImageContentById(this.data, contentId)
 			return Boolean(
-				this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, contentId) ||
+				this.hasActiveGeneration(contentId) ||
 				(content && isContentGenerationPending(content)),
 			)
 		}
 
+		return this.hasActiveGeneration() || hasProcessingImageContent(this.data)
+	}
+
+	private hasActiveGeneration(contentId?: string): boolean {
 		return (
-			this.isGenerating ||
-			Boolean(this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)) ||
-			hasProcessingImageContent(this.data)
+			this.canvas.generationRuntimeManager?.hasActiveGeneration?.(this.data.id, contentId) ??
+			this.isGenerating
 		)
 	}
 
 	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
 	public getActiveGenerateImageRequest(): GenerateImageRequest | undefined {
-		const runtimeTarget = this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
 		const activeContentId = getActiveImageContentId(this.data)
-		const runtimeTargetsActiveContent =
-			!runtimeTarget?.contentId || runtimeTarget.contentId === activeContentId
+		const runtimeTarget = activeContentId
+			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
+			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
 		return (
-			(runtimeTargetsActiveContent ? runtimeTarget?.generateImageRequest : undefined) ||
-			this.getActiveContentData().generateImageRequest
+			runtimeTarget?.generateImageRequest || this.getActiveContentData().generateImageRequest
 		)
 	}
 
@@ -1566,7 +1609,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 检查图片是否满足生成条件（正在生成中或等待生成结果）
 	 */
 	private isImageGenerationPending(): boolean {
-		if (this.isGenerating) {
+		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
 			return true
 		}
 
@@ -1897,7 +1940,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const activeContent = this.getActiveContentData()
 		const status = activeContent.status
 
-		if (this.isGenerating) {
+		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
 			const suffix = this.getGeneratingNameSuffix()
 			return `${baseName}${suffix}`
 		}
@@ -2110,7 +2153,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		// 失败重试期间保留已落库的失败状态，但运行时应优先展示本次提交态。
-		if (this.isGenerating) {
+		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
 			return this.renderGeneratingPlaceholder()
 		}
 
@@ -2359,7 +2402,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private isActiveGenerationPlaceholder(): boolean {
-		if (this.hasActiveImageGenerationTask() || this.isGenerating) {
+		if (
+			this.hasActiveImageGenerationTask() ||
+			this.hasActiveGeneration(getActiveImageContentId(this.data))
+		) {
 			return true
 		}
 

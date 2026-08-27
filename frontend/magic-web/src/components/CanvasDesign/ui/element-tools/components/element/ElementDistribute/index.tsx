@@ -7,14 +7,12 @@ import {
 	SelectTrigger,
 } from "../../../../primitives/shadcn/select"
 import styles from "./index.module.css"
-import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import type { DistributeType } from "../../../../../runtime/interaction/align/AlignmentManager"
 import { useCanvasDesignI18n } from "../../../../../app/providers/I18nProvider"
 import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
 
 export default function ElementDistribute() {
 	const { t } = useCanvasDesignI18n()
-	const { canvas } = useCanvas()
 	const tool = useElementToolResolution()
 	const [selectedValue, setSelectedValue] = useState<string>("")
 
@@ -45,8 +43,6 @@ export default function ElementDistribute() {
 	// 处理分布操作
 	const handleDistributeChange = useCallback(
 		(value: string) => {
-			if (!canvas) return
-
 			// 根据分布类型映射到对应的 action ID
 			const actionIdMap: Record<DistributeType, string> = {
 				"horizontal-spacing": "distribute.horizontal",
@@ -56,12 +52,11 @@ export default function ElementDistribute() {
 
 			const distributeType = value as DistributeType
 			const actionId = actionIdMap[distributeType]
-			if (actionId)
-				void (tool?.execute?.({ actionId }) ?? canvas?.userActionRegistry.execute(actionId))
+			if (actionId && tool?.visibility === "visible") void tool.execute?.({ actionId })
 			// 操作完成后重置为空，这样下次可以再次选择相同的选项
 			setTimeout(() => setSelectedValue(""), 0)
 		},
-		[canvas, tool],
+		[tool],
 	)
 
 	// 获取当前选中的图标

@@ -5,7 +5,7 @@ import { useGenerationRuntimeRevision } from "../../../app/hooks/canvas/useGener
 import { createElementToolContext, resolveElementTools } from "../../../runtime/element-tools"
 import type { ElementToolResolution, ElementToolSurface } from "../../../runtime/element-tools"
 import { useElementToolRuntimeStates } from "./useElementToolCommand"
-import useShowVideoOriginalSizeButton from "../shared/hooks/useShowVideoOriginalSizeButton"
+import useShowMediaOriginalSizeButton from "../shared/hooks/useShowMediaOriginalSizeButton"
 
 interface UseElementToolsOptions {
 	selectedElements?: Parameters<typeof createElementToolContext>[0]["selectedElements"]
@@ -19,7 +19,7 @@ interface UseElementToolsOptions {
 	isErasing?: boolean
 	isFullscreenPreviewOpen?: boolean
 	convertHightSupported?: boolean
-	showVideoOriginalSize?: boolean
+	showMediaOriginalSize?: boolean
 	isStoryboardOutputFrame?: boolean
 	canConcurrentGenerate?: boolean
 }
@@ -50,17 +50,17 @@ export function useElementTools(
 		}
 		return options.selectedElements
 	}, [element, options.selectedElements])
-	const activeVideoSrc =
-		element?.type === "video"
+	const activeMediaSrc =
+		element?.type === "video" || element?.type === "image"
 			? (element.contents?.find((content) => content.contentId === element.activeContentId)
 					?.src as string | undefined)
 			: undefined
-	const showVideoOriginalSize = useShowVideoOriginalSizeButton({
+	const showMediaOriginalSize = useShowMediaOriginalSizeButton({
 		canvas,
 		isSingleElement: selectedElements?.length === 1 || (!selectedElements && Boolean(element)),
 		elementType: element?.type,
 		elementId: element?.id,
-		videoSrc: activeVideoSrc,
+		mediaSrc: activeMediaSrc,
 		elementWidth: element?.width,
 		elementHeight: element?.height,
 	})
@@ -79,7 +79,7 @@ export function useElementTools(
 				isErasing: options.isErasing,
 				isFullscreenPreviewOpen: options.isFullscreenPreviewOpen,
 				convertHightSupported: options.convertHightSupported,
-				showVideoOriginalSize: options.showVideoOriginalSize ?? showVideoOriginalSize,
+				showMediaOriginalSize: options.showMediaOriginalSize ?? showMediaOriginalSize,
 				isStoryboardOutputFrame: options.isStoryboardOutputFrame,
 				canConcurrentGenerate: options.canConcurrentGenerate,
 				runtimeRevision: generationRuntimeRevision,
@@ -98,8 +98,8 @@ export function useElementTools(
 			options.isSelecting,
 			options.canConcurrentGenerate,
 			options.convertHightSupported,
-			options.showVideoOriginalSize,
-			showVideoOriginalSize,
+			options.showMediaOriginalSize,
+			showMediaOriginalSize,
 			options.activeToolSession,
 			runtimeStates,
 			generationRuntimeRevision,

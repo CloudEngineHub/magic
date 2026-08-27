@@ -71,6 +71,10 @@ describe("MediaEditRecoveryManager", () => {
 		expect(manager.get(baseKey, "source-1")).toBeNull()
 		expect(manager.get(reEditKey, "source-1")).not.toBeNull()
 
+		manager.clearContent("element-1", "content-1")
+		expect(manager.get(reEditKey, "source-1")).toBeNull()
+		manager.set(reEditKey, "source-1", { value: 2 })
+
 		manager.clearElement("element-1")
 		expect(manager.get(reEditKey, "source-1")).toBeNull()
 		expect(manager.get(otherElementKey, "source-2")).not.toBeNull()

@@ -441,17 +441,20 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					throw new Error(t("elementTools.imageExtend.submitFailed", "提交失败，请重试"))
 				}
 
-				const success = await newElementInstance.expandImage({
-					image_id: requestImageId,
-					file_path: imageSrc,
-					canvas_path: canvasPath,
-					mask_path: maskPath,
-					size: compositeResult.size,
-					reference_image_options: buildReferenceImageOptions({
-						filePath: imageSrc,
-						crop,
-					}),
-				})
+				const success = await newElementInstance.expandImage(
+					{
+						image_id: requestImageId,
+						file_path: imageSrc,
+						canvas_path: canvasPath,
+						mask_path: maskPath,
+						size: compositeResult.size,
+						reference_image_options: buildReferenceImageOptions({
+							filePath: imageSrc,
+							crop,
+						}),
+					},
+					{ attemptId: generationAttemptId },
+				)
 				if (!success) {
 					throw new Error(t("elementTools.imageExtend.submitFailed", "提交失败，请重试"))
 				}

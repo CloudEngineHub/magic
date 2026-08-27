@@ -135,6 +135,9 @@
 		"mediaDownload": {
 			"title": "Download"
 		},
+		"mediaOriginalSize": {
+			"title": "Restore Original Aspect Ratio"
+		},
 		"mediaReplace": {
 			"audio": "Replace Audio",
 			"image": "Replace Image",
@@ -189,9 +192,6 @@
 			"center": "Center",
 			"left": "Left",
 			"right": "Right"
-		},
-		"videoOriginalSize": {
-			"title": "Original Video Size"
 		}
 	},
 	"ellipse": {

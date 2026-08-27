@@ -135,6 +135,9 @@
 		"mediaDownload": {
 			"title": "下载"
 		},
+		"mediaOriginalSize": {
+			"title": "恢复原比例"
+		},
 		"mediaReplace": {
 			"audio": "替换音频",
 			"image": "替换图片",
@@ -189,9 +192,6 @@
 			"center": "居中对齐",
 			"left": "左对齐",
 			"right": "右对齐"
-		},
-		"videoOriginalSize": {
-			"title": "恢复原比例"
 		}
 	},
 	"ellipse": {

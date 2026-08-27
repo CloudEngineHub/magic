@@ -19,19 +19,25 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 					!context.generation.activeContentIsGenerating &&
 					hasResource(context))),
 		resolve: (context) =>
-			resolveTool(context, ElementToolTypeEnum.ElementResize, "top", top("element", 10), {
-				bindContent: false,
-			}),
+			resolveTool(
+				context,
+				ElementToolTypeEnum.ElementResize,
+				"top",
+				context.element.type === ElementTypeEnum.Frame
+					? top("frame-content", 20)
+					: top("element", 10),
+				{ bindContent: false },
+			),
 	},
 	{
 		id: ElementToolTypeEnum.ElementAlign,
 		scope: "element",
 		execution: "command",
-		surfaces: { top: top("layout", 100) },
+		surfaces: { top: top("layout", 30) },
 		isApplicable: (context) =>
 			context.selection.elements.length > 1 || context.element.type === ElementTypeEnum.Frame,
 		resolve: (context) =>
-			resolveTool(context, ElementToolTypeEnum.ElementAlign, "top", top("layout", 100), {
+			resolveTool(context, ElementToolTypeEnum.ElementAlign, "top", top("layout", 30), {
 				bindContent: false,
 			}),
 	},
@@ -39,11 +45,11 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.ElementDistribute,
 		scope: "element",
 		execution: "command",
-		surfaces: { top: top("layout", 110) },
+		surfaces: { top: top("layout", 31) },
 		isApplicable: (context) =>
 			context.selection.elements.length > 1 || context.element.type === ElementTypeEnum.Frame,
 		resolve: (context) =>
-			resolveTool(context, ElementToolTypeEnum.ElementDistribute, "top", top("layout", 110), {
+			resolveTool(context, ElementToolTypeEnum.ElementDistribute, "top", top("layout", 31), {
 				bindContent: false,
 			}),
 	},
@@ -51,11 +57,11 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.FrameRemove,
 		scope: "element",
 		execution: "command",
-		surfaces: { top: top("frame", 0) },
+		surfaces: { top: top("frame-action", 10) },
 		isApplicable: (context) =>
 			context.selection.isSingleElement && context.element.type === ElementTypeEnum.Frame,
 		resolve: (context) =>
-			resolveTool(context, ElementToolTypeEnum.FrameRemove, "top", top("frame", 0), {
+			resolveTool(context, ElementToolTypeEnum.FrameRemove, "top", top("frame-action", 10), {
 				bindContent: false,
 			}),
 	},
@@ -63,19 +69,25 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.FrameDownload,
 		scope: "element",
 		execution: "command",
-		surfaces: { top: top("frame", 20) },
+		surfaces: { top: top("frame-content", 21) },
 		isApplicable: (context) =>
 			context.selection.isSingleElement && context.element.type === ElementTypeEnum.Frame,
 		resolve: (context) =>
-			resolveTool(context, ElementToolTypeEnum.FrameDownload, "top", top("frame", 20), {
-				bindContent: false,
-			}),
+			resolveTool(
+				context,
+				ElementToolTypeEnum.FrameDownload,
+				"top",
+				top("frame-content", 21),
+				{
+					bindContent: false,
+				},
+			),
 	},
 	{
 		id: ElementToolTypeEnum.FrameStoryboardVideoBatch,
 		scope: "element",
 		execution: "command",
-		surfaces: { top: top("frame", 30) },
+		surfaces: { top: top("frame-content", 22) },
 		isApplicable: (context) =>
 			context.selection.isSingleElement &&
 			context.element.type === ElementTypeEnum.Frame &&
@@ -85,7 +97,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 				context,
 				ElementToolTypeEnum.FrameStoryboardVideoBatch,
 				"top",
-				top("frame", 30),
+				top("frame-content", 22),
 				{ bindContent: false },
 			),
 	},
@@ -93,12 +105,12 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.FrameCreate,
 		scope: "element",
 		execution: "command",
-		surfaces: { top: top("frame", 0) },
+		surfaces: { top: top("frame-create", 10) },
 		isApplicable: (context) =>
 			context.selection.elements.length > 1 &&
 			!context.selection.elements.some((element) => element.type === ElementTypeEnum.Frame),
 		resolve: (context) =>
-			resolveTool(context, ElementToolTypeEnum.FrameCreate, "top", top("frame", 0), {
+			resolveTool(context, ElementToolTypeEnum.FrameCreate, "top", top("frame-create", 10), {
 				bindContent: false,
 			}),
 	},
@@ -171,12 +183,13 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 			context.element.type === ElementTypeEnum.Image && mediaContentToolAllowed(context),
 	),
 	mediaTool(
-		ElementToolTypeEnum.ContentVideoOriginalSize,
-		"media",
-		10,
+		ElementToolTypeEnum.ContentMediaOriginalSize,
+		"element",
+		11,
 		(context) =>
-			context.element.type === ElementTypeEnum.Video &&
-			context.flags.showVideoOriginalSize &&
+			(context.element.type === ElementTypeEnum.Image ||
+				context.element.type === ElementTypeEnum.Video) &&
+			context.flags.showMediaOriginalSize &&
 			mediaContentToolAllowed(context),
 	),
 ]

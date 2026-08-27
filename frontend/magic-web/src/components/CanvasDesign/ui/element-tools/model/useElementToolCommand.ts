@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useSyncExternalStore } from "react"
+import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import type {
 	ElementToolCommand,
@@ -18,23 +18,46 @@ interface ElementToolCommandRegistration {
 /** 编辑器只暴露命令能力，不再拥有底部工具的展示生命周期。 */
 export function useElementToolCommand(registration: ElementToolCommandRegistration | null): void {
 	const { canvas } = useCanvas()
+	const commandBus = canvas?.elementToolCommandBus
+	const registrationRef = useRef<ElementToolCommandRegistration | null>(registration)
+	registrationRef.current = registration
+	const registrationKey = registration
+		? [
+				registration.elementId,
+				registration.toolId,
+				registration.contentId ?? "",
+				registration.operationId ?? "",
+				registration.state?.available ?? true,
+				registration.state?.disabled ?? false,
+				registration.state?.loading ?? false,
+				registration.state?.disabledReason ?? "",
+			].join("\u0000")
+		: null
 	useLayoutEffect(() => {
-		if (!canvas?.elementToolCommandBus || !registration) return
-		const capturedContentId = registration.contentId
-		return canvas.elementToolCommandBus.register(
+		const currentRegistration = registrationRef.current
+		if (!commandBus || !currentRegistration) return
+		const capturedContentId = currentRegistration.contentId
+		const capturedElementId = currentRegistration.elementId
+		const capturedToolId = currentRegistration.toolId
+		return commandBus.register(
 			{
-				elementId: registration.elementId,
-				toolId: registration.toolId,
-				contentId: registration.contentId,
-				operationId: registration.operationId,
+				elementId: currentRegistration.elementId,
+				toolId: currentRegistration.toolId,
+				contentId: currentRegistration.contentId,
+				operationId: currentRegistration.operationId,
 			},
 			(command: ElementToolCommand) => {
-				if (capturedContentId && command.contentId !== capturedContentId) return
-				return registration.execute(command)
+				if (
+					command.elementId !== capturedElementId ||
+					command.toolId !== capturedToolId ||
+					(capturedContentId && command.contentId !== capturedContentId)
+				)
+					return
+				return registrationRef.current?.execute(command)
 			},
-			registration.state,
+			currentRegistration.state,
 		)
-	}, [canvas, registration])
+	}, [commandBus, registrationKey])
 }
 
 export function useElementToolRuntimeStates(elementId: string | null) {

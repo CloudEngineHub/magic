@@ -21,6 +21,7 @@ import IconButton from "../../../../primitives/custom/IconButton"
 import { Button } from "../../../../primitives/shadcn/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../../primitives/shadcn/popover"
 import useElementToolPopoverAlign from "../../../shared/hooks/useElementToolPopoverAlign"
+import { useElementToolCommand } from "../../../model/useElementToolCommand"
 import { buildImagePromptExtractionPrompt } from "./imagePromptExtractionPrompt"
 import { createImagePromptTextElement } from "./imagePromptExtractionText"
 import {
@@ -218,6 +219,28 @@ export default function ImagePromptExtractionButton() {
 		t,
 	])
 
+	useElementToolCommand(
+		useMemo(
+			() =>
+				tool && resolvedElementId && activeContent?.contentId
+					? {
+							elementId: resolvedElementId,
+							contentId: activeContent.contentId,
+							toolId: ElementToolTypeEnum.ContentPromptExtraction,
+							state: { available: !buttonDisabled },
+							execute: () => generateExtractedPrompt(),
+						}
+					: null,
+			[
+				activeContent?.contentId,
+				buttonDisabled,
+				generateExtractedPrompt,
+				resolvedElementId,
+				tool,
+			],
+		),
+	)
+
 	const handleOpenChange = useCallback(
 		(nextOpen: boolean) => {
 			if (!nextOpen) {
@@ -229,9 +252,13 @@ export default function ImagePromptExtractionButton() {
 				return
 			}
 			if (buttonDisabled) return
+			if (tool?.id === ElementToolTypeEnum.ContentPromptExtraction) {
+				void tool.execute?.()
+				return
+			}
 			void generateExtractedPrompt()
 		},
-		[buttonDisabled, errorMessage, generateExtractedPrompt, hasExtractedPrompt],
+		[buttonDisabled, errorMessage, generateExtractedPrompt, hasExtractedPrompt, tool],
 	)
 
 	const handleCreateText = useCallback(() => {

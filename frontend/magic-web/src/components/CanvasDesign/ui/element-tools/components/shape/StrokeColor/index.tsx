@@ -1,13 +1,10 @@
 import { useCanvasUI } from "../../../../../app/providers/CanvasUIProvider"
+import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import styles from "./index.module.css"
 import transparentIcon from "../../../../../assets/svg/transparent.svg"
-import type {
-	RectangleElement,
-	EllipseElement,
-	StrokePosition,
-} from "../../../../../runtime/document/types"
+import type { StrokePosition } from "../../../../../runtime/document/types"
 import ColorPickerPopover from "../../../../primitives/custom/ColorPickerPopover/index"
 import { cn } from "../../../../../runtime/shared/lib/utils"
 import { Input } from "../../../../primitives/shadcn/input"
@@ -19,14 +16,23 @@ import {
 	SelectValue,
 } from "../../../../primitives/shadcn/select"
 import StrokeSize from "../../../../primitives/icons/StrokeSize"
-import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../../../app/providers/I18nProvider"
-import { getActiveContent } from "../../../../../runtime/document/elementContent"
+import { getActiveContent, getContentById } from "../../../../../runtime/document/elementContent"
+import { ElementToolTypeEnum } from "../../../../../public/props"
+import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
 
 export default function StrokeColor() {
 	const { t } = useCanvasDesignI18n()
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
+	const tool = useElementToolResolution()
+	const executeUpdate = useCallback(
+		(updates: Record<string, unknown>) => {
+			if (tool?.id !== ElementToolTypeEnum.ShapeStrokeColor) return
+			void tool.execute?.({ updates })
+		},
+		[tool],
+	)
 
 	// 追踪 Popover 的打开状态
 	const [isPopoverOpen, setIsPopoverOpen] = useState(false)
@@ -36,9 +42,16 @@ export default function StrokeColor() {
 
 	// 获取当前选中的第一个元素
 	const selectedElement = useMemo(() => {
-		if (selectedElements.length === 0) return null
-		return selectedElements[0]
-	}, [selectedElements])
+		return tool?.target.elementId
+			? (canvas?.elementManager.getElementData(tool.target.elementId) ?? null)
+			: (selectedElements[0] ?? null)
+	}, [canvas, selectedElements, tool?.target.elementId])
+	const targetContent =
+		selectedElement && tool?.target.contentId
+			? getContentById(selectedElement, tool.target.contentId)
+			: selectedElement
+				? getActiveContent(selectedElement)
+				: undefined
 
 	// 拖动状态
 	const [isDragging, setIsDragging] = useState(false)
@@ -54,9 +67,8 @@ export default function StrokeColor() {
 	// 获取当前描边颜色
 	const strokeColor = useMemo(() => {
 		if (!selectedElement) return undefined
-		const element = selectedElement as RectangleElement | EllipseElement
-		return getActiveContent(element)?.stroke || undefined
-	}, [selectedElement])
+		return targetContent?.stroke || undefined
+	}, [targetContent, selectedElement])
 
 	// 获取透明状态
 	const isTransparent = useMemo(() => {
@@ -71,9 +83,8 @@ export default function StrokeColor() {
 	// 获取边框宽度
 	const strokeWidth = useMemo(() => {
 		if (!selectedElement) return 1
-		const element = selectedElement as RectangleElement | EllipseElement
-		return getActiveContent(element)?.strokeWidth || 1
-	}, [selectedElement])
+		return targetContent?.strokeWidth || 1
+	}, [targetContent, selectedElement])
 
 	// 同步 strokeWidth 到 inputValue（取整）
 	useEffect(() => {
@@ -88,14 +99,14 @@ export default function StrokeColor() {
 	// 处理颜色变化
 	const handleColorChange = useCallback(
 		(rgba: [number, number, number, number]) => {
-			if (!selectedElement || !canvas) return
+			if (!selectedElement) return
 
 			const [r, g, b, a] = rgba
 			const color = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}${
 				a ? `, ${a}` : ""
 			})`
 			// 只更新颜色,如果当前是透明状态,也会自动取消透明
-			canvas.elementManager.update(selectedElement.id, {
+			executeUpdate({
 				stroke: color,
 				interactionConfig: {
 					...selectedElement.interactionConfig,
@@ -103,34 +114,34 @@ export default function StrokeColor() {
 				},
 			})
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	// 处理颜色模式变化
 	const handleModeChange = useCallback(
 		(mode: "hex" | "rgb" | "hsl") => {
-			if (!selectedElement || !canvas) return
-			canvas.elementManager.update(selectedElement.id, {
+			if (!selectedElement) return
+			executeUpdate({
 				interactionConfig: {
 					...selectedElement.interactionConfig,
 					strokeColorMode: mode,
 				},
 			})
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	// 处理透明色切换
 	const handleTransparentClick = useCallback(() => {
-		if (!selectedElement || !canvas) return
+		if (!selectedElement) return
 		// 切换透明状态,不修改颜色值
-		canvas.elementManager.update(selectedElement.id, {
+		executeUpdate({
 			interactionConfig: {
 				...selectedElement.interactionConfig,
 				strokeTransparent: !selectedElement.interactionConfig?.strokeTransparent,
 			},
 		})
-	}, [selectedElement, canvas])
+	}, [executeUpdate, selectedElement])
 
 	// 处理边框宽度变化
 	const handleStrokeWidthChange = useCallback(
@@ -138,7 +149,7 @@ export default function StrokeColor() {
 			const newValue = e.target.value
 			setInputValue(newValue)
 
-			if (!selectedElement || !canvas) return
+			if (!selectedElement) return
 
 			// 允许空值（用户正在删除）
 			if (newValue === "") return
@@ -146,17 +157,17 @@ export default function StrokeColor() {
 			const numValue = Number.parseInt(newValue, 10)
 			// 只有当值有效且非负时才更新（只接受整数）
 			if (!Number.isNaN(numValue) && numValue >= 0) {
-				canvas.elementManager.update(selectedElement.id, {
+				executeUpdate({
 					strokeWidth: numValue,
 				})
 			}
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	// 处理输入框失焦
 	const handleStrokeWidthBlur = useCallback(() => {
-		if (!selectedElement || !canvas) return
+		if (!selectedElement) return
 
 		// 如果输入为空或无效，恢复到当前的 strokeWidth
 		if (inputValue === "" || Number.isNaN(Number.parseInt(inputValue, 10))) {
@@ -166,25 +177,25 @@ export default function StrokeColor() {
 			// 确保值不小于 0
 			if (numValue < 0) {
 				setInputValue("0")
-				canvas.elementManager.update(selectedElement.id, {
+				executeUpdate({
 					strokeWidth: 0,
 				})
 			}
 		}
-	}, [selectedElement, inputValue, strokeWidth, canvas])
+	}, [executeUpdate, selectedElement, inputValue, strokeWidth])
 
 	// 处理边框位置变化
 	const handleStrokePositionChange = useCallback(
 		(value: StrokePosition) => {
-			if (!selectedElement || !canvas) return
-			canvas.elementManager.update(selectedElement.id, {
+			if (!selectedElement) return
+			executeUpdate({
 				interactionConfig: {
 					...selectedElement.interactionConfig,
 					strokePosition: value,
 				},
 			})
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	// 处理图标鼠标按下
@@ -209,8 +220,8 @@ export default function StrokeColor() {
 			const delta = Math.round(deltaX / 5)
 			const newValue = Math.max(0, Math.round(dragStartValueRef.current + delta))
 
-			if (selectedElementRef.current && canvas) {
-				canvas.elementManager.update(selectedElementRef.current.id, {
+			if (selectedElementRef.current) {
+				executeUpdate({
 					strokeWidth: newValue,
 				})
 			}
@@ -228,7 +239,7 @@ export default function StrokeColor() {
 			document.removeEventListener("mousemove", handleMouseMove, true)
 			document.removeEventListener("mouseup", handleMouseUp, true)
 		}
-	}, [isDragging, canvas])
+	}, [executeUpdate, isDragging])
 
 	return (
 		<>

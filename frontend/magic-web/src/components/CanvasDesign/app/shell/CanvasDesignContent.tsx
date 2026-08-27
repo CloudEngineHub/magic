@@ -21,6 +21,7 @@ import { toPlainObject } from "../../runtime/shared/ids"
 import type { CanvasDesignRef, CanvasDesignProps } from "../../public/props"
 import CanvasTips from "../../ui/panels/tips/index"
 import { FloatingUIProvider } from "../providers/FloatingUIProvider"
+import { BottomFloatingStackProvider } from "../providers/BottomFloatingStackProvider"
 import { useCanvasDesignRef } from "../hooks/canvas/useCanvasDesignRef"
 import { useCanvasEventListeners } from "../hooks/canvas/useCanvasEventListeners"
 import ImageCropPanel from "../../ui/panels/crop/index"
@@ -233,58 +234,60 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	return (
 		<FloatingUIProvider canvas={canvas} floatingBoundary={floatingBoundary}>
-			<div ref={canvasContainerRef} className={styles.canvasContainer} />
-			<ElementActionHints
-				hints={elementActionHints}
-				onAction={onElementActionHintAction}
-				connectionHints={connectionActionHints}
-				onConnectionAction={onConnectionActionHintAction}
-			/>
-			{!readonly && <ElementRenameOverlay />}
-			{!readonly && <ElementToolTopSurface />}
-			{!readonly && <ImageMessageEditor />}
-			{!readonly && <VideoGenerateEditor />}
-			{!readonly && <ElementBottomToolbarHost />}
-			{!readonly && <ImageCropPanel />}
-			{!readonly && <ImageExtendPanel />}
-			{!readonly && <ImageEraserPanel />}
-			<MessageHistory />
-			{fullscreenMediaElement?.type === "video" ? (
-				<VideoFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
+			<BottomFloatingStackProvider>
+				<div ref={canvasContainerRef} className={styles.canvasContainer} />
+				<ElementActionHints
+					hints={elementActionHints}
+					onAction={onElementActionHintAction}
+					connectionHints={connectionActionHints}
+					onConnectionAction={onConnectionActionHintAction}
 				/>
-			) : null}
-			{fullscreenMediaElement?.type === "image" ? (
-				<ImageElementFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
-				/>
-			) : null}
-			{fullscreenMediaElement?.type === "audio" ? (
-				<AudioElementFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
-				/>
-			) : null}
-			{storyboardReferenceImagePreview ? (
-				<MediaResourceFullscreenPreview
-					resource={{
-						kind: "image",
-						path: storyboardReferenceImagePreview.path,
-						fileName:
-							getCanvasResourceFileName(storyboardReferenceImagePreview.path) ||
-							storyboardReferenceImagePreview.path,
-						crop: storyboardReferenceImagePreview.crop,
-					}}
-					onClose={() => setStoryboardReferenceImagePreview(null)}
-				/>
-			) : null}
-			<Layers />
-			{!readonly && <Tools />}
-			{!readonly && <PluginPanel />}
-			{!readonly && <CanvasTips />}
-			<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
+				{!readonly && <ElementRenameOverlay />}
+				{!readonly && <ElementToolTopSurface />}
+				{!readonly && <ImageMessageEditor />}
+				{!readonly && <VideoGenerateEditor />}
+				{!readonly && <ElementBottomToolbarHost />}
+				{!readonly && <ImageCropPanel />}
+				{!readonly && <ImageExtendPanel />}
+				{!readonly && <ImageEraserPanel />}
+				<MessageHistory />
+				{fullscreenMediaElement?.type === "video" ? (
+					<VideoFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{fullscreenMediaElement?.type === "image" ? (
+					<ImageElementFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{fullscreenMediaElement?.type === "audio" ? (
+					<AudioElementFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{storyboardReferenceImagePreview ? (
+					<MediaResourceFullscreenPreview
+						resource={{
+							kind: "image",
+							path: storyboardReferenceImagePreview.path,
+							fileName:
+								getCanvasResourceFileName(storyboardReferenceImagePreview.path) ||
+								storyboardReferenceImagePreview.path,
+							crop: storyboardReferenceImagePreview.crop,
+						}}
+						onClose={() => setStoryboardReferenceImagePreview(null)}
+					/>
+				) : null}
+				<Layers />
+				{!readonly && <Tools />}
+				{!readonly && <PluginPanel />}
+				{!readonly && <CanvasTips />}
+				<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
+			</BottomFloatingStackProvider>
 		</FloatingUIProvider>
 	)
 })

@@ -155,7 +155,7 @@ function ActiveVideoGenerateEditor({
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
-	}, [videoElement.id])
+	}, [videoContent?.contentId, videoElement.id])
 
 	useCanvasEvent(
 		"element:video:generate-submit-started",
@@ -211,7 +211,7 @@ function ActiveVideoGenerateEditor({
 
 	const resultSecondEditNode = showResultSecondEdit ? (
 		<VideoSecondEdit
-			key={`${videoElement.id}-result-regenerate`}
+			key={`${videoElement.id}-${videoContent?.contentId ?? ""}-result-regenerate`}
 			videoElement={videoElement}
 			pendingToolCommand={pendingToolCommand}
 			onPendingToolCommandHandled={onPendingToolCommandHandled}
@@ -222,7 +222,7 @@ function ActiveVideoGenerateEditor({
 
 	const editorNode = showEditor ? (
 		<VideoGenerateEditorRender
-			key={`${videoElement.id}-${isRetryEditing ? "retry" : "create"}`}
+			key={`${videoElement.id}-${videoContent?.contentId ?? ""}-${isRetryEditing ? "retry" : "create"}`}
 			videoElement={videoElement}
 			autoFocus={isRetryEditing}
 			autoFocusAtDocumentEnd={isRetryEditing}

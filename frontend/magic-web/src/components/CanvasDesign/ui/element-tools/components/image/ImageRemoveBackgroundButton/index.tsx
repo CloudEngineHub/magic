@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 import IconButton from "../../../../primitives/custom/IconButton/index"
 import styles from "./index.module.css"
 import { Wand2 } from "lucide-react"
@@ -6,6 +6,7 @@ import { useCanvasDesignI18n } from "../../../../../app/providers/I18nProvider"
 import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import { useCanvasUI } from "../../../../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../../../../app/providers/MagicProvider"
+import { ElementToolTypeEnum } from "../../../../../public/props"
 import { ElementTypeEnum, type ImageElement } from "../../../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../../../runtime/elements/image/ImageElement"
 import { ElementFactory } from "../../../../../runtime/elements/core/ElementFactory"
@@ -21,6 +22,7 @@ import {
 	getContentById,
 } from "../../../../../runtime/document/elementContent"
 import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
+import { useElementToolCommand } from "../../../model/useElementToolCommand"
 
 export default function ImageRemoveBackgroundButton() {
 	const { t } = useCanvasDesignI18n()
@@ -133,15 +135,18 @@ export default function ImageRemoveBackgroundButton() {
 		}
 
 		try {
-			const success = await newElementInstance.removeBackground({
-				image_id: requestImageId,
-				file_path: filePath,
-				size: imageProcessRequestPayload.size,
-				reference_image_options: buildReferenceImageOptions({
-					filePath,
-					crop: imageProcessRequestPayload.crop,
-				}),
-			})
+			const success = await newElementInstance.removeBackground(
+				{
+					image_id: requestImageId,
+					file_path: filePath,
+					size: imageProcessRequestPayload.size,
+					reference_image_options: buildReferenceImageOptions({
+						filePath,
+						crop: imageProcessRequestPayload.crop,
+					}),
+				},
+				{ attemptId },
+			)
 			if (!success) {
 				canvas.eventEmitter.emit({
 					type: "element:image:generate-submit-failed",
@@ -159,8 +164,33 @@ export default function ImageRemoveBackgroundButton() {
 		}
 	}, [canvas, methods, selectedElements, t, tool])
 
+	useElementToolCommand(
+		useMemo(
+			() =>
+				tool?.target.elementId && tool.target.contentId
+					? {
+							elementId: tool.target.elementId,
+							contentId: tool.target.contentId,
+							toolId: ElementToolTypeEnum.ContentRemoveBackground,
+							state: { available: Boolean(methods?.removeBackground) },
+							execute: () => handleRemoveBackground(),
+						}
+					: null,
+			[handleRemoveBackground, methods?.removeBackground, tool],
+		),
+	)
+
 	return (
-		<IconButton onClick={handleRemoveBackground} className={styles.imageRemoveBackgroundButton}>
+		<IconButton
+			onClick={() => {
+				if (tool?.id === ElementToolTypeEnum.ContentRemoveBackground) {
+					void tool.execute?.()
+					return
+				}
+				void handleRemoveBackground()
+			}}
+			className={styles.imageRemoveBackgroundButton}
+		>
 			<Wand2 size={16} />
 			<span className={styles.buttonText}>
 				{t("elementTools.imageRemoveBackground.title", "去背景")}

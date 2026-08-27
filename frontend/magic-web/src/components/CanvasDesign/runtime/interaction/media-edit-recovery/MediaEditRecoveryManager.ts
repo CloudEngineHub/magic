@@ -99,6 +99,13 @@ export class MediaEditRecoveryManager {
 		this.records.delete(getRecoveryKey(key))
 	}
 
+	public clearContent(elementId: string, contentId: string): void {
+		const prefix = `${elementId}:${contentId}:`
+		for (const key of this.records.keys()) {
+			if (key.startsWith(prefix)) this.records.delete(key)
+		}
+	}
+
 	public clearElement(elementId: string): void {
 		for (const key of this.records.keys()) {
 			if (key.startsWith(`${elementId}:`)) this.records.delete(key)

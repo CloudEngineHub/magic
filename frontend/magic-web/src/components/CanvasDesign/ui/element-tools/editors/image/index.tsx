@@ -191,7 +191,7 @@ function ActiveImageMessageEditor({
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
-	}, [imageElement.id])
+	}, [activeContent.contentId, imageElement.id])
 
 	useCanvasEvent(
 		"element:image:generate-submit-started",
@@ -239,7 +239,7 @@ function ActiveImageMessageEditor({
 	if ((!hasGenerateImageRequest && !hasResultImage) || isRetryEditing) {
 		return (
 			<ImageMessageEditorRender
-				key={`${imageElement.id}-${isRetryEditing ? "retry" : "create"}`}
+				key={`${imageElement.id}-${activeContent.contentId}-${isRetryEditing ? "retry" : "create"}`}
 				imageElement={imageElement}
 				autoFocus={isRetryEditing}
 				autoFocusAtDocumentEnd={isRetryEditing}
@@ -253,7 +253,7 @@ function ActiveImageMessageEditor({
 	if (hasResultImage && hasOssSrc) {
 		return (
 			<SecondEdit
-				key={imageElement.id}
+				key={`${imageElement.id}-${activeContent.contentId}`}
 				imageElement={imageElement}
 				pendingToolCommand={pendingToolCommand}
 				onPendingToolCommandHandled={onPendingToolCommandHandled}

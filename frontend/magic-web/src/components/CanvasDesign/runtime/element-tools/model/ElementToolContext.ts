@@ -32,7 +32,7 @@ export interface CreateElementToolContextOptions {
 	isErasing?: boolean
 	isFullscreenPreviewOpen?: boolean
 	convertHightSupported?: boolean
-	showVideoOriginalSize?: boolean
+	showMediaOriginalSize?: boolean
 	isStoryboardOutputFrame?: boolean
 	canConcurrentGenerate?: boolean
 	runtimeRevision?: number
@@ -150,7 +150,7 @@ export function createElementToolContext(
 		},
 		flags: {
 			convertHightSupported: Boolean(options.convertHightSupported),
-			showVideoOriginalSize: Boolean(options.showVideoOriginalSize),
+			showMediaOriginalSize: Boolean(options.showMediaOriginalSize),
 			isStoryboardOutputFrame: Boolean(options.isStoryboardOutputFrame),
 		},
 	}

@@ -1,4 +1,4 @@
-.videoOriginalSizeButton {
+.mediaOriginalSizeButton {
 	display: flex;
 	gap: var(--spacing-1-5, 6px);
 	align-items: center;

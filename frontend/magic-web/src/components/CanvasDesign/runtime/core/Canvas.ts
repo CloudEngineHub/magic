@@ -314,10 +314,14 @@ export class Canvas {
 				previousContent && "src" in previousContent ? previousContent.src : undefined
 			const nextSource = nextContent && "src" in nextContent ? nextContent.src : undefined
 			if (
-				previousContent?.contentId !== nextContent?.contentId ||
+				previousContent?.contentId === nextContent?.contentId &&
+				previousContent?.contentId &&
 				previousSource !== nextSource
 			) {
-				this.mediaEditRecoveryManager.clearElement(data.elementId)
+				this.mediaEditRecoveryManager.clearContent(
+					data.elementId,
+					previousContent.contentId,
+				)
 			}
 		})
 		this.generationRuntimeManager = new GenerationRuntimeManager({ canvas: this })

@@ -160,11 +160,11 @@ export default function SecondEdit(props: SecondEditProps) {
 	useEffect(() => {
 		if (previousSourceFingerprintRef.current === sessionSourceFingerprint) return
 		sessionPersistenceEnabledRef.current = false
-		sessionStore?.clearElement(props.imageElement.id)
+		sessionStore?.clearContent(props.imageElement.id, sessionContentId)
 		previousSourceFingerprintRef.current = sessionSourceFingerprint
 		setSessionIntent(null)
 		setHasInterruptedDraft(false)
-	}, [props.imageElement.id, sessionSourceFingerprint, sessionStore])
+	}, [props.imageElement.id, sessionContentId, sessionSourceFingerprint, sessionStore])
 
 	const createAndSubmitImageGeneration = useCallback(
 		async (
@@ -214,7 +214,10 @@ export default function SecondEdit(props: SecondEditProps) {
 						sessionStore.clear(getSessionKey(sessionIntentToClear))
 						if (sessionIntent === sessionIntentToClear) setHasInterruptedDraft(false)
 					}
-					canvas.mediaEditRecoveryManager.clearElement(props.imageElement.id)
+					canvas.mediaEditRecoveryManager.clearContent(
+						props.imageElement.id,
+						sessionContentId,
+					)
 					if (options?.clearEditorPromptOnSuccess) setPrompt("")
 					if (options?.closeEditorOnSuccess) setIsEditing(false)
 					if (options?.deselectOnSuccess) canvas.selectionManager.deselectAll()
@@ -340,7 +343,10 @@ export default function SecondEdit(props: SecondEditProps) {
 					sessionStore.clear(getSessionKey(sessionIntentToClear))
 					if (sessionIntent === sessionIntentToClear) setHasInterruptedDraft(false)
 				}
-				canvas.mediaEditRecoveryManager.clearElement(props.imageElement.id)
+				canvas.mediaEditRecoveryManager.clearContent(
+					props.imageElement.id,
+					sessionContentId,
+				)
 				if (options?.clearEditorPromptOnSuccess) {
 					setPrompt("")
 				}
@@ -362,6 +368,7 @@ export default function SecondEdit(props: SecondEditProps) {
 			getSessionKey,
 			imageModelList,
 			props.imageElement,
+			sessionContentId,
 			sessionIntent,
 			sessionStore,
 			setPrompt,
@@ -479,10 +486,10 @@ export default function SecondEdit(props: SecondEditProps) {
 		setPendingOpenMode(null)
 		setIsEditing(false)
 		setIsVisible(false)
-		sessionStore?.clearElement(props.imageElement.id)
+		sessionStore?.clearContent(props.imageElement.id, sessionContentId)
 		setSessionIntent(null)
 		setHasInterruptedDraft(false)
-	}, [isReplacing, props.imageElement.id, sessionStore])
+	}, [isReplacing, props.imageElement.id, sessionContentId, sessionStore])
 
 	useEffect(() => {
 		if (!pendingOpenMode) return

@@ -1,4 +1,5 @@
 import { useCanvasUI } from "../../../../../app/providers/CanvasUIProvider"
+import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import { useCallback, useMemo, useState, useEffect } from "react"
 import styles from "./index.module.css"
 import type { RectangleElement, StarElement } from "../../../../../runtime/document/types"
@@ -8,14 +9,23 @@ import { Input } from "../../../../primitives/shadcn/input"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../../primitives/shadcn/popover"
 import IconButton from "../../../../primitives/custom/IconButton/index"
 import { SplinePointer } from "lucide-react"
-import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../../../app/providers/I18nProvider"
-import { getActiveContent } from "../../../../../runtime/document/elementContent"
+import { getActiveContent, getContentById } from "../../../../../runtime/document/elementContent"
+import { ElementToolTypeEnum } from "../../../../../public/props"
+import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
 
 export default function ShapeStyle() {
 	const { t } = useCanvasDesignI18n()
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
+	const tool = useElementToolResolution()
+	const executeUpdate = useCallback(
+		(updates: Record<string, unknown>) => {
+			if (tool?.id !== ElementToolTypeEnum.ShapeStyle) return
+			void tool.execute?.({ updates })
+		},
+		[tool],
+	)
 
 	// 本地输入框值状态
 	const [cornerRadiusInput, setCornerRadiusInput] = useState<string>("")
@@ -25,28 +35,35 @@ export default function ShapeStyle() {
 
 	// 获取当前选中的第一个元素
 	const selectedElement = useMemo(() => {
-		if (selectedElements.length === 0) return null
-		const element = selectedElements[0]
+		const element = tool?.target.elementId
+			? canvas?.elementManager.getElementData(tool.target.elementId)
+			: selectedElements[0]
+		if (!element) return null
 		// 只处理矩形、多边形、星形类型
 		if (element?.type === ElementTypeEnum.Rectangle || element?.type === ElementTypeEnum.Star) {
 			return element as RectangleElement | StarElement
 		}
 		return null
-	}, [selectedElements])
+	}, [canvas, selectedElements, tool?.target.elementId])
 
 	// 判断图形类型（基于元素类型枚举）
 	const shapeType = useMemo(() => {
 		if (!selectedElement) return null
 		return selectedElement.type
 	}, [selectedElement])
-	const activeContent = selectedElement ? getActiveContent(selectedElement) : undefined
+	const activeContent =
+		selectedElement && tool?.target.contentId
+			? getContentById(selectedElement, tool.target.contentId)
+			: selectedElement
+				? getActiveContent(selectedElement)
+				: undefined
 
 	// 获取当前值
 	const cornerRadius = useMemo(() => activeContent?.cornerRadius || 0, [activeContent])
 
 	const sides = useMemo(() => {
 		if (selectedElement?.type === ElementTypeEnum.Star) {
-			return getActiveContent(selectedElement)?.sides || 3
+			return activeContent?.sides || 3
 		}
 		return 3
 	}, [activeContent, selectedElement])
@@ -58,7 +75,7 @@ export default function ShapeStyle() {
 
 	const innerRadiusRatio = useMemo(() => {
 		if (selectedElement?.type === ElementTypeEnum.Star) {
-			return getActiveContent(selectedElement)?.innerRadiusRatio || 0.5
+			return activeContent?.innerRadiusRatio || 0.5
 		}
 		return 0.5
 	}, [activeContent, selectedElement])
@@ -74,12 +91,12 @@ export default function ShapeStyle() {
 	// 处理圆角变化
 	const handleCornerRadiusChange = useCallback(
 		(value: number[]) => {
-			if (!selectedElement || !canvas) return
+			if (!selectedElement) return
 			const newValue = value[0]
 			setCornerRadiusInput(Math.round(newValue).toString())
-			canvas.elementManager.update(selectedElement.id, { cornerRadius: newValue })
+			executeUpdate({ cornerRadius: newValue })
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleCornerRadiusInputChange = useCallback(
@@ -90,10 +107,10 @@ export default function ShapeStyle() {
 
 			const numValue = Number.parseInt(newValue, 10)
 			if (!Number.isNaN(numValue) && numValue >= 0) {
-				canvas?.elementManager.update(selectedElement.id, { cornerRadius: numValue })
+				executeUpdate({ cornerRadius: numValue })
 			}
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleCornerRadiusInputBlur = useCallback(() => {
@@ -106,12 +123,12 @@ export default function ShapeStyle() {
 	// 处理边数变化
 	const handleSidesChange = useCallback(
 		(value: number[]) => {
-			if (!selectedElement || !canvas) return
+			if (!selectedElement) return
 			const newValue = Math.round(value[0])
 			setSidesInput(newValue.toString())
-			canvas.elementManager.update(selectedElement.id, { sides: newValue })
+			executeUpdate({ sides: newValue })
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleSidesInputChange = useCallback(
@@ -122,10 +139,10 @@ export default function ShapeStyle() {
 
 			const numValue = Number.parseInt(newValue, 10)
 			if (!Number.isNaN(numValue) && numValue >= 3) {
-				canvas?.elementManager.update(selectedElement.id, { sides: numValue })
+				executeUpdate({ sides: numValue })
 			}
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleSidesInputBlur = useCallback(() => {
@@ -139,12 +156,12 @@ export default function ShapeStyle() {
 	// 处理透明度变化
 	const handleOpacityChange = useCallback(
 		(value: number[]) => {
-			if (!selectedElement || !canvas) return
+			if (!selectedElement) return
 			const newValue = value[0] / 100
 			setOpacityInput(Math.round(value[0]).toString())
-			canvas.elementManager.update(selectedElement.id, { opacity: newValue })
+			executeUpdate({ opacity: newValue })
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleOpacityInputChange = useCallback(
@@ -155,10 +172,10 @@ export default function ShapeStyle() {
 
 			const numValue = Number.parseInt(newValue, 10)
 			if (!Number.isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-				canvas?.elementManager.update(selectedElement.id, { opacity: numValue / 100 })
+				executeUpdate({ opacity: numValue / 100 })
 			}
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleOpacityInputBlur = useCallback(() => {
@@ -172,12 +189,12 @@ export default function ShapeStyle() {
 	// 处理内凹比例变化
 	const handleInnerRadiusRatioChange = useCallback(
 		(value: number[]) => {
-			if (!selectedElement || !canvas) return
+			if (!selectedElement) return
 			const newValue = value[0] / 100
 			setInnerRadiusRatioInput(Math.round(value[0]).toString())
-			canvas.elementManager.update(selectedElement.id, { innerRadiusRatio: newValue })
+			executeUpdate({ innerRadiusRatio: newValue })
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleInnerRadiusRatioInputChange = useCallback(
@@ -188,12 +205,12 @@ export default function ShapeStyle() {
 
 			const numValue = Number.parseInt(newValue, 10)
 			if (!Number.isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-				canvas?.elementManager.update(selectedElement.id, {
+				executeUpdate({
 					innerRadiusRatio: numValue / 100,
 				})
 			}
 		},
-		[selectedElement, canvas],
+		[executeUpdate, selectedElement],
 	)
 
 	const handleInnerRadiusRatioInputBlur = useCallback(() => {

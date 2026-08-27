@@ -44,6 +44,7 @@ import useElementPositionEffect from "../../../../app/hooks/layout/useElementPos
 import { useFloatingComponent } from "../../../../app/hooks/layout/useFloatingComponent"
 import { Button } from "../../../primitives/shadcn/button"
 import { FloatingSurfaceScope } from "../../../primitives/shadcn/popover"
+import { useBottomFloatingSurface } from "../../../../app/providers/BottomFloatingStackProvider"
 import ImageEditorControls from "./ImageEditorControls"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
 import styles from "./index.module.css"
@@ -222,10 +223,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		syncFromElement: config.handlers.syncReferenceFilesFromElement,
 		protectedReferencePaths: config.protectedReferencePaths,
 	})
+	const { stackOffset, containerRef: stackRef } = useBottomFloatingSurface({
+		surfaceId: floatingId,
+		elementId: imageElement.id,
+		order: 1,
+		enabled: true,
+	})
 
 	const { containerRef } = useElementPositionEffect({
 		position: "bottom",
-		offset: 12,
+		offset: 12 + stackOffset,
 		shouldShow,
 	})
 
@@ -239,8 +246,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		(node: HTMLDivElement | null) => {
 			containerRef.current = node
 			floatingRef.current = node
+			stackRef(node)
 		},
-		[containerRef, floatingRef],
+		[containerRef, floatingRef, stackRef],
 	)
 
 	const handleSelectSource = useCallback(

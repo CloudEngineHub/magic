@@ -23,7 +23,7 @@ import ImageCropButton from "../components/image/ImageCropButton/index"
 import ImageExtendButton from "../components/image/ImageExtendButton/index"
 import ImageRemoveBackgroundButton from "../components/image/ImageRemoveBackgroundButton/index"
 import ImageEraserButton from "../components/image/ImageEraserButton/index"
-import VideoOriginalSizeButton from "../components/video/VideoOriginalSizeButton/index"
+import MediaOriginalSizeButton from "../components/common/MediaOriginalSizeButton/index"
 import { ElementToolTypeEnum } from "../../../public/props"
 import type { ElementToolResolution } from "../../../runtime/element-tools"
 import { ElementToolResolutionProvider } from "../model/ElementToolResolutionContext"
@@ -80,8 +80,8 @@ function renderElementTool(id: ElementToolResolution["id"]) {
 			return <ImageRemoveBackgroundButton />
 		case ElementToolTypeEnum.ContentEraser:
 			return <ImageEraserButton />
-		case ElementToolTypeEnum.ContentVideoOriginalSize:
-			return <VideoOriginalSizeButton />
+		case ElementToolTypeEnum.ContentMediaOriginalSize:
+			return <MediaOriginalSizeButton />
 		default:
 			return null
 	}

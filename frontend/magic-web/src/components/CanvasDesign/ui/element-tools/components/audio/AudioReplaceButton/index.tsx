@@ -20,11 +20,14 @@ export default function AudioReplaceButton() {
 	)
 	const selected = selectedElements[0]
 	const selectedAudio = selected?.type === ElementTypeEnum.Audio ? selected : undefined
-	const audioSrc = selectedAudio
-		? tool?.target.contentId
-			? getContentById(selectedAudio, tool.target.contentId)?.src
-			: getActiveContent(selectedAudio)?.src
-		: undefined
+	const audioSrc =
+		selectedAudio && tool
+			? tool.target.contentId
+				? getContentById(selectedAudio, tool.target.contentId)?.src
+				: undefined
+			: selectedAudio
+				? getActiveContent(selectedAudio)?.src
+				: undefined
 	const isReplacing = replacingElementId === selectedAudio?.id
 	const isReplacementBusy = replacingElementId !== null
 
@@ -48,7 +51,12 @@ export default function AudioReplaceButton() {
 	const handleReplace = (event: MouseEvent<HTMLDivElement>) => {
 		if (!canvas || canvas.readonly || !selectedAudio || isReplacementBusy) return
 		if (tool) {
-			void tool.execute?.({ anchorElement: event.currentTarget })
+			if (tool.visibility !== "visible") return
+			void tool.execute?.({
+				anchorElement: event.currentTarget,
+				clientX: event.clientX,
+				clientY: event.clientY,
+			})
 			return
 		}
 		canvas.eventEmitter.emit({

@@ -32,5 +32,5 @@ export default function ElementBottomToolbarHost() {
 		isFullscreenPreviewOpen: Boolean(fullscreenMediaElement),
 	})
 
-	return <ElementToolBottomSurface tools={bottomTools} t={t} />
+	return <ElementToolBottomSurface tools={bottomTools} t={t} elementId={selectedElement?.id} />
 }

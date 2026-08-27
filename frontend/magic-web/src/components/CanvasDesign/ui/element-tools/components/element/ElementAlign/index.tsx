@@ -14,14 +14,12 @@ import {
 	SelectTrigger,
 } from "../../../../primitives/shadcn/select"
 import styles from "./index.module.css"
-import { useCanvas } from "../../../../../app/providers/CanvasProvider"
 import type { AlignType } from "../../../../../runtime/interaction/align/AlignmentManager"
 import { useCanvasDesignI18n } from "../../../../../app/providers/I18nProvider"
 import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
 
 export default function ElementAlign() {
 	const { t } = useCanvasDesignI18n()
-	const { canvas } = useCanvas()
 	const tool = useElementToolResolution()
 	const [selectedValue, setSelectedValue] = useState<string>("")
 
@@ -70,8 +68,6 @@ export default function ElementAlign() {
 	// 处理对齐操作
 	const handleAlignChange = useCallback(
 		(value: string) => {
-			if (!canvas) return
-
 			// 根据对齐类型映射到对应的 action ID
 			const actionIdMap: Record<AlignType, string> = {
 				left: "align.left",
@@ -84,12 +80,11 @@ export default function ElementAlign() {
 
 			const alignType = value as AlignType
 			const actionId = actionIdMap[alignType]
-			if (actionId)
-				void (tool?.execute?.({ actionId }) ?? canvas?.userActionRegistry.execute(actionId))
+			if (actionId && tool?.visibility === "visible") void tool.execute?.({ actionId })
 			// 操作完成后重置为空，这样下次可以再次选择相同的选项
 			setTimeout(() => setSelectedValue(""), 0)
 		},
-		[canvas, tool],
+		[tool],
 	)
 
 	// 获取当前选中的图标

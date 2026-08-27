@@ -14,7 +14,6 @@ import {
 	getActiveContent,
 	getContentById,
 	getPendingVideoGenerationContent,
-	hasPendingVideoGenerationContent,
 } from "../../document/elementContent"
 import type { GenerateVideoRequest, UploadFileResponse } from "../../../public/magic-types"
 import { BaseElement } from "../core/BaseElement"
@@ -76,7 +75,18 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
-	public isGenerating = false
+	private legacyIsGenerating = false
+
+	public get isGenerating(): boolean {
+		return (
+			this.canvas?.generationRuntimeManager?.hasActiveGeneration?.(this.data.id) ??
+			this.legacyIsGenerating
+		)
+	}
+
+	public set isGenerating(value: boolean) {
+		this.legacyIsGenerating = value
+	}
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
 	private isInlinePlaybackRefreshing = false
@@ -221,9 +231,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		},
 	): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
+		const contentId =
+			this.getVideoContent()?.contentId ?? this.data.activeContentId ?? undefined
 		if (
 			!generateVideo ||
-			this.hasPendingVideoGeneration() ||
+			this.hasPendingVideoGeneration(contentId) ||
 			(request.generation_type !== "canvas_composition" && !request.model_id) ||
 			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
@@ -239,8 +251,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			// 复用已有 video_id，避免同一次编辑链路上被当成新任务
 			video_id: request.video_id || this.getVideoRequest()?.video_id || generateUUID(),
 		}
-		const contentId =
-			this.getVideoContent()?.contentId ?? this.data.activeContentId ?? undefined
 		const recoveryContent = this.getVideoContent()
 		this.isGenerating = true
 		this.isErrorState = false
@@ -352,7 +362,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
 			!generateVideo ||
-			this.isGenerating ||
 			!request.model_id ||
 			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
@@ -418,6 +427,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					contentId,
 					persistedPatch: {
 						contents: next.contents,
+						// The newly submitted version is the version users should see while
+						// its result is being processed.
 						activeContentId: contentId,
 						mainContentId: next.mainContentId,
 					},
@@ -482,7 +493,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			!canDeleteActiveContentVersion(this.data) ||
 			activeContent?.status === GenerationStatus.Pending ||
 			activeContent?.status === GenerationStatus.Processing ||
-			this.isGenerating
+			this.hasActiveGeneration()
 		) {
 			return false
 		}
@@ -857,12 +868,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.syncPlaybackAttachment()
 	}
 
-	private isVideoGenerationPending(): boolean {
-		if (this.isGenerating) return true
+	private isVideoGenerationPending(contentId = this.getVideoContent()?.contentId): boolean {
+		if (this.hasActiveGeneration(contentId)) return true
 
-		const hasActiveGenerationTask = this.hasActiveVideoGenerationTask()
-		const hasSrc = !!this.getVideoSrc()
-		const status = this.getVideoStatus()
+		const content = contentId ? getContentById(this.data, contentId) : this.getVideoContent()
+		const hasActiveGenerationTask = Boolean(content?.generateVideoRequest?.video_id)
+		const hasSrc = !!content?.src
+		const status = content?.status
 
 		if (hasActiveGenerationTask && !hasSrc) return true
 		if (
@@ -1303,7 +1315,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private isActiveGenerationPlaceholder(): boolean {
-		if (this.hasActiveVideoGenerationTask() || this.isGenerating) {
+		if (
+			this.hasActiveVideoGenerationTask() ||
+			this.hasActiveGeneration(this.getVideoContent()?.contentId)
+		) {
 			return true
 		}
 
@@ -1433,12 +1448,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		return this.getActiveContent<VideoElementContent>()
 	}
 
-	private hasPendingVideoGeneration(): boolean {
+	private hasActiveGeneration(contentId?: string): boolean {
 		return (
-			this.isGenerating ||
-			Boolean(this.canvas.generationRuntimeManager.getTargetState(this.data.id)) ||
-			hasPendingVideoGenerationContent(this.data)
+			this.canvas.generationRuntimeManager?.hasActiveGeneration?.(this.data.id, contentId) ??
+			this.isGenerating
 		)
+	}
+
+	private hasPendingVideoGeneration(contentId = this.getVideoContent()?.contentId): boolean {
+		return this.isVideoGenerationPending(contentId)
 	}
 
 	private getVideoSrc(): string | undefined {

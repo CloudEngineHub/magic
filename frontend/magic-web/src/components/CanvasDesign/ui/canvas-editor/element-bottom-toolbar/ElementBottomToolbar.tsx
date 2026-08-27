@@ -3,6 +3,7 @@ import { useCallback, useMemo } from "react"
 import { cn } from "../../../runtime/shared/lib/utils"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
+import { useBottomFloatingSurface } from "../../../app/providers/BottomFloatingStackProvider"
 import { FloatingSurfaceScope } from "../../primitives/shadcn/popover"
 import styles from "./ElementBottomToolbar.module.css"
 
@@ -31,6 +32,8 @@ export interface ElementBottomToolbarProps {
 	sections?: ElementBottomToolbarSection[]
 	/** Floating component identifier; it must be unique within the canvas. */
 	floatingId: string
+	/** Element used to group bottom floating surfaces. */
+	elementId?: string | null
 	/** Whether the toolbar should be visible for the current selection/bounds. */
 	shouldShow?: Parameters<typeof useElementPositionEffect>[0]["shouldShow"]
 	offset?: number
@@ -47,6 +50,7 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 		items,
 		sections,
 		floatingId,
+		elementId,
 		shouldShow,
 		offset = 12,
 		ariaLabel = "元素底部工具栏",
@@ -61,10 +65,16 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 		return items?.some(Boolean) ? [{ id: "items", items }] : []
 	}, [items, sections])
 	const isEmpty = visibleSections.length === 0
+	const { containerRef: stackRef, stackOffset } = useBottomFloatingSurface({
+		surfaceId: floatingId,
+		elementId,
+		order: 0,
+		enabled: !isEmpty,
+	})
 
 	const { containerRef: positionRef } = useElementPositionEffect({
 		position: "bottom",
-		offset,
+		offset: offset + stackOffset,
 		shouldShow,
 	})
 	const { containerRef: floatingRef } = useFloatingComponent({
@@ -77,8 +87,9 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 		(node: HTMLDivElement | null) => {
 			positionRef.current = node
 			floatingRef.current = node
+			stackRef(node)
 		},
-		[floatingRef, positionRef],
+		[floatingRef, positionRef, stackRef],
 	)
 
 	return (

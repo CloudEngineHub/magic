@@ -281,16 +281,19 @@ export default function ImageEraserPanelRender() {
 				throw new Error(t("elementTools.imageEraser.submitFailed", "提交失败，请重试"))
 			}
 
-			const success = await newElementInstance.eraser({
-				image_id: requestImageId,
-				file_path: activeContent.src,
-				mark_path: maskPath,
-				size: imageProcessRequestPayload.size,
-				reference_image_options: buildReferenceImageOptions({
-					filePath: activeContent.src,
-					crop: imageProcessRequestPayload.crop,
-				}),
-			})
+			const success = await newElementInstance.eraser(
+				{
+					image_id: requestImageId,
+					file_path: activeContent.src,
+					mark_path: maskPath,
+					size: imageProcessRequestPayload.size,
+					reference_image_options: buildReferenceImageOptions({
+						filePath: activeContent.src,
+						crop: imageProcessRequestPayload.crop,
+					}),
+				},
+				{ attemptId: generationAttemptId },
+			)
 			if (!success) {
 				throw new Error(t("elementTools.imageEraser.submitFailed", "提交失败，请重试"))
 			}

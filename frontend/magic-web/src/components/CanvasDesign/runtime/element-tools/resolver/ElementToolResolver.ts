@@ -59,7 +59,13 @@ export function resolveElementTools(
 		return []
 	}
 	if (surface === "bottom" && (context.interaction.isEditing || hasExclusiveToolSession)) {
-		return []
+		if (hasExclusiveToolSession) return []
+		if (
+			context.element.type !== ElementTypeEnum.Image &&
+			context.element.type !== ElementTypeEnum.Video
+		) {
+			return []
+		}
 	}
 	if (
 		context.selection.elements.some((element) => element.locked) ||
@@ -75,7 +81,13 @@ export function resolveElementTools(
 		return []
 	}
 	const seen = new Set<string>()
+	const isMediaEditor =
+		surface === "bottom" &&
+		context.interaction.isEditing &&
+		(context.element.type === ElementTypeEnum.Image ||
+			context.element.type === ElementTypeEnum.Video)
 	return ELEMENT_TOOL_DEFINITIONS.filter((definition) => Boolean(definition.surfaces[surface]))
+		.filter((definition) => !isMediaEditor || definition.scope === "version-set")
 		.filter((definition) => definition.isApplicable(context))
 		.map((definition) => {
 			const resolved = definition.resolve(context)

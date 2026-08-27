@@ -104,6 +104,38 @@ describe("GenerationRuntimeManager", () => {
 
 		expect(manager.getTargetState("image-1", "a")?.attemptId).toBe("version-a")
 		expect(manager.getTargetState("image-1", "b")?.attemptId).toBe("version-b")
+		expect(manager.hasActiveGeneration("image-1", "a")).toBe(true)
+		expect(manager.hasActiveGeneration("image-1", "b")).toBe(true)
+		expect(manager.hasActiveGeneration("image-1", "missing")).toBe(false)
+		expect(manager.hasActiveGeneration("image-1")).toBe(true)
+	})
+
+	it("rejects duplicate attempts for the same Content while allowing sibling Content", () => {
+		const manager = new GenerationRuntimeManager()
+		manager.beginAttempt({
+			attemptId: "content-a-1",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "a" }],
+		})
+
+		expect(() =>
+			manager.beginAttempt({
+				attemptId: "content-a-2",
+				operation: "image-high",
+				failurePolicy: "restore-existing",
+				targets: [{ elementId: "image-1", contentId: "a" }],
+			}),
+		).toThrow("already has an active attempt")
+
+		expect(() =>
+			manager.beginAttempt({
+				attemptId: "content-b-1",
+				operation: "image-generate",
+				failurePolicy: "restore-existing",
+				targets: [{ elementId: "image-1", contentId: "b" }],
+			}),
+		).not.toThrow()
 	})
 
 	it("updates a batch phase and clears all remaining current targets atomically", () => {

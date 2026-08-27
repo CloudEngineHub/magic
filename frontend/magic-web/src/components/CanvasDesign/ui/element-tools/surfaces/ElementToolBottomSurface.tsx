@@ -8,9 +8,14 @@ import BottomVersionControlsRenderer from "../renderers/BottomVersionControlsRen
 interface ElementToolBottomSurfaceProps {
 	tools: readonly ElementToolResolution[]
 	t: (key: string, fallback?: string | { defaultValue?: string }) => string
+	elementId?: string | null
 }
 
-export default function ElementToolBottomSurface({ tools, t }: ElementToolBottomSurfaceProps) {
+export default function ElementToolBottomSurface({
+	tools,
+	t,
+	elementId,
+}: ElementToolBottomSurfaceProps) {
 	const sections = useMemo<ElementBottomToolbarSection[]>(() => {
 		const actionTools = tools.filter((tool) => tool.presentation.renderKind === "bottom-action")
 		const versionTools = tools.filter(
@@ -39,6 +44,7 @@ export default function ElementToolBottomSurface({ tools, t }: ElementToolBottom
 	return (
 		<ElementBottomToolbar
 			floatingId="element-bottom-toolbar"
+			elementId={elementId}
 			ariaLabel={t("elementBottomToolbar.label", "元素底部工具栏")}
 			sections={sections}
 			shouldShow={() => tools.length > 0}

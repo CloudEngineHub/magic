@@ -16,6 +16,7 @@ import { FloatingSurfaceScope } from "../../../primitives/shadcn/popover"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasModeUI, useCanvasSelectionUI } from "../../../../app/providers/CanvasUIProvider"
+import { useBottomFloatingSurface } from "../../../../app/providers/BottomFloatingStackProvider"
 import useElementPositionEffect from "../../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../../app/hooks/layout/useFloatingComponent"
 import { useCanvasEvent, useIsMediaReplacing } from "../../../../app/hooks/canvas"
@@ -209,10 +210,12 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	useEffect(() => {
 		if (previousSourceFingerprintRef.current === sessionSourceFingerprint) return
 		sessionPersistenceEnabledRef.current = false
-		sessionStore?.clearElement(videoElement.id)
+		if (videoElement.activeContentId) {
+			sessionStore?.clearContent(videoElement.id, videoElement.activeContentId)
+		}
 		previousSourceFingerprintRef.current = sessionSourceFingerprint
 		setHasInterruptedDraft(false)
-	}, [sessionSourceFingerprint, sessionStore, videoElement.id])
+	}, [sessionSourceFingerprint, sessionStore, videoElement.activeContentId, videoElement.id])
 
 	const captureSessionDraft = useCallback(() => {
 		if (
@@ -484,10 +487,16 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				? effectiveReferenceAssetCounts
 				: undefined,
 		})
+	const { stackOffset, containerRef: stackRef } = useBottomFloatingSurface({
+		surfaceId: "video-generate-editor",
+		elementId: videoElement.id,
+		order: 1,
+		enabled: true,
+	})
 
 	const { containerRef } = useElementPositionEffect({
 		position: "bottom",
-		offset: 12,
+		offset: 12 + stackOffset,
 		shouldShow: () => {
 			return selectedElements.some((element) => element?.type === ElementTypeEnum.Video)
 		},
@@ -503,8 +512,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		(node: HTMLDivElement | null) => {
 			containerRef.current = node
 			floatingRef.current = node
+			stackRef(node)
 		},
-		[containerRef, floatingRef],
+		[containerRef, floatingRef, stackRef],
 	)
 
 	const saveDefaultGenerateVideoConfig = useCallback(

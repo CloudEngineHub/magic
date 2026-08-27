@@ -29,6 +29,8 @@ import {
 	buildReferenceImageOptions,
 	getNormalizedImageProcessCrop,
 } from "../../../../../runtime/resources/image/imageCropUtils"
+import { ElementToolTypeEnum } from "../../../../../public/props"
+import { useElementToolCommand } from "../../../model/useElementToolCommand"
 
 export default function ImageConvertHight() {
 	const { t } = useCanvasDesignI18n()
@@ -227,7 +229,9 @@ export default function ImageConvertHight() {
 		// 构建高清图生成请求参数（selectedResolution 已经是宽x高格式）
 		// 调用新元素的 generateHightImage 方法
 		try {
-			const submitted = await newElementInstance.generateHightImage(hightImageRequest)
+			const submitted = await newElementInstance.generateHightImage(hightImageRequest, {
+				attemptId,
+			})
 			if (!submitted) {
 				return
 			}
@@ -245,6 +249,23 @@ export default function ImageConvertHight() {
 		selectedResolution,
 	])
 
+	useElementToolCommand(
+		useMemo(
+			() =>
+				tool?.target.elementId && tool.target.contentId && tool.target.operationId
+					? {
+							elementId: tool.target.elementId,
+							contentId: tool.target.contentId,
+							operationId: tool.target.operationId,
+							toolId: ElementToolTypeEnum.ContentEnhance,
+							state: { available: Boolean(selectedResolution) },
+							execute: () => handleSend(),
+						}
+					: null,
+			[handleSend, selectedResolution, tool],
+		),
+	)
+
 	return (
 		<div className={styles.imageConvertHight}>
 			<div className={styles.name}>
@@ -259,7 +280,13 @@ export default function ImageConvertHight() {
 			<SizeInput width={currentSize.width} height={currentSize.height} readonly />
 			<Button
 				className={styles.sendButton}
-				onClick={handleSend}
+				onClick={() => {
+					if (tool?.id === ElementToolTypeEnum.ContentEnhance) {
+						void tool.execute?.()
+						return
+					}
+					void handleSend()
+				}}
 				disabled={!selectedResolution}
 			>
 				<ArrowUp size={16} />

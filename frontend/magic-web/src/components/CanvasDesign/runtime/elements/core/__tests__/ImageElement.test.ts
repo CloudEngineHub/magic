@@ -1341,8 +1341,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.data).not.toHaveProperty("generateImageRequest")
 		if (!isImageElementContent(element.data)) throw new Error("Expected image Content data")
 		expect(element.data.contents).toHaveLength(3)
-		if (!element.data.activeContentId) throw new Error("Expected active Content")
-		expect(element.getContentData(element.data.activeContentId)?.generateImageRequest).toEqual(
+		expect(element.getContentData(target?.contentId)?.generateImageRequest).toEqual(
 			expect.objectContaining({ image_id: expect.any(String), prompt: "A product photo" }),
 		)
 		expect(element.data.mainContentId).toBe("v1")
@@ -1404,7 +1403,7 @@ describe("ImageElement mounted image node sync", () => {
 				generateImageRequest: expect.objectContaining({ prompt: "new version" }),
 			}),
 		)
-		expect(element.data.activeContentId).toBe(element.data.contents[1]?.contentId)
+		expect(element.data.activeContentId).toBe(element.data.contents[0]?.contentId)
 		expect(element.data.mainContentId).toBe(element.data.contents[0]?.contentId)
 		expect(element.isGenerating).toBe(false)
 		expect(generationRuntimeManager.getTargetState(element.data.id)).toBeNull()
@@ -1561,6 +1560,69 @@ describe("ImageElement mounted image node sync", () => {
 		)
 		expect(data.activeContentId).toBe(data.contents[2]?.contentId)
 		expect(data.mainContentId).toBe("v1")
+	})
+
+	it("keeps concurrent image Content generation attempts independent", async () => {
+		const first = createDeferred()
+		const second = createDeferred()
+		const generateImage = vi
+			.fn()
+			.mockImplementationOnce(() => first.promise)
+			.mockImplementationOnce(() => second.promise)
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const data = contentImage(
+			[{ contentId: "v1", src: "./images/original.png", status: GenerationStatus.Completed }],
+			"v1",
+			"v1",
+		)
+		const element = Object.create(ImageElement.prototype) as GenerationTestImageElement
+		element.data = data
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		const canvas = {
+			magicConfigManager: { config: { methods: { generateImage } } },
+			generationRuntimeManager,
+			mediaEditRecoveryManager: new MediaEditRecoveryManager(),
+			elementManager: {
+				getElementData: () => element.data,
+				getTemporaryElementMetadata: () => null,
+				commitGenerationTargets: vi.fn(
+					(targets: Array<{ persistedPatch: ElementUpdatePatch }>) => {
+						element.data = { ...element.data, ...targets[0]?.persistedPatch }
+					},
+				),
+			},
+			eventEmitter: { emit: vi.fn() },
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas
+		element.pollingManager = { start: vi.fn() }
+		element.rerenderWhenTransformIdle = vi.fn()
+
+		const firstPromise = element.submitContentGeneration({
+			model_id: "image-model",
+			prompt: "first version",
+		})
+		await Promise.resolve()
+		const secondPromise = element.submitContentGeneration({
+			model_id: "image-model",
+			prompt: "second version",
+		})
+		await Promise.resolve()
+
+		expect(generationRuntimeManager.getTargetStates("image-1")).toHaveLength(2)
+		first.resolve()
+		await expect(firstPromise).resolves.toBe(true)
+		expect(generationRuntimeManager.getTargetStates("image-1")).toHaveLength(1)
+		const firstContentId = element.data.contents[1]?.contentId
+		expect(element.data.activeContentId).toBe(firstContentId)
+
+		second.resolve()
+		await expect(secondPromise).resolves.toBe(true)
+		expect(generationRuntimeManager.getTargetStates("image-1")).toHaveLength(0)
+		expect(element.data.contents).toHaveLength(3)
+		expect(element.data.activeContentId).toBe(element.data.contents[2]?.contentId)
 	})
 
 	it("exposes a video generation request while submission is pending", async () => {
@@ -1898,6 +1960,90 @@ describe("ImageElement mounted image node sync", () => {
 			data.contents[1]?.contentId,
 		)
 		expect(element.pollingManager.start).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps concurrent video Content generation attempts independent", async () => {
+		const first = createDeferred()
+		const second = createDeferred()
+		const generateVideo = vi
+			.fn()
+			.mockImplementationOnce(() => first.promise)
+			.mockImplementationOnce(() => second.promise)
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const data: VideoElementData = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			width: 100,
+			height: 100,
+			activeContentId: "video-v1",
+			mainContentId: "video-v1",
+			contents: [
+				{
+					contentId: "video-v1",
+					src: "./videos/original.mp4",
+					status: GenerationStatus.Completed,
+				},
+			],
+		}
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: VideoElementData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: Canvas
+			pollingManager: {
+				setContentId: ReturnType<typeof vi.fn>
+				start: ReturnType<typeof vi.fn>
+			}
+			rerender: ReturnType<typeof vi.fn>
+		}
+		element.data = data
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		const canvas = {
+			magicConfigManager: { config: { methods: { generateVideo } } },
+			generationRuntimeManager,
+			mediaEditRecoveryManager: new MediaEditRecoveryManager(),
+			elementManager: {
+				getElementData: () => element.data,
+				getTemporaryElementMetadata: () => null,
+				commitGenerationTargets: vi.fn(
+					(targets: Array<{ persistedPatch: Partial<VideoElementData> }>) => {
+						element.data = { ...element.data, ...targets[0]?.persistedPatch }
+					},
+				),
+			},
+			eventEmitter: { emit: vi.fn() },
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas
+		element.pollingManager = { setContentId: vi.fn(), start: vi.fn() }
+		element.rerender = vi.fn()
+
+		const firstPromise = element.submitContentGeneration({
+			model_id: "video-model",
+			prompt: "first version",
+		})
+		await Promise.resolve()
+		const secondPromise = element.submitContentGeneration({
+			model_id: "video-model",
+			prompt: "second version",
+		})
+		await Promise.resolve()
+
+		expect(generationRuntimeManager.getTargetStates("video-1")).toHaveLength(2)
+		first.resolve()
+		await expect(firstPromise).resolves.toBe(true)
+		expect(generationRuntimeManager.getTargetStates("video-1")).toHaveLength(1)
+		const firstContentId = element.data.contents[1]?.contentId
+		expect(element.data.activeContentId).toBe(firstContentId)
+
+		second.resolve()
+		await expect(secondPromise).resolves.toBe(true)
+		expect(generationRuntimeManager.getTargetStates("video-1")).toHaveLength(0)
+		expect(element.data.contents).toHaveLength(3)
+		expect(element.data.activeContentId).toBe(element.data.contents[2]?.contentId)
 	})
 
 	it("preserves re-edit mode drafts without polluting the generate session on failure", async () => {

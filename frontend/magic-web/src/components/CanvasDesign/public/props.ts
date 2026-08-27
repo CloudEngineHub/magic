@@ -310,7 +310,7 @@ export const ElementToolTypeEnum = {
 	ContentEraser: "content.eraser",
 	ContentEnhance: "content.enhance",
 	ContentPromptExtraction: "content.prompt-extraction",
-	ContentVideoOriginalSize: "content.video-original-size",
+	ContentMediaOriginalSize: "content.media-original-size",
 
 	GenerationQuickEdit: "generation.quick-edit",
 	GenerationReEdit: "generation.re-edit",
