@@ -17,6 +17,7 @@ import type {
 const DEFAULT_MIN_HEIGHT = 200
 const DEFAULT_MAX_RATIO = 0.5
 const ACCESSORY_SELECTOR = "[data-conversation-input-accessory]"
+type MeasureReason = "initial" | "layout" | "content"
 
 interface UseConversationInputHeightOptions {
 	scope: string
@@ -58,17 +59,32 @@ function getMaxHeight(
 /** Estimate content height when an inner editor is already scrolling inside a fixed outer panel. */
 function measureNaturalHeight(container: HTMLDivElement) {
 	const baseHeight = Math.max(container.offsetHeight, container.scrollHeight)
-	const scrollableDescendants = Array.from(container.querySelectorAll<HTMLElement>("*"))
-	let overflowHeight = 0
+	const editor = container.querySelector<HTMLElement>(
+		'[data-testid="super-message-editor-content"] [contenteditable="true"], [contenteditable="true"]',
+	)
+	let naturalHeight = baseHeight
 
-	for (const element of scrollableDescendants) {
-		const styles = window.getComputedStyle(element)
-		if (!/(auto|scroll)/.test(styles.overflowY)) continue
-		if (element.scrollHeight <= element.clientHeight) continue
-		overflowHeight = Math.max(overflowHeight, element.scrollHeight - element.clientHeight)
+	if (editor) {
+		const currentEditorHeight = editor.getBoundingClientRect().height
+		const contentRoot = editor.matches(".ProseMirror")
+			? editor
+			: (editor.querySelector<HTMLElement>(".ProseMirror") ?? editor)
+		const contentRootRect = contentRoot.getBoundingClientRect()
+		const contentChildren = Array.from(contentRoot.children) as HTMLElement[]
+		const contentBottom = contentChildren.reduce(
+			(bottom, child) => Math.max(bottom, child.getBoundingClientRect().bottom),
+			contentRootRect.top,
+		)
+		const naturalEditorHeight = contentChildren.length
+			? contentBottom - contentRootRect.top
+			: Math.max(editor.scrollHeight, contentRootRect.height)
+		// Remove the currently allocated editor height before adding its intrinsic height.
+		// This allows automatic sizing to shrink after content is deleted, not only grow.
+		const containerWithoutEditor = Math.max(0, baseHeight - currentEditorHeight)
+		naturalHeight = containerWithoutEditor + naturalEditorHeight
 	}
 
-	return baseHeight + overflowHeight
+	return naturalHeight
 }
 
 /** Measure only fixed task/queue chrome so manual editor height remains user-controlled. */
@@ -100,10 +116,16 @@ export function useConversationInputHeight({
 	const [autoHeight, setAutoHeight] = useState(initialPreference.height)
 	const [availableHeight, setAvailableHeight] = useState(0)
 	const [accessoryHeight, setAccessoryHeight] = useState(0)
+	const [measurementReady, setMeasurementReady] = useState(false)
 	const manualHeightRef = useRef(initialPreference.height)
 	const previousLayoutKeyRef = useRef(layoutKey)
 	const pointerStartHeightRef = useRef(initialPreference.height)
 	const measureFrameRef = useRef<number | null>(null)
+	const pendingMeasureReasonRef = useRef<MeasureReason>("layout")
+	const initialMeasureFrameRef = useRef<number | null>(null)
+	const initialMeasureSecondFrameRef = useRef<number | null>(null)
+	const restoreAutoMeasureRef = useRef(false)
+	const pendingContentMeasureRef = useRef(false)
 
 	const effectiveMinHeight = minHeight + accessoryHeight
 	const autoMaxHeight = getMaxHeight(availableHeight, effectiveMinHeight, maxRatio)
@@ -127,7 +149,7 @@ export function useConversationInputHeight({
 	// Once the available panel has been measured, let automatic layouts fill their controlled panel.
 	// This avoids measuring a fill-height container and toggling the layout in a feedback loop.
 	const fillHeight =
-		enabled && (heightMode === "manual" || (heightMode === "auto" && availableHeight > 0))
+		enabled && (heightMode === "manual" || (heightMode === "auto" && measurementReady))
 
 	// Persist only the editor portion so temporary task chrome is measured again when it changes.
 	const persistPreference = useCallback(
@@ -145,7 +167,12 @@ export function useConversationInputHeight({
 	)
 
 	useEffect(() => {
-		if (!enabled || previousLayoutKeyRef.current === layoutKey) return
+		if (!enabled) {
+			// Background initialization while collapsed must not look like a visible mode switch on expand.
+			previousLayoutKeyRef.current = layoutKey
+			return
+		}
+		if (previousLayoutKeyRef.current === layoutKey) return
 
 		previousLayoutKeyRef.current = layoutKey
 		if (effectiveHeight <= effectiveMinHeight) return
@@ -173,51 +200,118 @@ export function useConversationInputHeight({
 	])
 
 	// Recalculate available space and accessory chrome before updating automatic editor height.
-	const measure = useCallback(() => {
-		if (!enabled) return
+	const measure = useCallback(
+		(reason: MeasureReason = "layout") => {
+			if (!enabled) return
 
-		const container = containerRef.current
-		const available = availableRef.current
-		if (!container || !available) return
+			const container = containerRef.current
+			const available = availableRef.current
+			if (!container || !available) return
+			if (heightMode === "auto" && !measurementReady && reason === "layout") return
 
-		const nextAvailableHeight = available.getBoundingClientRect().height
-		const nextAccessoryHeight = measureAccessoryHeight(container)
-		const nextMinHeight = minHeight + nextAccessoryHeight
-		const nextMaxHeight = getMaxHeight(nextAvailableHeight, nextMinHeight, maxRatio)
-		const naturalHeight = measureNaturalHeight(container)
-		const nextAutoHeight = clampHeight(
-			naturalHeight - nextAccessoryHeight,
+			const nextAvailableHeight = available.getBoundingClientRect().height
+			const nextAccessoryHeight = measureAccessoryHeight(container)
+			// The Splitter can retain its previous size during the first expanded frames.
+			// Keep the persisted/default height for this pass and establish only live bounds.
+			if (reason === "initial") {
+				setAvailableHeight(nextAvailableHeight)
+				setAccessoryHeight(nextAccessoryHeight)
+				setMeasurementReady(true)
+				return
+			}
+			// Do not use a fill-height container as natural content height.
+			if (reason === "layout" && heightMode === "auto" && fillHeight) {
+				setAvailableHeight((previous) =>
+					Math.abs(previous - nextAvailableHeight) < 1 ? previous : nextAvailableHeight,
+				)
+				setAccessoryHeight((previous) =>
+					Math.abs(previous - nextAccessoryHeight) < 1 ? previous : nextAccessoryHeight,
+				)
+				return
+			}
+			const nextMinHeight = minHeight + nextAccessoryHeight
+			const nextMaxHeight = getMaxHeight(nextAvailableHeight, nextMinHeight, maxRatio)
+			const naturalHeight = measureNaturalHeight(container)
+			const nextAutoHeight = clampHeight(
+				naturalHeight - nextAccessoryHeight,
+				minHeight,
+				Math.max(minHeight, nextMaxHeight - nextAccessoryHeight),
+			)
+
+			setAvailableHeight((previous) =>
+				Math.abs(previous - nextAvailableHeight) < 1 ? previous : nextAvailableHeight,
+			)
+			setAccessoryHeight((previous) =>
+				Math.abs(previous - nextAccessoryHeight) < 1 ? previous : nextAccessoryHeight,
+			)
+			if (heightMode === "manual") return
+
+			setAutoHeight((previous) =>
+				Math.abs(previous - nextAutoHeight) < 1 ? previous : nextAutoHeight,
+			)
+			if (reason === "content") setMeasurementReady(true)
+		},
+		[
+			availableRef,
+			containerRef,
+			enabled,
+			fillHeight,
+			heightMode,
+			maxRatio,
+			measurementReady,
 			minHeight,
-			Math.max(minHeight, nextMaxHeight - nextAccessoryHeight),
-		)
+		],
+	)
 
-		setAvailableHeight((previous) =>
-			Math.abs(previous - nextAvailableHeight) < 1 ? previous : nextAvailableHeight,
-		)
-		setAccessoryHeight((previous) =>
-			Math.abs(previous - nextAccessoryHeight) < 1 ? previous : nextAccessoryHeight,
-		)
-		if (heightMode === "manual") return
+	const scheduleMeasure = useCallback(
+		(reason: MeasureReason = "layout") => {
+			if (reason === "content") {
+				if (measureFrameRef.current !== null) {
+					window.cancelAnimationFrame(measureFrameRef.current)
+					measureFrameRef.current = null
+				}
+				pendingMeasureReasonRef.current = "layout"
+				measure("content")
+				return
+			}
+			if (reason !== "layout" || pendingMeasureReasonRef.current === "layout") {
+				pendingMeasureReasonRef.current = reason
+			}
+			if (measureFrameRef.current !== null) return
 
-		setAutoHeight((previous) =>
-			Math.abs(previous - nextAutoHeight) < 1 ? previous : nextAutoHeight,
-		)
-	}, [availableRef, containerRef, enabled, heightMode, maxRatio, minHeight])
-
-	const scheduleMeasure = useCallback(() => {
-		if (measureFrameRef.current !== null) {
-			window.cancelAnimationFrame(measureFrameRef.current)
-		}
-
-		measureFrameRef.current = window.requestAnimationFrame(() => {
-			measureFrameRef.current = null
-			measure()
-		})
-	}, [measure])
-
+			measureFrameRef.current = window.requestAnimationFrame(() => {
+				measureFrameRef.current = null
+				const pendingReason = pendingMeasureReasonRef.current
+				pendingMeasureReasonRef.current = "layout"
+				measure(pendingReason)
+			})
+		},
+		[measure],
+	)
 	useLayoutEffect(() => {
 		if (!enabled) return
-		scheduleMeasure()
+		if (heightMode === "auto" && restoreAutoMeasureRef.current) {
+			restoreAutoMeasureRef.current = false
+			scheduleMeasure("content")
+		}
+		if (!measurementReady) {
+			initialMeasureFrameRef.current = window.requestAnimationFrame(() => {
+				initialMeasureFrameRef.current = null
+				initialMeasureSecondFrameRef.current = window.requestAnimationFrame(() => {
+					initialMeasureSecondFrameRef.current = null
+					const shouldMeasureContent =
+						restoreAutoMeasureRef.current || pendingContentMeasureRef.current
+					scheduleMeasure("initial")
+					restoreAutoMeasureRef.current = false
+					pendingContentMeasureRef.current = false
+					window.requestAnimationFrame(() => {
+						if (shouldMeasureContent || editorElement?.textContent?.trim()) {
+							scheduleMeasure("content")
+						}
+					})
+				})
+			})
+		}
 
 		const container = containerRef.current
 		const available = availableRef.current
@@ -227,37 +321,67 @@ export function useConversationInputHeight({
 			if (heightMode === "manual" && entries.every((entry) => entry.target !== available)) {
 				return
 			}
-			scheduleMeasure()
+			scheduleMeasure("layout")
 		})
 		resizeObserver.observe(available)
 		if (heightMode === "auto") resizeObserver.observe(container)
 		container.querySelectorAll<HTMLElement>(ACCESSORY_SELECTOR).forEach((element) => {
 			resizeObserver.observe(element)
 		})
+		let editorElement: HTMLElement | null = null
+		const handleEditorInput = () => scheduleMeasure("content")
+		const handleContainerInput = () =>
+			scheduleMeasure(heightMode === "auto" ? "content" : "layout")
+		const bindEditorInput = () => {
+			const nextEditor = container.querySelector<HTMLElement>('[contenteditable="true"]')
+			if (nextEditor === editorElement) return
+			editorElement?.removeEventListener("input", handleEditorInput)
+			editorElement = nextEditor
+			editorElement?.addEventListener("input", handleEditorInput)
+		}
+		bindEditorInput()
+		container.addEventListener("input", handleContainerInput)
 
-		const mutationObserver = new MutationObserver(() => {
+		const mutationObserver = new MutationObserver((mutations) => {
 			container.querySelectorAll<HTMLElement>(ACCESSORY_SELECTOR).forEach((element) => {
 				resizeObserver.observe(element)
 			})
-			scheduleMeasure()
+			bindEditorInput()
+			const editorChanged = mutations.some((mutation) => {
+				const target =
+					mutation.target instanceof Element
+						? mutation.target
+						: mutation.target.parentElement
+				return Boolean(target?.closest('[contenteditable="true"]'))
+			})
+			if (editorChanged) {
+				if (measurementReady) scheduleMeasure("content")
+				else pendingContentMeasureRef.current = true
+			} else {
+				scheduleMeasure("layout")
+			}
 		})
-		mutationObserver.observe(container, {
-			childList: true,
-			characterData: true,
-			subtree: true,
-		})
-		if (heightMode === "auto") container.addEventListener("input", scheduleMeasure)
+		mutationObserver.observe(container, { childList: true, characterData: true, subtree: true })
 
 		return () => {
 			resizeObserver.disconnect()
-			mutationObserver?.disconnect()
-			if (heightMode === "auto") container.removeEventListener("input", scheduleMeasure)
+			mutationObserver.disconnect()
+			editorElement?.removeEventListener("input", handleEditorInput)
+			container.removeEventListener("input", handleContainerInput)
 			if (measureFrameRef.current !== null) {
 				window.cancelAnimationFrame(measureFrameRef.current)
 				measureFrameRef.current = null
 			}
+			if (initialMeasureFrameRef.current !== null) {
+				window.cancelAnimationFrame(initialMeasureFrameRef.current)
+				initialMeasureFrameRef.current = null
+			}
+			if (initialMeasureSecondFrameRef.current !== null) {
+				window.cancelAnimationFrame(initialMeasureSecondFrameRef.current)
+				initialMeasureSecondFrameRef.current = null
+			}
 		}
-	}, [availableRef, containerRef, enabled, heightMode, scheduleMeasure])
+	}, [availableRef, containerRef, enabled, heightMode, measurementReady, scheduleMeasure])
 
 	useEffect(() => {
 		if (enabled) return
@@ -267,7 +391,9 @@ export function useConversationInputHeight({
 		setHeightMode(currentPreference.mode)
 		manualHeightRef.current = currentPreference.height
 		setManualHeight(currentPreference.height)
-		setAutoHeight(currentPreference.height)
+		setAvailableHeight(0)
+		setAccessoryHeight(0)
+		setMeasurementReady(false)
 	}, [enabled, scope])
 
 	const updateManualHeight = useCallback(
@@ -342,10 +468,12 @@ export function useConversationInputHeight({
 
 	const restoreAutoHeight = useCallback(() => {
 		if (!enabled) return
+		restoreAutoMeasureRef.current = true
 		setHeightMode("auto")
-		persistPreference("auto", manualHeightRef.current)
-		scheduleMeasure()
-	}, [enabled, persistPreference, scheduleMeasure])
+		manualHeightRef.current = initialPreference.height
+		setManualHeight(initialPreference.height)
+		persistPreference("auto", initialPreference.height)
+	}, [enabled, initialPreference.height, persistPreference])
 
 	return {
 		enabled,

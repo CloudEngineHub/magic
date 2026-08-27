@@ -152,7 +152,7 @@ describe("useConversationInputHeight", () => {
 		await waitFor(() => expect(result.current.effectiveHeight).toBe(360))
 		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
 			"test-conversation",
-			{ mode: "auto", height: 320 },
+			{ mode: "auto", height: 240 },
 		)
 	})
 
@@ -177,6 +177,33 @@ describe("useConversationInputHeight", () => {
 		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
 			"test-conversation",
 			{ mode: "manual", height: 320 },
+		)
+	})
+
+	it("discards the manual height and returns to the initial auto state on double-click", async () => {
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "auto", height: 240 })
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "reset-height-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+				manualMaxRatio: 0.7,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(240))
+		act(() => {
+			result.current.startPointerResize()
+			result.current.resizeByPointerDelta(-260)
+		})
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(500))
+		act(() => result.current.restoreAutoHeight())
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(240))
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"reset-height-conversation",
+			{ mode: "auto", height: 240 },
 		)
 	})
 
@@ -207,6 +234,48 @@ describe("useConversationInputHeight", () => {
 
 		containerHeight = 200
 		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+	})
+
+	it("does not freeze a layout change that happened while the panel was collapsed", async () => {
+		const { result, rerender } = renderHook(
+			({ enabled, layoutKey }: { enabled: boolean; layoutKey: string }) =>
+				useConversationInputHeight({
+					scope: "collapsed-conversation",
+					layoutKey,
+					enabled,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+				}),
+			{ initialProps: { enabled: false, layoutKey: "summary:initial" } },
+		)
+
+		rerender({ enabled: false, layoutKey: "summary:loaded" })
+		rerender({ enabled: true, layoutKey: "summary:loaded" })
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+
+		expect(storeMocks.setChatInputHeightPreference).not.toHaveBeenCalled()
+	})
+
+	it("preserves automatic height when the panel is collapsed and reopened", async () => {
+		const { result, rerender } = renderHook(
+			({ enabled }: { enabled: boolean }) =>
+				useConversationInputHeight({
+					scope: "collapsed-auto-height",
+					enabled,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+				}),
+			{ initialProps: { enabled: true } },
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		containerHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+
+		rerender({ enabled: false })
+		rerender({ enabled: true })
 		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
 	})
 
