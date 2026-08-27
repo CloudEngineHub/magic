@@ -19,4 +19,6 @@ return [
     'project_not_found' => 'Resource not found: :project_id',
 
     'invalid_file_key' => 'Invalid value',
+    'topic_id_required' => 'Unable to resolve topic_id for topic space',
+    'unsupported_space_type' => 'Unsupported space type',
 ];

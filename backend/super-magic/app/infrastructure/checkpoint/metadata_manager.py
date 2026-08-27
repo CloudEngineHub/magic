@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from app.core.entity.checkpoint import CheckpointInfo, CheckpointManifest, VirtualCheckpoint
-from app.infrastructure.checkpoint.storage import CheckpointStorage
+from app.infrastructure.checkpoint.storage import KNOWN_SPACES, CheckpointStorage
 from app.utils.async_file_utils import async_write_json, async_read_json
 from agentlang.logger import get_logger
 
@@ -23,26 +23,64 @@ logger = get_logger(__name__)
 
 
 class CheckpointMetadataManager:
-    """Checkpoint元数据管理器"""
+    """Checkpoint元数据管理器
+
+    簿记与流水分属两方：
+    - checkpoint_info.json（<id>/ 根）由 Python 写：仅 {checkpoint_id,
+      created_time}，创建时一次写入、之后只读。
+    - <space>/operations.json 由 magicfs 写：append-only 操作流水，
+      Python 只读。
+
+    load_checkpoint_info 把两者聚合成内存中的 CheckpointInfo 返回，
+    对外接口形态不变。
+    """
 
     def __init__(self):
         self.storage = CheckpointStorage()
 
     async def save_checkpoint_info(self, checkpoint_info: CheckpointInfo) -> bool:
-        """保存checkpoint信息到文件"""
+        """保存checkpoint簿记信息到文件
+
+        只持久化 {checkpoint_id, created_time}；file_snapshots 属于
+        magicfs 的 operations.json，不由本方法写。
+        """
         try:
             info_file = self.storage.get_checkpoint_info_file_path(checkpoint_info.checkpoint_id)
 
-            await async_write_json(info_file, checkpoint_info.model_dump(), ensure_ascii=False, indent=2, default=str)
+            bookkeeping = {
+                "checkpoint_id": checkpoint_info.checkpoint_id,
+                "created_time": checkpoint_info.created_time,
+            }
 
-            logger.info(f"保存checkpoint信息成功: {checkpoint_info.checkpoint_id}")
+            await async_write_json(info_file, bookkeeping, ensure_ascii=False, indent=2, default=str)
+
+            logger.info(f"保存checkpoint簿记成功: {checkpoint_info.checkpoint_id}")
             return True
         except Exception as e:
-            logger.error(f"保存checkpoint信息失败: {e}")
+            logger.error(f"保存checkpoint簿记失败: {e}")
             return False
 
+    async def _load_space_operations(self, checkpoint_id: str) -> list:
+        """聚合各空间分区 operations.json 的 file_snapshots"""
+        merged: list = []
+        for space in KNOWN_SPACES:
+            ops_file = self.storage.get_space_operations_file_path(checkpoint_id, space)
+            if not ops_file.exists():
+                continue
+            try:
+                data = await async_read_json(ops_file)
+            except Exception as e:
+                logger.warning(f"读取空间操作流水失败，跳过该空间: {ops_file}: {e}")
+                continue
+            for snapshot in data.get("file_snapshots") or []:
+                if 'modified_time' in snapshot and isinstance(snapshot['modified_time'], str):
+                    snapshot['modified_time'] = datetime.fromisoformat(
+                        snapshot['modified_time'].replace('Z', '+00:00'))
+                merged.append(snapshot)
+        return merged
+
     async def load_checkpoint_info(self, checkpoint_id: str) -> Optional[CheckpointInfo]:
-        """从文件加载checkpoint信息"""
+        """从文件加载checkpoint信息（簿记 + 各空间流水聚合）"""
         try:
             info_file = self.storage.get_checkpoint_info_file_path(checkpoint_id)
 
@@ -55,11 +93,7 @@ class CheckpointMetadataManager:
             if 'created_time' in data and isinstance(data['created_time'], str):
                 data['created_time'] = datetime.fromisoformat(data['created_time'].replace('Z', '+00:00'))
 
-            # 处理file_snapshots中的datetime字段
-            if 'file_snapshots' in data:
-                for snapshot in data['file_snapshots']:
-                    if 'modified_time' in snapshot and isinstance(snapshot['modified_time'], str):
-                        snapshot['modified_time'] = datetime.fromisoformat(snapshot['modified_time'].replace('Z', '+00:00'))
+            data["file_snapshots"] = await self._load_space_operations(checkpoint_id)
 
             return CheckpointInfo(**data)
 

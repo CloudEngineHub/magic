@@ -151,6 +151,7 @@ class FileProcessAppService extends AbstractAppService
                 $task->getProjectId(),
                 $task->getTopicId()
             ) . '/screenshots';
+            // TODO: Topic 新空间启用时，Snapshot 物理目录应与上传、消息目录同步切换。
             $fullScreenshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $screenshotDir);
             if (! WorkDirectoryUtil::checkEffectiveFileKey($fullScreenshotDir, $fileKey)) {
                 $this->logger->warning('Tool Detail screenshot path does not belong to the current topic', [
@@ -1258,7 +1259,7 @@ class FileProcessAppService extends AbstractAppService
             ['size' => $result['size']]
         );
 
-        if (! $taskFileEntity->isProjectFile()) {
+        if (! $this->taskFileDomainService->isProjectSpaceFile($taskFileEntity)) {
             return $nextRevision;
         }
 

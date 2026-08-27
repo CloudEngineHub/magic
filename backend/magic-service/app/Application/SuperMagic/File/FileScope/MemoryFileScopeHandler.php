@@ -9,7 +9,6 @@ namespace App\Application\SuperMagic\File\FileScope;
 
 use App\Application\File\Service\FileAppService;
 use App\Application\SuperMagic\File\Service\FileMemoryAccessService;
-use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -71,7 +70,7 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
 
         $fileEntities = $this->magicFSFileDomainService->listFilesByParentId(
             (string) $parent->getFileId(),
-            StorageType::WORKSPACE->value,
+            $parent->getSpaceType(),
         );
         $fileEntities = array_values(array_filter(
             $fileEntities,
@@ -155,7 +154,8 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
             $rows = $this->taskFileDomainService->getProjectFileChildrenByParentCursor(
                 0,
                 $parentId,
-                StorageType::WORKSPACE->value,
+                '', // 不做 storage_type 预过滤：过渡期 user 空间文件可能为 'workspace' 或 'user'，
+                // 交由下方 belongsToCurrentUserSpaceRow 按 space_type='user' 统一判定。
                 $state['after_sort'] ?? null,
                 isset($state['after_file_id']) ? (int) $state['after_file_id'] : null,
                 $remaining + 1,
@@ -245,7 +245,7 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
             (string) $root->getFileId(),
             -1,
             0,
-            StorageType::WORKSPACE->value,
+            $root->getSpaceType(),
         );
 
         return array_values(array_filter(

@@ -2,10 +2,16 @@
 聊天历史管理API模块
 
 提供聊天历史相关功能，如打包下载历史记录等
+
+观察期说明：
+`/api/chat-history/download` 已在统一路由注册处暂时下线。仓库内未发现调用方，
+若观察期内无反馈，应删除本模块及对应的历史接口实现。
 """
+import asyncio
 import os
-import shutil
 import tempfile
+import zipfile
+from pathlib import Path, PurePosixPath
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
@@ -25,9 +31,22 @@ def remove_file(path: str):
     except Exception as e:
         logger.error(f"删除文件失败: {e}")
 
+def build_chat_history_archive(source_dir: Path, dest_zip_path: str) -> str:
+    """打包聊天历史目录，zip 内顶层固定为 .chat_history/，保持外部消费方兼容。"""
+    top = PurePosixPath(".chat_history")
+    with zipfile.ZipFile(dest_zip_path, "w", zipfile.ZIP_DEFLATED) as zip_ref:
+        for root, dirnames, filenames in os.walk(source_dir):
+            dirnames[:] = [dirname for dirname in dirnames if dirname != "llm_request"]
+            rel_root = PurePosixPath(Path(root).relative_to(source_dir).as_posix())
+            for dirname in dirnames:
+                zip_ref.writestr(str(top / rel_root / dirname) + "/", "")
+            for filename in filenames:
+                zip_ref.write(Path(root) / filename, str(top / rel_root / filename))
+    return dest_zip_path
+
 @router.get("/download")
 async def download_chat_history(background_tasks: BackgroundTasks):
-    """打包并下载.chat_history目录"""
+    """打包并下载 .topic/chat_history 目录，保持旧 zip 顶层结构兼容。"""
     try:
         # 检查目录是否存在
         chat_history_dir = PathManager.get_chat_history_dir()
@@ -41,12 +60,9 @@ async def download_chat_history(background_tasks: BackgroundTasks):
 
         logger.info(f"创建临时文件: {tmp_path}")
 
-        # 创建zip文件
-        archive_path = shutil.make_archive(
-            tmp_path.replace('.zip', ''), 
-            'zip', 
-            root_dir=PathManager.get_project_root(),
-            base_dir=PathManager.get_chat_history_dir_name()
+        # 写 zip 时用 arcname 补 `.chat_history/` 顶层前缀，避免 staging 全量拷贝
+        archive_path = await asyncio.to_thread(
+            build_chat_history_archive, chat_history_dir, tmp_path
         )
 
         logger.info(f"创建聊天历史压缩包: {archive_path}")

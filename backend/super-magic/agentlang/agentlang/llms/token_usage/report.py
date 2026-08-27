@@ -98,12 +98,9 @@ class TokenUsageReport:
             except (ImportError, RuntimeError):
                 # 导入失败时使用备用目录
                 logger.warning("无法导入 PathManager 或获取聊天历史目录，使用备用目录")
-                self.report_dir = os.path.join(os.getcwd(), ".chat_history")
+                self.report_dir = os.path.join(os.getcwd(), ".topic", "chat_history")
         else:
             self.report_dir = report_dir
-
-        # 确保报告目录存在
-        os.makedirs(self.report_dir, exist_ok=True)
 
         # 文件名前缀，可通过 set_file_prefix() 更新为 agent_name<agent_id> 格式
         self._file_prefix: Optional[str] = None
@@ -252,6 +249,9 @@ class TokenUsageReport:
         try:
             # 将报告转换为可JSON化的字典
             report_dict = self._serialize_report(report)
+
+            # 仅在首次真正写入报告时创建目录，避免 import 阶段提前创建 .topic。
+            os.makedirs(self.report_dir, exist_ok=True)
 
             # 保存到文件
             with open(file_path, 'w', encoding='utf-8') as f:

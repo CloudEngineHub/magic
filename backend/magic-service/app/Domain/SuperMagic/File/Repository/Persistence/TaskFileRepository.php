@@ -10,6 +10,7 @@ namespace App\Domain\SuperMagic\File\Repository\Persistence;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -62,7 +63,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return $result;
     }
 
-    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array
+    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
     {
         // 如果 ID 列表为空，直接返回空数组
         if (empty($fileIds)) {
@@ -80,8 +81,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $query->where('project_id', $projectId);
             }
 
-            if ($storageType !== null) {
-                $query->where('storage_type', $storageType);
+            if ($spaceType !== null) {
+                $query->where('space_type', $spaceType);
             }
 
             $models = $query->get();
@@ -150,6 +151,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             return null;
         }
         return new TaskFileEntity($model->toArray());
+    }
+
+    public function getCopiesBySourceFileId(int $sourceFileId): array
+    {
+        if ($sourceFileId <= 0) {
+            return [];
+        }
+
+        return $this->model::query()
+            ->where('source_file_id', $sourceFileId)
+            ->whereNull('deleted_at')
+            ->orderBy('file_id')
+            ->get()
+            ->map(static fn ($model): TaskFileEntity => new TaskFileEntity($model->toArray()))
+            ->all();
     }
 
     /**
@@ -777,6 +793,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 'user_id' => $dataIsolation->getCurrentUserId(),
                 'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                 'project_id' => $projectId,
+                'source_file_id' => null,
                 'topic_id' => 0,
                 'task_id' => 0,
                 'file_key' => $fileKey,
@@ -855,15 +872,15 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * 根据 parent_id 和 project_id 查找子文件列表.
      * 此查询会使用索引: idx_project_parent_sort (project_id, parent_id, sort, file_id).
      */
-    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $storageType = null): array
+    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $spaceType = null): array
     {
         $query = $this->model::query()
             ->where('project_id', $projectId)
             ->where('parent_id', $parentId)
             ->whereNull('deleted_at');
 
-        if ($storageType !== null) {
-            $query->where('storage_type', $storageType);
+        if ($spaceType !== null) {
+            $query->where('space_type', $spaceType);
         }
 
         $models = $query->limit($limit)->get();
@@ -1004,8 +1021,12 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
     /**
      * 获取指定父目录下的最小排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getMinSortByParentId(?int $parentId, int $projectId): ?int
+    public function getMinSortByParentId(?int $parentId, int $projectId, ?string $spaceType = null): ?int
     {
         $query = $this->model::query()
             ->where('project_id', $projectId)
@@ -1017,13 +1038,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $query->where('parent_id', $parentId);
         }
 
+        if ($spaceType !== null) {
+            $query->where('space_type', $spaceType);
+        }
+
         return $query->min('sort');
     }
 
     /**
      * 获取指定父目录下的最大排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getMaxSortByParentId(?int $parentId, int $projectId): ?int
+    public function getMaxSortByParentId(?int $parentId, int $projectId, ?string $spaceType = null): ?int
     {
         $query = $this->model::query()
             ->where('project_id', $projectId)
@@ -1033,6 +1062,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $query->whereNull('parent_id');
         } else {
             $query->where('parent_id', $parentId);
+        }
+
+        if ($spaceType !== null) {
+            $query->where('space_type', $spaceType);
         }
 
         return $query->max('sort');
@@ -1051,8 +1084,13 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
     /**
      * 获取指定排序值之后的下一个排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $currentSort 当前排序值
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getNextSortAfter(?int $parentId, int $currentSort, int $projectId): ?int
+    public function getNextSortAfter(?int $parentId, int $currentSort, int $projectId, ?string $spaceType = null): ?int
     {
         $query = $this->model::query()
             ->where('project_id', $projectId)
@@ -1065,13 +1103,23 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $query->where('parent_id', $parentId);
         }
 
+        if ($spaceType !== null) {
+            $query->where('space_type', $spaceType);
+        }
+
         return $query->min('sort');
     }
 
     /**
      * 获取同一父目录下的所有兄弟节点.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param string $orderBy 排序字段
+     * @param string $direction 排序方向
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getSiblingsByParentId(?int $parentId, int $projectId, string $orderBy = 'sort', string $direction = 'ASC'): array
+    public function getSiblingsByParentId(?int $parentId, int $projectId, string $orderBy = 'sort', string $direction = 'ASC', ?string $spaceType = null): array
     {
         $query = $this->model::query()
             ->where('project_id', $projectId)
@@ -1081,6 +1129,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $query->whereNull('parent_id');
         } else {
             $query->where('parent_id', $parentId);
+        }
+
+        if ($spaceType !== null) {
+            $query->where('space_type', $spaceType);
         }
 
         return $query->orderBy($orderBy, $direction)->get()->toArray();
@@ -1617,17 +1669,19 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * 根据项目ID获取根节点文件.
+     * 根据项目ID和空间类型获取根节点文件.
      *
      * @param int $projectId 项目ID
+     * @param string $spaceType 空间类型，默认 project 空间
      * @return null|TaskFileEntity 根节点文件实体
      */
-    public function getRootFileByProjectId(int $projectId): ?TaskFileEntity
+    public function getRootFileByProjectId(int $projectId, string $spaceType = FileSpaceType::PROJECT->value): ?TaskFileEntity
     {
         $model = $this->model::query()
             ->where('project_id', $projectId)
             ->whereNull('parent_id')
             ->where('is_directory', true)
+            ->where('space_type', $spaceType)
             ->first();
 
         if (! $model) {
@@ -1677,7 +1731,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         $model = $this->model::query()
             ->where('user_id', $userId)
             ->where('organization_code', $organizationCode)
-            ->where('space_type', 'user')
+            ->where('space_type', FileSpaceType::USER->value)
             ->whereNull('parent_id')
             ->where('file_name', '/')
             ->where('is_directory', true)
@@ -1689,6 +1743,54 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         }
 
         return new TaskFileEntity($model->toArray());
+    }
+
+    public function findTopicSpaceRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity
+    {
+        $model = $this->model::query()
+            ->where('organization_code', $organizationCode)
+            ->where('project_id', $projectId)
+            ->where('topic_id', $topicId)
+            ->where('space_type', FileSpaceType::TOPIC->value)
+            ->where('storage_type', StorageType::TOPIC->value)
+            // 不过滤 file_name：根目录名已从固定 `.topic` 改为 `topic_{topic_id}`，
+            // 去掉该条件可同时兼容存量 `.topic` 行，避免重复创建根目录。
+            ->whereNull('parent_id')
+            ->where('is_directory', true)
+            ->whereNull('deleted_at')
+            ->orderBy('file_id', 'asc')
+            ->first();
+
+        return $model ? new TaskFileEntity($model->toArray()) : null;
+    }
+
+    public function getTopicFilesByCursor(int $topicId, int $rootFileId, ?int $afterFileId, int $limit): array
+    {
+        $query = $this->model::query()
+            ->where('topic_id', $topicId)
+            ->where('space_type', FileSpaceType::TOPIC->value)
+            ->where('storage_type', StorageType::TOPIC->value)
+            ->where('file_id', '!=', $rootFileId)
+            ->whereNull('deleted_at')
+            ->orderBy('file_id', 'asc')
+            ->limit($limit);
+
+        if ($afterFileId !== null && $afterFileId > 0) {
+            $query->where('file_id', '>', $afterFileId);
+        }
+
+        return $query->get()->map(fn ($model) => new TaskFileEntity($model->toArray()))->all();
+    }
+
+    public function countTopicFilesForCopy(int $topicId, int $rootFileId): int
+    {
+        return $this->model::query()
+            ->where('topic_id', $topicId)
+            ->where('space_type', FileSpaceType::TOPIC->value)
+            ->where('storage_type', StorageType::TOPIC->value)
+            ->where('file_id', '!=', $rootFileId)
+            ->whereNull('deleted_at')
+            ->count();
     }
 
     /**
@@ -1745,6 +1847,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 'user_id' => $dataIsolation->getCurrentUserId(),
                 'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                 'project_id' => $projectId,
+                'source_file_id' => null,
                 'topic_id' => 0,
                 'task_id' => 0,
                 'parent_id' => $parentId,

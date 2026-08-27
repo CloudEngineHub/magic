@@ -19,4 +19,6 @@ return [
     'project_not_found' => '资源不存在：:project_id',
 
     'invalid_file_key' => '参数无效',
+    'topic_id_required' => '话题空间无法解析 topic_id',
+    'unsupported_space_type' => '不支持的空间类型',
 ];

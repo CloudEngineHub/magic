@@ -23,6 +23,7 @@ use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -627,7 +628,15 @@ class FileBatchAppService extends AbstractAppService
             sandboxId: $sandboxId,
             skipInitMessage: true
         );
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($dataIsolation, $agentContext);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            $dataIsolation,
+            $agentContext,
+            // 批量打包属于工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode)
+            )
+        );
 
         $this->topicDomainService->updateTopicStatusAndSandboxId(
             $topicEntity->getId(),

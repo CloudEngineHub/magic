@@ -10,7 +10,10 @@ namespace App\Domain\SuperMagic\File\Service;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\Common\Event\DeleteEventSource;
+use App\Domain\SuperMagic\File\Constant\TopicFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\SandboxFileNotificationDataValueObject;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
@@ -68,6 +71,10 @@ class TaskFileDomainService
 
     private const CACHE_TTL = 3540;
 
+    private const FILE_COPY_BATCH_SIZE = 100;
+
+    private const FILE_COPY_MAX_ATTEMPTS = 3;
+
     private const URL_EXPIRY_BUFFER = 60;
 
     private readonly LoggerInterface $logger;
@@ -105,6 +112,26 @@ class TaskFileDomainService
     public function getById(int $id): ?TaskFileEntity
     {
         return $this->taskFileRepository->getById($id);
+    }
+
+    /**
+     * @return TaskFileEntity[]
+     */
+    public function getCopiesBySourceFileId(int $sourceFileId): array
+    {
+        return $this->taskFileRepository->getCopiesBySourceFileId($sourceFileId);
+    }
+
+    public function isProjectSpaceFile(TaskFileEntity $fileEntity): bool
+    {
+        return $fileEntity->getSpaceType() === FileSpaceType::PROJECT->value;
+    }
+
+    public function shouldEnterRecycleBin(TaskFileEntity $fileEntity, DeleteEventSource $source): bool
+    {
+        return $fileEntity->getFileId() > 0
+            && $this->isProjectSpaceFile($fileEntity)
+            && in_array($source, [DeleteEventSource::User, DeleteEventSource::Agent], true);
     }
 
     /**
@@ -223,6 +250,222 @@ class TaskFileDomainService
     public function getRootFile(int $projectId): ?TaskFileEntity
     {
         return $this->taskFileRepository->getRootFileByProjectId($projectId);
+    }
+
+    public function getTopicRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity
+    {
+        return $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+    }
+
+    /**
+     * Get a topic file tree page without creating directories.
+     *
+     * @return array{list: TaskFileEntity[], total: int, next_cursor: ?int}
+     */
+    public function getFilesForCopy(TaskFileEntity $sourceRootFile, ?int $afterFileId = null, int $limit = 200): array
+    {
+        if ($sourceRootFile->getSpaceType() === FileSpaceType::PROJECT->value) {
+            $rawFiles = $this->taskFileRepository->getFilesByProjectIdWithResume(
+                $sourceRootFile->getProjectId(),
+                $afterFileId,
+                $limit + 1
+            );
+            $files = array_slice(array_values(array_filter(
+                $rawFiles,
+                fn (TaskFileEntity $file) => $file->getFileId() !== $sourceRootFile->getFileId()
+            )), 0, $limit);
+            return [
+                'list' => $files,
+                'total' => count($files),
+                'next_cursor' => count($rawFiles) > $limit && $files !== [] ? end($files)->getFileId() : null,
+            ];
+        }
+
+        $files = $this->taskFileRepository->getTopicFilesByCursor(
+            $sourceRootFile->getTopicId(),
+            $sourceRootFile->getFileId(),
+            $afterFileId,
+            $limit
+        );
+
+        $nextCursor = count($files) === $limit ? end($files)->getFileId() : null;
+        return [
+            'list' => $files,
+            'total' => $this->taskFileRepository->countTopicFilesForCopy(
+                $sourceRootFile->getTopicId(),
+                $sourceRootFile->getFileId()
+            ),
+            'next_cursor' => $nextCursor,
+        ];
+    }
+
+    /**
+     * Copy one page of a Task File tree under a new root.
+     *
+     * @return array{total: int, directories: int, files: int, copied: int, skipped: int, failed: int, failed_file_keys: string[], source_to_target: array<int, int>, source_to_target_file_keys: array<string, string>}
+     */
+    public function copyFileList(
+        DataIsolation $dataIsolation,
+        TaskFileEntity $sourceRootFile,
+        TaskFileEntity $targetRootFile,
+        array $sourceFiles,
+        array &$sourceToTarget = [],
+        array &$pendingParentIds = [],
+        ?callable $progressCallback = null,
+        ?int $targetTopicId = null
+    ): array {
+        $result = [
+            'total' => count($sourceFiles), 'directories' => 0, 'files' => 0,
+            'copied' => 0, 'skipped' => 0, 'failed' => 0, 'failed_file_keys' => [],
+            'source_to_target' => [], 'source_to_target_file_keys' => [],
+        ];
+        $targetRootKey = rtrim($targetRootFile->getFileKey(), '/');
+        $copyBatch = [];
+        $copyEntities = [];
+
+        foreach ($sourceFiles as $sourceFile) {
+            $newFileId = IdGenerator::getSnowId();
+            // MagicFS uses the generated file ID as the final object-key segment
+            // for ordinary files and directories. Only the already-created space
+            // root keeps its special deterministic key with a trailing slash.
+            $targetKey = $this->buildCopiedFileKey($targetRootKey, $newFileId);
+            $existingFile = $this->taskFileRepository->getByFileKey($targetKey);
+            if ($existingFile !== null) {
+                $sourceToTarget[$sourceFile->getFileId()] = $existingFile->getFileId();
+                $result['source_to_target_file_keys'][$sourceFile->getFileKey()] = $existingFile->getFileKey();
+                ++$result['skipped'];
+                continue;
+            }
+            $sourceParentId = $sourceFile->getParentId();
+            $parentId = $sourceToTarget[$sourceParentId] ?? $targetRootFile->getFileId();
+            if ($sourceParentId !== null && ! isset($sourceToTarget[$sourceParentId])) {
+                $pendingParentIds[] = [
+                    'source_file_id' => $sourceFile->getFileId(),
+                    'new_id' => null,
+                    'old_parent_id' => $sourceParentId,
+                ];
+            }
+
+            if ($sourceFile->getIsDirectory()) {
+                ++$result['directories'];
+                try {
+                    $this->cloudFileRepository->createFolderByCredential(
+                        WorkDirectoryUtil::getPrefix($targetKey),
+                        $dataIsolation->getCurrentOrganizationCode(),
+                        $targetKey,
+                        StorageBucketType::SandBox,
+                        ['metadata' => WorkDirectoryUtil::generateDefaultWorkDirMetadata()]
+                    );
+                    $newFile = $this->copyTaskFileEntity(
+                        $sourceFile, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(),
+                        $targetRootFile->getProjectId(), $targetTopicId ?? $targetRootFile->getTopicId(), $targetKey, $parentId, $newFileId
+                    );
+                    $newFile->setSource(TaskFileSource::COPY);
+                    $created = $this->taskFileRepository->insert($newFile);
+                    $sourceToTarget[$sourceFile->getFileId()] = $created->getFileId();
+                    $result['source_to_target_file_keys'][$sourceFile->getFileKey()] = $created->getFileKey();
+                    $this->setPendingNewFileId($pendingParentIds, $sourceFile->getFileId(), $created->getFileId());
+                    ++$result['copied'];
+                } catch (Throwable $e) {
+                    ++$result['failed'];
+                    $result['failed_file_keys'][] = $sourceFile->getFileKey();
+                    $this->logger->error('TaskFile tree directory copy failed', ['source_file_key' => $sourceFile->getFileKey(), 'target_file_key' => $targetKey, 'error' => $e->getMessage()]);
+                }
+                continue;
+            }
+
+            ++$result['files'];
+            $copyBatch[] = ['source_oss_path' => $sourceFile->getFileKey(), 'target_oss_path' => $targetKey];
+            $copyEntities[] = [$sourceFile, $targetKey, $parentId, $newFileId];
+            if (count($copyBatch) >= self::FILE_COPY_BATCH_SIZE) {
+                $this->copyFileBatch($dataIsolation, $copyBatch, $copyEntities, $targetRootFile, $sourceToTarget, $pendingParentIds, $result, $targetTopicId);
+                $copyBatch = [];
+                $copyEntities = [];
+                $progressCallback && $progressCallback($result);
+            }
+        }
+
+        if ($copyBatch !== []) {
+            $this->copyFileBatch($dataIsolation, $copyBatch, $copyEntities, $targetRootFile, $sourceToTarget, $pendingParentIds, $result, $targetTopicId);
+        }
+
+        $result['source_to_target'] = $sourceToTarget;
+        return $result;
+    }
+
+    public function fixCopiedParentIds(array $pendingParentIds, array $sourceToTarget, string $userId): void
+    {
+        $groups = [];
+        foreach ($pendingParentIds as $pending) {
+            $newParentId = $sourceToTarget[$pending['old_parent_id']] ?? null;
+            if ($newParentId !== null && $pending['new_id'] !== null) {
+                $groups[$newParentId][] = $pending['new_id'];
+            }
+        }
+        foreach ($groups as $newParentId => $fileIds) {
+            $this->taskFileRepository->batchUpdateParentId($fileIds, $newParentId, $userId);
+        }
+    }
+
+    private function setPendingNewFileId(array &$pendingParentIds, int $sourceFileId, int $newFileId): void
+    {
+        foreach ($pendingParentIds as &$pending) {
+            if (($pending['source_file_id'] ?? null) === $sourceFileId) {
+                $pending['new_id'] = $newFileId;
+                return;
+            }
+        }
+    }
+
+    private function copyFileBatch(DataIsolation $dataIsolation, array $copyBatch, array $copyEntities, TaskFileEntity $targetRootFile, array &$sourceToTarget, array &$pendingParentIds, array &$result, ?int $targetTopicId = null): void
+    {
+        try {
+            $lastError = null;
+            for ($attempt = 1; $attempt <= self::FILE_COPY_MAX_ATTEMPTS; ++$attempt) {
+                try {
+                    $copyResult = $this->sandboxGateway->copyFiles($dataIsolation, $copyBatch);
+                    if ($copyResult->isSuccess()) {
+                        $lastError = null;
+                        break;
+                    }
+                    $lastError = new RuntimeException($copyResult->getMessage() ?: 'Sandbox file copy failed');
+                } catch (Throwable $e) {
+                    $lastError = $e;
+                }
+
+                $this->logger->warning('TaskFile tree batch copy attempt failed', [
+                    'attempt' => $attempt,
+                    'max_attempts' => self::FILE_COPY_MAX_ATTEMPTS,
+                    'batch_size' => count($copyBatch),
+                    'source_file_keys' => array_map(
+                        static fn (array $copyItem): string => (string) ($copyItem['source_oss_path'] ?? ''),
+                        $copyBatch
+                    ),
+                    'error' => $lastError->getMessage(),
+                ]);
+            }
+            if ($lastError !== null) {
+                throw $lastError;
+            }
+            foreach ($copyEntities as [$sourceFile, $targetKey, $parentId, $newFileId]) {
+                $newFile = $this->copyTaskFileEntity(
+                    $sourceFile, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(),
+                    $targetRootFile->getProjectId(), $targetTopicId ?? $targetRootFile->getTopicId(), $targetKey, $parentId, $newFileId
+                );
+                $newFile->setSource(TaskFileSource::COPY);
+                $created = $this->taskFileRepository->insert($newFile);
+                $sourceToTarget[$sourceFile->getFileId()] = $created->getFileId();
+                $result['source_to_target_file_keys'][$sourceFile->getFileKey()] = $created->getFileKey();
+                $this->setPendingNewFileId($pendingParentIds, $sourceFile->getFileId(), $created->getFileId());
+                ++$result['copied'];
+            }
+        } catch (Throwable $e) {
+            $result['failed'] += count($copyEntities);
+            foreach ($copyEntities as [$sourceFile]) {
+                $result['failed_file_keys'][] = $sourceFile->getFileKey();
+            }
+            $this->logger->error('TaskFile tree batch copy failed', ['batch_size' => count($copyBatch), 'error' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -399,11 +642,12 @@ class TaskFileDomainService
      *
      * @param array $fileIds 文件ID数组
      * @param int $projectId 项目ID（可选，用于过滤）
+     * @param null|string $spaceType 文件空间类型（可选，用于过滤）
      * @return TaskFileEntity[] 文件实体列表
      */
-    public function getFilesByIds(array $fileIds, int $projectId = 0): array
+    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
     {
-        return $this->taskFileRepository->getFilesByIds($fileIds, $projectId);
+        return $this->taskFileRepository->getFilesByIds($fileIds, $projectId, $spaceType);
     }
 
     /**
@@ -1482,10 +1726,12 @@ class TaskFileDomainService
         }
 
         $newFileId = IdGenerator::getSnowId();
-        $targetFileKey = WorkDirectoryUtil::getFullFileKey(
-            $this->getFullPrefix($targetProject->getUserOrganizationCode()),
-            $targetProject->getWorkDir(),
-            (string) $newFileId
+        $targetFileKey = $this->buildCopiedFileKey(
+            WorkDirectoryUtil::getFullWorkdir(
+                $this->getFullPrefix($targetProject->getUserOrganizationCode()),
+                $targetProject->getWorkDir()
+            ),
+            $newFileId
         );
 
         // 5. Validate target key is within target project's work directory.
@@ -1539,6 +1785,7 @@ class TaskFileDomainService
             $newFileEntity->setCreatedAt(date('Y-m-d H:i:s'));
             $newFileEntity->setUpdatedAt(date('Y-m-d H:i:s'));
             $newFileEntity->setStorageType($fileEntity->getStorageType());
+            $newFileEntity->setSourceFileId($fileEntity->getFileId());
             $newFileEntity->setIsHidden($this->determineIsHidden($targetFileName, $targetParentId, $targetProject->getId()));
             $newFileEntity->setIsDirectory($fileEntity->getIsDirectory());
             $newFileEntity->setParentId($targetParentId);
@@ -1671,6 +1918,7 @@ class TaskFileDomainService
             $targetFileEntity->setFileKey($targetPath);
             $targetFileEntity->setCreatedAt(date('Y-m-d H:i:s'));
             $targetFileEntity->setStorageType($fileEntity->getStorageType());
+            $targetFileEntity->setSourceFileId($fileEntity->getFileId());
             $targetFileEntity->setIsHidden($this->determineIsHidden(basename($targetPath), $targetParentId, $fileEntity->getProjectId()));
             $targetFileEntity->setIsDirectory($fileEntity->getIsDirectory());
             $targetFileEntity->setParentId($targetParentId);
@@ -1700,11 +1948,16 @@ class TaskFileDomainService
 
     /**
      * 为新文件计算排序值（领域逻辑）.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $preFileId 前置文件ID，0表示插入第一位，-1表示插入末尾
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function calculateSortForNewFile(?int $parentId, int $preFileId, int $projectId): int
+    public function calculateSortForNewFile(?int $parentId, int $preFileId, int $projectId, ?string $spaceType = null): int
     {
         // Use FileSortUtil for consistent sorting logic
-        return FileSortUtil::calculateSortValue($this->taskFileRepository, $parentId, $preFileId, $projectId);
+        return FileSortUtil::calculateSortValue($this->taskFileRepository, $parentId, $preFileId, $projectId, $spaceType);
     }
 
     /**
@@ -2063,10 +2316,10 @@ class TaskFileDomainService
             $rootDirEntity->setIsDirectory(true);
             $rootDirEntity->setParentId(null);
             $rootDirEntity->setSource(TaskFileSource::AGENT);
-            $rootDirEntity->setStorageType(StorageType::WORKSPACE);
+            $rootDirEntity->setStorageType(FileSpaceType::USER->toStorageType());
             $rootDirEntity->setIsHidden(true);
             $rootDirEntity->setSort(0);
-            $rootDirEntity->setSpaceType('user');
+            $rootDirEntity->setSpaceType(FileSpaceType::USER->value);
 
             $now = date('Y-m-d H:i:s');
             $rootDirEntity->setCreatedAt($now);
@@ -2090,6 +2343,76 @@ class TaskFileDomainService
                     'lock_owner' => $lockOwner,
                 ]);
             }
+        }
+    }
+
+    public function findOrCreateTopicRootDirectory(
+        int $projectId,
+        int $topicId,
+        string $userId,
+        string $organizationCode,
+        string $projectOrganizationCode
+    ): int {
+        $root = $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+        if ($root !== null) {
+            return $root->getFileId();
+        }
+
+        $lockKey = sprintf('magicfs:topic_root_dir:%s:%d:%d', $organizationCode, $projectId, $topicId);
+        $lockOwner = IdGenerator::getUniqueId32();
+        if (! $this->locker->spinLock($lockKey, $lockOwner, self::LOCK_TIMEOUT)) {
+            $root = $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+            if ($root !== null) {
+                return $root->getFileId();
+            }
+            throw new RuntimeException('Failed to acquire lock for creating topic root directory');
+        }
+
+        try {
+            $root = $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+            if ($root !== null) {
+                return $root->getFileId();
+            }
+
+            // Topic root 使用既有固定物理目录，以便沙箱按该前缀申请最小范围权限。
+            // `topic_{topic_id}` 仅是 TaskFile 元数据名称，不拼入对象存储 file_key；
+            // 不能命名为 `.topic`，否则沙箱 mount 时与容器内挂载点冲突。
+            $relativeDir = WorkDirectoryUtil::getTopicRootDir($userId, $projectId, $topicId);
+            $fullPrefix = $this->getFullPrefix($projectOrganizationCode);
+            $fileKey = rtrim($fullPrefix . ltrim($relativeDir, '/'), '/') . '/';
+            $this->cloudFileRepository->createFolderByCredential(
+                WorkDirectoryUtil::getPrefix($relativeDir),
+                $projectOrganizationCode,
+                $fileKey,
+                StorageBucketType::SandBox,
+                ['metadata' => WorkDirectoryUtil::generateDefaultWorkDirMetadata()]
+            );
+
+            $entity = new TaskFileEntity();
+            $entity->setFileId(IdGenerator::getSnowId());
+            $entity->setUserId($userId);
+            $entity->setOrganizationCode($organizationCode);
+            $entity->setProjectId($projectId);
+            $entity->setTopicId($topicId);
+            $entity->setFileName(TopicFileConstant::rootFileName($topicId));
+            $entity->setFileKey($fileKey);
+            $entity->setFileSize(0);
+            $entity->setFileType(FileType::DIRECTORY->value);
+            $entity->setIsDirectory(true);
+            $entity->setIsHidden(false);
+            $entity->setParentId(null);
+            $entity->setSource(TaskFileSource::AGENT);
+            $entity->setSpaceType(FileSpaceType::TOPIC->value);
+            $entity->setStorageType(FileSpaceType::TOPIC->toStorageType());
+            $entity->setSort(0);
+            $now = date('Y-m-d H:i:s');
+            $entity->setCreatedAt($now);
+            $entity->setUpdatedAt($now);
+            $entity->setDeletedAt(null);
+
+            return $this->insertOrUpdate($entity)->getFileId();
+        } finally {
+            $this->locker->release($lockKey, $lockOwner);
         }
     }
 
@@ -2531,7 +2854,7 @@ class TaskFileDomainService
         $totalCount = $projectForkRecordEntity->getTotalFiles();
         $userId = $dataIsolation->getCurrentUserId();
         $sourceToNewIdMap = [];
-        $needFixFileIds = [];
+        $pendingParentIds = [];
         $failedFileKeys = [];
 
         $this->logger->info(sprintf(
@@ -2547,11 +2870,6 @@ class TaskFileDomainService
             $this->logger->warning(sprintf('Fork process %d is not in running status, current status: %s. Skipping file migration.', $projectForkRecordEntity->getId(), $projectForkRecordEntity->getStatus()->value));
             return [];
         }
-
-        // 预计算工作目录路径（避免重复计算）
-        $sourceFullWorkDir = WorkDirectoryUtil::getFullWorkdir($this->getFullPrefix($sourceProjectEntity->getUserOrganizationCode()), $sourceProjectEntity->getWorkDir());
-        $targetFullWorkDir = WorkDirectoryUtil::getFullWorkdir($this->getFullPrefix($forkProjectEntity->getUserOrganizationCode()), $forkProjectEntity->getWorkDir());
-        $targetWorkDirPrefix = WorkDirectoryUtil::getPrefix($forkProjectEntity->getWorkDir());
 
         // 设置用户上下文
         // Per-call user identity now flows through DataIsolation; the
@@ -2569,6 +2887,11 @@ class TaskFileDomainService
         $sourceRootFileId = $this->findOrCreateProjectRootDirectory($sourceProjectEntity->getId(), $sourceProjectEntity->getWorkDir(), $sourceProjectEntity->getUserId(), $sourceProjectEntity->getUserOrganizationCode(), $sourceProjectEntity->getUserOrganizationCode());
         $forkRootFileId = $this->findOrCreateProjectRootDirectory($forkProjectEntity->getId(), $forkProjectEntity->getWorkDir(), $forkProjectEntity->getUserId(), $forkProjectEntity->getUserOrganizationCode(), $forkProjectEntity->getUserOrganizationCode(), TaskFileSource::COPY);
         $sourceToNewIdMap[$sourceRootFileId] = $forkRootFileId;
+        $sourceRootFile = $this->taskFileRepository->getById($sourceRootFileId);
+        $forkRootFile = $this->taskFileRepository->getById($forkRootFileId);
+        if ($sourceRootFile === null || $forkRootFile === null) {
+            throw new RuntimeException('Project root TaskFile not found during fork migration');
+        }
 
         // 如果指定了文件ID列表,转换为整数并构建集合（用于快速查找）
         $fileIdSet = null;
@@ -2597,102 +2920,39 @@ class TaskFileDomainService
 
             // 分批获取和处理文件
             while (true) {
-                // 获取当前批次的源文件（支持按文件ID过滤）
-                $sourceFiles = $this->getSourceFilesForMigration(
-                    $sourceProjectEntity->getId(),
-                    $lastFileId,
-                    $pageSize,
-                    $fileIds
-                );
+                // 始终通过通用游标能力读取源文件；指定 fileIds 时只在
+                // 当前页做集合过滤，避免项目 Fork 保留另一套全量读取逻辑。
+                $sourcePage = $this->getFilesForCopy($sourceRootFile, $lastFileId, $pageSize);
+                $pageFiles = $sourcePage['list'];
+                if ($pageFiles === []) {
+                    break;
+                }
+                $lastFileId = end($pageFiles)->getFileId();
+                $sourceFiles = $fileIdSet === null
+                    ? $pageFiles
+                    : array_values(array_filter(
+                        $pageFiles,
+                        static fn (TaskFileEntity $file) => isset($fileIdSet[$file->getFileId()])
+                    ));
 
                 if (empty($sourceFiles)) {
-                    break; // No more files to process
-                }
-                foreach ($sourceFiles as $sourceFile) {
-                    $newFileKey = str_replace($sourceFullWorkDir, $targetFullWorkDir, $sourceFile->getFileKey());
-                    $lastFileId = $sourceFile->getFileId(); // 更新分页游标
-
-                    // 1. 检查文件是否存在，如果存在则跳过
-                    $existingFileEntity = $this->taskFileRepository->getByFileKey($newFileKey);
-                    if (! empty($existingFileEntity)) {
-                        continue;
+                    if ($sourcePage['next_cursor'] === null) {
+                        break;
                     }
-
-                    try {
-                        // 2. 处理远端附件
-                        if ($sourceFile->getIsDirectory()) {
-                            // 目录可以直接使用 cloud file 处理
-                            $metadata = WorkDirectoryUtil::generateDefaultWorkDirMetadata();
-                            $this->cloudFileRepository->createFolderByCredential(
-                                $targetWorkDirPrefix,
-                                $forkProjectEntity->getUserOrganizationCode(),
-                                $newFileKey,
-                                StorageBucketType::SandBox,
-                                ['metadata' => $metadata]
-                            );
-                        } else {
-                            // 文件拷贝需要通过远程沙箱处理
-                            // 处理文件：调用新的沙箱 copy 接口
-                            $copyResult = $this->sandboxGateway->copyFiles(
-                                $userCtx,
-                                [
-                                    [
-                                        'source_oss_path' => $sourceFile->getFileKey(),
-                                        'target_oss_path' => $newFileKey,
-                                    ],
-                                ],
-                            );
-
-                            if (! $copyResult->isSuccess()) {
-                                $failedFileKeys[] = $sourceFile->getFileKey();
-                                $this->logger->error(sprintf(
-                                    'Sandbox Copy File Failed to copy file %s to %s',
-                                    $sourceFile->getFileKey(),
-                                    $newFileKey
-                                ));
-                                continue;
-                            }
-                        }
-
-                        // 3. 保存数据库记录
-                        $parentId = $sourceToNewIdMap[$sourceFile->getParentId()] ?? null;
-                        // Create new TaskFileEntity for the forked project
-                        $newTaskFile = $this->copyTaskFileEntity(
-                            $sourceFile,
-                            $userId,
-                            $dataIsolation->getCurrentOrganizationCode(),
-                            $forkProjectEntity->getId(),
-                            $forkProjectEntity->getCurrentTopicId(),
-                            $newFileKey,
-                            $parentId,
-                        );
-                        $this->taskFileRepository->insert($newTaskFile);
-                        // 由于新的目标文件没有 parent_id，所以需要处理，为了提高处理效率，存储一下关系
-                        $sourceToNewIdMap[$sourceFile->getFileId()] = $newTaskFile->getFileId();
-                        if (is_null($newTaskFile->getParentId())) {
-                            $needFixFileIds[] = [
-                                'new_id' => $newTaskFile->getFileId(),
-                                'old_parent_id' => $sourceFile->getParentId(),
-                            ];
-                        }
-
-                        ++$processedCount; // 成功处理一个文件，计数器递增
-                    } catch (Throwable $e) {
-                        $this->logger->error(
-                            'Failed to process file during fork migration',
-                            [
-                                'exception' => $e->getMessage(),
-                                'file_name' => $sourceFile->getFileName(),
-                                'file_key' => $sourceFile->getFileKey(),
-                                'new_file_key' => $newFileKey,
-                                'is_directory' => $sourceFile->getIsDirectory(),
-                                'processed_count' => $processedCount,
-                            ]
-                        );
-                        $failedFileKeys[] = $sourceFile->getFileKey();
-                        // 继续处理下一个文件，不中断整个流程
-                    }
+                    continue;
                 }
+                $copyResult = $this->copyFileList(
+                    $userCtx,
+                    $sourceRootFile,
+                    $forkRootFile,
+                    $sourceFiles,
+                    $sourceToNewIdMap,
+                    $pendingParentIds,
+                    null,
+                    $forkProjectEntity->getCurrentTopicId()
+                );
+                $processedCount += $copyResult['copied'] + $copyResult['skipped'];
+                $failedFileKeys = array_merge($failedFileKeys, $copyResult['failed_file_keys']);
 
                 // 批次级别更新进度 (基于总文件数的准确进度计算)
                 if ($totalCount > 0) {
@@ -2714,7 +2974,7 @@ class TaskFileDomainService
                 ));
 
                 // 检查是否为最后一批
-                if (count($sourceFiles) < $pageSize) {
+                if ($sourcePage['next_cursor'] === null) {
                     break; // Less than page size, means it's the last batch
                 }
             }
@@ -2724,9 +2984,9 @@ class TaskFileDomainService
             $this->logger->info(sprintf('Fork record %d: Successfully processed %d/%d files', $forkRecordId, $processedCount, $totalCount));
 
             // 兜底逻辑：修复那些parent_id为null的文件
-            if (count($needFixFileIds) > 0) {
-                $this->batchFixParentIds($needFixFileIds, $sourceToNewIdMap, $userId);
-                $this->logger->info(sprintf('Fixed parent_id for %d files in fork record %d', count($needFixFileIds), $forkRecordId));
+            if ($pendingParentIds !== []) {
+                $this->fixCopiedParentIds($pendingParentIds, $sourceToNewIdMap, $userId);
+                $this->logger->info(sprintf('Fixed parent_id for %d files in fork record %d', count($pendingParentIds), $forkRecordId));
             }
 
             if ($failedFileKeys !== []) {
@@ -2804,6 +3064,7 @@ class TaskFileDomainService
         $dirEntity->setFileId(IdGenerator::getSnowId());
         $dirEntity->setFileName($oldFileEntity->getFileName());
         $dirEntity->setFileKey($newFileKey);
+        $dirEntity->setSourceFileId($oldFileEntity->getFileId());
 
         // Set current timestamp for created_at and updated_at
         $now = date('Y-m-d H:i:s');
@@ -3474,6 +3735,7 @@ class TaskFileDomainService
                 $fileEntity->setCreatedAt($currentTime);
                 $fileEntity->setTopicId($taskFileEntity->getTopicId());
                 $fileEntity->setTaskId($taskFileEntity->getTaskId());
+                $fileEntity->setSpaceType($taskFileEntity->getSpaceType());
                 $fileEntity->setSource($source);
                 $fileEntity->setLatestVersion(1);
                 $fileEntity->setMetadataVersion(1);
@@ -3876,6 +4138,7 @@ class TaskFileDomainService
         $newFileEntity->setParentId($targetParentIdInt);
         $newFileEntity->setIsHidden($this->determineIsHidden($targetFileName, $targetParentIdInt, $targetProjectId));
         $newFileEntity->setStorageType($sourceFile->getStorageType());
+        $newFileEntity->setSourceFileId($sourceFile->getFileId());
         $newFileEntity->setSource(TaskFileSource::COPY);
         $newFileEntity->setLatestVersion(1);
         $newFileEntity->setMetadataVersion(1);
@@ -4048,48 +4311,6 @@ class TaskFileDomainService
     }
 
     /**
-     * 获取需要迁移的源文件列表（支持分页和文件ID过滤）.
-     *
-     * @param int $projectId 项目ID
-     * @param int $lastFileId 上一批处理的最后一个文件ID（用于分页游标）
-     * @param int $pageSize 每批处理的文件数量
-     * @param null|array $fileIds 要复制的文件ID列表（null表示获取所有文件）
-     * @return array 文件实体数组
-     */
-    private function getSourceFilesForMigration(int $projectId, int $lastFileId, int $pageSize, ?array $fileIds = null): array
-    {
-        if ($fileIds === null) {
-            // 未指定文件ID列表: 获取项目所有文件
-            return $this->taskFileRepository->getFilesByProjectIdWithResume($projectId, $lastFileId, $pageSize);
-        }
-
-        // 指定了文件ID列表: 只获取指定的文件
-        // 使用分页游标过滤文件ID
-        $currentPageFileIds = array_filter(
-            $fileIds,
-            fn ($id) => $id > $lastFileId
-        );
-
-        // 获取当前批次的文件ID（最多$pageSize个）
-        $currentBatchFileIds = array_slice($currentPageFileIds, 0, $pageSize);
-
-        if (empty($currentBatchFileIds)) {
-            return [];
-        }
-
-        // 通过文件ID批量获取文件实体
-        $sourceFiles = $this->taskFileRepository->getFilesByIds(
-            $currentBatchFileIds,
-            $projectId
-        );
-
-        // 按文件ID升序排序，确保分页逻辑正确
-        usort($sourceFiles, fn ($a, $b) => $a->getFileId() <=> $b->getFileId());
-
-        return $sourceFiles;
-    }
-
-    /**
      * Copy file in cloud storage (without deleting source file).
      *
      * @param TaskFileEntity $fileEntity File entity
@@ -4143,6 +4364,16 @@ class TaskFileDomainService
 
             // Note: Do NOT delete source file (this is copy, not move)
         }
+    }
+
+    /**
+     * Generate the object key for an ordinary copied MagicFS node.
+     * Space roots keep their existing deterministic key rules; every child
+     * file or directory uses its newly generated file_id without a trailing slash.
+     */
+    private function buildCopiedFileKey(string $targetRootKey, int $newFileId): string
+    {
+        return rtrim($targetRootKey, '/') . '/' . $newFileId;
     }
 
     /**
@@ -4503,10 +4734,11 @@ class TaskFileDomainService
         int $projectId,
         int $topicId,
         string $newFileKey,
-        ?int $parentId = null
+        ?int $parentId = null,
+        ?int $newFileId = null
     ): TaskFileEntity {
         $newTaskFile = new TaskFileEntity();
-        $newTaskFile->setFileId(IdGenerator::getSnowId());
+        $newTaskFile->setFileId($newFileId ?? IdGenerator::getSnowId());
         $newTaskFile->setProjectId($projectId);
         $newTaskFile->setTopicId($topicId);
         $newTaskFile->setFileType($sourceFile->getFileType());
@@ -4521,6 +4753,11 @@ class TaskFileDomainService
         $newTaskFile->setParentId($parentId);
 
         $newTaskFile->setSort($sourceFile->getSort());
+        $newTaskFile->setSourceFileId($sourceFile->getFileId());
+        // Keep the logical MagicFS space aligned with the source tree. The
+        // entity default is `project`, which would make copied Topic files
+        // invisible to queries constrained by space_type = topic.
+        $newTaskFile->setSpaceType($sourceFile->getSpaceType());
         $newTaskFile->setStorageType($sourceFile->getStorageType());
         $newTaskFile->setMetadata($sourceFile->getMetadata());
         $newTaskFile->setDisplayConfig($sourceFile->getDisplayConfig());
@@ -4531,39 +4768,6 @@ class TaskFileDomainService
         $newTaskFile->setUpdatedAt(date('Y-m-d H:i:s'));
 
         return $newTaskFile;
-    }
-
-    /**
-     * Batch fix parent_id for files that couldn't be resolved during initial processing.
-     *
-     * @param array $needFixFileIds Array of files needing parent_id fixes
-     * @param array $sourceToNewIdMap Mapping from source file ID to new file ID
-     * @param string $userId User performing the update
-     */
-    private function batchFixParentIds(array $needFixFileIds, array $sourceToNewIdMap, string $userId): void
-    {
-        // Group files by their old parent_id for batch processing
-        $parentGroups = [];
-        foreach ($needFixFileIds as $fixInfo) {
-            $oldParentId = $fixInfo['old_parent_id'];
-            $newFileId = $fixInfo['new_id'];
-
-            if (isset($sourceToNewIdMap[$oldParentId])) {
-                $newParentId = $sourceToNewIdMap[$oldParentId];
-                $parentGroups[$newParentId][] = $newFileId;
-            }
-        }
-
-        // Batch update files by parent_id groups using repository
-        foreach ($parentGroups as $newParentId => $fileIds) {
-            $updatedCount = $this->taskFileRepository->batchUpdateParentId($fileIds, $newParentId, $userId);
-            $this->logger->debug(sprintf(
-                'Updated parent_id to %d for %d files (affected: %d)',
-                $newParentId,
-                count($fileIds),
-                $updatedCount
-            ));
-        }
     }
 
     /**

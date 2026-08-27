@@ -960,6 +960,7 @@ class MessageScheduleAppService extends AbstractAppService
             }
             // Build based on $oldWorkDir
             $fileEntity = new TaskFileEntity();
+            $fileEntity->setFileId((int) $fileData['file_id']);
             $fileEntity->setFileKey($filePath);
             $fileEntity->setFileName($fileData['file_name']);
             $fileEntity->setFileSize($fileData['file_size']);
@@ -1044,7 +1045,7 @@ class MessageScheduleAppService extends AbstractAppService
         $topicName = $topicName . ' ' . date('ymdHi');
 
         // 2. Create topic
-        return $this->topicDomainService->createTopic(
+        $topicEntity = $this->topicDomainService->createTopic(
             $dataIsolation,
             $projectEntity->getWorkspaceId(),
             $projectEntity->getId(),
@@ -1056,6 +1057,14 @@ class MessageScheduleAppService extends AbstractAppService
             CreationSource::SCHEDULED_TASK->value, // source
             $sourceId // sourceId
         );
+        $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+            $projectEntity->getId(),
+            $topicEntity->getId(),
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $projectEntity->getUserOrganizationCode()
+        );
+        return $topicEntity;
     }
 
     /**

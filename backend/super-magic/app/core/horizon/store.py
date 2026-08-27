@@ -1,7 +1,7 @@
 """AgentHorizon 的 JSON 持久化。
 
 文件命名规则与 ChatHistory 一致：
-  .chat_history/{agent_name}<{agent_id}>.horizon.json
+  .topic/chat_history/{agent_name}<{agent_id}>.horizon.json
 
 正常保存和 fork 写入共用同一套 codec：
 
@@ -35,8 +35,6 @@ from app.core.horizon.models import (
 from app.utils.async_file_utils import (
     async_exists,
     async_read_json,
-    async_rename,
-    async_unlink,
     async_write_json,
 )
 
@@ -280,7 +278,7 @@ def _decode_state(data: dict) -> HorizonState:
 
 
 class HorizonStore:
-    """原子写入的 JSON 持久化，与 ChatHistory 同目录。
+    """Horizon JSON 持久化，与 ChatHistory 同目录。
 
     Horizon 与 ChatHistory 是同一个 Agent 会话的两个持久化组件，不能单独把某一份当成
     完整上下文。`AgentContextSnapshotService` 会同时准备并提交它们；本类只负责 Horizon
@@ -291,6 +289,7 @@ class HorizonStore:
         self.agent_name = agent_name
         self.agent_id = agent_id
         self._path = self.path_for_session(agent_name, agent_id, Path(chat_history_dir))
+        self._save_lock = asyncio.Lock()
 
     @staticmethod
     def path_for_session(agent_name: str, agent_id: str, chat_history_dir: Path) -> Path:
@@ -310,18 +309,11 @@ class HorizonStore:
             return None
 
     async def save(self, state: HorizonState) -> None:
-        tmp = self._path.with_suffix(".tmp")
         try:
-            await self._write_path(tmp, state)
-            await async_rename(tmp, self._path)
+            async with self._save_lock:
+                await self._write_path(self._path, state)
         except Exception as e:
             logger.warning(f"[HorizonStore] 保存失败: {e}")
-            try:
-                await async_unlink(tmp)
-            except asyncio.CancelledError:
-                raise
-            except Exception as cleanup_error:
-                logger.warning(f"[HorizonStore] 清理临时文件失败: {cleanup_error}")
 
     @classmethod
     async def load_for_session(

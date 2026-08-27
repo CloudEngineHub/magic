@@ -42,6 +42,7 @@ use App\Domain\SuperMagic\Skill\Event\SkillImportedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -1552,7 +1553,15 @@ class SkillAppService extends AbstractSkillAppService
             sandboxId: $sandboxId,
             skipInitMessage: true
         );
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($contactDataIsolation, $agentContext);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            $contactDataIsolation,
+            $agentContext,
+            // Skill 工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($contactDataIsolation->getCurrentUserId(), $contactDataIsolation->getCurrentOrganizationCode())
+            )
+        );
 
         $this->topicDomainService->updateTopicStatusAndSandboxId(
             $topicEntity->getId(),

@@ -8,8 +8,8 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\File\Service;
 
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
-use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
@@ -46,9 +46,9 @@ class MagicFSFileDomainService
      * 根据 parent_id 查询文件列表.
      *
      * @param string $parentId Parent directory ID
-     * @param null|string $storageType Optional storage type filter (e.g. 'workspace'). Null means no filter.
+     * @param null|string $spaceType Optional space type filter (e.g. 'project'). Null means no filter.
      */
-    public function listFilesByParentId(string $parentId, ?string $storageType = null): array
+    public function listFilesByParentId(string $parentId, ?string $spaceType = null): array
     {
         // 1. 获取 project_id
         $projectId = $this->getProjectIdByParentId($parentId);
@@ -61,7 +61,7 @@ class MagicFSFileDomainService
             $projectId,
             $parentIdInt,
             10000,  // 设置一个较大的限制值，避免意外的无限查询
-            $storageType
+            $spaceType
         );
     }
 
@@ -104,7 +104,7 @@ class MagicFSFileDomainService
                 ['project_id' => $projectId]
             );
         }
-        if ($rootDir->getStorageType() !== StorageType::WORKSPACE) {
+        if ($rootDir->getSpaceType() !== FileSpaceType::PROJECT->value) {
             ExceptionBuilder::throw(
                 MagicFSErrorCode::FILE_NOT_FOUND,
                 'magicfs.project_not_found',
@@ -131,7 +131,7 @@ class MagicFSFileDomainService
      *                                 以保证外链引用的 file_id 在撤回/取消撤回前后保持稳定
      * @return TaskFileEntity 创建的文件实体
      */
-    public function createFile(string $name, string $parentId, bool $isDirectory, ?string $superMagicTaskId = null, ?int $sortValue = null, ?FileType $fileType = null, ?TaskFileSource $source = null, ?array $fileMetadata = null, bool $reuseDeletedFileId = false, int $topicId = 0, string $spaceType = ''): TaskFileEntity
+    public function createFile(string $name, string $parentId, bool $isDirectory, ?string $superMagicTaskId = null, ?int $sortValue = null, ?FileType $fileType = null, ?TaskFileSource $source = null, ?array $fileMetadata = null, bool $reuseDeletedFileId = false, int $topicId = 0): TaskFileEntity
     {
         // 1. 获取 project_id、user_id 和 organization_code（从父文件或认证信息）
         $parentInfo = $this->getParentFileInfo($parentId);
@@ -198,31 +198,20 @@ class MagicFSFileDomainService
         // 4. 生成文件 ID
         $fileId = IdGenerator::getSnowId();
 
-        // 5. 获取 workDir：
-        //    - project 空间：从 project_id 反查 project 实体取 workDir；
-        //    - user 空间（projectId<=0）：固定按 user_{userId}，与
-        //      TaskFileDomainService::findOrCreateUserRootDirectory 保持一致。
-        if ($projectId > 0) {
-            $project = $this->projectRepository->findById($projectId);
-            if ($project === null) {
-                ExceptionBuilder::throw(
-                    MagicFSErrorCode::FILE_NOT_FOUND,
-                    'magicfs.project_not_found',
-                    ['project_id' => $projectId]
-                );
-            }
-            $workDir = $project->getWorkDir();
-        } else {
-            if ($userId === '') {
-                ExceptionBuilder::throw(
-                    MagicFSErrorCode::FILE_NOT_FOUND,
-                    'magicfs.project_not_found',
-                    ['project_id' => $projectId]
-                );
-            }
-            // user 空间：user_{userId}/workspace，与 project 空间的 workspace 布局对齐
-            $workDir = WorkDirectoryUtil::getUserWorkDir($userId);
-        }
+        // 4.1. 统一解析空间上下文（space_type / workDir / topic_id）：
+        //      - 空间类型以父目录 space_type 为准（与挂载位置一致，批量复制/
+        //        移动进话题空间时自动落话题 key），无法识别时快速失败；
+        //      - topic_id 直接取父目录（话题根目录恒带 topic_id），父目录
+        //        缺失时快速失败，不做祖先链兜底。
+        $spaceContext = $this->resolveSpaceContext(
+            isset($parentFile) ? $parentFile : null,
+            $projectId,
+            $userId,
+            $parentId
+        );
+        $spaceType = $spaceContext['space_type'];
+        $workDir = $spaceContext['work_dir'];
+        $resolvedTopicId = $spaceContext['topic_id'];
 
         // 6. 为文件生成 S3 key (完整路径)
         // 注意：目录也需要唯一的 file_key，避免唯一索引冲突
@@ -245,15 +234,18 @@ class MagicFSFileDomainService
         $entity->setFileSize(0);
         $entity->setIsDirectory($isDirectory);
         $entity->setParentId($parentIdInt);
-        $entity->setStorageType(StorageType::WORKSPACE);
+
+        // 空间类型：优先取调用方传入的 space_type，缺省为 project。
+        // storage_type 是历史遗留字段（逐步废除），过渡期由 space_type 推导，保证两字段一致。
+        $effectiveSpaceType = $spaceType !== '' ? $spaceType : FileSpaceType::PROJECT->value;
+        $entity->setSpaceType($effectiveSpaceType);
+        $entity->setStorageType(FileSpaceType::resolveStorageType($effectiveSpaceType));
         $entity->setSource($source ?? TaskFileSource::AGENT);
         $entity->setLatestVersion(1);
         $entity->setMetadataVersion(1);
 
-        // 设置空间类型（如 project、user）
-        if ($spaceType !== '') {
-            $entity->setSpaceType($spaceType);
-        }
+        // 设置空间类型（与 workDir 命名空间一致，由 resolveSpaceContext 统一解析）
+        $entity->setSpaceType($spaceType);
 
         // 设置排序值（如果提供了 sortValue）
         if ($sortValue !== null) {
@@ -272,6 +264,11 @@ class MagicFSFileDomainService
         // Fallback: if topic_id is still 0 (no task found), use the explicitly passed topicId
         if ($entity->getTopicId() === 0 && $topicId > 0) {
             $entity->setTopicId($topicId);
+        }
+
+        // 话题空间：topic_id 与 file_key 命名空间保持一致（以父目录解析结果为准）
+        if ($spaceType === FileSpaceType::TOPIC->value) {
+            $entity->setTopicId($resolvedTopicId);
         }
 
         // 9. 设置文件类型（如果调用方指定了 fileType 则使用，否则根据 isDirectory 自动推断）
@@ -710,10 +707,10 @@ class MagicFSFileDomainService
      * @param string $fileId 文件ID
      * @param int $depth 递归深度，-1 表示无限深度
      * @param int $currentDepth 当前深度（内部使用）
-     * @param null|string $storageType Optional storage type filter (e.g. 'workspace'). Null means no filter.
+     * @param null|string $spaceType Optional space type filter (e.g. 'project'). Null means no filter.
      * @return array 文件树数据 [rootFile, childrenMap]
      */
-    public function getFileTree(string $fileId, int $depth = -1, int $currentDepth = 0, ?string $storageType = null): array
+    public function getFileTree(string $fileId, int $depth = -1, int $currentDepth = 0, ?string $spaceType = null): array
     {
         // 1. 获取根文件/目录
         $rootFile = $this->getFileById($fileId);
@@ -731,7 +728,7 @@ class MagicFSFileDomainService
         }
 
         // 4. 一次性查询所有子文件（批量查询，避免 N+1）
-        $allChildren = $this->getAllChildrenByProjectIdAndParentId($projectId, $fileId, $depth, $currentDepth, $storageType);
+        $allChildren = $this->getAllChildrenByProjectIdAndParentId($projectId, $fileId, $depth, $currentDepth, $spaceType);
 
         return [
             'root' => $rootFile,
@@ -900,7 +897,7 @@ class MagicFSFileDomainService
      * @param string $parentId 父文件ID
      * @param int $maxDepth 最大深度
      * @param int $currentDepth 当前深度
-     * @param null|string $storageType Optional storage type filter (e.g. 'workspace'). Null means no filter.
+     * @param null|string $spaceType Optional space type filter (e.g. 'project'). Null means no filter.
      * @return array<TaskFileEntity> 所有子文件数组
      */
     protected function getAllChildrenByProjectIdAndParentId(
@@ -908,7 +905,7 @@ class MagicFSFileDomainService
         string $parentId,
         int $maxDepth = -1,
         int $currentDepth = 0,
-        ?string $storageType = null
+        ?string $spaceType = null
     ): array {
         $maxDepthParam = $maxDepth !== -1 ? $maxDepth : 100;
         $descendantIds = $this->taskFileRepository->getAllDescendantIds(
@@ -924,7 +921,7 @@ class MagicFSFileDomainService
         return $this->taskFileRepository->getFilesByIds(
             $descendantIds,
             $projectId,
-            $storageType
+            $spaceType
         );
     }
 
@@ -945,6 +942,72 @@ class MagicFSFileDomainService
                 'error' => $throwable->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * 统一解析文件所属空间的上下文（space_type / workDir / topic_id）.
+     *
+     * 空间类型以父目录 space_type 为准（与挂载位置一致，批量复制/移动进话题
+     * 空间时自动落话题 key）；父目录缺失或 space_type 无法识别时快速失败。
+     *
+     * @param null|TaskFileEntity $parentFile 直接父目录
+     * @param int $projectId 项目 ID（user 空间为 0）
+     * @param string $userId 用户 ID
+     * @param string $parentId 父目录 ID（用于错误信息）
+     * @return array{space_type: string, work_dir: string, topic_id: int}
+     */
+    private function resolveSpaceContext(?TaskFileEntity $parentFile, int $projectId, string $userId, string $parentId): array
+    {
+        $spaceType = $parentFile !== null ? $parentFile->getSpaceType() : null;
+        $resolvedTopicId = 0;
+
+        switch ($spaceType) {
+            case FileSpaceType::TOPIC->value:
+                // 话题根目录恒带 topic_id；父目录缺失时快速失败，不做祖先链兜底
+                if ($parentFile === null || $parentFile->getTopicId() <= 0) {
+                    ExceptionBuilder::throw(
+                        MagicFSErrorCode::TOPIC_ID_REQUIRED,
+                        'magicfs.topic_id_required',
+                        ['parent_id' => $parentId]
+                    );
+                }
+                $resolvedTopicId = $parentFile->getTopicId();
+                $workDir = WorkDirectoryUtil::getTopicRootDir($userId, $projectId, $resolvedTopicId);
+                break;
+            case FileSpaceType::USER->value:
+                if ($userId === '') {
+                    ExceptionBuilder::throw(
+                        MagicFSErrorCode::FILE_NOT_FOUND,
+                        'magicfs.project_not_found',
+                        ['project_id' => $projectId]
+                    );
+                }
+                $workDir = WorkDirectoryUtil::getUserWorkDir($userId);
+                break;
+            case FileSpaceType::PROJECT->value:
+                $project = $this->projectRepository->findById($projectId);
+                if ($project === null) {
+                    ExceptionBuilder::throw(
+                        MagicFSErrorCode::FILE_NOT_FOUND,
+                        'magicfs.project_not_found',
+                        ['project_id' => $projectId]
+                    );
+                }
+                $workDir = $project->getWorkDir();
+                break;
+            default:
+                ExceptionBuilder::throw(
+                    MagicFSErrorCode::UNSUPPORTED_SPACE_TYPE,
+                    'magicfs.unsupported_space_type',
+                    ['parent_id' => $parentId, 'space_type' => (string) $spaceType]
+                );
+        }
+
+        return [
+            'space_type' => $spaceType,
+            'work_dir' => $workDir,
+            'topic_id' => $resolvedTopicId,
+        ];
     }
 
     /**
