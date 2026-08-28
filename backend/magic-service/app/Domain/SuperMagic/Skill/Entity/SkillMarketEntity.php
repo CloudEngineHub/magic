@@ -89,6 +89,8 @@ class SkillMarketEntity extends AbstractEntity
 
     protected int $baseInstallCount = 0;
 
+    protected int $totalInstallCount = 0;
+
     /**
      * @var null|int 排序值，数值越大越靠前；NULL 表示按创建时间排序
      */
@@ -119,11 +121,6 @@ class SkillMarketEntity extends AbstractEntity
      */
     protected ?string $deletedAt = null;
 
-    public function __construct(array $data = [])
-    {
-        parent::__construct($data);
-    }
-
     /**
      * 转换为数组.
      */
@@ -145,6 +142,7 @@ class SkillMarketEntity extends AbstractEntity
             'publish_status' => $this->publishStatus->value,
             'install_count' => $this->installCount,
             'base_install_count' => $this->baseInstallCount,
+            'total_install_count' => $this->totalInstallCount,
             'sort_order' => $this->sortOrder,
             'is_featured' => $this->isFeatured,
             'is_hidden' => $this->isHidden,
@@ -329,6 +327,7 @@ class SkillMarketEntity extends AbstractEntity
     public function setInstallCount(int|string $installCount): self
     {
         $this->installCount = is_string($installCount) ? (int) $installCount : $installCount;
+        $this->totalInstallCount = $this->installCount + $this->baseInstallCount;
         return $this;
     }
 
@@ -340,12 +339,19 @@ class SkillMarketEntity extends AbstractEntity
     public function setBaseInstallCount(int|string $baseInstallCount): self
     {
         $this->baseInstallCount = is_string($baseInstallCount) ? (int) $baseInstallCount : $baseInstallCount;
+        $this->totalInstallCount = $this->installCount + $this->baseInstallCount;
         return $this;
     }
 
     public function getTotalInstallCount(): int
     {
-        return $this->installCount + $this->baseInstallCount;
+        return $this->totalInstallCount;
+    }
+
+    public function setTotalInstallCount(int|string $totalInstallCount): self
+    {
+        $this->totalInstallCount = is_string($totalInstallCount) ? (int) $totalInstallCount : $totalInstallCount;
+        return $this;
     }
 
     public function getSortOrder(): ?int
