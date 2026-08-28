@@ -1,5 +1,6 @@
 import type { HttpClient } from "@/apis/core/HttpClient"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 import { genRequestUrl } from "@/utils/http"
 
 export type MicroAppPublishShareType = 2 | 4 | 5
@@ -55,8 +56,8 @@ export interface MicroAppListItem {
 	cover_url: string
 	publish_status: "published" | "unpublished" | string
 	updated_at: string | null
-	/** Server-calculated capability; missing values must not grant access. */
-	can_manage_collaborators?: boolean
+	/** Current user's effective role in the underlying project. */
+	user_role?: CollaboratorPermission
 }
 
 export interface MicroAppListResponse {

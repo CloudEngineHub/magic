@@ -10,6 +10,7 @@ import {
 	MicroAppEmptyIllustration,
 	MicroAppSearchEmptyIllustration,
 } from "@/pages/superMagic/components/MicroAppStateIllustration"
+import { canManageCollaborators as canManageProjectCollaborators } from "@/pages/superMagic/utils/permission"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import MicroAppCard from "./components/MicroAppCard"
@@ -212,7 +213,7 @@ export default function MicroAppsListPageMobile() {
 									canDelete={app.can_delete}
 									canManageCollaborators={
 										collaboratorManagement.canManageCollaborators &&
-										app.can_manage_collaborators
+										canManageProjectCollaborators(app.user_role)
 									}
 									testId={`micro-apps-mobile-app-${app.app_id}`}
 								/>
