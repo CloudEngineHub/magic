@@ -23,6 +23,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppListScope;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
@@ -189,6 +190,52 @@ class MicroAppProjectAppServiceTest extends TestCase
         self::assertSame(
             ['extra' => ['pure_mode' => true]],
             $service->resolvePublished(1001),
+        );
+    }
+
+    public function testShowByProjectReturnsCurrentUserRole(): void
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('org-1');
+        $requestContext = $this->createMock(RequestContext::class);
+        $requestContext->method('getUserAuthorization')->willReturn($authorization);
+
+        $project = (new ProjectEntity())
+            ->setId(2001)
+            ->setUserId('user-1')
+            ->setCreatedUid('user-1')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+        $record = (new MicroAppEntity())
+            ->setId(1001)
+            ->setProjectId(2001);
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->expects(self::once())
+            ->method('ensureByProjectId')
+            ->with(2001, 'org-1', 'user-1', 'user-1')
+            ->willReturn($record);
+        $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
+        $projectRepository->expects(self::once())->method('findById')->with(2001)->willReturn($project);
+        $responseFormatter = $this->createMock(MicroAppProjectResponseFormatter::class);
+        $responseFormatter->expects(self::once())
+            ->method('formatMicroApp')
+            ->with($record, $project)
+            ->willReturn(['project' => ['id' => 2001]]);
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+        );
+
+        self::assertSame(
+            ['project' => ['id' => 2001, 'user_role' => 'owner']],
+            $service->showByProject($requestContext, 2001),
         );
     }
 
@@ -407,6 +454,15 @@ class MicroAppProjectAppServiceTest extends TestCase
 
 final class TestableMicroAppProjectAppService extends MicroAppProjectAppService
 {
+    public function getAccessibleProject(
+        int $projectId,
+        string $userId,
+        string $organizationCode,
+        MemberRole $requiredRole = MemberRole::VIEWER,
+    ): ProjectEntity {
+        return new ProjectEntity();
+    }
+
     public function getAccessibleProjectWithManager(
         int $projectId,
         string $userId,

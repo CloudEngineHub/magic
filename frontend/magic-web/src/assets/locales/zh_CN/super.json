@@ -3644,13 +3644,15 @@
 	},
 	"microAppsPage": {
 		"actions": {
-			"manageCollaborators": "管理协作者",
+			"collaboratorsFailed": "加载协作者信息失败，请重试。",
+			"collaboratorsNoPermission": "你没有管理该应用协作者的权限。",
 			"deleteApp": "删除应用",
 			"deleteDescription": "「{{name}}」及对应项目将移入回收站，30 天内可以恢复。",
 			"deleteFailed": "删除应用失败，请重试。",
 			"deleteSuccess": "应用已移入回收站",
 			"deleteTitle": "删除应用",
 			"deleting": "删除中...",
+			"manageCollaborators": "管理协作者",
 			"more": "更多操作",
 			"openInNewWindow": "新窗口打开",
 			"rename": "重命名",
