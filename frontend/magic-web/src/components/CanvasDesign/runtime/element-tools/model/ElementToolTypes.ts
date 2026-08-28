@@ -124,6 +124,9 @@ export interface ElementToolContext {
 	}
 	flags: {
 		readonly convertHightSupported: boolean
+		readonly removeBackgroundSupported: boolean
+		readonly eraserSupported: boolean
+		readonly expandSupported: boolean
 		readonly showMediaOriginalSize: boolean
 		readonly isStoryboardOutputFrame: boolean
 	}

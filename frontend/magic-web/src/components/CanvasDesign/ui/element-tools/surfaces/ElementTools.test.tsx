@@ -49,7 +49,7 @@ vi.mock("../../../app/providers/CanvasUIProvider", () => ({
 }))
 
 vi.mock("../../../app/providers/MagicProvider", () => ({
-	useMagic: () => ({ convertHightConfig: { supported: false } }),
+	useMagic: () => ({ convertHightConfig: { enabled: false } }),
 }))
 
 vi.mock("../../../app/providers/CanvasProvider", () => ({

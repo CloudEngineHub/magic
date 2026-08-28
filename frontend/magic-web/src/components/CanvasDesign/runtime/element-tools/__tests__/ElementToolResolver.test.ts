@@ -90,6 +90,20 @@ describe("ElementToolResolver", () => {
 		expect(bottom.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.VersionDelete)
 	})
 
+	it("hides AI image editing tools when their abilities are disabled", () => {
+		const { top } = resolve(createImage(), {
+			removeBackgroundSupported: false,
+			eraserSupported: false,
+			expandSupported: false,
+		})
+
+		expect(top.map((tool) => tool.id)).not.toContain(
+			ElementToolTypeEnum.ContentRemoveBackground,
+		)
+		expect(top.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.ContentEraser)
+		expect(top.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.ContentExtend)
+	})
+
 	it("captures the active Content target instead of re-reading it later", () => {
 		const image = createImage({
 			contents: [

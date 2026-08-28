@@ -799,8 +799,8 @@ export interface GenerateHightImageResponse {
  * 获取转高清配置响应数据
  */
 export interface GetConvertHightConfigResponse {
-	/** 是否支持转高清，如果没有配置则不支持转高清 */
-	supported: boolean
+	/** 后台是否开启转高清能力 */
+	enabled: boolean
 	/** 支持的尺寸配置列表 */
 	image_size_config: {
 		sizes: {
@@ -809,8 +809,24 @@ export interface GetConvertHightConfigResponse {
 			/** 尺寸值，格式为 "宽度x高度"，如 "1024x1024" */
 			value: string
 			/** 分辨率等级，如 "1K", "2K", "4K" */
-			scale: string
+			scale: string | null
 		}[]
+	}
+}
+
+/** 获取 AI 能力可用性响应数据 */
+export interface AiAbilityAvailabilityResponse {
+	abilities: {
+		image_convert_high: GetConvertHightConfigResponse
+		image_remove_background: {
+			enabled: boolean
+		}
+		image_eraser: {
+			enabled: boolean
+		}
+		image_expand: {
+			enabled: boolean
+		}
 	}
 }
 
@@ -3077,7 +3093,17 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 转高清配置响应数据
 	 */
 	getConvertHightConfig() {
-		return fetch.get<GetConvertHightConfigResponse>("/api/v1/design/convert-high/config")
+		return fetch
+			.get<AiAbilityAvailabilityResponse>("/api/v1/ai-abilities/availability")
+			.then((response) => response.abilities.image_convert_high)
+	},
+
+	/**
+	 * @description 获取 AI 能力可用性配置
+	 * @returns AI 能力可用性响应数据
+	 */
+	getAiAbilityAvailability() {
+		return fetch.get<AiAbilityAvailabilityResponse>("/api/v1/ai-abilities/availability")
 	},
 
 	/**
