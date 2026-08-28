@@ -420,12 +420,17 @@ export function useWorkspaceListDnd({
 				previous?.disabled === preview?.disabled &&
 				previous?.target === preview?.target
 			if (isSamePreview) {
-				if (
-					refreshPosition &&
-					preview &&
-					(preview.type === "project" || activeDragRef.current?.type === "workspace")
-				) {
-					showDropIndicator(preview.target, preview.position || "after")
+				if (refreshPosition && preview) {
+					if (preview.type === "project" || activeDragRef.current?.type === "workspace") {
+						showDropIndicator(preview.target, preview.position || "after")
+					} else if (preview.disabled) {
+						showWorkspaceDisabled(preview.target)
+					} else {
+						const workspaceRoot = preview.target.closest<HTMLElement>(
+							"[data-sidebar-workspace-root]",
+						)
+						showWorkspaceHighlight(workspaceRoot, true)
+					}
 				}
 				return
 			}
