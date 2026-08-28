@@ -217,7 +217,7 @@ function registerAppCacheRoutes(
 			plugins: [
 				// Featured templates use an isolated, longer-lived bucket so lower-value images
 				// loaded later cannot evict them from the ordinary template cache.
-				new CacheableResponsePlugin({ statuses: [0, 200] }),
+				new CacheableResponsePlugin({ statuses: [200] }),
 				new ExpirationPlugin({
 					maxEntries: FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 					maxAgeSeconds: CACHE_TTL_15_DAYS,
@@ -233,9 +233,8 @@ function registerAppCacheRoutes(
 		new CacheFirst({
 			cacheName: SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
 			plugins: [
-				// Cross-origin <img> requests are opaque, but their cache key was granted only by
-				// the template catalog's URL marker above.
-				new CacheableResponsePlugin({ statuses: [0, 200] }),
+				// CORS-enabled template images must expose a readable 200 response before caching.
+				new CacheableResponsePlugin({ statuses: [200] }),
 				new ExpirationPlugin({
 					maxEntries: SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 					maxAgeSeconds: CACHE_TTL_7_DAYS,

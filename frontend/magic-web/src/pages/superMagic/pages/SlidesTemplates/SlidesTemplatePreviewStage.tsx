@@ -55,6 +55,7 @@ function usePreviewImagePreload(pages: string[], activeIndex: number) {
 		function preload(url: string | undefined) {
 			if (!url) return
 			const image = new window.Image()
+			image.crossOrigin = "anonymous"
 			image.decoding = "async"
 			image.src = url
 			images.push(image)
@@ -124,6 +125,7 @@ function usePreviewImageSwap(activePage: string | undefined, resetKey: string) {
 
 		let cancelled = false
 		const image = new window.Image()
+		image.crossOrigin = "anonymous"
 		image.decoding = "async"
 
 		const commitPage = () => {
@@ -192,6 +194,7 @@ function SlidesTemplatePreviewStage({
 		>
 			{displayedPage ? (
 				<img
+					crossOrigin="anonymous"
 					src={ambientPage}
 					alt=""
 					className={styles.ambientPreview}
@@ -210,6 +213,7 @@ function SlidesTemplatePreviewStage({
 				>
 					{displayedPage ? (
 						<img
+							crossOrigin="anonymous"
 							src={displayedPage}
 							alt={`${title} ${displayedPageNumber}`}
 							className={styles.previewPageImage}

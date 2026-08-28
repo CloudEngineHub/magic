@@ -62,6 +62,7 @@ function SlidesPresetPreviewPages({
 
 		const preloadImages = pages.map((page) => {
 			const image = new window.Image()
+			image.crossOrigin = "anonymous"
 			image.decoding = "async"
 			image.src = page
 			return image
@@ -95,6 +96,7 @@ function SlidesPresetPreviewPages({
 						data-testid={`${dataTestIdPrefix}-pages`}
 					>
 						<img
+							crossOrigin="anonymous"
 							src={activePage}
 							alt={`${title} ${activeIndex + 1}`}
 							className="size-full object-contain"
@@ -163,6 +165,7 @@ function SlidesPresetPreviewPages({
 									)}
 								>
 									<img
+										crossOrigin="anonymous"
 										src={page}
 										alt=""
 										className="size-full object-cover"

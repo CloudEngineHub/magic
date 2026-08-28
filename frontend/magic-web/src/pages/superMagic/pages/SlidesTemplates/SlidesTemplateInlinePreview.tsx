@@ -235,6 +235,7 @@ export default function SlidesTemplateInlinePreview({
 						>
 							{previewImageUrl ? (
 								<img
+									crossOrigin="anonymous"
 									src={previewImageUrl}
 									alt={title}
 									className="size-full object-cover"
@@ -455,6 +456,7 @@ export default function SlidesTemplateInlinePreview({
 											data-testid="slides-template-inline-preview-thumbnail"
 										>
 											<img
+												crossOrigin="anonymous"
 												src={getSlidesTemplatePreviewThumbnailImageUrl(
 													page,
 												)}

@@ -75,7 +75,7 @@ describe("slides template image cache route", () => {
 		).toBe(false)
 	})
 
-	it("allows opaque image responses in the dedicated cache", () => {
+	it("only caches CORS-readable image responses", () => {
 		const cacheFirstOptions: Record<string, unknown>[] = []
 		const cacheableResponseOptions: Record<string, unknown>[] = []
 		const expirationOptions: Record<string, unknown>[] = []
@@ -138,7 +138,10 @@ describe("slides template image cache route", () => {
 		).toBeLessThan(
 			cacheFirstOptions.findIndex((options) => options.cacheName === APP_IMAGE_CACHE_NAME),
 		)
-		expect(cacheableResponseOptions).toContainEqual({ statuses: [0, 200] })
+		expect(cacheableResponseOptions).toContainEqual({ statuses: [200] })
+		expect(cacheableResponseOptions).not.toContainEqual({ statuses: [0, 200] })
+		expect(SLIDES_TEMPLATE_IMAGE_CACHE_NAME).toContain("-v2")
+		expect(FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME).toContain("-v2")
 		expect(expirationOptions).toContainEqual({
 			maxEntries: FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 			maxAgeSeconds: CACHE_TTL_15_DAYS,

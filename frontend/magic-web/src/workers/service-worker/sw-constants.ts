@@ -121,7 +121,7 @@ export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
 // browsing useful without allowing template previews to occupy multiple gigabytes.
 export const SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 60
 export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 40
-// v2 removes the old buckets that also contained detail-page slide previews.
+// v2 removes legacy opaque buckets after TOS CORS is enabled.
 export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v2`
 export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v2`
 export const APP_MARKED_RESOURCE_CACHE_NAME = `${CACHE_NAMESPACE}-app-marked-resource-assets-v1`

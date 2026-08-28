@@ -50,6 +50,7 @@ describe("SlidesTemplatePreviewStage", () => {
 		const OriginalImage = window.Image
 		const createdImages: Array<{
 			complete: boolean
+			crossOrigin: string
 			decoding: ImageDecoding
 			onerror: (() => void) | null
 			onload: (() => void) | null
@@ -58,6 +59,7 @@ describe("SlidesTemplatePreviewStage", () => {
 
 		class MockImage {
 			complete = false
+			crossOrigin = ""
 			decoding: ImageDecoding = "auto"
 			onerror: (() => void) | null = null
 			onload: (() => void) | null = null
@@ -85,6 +87,7 @@ describe("SlidesTemplatePreviewStage", () => {
 			const initialImage = screen.getByTestId("slides-template-inline-preview-active-image")
 
 			expect(initialImage).toHaveAttribute("src", pages[0])
+			expect(initialImage).toHaveAttribute("crossorigin", "anonymous")
 
 			rerender(<SlidesTemplatePreviewStage activeIndex={1} pages={pages} title="Business" />)
 
@@ -107,6 +110,7 @@ describe("SlidesTemplatePreviewStage", () => {
 				.find((image) => image.src === pages[1] && image.onload)
 
 			expect(pendingImage).toBeDefined()
+			expect(createdImages.every((image) => image.crossOrigin === "anonymous")).toBe(true)
 
 			act(() => {
 				pendingImage?.onload?.()
