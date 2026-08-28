@@ -160,7 +160,7 @@ describe("useMicroAppsPage", () => {
 					publish_status: "unpublished",
 					updated_at: null,
 					can_delete: false,
-					can_manage_collaborators: false,
+					user_role: undefined,
 				},
 			],
 			total: 1,

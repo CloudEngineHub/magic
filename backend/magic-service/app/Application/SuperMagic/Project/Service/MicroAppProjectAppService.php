@@ -21,6 +21,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ProjectUpdatedEvent;
@@ -375,19 +376,30 @@ class MicroAppProjectAppService extends AbstractAppService
         );
 
         $coverUrls = $this->responseFormatter->resolveCoverUrls($result['list']);
+        $projectIds = array_values(array_unique(array_map(
+            static fn (array $row): int => (int) ($row['project_id'] ?? 0),
+            $result['list']
+        )));
+        $projectIds = array_values(array_filter($projectIds));
+        $targetIds = array_values(array_unique(array_merge([$userId], array_map('strval', $departmentIds))));
+        $userRoles = $this->projectMemberDomainService->getUserHighestRolesInProjects($projectIds, $targetIds);
         $items = [];
         foreach ($result['list'] as $row) {
             $appId = (string) ($row['app_id'] ?? '');
+            $projectId = (int) ($row['project_id'] ?? 0);
+            $isOwner = (string) ($row['project_owner_id'] ?? '') === $userId;
             $coverKey = (string) ($row['cover_file_key'] ?? '');
             $items[] = [
                 'app_id' => $appId,
+                'project_id' => (string) $projectId,
                 'app_name' => (string) ($row['app_name'] ?? ''),
                 'app_description' => (string) ($row['app_description'] ?? ''),
                 'creator_id' => (string) ($row['creator_id'] ?? ''),
                 'cover_url' => $coverUrls[$this->responseFormatter->coverUrlMapKey($row, $coverKey)] ?? '',
                 'publish_status' => (string) ($row['publish_status'] ?? MicroAppPublishStatus::Unpublished->value),
                 'updated_at' => ($row['updated_at'] ?? null) !== null ? (string) $row['updated_at'] : null,
-                'can_delete' => (string) ($row['project_owner_id'] ?? '') === $userId,
+                'user_role' => $isOwner ? MemberRole::OWNER->value : ($userRoles[$projectId] ?? null),
+                'can_delete' => $isOwner,
             ];
         }
 

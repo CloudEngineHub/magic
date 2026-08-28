@@ -12,7 +12,7 @@ const app: MicroAppListItem = {
 	cover_url: "",
 	publish_status: "unpublished",
 	updated_at: null,
-	can_manage_collaborators: true,
+	user_role: "manage",
 }
 
 describe("useMicroAppCollaboratorManagement", () => {
