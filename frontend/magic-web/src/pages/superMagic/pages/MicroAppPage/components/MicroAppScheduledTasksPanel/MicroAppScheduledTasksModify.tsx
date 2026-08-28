@@ -115,7 +115,8 @@ export function MicroAppScheduledTasksModify({
 	const [loading, setLoading] = useState(Boolean(initialValues))
 	const [promptRequired, setPromptRequired] = useState(false)
 	// 微应用定时任务始终由微应用数字员工执行，不能切换到其他 topic mode。
-	const topicMode = TopicMode.MicroApp
+	const modelTopicMode = TopicMode.Default
+	const runtimeTopicMode = TopicMode.MicroApp
 	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
 	const [modalStores] = useState(() => {
 		const projectFilesStore = new ProjectFilesStore()
@@ -205,7 +206,7 @@ export function MicroAppScheduledTasksModify({
 									input_mode: "plan",
 									chat_mode: "normal",
 									// Ignore legacy values so editing an old task repairs its mode on save.
-									topic_pattern: TopicMode.MicroApp,
+									topic_pattern: runtimeTopicMode,
 									model: tiptapEditorRef.current?.selectedModel,
 								},
 							},
@@ -289,7 +290,7 @@ export function MicroAppScheduledTasksModify({
 			task_status: TaskStatus.WAITING,
 			task_mode: "",
 			project_id: context.projectId,
-			topic_mode: topicMode,
+			topic_mode: modelTopicMode,
 			updated_at: "",
 			workspace_id: context.workspaceId,
 			token_used: null,
@@ -342,7 +343,7 @@ export function MicroAppScheduledTasksModify({
 							selectedTopic={selectedTopic}
 							selectedProject={selectedProject}
 							selectedWorkspace={selectedWorkspace}
-							topicMode={topicMode}
+							topicMode={modelTopicMode}
 							projectFilesStore={modalStores.projectFilesStore}
 							mentionPanelStore={modalStores.mentionPanelStore}
 							enableAiCompletion
