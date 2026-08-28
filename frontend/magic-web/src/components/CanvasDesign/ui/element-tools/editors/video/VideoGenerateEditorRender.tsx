@@ -46,6 +46,7 @@ import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
 import {
 	buildReferenceAssetInputs,
+	canAddReferenceAssetByCounts,
 	countVideoReferenceAssetInfosByKind,
 	hasVideoInputs,
 	resolveReferenceAssetLimits,
@@ -56,7 +57,10 @@ import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelSelectContext,
 } from "../../../../public/props"
-import type { ReferenceResourceSourceType } from "../../../editors/message/reference-assets/reference-resource.types"
+import type {
+	ReferenceAssetFileClass,
+	ReferenceResourceSourceType,
+} from "../../../editors/message/reference-assets/reference-resource.types"
 import { ReferenceResourceDropSurface } from "../../../editors/message/reference-assets/ReferenceResourceDropSurface"
 import {
 	checkLocalReferenceResourceDrop,
@@ -68,6 +72,7 @@ import {
 	type ReferenceDropProjectFile,
 	useReferenceResourceDrop,
 } from "../../../editors/message/reference-assets/useReferenceResourcePanelDataService"
+import { filterReferenceResourcePanelBatchItems } from "../../../editors/message/reference-assets/referenceResourceSelection"
 import styles from "./index.module.css"
 import { createAndSubmitVideoGeneration } from "./submit/createAndSubmitVideoGeneration"
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
@@ -170,6 +175,11 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const hasScrollbar = hasEditorScrollbar || hasSourceListScrollbar
 	const confirmVideoGeneration = useVideoPointsConfirm()
 	const isReplacing = useIsMediaReplacing(videoElement.id)
+	const linkedReferenceAssetInfosRef = useRef<VideoReferenceAssetInfo[]>([])
+	const getAdditionalReferenceAssetInfos = useCallback(
+		() => linkedReferenceAssetInfosRef.current,
+		[],
+	)
 
 	useEffect(() => {
 		setEditingElementId(videoElement.id)
@@ -190,6 +200,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		...(restoreOnMount ? { restoreOnMount } : {}),
 		...(sessionSnapshot ? { sessionSnapshot } : {}),
 		...(syncElementSize !== undefined ? { syncElementSize } : {}),
+		getAdditionalReferenceAssetInfos,
 	})
 	const { handlers } = config
 	const sessionStore = canvas?.mediaEditRecoveryManager
@@ -324,6 +335,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				const hasMaxIssue = validateReferenceAssetsByLimits(
 					config.currentInputModeConfig,
 					buildVideoReferenceAssetInfosFromReferences(references),
+					{ ignoreModeMaxCountForTotal: config.selectedInputMode === "omni_reference" },
 				).some((issue) => issue.rule === "max")
 				return hasMaxIssue ? "over-limit" : null
 			},
@@ -334,6 +346,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		config.supportsReferenceAudios,
 		config.supportsReferenceImages,
 		config.supportsReferenceVideos,
+		config.selectedInputMode,
 	])
 	const { linkedEditorInputs, handleLinkedMediaSelectionChange, handleMentionChange } =
 		useLinkedMediaAssociationController({
@@ -397,9 +410,20 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		() => countVideoReferenceAssetInfosByKind(mergedReferenceAssetInfos),
 		[mergedReferenceAssetInfos],
 	)
+	linkedReferenceAssetInfosRef.current = mergedReferenceAssetInfos.filter(
+		(info) =>
+			!config.referenceImageInfos.some(
+				(manualInfo) =>
+					getLinkedMediaReferenceIdentity(manualInfo.path, resolveResourceReference) ===
+					getLinkedMediaReferenceIdentity(info.path, resolveResourceReference),
+			),
+	)
 	const effectiveReferenceAssetLimits = useMemo(
-		() => resolveReferenceAssetLimits(config.currentInputModeConfig, mergedReferenceAssetInfos),
-		[config.currentInputModeConfig, mergedReferenceAssetInfos],
+		() =>
+			resolveReferenceAssetLimits(config.currentInputModeConfig, mergedReferenceAssetInfos, {
+				ignoreModeMaxCountForTotal: config.selectedInputMode === "omni_reference",
+			}),
+		[config.currentInputModeConfig, mergedReferenceAssetInfos, config.selectedInputMode],
 	)
 	const effectiveMaxReferenceFiles = useMemo(() => {
 		if (!config.supportsReferenceAssets) return 0
@@ -654,6 +678,20 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	)
 
 	const canAcceptReferenceDrop = config.supportsReferenceAssets && !config.isUploading
+	const canAcceptNextReferenceAsset = useCallback(
+		(
+			fileClass: ReferenceAssetFileClass,
+			currentAssetCounts: typeof effectiveReferenceAssetCounts,
+		) =>
+			fileClass !== "unknown" &&
+			canAddReferenceAssetByCounts(
+				config.currentInputModeConfig,
+				currentAssetCounts,
+				fileClass,
+				{ ignoreModeMaxCountForTotal: config.selectedInputMode === "omni_reference" },
+			),
+		[config.currentInputModeConfig, config.selectedInputMode],
+	)
 
 	const canAcceptProjectFiles = useCallback(
 		(files: ReferenceDropProjectFile[]) => {
@@ -666,6 +704,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				matchableItems,
 				currentReferenceFiles: effectiveReferencePaths,
 				maxReferenceFiles: effectiveMaxReferenceFiles,
+				assetLimits: effectiveReferenceAssetLimits,
+				currentAssetCounts: effectiveReferenceAssetCounts,
+				canAcceptNextAsset: canAcceptNextReferenceAsset,
 				resolveResourceReference,
 			})
 		},
@@ -673,8 +714,11 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			canAcceptReferenceDrop,
 			effectiveReferencePaths,
 			effectiveMaxReferenceFiles,
+			effectiveReferenceAssetLimits,
+			effectiveReferenceAssetCounts,
 			matchableItems,
 			resolveResourceReference,
+			canAcceptNextReferenceAsset,
 		],
 	)
 
@@ -688,6 +732,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				maxReferenceFiles: effectiveMaxReferenceFiles,
 				assetLimits: effectiveReferenceAssetLimits,
 				currentAssetCounts: effectiveReferenceAssetCounts,
+				canAcceptNextAsset: canAcceptNextReferenceAsset,
 			})
 		},
 		[
@@ -697,6 +742,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			effectiveReferenceAssetLimits,
 			effectiveReferenceAssetCounts,
 			effectiveReferencePaths,
+			canAcceptNextReferenceAsset,
 		],
 	)
 
@@ -708,6 +754,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				maxReferenceFiles: effectiveMaxReferenceFiles,
 				assetLimits: effectiveReferenceAssetLimits,
 				currentAssetCounts: effectiveReferenceAssetCounts,
+				canAcceptNextAsset: canAcceptNextReferenceAsset,
 			}),
 		[
 			canAcceptReferenceDrop,
@@ -715,6 +762,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			effectiveReferenceAssetLimits,
 			effectiveReferenceAssetCounts,
 			effectiveReferencePaths,
+			canAcceptNextReferenceAsset,
 		],
 	)
 
@@ -728,6 +776,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				maxReferenceFiles: effectiveMaxReferenceFiles,
 				assetLimits: effectiveReferenceAssetLimits,
 				currentAssetCounts: effectiveReferenceAssetCounts,
+				canAcceptNextAsset: canAcceptNextReferenceAsset,
 			}),
 		[
 			canAcceptReferenceDrop,
@@ -736,6 +785,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			effectiveReferenceAssetLimits,
 			effectiveReferenceAssetCounts,
 			effectiveReferencePaths,
+			canAcceptNextReferenceAsset,
 		],
 	)
 
@@ -762,8 +812,30 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				seenNextIdentitySet.add(identity)
 				nextFiles.push(file)
 			})
+			const filteredFiles = filterReferenceResourcePanelBatchItems({
+				items: nextFiles.map((file) => ({
+					data: {
+						file_path: file.path,
+						file_name: file.fileName,
+					},
+				})),
+				currentReferenceFiles: effectiveReferencePaths,
+				assetLimits: effectiveReferenceAssetLimits,
+				currentAssetCounts: effectiveReferenceAssetCounts,
+				canAcceptNextAsset: canAcceptNextReferenceAsset,
+				resolveResourceReference,
+			}).map((item) => item.data.file_path)
+			const acceptedPathSet = new Set(filteredFiles)
+			const acceptedNextFiles = nextFiles.filter((file) => acceptedPathSet.has(file.path))
+			if (acceptedNextFiles.length < nextFiles.length) {
+				toast.info(
+					t("videoEditor.referenceAssetPartialSkipped", {
+						defaultValue: "部分素材因类型不支持、重复或达到上限已跳过",
+					}),
+				)
+			}
 			const startSlot = config.currentReferenceImages.length
-			nextFiles.forEach((file, index) => {
+			acceptedNextFiles.forEach((file, index) => {
 				handlers.replaceReferenceImageAt(startSlot + index, {
 					path: file.path,
 					src: file.path,
@@ -774,14 +846,18 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		[
 			config.currentReferenceImages.length,
 			effectiveReferencePaths,
+			effectiveReferenceAssetCounts,
+			effectiveReferenceAssetLimits,
 			handlers,
 			resolveResourceReference,
+			canAcceptNextReferenceAsset,
+			t,
 		],
 	)
 
 	const handlePaste = useCallback(
 		(event: ClipboardEvent<HTMLDivElement>) => {
-			const files = Array.from(event.clipboardData.files)
+			const files = Array.from(event.clipboardData.files) as File[]
 			if (files.length === 0) return
 			if (!canAcceptLocalFiles(files).accepted) return
 
@@ -877,10 +953,19 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		const validationIssues = validateReferenceAssetsByLimits(
 			config.currentInputModeConfig,
 			currentInputs,
+			{ ignoreModeMaxCountForTotal: config.selectedInputMode === "omni_reference" },
 		)
 		if (validationIssues.length > 0) {
 			const firstIssue = validationIssues[0]
 			if (firstIssue.field === "total") {
+				if (firstIssue.reason === "variant") {
+					toast.error(
+						t("videoEditor.referenceAssetVariantNotMet", {
+							defaultValue: "参考素材组合不满足当前模型要求",
+						}),
+					)
+					return
+				}
 				if (firstIssue.rule === "max") {
 					toast.error(
 						t("videoEditor.referenceAssetTotalMaxReached", {
@@ -945,6 +1030,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		confirmVideoGeneration,
 		config.currentInputModeConfig,
 		config.selectedModelId,
+		config.selectedInputMode,
 		estimatedPoints,
 		isEstimateLoading,
 		mergedReferenceAssetInfos,

@@ -43,6 +43,8 @@ export interface UseVideoEditorConfigOptions {
 	recoveryIntent?: MediaEditIntent
 	/** 尺寸选择变化时是否同步更新当前 videoElement；结果态重新编辑生成新元素时应关闭 */
 	syncElementSize?: boolean
+	/** 当前有效的画布联动参考媒体，仅用于添加入口的统一计数，不由该 hook 持久化。 */
+	getAdditionalReferenceAssetInfos?: () => readonly VideoReferenceAssetInfo[]
 }
 
 export interface VideoModelOption {

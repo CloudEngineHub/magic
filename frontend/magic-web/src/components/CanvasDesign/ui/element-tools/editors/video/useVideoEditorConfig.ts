@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useUnmount, useUpdateEffect } from "ahooks"
+import { toast } from "sonner"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
@@ -36,6 +37,7 @@ import {
 } from "../../../editors/message/reference-assets/referenceBinding"
 import { createReferenceResourcePanelItemFromPath } from "../../../editors/message/reference-assets/createReferenceResourcePanelItem"
 import type { ReferenceResourceType } from "../../../editors/message/reference-assets/reference-resource.types"
+import { classifyReferenceAssetFile } from "../../../editors/message/reference-assets/referenceResourceSelection"
 import type { ReferenceResourceMetadataCandidate } from "../../../editors/message/reference-assets/referenceResourceDescriptor"
 import {
 	cloneFrameSlotInfos,
@@ -58,6 +60,7 @@ import {
 	buildFrameSlotInfos,
 	buildReferenceAssetInfos,
 	buildReferenceAssetInputs,
+	canAddReferenceAsset,
 	clampReferenceAssetsToLimits,
 	getAvailableInputModes,
 	getAvailableInputTabs,
@@ -146,6 +149,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		manageRecoverySession = true,
 		recoveryIntent = "generate",
 		syncElementSize = true,
+		getAdditionalReferenceAssetInfos,
 	} = options
 	const { t } = useCanvasDesignI18n()
 	const { videoModelList, isLoadingVideoModelList, methods } = useMagic()
@@ -453,8 +457,11 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	}, [currentInputModeConfig?.frame_roles, supportsEndFrame, supportsStartFrame])
 
 	const referenceAssetLimits = useMemo(
-		() => resolveReferenceAssetLimits(currentInputModeConfig, referenceImageInfos),
-		[currentInputModeConfig, referenceImageInfos],
+		() =>
+			resolveReferenceAssetLimits(currentInputModeConfig, referenceImageInfos, {
+				ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+			}),
+		[currentInputModeConfig, referenceImageInfos, selectedInputMode],
 	)
 
 	const currentInputModeVariant = useMemo(() => {
@@ -483,6 +490,27 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			),
 		[referenceImageInfos],
 	)
+	const getEffectiveReferenceAssetInfos = useCallback(() => {
+		const additionalInfos = getAdditionalReferenceAssetInfos?.() ?? []
+		if (additionalInfos.length === 0) return referenceImageInfos
+		const existingIdentities = new Set(
+			referenceImageInfos.map((info) =>
+				getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
+			),
+		)
+		return [
+			...referenceImageInfos,
+			...additionalInfos.filter((info) => {
+				const identity = getCanvasResourceReferenceIdentity(
+					info.path,
+					resolveResourceReference,
+				)
+				if (!identity || existingIdentities.has(identity)) return false
+				existingIdentities.add(identity)
+				return true
+			}),
+		]
+	}, [getAdditionalReferenceAssetInfos, referenceImageInfos, resolveResourceReference])
 
 	const maxReferenceImages = useMemo(() => {
 		if (!supportsReferenceAssets) return 0
@@ -577,6 +605,63 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		}
 		return Array.from(new Set(acceptParts)).join(",") || fileInputAccept
 	}, [fileInputAccept, selectedReferenceAssetKinds])
+	const filterSelectedReferenceFiles = useCallback(
+		(files: File[]) => {
+			if (selectedResourceSlot?.inputTab === "frame") return files
+			const allowedKinds = new Set<VideoReferenceAssetKind>(
+				selectedReferenceAssetKinds?.length
+					? selectedReferenceAssetKinds
+					: [
+							supportsReferenceImages ? "image" : null,
+							supportsReferenceVideos ? "video" : null,
+							supportsReferenceAudios ? "audio" : null,
+						].filter((kind): kind is VideoReferenceAssetKind => Boolean(kind)),
+			)
+			const replacing = Boolean(selectedResourceSlot?.path)
+			const nextAssets = getEffectiveReferenceAssetInfos()
+			const seenIdentities = new Set(
+				nextAssets.map((info) =>
+					getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
+				),
+			)
+			return files.filter((file) => {
+				const kind = classifyReferenceAssetFile({
+					fileName: file.name,
+					mimeType: file.type,
+				})
+				if (kind === "unknown" || !allowedKinds.has(kind)) return false
+				if (replacing) return true
+				const identity = [
+					"local",
+					file.name.toLowerCase(),
+					file.size,
+					file.lastModified,
+					file.type.toLowerCase(),
+				].join(":")
+				if (seenIdentities.has(identity)) return false
+				if (
+					!canAddReferenceAsset(currentInputModeConfig, nextAssets, kind, {
+						ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+					})
+				)
+					return false
+				seenIdentities.add(identity)
+				nextAssets.push({ path: identity, src: "", fileName: file.name, assetType: kind })
+				return true
+			})
+		},
+		[
+			currentInputModeConfig,
+			getEffectiveReferenceAssetInfos,
+			resolveResourceReference,
+			selectedInputMode,
+			selectedReferenceAssetKinds,
+			selectedResourceSlot,
+			supportsReferenceAudios,
+			supportsReferenceImages,
+			supportsReferenceVideos,
+		],
+	)
 	const matchableItems = useMemo(() => {
 		return referenceImageInfos.map((info) => ({
 			name: info.fileName,
@@ -913,6 +998,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const limitedInfos = clampReferenceAssetsToLimits(
 				nextInfos.filter(Boolean) as VideoReferenceAssetInfo[],
 				currentInputModeConfig,
+				{ ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference" },
 			)
 			setReferenceImageInfos(limitedInfos)
 			const nextProtectedReferencePaths =
@@ -969,6 +1055,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			referenceImageInfos,
 			protectedReferencePaths,
 			resolveResourceReference,
+			selectedInputMode,
 			updateProtectedReferencePaths,
 			messageEditorRef,
 		],
@@ -1004,6 +1091,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		maxReferenceFiles:
 			selectedResourceSlot?.inputTab === "frame" ? maxFrameImages : selectedReferenceMaxFiles,
 		accept: selectedResourceSlot?.inputTab === "frame" ? "image/*" : selectedReferenceAccept,
+		filterFiles: filterSelectedReferenceFiles,
 		shouldSaveToElement: false,
 		onFileUploaded: useCallback(
 			(result: UploadFileResponse, fileIndex = 0, batchTotal = 1) => {
@@ -1033,32 +1121,41 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			: null
 		rawTriggerFileSelect({
 			maxSelectedFiles: sel?.path ? 1 : undefined,
-			ignoreReferenceFileCapacity: Boolean(sel?.path),
+			ignoreReferenceFileCapacity: Boolean(sel?.path) || sel?.inputTab === "reference",
 		})
 	}, [isUploading, rawTriggerFileSelect])
 
 	const uploadReferenceFiles = useCallback(
 		async (files: File[]) => {
 			if (isUploading || !supportsReferenceAssets || files.length === 0) return
+			const acceptedFiles = filterSelectedReferenceFiles(files)
+			if (acceptedFiles.length < files.length) {
+				toast.info(
+					t("videoEditor.referenceAssetPartialSkipped", {
+						defaultValue: "部分素材因类型不支持、重复或达到上限已跳过",
+					}),
+				)
+			}
+			if (acceptedFiles.length === 0) return
 
 			const startSlot = currentReferenceImages.length
 			batchUploadBaseRef.current = {
 				inputTab: "reference",
 				startSlot,
 			}
-			await rawUploadFiles(files, {
+			await rawUploadFiles(acceptedFiles, {
 				currentReferenceFiles: currentReferenceImages,
-				maxReferenceFiles: maxReferenceImages,
 				maxSelectedFiles: files.length,
-				ignoreReferenceFileCapacity: false,
+				ignoreReferenceFileCapacity: true,
 			})
 		},
 		[
 			isUploading,
 			supportsReferenceAssets,
+			filterSelectedReferenceFiles,
 			currentReferenceImages,
-			maxReferenceImages,
 			rawUploadFiles,
+			t,
 		],
 	)
 
@@ -1118,13 +1215,18 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				nextFrameMaxCount > 0 ? previous.slice(0, nextFrameMaxCount) : [],
 			)
 			const nextModeConfig = getInputModeConfig(nextModel, nextInputMode)
-			const limitedReferenceInfos = clampReferenceAssetsToLimits(
+			const limitedReferenceInfos = clampReferenceAssetsToLimits<VideoReferenceAssetInfo>(
 				referenceImageInfos,
 				nextModeConfig,
+				{
+					ignoreModeMaxCountForTotal: nextInputMode === "omni_reference",
+					preserveIncompatibleVariants: true,
+				},
 			)
 			const nextVariantCode = resolveReferenceAssetLimits(
 				nextModeConfig,
 				limitedReferenceInfos,
+				{ ignoreModeMaxCountForTotal: nextInputMode === "omni_reference" },
 			).variantCode
 			const nextVariantConfig = nextModeConfig?.variants?.find(
 				(variant) => variant.code === nextVariantCode,
@@ -1446,8 +1548,11 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					? clampReferenceAssetsToLimits(
 							nextInfos.slice(0, maxReferenceImages),
 							currentInputModeConfig,
+							{ ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference" },
 						)
-					: clampReferenceAssetsToLimits(nextInfos, currentInputModeConfig)
+					: clampReferenceAssetsToLimits(nextInfos, currentInputModeConfig, {
+							ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+						})
 			setReferenceImageInfos(normalizedInfos)
 			setIsPopoverOpen(false)
 			setIsReferenceProjectPanelOpen(false)
@@ -1465,6 +1570,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			protectedReferencePaths,
 			referenceImageInfos,
 			resolveResourceReference,
+			selectedInputMode,
 			updateProtectedReferencePaths,
 		],
 	)
@@ -1787,7 +1893,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const requestToRestore = sessionSnapshot?.request ?? currentRequest
 			const rootStorage = canvas.magicConfigManager.config?.methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
-				DefaultGenerateVideoConfig | undefined
+				| DefaultGenerateVideoConfig
+				| undefined
 			const quickEditPreferredModelId = selectedModelId || savedRequest?.model_id
 			const quickEditModel = isQuickEdit
 				? resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)
@@ -1828,10 +1935,15 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 						]
 					: buildReferenceAssetInfos(requestToRestore?.inputs),
 				restoredModeConfig,
+				{
+					ignoreModeMaxCountForTotal: restoredInputMode === "omni_reference",
+					preserveIncompatibleVariants: true,
+				},
 			)
 			const restoredVariantCode = resolveReferenceAssetLimits(
 				restoredModeConfig,
 				restoredReferenceInfos,
+				{ ignoreModeMaxCountForTotal: restoredInputMode === "omni_reference" },
 			).variantCode
 			const restoredVariantConfig = restoredModeConfig?.variants?.find(
 				(variant) => variant.code === restoredVariantCode,

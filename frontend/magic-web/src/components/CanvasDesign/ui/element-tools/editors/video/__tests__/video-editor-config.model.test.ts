@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { VideoInputModeConfig, VideoModelItem } from "../../../../../public/magic-types"
 import {
+	canAddReferenceAsset,
+	resolveReferenceAssetLimits,
+	validateReferenceAssetsByLimits,
 	resolveSelectableInputModeForAvailableModes,
 	resolveVideoReferenceVideoModel,
 } from "../model-config/video-editor-config.model"
@@ -142,5 +145,46 @@ describe("resolveVideoReferenceVideoModel", () => {
 		expect(resolveVideoReferenceVideoModel([zeroLimitModel])).toBeNull()
 		expect(resolveVideoReferenceVideoModel([minimumTwoModel])).toBeNull()
 		expect(resolveVideoReferenceVideoModel([requiresImageModel])).toBeNull()
+	})
+})
+
+describe("omni reference asset limits", () => {
+	it("uses max_count as a per-type fallback without applying it as a total cap", () => {
+		const config: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos", "reference_audios"],
+			max_count: 2,
+			reference_images: { max_count: 1 },
+		}
+		const assets = [{ assetType: "image" as const }, { assetType: "video" as const }]
+		const limits = resolveReferenceAssetLimits(config, assets, {
+			ignoreModeMaxCountForTotal: true,
+		})
+		expect(limits.reference_images.max).toBe(1)
+		expect(limits.reference_videos.max).toBe(2)
+		expect(limits.reference_audios.max).toBe(2)
+		expect(limits.total.max).toBe(5)
+		expect(
+			canAddReferenceAsset(config, assets, "audio", {
+				ignoreModeMaxCountForTotal: true,
+			}),
+		).toBe(true)
+	})
+
+	it("requires a variant minimum at submit time but does not delete the draft", () => {
+		const config: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos"],
+			variants: [
+				{
+					code: "image-and-video",
+					limits: { reference_images: { min: 1 }, reference_videos: { min: 1 } },
+				},
+			],
+		}
+		const assets = [{ assetType: "image" as const }]
+		expect(
+			validateReferenceAssetsByLimits(config, assets, {
+				ignoreModeMaxCountForTotal: true,
+			}).some((issue) => issue.reason === "variant"),
+		).toBe(true)
 	})
 })
