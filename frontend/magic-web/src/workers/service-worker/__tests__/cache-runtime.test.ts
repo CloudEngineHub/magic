@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	bootstrapWorkboxCacheRuntime,
+	enforceAppStaticExpiration,
 	isCacheableFeaturedSlidesTemplateImage,
 	isCacheableSlidesTemplateImage,
 	type WorkboxRouteContext,
@@ -91,6 +92,10 @@ describe("slides template image cache route", () => {
 		const cacheFirstOptions: Record<string, unknown>[] = []
 		const cacheableResponseOptions: Record<string, unknown>[] = []
 		const expirationOptions: Record<string, unknown>[] = []
+		const cacheExpirationConstructors: Array<{
+			cacheName: string
+			options: Record<string, unknown>
+		}> = []
 
 		class CacheFirst {
 			constructor(options: Record<string, unknown>) {
@@ -107,6 +112,11 @@ describe("slides template image cache route", () => {
 				expirationOptions.push(options)
 			}
 		}
+		class CacheExpiration {
+			constructor(cacheName: string, options: Record<string, unknown>) {
+				cacheExpirationConstructors.push({ cacheName, options })
+			}
+		}
 		class CacheableResponsePlugin {
 			constructor(options: Record<string, unknown>) {
 				cacheableResponseOptions.push(options)
@@ -118,7 +128,7 @@ describe("slides template image cache route", () => {
 			setConfig: vi.fn(),
 			routing: { registerRoute: vi.fn() },
 			strategies: { CacheFirst, StaleWhileRevalidate },
-			expiration: { ExpirationPlugin },
+			expiration: { ExpirationPlugin, CacheExpiration },
 			cacheableResponse: { CacheableResponsePlugin },
 		})
 
@@ -164,7 +174,36 @@ describe("slides template image cache route", () => {
 			maxAgeSeconds: CACHE_TTL_7_DAYS,
 			purgeOnQuotaError: true,
 		})
+
 		expect(SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(60)
 		expect(FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(40)
+
+		expect(cacheExpirationConstructors).toContainEqual({
+			cacheName: "magic-web-app-static-assets-v2",
+			options: { maxEntries: 4000, maxAgeSeconds: 14 * 24 * 60 * 60 },
+		})
+	})
+
+	it("serializes static expiration enforcement for native warmup writes", async () => {
+		let expireCalls = 0
+		let resolveExpiration: (() => void) | null = null
+		const expirationManager = {
+			updateTimestamp: vi.fn(async () => undefined),
+			expireEntries: vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						expireCalls += 1
+						resolveExpiration = resolve
+					}),
+			),
+		}
+
+		const firstRun = enforceAppStaticExpiration(expirationManager)
+		const secondRun = enforceAppStaticExpiration(expirationManager)
+
+		expect(expirationManager.expireEntries).toHaveBeenCalledTimes(1)
+		resolveExpiration?.()
+		await Promise.all([firstRun, secondRun])
+		expect(expireCalls).toBe(1)
 	})
 })

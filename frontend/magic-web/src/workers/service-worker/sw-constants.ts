@@ -36,6 +36,10 @@ export const RESOURCE_CACHE_VERSION_QUERY_PARAM = "swv"
 /** Prefix for all cache buckets owned by this SW (activate cleanup uses this namespace). */
 export const CACHE_NAMESPACE = "magic-web"
 
+/** Keeps the current static cache bucket explicit so a release can migrate from v1 to v2 in one line. */
+export const APP_STATIC_CACHE_NAME_V1 = `${CACHE_NAMESPACE}-app-static-assets-v1`
+export const APP_STATIC_CACHE_NAME_V2 = `${CACHE_NAMESPACE}-app-static-assets-v2`
+
 /**
  * Hashed JS/CSS under /assets/** — shared by runtime CacheFirst matcher and build-time precache collection.
  * Vite content hashes use base64url characters including '_' and '-'.
@@ -120,7 +124,7 @@ export const CACHE_TTL_15_DAYS = SECONDS_PER_DAY * 15
 export const CACHE_TTL_30_DAYS = SECONDS_PER_DAY * 30
 export const CACHE_TTL_60_DAYS = SECONDS_PER_DAY * 60
 
-export const APP_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-app-static-assets-v1`
+export const APP_STATIC_CACHE_NAME = APP_STATIC_CACHE_NAME_V2
 export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
 // Only cover images enter these buckets. Keep the total bounded below the previous
 // 300 + 500 setup so template browsing cannot occupy multiple gigabytes.

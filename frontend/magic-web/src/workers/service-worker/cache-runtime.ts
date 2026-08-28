@@ -58,6 +58,10 @@ interface WorkboxLike {
 	}
 	expiration: {
 		ExpirationPlugin: new (options: Record<string, unknown>) => unknown
+		CacheExpiration?: new (
+			cacheName: string,
+			options: Record<string, unknown>,
+		) => CacheExpirationLike
 	}
 	cacheableResponse: {
 		CacheableResponsePlugin: new (options: Record<string, unknown>) => unknown
@@ -68,8 +72,15 @@ export interface ExpirationPluginLike {
 	expireEntries?: (options: { cacheName: string }) => Promise<void>
 }
 
+/** Exposes Workbox expiration metadata operations for native Cache API writes. */
+export interface CacheExpirationLike {
+	updateTimestamp: (url: string) => Promise<void>
+	expireEntries: () => Promise<void>
+}
+
 export interface CacheRuntimeRegistration {
 	appStaticExpirationPlugin: ExpirationPluginLike
+	appStaticExpirationManager: CacheExpirationLike | null
 }
 
 export interface WorkboxBootstrapResult {
@@ -225,6 +236,12 @@ function registerAppCacheRoutes(
 	const appStaticExpirationPlugin = new ExpirationPlugin(
 		APP_STATIC_EXPIRATION_OPTIONS,
 	) as ExpirationPluginLike
+	const appStaticExpirationManager = workbox.expiration.CacheExpiration
+		? new workbox.expiration.CacheExpiration(
+				APP_STATIC_CACHE_NAME,
+				APP_STATIC_EXPIRATION_OPTIONS,
+			)
+		: null
 
 	const sameOrigin = sw.location.origin
 	// Do not attach empty diagnostic plugin objects when diagnostics are disabled.
@@ -401,7 +418,7 @@ function registerAppCacheRoutes(
 		}),
 	)
 
-	return { appStaticExpirationPlugin }
+	return { appStaticExpirationPlugin, appStaticExpirationManager }
 }
 
 let lastWarmedUpAssetsSerialized = ""
@@ -439,6 +456,7 @@ function toWarmUpInFlightSerializedKey(
 export async function warmUpStaticAssetsOnIdle(
 	assets?: string[],
 	options?: WarmUpOptions,
+	expirationManager?: CacheExpirationLike | null,
 ): Promise<void> {
 	const assetsToWarm = normalizeWarmUpAssets(assets)
 	if (!assetsToWarm.length) return
@@ -479,12 +497,16 @@ export async function warmUpStaticAssetsOnIdle(
 						const request = new Request(cacheKey, { credentials: "same-origin" })
 						// Skip if already in cache (e.g. cached via regular HTTP dynamic request)
 						const existing = await cache.match(request)
-						if (existing) return
+						if (existing) {
+							await expirationManager?.updateTimestamp(request.url)
+							return
+						}
 
 						fetchedInBatch = true
 						const response = await fetch(request)
 						if (response.ok) {
 							await cache.put(request, response)
+							await expirationManager?.updateTimestamp(request.url)
 						}
 					} catch {
 						// Ignored single request failure.
@@ -493,6 +515,9 @@ export async function warmUpStaticAssetsOnIdle(
 					}
 				}),
 			)
+
+			// Enforce the same Workbox maxEntries/maxAgeSeconds policy after each native-write batch.
+			await enforceAppStaticExpiration(expirationManager)
 
 			if (fetchedInBatch) {
 				await new Promise((resolve) => setTimeout(resolve, intervalMs))
@@ -515,12 +540,37 @@ export async function warmUpStaticAssetsOnIdle(
 	}
 }
 
+let appStaticExpirationInFlight: Promise<void> | null = null
+
+/** Serializes expiration runs so concurrent warmups never compete in Workbox metadata cleanup. */
+export function enforceAppStaticExpiration(
+	expirationManager: CacheExpirationLike | null | undefined,
+): Promise<void> {
+	if (!expirationManager) return Promise.resolve()
+	if (appStaticExpirationInFlight) return appStaticExpirationInFlight
+
+	appStaticExpirationInFlight = expirationManager
+		.expireEntries()
+		.catch((error) => {
+			console.warn("[sw] Failed to enforce app static cache expiration", { error })
+		})
+		.finally(() => {
+			appStaticExpirationInFlight = null
+		})
+
+	return appStaticExpirationInFlight
+}
+
 /**
  * After install precache, enforce APP_STATIC maxEntries because native puts skip ExpirationPlugin.
  */
 export async function enforceAppStaticExpirationAfterPrecache(
 	registration: CacheRuntimeRegistration | null,
 ): Promise<void> {
+	if (registration?.appStaticExpirationManager) {
+		await enforceAppStaticExpiration(registration.appStaticExpirationManager)
+		return
+	}
 	if (!registration?.appStaticExpirationPlugin.expireEntries) return
 	await registration.appStaticExpirationPlugin.expireEntries({
 		cacheName: APP_STATIC_CACHE_NAME,
