@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { ScreenshotSelectionOverlay } from "../ScreenshotSelectionOverlay"
+import { CurrentTabCaptureError } from "../screenshot"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -220,6 +221,34 @@ describe("ScreenshotSelectionOverlay", () => {
 			expect(screen.getByTestId("html-screenshot-selection-box")).toBeInTheDocument()
 			expect(
 				screen.getByText("stylePanel.inspector.screenshotCaptureFailed"),
+			).toBeInTheDocument()
+		})
+	})
+
+	it("explains current-tab permission failures", async () => {
+		const onCapture = vi
+			.fn()
+			.mockRejectedValue(
+				new CurrentTabCaptureError("wrong-surface", "Choose the current tab"),
+			)
+		render(
+			<ScreenshotSelectionOverlay
+				containerWidth={640}
+				containerHeight={360}
+				captureUsesCurrentTab
+				onCapture={onCapture}
+			/>,
+		)
+
+		const overlay = screen.getByTestId("html-screenshot-selection-overlay")
+		fireEvent.keyDown(overlay, { key: "Enter" })
+
+		await waitFor(() => {
+			expect(
+				screen.getByText("stylePanel.inspector.screenshotCurrentTabHint"),
+			).toBeInTheDocument()
+			expect(
+				screen.getByText("stylePanel.inspector.screenshotCurrentTabRequired"),
 			).toBeInTheDocument()
 		})
 	})

@@ -94,6 +94,68 @@ describe("PendingTargetsPanel", () => {
 		expect(screen.getByTestId("element-inspector-submit-button")).toContainHTML("svg")
 	})
 
+	it("hides screenshot mode when capture is unsupported", () => {
+		render(
+			<PendingTargetsPanel
+				targets={[]}
+				submitState="idle"
+				onEdit={vi.fn()}
+				onRemove={vi.fn()}
+				onSubmit={vi.fn()}
+				screenshotSupported={false}
+			/>,
+		)
+
+		expect(
+			screen.queryByRole("button", { name: "stylePanel.inspector.screenshotMode" }),
+		).not.toBeInTheDocument()
+	})
+
+	it("expands and collapses the pending target list from the bottom bar", () => {
+		render(
+			<PendingTargetsPanel
+				targets={[
+					{
+						id: "#hero",
+						kind: "element",
+						info: {
+							selector: "#hero",
+							tagName: "section",
+							id: "hero",
+							classList: [],
+							rect: { top: 0, left: 0, width: 100, height: 80 },
+							margin: { top: 0, right: 0, bottom: 0, left: 0 },
+							padding: { top: 0, right: 0, bottom: 0, left: 0 },
+							border: { top: 0, right: 0, bottom: 0, left: 0 },
+							computedStyles: {},
+							attributes: {},
+							textContent: "",
+						},
+						instruction: "Update hero",
+					},
+				]}
+				submitState="idle"
+				onEdit={vi.fn()}
+				onRemove={vi.fn()}
+				onSubmit={vi.fn()}
+			/>,
+		)
+
+		const toggle = screen.getByTestId("element-inspector-pending-target-toggle")
+		const getTargetList = () => screen.queryByTestId("element-inspector-pending-target-list")
+
+		expect(toggle).toHaveAttribute("aria-expanded", "true")
+		expect(getTargetList()).toBeInTheDocument()
+
+		fireEvent.click(toggle)
+		expect(toggle).toHaveAttribute("aria-expanded", "false")
+		expect(getTargetList()).not.toBeInTheDocument()
+
+		fireEvent.click(toggle)
+		expect(toggle).toHaveAttribute("aria-expanded", "true")
+		expect(getTargetList()).toBeInTheDocument()
+	})
+
 	it("keeps the pending panel above a bottom toolbar when an inset is provided", () => {
 		render(
 			<PendingTargetsPanel

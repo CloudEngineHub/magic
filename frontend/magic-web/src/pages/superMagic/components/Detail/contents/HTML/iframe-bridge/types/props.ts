@@ -279,6 +279,12 @@ export interface HTMLEditorV2Ref {
 	/** 获取元素的文本内容 */
 	getTextContent: (selector: string) => Promise<string>
 
+	/** 更新元素的常用 HTML 属性，空值会移除属性 */
+	updateElementAttributes: (
+		selector: string,
+		attributes: Record<string, string | null>,
+	) => Promise<void>
+
 	// ========== 元素位置调整 ==========
 	/** 设置元素位置 (基于 relative 定位) */
 	setElementPosition: (selector: string, top: number, left: number) => Promise<void>

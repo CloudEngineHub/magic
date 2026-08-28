@@ -1786,10 +1786,16 @@ function getInlineInspectorFallbackScript(enable = false): string {
 				STOP: "MAGIC_INSPECTOR_STOP",
 				HOVER: "MAGIC_INSPECTOR_HOVER",
 				SELECT: "MAGIC_INSPECTOR_SELECT",
-				HOVER_END: "MAGIC_INSPECTOR_HOVER_END"
+				HOVER_END: "MAGIC_INSPECTOR_HOVER_END",
+				TRACK: "MAGIC_INSPECTOR_TRACK",
+				RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED"
 			};
 			var active = false;
 			var hoveredElement = null;
+			var trackedSelectors = new Set();
+			var trackedElements = new Map();
+			var lastTrackedRects = new Map();
+			var rectRefreshScheduled = false;
 			function parsePx(value) {
 				var n = parseFloat(value);
 				return isFinite(n) ? n : 0;
@@ -1891,6 +1897,59 @@ function getInlineInspectorFallbackScript(enable = false): string {
 					window.parent.postMessage({ type: type, elementInfo: info, timestamp: Date.now() }, "*");
 				} catch (error) {}
 			}
+			function postRects(rects) {
+				try {
+					window.parent.postMessage({ type: INSPECTOR_MSG.RECTS_CHANGED, rects: rects, timestamp: Date.now() }, "*");
+				} catch (error) {}
+			}
+			function getTrackedElement(selector) {
+				if (!selector) return null;
+				var cached = trackedElements.get(selector);
+				if (cached && cached.isConnected) return cached;
+				try {
+					var resolved = document.querySelector(selector);
+					if (resolved) trackedElements.set(selector, resolved);
+					return resolved;
+				} catch (error) {
+					return null;
+				}
+			}
+			function refreshTrackedRects() {
+				rectRefreshScheduled = false;
+				if (trackedSelectors.size === 0) return;
+				var rects = [];
+				trackedSelectors.forEach(function(selector) {
+					var element = getTrackedElement(selector);
+					if (!element) return;
+					var rect = element.getBoundingClientRect();
+					var nextRect = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+					var previousRect = lastTrackedRects.get(selector);
+					if (previousRect &&
+						previousRect.top === nextRect.top &&
+						previousRect.left === nextRect.left &&
+						previousRect.width === nextRect.width &&
+						previousRect.height === nextRect.height) return;
+					lastTrackedRects.set(selector, nextRect);
+					rects.push({ selector: selector, rect: nextRect });
+				});
+				if (rects.length > 0) postRects(rects);
+			}
+			function scheduleRectRefresh() {
+				if (rectRefreshScheduled || trackedSelectors.size === 0) return;
+				rectRefreshScheduled = true;
+				requestAnimationFrame(refreshTrackedRects);
+			}
+			function updateTrackedSelectors(selectors) {
+				trackedSelectors = new Set(Array.isArray(selectors) ? selectors.filter(Boolean) : []);
+				trackedElements.forEach(function(element, selector) {
+					if (!trackedSelectors.has(selector)) {
+						trackedElements.delete(selector);
+						lastTrackedRects.delete(selector);
+					}
+				});
+				trackedSelectors.forEach(getTrackedElement);
+				scheduleRectRefresh();
+			}
 			function onMouseMove(event) {
 				if (!active) return;
 				var target = event.target;
@@ -1936,9 +1995,12 @@ function getInlineInspectorFallbackScript(enable = false): string {
 				document.removeEventListener("click", onClick, true);
 				document.documentElement.style.cursor = "";
 			}
+			document.addEventListener("scroll", scheduleRectRefresh, true);
+			window.addEventListener("resize", scheduleRectRefresh, true);
 			window.addEventListener("message", function(event) {
 				if (event.data && event.data.type === INSPECTOR_MSG.START) activate();
 				if (event.data && event.data.type === INSPECTOR_MSG.STOP) deactivate();
+				if (event.data && event.data.type === INSPECTOR_MSG.TRACK) updateTrackedSelectors(event.data.selectors);
 			});
 		})();
 	`

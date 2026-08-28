@@ -45,6 +45,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		const translate = (key: string) => key
 
@@ -61,13 +63,25 @@ describe("useInspectorToolbarMode", () => {
 			selectedElement
 		rerender({ currentInspector: { ...inspector } })
 		expect(result.current.activeTarget?.info.selector).toBe(selectedElement.selector)
+		act(() =>
+			result.current.attachElementScreenshot(selectedElement.selector, {
+				dataUrl: "data:image/png;base64,shot",
+				rect: selectedElement.rect,
+			}),
+		)
+		expect(result.current.activeTarget?.screenshot?.dataUrl).toBe("data:image/png;base64,shot")
 
 		act(() => {
 			result.current.setDraftInstruction("Move this section lower")
 		})
+		;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement = {
+			...selectedElement,
+			rect: { ...selectedElement.rect, top: 240 },
+		}
 		rerender({ currentInspector: { ...inspector } })
 
 		expect(result.current.draftInstruction).toBe("Move this section lower")
+		expect(result.current.activeTarget?.info.rect.top).toBe(10)
 	})
 
 	it("keeps the selected element until the draft is confirmed", () => {
@@ -86,6 +100,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		vi.mocked(inspector.start).mockImplementation(() => {
 			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement = null
@@ -126,6 +142,32 @@ describe("useInspectorToolbarMode", () => {
 		expect(result.current.pendingTargets).toHaveLength(1)
 	})
 
+	it("clears a previous element selection before entering screenshot mode", () => {
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: createInfo(),
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+		} as unknown as ReturnType<typeof useElementInspector>
+		const translate = (key: string) => key
+		const { result } = renderHook(() => useInspectorToolbarMode(inspector, translate, fileInfo))
+
+		act(() => result.current.startInAppendMode())
+		act(() => result.current.updateSelectionMode("screenshot"))
+
+		expect(inspector.clearSelection).toHaveBeenCalled()
+	})
+
 	it("restores the previous instruction when selecting a confirmed element again", () => {
 		const selectedElement = createInfo()
 		const fileInfo = {
@@ -142,6 +184,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		vi.mocked(inspector.start).mockImplementation(() => {
 			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement = null
@@ -183,6 +227,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		const translate = (key: string) => key
 		const { result } = renderHook(() => useInspectorToolbarMode(inspector, translate, fileInfo))
@@ -216,6 +262,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		const translate = (key: string) => key
 		const { result, rerender } = renderHook(() =>
@@ -252,6 +300,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		vi.mocked(inspector.start).mockImplementation(() => {
 			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement = null
@@ -304,6 +354,8 @@ describe("useInspectorToolbarMode", () => {
 			hoveredElement: null,
 			selectedElement: null,
 			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
 		} as unknown as ReturnType<typeof useElementInspector>
 		vi.mocked(inspector.start).mockImplementation(() => {
 			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement = null

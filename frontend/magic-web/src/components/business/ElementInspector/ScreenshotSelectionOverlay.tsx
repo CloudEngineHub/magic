@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Camera, Loader2 } from "lucide-react"
 import type { InspectedElementRect } from "./types"
+import { CurrentTabCaptureError } from "./screenshot"
 
 interface ScreenshotSelectionOverlayProps {
 	containerWidth: number
@@ -13,6 +14,8 @@ interface ScreenshotSelectionOverlayProps {
 		width: number
 		height: number
 	}
+	/** Whether the capture must use the rendered browser tab instead of iframe DOM. */
+	captureUsesCurrentTab?: boolean
 	onCapture: (rect: InspectedElementRect) => Promise<void>
 	onCaptureStateChange?: (capturing: boolean) => void
 }
@@ -24,6 +27,7 @@ export function ScreenshotSelectionOverlay({
 	selectionBounds,
 	onCapture,
 	onCaptureStateChange,
+	captureUsesCurrentTab = false,
 }: ScreenshotSelectionOverlayProps) {
 	const { t } = useTranslation("super")
 	const [selection, setSelection] = useState<InspectedElementRect | null>(null)
@@ -124,7 +128,29 @@ export function ScreenshotSelectionOverlay({
 			setSelection(null)
 		} catch (error) {
 			console.warn("HTML screenshot capture failed", error)
-			setCaptureError(t("stylePanel.inspector.screenshotCaptureFailed"))
+			if (error instanceof CurrentTabCaptureError) {
+				switch (error.code) {
+					case "wrong-surface":
+						setCaptureError(t("stylePanel.inspector.screenshotCurrentTabRequired"))
+						break
+					case "permission-denied":
+						setCaptureError(t("stylePanel.inspector.screenshotPermissionDenied"))
+						break
+					case "cancelled":
+						setCaptureError(t("stylePanel.inspector.screenshotPermissionCancelled"))
+						break
+					case "unsupported":
+						setCaptureError(t("stylePanel.inspector.screenshotUnsupported"))
+						break
+					case "no-video":
+						setCaptureError(t("stylePanel.inspector.screenshotNoVideo"))
+						break
+					default:
+						setCaptureError(t("stylePanel.inspector.screenshotCaptureFailed"))
+				}
+			} else {
+				setCaptureError(t("stylePanel.inspector.screenshotCaptureFailed"))
+			}
 		} finally {
 			setIsCapturing(false)
 			onCaptureStateChange?.(false)
@@ -135,7 +161,8 @@ export function ScreenshotSelectionOverlay({
 		const start = startPointRef.current
 		if (!start || isCapturing) return
 		startPointRef.current = null
-		await captureSelection(getSelectionRect(start, getPoint(event)))
+		const end = getPoint(event)
+		await captureSelection(getSelectionRect(start, end))
 	}
 
 	const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -171,6 +198,11 @@ export function ScreenshotSelectionOverlay({
 					<Camera size={13} />
 				)}
 				{t("stylePanel.inspector.screenshotHint")}
+				{captureUsesCurrentTab && (
+					<span className="ml-1 opacity-80">
+						{t("stylePanel.inspector.screenshotCurrentTabHint")}
+					</span>
+				)}
 			</div>
 			{captureError && (
 				<div className="absolute left-1/2 top-14 max-w-[min(420px,calc(100%-24px))] -translate-x-1/2 rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground shadow-lg">

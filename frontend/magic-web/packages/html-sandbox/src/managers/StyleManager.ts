@@ -85,6 +85,34 @@ function setInlineStyle(element: HTMLElement, property: string, rawValue: string
 	element.style.setProperty(kebabProperty, value, priority)
 }
 
+const COMMON_ATTRIBUTE_NAMES: Record<string, string> = {
+	href: "href",
+	target: "target",
+	rel: "rel",
+	download: "download",
+	title: "title",
+	ariaLabel: "aria-label",
+}
+
+function setCommonAttribute(element: HTMLElement, name: string, value: string | null): void {
+	const attributeName = COMMON_ATTRIBUTE_NAMES[name]
+	if (!attributeName) return
+	if (value === null || value.trim() === "") {
+		element.removeAttribute(attributeName)
+		return
+	}
+	element.setAttribute(attributeName, value)
+}
+
+function readCommonAttributes(element: HTMLElement): Record<string, string | null> {
+	return Object.fromEntries(
+		Object.entries(COMMON_ATTRIBUTE_NAMES).map(([key, attributeName]) => [
+			key,
+			element.getAttribute(attributeName),
+		]),
+	)
+}
+
 /**
  * Extension point for undo/redo of non-style commands. Register via
  * StyleManager.registerCommandHandler() so restore/apply are delegated to
@@ -855,6 +883,30 @@ export class StyleManager {
 			metadata: {
 				canUndo: true,
 				description: "Update text content",
+			},
+		})
+	}
+
+	/** Update common HTML attributes and record one undoable command. */
+	async updateElementAttributes(
+		selector: string,
+		attributes: Record<string, string | null>,
+	): Promise<void> {
+		const element = findElement(selector)
+		const previousAttributes = readCommonAttributes(element)
+
+		for (const [name, value] of Object.entries(attributes)) {
+			setCommonAttribute(element, name, value)
+		}
+
+		this.commandHistory.push({
+			commandType: "UPDATE_ELEMENT_ATTRIBUTES",
+			payload: { selector, attributes },
+			previousState: { selector, attributes: previousAttributes },
+			timestamp: Date.now(),
+			metadata: {
+				canUndo: true,
+				description: "Update element attributes",
 			},
 		})
 	}
@@ -1657,6 +1709,18 @@ export class StyleManager {
 
 			const element = findElement(selector)
 
+			// Restore common HTML attributes as one atomic command.
+			if (command.commandType === "UPDATE_ELEMENT_ATTRIBUTES") {
+				const previousAttributes = (previousState.attributes ?? {}) as Record<
+					string,
+					string | null
+				>
+				for (const [name, value] of Object.entries(previousAttributes)) {
+					setCommonAttribute(element, name, value)
+				}
+				return
+			}
+
 			// Handle APPLY_TEXT_STYLE command
 			if (command.commandType === "APPLY_TEXT_STYLE") {
 				const previousState = command.previousState as any
@@ -1836,6 +1900,7 @@ export class StyleManager {
 				top,
 				left,
 				position,
+				attributes,
 			} = command.payload
 
 			// Handle duplicate element (redo)
@@ -1916,6 +1981,13 @@ export class StyleManager {
 			const element = findElement(selector) as HTMLElement
 
 			switch (command.commandType) {
+				case "UPDATE_ELEMENT_ATTRIBUTES":
+					for (const [name, value] of Object.entries(
+						(attributes ?? {}) as Record<string, string | null>,
+					)) {
+						setCommonAttribute(element, name, value)
+					}
+					break
 				case "SET_BACKGROUND_COLOR":
 					element.style.backgroundColor = color
 					break

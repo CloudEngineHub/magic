@@ -27,6 +27,14 @@ interface ElementInfo {
 	isTextElement?: boolean
 	textContent?: string
 	inlineStyles?: Record<string, string>
+	attributes?: {
+		href?: string
+		target?: string
+		rel?: string
+		download?: string
+		title?: string
+		ariaLabel?: string
+	}
 }
 
 export class ElementSelector {
@@ -94,6 +102,7 @@ export class ElementSelector {
 			const isText = this.isTextElement(element)
 			const textContent = element.textContent?.trim() || ""
 			const imageMetadata = this.getImageMetadata(element)
+			const attributes = this.getCommonAttributes(element)
 
 			infos.push({
 				selector,
@@ -105,6 +114,7 @@ export class ElementSelector {
 				rotation,
 				isTextElement: isText,
 				textContent: isText ? textContent : undefined,
+				attributes,
 			})
 		})
 		return infos
@@ -289,6 +299,20 @@ export class ElementSelector {
 			styles[property] = priority ? `${value} !${priority}` : value
 		}
 		return styles
+	}
+
+	private getCommonAttributes(element: HTMLElement): ElementInfo["attributes"] {
+		if (element.tagName.toLowerCase() !== "a") return undefined
+
+		const read = (name: string) => element.getAttribute(name) || undefined
+		return {
+			href: read("href"),
+			target: read("target"),
+			rel: read("rel"),
+			download: read("download"),
+			title: read("title"),
+			ariaLabel: read("aria-label"),
+		}
 	}
 
 	/**
@@ -726,6 +750,7 @@ export class ElementSelector {
 			const isText = this.isTextElement(element)
 			const textContent = element.textContent?.trim() || ""
 			const imageMetadata = this.getImageMetadata(element)
+			const attributes = this.getCommonAttributes(element)
 
 			this.bridge.sendEvent("ELEMENT_SELECTED", {
 				selector,
@@ -737,6 +762,7 @@ export class ElementSelector {
 				rotation,
 				isTextElement: isText,
 				textContent: isText ? textContent : undefined,
+				attributes,
 			})
 		} else {
 			// Multiple selection - send ELEMENTS_SELECTED

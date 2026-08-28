@@ -158,6 +158,61 @@ describe("useMessageEditorPubSub", () => {
 		unmount()
 	})
 
+	it("uploads an automatically captured element screenshot before sending", async () => {
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		uploadScreenshot.mockResolvedValue({
+			file_id: "saved-element-shot-1",
+			file_key: "temporary/hero.png",
+			file_name: "hero.png",
+			file_size: 3,
+			relative_file_path: ".tmp/hero.png",
+			is_hidden: true,
+		})
+		const onSendMessageByContent = vi.fn().mockResolvedValue(undefined)
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: null,
+				isMobile: false,
+				draftStore,
+				updateContent: vi.fn(),
+				enableMessageSendByContent: false,
+				onSendMessageByContent,
+				projectId: "project-1",
+				topicId: "topic-1",
+			}),
+		)
+
+		pubsub.publish(PubSubEvents.Submit_Html_Multi_Selection, {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+			instruction: "",
+			targets: [
+				{
+					id: "#hero",
+					kind: "element",
+					selector: "#hero",
+					elementLabel: "section#hero",
+					screenshot: {
+						dataUrl: "data:image/png;base64,AA==",
+						rect: { left: 0, top: 0, width: 100, height: 80 },
+					},
+					instruction: "Keep this visual style",
+				},
+			],
+		})
+
+		await vi.waitFor(() => expect(onSendMessageByContent).toHaveBeenCalledTimes(1))
+		expect(uploadScreenshot).toHaveBeenCalledTimes(1)
+		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).toContain(
+			"hero.png",
+		)
+
+		unmount()
+	})
+
 	it("maintains plain-text input through Widget commands", () => {
 		const mockEditor = createMockEditor({
 			type: "doc",

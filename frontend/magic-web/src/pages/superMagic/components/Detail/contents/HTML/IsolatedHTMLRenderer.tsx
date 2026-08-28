@@ -482,6 +482,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const contentWrapperRef = useRef<HTMLDivElement>(null)
 		const scrollContainerRef = useRef<HTMLDivElement>(null)
 		const iframeRef = useRef<HTMLIFrameElement>(null)
+		const inspectorCapturePrewarmRef = useRef<(() => void) | null>(null)
+		const registerInspectorCapturePrewarm = useCallback((prewarm: (() => void) | null) => {
+			inspectorCapturePrewarmRef.current = prewarm
+		}, [])
 		// Keep the editor bridge ref above callbacks and effects that reference it.
 		// Declaring it later would put those dependency arrays in the temporal dead zone.
 		const editorRef = useRef<HTMLEditorV2Ref>(null)
@@ -933,7 +937,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		}, [devConsoleEnabled, setDevConsoleEnabled])
 
 		// Element inspector (independent, can be triggered from DevConsole or elsewhere)
-		const elementInspector = useElementInspector({ iframeRef })
+		const elementInspector = useElementInspector({ iframeRef, targetOrigin: iframeTargetOrigin })
 		const inspectorFileInfo = useMemo(() => {
 			if (!fileId) return undefined
 			const file = findAttachmentByFileId(
@@ -950,6 +954,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			selectionMode: inspectorSelectionMode,
 			updateSelectionMode: updateInspectorSelectionMode,
 			captureScreenshotTarget: captureInspectorScreenshotTarget,
+			attachElementScreenshot: attachInspectorElementScreenshot,
 			isAppendPicking,
 			activeTarget: inspectorActiveTarget,
 			draftInstruction: inspectorDraftInstruction,
@@ -1626,6 +1631,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					resetInspectorSelection()
 				},
 				startInspectorAppend: () => {
+					inspectorCapturePrewarmRef.current?.()
 					startInAppendMode()
 				},
 			}),
@@ -2596,6 +2602,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														selectedElement={
 															elementInspector.selectedElement
 														}
+														trackedRects={elementInspector.trackedRects}
 														onClearSelection={
 															elementInspector.clearSelection
 														}
@@ -2642,6 +2649,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														panelContainerRef={inspectorViewportRef}
 														onCaptureScreenshot={
 															captureInspectorScreenshotTarget
+														}
+														onCaptureElementScreenshot={
+															isAppendPicking
+																? attachInspectorElementScreenshot
+																: undefined
+														}
+														onCapturePrewarmReady={
+															registerInspectorCapturePrewarm
 														}
 														onExitMultiSelection={
 															resetInspectorSelection

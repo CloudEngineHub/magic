@@ -43,4 +43,55 @@ describe("HTML inspector agent prompt", () => {
 		expect(mentions[1]?.attrs?.type).toBe(MentionItemType.UPLOAD_FILE)
 		expect(JSON.stringify(content)).toContain("Align this card")
 	})
+
+	it("renders an element screenshot as an image mention", () => {
+		const target: HtmlSelectionTarget = {
+			id: "#hero",
+			kind: "element",
+			info: {
+				selector: "#hero",
+				tagName: "section",
+				id: "hero",
+				classList: [],
+				rect: { top: 0, left: 0, width: 300, height: 120 },
+				margin: { top: 0, right: 0, bottom: 0, left: 0 },
+				padding: { top: 0, right: 0, bottom: 0, left: 0 },
+				border: { top: 0, right: 0, bottom: 0, left: 0 },
+				computedStyles: {},
+				attributes: {},
+				textContent: "Hero",
+			},
+			screenshot: {
+				dataUrl: "data:image/png;base64,abc",
+				rect: { top: 0, left: 0, width: 300, height: 120 },
+			},
+			instruction: "Keep this visual style",
+		}
+		const content = buildHtmlMultiSelectionPromptContent(
+			{ fileId: "html-1", fileName: "index.html", filePath: "index.html" },
+			[target],
+			"Inspector details",
+			new Map([
+				[
+					"#hero",
+					{
+						type: MentionItemType.UPLOAD_FILE,
+						data: {
+							file_id: "image-1",
+							file_name: "hero.png",
+							file_extension: "png",
+							file_path: ".tmp/hero.png",
+						},
+					},
+				],
+			]),
+		)
+
+		const mentions = (content.content ?? [])
+			.flatMap((paragraph) => paragraph.content ?? [])
+			.filter((node) => node.type === "mention")
+
+		expect(mentions).toHaveLength(2)
+		expect(mentions[1]?.attrs?.type).toBe(MentionItemType.UPLOAD_FILE)
+	})
 })

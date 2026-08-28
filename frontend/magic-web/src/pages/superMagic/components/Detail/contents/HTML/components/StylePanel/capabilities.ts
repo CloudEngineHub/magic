@@ -38,6 +38,7 @@ export function getElementCapabilities(element: SelectedElementInfo | null) {
 			showShadow: false,
 			showFlexItem: false,
 			showGridItem: false,
+			isLink: false,
 		}
 	}
 
@@ -45,6 +46,7 @@ export function getElementCapabilities(element: SelectedElementInfo | null) {
 	const display = element.computedStyles.display || "block"
 	const isImage = element.isImageElement === true || tagName === "img"
 	const isText = element.isTextElement === true && !isImage
+	const isLink = tagName === "a"
 	const isVoid = VOID_TAGS.has(tagName)
 	const isContainer = !isVoid
 	const parentDisplay = element.computedStyles.parentDisplay
@@ -69,5 +71,6 @@ export function getElementCapabilities(element: SelectedElementInfo | null) {
 		showShadow: true,
 		showFlexItem: parentDisplay === "flex",
 		showGridItem: parentDisplay === "grid",
+		isLink,
 	}
 }

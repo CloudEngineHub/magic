@@ -13,12 +13,14 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import type { InspectedElementInfo } from "./types"
+import type { InspectedElementInfo, InspectedElementRect } from "./types"
 import { INSPECTOR_MSG } from "./types"
 
 interface UseElementInspectorOptions {
 	/** Ref to the target iframe */
 	iframeRef: React.RefObject<HTMLIFrameElement | null>
+	/** Origin used for parent ↔ iframe inspector messages. */
+	targetOrigin?: string
 }
 
 interface UseElementInspectorReturn {
@@ -36,24 +38,46 @@ interface UseElementInspectorReturn {
 	selectedElement: InspectedElementInfo | null
 	/** Clear the selected element */
 	clearSelection: () => void
+	/** Update the small set of element selectors whose viewport rects should follow scrolling. */
+	setTrackedSelectors: (selectors: string[]) => void
+	/** Latest viewport rectangles reported by the iframe for tracked targets. */
+	trackedRects: Record<string, InspectedElementRect>
+}
+
+function areRectsEqual(a: InspectedElementRect | undefined, b: InspectedElementRect): boolean {
+	return Boolean(
+		a && a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height,
+	)
 }
 
 export function useElementInspector({
 	iframeRef,
+	targetOrigin,
 }: UseElementInspectorOptions): UseElementInspectorReturn {
 	const [active, setActive] = useState(false)
 	const [hoveredElement, setHoveredElement] = useState<InspectedElementInfo | null>(null)
 	const [selectedElement, setSelectedElement] = useState<InspectedElementInfo | null>(null)
+	const [trackedRects, setTrackedRects] = useState<Record<string, InspectedElementRect>>({})
 	const activeRef = useRef(false)
+	const trackedSelectorsRef = useRef<string[]>([])
+	const inspectorTargetOrigin = targetOrigin ?? window.location.origin
+
+	const postToIframe = useCallback(
+		(message: Record<string, unknown>) => {
+			try {
+				iframeRef.current?.contentWindow?.postMessage(message, inspectorTargetOrigin)
+			} catch {
+				// The iframe may be disconnected or navigating across origins.
+			}
+		},
+		[iframeRef, inspectorTargetOrigin],
+	)
 
 	const sendToIframe = useCallback(
 		(type: string, payload?: Record<string, unknown>) => {
-			iframeRef.current?.contentWindow?.postMessage(
-				{ type, ...payload, timestamp: Date.now() },
-				"*",
-			)
+			postToIframe({ type, ...payload, timestamp: Date.now() })
 		},
-		[iframeRef],
+		[postToIframe],
 	)
 
 	const start = useCallback(() => {
@@ -62,6 +86,7 @@ export function useElementInspector({
 		setHoveredElement(null)
 		setSelectedElement(null)
 		sendToIframe(INSPECTOR_MSG.START)
+		sendToIframe(INSPECTOR_MSG.TRACK, { selectors: trackedSelectorsRef.current })
 	}, [sendToIframe])
 
 	const stop = useCallback(() => {
@@ -82,6 +107,52 @@ export function useElementInspector({
 	const clearSelection = useCallback(() => {
 		setSelectedElement(null)
 	}, [])
+
+	const setTrackedSelectors = useCallback(
+		(selectors: string[]) => {
+			const nextSelectors = Array.from(new Set(selectors.filter(Boolean)))
+			const previousSelectors = trackedSelectorsRef.current
+			const selectorsUnchanged =
+				previousSelectors.length === nextSelectors.length &&
+				previousSelectors.every((selector, index) => selector === nextSelectors[index])
+			trackedSelectorsRef.current = nextSelectors
+			if (selectorsUnchanged) return
+			setTrackedRects((current) => {
+				const allowed = new Set(nextSelectors)
+				return Object.fromEntries(
+					Object.entries(current).filter(([selector]) => allowed.has(selector)),
+				)
+			})
+			postToIframe({
+				type: INSPECTOR_MSG.TRACK,
+				selectors: nextSelectors,
+				timestamp: Date.now(),
+			})
+		},
+		[postToIframe],
+	)
+
+	// A document reload replaces the injected inspector runtime, so replay the
+	// current target set once the new iframe document is ready.
+	useEffect(() => {
+		const iframe = iframeRef.current
+		if (!iframe) return
+		const handleLoad = () => {
+			setHoveredElement(null)
+			setSelectedElement(null)
+			setTrackedRects({})
+			if (activeRef.current) {
+				postToIframe({ type: INSPECTOR_MSG.START, timestamp: Date.now() })
+			}
+			postToIframe({
+				type: INSPECTOR_MSG.TRACK,
+				selectors: trackedSelectorsRef.current,
+				timestamp: Date.now(),
+			})
+		}
+		iframe.addEventListener("load", handleLoad)
+		return () => iframe.removeEventListener("load", handleLoad)
+	}, [iframeRef, postToIframe])
 
 	// Press Esc to cancel inspector while it is active
 	useEffect(() => {
@@ -125,9 +196,42 @@ export function useElementInspector({
 	useEffect(() => {
 		const handler = (event: MessageEvent) => {
 			if (event.source !== iframeRef.current?.contentWindow) return
+			if (inspectorTargetOrigin !== "*" && event.origin !== inspectorTargetOrigin) {
+				setActive(false)
+				activeRef.current = false
+				setHoveredElement(null)
+				setSelectedElement(null)
+				setTrackedRects({})
+				trackedSelectorsRef.current = []
+				return
+			}
 			if (!event.data?.type) return
 
 			switch (event.data.type) {
+				case INSPECTOR_MSG.RECTS_CHANGED: {
+					const rects = Array.isArray(event.data.rects) ? event.data.rects : []
+					if (rects.length === 0) return
+					setTrackedRects((current) => {
+						let changed = false
+						const next = { ...current }
+						for (const item of rects) {
+							if (!item?.selector || !item.rect) continue
+							if (areRectsEqual(current[item.selector], item.rect)) continue
+							next[item.selector] = item.rect
+							changed = true
+						}
+						return changed ? next : current
+					})
+					setSelectedElement((current) => {
+						if (!current) return current
+						const update = rects.find((item) => item?.selector === current.selector)
+						if (!update?.rect || areRectsEqual(current.rect, update.rect)) {
+							return current
+						}
+						return { ...current, rect: update.rect }
+					})
+					break
+				}
 				case INSPECTOR_MSG.HOVER: {
 					if (!activeRef.current) return
 					const info = event.data.elementInfo as InspectedElementInfo | undefined
@@ -157,20 +261,24 @@ export function useElementInspector({
 
 		window.addEventListener("message", handler)
 		return () => window.removeEventListener("message", handler)
-	}, [iframeRef, sendToIframe])
+	}, [iframeRef, inspectorTargetOrigin, sendToIframe])
 
 	// Clean up on unmount
 	useEffect(() => {
 		const iframe = iframeRef.current
 		return () => {
 			if (activeRef.current) {
-				iframe?.contentWindow?.postMessage(
-					{ type: INSPECTOR_MSG.STOP, timestamp: Date.now() },
-					"*",
-				)
+				try {
+					iframe?.contentWindow?.postMessage(
+						{ type: INSPECTOR_MSG.STOP, timestamp: Date.now() },
+						inspectorTargetOrigin,
+					)
+				} catch {
+					// The iframe can be disconnected before the hook cleanup runs.
+				}
 			}
 		}
-	}, [iframeRef])
+	}, [iframeRef, inspectorTargetOrigin])
 
 	return {
 		active,
@@ -180,5 +288,7 @@ export function useElementInspector({
 		hoveredElement,
 		selectedElement,
 		clearSelection,
+		setTrackedSelectors,
+		trackedRects,
 	}
 }

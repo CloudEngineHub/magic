@@ -66,7 +66,7 @@ export function ElementEditPopover({
 					</span>
 				</div>
 				<div className="flex min-h-16 items-center justify-center rounded-md bg-muted/50 px-2 py-1.5 text-[11px] text-muted-foreground">
-					{targetKind === "screenshot" ? (
+					{screenshotDataUrl ? (
 						<img
 							src={screenshotDataUrl}
 							alt=""

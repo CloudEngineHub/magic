@@ -149,6 +149,14 @@ function hasDynamicMarker(element: HTMLElement): boolean {
 	})
 }
 
+function collectIdCounts(): Map<string, number> {
+	const counts = new Map<string, number>()
+	document.querySelectorAll<HTMLElement>("[id]").forEach((element) => {
+		if (element.id) counts.set(element.id, (counts.get(element.id) ?? 0) + 1)
+	})
+	return counts
+}
+
 function getVisibleElementChildren(element: HTMLElement): HTMLElement[] {
 	return Array.from(element.children)
 		.filter((child): child is HTMLElement => child instanceof HTMLElement)
@@ -173,11 +181,18 @@ function getDirectTextContent(element: HTMLElement): string | undefined {
 	return parts.join(" ").trim().replace(/\s+/g, " ").slice(0, 80) || undefined
 }
 
-function describeNode(element: HTMLElement, isRoot: boolean) {
+function describeNode(
+	element: HTMLElement,
+	isRoot: boolean,
+	idCounts: ReadonlyMap<string, number>,
+) {
 	const tagName = element.tagName.toLowerCase()
 	const selector = getElementSelector(element)
 	const isExcluded = isInjectedElement(element) || EXCLUDED_TAGS.has(tagName)
-	const selectorIsUnique = Boolean(selector) && document.querySelectorAll(selector).length === 1
+	// The selector path is rooted at body and disambiguates same-tag siblings
+	// with :nth-of-type(). Only duplicate ids can make that path ambiguous, so
+	// count ids once per snapshot instead of querying the whole document per node.
+	const selectorIsUnique = Boolean(selector) && (!element.id || idCounts.get(element.id) === 1)
 	const canHaveChildren = !VOID_TAGS.has(tagName)
 	const isRootElement =
 		isRoot || element === document.documentElement || element === document.body
@@ -207,14 +222,36 @@ function describeNode(element: HTMLElement, isRoot: boolean) {
 }
 
 function buildNode(element: HTMLElement, isRoot = false): DomTreeNode {
-	const info = describeNode(element, isRoot)
-	const children = getVisibleElementChildren(element).map((child) => buildNode(child))
-
-	return {
+	const idCounts = collectIdCounts()
+	const root: DomTreeNode = {
 		nodeId: getNodeId(element),
-		...info,
-		children,
+		...describeNode(element, isRoot, idCounts),
+		children: [],
 	}
+	const stack: Array<{ element: HTMLElement; node: DomTreeNode }> = [{ element, node: root }]
+
+	// The HTML editor can receive generated documents with very deep wrapper
+	// nesting. Iterative DFS avoids exhausting the iframe call stack while
+	// preserving the same document order as the previous recursive traversal.
+	while (stack.length > 0) {
+		const current = stack.pop()
+		if (!current) continue
+		const children = getVisibleElementChildren(current.element)
+		const childNodes = children.map((child) => ({
+			node: {
+				nodeId: getNodeId(child),
+				...describeNode(child, false, idCounts),
+				children: [],
+			} satisfies DomTreeNode,
+			element: child,
+		}))
+		current.node.children.push(...childNodes.map(({ node }) => node))
+		for (let index = childNodes.length - 1; index >= 0; index -= 1) {
+			stack.push(childNodes[index])
+		}
+	}
+
+	return root
 }
 
 export function buildDomTree(): { root: DomTreeNode } {
@@ -236,7 +273,7 @@ export function findNodeById(nodeId: string): HTMLElement {
 }
 
 export function ensureEditableNode(element: HTMLElement, action: string): void {
-	const info = describeNode(element, false)
+	const info = describeNode(element, false, collectIdCounts())
 	if (!info.editable) {
 		throw new Error(info.disabledReason || `节点不支持${action}`)
 	}

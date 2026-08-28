@@ -1,4 +1,4 @@
-import { snapdom } from "@zumer/snapdom"
+import { snapdom, type SnapdomPlugin } from "@zumer/snapdom"
 import type { InspectedElementRect } from "./types"
 
 interface CaptureOptions {
@@ -7,6 +7,38 @@ interface CaptureOptions {
 	selection: InspectedElementRect
 	/** Optional rectangle already expressed in the host viewport's visual pixels. */
 	viewportSelection?: ScreenRect
+	/** Reusable current-tab capture session owned by the active inspector. */
+	currentTabSession?: CurrentTabCaptureSession
+}
+
+export interface CurrentTabCaptureSession {
+	acquire: () => Promise<MediaStream>
+	release: () => void
+}
+
+/** Whether this browser can request a rendered tab/window capture stream. */
+export function supportsCurrentTabCapture(): boolean {
+	return (
+		typeof navigator !== "undefined" &&
+		typeof navigator.mediaDevices?.getDisplayMedia === "function"
+	)
+}
+
+export type CurrentTabCaptureErrorCode =
+	| "unsupported"
+	| "permission-denied"
+	| "cancelled"
+	| "wrong-surface"
+	| "no-video"
+
+export class CurrentTabCaptureError extends Error {
+	readonly code: CurrentTabCaptureErrorCode
+
+	constructor(code: CurrentTabCaptureErrorCode, message: string) {
+		super(message)
+		this.name = "CurrentTabCaptureError"
+		this.code = code
+	}
 }
 
 interface ScreenRect {
@@ -35,10 +67,41 @@ interface BitmapSize {
 	height: number
 }
 
+interface VideoFrameCallbackTarget {
+	requestVideoFrameCallback?: (callback: () => void) => number
+}
+
+interface CaptureRootRenderSize {
+	width: number
+	height: number
+}
+
+interface CurrentTabDisplayMediaOptions extends DisplayMediaStreamOptions {
+	preferCurrentTab?: boolean
+	selfBrowserSurface?: "include" | "exclude"
+	surfaceSwitching?: "include" | "exclude"
+	monitorTypeSurfaces?: "include" | "exclude"
+}
+
 type PseudoElementName = "::before" | "::after"
 
-interface MaterializedPseudoElementsCleanup {
-	(): void
+interface PseudoElementStyleProperty {
+	name: string
+	value: string
+	priority: string
+}
+
+interface PseudoElementRecord {
+	path: number[]
+	name: PseudoElementName
+	content: string
+	properties: PseudoElementStyleProperty[]
+}
+
+interface AnimationState {
+	animation: Animation
+	currentTime: CSSNumberish | null
+	playState: AnimationPlayState
 }
 
 interface PseudoStyleSnapshot {
@@ -50,6 +113,96 @@ interface PseudoStyleSnapshot {
 	backgroundColor: string
 	borderStyle: string
 	filter: string
+}
+
+const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml"
+
+function stopMediaStream(stream: MediaStream | null) {
+	stream?.getTracks().forEach((track) => track.stop())
+}
+
+function hasLiveVideoTrack(stream: MediaStream | null): boolean {
+	return Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live"))
+}
+
+async function requestCurrentTabStream(): Promise<MediaStream> {
+	if (!supportsCurrentTabCapture()) {
+		throw new CurrentTabCaptureError(
+			"unsupported",
+			"Current browser does not support tab screenshots",
+		)
+	}
+
+	return navigator.mediaDevices.getDisplayMedia({
+		video: {
+			displaySurface: "browser",
+			cursor: "never",
+		},
+		audio: false,
+		preferCurrentTab: true,
+		selfBrowserSurface: "include",
+		surfaceSwitching: "exclude",
+		monitorTypeSurfaces: "exclude",
+	} as CurrentTabDisplayMediaOptions)
+}
+
+/** Reuse one display-media permission grant for the lifetime of an inspector session. */
+export function createCurrentTabCaptureSession(): CurrentTabCaptureSession {
+	let stream: MediaStream | null = null
+	let pending: Promise<MediaStream> | null = null
+	let requestId = 0
+
+	const release = () => {
+		requestId += 1
+		stopMediaStream(stream)
+		stream = null
+	}
+
+	const acquire = () => {
+		if (hasLiveVideoTrack(stream)) return Promise.resolve(stream as MediaStream)
+		if (pending) return pending
+
+		const currentRequestId = ++requestId
+		const nextRequest = requestCurrentTabStream().then((nextStream) => {
+			if (currentRequestId !== requestId) {
+				stopMediaStream(nextStream)
+				throw new DOMException("The capture session was released", "AbortError")
+			}
+
+			if (!hasLiveVideoTrack(nextStream)) {
+				stopMediaStream(nextStream)
+				throw new CurrentTabCaptureError(
+					"no-video",
+					"The selected capture surface has no video track",
+				)
+			}
+
+			stream = nextStream
+			const videoTrack = nextStream.getVideoTracks()[0]
+			videoTrack?.addEventListener("ended", () => {
+				if (stream === nextStream) {
+					stream = null
+				}
+			})
+			return nextStream
+		})
+		pending = nextRequest
+		void nextRequest.then(
+			() => {
+				if (pending === nextRequest) pending = null
+			},
+			() => {
+				if (pending === nextRequest) pending = null
+			},
+		)
+		return nextRequest
+	}
+
+	return { acquire, release }
+}
+
+function isHtmlElementNode(value: Element | null | undefined): value is HTMLElement {
+	return value?.nodeType === 1 && value.namespaceURI === HTML_NAMESPACE
 }
 
 /** Keep the screenshot crisp while preserving the drag rectangle's CSS size. */
@@ -144,6 +297,19 @@ export function resolveCaptureScreenSelection(
 	return viewportSelection ?? toRenderedSelection(iframe, iframeRect, selection)
 }
 
+/** Recalculate same-origin tab crops after browser sharing UI changes the viewport. */
+export function resolveCurrentTabScreenSelection(
+	iframe: Pick<HTMLIFrameElement, "clientWidth" | "clientHeight">,
+	iframeRect: Pick<DOMRect, "left" | "top" | "width" | "height">,
+	selection: InspectedElementRect,
+	viewportSelection: ScreenRect | undefined,
+	sameOrigin: boolean,
+): ScreenRect {
+	return sameOrigin
+		? toRenderedSelection(iframe, iframeRect, selection)
+		: resolveCaptureScreenSelection(iframe, iframeRect, selection, viewportSelection)
+}
+
 /** Convert iframe viewport coordinates into the coordinate system of a snapdom root. */
 export function getRootCaptureSelection(
 	selection: InspectedElementRect,
@@ -177,14 +343,18 @@ export function toBitmapCropSelection(
 	}
 }
 
-function resolveCaptureRoot(
+export function resolveCaptureRoot(
 	documentBody: HTMLElement,
 	selection: InspectedElementRect,
 ): HTMLElement {
+	const explicitRoot = documentBody.ownerDocument.querySelector<HTMLElement>(
+		"[data-magic-capture-root]",
+	)
+	if (explicitRoot) return explicitRoot
+
 	const roots = Array.from(
 		documentBody.querySelectorAll<HTMLElement>(".slide-container, main.ft-canvas, main.slide"),
 	)
-	if (roots.length === 0) return documentBody
 
 	const centerX = selection.left + selection.width / 2
 	const centerY = selection.top + selection.height / 2
@@ -203,99 +373,276 @@ function resolveCaptureRoot(
 			return firstArea - secondArea
 		})[0]
 
-	return containingRoot?.root ?? roots[0]
+	if (containingRoot?.root) return containingRoot.root
+
+	// Ordinary HTML pages do not have a stable local capture root. Their
+	// sections can be transformed, independently scrolled, or positioned next
+	// to fixed page chrome. Capturing the body keeps the crop in the same page
+	// coordinate system as the iframe selection. The body is also the fallback
+	// when a PPT root is not found.
+	return documentBody
+}
+
+/** Ordinary HTML pages must be captured from the rendered tab, not a detached body clone. */
+export function shouldCaptureCurrentTab(
+	documentBody: HTMLElement,
+	selection: InspectedElementRect,
+): boolean {
+	return resolveCaptureRoot(documentBody, selection) === documentBody
+}
+
+/** Prewarm screen sharing for ordinary/cross-origin pages before the first drag. */
+export function shouldPrewarmCurrentTabCapture(iframe: HTMLIFrameElement): boolean {
+	let document: Document | null = null
+	try {
+		document = iframe.contentDocument
+	} catch {
+		return true
+	}
+	if (!document?.body) return true
+	if (document.querySelector("[data-magic-capture-root]")) return false
+	return !document.querySelector(".slide-container, main.ft-canvas, main.slide")
 }
 
 /**
- * Materialize pseudo-elements before snapdom clones the tree.
+ * Return the root's current layout size for snapdom.
+ *
+ * `scrollWidth`/`scrollHeight` describe overflow content, not the layout that
+ * the user is looking at. Using them as the bitmap mapping size makes the crop
+ * scale differ from the rendered root and moves the visible content away from
+ * the drag rectangle. Prefer the root's stable visual dimensions instead.
+ */
+export function getCaptureRootRenderSize(
+	root: Pick<HTMLElement, "offsetWidth" | "offsetHeight" | "clientWidth" | "clientHeight">,
+	visualRect?: Pick<DOMRect, "width" | "height">,
+): CaptureRootRenderSize {
+	return {
+		width: Math.max(visualRect?.width || root.offsetWidth || root.clientWidth, 1),
+		height: Math.max(visualRect?.height || root.offsetHeight || root.clientHeight, 1),
+	}
+}
+
+function getElementPath(root: HTMLElement, element: HTMLElement): number[] | null {
+	const path: number[] = []
+	let current: HTMLElement | null = element
+
+	while (current && current !== root) {
+		const parent: HTMLElement | null = current.parentElement
+		if (!parent) return null
+		const index = Array.prototype.indexOf.call(parent.children, current) as number
+		if (index < 0) return null
+		path.unshift(index)
+		current = parent
+	}
+
+	return current === root ? path : null
+}
+
+function resolveElementPath(root: HTMLElement, path: number[]): HTMLElement | null {
+	let current = root
+	for (const index of path) {
+		const child = current.children.item(index)
+		if (!isHtmlElementNode(child)) return null
+		current = child
+	}
+	return current
+}
+
+function collectPseudoElements(root: HTMLElement): PseudoElementRecord[] {
+	const view = root.ownerDocument.defaultView
+	if (!view) return []
+
+	const records: PseudoElementRecord[] = []
+	const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))]
+	for (const source of elements) {
+		const path = getElementPath(root, source)
+		if (!path) continue
+
+		for (const name of ["::before", "::after"] satisfies PseudoElementName[]) {
+			const computed = view.getComputedStyle(source, name)
+			if (!shouldMaterializePseudoElement(computed)) continue
+
+			records.push({
+				path,
+				name,
+				content: computed.content,
+				properties: Array.from({ length: computed.length }, (_, index) => {
+					const property = computed.item(index)
+					return {
+						name: property,
+						value: computed.getPropertyValue(property),
+						priority: computed.getPropertyPriority(property),
+					}
+				}),
+			})
+		}
+	}
+
+	return records
+}
+
+/**
+ * Materialize pseudo-elements only inside snapdom's detached clone.
  *
  * snapdom can copy simple pseudo-elements, but foreignObject rendering is
  * inconsistent for absolute pseudo-elements with layered backgrounds. PPT
- * slides use those layers for the dark image mask and texture, so preserving
- * them as real children keeps the exported bitmap equal to the browser view.
+ * slides use those layers for the dark image mask and texture. Mutating the
+ * live iframe tree caused a visible relayout while capture was in progress, so
+ * the replacement nodes and suppression attributes must stay in the clone.
  */
-function materializePseudoElements(root: HTMLElement): MaterializedPseudoElementsCleanup {
-	const document = root.ownerDocument
-	const view = document.defaultView
-	if (!view) return () => undefined
+export function createPseudoElementsCapturePlugin(): SnapdomPlugin {
+	let records: PseudoElementRecord[] = []
 
-	const materialized: HTMLElement[] = []
-	const hiddenAttributes: Array<{
-		source: HTMLElement
-		attribute: string
-		previousValue: string | null
-	}> = []
-	const style = document.createElement("style")
-	style.textContent = `
-		[data-element-inspector-pseudo-before]::before,
-		[data-element-inspector-pseudo-after]::after {
-			content: none !important;
-			display: none !important;
-		}
-	`
-	document.head.appendChild(style)
+	return {
+		name: "magic-element-inspector-pseudo-elements",
+		beforeClone(context) {
+			records = isHtmlElementNode(context.element)
+				? collectPseudoElements(context.element)
+				: []
+		},
+		afterClone(context) {
+			if (!isHtmlElementNode(context.clone) || records.length === 0) return
 
-	const restore = () => {
-		for (const clone of materialized) clone.remove()
-		for (const { source, attribute, previousValue } of hiddenAttributes) {
-			if (previousValue === null) source.removeAttribute(attribute)
-			else source.setAttribute(attribute, previousValue)
-		}
-		style.remove()
-	}
-
-	try {
-		const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))]
-		for (const source of elements) {
-			for (const name of ["::before", "::after"] satisfies PseudoElementName[]) {
-				const computed = view.getComputedStyle(source, name)
-				if (!shouldMaterializePseudoElement(computed)) continue
-				const hasContent = computed.content !== "none" && computed.content !== "normal"
-
-				const clone = document.createElement("span")
-				clone.setAttribute("aria-hidden", "true")
-				clone.setAttribute("data-element-inspector-pseudo", name)
-				clone.style.pointerEvents = "none"
-				for (let index = 0; index < computed.length; index += 1) {
-					const property = computed.item(index)
-					clone.style.setProperty(
-						property,
-						computed.getPropertyValue(property),
-						computed.getPropertyPriority(property),
-					)
+			const cloneRoot = context.clone
+			const targets = records.map((record) => ({
+				record,
+				target: resolveElementPath(cloneRoot, record.path),
+			}))
+			const style = cloneRoot.ownerDocument.createElement("style")
+			style.setAttribute("data-element-inspector-pseudo-style", "true")
+			style.textContent = `
+				[data-element-inspector-pseudo-before]::before,
+				[data-element-inspector-pseudo-after]::after {
+					content: none !important;
+					display: none !important;
 				}
-				clone.style.content = "normal"
-				clone.style.pointerEvents = "none"
+			`
+			cloneRoot.appendChild(style)
 
-				if (
-					hasContent &&
-					computed.content.startsWith('"') &&
-					computed.content.endsWith('"')
-				) {
-					clone.textContent = computed.content.slice(1, -1)
+			for (const { record, target } of targets) {
+				if (!target) continue
+
+				const pseudo = cloneRoot.ownerDocument.createElement("span")
+				pseudo.setAttribute("aria-hidden", "true")
+				pseudo.setAttribute("data-element-inspector-pseudo", record.name)
+				for (const property of record.properties) {
+					pseudo.style.setProperty(property.name, property.value, property.priority)
 				}
+				pseudo.style.content = "normal"
+				pseudo.style.pointerEvents = "none"
+
+				const hasTextContent =
+					record.content.startsWith('"') && record.content.endsWith('"')
+				if (hasTextContent) pseudo.textContent = record.content.slice(1, -1)
 
 				const attribute =
-					name === "::before"
+					record.name === "::before"
 						? "data-element-inspector-pseudo-before"
 						: "data-element-inspector-pseudo-after"
-				hiddenAttributes.push({
-					source,
-					attribute,
-					previousValue: source.getAttribute(attribute),
-				})
-				source.setAttribute(attribute, "true")
-				if (name === "::before") source.insertBefore(clone, source.firstChild)
-				else source.appendChild(clone)
-				materialized.push(clone)
+				target.setAttribute(attribute, "true")
+				if (record.name === "::before") target.insertBefore(pseudo, target.firstChild)
+				else target.appendChild(pseudo)
 			}
+		},
+	}
+}
+
+function restoreAnimationState({ animation, currentTime, playState }: AnimationState) {
+	try {
+		animation.currentTime = currentTime
+		if (playState === "running") animation.play()
+		else if (playState === "paused") animation.pause()
+		else if (playState === "finished") animation.finish()
+	} catch {
+		// An animation can disappear while snapdom waits for remote resources.
+	}
+}
+
+/** Pause iframe motion without inserting layout-affecting nodes into the live page. */
+export function freezeDocumentForCapture(document: Document): () => void {
+	const animations =
+		typeof document.getAnimations === "function"
+			? document.getAnimations({ subtree: true }).map<AnimationState>((animation) => ({
+					animation,
+					currentTime: animation.currentTime,
+					playState: animation.playState,
+				}))
+			: []
+	for (const { animation } of animations) {
+		try {
+			animation.pause()
+		} catch {
+			// Ignore animations whose timeline is no longer active.
 		}
-	} catch (error) {
-		restore()
-		throw error
 	}
 
-	return restore
+	const scrollBehavior = [document.documentElement, document.body]
+		.filter(isHtmlElementNode)
+		.map((element) => ({ element, value: element.style.scrollBehavior }))
+	for (const { element } of scrollBehavior) element.style.scrollBehavior = "auto"
+
+	return () => {
+		for (const { element, value } of scrollBehavior) element.style.scrollBehavior = value
+		for (const state of animations) restoreAnimationState(state)
+	}
+}
+
+async function waitForStableCaptureFrame(document: Document): Promise<void> {
+	const view = document.defaultView
+	if (!view?.requestAnimationFrame) return
+
+	await new Promise<void>((resolve) => view.requestAnimationFrame(() => resolve()))
+	await new Promise<void>((resolve) => view.requestAnimationFrame(() => resolve()))
+}
+
+interface CaptureRectSnapshot {
+	left: number
+	top: number
+	width: number
+	height: number
+}
+
+function readCaptureRect(element: Element): CaptureRectSnapshot {
+	const rect = element.getBoundingClientRect()
+	return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+}
+
+function areCaptureRectsEqual(first: CaptureRectSnapshot, second: CaptureRectSnapshot): boolean {
+	return (
+		Math.abs(first.left - second.left) < 0.1 &&
+		Math.abs(first.top - second.top) < 0.1 &&
+		Math.abs(first.width - second.width) < 0.1 &&
+		Math.abs(first.height - second.height) < 0.1
+	)
+}
+
+/** Wait until a capture surface has produced the same layout rect twice. */
+export async function waitForStableCaptureRect(
+	element: Element,
+	maxFrames = 6,
+): Promise<CaptureRectSnapshot> {
+	let previous = readCaptureRect(element)
+	for (let frame = 0; frame < maxFrames; frame += 1) {
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+		const current = readCaptureRect(element)
+		if (areCaptureRectsEqual(previous, current)) return current
+		previous = current
+	}
+	return previous
+}
+
+/** Wait for the display stream to present a frame produced after inspector chrome was hidden. */
+export async function waitForFreshCaptureVideoFrame(video: HTMLVideoElement): Promise<void> {
+	const requestVideoFrameCallback = (video as HTMLVideoElement & VideoFrameCallbackTarget)
+		.requestVideoFrameCallback
+	if (typeof requestVideoFrameCallback === "function") {
+		await new Promise<void>((resolve) => {
+			requestVideoFrameCallback.call(video, () => resolve())
+		})
+		return
+	}
+
+	await new Promise<void>((resolve) => setTimeout(resolve, 50))
 }
 
 function cropCanvas(
@@ -341,40 +688,34 @@ async function captureSameOriginIframe({
 	// one slide is visible. Select the root containing the drag center so the
 	// crop cannot accidentally use the first slide in the document.
 	const captureRoot = resolveCaptureRoot(documentBody, selection)
-	const rootRect = captureRoot.getBoundingClientRect()
-	const renderWidth = Math.max(captureRoot.scrollWidth, captureRoot.offsetWidth, 1)
-	const renderHeight = Math.max(captureRoot.scrollHeight, captureRoot.offsetHeight, 1)
-	const restorePseudoElements = materializePseudoElements(captureRoot)
+	const rootRect = await waitForStableCaptureRect(captureRoot)
+	const { width: renderWidth, height: renderHeight } = getCaptureRootRenderSize(
+		captureRoot,
+		rootRect,
+	)
+	const result = await snapdom(captureRoot, {
+		// Render the selected root at its CSS size so the crop uses the same
+		// coordinate system as the inspector rect.
+		width: renderWidth,
+		height: renderHeight,
+		dpr: CAPTURE_OUTPUT_SCALE,
+		backgroundColor: "#ffffff",
+		plugins: [createPseudoElementsCapturePlugin()],
+	})
+	// snapdom.toBlob() defaults to SVG. createImageBitmap cannot decode the
+	// foreignObject SVG generated for this page, so request a raster PNG here.
+	const blob = await result.toBlob({ type: "image/png" })
+	const bitmap = await createImageBitmap(blob)
 	try {
-		const result = await snapdom(captureRoot, {
-			// Render the selected root at its CSS size so the crop uses the same
-			// coordinate system as the inspector rect.
+		const rootSelection = getRootCaptureSelection(selection, rootRect)
+		const bitmapSelection = toBitmapCropSelection(rootSelection, bitmap, {
 			width: renderWidth,
 			height: renderHeight,
-			dpr: CAPTURE_OUTPUT_SCALE,
-			backgroundColor: "#ffffff",
 		})
-		// snapdom.toBlob() defaults to SVG. createImageBitmap cannot decode the
-		// foreignObject SVG generated for this page, so request a raster PNG here.
-		const blob = await result.toBlob({ type: "image/png" })
-		const bitmap = await createImageBitmap(blob)
-		try {
-			const rootSelection = getRootCaptureSelection(selection, rootRect)
-			return cropCanvas(
-				bitmap,
-				bitmap.width,
-				bitmap.height,
-				toBitmapCropSelection(rootSelection, bitmap, {
-					width: renderWidth,
-					height: renderHeight,
-				}),
-				getCaptureOutputSize(selection, viewportSelection),
-			)
-		} finally {
-			bitmap.close()
-		}
+		const outputSize = getCaptureOutputSize(selection, viewportSelection)
+		return cropCanvas(bitmap, bitmap.width, bitmap.height, bitmapSelection, outputSize)
 	} finally {
-		restorePseudoElements()
+		bitmap.close()
 	}
 }
 
@@ -382,21 +723,26 @@ async function captureCurrentTab({
 	iframe,
 	selection,
 	viewportSelection,
+	currentTabSession,
 }: CaptureOptions): Promise<string> {
-	if (!navigator.mediaDevices?.getDisplayMedia) {
-		throw new Error("Current browser does not support tab screenshots")
+	let stream: MediaStream
+	try {
+		stream = currentTabSession
+			? await currentTabSession.acquire()
+			: await requestCurrentTabStream()
+	} catch (error) {
+		if (error instanceof CurrentTabCaptureError) throw error
+		if (error instanceof DOMException && error.name === "AbortError") {
+			throw new CurrentTabCaptureError("cancelled", "Tab capture permission was cancelled")
+		}
+		if (error instanceof DOMException && error.name === "NotAllowedError") {
+			throw new CurrentTabCaptureError(
+				"permission-denied",
+				"Tab capture permission was denied",
+			)
+		}
+		throw error
 	}
-
-	const stream = await navigator.mediaDevices.getDisplayMedia({
-		video: {
-			displaySurface: "browser",
-			preferCurrentTab: true,
-			selfBrowserSurface: "include",
-			surfaceSwitching: "exclude",
-			monitorTypeSurfaces: "exclude",
-		} as MediaTrackConstraints,
-		audio: false,
-	})
 	const video = document.createElement("video")
 	video.muted = true
 	video.playsInline = true
@@ -406,7 +752,17 @@ async function captureCurrentTab({
 		const track = stream.getVideoTracks()[0]
 		const displaySurface = track?.getSettings().displaySurface
 		if (displaySurface === "monitor") {
-			throw new Error("Please choose the current browser tab or window")
+			currentTabSession?.release()
+			throw new CurrentTabCaptureError(
+				"wrong-surface",
+				"Please choose the current browser tab or window",
+			)
+		}
+		if (!track) {
+			throw new CurrentTabCaptureError(
+				"no-video",
+				"The selected capture surface has no video track",
+			)
 		}
 
 		await video.play()
@@ -417,13 +773,21 @@ async function captureCurrentTab({
 			}
 			video.addEventListener("loadeddata", () => resolve(), { once: true })
 		})
+		await waitForFreshCaptureVideoFrame(video)
 
-		const iframeRect = iframe.getBoundingClientRect()
-		const screenSelection = resolveCaptureScreenSelection(
+		const iframeRect = await waitForStableCaptureRect(iframe)
+		let sameOrigin = false
+		try {
+			sameOrigin = Boolean(iframe.contentDocument)
+		} catch {
+			sameOrigin = false
+		}
+		const screenSelection = resolveCurrentTabScreenSelection(
 			iframe,
 			iframeRect,
 			selection,
 			viewportSelection,
+			sameOrigin,
 		)
 		const surface = getCaptureSurfaceGeometry(displaySurface, {
 			innerWidth: window.innerWidth,
@@ -446,26 +810,31 @@ async function captureCurrentTab({
 			getCaptureOutputSize(selection, viewportSelection),
 		)
 	} finally {
-		stream.getTracks().forEach((track) => track.stop())
+		if (!currentTabSession) stopMediaStream(stream)
 		video.srcObject = null
 	}
 }
 
-/** Capture a selected iframe region, falling back to browser tab capture for cross-origin shells. */
+/** Capture a selected iframe region from the rendered tab or a stable PPT capture root. */
 export async function captureIframeRegion(options: CaptureOptions): Promise<string> {
+	let iframeDocument: Document | null = null
 	try {
+		iframeDocument = options.iframe.contentDocument
+	} catch {
+		iframeDocument = null
+	}
+	if (!iframeDocument?.body || shouldCaptureCurrentTab(iframeDocument.body, options.selection)) {
+		return captureCurrentTab(options)
+	}
+
+	const restoreDocument = iframeDocument
+		? freezeDocumentForCapture(iframeDocument)
+		: () => undefined
+
+	try {
+		await waitForStableCaptureFrame(iframeDocument)
 		return await captureSameOriginIframe(options)
-	} catch (error) {
-		try {
-			return await captureCurrentTab(options)
-		} catch (fallbackError) {
-			throw new Error(
-				fallbackError instanceof Error
-					? fallbackError.message
-					: error instanceof Error
-						? error.message
-						: "Unable to capture the selected HTML region",
-			)
-		}
+	} finally {
+		restoreDocument()
 	}
 }

@@ -158,6 +158,17 @@ export function registerCommandHandlers(config: CommandHandlersConfig): void {
 		return { success: true }
 	})
 
+	// Update common HTML attributes
+	bridge.onCommand("UPDATE_ELEMENT_ATTRIBUTES", async (payload: unknown) => {
+		const { selector, attributes } = payload as {
+			selector: string
+			attributes: Record<string, string | null>
+		}
+		await styleManager.updateElementAttributes(selector, attributes)
+		EditorLogger.info("Update element attributes", { selector, attributes })
+		return { success: true }
+	})
+
 	// Set element position
 	bridge.onCommand("SET_ELEMENT_POSITION", async (payload: unknown) => {
 		const { selector, top, left } = payload as {

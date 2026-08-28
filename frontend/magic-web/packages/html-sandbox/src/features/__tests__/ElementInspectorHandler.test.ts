@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ElementInspectorHandler } from "../ElementInspectorHandler"
+import { getElementSelector } from "../../utils/dom"
 
 describe("ElementInspectorHandler", () => {
 	let container: HTMLDivElement
@@ -74,5 +75,55 @@ describe("ElementInspectorHandler", () => {
 		expect(info.elementHtml).not.toContain("token=secret")
 		expect(info.elementHtml).not.toContain("data-token")
 		expect(info.elementHtml).not.toContain("style=")
+	})
+
+	it("reports tracked element rectangles after scrolling", () => {
+		const handler = new ElementInspectorHandler()
+		const target = container.querySelectorAll("img")[1]
+		let top = 120
+		vi.spyOn(target, "getBoundingClientRect").mockImplementation(
+			() =>
+				({
+					top,
+					left: 40,
+					width: 200,
+					height: 100,
+					right: 240,
+					bottom: top + 100,
+					x: 40,
+					y: top,
+					toJSON: () => ({}),
+				}) as DOMRect,
+		)
+		const requestAnimationFrame = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) => {
+				callback(0)
+				return 1
+			})
+
+		try {
+			const selector = getElementSelector(target)
+			handler.updateTrackedSelectors([selector])
+			let rectMessage = postMessageSpy.mock.calls.find(
+				([message]) =>
+					(message as { type?: string }).type === "MAGIC_INSPECTOR_RECTS_CHANGED",
+			)
+			expect(rectMessage?.[0]).toMatchObject({
+				type: "MAGIC_INSPECTOR_RECTS_CHANGED",
+				rects: [{ selector, rect: { top: 120 } }],
+			})
+
+			postMessageSpy.mockClear()
+			top = 20
+			document.dispatchEvent(new Event("scroll", { bubbles: true }))
+			rectMessage = postMessageSpy.mock.calls.find(
+				([message]) =>
+					(message as { type?: string }).type === "MAGIC_INSPECTOR_RECTS_CHANGED",
+			)
+			expect(rectMessage?.[0]).toMatchObject({ rects: [{ rect: { top: 20 } }] })
+		} finally {
+			requestAnimationFrame.mockRestore()
+		}
 	})
 })

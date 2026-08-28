@@ -19,6 +19,7 @@ import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import type {
 	HtmlMultiSelectionSubmitState,
+	HtmlSelectionScreenshot,
 	HtmlSelectionTarget,
 	InspectedElementInfo,
 	InspectedElementRect,
@@ -34,10 +35,58 @@ import { formatElementSize, getShortSelector } from "./format"
 import { ElementEditPopover } from "./ElementEditPopover"
 import { PendingTargetsPanel } from "./PendingTargetsPanel"
 import { ScreenshotSelectionOverlay } from "./ScreenshotSelectionOverlay"
-import { captureIframeRegion, toRenderedSelection } from "./screenshot"
+import {
+	captureIframeRegion,
+	createCurrentTabCaptureSession,
+	type CurrentTabCaptureSession,
+	shouldPrewarmCurrentTabCapture,
+	supportsCurrentTabCapture,
+	toRenderedSelection,
+	waitForStableCaptureRect,
+} from "./screenshot"
 import { getHtmlSelectionTargetRect } from "./selection"
 
 export { buildAgentPromptContent, buildHtmlMultiSelectionPromptContent } from "./agentPrompt"
+
+function suppressCaptureCursor(iframe: HTMLIFrameElement): () => void {
+	const iframeDocument = (() => {
+		try {
+			return iframe.contentDocument
+		} catch {
+			return null
+		}
+	})()
+	const elements = [
+		document.documentElement,
+		document.body,
+		iframeDocument?.documentElement,
+		iframeDocument?.body,
+	].filter((element): element is HTMLElement => Boolean(element))
+	const previousCursors = elements.map((element) => element.style.cursor)
+	elements.forEach((element) => {
+		element.style.cursor = "none"
+	})
+
+	return () => {
+		elements.forEach((element, index) => {
+			element.style.cursor = previousCursors[index] ?? ""
+		})
+	}
+}
+
+function readIframeScrollOffset(iframe: HTMLIFrameElement) {
+	try {
+		const document = iframe.contentDocument
+		const scrollingElement = document?.scrollingElement
+		const view = iframe.contentWindow
+		return {
+			left: view?.scrollX ?? scrollingElement?.scrollLeft ?? 0,
+			top: view?.scrollY ?? scrollingElement?.scrollTop ?? 0,
+		}
+	} catch {
+		return { left: 0, top: 0 }
+	}
+}
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -75,11 +124,15 @@ interface ElementInspectorOverlayProps {
 	onSubmitPendingTargets?: () => void
 	selectionMode?: "element" | "screenshot"
 	onSelectionModeChange?: (mode: "element" | "screenshot") => void
+	screenshotSupported?: boolean
 	onCaptureScreenshot?: (
 		dataUrl: string,
 		rect: InspectedElementRect,
 		displaySize?: { width: number; height: number },
+		documentRect?: InspectedElementRect,
 	) => void
+	onCaptureElementScreenshot?: (selector: string, screenshot: HtmlSelectionScreenshot) => void
+	onCapturePrewarmReady?: (prewarm: (() => void) | null) => void
 	onExitMultiSelection?: () => void
 	/** Bottom distance for the pending-target panel when another toolbar occupies the canvas edge. */
 	pendingPanelBottomOffset?: number
@@ -87,6 +140,8 @@ interface ElementInspectorOverlayProps {
 	panelContainerRef?: React.RefObject<HTMLDivElement | null>
 	/** Scale ratio of the iframe (for coordinate conversion) */
 	scaleRatio?: number
+	/** Latest iframe viewport rects for selected and pending element targets. */
+	trackedRects?: Record<string, InspectedElementRect>
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -114,17 +169,45 @@ export function ElementInspectorOverlay({
 	onSubmitPendingTargets,
 	selectionMode = "element",
 	onSelectionModeChange,
+	screenshotSupported = supportsCurrentTabCapture(),
 	onCaptureScreenshot,
+	onCaptureElementScreenshot,
+	onCapturePrewarmReady,
 	onExitMultiSelection,
 	pendingPanelBottomOffset,
 	panelContainerRef,
 	scaleRatio = 1,
+	trackedRects = {},
 }: ElementInspectorOverlayProps) {
 	const { t } = useTranslation("super")
 	const overlayRef = useRef<HTMLDivElement>(null)
 	const [iframeRect, setIframeRect] = useState<DOMRect | null>(null)
+	const [iframeScrollOffset, setIframeScrollOffset] = useState({ left: 0, top: 0 })
 	const [isScreenshotCapturing, setIsScreenshotCapturing] = useState(false)
+	const [captureUsesCurrentTab, setCaptureUsesCurrentTab] = useState(false)
 	const [panelPortalHost, setPanelPortalHost] = useState<HTMLDivElement | null>(null)
+	const effectiveSelectionMode = screenshotSupported ? selectionMode : "element"
+	const iframeRectFrameRef = useRef<number | null>(null)
+	const scrollFrameRef = useRef<number | null>(null)
+	const currentTabCaptureSessionRef = useRef<CurrentTabCaptureSession | null>(null)
+	if (!currentTabCaptureSessionRef.current) {
+		currentTabCaptureSessionRef.current = createCurrentTabCaptureSession()
+	}
+
+	useEffect(() => {
+		if (!screenshotSupported && selectionMode === "screenshot") {
+			onSelectionModeChange?.("element")
+		}
+	}, [onSelectionModeChange, screenshotSupported, selectionMode])
+
+	useEffect(() => {
+		return () => currentTabCaptureSessionRef.current?.release()
+	}, [])
+
+	useEffect(() => {
+		if (active || selectedElement || activeTarget || pendingTargets.length > 0) return
+		currentTabCaptureSessionRef.current?.release()
+	}, [active, activeTarget, pendingTargets.length, selectedElement])
 
 	// The inspector overlay remains over the scaled content for accurate element geometry,
 	// while the collection bar is mounted in the unscaled canvas viewport.
@@ -140,29 +223,55 @@ export function ElementInspectorOverlay({
 			height: overlay.clientHeight || bounds.height,
 		}
 	}, [])
+	const getPanelSize = useCallback(() => {
+		const panel = panelPortalHost
+		if (!panel) return { width: 0, height: 0 }
+		const bounds = panel.getBoundingClientRect()
+		return {
+			width: panel.clientWidth || bounds.width,
+			height: panel.clientHeight || bounds.height,
+		}
+	}, [panelPortalHost])
 
 	// Track iframe position for coordinate conversion (ResizeObserver for selected-element case)
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
 
-		const updateRect = () => {
+		const readIframeRect = () => {
 			const parent = overlayRef.current?.parentElement
 			if (!parent || !iframe) return
 			const parentRect = parent.getBoundingClientRect()
 			const ifRect = iframe.getBoundingClientRect()
 			// Make iframe rect relative to the overlay container
-			setIframeRect(
-				new DOMRect(
-					ifRect.left - parentRect.left,
-					ifRect.top - parentRect.top,
-					ifRect.width,
-					ifRect.height,
-				),
+			const nextRect = new DOMRect(
+				ifRect.left - parentRect.left,
+				ifRect.top - parentRect.top,
+				ifRect.width,
+				ifRect.height,
 			)
+			setIframeRect((current) => {
+				if (
+					current &&
+					current.x === nextRect.x &&
+					current.y === nextRect.y &&
+					current.width === nextRect.width &&
+					current.height === nextRect.height
+				) {
+					return current
+				}
+				return nextRect
+			})
+		}
+		const updateRect = () => {
+			if (iframeRectFrameRef.current !== null) return
+			iframeRectFrameRef.current = requestAnimationFrame(() => {
+				iframeRectFrameRef.current = null
+				readIframeRect()
+			})
 		}
 
-		updateRect()
+		readIframeRect()
 
 		const ro = new ResizeObserver(updateRect)
 		ro.observe(iframe)
@@ -171,8 +280,83 @@ export function ElementInspectorOverlay({
 		return () => {
 			ro.disconnect()
 			window.removeEventListener("scroll", updateRect, true)
+			if (iframeRectFrameRef.current !== null) {
+				cancelAnimationFrame(iframeRectFrameRef.current)
+				iframeRectFrameRef.current = null
+			}
 		}
-	}, [iframeRef, active, hoveredElement])
+	}, [iframeRef, active])
+
+	useEffect(() => {
+		const iframe = iframeRef.current
+		setCaptureUsesCurrentTab(Boolean(iframe && shouldPrewarmCurrentTabCapture(iframe)))
+	}, [iframeRect, iframeRef])
+
+	// Screenshot targets are arbitrary rectangles rather than selectors. Keep
+	// their document anchor in sync with the iframe's internal scroll position.
+	useEffect(() => {
+		const iframe = iframeRef.current
+		if (!iframe) return
+
+		const updateScrollOffset = () => {
+			if (scrollFrameRef.current !== null) return
+			scrollFrameRef.current = requestAnimationFrame(() => {
+				scrollFrameRef.current = null
+				setIframeScrollOffset(readIframeScrollOffset(iframe))
+			})
+		}
+		const bindDocumentScroll = () => {
+			const unbinders: Array<() => void> = []
+			try {
+				const document = iframe.contentDocument
+				if (document) {
+					document.addEventListener("scroll", updateScrollOffset, true)
+					unbinders.push(() => {
+						try {
+							document.removeEventListener("scroll", updateScrollOffset, true)
+						} catch {
+							// The iframe may have navigated away from the same-origin document.
+						}
+					})
+				}
+			} catch {
+				// Cross-origin iframes do not expose their document.
+			}
+			try {
+				const view = iframe.contentWindow
+				view?.addEventListener("scroll", updateScrollOffset, true)
+				if (view) {
+					unbinders.push(() => {
+						try {
+							view.removeEventListener("scroll", updateScrollOffset, true)
+						} catch {
+							// WindowProxy access becomes restricted after a cross-origin navigation.
+						}
+					})
+				}
+			} catch {
+				// Cross-origin WindowProxy properties can throw during binding.
+			}
+			if (unbinders.length === 0) return undefined
+			updateScrollOffset()
+			return () => unbinders.forEach((unbind) => unbind())
+		}
+
+		let unbindDocumentScroll = bindDocumentScroll()
+		const handleLoad = () => {
+			unbindDocumentScroll?.()
+			unbindDocumentScroll = bindDocumentScroll()
+		}
+		iframe.addEventListener("load", handleLoad)
+		updateScrollOffset()
+
+		return () => {
+			iframe.removeEventListener("load", handleLoad)
+			unbindDocumentScroll?.()
+			if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current)
+			scrollFrameRef.current = null
+		}
+	}, [iframeRef, active])
 
 	const getOverlayGeometry = useCallback(() => {
 		const iframe = iframeRef.current
@@ -215,19 +399,23 @@ export function ElementInspectorOverlay({
 	)
 
 	const selectBox = useMemo(
-		() => (selectedElement ? toOverlayRect(selectedElement.rect) : null),
+		() =>
+			selectedElement
+				? toOverlayRect(trackedRects[selectedElement.selector] ?? selectedElement.rect)
+				: null,
+		// iframeRect changes after host scrolling and must invalidate this memoized box.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[selectedElement, toOverlayRect, iframeRect],
+		[selectedElement, toOverlayRect, iframeRect, trackedRects],
 	)
-	const handleCaptureScreenshot = useCallback(
+	const captureRegion = useCallback(
 		async (overlayRect: InspectedElementRect) => {
-			const geometry = getOverlayGeometry()
 			const iframe = iframeRef.current
-			if (!geometry || !iframe || !onCaptureScreenshot) {
-				throw new Error("HTML screenshot capture is unavailable")
-			}
+			if (!iframe) throw new Error("HTML screenshot capture is unavailable")
 			const overlay = overlayRef.current
 			if (!overlay) throw new Error("HTML screenshot overlay is unavailable")
+			await waitForStableCaptureRect(overlay)
+			const geometry = getOverlayGeometry()
+			if (!geometry) throw new Error("HTML screenshot geometry is unavailable")
 			const overlayBounds = overlay.getBoundingClientRect()
 			const viewportSelection = toRenderedSelection(
 				{
@@ -238,18 +426,116 @@ export function ElementInspectorOverlay({
 				overlayRect,
 			)
 			const iframeSelection = fromInspectorOverlayRect(overlayRect, geometry)
-			const dataUrl = await captureIframeRegion({
-				iframe,
-				selection: iframeSelection,
-				viewportSelection,
-			})
-			onCaptureScreenshot(dataUrl, iframeSelection, {
+			const { left: scrollLeft, top: scrollTop } = readIframeScrollOffset(iframe)
+			const documentSelection =
+				scrollLeft || scrollTop
+					? {
+							...iframeSelection,
+							left: iframeSelection.left + scrollLeft,
+							top: iframeSelection.top + scrollTop,
+						}
+					: undefined
+			const restoreCaptureCursor = suppressCaptureCursor(iframe)
+			let dataUrl: string
+			try {
+				dataUrl = await captureIframeRegion({
+					iframe,
+					selection: iframeSelection,
+					viewportSelection,
+					currentTabSession: currentTabCaptureSessionRef.current ?? undefined,
+				})
+			} finally {
+				restoreCaptureCursor()
+			}
+			const displaySize = {
 				width: viewportSelection.width,
 				height: viewportSelection.height,
-			})
+			}
+			return {
+				dataUrl,
+				rect: iframeSelection,
+				displaySize,
+				documentRect: documentSelection,
+			}
 		},
-		[getOverlayGeometry, iframeRef, onCaptureScreenshot],
+		[getOverlayGeometry, iframeRef],
 	)
+	const handleCaptureScreenshot = useCallback(
+		async (overlayRect: InspectedElementRect) => {
+			if (!onCaptureScreenshot) {
+				throw new Error("HTML screenshot capture is unavailable")
+			}
+			const result = await captureRegion(overlayRect)
+			onCaptureScreenshot(
+				result.dataUrl,
+				result.rect,
+				result.displaySize,
+				result.documentRect,
+			)
+		},
+		[captureRegion, onCaptureScreenshot],
+	)
+	const captureElementPreview = useCallback(
+		async (overlayRect: InspectedElementRect) => {
+			setIsScreenshotCapturing(true)
+			try {
+				await new Promise<void>((resolve) => {
+					if (typeof requestAnimationFrame === "function") {
+						requestAnimationFrame(() => resolve())
+						return
+					}
+					setTimeout(resolve, 0)
+				})
+				return await captureRegion(overlayRect)
+			} finally {
+				setIsScreenshotCapturing(false)
+			}
+		},
+		[captureRegion],
+	)
+
+	const elementScreenshotSelectorRef = useRef<string | null>(null)
+	useEffect(() => {
+		if (!selectedElement) {
+			elementScreenshotSelectorRef.current = null
+			return
+		}
+		if (!screenshotSupported) {
+			elementScreenshotSelectorRef.current = null
+			return
+		}
+		if (!onCaptureElementScreenshot || !selectBox) return
+		if (elementScreenshotSelectorRef.current === selectedElement.selector) return
+
+		const selector = selectedElement.selector
+		elementScreenshotSelectorRef.current = selector
+		let cancelled = false
+		void captureElementPreview(selectBox)
+			.then((result) => {
+				if (cancelled || elementScreenshotSelectorRef.current !== selector) return
+				onCaptureElementScreenshot(selector, {
+					dataUrl: result.dataUrl,
+					rect: result.rect,
+					displaySize: result.displaySize,
+					documentRect: result.documentRect,
+				})
+			})
+			.catch(() => {
+				if (!cancelled) elementScreenshotSelectorRef.current = null
+			})
+
+		return () => {
+			// Rect refreshes can rerun this effect while the same capture is pending.
+			// Only cancel when the selection itself has changed or was cleared.
+			if (elementScreenshotSelectorRef.current !== selector) cancelled = true
+		}
+	}, [
+		captureElementPreview,
+		onCaptureElementScreenshot,
+		screenshotSupported,
+		selectBox,
+		selectedElement,
+	])
 	const screenshotSelectionBounds = useMemo(() => {
 		const iframe = iframeRef.current
 		const parent = overlayRef.current?.parentElement
@@ -264,13 +550,86 @@ export function ElementInspectorOverlay({
 		})
 	}, [iframeRect, iframeRef, scaleRatio])
 
+	/**
+	 * Move the editor popover into the stable viewport layer. The inspector overlay
+	 * sits inside the scaled/scrolling content container, which can clip a popover
+	 * when the selected screenshot is near an edge.
+	 */
+	const toPanelRect = useCallback(
+		(box: InspectedElementRect) => {
+			const overlay = overlayRef.current
+			const panel = panelPortalHost
+			if (!overlay || !panel) return null
+
+			const overlayBounds = overlay.getBoundingClientRect()
+			const panelBounds = panel.getBoundingClientRect()
+			const overlayWidth = overlay.clientWidth || overlayBounds.width
+			const overlayHeight = overlay.clientHeight || overlayBounds.height
+			const panelWidth = panel.clientWidth || panelBounds.width
+			const panelHeight = panel.clientHeight || panelBounds.height
+			const overlayScaleX = overlayWidth > 0 ? overlayBounds.width / overlayWidth : 1
+			const overlayScaleY = overlayHeight > 0 ? overlayBounds.height / overlayHeight : 1
+			const panelScaleX = panelWidth > 0 ? panelBounds.width / panelWidth : 1
+			const panelScaleY = panelHeight > 0 ? panelBounds.height / panelHeight : 1
+
+			return {
+				left:
+					(overlayBounds.left + box.left * overlayScaleX - panelBounds.left) /
+					panelScaleX,
+				top: (overlayBounds.top + box.top * overlayScaleY - panelBounds.top) / panelScaleY,
+				width: (box.width * overlayScaleX) / panelScaleX,
+				height: (box.height * overlayScaleY) / panelScaleY,
+			}
+		},
+		[panelPortalHost],
+	)
+
+	const getTargetRect = useCallback(
+		(target: HtmlSelectionTarget) => {
+			if (target.kind === "element") {
+				return trackedRects[target.info.selector] ?? target.info.rect
+			}
+			return getHtmlSelectionTargetRect(target, iframeScrollOffset)
+		},
+		[iframeScrollOffset, trackedRects],
+	)
+	const prewarmCurrentTabCapture = useCallback(async () => {
+		if (!screenshotSupported) return
+		const iframe = iframeRef.current
+		if (!iframe || !shouldPrewarmCurrentTabCapture(iframe)) return
+
+		try {
+			await currentTabCaptureSessionRef.current?.acquire()
+		} catch {
+			// Permission denial is handled when the user starts a capture.
+		}
+	}, [iframeRef, screenshotSupported])
+
+	useEffect(() => {
+		onCapturePrewarmReady?.(() => {
+			void prewarmCurrentTabCapture()
+		})
+		return () => onCapturePrewarmReady?.(null)
+	}, [onCapturePrewarmReady, prewarmCurrentTabCapture])
+
+	const handleSelectionModeChange = useCallback(
+		(nextMode: "element" | "screenshot") => {
+			if (nextMode === "screenshot" && !screenshotSupported) return
+			if (nextMode === "screenshot") {
+				void prewarmCurrentTabCapture()
+			}
+			onSelectionModeChange?.(nextMode)
+		},
+		[onSelectionModeChange, prewarmCurrentTabCapture, screenshotSupported],
+	)
+
 	// Don't render anything if not active and no selection
 	if (!active && !selectedElement && !activeTarget && pendingTargets.length === 0) return null
 	const overlayScale = getOverlayScale()
 	const overlaySize = getOverlaySize()
 	const activeTargetBox = activeTarget
 		? toOverlayRect(
-				getHtmlSelectionTargetRect(activeTarget) ?? {
+				getTargetRect(activeTarget) ?? {
 					left: 0,
 					top: 0,
 					width: 0,
@@ -278,6 +637,28 @@ export function ElementInspectorOverlay({
 				},
 			)
 		: null
+	const panelSize = getPanelSize()
+	const activeTargetPanelBox = activeTargetBox ? toPanelRect(activeTargetBox) : null
+	const editPopoverBox = activeTargetPanelBox ?? activeTargetBox
+	const editPopover =
+		activeTarget &&
+		editPopoverBox &&
+		onDraftInstructionChange &&
+		onConfirmTarget &&
+		onCancelTarget ? (
+			<ElementEditPopover
+				info={activeTarget.kind === "element" ? activeTarget.info : undefined}
+				targetKind={activeTarget.kind}
+				screenshotDataUrl={activeTarget.screenshot?.dataUrl}
+				box={editPopoverBox}
+				containerWidth={activeTargetPanelBox ? panelSize.width : overlaySize.width}
+				containerHeight={activeTargetPanelBox ? panelSize.height : overlaySize.height}
+				instruction={draftInstruction}
+				onInstructionChange={onDraftInstructionChange}
+				onConfirm={onConfirmTarget}
+				onCancel={onCancelTarget}
+			/>
+		) : null
 	const pendingPanel =
 		(pendingTargets.length > 0 || active || activeTarget) &&
 		onEditPendingTarget &&
@@ -290,8 +671,9 @@ export function ElementInspectorOverlay({
 				onEdit={onEditPendingTarget}
 				onRemove={onRemovePendingTarget}
 				onSubmit={onSubmitPendingTargets}
-				selectionMode={selectionMode}
-				onSelectionModeChange={onSelectionModeChange}
+				selectionMode={effectiveSelectionMode}
+				onSelectionModeChange={handleSelectionModeChange}
+				screenshotSupported={screenshotSupported}
 				onExit={onExitMultiSelection}
 				bottomOffset={pendingPanelBottomOffset}
 			/>
@@ -304,6 +686,7 @@ export function ElementInspectorOverlay({
 						data-element-inspector-panel-portal="true"
 						style={{ visibility: isScreenshotCapturing ? "hidden" : undefined }}
 					>
+						{editPopover}
 						{pendingPanel}
 					</div>,
 					panelPortalHost,
@@ -333,14 +716,16 @@ export function ElementInspectorOverlay({
 					box={hoverBox}
 					overlayScale={overlayScale}
 					containerWidth={overlaySize.width}
+					animate={false}
 				/>
 			)}
 
-			{active && selectionMode === "screenshot" && (
+			{active && effectiveSelectionMode === "screenshot" && (
 				<ScreenshotSelectionOverlay
 					containerWidth={overlaySize.width}
 					containerHeight={overlaySize.height}
 					selectionBounds={screenshotSelectionBounds}
+					captureUsesCurrentTab={captureUsesCurrentTab}
 					onCapture={handleCaptureScreenshot}
 					onCaptureStateChange={setIsScreenshotCapturing}
 				/>
@@ -357,7 +742,9 @@ export function ElementInspectorOverlay({
 					)
 						return null
 
-					const box = toOverlayRect(target.info.rect)
+					const box = toOverlayRect(
+						trackedRects[target.info.selector] ?? target.info.rect,
+					)
 					return box ? (
 						<Fragment key={target.id}>
 							<ElementHighlight
@@ -375,7 +762,7 @@ export function ElementInspectorOverlay({
 				}
 
 				if (target.id === activeTarget?.id) return null
-				const box = toOverlayRect(target.screenshot.rect)
+				const box = toOverlayRect(getTargetRect(target))
 				return box ? (
 					<Fragment key={target.id}>
 						<ScreenshotHighlight
@@ -405,6 +792,7 @@ export function ElementInspectorOverlay({
 						box={selectBox}
 						overlayScale={overlayScale}
 						containerWidth={overlaySize.width}
+						animate={false}
 					/>
 
 					{/* Info card */}
@@ -418,7 +806,6 @@ export function ElementInspectorOverlay({
 							onCopySelector={onCopySelector}
 							onInsertToConsole={onInsertToConsole}
 							onSendToAgent={onSendToAgent}
-							t={t}
 						/>
 					)}
 				</>
@@ -431,7 +818,11 @@ export function ElementInspectorOverlay({
 				activeTarget.info &&
 				activeTarget.info.selector !== selectedElement?.selector && (
 					<ElementHighlight
-						info={activeTarget.info}
+						info={{
+							...activeTarget.info,
+							rect:
+								trackedRects[activeTarget.info.selector] ?? activeTarget.info.rect,
+						}}
 						box={activeTargetBox}
 						overlayScale={overlayScale}
 						containerWidth={overlaySize.width}
@@ -452,24 +843,7 @@ export function ElementInspectorOverlay({
 				/>
 			)}
 
-			{activeTarget &&
-				activeTargetBox &&
-				onDraftInstructionChange &&
-				onConfirmTarget &&
-				onCancelTarget && (
-					<ElementEditPopover
-						info={activeTarget.kind === "element" ? activeTarget.info : undefined}
-						targetKind={activeTarget.kind}
-						screenshotDataUrl={activeTarget.screenshot?.dataUrl}
-						box={activeTargetBox}
-						containerWidth={overlaySize.width}
-						containerHeight={overlaySize.height}
-						instruction={draftInstruction}
-						onInstructionChange={onDraftInstructionChange}
-						onConfirm={onConfirmTarget}
-						onCancel={onCancelTarget}
-					/>
-				)}
+			{!panelPortalHost && editPopover}
 
 			{pendingPanelContent}
 		</div>
@@ -483,11 +857,14 @@ function ElementHighlight({
 	box,
 	overlayScale,
 	containerWidth,
+	animate = false,
 }: {
 	info: InspectedElementInfo
 	box: { left: number; top: number; width: number; height: number }
 	overlayScale: { x: number; y: number }
 	containerWidth: number
+	/** Tracked rectangles refresh on every animation frame, so retained targets must not ease behind scrolling. */
+	animate?: boolean
 }) {
 	return (
 		<>
@@ -499,8 +876,9 @@ function ElementHighlight({
 					width: box.width,
 					height: box.height,
 					backgroundColor: "rgba(59, 130, 246, 0.1)",
-					transition:
-						"left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out",
+					transition: animate
+						? "left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out"
+						: undefined,
 				}}
 			/>
 
@@ -515,8 +893,9 @@ function ElementHighlight({
 						height:
 							box.height + (info.padding.top + info.padding.bottom) * overlayScale.y,
 						backgroundColor: "rgba(147, 196, 125, 0.3)",
-						transition:
-							"left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out",
+						transition: animate
+							? "left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out"
+							: undefined,
 						zIndex: -1,
 					}}
 				/>
@@ -644,7 +1023,6 @@ function ElementInfoCard({
 	onCopySelector,
 	onInsertToConsole,
 	onSendToAgent,
-	t,
 }: {
 	info: InspectedElementInfo
 	box: { left: number; top: number; width: number; height: number }
@@ -654,8 +1032,8 @@ function ElementInfoCard({
 	onCopySelector?: (selector: string) => void
 	onInsertToConsole?: (code: string) => void
 	onSendToAgent?: (content: JSONContent) => void
-	t: (key: string) => string
 }) {
+	const { t } = useTranslation("super")
 	const cardWidth = 280
 	const cardMaxHeight = 260
 
@@ -742,14 +1120,14 @@ function ElementInfoCard({
 				{/* Box model summary */}
 				<div className="mb-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
 					<div>
-						<span className="text-muted-foreground">margin:</span>{" "}
+						<span className="text-muted-foreground">{t("stylePanel.margin")}:</span>{" "}
 						<span className="font-mono">
 							{info.margin.top} {info.margin.right} {info.margin.bottom}{" "}
 							{info.margin.left}
 						</span>
 					</div>
 					<div>
-						<span className="text-muted-foreground">padding:</span>{" "}
+						<span className="text-muted-foreground">{t("stylePanel.padding")}:</span>{" "}
 						<span className="font-mono">
 							{info.padding.top} {info.padding.right} {info.padding.bottom}{" "}
 							{info.padding.left}

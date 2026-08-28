@@ -1,23 +1,16 @@
 import * as React from "react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import {
 	Ban,
-	AlertTriangle,
-	ChevronRight,
 	ChevronsDownUp,
 	ChevronsUpDown,
 	CornerDownRight,
-	FolderPlus,
-	ImagePlus,
-	Image as ImageIcon,
-	ListPlus,
-	Plus,
-	Trash2,
 	ArrowDown,
 	ArrowUp,
 	RefreshCw,
 	GripVertical,
 	Layers3,
+	Search,
 	X,
 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -31,29 +24,33 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Input } from "@/components/shadcn-ui/input"
-import { ContextMenu, ContextMenuTrigger } from "@/components/shadcn-ui/context-menu"
-import {
-	DropdownMenu,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/shadcn-ui/dropdown-menu"
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@/components/shadcn-ui/tooltip"
-import { Popover, PopoverTrigger } from "@/components/shadcn-ui/popover"
+import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
+import { manualPerfLogger } from "@/utils/manualPerfLogger"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { DomTreeNode, DomTreeResponse } from "../../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
-import { HTML_EDITOR_Z_INDEX } from "../../constants/z-index"
-import { DOMTreeContextMenu } from "./DOMTreeContextMenu"
-import { EditorDropdownMenuContent, EditorPopoverContent } from "../EditorFloating"
+import { DOMTreeRow, type DOMTreeRowHandlers } from "./DOMTreeRow"
+import { DOMTreeVirtualList } from "./DOMTreeVirtualList"
+import { ActionTooltip } from "./DOMTreeRowControls"
+import {
+	DOM_TREE_ROW_HEIGHT,
+	DOM_TREE_VIRTUAL_INITIAL_RECT,
+	DOM_TREE_VIRTUAL_OVERSCAN,
+	DOM_TREE_VIRTUAL_THRESHOLD,
+	buildDomTreeIndex,
+	collectNodeIds,
+	collectVisibleNodeRows,
+	estimateDomTreeRowSize,
+	getSemanticKey,
+	isSelectableNode,
+	type DeleteRequest,
+	type DropPosition,
+	type InsertPlacement,
+	type TextInsertRequest,
+} from "./domTreeModel"
 
 interface Props {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -65,49 +62,7 @@ interface Props {
 
 const DOM_TREE_FALLBACK_REFRESH_INTERVAL = 10_000
 const DOM_TREE_CONTENT_REFRESH_DELAY = 120
-const DOM_TREE_INDENT_STEP = 16
-
-function flattenParents(
-	node: DomTreeNode,
-	parent?: DomTreeNode,
-	map = new Map<string, DomTreeNode>(),
-) {
-	if (parent) map.set(node.nodeId, parent)
-	node.children.forEach((child) => flattenParents(child, node, map))
-	return map
-}
-
-function collectNodeIds(node: DomTreeNode, result = new Set<string>()) {
-	result.add(node.nodeId)
-	node.children.forEach((child) => collectNodeIds(child, result))
-	return result
-}
-
-function collectVisibleNodeIds(
-	node: DomTreeNode,
-	expanded: Set<string>,
-	result: string[] = [],
-): string[] {
-	result.push(node.nodeId)
-	if (expanded.has(node.nodeId)) {
-		node.children.forEach((child) => collectVisibleNodeIds(child, expanded, result))
-	}
-	return result
-}
-
-type DropPosition = "before" | "inside" | "after"
-type InsertPlacement = "before" | "inside" | "after"
-
-interface TextInsertRequest {
-	parentNodeId: string
-	index?: number
-	targetLabel: string
-}
-
-interface DeleteRequest {
-	selector: string
-	targetLabel: string
-}
+const DOM_TREE_VIRTUAL_LOG_INTERVAL_MS = 250
 
 function createDragPreview(label: string): HTMLElement {
 	const preview = document.createElement("div")
@@ -116,264 +71,6 @@ function createDragPreview(label: string): HTMLElement {
 		"pointer-events-none fixed -left-[1000px] -top-[1000px] z-[2147483647] max-w-60 overflow-hidden text-ellipsis whitespace-nowrap rounded-[3px] border border-primary/70 bg-popover px-3 py-2 text-xs font-semibold leading-4 text-popover-foreground shadow-[0_8px_24px_rgba(15,23,42,0.2)]"
 	document.body.appendChild(preview)
 	return preview
-}
-
-function getSemanticKey(tagName: string): string {
-	const tag = tagName.toLowerCase()
-	if (["br", "wbr"].includes(tag)) return "lineBreak"
-	if (tag === "hr") return "divider"
-	if (["img", "picture", "source"].includes(tag)) return "image"
-	if (
-		[
-			"input",
-			"button",
-			"select",
-			"textarea",
-			"option",
-			"optgroup",
-			"output",
-			"progress",
-			"meter",
-		].includes(tag)
-	)
-		return "control"
-	if (["video", "audio", "canvas", "svg"].includes(tag)) return "media"
-	if (["iframe", "object", "embed"].includes(tag)) return "embed"
-	if (["a", "area"].includes(tag)) return "link"
-	if (["blockquote", "q", "cite"].includes(tag)) return "quote"
-	if (["code", "pre", "kbd", "samp", "var"].includes(tag)) return "code"
-	if (["details", "summary"].includes(tag)) return "disclosure"
-	if (
-		["p", "span", "strong", "em", "b", "i", "u", "small", "mark", "del", "ins", "s"].includes(
-			tag,
-		)
-	)
-		return "text"
-	if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(tag)) return "heading"
-	if (["ul", "ol", "li", "dl", "dt", "dd"].includes(tag)) return "list"
-	if (["table", "thead", "tbody", "tr", "th", "td"].includes(tag)) return "table"
-	if (["form", "fieldset", "legend"].includes(tag)) return "form"
-	if (
-		[
-			"html",
-			"body",
-			"main",
-			"section",
-			"article",
-			"header",
-			"footer",
-			"nav",
-			"aside",
-			"div",
-			"figure",
-			"figcaption",
-		].includes(tag)
-	)
-		return "container"
-	return "element"
-}
-
-function getSemanticTone(semanticKey: string): string {
-	switch (semanticKey) {
-		case "container":
-			return "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-		case "text":
-		case "heading":
-		case "link":
-		case "quote":
-		case "code":
-			return "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300"
-		case "image":
-		case "media":
-			return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-		case "control":
-			return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-		case "form":
-		case "disclosure":
-			return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-		case "list":
-		case "table":
-		case "divider":
-			return "border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300"
-		case "lineBreak":
-			return "border-slate-500/25 bg-slate-500/10 text-slate-700 dark:text-slate-300"
-		case "embed":
-			return "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
-		default:
-			return "border-border/70 bg-muted/55 text-foreground/80"
-	}
-}
-
-function isSelectableNode(node: DomTreeNode): boolean {
-	if (node.canSelect !== undefined) return node.canSelect
-	// Older runtimes did not send canSelect. Keep root nodes selectable while
-	// preserving the previous editable/non-unique behavior for other nodes.
-	return (
-		node.editable ||
-		node.disabledReason === "根节点不可移动或删除" ||
-		["html", "body"].includes(node.tagName.toLowerCase())
-	)
-}
-
-const ActionTooltip = React.forwardRef<
-	HTMLElement,
-	{
-		label: React.ReactNode
-		children: React.ReactElement
-		side?: "top" | "right" | "bottom" | "left"
-	}
->(({ label, children, side = "top" }, ref) => {
-	if (label == null || label === "") return children
-	const isDisabled =
-		React.isValidElement<{ disabled?: boolean }>(children) && children.props.disabled === true
-	const trigger = isDisabled ? (
-		<span className="inline-flex min-w-0" tabIndex={0} aria-disabled="true">
-			{children}
-		</span>
-	) : (
-		React.cloneElement(children, { ref })
-	)
-
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>{trigger}</TooltipTrigger>
-			<TooltipContent
-				side={side}
-				sideOffset={6}
-				className="z-[10060] max-w-72 whitespace-normal break-words"
-				zIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
-			>
-				{label}
-			</TooltipContent>
-		</Tooltip>
-	)
-})
-ActionTooltip.displayName = "ActionTooltip"
-
-function NodeDetailsPopover({
-	children,
-	content,
-}: {
-	children: React.ReactElement
-	content: React.ReactNode
-}) {
-	return (
-		<Popover>
-			<PopoverTrigger asChild>
-				<span
-					className="inline-flex min-w-0 max-w-[34%] shrink-0 cursor-help"
-					onClick={(event) => event.stopPropagation()}
-				>
-					{children}
-				</span>
-			</PopoverTrigger>
-			<EditorPopoverContent
-				side="top"
-				align="start"
-				sideOffset={6}
-				className={cn(
-					"!z-[10060] w-fit max-w-72 border-0 bg-foreground px-3 py-2 text-background shadow-lg",
-				)}
-			>
-				{content}
-			</EditorPopoverContent>
-		</Popover>
-	)
-}
-
-interface AddNodeMenuProps {
-	mode: "inside" | "sibling"
-	open: boolean
-	disabled: boolean
-	onOpenChange: (open: boolean) => void
-	onAddText: (placement: InsertPlacement) => void
-	onAddImage: (placement: InsertPlacement) => void
-	label: string
-	testId: string
-}
-
-function AddNodeMenu({
-	mode,
-	open,
-	disabled,
-	onOpenChange,
-	onAddText,
-	onAddImage,
-	label,
-	testId,
-}: AddNodeMenuProps) {
-	const { t } = useTranslation("super")
-	const isInside = mode === "inside"
-	const Icon = isInside ? FolderPlus : ListPlus
-
-	return (
-		<DropdownMenu open={open} onOpenChange={onOpenChange}>
-			<ActionTooltip label={label}>
-				<span className="inline-flex" tabIndex={disabled ? 0 : undefined}>
-					<DropdownMenuTrigger asChild>
-						<Button
-							size="icon"
-							variant="ghost"
-							className="h-5 w-5 rounded-sm active:scale-[0.96]"
-							disabled={disabled}
-							aria-label={label}
-							data-testid={testId}
-							onPointerDown={(event) => event.stopPropagation()}
-							onClick={(event) => {
-								event.stopPropagation()
-								// Radix opens from pointerdown. Keep a click fallback for
-								// programmatic and keyboard activation without toggling twice.
-								if (!open) onOpenChange(true)
-							}}
-						>
-							<Icon className="h-3 w-3" />
-						</Button>
-					</DropdownMenuTrigger>
-				</span>
-			</ActionTooltip>
-			<EditorDropdownMenuContent align="end" className="w-56">
-				<DropdownMenuLabel>{label}</DropdownMenuLabel>
-				{isInside ? (
-					<>
-						<DropdownMenuItem onSelect={() => onAddText("inside")}>
-							<Plus className="h-4 w-4" />
-							{t("stylePanel.domTree.addText")}
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onAddImage("inside")}>
-							<ImagePlus className="h-4 w-4" />
-							{t("stylePanel.domTree.addImage")}
-						</DropdownMenuItem>
-					</>
-				) : (
-					<>
-						<DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-							{t("stylePanel.domTree.insertBefore")}
-						</DropdownMenuLabel>
-						<DropdownMenuItem onSelect={() => onAddText("before")}>
-							<Plus className="h-4 w-4" />
-							{t("stylePanel.domTree.addTextBefore")}
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onAddImage("before")}>
-							<ImagePlus className="h-4 w-4" />
-							{t("stylePanel.domTree.addImageBefore")}
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-							{t("stylePanel.domTree.insertAfter")}
-						</DropdownMenuLabel>
-						<DropdownMenuItem onSelect={() => onAddText("after")}>
-							<Plus className="h-4 w-4" />
-							{t("stylePanel.domTree.addTextAfter")}
-						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onAddImage("after")}>
-							<ImagePlus className="h-4 w-4" />
-							{t("stylePanel.domTree.addImageAfter")}
-						</DropdownMenuItem>
-					</>
-				)}
-			</EditorDropdownMenuContent>
-		</DropdownMenu>
-	)
 }
 
 function DOMTreePanelInner({
@@ -387,6 +84,8 @@ function DOMTreePanelInner({
 	const [tree, setTree] = useState<DomTreeResponse | null>(null)
 	const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
 	const [expanded, setExpanded] = useState<Set<string>>(new Set())
+	const [searchQuery, setSearchQuery] = useState("")
+	const [activeSearchIndex, setActiveSearchIndex] = useState(0)
 	const [width, setWidth] = useState(360)
 	const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null)
 	const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -410,6 +109,31 @@ function DOMTreePanelInner({
 	const treeViewportRef = useRef<HTMLDivElement>(null)
 	const autoScrollFrameRef = useRef<number | null>(null)
 	const previousContentRevisionRef = useRef(contentRevision)
+	const virtualRangeLogAtRef = useRef(0)
+	const hoverBridgeLogRef = useRef<{
+		hover_count: number
+		clear_count: number
+		timer: number | null
+	}>({ hover_count: 0, clear_count: 0, timer: null })
+	const recordHoverBridgeCall = useCallback((kind: "hover" | "clear") => {
+		if (!manualPerfLogger.isEnabled()) return
+		const stats = hoverBridgeLogRef.current
+		if (kind === "hover") stats.hover_count += 1
+		else stats.clear_count += 1
+		if (stats.timer !== null) return
+		stats.timer = window.setTimeout(() => {
+			const nextStats = { ...stats }
+			stats.hover_count = 0
+			stats.clear_count = 0
+			stats.timer = null
+			if (nextStats.hover_count > 0 || nextStats.clear_count > 0) {
+				manualPerfLogger.log("dom_tree_hover_bridge_batch", {
+					hover_call_count: nextStats.hover_count,
+					clear_call_count: nextStats.clear_count,
+				})
+			}
+		}, DOM_TREE_VIRTUAL_LOG_INTERVAL_MS)
+	}, [])
 	const nodeButtonRefs = useRef(new Map<string, HTMLButtonElement>())
 	const resetDragState = useCallback(() => {
 		interactionLockedRef.current = false
@@ -422,21 +146,56 @@ function DOMTreePanelInner({
 		}
 		void editorRef.current?.clearHoveredDomNode?.()
 	}, [editorRef])
-	const parentMap = useMemo(() => (tree ? flattenParents(tree.root) : new Map()), [tree])
-	const nodeMap = useMemo(() => {
-		const result = new Map<string, DomTreeNode>()
-		const visit = (node: DomTreeNode) => {
-			result.set(node.nodeId, node)
-			node.children.forEach(visit)
+	const treeIndex = useMemo(() => {
+		const startedAt = manualPerfLogger.isEnabled() ? manualPerfLogger.now() : 0
+		const index = buildDomTreeIndex(tree?.root)
+		if (startedAt) {
+			manualPerfLogger.recordDuration("dom_tree_index", startedAt, {
+				node_count: index.nodeMap.size,
+			})
 		}
-		if (tree) visit(tree.root)
-		return result
+		return index
 	}, [tree])
+	const { nodeMap, parentMap, nodeIdBySelector } = treeIndex
 	const allNodesExpanded = Boolean(tree && expanded.size >= nodeMap.size)
-	const visibleNodeIds = useMemo(
-		() => (tree ? collectVisibleNodeIds(tree.root, expanded) : []),
-		[expanded, tree],
+	const deferredSearchQuery = useDeferredValue(searchQuery)
+	const normalizedSearchQuery = deferredSearchQuery.trim().toLowerCase()
+	const searchIndex = useMemo(
+		() =>
+			Array.from(nodeMap.values()).map((node) => ({
+				node,
+				searchableText: [
+					node.label,
+					node.tagName,
+					node.textContent,
+					node.selector,
+					node.resource,
+				]
+					.filter(Boolean)
+					.join(" ")
+					.toLowerCase(),
+			})),
+		[nodeMap],
 	)
+	const searchResults = useMemo(() => {
+		if (!normalizedSearchQuery) return []
+		return searchIndex
+			.filter(({ searchableText }) => searchableText.includes(normalizedSearchQuery))
+			.map(({ node }) => node)
+	}, [normalizedSearchQuery, searchIndex])
+	const visibleSearchResults = useMemo(() => searchResults.slice(0, 30), [searchResults])
+	const visibleRows = useMemo(() => {
+		const startedAt = manualPerfLogger.isEnabled() ? manualPerfLogger.now() : 0
+		const rows = tree ? collectVisibleNodeRows(tree.root, expanded) : []
+		if (startedAt) {
+			manualPerfLogger.recordDuration("dom_tree_visible_rows", startedAt, {
+				node_count: nodeMap.size,
+				visible_row_count: rows.length,
+			})
+		}
+		return rows
+	}, [expanded, nodeMap.size, tree])
+	const visibleNodeIds = useMemo(() => visibleRows.map((row) => row.nodeId), [visibleRows])
 	const focusableNodeIds = useMemo(
 		() =>
 			visibleNodeIds.filter((nodeId) => {
@@ -444,6 +203,91 @@ function DOMTreePanelInner({
 				return node ? isSelectableNode(node) : false
 			}),
 		[nodeMap, visibleNodeIds],
+	)
+	const shouldVirtualize = visibleRows.length > DOM_TREE_VIRTUAL_THRESHOLD
+	const draggedRowIndex = draggedNodeId
+		? visibleRows.findIndex((row) => row.nodeId === draggedNodeId)
+		: -1
+	const virtualRangeExtractor = useCallback(
+		(range: Parameters<typeof defaultRangeExtractor>[0]) => {
+			const indexes = defaultRangeExtractor(range)
+			if (draggedRowIndex < 0 || indexes.includes(draggedRowIndex)) return indexes
+
+			// Native drag requires the source row to remain mounted while the list scrolls.
+			return [...indexes, draggedRowIndex].sort((a, b) => a - b)
+		},
+		[draggedRowIndex],
+	)
+	const getTreeScrollElement = useCallback(() => treeViewportRef.current, [])
+	const getVirtualRowKey = useCallback(
+		(index: number) => visibleRows[index]?.nodeId ?? index,
+		[visibleRows],
+	)
+	const virtualizerOptions = useMemo(
+		() => ({
+			count: visibleRows.length,
+			getScrollElement: getTreeScrollElement,
+			// Radix ScrollArea attaches its viewport after the first render. A small
+			// initial rect prevents a blank tree during that handoff; the virtualizer
+			// replaces it with the measured viewport as soon as the element is ready.
+			initialRect: DOM_TREE_VIRTUAL_INITIAL_RECT,
+			estimateSize: estimateDomTreeRowSize,
+			getItemKey: getVirtualRowKey,
+			overscan: DOM_TREE_VIRTUAL_OVERSCAN,
+			rangeExtractor: virtualRangeExtractor,
+		}),
+		[visibleRows.length, getTreeScrollElement, getVirtualRowKey, virtualRangeExtractor],
+	)
+	const treeVirtualizer = useVirtualizer(virtualizerOptions)
+	const virtualItems = shouldVirtualize ? treeVirtualizer.getVirtualItems() : undefined
+	const virtualItemsForRender = useMemo(() => {
+		if (!shouldVirtualize) return []
+		if (virtualItems && virtualItems.length > 0) return virtualItems
+
+		// Keep the first viewport usable before Radix reports its actual size. This
+		// also covers a temporarily hidden panel; the virtualizer replaces these
+		// rows after the scroll element becomes measurable.
+		return visibleRows.slice(0, 18).map((_, index) => ({
+			index,
+			key: visibleRows[index]?.nodeId ?? index,
+			start: index * DOM_TREE_ROW_HEIGHT,
+		}))
+	}, [shouldVirtualize, virtualItems, visibleRows])
+	const virtualRowRenderStateToken = useMemo(
+		() => ({
+			t,
+			tree,
+			expanded,
+			selectedNodeId,
+			hoveredNodeId,
+			draggedNodeId,
+			dropTarget,
+			invalidDropTargetId,
+			isBusy,
+			openAddMenuKey,
+			clipboardNodeId,
+			clipboardMode,
+			nodeMap,
+			parentMap,
+			focusableNodeIds,
+		}),
+		[
+			t,
+			tree,
+			expanded,
+			selectedNodeId,
+			hoveredNodeId,
+			draggedNodeId,
+			dropTarget,
+			invalidDropTargetId,
+			isBusy,
+			openAddMenuKey,
+			clipboardNodeId,
+			clipboardMode,
+			nodeMap,
+			parentMap,
+			focusableNodeIds,
+		],
 	)
 	const draggedNode = draggedNodeId ? nodeMap.get(draggedNodeId) : undefined
 	const dropTargetNode = dropTarget ? nodeMap.get(dropTarget.nodeId) : undefined
@@ -495,14 +339,21 @@ function DOMTreePanelInner({
 			// The bridge request can take several seconds while the iframe runtime activates.
 			// Ignore a tick while one request is pending so polling cannot create a timeout queue.
 			if (requestInFlightRef.current || (!force && interactionLockedRef.current)) return
+			const startedAt = manualPerfLogger.isEnabled() ? manualPerfLogger.now() : 0
+			let perfData: Record<string, unknown> = { force }
 			requestInFlightRef.current = true
 			setLoadState((current) => (current === "ready" ? current : "loading"))
 			try {
 				const next = await editorRef.current?.getDomTree()
-				if (!force && interactionLockedRef.current) return
+				perfData = { force, has_root: Boolean(next?.root) }
+				if (!force && interactionLockedRef.current) {
+					perfData.reason = "interaction_locked"
+					return
+				}
 				// A null result means the host bridge is not ready yet. Keep the loading
 				// state so the next scheduled retry can render the tree without flashing an error.
 				if (!next?.root) {
+					perfData.reason = "runtime_not_ready"
 					setLoadState("loading")
 					return
 				}
@@ -520,6 +371,7 @@ function DOMTreePanelInner({
 					}
 				}
 				const nextNodeIds = collectNodeIds(next.root)
+				perfData.node_count = nextNodeIds.size
 				setExpanded((current) => {
 					// Expand the initial tree by default, then preserve the user's
 					// disclosure choices while polling or after a structure edit.
@@ -536,9 +388,13 @@ function DOMTreePanelInner({
 					current && nextNodeIds.has(current) ? current : null,
 				)
 			} catch (error) {
+				perfData = { force, error: true }
 				console.warn("读取 DOM 树失败", error)
 				setLoadState("error")
 			} finally {
+				if (startedAt) {
+					manualPerfLogger.recordDuration("dom_tree_refresh", startedAt, perfData)
+				}
 				requestInFlightRef.current = false
 			}
 		},
@@ -564,6 +420,14 @@ function DOMTreePanelInner({
 		}
 	}, [editorRef, refresh, resetDragState, visible])
 
+	useEffect(
+		() => () => {
+			const timer = hoverBridgeLogRef.current.timer
+			if (timer !== null) window.clearTimeout(timer)
+		},
+		[],
+	)
+
 	useEffect(() => {
 		if (!visible) {
 			previousContentRevisionRef.current = contentRevision
@@ -580,11 +444,41 @@ function DOMTreePanelInner({
 			setSelectedNodeId(null)
 			return
 		}
-		const selectedNode = [...nodeMap.values()].find(
-			(node) => node.selector === selectedSelector,
+		setSelectedNodeId(nodeIdBySelector.get(selectedSelector) ?? null)
+	}, [nodeIdBySelector, selectedSelector])
+
+	useEffect(() => {
+		setActiveSearchIndex(0)
+	}, [normalizedSearchQuery])
+
+	useEffect(() => {
+		if (!shouldVirtualize || !selectedNodeId) return
+		const rowIndex = visibleRows.findIndex((row) => row.nodeId === selectedNodeId)
+		if (rowIndex >= 0) treeVirtualizer.scrollToIndex(rowIndex, { align: "auto" })
+	}, [selectedNodeId, shouldVirtualize, treeVirtualizer, visibleRows])
+
+	useEffect(() => {
+		if (!shouldVirtualize || !manualPerfLogger.isEnabled()) return
+		const timestamp = manualPerfLogger.now()
+		const isScrolling = treeVirtualizer.isScrolling
+		if (
+			isScrolling &&
+			timestamp - virtualRangeLogAtRef.current < DOM_TREE_VIRTUAL_LOG_INTERVAL_MS
 		)
-		setSelectedNodeId(selectedNode?.nodeId ?? null)
-	}, [nodeMap, selectedSelector])
+			return
+
+		virtualRangeLogAtRef.current = timestamp
+		const firstItem = virtualItemsForRender[0]
+		const lastItem = virtualItemsForRender[virtualItemsForRender.length - 1]
+		manualPerfLogger.log("dom_tree_virtual_range", {
+			total_row_count: visibleRows.length,
+			mounted_row_count: virtualItemsForRender.length,
+			first_index: firstItem?.index ?? -1,
+			last_index: lastItem?.index ?? -1,
+			total_size_px: treeVirtualizer.getTotalSize(),
+			is_scrolling: isScrolling,
+		})
+	}, [shouldVirtualize, treeVirtualizer, virtualItemsForRender, visibleRows.length])
 
 	useEffect(() => {
 		if (!draggedNodeId) return
@@ -603,19 +497,39 @@ function DOMTreePanelInner({
 		}
 	}, [draggedNodeId, resetDragState])
 
-	const selectNode = async (node: DomTreeNode) => {
-		if (!isSelectableNode(node)) return
-		setSelectedNodeId(node.nodeId)
-		try {
-			await editorRef.current?.selectDomNode(node.nodeId)
-			await editorRef.current?.scrollToDomNode(node.nodeId)
-		} catch (error) {
-			setSelectedNodeId(null)
-			setActionError(
-				error instanceof Error ? error.message : t("stylePanel.domTree.actionFailed"),
-			)
-		}
-	}
+	const selectNode = useCallback(
+		async (node: DomTreeNode) => {
+			if (!isSelectableNode(node)) return
+			setSelectedNodeId(node.nodeId)
+			try {
+				await editorRef.current?.selectDomNode(node.nodeId)
+				await editorRef.current?.scrollToDomNode(node.nodeId)
+			} catch (error) {
+				setSelectedNodeId(null)
+				setActionError(
+					error instanceof Error ? error.message : t("stylePanel.domTree.actionFailed"),
+				)
+			}
+		},
+		[editorRef, t],
+	)
+
+	const focusSearchResult = useCallback(
+		(node: DomTreeNode, resultIndex: number) => {
+			setActiveSearchIndex(resultIndex)
+			setExpanded((current) => {
+				const next = new Set(current)
+				let parent = parentMap.get(node.nodeId)
+				while (parent) {
+					next.add(parent.nodeId)
+					parent = parentMap.get(parent.nodeId)
+				}
+				return next.size === current.size ? current : next
+			})
+			void selectNode(node)
+		},
+		[parentMap, selectNode],
+	)
 
 	const isInvalidDrop = useCallback(
 		(sourceId: string, targetId: string) => {
@@ -914,7 +828,6 @@ function DOMTreePanelInner({
 		window.addEventListener("blur", stop)
 	}
 
-	if (!visible) return null
 	const getSemanticLabel = (node?: DomTreeNode) =>
 		node ? t(`stylePanel.domTree.semantic.${getSemanticKey(node.tagName)}`) : ""
 	const getNodeDisplayLabel = (node?: DomTreeNode) =>
@@ -952,19 +865,8 @@ function DOMTreePanelInner({
 	) : (
 		<GripVertical className="h-3.5 w-3.5 shrink-0" />
 	)
-	const renderNode = (node: DomTreeNode, depth = 0): React.ReactNode => {
-		const isExpanded = expanded.has(node.nodeId)
-		const semanticKey = getSemanticKey(node.tagName)
-		const semanticLabel = t(`stylePanel.domTree.semantic.${semanticKey}`)
-		const isRootNode =
-			tree?.root.nodeId === node.nodeId || node.tagName.toLowerCase() === "body"
-		const canInsertInside = node.canHaveChildren && (node.editable || isRootNode)
-		// Void elements such as img/input/br can still insert valid sibling nodes.
-		const canInsertSibling = parentMap.has(node.nodeId) && node.editable
-		const isDragged = draggedNodeId === node.nodeId
-		const activeDropPosition = dropTarget?.nodeId === node.nodeId ? dropTarget.position : null
-		const isInvalidDropTarget = invalidDropTargetId === node.nodeId
-		const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+	const handleDragOver = useCallback(
+		(event: React.DragEvent<HTMLDivElement>, node: DomTreeNode) => {
 			event.preventDefault()
 			setHoveredNodeId(null)
 			event.dataTransfer.dropEffect = "move"
@@ -972,12 +874,13 @@ function DOMTreePanelInner({
 			if (viewport && typeof viewport.scrollBy === "function") {
 				const viewportRect = viewport.getBoundingClientRect()
 				const edgeDistance = 28
-				if (event.clientY < viewportRect.top + edgeDistance) {
-					scheduleAutoScroll(-1)
-				} else if (event.clientY > viewportRect.bottom - edgeDistance) {
-					scheduleAutoScroll(1)
-				}
+				if (event.clientY < viewportRect.top + edgeDistance) scheduleAutoScroll(-1)
+				else if (event.clientY > viewportRect.bottom - edgeDistance) scheduleAutoScroll(1)
 			}
+			const isRootNode =
+				tree?.root.nodeId === node.nodeId || node.tagName.toLowerCase() === "body"
+			const canInsertInside = node.canHaveChildren && (node.editable || isRootNode)
+			const canInsertSibling = parentMap.has(node.nodeId) && node.editable
 			const isInvalidTarget =
 				!draggedNodeId ||
 				isInvalidDrop(draggedNodeId, node.nodeId) ||
@@ -985,16 +888,9 @@ function DOMTreePanelInner({
 			if (isInvalidTarget) {
 				event.dataTransfer.dropEffect = "none"
 				setDropTarget(null)
-				setInvalidDropTargetId((current) =>
-					current === (draggedNodeId ? node.nodeId : null)
-						? current
-						: draggedNodeId
-							? node.nodeId
-							: null,
-				)
+				setInvalidDropTargetId(draggedNodeId ? node.nodeId : null)
 				return
 			}
-			setInvalidDropTargetId(null)
 			const rect = event.currentTarget.getBoundingClientRect()
 			const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0
 			const position: DropPosition =
@@ -1013,514 +909,109 @@ function DOMTreePanelInner({
 				event.dataTransfer.dropEffect = "none"
 				return
 			}
+			setInvalidDropTargetId(null)
 			setDropTarget((current) =>
 				current?.nodeId === node.nodeId && current.position === position
 					? current
 					: { nodeId: node.nodeId, position },
 			)
-		}
-		const handleDragEnd = () => {
-			resetDragState()
-		}
-		return (
-			<div key={node.nodeId} className="relative w-full min-w-0 max-w-full">
-				<ContextMenu>
-					<ContextMenuTrigger asChild>
-						<div
-							onDragOver={handleDragOver}
-							onDragEnter={handleDragOver}
-							onDragLeave={(event) => {
-								if (
-									event.relatedTarget instanceof Node &&
-									event.currentTarget.contains(event.relatedTarget)
-								)
-									return
-								if (dropTarget?.nodeId === node.nodeId) setDropTarget(null)
-								if (invalidDropTargetId === node.nodeId)
-									setInvalidDropTargetId(null)
-							}}
-							onDragEnd={handleDragEnd}
-							onDrop={(event) => void dropNode(event, node)}
-							className={cn(
-								"group relative box-border grid h-8 max-h-8 min-h-8 w-full min-w-0 max-w-full select-none grid-cols-[20px_20px_minmax(0,1fr)] items-center gap-1 overflow-hidden whitespace-nowrap rounded-none border border-transparent bg-card/45 px-1.5 pr-1 text-[11px] leading-none shadow-[inset_0_-1px_0_hsl(var(--border)/0.14)] transition-[background-color,border-color,box-shadow,opacity] duration-150 ease-out motion-reduce:transition-none",
-								node.canMove
-									? "cursor-grab active:cursor-grabbing"
-									: "cursor-default",
-								"focus-within:border-border focus-within:bg-muted/75 hover:border-border/60 hover:bg-muted/55",
-								hoveredNodeId === node.nodeId &&
-									selectedNodeId !== node.nodeId &&
-									"border-primary/35 bg-accent/60 text-foreground shadow-[inset_3px_0_0_hsl(var(--primary)/0.85)]",
-								selectedNodeId === node.nodeId &&
-									"border-sky-400/70 bg-sky-50/80 text-foreground shadow-[inset_2px_0_0_rgb(14_165_233),inset_0_0_0_1px_rgb(14_165_233_/_0.18)] dark:border-sky-500/60 dark:bg-sky-950/25",
-								isDragged &&
-									"z-20 cursor-grabbing border-dashed border-primary/80 bg-primary/20 opacity-60 ring-2 ring-inset ring-primary/65",
-								isBusy && "cursor-wait",
-								draggedNodeId && !isDragged && !activeDropPosition && "opacity-85",
-								!node.editable && !node.canHaveChildren && "opacity-50",
-								activeDropPosition === "inside" &&
-									"z-10 border-primary/70 bg-primary/15 ring-2 ring-inset ring-primary/75",
-								isInvalidDropTarget &&
-									"z-10 border-destructive/65 bg-destructive/10 text-destructive ring-2 ring-inset ring-destructive/70",
-							)}
-							style={{ paddingLeft: depth * DOM_TREE_INDENT_STEP + 3 }}
-							data-node-id={node.nodeId}
-							data-testid={`dom-tree-node-${node.nodeId}`}
-							role="treeitem"
-							aria-level={depth + 1}
-							aria-expanded={node.children.length > 0 ? isExpanded : undefined}
-							data-dragging={isDragged ? "true" : undefined}
-							data-drop-position={activeDropPosition ?? undefined}
-							data-drop-invalid={isInvalidDropTarget ? "true" : undefined}
-							data-state={
-								isDragged
-									? "dragging"
-									: isInvalidDropTarget
-										? "drop-invalid"
-										: activeDropPosition
-											? `drop-${activeDropPosition}`
-											: selectedNodeId === node.nodeId
-												? "selected"
-												: hoveredNodeId === node.nodeId
-													? "hovered"
-													: "idle"
-							}
-							aria-selected={selectedNodeId === node.nodeId}
-							aria-grabbed={isDragged}
-							onMouseEnter={() => {
-								setHoveredNodeId(node.nodeId)
-								if (!draggedNodeId && isSelectableNode(node)) {
-									void editorRef.current?.hoverDomNode?.(node.nodeId)
-								} else if (!draggedNodeId) {
-									void editorRef.current?.clearHoveredDomNode?.()
-								}
-							}}
-							onMouseLeave={() => {
-								setHoveredNodeId((current) =>
-									current === node.nodeId ? null : current,
-								)
-								void editorRef.current?.clearHoveredDomNode?.()
-							}}
-						>
-							{Array.from({ length: depth }).map((_, index) => (
-								<span
-									key={`guide-${index}`}
-									className="pointer-events-none absolute inset-y-0 w-px bg-border/35"
-									style={{ left: index * DOM_TREE_INDENT_STEP + 15 }}
-								/>
-							))}
-							{activeDropPosition === "before" ? (
-								<span className="pointer-events-none absolute inset-x-2 top-0 z-10 flex h-0.5 items-center justify-end bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.15)] transition-[box-shadow] duration-150 motion-reduce:transition-none">
-									<span className="absolute right-0 top-0 flex items-center gap-1 border border-primary/40 bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground shadow-md">
-										<ArrowUp className="h-2.5 w-2.5" />
-										{t("stylePanel.domTree.dropBeforeShort")}
-									</span>
-								</span>
-							) : null}
-							{activeDropPosition === "after" ? (
-								<span className="pointer-events-none absolute inset-x-2 bottom-0 z-10 flex h-0.5 items-center justify-end bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.15)] transition-[box-shadow] duration-150 motion-reduce:transition-none">
-									<span className="absolute bottom-0 right-0 flex items-center gap-1 border border-primary/40 bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground shadow-md">
-										<ArrowDown className="h-2.5 w-2.5" />
-										{t("stylePanel.domTree.dropAfterShort")}
-									</span>
-								</span>
-							) : null}
-							{activeDropPosition === "inside" ? (
-								<span className="pointer-events-none absolute inset-0.5 z-10 flex items-center justify-end border-2 border-dashed border-primary/70 bg-primary/10 px-2 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15)] transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none">
-									<span className="flex items-center gap-1 border border-primary/40 bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground shadow-md">
-										<ArrowDown className="h-2.5 w-2.5" />
-										{t("stylePanel.domTree.dropInsideShort")}
-									</span>
-								</span>
-							) : null}
-							{isInvalidDropTarget ? (
-								<span className="pointer-events-none absolute inset-x-1 inset-y-0.5 z-10 flex min-w-0 items-center justify-center gap-1 rounded-none border border-destructive/45 bg-destructive/15 px-2 text-[9px] font-semibold text-destructive shadow-sm backdrop-blur-sm">
-									<Ban className="h-2.5 w-2.5 shrink-0" />
-									<span className="truncate">
-										{t("stylePanel.domTree.dropInvalid", {
-											node: getNodeDisplayLabel(node),
-										})}
-									</span>
-								</span>
-							) : null}
-							{node.children.length > 0 ? (
-								<ActionTooltip
-									label={
-										isExpanded
-											? t("stylePanel.domTree.collapseNode")
-											: t("stylePanel.domTree.expand")
-									}
-								>
-									<button
-										type="button"
-										className="z-10 flex h-full w-5 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-background hover:text-foreground active:scale-[0.96]"
-										onClick={() => toggleExpanded(node.nodeId)}
-										aria-label={
-											isExpanded
-												? t("stylePanel.domTree.collapseNode")
-												: t("stylePanel.domTree.expand")
-										}
-										data-testid={`dom-tree-toggle-${node.nodeId}`}
-									>
-										<span
-											className={cn(
-												"inline-flex transition-transform duration-200 ease-out motion-reduce:transition-none",
-												isExpanded && "rotate-90",
-											)}
-										>
-											<ChevronRight className="h-3.5 w-3.5" />
-										</span>
-									</button>
-								</ActionTooltip>
-							) : (
-								<span className="h-full w-5 shrink-0" aria-hidden="true" />
-							)}
-							<ActionTooltip
-								label={node.canMove ? t("stylePanel.domTree.dragHandle") : ""}
-								side="left"
-							>
-								<span
-									className={cn(
-										"flex h-full w-5 shrink-0 items-center justify-center rounded-none text-muted-foreground/45 transition-[background-color,color,transform] duration-150 motion-reduce:transition-none",
-										node.canMove &&
-											"group-hover:bg-muted/70 group-hover:text-muted-foreground",
-										node.canMove && "cursor-grab active:cursor-grabbing",
-									)}
-									draggable={node.canMove}
-									onDragStart={(event) => {
-										if (!node.canMove) return
-										interactionLockedRef.current = true
-										setActionError(null)
-										setOpenAddMenuKey(null)
-										setHoveredNodeId(null)
-										setInvalidDropTargetId(null)
-										setDropTarget(null)
-										setDraggedNodeId(node.nodeId)
-										event.dataTransfer.effectAllowed = "move"
-										event.dataTransfer.setData("text/plain", node.nodeId)
-										if (event.dataTransfer.setDragImage) {
-											const preview = createDragPreview(
-												`${semanticLabel} · ${node.label}`,
-											)
-											event.dataTransfer.setDragImage(preview, 12, 16)
-											window.requestAnimationFrame(() => preview.remove())
-										}
-									}}
-									aria-label={
-										node.canMove
-											? t("stylePanel.domTree.dragHandle")
-											: undefined
-									}
-									aria-hidden={node.canMove ? undefined : true}
-									data-testid={`dom-tree-drag-handle-${node.nodeId}`}
-								>
-									<GripVertical className="h-3.5 w-3.5" />
-								</span>
-							</ActionTooltip>
-							<button
-								type="button"
-								disabled={!isSelectableNode(node) || isBusy}
-								ref={(element) => {
-									if (element) nodeButtonRefs.current.set(node.nodeId, element)
-									else nodeButtonRefs.current.delete(node.nodeId)
-								}}
-								className="col-start-3 flex h-full min-h-0 min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-none text-left leading-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
-								onClick={() => void selectNode(node)}
-								onKeyDown={(event) => {
-									if (
-										(event.metaKey || event.ctrlKey) &&
-										!event.shiftKey &&
-										!event.altKey &&
-										["c", "x", "v"].includes(event.key.toLowerCase())
-									) {
-										event.preventDefault()
-										void handleNodeShortcut(event, node)
-										return
-									}
-									if (
-										event.key === "ArrowUp" ||
-										event.key === "ArrowDown" ||
-										event.key === "Home" ||
-										event.key === "End"
-									) {
-										event.preventDefault()
-										const currentIndex = focusableNodeIds.indexOf(node.nodeId)
-										const nextIndex =
-											event.key === "Home"
-												? 0
-												: event.key === "End"
-													? focusableNodeIds.length - 1
-													: currentIndex +
-														(event.key === "ArrowDown" ? 1 : -1)
-										const nextNodeId = focusableNodeIds[nextIndex]
-										if (nextNodeId)
-											nodeButtonRefs.current.get(nextNodeId)?.focus()
-										return
-									}
-									if (event.key === "ArrowRight" && node.children.length > 0) {
-										event.preventDefault()
-										if (!isExpanded) toggleExpanded(node.nodeId)
-										return
-									}
-									if (event.key === "ArrowLeft" && node.children.length > 0) {
-										event.preventDefault()
-										if (isExpanded) toggleExpanded(node.nodeId)
-										return
-									}
-									if (
-										(event.key === "Delete" || event.key === "Backspace") &&
-										node.canDelete
-									) {
-										event.preventDefault()
-										void remove(node)
-										return
-									}
-									if (
-										(event.metaKey || event.ctrlKey) &&
-										event.key.toLowerCase() === "d" &&
-										node.editable &&
-										node.selector
-									) {
-										event.preventDefault()
-										void duplicate(node)
-									}
-								}}
-								data-testid={`dom-tree-node-content-${node.nodeId}`}
-							>
-								<NodeDetailsPopover
-									content={
-										<div className="flex max-w-72 flex-col gap-1">
-											<span className="font-mono text-xs font-semibold text-background">
-												{node.label}
-											</span>
-											{node.textContent ? (
-												<span className="max-w-72 whitespace-normal break-words text-[11px] text-background/80">
-													{node.textContent}
-												</span>
-											) : null}
-											{getNodeHint(node) ? (
-												<span className="max-w-72 whitespace-normal break-words text-[10px] leading-4 text-background/70">
-													{getNodeHint(node)}
-												</span>
-											) : null}
-										</div>
-									}
-								>
-									<span
-										className={cn(
-											"inline-flex h-5 min-h-5 min-w-0 max-w-full shrink-0 items-center truncate rounded-sm border px-1.5 text-[10px] font-medium leading-4 transition-colors duration-150 motion-reduce:transition-none",
-											getSemanticTone(semanticKey),
-										)}
-										data-testid={`dom-tree-node-tag-${node.nodeId}`}
-									>
-										<span className="truncate">{semanticLabel}</span>
-									</span>
-								</NodeDetailsPopover>
-								{node.dynamicWarning ? (
-									<ActionTooltip label={getNodeHint(node)}>
-										<span
-											className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-amber-600 dark:text-amber-400"
-											aria-label={getNodeHint(node)}
-										>
-											<AlertTriangle className="h-3 w-3" />
-										</span>
-									</ActionTooltip>
-								) : null}
-								{node.textContent ? (
-									<span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-										· {node.textContent}
-									</span>
-								) : null}
-								{node.tagName.toLowerCase() === "img" && node.resource ? (
-									<span className="flex min-w-0 max-w-[42%] flex-1 items-center gap-1 overflow-hidden text-[10px] text-muted-foreground/75">
-										<ImageIcon className="h-3 w-3 shrink-0" />
-										<span className="min-w-0 flex-1 truncate">
-											{node.resource}
-										</span>
-									</span>
-								) : null}
-							</button>
-							<span
-								className={cn(
-									"pointer-events-none absolute inset-y-1 right-1 z-20 flex h-auto w-max min-w-0 max-w-[calc(100%_-_8px)] items-center justify-end gap-1 overflow-hidden rounded-md border border-border/70 bg-background/95 px-1 opacity-0 shadow-sm transition-[opacity,transform,background-color] duration-150 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100",
-									"translate-x-1",
-									selectedNodeId === node.nodeId &&
-										"bg-sky-50/95 dark:bg-sky-950/95",
-									isBusy && "pointer-events-none",
-									draggedNodeId && "pointer-events-none opacity-0",
-								)}
-								aria-hidden={
-									node.editable || canInsertInside || canInsertSibling
-										? undefined
-										: true
-								}
-								data-testid={`dom-tree-actions-${node.nodeId}`}
-							>
-								{node.editable || canInsertInside || canInsertSibling ? (
-									<>
-										{parentMap.has(node.nodeId) ? (
-											<>
-												<ActionTooltip
-													label={t("stylePanel.domTree.moveUp")}
-												>
-													<Button
-														size="icon"
-														variant="ghost"
-														className="h-5 w-5 rounded-sm active:scale-[0.96]"
-														disabled={
-															isBusy ||
-															parentMap.get(node.nodeId)?.children[0]
-																?.nodeId === node.nodeId
-														}
-														onClick={() =>
-															void moveToAdjacent(node, -1)
-														}
-														aria-label={t("stylePanel.domTree.moveUp")}
-													>
-														<ArrowUp className="h-3 w-3" />
-													</Button>
-												</ActionTooltip>
-												<ActionTooltip
-													label={t("stylePanel.domTree.moveDown")}
-												>
-													<Button
-														size="icon"
-														variant="ghost"
-														className="h-5 w-5 rounded-sm active:scale-[0.96]"
-														disabled={
-															isBusy ||
-															parentMap
-																.get(node.nodeId)
-																?.children.at(-1)?.nodeId ===
-																node.nodeId
-														}
-														onClick={() => void moveToAdjacent(node, 1)}
-														aria-label={t(
-															"stylePanel.domTree.moveDown",
-														)}
-													>
-														<ArrowDown className="h-3 w-3" />
-													</Button>
-												</ActionTooltip>
-											</>
-										) : null}
-										{canInsertInside ? (
-											<AddNodeMenu
-												mode="inside"
-												open={openAddMenuKey === `${node.nodeId}:inside`}
-												onOpenChange={(open) =>
-													setOpenAddMenuKey(
-														open ? `${node.nodeId}:inside` : null,
-													)
-												}
-												onAddText={(placement) =>
-													void addText(node, placement)
-												}
-												onAddImage={(placement) =>
-													void addImage(node, placement)
-												}
-												label={t("stylePanel.domTree.addInsideAction")}
-												testId={`dom-tree-add-${node.nodeId}`}
-												disabled={isBusy}
-											/>
-										) : null}
-										{canInsertSibling ? (
-											<AddNodeMenu
-												mode="sibling"
-												open={openAddMenuKey === `${node.nodeId}:sibling`}
-												onOpenChange={(open) =>
-													setOpenAddMenuKey(
-														open ? `${node.nodeId}:sibling` : null,
-													)
-												}
-												onAddText={(placement) =>
-													void addText(node, placement)
-												}
-												onAddImage={(placement) =>
-													void addImage(node, placement)
-												}
-												label={t("stylePanel.domTree.addSiblingAction")}
-												testId={`dom-tree-add-sibling-${node.nodeId}`}
-												disabled={isBusy}
-											/>
-										) : null}
-										{node.canDelete ? (
-											<ActionTooltip label={t("stylePanel.domTree.delete")}>
-												<Button
-													size="icon"
-													variant="ghost"
-													className="h-5 w-5 rounded-sm text-destructive active:scale-[0.96]"
-													disabled={isBusy}
-													onClick={() => void remove(node)}
-													aria-label={t("stylePanel.domTree.delete")}
-												>
-													<Trash2 className="h-3 w-3" />
-												</Button>
-											</ActionTooltip>
-										) : null}
-									</>
-								) : null}
-							</span>
-						</div>
-					</ContextMenuTrigger>
-					<DOMTreeContextMenu
-						node={node}
-						semanticLabel={semanticLabel}
-						nodeHint={getNodeHint(node)}
-						isExpanded={isExpanded}
-						isBusy={isBusy}
-						canInsertInside={canInsertInside}
-						canInsertSibling={canInsertSibling}
-						canMoveBefore={
-							node.canMove &&
-							parentMap.get(node.nodeId)?.children[0]?.nodeId !== node.nodeId
-						}
-						canMoveAfter={
-							node.canMove &&
-							parentMap.get(node.nodeId)?.children.at(-1)?.nodeId !== node.nodeId
-						}
-						onSelect={() => void selectNode(node)}
-						onCopy={() => void copyNode(node)}
-						onCut={() => void cutNode(node)}
-						onPaste={() => void pasteNode(node)}
-						onDuplicate={() => void duplicate(node)}
-						onToggleExpanded={() => toggleExpanded(node.nodeId)}
-						onMoveBefore={() => void moveToAdjacent(node, -1)}
-						onMoveAfter={() => void moveToAdjacent(node, 1)}
-						onAddText={(placement) => void addText(node, placement)}
-						onAddImage={(placement) => void addImage(node, placement)}
-						onDelete={() => void remove(node)}
-						canPaste={Boolean(clipboardNodeId && getPasteTarget(node))}
-					/>
-				</ContextMenu>
-				{node.children.length > 0 ? (
-					<div
-						data-testid={`dom-tree-children-${node.nodeId}`}
-						role="group"
-						aria-hidden={!isExpanded}
-						data-inert={!isExpanded ? "true" : undefined}
-						ref={(element) => {
-							if (!element) return
-							const inertElement = element as HTMLDivElement & { inert?: boolean }
-							if ("inert" in inertElement) inertElement.inert = !isExpanded
-							else if (!isExpanded) inertElement.setAttribute("inert", "")
-							else inertElement.removeAttribute("inert")
-						}}
-						className={cn(
-							"grid transition-[grid-template-rows,opacity,filter] duration-200 ease-out motion-reduce:transition-none",
-							isExpanded
-								? "grid-rows-[1fr] opacity-100 blur-0"
-								: "pointer-events-none grid-rows-[0fr] opacity-0 blur-[2px]",
-						)}
-					>
-						<div className="min-h-0 overflow-hidden">
-							{node.children.map((child) => renderNode(child, depth + 1))}
-						</div>
-					</div>
-				) : null}
-			</div>
-		)
+		},
+		[draggedNodeId, isInvalidDrop, parentMap, scheduleAutoScroll, tree],
+	)
+	const handleDragLeave = useCallback(
+		(event: React.DragEvent<HTMLDivElement>, node: DomTreeNode) => {
+			if (
+				event.relatedTarget instanceof Node &&
+				event.currentTarget.contains(event.relatedTarget)
+			)
+				return
+			if (dropTarget?.nodeId === node.nodeId) setDropTarget(null)
+			if (invalidDropTargetId === node.nodeId) setInvalidDropTargetId(null)
+		},
+		[dropTarget, invalidDropTargetId],
+	)
+	const handleDragStart = useCallback(
+		(event: React.DragEvent<HTMLSpanElement>, node: DomTreeNode, semanticLabel: string) => {
+			if (!node.canMove) return
+			interactionLockedRef.current = true
+			setActionError(null)
+			setOpenAddMenuKey(null)
+			setHoveredNodeId(null)
+			setInvalidDropTargetId(null)
+			setDropTarget(null)
+			setDraggedNodeId(node.nodeId)
+			event.dataTransfer.effectAllowed = "move"
+			event.dataTransfer.setData("text/plain", node.nodeId)
+			if (event.dataTransfer.setDragImage) {
+				const preview = createDragPreview(`${semanticLabel} · ${node.label}`)
+				event.dataTransfer.setDragImage(preview, 12, 16)
+				window.requestAnimationFrame(() => preview.remove())
+			}
+		},
+		[],
+	)
+	const handleMouseEnter = useCallback(
+		(node: DomTreeNode) => {
+			setHoveredNodeId(node.nodeId)
+			if (!draggedNodeId && isSelectableNode(node)) {
+				recordHoverBridgeCall("hover")
+				void editorRef.current?.hoverDomNode?.(node.nodeId)
+			} else if (!draggedNodeId) {
+				recordHoverBridgeCall("clear")
+				void editorRef.current?.clearHoveredDomNode?.()
+			}
+		},
+		[draggedNodeId, editorRef, recordHoverBridgeCall],
+	)
+	const handleMouseLeave = useCallback(
+		(node: DomTreeNode) => {
+			setHoveredNodeId((current) => (current === node.nodeId ? null : current))
+			recordHoverBridgeCall("clear")
+			void editorRef.current?.clearHoveredDomNode?.()
+		},
+		[editorRef, recordHoverBridgeCall],
+	)
+	const rowHandlers: DOMTreeRowHandlers = {
+		onDragOver: handleDragOver,
+		onDragLeave: handleDragLeave,
+		onDrop: (event, node) => void dropNode(event, node),
+		onDragStart: handleDragStart,
+		onDragEnd: resetDragState,
+		onMouseEnter: handleMouseEnter,
+		onMouseLeave: handleMouseLeave,
+		onSelect: (node) => void selectNode(node),
+		onShortcut: (event, node) => void handleNodeShortcut(event, node),
+		onToggleExpanded: toggleExpanded,
+		onRemove: (node) => void remove(node),
+		onDuplicate: (node) => void duplicate(node),
+		onCopy: (node) => void copyNode(node),
+		onCut: (node) => void cutNode(node),
+		onPaste: (node) => void pasteNode(node),
+		onMoveToAdjacent: (node, direction) => void moveToAdjacent(node, direction),
+		onAddText: (node, placement) => void addText(node, placement),
+		onAddImage: (node, placement) => void addImage(node, placement),
+		onOpenAddMenuChange: (key, open) => setOpenAddMenuKey(open ? key : null),
 	}
-
+	const renderNode = (node: DomTreeNode, depth = 0, renderChildren = true): React.ReactNode => (
+		<DOMTreeRow
+			key={node.nodeId}
+			node={node}
+			depth={depth}
+			rootNodeId={tree?.root.nodeId}
+			state={virtualRowRenderStateToken}
+			handlers={rowHandlers}
+			parentMap={parentMap}
+			focusableNodeIds={focusableNodeIds}
+			nodeButtonRefs={nodeButtonRefs}
+			getNodeHint={getNodeHint}
+			getNodeDisplayLabel={getNodeDisplayLabel}
+		>
+			{renderChildren && node.children.length > 0
+				? node.children.map((child) => renderNode(child, depth + 1))
+				: null}
+		</DOMTreeRow>
+	)
+	if (!visible) return null
 	return (
 		<TooltipProvider delayDuration={200}>
 			<aside
@@ -1616,6 +1107,106 @@ function DOMTreePanelInner({
 						</button>
 					</ActionTooltip>
 				</div>
+				<div className="relative z-40 flex min-h-10 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 py-1.5">
+					<Search className="pointer-events-none absolute left-5 h-3.5 w-3.5 text-muted-foreground" />
+					<Input
+						value={searchQuery}
+						onChange={(event) => setSearchQuery(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Escape") {
+								setSearchQuery("")
+								return
+							}
+							if (event.key !== "Enter" || searchResults.length === 0) return
+							event.preventDefault()
+							const direction = event.shiftKey ? -1 : 1
+							const nextIndex =
+								(activeSearchIndex + direction + searchResults.length) %
+								searchResults.length
+							focusSearchResult(searchResults[nextIndex], nextIndex)
+						}}
+						placeholder={t("stylePanel.domTree.searchPlaceholder")}
+						aria-label={t("stylePanel.domTree.searchInputLabel")}
+						aria-controls="dom-tree-search-results"
+						aria-expanded={Boolean(normalizedSearchQuery)}
+						aria-haspopup="listbox"
+						aria-autocomplete="list"
+						data-testid="dom-tree-search-input"
+						className="h-7 min-w-0 flex-1 pl-8 pr-14 text-xs"
+					/>
+					{searchQuery ? (
+						<>
+							<span className="pointer-events-none absolute right-10 text-[10px] tabular-nums text-muted-foreground">
+								{searchResults.length > 0
+									? `${Math.min(activeSearchIndex + 1, searchResults.length)} / ${searchResults.length}`
+									: t("stylePanel.domTree.searchNoResults")}
+							</span>
+							<Button
+								type="button"
+								size="icon"
+								variant="ghost"
+								className="absolute right-4 h-6 w-6 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+								onClick={() => setSearchQuery("")}
+								aria-label={t("stylePanel.domTree.clearSearch")}
+								data-testid="dom-tree-search-clear"
+							>
+								<X className="h-3 w-3" />
+							</Button>
+						</>
+					) : null}
+					{normalizedSearchQuery ? (
+						<div
+							id="dom-tree-search-results"
+							role="listbox"
+							aria-label={t("stylePanel.domTree.searchResultsLabel")}
+							className="absolute left-3 right-3 top-[calc(100%+4px)] max-h-64 overflow-y-auto rounded-lg border border-border/80 bg-popover p-1 shadow-xl"
+							onWheel={(event) => event.stopPropagation()}
+						>
+							<div className="px-2 py-1 text-[10px] font-medium text-muted-foreground">
+								{searchResults.length > 0
+									? t("stylePanel.domTree.searchResultCount", {
+											count: searchResults.length,
+										})
+									: t("stylePanel.domTree.searchNoResults")}
+							</div>
+							{visibleSearchResults.map((node, index) => (
+								<button
+									key={node.nodeId}
+									type="button"
+									role="option"
+									aria-selected={index === activeSearchIndex}
+									className={cn(
+										"flex min-h-8 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-[11px] transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+										index === activeSearchIndex && "bg-muted/70",
+									)}
+									onClick={() => focusSearchResult(node, index)}
+									data-testid={`dom-tree-search-result-${node.nodeId}`}
+								>
+									<span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 py-0.5 text-[9px] text-muted-foreground">
+										{t(
+											`stylePanel.domTree.semantic.${getSemanticKey(node.tagName)}`,
+										)}
+									</span>
+									<span className="min-w-0 flex-1 truncate font-medium text-foreground">
+										{node.label}
+									</span>
+									{node.textContent ? (
+										<span className="min-w-0 max-w-[45%] truncate text-muted-foreground">
+											· {node.textContent}
+										</span>
+									) : null}
+								</button>
+							))}
+							{searchResults.length > visibleSearchResults.length ? (
+								<div className="px-2 py-1 text-[10px] text-muted-foreground">
+									{t("stylePanel.domTree.searchMore", {
+										count: searchResults.length - visibleSearchResults.length,
+									})}
+								</div>
+							) : null}
+						</div>
+					) : null}
+				</div>
 				<div
 					className={cn(
 						"flex h-8 min-h-8 shrink-0 items-center gap-2 border-b px-3 text-[11px] font-medium transition-[background-color,border-color,color] duration-150 ease-out motion-reduce:transition-none",
@@ -1663,13 +1254,26 @@ function DOMTreePanelInner({
 						</div>
 					) : null}
 					{tree && loadState === "ready" ? (
-						<div
-							className="w-full min-w-0 max-w-full overflow-hidden px-1.5 py-1.5"
-							role="tree"
-							aria-label={t("stylePanel.domTree.title")}
-						>
-							{renderNode(tree.root)}
-						</div>
+						shouldVirtualize ? (
+							<DOMTreeVirtualList
+								label={t("stylePanel.domTree.title")}
+								visibleRows={visibleRows}
+								nodeMap={nodeMap}
+								virtualItems={virtualItemsForRender}
+								totalSize={treeVirtualizer.getTotalSize()}
+								isScrolling={treeVirtualizer.isScrolling}
+								renderNode={renderNode}
+								renderStateToken={virtualRowRenderStateToken}
+							/>
+						) : (
+							<div
+								className="w-full min-w-0 max-w-full overflow-hidden px-1.5 py-1.5"
+								role="tree"
+								aria-label={t("stylePanel.domTree.title")}
+							>
+								{renderNode(tree.root)}
+							</div>
+						)
 					) : loadState === "error" ? (
 						<div className="flex flex-col gap-2 p-3 text-xs text-muted-foreground">
 							<span>{t("stylePanel.domTree.loadFailed")}</span>

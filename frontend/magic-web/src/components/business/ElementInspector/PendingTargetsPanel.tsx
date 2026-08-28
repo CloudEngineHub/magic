@@ -1,5 +1,16 @@
-import { Camera, Edit3, ListChecks, Loader2, MousePointer, Send, Trash2 } from "lucide-react"
+import {
+	Camera,
+	ChevronDown,
+	ChevronUp,
+	Edit3,
+	ListChecks,
+	Loader2,
+	MousePointer,
+	Send,
+	Trash2,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
@@ -15,6 +26,7 @@ interface PendingTargetsPanelProps {
 	onSubmit: () => void
 	selectionMode?: "element" | "screenshot"
 	onSelectionModeChange?: (mode: "element" | "screenshot") => void
+	screenshotSupported?: boolean
 	onExit?: () => void
 	/** Bottom distance from the containing canvas, including space for other chrome. */
 	bottomOffset?: number
@@ -30,10 +42,12 @@ export function PendingTargetsPanel({
 	onSubmit,
 	selectionMode = "element",
 	onSelectionModeChange,
+	screenshotSupported = true,
 	onExit,
 	bottomOffset = 16,
 }: PendingTargetsPanelProps) {
 	const { t } = useTranslation("super")
+	const [isExpanded, setIsExpanded] = useState(true)
 	const isSubmitting = submitState === "submitting"
 	const hasEmptyInstruction = targets.some((target) => !target.instruction.trim())
 	const canSubmit = targets.length > 0 && !hasEmptyInstruction && !isSubmitting
@@ -44,14 +58,18 @@ export function PendingTargetsPanel({
 			style={{ bottom: bottomOffset }}
 			data-testid="element-inspector-pending-panel"
 		>
-			{targets.length > 0 && (
-				<div className="max-h-36 space-y-1 overflow-y-auto border-b p-2.5">
+			{targets.length > 0 && isExpanded && (
+				<div
+					id="element-inspector-pending-target-list"
+					className="max-h-36 space-y-1 overflow-y-auto border-b p-2.5"
+					data-testid="element-inspector-pending-target-list"
+				>
 					{targets.map((target) => (
 						<div
 							key={target.id}
 							className="flex items-start gap-2 rounded-lg bg-muted/40 px-2 py-1.5"
 						>
-							{target.kind === "screenshot" && (
+							{target.screenshot?.dataUrl && (
 								<img
 									src={target.screenshot.dataUrl}
 									alt=""
@@ -133,37 +151,62 @@ export function PendingTargetsPanel({
 							<MousePointer size={15} />
 						</Button>
 					</MagicTooltip>
-					<MagicTooltip
-						title={t("stylePanel.inspector.screenshotMode")}
-						placement="top"
-						contentZIndex={10060}
-					>
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className={cn(
-								"h-9 w-9 rounded-lg transition-[background-color,color,box-shadow,transform] active:scale-[0.96]",
-								selectionMode === "screenshot"
-									? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-									: "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-							)}
-							onClick={() => onSelectionModeChange?.("screenshot")}
-							aria-label={t("stylePanel.inspector.screenshotMode")}
-							aria-pressed={selectionMode === "screenshot"}
+					{screenshotSupported && (
+						<MagicTooltip
+							title={t("stylePanel.inspector.screenshotMode")}
+							placement="top"
+							contentZIndex={10060}
 						>
-							<Camera size={15} />
-						</Button>
-					</MagicTooltip>
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								className={cn(
+									"h-9 w-9 rounded-lg transition-[background-color,color,box-shadow,transform] active:scale-[0.96]",
+									selectionMode === "screenshot"
+										? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+										: "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+								)}
+								onClick={() => onSelectionModeChange?.("screenshot")}
+								aria-label={t("stylePanel.inspector.screenshotMode")}
+								aria-pressed={selectionMode === "screenshot"}
+							>
+								<Camera size={15} />
+							</Button>
+						</MagicTooltip>
+					)}
 				</div>
 
 				<div className="h-6 w-px bg-border" />
 
-				<div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+				<button
+					type="button"
+					className={cn(
+						"flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-sm text-muted-foreground",
+						"hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+						"disabled:pointer-events-none disabled:opacity-50",
+					)}
+					onClick={() => setIsExpanded((expanded) => !expanded)}
+					disabled={targets.length === 0}
+					aria-expanded={targets.length > 0 ? isExpanded : false}
+					aria-controls="element-inspector-pending-target-list"
+					data-testid="element-inspector-pending-target-toggle"
+					aria-label={t(
+						isExpanded
+							? "stylePanel.inspector.collapsePendingTargets"
+							: "stylePanel.inspector.expandPendingTargets",
+					)}
+				>
 					<ListChecks size={16} className="shrink-0" />
 					<span className="truncate tabular-nums">
 						{t("stylePanel.inspector.pendingTargetCount", { count: targets.length })}
 					</span>
-				</div>
+					{targets.length > 0 &&
+						(isExpanded ? (
+							<ChevronUp size={14} className="shrink-0" aria-hidden="true" />
+						) : (
+							<ChevronDown size={14} className="shrink-0" aria-hidden="true" />
+						))}
+				</button>
 
 				<div className="ml-auto flex shrink-0 items-center gap-1.5">
 					{onExit && (

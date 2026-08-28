@@ -230,6 +230,23 @@ export function useSelectedElement(editorRef: React.RefObject<HTMLEditorV2Ref>) 
 		[editorRef, stylePanelStore],
 	)
 
+	const updateAttributes = useCallback(
+		async (attributes: Record<string, string | null>) => {
+			const selectedElement = stylePanelStore.selectedElement
+			if (!editorRef.current || !selectedElement) return
+
+			await editorRef.current.updateElementAttributes(selectedElement.selector, attributes)
+			const nextAttributes = { ...(selectedElement.attributes ?? {}) }
+			for (const [name, value] of Object.entries(attributes)) {
+				if (value === null || value.trim() === "")
+					delete nextAttributes[name as keyof typeof nextAttributes]
+				else nextAttributes[name as keyof typeof nextAttributes] = value
+			}
+			stylePanelStore.selectElement({ ...selectedElement, attributes: nextAttributes })
+		},
+		[editorRef, stylePanelStore],
+	)
+
 	/**
 	 * 清除选择
 	 */
@@ -252,6 +269,7 @@ export function useSelectedElement(editorRef: React.RefObject<HTMLEditorV2Ref>) 
 		toggleSelectionMode,
 		updateStyle,
 		updateBatchStyles,
+		updateAttributes,
 		clearSelection,
 	}
 }

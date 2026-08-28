@@ -132,6 +132,7 @@ export enum EditorMessageType {
 	SET_TEXT_CONTENT = "SET_TEXT_CONTENT",
 	GET_TEXT_CONTENT = "GET_TEXT_CONTENT",
 	UPDATE_TEXT_CONTENT = "UPDATE_TEXT_CONTENT",
+	UPDATE_ELEMENT_ATTRIBUTES = "UPDATE_ELEMENT_ATTRIBUTES",
 	ENABLE_TEXT_EDITING = "ENABLE_TEXT_EDITING",
 	DISABLE_TEXT_EDITING = "DISABLE_TEXT_EDITING",
 
@@ -478,6 +479,15 @@ export interface ElementSelectedPayload {
 	textContent?: string
 	/** 元素当前的内联 CSS 声明 */
 	inlineStyles?: Record<string, string>
+	/** 常用 HTML 属性 */
+	attributes?: {
+		href?: string
+		target?: string
+		rel?: string
+		download?: string
+		title?: string
+		ariaLabel?: string
+	}
 }
 
 /**
@@ -530,6 +540,12 @@ export interface GetTextContentResponse {
 export interface UpdateTextContentPayload {
 	selector: string
 	content: string
+}
+
+/** 更新元素常用 HTML 属性的 Payload */
+export interface UpdateElementAttributesPayload {
+	selector: string
+	attributes: Record<string, string | null>
 }
 
 /**

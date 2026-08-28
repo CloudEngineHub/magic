@@ -10,6 +10,7 @@ export type {
 	InspectedElementDomContext,
 	BoxModelSides,
 	HtmlSelectionTarget,
+	HtmlSelectionScreenshot,
 	HtmlElementSelectionTarget,
 	HtmlScreenshotSelectionTarget,
 	HtmlMultiSelectionRequest,
@@ -22,6 +23,7 @@ export {
 	buildHtmlMultiSelectionRequest,
 	createHtmlSelectionTarget,
 	getHtmlElementLabel,
+	getHtmlScreenshotFileName,
 	getHtmlSelectionTargetRect,
 	upsertHtmlSelectionTarget,
 } from "./selection"

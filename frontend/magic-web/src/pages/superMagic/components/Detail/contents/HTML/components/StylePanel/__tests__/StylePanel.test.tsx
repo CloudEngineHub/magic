@@ -3,40 +3,45 @@ import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { StylePanel } from "../StylePanel"
 
-const { mockUpdateStyle, mockSelectElement, mockSelectedElement, mockStylePanelStore } = vi.hoisted(
-	() => {
-		const mockSelectElement = vi.fn()
+const {
+	mockUpdateStyle,
+	mockUpdateAttributes,
+	mockSelectElement,
+	mockSelectedElement,
+	mockStylePanelStore,
+} = vi.hoisted(() => {
+	const mockSelectElement = vi.fn()
 
-		return {
-			mockUpdateStyle: vi.fn(),
-			mockSelectElement,
-			mockSelectedElement: {
-				current: {
-					selector: "img.hero",
-					tagName: "img",
-					isImageElement: true,
-					intrinsicWidth: 800,
-					intrinsicHeight: 400,
-					intrinsicAspectRatio: 2,
-					computedStyles: {
-						fontWeight: "400",
-						fontStyle: "normal",
-						textDecoration: "none",
-						textAlign: "left",
-						color: "#000000",
-						width: "320px",
-						height: "160px",
-					},
+	return {
+		mockUpdateStyle: vi.fn(),
+		mockUpdateAttributes: vi.fn().mockResolvedValue(undefined),
+		mockSelectElement,
+		mockSelectedElement: {
+			current: {
+				selector: "img.hero",
+				tagName: "img",
+				isImageElement: true,
+				intrinsicWidth: 800,
+				intrinsicHeight: 400,
+				intrinsicAspectRatio: 2,
+				computedStyles: {
+					fontWeight: "400",
+					fontStyle: "normal",
+					textDecoration: "none",
+					textAlign: "left",
+					color: "#000000",
+					width: "320px",
+					height: "160px",
 				},
 			},
-			mockStylePanelStore: {
-				selectedElements: [] as Array<unknown>,
-				getSelectedSelectors: () => ["img.hero"],
-				selectElement: mockSelectElement,
-			},
-		}
-	},
-)
+		},
+		mockStylePanelStore: {
+			selectedElements: [] as Array<unknown>,
+			getSelectedSelectors: () => ["img.hero"],
+			selectElement: mockSelectElement,
+		},
+	}
+})
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -50,6 +55,7 @@ vi.mock("../hooks/useSelectedElement", () => ({
 			selectedElement: mockSelectedElement.current,
 			updateStyle: mockUpdateStyle,
 			updateBatchStyles: mockUpdateStyle,
+			updateAttributes: mockUpdateAttributes,
 		}
 	},
 }))
@@ -103,6 +109,8 @@ vi.mock("../controls", () => ({
 describe("StylePanel", () => {
 	beforeEach(() => {
 		mockUpdateStyle.mockReset()
+		mockUpdateAttributes.mockReset()
+		mockUpdateAttributes.mockResolvedValue(undefined)
 		mockSelectElement.mockReset()
 		mockSelectedElement.current = {
 			selector: "img.hero",
@@ -149,6 +157,32 @@ describe("StylePanel", () => {
 
 		expect(screen.getByText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
 		expect(screen.getByLabelText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
+	})
+
+	it("should render common link settings and keep advanced settings collapsed", () => {
+		mockSelectedElement.current = {
+			selector: "a.cta",
+			tagName: "a",
+			isTextElement: true,
+			attributes: { href: "/docs", target: "_blank" },
+			computedStyles: {
+				fontWeight: "400",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "left",
+				color: "#000000",
+				width: "320px",
+				height: "40px",
+			},
+		}
+
+		render(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		expect(screen.getByTestId("style-panel-anchor-section")).toBeInTheDocument()
+		expect(screen.getByDisplayValue("/docs")).toBeInTheDocument()
+		expect(
+			screen.queryByPlaceholderText("stylePanel.linkTitlePlaceholder"),
+		).not.toBeInTheDocument()
 	})
 
 	it("should render and commit text content for a text node", async () => {

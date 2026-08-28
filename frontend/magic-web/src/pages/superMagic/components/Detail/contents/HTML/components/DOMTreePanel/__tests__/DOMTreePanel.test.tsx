@@ -79,6 +79,271 @@ describe("DOMTreePanel", () => {
 		})
 	})
 
+	it("virtualizes a large visible tree", async () => {
+		const children = Array.from({ length: 220 }, (_, index) => ({
+			nodeId: `node-${index}`,
+			tagName: "section",
+			label: `section-${index}`,
+			children: [],
+			editable: true,
+			canHaveChildren: true,
+			canDelete: true,
+			canMove: true,
+		}))
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "root",
+				tagName: "body",
+				label: "body",
+				children,
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
+
+		await waitFor(() => expect(screen.getByTestId("dom-tree-virtual-list")).toBeInTheDocument())
+		const mountedRows = screen.getAllByRole("treeitem")
+		expect(mountedRows.length).toBeLessThan(children.length + 1)
+	})
+
+	it("searches nodes and jumps to the selected result", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "section",
+						tagName: "section",
+						label: "hero-section",
+						selector: "section.hero",
+						textContent: "Welcome",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const selectDomNode = vi.fn().mockResolvedValue(undefined)
+		const scrollToDomNode = vi.fn().mockResolvedValue(undefined)
+
+		render(
+			<DOMTreePanel
+				editorRef={{ current: { getDomTree, selectDomNode, scrollToDomNode } } as never}
+				visible
+			/>,
+		)
+
+		const input = await screen.findByTestId("dom-tree-search-input")
+		fireEvent.change(input, { target: { value: "hero" } })
+
+		const result = await screen.findByTestId("dom-tree-search-result-section")
+		expect(result).toBeInTheDocument()
+		fireEvent.click(result)
+
+		await waitFor(() => {
+			expect(selectDomNode).toHaveBeenCalledWith("section")
+			expect(scrollToDomNode).toHaveBeenCalledWith("section")
+		})
+	})
+
+	it("expands collapsed ancestors before jumping to a search result", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "section",
+						tagName: "section",
+						label: "hero-section",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const selectDomNode = vi.fn().mockResolvedValue(undefined)
+
+		render(
+			<DOMTreePanel
+				editorRef={{ current: { getDomTree, selectDomNode } } as never}
+				visible
+			/>,
+		)
+
+		const children = await screen.findByTestId("dom-tree-children-body")
+		fireEvent.click(screen.getByTestId("dom-tree-toggle-body"))
+		expect(children).toHaveAttribute("aria-hidden", "true")
+
+		fireEvent.change(await screen.findByTestId("dom-tree-search-input"), {
+			target: { value: "hero" },
+		})
+		fireEvent.click(await screen.findByTestId("dom-tree-search-result-section"))
+
+		await waitFor(() => expect(children).toHaveAttribute("aria-hidden", "false"))
+	})
+
+	it("cycles through search results with Enter and Shift+Enter", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "first",
+						tagName: "section",
+						label: "item-first",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+					{
+						nodeId: "second",
+						tagName: "section",
+						label: "item-second",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const selectDomNode = vi.fn().mockResolvedValue(undefined)
+		const scrollToDomNode = vi.fn().mockResolvedValue(undefined)
+
+		render(
+			<DOMTreePanel
+				editorRef={{ current: { getDomTree, selectDomNode, scrollToDomNode } } as never}
+				visible
+			/>,
+		)
+
+		const input = await screen.findByTestId("dom-tree-search-input")
+		fireEvent.change(input, { target: { value: "item" } })
+		await screen.findByTestId("dom-tree-search-result-first")
+
+		fireEvent.keyDown(input, { key: "Enter" })
+		await waitFor(() => expect(selectDomNode).toHaveBeenLastCalledWith("second"))
+		fireEvent.keyDown(input, { key: "Enter", shiftKey: true })
+		await waitFor(() => expect(selectDomNode).toHaveBeenLastCalledWith("first"))
+	})
+
+	it("clears the search with the clear button or Escape", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
+		const input = await screen.findByTestId("dom-tree-search-input")
+		fireEvent.change(input, { target: { value: "missing" } })
+		expect(
+			(await screen.findAllByText("stylePanel.domTree.searchNoResults")).length,
+		).toBeGreaterThan(0)
+
+		fireEvent.change(input, { target: { value: "body" } })
+		await screen.findByTestId("dom-tree-search-clear")
+		fireEvent.click(screen.getByTestId("dom-tree-search-clear"))
+		expect(input).toHaveValue("")
+
+		fireEvent.change(input, { target: { value: "body" } })
+		fireEvent.keyDown(input, { key: "Escape" })
+		expect(input).toHaveValue("")
+	})
+
+	it("does not render indent guide lines in a deep virtual tree", async () => {
+		let nestedNode: {
+			nodeId: string
+			tagName: string
+			label: string
+			children: unknown[]
+			editable: boolean
+			canHaveChildren: boolean
+			canDelete: boolean
+			canMove: boolean
+		} = {
+			nodeId: "node-219",
+			tagName: "section",
+			label: "section-219",
+			children: [],
+			editable: true,
+			canHaveChildren: true,
+			canDelete: true,
+			canMove: true,
+		}
+		for (let index = 218; index >= 0; index -= 1) {
+			nestedNode = {
+				nodeId: `node-${index}`,
+				tagName: "section",
+				label: `section-${index}`,
+				children: [nestedNode],
+				editable: true,
+				canHaveChildren: true,
+				canDelete: true,
+				canMove: true,
+			}
+		}
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "root",
+				tagName: "body",
+				label: "body",
+				children: [nestedNode],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		const { container } = render(
+			<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />,
+		)
+
+		await screen.findByTestId("dom-tree-virtual-list")
+		const guideLayers = container.querySelectorAll('[data-testid^="dom-tree-indent-guides-"]')
+
+		expect(guideLayers).toHaveLength(0)
+	})
+
 	it("skips the recursive tree when an unrelated zoom state changes", async () => {
 		const getDomTree = vi.fn().mockResolvedValue({
 			root: {
@@ -1225,6 +1490,49 @@ describe("DOMTreePanel", () => {
 		)
 
 		fireEvent.click(await screen.findByTestId("dom-tree-node-content-section"))
+
+		await waitFor(() => {
+			expect(selectDomNode).toHaveBeenCalledWith("section")
+			expect(scrollToDomNode).toHaveBeenCalledWith("section")
+		})
+	})
+
+	it("selects the node when clicking its indentation area", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "section",
+						tagName: "section",
+						label: "section.hero",
+						selector: "section.hero",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const selectDomNode = vi.fn().mockResolvedValue(undefined)
+		const scrollToDomNode = vi.fn().mockResolvedValue(undefined)
+
+		render(
+			<DOMTreePanel
+				editorRef={{ current: { getDomTree, selectDomNode, scrollToDomNode } } as never}
+				visible
+			/>,
+		)
+
+		fireEvent.click(await screen.findByTestId("dom-tree-node-section"))
 
 		await waitFor(() => {
 			expect(selectDomNode).toHaveBeenCalledWith("section")

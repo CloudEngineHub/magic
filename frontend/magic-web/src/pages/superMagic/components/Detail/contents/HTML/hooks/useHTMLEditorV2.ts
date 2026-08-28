@@ -206,6 +206,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				isTextElement: payload.isTextElement,
 				textContent: payload.textContent,
 				inlineStyles: payload.inlineStyles,
+				attributes: payload.attributes,
 				computedStyles: payload.computedStyles,
 			})
 		})
@@ -626,6 +627,17 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 					EditorMessageType.UPDATE_TEXT_CONTENT,
 					{ selector, content },
 					{ description: `更新文本内容`, canUndo: true },
+				)
+			},
+			updateElementAttributes: async (
+				selector: string,
+				attributes: Record<string, string | null>,
+			) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.UPDATE_ELEMENT_ATTRIBUTES,
+					{ selector, attributes },
+					{ description: "更新链接属性", canUndo: true },
 				)
 			},
 			getTextContent: async (selector: string) => {

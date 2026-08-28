@@ -116,6 +116,10 @@ export interface SelectedElementInfo {
 		alt?: string
 		title?: string
 		href?: string
+		target?: string
+		rel?: string
+		download?: string
+		ariaLabel?: string
 	}
 }
 

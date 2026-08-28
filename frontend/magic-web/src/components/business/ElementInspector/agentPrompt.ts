@@ -170,6 +170,10 @@ export function buildHtmlMultiSelectionPromptContent(
 
 		const info = "info" in target ? target.info : undefined
 		const label = info ? getHtmlElementLabel(info) : target.elementLabel
+		const screenshotMention = target.screenshot
+			? (screenshotMentions.get(target.id ?? `screenshot:${index}`) ??
+				target.screenshot.mention)
+			: undefined
 		content.push({
 			type: "paragraph",
 			content: [
@@ -177,6 +181,7 @@ export function buildHtmlMultiSelectionPromptContent(
 					type: "text",
 					text: `目标 ${index + 1}（${label}）：${target.instruction}`,
 				},
+				...(screenshotMention ? [{ type: "mention", attrs: screenshotMention }] : []),
 			],
 		})
 		if (info) {

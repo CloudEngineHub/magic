@@ -87,4 +87,32 @@ describe("domTree", () => {
 
 		expect(tree.root.children[0].resource).toBe("images/chart.png")
 	})
+
+	it("keeps duplicate ids non-editable without per-node document queries", () => {
+		document.body.innerHTML = `
+			<section id="duplicate">First</section>
+			<section id="duplicate">Second</section>
+		`
+
+		const tree = buildDomTree()
+
+		expect(tree.root.children[0].editable).toBe(false)
+		expect(tree.root.children[1].editable).toBe(false)
+		expect(tree.root.children[0].disabledReason).toBe("节点定位不唯一")
+	})
+
+	it("builds deeply nested documents without recursive tree traversal", () => {
+		const depth = 300
+		document.body.innerHTML = `${"<section>".repeat(depth)}leaf${"</section>".repeat(depth)}`
+
+		const tree = buildDomTree()
+		let current = tree.root
+		for (let index = 0; index < depth; index += 1) {
+			expect(current.children).toHaveLength(1)
+			current = current.children[0]
+		}
+
+		expect(current.tagName).toBe("section")
+		expect(current.textContent).toBe("leaf")
+	})
 })

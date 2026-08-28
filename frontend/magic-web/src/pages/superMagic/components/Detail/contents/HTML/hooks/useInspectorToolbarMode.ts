@@ -5,9 +5,11 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	buildHtmlMultiSelectionRequest,
 	createHtmlSelectionTarget,
+	getHtmlScreenshotFileName,
 	upsertHtmlSelectionTarget,
 	buildAgentPromptContent,
 	type HtmlMultiSelectionSubmitState,
+	type HtmlSelectionScreenshot,
 	type HtmlSelectionTarget,
 	type InspectedElementRect,
 	type useElementInspector,
@@ -63,7 +65,27 @@ export function useInspectorToolbarMode(
 		start: startInspector,
 		stop: stopInspector,
 		clearSelection,
+		setTrackedSelectors,
 	} = elementInspector
+
+	// Keep only the small set of element targets that can be visible in the
+	// inspector. The iframe refreshes their viewport rects on scroll; unrelated
+	// page elements are never measured.
+	const trackedSelectors = useMemo(() => {
+		const selectors = pendingTargets
+			.filter(
+				(target): target is Extract<HtmlSelectionTarget, { kind: "element" }> =>
+					target.kind === "element",
+			)
+			.map((target) => target.info.selector)
+		if (activeTarget?.kind === "element") selectors.push(activeTarget.info.selector)
+		if (selectedElement?.selector) selectors.push(selectedElement.selector)
+		return Array.from(new Set(selectors.filter(Boolean)))
+	}, [activeTarget, pendingTargets, selectedElement?.selector])
+
+	useEffect(() => {
+		setTrackedSelectors(trackedSelectors)
+	}, [setTrackedSelectors, trackedSelectors])
 
 	const updateMode = useCallback((nextMode: InspectorMode) => {
 		modeRef.current = nextMode
@@ -74,6 +96,30 @@ export function useInspectorToolbarMode(
 		if (modeRef.current === "devConsole" || !selectedElement) return
 
 		const info = selectedElement
+		if (
+			modeRef.current === "multiSelection" &&
+			activeTarget?.kind === "element" &&
+			activeTarget.info.selector === info.selector
+		) {
+			return
+		}
+
+		setPendingTargets((targets) => {
+			let changed = false
+			const nextTargets = targets.map((target) => {
+				if (target.kind !== "element" || target.info.selector !== info.selector) {
+					return target
+				}
+				changed = true
+				return { ...target, info }
+			})
+			return changed ? nextTargets : targets
+		})
+		setActiveTarget((target) =>
+			target?.kind === "element" && target.info.selector === info.selector
+				? { ...target, info }
+				: target,
+		)
 		if (modeRef.current === "multiSelection") {
 			const existing = pendingTargets.find(
 				(target) => target.kind === "element" && target.info?.selector === info.selector,
@@ -115,8 +161,10 @@ export function useInspectorToolbarMode(
 		})
 	}, [
 		selectedElement,
+		activeTarget,
 		stableFileInfo,
 		pendingTargets,
+		setPendingTargets,
 		t,
 		stopInspector,
 		clearSelection,
@@ -142,10 +190,11 @@ export function useInspectorToolbarMode(
 			setSubmitError(null)
 			setActiveTarget(null)
 			setDraftInstruction("")
+			clearSelection()
 			if (modeRef.current !== "multiSelection") updateMode("multiSelection")
 			startInspector()
 		},
-		[startInspector, updateMode],
+		[clearSelection, startInspector, updateMode],
 	)
 
 	const captureScreenshotTarget = useCallback(
@@ -153,18 +202,42 @@ export function useInspectorToolbarMode(
 			dataUrl: string,
 			rect: InspectedElementRect,
 			displaySize?: { width: number; height: number },
+			documentRect?: InspectedElementRect,
 		) => {
 			setActiveTarget({
 				id: `screenshot:${Date.now()}`,
 				kind: "screenshot",
-				screenshot: { dataUrl, rect, displaySize },
+				screenshot: { dataUrl, rect, displaySize, documentRect: documentRect ?? rect },
 				instruction: "",
 			})
+			clearSelection()
 			setDraftInstruction("")
 			setSubmitError(null)
 			stopInspector()
 		},
-		[stopInspector],
+		[clearSelection, stopInspector],
+	)
+
+	const attachElementScreenshot = useCallback(
+		(selector: string, screenshot: HtmlSelectionScreenshot) => {
+			setActiveTarget((target) =>
+				target?.kind === "element" && target.info.selector === selector
+					? { ...target, screenshot }
+					: target,
+			)
+			setPendingTargets((targets) => {
+				let changed = false
+				const next = targets.map((target) => {
+					if (target.kind !== "element" || target.info.selector !== selector) {
+						return target
+					}
+					changed = true
+					return { ...target, screenshot }
+				})
+				return changed ? next : targets
+			})
+		},
+		[],
 	)
 
 	const confirmTarget = useCallback(() => {
@@ -175,17 +248,17 @@ export function useInspectorToolbarMode(
 		}
 		setPendingTargets((targets) => upsertHtmlSelectionTarget(targets, confirmedTarget))
 		if (
-			confirmedTarget.kind === "screenshot" &&
+			confirmedTarget.screenshot &&
 			pubsub.hasListeners(PubSubEvents.Prepare_Html_Screenshot)
 		) {
 			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
 				targetId: confirmedTarget.id,
 				dataUrl: confirmedTarget.screenshot.dataUrl,
-				fileName: `html-screenshot-${confirmedTarget.id.replace(/[^a-zA-Z0-9_-]/g, "-")}.png`,
+				fileName: getHtmlScreenshotFileName(confirmedTarget.id ?? ""),
 				onSuccess: (mention) => {
 					setPendingTargets((targets) =>
 						targets.map((target) =>
-							target.kind === "screenshot" && target.id === confirmedTarget.id
+							target.id === confirmedTarget.id
 								? { ...target, screenshot: { ...target.screenshot, mention } }
 								: target,
 						),
@@ -355,6 +428,7 @@ export function useInspectorToolbarMode(
 		selectionMode,
 		updateSelectionMode,
 		captureScreenshotTarget,
+		attachElementScreenshot,
 		activeTarget,
 		draftInstruction,
 		setDraftInstruction,

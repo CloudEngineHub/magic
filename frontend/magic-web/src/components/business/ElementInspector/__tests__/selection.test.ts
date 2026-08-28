@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
 	buildHtmlMultiSelectionRequest,
 	createHtmlSelectionTarget,
+	getHtmlScreenshotFileName,
+	getHtmlSelectionTargetRect,
 	upsertHtmlSelectionTarget,
 } from "../selection"
 import type { InspectedElementInfo } from "../types"
@@ -24,6 +26,15 @@ function createInfo(overrides: Partial<InspectedElementInfo> = {}): InspectedEle
 }
 
 describe("HTML multi-selection payload", () => {
+	it("keeps generated screenshot filenames short and deterministic", () => {
+		const selector = `section.${"very-long-class-name-".repeat(40)}`
+		const fileName = getHtmlScreenshotFileName(selector)
+
+		expect(fileName).toBe(getHtmlScreenshotFileName(selector))
+		expect(fileName).toMatch(/^html-screenshot-[0-9a-f]{8}\.png$/)
+		expect(fileName.length).toBeLessThanOrEqual(255)
+	})
+
 	it("marks element targets explicitly and serializes screenshot targets", () => {
 		const elementTarget = createHtmlSelectionTarget(createInfo(), "Update the title")
 		const screenshotTarget = {
@@ -44,6 +55,7 @@ describe("HTML multi-selection payload", () => {
 			instruction: "",
 			targets: [
 				{
+					id: "#hero",
 					kind: "element",
 					selector: "#hero",
 					elementLabel: "section#hero",
@@ -69,6 +81,42 @@ describe("HTML multi-selection payload", () => {
 		const updated = createHtmlSelectionTarget(createInfo(), "Use a darker background")
 
 		expect(upsertHtmlSelectionTarget([first], updated)).toEqual([updated])
+	})
+
+	it("keeps an element screenshot in the structured request", () => {
+		const target = createHtmlSelectionTarget(createInfo(), "Match this visual")
+		target.screenshot = {
+			dataUrl: "data:image/png;base64,abc",
+			rect: { left: 20, top: 10, width: 300, height: 120 },
+		}
+
+		expect(buildHtmlMultiSelectionRequest("file-1", [target], "").targets[0]).toMatchObject({
+			kind: "element",
+			id: "#hero",
+			screenshot: {
+				dataUrl: "data:image/png;base64,abc",
+			},
+		})
+	})
+
+	it("moves screenshot targets with iframe document scrolling", () => {
+		const target = {
+			id: "screenshot:1",
+			kind: "screenshot" as const,
+			screenshot: {
+				dataUrl: "data:image/png;base64,abc",
+				rect: { left: 40, top: 80, width: 240, height: 120 },
+				documentRect: { left: 40, top: 780, width: 240, height: 120 },
+			},
+			instruction: "Keep this area",
+		}
+
+		expect(getHtmlSelectionTargetRect(target, { left: 0, top: 700 })).toEqual({
+			left: 40,
+			top: 80,
+			width: 240,
+			height: 120,
+		})
 	})
 
 	it("keeps target instructions separate and bounds large text fragments", () => {

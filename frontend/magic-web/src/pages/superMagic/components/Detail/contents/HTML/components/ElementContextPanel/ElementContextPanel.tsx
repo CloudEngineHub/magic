@@ -21,6 +21,9 @@ interface Props {
 	boundaryRef?: React.RefObject<HTMLElement | null>
 }
 
+const MIN_CONTEXT_PANEL_HEIGHT = 420
+const MAX_CONTEXT_PANEL_HEIGHT = 720
+
 export function ElementContextPanel({
 	editorRef,
 	anchor,
@@ -36,8 +39,8 @@ export function ElementContextPanel({
 		left: 8,
 		top: 8,
 		width: 360,
-		height: 420,
-		maxHeight: 720,
+		height: MIN_CONTEXT_PANEL_HEIGHT,
+		maxHeight: MAX_CONTEXT_PANEL_HEIGHT,
 	})
 	const [isOpen, setIsOpen] = useState(false)
 	const hasAnchor = Boolean(open && anchor && selector)
@@ -80,9 +83,13 @@ export function ElementContextPanel({
 				panelRef.current?.scrollHeight || 0,
 				panelRef.current?.getBoundingClientRect().height || 0,
 			)
+			// The first measurement can happen before the selected-element controls have
+			// finished rendering. Keep the panel usable instead of locking in a short
+			// height that prevents the rest of the controls from being reached.
+			const contentHeight = Math.max(MIN_CONTEXT_PANEL_HEIGHT, measuredHeight || 0)
 			const panelHeight = Math.min(
-				720,
-				Math.max(48, measuredHeight || 420),
+				MAX_CONTEXT_PANEL_HEIGHT,
+				contentHeight,
 				Math.max(48, viewport.height - 16),
 			)
 			const next = getContextPanelPosition(

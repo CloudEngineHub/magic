@@ -16,6 +16,7 @@ import LayoutSection from "./sections/LayoutSection"
 import BoxModelSection from "./sections/BoxModelSection"
 import FlexGridSection from "./sections/FlexGridSection"
 import ImageSection from "./sections/ImageSection"
+import { AnchorSection } from "./sections/AnchorSection"
 import BackgroundSection from "./sections/BackgroundSection"
 import BorderSection from "./sections/BorderSection"
 import ShadowSection from "./sections/ShadowSection"
@@ -51,7 +52,8 @@ export const StylePanel = observer(function StylePanel({
 	onToggleDomTree,
 }: StylePanelProps) {
 	const { t } = useTranslation("super")
-	const { selectedElement, updateStyle, updateBatchStyles } = useSelectedElement(editorRef)
+	const { selectedElement, updateStyle, updateBatchStyles, updateAttributes } =
+		useSelectedElement(editorRef)
 	const stylePanelStore = useStylePanelStore()
 
 	// Local state for quick access
@@ -373,6 +375,14 @@ export const StylePanel = observer(function StylePanel({
 								/>
 							</div>
 						</div>
+					) : null}
+
+					{capabilities.isLink && selectedElement ? (
+						<AnchorSection
+							selectedElement={selectedElement}
+							disabled={isDisabled}
+							onUpdate={updateAttributes}
+						/>
 					) : null}
 
 					{capabilities.showParagraph ? (

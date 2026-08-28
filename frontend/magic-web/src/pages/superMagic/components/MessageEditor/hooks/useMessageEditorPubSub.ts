@@ -7,7 +7,10 @@ import type { SendMessageByContentPayload } from "../types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { SuperMagicWidgetEditorCommandPayload } from "@/pages/superMagic/events/message"
 import type { HtmlMultiSelectionRequest } from "@/components/business/ElementInspector"
-import { buildHtmlMultiSelectionPromptContent } from "@/components/business/ElementInspector"
+import {
+	buildHtmlMultiSelectionPromptContent,
+	getHtmlScreenshotFileName,
+} from "@/components/business/ElementInspector"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { htmlScreenshotUploadService } from "../services/HtmlScreenshotUploadService"
 import {
@@ -99,11 +102,6 @@ function appendPlainTextToDocument(currentContent: JSONContent, content: string)
 	return { ...documentContent, content: nodes }
 }
 
-function getScreenshotFileName(targetId: string, index: number) {
-	const safeTargetId = targetId.replace(/[^a-zA-Z0-9_-]/g, "-")
-	return `html-screenshot-${safeTargetId || index + 1}.png`
-}
-
 function useMessageEditorPubSub({
 	editor,
 	isMobile,
@@ -188,8 +186,8 @@ function useMessageEditorPubSub({
 	useEffect(() => {
 		const handleSubmitHtmlMultiSelection = async (request: HtmlMultiSelectionRequest) => {
 			try {
-				const screenshotTargets = request.targets.filter(
-					(target) => target.kind === "screenshot" && Boolean(target.screenshot?.dataUrl),
+				const screenshotTargets = request.targets.filter((target) =>
+					Boolean(target.screenshot?.dataUrl),
 				)
 				const screenshotMentions = new Map(
 					await Promise.all(
@@ -201,7 +199,7 @@ function useMessageEditorPubSub({
 										(await uploadScreenshot(
 											target.id ?? `screenshot:${index}`,
 											target.screenshot?.dataUrl ?? "",
-											getScreenshotFileName(
+											getHtmlScreenshotFileName(
 												target.id ?? `screenshot:${index}`,
 												index,
 											),

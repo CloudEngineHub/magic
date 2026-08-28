@@ -20,6 +20,8 @@ const INSPECTOR_MSG = {
 	HOVER: "MAGIC_INSPECTOR_HOVER",
 	SELECT: "MAGIC_INSPECTOR_SELECT",
 	HOVER_END: "MAGIC_INSPECTOR_HOVER_END",
+	TRACK: "MAGIC_INSPECTOR_TRACK",
+	RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED",
 } as const
 
 interface BoxModelSides {
@@ -313,6 +315,111 @@ function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 export class ElementInspectorHandler {
 	private active = false
 	private hoveredElement: HTMLElement | null = null
+	private trackedSelectors = new Set<string>()
+	private trackedElements = new Map<string, Element>()
+	private lastTrackedRects = new Map<string, InspectedElementInfo["rect"]>()
+	private rectRefreshScheduled = false
+	private trackingListenersAttached = false
+
+	private postTrackedRects(rects: { selector: string; rect: InspectedElementInfo["rect"] }[]) {
+		try {
+			window.parent.postMessage(
+				{ type: INSPECTOR_MSG.RECTS_CHANGED, rects, timestamp: Date.now() },
+				getParentOrigin(),
+			)
+		} catch {
+			// ignore
+		}
+	}
+
+	private getTrackedElement(selector: string): Element | null {
+		const cached = this.trackedElements.get(selector)
+		if (cached?.isConnected) return cached
+		try {
+			const element = document.querySelector(selector)
+			if (element) this.trackedElements.set(selector, element)
+			return element
+		} catch {
+			return null
+		}
+	}
+
+	private refreshTrackedRects = () => {
+		this.rectRefreshScheduled = false
+		if (this.trackedSelectors.size === 0) return
+
+		const rects: { selector: string; rect: InspectedElementInfo["rect"] }[] = []
+		for (const selector of this.trackedSelectors) {
+			const element = this.getTrackedElement(selector)
+			if (!element) continue
+			const rect = element.getBoundingClientRect()
+			const nextRect = {
+				top: rect.top,
+				left: rect.left,
+				width: rect.width,
+				height: rect.height,
+			}
+			const previousRect = this.lastTrackedRects.get(selector)
+			if (
+				previousRect &&
+				previousRect.top === nextRect.top &&
+				previousRect.left === nextRect.left &&
+				previousRect.width === nextRect.width &&
+				previousRect.height === nextRect.height
+			) {
+				continue
+			}
+			this.lastTrackedRects.set(selector, nextRect)
+			rects.push({ selector, rect: nextRect })
+		}
+
+		if (rects.length > 0) this.postTrackedRects(rects)
+	}
+
+	private scheduleRectRefresh = () => {
+		if (this.rectRefreshScheduled || this.trackedSelectors.size === 0) return
+		this.rectRefreshScheduled = true
+		window.requestAnimationFrame(this.refreshTrackedRects)
+	}
+
+	private attachTrackingListeners() {
+		if (this.trackingListenersAttached) return
+		document.addEventListener("scroll", this.scheduleRectRefresh, true)
+		window.addEventListener("resize", this.scheduleRectRefresh)
+		this.trackingListenersAttached = true
+	}
+
+	private detachTrackingListeners() {
+		if (!this.trackingListenersAttached) return
+		document.removeEventListener("scroll", this.scheduleRectRefresh, true)
+		window.removeEventListener("resize", this.scheduleRectRefresh)
+		this.trackingListenersAttached = false
+	}
+
+	updateTrackedSelectors(selectors: unknown): void {
+		const nextSelectors = new Set(
+			Array.isArray(selectors)
+				? selectors.filter(
+						(selector): selector is string =>
+							typeof selector === "string" && !!selector,
+					)
+				: [],
+		)
+		this.trackedSelectors = nextSelectors
+		for (const selector of this.trackedElements.keys()) {
+			if (!nextSelectors.has(selector)) {
+				this.trackedElements.delete(selector)
+				this.lastTrackedRects.delete(selector)
+			}
+		}
+		if (nextSelectors.size === 0) {
+			this.detachTrackingListeners()
+			return
+		}
+		this.attachTrackingListeners()
+		for (const selector of nextSelectors) this.getTrackedElement(selector)
+		this.scheduleRectRefresh()
+	}
 
 	private onMouseMove = (e: MouseEvent) => {
 		if (!this.active) return

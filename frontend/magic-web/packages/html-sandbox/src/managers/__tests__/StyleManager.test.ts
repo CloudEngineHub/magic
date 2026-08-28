@@ -1113,4 +1113,51 @@ describe("StyleManager", () => {
 			expect(commandHistory.getUndoStackSize()).toBe(1)
 		})
 	})
+
+	describe("updateElementAttributes", () => {
+		it("should update common anchor attributes", async () => {
+			container.innerHTML = "<a id='test' href='/old' target='_self' rel='nofollow'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", {
+				href: "/new",
+				target: "_blank",
+				rel: "noopener",
+				ariaLabel: "Open link",
+			})
+
+			expect(element.getAttribute("href")).toBe("/new")
+			expect(element.getAttribute("target")).toBe("_blank")
+			expect(element.getAttribute("rel")).toBe("noopener")
+			expect(element.getAttribute("aria-label")).toBe("Open link")
+		})
+
+		it("should restore and reapply attributes through undo and redo", async () => {
+			container.innerHTML = "<a id='test' href='/old' title='Old title'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", {
+				href: "/new",
+				title: "New title",
+			})
+			await styleManager.undo()
+
+			expect(element.getAttribute("href")).toBe("/old")
+			expect(element.getAttribute("title")).toBe("Old title")
+
+			await styleManager.redo()
+
+			expect(element.getAttribute("href")).toBe("/new")
+			expect(element.getAttribute("title")).toBe("New title")
+		})
+
+		it("should remove an attribute when its value is empty", async () => {
+			container.innerHTML = "<a id='test' href='/page' download='file.pdf'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", { download: "" })
+
+			expect(element.hasAttribute("download")).toBe(false)
+		})
+	})
 })

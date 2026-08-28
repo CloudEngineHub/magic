@@ -16,6 +16,14 @@ export interface SelectedInfo {
 	isTextElement?: boolean
 	textContent?: string
 	inlineStyles?: Record<string, string>
+	attributes?: {
+		href?: string
+		target?: string
+		rel?: string
+		download?: string
+		title?: string
+		ariaLabel?: string
+	}
 	intrinsicWidth?: number
 	intrinsicHeight?: number
 	intrinsicAspectRatio?: number

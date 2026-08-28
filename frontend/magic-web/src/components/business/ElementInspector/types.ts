@@ -80,23 +80,29 @@ export interface HtmlElementSelectionTarget {
 	id: string
 	kind: "element"
 	info: InspectedElementInfo
+	/** Optional rendered preview captured from the selected element. */
+	screenshot?: HtmlSelectionScreenshot
 	instruction: string
+}
+
+export interface HtmlSelectionScreenshot {
+	dataUrl: string
+	rect: InspectedElementRect
+	/** Rectangle in the iframe document coordinate system for scroll tracking. */
+	documentRect?: InspectedElementRect
+	/** Final image dimensions in the host viewport's CSS pixels. */
+	displaySize?: {
+		width: number
+		height: number
+	}
+	mention?: TiptapMentionAttributes
 }
 
 /** A user-selected screenshot region waiting for submission. */
 export interface HtmlScreenshotSelectionTarget {
 	id: string
 	kind: "screenshot"
-	screenshot: {
-		dataUrl: string
-		rect: InspectedElementRect
-		/** Final image dimensions in the host viewport's CSS pixels. */
-		displaySize?: {
-			width: number
-			height: number
-		}
-		mention?: TiptapMentionAttributes
-	}
+	screenshot: HtmlSelectionScreenshot
 	instruction: string
 }
 
@@ -110,11 +116,7 @@ export interface HtmlMultiSelectionRequestTarget {
 	textContent?: string
 	domContext?: InspectedElementInfo["domContext"]
 	elementHtml?: string
-	screenshot?: {
-		dataUrl: string
-		rect: InspectedElementRect
-		mention?: TiptapMentionAttributes
-	}
+	screenshot?: Pick<HtmlSelectionScreenshot, "dataUrl" | "rect" | "mention">
 	instruction: string
 }
 
@@ -153,4 +155,8 @@ export const INSPECTOR_MSG = {
 	SELECT: "MAGIC_INSPECTOR_SELECT",
 	/** iframe → parent: hover ended (mouse left all elements) */
 	HOVER_END: "MAGIC_INSPECTOR_HOVER_END",
+	/** parent → iframe: keep selected elements available for geometry refresh */
+	TRACK: "MAGIC_INSPECTOR_TRACK",
+	/** iframe → parent: tracked element rectangles changed after scrolling */
+	RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED",
 } as const

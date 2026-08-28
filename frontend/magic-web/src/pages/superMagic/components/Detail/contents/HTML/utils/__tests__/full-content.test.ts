@@ -81,6 +81,20 @@ describe("getFullContent", () => {
 		expect(result).not.toContain("overflow-y: auto !important;")
 	})
 
+	it("injects throttled tracked-rectangle refresh for inspector targets", async () => {
+		const { getFullContent } = await import("../full-content")
+		const result = getFullContent(
+			"<!DOCTYPE html><html><body><div>Preview</div></body></html>",
+			"",
+			{ enableInlineInspectorFallback: true },
+		)
+
+		expect(result).toContain('TRACK: "MAGIC_INSPECTOR_TRACK"')
+		expect(result).toContain('RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED"')
+		expect(result).toContain("requestAnimationFrame(refreshTrackedRects)")
+		expect(result).toContain("lastTrackedRects")
+	})
+
 	it("injects iframe content metrics only for document-flow fullscreen", async () => {
 		const { getFullContent } = await import("../full-content")
 		const result = getFullContent(
