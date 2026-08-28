@@ -10,7 +10,9 @@ import {
 	CACHE_TTL_15_DAYS,
 	CACHE_TTL_7_DAYS,
 	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 	SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 } from "../sw-constants"
 
 function createContext(
@@ -138,12 +140,14 @@ describe("slides template image cache route", () => {
 		)
 		expect(cacheableResponseOptions).toContainEqual({ statuses: [0, 200] })
 		expect(expirationOptions).toContainEqual({
-			maxEntries: 300,
+			maxEntries: FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 			maxAgeSeconds: CACHE_TTL_15_DAYS,
+			purgeOnQuotaError: true,
 		})
 		expect(expirationOptions).toContainEqual({
-			maxEntries: 500,
+			maxEntries: SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 			maxAgeSeconds: CACHE_TTL_7_DAYS,
+			purgeOnQuotaError: true,
 		})
 	})
 })

@@ -21,6 +21,21 @@ describe("SlidesTemplatePreviewStage", () => {
 		expect(screen.getByTestId("slides-template-inline-preview-stage")).toHaveClass("size-full")
 	})
 
+	it("reuses the active page URL for the ambient background", () => {
+		const page =
+			"https://assets.example.test/templates/slide-008.png?x-tos-process=image%2Fresize%2Cw_1920%2Fformat%2Cwebp"
+		render(<SlidesTemplatePreviewStage activeIndex={0} pages={[page]} title="Business" />)
+
+		expect(screen.getByTestId("slides-template-inline-preview-active-image")).toHaveAttribute(
+			"src",
+			page,
+		)
+		expect(screen.getByTestId("slides-template-inline-preview-ambient-image")).toHaveAttribute(
+			"src",
+			page,
+		)
+	})
+
 	it("renders the page number outside the preview frame", () => {
 		renderStage(0)
 

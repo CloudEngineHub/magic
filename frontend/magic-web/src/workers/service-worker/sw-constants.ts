@@ -116,8 +116,14 @@ export const CACHE_TTL_60_DAYS = SECONDS_PER_DAY * 60
 
 export const APP_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-app-static-assets-v1`
 export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
-export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v1`
-export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v1`
+// Template cache entries are intentionally capped below the previous 300 + 500 setup.
+// Only cover images enter these buckets, so 60 ordinary and 40 featured entries keep
+// browsing useful without allowing template previews to occupy multiple gigabytes.
+export const SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 60
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 40
+// v2 removes the old buckets that also contained detail-page slide previews.
+export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v2`
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v2`
 export const APP_MARKED_RESOURCE_CACHE_NAME = `${CACHE_NAMESPACE}-app-marked-resource-assets-v1`
 export const PACKAGES_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-packages-static-assets-v1`
 export const EMOJIS_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-emojis-static-assets-v1`

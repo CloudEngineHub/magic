@@ -16,8 +16,10 @@ import {
 	DEFAULT_WORKBOX_RUNTIME_URL,
 	EMOJIS_STATIC_CACHE_NAME,
 	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 	PACKAGES_STATIC_CACHE_NAME,
 	SLIDES_TEMPLATE_IMAGE_CACHE_NAME,
+	SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 	VENDOR_CACHEABLE_HOSTS_QUERY_PARAM,
 	VENDOR_STATIC_CACHE_NAME,
 	WORKBOX_CDN_QUERY_PARAM,
@@ -217,8 +219,10 @@ function registerAppCacheRoutes(
 				// loaded later cannot evict them from the ordinary template cache.
 				new CacheableResponsePlugin({ statuses: [0, 200] }),
 				new ExpirationPlugin({
-					maxEntries: 300,
+					maxEntries: FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 					maxAgeSeconds: CACHE_TTL_15_DAYS,
+					// Template covers are re-fetchable; clear this bucket if the browser reports a quota error.
+					purgeOnQuotaError: true,
 				}),
 			],
 		}),
@@ -233,8 +237,10 @@ function registerAppCacheRoutes(
 				// the template catalog's URL marker above.
 				new CacheableResponsePlugin({ statuses: [0, 200] }),
 				new ExpirationPlugin({
-					maxEntries: 500,
+					maxEntries: SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES,
 					maxAgeSeconds: CACHE_TTL_7_DAYS,
+					// Template covers are re-fetchable; clear this bucket if the browser reports a quota error.
+					purgeOnQuotaError: true,
 				}),
 			],
 		}),
