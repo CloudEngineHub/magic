@@ -36,6 +36,7 @@ use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\Utils\ShareUrlBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\CreateShareRequestDTO;
 use Hyperf\DbConnection\Db;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -252,7 +253,7 @@ class MicroAppProjectAppService extends AbstractAppService
             $authorization->getOrganizationCode()
         );
 
-        return $this->responseFormatter->formatMicroApp($record, $project);
+        return $this->formatMicroAppResponse($record, $project, $authorization);
     }
 
     public function showByProject(RequestContext $requestContext, int $projectId): array
@@ -276,7 +277,7 @@ class MicroAppProjectAppService extends AbstractAppService
             $project->getCreatedUid(),
         );
 
-        return $this->responseFormatter->formatMicroApp($record, $project);
+        return $this->formatMicroAppResponse($record, $project, $authorization);
     }
 
     public function resolvePublished(int $appId): array
@@ -446,6 +447,37 @@ class MicroAppProjectAppService extends AbstractAppService
 
         $workspace = $this->workspaceRepository->getWorkspaceById($workspaceId);
         return $workspace !== null && $workspace->getWorkspaceType() === WorkspaceType::MicroApp->value;
+    }
+
+    private function formatMicroAppResponse(
+        MicroAppEntity $record,
+        ProjectEntity $project,
+        MagicUserAuthorization $authorization,
+    ): array {
+        $response = $this->responseFormatter->formatMicroApp($record, $project);
+        $response['project']['user_role'] = $this->resolveUserRole($project, $authorization);
+
+        return $response;
+    }
+
+    private function resolveUserRole(ProjectEntity $project, MagicUserAuthorization $authorization): ?string
+    {
+        $userId = $authorization->getId();
+        if ($project->getUserId() === $userId) {
+            return MemberRole::OWNER->value;
+        }
+
+        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId(
+            $this->createDataIsolation($authorization),
+            $userId,
+            true,
+        );
+        $roles = $this->projectMemberDomainService->getUserHighestRolesInProjects(
+            [$project->getId()],
+            array_values(array_unique(array_merge([$userId], array_map('strval', $departmentIds)))),
+        );
+
+        return $roles[$project->getId()] ?? null;
     }
 
     private function canAccessShare(ResourceShareEntity $shareEntity, string $userId, string $organizationCode): bool

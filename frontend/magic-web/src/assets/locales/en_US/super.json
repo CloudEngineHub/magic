@@ -3626,13 +3626,15 @@
 	},
 	"microAppsPage": {
 		"actions": {
-			"manageCollaborators": "Manage collaborators",
+			"collaboratorsFailed": "Failed to load collaborator information. Please retry.",
+			"collaboratorsNoPermission": "You do not have permission to manage collaborators for this app.",
 			"deleteApp": "Delete app",
 			"deleteDescription": "“{{name}}” and its project will be moved to the recycle bin and can be restored within 30 days.",
 			"deleteFailed": "Failed to delete the app. Please retry.",
 			"deleteSuccess": "App moved to the recycle bin",
 			"deleteTitle": "Delete app",
 			"deleting": "Deleting...",
+			"manageCollaborators": "Manage collaborators",
 			"more": "More actions",
 			"openInNewWindow": "Open in new window",
 			"rename": "Rename",
