@@ -46,22 +46,22 @@ export default function ElementTools() {
 			firstSelectedElement && replacingMediaElementId === firstSelectedElement.id,
 		),
 		convertHightSupported: hasAvailability
-			? Boolean(availability?.image_convert_high.enabled)
+			? Boolean(availability?.image_convert_high?.enabled)
 			: hasAvailabilityProvider
 				? false
 				: Boolean(convertHightConfig?.enabled),
 		removeBackgroundSupported: hasAvailability
-			? Boolean(availability?.image_remove_background.enabled)
+			? Boolean(availability?.image_remove_background?.enabled)
 			: hasAvailabilityProvider
 				? false
 				: undefined,
 		eraserSupported: hasAvailability
-			? Boolean(availability?.image_eraser.enabled)
+			? Boolean(availability?.image_eraser?.enabled)
 			: hasAvailabilityProvider
 				? false
 				: undefined,
 		expandSupported: hasAvailability
-			? Boolean(availability?.image_expand.enabled)
+			? Boolean(availability?.image_expand?.enabled)
 			: hasAvailabilityProvider
 				? false
 				: undefined,
