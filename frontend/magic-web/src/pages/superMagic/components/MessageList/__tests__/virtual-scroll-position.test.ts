@@ -19,7 +19,7 @@ const createVirtualizer = ({
 		scrollOffset,
 		scrollDirection,
 		itemSizeCache: new Map(measuredItem ? [[measuredItem.key, measuredItem.size]] : undefined),
-	}) as Virtualizer<HTMLDivElement, HTMLDivElement>
+	}) as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
 
 const virtualMessageListSource = readFileSync(
 	resolve(
@@ -112,11 +112,8 @@ describe("shouldAdjustVirtualMessageScrollPosition", () => {
 		).toBe(true)
 	})
 
-	it("wires the custom predicate into the shared virtual message list", () => {
-		// The pure policy only fixes production behavior when the shared virtualizer installs it.
-		expect(virtualMessageListSource).toContain(
-			"virtualizer.shouldAdjustScrollPositionOnItemSizeChange =",
-		)
-		expect(virtualMessageListSource).toContain("shouldAdjustVirtualMessageScrollPosition")
+	it("uses Virtuoso as the shared virtual message list implementation", () => {
+		expect(virtualMessageListSource).toContain("GroupedVirtuoso")
+		expect(virtualMessageListSource).not.toContain("useVirtualizer")
 	})
 })

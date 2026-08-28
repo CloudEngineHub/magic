@@ -1,6 +1,6 @@
+import { createElement, type ComponentProps, type ReactNode } from "react"
 import { fireEvent, render } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { VirtualItem } from "@tanstack/react-virtual"
 import type { SuperMagicMessageItem } from "../type"
 import { buildVirtualMessageProjection } from "../virtual-message-items"
 import { VirtualMessageList } from "../components/VirtualMessageList"
@@ -8,44 +8,50 @@ import { VirtualMessageList } from "../components/VirtualMessageList"
 const virtualState = vi.hoisted(() => ({
 	toolStatus: "completed",
 	canonicalNode: undefined as Record<string, unknown> | undefined,
-	startIndex: 3,
-	endIndex: 4,
-	scrollOffset: 0,
-	measurementsCache: [
-		{ index: 0, key: "user-0", start: 0, end: 80, size: 80, lane: 0 },
-		{ index: 1, key: "assistant-1", start: 100, end: 180, size: 80, lane: 0 },
-		{ index: 2, key: "assistant-2", start: 200, end: 280, size: 80, lane: 0 },
-		{ index: 3, key: "assistant-3", start: 300, end: 380, size: 80, lane: 0 },
-		{ index: 4, key: "user-4", start: 400, end: 480, size: 80, lane: 0 },
-	] as Array<VirtualItem>,
-	options: undefined as { gap?: number } | undefined,
-	virtualItems: [
-		{ index: 0, key: "user-0", start: 0, end: 80, size: 80, lane: 0 },
-		{ index: 3, key: "assistant-3", start: 300, end: 380, size: 80, lane: 0 },
-		{ index: 4, key: "user-4", start: 400, end: 480, size: 80, lane: 0 },
-	] as Array<VirtualItem>,
+	lastProps: undefined as Record<string, any> | undefined,
 }))
 
-vi.mock("@tanstack/react-virtual", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("@tanstack/react-virtual")>()
-	return {
-		...actual,
-		useVirtualizer: (options: { gap?: number }) => {
-			virtualState.options = options
-			return {
-				range: {
-					startIndex: virtualState.startIndex,
-					endIndex: virtualState.endIndex,
+vi.mock("react-virtuoso", () => ({
+	GroupedVirtuoso: (props: Record<string, any>) => {
+		virtualState.lastProps = props
+		const Group = props.components?.Group || "div"
+		const List = props.components?.List || "div"
+		let itemIndex = 0
+		const groups = (props.groupCounts || []).map((count: number, groupIndex: number) => {
+			const header = createElement(
+				Group,
+				{
+					key: `group-${groupIndex}`,
+					"data-index": groupIndex,
+					"data-item-index": itemIndex,
+					"data-known-size": 80,
+					style: { position: "sticky", top: 0 },
 				},
-				scrollOffset: virtualState.scrollOffset,
-				measurementsCache: virtualState.measurementsCache,
-				getVirtualItems: () => virtualState.virtualItems,
-				getTotalSize: () => 500,
-				measureElement: vi.fn(),
-			}
-		},
-	}
-})
+				props.groupContent?.(groupIndex),
+			)
+			const groupItems = Array.from({ length: count }, (_, offset) => {
+				const currentIndex = itemIndex + offset
+				const absoluteIndex = currentIndex + (props.firstItemIndex || 0)
+				return createElement(
+					"div",
+					{
+						key: currentIndex,
+						"data-virtuoso-item-index": currentIndex,
+					},
+					props.itemContent?.(absoluteIndex, groupIndex, undefined, undefined),
+				)
+			})
+			itemIndex += count
+			return [header, ...groupItems]
+		})
+
+		return createElement(
+			List,
+			{ "data-testid": "mock-virtuoso-list" },
+			groups.flat() as ReactNode,
+		)
+	},
+}))
 
 vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: {
@@ -68,225 +74,201 @@ function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMes
 		super_message_id: id,
 		app_message_id: id,
 		role,
+		content: `${role} message`,
 	} as unknown as SuperMagicMessageItem
+}
+
+function renderList(
+	items: Array<SuperMagicMessageItem>,
+	options?: Partial<ComponentProps<typeof VirtualMessageList>>,
+) {
+	const projection = buildVirtualMessageProjection(items)
+	return render(
+		<VirtualMessageList
+			items={projection.items}
+			userIndices={projection.userIndices}
+			isMobile={false}
+			getScrollElement={() => null}
+			renderNode={({ item }) => <span>{item.key}</span>}
+			{...options}
+		/>,
+	)
 }
 
 describe("VirtualMessageList", () => {
 	beforeEach(() => {
 		virtualState.toolStatus = "completed"
 		virtualState.canonicalNode = undefined
-		virtualState.startIndex = 3
-		virtualState.endIndex = 4
-		virtualState.scrollOffset = 0
-		virtualState.options = undefined
-		virtualState.virtualItems = [
-			{ index: 0, key: "user-0", start: 0, end: 80, size: 80, lane: 0 },
-			{ index: 3, key: "assistant-3", start: 300, end: 380, size: 80, lane: 0 },
-			{ index: 4, key: "user-4", start: 400, end: 480, size: 80, lane: 0 },
-		]
+		virtualState.lastProps = undefined
 	})
 
-	it("preserves the existing per-row spacing without adding a second global gap", () => {
-		virtualState.startIndex = 0
-		virtualState.endIndex = 1
-		virtualState.virtualItems = [
-			{ index: 0, key: "user-0", start: 0, end: 88, size: 88, lane: 0 },
-			{ index: 1, key: "assistant-1", start: 88, end: 216, size: 128, lane: 0 },
-		]
-		const projection = buildVirtualMessageProjection([
-			message("user-0", "user"),
-			message("assistant-1", "assistant"),
-		])
-
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
-
-		expect(virtualState.options?.gap ?? 0).toBe(0)
-		expect(
-			container
-				.querySelector('[data-message-id="user-0"]')
-				?.closest('[data-testid="virtual-message-row"]')
-				?.querySelector('[data-virtual-message-spacing="true"]'),
-		).toHaveClass("h-2")
-		expect(container.querySelector('[data-message-id="assistant-1"]')).toHaveClass("pb-2")
-		expect(container.querySelector('[data-message-id="assistant-1"]')).toHaveClass(
-			"[--message-status-offset:-1.5rem]",
-		)
-	})
-
-	it("pushes the active User upward when the next User reaches the sticky boundary", () => {
-		virtualState.scrollOffset = 300
-		const projection = buildVirtualMessageProjection([
+	it("passes grouped counts to Virtuoso and renders each User as one sticky group header", () => {
+		const { container } = renderList([
 			message("user-0", "user"),
 			message("assistant-1", "assistant"),
 			message("assistant-2", "assistant"),
-			message("assistant-3", "assistant"),
-			message("user-4", "user"),
+			message("user-3", "user"),
+			message("tool-4", "tool"),
 		])
 
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
-
-		expect(container.querySelector('[data-sticky-message-id="user-0"]')).toHaveStyle({
-			transform: "translateY(-12px)",
-		})
-	})
-
-	it("mounts the visible range plus one active User flush to the mobile header", () => {
-		const projection = buildVirtualMessageProjection([
-			message("user-0", "user"),
-			message("assistant-1", "assistant"),
-			message("assistant-2", "assistant"),
-			message("assistant-3", "assistant"),
-			message("user-4", "user"),
-		])
-
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span data-testid={`message-${item.key}`} />}
-			/>,
-		)
-
-		expect(container.querySelectorAll("[data-testid='virtual-message-row']")).toHaveLength(3)
-		const sticky = container.querySelector<HTMLElement>('[data-sticky-message-id="user-0"]')
-		expect(sticky).not.toBeNull()
-		expect(sticky).toHaveClass("top-0", "z-40", "bg-mobile-background")
-		expect(sticky).not.toHaveClass("!-top-[2px]")
-		expect(sticky).toHaveStyle({ position: "sticky", transform: "translateY(0px)" })
-
-		const visibleAssistant = container.querySelector<HTMLElement>(
-			'[data-message-id="assistant-3"]',
-		)
-		expect(visibleAssistant?.closest('[data-testid="virtual-message-row"]')).toHaveStyle({
-			position: "absolute",
-			transform: "translateY(300px)",
-		})
-		expect(container.querySelector('[data-message-id="assistant-1"]')).toBeNull()
-		expect(container.querySelector('[data-message-id="assistant-2"]')).toBeNull()
-	})
-
-	it("uses the desktop sticky offset without duplicating the active User", () => {
-		const projection = buildVirtualMessageProjection([
-			message("user-0", "user"),
-			message("assistant-1", "assistant"),
-			message("assistant-2", "assistant"),
-			message("assistant-3", "assistant"),
-			message("user-4", "user"),
-		])
-
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
-
+		expect(virtualState.lastProps?.groupCounts).toEqual([2, 1])
+		expect(virtualState.lastProps?.data).toBeUndefined()
 		expect(container.querySelectorAll('[data-message-id="user-0"]')).toHaveLength(1)
-		expect(container.querySelector('[data-sticky-message-id="user-0"]')).toHaveClass(
-			"top-[40px]",
-			"z-20",
-		)
+		expect(container.querySelectorAll('[data-message-id="user-3"]')).toHaveLength(1)
+		expect(container.querySelector('[data-message-id="assistant-1"]')).not.toBeNull()
+		expect(container.querySelector('[data-message-id="tool-4"]')).not.toBeNull()
+		expect(container.querySelector('[data-virtual-message-spacing="true"]')).toHaveClass("h-2")
+		expect(
+			(container.querySelector("[data-virtual-message-kind='group']") as HTMLElement).style
+				.transform,
+		).toBe("")
 	})
 
-	it("allows mobile callers to keep mobile positioning without the mobile mask", () => {
-		const projection = buildVirtualMessageProjection([
+	it("uses a measurable spacer for the leading group without a User header", () => {
+		const { container } = renderList([message("leading", "assistant")])
+
+		expect(
+			container.querySelector('[data-virtual-message-leading-group-spacer="true"]'),
+		).toHaveStyle({ height: "1px" })
+	})
+
+	it("passes the real scroll parent and uses a desktop sticky offset variable", () => {
+		const viewport = document.createElement("div")
+		const { container } = renderList([message("user-0", "user")], {
+			isMobile: false,
+			getScrollElement: () => viewport,
+		})
+
+		expect(virtualState.lastProps?.customScrollParent).toBe(viewport)
+		expect(
+			container.querySelector("[data-virtual-message-kind='group']")?.parentElement,
+		).toHaveStyle({
+			top: "var(--message-group-sticky-top, 0px)",
+		})
+		expect(
+			container.querySelector('[data-message-id="user-0"]')?.parentElement,
+		).not.toHaveClass("before:bg-[rgb(var(--mobile-background-rgb))]", "after:bg-none")
+	})
+
+	it("does not treat a range-only update as a scroll request", () => {
+		const onVirtualizerChange = vi.fn()
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			onVirtualizerChange,
+		})
+
+		virtualState.lastProps?.rangeChanged?.({ startIndex: 0, endIndex: 1 })
+		expect(onVirtualizerChange).not.toHaveBeenCalled()
+
+		virtualState.lastProps?.totalListHeightChanged?.(256)
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("uses a stable positive firstItemIndex and decreases it only for prepended ordinary items", () => {
+		const initialMessages = [
 			message("user-0", "user"),
+			message("assistant-0", "assistant"),
+			message("user-1", "user"),
 			message("assistant-1", "assistant"),
-			message("assistant-2", "assistant"),
-			message("assistant-3", "assistant"),
-			message("user-4", "user"),
-		])
-
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile
-				useMobileStickyOverlay={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
-
-		const sticky = container.querySelector<HTMLElement>('[data-sticky-message-id="user-0"]')
-		const stickyMask = container.querySelector<HTMLElement>(
-			'[data-message-id="user-0"]',
-		)?.parentElement
-
-		expect(sticky).toHaveClass("top-0", "z-40")
-		expect(stickyMask).not.toHaveClass("before:bg-[rgb(var(--mobile-background-rgb))]")
-		expect(stickyMask).not.toHaveClass("after:bg-none")
-	})
-
-	it("measures a non-terminal top-level Tool as zero height instead of leaving an estimate gap", () => {
-		virtualState.toolStatus = "running"
-		virtualState.startIndex = 0
-		virtualState.endIndex = 0
-		virtualState.virtualItems = [
-			{ index: 0, key: "tool-0", start: 0, end: 80, size: 80, lane: 0 },
 		]
-		const projection = buildVirtualMessageProjection([message("tool-0", "tool")])
-
-		const { container } = render(
+		const initialProjection = buildVirtualMessageProjection(initialMessages)
+		const view = render(
 			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
+				items={initialProjection.items}
 				isMobile={false}
 				getScrollElement={() => null}
 				renderNode={({ item }) => <span>{item.key}</span>}
 			/>,
 		)
+
+		const initialFirstItemIndex = virtualState.lastProps?.firstItemIndex
+		expect(initialFirstItemIndex).toBeGreaterThan(0)
+
+		const prependedProjection = buildVirtualMessageProjection([
+			message("history-user", "user"),
+			message("history-assistant", "assistant"),
+			...initialMessages,
+		])
+		view.rerender(
+			<VirtualMessageList
+				items={prependedProjection.items}
+				isMobile={false}
+				getScrollElement={() => null}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+		)
+
+		expect(virtualState.lastProps?.firstItemIndex).toBe(initialFirstItemIndex - 1)
+
+		const headerOnlyProjection = buildVirtualMessageProjection([
+			message("header-only-user", "user"),
+			message("history-user", "user"),
+			message("history-assistant", "assistant"),
+			...initialMessages,
+		])
+		view.rerender(
+			<VirtualMessageList
+				items={headerOnlyProjection.items}
+				isMobile={false}
+				getScrollElement={() => null}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+		)
+
+		expect(virtualState.lastProps?.firstItemIndex).toBe(initialFirstItemIndex - 1)
+		view.unmount()
+	})
+
+	it("filters a non-terminal empty Tool before it reaches Virtuoso", () => {
+		virtualState.toolStatus = "running"
+		const emptyTool = {
+			...message("tool-0", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+		} as unknown as SuperMagicMessageItem
+		const { container } = renderList([emptyTool])
 
 		expect(container.querySelector('[data-message-id="tool-0"]')).toBeNull()
-		expect(container.querySelector('[data-virtual-message-hidden="true"]')).toHaveStyle({
-			height: "0px",
+		expect(container.querySelector('[data-virtual-message-hidden="true"]')).toBeNull()
+	})
+
+	it("renders a Tool whose terminal state is carried by the nested tool result", () => {
+		virtualState.toolStatus = ""
+		virtualState.canonicalNode = {
+			role: "tool",
+			debug: {
+				status: "running",
+				tool: { name: "finish_task", status: "finished" },
+			},
+		}
+		const finishTask = {
+			...message("finish-task", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [{ filename: "result.html" }],
+		} as unknown as SuperMagicMessageItem
+		const { container } = renderList([finishTask], {
+			topicId: "chat-topic",
 		})
+
+		expect(container.querySelector('[data-message-id="finish-task"]')).not.toBeNull()
+		expect(container.querySelector('[data-virtual-message-hidden="true"]')).toBeNull()
 	})
 
 	it("keeps the outer chat Topic ID when merging a historical canonical node", () => {
-		virtualState.startIndex = 0
-		virtualState.endIndex = 0
-		virtualState.virtualItems = [
-			{ index: 0, key: "assistant-0", start: 0, end: 80, size: 80, lane: 0 },
-		]
 		virtualState.canonicalNode = {
 			role: "assistant",
 			topic_id: "inner-sandbox-topic",
 			super_message_id: "assistant-0",
 		}
-		const historicalAssistant = {
-			...message("assistant-0", "assistant"),
-			topic_id: "chat-topic",
-		}
-		const projection = buildVirtualMessageProjection([historicalAssistant])
 		let renderedTopicId = ""
+		const projection = buildVirtualMessageProjection([message("assistant-0", "assistant")])
 
 		render(
 			<VirtualMessageList
 				topicId="chat-topic"
 				items={projection.items}
-				userIndices={projection.userIndices}
 				isMobile={false}
 				getScrollElement={() => null}
 				renderNode={({ item }) => {
@@ -300,34 +282,19 @@ describe("VirtualMessageList", () => {
 	})
 
 	it("keeps other rows mounted when a render callback throws", () => {
-		virtualState.startIndex = 0
-		virtualState.endIndex = 1
-		virtualState.virtualItems = [
-			{ index: 0, key: "user-0", start: 0, end: 80, size: 80, lane: 0 },
-			{ index: 1, key: "assistant-1", start: 80, end: 160, size: 80, lane: 0 },
-		]
-		const projection = buildVirtualMessageProjection([
-			message("user-0", "user"),
-			message("assistant-1", "assistant"),
-		])
 		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
-
 		try {
-			const { container } = render(
-				<VirtualMessageList
-					items={projection.items}
-					userIndices={projection.userIndices}
-					isMobile={false}
-					getScrollElement={() => null}
-					renderNode={({ item }) => {
+			const { container } = renderList(
+				[message("user-0", "user"), message("assistant-1", "assistant")],
+				{
+					renderNode: ({ item }) => {
 						if (item.key === "assistant-1") throw new Error("render failed")
 						return <span>{item.key}</span>
-					}}
-				/>,
+					},
+				},
 			)
 
 			expect(container.querySelector('[data-message-id="user-0"]')).not.toBeNull()
-			expect(container.querySelector('[data-message-id="assistant-1"]')).not.toBeNull()
 			expect(container.querySelector('[data-testid="message-render-error"]')).not.toBeNull()
 		} finally {
 			consoleError.mockRestore()
@@ -337,58 +304,28 @@ describe("VirtualMessageList", () => {
 	it.each([
 		["null", null],
 		["false", false],
-	])("does not expose an empty message row when renderNode returns %s", (_, emptyNode) => {
-		virtualState.startIndex = 0
-		virtualState.endIndex = 1
-		virtualState.virtualItems = [
-			{ index: 0, key: "user-0", start: 0, end: 80, size: 80, lane: 0 },
-			{ index: 1, key: "assistant-1", start: 80, end: 160, size: 80, lane: 0 },
-		]
-		const projection = buildVirtualMessageProjection([
-			message("user-0", "user"),
-			message("assistant-1", "assistant"),
-		])
-
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) =>
-					item.key === "assistant-1" ? emptyNode : <span>{item.key}</span>
-				}
-			/>,
+	])("does not expose a message content wrapper when renderNode returns %s", (_, emptyNode) => {
+		const { container } = renderList(
+			[message("user-0", "user"), message("assistant-1", "assistant")],
+			{
+				renderNode: ({ item }) =>
+					item.key === "assistant-1" ? emptyNode : <span>{item.key}</span>,
+			},
 		)
 
 		expect(container.querySelector('[data-message-id="user-0"]')).not.toBeNull()
 		expect(container.querySelector('[data-message-id="assistant-1"]')).toBeNull()
 	})
 
-	it("toggles export selection from the turnKey sidecar instead of a mounted group DOM", () => {
-		virtualState.startIndex = 1
-		virtualState.endIndex = 1
-		virtualState.virtualItems = [
-			{ index: 0, key: "user-0", start: 0, end: 80, size: 80, lane: 0 },
-			{ index: 1, key: "assistant-1", start: 80, end: 160, size: 80, lane: 0 },
-		]
-		const projection = buildVirtualMessageProjection([
-			message("user-0", "user"),
-			message("assistant-1", "assistant"),
-		])
+	it("toggles export selection from the turnKey sidecar", () => {
 		const onToggleSelect = vi.fn()
-
-		const { container } = render(
-			<VirtualMessageList
-				items={projection.items}
-				userIndices={projection.userIndices}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-				exportMode
-				selectedKeys={new Set()}
-				onToggleSelect={onToggleSelect}
-			/>,
+		const { container } = renderList(
+			[message("user-0", "user"), message("assistant-1", "assistant")],
+			{
+				exportMode: true,
+				selectedKeys: new Set(),
+				onToggleSelect,
+			},
 		)
 
 		fireEvent.click(

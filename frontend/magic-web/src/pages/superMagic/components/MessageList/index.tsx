@@ -27,7 +27,6 @@ import { SuperMagicMessageItem } from "./type"
 import { Node } from "./components/Nodes"
 import { observer } from "mobx-react-lite"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import type { Virtualizer } from "@tanstack/react-virtual"
 import { superMagicStore } from "../../stores"
 import { optimisticMessageStore } from "../../stores/optimisticMessageStore"
 import { SuperMagicApi } from "@/apis"
@@ -65,6 +64,7 @@ import {
 import { VirtualMessageList } from "./components/VirtualMessageList"
 import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
+import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 
 export { MessageListProvider }
 
@@ -183,12 +183,11 @@ const MessageList = observer(
 		const nodesPanelRef = useRef<HTMLDivElement | null>(null)
 		/**
 		 * ScrollArea viewport commits after VirtualMessageList's first render.
-		 * Keep the element in state so that mount triggers a re-render and
-		 * TanStack Virtualizer can bind a real getScrollElement (ref-only
-		 * assignment would leave memoized VirtualMessageList stuck on null).
+		 * Keep the element in state so the Virtuoso instance receives the real
+		 * custom scroll parent instead of staying bound to the initial null value.
 		 */
 		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
-		const virtualizerRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null)
+		const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
 		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
 		const scrollEdgeFadeConfig = useMemo(() => {
 			if (!isMobile || isShare) return null
@@ -734,6 +733,9 @@ const MessageList = observer(
 				</div>
 			)
 		}
+		const renderVirtualMessageNode = useMemoizedFn(({ item }: { item: VirtualMessageItem }) =>
+			renderVirtualMessageContent(item),
+		)
 
 		return (
 			<MessageListProvider value={augmentedMessageListContext}>
@@ -781,7 +783,7 @@ const MessageList = observer(
 										isMobile={isMobile}
 										getScrollElement={getScrollElement}
 										stickyMessageClassName={stickyMessageClassName}
-										renderNode={({ item }) => renderVirtualMessageContent(item)}
+										renderNode={renderVirtualMessageNode}
 										exportMode={enableExport && exportStore.exportMode}
 										selectedKeys={exportStore.selectedKeys}
 										onToggleSelect={handleToggleSelect}

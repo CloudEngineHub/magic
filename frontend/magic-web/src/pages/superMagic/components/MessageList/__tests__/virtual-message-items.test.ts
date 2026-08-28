@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import type { SuperMagicMessageItem } from "../type"
 import {
 	buildVirtualMessageProjection,
+	buildGroupedVirtualMessageProjection,
 	composeVirtualMessageItems,
 	createStickyRangeExtractor,
 	findActiveStickyIndex,
+	getPrependedVirtualItemCount,
 } from "../virtual-message-items"
 
 function message(
@@ -15,10 +17,37 @@ function message(
 		super_message_id: superMessageId,
 		app_message_id: `app-${superMessageId}`,
 		role,
+		content: `${role} message`,
 	} as unknown as SuperMagicMessageItem
 }
 
 describe("virtual message projection", () => {
+	it("groups each User as a sticky header without losing leading messages", () => {
+		const projection = buildVirtualMessageProjection([
+			message("leading", "assistant"),
+			message("user-1", "user"),
+			message("assistant-1", "assistant"),
+			message("tool-1", "tool"),
+			message("user-2", "user"),
+			message("assistant-2", "assistant"),
+		])
+
+		const grouped = buildGroupedVirtualMessageProjection(projection.items)
+
+		expect(grouped.groupCounts).toEqual([1, 2, 1])
+		expect(grouped.groups.map((group) => group.header?.key)).toEqual([
+			undefined,
+			"user-1",
+			"user-2",
+		])
+		expect(grouped.items.map((item) => item.key)).toEqual([
+			"leading",
+			"assistant-1",
+			"tool-1",
+			"assistant-2",
+		])
+	})
+
 	it("keeps every converted message flat while retaining turn ownership", () => {
 		const projection = buildVirtualMessageProjection([
 			message("leading", "assistant"),
@@ -54,6 +83,131 @@ describe("virtual message projection", () => {
 			"user-2",
 			"assistant-2",
 		])
+	})
+
+	it("filters non-user messages whose explicit render payload is empty", () => {
+		const emptyTool = {
+			...message("empty-tool", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+		} as unknown as SuperMagicMessageItem
+		const visibleAssistant = {
+			...message("assistant", "assistant"),
+			content: "visible",
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([
+			message("user", "user"),
+			emptyTool,
+			visibleAssistant,
+		])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["user", "assistant"])
+		expect(projection.items[1]?.index).toBe(1)
+		expect(projection.items[1]?.sourceIndex).toBe(2)
+	})
+
+	it("keeps an empty-payload Tool when its business result carries attachments", () => {
+		const finishTask = {
+			...message("finish-task", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [{ filename: "missing_animals.json" }],
+			debug: {
+				status: "running",
+				tool: { name: "finish_task", status: "finished" },
+			},
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([finishTask])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["finish-task"])
+	})
+
+	it("filters a terminal Tool response when it has no renderable result", () => {
+		const emptyFinishedTool = {
+			...message("empty-finished-tool", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [],
+			tool: { name: "read_files", status: "finished" },
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([emptyFinishedTool])
+
+		expect(projection.items).toEqual([])
+	})
+
+	it("keeps a terminal empty-payload Assistant for Store-backed status sidecars", () => {
+		const assistant = {
+			...message("finished-assistant", "assistant"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			status: "finished",
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([assistant])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["finished-assistant"])
+	})
+
+	it("filters a non-user message with no payload or business sidecar", () => {
+		const emptyAssistant = {
+			...message("empty-assistant", "assistant"),
+			content: undefined,
+			reasoning_content: undefined,
+			tool_calls: undefined,
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([emptyAssistant])
+
+		expect(projection.items).toEqual([])
+	})
+
+	it("counts only a strict prefix when the previous virtual sequence is preserved as a suffix", () => {
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "x" }, { key: "y" }, { key: "a" }, { key: "b" }],
+			),
+		).toBe(2)
+
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "a" }, { key: "b" }, { key: "c" }],
+			),
+		).toBe(0)
+
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "x" }, { key: "b" }],
+			),
+		).toBe(0)
+	})
+
+	it("allows concurrent tail appends while preserving the historical prepend count", () => {
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "x" }, { key: "a" }, { key: "b" }, { key: "new-tail" }],
+			),
+		).toBe(1)
+	})
+
+	it("does not count an empty previous sequence or a repeated history page", () => {
+		expect(getPrependedVirtualItemCount([], [{ key: "x" }])).toBe(0)
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "a" }, { key: "b" }],
+			),
+		).toBe(0)
 	})
 
 	it("finds the latest User at or before the visible start", () => {

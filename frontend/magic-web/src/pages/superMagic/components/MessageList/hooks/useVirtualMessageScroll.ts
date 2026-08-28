@@ -7,15 +7,25 @@ import {
 	useRef,
 	useState,
 } from "react"
-import type { Virtualizer } from "@tanstack/react-virtual"
 import { debounce, throttle } from "lodash-es"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { MessageListScrollAdapter } from "../message-list-scroll-adapter"
+import { getPrependedVirtualItemCount } from "../virtual-message-items"
 
 const DEFAULT_MIN_TOP_DISTANCE = 400
 const MIN_BOTTOM_DISTANCE = 50
 const BACK_TO_LATEST_OFFSET = 100
-const MAX_ANCHOR_CORRECTION_FRAMES = 8
+const MAX_ANCHOR_CORRECTION_DURATION = 500
 const ANCHOR_ERROR_TOLERANCE = 2
+const ANCHOR_SETTLE_FRAMES = 1
+
+type ScrollRequestPriority = "follow" | "anchor" | "explicit"
+
+interface PendingScrollRequest {
+	offset: number
+	options: { align?: "start" | "end"; behavior?: ScrollBehavior }
+	priority: number
+}
 
 interface VirtualScrollItem {
 	key: string
@@ -23,7 +33,7 @@ interface VirtualScrollItem {
 
 interface UseVirtualMessageScrollOptions {
 	containerRef: RefObject<HTMLDivElement | null>
-	virtualizerRef: MutableRefObject<Virtualizer<HTMLDivElement, HTMLDivElement> | null>
+	virtualizerRef: MutableRefObject<MessageListScrollAdapter | null>
 	items: ReadonlyArray<VirtualScrollItem>
 	topicKey: string
 	onPullMore?: () => void | Promise<unknown>
@@ -35,12 +45,13 @@ interface HistoryAnchorSnapshot {
 	key: string
 	viewportOffset: number
 	previousCount: number
+	previousItemKeys: Array<{ key: string }>
 	generation: number
 }
 
 function getScrollableEndOffset(
 	viewport: HTMLDivElement | null,
-	virtualizer: Virtualizer<HTMLDivElement, HTMLDivElement> | null,
+	virtualizer: MessageListScrollAdapter | null,
 ) {
 	return Math.max(virtualizer?.getTotalSize() || 0, viewport?.scrollHeight || 0)
 }
@@ -49,10 +60,7 @@ export interface UseVirtualMessageScrollReturn {
 	showBackToLatest: boolean
 	scrollToBottom: (behavior?: ScrollBehavior) => void
 	notifyPullMoreStarted: () => void
-	onVirtualizerChange: (
-		instance: Virtualizer<HTMLDivElement, HTMLDivElement>,
-		sync: boolean,
-	) => void
+	onVirtualizerChange: (instance: MessageListScrollAdapter, sync: boolean) => void
 }
 
 /**
@@ -91,6 +99,8 @@ export function useVirtualMessageScroll({
 	const historyUnlockFrameRef = useRef<number | null>(null)
 	const prevTopicKeyRef = useRef(topicKey)
 	const previousItemCountRef = useRef(items.length)
+	const pendingScrollRequestRef = useRef<PendingScrollRequest | null>(null)
+	const scrollRequestFrameRef = useRef<number | null>(null)
 
 	const clearGuard = useCallback(() => {
 		if (guardTimerRef.current === null) return
@@ -118,6 +128,64 @@ export function useVirtualMessageScroll({
 			layoutCorrectionTimerRef.current = null
 		}, 100)
 	}, [])
+
+	const cancelPendingScrollRequest = useCallback(() => {
+		pendingScrollRequestRef.current = null
+		if (scrollRequestFrameRef.current !== null) {
+			window.cancelAnimationFrame(scrollRequestFrameRef.current)
+			scrollRequestFrameRef.current = null
+		}
+	}, [])
+
+	const applyScrollRequest = useCallback(
+		(request: PendingScrollRequest) => {
+			const virtualizer = virtualizerRef.current
+			if (!containerRef.current || !virtualizer) return
+			virtualizer.scrollToOffset(request.offset, request.options)
+		},
+		[containerRef, virtualizerRef],
+	)
+
+	const requestScrollToOffset = useCallback(
+		(
+			offset: number,
+			options: PendingScrollRequest["options"],
+			priority: ScrollRequestPriority,
+			schedule = true,
+		) => {
+			if (!Number.isFinite(offset)) return
+			const priorityValue = priority === "explicit" ? 3 : priority === "anchor" ? 2 : 1
+			const pending = pendingScrollRequestRef.current
+			if (pending && pending.priority > priorityValue) return
+
+			const nextRequest = { offset, options, priority: priorityValue }
+			if (
+				pending &&
+				pending.priority === priorityValue &&
+				pending.offset === offset &&
+				pending.options.align === options.align &&
+				pending.options.behavior === options.behavior
+			) {
+				return
+			}
+
+			if (!schedule) {
+				cancelPendingScrollRequest()
+				applyScrollRequest(nextRequest)
+				return
+			}
+
+			pendingScrollRequestRef.current = nextRequest
+			if (scrollRequestFrameRef.current !== null) return
+			scrollRequestFrameRef.current = window.requestAnimationFrame(() => {
+				scrollRequestFrameRef.current = null
+				const request = pendingScrollRequestRef.current
+				pendingScrollRequestRef.current = null
+				if (request) applyScrollRequest(request)
+			})
+		},
+		[applyScrollRequest, cancelPendingScrollRequest],
+	)
 
 	const clearHistoryUnlockFrame = useCallback(() => {
 		if (historyUnlockFrameRef.current === null) return
@@ -183,28 +251,31 @@ export function useVirtualMessageScroll({
 			historyAnchorRef.current = null
 			historyGenerationRef.current += 1
 			startGuard(behavior === "smooth" ? 1000 : 300)
-			virtualizer.scrollToOffset(getScrollableEndOffset(viewport, virtualizer), {
-				align: "end",
-				behavior,
-			})
+			requestScrollToOffset(
+				getScrollableEndOffset(viewport, virtualizer),
+				{ align: "end", behavior },
+				"explicit",
+				false,
+			)
 		},
-		[containerRef, startGuard, virtualizerRef],
+		[containerRef, requestScrollToOffset, startGuard, virtualizerRef],
 	)
 
 	const notifyPullMoreStarted = useCallback(() => {
 		const viewport = containerRef.current
 		const virtualizer = virtualizerRef.current
-		const anchorIndex = virtualizer?.range?.startIndex
-		if (!viewport || !virtualizer || anchorIndex === undefined) return
+		const anchorKey = virtualizer?.getFirstVisibleItemKey()
+		if (!viewport || !virtualizer || !anchorKey) return
 
-		const anchorItem = itemsRef.current[anchorIndex]
-		const measurement = virtualizer.measurementsCache[anchorIndex]
-		if (!anchorItem || !measurement) return
+		const anchorItem = itemsRef.current.find((item) => item.key === anchorKey)
+		const anchorOffset = virtualizer.getItemOffset(anchorKey)
+		if (!anchorItem || anchorOffset === undefined) return
 
 		historyAnchorRef.current = {
 			key: anchorItem.key,
-			viewportOffset: measurement.start - viewport.scrollTop,
+			viewportOffset: anchorOffset - viewport.scrollTop,
 			previousCount: itemsRef.current.length,
+			previousItemKeys: itemsRef.current.map((item) => ({ key: item.key })),
 			generation: ++historyGenerationRef.current,
 		}
 	}, [containerRef, virtualizerRef])
@@ -250,27 +321,44 @@ export function useVirtualMessageScroll({
 		const snapshot = historyAnchorRef.current
 		const viewport = containerRef.current
 		const virtualizer = virtualizerRef.current
-		if (!snapshot || !viewport || !virtualizer || items.length <= snapshot.previousCount) return
+		if (!snapshot || !viewport || !virtualizer) return
 
-		const anchorIndex = items.findIndex((item) => item.key === snapshot.key)
-		if (anchorIndex < 0) {
+		const prependedCount = getPrependedVirtualItemCount(snapshot.previousItemKeys, items)
+		if (prependedCount === 0) {
+			// A count increase alone can come from a middle insertion, streaming projection, or
+			// another non-history update. Only an exact old-suffix match is allowed to consume the
+			// history anchor; otherwise release it without moving the user's viewport.
+			if (items.length > snapshot.previousCount) {
+				historyAnchorRef.current = null
+				scheduleHistoryUnlock()
+			}
+			return
+		}
+
+		if (!items.some((item) => item.key === snapshot.key)) {
 			historyAnchorRef.current = null
 			scheduleHistoryUnlock()
 			return
 		}
 
-		let frame = 0
 		let stableFrames = 0
+		let settleFrames = 0
+		let anchorWasUnavailable = false
 		let animationFrame = 0
 		const generation = snapshot.generation
+		const correctionDeadline = Date.now() + MAX_ANCHOR_CORRECTION_DURATION
 
 		const correctAnchor = () => {
 			if (historyAnchorRef.current?.generation !== generation) return
 			const currentVirtualizer = virtualizerRef.current
 			const currentViewport = containerRef.current
-			const measurement = currentVirtualizer?.measurementsCache[anchorIndex]
-			if (!currentVirtualizer || !currentViewport || !measurement) {
-				if (++frame < MAX_ANCHOR_CORRECTION_FRAMES) {
+			const anchorOffset = currentVirtualizer?.getItemOffset(snapshot.key)
+			if (!currentVirtualizer || !currentViewport || anchorOffset === undefined) {
+				anchorWasUnavailable = true
+				// Virtuoso may need several layout passes before the anchored row is mounted.
+				// Use a time deadline instead of a frame count so slower devices or heavy Markdown
+				// renders do not release the history lock before the anchor becomes measurable.
+				if (Date.now() < correctionDeadline) {
 					animationFrame = window.requestAnimationFrame(correctAnchor)
 				} else {
 					historyAnchorRef.current = null
@@ -279,21 +367,29 @@ export function useVirtualMessageScroll({
 				return
 			}
 
-			const targetOffset = measurement.start - snapshot.viewportOffset
+			const targetOffset = anchorOffset - snapshot.viewportOffset
 			const error = targetOffset - currentViewport.scrollTop
+			if (!anchorWasUnavailable && settleFrames < ANCHOR_SETTLE_FRAMES) {
+				// firstItemIndex is the primary prepend correction. Give Virtuoso a couple of
+				// layout passes to apply it before the compatibility anchor writes scrollTop.
+				settleFrames += 1
+				animationFrame = window.requestAnimationFrame(correctAnchor)
+				return
+			}
 			if (Math.abs(error) > ANCHOR_ERROR_TOLERANCE) {
 				stableFrames = 0
 				markLayoutCorrection()
-				currentVirtualizer.scrollToOffset(targetOffset, {
-					align: "start",
-					behavior: "auto",
-				})
+				requestScrollToOffset(
+					targetOffset,
+					{ align: "start", behavior: "auto" },
+					"anchor",
+					false,
+				)
 			} else {
 				stableFrames += 1
 			}
 
-			frame += 1
-			if (stableFrames >= 2 || frame >= MAX_ANCHOR_CORRECTION_FRAMES) {
+			if (stableFrames >= 2 || Date.now() >= correctionDeadline) {
 				historyAnchorRef.current = null
 				scheduleHistoryUnlock()
 				return
@@ -308,6 +404,7 @@ export function useVirtualMessageScroll({
 		finishHistoryLoad,
 		items,
 		markLayoutCorrection,
+		requestScrollToOffset,
 		scheduleHistoryUnlock,
 		virtualizerRef,
 	])
@@ -362,13 +459,15 @@ export function useVirtualMessageScroll({
 				const distanceToBottom = totalSize - viewport.scrollTop - viewport.clientHeight
 				const isProgrammatic =
 					guardTimerRef.current !== null || isLayoutCorrectionRef.current
+				const movedUp = viewport.scrollTop < previousScrollTopRef.current
+				const movedDown = viewport.scrollTop > previousScrollTopRef.current
 
 				if (!isProgrammatic && isUserScrollInteractionRef.current) {
-					if (viewport.scrollTop < previousScrollTopRef.current) {
+					if (movedUp) {
 						if (historyLoadStateRef.current === "idle") {
 							userHistoryIntentRef.current = true
 						}
-					} else if (viewport.scrollTop > previousScrollTopRef.current) {
+					} else if (movedDown) {
 						userHistoryIntentRef.current = false
 					}
 				}
@@ -377,7 +476,17 @@ export function useVirtualMessageScroll({
 				setShowBackToLatest(
 					viewport.scrollTop + viewport.clientHeight + BACK_TO_LATEST_OFFSET < totalSize,
 				)
-				if (!isProgrammatic) autoFollowRef.current = distanceToBottom < MIN_BOTTOM_DISTANCE
+				if (!isProgrammatic) {
+					if (
+						movedUp &&
+						(isUserScrollInteractionRef.current || userHistoryIntentRef.current)
+					) {
+						autoFollowRef.current = false
+					} else if (distanceToBottom < MIN_BOTTOM_DISTANCE && movedDown) {
+						// Re-enable follow only after an explicit downward gesture reaches the bottom.
+						autoFollowRef.current = true
+					}
+				}
 				if (
 					!isProgrammatic &&
 					historyLoadStateRef.current === "idle" &&
@@ -390,6 +499,12 @@ export function useVirtualMessageScroll({
 		)
 
 		const handleWheel = (event: WheelEvent) => {
+			const nestedScrollViewport =
+				event.target instanceof Element
+					? event.target.closest('[data-slot="scroll-area-viewport"]')
+					: null
+			if (nestedScrollViewport && nestedScrollViewport !== viewport) return
+
 			if (historyLoadStateRef.current !== "idle") {
 				if (event.deltaY >= 0) userHistoryIntentRef.current = false
 				return
@@ -401,12 +516,21 @@ export function useVirtualMessageScroll({
 				return
 			}
 			userHistoryIntentRef.current = true
+			// User intent must win immediately, even while the viewport is still within the
+			// bottom tolerance. Otherwise a resize in the same gesture can pull it back down.
+			autoFollowRef.current = false
+			cancelPendingScrollRequest()
 			if (guardTimerRef.current === null && !isLayoutCorrectionRef.current) return
 			clearGuard()
 			isLayoutCorrectionRef.current = false
 			autoFollowRef.current = false
 		}
-		const handlePointerDown = () => {
+		const handlePointerDown = (event: PointerEvent) => {
+			const nestedScrollViewport =
+				event.target instanceof Element
+					? event.target.closest('[data-slot="scroll-area-viewport"]')
+					: null
+			if (nestedScrollViewport && nestedScrollViewport !== viewport) return
 			isUserScrollInteractionRef.current = true
 		}
 		const handlePointerEnd = () => {
@@ -428,7 +552,14 @@ export function useVirtualMessageScroll({
 			pullMessages.cancel()
 			handleScroll.cancel()
 		}
-	}, [clearGuard, containerRef, minTopDistance, settleHistoryRequest, virtualizerRef])
+	}, [
+		cancelPendingScrollRequest,
+		clearGuard,
+		containerRef,
+		minTopDistance,
+		settleHistoryRequest,
+		virtualizerRef,
+	])
 
 	useEffect(() => {
 		const viewport = containerRef.current
@@ -445,13 +576,15 @@ export function useVirtualMessageScroll({
 			)
 				return
 
+			const virtualEndOffset = virtualizer.getTotalSize()
 			const scrollableEndOffset = getScrollableEndOffset(viewport, virtualizer)
+			// Virtuoso already follows dynamic row measurements through totalListHeightChanged.
+			// The outer observer only owns content that exists after the virtual canvas, such as
+			// the loading/footer rows; otherwise the two observers write the same scroll position.
+			if (scrollableEndOffset <= virtualEndOffset) return
 			lastTotalSizeRef.current = scrollableEndOffset
 			markLayoutCorrection()
-			virtualizer.scrollToOffset(scrollableEndOffset, {
-				align: "end",
-				behavior: "auto",
-			})
+			requestScrollToOffset(scrollableEndOffset, { align: "end", behavior: "auto" }, "follow")
 		})
 
 		observer.observe(contentWrapper)
@@ -460,10 +593,10 @@ export function useVirtualMessageScroll({
 			observer.disconnect()
 			if (resizeObserverRef.current === observer) resizeObserverRef.current = null
 		}
-	}, [containerRef, markLayoutCorrection, virtualizerRef])
+	}, [containerRef, markLayoutCorrection, requestScrollToOffset, virtualizerRef])
 
 	const onVirtualizerChange = useCallback(
-		(instance: Virtualizer<HTMLDivElement, HTMLDivElement>) => {
+		(instance: MessageListScrollAdapter) => {
 			const totalSize = getScrollableEndOffset(containerRef.current, instance)
 			const previousTotalSize = lastTotalSizeRef.current
 			lastTotalSizeRef.current = totalSize
@@ -476,9 +609,9 @@ export function useVirtualMessageScroll({
 				return
 
 			markLayoutCorrection()
-			instance.scrollToOffset(totalSize, { align: "end", behavior: "auto" })
+			requestScrollToOffset(totalSize, { align: "end", behavior: "auto" }, "follow")
 		},
-		[containerRef, markLayoutCorrection],
+		[containerRef, markLayoutCorrection, requestScrollToOffset],
 	)
 
 	useEffect(() => {
@@ -489,14 +622,17 @@ export function useVirtualMessageScroll({
 				userHistoryIntentRef.current = false
 				historyAnchorRef.current = null
 				historyGenerationRef.current += 1
+				cancelPendingScrollRequest()
 				startGuard(options?.time || 1000)
 				const virtualizer = virtualizerRef.current
 				const viewport = containerRef.current
 				if (virtualizer && viewport) {
-					virtualizer.scrollToOffset(getScrollableEndOffset(viewport, virtualizer), {
-						align: "end",
-						behavior: options?.behavior || "smooth",
-					})
+					requestScrollToOffset(
+						getScrollableEndOffset(viewport, virtualizer),
+						{ align: "end", behavior: options?.behavior || "smooth" },
+						"explicit",
+						false,
+					)
 				}
 			},
 		)
@@ -514,18 +650,25 @@ export function useVirtualMessageScroll({
 			pubsub.unsubscribe(PubSubEvents.Message_Register_Programmatic_Scroll)
 			pubsub.unsubscribe(PubSubEvents.Message_Suppress_Auto_Scroll, handleSuppressAutoScroll)
 		}
-	}, [containerRef, startGuard, virtualizerRef])
+	}, [
+		cancelPendingScrollRequest,
+		containerRef,
+		requestScrollToOffset,
+		startGuard,
+		virtualizerRef,
+	])
 
 	useEffect(
 		() => () => {
 			clearGuard()
+			cancelPendingScrollRequest()
 			clearHistoryUnlockFrame()
 			if (layoutCorrectionTimerRef.current !== null) {
 				window.clearTimeout(layoutCorrectionTimerRef.current)
 			}
 			resizeObserverRef.current?.disconnect()
 		},
-		[clearGuard, clearHistoryUnlockFrame],
+		[cancelPendingScrollRequest, clearGuard, clearHistoryUnlockFrame],
 	)
 
 	return { showBackToLatest, scrollToBottom, notifyPullMoreStarted, onVirtualizerChange }

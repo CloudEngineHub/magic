@@ -31,6 +31,140 @@ export interface VirtualMessageProjection {
 	userIndices: Array<number>
 }
 
+export interface GroupedVirtualMessageGroup {
+	key: string
+	header?: VirtualMessageItem
+	items: Array<VirtualMessageItem>
+}
+
+export interface GroupedVirtualMessageProjection {
+	groups: Array<GroupedVirtualMessageGroup>
+	items: Array<VirtualMessageItem>
+	groupCounts: Array<number>
+}
+
+/**
+ * Detects an inverse-pagination update without relying on raw page counts. The previous
+ * projection must remain a contiguous sequence after a positive offset; a concurrent tail
+ * append is valid, while middle inserts, replacements, and filtered/reordered updates are not.
+ */
+export function getPrependedVirtualItemCount(
+	previousItems: ReadonlyArray<Pick<VirtualMessageItem, "key">>,
+	nextItems: ReadonlyArray<Pick<VirtualMessageItem, "key">>,
+) {
+	if (previousItems.length === 0 || nextItems.length <= previousItems.length) return 0
+
+	for (let offset = 1; offset <= nextItems.length - previousItems.length; offset += 1) {
+		let matchesPreviousSequence = true
+		for (let index = 0; index < previousItems.length; index += 1) {
+			if (nextItems[offset + index]?.key !== previousItems[index]?.key) {
+				matchesPreviousSequence = false
+				break
+			}
+		}
+		if (matchesPreviousSequence) return offset
+	}
+	return 0
+}
+
+function hasRenderableMessageValue(value: unknown) {
+	if (value == null) return false
+	if (typeof value === "string") return value.trim().length > 0
+	if (Array.isArray(value)) return value.length > 0
+	if (typeof value === "object") return Object.keys(value).length > 0
+	return true
+}
+
+const terminalMessageStatuses = new Set([
+	"completed",
+	"finished",
+	"failed",
+	"error",
+	"suspended",
+	"response_missing",
+])
+
+function hasTerminalMessageStatus(node: SuperMagicMessageItem) {
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const tool = node?.tool as Record<string, unknown> | undefined
+	const debugTool = debug?.tool as Record<string, unknown> | undefined
+	return [node?.status, debug?.status, tool?.status, debugTool?.status].some(
+		(status) => typeof status === "string" && terminalMessageStatuses.has(status),
+	)
+}
+
+/**
+ * A message may render through Store-backed business sidecars even when its streaming payload
+ * is empty. Tool responses are different: their visible branch is AttachmentSection, while
+ * tool-call cards are rendered from the Assistant's tool_calls. Do not keep a role=tool row
+ * merely because it reached a terminal status, otherwise Virtuoso measures an empty row.
+ */
+function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
+	if (node?.role === "user") return true
+	const payloads = [node?.content, node?.reasoning_content, node?.tool_calls]
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const tool = node?.tool as Record<string, unknown> | undefined
+	const debugTool = debug?.tool as Record<string, unknown> | undefined
+	const attachmentPayloads = [
+		node?.attachments,
+		debug?.attachments,
+		tool?.attachments,
+		debugTool?.attachments,
+	]
+
+	if (isToolRoleMessage(node)) {
+		return (
+			payloads.some(hasRenderableMessageValue) ||
+			attachmentPayloads.some(hasRenderableMessageValue)
+		)
+	}
+
+	if (payloads.some(hasRenderableMessageValue)) return true
+
+	// Assistant sidecar UI can be rendered from fields outside the streaming payload trio.
+	// Terminal status is retained here because the Store may fill the final Assistant projection
+	// after the historical message enters the list.
+	return attachmentPayloads.some(hasRenderableMessageValue) || hasTerminalMessageStatus(node)
+}
+
+/**
+ * Maps the flat message projection to Virtuoso groups. User messages become native sticky
+ * group headers, while the remaining messages stay as measured group items.
+ */
+export function buildGroupedVirtualMessageProjection(
+	items: ReadonlyArray<VirtualMessageItem>,
+): GroupedVirtualMessageProjection {
+	const groups: Array<GroupedVirtualMessageGroup> = []
+	let currentGroup: GroupedVirtualMessageGroup | undefined
+
+	for (const item of items) {
+		if (item.isUser) {
+			currentGroup = {
+				key: `turn-${item.key}`,
+				header: item,
+				items: [],
+			}
+			groups.push(currentGroup)
+			continue
+		}
+
+		if (!currentGroup) {
+			currentGroup = {
+				key: "leading-messages",
+				items: [],
+			}
+			groups.push(currentGroup)
+		}
+		currentGroup.items.push(item)
+	}
+
+	return {
+		groups,
+		items: groups.flatMap((group) => group.items),
+		groupCounts: groups.map((group) => group.items.length),
+	}
+}
+
 /**
  * Builds the shared data projection for both the virtual DOM and turn-based export logic.
  * Keeping both products in one pass prevents DOM virtualization from changing business ownership.
@@ -43,21 +177,23 @@ export function buildVirtualMessageProjection(
 	const items: Array<VirtualMessageItem> = []
 	let currentTurnKey = "leading-messages"
 
-	messages.forEach((node, index) => {
-		const key = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
+	messages.forEach((node, sourceIndex) => {
+		const key = getMessageNodeKey(node) || `${node?.role || "message"}-${sourceIndex}`
 		const isUser = isUserRoleMessage(node)
 		const isTool = isToolRoleMessage(node)
 
 		if (isUser) {
 			currentTurnKey = `turn-${key}`
-			userIndices.push(index)
+		}
+		if (!shouldIncludeVirtualMessage(node)) {
+			return
 		}
 
 		items.push({
 			key,
 			node,
-			index,
-			sourceIndex: index,
+			index: items.length,
+			sourceIndex,
 			role: node?.role,
 			turnKey: currentTurnKey,
 			isUser,
@@ -66,6 +202,7 @@ export function buildVirtualMessageProjection(
 			renderMode: "message",
 			exportSelectable: currentTurnKey !== "leading-messages",
 		})
+		if (isUser) userIndices.push(items.length - 1)
 	})
 
 	return { items, messageKeys, messageTurnGroups, userIndices }
