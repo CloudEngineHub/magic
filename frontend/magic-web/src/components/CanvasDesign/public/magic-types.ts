@@ -4,6 +4,7 @@ import type {
 	CanvasFileElement,
 	MarkerTypeEnum,
 	CropConfig,
+	ElementType,
 } from "../runtime/document/types"
 import type {
 	CanvasResourceReferenceResolverSnapshot,
@@ -176,11 +177,18 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
+	| "standard"
+	| "image_reference"
+	| "omni_reference"
+	| "video_edit"
+	| "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	"reference_images" | "reference_videos" | "reference_audios" | "frames"
+	| "reference_images"
+	| "reference_videos"
+	| "reference_audios"
+	| "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -1286,7 +1294,8 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
+	| IdentifyImageMarkPointResponse
+	| IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1298,9 +1307,17 @@ export interface CanvasDesignStorageData {
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
+	layersFilter?: CanvasLayersFilterState
 	markers?: Marker[]
 	/** 关联文本的用户选择与顺序（不进入生成 API） */
 	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraftV1 | StoredLinkedEditorDraft>
+}
+
+/** 图层列表的持久化筛选条件。 */
+export interface CanvasLayersFilterState {
+	visibility: "all" | "visible" | "hidden"
+	locked: "all" | "locked" | "unlocked"
+	types: ElementType[]
 }
 
 /** v1 草稿兼容读取类型；媒体 selected ID 仅为历史字段，不再参与业务状态。 */
