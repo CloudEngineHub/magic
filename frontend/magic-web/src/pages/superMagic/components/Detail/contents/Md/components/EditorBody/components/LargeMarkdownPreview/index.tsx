@@ -1,7 +1,9 @@
 import {
 	forwardRef,
+	memo,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -18,8 +20,8 @@ import rehypeRaw from "rehype-raw"
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
-import { cn } from "@/lib/utils"
 import { useTheme } from "@/models/config/hooks"
+import { cn } from "@/utils/cn"
 import { parseAnchorLink, scrollToAnchor, slugify } from "@/utils/slug"
 import {
 	getVirtualMarkdownChunkContent,
@@ -60,13 +62,16 @@ interface LocalSearchMatch {
 	id: string
 	start: number
 	end: number
-	isCurrent: boolean
 }
 
 interface SearchWorkerResponse {
 	requestId: number
 	results: MarkdownSearchResult[]
 }
+
+// Keep the empty prop identity stable so memoized chunks without matches do not re-render
+// while the current search result is being moved between other chunks.
+const EMPTY_SEARCH_RESULTS: MarkdownSearchResult[] = []
 
 const VirtualMarkdownList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 	function VirtualMarkdownList({ className, style, ...props }, ref) {
@@ -156,9 +161,7 @@ function createSearchHighlightPlugin(matches: LocalSearchMatch[]) {
 							type: "element",
 							tagName: "mark",
 							properties: {
-								className: match.isCurrent
-									? ["search-result", "search-result-current"]
-									: ["search-result"],
+								className: ["search-result"],
 								"data-search-result-id": match.id,
 							},
 							children: [
@@ -236,17 +239,15 @@ interface MarkdownChunkProps {
 	chunk: VirtualMarkdownChunk
 	content: string
 	searchMatches: MarkdownSearchResult[]
-	currentSearchResultId?: string
 	urlResolver?: LargeMarkdownPreviewProps["urlResolver"]
 	onAnchorClick: (href: string) => boolean
 	onLinkClick?: LargeMarkdownPreviewProps["onLinkClick"]
 }
 
-function MarkdownChunk({
+const MarkdownChunk = memo(function MarkdownChunk({
 	chunk,
 	content,
 	searchMatches,
-	currentSearchResultId,
 	urlResolver,
 	onAnchorClick,
 	onLinkClick,
@@ -267,12 +268,11 @@ function MarkdownChunk({
 					id: result.id,
 					start: prefixLength + clippedStart - chunk.start,
 					end: prefixLength + clippedEnd - chunk.start,
-					isCurrent: result.id === currentSearchResultId,
 				},
 			]
 		})
 		return createSearchHighlightPlugin(localMatches)
-	}, [chunk.end, chunk.prefix, chunk.start, currentSearchResultId, searchMatches])
+	}, [chunk.end, chunk.prefix, chunk.start, searchMatches])
 	const components = useMemo<Components>(
 		() => ({
 			a: ({ href = "", ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -327,7 +327,7 @@ function MarkdownChunk({
 			</ReactMarkdown>
 		</div>
 	)
-}
+})
 
 interface LargeMarkdownSearchToolbarProps {
 	visible: boolean
@@ -495,6 +495,24 @@ export default function LargeMarkdownPreview({
 	}, [chunks, searchResults])
 	const currentSearchResult = searchResults[searchResultIndex]
 
+	useLayoutEffect(() => {
+		const root = rootRef.current
+		if (!root) return
+
+		// Changing only the current marker avoids re-running ReactMarkdown for every mounted
+		// chunk on each Enter/Arrow navigation. That re-parse can trigger Virtuoso measurements
+		// and browser scroll anchoring even when the next result has the same viewport position.
+		root.querySelectorAll<HTMLElement>(".search-result-current").forEach((element) => {
+			element.classList.remove("search-result-current")
+		})
+		if (!searchEnabled || !currentSearchResult) return
+
+		const selector = `[data-search-result-id="${currentSearchResult.id}"]`
+		root.querySelectorAll<HTMLElement>(selector).forEach((element) => {
+			element.classList.add("search-result-current")
+		})
+	}, [currentSearchResult, searchEnabled])
+
 	useEffect(() => {
 		if (!searchEnabled) return
 
@@ -589,7 +607,7 @@ export default function LargeMarkdownPreview({
 		if (!searchEnabled || !currentSearchResult) return
 		const navigationId = searchNavigationIdRef.current + 1
 		searchNavigationIdRef.current = navigationId
-		const selector = `[data-search-result-id="${currentSearchResult.id}"].search-result-current`
+		const selector = `[data-search-result-id="${currentSearchResult.id}"]`
 
 		const alignMountedResult = (attempt = 0) => {
 			if (searchNavigationIdRef.current !== navigationId) return
@@ -600,6 +618,7 @@ export default function LargeMarkdownPreview({
 				if (attempt < 12) requestAnimationFrame(() => alignMountedResult(attempt + 1))
 				return
 			}
+			element.classList.add("search-result-current")
 
 			const scroller = virtuosoScrollerRef.current
 			if (!scroller) return
@@ -717,8 +736,7 @@ export default function LargeMarkdownPreview({
 						<MarkdownChunk
 							chunk={chunk}
 							content={content}
-							searchMatches={resultsByChunk.get(_index) ?? []}
-							currentSearchResultId={currentSearchResult?.id}
+							searchMatches={resultsByChunk.get(_index) ?? EMPTY_SEARCH_RESULTS}
 							urlResolver={urlResolver}
 							onAnchorClick={handleAnchorClick}
 							onLinkClick={onLinkClick}
