@@ -4,18 +4,47 @@ import {
 	getCaptureSurfaceGeometry,
 	getRootCaptureSelection,
 	resolveCaptureScreenSelection,
+	shouldMaterializePseudoElement,
 	toBitmapCropSelection,
 	toRenderedSelection,
 } from "../screenshot"
 
 describe("HTML screenshot geometry", () => {
+	it("keeps visible pseudo-element layers in the capture tree", () => {
+		expect(
+			shouldMaterializePseudoElement({
+				content: '""',
+				display: "block",
+				visibility: "visible",
+				opacity: "1",
+				backgroundImage: "linear-gradient(black, transparent)",
+				backgroundColor: "rgba(0, 0, 0, 0)",
+				borderStyle: "none",
+				filter: "none",
+			}),
+		).toBe(true)
+
+		expect(
+			shouldMaterializePseudoElement({
+				content: "none",
+				display: "inline",
+				visibility: "visible",
+				opacity: "1",
+				backgroundImage: "none",
+				backgroundColor: "rgba(0, 0, 0, 0)",
+				borderStyle: "none",
+				filter: "none",
+			}),
+		).toBe(false)
+	})
+
 	it("uses visual viewport dimensions for the screenshot output", () => {
 		expect(
 			getCaptureOutputSize(
 				{ left: 123, top: 157, width: 780, height: 390 },
 				{ left: 360, top: 320, width: 400, height: 200 },
 			),
-		).toEqual({ width: 400, height: 200 })
+		).toEqual({ width: 800, height: 400 })
 	})
 
 	it("maps iframe CSS coordinates to visual screen coordinates", () => {

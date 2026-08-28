@@ -35,14 +35,55 @@ interface BitmapSize {
 	height: number
 }
 
+type PseudoElementName = "::before" | "::after"
+
+interface MaterializedPseudoElementsCleanup {
+	(): void
+}
+
+interface PseudoStyleSnapshot {
+	content: string
+	display: string
+	visibility: string
+	opacity: string
+	backgroundImage: string
+	backgroundColor: string
+	borderStyle: string
+	filter: string
+}
+
+/** Keep the screenshot crisp while preserving the drag rectangle's CSS size. */
+export const CAPTURE_OUTPUT_SCALE = 2
+
+/** Return whether a pseudo-element contributes visible content or styling. */
+export function shouldMaterializePseudoElement(style: PseudoStyleSnapshot): boolean {
+	const hasContent = style.content !== "none" && style.content !== "normal"
+	const hasVisualLayer =
+		style.backgroundImage !== "none" ||
+		style.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+		style.borderStyle !== "none" ||
+		style.filter !== "none"
+
+	return (
+		style.display !== "none" &&
+		style.visibility !== "hidden" &&
+		style.opacity !== "0" &&
+		(hasContent || hasVisualLayer)
+	)
+}
+
 /** Prefer the host drag size so iframe zoom does not change the PNG dimensions. */
 export function getCaptureOutputSize(
 	selection: InspectedElementRect,
 	viewportSelection?: ScreenRect,
+	outputScale = CAPTURE_OUTPUT_SCALE,
 ): BitmapSize {
 	return {
-		width: Math.max(1, Math.round(viewportSelection?.width ?? selection.width)),
-		height: Math.max(1, Math.round(viewportSelection?.height ?? selection.height)),
+		width: Math.max(1, Math.round((viewportSelection?.width ?? selection.width) * outputScale)),
+		height: Math.max(
+			1,
+			Math.round((viewportSelection?.height ?? selection.height) * outputScale),
+		),
 	}
 }
 
@@ -165,6 +206,98 @@ function resolveCaptureRoot(
 	return containingRoot?.root ?? roots[0]
 }
 
+/**
+ * Materialize pseudo-elements before snapdom clones the tree.
+ *
+ * snapdom can copy simple pseudo-elements, but foreignObject rendering is
+ * inconsistent for absolute pseudo-elements with layered backgrounds. PPT
+ * slides use those layers for the dark image mask and texture, so preserving
+ * them as real children keeps the exported bitmap equal to the browser view.
+ */
+function materializePseudoElements(root: HTMLElement): MaterializedPseudoElementsCleanup {
+	const document = root.ownerDocument
+	const view = document.defaultView
+	if (!view) return () => undefined
+
+	const materialized: HTMLElement[] = []
+	const hiddenAttributes: Array<{
+		source: HTMLElement
+		attribute: string
+		previousValue: string | null
+	}> = []
+	const style = document.createElement("style")
+	style.textContent = `
+		[data-element-inspector-pseudo-before]::before,
+		[data-element-inspector-pseudo-after]::after {
+			content: none !important;
+			display: none !important;
+		}
+	`
+	document.head.appendChild(style)
+
+	const restore = () => {
+		for (const clone of materialized) clone.remove()
+		for (const { source, attribute, previousValue } of hiddenAttributes) {
+			if (previousValue === null) source.removeAttribute(attribute)
+			else source.setAttribute(attribute, previousValue)
+		}
+		style.remove()
+	}
+
+	try {
+		const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))]
+		for (const source of elements) {
+			for (const name of ["::before", "::after"] satisfies PseudoElementName[]) {
+				const computed = view.getComputedStyle(source, name)
+				if (!shouldMaterializePseudoElement(computed)) continue
+				const hasContent = computed.content !== "none" && computed.content !== "normal"
+
+				const clone = document.createElement("span")
+				clone.setAttribute("aria-hidden", "true")
+				clone.setAttribute("data-element-inspector-pseudo", name)
+				clone.style.pointerEvents = "none"
+				for (let index = 0; index < computed.length; index += 1) {
+					const property = computed.item(index)
+					clone.style.setProperty(
+						property,
+						computed.getPropertyValue(property),
+						computed.getPropertyPriority(property),
+					)
+				}
+				clone.style.content = "normal"
+				clone.style.pointerEvents = "none"
+
+				if (
+					hasContent &&
+					computed.content.startsWith('"') &&
+					computed.content.endsWith('"')
+				) {
+					clone.textContent = computed.content.slice(1, -1)
+				}
+
+				const attribute =
+					name === "::before"
+						? "data-element-inspector-pseudo-before"
+						: "data-element-inspector-pseudo-after"
+				hiddenAttributes.push({
+					source,
+					attribute,
+					previousValue: source.getAttribute(attribute),
+				})
+				source.setAttribute(attribute, "true")
+				if (name === "::before") source.insertBefore(clone, source.firstChild)
+				else source.appendChild(clone)
+				materialized.push(clone)
+			}
+		}
+	} catch (error) {
+		restore()
+		throw error
+	}
+
+	return restore
+}
+
 function cropCanvas(
 	source: CanvasImageSource,
 	sourceWidth: number,
@@ -211,33 +344,37 @@ async function captureSameOriginIframe({
 	const rootRect = captureRoot.getBoundingClientRect()
 	const renderWidth = Math.max(captureRoot.scrollWidth, captureRoot.offsetWidth, 1)
 	const renderHeight = Math.max(captureRoot.scrollHeight, captureRoot.offsetHeight, 1)
-
-	const result = await snapdom(captureRoot, {
-		// Render the selected root at its CSS size so the crop uses the same
-		// coordinate system as the inspector rect.
-		width: renderWidth,
-		height: renderHeight,
-		dpr: 1,
-		backgroundColor: "#ffffff",
-	})
-	// snapdom.toBlob() defaults to SVG. createImageBitmap cannot decode the
-	// foreignObject SVG generated for this page, so request a raster PNG here.
-	const blob = await result.toBlob({ type: "image/png" })
-	const bitmap = await createImageBitmap(blob)
+	const restorePseudoElements = materializePseudoElements(captureRoot)
 	try {
-		const rootSelection = getRootCaptureSelection(selection, rootRect)
-		return cropCanvas(
-			bitmap,
-			bitmap.width,
-			bitmap.height,
-			toBitmapCropSelection(rootSelection, bitmap, {
-				width: renderWidth,
-				height: renderHeight,
-			}),
-			getCaptureOutputSize(selection, viewportSelection),
-		)
+		const result = await snapdom(captureRoot, {
+			// Render the selected root at its CSS size so the crop uses the same
+			// coordinate system as the inspector rect.
+			width: renderWidth,
+			height: renderHeight,
+			dpr: CAPTURE_OUTPUT_SCALE,
+			backgroundColor: "#ffffff",
+		})
+		// snapdom.toBlob() defaults to SVG. createImageBitmap cannot decode the
+		// foreignObject SVG generated for this page, so request a raster PNG here.
+		const blob = await result.toBlob({ type: "image/png" })
+		const bitmap = await createImageBitmap(blob)
+		try {
+			const rootSelection = getRootCaptureSelection(selection, rootRect)
+			return cropCanvas(
+				bitmap,
+				bitmap.width,
+				bitmap.height,
+				toBitmapCropSelection(rootSelection, bitmap, {
+					width: renderWidth,
+					height: renderHeight,
+				}),
+				getCaptureOutputSize(selection, viewportSelection),
+			)
+		} finally {
+			bitmap.close()
+		}
 	} finally {
-		bitmap.close()
+		restorePseudoElements()
 	}
 }
 
