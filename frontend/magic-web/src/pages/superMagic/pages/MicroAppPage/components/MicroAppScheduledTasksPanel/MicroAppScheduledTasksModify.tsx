@@ -114,7 +114,7 @@ export function MicroAppScheduledTasksModify({
 	const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 	const [loading, setLoading] = useState(Boolean(initialValues))
 	const [promptRequired, setPromptRequired] = useState(false)
-	// 微应用定时任务始终由微应用数字员工执行，不能切换到其他 topic mode。
+	// 微应用员工可能不在员工列表中：编辑器使用 default 模型目录，运行协议仍固定为 micro-app。
 	const modelTopicMode = TopicMode.Default
 	const runtimeTopicMode = TopicMode.MicroApp
 	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
