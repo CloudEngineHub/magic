@@ -1,11 +1,21 @@
 import Konva from "konva"
-import type { VideoElement as VideoElementData, LayerElement } from "../../document/types"
-import { GenerationStatus } from "../../../public/magic-types"
 import type {
-	GenerateVideoRequest,
-	StoredVideoModeDraftsMap,
-	UploadFileResponse,
-} from "../../../public/magic-types"
+	VideoElement as VideoElementData,
+	VideoElementContent,
+	LayerElement,
+} from "../../document/types"
+import { ElementTypeEnum } from "../../document/types"
+import { GenerationStatus } from "../../../public/magic-types"
+import {
+	appendContent,
+	canDeleteActiveContentVersion,
+	createContentId,
+	deleteActiveContent as deleteContentFromData,
+	getActiveContent,
+	getContentById,
+	getPendingVideoGenerationContent,
+} from "../../document/elementContent"
+import type { GenerateVideoRequest, UploadFileResponse } from "../../../public/magic-types"
 import { BaseElement } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { generateUUID, type Rect } from "../../shared/ids"
@@ -14,11 +24,17 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
+import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { TransformContext } from "../core/BaseElement"
+import {
+	appendReferenceImageInfos,
+	removeReferenceImageInfosByPath,
+	replaceReferenceImageInfos,
+} from "../core/referenceImageInfos"
 import { VideoRenderer } from "./VideoRenderer"
 import { VideoPollingManager } from "../../resources/polling/VideoPollingManager"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import {
 	buildFullscreenVideoPlaybackConsumerId,
 	buildInlineVideoPlaybackConsumerId,
@@ -31,7 +47,13 @@ import type {
 	VideoResourceLoadOptions,
 } from "../../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
-import { hasVideoGenerationRequestUserIntent } from "../../shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../shared/videoGenerationRequestIntent"
+import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
+import type { GenerationFailurePolicy } from "../../generation/GenerationRuntimeManager"
+import {
+	buildMediaEditSourceFingerprint,
+	type MediaEditIntent,
+} from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -52,14 +74,24 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	public isGenerating = false
+	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
+	private legacyIsGenerating = false
+
+	public get isGenerating(): boolean {
+		return (
+			this.canvas?.generationRuntimeManager?.hasActiveGeneration?.(this.data.id) ??
+			this.legacyIsGenerating
+		)
+	}
+
+	public set isGenerating(value: boolean) {
+		this.legacyIsGenerating = value
+	}
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
 	private isInlinePlaybackRefreshing = false
 	private isErrorState = false
 	private contentUpdateHandler?: () => void
-	private tempGenerateVideoRequest?: Partial<GenerateVideoRequest>
-	private modeInputDrafts?: StoredVideoModeDraftsMap
 	private referenceImageInfos: UploadFileResponse[] = []
 	private previewLoadToken = 0
 	private previewLoadInFlightPath?: string
@@ -81,43 +113,74 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}) => void
 	private isRetryEditing = false
+	private generationRuntimeUnsubscribe?: () => void
+	private mediaReplaceStateUnsubscribe?: () => void
 
 	constructor(data: VideoElementData, canvas: Canvas) {
 		super(data, canvas)
 		this.setupRetryEditingListeners()
 		this.setupVideoResourceRefreshedListener()
 		this.setupVideoResourceLoadFailedListener()
+		this.generationRuntimeUnsubscribe = this.canvas.generationRuntimeManager.subscribeElement(
+			this.data.id,
+			() => {
+				this.rerenderWhenTransformIdle()
+			},
+		)
+		this.mediaReplaceStateUnsubscribe = this.canvas.eventEmitter.on(
+			"element:media:replaceStateChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId !== this.data.id) return
+				this.rerenderWhenTransformIdle()
+			},
+		)
 
+		const pollingContent = getPendingVideoGenerationContent(this.data) ?? this.getVideoContent()
 		this.pollingManager = new VideoPollingManager({
 			elementId: this.data.id,
 			canvas: this.canvas,
+			contentId: pollingContent?.contentId,
 			getElementData: () => this.data,
-			onPollingIssue: () => {
+			onPollingIssue: (contentId) => {
+				if (contentId && contentId !== this.getVideoContent()?.contentId) return
 				this.handlePollingIssue()
 			},
 		})
 
-		const tempConfig = VideoElement.getTempConfigFromStorage(this.canvas, this.data.id)
-		this.modeInputDrafts = VideoElement.getModeInputDraftsFromStorage(this.canvas, this.data.id)
-		if (tempConfig) {
-			this.tempGenerateVideoRequest = tempConfig
-		} else if (this.data.generateVideoRequest) {
-			// 无本地临时草稿时，从元素已保存的请求恢复可继续编辑的字段子集
-			const { model_id, input_mode, task, generation, inputs, video_id } =
-				this.data.generateVideoRequest
-			this.tempGenerateVideoRequest = {
-				...(model_id && { model_id }),
-				...(input_mode && { input_mode }),
-				...(task && { task }),
-				...(generation ? { generation } : {}),
-				...(inputs ? { inputs } : {}),
-				...(video_id ? { video_id } : {}),
-			}
-		}
-
-		if (!this.data.src && this.data.generateVideoRequest?.video_id) {
+		if (!pollingContent?.src && pollingContent?.generateVideoRequest?.video_id) {
 			this.pollingManager.start()
 		}
+	}
+
+	private clearGenerateRecoveryDraft(content = this.getVideoContent()): void {
+		if (!content) return
+		this.canvas.mediaEditRecoveryManager?.clear({
+			elementId: this.data.id,
+			contentId: content.contentId,
+			intent: "generate",
+		})
+	}
+
+	private saveGenerateRecoveryDraft(
+		request: Partial<GenerateVideoRequest>,
+		content = this.getVideoContent(),
+		intent: MediaEditIntent = "generate",
+	): void {
+		if (!content) return
+		const key = {
+			elementId: this.data.id,
+			contentId: content.contentId,
+			intent,
+		}
+		const sourceFingerprint = buildMediaEditSourceFingerprint(content.contentId, content.src)
+		const existing = this.canvas.mediaEditRecoveryManager?.get<{
+			request: Partial<GenerateVideoRequest>
+			modeDrafts?: unknown
+		}>(key, sourceFingerprint)
+		this.canvas.mediaEditRecoveryManager?.saveDraft(key, sourceFingerprint, {
+			...existing?.draft,
+			request,
+		})
 	}
 
 	override destroy(): void {
@@ -135,10 +198,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
+		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
 		this.removeVideoResourceLoadFailedListener()
+		this.generationRuntimeUnsubscribe?.()
+		this.generationRuntimeUnsubscribe = undefined
+		this.mediaReplaceStateUnsubscribe?.()
+		this.mediaReplaceStateUnsubscribe = undefined
 		super.destroy()
 	}
 
@@ -149,17 +217,27 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
+		this.mainVersionTagDecorator?.destroy()
+		this.mainVersionTagDecorator = undefined
 		return super.rerender()
 	}
 
 	/** 调用宿主 generateVideo，写入 generateVideoRequest 并启动轮询 */
-	public async generateVideo(request: GenerateVideoRequest): Promise<boolean> {
+	public async generateVideo(
+		request: GenerateVideoRequest,
+		options?: {
+			failurePolicy?: GenerationFailurePolicy
+			keepTemporaryUntilComplete?: boolean
+		},
+	): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
+		const contentId =
+			this.getVideoContent()?.contentId ?? this.data.activeContentId ?? undefined
 		if (
 			!generateVideo ||
-			this.isGenerating ||
-			!request.model_id ||
-			!hasVideoGenerationRequestUserIntent(request)
+			this.hasPendingVideoGeneration(contentId) ||
+			(request.generation_type !== "canvas_composition" && !request.model_id) ||
+			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",
@@ -171,31 +249,29 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const requestWithId: GenerateVideoRequest = {
 			...request,
 			// 复用已有 video_id，避免同一次编辑链路上被当成新任务
-			video_id:
-				request.video_id ||
-				this.data.generateVideoRequest?.video_id ||
-				this.tempGenerateVideoRequest?.video_id ||
-				generateUUID(),
+			video_id: request.video_id || this.getVideoRequest()?.video_id || generateUUID(),
 		}
-		const previousStatus = this.data.status
-		const previousErrorMessage = this.data.errorMessage
-		const previousGenerateVideoRequest = this.data.generateVideoRequest
-
+		const recoveryContent = this.getVideoContent()
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
-		// 先固化已提交配置，让提交等待和后续 processing 阶段都能打开生成记录。
-		this.canvas.elementManager.update(
-			this.data.id,
-			{
-				generateVideoRequest: requestWithId,
-				status: undefined,
-				errorMessage: undefined,
-			},
-			// 接口确认前只更新运行时 UI，避免刷新时恢复出尚未真正创建的任务。
-			{ mode: "data-only", silent: true },
-		)
-		this.isGenerating = true
+		const isGenerationPlaceholder =
+			this.canvas.elementManager.getTemporaryElementMetadata?.(this.data.id)?.kind ===
+			"generation-result"
+		const attemptId = this.canvas.generationRuntimeManager.beginAttempt({
+			operation: "video-generate",
+			originElementId: this.data.id,
+			targets: [
+				{
+					elementId: this.data.id,
+					...(contentId ? { contentId } : {}),
+					generateVideoRequest: requestWithId,
+				},
+			],
+			failurePolicy:
+				options?.failurePolicy ??
+				(isGenerationPlaceholder ? "promote-empty" : "restore-existing"),
+		})
 		this.rerender()
 		this.canvas.eventEmitter.emit({
 			type: "element:video:generate-submit-started",
@@ -204,50 +280,240 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		try {
 			await generateVideo(requestWithId)
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
+				this.isGenerating = false
+				return false
+			}
 			this.isGenerating = false
+			const persistedRequest: GenerateVideoRequest =
+				requestWithId.generation_type === "canvas_composition"
+					? {
+							video_id: requestWithId.video_id,
+							generation_type: requestWithId.generation_type,
+						}
+					: requestWithId
 
-			this.canvas.elementManager.update(
-				this.data.id,
-				{
-					generateVideoRequest: requestWithId,
-					videoGenerationResultMeta: undefined,
-					status: undefined,
-					errorMessage: undefined,
-					src: undefined,
-				},
-				{ silent: false },
-			)
+			const persistedPatch = {
+				contents: this.data.contents.map((content) =>
+					content.contentId === contentId
+						? {
+								...content,
+								generateVideoRequest: persistedRequest,
+								videoEditorDraft: undefined,
+								videoGenerationResultMeta: undefined,
+								status: undefined,
+								errorMessage: undefined,
+								src: undefined,
+							}
+						: content,
+				),
+				activeContentId: this.data.activeContentId,
+				mainContentId: this.data.mainContentId,
+			}
+			const confirmed = options?.keepTemporaryUntilComplete
+				? (() => {
+						this.canvas.elementManager.update(this.data.id, persistedPatch, {
+							silent: true,
+						})
+						this.canvas.generationRuntimeManager.completeAttempt(attemptId)
+						return true
+					})()
+				: this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
+						{
+							elementId: this.data.id,
+							...(contentId ? { contentId } : {}),
+							persistedPatch,
+						},
+					])
+			if (!confirmed) return false
 
 			this.isErrorState = false
-			this.clearTempGenerateVideoRequest()
+			this.clearGenerateRecoveryDraft(recoveryContent)
 			this.pollingManager.start()
 			this.rerender()
 			return true
 		} catch (error) {
-			this.isGenerating = false
-			const currentElement = this.canvas.elementManager.getElementData(this.data.id)
-			// 只回滚仍属于本次提交的配置，避免覆盖等待期间到达的更新。
 			if (
-				currentElement?.type === ElementTypeEnum.Video &&
-				currentElement.generateVideoRequest === requestWithId
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
 			) {
-				this.canvas.elementManager.update(
-					this.data.id,
-					{
-						generateVideoRequest: previousGenerateVideoRequest,
-						status: previousStatus,
-						errorMessage: previousErrorMessage,
-					},
-					{ mode: "data-only", silent: true },
-				)
+				this.isGenerating = false
+				return false
 			}
-			this.rerender()
+			this.isGenerating = false
+			this.canvas.eventEmitter.emit({
+				type: "element:video:generate-submit-failed",
+				data: { elementId: this.data.id },
+			})
+			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent)
+			return false
+		}
+	}
+
+	/**
+	 * 在当前视频元素内追加一次生成 Content，供结果态的重新编辑/再次生成使用。
+	 * 生成请求确认前只登记运行时 attempt，避免失败时把空任务写入 DSL。
+	 */
+	public async submitContentGeneration(
+		request: GenerateVideoRequest,
+		options?: { recoveryIntent?: MediaEditIntent },
+	): Promise<boolean> {
+		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
+		if (
+			!generateVideo ||
+			!request.model_id ||
+			!hasVideoGenerationRequestSubmitIntent(request)
+		) {
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",
 				data: { elementId: this.data.id },
 			})
 			return false
 		}
+
+		const contentId = createContentId("content")
+		const recoveryContent = this.getVideoContent()
+		const requestWithId: GenerateVideoRequest = {
+			...request,
+			prompt: request.prompt?.trim(),
+			// 追加 Content 必须对应全新的服务端任务，不能复用旧版本的 video_id。
+			video_id: generateUUID(),
+		}
+		this.isGenerating = true
+		this.isErrorState = false
+		this.isRetryEditing = false
+		const attemptId = this.canvas.generationRuntimeManager.beginAttempt({
+			operation: "video-generate",
+			originElementId: this.data.id,
+			targets: [
+				{
+					elementId: this.data.id,
+					contentId,
+					generateVideoRequest: requestWithId,
+				},
+			],
+			failurePolicy: "restore-existing",
+		})
+		this.rerender()
+		this.canvas.eventEmitter.emit({
+			type: "element:video:generate-submit-started",
+			data: { elementId: this.data.id },
+		})
+
+		try {
+			await generateVideo(requestWithId)
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
+				this.isGenerating = false
+				return false
+			}
+
+			const current = this.canvas.elementManager.getElementData(this.data.id)
+			if (!current || current.type !== ElementTypeEnum.Video) {
+				this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+				this.isGenerating = false
+				return false
+			}
+
+			const next = appendContent<VideoElementData>(current, {
+				contentId,
+				generateVideoRequest: requestWithId,
+			})
+			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
+				{
+					elementId: this.data.id,
+					contentId,
+					persistedPatch: {
+						contents: next.contents,
+						// The newly submitted version is the version users should see while
+						// its result is being processed.
+						activeContentId: contentId,
+						mainContentId: next.mainContentId,
+					},
+				},
+			])
+			if (!confirmed) {
+				this.isGenerating = false
+				return false
+			}
+
+			this.isGenerating = false
+			this.isErrorState = false
+			this.clearGenerateRecoveryDraft(recoveryContent)
+			this.pollingManager.setContentId(contentId)
+			this.pollingManager.start(contentId)
+			this.rerender()
+			return true
+		} catch {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
+				this.isGenerating = false
+				return false
+			}
+			this.isGenerating = false
+			this.canvas.eventEmitter.emit({
+				type: "element:video:generate-submit-failed",
+				data: { elementId: this.data.id },
+			})
+			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, options?.recoveryIntent)
+			return false
+		}
+	}
+
+	public switchActiveContent(contentId: string): boolean {
+		if (!getContentById(this.data, contentId)) return false
+		if (this.data.activeContentId === contentId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ activeContentId: contentId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public setMainContent(contentId: string): boolean {
+		const target = getContentById(this.data, contentId)
+		if (!target?.src || target.status !== GenerationStatus.Completed) return false
+		if (this.data.mainContentId === contentId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ mainContentId: contentId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public deleteActiveContent(): boolean {
+		const activeContent = getActiveContent<VideoElementContent>(this.data)
+		if (
+			!canDeleteActiveContentVersion(this.data) ||
+			activeContent?.status === GenerationStatus.Pending ||
+			activeContent?.status === GenerationStatus.Processing ||
+			this.hasActiveGeneration()
+		) {
+			return false
+		}
+
+		const result = deleteContentFromData(
+			this.data,
+			(content) => Boolean(content.src) && content.status === GenerationStatus.Completed,
+		)
+		if (!result) return false
+		this.canvas.elementManager.update(
+			this.data.id,
+			{
+				contents: result.element.contents,
+				activeContentId: result.element.activeContentId,
+				mainContentId: result.element.mainContentId,
+			},
+			{ silent: false },
+		)
+		return true
 	}
 
 	private async loadPreviewFromPath(
@@ -262,7 +528,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		try {
 			const loaded = await this.canvas.videoResourceManager.getPreviewResource(path, options)
 			if (!loaded) {
-				if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+				if (loadToken !== this.previewLoadToken || this.getVideoSrc() !== path) {
 					return
 				}
 				if (options?.signal?.aborted) {
@@ -285,7 +551,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				return
 			}
 
-			if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+			if (loadToken !== this.previewLoadToken || this.getVideoSrc() !== path) {
 				return
 			}
 
@@ -295,7 +561,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isErrorState = false
 			this.schedulePreviewRefresh()
 		} catch (error) {
-			if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+			if (loadToken !== this.previewLoadToken || this.getVideoSrc() !== path) {
 				return
 			}
 			this.isLoadingState = false
@@ -309,7 +575,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	public requestPreviewLoad(options?: VideoResourceLoadOptions & { force?: boolean }): void {
-		const path = this.data.src
+		const path = this.getVideoSrc()
 		if (!path || this.isDestroyed) return
 		if (!options?.force) {
 			if (
@@ -373,14 +639,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private setupVideoResourceRefreshedListener(): void {
-		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 		this.videoResourceRefreshedHandler = ({ data }) => {
-			const currentPath = this.data.src
+			const currentPath = this.getVideoSrc()
 			if (!currentPath) return
-			if (
-				toCanonicalCanvasResourcePath(data.path, resolveAbs) !==
-				toCanonicalCanvasResourcePath(currentPath, resolveAbs)
-			) {
+			if (!areCanvasHostResourceReferencesSame(this.canvas, data.path, currentPath)) {
 				return
 			}
 
@@ -406,14 +668,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private setupVideoResourceLoadFailedListener(): void {
-		const resolveAbs = this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 		this.videoResourceLoadFailedHandler = ({ data }) => {
-			const currentPath = this.data.src
+			const currentPath = this.getVideoSrc()
 			if (!currentPath) return
-			if (
-				toCanonicalCanvasResourcePath(data.path, resolveAbs) !==
-				toCanonicalCanvasResourcePath(currentPath, resolveAbs)
-			) {
+			if (!areCanvasHostResourceReferencesSame(this.canvas, data.path, currentPath)) {
 				return
 			}
 
@@ -480,12 +738,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private async ensureInlinePlayback(autoPlay: boolean): Promise<boolean> {
-		const path = this.data.src
+		const path = this.getVideoSrc()
 		if (!path) {
 			return false
 		}
 
 		const consumerId = this.getInlinePlaybackConsumerId()
+		if (autoPlay) {
+			this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
+		}
 
 		if (this.renderer.hasAttachedPlayback()) {
 			if (autoPlay) {
@@ -516,7 +777,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				const session = await this.canvas.videoPlaybackManager.acquire(path, consumerId, {
 					autoPlay,
 				})
-				if (requestToken !== this.inlinePlaybackRequestToken || this.data.src !== path) {
+				if (
+					requestToken !== this.inlinePlaybackRequestToken ||
+					this.getVideoSrc() !== path
+				) {
 					if (session) {
 						this.canvas.videoPlaybackManager.release(consumerId)
 					}
@@ -535,7 +799,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.rerenderWhenTransformIdle()
 				return true
 			} catch {
-				if (requestToken !== this.inlinePlaybackRequestToken || this.data.src !== path) {
+				if (
+					requestToken !== this.inlinePlaybackRequestToken ||
+					this.getVideoSrc() !== path
+				) {
 					return false
 				}
 				this.isInlinePlaybackPending = false
@@ -556,6 +823,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 内联 consumer 将会话移交给全屏 consumer，用于进入全屏层 */
 	public handoffPlaybackToFullscreen(): HTMLVideoElement | null {
+		this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 		const session = this.canvas.videoPlaybackManager.handoff(
 			this.getInlinePlaybackConsumerId(),
 			this.getFullscreenPlaybackConsumerId(),
@@ -576,11 +844,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 为全屏层申请独立 consumer 的 video（自动播放），不经过内联 handoff 时使用 */
 	public async acquireFullscreenPlayback(): Promise<HTMLVideoElement | null> {
-		const path = this.data.src
+		const path = this.getVideoSrc()
 		if (!path) {
 			return null
 		}
 
+		this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 		const session = await this.canvas.videoPlaybackManager.acquire(
 			path,
 			this.getFullscreenPlaybackConsumerId(),
@@ -600,12 +869,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.syncPlaybackAttachment()
 	}
 
-	private isVideoGenerationPending(): boolean {
-		if (this.isGenerating) return true
+	private isVideoGenerationPending(contentId = this.getVideoContent()?.contentId): boolean {
+		if (this.hasActiveGeneration(contentId)) return true
 
-		const hasActiveGenerationTask = this.hasActiveVideoGenerationTask()
-		const hasSrc = !!this.data.src
-		const status = this.data.status
+		const content = contentId ? getContentById(this.data, contentId) : this.getVideoContent()
+		const hasActiveGenerationTask = Boolean(content?.generateVideoRequest?.video_id)
+		const hasSrc = !!content?.src
+		const status = content?.status
 
 		if (hasActiveGenerationTask && !hasSrc) return true
 		if (
@@ -665,23 +935,34 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		this.syncRenderLayout(this.data.width, this.data.height)
-		if (this.data.src) {
-			this.canvas.visibilityManager.registerVideoElement(this.data.id, this.data.src)
+		this.mainVersionTagDecorator?.refreshLayout()
+		const src = this.getVideoSrc()
+		if (src) {
+			this.canvas.visibilityManager.registerVideoElement(this.data.id, src)
 		}
 	}
 
 	update(newData: VideoElementData): boolean {
-		const srcChanged = this.data.src !== newData.src
-		const newStatus = newData.status
+		const currentActiveContentId = this.data.activeContentId
+		const previousContent = this.getVideoContent()
+		const nextContent = getActiveContent<VideoElementContent>(newData)
+		const srcChanged = previousContent?.src !== nextContent?.src
+		const newStatus = nextContent?.status
 		const generationSettled =
-			!!newData.src ||
+			!!nextContent?.src ||
 			newStatus === GenerationStatus.Completed ||
 			newStatus === GenerationStatus.Failed
+		const contentControlsChanged =
+			this.data.contents.length !== newData.contents.length ||
+			this.data.mainContentId !== newData.mainContentId
 		const needsRerender =
-			this.data.generateVideoRequest?.video_id !== newData.generateVideoRequest?.video_id ||
-			this.data.src !== newData.src ||
-			this.data.status !== newData.status ||
-			this.data.errorMessage !== newData.errorMessage
+			contentControlsChanged ||
+			currentActiveContentId !== newData.activeContentId ||
+			previousContent?.generateVideoRequest?.video_id !==
+				nextContent?.generateVideoRequest?.video_id ||
+			previousContent?.src !== nextContent?.src ||
+			previousContent?.status !== nextContent?.status ||
+			previousContent?.errorMessage !== nextContent?.errorMessage
 
 		this.data = newData
 
@@ -700,8 +981,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isErrorState = false
 			this.releasePlaybackConsumers()
 			this.renderer.resetPreview()
-			if (newData.src) {
-				this.canvas.visibilityManager.updateVideoElement(this.data.id, newData.src)
+			if (nextContent?.src) {
+				this.canvas.visibilityManager.updateVideoElement(this.data.id, nextContent.src)
 			} else {
 				this.canvas.visibilityManager.unregisterVideoElement(this.data.id)
 			}
@@ -746,6 +1027,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.createBorder(group, width, height, false)
 		this.createCornerActions(group, width, height, { fullscreen: true })
+		this.createMainVersionTag(group, width, height)
 		this.setupContentUpdateListener(group)
 	}
 
@@ -760,10 +1042,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		},
 	): void {
 		const isGeneratingStage = options.stage === "generating" || options.stage === "uploading"
+		const status = this.getVideoStatus()
+		const request = this.getVideoRequest()
 		const shouldShowRetryButton =
 			options.mode === "error" &&
-			this.data.status === GenerationStatus.Failed &&
-			!!this.data.generateVideoRequest &&
+			status === GenerationStatus.Failed &&
+			!!request &&
 			!this.isVideoResourceErrorText(options.text) &&
 			!this.isRetryEditing
 		this.isLoadingState = options.stage === "loading"
@@ -774,6 +1058,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			showRetryButton: shouldShowRetryButton,
 			onRetry: shouldShowRetryButton
 				? () => {
+						if (this.canvas.mediaReplaceController?.isReplacing?.(this.data.id)) return
 						this.isRetryEditing = true
 						this.canvas.selectionManager.select(this.data.id, false, false)
 						this.rerender()
@@ -804,6 +1089,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 
 				this.createCornerActions(group, width, height)
+				this.createMainVersionTag(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -822,6 +1108,16 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
+	}
+
+	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
+		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+			canvas: this.canvas,
+			width,
+			height,
+			data: this.data,
+		})
+		this.mainVersionTagDecorator.create()
 	}
 
 	private setupRetryEditingListeners(): void {
@@ -915,9 +1211,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private getVideoLoadErrorText(): string {
-		const failureReason = this.data.src
-			? this.canvas.videoResourceManager.getFailureReason(this.data.src)
-			: null
+		const src = this.getVideoSrc()
+		const failureReason = src ? this.canvas.videoResourceManager.getFailureReason(src) : null
 
 		if (failureReason === "not-found") {
 			return this.getText("video.fileMissing", "视频文件不存在")
@@ -934,15 +1229,31 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private resolveRenderState(): VideoRenderState {
-		const hasSrc = !!this.data.src
-		const status = this.data.status
+		const replacementState = this.canvas.mediaReplaceController?.getReplacementState?.(
+			this.data.id,
+		)
+		if (
+			replacementState?.source === "local-upload" &&
+			replacementState.phase === "uploading" &&
+			replacementState.contentId === this.getVideoContent()?.contentId
+		) {
+			return {
+				stage: "uploading",
+				placeholderMode: "loading",
+				text: this.getText("video.uploading", "正在上传中..."),
+			}
+		}
+
+		const src = this.getVideoSrc()
+		const hasSrc = !!src
+		const status = this.getVideoStatus()
 
 		if (hasSrc || status === GenerationStatus.Completed) {
 			if (this.isErrorState) {
 				return {
 					stage: "error",
 					placeholderMode: "error",
-					text: this.data.errorMessage || this.getVideoLoadErrorText(),
+					text: this.getVideoErrorMessage() || this.getVideoLoadErrorText(),
 				}
 			}
 
@@ -963,8 +1274,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				placeholderMode: "error",
 				text: this.isRetryEditing
 					? this.getText("video.retryEditing", "请重新编辑视频生成需求")
-					: this.data.errorMessage ||
-						this.getText("video.generateFailed", "视频生成失败"),
+					: resolveGenerationErrorMessage(
+							this.getVideoErrorMessage(),
+							this.getText("video.generateFailed", "视频生成失败"),
+						),
 			}
 		}
 
@@ -973,6 +1286,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			status === GenerationStatus.Processing ||
 			this.isVideoGenerationPending()
 		) {
+			if (this.canvas.videoCompositionManager?.isComposingResult?.(this.data.id)) {
+				return {
+					stage: "generating",
+					placeholderMode: "loading",
+					text: this.getText("video.merging", "正在合并中..."),
+				}
+			}
 			const isGenerating = this.isActiveGenerationPlaceholder()
 
 			return {
@@ -992,16 +1312,19 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private hasActiveVideoGenerationTask(): boolean {
-		return !!this.data.generateVideoRequest?.video_id
+		return !!this.getActiveGenerateVideoRequest()?.video_id
 	}
 
 	private isActiveGenerationPlaceholder(): boolean {
-		if (this.hasActiveVideoGenerationTask() || this.isGenerating) {
+		if (
+			this.hasActiveVideoGenerationTask() ||
+			this.hasActiveGeneration(this.getVideoContent()?.contentId)
+		) {
 			return true
 		}
 
 		return (
-			this.data.status === GenerationStatus.Processing &&
+			this.getVideoStatus() === GenerationStatus.Processing &&
 			!this.canvas.elementManager.isTemporary(this.data.id)
 		)
 	}
@@ -1027,11 +1350,20 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private shouldShowInfoButton(): boolean {
-		return !!this.data.generateVideoRequest
+		return !!this.getActiveGenerateVideoRequest()
+	}
+
+	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
+	public getActiveGenerateVideoRequest(): GenerateVideoRequest | undefined {
+		const activeContentId = this.getVideoContent()?.contentId
+		const runtimeTarget = activeContentId
+			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
+			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
+		return runtimeTarget?.generateVideoRequest || this.getVideoRequest()
 	}
 
 	private shouldShowFullscreenButton(): boolean {
-		return !!this.data.src
+		return !!this.getVideoSrc()
 	}
 
 	private setupContentUpdateListener(group: Konva.Group): void {
@@ -1093,6 +1425,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.updatePlayerLayout(this.node, width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
+		this.mainVersionTagDecorator?.updateConfig({ width, height, data: this.data })
 		this.node.getLayer()?.batchDraw()
 	}
 
@@ -1108,104 +1441,39 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	/** 从宿主 storage 读取未发送的草稿请求 */
-	static getTempConfigFromStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-	): Partial<GenerateVideoRequest> | undefined {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage) return undefined
-		const storage = methods.getStorage()
-		return storage?.tempVideoConfigs?.[elementId]
-	}
-
-	/** 持久化草稿请求（提示词、模型、参考图等） */
-	static saveTempConfigToStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-		config: Partial<GenerateVideoRequest>,
-	): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage() || {}
-		const tempVideoConfigs = storage.tempVideoConfigs || {}
-		tempVideoConfigs[elementId] = config
-
-		methods.saveStorage({
-			...storage,
-			tempVideoConfigs,
-		})
-	}
-
-	/** 删除该元素在 storage 中的草稿 */
-	static clearTempConfigFromStorage(canvas: BaseElement["canvas"], elementId: string): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage()
-		if (!storage?.tempVideoConfigs) return
-
-		const tempVideoConfigs = { ...storage.tempVideoConfigs }
-		delete tempVideoConfigs[elementId]
-
-		methods.saveStorage({
-			...storage,
-			tempVideoConfigs,
-		})
-	}
-
-	static getModeInputDraftsFromStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-	): StoredVideoModeDraftsMap | undefined {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage) return undefined
-		const storage = methods.getStorage()
-		return storage?.tempVideoModeDrafts?.[elementId]
-	}
-
-	static saveModeInputDraftsToStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-		drafts: StoredVideoModeDraftsMap,
-	): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage() || {}
-		const tempVideoModeDrafts = { ...(storage.tempVideoModeDrafts || {}) }
-		const hasAnyDraft = Object.keys(drafts).length > 0
-		if (hasAnyDraft) {
-			tempVideoModeDrafts[elementId] = drafts
-		} else {
-			delete tempVideoModeDrafts[elementId]
-		}
-
-		methods.saveStorage({
-			...storage,
-			tempVideoModeDrafts,
-		})
-	}
-
-	static clearModeInputDraftsFromStorage(canvas: BaseElement["canvas"], elementId: string): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage()
-		if (!storage?.tempVideoModeDrafts) return
-
-		const tempVideoModeDrafts = { ...storage.tempVideoModeDrafts }
-		delete tempVideoModeDrafts[elementId]
-
-		methods.saveStorage({
-			...storage,
-			tempVideoModeDrafts,
-		})
-	}
-
 	public getRenderName(): string {
 		return this.getText("video.defaultName", "视频生成器")
+	}
+
+	private getVideoContent(): VideoElementContent | undefined {
+		return this.getActiveContent<VideoElementContent>()
+	}
+
+	private hasActiveGeneration(contentId?: string): boolean {
+		return (
+			this.canvas.generationRuntimeManager?.hasActiveGeneration?.(this.data.id, contentId) ??
+			this.isGenerating
+		)
+	}
+
+	private hasPendingVideoGeneration(contentId = this.getVideoContent()?.contentId): boolean {
+		return this.isVideoGenerationPending(contentId)
+	}
+
+	private getVideoSrc(): string | undefined {
+		return this.getVideoContent()?.src
+	}
+
+	private getVideoStatus(): VideoElementContent["status"] {
+		return this.getVideoContent()?.status
+	}
+
+	private getVideoErrorMessage(): string | undefined {
+		return this.getVideoContent()?.errorMessage
+	}
+
+	private getVideoRequest(): GenerateVideoRequest | undefined {
+		return this.getVideoContent()?.generateVideoRequest
 	}
 
 	/** 内联预览播放（必要时先 acquire 会话） */
@@ -1215,6 +1483,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		if (this.renderer.hasAttachedPlayback()) {
+			this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 			this.renderer.play()
 			return
 		}
@@ -1231,6 +1500,17 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.pause()
 	}
 
+	/** 替换开始时暂停内联与全屏 consumer，但不销毁现有资源。 */
+	public pauseForReplacement(): void {
+		this.pausePreview()
+		this.canvas.videoPlaybackManager
+			.getVideoElement(this.getInlinePlaybackConsumerId())
+			?.pause()
+		this.canvas.videoPlaybackManager
+			.getVideoElement(this.getFullscreenPlaybackConsumerId())
+			?.pause()
+	}
+
 	/** 播放/暂停切换（受 canTogglePlayback 约束） */
 	public togglePreview(): void {
 		if (!this.canTogglePlayback()) {
@@ -1238,6 +1518,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		if (this.renderer.hasAttachedPlayback()) {
+			if (this.renderer.isPaused()) {
+				this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
+			}
 			this.renderer.toggle()
 			return
 		}
@@ -1247,73 +1530,30 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 已有成片且解码出预览后可交互播放 */
 	public canTogglePlayback(): boolean {
-		return !!this.data.src && this.renderer.hasPreview() && !this.isInlinePlaybackPending
-	}
-
-	/** 更新内存与 storage 中的草稿请求 */
-	public saveTempGenerateVideoRequest(request: Partial<GenerateVideoRequest>): void {
-		this.tempGenerateVideoRequest = request
-		VideoElement.saveTempConfigToStorage(this.canvas, this.data.id, request)
-	}
-
-	/** 当前草稿请求（未发送生成前） */
-	public getTempGenerateVideoRequest(): Partial<GenerateVideoRequest> | undefined {
-		return this.tempGenerateVideoRequest
-	}
-
-	/** 各互斥 input_mode 下的参考/首尾帧暂存（刷新或重挂载后恢复） */
-	public getModeInputDrafts(): StoredVideoModeDraftsMap | undefined {
-		return this.modeInputDrafts
-	}
-
-	public saveModeInputDrafts(drafts: StoredVideoModeDraftsMap): void {
-		this.modeInputDrafts = Object.keys(drafts).length > 0 ? drafts : undefined
-		VideoElement.saveModeInputDraftsToStorage(this.canvas, this.data.id, drafts)
-	}
-
-	/** 清除草稿（内存 + storage） */
-	public clearTempGenerateVideoRequest(): void {
-		this.tempGenerateVideoRequest = undefined
-		this.modeInputDrafts = undefined
-		VideoElement.clearTempConfigFromStorage(this.canvas, this.data.id)
-		VideoElement.clearModeInputDraftsFromStorage(this.canvas, this.data.id)
-	}
-
-	/** 生成成功后去掉草稿中的 prompt，保留模型等字段 */
-	public clearTempGenerateVideoRequestPrompt(): void {
-		if (this.tempGenerateVideoRequest) {
-			const { prompt, ...rest } = this.tempGenerateVideoRequest
-			void prompt
-			this.tempGenerateVideoRequest = rest
-			VideoElement.saveTempConfigToStorage(this.canvas, this.data.id, rest)
-		}
+		return !!this.getVideoSrc() && this.renderer.hasPreview() && !this.isInlinePlaybackPending
 	}
 
 	/** 追加一张参考图/帧（去重 path），并预热图片缓存 */
 	public saveReferenceImageInfo(fileInfo: UploadFileResponse): void {
-		const exists = this.referenceImageInfos.some((info) => info.path === fileInfo.path)
-		if (!exists) {
-			this.canvas.imageResourceManager.loadResource(fileInfo.path)
-			this.referenceImageInfos.push(fileInfo)
-		}
+		this.referenceImageInfos = appendReferenceImageInfos(
+			this.canvas,
+			this.referenceImageInfos,
+			[fileInfo],
+		)
 	}
 
 	/** 批量追加参考图信息（去重） */
 	public saveReferenceImageInfos(fileInfos: UploadFileResponse[]): void {
-		const existingPaths = new Set(this.referenceImageInfos.map((info) => info.path))
-		const newInfos = fileInfos.filter((info) => !existingPaths.has(info.path))
-		newInfos.forEach((info) => {
-			this.canvas.imageResourceManager.loadResource(info.path)
-		})
-		this.referenceImageInfos.push(...newInfos)
+		this.referenceImageInfos = appendReferenceImageInfos(
+			this.canvas,
+			this.referenceImageInfos,
+			fileInfos,
+		)
 	}
 
 	/** 覆盖参考图列表并广播 referenceImages:changed */
 	public setReferenceImageInfos(fileInfos: UploadFileResponse[]): void {
-		fileInfos.forEach((info) => {
-			this.canvas.imageResourceManager.loadResource(info.path)
-		})
-		this.referenceImageInfos = fileInfos
+		this.referenceImageInfos = replaceReferenceImageInfos(this.canvas, fileInfos)
 		this.canvas.eventEmitter.emit({
 			type: "referenceImages:changed",
 			data: { elementId: this.data.id },
@@ -1327,7 +1567,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 按 path 移除一项并广播变更 */
 	public removeReferenceImageInfo(path: string): void {
-		this.referenceImageInfos = this.referenceImageInfos.filter((info) => info.path !== path)
+		this.referenceImageInfos = removeReferenceImageInfosByPath(
+			this.canvas,
+			this.referenceImageInfos,
+			path,
+		)
 		this.canvas.eventEmitter.emit({
 			type: "referenceImages:changed",
 			data: { elementId: this.data.id },

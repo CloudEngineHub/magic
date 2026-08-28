@@ -39,6 +39,12 @@ describe("findRawAudioFile", () => {
 		expect(findRawAudioFile(list)).toBeNull()
 	})
 
+	it("recognizes raw audio files", () => {
+		const list = [{ file_id: "raw-audio", file_name: "recording.raw", file_extension: "raw" }]
+
+		expect(findRawAudioFile(list)?.file_id).toBe("raw-audio")
+	})
+
 	it("falls back when preferred id points to a hidden audio file", () => {
 		const list = [
 			{

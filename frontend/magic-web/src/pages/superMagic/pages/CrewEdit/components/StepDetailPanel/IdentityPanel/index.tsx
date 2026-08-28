@@ -13,6 +13,7 @@ import {
 	IdentityPromptPanel,
 } from "./components"
 import { CREW_PANEL_IDS } from "./constants"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 const CREWDO_LOGO_SIZE = 50
 
@@ -37,6 +38,8 @@ function IdentityPanel() {
 	}
 	const globalConfig = globalConfigStore.globalConfig
 	const isConversationLocked = conversation.isConversationLocked
+	const isReadOnly = isReadOnlyProject(conversation.selectedProject?.user_role)
+	const isDisabled = isConversationLocked || isReadOnly
 	const crewdoLogoUrl = globalConfig?.minimal_logo
 		? getAvatarUrl(globalConfig.minimal_logo, CREWDO_LOGO_SIZE)
 		: ""
@@ -49,20 +52,21 @@ function IdentityPanel() {
 	}, [])
 
 	useEffect(() => {
-		if (isConversationLocked) setPromptOpen(false)
-	}, [isConversationLocked])
+		if (isDisabled) setPromptOpen(false)
+	}, [isDisabled])
 
 	const openPrompt = useCallback(() => {
-		if (isConversationLocked) return
+		if (isDisabled) return
 		setPromptOpen(true)
-	}, [isConversationLocked])
+	}, [isDisabled])
 
 	const savePrompt = useCallback(
 		(value: string) => {
+			if (isDisabled) return
 			void identity.savePrompt(value)
 			setPromptOpen(false)
 		},
-		[identity],
+		[identity, isDisabled],
 	)
 
 	const closePrompt = useCallback(() => {
@@ -112,10 +116,7 @@ function IdentityPanel() {
 
 						<div className="relative z-[-1] flex w-[400px] flex-col gap-2 overflow-hidden rounded-3xl border border-border bg-white/30 px-4 pb-4 pt-12">
 							<div className="absolute left-1/2 top-[19px] h-[10px] w-[100px] -translate-x-1/2 rounded-full bg-black" />
-							<IdentityCardContent
-								onOpenPrompt={openPrompt}
-								disabled={isConversationLocked}
-							/>
+							<IdentityCardContent onOpenPrompt={openPrompt} disabled={isDisabled} />
 						</div>
 					</>
 				)}
@@ -128,7 +129,7 @@ function IdentityPanel() {
 						onClose={closePrompt}
 						initialValue={member.prompt ?? ""}
 						onSave={savePrompt}
-						disabled={isConversationLocked}
+						disabled={isDisabled}
 					/>,
 					portalContainer,
 				)}

@@ -4,6 +4,7 @@ import type { CanvasDesignRef } from "../../../public/props"
 import type { CanvasDocument, Marker, PaddingInsetConfig } from "../../../runtime/document/types"
 import { toPlainObject } from "../../../runtime/shared/ids"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 
 const RESOURCE_REFRESH_CONCURRENCY = 3
 
@@ -88,10 +89,14 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				// 兼容 useImmer 创建的 Proxy 对象，转换为普通对象
 				const plainData = toPlainObject(data)
 				if (options?.mode === "replace") {
-					canvas.loadDocument(plainData)
+					canvas.loadDocument(plainData, {
+						elementDetailsProvenance: options.elementDetailsProvenance,
+					})
 				} else {
 					// 使用智能差异更新，只更新变化的元素，保留当前状态
-					canvas.loadDocumentSmart(plainData)
+					canvas.loadDocumentSmart(plainData, {
+						elementDetailsProvenance: options?.elementDetailsProvenance,
+					})
 					// 立即记录历史，支持撤销到更新前的状态
 					canvas.historyManager.recordHistoryImmediate()
 				}
@@ -107,6 +112,19 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 					resources,
 					RESOURCE_REFRESH_CONCURRENCY,
 					async (resource) => {
+						if (resource.mediaType === "audio") {
+							canvas.audioPlaybackManager.releaseByPath(resource.path)
+							const refreshed = await canvas.audioResourceManager.refresh(
+								resource.path,
+							)
+							if (refreshed) {
+								canvas.visibilityManager.invalidateAudioLoadRequest(
+									resource.path,
+									"host-refresh",
+								)
+							}
+							return
+						}
 						if (resource.mediaType === "video") {
 							return canvas.videoResourceManager.refreshResource(resource.path)
 						}
@@ -138,10 +156,9 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				const elementInstance = canvas.elementManager.getElementInstance(elementId)
 				if (elementInstance && elementInstance instanceof ImageElementClass) {
 					const imageData = elementInstance.getData()
-					if (!imageData.src) return null
-					const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(
-						imageData.src,
-					)
+					const active = getActiveImageContent(imageData)
+					if (!active.src) return null
+					const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(active.src)
 					return ossInfo?.ossSrc ?? null
 				}
 				return null
@@ -152,9 +169,10 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				if (!(elementInstance instanceof ImageElementClass)) return null
 
 				const imageData = elementInstance.getData()
-				if (!imageData.src) return null
+				const active = getActiveImageContent(imageData)
+				if (!active.src) return null
 
-				const resource = await canvas.imageResourceManager.getResource(imageData.src, {
+				const resource = await canvas.imageResourceManager.getResource(active.src, {
 					variant: "full",
 				})
 				if (!resource) return null

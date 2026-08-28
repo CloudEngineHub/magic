@@ -3,9 +3,10 @@
 通过浏览器截图和视觉理解技术分析网页内容
 """
 
-from app.i18n import i18n
 import asyncio
 import re
+import stat
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -16,11 +17,23 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import num_tokens_from_string, truncate_text_by_token
-from app.core.entity.message.server_message import ToolDetail, DisplayType, FileContent
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
+from app.service.browser.browser_config_adapter import BrowserConfigAdapter
+from app.service.browser.workspace_page_loader import load_workspace_page
 from app.tools.core import BaseToolParams, tool
+from app.tools.visual_understanding import VisualUnderstanding, VisualUnderstandingParams
 from app.tools.workspace_tool import WorkspaceTool
-from magic_use.magic_browser import MagicBrowser, MagicBrowserConfig
-from app.tools.use_browser_operations.content import ContentOperations, VisualQueryParams
+from app.utils.async_file_utils import (
+    async_close_fd,
+    async_exists,
+    async_mkdir,
+    async_mkstemp,
+    async_stat,
+    async_unlink,
+    async_write_bytes,
+)
+from magic_use import BrowserClient, create_browser
 
 logger = get_logger(__name__)
 
@@ -35,6 +48,24 @@ Webpage target, can be local HTML file path (relative to working directory) or r
         ...,
         description="""<!--zh: 关于网页内容的问题或分析要求，例如：'描述这个网页的布局和主要内容'、'分析网页的设计风格'等。工具会自动将页面HTML代码作为参考信息提供给AI大模型-->
 Question or analysis requirements about webpage content, e.g., 'Describe the layout and main content of this webpage', 'Analyze the design style of webpage', etc. Tool will automatically provide page HTML code as reference information to AI LLM"""
+    )
+    viewport_width: int | None = Field(
+        default=None,
+        gt=0,
+        description="""<!--zh: 可选的 CSS 视口宽度。固定画布页面应传入幻灯片画布宽度。-->
+Optional CSS viewport width. Set it to the slide canvas width for fixed-canvas pages.""",
+    )
+    viewport_height: int | None = Field(
+        default=None,
+        gt=0,
+        description="""<!--zh: 可选的 CSS 视口高度。固定画布页面应传入幻灯片画布高度。-->
+Optional CSS viewport height. Set it to the slide canvas height for fixed-canvas pages.""",
+    )
+    device_scale_factor: float | None = Field(
+        default=None,
+        gt=0,
+        description="""<!--zh: 可选的设备像素比。需要按 CSS 像素精确截取幻灯片时使用 1。-->
+Optional device scale factor. Use 1 for exact CSS-pixel slide screenshots.""",
     )
 
     @field_validator('target')
@@ -127,21 +158,22 @@ class VisualUnderstandingWebpage(WorkspaceTool[VisualUnderstandingWebpageParams]
         except Exception:
             return False
 
-    def _prepare_file_url(self, file_path: str) -> str:
-        """将本地文件路径转换为file:// URL"""
-        # 确保路径是绝对路径
-        if not Path(file_path).is_absolute():
-            file_path = str(self.base_dir / file_path)
-
-        # 转换为file:// URL
-        file_url = Path(file_path).as_uri()
-        logger.debug(f"本地文件转换为URL: {file_path} -> {file_url}")
-        return file_url
-
-    async def _create_browser(self) -> MagicBrowser:
+    async def _create_browser(
+        self,
+        *,
+        viewport_width: int | None,
+        viewport_height: int | None,
+        device_scale_factor: float | None,
+    ) -> BrowserClient:
         """创建浏览器实例"""
         # 创建适合截图的浏览器实例
-        browser = await MagicBrowser.create_for_scraping()
+        config = await BrowserConfigAdapter.build_playwright(
+            str(self.base_dir),
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            device_scale_factor=device_scale_factor,
+        )
+        browser = await create_browser(config)
         logger.debug("创建浏览器实例用于网页视觉理解")
         return browser
 
@@ -155,51 +187,46 @@ class VisualUnderstandingWebpage(WorkspaceTool[VisualUnderstandingWebpageParams]
         browser = None
         try:
             # 创建浏览器实例
-            browser = await self._create_browser()
+            browser = await self._create_browser(
+                viewport_width=params.viewport_width,
+                viewport_height=params.viewport_height,
+                device_scale_factor=params.device_scale_factor,
+            )
 
-            # 准备目标URL
+            pages = await browser.list_pages()
+            if not pages:
+                return ToolResult.error("无法获取活跃页面ID")
+            page_id = pages[0].id
+
+            # 准备并加载目标页面
             if self._is_url(target):
                 target_url = target
+                await browser.navigate(page_id, target_url)
                 logger.debug(f"使用远程URL: {target_url}")
             else:
-                # 验证本地文件是否存在
                 local_file_path = self.base_dir / target
-                if not local_file_path.exists():
+                if not await async_exists(local_file_path):
                     return ToolResult.error(f"本地文件不存在: {target}")
-                if not local_file_path.is_file():
+                if not stat.S_ISREG((await async_stat(local_file_path)).st_mode):
                     return ToolResult.error(f"指定路径不是文件: {target}")
-
-                target_url = self._prepare_file_url(str(local_file_path))
-                logger.debug(f"使用本地文件: {target} -> {target_url}")
-
-            # 导航到目标页面
-            logger.debug(f"导航到页面: {target_url}")
-            goto_result = await browser.goto(page_id=None, url=target_url)
-
-            if hasattr(goto_result, 'error'):
-                return ToolResult.error(f"页面导航失败: {goto_result.error}")
+                target_url = await load_workspace_page(
+                    browser,
+                    page_id,
+                    Path(self.base_dir),
+                    local_file_path,
+                )
+                logger.debug(f"使用自包含工作区页面: {target} -> {target_url}")
 
             # 等待页面加载完成
             await asyncio.sleep(2)
 
-            # 获取活跃页面ID
-            page_id = await browser.get_active_page_id()
-            if not page_id:
-                return ToolResult.error("无法获取活跃页面ID")
-
             # 获取页面HTML内容作为参考信息
             html_content = ""
             try:
-                # 通过浏览器获取页面HTML
-                html_result = await browser.evaluate_js(
-                    page_id=page_id,
-                    js_code="document.documentElement.outerHTML"
-                )
-                # Check if the result is successful and has content
-                if hasattr(html_result, 'success') and html_result.success and hasattr(html_result, 'result'):
-                    raw_html = str(html_result.result)
+                html_result = await browser.evaluate(page_id, "document.documentElement.outerHTML")
+                if html_result:
+                    raw_html = str(html_result)
 
-                    # 计算token数量并截断（限制16K token）
                     token_count = num_tokens_from_string(raw_html)
                     logger.debug(f"原始HTML token数量: {token_count}")
 
@@ -209,9 +236,6 @@ class VisualUnderstandingWebpage(WorkspaceTool[VisualUnderstandingWebpageParams]
                             logger.debug("HTML内容已截断以控制在16K token内")
                     else:
                         html_content = raw_html
-
-                elif hasattr(html_result, 'error'):
-                    logger.warning(f"获取页面HTML失败: {html_result.error}")
                 else:
                     logger.warning("无法获取页面HTML内容")
 
@@ -230,11 +254,22 @@ class VisualUnderstandingWebpage(WorkspaceTool[VisualUnderstandingWebpageParams]
 {query}"""
                 logger.debug("已将HTML内容添加到查询中作为参考信息")
 
-            # 通过 ContentOperations 进行视觉查询
-            logger.debug(f"执行增强视觉查询")
-            content_ops = ContentOperations()
-            visual_params = VisualQueryParams(page_id=page_id, query=enhanced_query)
-            visual_result = await content_ops.visual_query(browser, visual_params)
+            logger.debug("执行增强视觉查询")
+            screenshot = await browser.screenshot(page_id)
+            temp_dir = Path(tempfile.gettempdir()) / "super-magic" / "browser-visual"
+            await async_mkdir(temp_dir, parents=True, exist_ok=True)
+            fd, screenshot_path = await async_mkstemp(suffix=".png", prefix="webpage-", dir=temp_dir)
+            await async_close_fd(fd)
+            try:
+                await async_write_bytes(screenshot_path, screenshot.image)
+                visual_result = await VisualUnderstanding().execute_purely(
+                    VisualUnderstandingParams(images=[screenshot_path], query=enhanced_query),
+                    include_download_info_in_content=False,
+                    include_dimensions_info_in_content=False,
+                    skip_format_validation=True,
+                )
+            finally:
+                await async_unlink(screenshot_path)
 
             if not visual_result.ok:
                 return ToolResult.error(f"视觉分析失败: {visual_result.content}")

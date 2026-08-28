@@ -487,6 +487,16 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
      */
     public function testRun(Authenticatable $authorization, MagicFlowEntity $magicFlowEntity, array $triggerConfig): array
     {
+        $flowDataIsolation = $this->createFlowDataIsolation($authorization);
+        $persistedMagicFlow = $this->getFlowAndValidateOperation(
+            $flowDataIsolation,
+            $magicFlowEntity->getCode(),
+            'edit'
+        );
+        if ($magicFlowEntity->getType() !== $persistedMagicFlow->getType()) {
+            ExceptionBuilder::throw(FlowErrorCode::ValidateFailed, 'flow.executor.unsupported_flow_type');
+        }
+
         // 获取助理信息
         if ($magicFlowEntity->getType() == Type::Main) {
             $magicAgentEntity = $this->magicAgentDomainService->getByFlowCode($magicFlowEntity->getCode());
@@ -501,7 +511,6 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         if ($triggerType === null) {
             ExceptionBuilder::throw(FlowErrorCode::ValidateFailed, 'flow.common.not_found', ['label' => 'trigger_type']);
         }
-        $flowDataIsolation = $this->createFlowDataIsolation($authorization);
         $magicFlowEntity->setOrganizationCode($flowDataIsolation->getCurrentOrganizationCode());
 
         $result = [

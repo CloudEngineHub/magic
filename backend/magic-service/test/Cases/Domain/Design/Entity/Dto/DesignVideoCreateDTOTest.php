@@ -16,6 +16,97 @@ use Throwable;
  */
 class DesignVideoCreateDTOTest extends TestCase
 {
+    public function testBase64ReferenceImageIsAccepted(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'video-base64-image',
+            'model_id' => 'doubao-seedance-2-0-fast-260128',
+            'prompt' => '大家在看镜头',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                'reference_images' => [[
+                    'source_type' => 'base64',
+                    'base64_data' => base64_encode('mock-image'),
+                    'mime_type' => 'image/png',
+                    'type' => 'asset',
+                ]],
+            ],
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame('base64', $dto->getReferenceImages()[0]['source_type']);
+    }
+
+    public function testBase64FrameIsAccepted(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'video-base64-frame',
+            'model_id' => 'doubao-seedance-2-0-fast-260128',
+            'prompt' => '大家在看镜头',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                'frames' => [[
+                    'role' => 'start',
+                    'source_type' => 'base64',
+                    'base64_data' => base64_encode('mock-frame'),
+                    'mime_type' => 'image/jpeg',
+                ]],
+            ],
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame('base64', $dto->getFrames()[0]['source_type']);
+    }
+
+    public function testBase64ImageCannotMixUri(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'video-base64-conflict',
+            'model_id' => 'doubao-seedance-2-0-fast-260128',
+            'prompt' => '大家在看镜头',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                'reference_images' => [[
+                    'uri' => '/2121/images/reference.png',
+                    'source_type' => 'base64',
+                    'base64_data' => base64_encode('mock-image'),
+                    'mime_type' => 'image/png',
+                ]],
+            ],
+        ]);
+
+        $this->expectException(Throwable::class);
+
+        $dto->valid();
+    }
+
+    public function testInvalidBase64ImageIsRejected(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'video-invalid-base64',
+            'model_id' => 'doubao-seedance-2-0-fast-260128',
+            'prompt' => '大家在看镜头',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                'reference_images' => [[
+                    'source_type' => 'base64',
+                    'base64_data' => 'not-valid-base64',
+                    'mime_type' => 'image/png',
+                ]],
+            ],
+        ]);
+
+        $this->expectException(Throwable::class);
+
+        $dto->valid();
+    }
+
     public function testInputsVideoIsRejected(): void
     {
         $dto = new DesignVideoCreateDTO([
@@ -243,5 +334,54 @@ class DesignVideoCreateDTOTest extends TestCase
         $this->expectException(Throwable::class);
 
         $dto->validForEstimate();
+    }
+
+    public function testCanvasCompositionAcceptsWorkspaceFileListsWithoutTopicId(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'composition-1',
+            'generation_type' => 'canvas_composition',
+            'file_dir' => '/canvas/videos/',
+            'generation' => [
+                'aspect_ratio' => '9:16',
+                'resolution' => '480p',
+            ],
+            'composition' => [
+                'videos' => [
+                    ['path' => '/canvas/videos/a.mp4'],
+                    ['path' => '/canvas/videos/b.mp4'],
+                ],
+                'audios' => [
+                    ['path' => '/canvas/audios/b.mp3'],
+                ],
+            ],
+        ]);
+
+        $dto->validForCanvasComposition();
+
+        $this->assertCount(2, $dto->getComposition()['videos']);
+        $this->assertSame('/canvas/audios/b.mp3', $dto->getComposition()['audios'][0]['path']);
+    }
+
+    public function testCanvasCompositionRejectsMultipleAudioFiles(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'composition-2',
+            'generation_type' => 'canvas_composition',
+            'file_dir' => '/canvas/videos/',
+            'composition' => [
+                'videos' => [['path' => '/canvas/videos/a.mp4']],
+                'audios' => [
+                    ['path' => '/canvas/audios/a.mp3'],
+                    ['path' => '/canvas/audios/b.mp3'],
+                ],
+            ],
+        ]);
+
+        $this->expectException(Throwable::class);
+
+        $dto->validForCanvasComposition();
     }
 }

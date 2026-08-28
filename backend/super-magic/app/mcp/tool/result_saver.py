@@ -1,13 +1,9 @@
-"""MCP 工具结果文件落盘
-
-提供将 MCP 工具执行结果异步保存到文件的功能，支持：
-- 用户指定输出绝对路径（交付给用户的产物，建议放在工作区内）
-- 未指定且结果超阈值时自动保存到运行时目录（用户不可见）
-- 文件名冲突时自动追加时间戳
-"""
+"""MCP 工具结果的临时落盘与显式持久化。"""
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +11,22 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 
 from app.path_manager import PathManager
-from app.utils.async_file_utils import async_exists, async_mkdir, async_write_json
+from app.utils.async_file_utils import (
+    async_chmod,
+    async_close_fd,
+    async_mkdir,
+    async_mkstemp,
+    async_realpath,
+    async_stat,
+    async_unlink,
+    async_write_json,
+)
+from app.utils.runtime_storage import (
+    RuntimeEvictionPolicy,
+    ensure_runtime_directory,
+    evict_runtime_files,
+    trigger_opportunistic_cleanup,
+)
 
 logger = get_logger(__name__)
 
@@ -24,6 +35,51 @@ RESULT_SIZE_THRESHOLD = 8 * 1024
 
 # 未指定输出路径时默认使用的运行时子目录名 (.runtime/<name>/)
 MCP_OUTPUT_DIR_NAME = "mcp_outputs"
+
+_MCP_OUTPUT_EVICTION_POLICY = RuntimeEvictionPolicy(
+    max_entries=128,
+    target_entries=96,
+    max_total_bytes=256 * 1024 * 1024,
+    target_total_bytes=192 * 1024 * 1024,
+    max_age_seconds=7 * 24 * 60 * 60,
+)
+
+
+class McpOutputStorageScope(StrEnum):
+    """MCP 落盘结果的生命周期范围。"""
+
+    TEMPORARY = "temporary"
+    WORKSPACE = "workspace"
+    EXTERNAL = "external"
+
+
+@dataclass(frozen=True, slots=True)
+class McpOutputMetadata:
+    output_file_path: str
+    storage_scope: McpOutputStorageScope
+    file_size: int
+    tool_name: str
+    server_name: str
+    timestamp: str
+    status: str
+
+    def to_data(self) -> dict[str, str | int]:
+        return {
+            "output_file_path": self.output_file_path,
+            "storage_scope": self.storage_scope.value,
+            "file_size": self.file_size,
+            "tool_name": self.tool_name,
+            "server_name": self.server_name,
+            "timestamp": self.timestamp,
+            "status": self.status,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedOutputPath:
+    path: Path
+    storage_scope: McpOutputStorageScope
+
 
 def should_save_to_file(result: ToolResult, output_file_path: str) -> bool:
     """判断是否应该将结果保存到文件
@@ -44,23 +100,14 @@ async def save_result_to_file(
     result: ToolResult,
     output_file_path: str,
     tool_original_name: str,
-    tool_full_name: str,
     server_name: str,
+    workspace_dir: Path | None,
 ) -> ToolResult:
-    """将工具结果异步保存到文件，返回包含文件信息的新 ToolResult
-
-    Args:
-        result: 工具执行结果
-        output_file_path: 用户指定的相对路径（相对于 workspace），空字符串使用默认路径
-        tool_original_name: 工具原始名称（不带前缀）
-        tool_full_name: 工具完整名称（带前缀）
-        server_name: 所属 MCP 服务器名称
-
-    Returns:
-        ToolResult: 包含文件路径和说明的 JSON 字符串结果
-    """
-    file_path, reason = await _resolve_output_path(
-        output_file_path, tool_full_name
+    """保存成功结果，并返回可供模型和前端分别消费的文件信息。"""
+    resolved_output = await _resolve_output_path(
+        output_file_path,
+        tool_original_name,
+        workspace_dir,
     )
 
     parsed_content = _try_parse_json(result.content)
@@ -75,68 +122,127 @@ async def save_result_to_file(
         "result": parsed_content,
     }
 
-    await async_write_json(file_path, output_data, ensure_ascii=False, indent=2)
-    logger.info(f"MCP tool result saved to file: {file_path}")
+    try:
+        await async_write_json(resolved_output.path, output_data, ensure_ascii=False, indent=2)
+        await async_chmod(resolved_output.path, 0o600)
+    except BaseException:
+        if resolved_output.storage_scope == McpOutputStorageScope.TEMPORARY:
+            try:
+                await async_unlink(resolved_output.path)
+            except BaseException as cleanup_error:
+                logger.warning(
+                    "Failed to clean up incomplete MCP output file: path=%s, error=%s",
+                    resolved_output.path,
+                    cleanup_error,
+                )
+        raise
+    logger.info("MCP tool result saved to file: %s", resolved_output.path)
 
-    file_info = {
-        "output_file_path": str(file_path),
-        "reason": reason,
-        "file_size": _get_result_size(result),
-        "tool_name": tool_original_name,
-        "server_name": server_name,
-        "timestamp": timestamp,
-        "status": "success" if result.ok else "failed",
-    }
+    file_stat = await async_stat(resolved_output.path)
+    metadata = McpOutputMetadata(
+        output_file_path=str(resolved_output.path),
+        storage_scope=resolved_output.storage_scope,
+        file_size=file_stat.st_size,
+        tool_name=tool_original_name,
+        server_name=server_name,
+        timestamp=timestamp,
+        status="success" if result.ok else "failed",
+    )
 
     return ToolResult(
-        content=json.dumps(file_info, ensure_ascii=False, indent=2),
+        content=_build_model_content(metadata),
         ok=result.ok,
+        data=metadata.to_data(),
+        extra_info=result.extra_info,
+        system=result.system,
         name=result.name,
         execution_time=result.execution_time,
+        tool_call_id=result.tool_call_id,
+        use_custom_remark=result.use_custom_remark,
     )
 
 
 async def _resolve_output_path(
     output_file_path: str,
-    tool_full_name: str,
-) -> tuple[Path, str]:
-    """解析输出文件路径，返回 (绝对路径, 原因说明)
-
-    - 指定 output_file_path：必须是绝对路径，直接使用（建议放在工作区内供交付）
-    - 未指定或不是绝对路径：默认落盘到运行时目录（.runtime/mcp_outputs），不对用户可见
-    """
+    tool_original_name: str,
+    workspace_dir: Path | None,
+) -> _ResolvedOutputPath:
+    """解析显式绝对路径或创建 `.runtime/mcp_outputs` 临时文件。"""
     if output_file_path.strip():
         candidate = Path(output_file_path.strip())
-        if candidate.is_absolute():
-            resolved = candidate.resolve()
-            await async_mkdir(resolved.parent, parents=True, exist_ok=True)
-            file_path = await _avoid_conflict(resolved)
-            return file_path, "User-specified output path; saved as a deliverable artifact."
-        logger.warning(
-            f"output_file_path must be an absolute path, got: {output_file_path}; "
-            "falling back to runtime directory"
-        )
+        if not candidate.is_absolute():
+            raise ValueError("output_file_path must be an absolute path.")
+        resolved = await async_realpath(candidate)
+        await async_mkdir(resolved.parent, parents=True, exist_ok=True)
+        storage_scope = await _classify_explicit_scope(resolved, workspace_dir)
+        return _ResolvedOutputPath(path=resolved, storage_scope=storage_scope)
 
+    output_dir = await ensure_runtime_directory(
+        PathManager.get_runtime_dir() / MCP_OUTPUT_DIR_NAME
+    )
+    fd, raw_path = await async_mkstemp(
+        suffix=".json",
+        prefix=f"{_clean_tool_name(tool_original_name)}-",
+        dir=output_dir,
+    )
+    await async_close_fd(fd)
+    return _ResolvedOutputPath(
+        path=Path(raw_path),
+        storage_scope=McpOutputStorageScope.TEMPORARY,
+    )
+
+
+async def _classify_explicit_scope(
+    output_path: Path,
+    workspace_dir: Path | None,
+) -> McpOutputStorageScope:
+    if workspace_dir is None:
+        return McpOutputStorageScope.EXTERNAL
+    resolved_workspace = await async_realpath(workspace_dir)
+    if output_path == resolved_workspace or resolved_workspace in output_path.parents:
+        return McpOutputStorageScope.WORKSPACE
+    return McpOutputStorageScope.EXTERNAL
+
+
+def trigger_mcp_output_cleanup() -> None:
     output_dir = PathManager.get_runtime_dir() / MCP_OUTPUT_DIR_NAME
-    await async_mkdir(output_dir, parents=True, exist_ok=True)
-    filename = _generate_filename(tool_full_name)
-    file_path = await _avoid_conflict(output_dir / filename)
-    return file_path, "Output exceeded the size threshold; auto-persisted to the runtime directory (not visible to the user). Read the file when full content is needed."
+    trigger_opportunistic_cleanup(
+        "mcp_outputs",
+        lambda: evict_runtime_files(
+            output_dir,
+            policy=_MCP_OUTPUT_EVICTION_POLICY,
+            suffixes=(".json",),
+        ),
+    )
 
 
-async def _avoid_conflict(file_path: Path) -> Path:
-    """若文件已存在，在文件名后追加 UTC 时间戳避免覆盖"""
-    if not await async_exists(file_path):
-        return file_path
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return file_path.parent / f"{file_path.stem}_{timestamp}{file_path.suffix}"
+def _clean_tool_name(tool_name: str) -> str:
+    clean = "".join(
+        character
+        for character in (tool_name or "")
+        if character.isalnum() or character in "-_"
+    )
+    return (clean or "mcp")[:24]
 
 
-def _generate_filename(tool_name: str) -> str:
-    """生成输出文件名：{clean_tool_name}_{utc_timestamp}.json"""
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    clean = "".join(c for c in (tool_name or "") if c.isalnum() or c in "-_") or "mcp_tool"
-    return f"{clean}_{timestamp}.json"
+def _build_model_content(metadata: McpOutputMetadata) -> str:
+    if metadata.storage_scope == McpOutputStorageScope.TEMPORARY:
+        lifecycle = (
+            "This is a capacity-managed .runtime file. It may be deleted by later cleanup or when "
+            "the sandbox is rebuilt. To keep a future result, provide an absolute output_file_path "
+            "inside the current .workspace directory."
+        )
+    elif metadata.storage_scope == McpOutputStorageScope.WORKSPACE:
+        lifecycle = "This file is inside the current .workspace directory and is intended to persist."
+    else:
+        lifecycle = "This file is outside .workspace. Its persistence depends on that external path."
+    return (
+        "MCP tool execution succeeded and the full result was saved to a JSON file.\n\n"
+        f"Path: {metadata.output_file_path}\n"
+        f"Size: {metadata.file_size} bytes\n"
+        f"Storage scope: {metadata.storage_scope.value}\n\n"
+        f"{lifecycle}"
+    )
 
 
 def _get_result_size(result: ToolResult) -> int:

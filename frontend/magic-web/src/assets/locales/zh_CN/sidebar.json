@@ -7,6 +7,7 @@
 		"aiFinance": "AI 金融",
 		"aiSearch": "AI 搜索",
 		"apps": "应用",
+		"microApps": "微应用",
 		"more": "更多"
 	},
 	"audioRecordings": {
@@ -82,7 +83,7 @@
 		"nav": {
 			"apps": "应用",
 			"chats": "对话",
-			"magiClaw": "超级龙虾",
+			"magiClaw": "{{clawBrand}}",
 			"myCrew": "数字员工",
 			"recording": "录音与纪要",
 			"trash": "回收站",
@@ -119,6 +120,7 @@
 		"createDialog": {
 			"avatarLabel": "头像",
 			"basicInformationLabel": "基础信息",
+			"heading": "创建{{clawBrand}}",
 			"nameLabel": "名称",
 			"namePlaceholder": "输入 {{clawBrand}} 名称",
 			"removeUploadedAvatar": "删除已上传头像",
@@ -173,7 +175,7 @@
 			"stop": "停止",
 			"stopFailed": "停止失败，请稍后重试",
 			"stopSuccess": "停止成功",
-			"title": "我的超级龙虾",
+			"title": "我的{{clawBrand}}",
 			"upgradeAvailable": "有新版本可用",
 			"userGuide": "使用指南"
 		},
@@ -195,7 +197,7 @@
 		},
 		"features": {
 			"connect": {
-				"description": "无缝接入飞书、微信、钉钉等主流平台，打破应用边界，让超级龙虾随时随地都在你身边。",
+				"description": "无缝接入飞书、微信、钉钉等主流平台，打破应用边界，让 {{clawBrand}} 随时随地都在你身边。",
 				"title": "连接到任意平台，随时随地开聊"
 			},
 			"customization": {
@@ -208,6 +210,7 @@
 			}
 		},
 		"getStarted": "开始使用",
+		"heroDescription": "{{clawBrand}}是一个拥有鲜明个性与长期记忆的 AI 助手\n无需复杂设置，7×24 小时在线",
 		"heroLead": "超级",
 		"mobile": {
 			"createdByMe": "我创建的",
@@ -215,7 +218,7 @@
 			"moreActions": "更多操作",
 			"mySuperClaw": "我的 {{clawBrand}}"
 		},
-		"title": "超级龙虾",
+		"title": "{{clawBrand}}",
 		"titleAccent": "龙虾",
 		"workspace": {
 			"back": "返回",

@@ -1,4 +1,4 @@
-import { memo, useState, useMemo } from "react"
+import { memo, useLayoutEffect, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { Sparkles, ChevronDown } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -10,7 +10,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import { useAIEdit } from "@/pages/superMagic/components/Detail/components/PPTRender/hooks/useAIEdit"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ConditionalTooltip from "./ConditionalTooltip"
 import { TOOLBAR_Z_INDEX } from "../../constants/z-index"
 
@@ -33,6 +33,10 @@ function AIEditButton({
 }: AIEditButtonProps) {
 	const { t } = useTranslation("super")
 	const [dropdownOpen, setDropdownOpen] = useState(false)
+
+	useLayoutEffect(() => {
+		setDropdownOpen(false)
+	}, [fileId])
 
 	// Find current file from attachmentList
 	const currentFile = useMemo(() => {

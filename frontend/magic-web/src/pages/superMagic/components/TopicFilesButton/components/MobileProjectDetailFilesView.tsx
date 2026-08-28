@@ -6,7 +6,7 @@ import MobilePathBreadcrumb from "@/pages/superMagic/components/MobilePathBreadc
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"

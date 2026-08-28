@@ -43,11 +43,11 @@ vi.mock("@/opensource/components/business/MentionPanel/builtin-store", () => ({
 	},
 }))
 
-vi.mock("@tiptap/extension-suggestion", () => ({
+vi.mock("@/infrastructure/editors/tiptap/extension-suggestion", () => ({
 	Suggestion: vi.fn(() => ({})),
 }))
 
-vi.mock("@tiptap/core", () => ({
+vi.mock("@/infrastructure/editors/tiptap/core", () => ({
 	Node: {
 		create: vi.fn(() => ({
 			configure: vi.fn(),

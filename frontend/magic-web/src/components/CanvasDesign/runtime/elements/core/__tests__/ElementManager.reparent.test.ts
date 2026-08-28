@@ -39,7 +39,7 @@ function createHarness(options: {
 
 	Object.assign(manager as unknown as Record<string, unknown>, {
 		elements: elementMap,
-		temporaryElements: new Set<string>(),
+		temporaryElements: new Map(),
 		canvas: {
 			contentLayer,
 			permissionManager: {
@@ -77,6 +77,9 @@ function createRectangle(id: string, x: number, y: number): LayerElement {
 		width: 100,
 		height: 80,
 		zIndex: 2,
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+		contents: [{ contentId: `${id}-content` }],
 	}
 }
 
@@ -93,6 +96,9 @@ function createFrame(
 		y,
 		width: 400,
 		height: 300,
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+		contents: [{ contentId: `${id}-content` }],
 		children,
 	}
 }

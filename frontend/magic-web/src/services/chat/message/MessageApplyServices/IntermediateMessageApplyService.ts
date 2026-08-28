@@ -5,6 +5,7 @@ import {
 	RawMessage,
 	StartConversationInputMessage,
 	SuperMagicChunkMessage,
+	SuperMagicCheckpointRollbackMessage,
 	SuperMagicFileChangeMessage,
 	SuperMagicMessageQueueMessage,
 } from "@/types/chat/intermediate_message"
@@ -43,6 +44,11 @@ class IntermediateMessageApplyService {
 			case IntermediateMessageType.SuperMagicFileChange:
 				this.applySuperMagicFileChange(
 					message.seq as SeqResponse<SuperMagicFileChangeMessage>,
+				)
+				break
+			case IntermediateMessageType.SuperMagicCheckpointRollback:
+				this.applySuperMagicCheckpointRollback(
+					message.seq as SeqResponse<SuperMagicCheckpointRollbackMessage>,
 				)
 				break
 			default:
@@ -100,6 +106,11 @@ class IntermediateMessageApplyService {
 		projectAttachmentsChangeLog.intermediateReceived(seq)
 		pubsub.publish(PubSubEvents.Super_Magic_File_Change_Intermediate, seq)
 		projectAttachmentsChangeLog.intermediatePublished(seq)
+	}
+
+	applySuperMagicCheckpointRollback(seq: SeqResponse<SuperMagicCheckpointRollbackMessage>) {
+		// 保留完整 seq，消费方需要用 conversation_id 路由，并把外层 seq_id 仅作为事件身份。
+		pubsub.publish(PubSubEvents.Super_Magic_Checkpoint_Rollback, seq)
 	}
 }
 

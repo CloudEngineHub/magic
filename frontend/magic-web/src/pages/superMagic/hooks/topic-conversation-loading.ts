@@ -1,5 +1,6 @@
 import { isObject } from "lodash-es"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
+import type { SuperMagicStoreMessageNode } from "@/pages/superMagic/stores/types"
 import { MessageStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { projectVisibleMessagesByRevokedTail } from "@/pages/superMagic/utils/project-visible-messages-by-revoked-tail"
 
@@ -17,7 +18,7 @@ interface MessageNodeSnapshot<TStatus = unknown> {
 
 interface ResolveTopicConversationLoadingStateParams {
 	topicMessages: SuperMagicMessageItem[]
-	getMessageNode: (appMessageId?: string) => unknown
+	getMessageNode: (superMessageId?: string) => SuperMagicStoreMessageNode | undefined
 	getOptimisticStatus: (message?: SuperMagicMessageItem) => unknown
 }
 
@@ -55,7 +56,7 @@ export function resolveTopicConversationLoadingState<TStatus = unknown>({
 	const lastMessage = visibleTopicMessages[visibleTopicMessages.length - 1]
 	const lastMessageWithRole = findLastNonUserMessage(visibleTopicMessages)
 	const lastMessageNode = toMessageNodeSnapshot<TStatus>(
-		getMessageNode(lastMessageWithRole?.app_message_id),
+		getMessageNode(lastMessageWithRole?.super_message_id),
 	)
 
 	// Local optimistic user messages are transport state, not assistant generation.
@@ -77,7 +78,7 @@ export function resolveTopicConversationLoadingState<TStatus = unknown>({
 	}
 
 	// An active revoked tail is an edit state, not an assistant generation state.
-	if (lastMessage?.status === MessageStatus.REVOKED) {
+	if ((lastMessage?.imStatus ?? lastMessage?.status) === MessageStatus.REVOKED) {
 		return {
 			isLoading: false,
 			lastMessage,

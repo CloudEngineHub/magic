@@ -1,9 +1,15 @@
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum, type ImageElement } from "../../document/types"
+import {
+	getActiveContent,
+	getActiveImageContentId,
+	getContentById,
+} from "../../document/elementContent"
 import { isCanvasUIComponentNode } from "../../shared/dom/domGuards"
 import { calculateNodesRect } from "../../shared/ids"
 import { EraserRenderer, type EraserPoint, type EraserStroke } from "./EraserRenderer"
 import type { CanvasPointerInput } from "../input/index"
+import { ImageEditingSession } from "../image-editing/ImageEditingSession"
 
 export const MIN_RADIUS = 8
 export const MAX_RADIUS = 120
@@ -25,10 +31,11 @@ export class EraserManager {
 	private canvas: Canvas
 
 	private erasingElementId: string | null = null
+	private erasingContentId: string | null = null
 	private radius = medianRadius(MIN_RADIUS, MAX_RADIUS)
 	private strokes: EraserStroke[] = []
-	private originalNodeIndex: number | undefined = undefined
 	private eraserRenderer: EraserRenderer | null = null
+	private editingSession: ImageEditingSession | null = null
 
 	private escapeHandler?: () => void
 	private elementSelectHandler?: (event: { data: { elementIds: string[] } }) => void
@@ -176,6 +183,14 @@ export class EraserManager {
 
 	private emitEraserPosition(): void {
 		if (!this.erasingElementId) return
+		const sessionBounds = this.editingSession?.getContentBounds()
+		if (sessionBounds) {
+			this.canvas.eventEmitter.emit({
+				type: "eraser:position",
+				data: { elementId: this.erasingElementId, boundingRect: sessionBounds },
+			})
+			return
+		}
 
 		const adapter = this.canvas.elementManager.getNodeAdapter()
 		const nodes = adapter.getNodesForTransform([this.erasingElementId])
@@ -207,6 +222,7 @@ export class EraserManager {
 			type: "eraser:sessionUpdate",
 			data: {
 				elementId: this.erasingElementId,
+				contentId: this.erasingContentId ?? undefined,
 				radius: this.radius,
 				strokeCount: this.strokes.length,
 				canUndo: this.canUndo(),
@@ -347,14 +363,8 @@ export class EraserManager {
 		this.eraserRenderer.beginStroke(pointer)
 	}
 
-	public enterEraserMode(elementId: string): void {
-		if (this.canvas.cropManager.getCroppingElementId()) {
-			this.canvas.cropManager.cancelCrop()
-		}
-
-		if (this.erasingElementId && this.erasingElementId !== elementId) {
-			this.exitEraserMode(true)
-		}
+	public enterEraserMode(elementId: string, contentId?: string): void {
+		if (this.erasingElementId === elementId) return
 
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (!elementData || elementData.type !== ElementTypeEnum.Image) {
@@ -362,13 +372,21 @@ export class EraserManager {
 		}
 
 		const imageElement = elementData as ImageElement
+		if (contentId && getActiveImageContentId(imageElement) !== contentId) return
 		if ((imageElement.width ?? 0) <= 0 || (imageElement.height ?? 0) <= 0) {
 			return
 		}
 
+		this.canvas.imageEditingCoordinator.activate({
+			mode: "eraser",
+			elementId,
+			cancel: () => this.cancelEraser(),
+		})
+
 		this.canvas.selectionManager.deselectAll()
 
 		this.erasingElementId = elementId
+		this.erasingContentId = contentId ?? getActiveContent(imageElement)?.contentId ?? null
 		this.strokes = []
 		this.isPointerDown = false
 		this.isCursorVisible = false
@@ -376,22 +394,27 @@ export class EraserManager {
 		const { min, max } = this.getRadiusRange()
 		this.radius = medianRadius(min, max)
 
-		const elementInstance = this.canvas.elementManager.getElementInstance(elementId)
-		const node = elementInstance?.getNode()
-		if (node) {
-			const parent = node.getParent()
-			if (parent) {
-				this.originalNodeIndex = parent.children?.indexOf(node) ?? -1
-				node.moveToTop()
-			}
+		this.editingSession = new ImageEditingSession({ canvas: this.canvas, elementId })
+		if (!this.editingSession.mount()) {
+			this.editingSession = null
+			this.exitEraserMode(true)
+			return
 		}
 
-		this.eraserRenderer = new EraserRenderer({
-			canvas: this.canvas,
-			elementId,
-			manager: this,
-		})
-		this.eraserRenderer.render()
+		try {
+			this.eraserRenderer = new EraserRenderer({
+				canvas: this.canvas,
+				elementId,
+				manager: this,
+			})
+			if (!this.eraserRenderer.render()) {
+				this.exitEraserMode(true)
+				return
+			}
+		} catch (error) {
+			this.exitEraserMode(true)
+			throw error
+		}
 		this.canvas.cursorManager.enterEraserMode({
 			elementId,
 			radius: this.radius,
@@ -433,6 +456,7 @@ export class EraserManager {
 		}
 
 		const elementId = this.erasingElementId
+		const contentId = this.erasingContentId
 
 		this.removePositionListeners()
 		this.isPointerDown = false
@@ -444,23 +468,21 @@ export class EraserManager {
 		}
 		this.canvas.cursorManager.exitEraserMode()
 
-		if (this.originalNodeIndex !== undefined) {
-			const parentId = this.canvas.elementManager.findParentIdForElement(elementId)
-			if (parentId) {
-				this.canvas.elementManager.reorderChildrenInParentPublic(parentId)
-			} else {
-				this.canvas.elementManager.reorderTopLevelElementsPublic()
-			}
-			this.originalNodeIndex = undefined
-		}
-
 		this.erasingElementId = null
+		this.erasingContentId = null
 		this.strokes = []
+		this.editingSession?.destroy()
+		this.editingSession = null
+		this.canvas.imageEditingCoordinator.deactivate("eraser", elementId)
 		this.canvas.selectionManager.select(elementId, false)
 
 		this.canvas.eventEmitter.emit({
 			type: "eraser:exit",
-			data: { elementId, restored: shouldRestore },
+			data: {
+				elementId,
+				contentId: contentId ?? undefined,
+				restored: shouldRestore,
+			},
 		})
 	}
 
@@ -517,6 +539,7 @@ export class EraserManager {
 	public getSessionSnapshot() {
 		return {
 			elementId: this.erasingElementId,
+			contentId: this.erasingContentId ?? undefined,
 			radius: this.radius,
 			strokes: this.getStrokes(),
 		}
@@ -524,6 +547,17 @@ export class EraserManager {
 
 	public confirmEraser(): void {
 		if (!this.erasingElementId) {
+			return
+		}
+		const element = this.canvas.elementManager.getElementData(this.erasingElementId)
+		if (
+			!element ||
+			element.type !== ElementTypeEnum.Image ||
+			!this.erasingContentId ||
+			getActiveImageContentId(element as ImageElement) !== this.erasingContentId ||
+			!getContentById(element, this.erasingContentId)
+		) {
+			this.cancelEraser()
 			return
 		}
 

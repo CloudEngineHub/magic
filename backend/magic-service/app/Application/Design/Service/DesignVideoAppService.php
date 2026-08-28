@@ -8,7 +8,11 @@ declare(strict_types=1);
 namespace App\Application\Design\Service;
 
 use App\Application\Design\Event\Message\DesignVideoPollMessage;
+use App\Application\Design\Event\Message\DesignVideoSubmitMessage;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
+use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
+use App\Application\ModelGateway\Mapper\ModelEntry;
+use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
@@ -17,15 +21,15 @@ use App\Domain\Design\Factory\DesignVideoInputPayloadPreparer;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
-use App\Domain\VideoCatalog\Entity\ValueObject\VideoCatalogModelDefinition;
-use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
+use App\Infrastructure\Util\File\ProviderAssetUri;
 use App\Interfaces\Design\DTO\VideoPointEstimateDTO;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Amqp\Producer;
 use Hyperf\Database\Exception\QueryException;
 use Qbhy\HyperfAuth\Authenticatable;
@@ -36,11 +40,14 @@ class DesignVideoAppService extends DesignAppService
     // 给 payload builder 的能力标记：支持图片 URL 时就不再转 base64。
     private const string REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL = 'supports_image_input_url';
 
+    // 给 payload builder 的能力标记：允许透传 provider 专用 asset URI。
+    private const string REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI = 'supports_provider_asset_uri';
+
     private const string SOURCE_ID_DESIGN_VIDEO_GENERATION = 'design_video_generation';
 
     public function __construct(
         private readonly TaskFileDomainService $taskFileDomainService,
-        private readonly VideoCatalogQueryDomainService $videoCatalogDomainService,
+        private readonly ModelGatewayMapper $modelGatewayMapper,
         private readonly DesignGenerationTaskDomainService $designGenerationTaskDomainService,
         private readonly DesignVideoSubmissionDomainService $submissionDomainService,
         private readonly Producer $producer,
@@ -48,16 +55,28 @@ class DesignVideoAppService extends DesignAppService
     }
 
     /**
-     * 创建 Design 视频生成任务：校验项目与素材、保存本地任务、提交模型网关并投递首次轮询。
+     * 创建 Design 视频生成任务：校验项目与素材、保存本地任务并投递异步执行消息。
      */
     public function create(Authenticatable $authenticatable, DesignGenerationTaskEntity $entity): DesignGenerationTaskEntity
     {
         $designDataIsolation = $this->createDesignDataIsolation($authenticatable);
         $project = $this->assertProjectAccess($designDataIsolation, $entity->getProjectId(), MemberRole::EDITOR);
-        $modelDefinition = $this->findModelOrFail($entity->getModelId());
-        $outputDirectory = $this->assertWorkspacePathsExist($project->getId(), $entity);
-        // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
-        $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+        $modelEntry = null;
+        $supportsProviderAssetUri = false;
+        if ($entity->isCanvasComposition()) {
+            $outputDirectory = $this->assertCanvasCompositionPathsExist($project->getId(), $entity);
+            $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+        } else {
+            $modelEntry = $this->findModelOrFail($designDataIsolation, $entity->getModelId());
+            $supportsProviderAssetUri = $this->supportsProviderAssetUri($modelEntry);
+            $outputDirectory = $this->assertWorkspacePathsExist(
+                $project->getId(),
+                $entity,
+                $supportsProviderAssetUri,
+            );
+            // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
+            $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+        }
 
         $existingEntity = $this->designGenerationTaskDomainService->findVideoTask($designDataIsolation, $project->getId(), $entity->getGenerationId());
         if ($existingEntity !== null) {
@@ -71,7 +90,10 @@ class DesignVideoAppService extends DesignAppService
             $entity->getGenerationId()
         );
         // 先在请求体里写入能力开关，后续 builder 就能无状态地选择图片输入格式。
-        $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelDefinition);
+        if ($modelEntry !== null) {
+            $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelEntry);
+            $requestPayload[self::REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI] = $supportsProviderAssetUri;
+        }
         $entity->setOrganizationCode($designDataIsolation->getCurrentOrganizationCode());
         $entity->setUserId($designDataIsolation->getCurrentUserId());
         $entity->setRequestPayload($requestPayload);
@@ -89,19 +111,21 @@ class DesignVideoAppService extends DesignAppService
             throw $throwable;
         }
 
-        // 调用外部网关提交任务，失败则删除任务记录
-        try {
-            $providerPayload = $this->submissionDomainService->submit($entity);
-        } catch (Throwable $throwable) {
-            $this->designGenerationTaskDomainService->deleteTask($designDataIsolation, $entity);
-            throw $throwable;
+        // 普通生视频沿用同步提交；画布合成需要初始化沙箱，交给独立消费者异步提交。
+        if (! $entity->isCanvasComposition()) {
+            try {
+                $providerPayload = $this->submissionDomainService->submit($entity);
+            } catch (Throwable $throwable) {
+                $this->designGenerationTaskDomainService->deleteTask($designDataIsolation, $entity);
+                throw $throwable;
+            }
+
+            $this->designGenerationTaskDomainService->markAsSubmitted($designDataIsolation, $entity, $providerPayload);
         }
 
-        $this->designGenerationTaskDomainService->markAsSubmitted($designDataIsolation, $entity, $providerPayload);
-
-        // 投递首次 poll 消息，失败则记录重试信息，由 crontab 兜底恢复
+        // 投递首次执行消息，失败则记录重试信息，由 crontab 兜底恢复。
         try {
-            $this->producer->produce($this->buildInitialPollPublisher($entity));
+            $this->producer->produce($this->buildInitialPublisher($entity));
             $this->designGenerationTaskDomainService->markFirstPollSent($designDataIsolation, $entity);
         } catch (Throwable $throwable) {
             $this->designGenerationTaskDomainService->markFirstPollDispatchFailed(
@@ -145,12 +169,13 @@ class DesignVideoAppService extends DesignAppService
         // 检查项目权限
         $this->assertProjectAccess($designDataIsolation, $projectId, MemberRole::EDITOR);
 
-        $this->findModelOrFail($dto->getModelId());
+        $modelEntry = $this->findModelOrFail($designDataIsolation, $dto->getModelId());
         $payload = $dto->toModelGatewayPayload();
         $payload['inputs'] = $this->prepareEstimateInputs(
             $designDataIsolation->getCurrentOrganizationCode(),
             $projectId,
             $dto,
+            $this->supportsProviderAssetUri($modelEntry),
         );
 
         $payload = $this->prepareGatewayPayloadWithBusinessParams(
@@ -207,23 +232,25 @@ class DesignVideoAppService extends DesignAppService
     /**
      * 查询视频模型定义，找不到时统一抛 Design 参数错误。
      */
-    private function findModelOrFail(string $modelId): VideoCatalogModelDefinition
+    private function findModelOrFail(DesignDataIsolation $dataIsolation, string $modelId): ModelEntry
     {
-        $modelDefinition = $this->videoCatalogDomainService->findModel($modelId);
-        if ($modelDefinition === null) {
+        $modelEntry = $this->modelGatewayMapper->getOrganizationVideoModel($dataIsolation, $modelId);
+        if (! $modelEntry instanceof ModelEntry || ! $modelEntry->isVideoModel()) {
             ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.not_found', ['label' => $modelId]);
         }
 
-        return $modelDefinition;
+        return $modelEntry;
     }
 
     /**
      * 判断当前 provider 是否支持直接传图片 URL，用于生成任务 payload 构建。
      */
-    private function supportsImageInputUrl(VideoCatalogModelDefinition $modelDefinition): bool
+    private function supportsImageInputUrl(ModelEntry $modelEntry): bool
     {
+        $providerCode = $modelEntry->getVideoModel()?->getProviderCode();
+
         return in_array(
-            $modelDefinition->getProviderCode(),
+            $providerCode?->value,
             [
                 ProviderCode::VolcengineArk->value,
                 ProviderCode::Keling->value,
@@ -237,10 +264,14 @@ class DesignVideoAppService extends DesignAppService
      *
      * @return array<string, mixed>
      */
-    private function prepareEstimateInputs(string $organizationCode, int $projectId, DesignVideoCreateDTO $dto): array
-    {
+    private function prepareEstimateInputs(
+        string $organizationCode,
+        int $projectId,
+        DesignVideoCreateDTO $dto,
+        bool $supportsProviderAssetUri,
+    ): array {
         $inputs = DesignVideoInputPayloadPreparer::prepareInputs($dto);
-        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputs);
+        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputs, $supportsProviderAssetUri);
 
         return $inputs;
     }
@@ -248,8 +279,11 @@ class DesignVideoAppService extends DesignAppService
     /**
      * 校验输出目录和所有输入素材均在当前项目工作区内存在。
      */
-    private function assertWorkspacePathsExist(int $projectId, DesignGenerationTaskEntity $entity): TaskFileEntity
-    {
+    private function assertWorkspacePathsExist(
+        int $projectId,
+        DesignGenerationTaskEntity $entity,
+        bool $supportsProviderAssetUri,
+    ): TaskFileEntity {
         // Verify target directory exists via tree navigation
         $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath($projectId, $entity->getFileDir());
         if (! $taskFileDir || ! $taskFileDir->getIsDirectory()) {
@@ -257,9 +291,94 @@ class DesignVideoAppService extends DesignAppService
         }
 
         $inputPayload = $entity->getInputPayload();
-        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputPayload);
+        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputPayload, $supportsProviderAssetUri);
 
         return $taskFileDir;
+    }
+
+    /** 校验文件列表合成的输出目录和所有输入媒体。 */
+    private function assertCanvasCompositionPathsExist(
+        int $projectId,
+        DesignGenerationTaskEntity $entity,
+    ): TaskFileEntity {
+        $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath($projectId, $entity->getFileDir());
+        if (! $taskFileDir || ! $taskFileDir->getIsDirectory()) {
+            ExceptionBuilder::throw(
+                DesignErrorCode::InvalidArgument,
+                'design.video_generation.file_dir_not_exists',
+                ['file_dir' => $entity->getFileDir()]
+            );
+        }
+
+        $requestPayload = $entity->getRequestPayload();
+        $composition = is_array($requestPayload['composition'] ?? null) ? $requestPayload['composition'] : [];
+        /** @var array<string, array{names: array<string, bool>, paths: array<string, string>}> $filesByParentPath */
+        $filesByParentPath = [];
+        foreach (['videos', 'audios'] as $mediaType) {
+            foreach ((array) ($composition[$mediaType] ?? []) as $media) {
+                $path = trim((string) ($media['path'] ?? ''));
+                [$parentPath, $fileName] = $this->splitWorkspacePath($path);
+                $filesByParentPath[$parentPath]['names'][$fileName] = true;
+                $filesByParentPath[$parentPath]['paths'][$fileName] = $path;
+            }
+        }
+
+        foreach ($filesByParentPath as $parentPath => $fileData) {
+            $parentDirectory = $this->normalizeWorkspacePath($entity->getFileDir()) === $parentPath
+                ? $taskFileDir
+                : $this->taskFileDomainService->findEntityByRelativePath($projectId, $parentPath);
+            if (! $parentDirectory || ! $parentDirectory->getIsDirectory()) {
+                $missingPath = array_values($fileData['paths'])[0] ?? $parentPath;
+                ExceptionBuilder::throw(
+                    DesignErrorCode::InvalidArgument,
+                    'design.video_generation.reference_file_not_exists',
+                    ['file_key' => $missingPath]
+                );
+            }
+
+            $fileNames = array_keys($fileData['names']);
+            $files = $this->taskFileDomainService->getByProjectParentAndNames(
+                $projectId,
+                $parentDirectory->getFileId(),
+                $fileNames,
+            );
+            foreach ($fileData['paths'] as $fileName => $path) {
+                $taskFile = $files[$fileName] ?? null;
+                if (! $taskFile || $taskFile->getIsDirectory()) {
+                    ExceptionBuilder::throw(
+                        DesignErrorCode::InvalidArgument,
+                        'design.video_generation.reference_file_not_exists',
+                        ['file_key' => $path]
+                    );
+                }
+            }
+        }
+
+        return $taskFileDir;
+    }
+
+    /**
+     * 拆分工作区相对路径，返回父目录路径和文件名。
+     *
+     * @return array{string, string}
+     */
+    private function splitWorkspacePath(string $path): array
+    {
+        $segments = array_values(array_filter(
+            explode('/', trim($path, '/')),
+            static fn (string $segment): bool => $segment !== ''
+        ));
+        $fileName = (string) array_pop($segments);
+        $parentPath = $segments === [] ? '/' : '/' . implode('/', $segments);
+
+        return [$parentPath, $fileName];
+    }
+
+    /** 统一工作区路径格式，用于判断是否可以复用已解析的输出目录。 */
+    private function normalizeWorkspacePath(string $path): string
+    {
+        $path = '/' . trim($path, '/');
+        return $path === '/' ? $path : rtrim($path, '/');
     }
 
     /**
@@ -267,18 +386,21 @@ class DesignVideoAppService extends DesignAppService
      *
      * @param array<string, mixed> $inputPayload
      */
-    private function assertWorkspaceInputPayloadFilesExist(int $projectId, array $inputPayload): void
-    {
+    private function assertWorkspaceInputPayloadFilesExist(
+        int $projectId,
+        array $inputPayload,
+        bool $supportsProviderAssetUri = false,
+    ): void {
         foreach ((array) ($inputPayload['reference_images'] ?? []) as $referenceImage) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($referenceImage['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceImage['uri'] ?? ''), $supportsProviderAssetUri);
         }
 
         foreach ((array) ($inputPayload['reference_videos'] ?? []) as $referenceVideo) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($referenceVideo['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceVideo['uri'] ?? ''), $supportsProviderAssetUri);
         }
 
         foreach ((array) ($inputPayload['reference_audios'] ?? []) as $referenceAudio) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($referenceAudio['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceAudio['uri'] ?? ''), $supportsProviderAssetUri);
         }
 
         $maskUri = (string) ($inputPayload['mask']['uri'] ?? '');
@@ -287,8 +409,20 @@ class DesignVideoAppService extends DesignAppService
         }
 
         foreach ((array) ($inputPayload['frames'] ?? []) as $frame) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($frame['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($frame['uri'] ?? ''), $supportsProviderAssetUri);
         }
+    }
+
+    /**
+     * 仅对工作区路径执行文件存在校验，内联 Base64 图片由入口完成校验。
+     */
+    private function assertWorkspaceInputUri(int $projectId, string $uri, bool $supportsProviderAssetUri = false): void
+    {
+        if (ImageBase64DataUriParser::isValid($uri) || ($supportsProviderAssetUri && ProviderAssetUri::isValid($uri))) {
+            return;
+        }
+
+        $this->assertWorkspaceFileExists($projectId, $uri);
     }
 
     /**
@@ -304,6 +438,14 @@ class DesignVideoAppService extends DesignAppService
                 ['file_key' => $relativePath]
             );
         }
+    }
+
+    /**
+     * 判断当前 provider 是否支持将 asset URI 原样传给模型接口。
+     */
+    private function supportsProviderAssetUri(ModelEntry $modelEntry): bool
+    {
+        return $modelEntry->getVideoModel()?->getProviderCode() === ProviderCode::VolcengineArk;
     }
 
     /**
@@ -337,6 +479,14 @@ class DesignVideoAppService extends DesignAppService
                     )[0]['url'] ?? null
                 );
             } else {
+                if ($entity->isCanvasComposition()) {
+                    // 合成文件已由共享沙箱写入，MagicFS 文件索引可能稍后才可见；不要把暂时未索引误判为失败。
+                    $providerUrl = trim((string) ($entity->getOutputPayload()['provider_video_url'] ?? ''));
+                    if ($providerUrl !== '') {
+                        $entity->setFileUrl($providerUrl);
+                    }
+                    return;
+                }
                 $entity->setStatus(DesignGenerationStatus::FAILED);
                 $entity->setErrorMessage('Generated video file not found');
             }
@@ -369,6 +519,22 @@ class DesignVideoAppService extends DesignAppService
             $entity->getProjectId(),
             $entity->getGenerationId(),
         ));
+    }
+
+    /**
+     * 构造首次异步消息；画布合成先进入提交队列，其他视频任务直接进入轮询队列。
+     */
+    private function buildInitialPublisher(DesignGenerationTaskEntity $entity): DesignVideoPollDelayPublisher|DesignVideoSubmitPublisher
+    {
+        if ($entity->isCanvasComposition()) {
+            return new DesignVideoSubmitPublisher(new DesignVideoSubmitMessage(
+                $entity->getOrganizationCode(),
+                $entity->getProjectId(),
+                $entity->getGenerationId(),
+            ));
+        }
+
+        return $this->buildInitialPollPublisher($entity);
     }
 
     /**

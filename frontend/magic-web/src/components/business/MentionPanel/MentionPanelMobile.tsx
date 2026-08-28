@@ -20,7 +20,7 @@ import { MentionItemType } from "./types"
 // Components
 import MagicPopup from "../../base-mobile/MagicPopup"
 import MobileMenuItem from "./components/MobileMenuItem"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	canTogglePendingItem,
 	canTogglePendingLeafItem,

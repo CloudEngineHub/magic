@@ -4,13 +4,16 @@ import IconButton from "../../primitives/custom/IconButton/index"
 import {
 	Eye,
 	EyeClosed,
+	Film,
 	Folder,
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
+	Mic,
 	Search,
 	Type,
 	Video,
+	Workflow,
 	X,
 } from "lucide-react"
 import { FolderIcon } from "../../primitives/icons/index"
@@ -19,7 +22,7 @@ import { Input } from "../../primitives/shadcn/input"
 import LayersEmpty from "../empty/index"
 import { Tooltip, TooltipTrigger, TooltipContent } from "../../primitives/shadcn/tooltip"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
-import classNames from "classnames"
+import { cn } from "../../../runtime/shared/lib/utils"
 import Tree, { type TreeNode, type RenderNodeContext } from "../../primitives/custom/Tree/index"
 import {
 	ElementTypeEnum,
@@ -272,6 +275,15 @@ export default function LayersDrawer() {
 				case ElementTypeEnum.Video:
 					iconContent = <Video size={16} className={styles.layerNodeVideoIcon} />
 					break
+				case ElementTypeEnum.VideoEdit:
+					iconContent = <Film size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.Audio:
+					iconContent = <Mic size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.Storyboard:
+					iconContent = <Workflow size={16} className={styles.layerNodeVideoIcon} />
+					break
 				default:
 					iconContent = <div className={styles.layerNodeElementIcon}></div>
 					break
@@ -283,7 +295,7 @@ export default function LayersDrawer() {
 					<div className={styles.layerNodeLabel}>
 						{isEditing ? (
 							<Input
-								className={classNames(
+								className={cn(
 									styles.layerNodeInput,
 									context.noHoverClassName,
 									context.noActiveClassName,
@@ -318,14 +330,14 @@ export default function LayersDrawer() {
 					{!isEditing && (
 						<div className={styles.layerNodeActions}>
 							<div
-								className={classNames(
+								className={cn(
 									// 锁定按钮：当被锁定时一直显示，否则只在 hover 时显示
 									!isLocked && context.showOnHoverClassName,
 									readonly && !isLocked && styles.hidden,
 								)}
 							>
 								<IconButton
-									className={classNames(
+									className={cn(
 										styles.layerNodeActionButton,
 										readonly && styles.noHover,
 										context.noHoverClassName,
@@ -341,13 +353,13 @@ export default function LayersDrawer() {
 								</IconButton>
 							</div>
 							<div
-								className={classNames(
+								className={cn(
 									// 可见性按钮：当不可见时一直显示，否则只在 hover 时显示
 									isVisible && context.showOnHoverClassName,
 								)}
 							>
 								<IconButton
-									className={classNames(
+									className={cn(
 										styles.layerNodeActionButton,
 										context.noHoverClassName,
 										context.noActiveClassName,
@@ -458,7 +470,7 @@ export default function LayersDrawer() {
 
 	return (
 		<div
-			className={classNames(
+			className={cn(
 				styles.layersDrawer,
 				collapsed && styles.collapsed,
 				readonly && styles.readonly,
@@ -473,7 +485,7 @@ export default function LayersDrawer() {
 				<span className={styles.layersDrawerTitle}>{t("layers.title", "图层")}</span>
 				{!collapsed && !!elements?.length && (
 					<div
-						className={classNames(
+						className={cn(
 							styles.layersDrawerSearch,
 							layerSearchValue && styles.layersDrawerSearchActive,
 						)}
@@ -558,7 +570,7 @@ export default function LayersDrawer() {
 					))}
 			</div>
 			<div className={styles.layersDrawerFooter}>
-				<Tooltip>
+				<Tooltip delayDuration={0}>
 					<TooltipTrigger>
 						<IconButton
 							className={styles.layersDrawerCollapseButton}

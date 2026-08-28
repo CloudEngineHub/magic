@@ -26,12 +26,14 @@ import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { toCanvasGenerateHightImageResponse } from "./useHighImageGeneration"
-import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
+import {
+	resolveDesignCanvasResourceApiUri,
+	resolveDesignWorkspaceStoragePath,
+} from "../utils/designResourceReferenceResolver"
 import {
 	syncFileInfoAfterGenerationComplete,
 	syncFileInfosAfterGenerationComplete,
 } from "../utils/syncFileInfoAfterGenerationComplete"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const IMAGE_MODEL_LIST_TTL_MS = 60_000
 const imageModelListCacheByKey = new Map<string, { models: ImageModelItem[]; fetchedAt: number }>()
@@ -146,25 +148,24 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 		}
 
 		await superMagicModeService.fetchModeList({ force: false })
+		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllImageModelGroups() || []
 		const officialModels: ImageModelItem[] = officialGroups.flatMap(
 			(groupItem: {
 				group: { id: string; name: string; icon: string; sort: number }
 				models: ImageModelItem[]
 			}) =>
-				(groupItem.models || []).map(
-					(model): ImageModelItem => ({
-						...model,
-						model_source: "official",
-						model_group: {
-							id: groupItem.group.id,
-							name: normalizeImageModelGroupLabel(groupItem.group.name),
-							icon: groupItem.group.icon,
-							sort: groupItem.group.sort,
-							source: "official",
-						},
-					}),
-				),
+				(groupItem.models || []).map((model): ImageModelItem => ({
+					...model,
+					model_source: "official",
+					model_group: {
+						id: groupItem.group.id,
+						name: normalizeImageModelGroupLabel(groupItem.group.name),
+						icon: groupItem.group.icon,
+						sort: groupItem.group.sort,
+						source: "official",
+					},
+				})),
 		)
 		const customModels = getRepresentativeModelsByModelId(
 			await superMagicCustomModelService.getMyModelsByType(MODEL_TYPE_IMAGE),
@@ -298,28 +299,28 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 			)
 
 			if (result.status === "completed" && result.file_url && result.file_name) {
-				let filePath = ""
-				if (result.file_dir) {
-					const normalizedDir = normalizePath(result.file_dir)
-					filePath = normalizedDir
-						? `${normalizedDir}/${result.file_name}`
-						: result.file_name
-				} else {
-					filePath = result.file_name
-				}
-
-				await syncFileInfoAfterGenerationComplete({
-					projectId,
-					filePath,
-					fileUrl: result.file_url,
-					fileName: result.file_name,
-					setFileInfoCache,
+				const normalizedDir = normalizePath(result.file_dir || "")
+				const workspacePath = normalizedDir
+					? `${normalizedDir}/${result.file_name}`
+					: result.file_name
+				const filePath = resolveDesignWorkspaceStoragePath(workspacePath, {
+					designProjectBasePath,
 				})
+
+				if (filePath) {
+					await syncFileInfoAfterGenerationComplete({
+						projectId,
+						filePath,
+						fileUrl: result.file_url,
+						fileName: result.file_name,
+						setFileInfoCache,
+					})
+				}
 			}
 
 			return result
 		},
-		[projectId, setFileInfoCache, t],
+		[designProjectBasePath, projectId, setFileInfoCache, t],
 	)
 
 	/* 查询多图生成结果 */
@@ -343,15 +344,26 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 			const result = await SuperMagicApi.getImageGenerationResults(requestParams)
 
 			if (result.status === "completed" && result.file_dir && result.images.length > 0) {
+				const normalizedDir = normalizePath(result.file_dir)
 				const files = result.images
 					.filter((image) => image.file_url && image.file_name)
-					.map((image) => ({
-						filePath: normalizePath(result.file_dir)
-							? `${normalizePath(result.file_dir)}/${image.file_name}`
-							: image.file_name,
-						fileUrl: image.file_url as string,
-						fileName: image.file_name,
-					}))
+					.flatMap((image) => {
+						const workspacePath = normalizedDir
+							? `${normalizedDir}/${image.file_name}`
+							: image.file_name
+						const filePath = resolveDesignWorkspaceStoragePath(workspacePath, {
+							designProjectBasePath,
+						})
+						return filePath
+							? [
+									{
+										filePath,
+										fileUrl: image.file_url as string,
+										fileName: image.file_name,
+									},
+								]
+							: []
+					})
 
 				await syncFileInfosAfterGenerationComplete({
 					projectId,
@@ -362,7 +374,7 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 
 			return result as ImageGenerationResultsResponse
 		},
-		[projectId, setFileInfoCache, t],
+		[designProjectBasePath, projectId, setFileInfoCache, t],
 	)
 
 	return {
@@ -381,7 +393,7 @@ function resolveReferenceImagePath(params: {
 	getErrorMessage: () => string
 }): string {
 	const { imagePath, designProjectBasePath, flatAttachments, getErrorMessage } = params
-	const resolved = toWorkspaceAbsoluteApiPathForOperation(imagePath, {
+	const resolved = resolveDesignCanvasResourceApiUri(imagePath, {
 		designProjectBasePath,
 		flatAttachments,
 	})

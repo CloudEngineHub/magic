@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { ChevronRight, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 import ProjectList from "./ProjectList"
@@ -58,7 +58,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	const workspaceHeaderRef = useRef<HTMLDivElement>(null)
 	const collapseScrollAnchorRef = useRef<{
-		viewport: HTMLElement
+		scrollContainer: HTMLElement
 		anchorTop: number
 	} | null>(null)
 
@@ -70,7 +70,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		const topAfter = workspaceHeaderRef.current.getBoundingClientRect().top
 		const delta = topAfter - pending.anchorTop
 		if (Math.abs(delta) < 0.5) return
-		pending.viewport.scrollTop += delta
+		pending.scrollContainer.scrollTop += delta
 	}, [isExpanded])
 
 	/**
@@ -119,12 +119,12 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		e.preventDefault()
 		e.stopPropagation()
 		if (isExpanded && workspaceHeaderRef.current) {
-			const viewport = workspaceHeaderRef.current.closest<HTMLElement>(
-				'[data-slot="scroll-area-viewport"]',
+			const scrollContainer = workspaceHeaderRef.current.closest<HTMLElement>(
+				"[data-testid='sidebar-content-root']",
 			)
-			if (viewport) {
+			if (scrollContainer) {
 				collapseScrollAnchorRef.current = {
-					viewport,
+					scrollContainer,
 					anchorTop: workspaceHeaderRef.current.getBoundingClientRect().top,
 				}
 			}
@@ -145,14 +145,24 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	return (
 		<SidebarMenuItem
-			className={cn("flex w-full max-w-full shrink-0 flex-col items-center", className)}
+			className={cn(
+				"flex w-full max-w-full shrink-0 flex-col items-center",
+				// Selecting a workspace scrolls this item to the top. Reserve the sticky
+				// "工作区" header height so the workspace title does not stick downward
+				// over the first project.
+				"scroll-mt-[var(--workspace-list-sticky-top)]",
+				className,
+			)}
 			data-testid={`sidebar-workspace-item-${workspace.id}`}
 			data-workspace-id-segment={workspaceIdSegment}
 			data-workspace-name={workspace.name || t("super:workspace.unnamedWorkspace")}
 		>
 			{/* Section wraps header + projects so sticky releases when whole block scrolls out */}
 			<div className="flex w-full min-w-0 flex-col">
-				<div ref={workspaceHeaderRef} className="sticky top-0 z-10 w-full bg-sidebar">
+				<div
+					ref={workspaceHeaderRef}
+					className="sticky top-[var(--workspace-list-sticky-top)] z-10 w-full bg-sidebar"
+				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}

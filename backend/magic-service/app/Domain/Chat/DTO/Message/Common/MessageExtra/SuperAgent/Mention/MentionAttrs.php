@@ -12,6 +12,8 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\DesignMar
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory\DirectoryData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\FileData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\Directory\MemoryDirectoryData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\File\MemoryFileData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Skill\SkillData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Tool\ToolData;
@@ -56,6 +58,8 @@ final class MentionAttrs extends AbstractDTO
         } else {
             $this->data = match ($this->getType()) {
                 MentionType::PROJECT_FILE, MentionType::UPLOAD_FILE => new FileData($data),
+                MentionType::MEMORY_FILE => new MemoryFileData($data),
+                MentionType::MEMORY_DIRECTORY => new MemoryDirectoryData($data),
                 MentionType::AGENT => new AgentData($data),
                 MentionType::MCP => new McpData($data),
                 MentionType::TOOL => new ToolData($data),

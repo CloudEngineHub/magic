@@ -10,6 +10,25 @@ const { mockViewRef } = vi.hoisted(() => ({
 	mockViewRef: { current: "manage" as ProjectShareSheetView },
 }))
 
+const { mockCandidateTreeRef } = vi.hoisted(() => ({
+	mockCandidateTreeRef: {
+		current: [
+			{
+				file_id: "file-1",
+				name: "fictional-default.html",
+				file_extension: "html",
+				is_directory: false,
+			},
+			{
+				file_id: "file-2",
+				name: "fictional-report.md",
+				file_extension: "md",
+				is_directory: false,
+			},
+		],
+	},
+}))
+
 const { mockControllerHandlers } = vi.hoisted(() => ({
 	mockControllerHandlers: {
 		closeDefaultOpenFilePicker: vi.fn(),
@@ -37,8 +56,19 @@ vi.hoisted(() => {
 	})
 })
 
+/** Matches ProjectShareSheet max-height: viewport minus safe-area and the drawer handle. */
+const SHARE_SHEET_MAX_HEIGHT =
+	"calc(100dvh - var(--safe-area-inset-top) - var(--safe-area-inset-bottom) - 44px)"
+/** Manage/edit min-height stays stable but cannot exceed the safe max-height. */
+const SHARE_SHEET_STABLE_MIN_HEIGHT = `min(72dvh, 640px, ${SHARE_SHEET_MAX_HEIGHT})`
+
 interface MockCommonPopupProps {
 	children: ReactNode
+	wrapperStyle?: {
+		height?: string
+		minHeight?: string | number
+		maxHeight?: string
+	}
 	popupProps?: {
 		visible?: boolean
 		className?: string
@@ -46,12 +76,14 @@ interface MockCommonPopupProps {
 		bodyStyle?: {
 			background?: string
 			height?: string
+			minHeight?: string | number
+			maxHeight?: string
 		}
 	}
 }
 
 vi.mock("@/pages/superMagicMobile/components/CommonPopup", () => ({
-	default: ({ children, popupProps }: MockCommonPopupProps) =>
+	default: ({ children, popupProps, wrapperStyle }: MockCommonPopupProps) =>
 		popupProps?.visible ? (
 			<div
 				data-testid="mock-common-popup"
@@ -59,6 +91,11 @@ vi.mock("@/pages/superMagicMobile/components/CommonPopup", () => ({
 				data-popup-body-classname={popupProps.bodyClassName}
 				data-popup-background={popupProps.bodyStyle?.background}
 				data-popup-height={popupProps.bodyStyle?.height}
+				data-popup-min-height={popupProps.bodyStyle?.minHeight}
+				data-popup-max-height={popupProps.bodyStyle?.maxHeight}
+				data-popup-wrapper-height={wrapperStyle?.height}
+				data-popup-wrapper-min-height={wrapperStyle?.minHeight}
+				data-popup-wrapper-max-height={wrapperStyle?.maxHeight}
 			>
 				<div
 					className="h-1 w-20 rounded-full"
@@ -191,20 +228,7 @@ vi.mock("../hooks/useProjectShareSheet", () => ({
 				is_directory: false,
 			},
 		],
-		defaultOpenFileCandidateTree: [
-			{
-				file_id: "file-1",
-				name: "fictional-default.html",
-				file_extension: "html",
-				is_directory: false,
-			},
-			{
-				file_id: "file-2",
-				name: "fictional-report.md",
-				file_extension: "md",
-				is_directory: false,
-			},
-		],
+		defaultOpenFileCandidateTree: mockCandidateTreeRef.current,
 		defaultOpenFilePickerOpen: mockViewRef.current === "create",
 		memberSelectorOpen: false,
 		selectedMemberNodes: [],
@@ -289,6 +313,21 @@ function renderProjectShareSheet() {
 describe("ProjectShareSheet", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mockViewRef.current = "manage"
+		mockCandidateTreeRef.current = [
+			{
+				file_id: "file-1",
+				name: "fictional-default.html",
+				file_extension: "html",
+				is_directory: false,
+			},
+			{
+				file_id: "file-2",
+				name: "fictional-report.md",
+				file_extension: "md",
+				is_directory: false,
+			},
+		]
 	})
 
 	it("applies scroll safe-bottom padding on views without a fixed footer", () => {
@@ -322,8 +361,77 @@ describe("ProjectShareSheet", () => {
 			"data-popup-background",
 			"#F7F7F6",
 		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute("data-popup-height", "auto")
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-min-height",
+			SHARE_SHEET_STABLE_MIN_HEIGHT,
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-max-height",
+			SHARE_SHEET_MAX_HEIGHT,
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-wrapper-height",
+			"auto",
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-wrapper-min-height",
+			SHARE_SHEET_STABLE_MIN_HEIGHT,
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-wrapper-max-height",
+			SHARE_SHEET_MAX_HEIGHT,
+		)
+		expect(screen.getByTestId("project-share-sheet-root")).toHaveStyle({
+			minHeight: SHARE_SHEET_STABLE_MIN_HEIGHT,
+			maxHeight: SHARE_SHEET_MAX_HEIGHT,
+		})
 		expect(screen.getByTestId("project-share-sheet-manage-empty")).toHaveTextContent(
 			"还没有分享链接",
+		)
+	})
+
+	it("分享详情页按内容自适应高度，不应用列表和编辑态的最小高度", () => {
+		mockViewRef.current = "linkDetail"
+		renderProjectShareSheet()
+
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-min-height",
+			"0",
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-wrapper-min-height",
+			"0",
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-max-height",
+			SHARE_SHEET_MAX_HEIGHT,
+		)
+		expect(screen.getByTestId("project-share-sheet-root")).toHaveStyle({
+			maxHeight: SHARE_SHEET_MAX_HEIGHT,
+		})
+		expect(screen.getByTestId("project-share-sheet-root").getAttribute("style")).toContain(
+			"min-height: 0",
+		)
+	})
+
+	it("创建页使用 minHeight 0 和扣除安全区的 maxHeight，避免长表单把底栏顶出可视区", () => {
+		mockViewRef.current = "create"
+		renderProjectShareSheet()
+
+		const sheetPopup = screen
+			.getByTestId("project-share-sheet-root")
+			.closest("[data-testid='mock-common-popup']")
+
+		expect(sheetPopup).toHaveAttribute("data-popup-min-height", "0")
+		expect(sheetPopup).toHaveAttribute("data-popup-wrapper-min-height", "0")
+		expect(sheetPopup).toHaveAttribute("data-popup-max-height", SHARE_SHEET_MAX_HEIGHT)
+		expect(sheetPopup).not.toHaveAttribute("data-popup-max-height", "92dvh")
+		expect(screen.getByTestId("project-share-sheet-root").getAttribute("style")).toContain(
+			"min-height: 0",
+		)
+		expect(screen.getByTestId("project-share-sheet-root").getAttribute("style")).toContain(
+			SHARE_SHEET_MAX_HEIGHT,
 		)
 	})
 
@@ -338,6 +446,39 @@ describe("ProjectShareSheet", () => {
 		fireEvent.click(screen.getByText("fictional-report.md"))
 
 		expect(mockControllerHandlers.selectDefaultOpenFile).toHaveBeenCalledWith("file-2")
+	})
+
+	it("新建分享默认文件选择器开启父级半选提示", () => {
+		mockViewRef.current = "create"
+		mockCandidateTreeRef.current = [
+			{
+				file_id: "fictional-parent-folder",
+				name: "Fictional Parent Folder",
+				is_directory: true,
+				children: [
+					{
+						file_id: "file-1",
+						name: "fictional-default.html",
+						file_extension: "html",
+						is_directory: false,
+					},
+					{
+						file_id: "fictional-sibling-file",
+						name: "fictional-sibling.md",
+						file_extension: "md",
+						is_directory: false,
+					},
+				],
+			},
+		]
+
+		renderProjectShareSheet()
+
+		expect(
+			screen.getByTestId(
+				"project-share-default-file-picker-folder-state-fictional-parent-folder",
+			),
+		).toBeInTheDocument()
 	})
 
 	it("默认文件选择器只保留基础弹窗手柄", () => {
@@ -360,6 +501,31 @@ describe("ProjectShareSheet", () => {
 
 		expect(screen.getAllByTestId("mock-common-popup-default-handle")).toHaveLength(1)
 		expect(container.querySelectorAll(".h-1.w-20.rounded-full")).toHaveLength(1)
+	})
+
+	it("默认文件选择器关闭按钮与分享弹窗保持相同尺寸并触发关闭", () => {
+		const onClose = vi.fn()
+
+		render(
+			<DefaultOpenFilePicker
+				open
+				candidateTree={[]}
+				onClose={onClose}
+				onSelectFile={vi.fn()}
+			/>,
+		)
+
+		const closeButton = screen.getByTestId("project-share-default-file-picker-close")
+		const closeIcon = closeButton.querySelector("svg")
+
+		expect(closeButton).toHaveClass("h-12", "w-12", "left-2.5")
+		expect(closeButton.className).toContain("shadow-[0_8px_25px_rgba(0,0,0,0.10)]")
+		expect(closeIcon).toHaveClass("h-[22px]", "w-[22px]")
+		expect(closeIcon).toHaveAttribute("stroke-width", "2")
+
+		fireEvent.click(closeButton)
+
+		expect(onClose).toHaveBeenCalledTimes(1)
 	})
 
 	it("默认文件选择器按话题文件弹窗样式固定高度并将搜索栏放在底部", () => {
@@ -413,6 +579,76 @@ describe("ProjectShareSheet", () => {
 		expect(searchRoot.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING).toBe(
 			Node.DOCUMENT_POSITION_PRECEDING,
 		)
+	})
+
+	it("默认文件选择器用父级半选提示默认文件路径", () => {
+		const onSelectFile = vi.fn()
+
+		render(
+			<DefaultOpenFilePicker
+				open
+				candidateTree={[
+					{
+						file_id: "fictional-parent-folder",
+						name: "Fictional Parent Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "fictional-default-file",
+								name: "fictional-default.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "fictional-sibling-file",
+								name: "fictional-sibling.md",
+								file_extension: "md",
+								is_directory: false,
+							},
+						],
+					},
+					{
+						file_id: "fictional-unrelated-folder",
+						name: "Fictional Unrelated Folder",
+						is_directory: true,
+						children: [
+							{
+								file_id: "fictional-unrelated-file",
+								name: "fictional-unrelated.txt",
+								file_extension: "txt",
+								is_directory: false,
+							},
+						],
+					},
+				]}
+				selectedFileId="fictional-default-file"
+				onClose={vi.fn()}
+				onSelectFile={onSelectFile}
+			/>,
+		)
+
+		const parentState = screen.getByTestId(
+			"project-share-default-file-picker-folder-state-fictional-parent-folder",
+		)
+		expect(parentState.querySelector("svg")).toHaveClass("lucide-minus")
+		expect(
+			screen.queryByTestId(
+				"project-share-default-file-picker-folder-state-fictional-unrelated-folder",
+			),
+		).not.toBeInTheDocument()
+
+		const parentRow = screen
+			.getAllByTestId("project-share-default-file-picker-folder-row")
+			.find((row) => within(row).queryByText("Fictional Parent Folder"))
+		expect(parentRow).toBeDefined()
+		if (!parentRow) throw new Error("Expected the default file parent folder row")
+
+		fireEvent.click(
+			within(parentRow).getByTestId("project-share-default-file-picker-folder-primary"),
+		)
+
+		expect(onSelectFile).not.toHaveBeenCalled()
+		expect(screen.getByText("fictional-default.html")).toBeInTheDocument()
 	})
 
 	it("默认文件选择器初始空态复用移动端文件列表空态", () => {
@@ -517,6 +753,49 @@ describe("ProjectShareSheet", () => {
 		)
 
 		expect(onSelectFile).toHaveBeenCalledWith("file-special-folder")
+	})
+
+	it("特殊文件夹的父级半选控制仍可设置文件夹为默认文件", () => {
+		const onSelectFile = vi.fn()
+
+		render(
+			<DefaultOpenFilePicker
+				open
+				candidateTree={[
+					{
+						file_id: "fictional-special-folder",
+						name: "Fictional Special Folder",
+						is_directory: true,
+						display_config: { type: "slide" },
+						children: [
+							{
+								file_id: "fictional-special-default",
+								name: "fictional-special-default.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+							{
+								file_id: "fictional-special-sibling",
+								name: "fictional-special-sibling.html",
+								file_extension: "html",
+								is_directory: false,
+							},
+						],
+					},
+				]}
+				selectedFileId="fictional-special-default"
+				onClose={vi.fn()}
+				onSelectFile={onSelectFile}
+			/>,
+		)
+
+		const selectControl = screen.getByTestId("project-share-default-file-picker-folder-select")
+		expect(selectControl).toHaveClass("bg-foreground")
+		expect(selectControl.querySelector("svg")).toHaveClass("lucide-minus")
+
+		fireEvent.click(selectControl)
+
+		expect(onSelectFile).toHaveBeenCalledWith("fictional-special-folder")
 	})
 
 	it("默认文件选择器搜索到特殊文件夹时仍保持主体进入目录、右侧勾选选择", () => {

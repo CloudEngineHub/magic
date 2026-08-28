@@ -175,7 +175,8 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         int $page = 1,
         int $pageSize = 10,
         string $orderBy = 'updated_at',
-        string $orderDirection = 'desc'
+        string $orderDirection = 'desc',
+        bool $pinPriority = false
     ): array {
         $query = $this->projectModel::query()
             ->withoutGlobalScopes()
@@ -201,7 +202,16 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
 
         // 应用查询条件
         foreach ($conditions as $field => $value) {
-            if (is_array($value)) {
+            if ($field === 'exclude_micro_apps') {
+                if ($value) {
+                    $query->whereNotExists(function ($microAppQuery): void {
+                        $microAppQuery->select(Db::raw(1))
+                            ->from('magic_super_agent_micro_apps as ma')
+                            ->whereColumn('ma.project_id', 'p.id')
+                            ->whereNull('ma.deleted_at');
+                    });
+                }
+            } elseif (is_array($value)) {
                 // 支持project_ids数组查询
                 $query->whereIn('p.id', $value);
             } elseif ($field === 'project_name_like') {
@@ -223,8 +233,10 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
                 Db::raw('COALESCE(pms.is_pinned, 0) as is_pinned'),
                 Db::raw('pms.pinned_at as pinned_at'),
             ]);
-            $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC')
-                ->orderByRaw('pms.pinned_at DESC');
+            if ($pinPriority) {
+                $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC')
+                    ->orderByRaw('pms.pinned_at DESC');
+            }
         }
 
         // 排序和分页

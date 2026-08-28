@@ -1,7 +1,7 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { forwardRef, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { useMemoizedFn, useAsyncEffect } from "ahooks"
+import { useAsyncEffect, useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useMessageEditor, useDragUpload, useSlideContentSync } from "./hooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -28,6 +28,7 @@ import {
 	type SendMessageByContentPayload,
 } from "./types"
 import {
+	type DataService,
 	McpMentionData,
 	MentionItemType,
 	type MentionSelectContext,
@@ -46,13 +47,16 @@ import {
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { insertMentionFromDroppedData } from "./utils/drag"
 import { runActiveEditor, useLatestActiveEditor } from "./utils/editorLifecycle"
+import useEditorPromptCarousel from "./hooks/useEditorPromptCarousel"
 import useChooseUploadDirModal from "./hooks/useChooseUploadDirModal"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
+import { resolveModelTopicMode } from "./utils/modelTopicMode"
 import type { Topic } from "../../pages/Workspace/types"
 import useSharedDataFromApp from "./hooks/useSharedDataFromApp"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
 import useMessageEditorPubSub from "./hooks/useMessageEditorPubSub"
 import { useMessageEditorMarker } from "./hooks/useMessageEditorMarker"
+import { useCanvasPendingMentionBridge } from "./hooks/useCanvasPendingMentionBridge"
 import { resolveMessageEditorModules } from "./utils/moduleConfig"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "../../hooks/useTaskInterrupt"
@@ -61,6 +65,13 @@ import {
 	createPastedTextFile,
 	shouldConvertPastedTextToAttachment,
 } from "./utils/pastedTextAttachment"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { isAllowedMention as defaultIsAllowedMention } from "./utils/mention"
+import {
+	MessageSendModelWaitError,
+	resolveMessageSendModels,
+	type ResolvedMessageSendModels,
+} from "./utils/messageSendModelFallback"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -85,20 +96,24 @@ export const MessageEditorContainer = observer(
 				containerClassName,
 				onSend,
 				placeholder,
+				promptCarousel,
 				onFileUpload,
 				isTaskRunning = false,
 				onInterrupt,
 				stopEventLoading,
 				selectedTopic,
 				selectedProject,
+				selectedWorkspace,
 				draftKey,
 				size = "default",
 				modules,
 				isSending = false,
 				sendButtonLoading = false,
 				topicMode,
+				modelTopicMode,
 				onFocus,
 				onBlur,
+				onReady,
 				onMentionInsertItems,
 				onFileClick,
 				onEnsureProject,
@@ -166,6 +181,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const isMountedRef = useRef(true)
+			const modelWaitAbortControllerRef = useRef<AbortController | null>(null)
 			const isProjectContext = Boolean(selectedProject?.id)
 
 			useSyncEditorStoreState({
@@ -179,8 +195,12 @@ export const MessageEditorContainer = observer(
 			const fileUploadStore = store.fileUploadStore
 			const tiptapEditorRef = useRef<Editor | null>(null)
 			const shouldSkipMentionRemoveSyncRef = useRef(false)
+			const promoteCanvasPendingMentionsRef = useRef<(() => void) | null>(null)
 
 			const getEditor = useMemoizedFn(() => tiptapEditorRef.current)
+			const promoteCanvasPendingMentions = useMemoizedFn(() => {
+				promoteCanvasPendingMentionsRef.current?.()
+			})
 			const runWithoutMentionRemoveSync = useMemoizedFn((callback: () => void) => {
 				shouldSkipMentionRemoveSyncRef.current = true
 				try {
@@ -203,6 +223,7 @@ export const MessageEditorContainer = observer(
 				handleRemoveFile,
 				handleRemoveUploadedFile,
 				handleMentionRemoveItems: handleUploadMentionRemoveItems,
+				isAllowedUploadMention,
 				shouldRestoreRemovedMention,
 			} = useUploadMentionFlow({
 				fileUploadStore,
@@ -226,6 +247,23 @@ export const MessageEditorContainer = observer(
 					content: store.editorStore.value,
 				})
 
+			const {
+				promptCarouselConfigured,
+				effectiveAiCompletionEnabled,
+				promptCarouselNode,
+				acceptPromptCarousel,
+				navigatePromptCarousel,
+				setIsEditorFocused,
+			} = useEditorPromptCarousel({
+				promptCarousel,
+				isMobile,
+				hasEditorContent: !isEmptyJSONContent(store.editorStore.value),
+				hasFiles: files.length > 0,
+				isComposing: store.editorStore.isComposing,
+				aiCompletionEnabled,
+				editorRef: tiptapEditorRef,
+			})
+
 			const handleMentionRemove = useMemoizedFn((mentionAttrs: TiptapMentionAttributes) => {
 				handleMarkerMentionRemove(mentionAttrs)
 				handleRemoveFile(mentionAttrs)
@@ -248,6 +286,7 @@ export const MessageEditorContainer = observer(
 				if (isEditingQueueItem) {
 					return isAllFilesUploaded && !isSending && !sendButtonLoading
 				}
+				if (!store.topicModelStore.isLanguageModelReady) return false
 				const hasContent = !isEmptyJSONContent(store.editorStore.value)
 				return hasContent && isAllFilesUploaded && !isSending && !sendButtonLoading
 			}, [
@@ -258,6 +297,7 @@ export const MessageEditorContainer = observer(
 				isSending,
 				sendButtonLoading,
 				sendEnabled,
+				store.topicModelStore.isLanguageModelReady,
 			])
 
 			const sendButtonDisabled = !canSendMessage
@@ -299,6 +339,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const handleBlur = useMemoizedFn(() => {
+				setIsEditorFocused(false)
 				store.draftStore.saveDraftOnBlur({
 					value: store.editorStore.value,
 					onError: (error) => {
@@ -310,6 +351,17 @@ export const MessageEditorContainer = observer(
 				onBlur?.()
 				if (isMobile) resetDocumentScrollPosition()
 			})
+			const handleFocus = useMemoizedFn(() => {
+				promoteCanvasPendingMentions()
+				setIsEditorFocused(true)
+				onFocus?.()
+			})
+
+			const isAllowedEditorMention = useMemoizedFn(
+				(attrs: TiptapMentionAttributes, dataService: DataService) =>
+					isAllowedUploadMention(attrs) &&
+					(isAllowedMention ?? defaultIsAllowedMention)(attrs, dataService),
+			)
 
 			const handleSend = useMessageSendHandler({
 				voiceInputRef,
@@ -322,18 +374,21 @@ export const MessageEditorContainer = observer(
 				onSend,
 				topicMode,
 				collectMentionItemsFromEditor,
+				promoteCanvasPendingMentions,
 				isMountedRef,
 			})
 
 			const { tiptapEditor, domRef } = useMessageEditor({
 				value: store.editorStore.value,
 				onSend: handleSend,
-				placeholder,
+				placeholder: promptCarouselConfigured ? "" : placeholder,
+				ariaLabel: placeholder,
+				onPromptCarouselAccept: acceptPromptCarousel,
+				onPromptCarouselNavigate: navigatePromptCarousel,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
-					if (!selectedProject?.id) {
-						store.fileUploadStore.addPendingProjectFileReferences(items)
-					}
+					store.fileUploadStore.restorePastedUploadFileReferences(items)
+					store.fileUploadStore.addPendingProjectFileReferences(items)
 					onMentionInsertItems?.(items)
 				},
 				onChange: setValue,
@@ -343,18 +398,49 @@ export const MessageEditorContainer = observer(
 				onKeyboardInput: handleKeyboardInput,
 				shouldEnableMention,
 				sendEnabled,
-				aiCompletionEnabled,
+				aiCompletionEnabled: effectiveAiCompletionEnabled,
 				isOAuthInProgress: store.editorStore.isOAuthInProgress,
-				onFocus,
+				onFocus: handleFocus,
 				onBlur: handleBlur,
 				size,
 				topicMode,
 				mentionPanelStore,
-				isAllowedMention,
+				isAllowedMention: isAllowedEditorMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
 				shouldRestoreRemovedMention,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
+			const canvasSelectionMentionScope = useMemo(
+				() => ({
+					workspaceId: selectedWorkspace?.id ?? draftKey?.workspaceId,
+					projectId:
+						selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
+					topicId: selectedTopic?.id ?? draftKey?.topicId,
+				}),
+				[
+					draftKey?.projectId,
+					draftKey?.topicId,
+					draftKey?.workspaceId,
+					selectedProject?.id,
+					selectedTopic?.id,
+					selectedTopic?.project_id,
+					selectedWorkspace?.id,
+				],
+			)
+			const { promotePending: promoteCanvasPending } = useCanvasPendingMentionBridge({
+				editor: tiptapEditor,
+				enabled: shouldEnableMention,
+				scope: canvasSelectionMentionScope,
+			})
+
+			useEffect(() => {
+				promoteCanvasPendingMentionsRef.current = promoteCanvasPending
+				return () => {
+					if (promoteCanvasPendingMentionsRef.current === promoteCanvasPending) {
+						promoteCanvasPendingMentionsRef.current = null
+					}
+				}
+			}, [promoteCanvasPending])
 
 			useEffect(() => {
 				tiptapEditorRef.current = tiptapEditor
@@ -365,8 +451,16 @@ export const MessageEditorContainer = observer(
 			}, [tiptapEditor, store.editorStore])
 
 			useEffect(() => {
+				isMountedRef.current = true
+				const controller = new AbortController()
+				modelWaitAbortControllerRef.current = controller
+
 				return () => {
 					isMountedRef.current = false
+					controller.abort()
+					if (modelWaitAbortControllerRef.current === controller) {
+						modelWaitAbortControllerRef.current = null
+					}
 				}
 			}, [])
 
@@ -375,17 +469,37 @@ export const MessageEditorContainer = observer(
 			})
 
 			const handleSendMessageByContent = useMemoizedFn(
-				(data: SendMessageByContentPayload) => {
+				async (data: SendMessageByContentPayload) => {
+					let models: ResolvedMessageSendModels | null
+					try {
+						models = await resolveMessageSendModels({
+							topicModelStore: store.topicModelStore,
+							selectedModel: data.selectedModel,
+							selectedImageModel: data.selectedImageModel,
+							selectedVideoModel: data.selectedVideoModel,
+							signal: modelWaitAbortControllerRef.current?.signal,
+						})
+					} catch (error) {
+						if (
+							error instanceof MessageSendModelWaitError &&
+							error.reason === "aborted"
+						) {
+							return
+						}
+						magicToast.error(t("messageEditor.modelLoadFailed"))
+						return
+					}
+					if (!models) {
+						magicToast.error(t("messageEditor.pleaseSelectModel"))
+						return
+					}
 					onSend?.({
 						value: data.jsonContent,
 						mentionItems:
 							data.mentionItems ?? collectMentionItemsFromContent(data.jsonContent),
-						selectedModel:
-							data.selectedModel ?? store.topicModelStore.selectedLanguageModel,
-						selectedImageModel:
-							data.selectedImageModel ?? store.topicModelStore.selectedImageModel,
-						selectedVideoModel:
-							data.selectedVideoModel ?? store.topicModelStore.selectedVideoModel,
+						selectedModel: models.selectedModel,
+						selectedImageModel: models.selectedImageModel,
+						selectedVideoModel: models.selectedVideoModel,
 						topicMode: data.topicMode ?? topicMode,
 						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
 						extra: data.extra,
@@ -455,22 +569,28 @@ export const MessageEditorContainer = observer(
 				store.draftStore.resetSendingGuard()
 				clearAllMarkers()
 
-				if (!draftKey) {
-					return
-				}
+				try {
+					if (!draftKey || skipInitialDraftRestore) {
+						store.draftStore.markDraftReady()
+						return
+					}
 
-				if (skipInitialDraftRestore) {
-					return
+					await store.draftStore.loadLatestDraft({
+						isClearContent: true,
+						replaceDirectly: true,
+					})
+				} catch (error) {
+					store.draftStore.markDraftReady()
+					console.error("Failed to restore latest draft:", error)
+				} finally {
+					// Report readiness after the existing draft phase has settled.
+					onReady?.()
 				}
-
-				await store.draftStore.loadLatestDraft({
-					isClearContent: true,
-					replaceDirectly: true,
-				})
 			}, [
 				draftKey?.topicId,
 				draftKey?.projectId,
 				draftKey?.workspaceId,
+				onReady,
 				skipInitialDraftRestore,
 			])
 
@@ -742,7 +862,7 @@ export const MessageEditorContainer = observer(
 				isEditingQueueItem: isEditingQueueItem ?? false,
 				selectedTopic,
 				selectedProject,
-				topicMode,
+				topicMode: resolveModelTopicMode(topicMode, modelTopicMode),
 				mentionPanelStore,
 				mcpButtonConfig,
 				handleSelectMentionItem,
@@ -791,7 +911,8 @@ export const MessageEditorContainer = observer(
 					outsideBottomContent={outsideBottomContent}
 					outsideTopContent={outsideTopContent}
 					uploadModal={uploadModal}
-					showAiCompletion={aiCompletionEnabled}
+					promptCarouselNode={promptCarouselNode}
+					showAiCompletion={effectiveAiCompletionEnabled}
 				/>
 			)
 		},

@@ -5,10 +5,10 @@ Downloads crew agent definition files from remote API and extracts them
 to the local agents/crew/{agent_code}/ directory.
 """
 
+import asyncio
 import io
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 import aiohttp
 
@@ -18,6 +18,14 @@ from app.infrastructure.sdk.magic_service.parameter.get_agent_openapi_parameter 
 from app.utils.async_file_utils import async_exists, async_mkdir, async_write_bytes
 
 logger = get_logger(__name__)
+
+
+class CrewPackageInvalidError(RuntimeError):
+    """Raised when a Crew package is incomplete or invalid."""
+
+
+class CrewPackageFetchError(RuntimeError):
+    """Raised when a Crew package cannot be retrieved."""
 
 
 class CrewDownloader:
@@ -40,7 +48,9 @@ class CrewDownloader:
 
         file_url = result.file_url
         if not file_url:
-            raise ValueError(f"Agent '{agent_code}' API response missing file_url")
+            raise CrewPackageInvalidError(
+                f"Employee package metadata is incomplete: {agent_code}"
+            )
 
         logger.info(f"Downloading crew package for '{agent_code}' from: {file_url}")
 
@@ -48,8 +58,8 @@ class CrewDownloader:
 
         identity_file = target_dir / "IDENTITY.md"
         if not await async_exists(identity_file):
-            raise ValueError(
-                f"Downloaded crew package for '{agent_code}' is missing IDENTITY.md"
+            raise CrewPackageInvalidError(
+                f"Employee package is missing required configuration: {agent_code}"
             )
 
         logger.info(f"Crew package extracted to: {target_dir}")
@@ -62,30 +72,40 @@ class CrewDownloader:
         """
         await async_mkdir(target_dir, parents=True, exist_ok=True)
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
-                if resp.status != 200:
-                    raise Exception(
-                        f"Failed to download crew package: HTTP {resp.status}"
-                    )
-                data = await resp.read()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                    if resp.status != 200:
+                        raise CrewPackageFetchError(
+                            f"Employee package download returned HTTP {resp.status}"
+                        )
+                    data = await resp.read()
+        except asyncio.CancelledError:
+            raise
+        except CrewPackageFetchError:
+            raise
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            raise CrewPackageFetchError("Employee package download failed") from exc
 
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            names = zf.namelist()
-            # Strip common top-level directory prefix (e.g. "SMA-xxx/") if all
-            # entries share the same root folder, so files land directly in target_dir.
-            top_level = {n.split("/")[0] for n in names if n.strip()}
-            prefix = (top_level.pop() + "/") if len(top_level) == 1 else ""
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                names = zf.namelist()
+                # Strip common top-level directory prefix (e.g. "SMA-xxx/") if all
+                # entries share the same root folder, so files land directly in target_dir.
+                top_level = {n.split("/")[0] for n in names if n.strip()}
+                prefix = (top_level.pop() + "/") if len(top_level) == 1 else ""
 
-            for member in zf.infolist():
-                rel_path = member.filename[len(prefix):] if prefix and member.filename.startswith(prefix) else member.filename
-                if not rel_path:  # top-level directory entry itself
-                    continue
-                dest = target_dir / rel_path
-                if member.filename.endswith("/"):
-                    await async_mkdir(dest, parents=True, exist_ok=True)
-                else:
-                    await async_mkdir(dest.parent, parents=True, exist_ok=True)
-                    await async_write_bytes(dest, zf.read(member.filename))
+                for member in zf.infolist():
+                    rel_path = member.filename[len(prefix):] if prefix and member.filename.startswith(prefix) else member.filename
+                    if not rel_path:  # top-level directory entry itself
+                        continue
+                    dest = target_dir / rel_path
+                    if member.filename.endswith("/"):
+                        await async_mkdir(dest, parents=True, exist_ok=True)
+                    else:
+                        await async_mkdir(dest.parent, parents=True, exist_ok=True)
+                        await async_write_bytes(dest, zf.read(member.filename))
+        except zipfile.BadZipFile as exc:
+            raise CrewPackageInvalidError("Employee package archive is invalid") from exc
 
         logger.info(f"Extracted {len(names)} files to {target_dir}")

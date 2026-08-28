@@ -8,6 +8,10 @@ import { RecallTestView } from "./components/RecallTestView"
 import { RebindModeView } from "./components/RebindModeView"
 import type { KnowledgeDetailViewProps } from "./types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import useNavigate from "@/routes/hooks/useNavigate"
+import { RouteName } from "@/routes/constants"
+import { CREW_EDIT_STEP } from "../../../store"
 
 /**
  * Main container component for knowledge detail view
@@ -20,7 +24,9 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
  * - 7.8: Early return from functions
  */
 function KnowledgeDetailView({ knowledgeCode }: KnowledgeDetailViewProps) {
-	const { crewCode, knowledge } = useCrewEditStore()
+	const { crewCode, knowledge, conversation } = useCrewEditStore()
+	const navigate = useNavigate()
+	const readOnly = isReadOnlyProject(conversation.selectedProject?.user_role)
 
 	// 使用 ref 存储最新的 knowledge，避免因 MobX 对象引用变化导致重复订阅
 	const knowledgeRef = useRef(knowledge)
@@ -59,6 +65,16 @@ function KnowledgeDetailView({ knowledgeCode }: KnowledgeDetailViewProps) {
 		documentType,
 		editDocumentCode,
 	} = useKnowledgeDetailMode()
+
+	useEffect(() => {
+		if (!readOnly || (!isCreateMode && !isEditMode && !isRebindMode) || !crewCode) return
+		navigate({
+			name: RouteName.CrewEdit,
+			params: { id: crewCode },
+			query: { panel: CREW_EDIT_STEP.KnowledgeBase, code: knowledgeCode },
+			replace: true,
+		})
+	}, [crewCode, isCreateMode, isEditMode, isRebindMode, knowledgeCode, navigate, readOnly])
 	const { handleClose, handleBackToList } = useKnowledgeNavigation({
 		crewCode: crewCode ?? undefined,
 		knowledgeCode,
@@ -77,7 +93,7 @@ function KnowledgeDetailView({ knowledgeCode }: KnowledgeDetailViewProps) {
 	}
 
 	// Early return for rebind mode (Vercel 7.8)
-	if (isRebindMode) {
+	if (isRebindMode && !readOnly) {
 		return (
 			<div className="flex h-full w-full flex-col bg-background p-3.5">
 				<RebindModeView
@@ -91,7 +107,7 @@ function KnowledgeDetailView({ knowledgeCode }: KnowledgeDetailViewProps) {
 	}
 
 	// Early return for create/edit mode (Vercel 7.8)
-	if ((isCreateMode || isEditMode) && documentType) {
+	if ((isCreateMode || isEditMode) && documentType && !readOnly) {
 		return (
 			<div className="flex h-full w-full flex-col bg-background p-3.5">
 				<CreateModeView

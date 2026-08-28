@@ -1,6 +1,6 @@
 import { userStore } from "@/models/user"
 import { RequestMethod as OpenSourceRequestMethod } from "@/apis/constant"
-import { env, isCommercial } from "@/utils/env"
+import { env } from "@/utils/env"
 import { genRequestUrl } from "@/utils/http"
 import { Upload, UploadConfig } from "@dtyq/upload-sdk"
 import { useMemoizedFn } from "ahooks"
@@ -16,7 +16,6 @@ import magicToast from "@/components/base/MagicToaster/utils"
 // Todo（2025-04-16）:
 // CommercialRequestUrl 与 OpenSourceRequestUrl 待合并
 // CommercialRequestMethod 与 OpenSourceRequestMethod 待合并
-// 后续针对请求的 api 不应该再依赖 isCommercial 的判断
 
 /**
  * 文件上传 Hook
@@ -57,6 +56,7 @@ export const useUpload = <F extends FileUploadData>({
 	onFail,
 	onInit,
 	storageType = "private",
+	businessCode,
 	sts = true,
 	body,
 	url,
@@ -68,6 +68,13 @@ export const useUpload = <F extends FileUploadData>({
 	const logger = Logger.createLogger("UseUploadFiles")
 
 	const [uploading, setUploading] = useState(false)
+
+	const uploadCredentialPath =
+		businessCode === "skill"
+			? storageType === "public"
+				? "/api/v1/file/public-upload-token"
+				: "/api/v1/file/private-upload-token"
+			: "/api/v1/file/temporary-credential"
 
 	const upload = useMemoizedFn<
 		(
@@ -109,7 +116,12 @@ export const useUpload = <F extends FileUploadData>({
 					const { organizationCode } = userStore.user
 
 					if (!fileData.file) {
-						logger.error("upload missing file body", { fileName: originalFileName })
+						logger.error({
+							eventKey: "upload_missing_file_body_failed",
+							errorKind: "invalid_state",
+							message: "upload missing file body",
+							context: { fileIndex: i, fileName: originalFileName },
+						})
 						reject(new Error("file is required"))
 						return
 					}
@@ -121,13 +133,7 @@ export const useUpload = <F extends FileUploadData>({
 					 * 保证切换组织后，能正确获取鉴权信息
 					 */
 					const uploadUrl = `${
-						url ??
-						env("MAGIC_SERVICE_BASE_URL") +
-							genRequestUrl(
-								isCommercial()
-									? "/api/v1/file/temporary-credential"
-									: "/api/v1/file/temporary-credential",
-							)
+						url ?? env("MAGIC_SERVICE_BASE_URL") + genRequestUrl(uploadCredentialPath)
 					}?organization_code=${organizationCode}`
 
 					const file = new File([fileData.file], "file", {
@@ -153,11 +159,14 @@ export const useUpload = <F extends FileUploadData>({
 							customCredentials,
 							...customOption,
 							body: JSON.stringify(
-								body ?? {
-									storage: storageType,
-									sts,
-									content_type: fileData.file.type,
-								},
+								body ??
+									(businessCode === "skill"
+										? { business_code: businessCode }
+										: {
+												storage: storageType,
+												sts,
+												content_type: fileData.file.type,
+											}),
 							),
 						})
 
@@ -186,10 +195,12 @@ export const useUpload = <F extends FileUploadData>({
 					})
 
 					fail?.((err) => {
-						logger.error("upload failed", {
-							fileName: originalFileName,
-							fileSize: fileData.file?.size,
-							message: err?.message,
+						logger.error({
+							eventKey: "upload_failed",
+							errorKind: "unknown",
+							error: err,
+							message: "upload failed",
+							context: { fileSize: fileData.file?.size },
 						})
 						onFail?.(fileData, err)
 						reject({
@@ -217,16 +228,15 @@ export const useUpload = <F extends FileUploadData>({
 			setUploading(false)
 
 			if (rejectedData.length > 0) {
-				logger.error("batch upload finished with rejections", {
-					count: rejectedData.length,
-					files: rejectedData
-						.map((r) => {
-							const reason = (r as PromiseRejectedResult).reason as
-								| { uploadFile?: { name?: string } }
-								| undefined
-							return reason?.uploadFile?.name
-						})
-						.filter(Boolean),
+				logger.error({
+					eventKey: "batch_upload_finished_rejections_failed",
+					errorKind: "unknown",
+					error: rejectedData[0]?.reason,
+					message: "batch upload finished with rejections",
+					// Filenames may contain business data; keep count only.
+					context: {
+						count: rejectedData.length,
+					},
 				})
 			}
 
@@ -319,7 +329,12 @@ export const useUpload = <F extends FileUploadData>({
 				}
 				return { fullfilled: [] }
 			} catch (error) {
-				logger.error("uploadAndGetFileUrl failed", error)
+				logger.error({
+					eventKey: "upload_and_get_file_url_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "uploadAndGetFileUrl failed",
+				})
 				return { fullfilled: [] }
 			}
 		},

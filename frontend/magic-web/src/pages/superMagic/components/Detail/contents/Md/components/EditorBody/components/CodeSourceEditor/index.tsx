@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react"
-import { MonacoEditor } from "@/lib/monacoEditor"
+import { MonacoEditor } from "@/infrastructure/editors/monaco"
 import type { editor } from "monaco-editor"
 import { useUnmount } from "ahooks"
 import { useTheme } from "@/models/config/hooks"

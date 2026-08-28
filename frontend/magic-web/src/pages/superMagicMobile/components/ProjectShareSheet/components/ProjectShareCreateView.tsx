@@ -16,7 +16,7 @@ import { NodeType, type TreeNode } from "@dtyq/user-selector"
 import MemberDepartmentSelector from "@/components/business/MemberDepartmentSelector"
 import { Input } from "@/components/shadcn-ui/input"
 import { Switch } from "@/components/shadcn-ui/switch"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { MobileAttachmentRowIcon } from "@/pages/superMagic/components/TopicFilesButton/components/MobileAttachmentRowIcon"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -51,7 +51,12 @@ function SelectedFilesSection({ controller }: { controller: ProjectShareSheetCon
 		return null
 	}
 
-	if (controller.mode !== "file" || controller.selectedFileCount === 0) {
+	if (controller.mode !== "file") {
+		return null
+	}
+
+	const canEditFileRange = controller.isEditing && !controller.enableInlineFileSelection
+	if (controller.selectedFileCount === 0 && !canEditFileRange) {
 		return null
 	}
 
@@ -60,6 +65,7 @@ function SelectedFilesSection({ controller }: { controller: ProjectShareSheetCon
 			hierarchy={controller.selectedFileHierarchy}
 			totalCount={controller.selectedFileCount}
 			testId="project-share-sheet-selected-files-trigger"
+			onEdit={canEditFileRange ? controller.openFileSelector : undefined}
 		/>
 	)
 }
@@ -199,6 +205,21 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 		],
 		[t],
 	)
+
+	if (controller.view === "edit" && controller.editLoading) {
+		return (
+			<div
+				className="min-h-70 flex items-center justify-center text-sm text-muted-foreground"
+				data-testid="project-share-sheet-edit-loading"
+			>
+				{t("common.loading")}
+				<ProjectShareScrollSpacer
+					variant="single"
+					testId="project-share-sheet-edit-loading-spacer"
+				/>
+			</div>
+		)
+	}
 
 	return (
 		<div className="flex flex-col gap-2.5" data-testid="project-share-sheet-create-view">

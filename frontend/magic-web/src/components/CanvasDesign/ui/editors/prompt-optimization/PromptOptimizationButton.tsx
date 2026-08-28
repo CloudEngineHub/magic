@@ -267,6 +267,10 @@ export default function PromptOptimizationButton(props: PromptOptimizationButton
 							tokenConfig={promptPlaceholderTokenConfig}
 							placeholderPaths={placeholderPaths ?? {}}
 							onPreviewMediaResource={handlePreviewMediaResource}
+							resolveResourceReference={
+								canvas?.magicConfigManager.config?.methods?.resolveResourceReference
+							}
+							deletedSuffix={t("messageHistory.deletedSuffix", "（已删除）")}
 						/>
 					</div>
 				)}

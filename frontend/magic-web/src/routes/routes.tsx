@@ -11,7 +11,12 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
+import {
+	microAppPublicRoutes,
+	superMagicMicroAppRoutes,
+} from "@/routes/modules/superMagicMicroAppRoutes"
 import { superMagicSlidesTemplateRoutes } from "@/routes/modules/superMagicSlidesTemplateRoutes"
+import ProjectOrganizationAccessGuard from "@/pages/superMagic/components/ProjectOrganizationAccessGuard"
 
 /**
  * @description 路由处理器，需要异步渲染，等待路由生成再渲染再执行对应业务流程
@@ -471,6 +476,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						path: `/:clusterCode${RoutePath.SuperWorkspaceState}`,
 						element: <WorkspacePage />,
 					},
+					...superMagicMicroAppRoutes,
 					{
 						name: RouteName.SuperChatProjectState,
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
@@ -480,12 +486,20 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 					{
 						name: RouteName.SuperWorkspaceProjectState,
 						path: `/:clusterCode${RoutePath.SuperWorkspaceProjectState}`,
-						element: <ProjectPage />,
+						element: (
+							<ProjectOrganizationAccessGuard>
+								<ProjectPage />
+							</ProjectOrganizationAccessGuard>
+						),
 					},
 					{
 						name: RouteName.SuperWorkspaceProjectTopicState,
 						path: `/:clusterCode${RoutePath.SuperWorkspaceProjectTopicState}`,
-						element: <TopicPage />,
+						element: (
+							<ProjectOrganizationAccessGuard>
+								<TopicPage />
+							</ProjectOrganizationAccessGuard>
+						),
 					},
 				],
 			},
@@ -543,6 +557,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			path: RoutePath.SuperMagicShare,
 			element: <SuperMagicShare />,
 		},
+		...microAppPublicRoutes,
 		{
 			name: RouteName.SuperMagicFileShare,
 			path: RoutePath.SuperMagicFileShare,

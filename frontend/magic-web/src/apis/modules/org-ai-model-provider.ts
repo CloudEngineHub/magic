@@ -1,10 +1,14 @@
 import type { HttpClient } from "@/apis/core/HttpClient"
+import type { VideoGenerationConfig } from "@/components/CanvasDesign/public/magic-types"
 
 import { genRequestUrl } from "@/utils/http"
 
-/** Backend model_type: 0=文生图, 3=LLM */
+/** Backend model_type: 0=文生图, 3=LLM, 5=文生视频 */
 export const MODEL_TYPE_LLM = 3
 export const MODEL_TYPE_IMAGE = 0
+export const MODEL_TYPE_VIDEO = 5
+
+export type ServiceProviderCategory = "llm" | "vlm" | "vgm"
 
 /** Response from GET /service-providers */
 export interface ServiceProviderConfig {
@@ -12,7 +16,7 @@ export interface ServiceProviderConfig {
 	name: string
 	icon?: string
 	provider_code: string
-	category: "llm" | "vlm"
+	category: ServiceProviderCategory
 	config: Record<string, unknown>
 	alias?: string
 	translate?: { alias?: Record<string, string> }
@@ -38,7 +42,7 @@ export interface ProviderTemplate {
 	name: string
 	icon?: string
 	provider_code: string
-	category: "llm" | "vlm"
+	category: ServiceProviderCategory
 	config_schema?: Record<string, { required?: boolean; type?: string }>
 	[key: string]: unknown
 }
@@ -47,7 +51,7 @@ export interface AddOrgAiModelProviderParams {
 	service_provider_id: string
 	alias?: string
 	config: Record<string, string>
-	category?: "llm" | "vlm"
+	category?: ServiceProviderCategory
 	status?: 0 | 1
 }
 
@@ -103,6 +107,8 @@ export interface ServiceProviderModel {
 		id: string
 		name: string
 	}
+	/** 视频生成能力配置（个人/服务商模型接口可能返回） */
+	video_generation_config?: VideoGenerationConfig | null
 	/** 生图尺寸与参考图上限等（个人/服务商模型接口可能返回） */
 	image_size_config?: {
 		max_reference_images?: number
@@ -121,13 +127,13 @@ export interface ServiceProviderModelsResponse {
 }
 
 export const generateOrgAiModelProviderApi = (fetch: HttpClient) => ({
-	getOrgAiModelProviderList(category: "llm" | "vlm" = "llm") {
+	getOrgAiModelProviderList(category: ServiceProviderCategory = "llm") {
 		return fetch.get<ServiceProviderConfig[]>(
 			genRequestUrl("/api/v1/organization/admin/service-providers", {}, { category }),
 		)
 	},
 
-	getNonOfficialProviderTemplates(category: "llm" | "vlm" = "llm") {
+	getNonOfficialProviderTemplates(category: ServiceProviderCategory = "llm") {
 		return fetch.get<ProviderTemplate[]>(
 			genRequestUrl("/api/v1/service-providers/templates/queries", {}, { category }),
 		)

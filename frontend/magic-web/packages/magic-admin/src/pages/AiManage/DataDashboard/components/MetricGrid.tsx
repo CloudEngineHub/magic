@@ -25,8 +25,14 @@ import { formatDecimal, formatNumber, formatPercent, safeDivide } from "../utils
 
 export function buildMetrics(
 	view: DataDashboardView,
-	summary: DataDashboard.AgentSummary | DataDashboard.MemberSummary | null,
+	summary:
+		| DataDashboard.AgentSummary
+		| DataDashboard.MemberSummary
+		| DataDashboard.OrganizationSummary
+		| DataDashboard.ConsumptionAnalysisSummary
+		| null,
 	t: DashboardT,
+	statisticsDayCount = 0,
 ): MetricCardData[] {
 	if (!summary) return []
 
@@ -90,6 +96,124 @@ export function buildMetrics(
 		]
 	}
 
+	if (view === VIEW.ConsumptionAnalysis) {
+		const consumptionSummary = summary as DataDashboard.ConsumptionAnalysisSummary
+		return [
+			metricFromKey(
+				t,
+				METRIC_KEY.TotalAmount,
+				formatNumber(consumptionSummary.total_points),
+				"green",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.TotalTokens,
+				formatNumber(consumptionSummary.total_tokens),
+				"cyan",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DailyAmount,
+				formatNumber(safeDivide(consumptionSummary.total_points, statisticsDayCount)),
+				"green",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DailyTokens,
+				formatNumber(safeDivide(consumptionSummary.total_tokens, statisticsDayCount)),
+				"cyan",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.AvgAmount,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_points,
+						consumptionSummary.total_call_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.AvgTokens,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_tokens,
+						consumptionSummary.total_call_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.MemberAvgAmount,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_points,
+						consumptionSummary.calling_member_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.MemberAvgTokens,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_tokens,
+						consumptionSummary.calling_member_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentAvgAmount,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_points,
+						consumptionSummary.department_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentAvgTokens,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_tokens,
+						consumptionSummary.department_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.AgentAvgAmount,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_points,
+						consumptionSummary.active_agent_count,
+					),
+				),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.AgentAvgTokens,
+				formatNumber(
+					safeDivide(
+						consumptionSummary.total_tokens,
+						consumptionSummary.active_agent_count,
+					),
+				),
+				"gray",
+			),
+		]
+	}
+
 	if (view === VIEW.MemberAnalysis) {
 		const memberSummary = summary as DataDashboard.MemberSummary
 		const activeRate = safeDivide(
@@ -141,6 +265,101 @@ export function buildMetrics(
 				t,
 				METRIC_KEY.MemberAvgTokens,
 				formatNumber(safeDivide(memberSummary.total_tokens, callingMemberCount)),
+				"gray",
+			),
+		]
+	}
+
+	if (view === VIEW.OrganizationAnalysis) {
+		const organizationSummary = summary as DataDashboard.OrganizationSummary
+		const coveredDepartmentCount = getDepartmentUsageCount(organizationSummary, [
+			"high",
+			"medium",
+			"low",
+		])
+		const uncoveredDepartmentCount = getDepartmentUsageCount(organizationSummary, ["unused"])
+		const departmentCount = organizationSummary.usage_distribution.reduce(
+			(total, item) => total + item.department_count,
+			0,
+		)
+		const departmentAverageActivationRate = safeDivide(
+			organizationSummary.department_statistics.reduce(
+				(total, item) =>
+					total + safeDivide(item.active_member_count, item.employed_member_count),
+				0,
+			),
+			organizationSummary.department_statistics.length,
+		)
+		// 人均指标使用后端去重后的调用成员数，不能累加各层级 active_member_count，避免父子部门重复统计。
+		const callingMemberCount = organizationSummary.calling_member_count
+
+		return [
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentLevels,
+				`${formatNumber(organizationSummary.level_1_department_count)} / ${formatNumber(
+					organizationSummary.level_2_department_count,
+				)} / ${formatNumber(organizationSummary.level_3_department_count)}`,
+				"blue",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.CoveredDepartments,
+				formatNumber(coveredDepartmentCount),
+				"blue",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.UncoveredDepartments,
+				formatNumber(uncoveredDepartmentCount),
+				"orange",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentCoverage,
+				formatPercent(safeDivide(coveredDepartmentCount, departmentCount)),
+				"green",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentAverageActivationRate,
+				formatPercent(departmentAverageActivationRate),
+				"green",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentCalls,
+				formatNumber(organizationSummary.total_call_count),
+				"blue",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentAmount,
+				formatNumber(organizationSummary.total_points),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentTokens,
+				formatNumber(organizationSummary.total_tokens),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentMemberAvgCalls,
+				formatDecimal(safeDivide(organizationSummary.total_call_count, callingMemberCount)),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentMemberAvgAmount,
+				formatNumber(safeDivide(organizationSummary.total_points, callingMemberCount)),
+				"gray",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.DepartmentMemberAvgTokens,
+				formatNumber(safeDivide(organizationSummary.total_tokens, callingMemberCount)),
 				"gray",
 			),
 		]
@@ -231,6 +450,17 @@ function metricFromKey(
 	}
 }
 
+function getDepartmentUsageCount(
+	summary: DataDashboard.OrganizationSummary,
+	usageTypes: DataDashboard.DepartmentUsageType[],
+) {
+	const usageTypeSet = new Set<DataDashboard.DepartmentUsageType>(usageTypes)
+	return summary.usage_distribution.reduce(
+		(total, item) => total + (usageTypeSet.has(item.usage_type) ? item.department_count : 0),
+		0,
+	)
+}
+
 const METRIC_ICON_MAP: Partial<Record<MetricKey, typeof BarChart3>> = {
 	[METRIC_KEY.ActiveMembers]: BarChart3,
 	[METRIC_KEY.ActivationRate]: Database,
@@ -246,7 +476,7 @@ const METRIC_ICON_MAP: Partial<Record<MetricKey, typeof BarChart3>> = {
 	[METRIC_KEY.DepartmentCoverage]: UsersRound,
 	[METRIC_KEY.DepartmentAverageActivationRate]: UsersRound,
 	[METRIC_KEY.DepartmentCalls]: Building2,
-	[METRIC_KEY.DepartmentAmount]: BriefcaseBusiness,
+	[METRIC_KEY.DepartmentAmount]: Bot,
 	[METRIC_KEY.DepartmentTokens]: TrendingUp,
 	[METRIC_KEY.DepartmentMemberAvgCalls]: BarChart3,
 	[METRIC_KEY.DepartmentMemberAvgAmount]: Database,
@@ -259,10 +489,16 @@ const METRIC_ICON_MAP: Partial<Record<MetricKey, typeof BarChart3>> = {
 	[METRIC_KEY.AgentDepartments]: Building2,
 	[METRIC_KEY.AgentAmount]: Bot,
 	[METRIC_KEY.AgentTokens]: TrendingUp,
-	[METRIC_KEY.AvgAmount]: BarChart3,
-	[METRIC_KEY.AvgTokens]: Database,
-	[METRIC_KEY.TotalAmount]: BriefcaseBusiness,
+	[METRIC_KEY.TotalAmount]: BarChart3,
 	[METRIC_KEY.TotalTokens]: Database,
+	[METRIC_KEY.DailyAmount]: CircleGauge,
+	[METRIC_KEY.DailyTokens]: UsersRound,
+	[METRIC_KEY.AvgAmount]: UserRoundCheck,
+	[METRIC_KEY.AvgTokens]: Building2,
+	[METRIC_KEY.DepartmentAvgAmount]: BarChart3,
+	[METRIC_KEY.DepartmentAvgTokens]: Database,
+	[METRIC_KEY.AgentAvgAmount]: CircleGauge,
+	[METRIC_KEY.AgentAvgTokens]: UsersRound,
 }
 
 function getMetricIcon(key: string) {

@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import type { RecordingDetailFileMap, RecordingDetailFileRef } from "../../types/recording-detail"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
@@ -16,6 +17,8 @@ interface RecordingDetailRightPanelProps {
 	fileMap: RecordingDetailFileMap | null
 	summaryContent: Record<string, string | undefined>
 	notesContent?: string
+	attachmentTree?: AttachmentFile[]
+	notesFilePath?: string
 	attachmentList: AttachmentItem[]
 	summaryReady: boolean
 	summarizing: boolean
@@ -32,6 +35,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	fileMap,
 	summaryContent,
 	notesContent,
+	attachmentTree = [],
+	notesFilePath,
 	attachmentList,
 	summaryReady,
 	summarizing,
@@ -66,7 +71,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 		const status = summarizing ? "generating" : summaryFailed ? "failed" : "pending"
 		return (
 			<div
-				className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
+				className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
 				data-testid="recording-detail-right-panel"
 			>
 				<RecordingDetailSummaryState
@@ -80,7 +85,10 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 
 	if (tabs.length === 0) {
 		return (
-			<div className="flex h-full min-h-[560px] items-center justify-center rounded-[22px] border border-border bg-card shadow-sm">
+			<div
+				className="flex h-full min-h-0 items-center justify-center rounded-[22px] border border-border bg-card shadow-sm"
+				data-testid="recording-detail-right-panel"
+			>
 				<RecordingDetailEmptyState variant="noSummary" />
 			</div>
 		)
@@ -90,7 +98,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 
 	return (
 		<div
-			className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
+			// The panel must shrink with the workbench so focused transcript rows cannot scroll the horizontal viewport vertically.
+			className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
 			data-testid="recording-detail-right-panel"
 		>
 			<RecordingDetailTabStrip
@@ -105,6 +114,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 						file={activeTab.file}
 						content={activeTab.content}
 						attachmentList={attachmentList}
+						attachmentTree={attachmentTree}
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={onOpenSpeakerSettings}
 						onTimeClick={onTimeClick}
@@ -130,6 +140,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 								<RecordingMarkdownContent
 									content={notesContent}
 									layout="desktop"
+									attachments={attachmentTree}
+									relativeFilePath={notesFilePath}
 									speakerNameMap={speakerNameMap}
 									onSpeakerClick={onOpenSpeakerSettings}
 									onTimeClick={(time) => onTimeClick(time)}
@@ -145,6 +157,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 							file={activeTab.file}
 							content={activeTab.content}
 							attachmentList={attachmentList}
+							attachmentTree={attachmentTree}
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onTimeClick={onTimeClick}

@@ -111,4 +111,22 @@ describe("vitePluginTransformBaseImports", () => {
 			'import TriangleAlertIcon from "lucide-react/dist/esm/icons/triangle-alert.js"',
 		)
 	})
+
+	test("marks transformed Lucide static imports for the static code-splitting group", () => {
+		const transformedCode = getTransformResult({
+			code: 'import { Search } from "lucide-react"',
+			paths: [
+				{
+					base: "lucide-react",
+					subDirectory: "dist/esm/icons",
+					query: "lucide-static",
+					componentNameFormatter: (componentName) => `${componentName.toLowerCase()}.js`,
+				},
+			],
+		})
+
+		expect(transformedCode).toContain(
+			'import Search from "lucide-react/dist/esm/icons/search.js?lucide-static"',
+		)
+	})
 })

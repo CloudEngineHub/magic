@@ -6,6 +6,7 @@ import { ElementToolStateProvider } from "../providers/ElementToolStateProvider"
 import { LayersUIProvider } from "../providers/LayersUIProvider"
 import { ElementMenuProvider } from "../../ui/panels/menu/ElementMenuProvider"
 import { ConnectionMenuProvider } from "../../ui/panels/menu/ConnectionMenuProvider"
+import { MediaReplaceMenuProvider } from "../../ui/panels/media/MediaReplaceMenuProvider"
 import { MagicProvider } from "../providers/MagicProvider"
 import { PortalContainerProvider } from "../../ui/primitives/custom/PortalContainerContext"
 import { CanvasDesignI18nProvider } from "../providers/I18nProvider"
@@ -57,9 +58,14 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 										<CanvasUIProvider readonly={props.readonly}>
 											<ElementMenuProvider>
 												<ConnectionMenuProvider>
-													<LayersUIProvider getDevice={getDevice}>
-														<CanvasDesignContent ref={ref} {...props} />
-													</LayersUIProvider>
+													<MediaReplaceMenuProvider>
+														<LayersUIProvider getDevice={getDevice}>
+															<CanvasDesignContent
+																ref={ref}
+																{...props}
+															/>
+														</LayersUIProvider>
+													</MediaReplaceMenuProvider>
 												</ConnectionMenuProvider>
 											</ElementMenuProvider>
 										</CanvasUIProvider>

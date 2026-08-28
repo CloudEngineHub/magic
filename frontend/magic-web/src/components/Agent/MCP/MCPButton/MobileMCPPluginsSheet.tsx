@@ -4,7 +4,7 @@ import { Check, Plug, Plus, Search, Settings, X } from "lucide-react"
 import { IconLoader2 } from "@tabler/icons-react"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicImage from "@/components/base/MagicImage"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import {
 	useMCPPanelController,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import type { VideoElement } from "../../../runtime/document/types"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import { useCanvas } from "../../providers/CanvasProvider"
 
 /**
@@ -12,7 +13,7 @@ export function useVideoOssSrc(videoElement: VideoElement | null) {
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasError, setHasError] = useState(false)
 
-	const path = videoElement?.src
+	const path = videoElement ? getActiveContent(videoElement)?.src : undefined
 
 	const syncOssSrc = useCallback(async () => {
 		if (!canvas || !path) {
@@ -28,7 +29,7 @@ export function useVideoOssSrc(videoElement: VideoElement | null) {
 			const loaded = await canvas.videoResourceManager.ensureFreshOssInfo(path, {
 				allowCachedFallback: true,
 			})
-			if (videoElement?.src === path) {
+			if (videoElement && getActiveContent(videoElement)?.src === path) {
 				if (loaded) {
 					setOssSrc(loaded.ossSrc)
 					setHasError(false)
@@ -38,16 +39,16 @@ export function useVideoOssSrc(videoElement: VideoElement | null) {
 				}
 			}
 		} catch (error) {
-			if (videoElement?.src === path) {
+			if (videoElement && getActiveContent(videoElement)?.src === path) {
 				setOssSrc(undefined)
 				setHasError(true)
 			}
 		} finally {
-			if (videoElement?.src === path) {
+			if (videoElement && getActiveContent(videoElement)?.src === path) {
 				setIsLoading(false)
 			}
 		}
-	}, [canvas, path, videoElement?.src])
+	}, [canvas, path, videoElement])
 
 	useEffect(() => {
 		void syncOssSrc()

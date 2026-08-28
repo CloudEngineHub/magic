@@ -1,9 +1,10 @@
 import { Button, Checkbox, Flex, Modal } from "antd"
-import { createStyles, useResponsive } from "antd-style"
+import { createStyles } from "antd-style"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import IconInfo from "./icons/IconInfo"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export interface FolderConflictModalProps {
 	visible: boolean
@@ -13,6 +14,7 @@ export interface FolderConflictModalProps {
 	onCancel: () => void
 	onMerge: (applyToAll: boolean) => void
 	onKeepBoth: (applyToAll: boolean) => void
+	onReplace?: (applyToAll: boolean) => void
 }
 
 const useStyles = createStyles(({ css, token, prefixCls }) => ({
@@ -169,11 +171,12 @@ export function FolderConflictModal({
 	onCancel,
 	onMerge,
 	onKeepBoth,
+	onReplace,
 }: FolderConflictModalProps) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const [applyToAll, setApplyToAll] = useState(false)
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 	const showApplyToAll = (totalConflicts || 0) > 1
 
 	const resetApplyToAll = () => setApplyToAll(false)
@@ -183,6 +186,10 @@ export function FolderConflictModal({
 	}
 	const handleKeepBoth = () => {
 		onKeepBoth(applyToAll)
+		resetApplyToAll()
+	}
+	const handleReplace = () => {
+		onReplace?.(applyToAll)
 		resetApplyToAll()
 	}
 	const handleMerge = () => {
@@ -243,6 +250,11 @@ export function FolderConflictModal({
 					<div className={styles.mobileFooter}>
 						{showApplyToAll ? applyToAllCheckbox : null}
 						<div className={styles.mobileButtonGroup}>
+							{onReplace && (
+								<Button className={styles.mobileButton} onClick={handleReplace}>
+									{t("topicFiles.duplicateFolder.replace")}
+								</Button>
+							)}
 							<Button className={styles.mobileButton} onClick={handleKeepBoth}>
 								{t("topicFiles.duplicateFolder.keepBoth")}
 							</Button>
@@ -292,6 +304,11 @@ export function FolderConflictModal({
 							<Button className={styles.primaryButton} onClick={handleKeepBoth}>
 								{t("topicFiles.duplicateFolder.keepBoth")}
 							</Button>
+							{onReplace && (
+								<Button className={styles.primaryButton} onClick={handleReplace}>
+									{t("topicFiles.duplicateFolder.replace")}
+								</Button>
+							)}
 							{canMerge && (
 								<Button className={styles.primaryButton} onClick={handleMerge}>
 									{t("topicFiles.duplicateFolder.merge")}

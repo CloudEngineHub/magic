@@ -5,7 +5,6 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { LoginValueKey } from "@/pages/login/constants"
 import { RoutePath } from "@/constants/routes"
 import { baseHistory, history } from "@/routes/history"
-import { RouteName } from "@/routes/constants"
 import { logger as Logger } from "@/utils/log"
 import { useAuthorization } from "@/models/user/hooks"
 import { useClusterCode } from "@/providers/ClusterProvider"
@@ -22,6 +21,8 @@ import { userStore } from "@/models/user"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
 import { defaultClusterCode } from "@/routes/helpers"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 const logger = Logger.createLogger("withThirdPartyAuth")
 
@@ -83,13 +84,21 @@ export function withThirdPartyAuth<T extends object>(
 						baseHistory.replace(`${url.pathname}${url.search}`)
 					}
 				} catch (error: any) {
-					logger.error(
-						"temporary authorization code call exception",
-						`tempToken: ${tempToken}`,
-						error,
-					)
+					logger.error({
+						eventKey: "temporary_authorization_code_exchange_failed",
+						errorKind: "permission",
+						error: error,
+						message: "temporary authorization code call exception",
+						// 临时授权码属于凭据，只记录是否存在，禁止进入上报内容。
+						context: { tempToken },
+					})
 					// Need to redirect to login route
-					history.push({ name: RouteName.Login })
+						authEventBus.emit(AuthEventName.RequestLogin, {
+						reason: "third-party-auth-failed",
+						source: "third-party",
+						returnTo: window.location.href,
+						preserveQuery: true,
+					})
 				}
 			},
 			{ wait: 3000, leading: true, trailing: false },
@@ -188,11 +197,22 @@ export function withThirdPartyAuth<T extends object>(
 					// Optimized for specific scenarios, continue the business process under the same tab
 					await redirectUrlStep()
 				} catch (error: any) {
-					logger.error("login free error", `deployCode: ${deployCode}`, error)
+					logger.error({
+						eventKey: "login_free_failed",
+						errorKind: "permission",
+						error: error,
+						message: "login free error",
+						context: { deployCode },
+					})
 					magicToast.error(error?.message)
 
 					// Need to redirect to login route
-					history.push({ name: RouteName.Login })
+					authEventBus.emit(AuthEventName.RequestLogin, {
+						reason: "third-party-auth-failed",
+						source: "third-party",
+						returnTo: window.location.href,
+						preserveQuery: true,
+					})
 				}
 			},
 			{ wait: 3000, leading: true, trailing: false },
@@ -230,7 +250,12 @@ export function withThirdPartyAuth<T extends object>(
 							}
 						}
 					} catch (error) {
-						logger.error("login free mount error", error)
+						logger.error({
+							eventKey: "login_free_mount_failed",
+							errorKind: "permission",
+							error: error,
+							message: "login free mount error",
+						})
 					} finally {
 						setLoading(false)
 					}

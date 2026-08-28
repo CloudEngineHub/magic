@@ -1,25 +1,25 @@
 "use client"
 
 import * as React from "react"
-import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
-import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model"
+import { EditorContent, EditorContext, useEditor } from "@/infrastructure/editors/tiptap/react"
+import type { Node as ProseMirrorNode, Slice } from "@/infrastructure/editors/tiptap/pm-model"
 import { useTranslation } from "react-i18next"
 import { cx } from "antd-style"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // --- Tiptap Core Extensions ---
-import { StarterKit } from "@tiptap/starter-kit"
-import { TaskItem, TaskList } from "@tiptap/extension-list"
-import { TextAlign } from "@tiptap/extension-text-align"
-import { Typography } from "@tiptap/extension-typography"
-import { Highlight } from "@tiptap/extension-highlight"
-import { Subscript } from "@tiptap/extension-subscript"
-import { Superscript } from "@tiptap/extension-superscript"
-import { CharacterCount, Selection } from "@tiptap/extensions"
-import { Markdown } from "tiptap-markdown"
+import { StarterKit } from "@/infrastructure/editors/tiptap/starter-kit"
+import { TaskItem, TaskList } from "@/infrastructure/editors/tiptap/extension-list"
+import { TextAlign } from "@/infrastructure/editors/tiptap/extension-text-align"
+import { Typography } from "@/infrastructure/editors/tiptap/extension-typography"
+import { Highlight } from "@/infrastructure/editors/tiptap/extension-highlight"
+import { Subscript } from "@/infrastructure/editors/tiptap/extension-subscript"
+import { Superscript } from "@/infrastructure/editors/tiptap/extension-superscript"
+import { CharacterCount, Selection } from "@/infrastructure/editors/tiptap/extensions"
+import { Markdown } from "@/infrastructure/editors/tiptap/markdown"
 import { SlashCommandExtension } from "@/components/tiptap-ui-primitive/SlashDropdownMenu"
-import { TableRow, TableCell, TableHeader } from "@tiptap/extension-table"
-import { DragHandle } from "@tiptap/extension-drag-handle-react"
+import { TableRow, TableCell, TableHeader } from "@/infrastructure/editors/tiptap/extension-table"
+import { DragHandle } from "@/infrastructure/editors/tiptap/extension-drag-handle-react"
 
 // --- UI Primitives ---
 import { Toolbar } from "@/components/tiptap-ui-primitive/toolbar"
@@ -62,7 +62,7 @@ import { SearchAndReplace } from "./components/SearchAndReplace"
 
 // --- Types ---
 import type { SimpleEditorProps, SimpleEditorRef } from "./types"
-import type { EditorEvents } from "@tiptap/react"
+import type { EditorEvents } from "@/infrastructure/editors/tiptap/react"
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
@@ -85,6 +85,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		additionalExtensions,
 		enableDragHandle = true,
 		enableSearchReplace = true,
+		enableCodeBlockWrap = false,
 		isEditable = true,
 		isMobile = false,
 		documentFlow = false,
@@ -177,7 +178,9 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 			}),
 			MarkdownFrontmatterNode,
 			HorizontalRule,
-			CodeBlockNode,
+			CodeBlockNode.configure({
+				enableWrapToggle: enableCodeBlockWrap,
+			}),
 			TextAlign.configure({ types: ["heading", "paragraph"] }),
 			TaskList,
 			TaskItem.configure({ nested: true }),

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
 import {
-	Check,
 	ChevronLeft,
 	ChevronsUpDown,
 	ImageIcon,
@@ -12,7 +11,7 @@ import {
 	X,
 } from "lucide-react"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Trans, useTranslation } from "react-i18next"
 import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
@@ -34,6 +33,7 @@ import type { CrewItem, ProjectListItem, Topic } from "@/pages/superMagic/pages/
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import MobileCrewModeList from "./MobileCrewModeList"
 
 interface MobileComposerModeSelectorProps {
 	className?: string
@@ -128,42 +128,18 @@ function MobileComposerModeSelectorComponent({
 	const [activeModelRow, setActiveModelRow] = useState<ModelRowData | null>(null)
 	const [activeModelTab, setActiveModelTab] = useState<ModelTabType>("language")
 	const [modelSearchKeyword, setModelSearchKeyword] = useState("")
-	const scrollContainerRef = useRef<HTMLDivElement>(null)
-	const selectedModeItemRef = useRef<HTMLButtonElement>(null)
 	const modelScrollContainerRef = useRef<HTMLDivElement>(null)
 	const selectedModelItemRef = useRef<HTMLDivElement>(null)
 	const isClawVariant = selectorVariant === "claw"
 
 	useFeaturedModeListRefreshOnFirstOpen(open)
 
-	const currentMode = useMemo(() => {
-		if (!topicMode) return null
-		return superMagicModeService.getModeConfigWithLegacy(topicMode, undefined, false, agentCode)
-	}, [agentCode, topicMode])
+	// Resolve during each observed render so an asynchronously loaded mode list can restore the avatar.
+	const currentMode = topicMode
+		? superMagicModeService.getModeConfigWithLegacy(topicMode, undefined, false, agentCode)
+		: null
 	const allowChangeMode = (messagesLength ?? 0) > 0 ? false : true
-
-	useEffect(() => {
-		if (!open || activeModelRow || isClawVariant) return
-
-		const timer = window.setTimeout(() => {
-			const container = scrollContainerRef.current
-			const selectedItem = selectedModeItemRef.current
-			if (!container || !selectedItem) return
-
-			const containerRect = container.getBoundingClientRect()
-			const itemRect = selectedItem.getBoundingClientRect()
-			const targetScrollTop =
-				container.scrollTop +
-				(itemRect.top - containerRect.top) -
-				(containerRect.height - itemRect.height) / 2
-
-			container.scrollTo({ top: Math.max(0, targetScrollTop), behavior: "smooth" })
-		}, 200)
-
-		return () => {
-			window.clearTimeout(timer)
-		}
-	}, [activeModelRow, isClawVariant, open])
+	const selectedModeIdentifier = topicMode === "custom_agent" && agentCode ? agentCode : topicMode
 
 	useEffect(() => {
 		if (!activeModelRow) return
@@ -496,7 +472,7 @@ function MobileComposerModeSelectorComponent({
 
 						<div
 							ref={modelScrollContainerRef}
-							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg py-3 px-6"
+							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg px-6 py-3"
 							data-testid="mobile-composer-mode-selector-model-list"
 						>
 							{isCurrentTabEmpty ? (
@@ -586,67 +562,12 @@ function MobileComposerModeSelectorComponent({
 
 						{!isClawVariant ? (
 							<>
-								<div
-									ref={scrollContainerRef}
-									className="no-scrollbar max-h-[388px] min-h-0 flex-1 overflow-y-auto px-3.5 py-2.5"
-									data-testid="mobile-composer-mode-selector-list"
-								>
-									{modeList.length === 0 ? (
-										<DataEmptyState
-											variant="crew"
-											compact
-											className="h-full py-8"
-										/>
-									) : (
-										<div className="flex flex-col gap-1.5">
-											{modeList.map((crew) => {
-												const isActive = modeMatchesTopic(
-													crew.mode.identifier,
-													topicMode,
-													agentCode,
-												)
-												return (
-													<button
-														key={crew.mode.identifier}
-														type="button"
-														ref={isActive ? selectedModeItemRef : null}
-														onClick={() => handleSelectCrew(crew)}
-														className={cn(
-															"flex h-12 w-full items-center gap-3 rounded-full transition-colors active:opacity-60",
-															isActive && "bg-card",
-														)}
-														style={{
-															paddingLeft: 7,
-															paddingRight: 16,
-															...(isActive
-																? {
-																		boxShadow:
-																			"0px 1px 3px 0px rgba(0,0,0,0.10), 0px 1px 2px 0px rgba(0,0,0,0.10)",
-																	}
-																: {}),
-														}}
-														data-testid="mobile-composer-mode-selector-item"
-													>
-														<ModeAvatar
-															mode={crew.mode}
-															iconSize={34}
-															data-testid={`mobile-composer-mode-selector-avatar-${crew.mode.identifier}`}
-														/>
-														<span className="flex-1 truncate text-left text-base font-medium leading-5 text-foreground">
-															{crew.mode.name}
-														</span>
-														{isActive ? (
-															<Check
-																className="h-4 w-4 shrink-0 text-foreground"
-																strokeWidth={2}
-															/>
-														) : null}
-													</button>
-												)
-											})}
-										</div>
-									)}
-								</div>
+								<MobileCrewModeList
+									open={open && !activeModelRow}
+									modes={modeList}
+									selectedModeIdentifier={selectedModeIdentifier}
+									onSelectCrew={handleSelectCrew}
+								/>
 
 								<div className="shrink-0 px-3.5">
 									<div className="h-px w-full bg-border" />

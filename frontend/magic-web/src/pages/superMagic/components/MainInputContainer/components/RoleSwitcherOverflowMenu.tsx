@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ModeAvatar from "../../ModeAvatar"
 import {
 	ChevronDown,
@@ -96,7 +96,7 @@ export function RoleSwitcherOverflowMenu({
 							type="button"
 							variant="outline"
 							size="icon"
-							className="size-9 shrink-0 rounded-full"
+							className="size-10 shrink-0 rounded-full"
 							data-testid="role-switcher-overflow-trigger"
 							aria-expanded={isPopoverOpen}
 						>

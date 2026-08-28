@@ -11,21 +11,21 @@ use App\Application\Mode\Assembler\ModeAssembler;
 use App\Application\Mode\DTO\ModeAggregateDTO;
 use App\Application\Mode\DTO\ModeGroupAggregateDTO;
 use App\Application\Permission\Service\UserModelAccessAppService;
+use App\Application\SuperMagic\Agent\Service\Old\SuperMagicAgentOldAppService;
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
 use App\Domain\Mode\Entity\ModeAggregate;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
+use App\Domain\SuperMagic\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 use App\ErrorCode\ModeErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Application\Agent\Service\Old\SuperMagicAgentOldAppService;
-use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
-use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 
 /**
  * 前台模式 app service。
@@ -141,8 +141,16 @@ class ModeAppService extends AbstractModeAppService
         // 合并常用和全部 agent 列表，常用在前
         /** @var array<SuperMagicAgentEntity> $allAgents */
         $allAgents = array_merge($agentData['frequent'], $agentData['all']);
+        $systemDefaultAgentCode = $this->modeDomainService->getSystemDefaultAgent(
+            $this->createSystemDefaultAgentModeDataIsolation()
+        );
         if (empty($allAgents)) {
-            return [];
+            return [
+                'default_agent_code' => $systemDefaultAgentCode,
+                'total' => 0,
+                'list' => [],
+                'models' => [],
+            ];
         }
 
         // 获取后台的所有模式，用于封装数据到 Agent 中
@@ -197,15 +205,13 @@ class ModeAppService extends AbstractModeAppService
                     'playbooks' => $playbookArray,
                     'sort' => 0,
                 ],
-                'agent' => [
-                    'type' => $agent->getType()->value,
-                    'category' => $agent->getCategory(),
-                ],
+                'agent' => $this->buildFeaturedAgentMetadata($agent),
                 'groups' => $this->buildModeGroups($modeAggregateDTO),
             ];
         }
 
         return [
+            'default_agent_code' => $systemDefaultAgentCode,
             'total' => count($list),
             'list' => $list,
             'models' => $modeRuntimeData['models'],
@@ -248,6 +254,20 @@ class ModeAppService extends AbstractModeAppService
             ],
             'models' => $modeRuntimeData['models'],
             'groups' => $this->buildModeGroups($modeAggregateDTO),
+        ];
+    }
+
+    /**
+     * @return array{type: int, category: string, is_visible: bool}
+     */
+    private function buildFeaturedAgentMetadata(SuperMagicAgentEntity $agent): array
+    {
+        $category = $agent->getCategory();
+
+        return [
+            'type' => $agent->getType()->value,
+            'category' => $category,
+            'is_visible' => $category === 'frequent',
         ];
     }
 

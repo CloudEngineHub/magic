@@ -4,13 +4,13 @@ import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { MAGIC_WIDGET_DISMISS_PREVIEW_EVENT } from "@/providers/MagicWidgetProvider/config"
 
 // Types
 import type {
 	FilesViewerProps,
 	TabItem,
 	FileItem,
-	TabAction,
 	WebsitePreset,
 	PlaybackTabItem,
 	ActiveDetailTabType,
@@ -20,23 +20,29 @@ import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
-	handleDuplicateTabNames,
 	convertFileToTabItem,
 	getFileTabTitle,
 	normalizeSlideProjectTabItem,
 	dedupeTabsById,
+	mergeAttachmentFileForTab,
 } from "../utils/tabUtils"
 import { DetailType } from "../../../types"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { usePlaybackTab } from "./usePlaybackTab"
-import { useKnowledgeBaseTab, type KnowledgeBaseTabItem } from "./useKnowledgeBaseTab"
+import {
+	buildKnowledgeBaseTabId,
+	useKnowledgeBaseTab,
+	type KnowledgeBaseTabItem,
+} from "./useKnowledgeBaseTab"
 import { detectContentTypeRender } from "../utils/preview"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { manualPerfLogger, measureManualPerfOperation } from "@/utils/manualPerfLogger"
+import { resolvePreviewExitAction, shouldAutoEnterPreviewFullscreen } from "../utils/previewMode"
 import {
 	normalizeAttachmentPath,
+	isStandalonePreviewFile,
 	isTemporaryPreviewFile,
 	resolvePendingAttachmentFile,
 	resolvePersistableTabs,
@@ -48,6 +54,7 @@ import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/compo
 import { buildWebsiteTab, isWebsiteTab } from "../utils/websiteTabs"
 import { getFileViewerTabType } from "../utils/tabType"
 import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
+import { tabReducer } from "./tabReducer"
 
 function normalizeFileId(value: unknown): string | undefined {
 	if (typeof value === "string" && value.trim()) return value.trim()
@@ -95,8 +102,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		| FileItem["display_config"]
-		| undefined
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -133,191 +139,6 @@ function isHiddenProjectFile(file: FileItem | undefined): file is FileItem {
 // 	downloadFileContent,
 // } from "@/pages/superMagic/utils/api"
 
-// Tab reducer function
-function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
-	const now = Date.now() // Timestamp for all operations
-
-	switch (action.type) {
-		case TabActionType.ADD_TAB:
-			if (!action.payload?.tab) return state
-
-			// Check if tab already exists
-			const existingTabIndex = state.findIndex((tab) => tab.id === action.payload!.tab!.id)
-			if (existingTabIndex !== -1) {
-				const shouldUsePendingAttachmentSyncTab =
-					action.payload.tab.fileData?.display_config?.previewPolicy
-						?.awaitAttachmentSync === true
-				const shouldReplaceFileData =
-					action.payload.tab.fileData?.display_config?.type === DetailType.SelfMedia ||
-					shouldUsePendingAttachmentSyncTab
-				// Switch to existing tab and update active_at
-				const newState = state.map((tab) => {
-					if (tab.id !== action.payload!.tab!.id) {
-						return {
-							...tab,
-							active: false,
-						}
-					}
-
-					return {
-						...tab,
-						active: true,
-						active_at: now,
-						title: shouldReplaceFileData ? action.payload!.tab!.title : tab.title,
-						fileData: shouldReplaceFileData
-							? action.payload!.tab!.fileData
-							: tab.fileData,
-						isDeleted: shouldUsePendingAttachmentSyncTab ? false : tab.isDeleted,
-						isLoading: shouldUsePendingAttachmentSyncTab ? true : tab.isLoading,
-						display_config: shouldReplaceFileData
-							? action.payload!.tab!.display_config
-							: tab.display_config,
-						filePath: shouldReplaceFileData
-							? action.payload!.tab!.fileData.relative_file_path ||
-								action.payload!.tab!.filePath
-							: tab.fileData.relative_file_path || tab.filePath,
-					}
-				})
-				return newState
-			}
-
-			// Prepare new tab with filePath and timestamps
-			const newTab = {
-				...action.payload.tab,
-				active: true,
-				filePath:
-					action.payload.tab.fileData.relative_file_path || action.payload.tab.filePath,
-				create_at: now,
-				active_at: now,
-			}
-
-			// Handle duplicate names and add new tab
-			const addedState = handleDuplicateTabNames(state, newTab)
-			return addedState
-
-		case TabActionType.REMOVE_TAB:
-			if (!action.payload?.tabId) return state
-
-			// If only one tab left, clear all tabs but don't auto-open
-			if (state.length === 1) {
-				return []
-			}
-
-			const filteredTabs = state.filter((tab) => tab.id !== action.payload!.tabId)
-
-			// If removing active tab, activate the most recently active tab
-			const removedTab = state.find((tab) => tab.id === action.payload!.tabId)
-			if (removedTab?.active && filteredTabs.length > 0) {
-				// Find the most recently active tab (highest active_at timestamp)
-				const mostRecentTab = filteredTabs.reduce((mostRecent, current) => {
-					// 如果当前 tab 没有 active_at，使用 create_at 或者当前时间
-					const currentActiveAt = current.active_at || current.create_at || 0
-					const mostRecentActiveAt = mostRecent.active_at || mostRecent.create_at || 0
-
-					return currentActiveAt > mostRecentActiveAt ? current : mostRecent
-				})
-
-				const removedState = filteredTabs.map((tab) => ({
-					...tab,
-					active: tab.id === mostRecentTab.id,
-					active_at: tab.id === mostRecentTab.id ? now : tab.active_at,
-				}))
-				return removedState
-			}
-
-			return filteredTabs
-
-		case TabActionType.SWITCH_TAB:
-			if (!action.payload?.tabId) return state
-
-			return state.map((tab) => ({
-				...tab,
-				active: tab.id === action.payload!.tabId,
-				active_at: tab.id === action.payload!.tabId ? now : tab.active_at,
-			}))
-
-		case TabActionType.UPDATE_TAB:
-			if (!action.payload?.tab) return state
-
-			const updatedState = state.map((tab) =>
-				tab.id === action.payload!.tab!.id ? { ...tab, ...action.payload!.tab } : tab,
-			)
-			return updatedState
-
-		case TabActionType.CLEAR_TABS:
-			const clearedState: TabItem[] = []
-			return clearedState
-
-		case TabActionType.CLOSE_OTHER_TABS:
-			if (!action.payload?.tabId) return state
-
-			// Keep only the specified tab
-			const keepTab = state.find((tab) => tab.id === action.payload!.tabId)
-			if (!keepTab) return state
-
-			return [{ ...keepTab, active: true, active_at: now }]
-
-		case TabActionType.CLOSE_TABS_TO_RIGHT:
-			if (!action.payload?.tabId) return state
-
-			// Find the index of the specified tab
-			const targetIndex = state.findIndex((tab) => tab.id === action.payload!.tabId)
-			if (targetIndex === -1) return state
-
-			// Keep tabs from start to target index (inclusive)
-			const tabsToRightClosedState = state.slice(0, targetIndex + 1)
-			return tabsToRightClosedState
-
-		case TabActionType.SYNC_TABS_DATA:
-			if (!action.payload?.tabs) return state
-
-			return action.payload.tabs
-
-		case TabActionType.REORDER_TABS:
-			if (action.payload?.fromIndex === undefined || action.payload?.toIndex === undefined) {
-				return state
-			}
-
-			const { fromIndex, toIndex } = action.payload
-
-			// 禁止拖拽演示模式tab（固定在第一位）
-			if (state[fromIndex]?.id === PLAYBACK_TAB_ID) {
-				return state
-			}
-
-			// 禁止将其他tab拖拽到演示模式tab的位置（如果演示模式tab存在且在第一位）
-			if (state[0]?.id === PLAYBACK_TAB_ID && toIndex === 0) {
-				return state
-			}
-
-			if (
-				fromIndex === toIndex ||
-				fromIndex < 0 ||
-				toIndex < 0 ||
-				fromIndex >= state.length ||
-				toIndex >= state.length
-			) {
-				return state
-			}
-
-			const reorderedState = [...state]
-			const [movedTab] = reorderedState.splice(fromIndex, 1)
-			reorderedState.splice(toIndex, 0, movedTab)
-
-			return reorderedState
-
-		case TabActionType.DEACTIVATE_ALL:
-			// 将所有tab设置为非激活状态
-			return state.map((tab) => ({
-				...tab,
-				active: false,
-			}))
-
-		default:
-			return state
-	}
-}
-
 /**
  * useFilesViewer - FilesViewer组件主要逻辑Hook
  *
@@ -352,7 +173,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 		topicName,
 		projectId,
 		onFileTabsCacheLoaded,
+		nonClosableFileIds,
+		previewMode = "split",
+		previewSessionKey = 0,
+		onPreviewDismiss,
+		persistFileTabs = true,
 	} = props
+	const nonClosableFileIdsKey = (nonClosableFileIds || []).map(String).sort().join("|")
+	const nonClosableFileIdSet = useMemo(
+		() => new Set(nonClosableFileIdsKey ? nonClosableFileIdsKey.split("|") : []),
+		[nonClosableFileIdsKey],
+	)
 
 	const onFileTabsCacheLoadedRef = useRef(onFileTabsCacheLoaded)
 	onFileTabsCacheLoadedRef.current = onFileTabsCacheLoaded
@@ -380,6 +211,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const [error] = useState<string>()
 	const [favoriteFiles, setFavoriteFiles] = useState<Set<string>>(new Set())
 	const [fullscreenFileId, setFullscreenFileId] = useState<string | null>(null)
+	const activePreviewModeRef = useRef(previewMode)
 
 	// 拖拽相关状态
 	const [draggedTab, setDraggedTab] = useState<TabItem | null>(null)
@@ -414,6 +246,18 @@ export function useFilesViewer(props: FilesViewerProps) {
 		hasActiveFileTab, // 传递当前是否有激活的文件tab
 	})
 
+	/** Keeps the active preview inside one fullscreen shell without re-entering during tab switches. */
+	const activatePreviewFullscreen = useMemoizedFn((tabId: string, allowAutomaticEntry = true) => {
+		if (fullscreenFileId) {
+			setFullscreenFileId(tabId)
+			return
+		}
+		if (allowAutomaticEntry && shouldAutoEnterPreviewFullscreen(previewMode)) {
+			activePreviewModeRef.current = previewMode
+			setFullscreenFileId(tabId)
+		}
+	})
+
 	// 使用知识库Tab hook
 	const {
 		knowledgeBaseTabs,
@@ -446,24 +290,28 @@ export function useFilesViewer(props: FilesViewerProps) {
 			// 如果需要激活playbackTab，则将所有文件tab设置为非激活状态
 			if (shouldActivate) {
 				dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
+				// Only an explicit tool-preview action may automatically promote playback fullscreen.
+				activatePreviewFullscreen(PLAYBACK_TAB_ID, forceActivate === true)
 			}
 
 			// 打开playback tab
 			openPlaybackTabOriginal(options)
 		},
-		[openPlaybackTabOriginal, hasActiveFileTab, setUserSelectDetail],
+		[openPlaybackTabOriginal, hasActiveFileTab, setUserSelectDetail, activatePreviewFullscreen],
 	)
 
 	// 包装openKnowledgeBaseTab，打开知识库tab时取消其他文件tab的激活
 	const openKnowledgeBaseTab = useCallback(
 		(data: Parameters<typeof openKnowledgeBaseTabOriginal>[0]) => {
+			// Keep knowledge-base previews in the configured fullscreen shell when required.
+			activatePreviewFullscreen(buildKnowledgeBaseTabId(data))
 			// 取消所有文件tab的激活
 			dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
 			// 无条件取消playback tab的激活（updatePlaybackTab 内部已做幂等处理）
 			updatePlaybackTab({ active: false })
 			openKnowledgeBaseTabOriginal(data)
 		},
-		[openKnowledgeBaseTabOriginal, updatePlaybackTab],
+		[openKnowledgeBaseTabOriginal, updatePlaybackTab, activatePreviewFullscreen],
 	)
 
 	// Use ref to track clearing state to avoid race conditions
@@ -627,6 +475,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			file ||
 			(attachmentFile?.is_directory && attachmentFile?.file_id ? attachmentFile : null) ||
 			(isHiddenProjectFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
+			(isStandalonePreviewFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
 			(isTemporaryPreviewFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
 			pendingAttachmentFile
 
@@ -651,6 +500,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			...(normalizedFileItem || {}),
 			...targetFile,
 			display_config: targetDisplayConfig,
+			htmlNavigation: normalizedPreviewFile?.htmlNavigation,
 		}
 
 		const newTab = convertFileToTabItem(mergedTargetFile, attachments, {
@@ -660,6 +510,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 		if (!newTab) {
 			return
 		}
+		newTab.closeable = !(
+			nonClosableFileIdSet.has(newTab.id) ||
+			nonClosableFileIdSet.has(String(newTab.fileData.file_id))
+		)
 
 		if (isPendingAttachmentOpen) {
 			newTab.isLoading = true
@@ -689,6 +543,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				},
 			})
 			dispatchTabs({ type: TabActionType.SWITCH_TAB, payload: { tabId: newTab.id } })
+			activatePreviewFullscreen(newTab.id)
 			notifyActiveFileOpen(openedFileId)
 			return
 		}
@@ -701,6 +556,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: newTab } })
+		activatePreviewFullscreen(newTab.id)
 		notifyActiveFileOpen(openedFileId)
 	})
 
@@ -710,13 +566,16 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 		deactivateAllKnowledgeBaseTabs()
 
-		dispatchTabs({
-			type: TabActionType.ADD_TAB,
-			payload: { tab: buildWebsiteTab(preset) },
-		})
+		const websiteTab = buildWebsiteTab(preset)
+		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: websiteTab } })
+		activatePreviewFullscreen(websiteTab.id)
 	})
 
 	const closeFileTab = useMemoizedFn((tabId: string) => {
+		if (fullscreenFileId === tabId) {
+			// Closing the preview is an explicit request to restore the inline host layout.
+			setFullscreenFileId(null)
+		}
 		// 如果是关闭playback tab
 		if (tabId === PLAYBACK_TAB_ID) {
 			closePlaybackTab()
@@ -758,6 +617,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 			return
 		}
 
+		if (tabs.find((tab) => tab.id === tabId)?.closeable === false) return
+
 		// 检查是否正在关闭当前激活的tab
 		const closingTab = tabs.find((tab) => tab.id === tabId)
 		const isClosingActiveTab = closingTab?.active
@@ -797,6 +658,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			// 激活playback tab
 			if (playbackTab) {
 				updatePlaybackTab({ active: true })
+				activatePreviewFullscreen(PLAYBACK_TAB_ID)
 			}
 		} else if (isKnowledgeBaseTab(tabId)) {
 			// 切换到知识库tab
@@ -805,6 +667,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
 			updatePlaybackTab({ active: false })
 			openKnowledgeBaseTabOriginal(kbTab.data)
+			activatePreviewFullscreen(kbTab.id)
 		} else {
 			// 切换到文件tab时，将playback tab和知识库tabs设置为非激活状态
 			if (playbackTab?.active) {
@@ -812,6 +675,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			}
 			deactivateAllKnowledgeBaseTabs()
 			dispatchTabs({ type: TabActionType.SWITCH_TAB, payload: { tabId } })
+			activatePreviewFullscreen(tabId)
 		}
 	})
 
@@ -821,6 +685,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		dispatchTabs({ type: TabActionType.CLEAR_TABS })
 		// 同时关闭 playbackTab
 		closePlaybackTab()
+		setFullscreenFileId(null)
 	}, [dispatchTabs, closePlaybackTab])
 
 	// 关闭指定 tab 外的所有 tab
@@ -900,13 +765,38 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const handleFileFullscreen = useMemoizedFn((fileId: string) => {
 		if (fullscreenFileId === fileId) {
 			setFullscreenFileId(null)
+			if (resolvePreviewExitAction(activePreviewModeRef.current) === "dismiss") {
+				onPreviewDismiss?.()
+			}
 		} else {
+			activePreviewModeRef.current = previewMode
 			setFullscreenFileId(fileId)
 		}
 	})
 
+	/** Promotes the active preview tab without reopening or replacing its cached renderer. */
+	const enterPreviewFullscreen = useMemoizedFn(() => {
+		if (!activeTab?.id) return
+		activePreviewModeRef.current = previewMode
+		setFullscreenFileId(activeTab.id)
+	})
+
+	/** Restores the current preview layout without applying mode-specific dismissal behavior. */
+	const exitPreviewFullscreen = useMemoizedFn(() => {
+		setFullscreenFileId(null)
+	})
+
+	/** Dismisses the preview surface while retaining tabs for a later reopen. */
+	const dismissPreview = useMemoizedFn(() => {
+		setFullscreenFileId(null)
+		onPreviewDismiss?.()
+	})
+
 	const handleExitFullscreen = useMemoizedFn(() => {
 		setFullscreenFileId(null)
+		if (resolvePreviewExitAction(activePreviewModeRef.current) === "dismiss") {
+			onPreviewDismiss?.()
+		}
 	})
 
 	// 拖拽处理函数
@@ -992,6 +882,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						content: resolvePreviewContent(file),
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1011,6 +902,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						file_size: file.file_size,
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1031,6 +923,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						file_size: file.file_size,
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1049,6 +942,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						content: resolvePreviewContent(file),
 						display_config: file?.display_config,
 						file_key: file.file_key,
+						project_id: file.project_id,
 					},
 					updatedAt: file.updated_at,
 					currentFileId: file.file_id,
@@ -1082,8 +976,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Exit_Fullscreen, handleExitFullscreen)
+		window.addEventListener(MAGIC_WIDGET_DISMISS_PREVIEW_EVENT, dismissPreview)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Exit_Fullscreen, handleExitFullscreen)
+			window.removeEventListener(MAGIC_WIDGET_DISMISS_PREVIEW_EVENT, dismissPreview)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
@@ -1107,7 +1003,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 	// Clear tabs when selectedProject changes
 	// 加载缓存状态
 	useEffect(() => {
-		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id) {
+		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id || isShareRoute) {
+			return
+		}
+
+		if (!persistFileTabs) {
+			// Embedded preview sessions must always start from the conversation surface.
+			setCacheLoaded(true)
+			notifyFileTabsCacheLoaded(selectedProject.id)
 			return
 		}
 
@@ -1179,7 +1082,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 								return {
 									...tab,
 									type: tab.type || (isCachedWebsiteTab ? "website" : "file"),
-									closeable: true,
+									closeable: !nonClosableFileIdSet.has(String(tab.id)),
 									isDeleted: isDeleted || false, // 确保类型为boolean
 									isLoading,
 									fileData: {
@@ -1303,6 +1206,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 		openPlaybackTab,
 		fileList,
 		isAwaitingProjectAttachments,
+		isShareRoute,
+		persistFileTabs,
 	])
 
 	useEffect(() => {
@@ -1317,9 +1222,33 @@ export function useFilesViewer(props: FilesViewerProps) {
 			checkBeforeCloseMapRef.current.clear()
 			setFullscreenFileId(null)
 			setCacheLoaded(false) // Reset cache loaded state
-			clearAllTabs()
+			dispatchTabs({
+				type: TabActionType.CLEAR_TABS,
+				payload: { force: true },
+			})
 		}
-	}, [clearAllTabs, viewerProjectId])
+	}, [viewerProjectId])
+
+	useEffect(() => {
+		let hasUpdates = false
+		const updatedTabs = tabs.map((tab) => {
+			const closeable = !(
+				nonClosableFileIdSet.has(tab.id) ||
+				nonClosableFileIdSet.has(String(tab.fileData.file_id))
+			)
+			if (tab.closeable === closeable) return tab
+
+			hasUpdates = true
+			return { ...tab, closeable }
+		})
+
+		if (hasUpdates) {
+			dispatchTabs({
+				type: TabActionType.SYNC_TABS_DATA,
+				payload: { tabs: updatedTabs },
+			})
+		}
+	}, [nonClosableFileIdSet, tabs])
 
 	// Sync tab data when fileList changes
 	useEffect(() => {
@@ -1422,23 +1351,29 @@ export function useFilesViewer(props: FilesViewerProps) {
 					return tab
 				}
 
-				// Refresh real file data.
-				if (JSON.stringify(updatedFile) !== JSON.stringify(tab.fileData) || tab.isLoading) {
+				const syncedFileData = mergeAttachmentFileForTab(tab, updatedFile)
+				const syncedDisplayConfig = syncedFileData.display_config
+
+				// Refresh real file data, while retaining memory-only template metadata.
+				if (
+					JSON.stringify(syncedFileData) !== JSON.stringify(tab.fileData) ||
+					tab.isLoading
+				) {
 					hasUpdates = true
 
 					// Handles index.html title fallback.
 					const tabTitle = getFileTabTitle(
-						updatedFile,
+						syncedFileData,
 						attachments,
-						updatedFile.display_config,
+						syncedDisplayConfig,
 					)
 
 					return {
 						...tab,
 						id: updatedFile.file_id,
 						title: tabTitle,
-						fileData: updatedFile,
-						display_config: updatedFile.display_config,
+						fileData: syncedFileData,
+						display_config: syncedDisplayConfig,
 						filePath: updatedFile.relative_file_path,
 						isDeleted: false,
 						isLoading: false,
@@ -1451,17 +1386,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 					// Handles index.html title fallback.
 					const tabTitle = getFileTabTitle(
-						updatedFile,
+						syncedFileData,
 						attachments,
-						updatedFile.display_config,
+						syncedDisplayConfig,
 					)
 
 					return {
 						...tab,
 						id: updatedFile.file_id,
 						title: tabTitle,
-						fileData: updatedFile,
-						display_config: updatedFile.display_config,
+						fileData: syncedFileData,
+						display_config: syncedDisplayConfig,
 						filePath: updatedFile.relative_file_path,
 						isDeleted: false,
 						isLoading: false,
@@ -1511,7 +1446,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// 保存文件状态到缓存
 	const saveCacheState = useCallback(async () => {
-		if (!organizationCode || !selectedProject?.id || !cacheLoaded || isProjectSwitching) {
+		if (
+			!persistFileTabs ||
+			!organizationCode ||
+			!selectedProject?.id ||
+			!cacheLoaded ||
+			isProjectSwitching
+		) {
 			return
 		}
 
@@ -1596,6 +1537,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		isProjectSwitching,
 		projectStateRepository,
 		playbackTab,
+		persistFileTabs,
 	])
 
 	// 当 tabs 状态变化时保存缓存
@@ -1617,8 +1559,11 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		// 如果有活跃的 tab，强制刷新其内容
 		if (activeTab) {
-			// 重新获取文件数据
-			const file = fileById.get(String(activeTab.id))
+			// 项目文件使用附件索引；独立预览文件使用 Tab 自身数据重新拉取内容。
+			const indexedFile = fileById.get(String(activeTab.id))
+			const file =
+				indexedFile ||
+				(isStandalonePreviewFile(activeTab.fileData) ? activeTab.fileData : undefined)
 			if (file) {
 				// 使用 getFileTabTitle 获取正确的 tab title（处理 index.html 的情况）
 				const tabTitle = getFileTabTitle(file, attachments, file.display_config)
@@ -1632,6 +1577,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 					title: tabTitle,
 					fileData: {
 						...file,
+						htmlNavigation: activeTab.fileData.htmlNavigation,
 						// 清除缓存的内容，强制重新加载
 						content: undefined,
 					},
@@ -1711,7 +1657,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		lastNotifiedTabTypeRef.current = currentActiveTabType
 		onActiveTabChange(currentActiveTabType)
-	}, [activeTabType, onActiveTabChange])
+	}, [activeTabType, onActiveTabChange, previewSessionKey])
 
 	// 执行 tab 打开后的回调
 	useEffect(() => {
@@ -1745,6 +1691,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		fileList,
 		loading,
 		isRestoringFileTabs: Boolean(activeTab?.isLoading),
+		isAwaitingProjectAttachments,
 		error,
 		favoriteFiles,
 		fullscreenFileId,
@@ -1785,6 +1732,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 		handleShare,
 		handleFileFullscreen,
 		handleExitFullscreen,
+		enterPreviewFullscreen,
+		exitPreviewFullscreen,
 		getFileDetail,
 
 		// Computed props for Render component
@@ -1810,10 +1759,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 			// 类型已经在 getFileDetail 中处理，直接使用
 			const type = fileDetail.type
+			const renderData =
+				type === DetailType.Html && fileDetail.data && typeof fileDetail.data === "object"
+					? {
+							...fileDetail.data,
+							htmlNavigation: tab.fileData.htmlNavigation,
+						}
+					: fileDetail.data
 
 			return {
 				type,
-				data: fileDetail.data,
+				data: renderData,
 				updatedAt: fileDetail.updatedAt,
 				attachments,
 				setUserSelectDetail,

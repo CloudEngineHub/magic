@@ -5,10 +5,9 @@ Provides utilities for reading and accessing initialization configuration data.
 """
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from agentlang.logger import get_logger
-
 from app.core.entity.message.client_message import User
 from app.path_manager import PathManager
 
@@ -376,6 +375,11 @@ class InitClientMessageUtil:
                 )
                 return
 
+            # 个人偏好是 CHAT 运行时字段，不写入初始化配置文件。
+            chat_metadata.pop("personal_preferences", None)
+            # 兼容尚未迁移的历史 CHAT metadata。
+            chat_metadata.pop("long_term_memory_enabled", None)
+
             init_metadata = init_data.get("metadata")
             if not isinstance(init_metadata, dict):
                 init_metadata = {}
@@ -436,17 +440,6 @@ class InitClientMessageUtil:
             logger.info(f"已从 {source} 保存 metadata 到: {metadata_file}")
         except Exception as e:
             logger.error(f"保存 metadata.json 失败 (source={source}): {e}")
-
-    @classmethod
-    def get_memory(cls) -> Optional[str]:
-        """
-        从 init_client_message 获取 memory 字段
-
-        Returns:
-            Optional[str]: memory 值
-        """
-        config_data = cls.get_full_config()
-        return config_data.get("memory")
 
     @classmethod
     def get_sts_token_refresh(cls) -> Optional[Dict[str, Any]]:
@@ -511,6 +504,26 @@ class InitClientMessageUtil:
         if env_sandbox_id:
             logger.info(f"Using sandbox_id from environment variable: {env_sandbox_id}")
         return env_sandbox_id
+
+    @classmethod
+    def get_topic_id(cls) -> str:
+        """从正式产品上下文读取稳定话题 ID，并兼容旧 metadata 字段。"""
+        try:
+            config_data = cls.get_full_config()
+            product_context = config_data.get("super_magic_product_context")
+            if isinstance(product_context, dict):
+                topic = product_context.get("topic")
+                if isinstance(topic, dict):
+                    topic_id = str(topic.get("id") or "").strip()
+                    if topic_id:
+                        return topic_id
+
+            metadata = config_data.get("metadata")
+            if isinstance(metadata, dict):
+                return str(metadata.get("topic_id") or "").strip()
+        except Exception as e:
+            logger.info(f"Failed to get topic_id from initialization config: {e}")
+        return ""
 
     @classmethod
     def get_platform_type(cls) -> Optional[str]:

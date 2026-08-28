@@ -3,7 +3,6 @@ import { memo } from "react"
 import { useTranslation } from "react-i18next"
 import { useStyles } from "./style"
 import { openLongTremMemoryModal } from "@/pages/superMagic/components/LongTremMemory"
-import routeManageService from "@/pages/superMagic/services/routeManageService"
 
 export default memo(function SwitchRoute() {
 	const { styles, cx } = useStyles()
@@ -11,7 +10,7 @@ export default memo(function SwitchRoute() {
 
 	/** 打开长期记忆 */
 	const handleLongMemoryClick = () => {
-		openLongTremMemoryModal({ onWorkspaceStateChange: routeManageService.navigateToState })
+		openLongTremMemoryModal()
 	}
 
 	return (
@@ -22,7 +21,11 @@ export default memo(function SwitchRoute() {
 					<IconLayoutGrid className={styles.icon} />
 					<div>{t("workspace.workspace")}</div>
 				</div>
-				<div className={cx(styles.item)} onClick={handleLongMemoryClick} data-testid="handle-long-memory-click">
+				<div
+					className={cx(styles.item)}
+					onClick={handleLongMemoryClick}
+					data-testid="handle-long-memory-click"
+				>
 					<IconBrain className={styles.icon} />
 					<div>
 						{t("longMemory", {

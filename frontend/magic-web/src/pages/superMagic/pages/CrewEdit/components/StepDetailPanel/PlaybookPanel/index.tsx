@@ -33,10 +33,12 @@ import { usePlaybookScenes } from "./hooks/usePlaybookScenes"
 import { SceneRow } from "./components/SceneRow"
 import { SceneEditPanel } from "./components/SceneEditPanel"
 import type { SceneAction } from "./types"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 export const PlaybookPanel = observer(function PlaybookPanel() {
 	const store = useCrewEditStore()
 	const { playbook, layout } = store
+	const readOnly = isReadOnlyProject(store.conversation.selectedProject?.user_role)
 	const { t } = useTranslation("crew/create")
 
 	// Track which scene is being edited (null = list view)
@@ -71,6 +73,7 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 	)
 
 	function handleDragEnd(event: DragEndEvent) {
+		if (readOnly) return
 		const { active, over } = event
 		if (over && active.id !== over.id) {
 			handleReorder(String(active.id), String(over.id))
@@ -82,15 +85,18 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 			setEditingSceneId(id)
 			return
 		}
+		if (readOnly) return
 		_handleAction(id, action)
 	}
 
 	function handleCreateScene() {
+		if (readOnly) return
 		const scene = playbook.createScene()
 		setEditingSceneId(scene.id)
 	}
 
 	function handleBatchDeleteClick() {
+		if (readOnly) return
 		const ids = Array.from(selectedIds)
 		confirm({
 			title: t("playbook.batchDeleteConfirm.title"),
@@ -98,6 +104,21 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 			variant: "destructive",
 			onConfirm: () => handleBatchDelete(ids),
 		})
+	}
+
+	function handleSelectAllSafely(checked: boolean) {
+		if (readOnly) return
+		handleSelectAll(checked)
+	}
+
+	function handleSelectOneSafely(id: string, checked: boolean) {
+		if (readOnly) return
+		handleSelectOne(id, checked)
+	}
+
+	function handleToggleEnabledSafely(id: string) {
+		if (readOnly) return
+		handleToggleEnabled(id)
 	}
 
 	// If a scene is being edited, show the edit panel (fetch via API, not list data)
@@ -109,6 +130,7 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 					playbookId={String(playbookId)}
 					onBack={() => setEditingSceneId(null)}
 					onClose={() => layout.closePlaybook()}
+					readOnly={readOnly}
 				/>
 			)
 		}
@@ -153,20 +175,30 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 			<div className="flex min-h-0 flex-1 flex-col gap-2.5">
 				{/* Control bar */}
 				<div className="flex shrink-0 items-center justify-between">
-					<Checkbox
-						checked={allSelected ? true : someSelected ? "indeterminate" : false}
-						onCheckedChange={(checked) => handleSelectAll(checked === true)}
-						data-testid="playbook-select-all"
-					/>
-					<label
-						className="ml-2 mr-auto cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
-						onClick={() => handleSelectAll(!allSelected)}
-						data-testid="handle-select-all"
-					>
-						{t("playbook.selectAll")}
-					</label>
+					{readOnly ? (
+						<div className="mr-auto" />
+					) : (
+						<>
+							<Checkbox
+								checked={
+									allSelected ? true : someSelected ? "indeterminate" : false
+								}
+								onCheckedChange={(checked) =>
+									handleSelectAllSafely(checked === true)
+								}
+								data-testid="playbook-select-all"
+							/>
+							<label
+								className="ml-2 mr-auto cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
+								onClick={() => handleSelectAllSafely(!allSelected)}
+								data-testid="handle-select-all"
+							>
+								{t("playbook.selectAll")}
+							</label>
+						</>
+					)}
 
-					{selectedIds.size > 0 ? (
+					{!readOnly && selectedIds.size > 0 ? (
 						<div className="flex items-center gap-2">
 							<Button
 								variant="outline"
@@ -228,14 +260,16 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 
 							<Separator orientation="vertical" className="!h-5" />
 
-							<Button
-								className="h-9 shadow-xs"
-								onClick={handleCreateScene}
-								data-testid="playbook-create-button"
-							>
-								<CirclePlus className="h-4 w-4" />
-								{t("playbook.create")}
-							</Button>
+							{readOnly ? null : (
+								<Button
+									className="h-9 shadow-xs"
+									onClick={handleCreateScene}
+									data-testid="playbook-create-button"
+								>
+									<CirclePlus className="h-4 w-4" />
+									{t("playbook.create")}
+								</Button>
+							)}
 						</div>
 					)}
 				</div>
@@ -283,9 +317,10 @@ export const PlaybookPanel = observer(function PlaybookPanel() {
 											<SceneRow
 												key={scene.id}
 												scene={scene}
+												readOnly={readOnly}
 												selected={selectedIds.has(scene.id)}
-												onSelect={handleSelectOne}
-												onToggleEnabled={handleToggleEnabled}
+												onSelect={handleSelectOneSafely}
+												onToggleEnabled={handleToggleEnabledSafely}
 												onAction={handleAction}
 											/>
 										</>

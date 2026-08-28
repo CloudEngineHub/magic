@@ -35,11 +35,17 @@ export { DEFAULT_INSPIRATION_GROUP_KEY } from "./inspirationConfig"
 
 export class SceneEditStore {
 	scene: SceneItem
+	readonly readOnly: boolean
 
 	private _onSave: ((scene: SceneItem) => Promise<void>) | null = null
 
-	constructor(initialScene: SceneItem, onSave?: (scene: SceneItem) => Promise<void>) {
+	constructor(
+		initialScene: SceneItem,
+		onSave?: (scene: SceneItem) => Promise<void>,
+		readOnly = false,
+	) {
 		this.scene = initialScene
+		this.readOnly = readOnly
 		this._onSave = onSave ?? null
 		makeAutoObservable(
 			this,
@@ -51,6 +57,7 @@ export class SceneEditStore {
 
 	/** Explicitly persist the current scene state to the backend. */
 	save(): Promise<void> {
+		if (this.readOnly) return Promise.resolve()
 		return this._onSave?.(this.scene) ?? Promise.resolve()
 	}
 
@@ -73,12 +80,14 @@ export class SceneEditStore {
 	updateBasicInfo(
 		data: Partial<Pick<SceneItem, "name" | "description" | "icon" | "theme_color" | "enabled">>,
 	) {
+		if (this.readOnly) return
 		Object.assign(this.scene, data)
 	}
 
 	// ─── Inspiration config ───────────────────────────────────────────────────
 
 	updateInspirationConfig(data: { title?: LocaleText; view_type?: string }) {
+		if (this.readOnly) return
 		const inspiration = this.scene.configs?.inspiration
 		if (!inspiration) return
 		// `title` lives at the DemoPanelConfig top level
@@ -104,6 +113,7 @@ export class SceneEditStore {
 		data: { group_name: LocaleText; group_icon?: string },
 		defaultGroupName?: LocaleText,
 	): string {
+		if (this.readOnly) return DEFAULT_INSPIRATION_GROUP_KEY
 		const newGroup: OptionGroup = { group_key: genKey(), ...data, children: [] }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
@@ -130,6 +140,7 @@ export class SceneEditStore {
 	}
 
 	editInspirationGroup(groupKey: string, data: { group_name: LocaleText; group_icon?: string }) {
+		if (this.readOnly) return
 		this.scene.configs = {
 			...this.scene.configs,
 			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (gs) =>
@@ -139,6 +150,7 @@ export class SceneEditStore {
 	}
 
 	deleteInspirationGroup(groupKey: string) {
+		if (this.readOnly) return
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = (base.demo.groups ?? []).filter((group) => group.group_key !== groupKey)
 		const defaultSelectedGroupKey =
@@ -166,6 +178,7 @@ export class SceneEditStore {
 		groupKey: string,
 		defaultGroupName?: LocaleText,
 	) {
+		if (this.readOnly) return
 		const newItem: IdentifiedOptionItem = { ...data, value: genKey() }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
@@ -201,6 +214,7 @@ export class SceneEditStore {
 	}
 
 	editInspirationItem(value: string, data: InspirationItemData, groupKey: string) {
+		if (this.readOnly) return
 		this.scene.configs = {
 			...this.scene.configs,
 			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
@@ -210,6 +224,7 @@ export class SceneEditStore {
 	}
 
 	deleteInspirationItem(value: string) {
+		if (this.readOnly) return
 		this.scene.configs = {
 			...this.scene.configs,
 			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
@@ -219,6 +234,7 @@ export class SceneEditStore {
 	}
 
 	deleteInspirationItems(values: string[]) {
+		if (this.readOnly) return
 		const valueSet = new Set(values)
 		this.scene.configs = {
 			...this.scene.configs,
@@ -231,10 +247,12 @@ export class SceneEditStore {
 	// ─── Presets ──────────────────────────────────────────────────────────────
 
 	updatePresets(config: FieldPanelConfig) {
+		if (this.readOnly) return
 		this.scene.configs = { ...this.scene.configs, presets: config }
 	}
 
 	private patchPresetItems(mapFn: (items: FieldItem[]) => FieldItem[]) {
+		if (this.readOnly) return
 		const base: FieldPanelConfig = this.scene.configs?.presets ?? {
 			type: SkillPanelType.FIELD,
 			field: { items: [] },
@@ -252,6 +270,7 @@ export class SceneEditStore {
 	}
 
 	createPresetItem(data: Partial<FieldItem>) {
+		if (this.readOnly) return
 		const newItem: FieldItem = {
 			data_key: genKey(),
 			label: { default: "", zh_CN: "", en_US: "" },
@@ -264,6 +283,7 @@ export class SceneEditStore {
 	}
 
 	editPresetItem(dataKey: string, data: Partial<FieldItem>) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) =>
 			items.map((item) =>
 				item.data_key === dataKey
@@ -274,15 +294,18 @@ export class SceneEditStore {
 	}
 
 	deletePresetItem(dataKey: string) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) => items.filter((item) => item.data_key !== dataKey))
 	}
 
 	deletePresetItems(dataKeys: string[]) {
+		if (this.readOnly) return
 		const keySet = new Set(dataKeys)
 		this.patchPresetItems((items) => items.filter((item) => !keySet.has(item.data_key)))
 	}
 
 	reorderPresetItems(orderedKeys: string[]) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) => {
 			const itemMap = new Map(items.map((item) => [item.data_key, item]))
 			const reordered = orderedKeys
@@ -295,6 +318,7 @@ export class SceneEditStore {
 	}
 
 	updatePresetsConfig(data: { view_type?: OptionViewType }) {
+		if (this.readOnly) return
 		const base: FieldPanelConfig = this.scene.configs?.presets ?? {
 			type: SkillPanelType.FIELD,
 			field: { items: [] },
@@ -351,6 +375,7 @@ export class SceneEditStore {
 		default_value?: string
 		preset_content?: LocaleText
 	}) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) =>
 			items.map((item) =>
 				item.option_view_type === "grid"
@@ -363,6 +388,7 @@ export class SceneEditStore {
 	// ─── QuickStart helpers ───────────────────────────────────────────────────
 
 	private patchQuickStartItems(mapFn: (items: GuideItem[]) => GuideItem[]) {
+		if (this.readOnly) return
 		const base: GuidePanelConfig = this.scene.configs?.quick_start ?? {
 			type: SkillPanelType.GUIDE,
 			guide: { items: [] },
@@ -379,6 +405,7 @@ export class SceneEditStore {
 	// ─── QuickStart CRUD + reorder ────────────────────────────────────────────
 
 	createQuickStartItem(data: Partial<GuideItem>) {
+		if (this.readOnly) return
 		const newItem: GuideItem = {
 			key: genKey(),
 			title: { default: "", zh_CN: "", en_US: "" },
@@ -391,21 +418,25 @@ export class SceneEditStore {
 	}
 
 	editQuickStartItem(key: string, data: Partial<GuideItem>) {
+		if (this.readOnly) return
 		this.patchQuickStartItems((items) =>
 			items.map((item) => (item.key === key ? { ...item, ...data } : item)),
 		)
 	}
 
 	deleteQuickStartItem(key: string) {
+		if (this.readOnly) return
 		this.patchQuickStartItems((items) => items.filter((item) => item.key !== key))
 	}
 
 	deleteQuickStartItems(keys: string[]) {
+		if (this.readOnly) return
 		const keySet = new Set(keys)
 		this.patchQuickStartItems((items) => items.filter((item) => !keySet.has(item.key)))
 	}
 
 	reorderQuickStartItems(orderedKeys: string[]) {
+		if (this.readOnly) return
 		this.patchQuickStartItems((items) => {
 			const itemMap = new Map(items.map((item) => [item.key, item]))
 			const reordered = orderedKeys
@@ -419,10 +450,12 @@ export class SceneEditStore {
 	}
 
 	updateQuickStart(config: GuidePanelConfig) {
+		if (this.readOnly) return
 		this.scene.configs = { ...this.scene.configs, quick_start: config }
 	}
 
 	updateQuickStartConfig(data: { title?: LocaleText }) {
+		if (this.readOnly) return
 		const base: GuidePanelConfig = this.scene.configs?.quick_start ?? {
 			type: SkillPanelType.GUIDE,
 			guide: { items: [] },

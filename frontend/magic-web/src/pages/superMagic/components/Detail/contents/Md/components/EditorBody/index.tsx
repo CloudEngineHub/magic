@@ -16,7 +16,10 @@ import {
 	type AttachmentFile,
 } from "../../utils"
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
-import { Editor } from "@tiptap/react"
+import { Editor } from "@/infrastructure/editors/tiptap/react"
+import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
+import { SafeHtmlDiv, SafeHtmlSpan, SafeHtmlTextBlockStyles } from "./extensions/safe-html-style"
+import { SafeVideo } from "./extensions/safe-video"
 import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
 import { isLargeMarkdownContent } from "./largeMarkdown"
 
@@ -40,9 +43,10 @@ interface EditorBodyProps {
 	setEditContent?: (content: string) => void
 	selectedProject?: ProjectListItem | null
 	currentDocumentPath?: string
-	urlResolver?: (relativePath: string) => string | Promise<string>
+	urlResolver?: ProjectImageUrlResolver
 	folderPath?: string
-	onImageUploadSuccess?: (relativePath: string) => void
+	onImageUploadSuccess?: (relativePath: string) => void | Promise<void>
+	onImageUploadError?: (error: Error) => void
 	editorRef?: React.RefObject<SimpleEditorRef>
 	placeholder?: string
 	attachments?: AttachmentFile[]
@@ -51,9 +55,11 @@ interface EditorBodyProps {
 	"data-testid"?: string
 	/**
 	 * Async callback to resolve or create the images folder before upload.
-	 * Should return the file_id of the images folder, or undefined to fall back to root.
+	 * Should return the file_id of the images folder. Recording callers can set
+	 * requireImagesFolderParentId to fail instead of falling back to the project root.
 	 */
 	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
+	requireImagesFolderParentId?: boolean
 }
 
 function EditorBody({
@@ -75,6 +81,7 @@ function EditorBody({
 	folderPath,
 	urlResolver,
 	onImageUploadSuccess,
+	onImageUploadError,
 	editorRef,
 	placeholder,
 	attachments,
@@ -82,6 +89,7 @@ function EditorBody({
 	onSave,
 	"data-testid": dataTestId,
 	resolveImagesFolderParentId,
+	requireImagesFolderParentId,
 }: EditorBodyProps) {
 	// Use project image extensions hook
 	const projectImageExtensions = useProjectImageExtensions({
@@ -90,7 +98,9 @@ function EditorBody({
 		folderPath,
 		urlResolver,
 		onSuccess: onImageUploadSuccess,
+		onError: onImageUploadError,
 		resolveImagesFolderParentId,
+		requireImagesFolderParentId,
 	})
 
 	// Handle link click: open external URLs in new tab, or open relative files in tab
@@ -173,7 +183,14 @@ function EditorBody({
 	const shouldUseCodeSourceEditor = viewMode === "code" || (isLargeMarkdown && isEditMode)
 
 	// Combine all extensions
-	const allExtensions = [...projectImageExtensions, customLinkNode]
+	const allExtensions = [
+		...projectImageExtensions,
+		customLinkNode,
+		SafeHtmlDiv,
+		SafeHtmlSpan,
+		SafeHtmlTextBlockStyles,
+		SafeVideo,
+	]
 
 	// 创建内部的 editorRef（如果外部没有传入）
 	const internalEditorRef = useRef<SimpleEditorRef>(null)
@@ -260,6 +277,7 @@ function EditorBody({
 					<SimpleEditor
 						ref={actualEditorRef}
 						content={isEditMode ? editContent || content : processedContent || content}
+						enableCodeBlockWrap
 						onUpdate={({ editor: _editor }) => {
 							const content =
 								(

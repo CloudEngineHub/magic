@@ -210,7 +210,11 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         ]);
 
         try {
-            $filesystem->downloadByChunks($filePath, $localPath, $config, $this->getInternalEndpointOptions($organizationCode));
+            $endpointOptions = ['internal_endpoint' => ($options['internal_endpoint'] ?? true) === true];
+            $downloadOptions = $endpointOptions['internal_endpoint']
+                ? $this->getInternalEndpointOptions($organizationCode, $endpointOptions)
+                : $this->getOptions($organizationCode, $endpointOptions);
+            $filesystem->downloadByChunks($filePath, $localPath, $config, $downloadOptions);
 
             $this->logger->info('chunk_download_repository_success', [
                 'organization_code' => $organizationCode,
@@ -413,6 +417,9 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         array $options = []
     ): void {
         try {
+            // 未显式指定时，按环境变量选择对象存储访问端点。
+            $options['internal_endpoint'] ??= (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+
             $prefix = $this->formatPrefix($prefix, $organizationCode);
             // Security check: validate if file path starts with organization code
             if (! Str::startsWith($objectKey, $organizationCode)) {
@@ -537,6 +544,9 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         array $options = []
     ): array {
         try {
+            // 未显式指定时，按环境变量选择对象存储访问端点。
+            $options['internal_endpoint'] ??= (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+
             // Security check: validate if object key belongs to organization code
             if (! Str::startsWith($objectKey, $organizationCode)) {
                 $this->logger->warning('Get object metadata failed: object key does not belong to specified organization', [
@@ -560,6 +570,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'content_type' => $result['content_type'] ?? null,
                 'content_length' => $result['content_length'] ?? null,
                 'last_modified' => $result['last_modified'] ?? null,
             ]);
@@ -618,6 +629,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'content_type' => $metadata['content_type'] ?? null,
                 'metadata_count' => count($metadata),
             ]);
         } catch (Throwable $exception) {
@@ -680,6 +692,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
 
             // Prepare options for creation
             $createOptions = $options;
+            $createOptions['internal_endpoint'] = (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
 
             // Set default content for folders
             if ($isFolder && ! isset($createOptions['content'])) {
@@ -693,6 +706,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'object_key' => $objectKey,
                 'object_type' => $isFolder ? 'folder' : 'file',
                 'bucket_type' => $bucketType->value,
+                'content_type' => $createOptions['content_type'] ?? null,
                 'content_length' => strlen($createOptions['content'] ?? ''),
             ]);
         } catch (Throwable $exception) {
@@ -830,6 +844,75 @@ class CloudFileRepository implements CloudFileRepositoryInterface
     }
 
     /**
+     * Generate multiple pre-signed URLs with one temporary credential request.
+     *
+     * @param array<int, array{object_key:string, options?:array}> $items
+     * @return array<string, string> URLs indexed by object key
+     */
+    public function getPreSignedUrlsByCredential(
+        string $organizationCode,
+        array $items,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        int $credentialExpires = 7200,
+        array $options = []
+    ): array {
+        $validItems = [];
+        foreach ($items as $item) {
+            $objectKey = $item['object_key'] ?? '';
+            if (! is_string($objectKey) || $objectKey === '') {
+                continue;
+            }
+            if (! Str::startsWith($objectKey, $organizationCode)) {
+                $this->logger->warning('Batch pre-signed URL skipped: object key does not belong to specified organization', [
+                    'organization_code' => $organizationCode,
+                    'object_key' => $objectKey,
+                ]);
+                continue;
+            }
+
+            $itemOptions = $item['options'] ?? [];
+            $itemOptions['method'] ??= 'GET';
+            $validItems[] = [
+                'object_key' => $objectKey,
+                'options' => $itemOptions,
+            ];
+        }
+
+        if ($validItems === []) {
+            return [];
+        }
+
+        $imageProcess = ImageProcessFactory::getByHeader();
+        if ($imageProcess) {
+            $options['image'] = $imageProcess;
+        }
+
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => true,
+            'role_session_name' => 'magic',
+            'dir' => '',
+            'expires' => $credentialExpires,
+        ]);
+
+        try {
+            return $this->getFilesystem($bucketType->value)->getPreSignedUrlsByCredential(
+                $credentialPolicy,
+                $validItems,
+                $this->getOptions($organizationCode, $options)
+            );
+        } catch (Throwable $exception) {
+            $this->logger->error('get_presigned_urls_by_credential_failed', [
+                'organization_code' => $organizationCode,
+                'bucket_type' => $bucketType->value,
+                'item_count' => count($validItems),
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+            throw $exception;
+        }
+    }
+
+    /**
      * Delete multiple objects by credential.
      *
      * @param string $prefix Prefix for data isolation
@@ -925,6 +1008,9 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         array $options = []
     ): void {
         try {
+            // 重命名包含复制、校验和删除，三个阶段必须使用相同的访问端点。
+            $options['internal_endpoint'] ??= (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+
             // Security check: validate if both keys belong to organization code
             if (! Str::startsWith($sourceKey, $organizationCode)) {
                 $this->logger->warning('Object rename failed: source key does not belong to specified organization', [
@@ -965,7 +1051,8 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 $destinationMetadata = $this->getHeadObjectByCredential(
                     $organizationCode,
                     $destinationKey,
-                    $bucketType
+                    $bucketType,
+                    $options,
                 );
 
                 $this->logger->info('rename_destination_verified', [
@@ -992,7 +1079,8 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 $prefix, // use the same prefix as the rename operation
                 $organizationCode,
                 $sourceKey,
-                $bucketType
+                $bucketType,
+                $options,
             );
 
             $this->logger->info('rename_object_by_credential_success', [

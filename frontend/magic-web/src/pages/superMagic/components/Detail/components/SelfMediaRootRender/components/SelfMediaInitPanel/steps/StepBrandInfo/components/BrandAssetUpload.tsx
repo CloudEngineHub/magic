@@ -8,7 +8,7 @@ import {
 	DropdownMenuTrigger,
 	DropdownMenuContent,
 } from "@/components/shadcn-ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import projectFilesStore from "@/stores/projectFiles"
 import { UploadCloud, FileText, Trash2, CheckCircle2, Loader2, FolderOpen } from "lucide-react"
 import ProjectFilePickerContent from "../../../components/picker/ProjectFilePickerContent"

@@ -104,9 +104,6 @@ Negative examples:
 - pure casual chat or pure creative generation
 """
 
-    def is_visible_in_ui(self) -> bool:
-        return False
-
     async def get_tool_detail(
         self,
         tool_context: ToolContext,

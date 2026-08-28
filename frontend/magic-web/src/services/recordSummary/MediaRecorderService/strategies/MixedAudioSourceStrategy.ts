@@ -70,14 +70,16 @@ export class MixedAudioSourceStrategy implements AudioSourceStrategy {
 			const micAudioTracks = this.micMediaStream.getAudioTracks()
 			micAudioTracks.forEach((track) => {
 				track.onended = () => {
-					this.dependencies.logger.error(
-						"Microphone audio track ended unexpectedly in mixed mode",
-						{
+					this.dependencies.logger.error({
+						eventKey: "mixed_audio_microphone_track_ended_unexpectedly",
+						errorKind: "unknown",
+						message: "Microphone audio track ended unexpectedly in mixed mode",
+						context: {
 							trackId: track.id,
 							trackLabel: track.label,
 							trackState: track.readyState,
 						},
-					)
+					})
 
 					// 上报监控：混合模式下麦克风音频轨道意外结束
 					// Report: Microphone track ended unexpectedly in mixed mode
@@ -174,7 +176,12 @@ export class MixedAudioSourceStrategy implements AudioSourceStrategy {
 				audioRecorder: this.audioRecorder,
 			}
 		} catch (error) {
-			this.dependencies.logger.error("Failed to initialize mixed audio source:", error)
+			this.dependencies.logger.error({
+				eventKey: "initialize_mixed_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to initialize mixed audio source:",
+			})
 			await this.cleanup()
 			throw new AudioStreamCaptureError(
 				"Failed to initialize mixed audio source",
@@ -225,14 +232,16 @@ export class MixedAudioSourceStrategy implements AudioSourceStrategy {
 			// Monitor system audio track state
 			audioTracks.forEach((track) => {
 				track.onended = () => {
-					this.dependencies.logger.error(
-						"System audio track ended unexpectedly in mixed mode",
-						{
+					this.dependencies.logger.error({
+						eventKey: "mixed_audio_system_track_ended_unexpectedly",
+						errorKind: "unknown",
+						message: "System audio track ended unexpectedly in mixed mode",
+						context: {
 							trackId: track.id,
 							trackLabel: track.label,
 							trackState: track.readyState,
 						},
-					)
+					})
 
 					// 上报监控：混合模式下系统音频轨道意外结束（用户停止共享、关闭窗口）
 					// Report: System audio track ended unexpectedly in mixed mode (user stopped sharing or closed window)
@@ -266,7 +275,12 @@ export class MixedAudioSourceStrategy implements AudioSourceStrategy {
 
 			return displayMedia
 		} catch (error) {
-			this.dependencies.logger.error("Failed to capture system audio:", error)
+			this.dependencies.logger.error({
+				eventKey: "capture_system_audio_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to capture system audio:",
+			})
 
 			// 上报监控：混合模式下系统音频捕获失败（用户拒绝、浏览器不支持、选择无音频窗口）
 			// Report: System audio capture failed in mixed mode (permission denied, browser not supported, or no audio window selected)
@@ -345,7 +359,12 @@ export class MixedAudioSourceStrategy implements AudioSourceStrategy {
 
 			return destination.stream
 		} catch (error) {
-			this.dependencies.logger.error("Failed to mix audio streams:", error)
+			this.dependencies.logger.error({
+				eventKey: "mix_audio_streams_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to mix audio streams:",
+			})
 			throw new AudioStreamCaptureError("Failed to mix audio streams", error as Error)
 		}
 	}
@@ -389,7 +408,12 @@ export class MixedAudioSourceStrategy implements AudioSourceStrategy {
 				this.dependencies.logger.log("Manual audio processing set up successfully")
 				resolve()
 			} catch (error) {
-				this.dependencies.logger.error("Failed to set up manual audio processing:", error)
+				this.dependencies.logger.error({
+					eventKey: "mixed_audio_manual_processing_setup_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to set up manual audio processing:",
+				})
 				reject(error)
 			}
 		})

@@ -26,6 +26,7 @@ export interface NavigateToStateParams {
 	workspaceId?: string | null
 	projectId?: string | null
 	topicId?: string | null
+	state?: Record<string, unknown> | null
 	viewTransition?: boolean | ViewTransitionConfig
 }
 
@@ -267,6 +268,7 @@ class RouteManageService {
 		workspaceId,
 		projectId,
 		topicId,
+		state,
 		viewTransition = false,
 	}: NavigateToStateParams) => {
 		if (isUndefined(workspaceId) && isUndefined(projectId) && isUndefined(topicId)) return
@@ -281,6 +283,7 @@ class RouteManageService {
 
 		// 2. 如果传入的参数与当前路由参数相同，则不进行任何操作
 		if (
+			state === undefined &&
 			workspaceId == param_workspaceId &&
 			projectId == param_projectId &&
 			topicId == param_topicId
@@ -337,6 +340,7 @@ class RouteManageService {
 						projectId: superMagicWorkspaceState.projectId,
 						topicId: superMagicWorkspaceState.topicId,
 					},
+					state,
 					viewTransition: param_topicId ? false : viewTransition,
 					replace: !!param_topicId,
 				})
@@ -355,6 +359,7 @@ class RouteManageService {
 				params: {
 					projectId: superMagicWorkspaceState.projectId,
 				},
+				state,
 				viewTransition,
 				replace: false,
 			})
@@ -366,6 +371,7 @@ class RouteManageService {
 					query: {
 						tab: MobileTabParam.Super,
 					},
+					state,
 					viewTransition,
 					replace: false,
 				})
@@ -375,6 +381,7 @@ class RouteManageService {
 					params: {
 						workspaceId: superMagicWorkspaceState.workspaceId,
 					},
+					state,
 					viewTransition,
 					replace: false,
 				})
@@ -388,10 +395,12 @@ class RouteManageService {
 					query: {
 						tab: MobileTabParam.Super,
 					},
+					state,
 				})
 			} else {
 				this.safeNavigate({
 					name: this.getRouteName(RouteName.Super),
+					state,
 					viewTransition,
 					replace: false,
 				})
@@ -585,7 +594,11 @@ class RouteManageService {
 		}
 	}
 
-	navigateToProject(project: ProjectListItem, replace?: boolean) {
+	navigateToProject(
+		project: ProjectListItem,
+		replace?: boolean,
+		state?: Record<string, unknown> | null,
+	) {
 		const { workspaceId: param_workspaceId, projectId: param_projectId } =
 			this.getCurrentRouteParams()
 
@@ -639,11 +652,17 @@ class RouteManageService {
 				projectId: project.id,
 			},
 			viewTransition,
+			state,
 			replace,
 		})
 	}
 
-	navigateToChatProject(project: ProjectListItem, topicId?: string, replace?: boolean) {
+	navigateToChatProject(
+		project: ProjectListItem,
+		topicId?: string,
+		replace?: boolean,
+		state?: Record<string, unknown> | null,
+	) {
 		const targetTopicId = topicId || undefined
 		const currentParams = this.getCurrentRouteParams()
 		const currentRouteName = this.getCurrentMatchedRouteName()
@@ -693,11 +712,16 @@ class RouteManageService {
 				topicId: targetTopicId,
 			},
 			viewTransition,
+			state,
 			replace: shouldReplace,
 		})
 	}
 
-	navigateToCollaborationProject(project: ProjectListItem, replace?: boolean) {
+	navigateToCollaborationProject(
+		project: ProjectListItem,
+		replace?: boolean,
+		state?: Record<string, unknown> | null,
+	) {
 		const {
 			workspaceId: param_workspaceId,
 			projectId: param_projectId,
@@ -729,6 +753,7 @@ class RouteManageService {
 				projectId: project.id,
 			},
 			viewTransition,
+			state,
 			replace,
 		})
 	}
@@ -786,11 +811,13 @@ class RouteManageService {
 		projectId,
 		topicId,
 		replace = false,
+		state,
 	}: {
 		workspaceId: string
 		projectId: string
 		topicId: string
 		replace?: boolean
+		state?: Record<string, unknown> | null
 	}) {
 		// 更新缓存：完整状态（工作区 + 项目 + 话题）
 		const userInfo = userStore.user.userInfo
@@ -842,12 +869,13 @@ class RouteManageService {
 				params: {
 					projectId,
 				},
+				state,
 				replace,
 			})
 		} else if (this.shouldPreserveChatRoute(projectId)) {
 			const currentProject = projectStore.selectedProject
 			if (currentProject?.id === projectId) {
-				this.navigateToChatProject(currentProject, topicId, replace)
+				this.navigateToChatProject(currentProject, topicId, replace, state)
 				return
 			}
 
@@ -857,6 +885,7 @@ class RouteManageService {
 					projectId,
 					topicId,
 				},
+				state,
 				replace,
 			})
 		} else {
@@ -866,6 +895,7 @@ class RouteManageService {
 					projectId,
 					topicId,
 				},
+				state,
 				replace,
 			})
 		}

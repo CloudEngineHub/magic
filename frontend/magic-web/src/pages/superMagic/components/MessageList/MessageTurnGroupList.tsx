@@ -1,5 +1,5 @@
 import { memo, type PropsWithChildren, type ReactNode } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
@@ -7,33 +7,42 @@ import { isUserRoleMessage, isToolRoleMessage, type MessageTurnGroup } from "./m
 import { superMagicStore } from "@/pages/superMagic/stores"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 
-export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
-	"sticky isolate z-20 overflow-visible",
+export const USER_MESSAGE_STICKY_POSITION_CLASS = "sticky z-20"
+
+export const USER_MESSAGE_STICKY_MASK_CLASS = cn(
+	"isolate overflow-visible",
 	"[--sticky-message-mask-bg:rgb(var(--sidebar-rgb))] [--sticky-message-mask-fade-from:rgb(var(--sidebar-rgb))]",
 	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-[var(--sticky-message-mask-bg)] before:content-['']",
 	"after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:z-0 after:h-4 after:bg-gradient-to-b after:from-[var(--sticky-message-mask-fade-from)] after:to-transparent after:content-['']",
 	"[&>*]:relative [&>*]:z-[1]",
 )
 
-/**
- * Desktop-only sticky mask tweaks; mobile renders flat lists (no sticky) so this is unused on mobile.
- */
+export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
+	USER_MESSAGE_STICKY_POSITION_CLASS,
+	USER_MESSAGE_STICKY_MASK_CLASS,
+)
+
+/** Mobile keeps the same sticky User row but uses the mobile page background without a fade tail. */
 export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 	"before:bg-[rgb(var(--mobile-background-rgb))]",
 	"after:bg-none",
-	"!-top-[2px]",
 )
 
 export function getUserMessageStickyTopClass(
 	isMobile: boolean,
-): "top-[10px] [--sticky-message-top:10px]" | "top-[40px] [--sticky-message-top:40px]" {
-	return isMobile
-		? "top-[10px] [--sticky-message-top:10px]"
-		: "top-[40px] [--sticky-message-top:40px]"
+): "top-0 [--sticky-message-top:0px]" | "top-[40px] [--sticky-message-top:40px]" {
+	return isMobile ? "top-0 [--sticky-message-top:0px]" : "top-[40px] [--sticky-message-top:40px]"
 }
 
 /** Extra classes applied to the row wrapper when the message is from the user */
 export const USER_MESSAGE_ROW_CLASS = "flex min-w-0 justify-end"
+
+/**
+ * Assistant content keeps a timeline gutter, while terminal status badges cancel only that
+ * gutter through the inherited CSS variable so they align with top-level Tool statuses.
+ */
+export const ASSISTANT_MESSAGE_ROW_CLASS =
+	"pb-2 pl-6 [--message-status-offset:-1.5rem] after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']"
 
 export interface MessageTurnGroupListProps {
 	groups: Array<MessageTurnGroup>
@@ -77,9 +86,7 @@ function MessageRowContainer({
 			data-message-role={node?.role || "user"}
 			className={cn(
 				"relative w-full",
-				!isUser &&
-					!isTool &&
-					"pb-2 pl-6 after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']",
+				!isUser && !isTool && ASSISTANT_MESSAGE_ROW_CLASS,
 				isUser && USER_MESSAGE_ROW_CLASS,
 			)}
 		>
@@ -122,7 +129,7 @@ function MessageTurnGroupListInner({
 
 	function row(node: SuperMagicMessageItem, index: number) {
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
-		const card = superMagicStore.getMessageNode(node?.app_message_id) as
+		const card = superMagicStore.getMessageNode(node?.super_message_id) as
 			| { status?: string }
 			| undefined
 		if (!statusList.has(card?.status as string) && node?.role === "tool") {
@@ -241,7 +248,7 @@ function MessageTurnGroupListInner({
 								isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 								userMessageStickyTopClass,
 								stickyMessageClassName,
-								"mb-2",
+								isMobile ? "z-40 bg-mobile-background pb-2" : "mb-2",
 							)}
 						>
 							{row(stickyItem.node, stickyItem.index)}

@@ -15,9 +15,9 @@ class TaskEventUtil
     public static function getRemindTaskEventByCode(int $code): string
     {
         switch ($code) {
-            case EventErrorCode::EVENT_TASK_PENDING:
+            case EventErrorCode::EVENT_TASK_PENDING->value:
                 return TaskEvent::SUSPENDED->value;
-            case EventErrorCode::EVENT_TASK_STOP:
+            case EventErrorCode::EVENT_TASK_STOP->value:
                 return TaskEvent::TERMINATED->value;
             default:
                 return '';

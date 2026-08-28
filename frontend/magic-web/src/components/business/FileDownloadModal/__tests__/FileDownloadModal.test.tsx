@@ -87,6 +87,34 @@ describe("FileDownloadModal", () => {
 		})
 	})
 
+	it("renders the manual retry as a native link in a new tab", () => {
+		render(<FileDownloadModal {...defaultProps} nativeDownload downloadTarget="_blank" />)
+
+		const downloadLink = screen.getByRole("link", { name: /下载文件/ })
+		expect(downloadLink).toHaveAttribute("href", "https://example.com/test-file.pdf")
+		expect(downloadLink).toHaveAttribute("target", "_blank")
+		expect(downloadLink).toHaveAttribute("rel", "noopener noreferrer")
+		expect(downloadLink).not.toHaveAttribute("download")
+
+		fireEvent.click(downloadLink)
+		expect(mockOnDownload).not.toHaveBeenCalled()
+	})
+
+	it("keeps the filename hint for native blob downloads", () => {
+		render(
+			<FileDownloadModal
+				{...defaultProps}
+				downloadUrl="blob:generated-zip"
+				fileName="folder.zip"
+				nativeDownload
+			/>,
+		)
+
+		const downloadLink = screen.getByRole("link", { name: /下载文件/ })
+		expect(downloadLink).toHaveAttribute("href", "blob:generated-zip")
+		expect(downloadLink).toHaveAttribute("download", "folder.zip")
+	})
+
 	it("calls onCopyLink without closing when copy link button is clicked", async () => {
 		render(<FileDownloadModal {...defaultProps} />)
 

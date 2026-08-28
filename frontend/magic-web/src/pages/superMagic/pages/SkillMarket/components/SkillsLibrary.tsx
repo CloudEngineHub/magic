@@ -1,31 +1,35 @@
-import { useCallback, useMemo, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { RefObject } from "react"
-import { reaction } from "mobx"
-import { configStore } from "@/models/config"
 import { useDebounce, useThrottle } from "ahooks"
-import { CirclePlus, ChevronDown, Check, Loader2 } from "lucide-react"
-import { useTranslation } from "react-i18next"
+import { Check, ChevronDown, Loader2, Plus } from "lucide-react"
+import { reaction } from "mobx"
 import { observer } from "mobx-react-lite"
-import { Button } from "@/components/shadcn-ui/button"
-import useNavigate from "@/routes/hooks/useNavigate"
-import { RouteName } from "@/routes/constants"
+import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
+import { Button } from "@/components/shadcn-ui/button"
+import { Skills } from "@/enhance/lucide-react"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
+import { cn } from "@/utils/cn"
+import { configStore } from "@/models/config"
 import SkillActionDropdown from "@/pages/superMagic/components/SkillActionDropdown"
-import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
-import { useSkillCreateMenuItems } from "@/pages/superMagic/hooks/useSkillCreateMenuItems"
-import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
-import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
+import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
+import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
+import { useSkillCreateMenuItems } from "@/pages/superMagic/hooks/useSkillCreateMenuItems"
+import MarketStickyHeader from "@/pages/superMagic/pages/CrewMarket/components/MarketStickyHeader"
+import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
 import {
-	MY_SKILLS_TAB_VALUES,
 	MY_SKILLS_INITIAL_TAB_QUERY_KEY,
 	MY_SKILLS_PUBLISH_SKILL_CODE_QUERY_KEY,
+	MY_SKILLS_TAB_VALUES,
 } from "@/pages/superMagic/pages/MySkillsPage/route-state"
-import SkillCard, { type SkillCardData } from "./SkillCard"
-import { StoreSkillsStore } from "../stores/store-skills"
-import { Skills } from "@/enhance/lucide-react"
+import { RouteName } from "@/routes/constants"
+import useNavigate from "@/routes/hooks/useNavigate"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
+import { StoreSkillsStore } from "../stores/store-skills"
+import SkillCard from "./SkillCard"
+import SkillCategoryFilter from "./SkillCategoryFilter"
 
 const SKILLS_SEARCH_DEBOUNCE_MS = 300
 const SKILLS_SEARCH_THROTTLE_MS = 400
@@ -50,13 +54,38 @@ function SkillsLibrary({
 
 	const [searchQuery, setSearchQuery] = useState("")
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
+	const lastSubmittedSearchRef = useRef<string | null>(null)
+	const lastSearchEffectKeywordRef = useRef<string | null>(null)
+	const initialLoadLifecycleRef = useRef({ initialized: false, generation: 0 })
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
 	const debouncedSearchQuery = useDebounce(searchQuery, { wait: SKILLS_SEARCH_DEBOUNCE_MS })
 	const throttledSearchQuery = useThrottle(debouncedSearchQuery, {
 		wait: SKILLS_SEARCH_THROTTLE_MS,
 	})
+	const gridClass =
+		skillGridClassName ??
+		"grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
+	const hasActiveFilters =
+		Boolean(searchQuery.trim()) ||
+		Boolean(skillsStore.keyword) ||
+		skillsStore.categoryIds.length > 0 ||
+		skillsStore.publisherType != null ||
+		skillsStore.isFeatured != null
+	useEffect(() => {
+		const lifecycle = initialLoadLifecycleRef.current
+		const effectGeneration = ++lifecycle.generation
 
-	useEffect(() => () => skillsStore.reset(), [skillsStore])
+		if (!lifecycle.initialized) {
+			lifecycle.initialized = true
+			void skillsStore.fetchCategories()
+		}
+
+		return () => {
+			queueMicrotask(() => {
+				if (lifecycle.generation === effectGeneration) skillsStore.reset()
+			})
+		}
+	}, [skillsStore])
 
 	useEffect(() => {
 		return reaction(
@@ -70,11 +99,20 @@ function SkillsLibrary({
 	// Debounced search; skip while IME is composing (CJK input).
 	useEffect(() => {
 		if (isSearchComposing) return
-		const kw = throttledSearchQuery.trim()
-		void skillsStore.fetchSkills({ keyword: kw || undefined, page: 1 })
+		const keyword = throttledSearchQuery.trim()
+		if (lastSubmittedSearchRef.current === keyword) {
+			lastSubmittedSearchRef.current = null
+			return
+		}
+		if (lastSearchEffectKeywordRef.current === keyword) return
+		lastSearchEffectKeywordRef.current = keyword
+		void skillsStore
+			.fetchSkills({ keyword: keyword || undefined, page: 1 })
+			.catch(() => undefined)
 	}, [skillsStore, throttledSearchQuery, isSearchComposing])
+
 	const handleAutoLoadMore = useCallback(() => {
-		void skillsStore.loadMore()
+		void skillsStore.loadMore().catch(() => undefined)
 	}, [skillsStore])
 	const sentinelRef = useAutoLoadMoreSentinel({
 		rootRef: scrollViewportRef,
@@ -87,51 +125,97 @@ function SkillsLibrary({
 
 	const handleAdd = useCallback(
 		(id: string) => {
-			void skillsStore.addSkill(id)
+			void skillsStore.addSkill(id).catch(() => {
+				toast.error(t("skillsLibrary.addFailed"))
+			})
+		},
+		[skillsStore, t],
+	)
+
+	const handleRetrySkills = useCallback(() => {
+		void skillsStore.retrySkills().catch(() => undefined)
+	}, [skillsStore])
+
+	const handleCategoryChange = useCallback(
+		(categoryIds: string[], isFeatured?: 0 | 1) => {
+			void skillsStore
+				.fetchSkills({ page: 1, category_ids: categoryIds, is_featured: isFeatured })
+				.catch(() => undefined)
 		},
 		[skillsStore],
 	)
 
-	const handleUpgrade = useCallback(
-		(id: string) => {
-			void skillsStore.upgradeSkill(id)
-		},
-		[skillsStore],
-	)
-
-	const handleOpenDetail = useCallback(
-		(skill: SkillCardData) => {
-			const fromStore = skillsStore.list.find((s) => s.id === skill.id)
-			if (fromStore) setSelectedSkill(fromStore)
-		},
-		[skillsStore],
-	)
-
-	const handleSearch = useCallback(() => {
-		if (isSearchComposing) return
-		const keyword = searchQuery.trim()
-		void skillsStore.fetchSkills({ keyword: keyword || undefined, page: 1 })
-	}, [isSearchComposing, searchQuery, skillsStore])
-
-	const onSearchCompositionStart = useCallback(() => setIsSearchComposing(true), [])
-	const onSearchCompositionEnd = useCallback(() => setIsSearchComposing(false), [])
+	const handleOpenDetail = useCallback((skill: StoreSkillView) => {
+		setSelectedSkill(skill)
+	}, [])
 
 	function handleMySkills() {
 		navigate({ name: RouteName.MySkills })
 	}
 
+	const handleSearch = useCallback(
+		(query?: string) => {
+			if (isSearchComposing) return
+			const keyword = (query ?? searchQuery).trim()
+			lastSubmittedSearchRef.current = keyword
+			void skillsStore
+				.fetchSkills({ keyword: keyword || undefined, page: 1 })
+				.catch(() => undefined)
+		},
+		[isSearchComposing, searchQuery, skillsStore],
+	)
+	const onSearchCompositionStart = useCallback(() => setIsSearchComposing(true), [])
+	const onSearchCompositionEnd = useCallback(() => setIsSearchComposing(false), [])
+
 	const createSkillMenuItems = useSkillCreateMenuItems({
 		createViaChatTestId: "skills-create-via-chat",
 		importSkillTestId: "skills-import-skill",
 	})
+	const selectedSkillId = selectedSkill?.id
+	const selectedSkillStatus = selectedSkill?.status
+	const selectedSkillNeedUpgrade = selectedSkill?.needUpgrade ?? false
+	const isSelectedSkillAdding = selectedSkillId
+		? skillsStore.isAddingSkill(selectedSkillId)
+		: false
+	const detailPrimaryAction = useMemo(
+		() =>
+			selectedSkillId
+				? {
+						label: isSelectedSkillAdding
+							? t("skillsLibrary.adding")
+							: selectedSkillStatus === "added"
+								? selectedSkillNeedUpgrade
+									? t("skillsLibrary.upgrade")
+									: t("skillsLibrary.added")
+								: t("skillsLibrary.addToMySkills"),
+						onClick: async () => {
+							if (selectedSkillStatus === "added") {
+								if (selectedSkillNeedUpgrade)
+									await skillsStore.upgradeSkill(selectedSkillId)
+								return
+							}
 
-	const gridClass = skillGridClassName ?? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+							await skillsStore.addSkill(selectedSkillId)
+						},
+						onError: () => toast.error(t("skillsLibrary.actionFailed")),
+						disabled:
+							isSelectedSkillAdding ||
+							(selectedSkillStatus === "added" && !selectedSkillNeedUpgrade),
+						testId: "skill-detail-dialog-primary-action",
+					}
+				: undefined,
+		[
+			isSelectedSkillAdding,
+			selectedSkillId,
+			selectedSkillNeedUpgrade,
+			selectedSkillStatus,
+			skillsStore,
+			t,
+		],
+	)
 
 	return (
-		<div
-			className="mt-5 flex min-w-0 flex-col gap-6 sm:mt-8 sm:gap-8"
-			data-testid="skills-library"
-		>
+		<div className="flex min-w-0 flex-col pt-5 sm:pt-6" data-testid="skills-library">
 			<SkillDetailDialog
 				open={selectedSkill != null}
 				onOpenChange={(nextOpen) => {
@@ -141,35 +225,12 @@ function SkillsLibrary({
 				skillCode={selectedSkill?.skillCode ?? null}
 				detailSource="market"
 				skillSummary={selectedSkill}
-				primaryAction={
-					selectedSkill
-						? {
-								label:
-									selectedSkill.status === "added"
-										? selectedSkill.needUpgrade
-											? t("skillsLibrary.upgrade")
-											: t("skillsLibrary.added")
-										: t("skillsLibrary.addToMySkills"),
-								onClick: async () => {
-									if (selectedSkill.status === "added") {
-										if (selectedSkill.needUpgrade)
-											await skillsStore.upgradeSkill(selectedSkill.id)
-										return
-									}
-
-									await skillsStore.addSkill(selectedSkill.id)
-								},
-								disabled:
-									selectedSkill.status === "added" && !selectedSkill.needUpgrade,
-								testId: "skill-detail-dialog-primary-action",
-							}
-						: undefined
-				}
+				primaryAction={detailPrimaryAction}
 			/>
-			<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+			<header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 				{hideMarketingHeadline ? null : (
 					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
-						<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
+						<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight tracking-[-0.035em] text-transparent sm:text-3xl lg:text-4xl">
 							{t("skillsLibrary.title")}
 						</h1>
 						<p className="max-w-2xl break-words text-sm text-muted-foreground">
@@ -177,7 +238,18 @@ function SkillsLibrary({
 						</p>
 					</div>
 				)}
-				<div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
+
+				<div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
+					<Button
+						variant="outline"
+						className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
+						onClick={handleMySkills}
+						data-testid="skills-library-my-skills-button"
+					>
+						<Skills className="size-4" />
+						{t("skillsLibrary.mySkills")}
+					</Button>
+
 					{canCreateSkill ? (
 						<SkillActionDropdown
 							createMenuItems={createSkillMenuItems}
@@ -200,63 +272,80 @@ function SkillsLibrary({
 									className="h-9 flex-1 gap-2 shadow-xs sm:flex-none"
 									data-testid="skills-library-create-button"
 								>
-									<CirclePlus className="h-4 w-4" />
+									<Plus className="size-4" />
 									{t("skillsLibrary.createSkill")}
-									<ChevronDown className="h-4 w-4" />
+									<ChevronDown className="size-4 opacity-70" />
 								</Button>
 							</span>
 						</SkillActionDropdown>
 					) : null}
-					<Button
-						variant="outline"
-						className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
-						onClick={handleMySkills}
-						data-testid="skills-library-my-skills-button"
+				</div>
+			</header>
+
+			<MarketStickyHeader
+				className="gap-5 pb-5 pt-5 sm:gap-6 sm:pb-6 sm:pt-6"
+				scrollViewportRef={scrollViewportRef}
+				data-testid="skills-library-sticky-header"
+			>
+				<SearchBar
+					value={searchQuery}
+					onChange={setSearchQuery}
+					onSearch={handleSearch}
+					onCompositionStart={onSearchCompositionStart}
+					onCompositionEnd={onSearchCompositionEnd}
+					placeholder={t("skillsLibrary.aiSearchPlaceholder")}
+					enableSearchSubmit
+					data-testid="skills-library-search-bar"
+				/>
+				<SkillCategoryFilter
+					categories={skillsStore.categories}
+					selectedCategoryIds={skillsStore.categoryIds}
+					selectedIsFeatured={skillsStore.isFeatured}
+					loading={skillsStore.categoriesLoading}
+					error={skillsStore.categoriesError}
+					onChange={handleCategoryChange}
+				/>
+			</MarketStickyHeader>
+
+			<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
+				{skillsStore.listError ? (
+					<div
+						className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
+						data-testid="skills-library-error"
 					>
-						<Skills className="h-4 w-4" />
-						{t("skillsLibrary.mySkills")}
-					</Button>
-				</div>
-			</div>
-
-			<SearchBar
-				value={searchQuery}
-				onChange={setSearchQuery}
-				onSearch={handleSearch}
-				onCompositionStart={onSearchCompositionStart}
-				onCompositionEnd={onSearchCompositionEnd}
-				placeholder={t("skillsLibrary.aiSearchPlaceholder")}
-				enableSearchSubmit
-				data-testid="skills-library-search-bar"
-			/>
-
-			{skillsStore.loading && skillsStore.list.length === 0 ? (
-				<div
-					className="flex items-center justify-center py-8"
-					data-testid="skills-library-loading"
-				>
-					<Loader2 className="size-5 animate-spin text-muted-foreground" />
-				</div>
-			) : skillsStore.isEmpty ? (
-				<div
-					className="flex items-center justify-center py-8 text-sm text-muted-foreground"
-					data-testid="skills-library-empty"
-				>
-					{skillsStore.keyword ? t("noResults") : t("skillsLibrary.noMoreData")}
-				</div>
-			) : (
-				<div className={gridClass} data-testid="skill-card-grid">
-					{skillsStore.list.map((skill) => (
-						<SkillCard
-							key={skill.id}
-							skill={skill}
-							onAdd={handleAdd}
-							onUpgrade={handleUpgrade}
-							onOpenDetail={handleOpenDetail}
-						/>
-					))}
-				</div>
-			)}
+						<span>{t("skillsLibrary.loadFailed")}</span>
+						<Button variant="outline" size="sm" onClick={handleRetrySkills}>
+							{t("skillsLibrary.retrySkills")}
+						</Button>
+					</div>
+				) : skillsStore.loading && skillsStore.list.length === 0 ? (
+					<div
+						className="flex items-center justify-center py-16"
+						data-testid="skills-library-loading"
+					>
+						<Loader2 className="size-5 animate-spin text-muted-foreground" />
+					</div>
+				) : skillsStore.isEmpty ? (
+					<div
+						className="flex items-center justify-center py-16 text-sm text-muted-foreground"
+						data-testid="skills-library-empty"
+					>
+						{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
+					</div>
+				) : (
+					<div className={cn(gridClass, "mt-4")} data-testid="skill-card-grid">
+						{skillsStore.list.map((skill) => (
+							<SkillCard
+								key={skill.id}
+								skill={skill}
+								isAdding={skillsStore.isAddingSkill(skill.id)}
+								onAdd={handleAdd}
+								onOpenDetail={() => handleOpenDetail(skill)}
+							/>
+						))}
+					</div>
+				)}
+			</section>
 
 			<div
 				ref={sentinelRef}
@@ -264,7 +353,19 @@ function SkillsLibrary({
 				data-testid="skills-library-scroll-sentinel"
 			/>
 
-			{shouldShowLoadingMoreIndicator ? (
+			{skillsStore.loadingMoreError ? (
+				<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
+					<span>{t("skillsLibrary.loadFailed")}</span>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 px-2"
+						onClick={handleAutoLoadMore}
+					>
+						{t("skillsLibrary.retrySkills")}
+					</Button>
+				</div>
+			) : shouldShowLoadingMoreIndicator ? (
 				<div
 					className="flex items-center justify-center py-2"
 					data-testid="skills-library-loading-more"

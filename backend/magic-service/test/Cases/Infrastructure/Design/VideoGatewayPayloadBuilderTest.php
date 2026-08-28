@@ -10,6 +10,8 @@ namespace HyperfTest\Cases\Infrastructure\Design;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Infrastructure\Design\DesignVideoPromptReferenceRewriter;
 use App\Infrastructure\Design\VideoGatewayPayloadBuilder;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use PHPUnit\Framework\TestCase;
@@ -19,6 +21,27 @@ use PHPUnit\Framework\TestCase;
  */
 class VideoGatewayPayloadBuilderTest extends TestCase
 {
+    public function testBuildPassesBase64ReferenceImagesAndFramesWithoutResolvingWorkspaceFiles(): void
+    {
+        $builder = $this->createBuilder();
+        $referenceImage = 'data:image/png;base64,' . base64_encode('mock-image');
+        $frame = 'data:image/jpeg;base64,' . base64_encode('mock-frame');
+
+        $entity = new DesignGenerationTaskEntity();
+        $entity->setOrganizationCode('org');
+        $entity->setProjectId(1001);
+        $entity->setRequestPayload(['prompt' => 'make a video']);
+        $entity->setInputPayload([
+            'reference_images' => [['uri' => $referenceImage, 'type' => 'asset']],
+            'frames' => [['role' => 'start', 'uri' => $frame]],
+        ]);
+
+        $payload = $builder->build($entity);
+
+        $this->assertSame($referenceImage, $payload['inputs']['reference_images'][0]['uri']);
+        $this->assertSame($frame, $payload['inputs']['frames'][0]['uri']);
+    }
+
     public function testBuildConvertsReferenceImagesAndFramesToDataUrlByDefault(): void
     {
         $builder = $this->createBuilder(
@@ -85,6 +108,40 @@ class VideoGatewayPayloadBuilderTest extends TestCase
         $this->assertSame('asset', $payload['inputs']['reference_images'][0]['type']);
         $this->assertSame('start', $payload['inputs']['frames'][0]['role']);
         $this->assertSame('https://cdn.example.com/start.jpg', $payload['inputs']['frames'][0]['uri']);
+    }
+
+    public function testBuildPassesProviderAssetUrisWithoutResolvingWorkspaceFiles(): void
+    {
+        $builder = $this->createBuilder();
+
+        $entity = new DesignGenerationTaskEntity();
+        $entity->setOrganizationCode('org');
+        $entity->setProjectId(1001);
+        $entity->setRequestPayload([
+            'prompt' => '人物面对镜头介绍产品',
+            'model_id' => 'doubao-seedance-2-0-260128',
+            'supports_image_input_url' => true,
+            'supports_provider_asset_uri' => true,
+            'inputs' => [
+                'reference_images' => [['uri' => 'asset://avatar-image-001']],
+                'reference_videos' => [['uri' => 'asset://avatar-video-001']],
+                'reference_audios' => [['uri' => 'asset://avatar-audio-001']],
+                'frames' => [['role' => 'start', 'uri' => 'asset://avatar-frame-001']],
+            ],
+        ]);
+        $entity->setInputPayload([
+            'reference_images' => [['uri' => 'asset://avatar-image-001']],
+            'reference_videos' => [['uri' => 'asset://avatar-video-001']],
+            'reference_audios' => [['uri' => 'asset://avatar-audio-001']],
+            'frames' => [['role' => 'start', 'uri' => 'asset://avatar-frame-001']],
+        ]);
+
+        $payload = $builder->build($entity);
+
+        $this->assertSame('asset://avatar-image-001', $payload['inputs']['reference_images'][0]['uri']);
+        $this->assertSame('asset://avatar-video-001', $payload['inputs']['reference_videos'][0]['uri']);
+        $this->assertSame('asset://avatar-audio-001', $payload['inputs']['reference_audios'][0]['uri']);
+        $this->assertSame('asset://avatar-frame-001', $payload['inputs']['frames'][0]['uri']);
     }
 
     public function testBuildRewritesPromptMentionsForOmniReferenceUsingOriginalFileNames(): void
@@ -284,7 +341,11 @@ class VideoGatewayPayloadBuilderTest extends TestCase
      */
     private function createBuilder(array $links = [], array $downloads = []): VideoGatewayPayloadBuilder
     {
-        return new VideoGatewayPayloadBuilder($this->createFileDomainService($links, $downloads));
+        return new VideoGatewayPayloadBuilder(
+            $this->createFileDomainService($links, $downloads),
+            $this->createMock(TaskFileDomainService::class),
+            new DesignVideoPromptReferenceRewriter(),
+        );
     }
 
     /**

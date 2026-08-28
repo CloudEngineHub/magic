@@ -274,7 +274,12 @@ export function useMagicDocxRender(props: MagicDocxRenderProps) {
 				return
 			}
 
-			logger.error("Docx render error:", error)
+			logger.error({
+				eventKey: "docx_render_failed",
+				errorKind: "render",
+				error: error,
+				message: "Docx render error:",
+			})
 
 			let renderError: DocxRenderError
 			if (error instanceof DocxRenderError) {

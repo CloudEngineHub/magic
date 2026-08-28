@@ -428,14 +428,14 @@ function extractEmbeddedToolCalls(
 
 export interface ExtractOptions {
 	includeToolCall: boolean
-	resolveNode?: (appMessageId: string) => any
+	resolveNode?: (superMessageId: string) => any
 	workspaceFilesList?: AttachmentItem[]
 }
 
 function getMergedNode(node: SuperMagicMessageItem | undefined, opts: ExtractOptions): any {
 	if (!node) return undefined
-	const appId = (node as any)?.app_message_id
-	const storeNode: any = appId ? opts.resolveNode?.(appId) : undefined
+	const superMessageId = (node as any)?.super_message_id
+	const storeNode: any = superMessageId ? opts.resolveNode?.(superMessageId) : undefined
 	return storeNode || node
 }
 

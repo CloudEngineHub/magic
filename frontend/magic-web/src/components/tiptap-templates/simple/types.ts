@@ -1,5 +1,10 @@
-import type { Content, EditorEvents, AnyExtension, Editor } from "@tiptap/react"
-import type { CharacterCountOptions } from "@tiptap/extensions"
+import type {
+	Content,
+	EditorEvents,
+	AnyExtension,
+	Editor,
+} from "@/infrastructure/editors/tiptap/react"
+import type { CharacterCountOptions } from "@/infrastructure/editors/tiptap/extensions"
 import type { SlashDropdownMenuProps } from "@/components/tiptap-ui-primitive/SlashDropdownMenu"
 
 export interface SimpleEditorProps {
@@ -29,6 +34,11 @@ export interface SimpleEditorProps {
 	 * @default true
 	 */
 	enableSearchReplace?: boolean
+	/**
+	 * Enable the persisted wrap toggle for read-only code blocks.
+	 * @default false
+	 */
+	enableCodeBlockWrap?: boolean
 	/**
 	 * Enable or disable editor editability
 	 * @default true

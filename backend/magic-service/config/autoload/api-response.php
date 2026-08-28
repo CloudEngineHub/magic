@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
+use App\Domain\MagicBase\Exception\MagicBaseUnsupportedQueryException;
 use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\HttpErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -18,6 +19,13 @@ return [
     ],
     // AOP处理器会自动捕获此处配置的异常,并返回错误结构体(实现类必须继承Exception).
     'error_exception' => [
+        MagicBaseUnsupportedQueryException::class => static function (MagicBaseUnsupportedQueryException $exception) {
+            return [
+                'code' => $exception->getCode(),
+                'message' => $exception->getMessage(),
+                'data' => $exception->getData(),
+            ];
+        },
         BusinessException::class,
         UnauthorizedException::class => static function (UnauthorizedException $exception) {
             return [

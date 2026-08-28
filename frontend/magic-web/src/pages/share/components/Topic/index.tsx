@@ -8,7 +8,11 @@ import TaskList from "../TaskList"
 import ReplayLogo from "@/pages/share/assets/icon/replay_logo.svg"
 import PreviewDetailPopup from "@/pages/superMagicMobile/components/PreviewDetailPopup/index"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import {
+	getAppEntryFile,
+	isMagicProjectConfigFile,
+	resolveMagicProjectAttachment,
+} from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 import { IconFolder, IconLayoutGrid, IconLogin, IconPlayerPlayFilled } from "@tabler/icons-react"
 import { MagicTooltip } from "@/components/base"
@@ -21,7 +25,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MessageList from "../MessageList"
-import { MessageStatus, TaskStatus, type TaskData } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	MessageStatus,
+	TaskStatus,
+	type ProjectListItem,
+	type TaskData,
+} from "@/pages/superMagic/pages/Workspace/types"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import { useDownloadAll } from "@/pages/superMagic/components/TopicFilesButton/useDownloadAll"
 import { getBaseUrl } from "@/pages/superMagicMobile/utils/mobile"
@@ -33,6 +42,8 @@ import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
 import { messagesTransformer } from "../MessageList/utils"
 import { observer } from "mobx-react-lite"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 import FooterLogo from "./components/FooterLogo"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import ResizableDivider from "@/pages/superMagic/components/ResizableDivider"
@@ -43,12 +54,16 @@ import {
 	DEFAULT_MAX_WIDTH,
 	DEFAULT_WIDTH,
 } from "@/pages/superMagic/constants/resizablePanel"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { ProjectFilesStore } from "@/stores/projectFiles"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { calculateDefaultOpenFileId } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareMenuFilters } from "../../hooks"
+import type { CrossProjectOperationSuccessResult } from "@/pages/superMagic/components/TopicFilesButton/hooks/useCrossProjectFileOperation"
+
+const SHARE_MESSAGE_TOP_MASK_CLASS_NAME =
+	"pointer-events-none absolute inset-x-0 top-0 z-10 h-2.5 bg-white dark:bg-card"
 
 function Topic({
 	data,
@@ -63,10 +78,14 @@ function Topic({
 	isImmersiveFullscreen,
 	topicId,
 	projectId,
+	shareCode,
+	sharePassword,
+	onCopySharedFilesComplete,
 	showAllProjectFiles,
 	viewFileList,
 	showCreatedByBadge,
 	allowDownloadProjectFile,
+	allowCopyProjectFiles = false,
 	forceFullscreenMode,
 	documentFlowFullscreen,
 	hidePreviewHeader,
@@ -86,11 +105,19 @@ function Topic({
 	isImmersiveFullscreen?: boolean
 	topicId?: string
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCopySharedFilesComplete?: (info: {
+		projectId: string
+		workspaceId: string
+		projectName?: string
+	}) => void
 	showAllProjectFiles?: boolean
 	isProjectShare?: boolean
 	viewFileList?: boolean
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
+	allowCopyProjectFiles?: boolean
 	forceFullscreenMode?: boolean
 	documentFlowFullscreen?: boolean
 	hidePreviewHeader?: boolean
@@ -128,15 +155,45 @@ function Topic({
 	const { handleDownloadAll, allLoading } = useDownloadAll({ projectId })
 
 	const { isShareRoute, isLegacy } = useShareRoute()
+	const shareSelectedProject = useMemo(
+		() =>
+			projectId
+				? ({
+						id: projectId,
+						project_name: resource_name,
+						name: resource_name,
+					} as ProjectListItem)
+				: null,
+		[projectId, resource_name],
+	)
 
 	// 判断是否是新格式文件分享（多个文件，无fileId）
 	const isNewFileShare = isFileShare && !fileId
 	const shouldRenderFullscreenFileOnly = isFullscreenMode && Boolean(isFileShare) && !isMobile
 
 	// 使用分享页面菜单过滤 Hook
+	const allowCopySharedFiles = isLogined && allowCopyProjectFiles
 	const { filterShareMenuItems, filterBatchDownloadLayerMenuItems } = useShareMenuFilters({
 		allowDownloadProjectFile,
+		allowCopyProjectFile: allowCopySharedFiles,
 	})
+	const handleCrossProjectOperationSuccess = useMemoizedFn(
+		(result: CrossProjectOperationSuccessResult) => {
+			if (
+				result.operationType !== "copy" ||
+				!result.targetProjectId ||
+				!result.targetWorkspaceId
+			) {
+				return
+			}
+
+			onCopySharedFilesComplete?.({
+				projectId: result.targetProjectId,
+				workspaceId: result.targetWorkspaceId,
+				projectName: result.targetProjectName,
+			})
+		},
+	)
 
 	// 判断是否需要调整 BackToLatestButton 的位置
 	// BackToLatestButton 只在话题分享场景显示，当 Badge 也显示时，需要上移按钮避免遮挡
@@ -150,7 +207,7 @@ function Topic({
 	const {
 		width: projectSiderWidth,
 		isDragging: isProjectSiderDragging,
-		handleMouseDown: handleProjectSiderMouseDown,
+		handleResizeStart: handleProjectSiderResizeStart,
 	} = useResizablePanel({
 		minWidth: DEFAULT_MIN_WIDTH.PROJECT_SIDER,
 		maxWidth: DEFAULT_MAX_WIDTH.PROJECT_SIDER,
@@ -163,7 +220,7 @@ function Topic({
 	const {
 		width: messagePanelWidth,
 		isDragging: isMessagePanelDragging,
-		handleMouseDown: handleMessagePanelMouseDown,
+		handleResizeStart: handleMessagePanelResizeStart,
 	} = useResizablePanel({
 		minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
 		maxWidth: DEFAULT_MAX_WIDTH.MESSAGE_PANEL,
@@ -724,14 +781,26 @@ function Topic({
 
 			const targetFile = findFileInAttachments(attachments.tree)
 			if (targetFile) {
+				const targetFileName =
+					targetFile.display_filename || targetFile.file_name || targetFile.filename
+				const magicProjectResolution = isMagicProjectConfigFile(targetFileName)
+					? resolveMagicProjectAttachment(
+							targetFile,
+							attachments.list || [],
+							attachments.tree || [],
+						)
+					: undefined
+				const resolvedProjectDirectory = magicProjectResolution?.projectDirectory
 				// 检查是否是文件夹且有 metadata.type
 				const isFolder =
+					resolvedProjectDirectory?.is_directory ||
+					resolvedProjectDirectory?.children?.length ||
 					targetFile.is_directory ||
 					(targetFile.children && targetFile.children.length > 0)
-				let fileToOpen = targetFile
+				let fileToOpen = resolvedProjectDirectory || targetFile
 
 				// 如果是文件夹且有 metadata.type，获取入口文件
-				if (isFolder && targetFile.display_config?.type) {
+				if (!resolvedProjectDirectory && isFolder && targetFile.display_config?.type) {
 					const entryFile = getAppEntryFile(
 						targetFile.children || [],
 						targetFile.display_config,
@@ -995,6 +1064,11 @@ function Topic({
 														setUserDetail(detail)
 													}}
 													projectId={projectId}
+													shareCode={shareCode}
+													sharePassword={sharePassword}
+													onCrossProjectOperationSuccess={
+														handleCrossProjectOperationSuccess
+													}
 													className="left-0"
 													onFileClick={(fileItem: any) => {
 														setUserDetail(null)
@@ -1005,6 +1079,7 @@ function Topic({
 													}}
 													activeFileId={activeFileId}
 													allowEdit={false}
+													allowCopyTo={allowCopySharedFiles}
 													filterMenuItems={filterShareMenuItems}
 													filterBatchDownloadLayerMenuItems={
 														filterBatchDownloadLayerMenuItems
@@ -1018,7 +1093,7 @@ function Topic({
 								<ResizableDivider
 									position="right"
 									offsetLeft={projectSiderWidth}
-									onMouseDown={handleProjectSiderMouseDown}
+									onResizeStart={handleProjectSiderResizeStart}
 									onHoverChange={setIsProjectSiderHovering}
 								/>
 							</>
@@ -1062,6 +1137,7 @@ function Topic({
 									onActiveFileChange={setActiveFileId}
 									topicName={resource_name}
 									projectId={projectId}
+									selectedProject={shareSelectedProject}
 									allowDownload={allowDownloadProjectFile}
 									hideTabBar={shouldRenderFullscreenFileOnly}
 									showFileHeader={
@@ -1081,7 +1157,7 @@ function Topic({
 						<ResizableDivider
 							position="left"
 							offsetLeft={messagePanelWidth + 5}
-							onMouseDown={handleMessagePanelMouseDown}
+							onResizeStart={handleMessagePanelResizeStart}
 							onHoverChange={setIsMessagePanelHovering}
 						/>
 						<div className={cn("p-2", isMobile ? "w-full" : "")}>
@@ -1123,7 +1199,7 @@ function Topic({
 										viewportRef={messageContainerRef}
 									>
 										<MessageList
-											topicId={data?.project_id}
+											topicId={topicId || data?.project_id || ""}
 											messageList={messageList}
 											onSelectDetail={(detail) => {
 												setUserDetail(detail)
@@ -1134,13 +1210,22 @@ function Topic({
 											currentTopicStatus={
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
-											stickyMessageClassName="-top-[10px] pt-[10px] [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 											projectFilesStore={projectFilesStore}
+											scrollContainerRef={messageContainerRef}
 										/>
 										{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 											<LoadingMessage />
 										)}
 									</ScrollArea>
+									{/* Keep scrolling rows hidden inside the viewport's top padding. */}
+									<div
+										aria-hidden
+										className={cn(
+											SHARE_MESSAGE_TOP_MASK_CLASS_NAME,
+											"max-md:h-[calc(60px+var(--safe-area-inset-top,env(safe-area-inset-top)))]",
+										)}
+									/>
 									<BackToLatestButton
 										visible={showBackToLatest}
 										onClick={scrollToBottom}
@@ -1280,9 +1365,12 @@ function Topic({
 										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
 								)}
 							>
-								<div className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5">
+								<div
+									ref={messageContainerRef}
+									className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5"
+								>
 									<MessageList
-										topicId={data?.project_id}
+										topicId={topicId || data?.project_id || ""}
 										messageList={messageList}
 										onSelectDetail={(detail) => {
 											setUserDetail(detail)
@@ -1293,8 +1381,9 @@ function Topic({
 										currentTopicStatus={
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
-										stickyMessageClassName="top-0 z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 										projectFilesStore={projectFilesStore}
+										scrollContainerRef={messageContainerRef}
 									/>
 									{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 										<LoadingMessage />
@@ -1369,7 +1458,14 @@ function Topic({
 					{!isLogined ? (
 						<div
 							className="flex h-10 cursor-pointer items-center gap-1 rounded-lg p-2.5 text-sm text-foreground"
-							onClick={() => history.replace({ name: RouteName.Login })}
+							onClick={() =>
+								authEventBus.emit(AuthEventName.RequestLogin, {
+									reason: "manual",
+									source: "share",
+									returnTo: window.location.href,
+									preserveQuery: true,
+								})
+							}
 							data-testid="share-navigation-login-item"
 						>
 							<IconLogin className="size-5" />
@@ -1447,10 +1543,14 @@ function Topic({
 							}
 						}}
 						projectId={projectId}
+						shareCode={shareCode}
+						sharePassword={sharePassword}
+						onCrossProjectOperationSuccess={handleCrossProjectOperationSuccess}
 						handleDownloadAll={handleDownloadAll}
 						allLoading={allLoading}
 						activeFileId={activeFileId}
 						allowEdit={false}
+						allowCopyTo={allowCopySharedFiles}
 						filterMenuItems={filterShareMenuItems}
 						filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 						allowDownload={allowDownloadProjectFile}

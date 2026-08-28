@@ -8,29 +8,27 @@
 不抽生命周期、不抽状态机、不为"将来可能新增 MCP 能力"留扩展点（AGENTS.md §2）。
 """
 from abc import ABC
-from typing import ClassVar, Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 
+from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.mcp.connection.server_manager import MCPServerManager
 from app.mcp.manager import get_global_mcp_manager, get_or_create_manager
 from app.mcp.store import get_chat_mcp_store
 from app.mcp.store.chat_mcp_store import ChatMcpStore
-from app.tools.core import BaseTool, BaseToolParams
+from app.tools.core import BaseTool, BaseToolParams, tool
 
 P = TypeVar("P", bound=BaseToolParams)
 
 
+@tool(code_mode_only=True)
 class BaseMcpTool(BaseTool[P], Generic[P], ABC):
-    """MCP 工具共享基类。
+    """Shared base for MCP tools available only through Code Mode.
 
-    继承本类的工具默认 `code_mode_only = True`，意味着它们：
-    - 仍然会被 tool_factory 注册（dispatcher 能找到）
-    - 但**不会**出现在 LLM 看到的工具列表里
-    - 只能通过 `run_sdk_snippet` + `sdk.tool.call('mcp_xxx', ...)` 调用
-
-    详见 agents/guides/TOOL_OR_SKILL.md §「Code Mode 专属工具」。
+    Subclasses inherit `@tool(code_mode_only=True)`: they remain registered for
+    dispatch but are excluded from the LLM tool list and must be called through
+    `run_sdk_snippet` with `sdk.tool.call(...)`.
     """
-
-    code_mode_only: ClassVar[bool] = True
 
     @staticmethod
     def _get_store() -> ChatMcpStore:
@@ -46,6 +44,23 @@ class BaseMcpTool(BaseTool[P], Generic[P], ABC):
     def _get_manager_or_none() -> Optional[MCPServerManager]:
         """只读地拿全局 manager，未创建时返回 None。"""
         return get_global_mcp_manager()
+
+    @staticmethod
+    def _build_mcp_tool_detail(
+        result: ToolResult,
+        file_name: str,
+        error_title: str,
+    ) -> Optional[ToolDetail]:
+        """将 MCP 工具结果转换为用户侧 Markdown 详情。"""
+        content = (result.content or "").strip()
+        if not result.ok:
+            content = f"## {error_title}\n\n{content or 'MCP tool execution failed.'}"
+        if not content:
+            return None
+        return ToolDetail(
+            type=DisplayType.MD,
+            data=FileContent(file_name=file_name, content=content),
+        )
 
     @staticmethod
     async def _ensure_server_in_manager(server_name: str) -> bool:

@@ -1,4 +1,5 @@
 import type Logger from "../Logger"
+import type { ErrorReport } from "../errorReport"
 
 /**
  * 日志级别枚举
@@ -22,6 +23,8 @@ export interface LogContext {
 	namespace: string
 	/** 链路追踪ID */
 	traceId: string
+	/** 与 APM 和 SourceMap 对齐的发布版本 */
+	release: string
 	/** 原始参数 */
 	data: any
 	// /** 处理后的数据 */
@@ -45,6 +48,10 @@ export interface LogContext {
 	skipReport?: boolean
 	/** 插件间共享的元数据 */
 	metadata: Record<string, any>
+	/** 结构化异常上报；legacy 日志不设置。 */
+	errorReport?: ErrorReport
+	/** 保留给 Provider 的原始异常引用，不进入自建上报序列化。 */
+	originalError?: Error
 }
 
 /** api 配置 */

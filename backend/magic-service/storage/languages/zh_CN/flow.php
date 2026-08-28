@@ -222,10 +222,26 @@ return [
                 'invalid_format' => '工具名称只能包含字母、数字、下划线',
             ],
         ],
+        'end' => [
+            'must_exist' => '请求处理失败',
+        ],
     ],
     'model_config' => [
         'max_record_error' => '最大记录数 只能是 0-500 之间的整数',
         'temperature_error' => '温度参数 只能是 0-1 之间的小数',
+    ],
+    'attachment' => [
+        'invalid_url' => '外部附件地址必须是包含主机的 HTTP 或 HTTPS URL',
+        'blocked' => '外部附件地址被 SSRF 安全策略拦截：:reason',
+        'block_reason' => [
+            'invalid_url' => 'URL 格式无效',
+            'blacklisted' => '目标地址命中安全黑名单',
+            'protocol_not_allowed' => 'URL 协议不被允许',
+            'non_public_ip' => '目标地址不是公网 IP',
+            'redirect_not_allowed' => '目标地址发生不允许的重定向',
+            'resolve_failed' => '目标主机解析失败',
+            'unknown' => '目标地址不符合安全策略',
+        ],
     ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] 不支持的节点类型',
@@ -327,5 +343,8 @@ return [
         'prefix' => [
             'invalid_format' => '缓存前缀格式无效',
         ],
+    ],
+    'mode' => [
+        'not_found' => '资源不存在：:model_name',
     ],
 ];

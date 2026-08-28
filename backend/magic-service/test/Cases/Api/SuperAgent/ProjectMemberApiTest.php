@@ -7,12 +7,12 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Api\SuperAgent;
 
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectMemberEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberStatus;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberType;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
+use App\Domain\SuperMagic\Project\Entity\ProjectMemberEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberStatus;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberType;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use Mockery;
 
 /**

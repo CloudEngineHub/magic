@@ -10,7 +10,7 @@ import type { DesignData } from "../../types"
 const DESIGN_DATA: DesignData = {
 	type: "design",
 	name: "design",
-	version: "2.0.0",
+	version: "3.0.0",
 	canvas: { elements: [] },
 }
 
@@ -53,6 +53,14 @@ function createListener(
 	return listener
 }
 
+function createDeferred<T>() {
+	let resolve!: (value: T) => void
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise
+	})
+	return { promise, resolve }
+}
+
 describe("DesignRemoteListener file-change freshness", () => {
 	it("detects nested processing media whose sidecar generation request is not hydrated", () => {
 		const data: DesignData = {
@@ -67,6 +75,9 @@ describe("DesignRemoteListener file-change freshness", () => {
 						y: 0,
 						width: 100,
 						height: 100,
+						contents: [{ contentId: "frame-content-1" }],
+						activeContentId: "frame-content-1",
+						mainContentId: "frame-content-1",
 						children: [
 							{
 								id: "image-1",
@@ -76,7 +87,19 @@ describe("DesignRemoteListener file-change freshness", () => {
 								y: 0,
 								width: 100,
 								height: 100,
-								status: "processing",
+								contents: [
+									{
+										contentId: "image-content-1",
+										status: "completed",
+										generateImageRequest: { prompt: "active content" },
+									},
+									{
+										contentId: "image-content-2",
+										status: "processing",
+									},
+								],
+								activeContentId: "image-content-1",
+								mainContentId: "image-content-1",
 							},
 						],
 					},
@@ -86,9 +109,19 @@ describe("DesignRemoteListener file-change freshness", () => {
 
 		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(true)
 
-		const image = (data.canvas.elements[0] as { children: Array<Record<string, unknown>> })
-			.children[0]
-		image.generateImageRequest = { prompt: "A product photo" }
+		const image = (
+			data.canvas?.elements?.[0] as unknown as {
+				children: Array<{
+					contents: Array<Record<string, unknown>>
+					activeContentId: string
+				}>
+			}
+		).children[0]
+		const imageContent = image.contents.find(
+			(content) => content.contentId === "image-content-2",
+		)
+		if (!imageContent) throw new Error("Expected image content")
+		imageContent.generateImageRequest = { prompt: "A product photo" }
 		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(false)
 	})
 
@@ -211,5 +244,28 @@ describe("DesignRemoteListener file-change freshness", () => {
 			remoteVersion: 4,
 		})
 		expect(updateLocalVersion).toHaveBeenCalledWith(4)
+	})
+
+	it("discards an in-flight file-change load after the project changes", async () => {
+		vi.useFakeTimers()
+		const deferredData = createDeferred<DesignData>()
+		const applyRemoteDesignData = vi.fn().mockReturnValue(true)
+		const listener = createListener({ applyRemoteDesignData })
+		const listenerInternals = listener as unknown as {
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			debouncedLoadAndApply: (ms: null, version: number) => void
+		}
+		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
+			.fn()
+			.mockReturnValue(deferredData.promise)
+
+		listenerInternals.debouncedLoadAndApply(null, 4)
+		await vi.advanceTimersByTimeAsync(0)
+		listener.updateOptions({ projectId: "project-2", designProjectId: "design-2" })
+		deferredData.resolve(DESIGN_DATA)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(applyRemoteDesignData).not.toHaveBeenCalled()
 	})
 })

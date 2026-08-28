@@ -35,6 +35,11 @@ interface UseCanvasEventListenersOptions {
 		patch: CanvasDesignDataPatch,
 		meta?: CanvasDesignDataChangeMeta,
 	) => void
+	onSelectionChange?: (elementIds: string[]) => void
+}
+
+type PendingCanvasDataChangeMeta = CanvasDesignDataChangeMeta & {
+	requiresFullExport?: boolean
 }
 
 /**
@@ -51,6 +56,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
+		onSelectionChange,
 	} = options
 
 	const { canvas } = useCanvas()
@@ -62,9 +68,25 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	const onMarkerUpdatedRef = useLatest(onMarkerUpdated)
 	const onCanvasDesignDataChangeRef = useLatest(onCanvasDesignDataChange)
 	const onCanvasDesignDataPatchChangeRef = useLatest(onCanvasDesignDataPatchChange)
+	const onSelectionChangeRef = useLatest(onSelectionChange)
 	const readonlyRef = useLatest(readonly)
-	const pendingCanvasDataChangeMetaRef = useRef<CanvasDesignDataChangeMeta | null>(null)
+	const pendingCanvasDataChangeMetaRef = useRef<PendingCanvasDataChangeMeta | null>(null)
 	const pendingDeletedElementIdsRef = useRef<Set<string>>(new Set())
+	const isElementWithinSelection = useCallback(
+		(elementId: string, selectedIds: string[]) => {
+			if (!canvas) return false
+			const selectedIdSet = new Set(selectedIds)
+			const visited = new Set<string>()
+			let currentId: string | undefined = elementId
+			while (currentId && !visited.has(currentId)) {
+				if (selectedIdSet.has(currentId)) return true
+				visited.add(currentId)
+				currentId = canvas.elementManager.findParentIdForElement(currentId)
+			}
+			return false
+		},
+		[canvas],
+	)
 	const canvasDataChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// 防抖保存 viewport 到 storage
@@ -154,6 +176,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 					previous?.elementNameChanges,
 					changeMeta?.elementNameChanges,
 				),
+				requiresFullExport: previous?.requiresFullExport || source === "document:restored",
 			}
 		},
 		[mergeElementNameChanges],
@@ -167,9 +190,11 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 
 		const meta = pendingCanvasDataChangeMetaRef.current
 		pendingCanvasDataChangeMetaRef.current = null
+		const requiresFullExport = meta?.requiresFullExport === true
 		const deletedElementIds = Array.from(pendingDeletedElementIdsRef.current)
 		pendingDeletedElementIdsRef.current.clear()
 		if (!canvas || readonlyRef.current) return
+		if (canvas.isDestroyed) return
 		const metaWithDeletedElementIds: CanvasDesignDataChangeMeta | undefined =
 			meta || deletedElementIds.length > 0
 				? {
@@ -193,6 +218,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			(deletedConnectionIds && deletedConnectionIds.length > 0)
 		if (
 			patchHandler &&
+			!requiresFullExport &&
 			(hasElementPatch || hasConnectionPatch) &&
 			metaWithDeletedElementIds?.source !== "canvas:clear"
 		) {
@@ -258,6 +284,18 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		[flushCanvasDesignDataChange, mergePendingCanvasDataChangeMeta],
 	)
 
+	const filterRuntimeOnlyGenerationElementIds = useCallback(
+		(elementIds?: string[]): string[] | undefined => {
+			if (!elementIds || !canvas) return elementIds
+			return elementIds.filter(
+				(elementId) =>
+					canvas.elementManager.getTemporaryElementMetadata(elementId)?.kind !==
+					"generation-result",
+			)
+		},
+		[canvas],
+	)
+
 	useEffect(() => {
 		return () => {
 			flushCanvasDesignDataChange()
@@ -315,6 +353,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	useCanvasEvents(
 		["element:deleted"] as const,
 		(event) => {
+			if (event.data.persistence === "runtime-only") return
 			pendingDeletedElementIdsRef.current.add(event.data.elementId)
 		},
 		[canvas],
@@ -322,18 +361,61 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 
 	// 监听所有可能导致画布数据变化的事件
 	useCanvasEvents(
+		["element:select", "element:deselect"] as const,
+		() => {
+			const selectedIds = canvas?.selectionManager?.getSelectedIds()
+			if (!selectedIds) return
+			onSelectionChangeRef.current?.(selectedIds)
+		},
+		[canvas],
+	)
+
+	// Recompute the selected media when a selected element's active/main content changes.
+	useCanvasEvents(
+		["element:updated"] as const,
+		(event) => {
+			const selectedIds = canvas?.selectionManager?.getSelectedIds() ?? []
+			if (!isElementWithinSelection(event.data.elementId, selectedIds)) return
+			onSelectionChangeRef.current?.(selectedIds)
+		},
+		[canvas, isElementWithinSelection],
+	)
+
+	useCanvasEvents(
 		[
 			"element:change",
 			"canvas:clear",
 			"element:temporary:converted",
 			"connection:change",
+			"document:restored",
 		] as const,
-		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent) => {
+		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent, restoredEvent) => {
 			if (changeEvent) {
 				if (changeEvent.data?.phase === "transient") return
+				const changedElementIds = filterRuntimeOnlyGenerationElementIds(
+					changeEvent.data?.elementIds,
+				)
+				const selectedIds = canvas?.selectionManager?.getSelectedIds() ?? []
+				if (
+					selectedIds.length > 0 &&
+					(!changedElementIds ||
+						changedElementIds.some((id) => isElementWithinSelection(id, selectedIds)))
+				) {
+					onSelectionChangeRef.current?.(selectedIds)
+				}
+				const elementNameChanges = changeEvent.data?.nameChanges?.filter(
+					(change) => changedElementIds?.includes(change.elementId) ?? true,
+				)
+				if (
+					changeEvent.data?.elementIds &&
+					changedElementIds?.length === 0 &&
+					!elementNameChanges?.length
+				) {
+					return
+				}
 				scheduleCanvasDesignDataChange("element:change", {
-					changedElementIds: changeEvent.data?.elementIds,
-					elementNameChanges: changeEvent.data?.nameChanges,
+					changedElementIds,
+					elementNameChanges,
 				})
 				return
 			}
@@ -352,9 +434,18 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 					changedConnectionIds: connectionEvent.data.changedConnectionIds,
 					deletedConnectionIds: connectionEvent.data.deletedConnectionIds,
 				})
+				return
+			}
+			if (restoredEvent) {
+				onSelectionChangeRef.current?.(canvas?.selectionManager?.getSelectedIds() ?? [])
+				scheduleCanvasDesignDataChange("document:restored")
 			}
 		},
-		[scheduleCanvasDesignDataChange],
+		[
+			filterRuntimeOnlyGenerationElementIds,
+			isElementWithinSelection,
+			scheduleCanvasDesignDataChange,
+		],
 	)
 
 	// 监听 viewport 变化，保存到 storage

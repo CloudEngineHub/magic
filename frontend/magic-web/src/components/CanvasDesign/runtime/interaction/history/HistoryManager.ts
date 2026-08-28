@@ -60,6 +60,10 @@ export class HistoryManager {
 	/** 防抖定时器 */
 	private debounceTimer: number | null = null
 
+	/** 正在执行的原子操作层数；事务内的事件只标记脏状态。 */
+	private transactionDepth = 0
+	private transactionDirty = false
+
 	/** 防抖延迟（毫秒） */
 	private debounceDelay = 300
 
@@ -89,12 +93,20 @@ export class HistoryManager {
 			this.recordHistoryImmediate()
 		})
 
-		this.canvas.eventEmitter.on("element:deleted", () => {
+		this.canvas.eventEmitter.on("element:deleted", ({ data }) => {
+			if (data.persistence === "runtime-only") return
 			this.recordHistoryImmediate()
 		})
 
 		// 监听需要防抖记录历史的事件（更新）
-		this.canvas.eventEmitter.on("element:updated", () => {
+		this.canvas.eventEmitter.on("element:updated", ({ data }) => {
+			const excluded =
+				data.historyPolicy === "exclude" ||
+				this.canvas.elementManager.getTemporaryElementMetadata(data.elementId)
+					?.historyPolicy === "exclude"
+			if (excluded) {
+				return
+			}
 			this.recordHistoryDebounced()
 		})
 
@@ -125,6 +137,10 @@ export class HistoryManager {
 	 * 立即记录当前状态到历史
 	 */
 	public recordHistoryImmediate(): void {
+		if (this.transactionDepth > 0) {
+			this.transactionDirty = true
+			return
+		}
 		// 清除防抖定时器
 		if (this.debounceTimer !== null) {
 			window.clearTimeout(this.debounceTimer)
@@ -138,6 +154,10 @@ export class HistoryManager {
 	 * 防抖记录历史
 	 */
 	public recordHistoryDebounced(): void {
+		if (this.transactionDepth > 0) {
+			this.transactionDirty = true
+			return
+		}
 		if (!this.isEnabled || this.isApplyingHistory) {
 			this.skippedRecordCount += 1
 			return
@@ -156,6 +176,62 @@ export class HistoryManager {
 	}
 
 	/**
+	 * 将一组元素/连接变更合并成一条历史记录。
+	 * 回调返回 null 或 shouldRecord 返回 false 时，不产生新的历史记录。
+	 */
+	public runTransaction<T>(callback: () => T, shouldRecord?: (result: T) => boolean): T {
+		this.transactionDepth += 1
+		let result!: T
+		let completed = false
+		try {
+			result = callback()
+			completed = true
+			return result
+		} finally {
+			this.transactionDepth -= 1
+			this.completeTransaction(result, completed, shouldRecord)
+		}
+	}
+
+	/**
+	 * 将跨异步边界的一组元素/连接变更合并成一条历史记录。
+	 *
+	 * 生成提交会在请求完成后异步确认，普通 runTransaction 无法覆盖 await
+	 * 之后触发的事件，因此提供异步版本复用同一事务语义。
+	 */
+	public async runAsyncTransaction<T>(
+		callback: () => Promise<T>,
+		shouldRecord?: (result: T) => boolean,
+	): Promise<T> {
+		this.transactionDepth += 1
+		let result!: T
+		let completed = false
+		try {
+			result = await callback()
+			completed = true
+			return result
+		} finally {
+			this.transactionDepth -= 1
+			this.completeTransaction(result, completed, shouldRecord)
+		}
+	}
+
+	private completeTransaction<T>(
+		result: T,
+		completed: boolean,
+		shouldRecord?: (result: T) => boolean,
+	): void {
+		if (this.transactionDepth !== 0) return
+
+		const shouldCommit = completed && (shouldRecord ? shouldRecord(result) : true)
+		const shouldRecordHistory = shouldCommit && this.transactionDirty
+		this.transactionDirty = false
+		if (shouldRecordHistory) {
+			this.recordHistoryImmediate()
+		}
+	}
+
+	/**
 	 * 执行记录历史的核心逻辑
 	 */
 	private doRecordHistory(): void {
@@ -164,7 +240,7 @@ export class HistoryManager {
 			return
 		}
 
-		// 获取当前文档快照（包含临时元素，以便撤销时能正确恢复）
+		// 获取历史快照：保留上传占位，排除从未被后端确认的生成结果占位。
 		const startedAt = now()
 		const snapshot = this.canvas.exportDocument({ includeTemporary: true })
 		const durationMs = now() - startedAt

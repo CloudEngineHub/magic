@@ -3,6 +3,7 @@ import { superMagicUploadTokenService } from "@/pages/superMagic/components/Mess
 import { Upload, UploadConfig } from "@dtyq/upload-sdk"
 import type { FileUploadData } from "@/hooks/useUploadFiles"
 import { SuperMagicApi } from "@/apis"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 // 上传凭证接口（兼容现有系统）
 type UploadCredentials = UploadConfig["customCredentials"]
@@ -97,6 +98,7 @@ class OSSUploadService {
 	 * @param preGeneratedSnowflakeIds 预生成的雪花ID数组（可选），如果提供则直接使用，否则调用API批量获取
 	 * @param onProgress 进度回调函数
 	 * @param onFileCompleted 文件完成回调函数
+	 * @param fileScope 文件上传凭证所属的特殊空间
 	 */
 	async uploadFiles(
 		files: FolderUploadFile[],
@@ -106,6 +108,7 @@ class OSSUploadService {
 		preGeneratedSnowflakeIds?: string[],
 		onProgress?: (fileId: string, uploadedBytes: number) => void,
 		onFileCompleted?: (fileId: string, result: FolderUploadResult) => void,
+		fileScope?: FileScope,
 	): Promise<FolderUploadResult[]> {
 		// // 如果当前处于暂停状态，不允许开始新的上传
 		// if (this.uploadState === "paused") {
@@ -120,8 +123,13 @@ class OSSUploadService {
 		// 获取上传凭证
 		// 如果有自定义fileKey，使用专门的方法获取修改过dir的凭证
 		const customCredentials = hasCustomFileKey
-			? await superMagicUploadTokenService.getUploadTokenForCustomKey(projectId)
-			: await superMagicUploadTokenService.getUploadToken(projectId, folderPath)
+			? await superMagicUploadTokenService.getUploadTokenForCustomKey(projectId, fileScope)
+			: await superMagicUploadTokenService.getUploadToken(
+					projectId,
+					folderPath,
+					false,
+					fileScope,
+				)
 		try {
 			// 批量生成雪花ID（用作 OSS 文件名）
 			// 如果提供了预生成的雪花ID，则直接使用；否则调用API批量获取
@@ -279,6 +287,7 @@ class OSSUploadService {
 	 * @param fileKey 要覆盖的 OSS file_key（完整路径）
 	 * @param projectId 项目 ID
 	 * @param fileName 文件名（用于构造 File 对象和推断 content_type）
+	 * @param fileScope 文件编辑保存时使用的文件空间
 	 * @returns 上传后的 OSS path
 	 */
 	async uploadContentByFileKey(
@@ -286,6 +295,7 @@ class OSSUploadService {
 		fileKey: string,
 		projectId: string,
 		fileName: string = "content.html",
+		fileScope?: FileScope,
 	): Promise<string> {
 		// 根据文件扩展名推断 content_type
 		const ext = fileName.split(".").pop()?.toLowerCase() || ""
@@ -308,8 +318,10 @@ class OSSUploadService {
 		const file = new File([blob], fileName, { type: contentType })
 
 		// 获取 customFileKey 模式的上传凭证
-		const customCredentials =
-			await superMagicUploadTokenService.getUploadTokenForCustomKey(projectId)
+		const customCredentials = await superMagicUploadTokenService.getUploadTokenForCustomKey(
+			projectId,
+			fileScope,
+		)
 
 		// 提取相对于 dir 的路径
 		const relativeFileName = extractRelativePathFromCustomKey(

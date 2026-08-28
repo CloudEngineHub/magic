@@ -3,7 +3,6 @@ import type { RequestConfig } from "@/apis/core/HttpClient"
 import { service } from "@/services"
 import { RoutePath } from "@/constants/routes"
 import { baseHistory, history } from "@/routes/history"
-import { RouteName } from "@/routes/constants"
 import { LoginValueKey } from "@/pages/login/constants"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
 import { defaultClusterCode } from "@/routes/helpers"
@@ -21,6 +20,9 @@ import type {
 	ThirdPartyAccountIdentity,
 	ThirdPartyAccountReconcileResult,
 } from "@/services/app/types/thirdPartyAccountReconcile"
+import { isLoginAuthorizationWhitelist } from "@/utils/env"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 // const logger = Logger.createLogger("thirdPartyAuthService")
 const logger = { ...console, report: console.log }
@@ -279,7 +281,12 @@ class ThirdPartyAuthService {
 			})
 			// Need to redirect to login route
 			logger.log("重定向到登录页")
-			history.push({ name: RouteName.Login })
+			authEventBus.emit(AuthEventName.RequestLogin, {
+				reason: "third-party-auth-failed",
+				source: "third-party",
+				returnTo: window.location.href,
+				preserveQuery: true,
+			})
 			throw error
 		}
 	}
@@ -376,7 +383,9 @@ class ThirdPartyAuthService {
 				redirectUrl.searchParams.set(k, v)
 			})
 			logger.log("打开外部重定向链接", { redirectUrl: redirectUrl.toString() })
-			this.customThirdPartyOpenLink(redirectUrl.toString(), "dingtalk")
+			if (isLoginAuthorizationWhitelist(redirectUrl.toString())) {
+				this.customThirdPartyOpenLink(redirectUrl.toString(), "dingtalk")
+			}
 		} else {
 			logger.log("处理平台内重定向")
 			// Regarding the redirection within the platform,
@@ -468,7 +477,12 @@ class ThirdPartyAuthService {
 			logger.error("自动登录流程失败", { deployCode, error })
 			// Need to redirect to login route
 			logger.log("重定向到登录页")
-			history.push({ name: RouteName.Login })
+			authEventBus.emit(AuthEventName.RequestLogin, {
+				reason: "third-party-auth-failed",
+				source: "third-party",
+				returnTo: window.location.href,
+				preserveQuery: true,
+			})
 			throw error
 		}
 	}

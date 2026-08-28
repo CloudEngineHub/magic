@@ -26,6 +26,8 @@ use App\Interfaces\Agent\Assembler\FileAssembler;
 
 class ModeDomainService
 {
+    private const string SYSTEM_DEFAULT_AGENT_FALLBACK = 'general';
+
     public function __construct(
         private ModeRepositoryInterface $modeRepository,
         private ModeGroupRepositoryInterface $groupRepository,
@@ -100,6 +102,48 @@ class ModeDomainService
     public function getModeById(ModeDataIsolation $dataIsolation, int|string $id): ?ModeEntity
     {
         return $this->modeRepository->findById($dataIsolation, $id);
+    }
+
+    /**
+     * 根据标识符获取模式基本信息.
+     */
+    public function getModeByIdentifier(ModeDataIsolation $dataIsolation, string $identifier): ?ModeEntity
+    {
+        return $this->modeRepository->findByIdentifier($dataIsolation, $identifier);
+    }
+
+    public function getSystemDefaultAgent(ModeDataIsolation $dataIsolation): string
+    {
+        $mode = $this->modeRepository->findSystemDefaultAgent($dataIsolation);
+        if ($mode === null || ! $mode->isEnabled() || ! empty($mode->getVisibilityWhitelist()['organizations'] ?? [])) {
+            return self::SYSTEM_DEFAULT_AGENT_FALLBACK;
+        }
+
+        return $mode->getIdentifier();
+    }
+
+    public function isSystemDefaultAgent(ModeDataIsolation $dataIsolation, string $identifier): bool
+    {
+        return $this->getSystemDefaultAgent($dataIsolation) === $identifier;
+    }
+
+    public function validateSystemDefaultAgent(ModeDataIsolation $dataIsolation, string $identifier): ModeEntity
+    {
+        $mode = $this->modeRepository->findByIdentifier($dataIsolation, trim($identifier));
+        if ($mode === null || ! $mode->isEnabled() || ! empty($mode->getVisibilityWhitelist()['organizations'] ?? [])) {
+            ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_INVALID);
+        }
+
+        return $mode;
+    }
+
+    public function setSystemDefaultAgent(ModeDataIsolation $dataIsolation, ModeEntity $mode): void
+    {
+        if (! $mode->getId() || ! $mode->isEnabled() || ! empty($mode->getVisibilityWhitelist()['organizations'] ?? [])) {
+            ExceptionBuilder::throw(ModeErrorCode::SYSTEM_DEFAULT_AGENT_INVALID);
+        }
+
+        $this->modeRepository->setSystemDefaultAgent($dataIsolation, $mode->getId());
     }
 
     /**

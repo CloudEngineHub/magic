@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
 	cancelShare: vi.fn(),
 	createOrUpdateShareResource: vi.fn(),
 	getSnowflakeIds: vi.fn(),
+	getShareInfoByCode: vi.fn(),
 	getShareResourceMembers: vi.fn(),
+	batchGetFileDetails: vi.fn(),
 	writeText: vi.fn(),
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
@@ -48,9 +50,10 @@ vi.hoisted(() => {
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getSnowflakeIds: mocks.getSnowflakeIds,
+		getShareInfoByCode: mocks.getShareInfoByCode,
 		getShareResourceMembers: mocks.getShareResourceMembers,
 		createOrUpdateShareResource: mocks.createOrUpdateShareResource,
-		batchGetFileDetails: vi.fn().mockResolvedValue({ files: [] }),
+		batchGetFileDetails: mocks.batchGetFileDetails,
 	},
 }))
 
@@ -139,8 +142,10 @@ describe("useProjectShareSheet", () => {
 		mocks.fileShareData = []
 		mocks.useShareDataCalls = []
 		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["share-1"] })
+		mocks.getShareInfoByCode.mockResolvedValue({})
 		mocks.getShareResourceMembers.mockResolvedValue({ members: [] })
 		mocks.createOrUpdateShareResource.mockResolvedValue({})
+		mocks.batchGetFileDetails.mockResolvedValue({ files: [] })
 		mocks.cancelShare.mockResolvedValue(undefined)
 		mocks.canUseNativeShare.mockReturnValue(false)
 		mocks.shareToNativeTarget.mockResolvedValue("shared")
@@ -276,6 +281,10 @@ describe("useProjectShareSheet", () => {
 			result.current.goToLinkDetail("share-multi")
 		})
 
+		await waitFor(() => {
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
+
 		await act(async () => {
 			await result.current.copySelectedShareUrl()
 		})
@@ -284,6 +293,139 @@ describe("useProjectShareSheet", () => {
 		const copiedText = String(mocks.writeText.mock.calls[0]?.[0])
 		expect(copiedText).not.toMatch(/^https?:\/\//)
 		expect(copiedText.length).toBeGreaterThan(1)
+	})
+
+	it("单文件详情打开时预加载分享文案，点击复制时不再请求文件详情", async () => {
+		mocks.fileShareData = [
+			{
+				resource_id: "fictional-share-1",
+				title: "Fictional File Share",
+				project_id: "fictional-project-1",
+				project_name: "Fictional Project",
+				workspace_id: "fictional-workspace-1",
+				workspace_name: "Fictional Workspace",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				created_at: "2026-05-05",
+				has_password: true,
+				password: "FAKE12",
+				share_project: false,
+				file_ids: ["fictional-file-1"],
+				extend: { file_count: 1 },
+			},
+		]
+		mocks.batchGetFileDetails.mockResolvedValue({
+			files: [{ display_config: { type: "slide" } }],
+		})
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [],
+				mode: "file",
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.goToLinkDetail("fictional-share-1")
+		})
+
+		await waitFor(() => {
+			expect(mocks.batchGetFileDetails).toHaveBeenCalledTimes(1)
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
+
+		await act(async () => {
+			await result.current.copySelectedShareUrl()
+		})
+
+		expect(mocks.batchGetFileDetails).toHaveBeenCalledTimes(1)
+		expect(mocks.writeText).toHaveBeenCalledWith(result.current.selectedShareMessageText)
+	})
+
+	it("快速切换分享记录时不会复制上一条记录的预加载文案", async () => {
+		mocks.fileShareData = [
+			{
+				resource_id: "fictional-share-a",
+				title: "Fictional Share A",
+				project_id: "fictional-project-1",
+				project_name: "Fictional Project",
+				workspace_id: "fictional-workspace-1",
+				workspace_name: "Fictional Workspace",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				created_at: "2026-05-05",
+				has_password: true,
+				password: "FAKEA1",
+				share_project: false,
+				file_ids: ["fictional-file-a"],
+				extend: { file_count: 1 },
+			},
+			{
+				resource_id: "fictional-share-b",
+				title: "Fictional Share B",
+				project_id: "fictional-project-1",
+				project_name: "Fictional Project",
+				workspace_id: "fictional-workspace-1",
+				workspace_name: "Fictional Workspace",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				created_at: "2026-05-06",
+				has_password: true,
+				password: "FAKEB2",
+				share_project: false,
+				file_ids: ["fictional-file-b"],
+				extend: { file_count: 1 },
+			},
+		]
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project-1",
+				projectName: "Fictional Project",
+				attachments: [],
+				mode: "file",
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.goToLinkDetail("fictional-share-a")
+		})
+
+		await waitFor(() => {
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
+
+		// Hold the second payload build open to verify the first share text cannot leak through.
+		let resolveSecondFileDetails: (value: { files: [] }) => void = () => undefined
+		mocks.batchGetFileDetails.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveSecondFileDetails = resolve
+				}),
+		)
+
+		act(() => {
+			result.current.goToLinkDetail("fictional-share-b")
+		})
+
+		expect(result.current.selectedShareMessageText).toBe("")
+		await act(async () => {
+			await result.current.copySelectedShareUrl()
+		})
+		expect(mocks.writeText).not.toHaveBeenCalled()
+
+		await act(async () => {
+			resolveSecondFileDetails({ files: [] })
+		})
+		await waitFor(() => {
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
 	})
 
 	it("详情页系统分享使用预先构建的分享文案", async () => {
@@ -851,7 +993,7 @@ describe("useProjectShareSheet", () => {
 		)
 	})
 
-	it("文件模式下查看整项目分享详情时，不使用当前勾选文件作为已选文件", () => {
+	it("文件模式下查看整项目分享详情时，不使用当前勾选文件作为已选文件", async () => {
 		mocks.fileShareData = [
 			{
 				resource_id: "project-share-1",
@@ -894,6 +1036,9 @@ describe("useProjectShareSheet", () => {
 
 		expect(result.current.selectedFileCount).toBe(0)
 		expect(result.current.selectedFileHierarchy).toEqual([])
+		await waitFor(() => {
+			expect(result.current.selectedShareMessageText).toBeTruthy()
+		})
 	})
 
 	it("打开组织分享详情时会请求成员列表并归一化节点 id", async () => {
@@ -1040,5 +1185,74 @@ describe("useProjectShareSheet", () => {
 
 		expect(mocks.getShareResourceMembers).not.toHaveBeenCalled()
 		expect(result.current.detailMemberNodes).toEqual([])
+	})
+
+	it("编辑文件分享复用原资源并自动合并范围外的默认打开文件", async () => {
+		mocks.fileShareData = [
+			{
+				resource_id: "fictional-file-share",
+				title: "Fictional File Share",
+				project_id: "fictional-project",
+				project_name: "Fictional Project",
+				workspace_id: "fictional-workspace",
+				workspace_name: "Fictional Workspace",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				created_at: "2026-06-01",
+				has_password: true,
+				password: "FAKEPWD",
+				share_project: false,
+				file_ids: ["fictional-file-a"],
+				extend: { file_count: 1 },
+			},
+		]
+		mocks.getShareInfoByCode.mockResolvedValue({
+			resource_name: "Fictional Edited Share",
+			share_type: ShareType.PasswordProtected,
+			password: "FAKEPWD2",
+			file_ids: ["fictional-file-a"],
+			default_open_file_id: "fictional-file-b",
+			expire_days: 30,
+			extra: { view_file_list: true },
+		})
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fictional-project",
+				projectName: "Fictional Project",
+				mode: "file",
+				attachments: [
+					{ file_id: "fictional-file-a", name: "Fictional A", is_directory: false },
+					{ file_id: "fictional-file-b", name: "Fictional B", is_directory: false },
+				],
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => result.current.goToLinkDetail("fictional-file-share"))
+		await waitFor(() => expect(result.current.view).toBe("linkDetail"))
+
+		act(() => result.current.openEditSelectedShare())
+		await waitFor(() => {
+			expect(result.current.view).toBe("edit")
+			expect(result.current.editLoading).toBe(false)
+		})
+
+		expect(result.current.defaultOpenFileCandidates.map((item) => item.file_id)).toContain(
+			"fictional-file-b",
+		)
+		await act(async () => result.current.submitCreateShare())
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				resource_id: "fictional-file-share",
+				file_ids: ["fictional-file-a", "fictional-file-b"],
+				default_open_file_id: "fictional-file-b",
+				share_project: false,
+			}),
+		)
+		expect(mocks.writeText).not.toHaveBeenCalled()
+		expect(result.current.view).toBe("linkDetail")
 	})
 })

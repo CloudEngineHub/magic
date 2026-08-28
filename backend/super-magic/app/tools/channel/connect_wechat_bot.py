@@ -21,20 +21,19 @@ logger = get_logger(__name__)
 class ConnectWechatBotParams(BaseToolParams):
     force_refresh: bool = Field(
         default=False,
-        description="""<!--zh: 为 true 时强制取消旧登录会话并重新发起扫码-->
-Force-cancel the current login session and generate a new QR flow when set to true.""",
+        description="Cancel the current login session and start a new QR flow when true.",
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ConnectWechatBot(BaseTool[ConnectWechatBotParams]):
-    """<!--zh
-    发起微信官方 ClawBot 扫码登录。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Start the WeChat ClawBot QR login flow. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Start the WeChat ClawBot QR login flow for SDK snippets."""
 
     async def execute(self, tool_context: ToolContext, params: ConnectWechatBotParams) -> ToolResult:
+        topic_id = tool_context.topic_id
+        if not topic_id:
+            return ToolResult.error("The current topic ID is missing, so the WeChat channel cannot be bound.")
+
         manager = WechatLoginManager.get_instance()
         agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
 
@@ -53,8 +52,6 @@ class ConnectWechatBot(BaseTool[ConnectWechatBotParams]):
             # 仅在新 session 上挂兜底回调，复用时已有回调无需重复注册。
             # 作用：即使模型未调用 wait_wechat_login，扫码成功后也能自动写配置并激活渠道。
             if session._on_success is None:
-                sandbox_id = tool_context.sandbox_id
-
                 async def _on_login_success(result: "WechatLoginResult") -> None:
                     from app.channel.config import (
                         DEFAULT_WECHAT_CDN_BASE_URL,
@@ -73,7 +70,7 @@ class ConnectWechatBot(BaseTool[ConnectWechatBotParams]):
                         base_url=result.base_url,
                         cdn_base_url=existing_cdn_base_url,
                         ilink_user_id=result.ilink_user_id,
-                        sandbox_id=sandbox_id,
+                        topic_id=topic_id,
                     )
                     await save_config(config)
                     logger.info(
@@ -122,9 +119,10 @@ class ConnectWechatBot(BaseTool[ConnectWechatBotParams]):
 
 def _build_qr_render_message(qrcode_url: str, status_text: str | None = None) -> str:
     lines = [
-        "Reply to the user with the following content (no extra prose), "
-        "adapting the heading and description to user preferred language. "
-        "Then immediately call `wait_wechat_login`.",
+        "Output the following content as your reply (no extra prose), "
+        "adapting the heading and description to user preferred language, "
+        "and include a `wait_wechat_login` call in the same reply. "
+        "Do not end your turn after showing the QR — the user's scan would go unanswered.",
     ]
     if status_text:
         lines.extend(("", f"Current status: {status_text}"))

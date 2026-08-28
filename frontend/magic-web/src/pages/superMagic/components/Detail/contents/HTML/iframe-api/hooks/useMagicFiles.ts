@@ -6,6 +6,10 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { base64ToFile } from "@/pages/superMagic/components/MessageEditor/utils/fileConverter"
 import { resolveUploadPath } from "../../utils/file-utils"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import {
+	isAgentSelectionAvailable,
+	resolveAgentSelection,
+} from "@/services/superMagic/DefaultAgentSelectionService"
 import { addMultipleFilesToCurrentChat } from "@/pages/superMagic/utils/topics"
 import { SuperMagicApi } from "@/apis"
 import SuperMagicService from "@/pages/superMagic/services"
@@ -298,15 +302,15 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					return
 				}
 
-				const finalAgentMode = agentMode || TopicMode.General
-				const validModes = Object.values(TopicMode)
-				if (!validModes.includes(finalAgentMode as TopicMode)) {
+				const selection = resolveAgentSelection(agentMode)
+				if (!isAgentSelectionAvailable(selection.modeIdentifier, selection.agentCode)) {
 					replyToIframe(replyType, requestId, {
 						success: false,
-						error: `Invalid agentMode: ${finalAgentMode}`,
+						error: `Invalid agentMode: ${selection.modeIdentifier}`,
 					})
 					return
 				}
+				const finalAgentMode = selection.modeIdentifier as TopicMode
 
 				const workspaceId =
 					selectedProject.workspace_id || workspaceStore.selectedWorkspace?.id || ""

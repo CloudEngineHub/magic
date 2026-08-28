@@ -16,6 +16,7 @@ import useSharedProjectMode from "@/pages/superMagic/hooks/useSharedProjectMode"
 import RecordingSummaryEditorModeSwitch from "@/components/business/RecordingSummary/components/EditorModeSwitch"
 import RecordingSummaryEditorPanel from "@/components/business/RecordingSummary/EditorPanel"
 import MobileComposer from "@/pages/superMagicMobile/pages/ChatPage/components/mobile-composer/MobileComposer"
+import { useConversationInputLayout } from "@/pages/superMagic/components/ConversationInputResize/context"
 
 interface RecordSummaryEditorContainerProps {
 	editorContext?: SceneEditorContext
@@ -27,6 +28,9 @@ export default function RecordSummaryEditorContainer({
 	editorNodes,
 }: RecordSummaryEditorContainerProps) {
 	const isMobile = useIsMobile()
+	const inputLayout = useConversationInputLayout()
+	// Only resizable desktop conversations provide a fixed-height layout contract.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 	const scopedTopicStore = editorContext?.topicStore ?? topicStore
 
 	const selectedTopic = editorContext?.selectedTopic ?? scopedTopicStore.selectedTopic
@@ -39,27 +43,35 @@ export default function RecordSummaryEditorContainer({
 
 	useSharedProjectMode({ setTopicMode: effectiveSetTopicMode })
 
-	const { editorMode, setEditorMode } = useRecordingSummaryEditorMode({
+	const { editorMode: savedEditorMode, setEditorMode } = useRecordingSummaryEditorMode({
 		selectedTopic,
 		hasMessage: (editorContext?.messagesLength ?? 0) > 0,
 	})
+	// Detail conversations stay in text-editing mode regardless of the persisted recording preference.
+	const editorMode =
+		editorContext?.allowRecordingMode === false
+			? RecordingSummaryEditorMode.Editing
+			: savedEditorMode
 
 	const editorSize = editorContext?.size ?? "default"
 
+	// Hiding the switch also removes the only inline entry that could start a new recording.
 	const editorModeSwitch =
-		editorContext?.editorModeSwitch ??
-		(({ disabled }: { disabled: boolean }) => (
-			<RecordingSummaryEditorModeSwitch
-				className={getButtonPaddingClass(editorSize)}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				selectedWorkspace={selectedWorkspace}
-				iconSize={EDITOR_ICON_SIZE_MAP[editorSize]}
-				editorMode={editorMode}
-				setEditorMode={setEditorMode}
-				disabled={disabled}
-			/>
-		))
+		editorContext?.allowRecordingMode === false
+			? undefined
+			: (editorContext?.editorModeSwitch ??
+				(({ disabled }: { disabled: boolean }) => (
+					<RecordingSummaryEditorModeSwitch
+						className={getButtonPaddingClass(editorSize)}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						selectedWorkspace={selectedWorkspace}
+						iconSize={EDITOR_ICON_SIZE_MAP[editorSize]}
+						editorMode={editorMode}
+						setEditorMode={setEditorMode}
+						disabled={disabled}
+					/>
+				)))
 
 	const tiptapEditorRef = useRef<MessageEditorRef | null>(null)
 
@@ -68,22 +80,7 @@ export default function RecordSummaryEditorContainer({
 		setEditorMode,
 		tiptapEditorRef,
 	})
-
-	const editingEditorContext: SceneEditorContext = {
-		...editorContext,
-		selectedTopic,
-		selectedProject,
-		selectedWorkspace,
-		topicStore: scopedTopicStore,
-		topicMode: editorContext?.topicMode ?? TopicMode.RecordSummary,
-		setTopicMode: effectiveSetTopicMode,
-		size: editorSize,
-		editorModeSwitch,
-		containerClassName: editorContext?.containerClassName,
-		editorRef: tiptapEditorRef,
-	}
-
-	return editorMode === RecordingSummaryEditorMode.Recording ? (
+	const recordingEditorNode = (
 		<Suspense fallback={<RecordSummaryEditorPanelSkeleton size={editorSize} />}>
 			<RecordingSummaryEditorPanel
 				className={editorContext?.className}
@@ -100,8 +97,32 @@ export default function RecordSummaryEditorContainer({
 				attachments={editorContext?.attachments}
 				taskDataNode={editorNodes?.taskDataNode}
 				messageQueueNode={editorNodes?.messageQueueNode}
+				fillHeight={shouldFillHeight}
 			/>
 		</Suspense>
+	)
+
+	const editingEditorContext: SceneEditorContext = {
+		...editorContext,
+		selectedTopic,
+		selectedProject,
+		selectedWorkspace,
+		topicStore: scopedTopicStore,
+		topicMode: editorContext?.topicMode ?? TopicMode.RecordSummary,
+		setTopicMode: effectiveSetTopicMode,
+		size: editorSize,
+		editorModeSwitch,
+		containerClassName: editorContext?.containerClassName,
+		editorRef: tiptapEditorRef,
+	}
+
+	return editorMode === RecordingSummaryEditorMode.Recording ? (
+		shouldFillHeight ? (
+			// Reserve space for the small-mode toolbar while the idle surface fills the remainder.
+			<div className="flex h-full min-h-0 w-full flex-col">{recordingEditorNode}</div>
+		) : (
+			recordingEditorNode
+		)
 	) : isMobile ? (
 		<MobileComposer editorContext={editingEditorContext} editorNodes={editorNodes} />
 	) : (

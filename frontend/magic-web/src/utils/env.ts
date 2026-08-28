@@ -38,7 +38,6 @@ export const env = (
 
 	const defaultCDN = import.meta.env?.MAGIC_CDNHOST || window?.CONFIG?.MAGIC_CDNHOST
 
-
 	if (deployCode && clusterConfig?.[deployCode]?.services && !isCurrentEnv) {
 		const dingTalkConfig = clusterConfig?.[deployCode]?.magic_app?.keyconfig?.find(
 			(item) => item.type === "dingtalk",
@@ -99,17 +98,36 @@ export const isInternationalEnv = (): boolean =>
 		env("MAGIC_APP_ENV") as AppEnv,
 	)
 
+const LOGIN_AUTHORIZATION_PROTOCOLS = new Set(["http:", "https:"])
+
+const getLoginAuthorizationOrigin = (value: string): string | null => {
+	try {
+		const parsedUrl = new URL(value.trim())
+		return LOGIN_AUTHORIZATION_PROTOCOLS.has(parsedUrl.protocol) ? parsedUrl.origin : null
+	} catch {
+		return null
+	}
+}
+
 /**
- * @description 获取登录授权白名单
- * @returns {string[]} 登录授权白名单
+ * @description 判断 URL 是否命中登录授权白名单
+ * @returns {boolean} 是否命中登录授权白名单
  */
 export const isLoginAuthorizationWhitelist = (url: string): boolean => {
+	let whitelist: string
 	try {
-		const whitelist = env("MAGIC_LOGIN_AUTHORIZATION_WHITELIST")
-		return (typeof whitelist === "string" ? whitelist.split(",") : []).includes(url)
-	} catch (error) {
+		const configuredWhitelist = env("MAGIC_LOGIN_AUTHORIZATION_WHITELIST")
+		if (typeof configuredWhitelist !== "string") return false
+		whitelist = configuredWhitelist
+	} catch {
 		return false
 	}
+
+	const targetOrigin = getLoginAuthorizationOrigin(url)
+	if (!targetOrigin) return false
+
+	// 授权参数可能在校验前被追加，因此按标准 URL origin 精确匹配协议、域名和端口。
+	return whitelist.split(",").some((item) => getLoginAuthorizationOrigin(item) === targetOrigin)
 }
 
 /**
@@ -131,9 +149,6 @@ export const isPreEnv = (): boolean =>
  * @returns {boolean} 是否测试环境
  */
 export const isTestEnv = (): boolean => env("MAGIC_APP_ENV") === AppEnv.Test
-
-/** 商业化版本 */
-export const isCommercial = () => env("MAGIC_EDITION") === "ENTERPRISE"
 
 /**
  * @description 私有化部署配置

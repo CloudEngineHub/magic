@@ -136,13 +136,12 @@ class FileServiceSimpleUpload extends SimpleUpload
     }
 
     /**
-     * Generate pre-signed URL by credential
-     * 将请求转发给具体的平台实现.
+     * 使用临时凭证生成预签名 URL，并转发给具体的平台实现.
      *
      * @param array $credential 凭证信息
      * @param string $objectKey 对象键
-     * @param array $options 额外选项 (method, expires, filename, etc.)
-     * @return string Pre-signed URL
+     * @param array $options 额外选项，包括 method、expires、filename、download 等
+     * @return string 预签名 URL
      * @throws CloudFileException
      */
     public function getPreSignedUrlByCredential(array $credential, string $objectKey, array $options = []): string

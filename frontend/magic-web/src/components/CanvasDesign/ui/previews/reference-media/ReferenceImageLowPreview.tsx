@@ -1,7 +1,5 @@
-import { useMemo, type CSSProperties } from "react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../primitives/shadcn/tooltip"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
 import { useReferenceImageUrls } from "../../../app/hooks/resources/useReferenceImageUrls"
 import { ImagePlus, LoaderCircle } from "lucide-react"
 import {
@@ -16,9 +14,27 @@ import { cn } from "../../../runtime/shared/lib/utils"
 import styles from "../../editors/message/index.module.css"
 import type { ReferenceMediaPreviewProps } from "./types"
 import { useObserveBoxSize } from "./useObserveBoxSize"
+import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
+import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
 
 export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
-	const { fileName, path, fillParent, objectFit = "cover", inlineOriginal, sourceCrop } = props
+	const {
+		fileName,
+		path,
+		fillParent,
+		objectFit = "cover",
+		inlineOriginal,
+		sourceCrop,
+		enableTooltip,
+		tooltipSide,
+	} = props
+	const showTooltip = enableTooltip ?? !inlineOriginal
+	const tooltipMaxSize = enableTooltip
+		? REFERENCE_MEDIA_TOOLTIP_MAX_SIZE
+		: TOOLTIP_PREVIEW_MIN_SIZE
+	const { t } = useCanvasDesignI18n()
+	const [previewContentError, setPreviewContentError] = useState(false)
 	const portalContainer = usePortalContainer()
 	const {
 		lowUrl,
@@ -30,6 +46,7 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 		open,
 		handleOpenChange,
 	} = useReferenceImageUrls(path, { eagerFullUrl: !!inlineOriginal })
+	useEffect(() => setPreviewContentError(false), [fullUrl])
 
 	const previewSize = useMemo(() => {
 		if (!imageInfo) {
@@ -41,14 +58,17 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 				height: imageInfo.naturalHeight,
 			})
 			if (p.width > 0 && p.height > 0) {
-				return calculateTooltipBoundedPreviewSize({
-					naturalWidth: p.width,
-					naturalHeight: p.height,
-				})
+				return calculateTooltipBoundedPreviewSize(
+					{
+						naturalWidth: p.width,
+						naturalHeight: p.height,
+					},
+					tooltipMaxSize,
+				)
 			}
 		}
-		return calculateTooltipBoundedPreviewSize(imageInfo)
-	}, [imageInfo, sourceCrop])
+		return calculateTooltipBoundedPreviewSize(imageInfo, tooltipMaxSize)
+	}, [imageInfo, sourceCrop, tooltipMaxSize])
 
 	const canCropLayout =
 		Boolean(sourceCrop) && Boolean(imageInfo?.naturalWidth && imageInfo?.naturalHeight)
@@ -92,8 +112,8 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 		)
 	}, [canCropLayout, sourceCrop, imageInfo, inlineBoxW, inlineBoxH, inlineOriginal])
 
-	const tooltipW = previewSize.width || TOOLTIP_PREVIEW_MIN_SIZE
-	const tooltipH = previewSize.height || TOOLTIP_PREVIEW_MIN_SIZE
+	const tooltipW = previewSize.width || tooltipMaxSize
+	const tooltipH = previewSize.height || tooltipMaxSize
 	const tooltipCroppedStyle = useMemo(() => {
 		if (!canCropLayout || !sourceCrop || !imageInfo) {
 			return undefined
@@ -138,86 +158,61 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 		</>
 	)
 
-	if (inlineOriginal) {
-		return (
-			<div ref={inlineBoxRef} className={previewWrapperClass}>
-				{renderPreviewInner(inlineCroppedStyle)}
-			</div>
-		)
+	const inlinePreview = (
+		<div ref={inlineOriginal ? inlineBoxRef : previewBoxRef} className={previewWrapperClass}>
+			{renderPreviewInner(inlineOriginal ? inlineCroppedStyle : previewCroppedStyle)}
+		</div>
+	)
+
+	if (inlineOriginal && !showTooltip) {
+		return inlinePreview
 	}
 
+	if (!showTooltip) return inlinePreview
+
+	const previewContent = fullUrl ? (
+		<div
+			className="relative overflow-hidden bg-black"
+			style={{ width: tooltipW, height: tooltipH }}
+		>
+			<img
+				src={fullUrl}
+				alt={fileName}
+				className="block object-contain"
+				style={{
+					...(tooltipCroppedStyle || { width: tooltipW, height: tooltipH }),
+					maxWidth: "none",
+					maxHeight: "none",
+				}}
+				onError={() => setPreviewContentError(true)}
+			/>
+		</div>
+	) : undefined
+
 	return (
-		<Tooltip open={open} onOpenChange={handleOpenChange}>
-			<TooltipTrigger asChild>
-				<div ref={previewBoxRef} className={previewWrapperClass}>
-					{renderPreviewInner(previewCroppedStyle)}
-				</div>
-			</TooltipTrigger>
-			<TooltipPrimitive.Portal container={portalContainer || undefined}>
-				<TooltipContent
-					side="left"
-					sideOffset={8}
-					className={styles.referenceImageTooltip}
-					style={{
-						...(previewSize.width ? { width: previewSize.width } : {}),
-						maxWidth: TOOLTIP_PREVIEW_MIN_SIZE,
-						maxHeight: TOOLTIP_PREVIEW_MIN_SIZE,
-					}}
-				>
-					{isFullUrlLoading ? (
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								width: previewSize.width || TOOLTIP_PREVIEW_MIN_SIZE,
-								height: previewSize.height || TOOLTIP_PREVIEW_MIN_SIZE,
-							}}
-						>
-							<LoaderCircle
-								size={16}
-								className={styles.loadingIcon}
-								style={{ animation: "spin 1s linear infinite" }}
-							/>
-						</div>
-					) : (
-						fullUrl && (
-							<div
-								style={{
-									position: "relative",
-									overflow: "hidden",
-									width: tooltipW,
-									height: tooltipH,
-								}}
-							>
-								{tooltipCroppedStyle ? (
-									<img
-										src={fullUrl}
-										alt={fileName}
-										className={styles.referenceImageTooltipPreview}
-										style={{
-											...tooltipCroppedStyle,
-											maxWidth: "none",
-											maxHeight: "none",
-										}}
-									/>
-								) : (
-									<img
-										src={fullUrl}
-										alt={fileName}
-										className={styles.referenceImageTooltipPreview}
-										style={{
-											...(previewSize.width ? previewSize : {}),
-											maxWidth: TOOLTIP_PREVIEW_MIN_SIZE,
-											maxHeight: TOOLTIP_PREVIEW_MIN_SIZE,
-										}}
-									/>
-								)}
-							</div>
-						)
-					)}
-				</TooltipContent>
-			</TooltipPrimitive.Portal>
-		</Tooltip>
+		<MediaPreviewTooltip
+			mediaType="image"
+			fileName={fileName}
+			previewUrl={fullUrl}
+			isLoading={isFullUrlLoading}
+			hasError={hasError || previewContentError || (!isFullUrlLoading && !fullUrl)}
+			errorMessage={t("mediaResourceFullscreenPreview.imageLoadFailed", "图片加载失败")}
+			closeLabel={t("mediaResourceFullscreenPreview.close", "关闭预览")}
+			audioLabels={{
+				play: t("video.fullscreen.play", "播放"),
+				pause: t("video.fullscreen.pause", "暂停"),
+				progress: t("video.fullscreen.progress", "播放进度"),
+			}}
+			maxWidth={tooltipW}
+			maxHeight={tooltipH}
+			side={tooltipSide ?? "top"}
+			open={open}
+			onOpenChange={handleOpenChange}
+			enableTouchTrigger
+			container={portalContainer}
+			previewContent={previewContent}
+		>
+			{inlinePreview}
+		</MediaPreviewTooltip>
 	)
 }

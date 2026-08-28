@@ -1,9 +1,9 @@
-import { cn } from "@/lib/utils"
-import React, { useEffect, useMemo, useState } from "react"
+import { cn } from "@/utils/cn"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import TaskList from "../TaskList"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { observer } from "mobx-react-lite"
-import { MessageEditorSize } from "../MessageEditor/types"
+import type { MessageEditorSize } from "../MessageEditor/types"
 import { roleStore } from "../../stores"
 import useTopicMode from "../../hooks/useTopicMode"
 import MessageQueue from "../MessagePanel/components/MessageQueue"
@@ -13,7 +13,7 @@ import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-
 import { DEFAULT_LAYOUT_CONFIG } from "../MessageEditor/constants/constant"
 import { usePreload } from "../MessagePanel/utils/preload"
 import { useTaskData } from "../../hooks/useTaskData"
-import { ProjectPageInputContainerProps } from "./types"
+import type { ProjectPageInputContainerProps } from "./types"
 import type {
 	SceneEditorContext,
 	SceneEditorNodes,
@@ -24,10 +24,12 @@ import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/compon
 import DesktopInputContainer from "./DesktopInputContainer"
 import { MOBILE_LAYOUT_CONFIG } from "../MainInputContainer/components/editors/constant"
 import { createMessageEditorDraftKey } from "../MessageEditor/utils/draftKey"
+import { TopicInvalidModeFallback } from "../MessageEditor/components/TopicInvalidModeFallback"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { useConversationInputLayout } from "../ConversationInputResize/context"
 
 /**
  * 这个组件作为项目页的编辑器组件
@@ -54,17 +56,30 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	attachments,
 	isShowLoadingInit = false,
 	mentionPanelStore = GlobalMentionPanelStore,
+	topicStore,
+	allowRecordingMode,
 	topicModeLogic: topicModeLogicProps,
+	modelTopicMode,
 	size = "small",
 	enableMessageSendByContent = true,
 	editorLayoutConfig,
 	showTopicModeExamplePortal = true,
 	enableReEditMessageFromPubSub = false,
+	showModeToggle,
+	showModelSelector,
 	onSendSuccess,
 	onSendComplete,
 	createTopic,
 }) => {
 	const isMobile = useIsMobile()
+	const inputLayout = useConversationInputLayout()
+	// Layout context is available only inside resizable desktop conversations.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
+	// Keep the editor's own root ref separate from the layout container: the shared
+	// containerRef is already attached to the layout wrapper, so reusing it here would
+	// silently rebind it to the editor node and break the height measurement target.
+	const localContainerRef = useRef<HTMLDivElement>(null)
+	const effectiveContainerRef = containerRef ?? localContainerRef
 	const { taskData: taskDataFromStore } = useTaskData({ selectedTopic })
 	const taskData = taskDataProp ?? taskDataFromStore
 
@@ -76,21 +91,29 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	const canInterruptTask =
 		showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 	/**
-	 * 首页的话题模式选择Tab，用于创建新项目时指定项目的话题模式
+	 * 话题页优先使用当前项目模式展示示例，不修改首页的全局模式选择。
 	 */
-	const tabPattern = roleStore.currentRole
-	const setTabPattern = roleStore.setCurrentRole
+	const projectMode = selectedProject?.project_mode
+	const tabPattern =
+		projectMode && superMagicModeService.isModeValid(projectMode)
+			? projectMode
+			: roleStore.currentRole
 
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
-	const { topicMode: innerTopicMode, setTopicMode: innerSetTopicMode } = useTopicMode({
+	const {
+		topicMode: innerTopicMode,
+		setTopicMode: innerSetTopicMode,
+		recoverTopicMode: innerRecoverTopicMode,
+	} = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
 
 	const topicMode = topicModeLogicProps?.topicMode ?? innerTopicMode
 	const setTopicMode = topicModeLogicProps?.setTopicMode ?? innerSetTopicMode
+	const recoverTopicMode = topicModeLogicProps?.recoverTopicMode ?? innerRecoverTopicMode
 
 	const { handleInterrupt } = useTaskInterrupt({
 		selectedTopic: selectedTopic ?? null,
@@ -106,6 +129,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus,
 		isShowLoadingInit,
 	})
@@ -131,19 +155,15 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		userId,
 	])
 
-	useEffect(() => {
-		if (selectedProject?.project_mode) {
-			setTabPattern(selectedProject.project_mode)
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [selectedProject?.project_mode])
-
 	const editorSize = size as MessageEditorSize
 
-	const editPanelClassName = classNames?.editorContent
+	const editPanelClassName = cn(classNames?.editorContent, shouldFillHeight && "h-full min-h-0")
 
 	const editPanelContainerClassName = cn(
 		"rounded-xl",
+		shouldFillHeight && "h-full min-h-0",
+		// Let the project conversation panel use its negotiated manual height above 50vh.
+		shouldFillHeight && "!max-h-none",
 		classNames?.editorInnerWrapper,
 		isFocused && "border-blue-500 dark:border-blue-400",
 	)
@@ -197,8 +217,10 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			setSelectedTopic,
 			setSelectedProject,
 			topicMode: topicMode,
+			modelTopicMode,
 			agentCode: selectedTopic?.agent_code,
 			setTopicMode: setTopicMode,
+			recoverTopicMode,
 			topicExamplesMode: tabPattern,
 			size: editorSize,
 			className: editPanelClassName,
@@ -209,6 +231,8 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			handleInterrupt,
 			isEmptyStatus: !!isEmptyStatus,
 			useChatTerminology: isCachedChatWorkspaceProject(selectedProject),
+			showModeToggle,
+			showModelSelector,
 			messagesLength: (messages ?? []).length,
 			enableMessageSendByContent,
 			modules: {
@@ -220,6 +244,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				editorLayoutConfig ?? (isMobile ? MOBILE_LAYOUT_CONFIG : DEFAULT_LAYOUT_CONFIG),
 			attachments,
 			mentionPanelStore,
+			// Recording detail injects its isolated store so send-time renames never fall back globally.
+			topicStore,
+			allowRecordingMode,
 			onFileClick,
 			onEditorFocus: () => {
 				setIsFocused(true)
@@ -239,6 +266,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			showTopicExamplesPortal: showTopicModeExamplePortal,
 			onSendSuccess,
 			createTopic,
+			invalidModeFallback: TopicInvalidModeFallback,
 		}
 	}, [
 		selectedTopic,
@@ -247,7 +275,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		setSelectedTopic,
 		setSelectedProject,
 		topicMode,
+		modelTopicMode,
 		setTopicMode,
+		recoverTopicMode,
 		tabPattern,
 		editorSize,
 		editPanelClassName,
@@ -263,12 +293,16 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		isMobile,
 		attachments,
 		mentionPanelStore,
+		topicStore,
+		allowRecordingMode,
 		onFileClick,
 		onMessageSendReady,
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,
 		showTopicModeExamplePortal,
+		showModeToggle,
+		showModelSelector,
 		onSendSuccess,
 		createTopic,
 		onEditorFocus,
@@ -307,8 +341,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			currentScene={currentScene}
 			shouldShowCurrentSceneBadge={shouldShowCurrentSceneBadge}
 			shouldShowSceneControls={shouldShowSceneControls}
-			containerRef={containerRef}
+			containerRef={effectiveContainerRef}
 			className={className}
+			fillHeight={shouldFillHeight}
 			classNames={classNames}
 			editorSize={editorSize}
 			isFocused={isFocused}

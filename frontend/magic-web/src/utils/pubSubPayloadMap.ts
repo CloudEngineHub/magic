@@ -24,6 +24,7 @@ import type {
 import type {
 	SuperMagicAddContentToChatPayload,
 	SuperMagicAddFileToChatPayload,
+	SuperMagicCanvasSelectionMentionsPayload,
 	SuperMagicInsertMarkerToChatPayload,
 	SuperMagicMessageRegisterProgrammaticScrollArgs,
 	SuperMagicMessageScrollToBottomArgs,
@@ -38,6 +39,7 @@ import type {
 	SuperMagicSetInputMessageArgs,
 	SuperMagicStreamMessageArgs,
 	SuperMagicSyncMarkersToChatPayload,
+	SuperMagicWidgetEditorCommandPayload,
 } from "@/pages/superMagic/events/message"
 import type {
 	SuperMagicOpenFileTabPayload,
@@ -65,7 +67,11 @@ import type {
 	SuperMagicPlaybackStartArgs,
 } from "@/pages/superMagic/events/playback"
 import type { SeqResponse } from "@/types/request"
-import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
+import type {
+	SuperMagicCheckpointRollbackMessage,
+	SuperMagicFileChangeMessage,
+} from "@/types/chat/intermediate_message"
+import type { PersonalPreferencesValue } from "@/utils/personalPreferencesCache"
 
 /**
  * 全局事件名 → 参数类型映射。
@@ -127,11 +133,17 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
 	/** 展开话题对话面板：无参数。 */
 	[PubSubEvents.Expand_Topic_Conversation_Panel]: []
+	/** Collapse the topic conversation panel without changing the active preview. */
+	[PubSubEvents.Collapse_Topic_Conversation_Panel]: []
 	/** 消息队列消费完成：传入可选消息数据。 */
 	[PubSubEvents.SuperMagicMessageQueueConsumed]: SuperMagicQueueConsumedArgs
 	/** Intermediate 文件变更：传入完整 seq，订阅方自行解析。 */
 	[PubSubEvents.Super_Magic_File_Change_Intermediate]: [
 		payload: SeqResponse<SuperMagicFileChangeMessage>,
+	]
+	/** Intermediate 检查点事件：保留完整 seq，外层 seq_id 只作为领域事件 ID。 */
+	[PubSubEvents.Super_Magic_Checkpoint_Rollback]: [
+		payload: SeqResponse<SuperMagicCheckpointRollbackMessage>,
 	]
 	/** 通过外部消息内容直接发送消息：传入发送内容 payload。 */
 	[PubSubEvents.Send_Message_by_Content]: SuperMagicSendMessageByContentArgs
@@ -157,6 +169,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Receive_RecordSummary_Audio_File]: SuperMagicReceiveRecordSummaryAudioFileArgs
 	/** 设置输入框文本：传入字符串消息。 */
 	[PubSubEvents.Set_Input_Message]: SuperMagicSetInputMessageArgs
+	/** Executes Widget-only append, clear, or read operations against the active editor. */
+	[PubSubEvents.Magic_Widget_Editor_Command]: SuperMagicWidgetEditorCommandPayload
 	/** 添加内容到聊天框：传入可选内容与额外信息。 */
 	[PubSubEvents.Add_Content_To_Chat]: SuperMagicAddContentToChatPayload
 	/** 进入编辑状态：传入目标文件 ID。 */
@@ -184,10 +198,12 @@ export interface PubSubTypedPayloadMap {
 	/** 详情页刷新：无参数。 */
 	[PubSubEvents.Super_Magic_Detail_Refresh]: []
 	/** 追加 JSONContent 到输入框末尾（不覆盖已有内容）：传入 JSONContent。 */
-	[PubSubEvents.Append_Content_To_Editor]: [content: import("@tiptap/react").JSONContent]
+	[PubSubEvents.Append_Content_To_Editor]: [
+		content: import("@/infrastructure/editors/tiptap/react").JSONContent,
+	]
 	/** 追加建议内容到输入框末尾：传入文本字符串或 JSONContent。 */
 	[PubSubEvents.Append_Suggestion_To_Editor]: [
-		content: string | import("@tiptap/core").JSONContent,
+		content: string | import("@/infrastructure/editors/tiptap/core").JSONContent,
 	]
 	/** 幻灯片添加后设置编辑器内容。 */
 	[PubSubEvents.Set_Content_When_Slide_Added]: SuperMagicSetContentWhenSlideAddedArgs
@@ -199,6 +215,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Trigger_Document_List_Polling]: []
 	/** 添加文件到聊天输入框：传入标准文件 mention payload。 */
 	[PubSubEvents.Add_File_To_Chat]: SuperMagicAddFileToChatPayload
+	/** 画布选择 mentions：传入画布选择 payload。 */
+	[PubSubEvents.Super_Magic_Canvas_Selection_Mentions]: SuperMagicCanvasSelectionMentionsPayload
 	/** 发送打断消息：可选回调，打断完成后执行。 */
 	[PubSubEvents.Send_Interrupt_Message]: SuperMagicSendInterruptMessageArgs
 	/** 触发创建新话题：零参数。 */
@@ -223,4 +241,9 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Playback_End]: SuperMagicPlaybackEndPayload
 	/** 外部/原生层将拖拽数据投入消息编辑器：传入拖拽数据，消费方自行收窄。 */
 	[PubSubEvents.Insert_Drag_Data_To_Editor]: SuperMagicInsertDragDataToEditorArgs
+	/** 当前用户完整个人偏好更新：携带用户隔离键和服务端确认后的完整值。 */
+	[PubSubEvents.Personal_Preferences_Updated]: {
+		userKey: string
+		value: PersonalPreferencesValue
+	}
 }

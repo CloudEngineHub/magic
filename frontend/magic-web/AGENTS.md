@@ -48,7 +48,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
   - **For existing components**: Use `createStyles` and `cx` helpers from `antd-style`; never import `classnames` or `clsx`
   - **Never mix**: Do not use Tailwind and antd-style in the same component
   - Tailwind config: `tailwind.config.ts`, CSS variables in `src/index.css`
-  - shadcn/ui config: `components.json` with aliases pointing to `@/components/shadcn-ui`, `@/lib/utils`, etc.
+  - shadcn/ui config: `components.json` with aliases pointing to `@/components/shadcn-ui`, `@/utils/cn`, etc.
 - All user-visible strings must use i18n keys. Update both `zh_CN` and `en_US` dictionaries together.
 - **i18n — React**: After `const { t } = useTranslation("namespace")`, only use **literal** keys, e.g. `t("common.confirm")`. Do not pass `t` as props or helper args typed as generic `string` keys—static tools lose track. Long copy: same file, inline right after `useTranslation`, or a `use*` hook that calls `useTranslation` itself.
 - **i18n — keys**: Keys must be **static full strings** (`t("a.b.c")`). Avoid building keys from variables, `+`, or template literals—tooling cannot see those. Use dynamic keys **only** when there is no workable literal-based design; add a short comment explaining why.

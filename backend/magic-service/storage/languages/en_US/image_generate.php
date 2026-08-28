@@ -77,6 +77,11 @@ return [
     'too_many_reference_images_limit_14' => 'Too many reference images, maximum allowed is 14',
     'too_many_reference_images_limit_3' => 'Too many reference images, maximum allowed is 3',
     'too_many_reference_images_limit' => 'Too many reference images, maximum allowed is :limit',
+    'reference_image_mime_type_unsupported' => 'The reference image MIME type is not supported',
+    'reference_image_single_size_exceeded' => 'A single reference image exceeds the Base64 transport limit',
+    'reference_image_total_size_exceeded' => 'The total reference image size exceeds the Base64 transport limit',
+    'reference_image_file_open_failed' => 'Failed to open the reference image file',
+    'reference_image_file_read_failed' => 'Failed to read the reference image file',
     'too_many_images_limit_1' => 'Image convert high definition only supports 1 image',
     'unsupported_output_format' => 'The current model does not support output format :format, supported formats are: :supported',
     'remove_background_image_required' => 'Image url is required for background removal',
@@ -98,4 +103,12 @@ return [
     ],
     # watermark
     'image_watermark' => 'website/static/img/watermark_en.png',
+    'gcs_bucket_not_configured' => 'Gcs bucket not configured',
+    'gcs_upload_failed' => 'Operation failed',
+    'image_convert_high_model_not_configured' => 'Image convert high model not configured',
+    'invalid_response_type' => 'Invalid value',
+    'upload_failed' => 'Operation failed',
+    'vertex_ai_does_not_support_file_upload' => 'Vertex ai does not support file upload',
+
+    'unsupported_image_format' => 'Unsupported image format',
 ];

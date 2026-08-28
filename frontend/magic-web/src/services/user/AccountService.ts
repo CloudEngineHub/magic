@@ -1,5 +1,6 @@
 import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { userStore } from "@/models/user"
+import { getHtmlPermissionGrantStore } from "@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import type { User } from "@/types/user"
 import { logger as Logger } from "@/utils/log"
 import { BroadcastChannelSender } from "@/broadcastChannel"
@@ -137,8 +138,60 @@ export class AccountService {
 	 * @description 账号移除
 	 * @param unionId
 	 */
+	invalidateSession = async ({ accountId }: { accountId?: string } = {}) => {
+		const currentAccountId = userStore.user.userInfo?.magic_id
+		const targetAccountId = accountId ?? currentAccountId
+		const accountRepository = new AccountRepository()
+		let cleanupStatus: "completed" | "partial" = "completed"
+		// Authentication has already failed on the server. This path only removes
+		// local session state and deliberately does not call remote logout or abort
+		// shared HTTP clients, so the auth event can always reach navigation.
+		try {
+			await getHtmlPermissionGrantStore().clear()
+		} catch (error) {
+			cleanupStatus = "partial"
+			logger.error({
+				eventKey: "clear_html_permission_grants_failed",
+				errorKind: "storage",
+				error,
+				message: "Failed to clear HTML permission grants during session invalidation",
+			})
+		}
+
+		if (targetAccountId) {
+			await accountRepository.deleteAccount(targetAccountId)
+			userStore.account.deleteAccount(targetAccountId)
+		}
+
+		if (targetAccountId !== currentAccountId && currentAccountId) return { cleanupStatus }
+
+		const user = new UserRepository()
+		await user.setAuthorization("")
+		userStore.user.setAuthorization(null)
+		userStore.user.setUserInfo(null)
+		this.service.get<UserService>("userService").setUserInfo(null)
+		this.service.get<UserService>("userService").removeOrganization()
+		await this.service.get<ConfigService>("configService").setClusterCode("")
+		MessageService.destroy()
+
+		return { cleanupStatus }
+	}
+
 	deleteAccount = async (unionId?: string) => {
 		logger.report("deleteAccount", new Error())
+		// Account removal is a security lifecycle event. Clear the shared consent cache even
+		// when another cached account remains, because stored grants intentionally have no plaintext owner ID.
+		try {
+			await getHtmlPermissionGrantStore().clear()
+		} catch (error) {
+			// Permission storage cleanup is best effort and must not prevent token removal or logout.
+			logger.error({
+				eventKey: "clear_html_permission_grants_failed",
+				errorKind: "storage",
+				error,
+				message: "Failed to clear HTML permission grants during account removal",
+			})
+		}
 		const allClean = async () => {
 			MessageService.destroy()
 

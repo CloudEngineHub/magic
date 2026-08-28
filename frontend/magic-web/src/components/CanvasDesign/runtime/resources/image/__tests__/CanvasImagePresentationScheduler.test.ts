@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { EventEmitter } from "../../../core/EventEmitter"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import type { ImageResourceVariant, LoadedResource } from "../ImageResourceManager"
 import {
 	CanvasImagePresentationScheduler,
@@ -96,8 +98,7 @@ describe("CanvasImagePresentationScheduler", () => {
 
 	function runNextFrame(): void {
 		const nextFrame = frameCallbacks.entries().next().value as
-			| [number, FrameRequestCallback]
-			| undefined
+			[number, FrameRequestCallback] | undefined
 		if (!nextFrame) return
 		const [frameId, callback] = nextFrame
 		frameCallbacks.delete(frameId)
@@ -107,6 +108,7 @@ describe("CanvasImagePresentationScheduler", () => {
 	function createScheduler(options?: {
 		consumers?: Map<string, TestConsumer>
 		cachedResources?: Map<string, LoadedResource>
+		resolveResourceReference?: ResolveCanvasResourceReference
 	}) {
 		const eventEmitter = new EventEmitter()
 		const consumers = options?.consumers ?? new Map<string, TestConsumer>()
@@ -117,7 +119,11 @@ describe("CanvasImagePresentationScheduler", () => {
 		)
 		const canvas = {
 			eventEmitter,
-			magicConfigManager: { config: { methods: {} } },
+			magicConfigManager: {
+				config: {
+					methods: { resolveResourceReference: options?.resolveResourceReference },
+				},
+			},
 			elementManager: {
 				getElementInstance: (elementId: string) => consumers.get(elementId),
 			},
@@ -130,6 +136,7 @@ describe("CanvasImagePresentationScheduler", () => {
 			>[0]["canvas"],
 		})
 		return {
+			canvas,
 			cachedResources,
 			consumers,
 			eventEmitter,
@@ -169,6 +176,47 @@ describe("CanvasImagePresentationScheduler", () => {
 				pendingCount: 0,
 			}),
 		)
+	})
+
+	it("applies a loaded alias immediately with the host resolver", () => {
+		const consumer = createConsumer()
+		const { eventEmitter, scheduler } = createScheduler({
+			consumers: new Map([["image-1", consumer]]),
+			resolveResourceReference: createTestResourceReferenceResolver(),
+		})
+		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/a.png")], "idle")
+		const preview = createResource("preview")
+
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "/画布A/images/a.png", resource: preview },
+		})
+		runNextFrame()
+
+		expect(consumer.applyPresentedResource).toHaveBeenCalledWith(preview, "preview")
+	})
+
+	it("rebuilds the path index when the host resolver semantics change", () => {
+		let currentCanvasWorkspacePath = "/画布A"
+		const resolveResourceReference: ResolveCanvasResourceReference = (input, options) =>
+			createTestResourceReferenceResolver({ currentCanvasWorkspacePath })(input, options)
+		const consumer = createConsumer()
+		const { eventEmitter, scheduler } = createScheduler({
+			consumers: new Map([["image-1", consumer]]),
+			resolveResourceReference,
+		})
+		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/a.png")], "idle")
+
+		currentCanvasWorkspacePath = "/画布B"
+		scheduler.handleResourceReferenceResolverChanged()
+		const preview = createResource("preview")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "/画布B/images/a.png", resource: preview },
+		})
+		runNextFrame()
+
+		expect(consumer.applyPresentedResource).toHaveBeenCalledWith(preview, "preview")
 	})
 
 	it("accepts directed full completions only for the matching target", () => {
@@ -214,6 +262,10 @@ describe("CanvasImagePresentationScheduler", () => {
 			data: { path: "./images/a.png", resource: createResource("preview") },
 		})
 		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/b.png")], "idle")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/a.png", resource: createResource("preview") },
+		})
 		runNextFrame()
 
 		expect(firstConsumer.applyPresentedResource).not.toHaveBeenCalled()

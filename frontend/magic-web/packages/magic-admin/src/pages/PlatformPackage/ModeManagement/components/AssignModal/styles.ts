@@ -24,6 +24,20 @@ export const useStyles = createStyles(({ prefixCls, css, token, isDarkMode }) =>
 		nameWrapper: css`
 			overflow: hidden;
 		`,
+		/* Keep the two-line model details flexible so long identifiers do not push out the drag handle. */
+		leftModelNameWrapper: css`
+			min-width: 0;
+			flex: 1;
+		`,
+		leftModelItem: css`
+			height: auto;
+			min-height: 64px;
+		`,
+		modelInfo: css`
+			min-width: 0;
+			flex: 1;
+			overflow: hidden;
+		`,
 		name: css`
 			text-overflow: ellipsis;
 			overflow: hidden;

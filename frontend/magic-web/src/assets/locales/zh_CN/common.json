@@ -1,4 +1,5 @@
 {
+	"backToTop": "回到顶部",
 	"broadcastChannel": {
 		"account": {
 			"cancel": "保持当前",
@@ -89,6 +90,8 @@
 		"chatSettings": "通讯设置",
 		"contacts": "通讯录",
 		"contactsAiAssistant": "通讯录/AI助理",
+		"contactsAssistantAi": "通讯录/AI助理",
+		"contactsMy": "通讯录/我的群组",
 		"contactsMyFriends": "通讯录/我的朋友",
 		"contactsMyGroups": "通讯录/我的群组",
 		"contactsOrganization": "通讯录/组织架构",

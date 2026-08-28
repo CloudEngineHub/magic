@@ -1,7 +1,7 @@
 import React from "react"
-import { Editor, JSONContent } from "@tiptap/react"
+import { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { IconArrowUp, IconArrowUpDashed } from "@tabler/icons-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import FlexBox from "@/components/base/FlexBox"
 import MagicIcon from "@/components/base/MagicIcon"
 import { isEmptyJSONContent } from "../utils"
@@ -96,13 +96,9 @@ type ButtonRenderer = (context: ButtonRendererContext) => React.ReactNode
 
 function getMessageTokenUsage(message: Record<string, unknown>): TokenUsage | undefined {
 	const node =
-		(superMagicStore.getMessageNode(message.app_message_id as string) as
+		(superMagicStore.getMessageNode(message.super_message_id as string) as
 			| Record<string, unknown>
-			| undefined) ||
-		(superMagicStore.getMessageNode(message.correlation_id as string) as
-			| Record<string, unknown>
-			| undefined) ||
-		(message.debug as Record<string, unknown> | undefined)
+			| undefined) || (message.debug as Record<string, unknown> | undefined)
 	const tokenUsage = node?.token_usage as TokenUsage | undefined
 
 	return tokenUsage && typeof tokenUsage.total_tokens === "number" ? tokenUsage : undefined

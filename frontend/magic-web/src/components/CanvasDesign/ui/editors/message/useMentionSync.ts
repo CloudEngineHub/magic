@@ -4,7 +4,13 @@ import { ImageElement as ImageElementClass } from "../../../runtime/elements/ima
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import type { UploadFileResponse } from "../../../public/magic-types"
 import type { MatchableMentionItem } from "./tiptap/contentUtils"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceFileName,
+	getCanvasResourceReferenceIdentity,
+} from "../../../runtime/shared/path/canvasResourcePath"
+import type { MessageEditorMentionChangeContext } from "./MessageEditor"
+import { reconcileMentionPathsWithPersistedReferences } from "./mentionPathReconciliation"
+import { reconcileProtectedReferencePaths } from "./reference-assets/referenceBinding"
 
 interface UseMentionSyncOptions {
 	canvas: Canvas | null
@@ -47,10 +53,20 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 	} = options
 
 	const syncVersionRef = useRef(0)
+	const previousPromptRef = useRef<{ elementId: string; prompt: string } | null>(null)
 
 	const syncMentionPaths = useCallback(
-		(paths: string[], currentPrompt: string) => {
+		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			const previousPrompt =
+				previousPromptRef.current?.elementId === elementId
+					? previousPromptRef.current.prompt
+					: undefined
+			previousPromptRef.current = { elementId, prompt: currentPrompt }
 			if (!canvas) return
+			const resolveResourceReference =
+				canvas.magicConfigManager.config?.methods?.resolveResourceReference
+			const getResourceIdentity = (path?: string) =>
+				getCanvasResourceReferenceIdentity(path, resolveResourceReference)
 
 			// 保护：paths 为空但 currentPrompt 中仍有 @ 时，可能是 @ 尚未解析为 mention 节点，不执行
 			if (paths.length === 0 && /@/.test(currentPrompt)) {
@@ -58,33 +74,68 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const elementInstance = canvas.elementManager.getElementInstance(elementId)
-			if (
-				!(
-					elementInstance instanceof ImageElementClass ||
-					elementInstance instanceof VideoElementClass
-				)
-			) {
+			if (!(
+				elementInstance instanceof ImageElementClass ||
+				elementInstance instanceof VideoElementClass
+			)) {
 				return
 			}
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
-			const currentPaths = new Set(currentInfos.map((info) => info.path))
-			const pathsSet = new Set(paths)
-			const protectedPathSet = new Set(protectedReferencePaths)
+			const effectiveProtectedReferencePaths = reconcileProtectedReferencePaths({
+				referenceFileInfos: currentInfos,
+				protectedReferencePaths,
+				currentPrompt,
+				previousPrompt,
+				source: context.source,
+				resolveResourceReference,
+			})
+			const reconciledPaths = reconcileMentionPathsWithPersistedReferences({
+				incomingPaths: paths,
+				persistedPaths: currentInfos.map((info) => info.path),
+				source: context.source,
+				resolveResourceReference,
+			})
+			const currentPathByIdentity = new Map(
+				currentInfos.map((info) => [getResourceIdentity(info.path), info.path]),
+			)
+			const mentionedPathIdentities = new Set(reconciledPaths.map(getResourceIdentity))
+			const protectedPathIdentities = new Set(
+				effectiveProtectedReferencePaths.map(getResourceIdentity),
+			)
+			const findMatchableItem = (path: string) => {
+				const identity = getResourceIdentity(path)
+				return matchableItems.find((item) => getResourceIdentity(item.path) === identity)
+			}
 
-			let pathsToAdd = paths.filter((path) => path && !currentPaths.has(path))
+			const pathsToAddIdentities = new Set<string>()
+			let pathsToAdd = reconciledPaths.filter((path) => {
+				const identity = getResourceIdentity(path)
+				if (
+					!identity ||
+					currentPathByIdentity.has(identity) ||
+					pathsToAddIdentities.has(identity)
+				) {
+					return false
+				}
+				pathsToAddIdentities.add(identity)
+				return true
+			})
 			const pathsToRemove = mentionSyncAddOnly
 				? []
-				: Array.from(currentPaths).filter(
-						(path) => !pathsSet.has(path) && !protectedPathSet.has(path),
-					)
-
+				: currentInfos
+						.map((info) => info.path)
+						.filter(
+							(path) =>
+								!mentionedPathIdentities.has(getResourceIdentity(path)) &&
+								!protectedPathIdentities.has(getResourceIdentity(path)),
+						)
 			// 限制场景下过滤 pathsToAdd
 			if (isReferenceFileLimitReached && maxReferenceFiles !== undefined) {
-				const currentPathsArray = Array.from(currentPaths)
+				const currentPathsArray = currentInfos.map((info) => info.path)
 				pathsToAdd = pathsToAdd.filter((path) => {
-					if (currentPathsArray.includes(path)) return true
-					const matchableItem = matchableItems.find((item) => item.path === path)
+					if (currentPathByIdentity.has(getResourceIdentity(path))) return true
+					const matchableItem = findMatchableItem(path)
 					if (matchableItem?.disabled) return false
 					const currentCount = currentPathsArray.length - pathsToRemove.length
 					if (currentCount >= maxReferenceFiles) return false
@@ -103,7 +154,7 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			})
 
 			pathsToAdd.forEach((path) => {
-				const matchableItem = matchableItems.find((item) => item.path === path)
+				const matchableItem = findMatchableItem(path)
 				if (matchableItem && !matchableItem.disabled) {
 					const newInfo: UploadFileResponse = {
 						path: matchableItem.path || path,
@@ -120,7 +171,6 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 					})
 				}
 			})
-
 			// 同步从 Element 拉取到 React state
 			syncFromElement()
 

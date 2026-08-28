@@ -1,9 +1,8 @@
-import { useResponsive } from "ahooks"
 import MagicSkeleton from "@/components/base/MagicSkeleton"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export default function AgentSettingsSkeleton() {
-	const { md } = useResponsive()
-	const isMobile = !md
+	const isMobile = useIsMobile()
 
 	if (isMobile) {
 		return (

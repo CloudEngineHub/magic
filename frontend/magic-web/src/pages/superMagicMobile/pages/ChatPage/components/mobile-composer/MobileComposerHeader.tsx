@@ -17,6 +17,8 @@ interface MobileComposerHeaderProps {
 	topicMode?: TopicMode
 	agentCode?: string | null
 	selectorVariant?: "default" | "claw"
+	showModeSelector?: boolean
+	showModelSelector?: boolean
 	messagesLength?: number
 	useChatTerminology?: boolean
 	sceneControlNode?: ReactNode
@@ -30,13 +32,16 @@ function MobileComposerHeaderComponent({
 	topicMode,
 	agentCode,
 	selectorVariant = "default",
+	showModeSelector = true,
+	showModelSelector = false,
 	messagesLength,
 	useChatTerminology,
 	sceneControlNode,
 	onModeChange,
 }: MobileComposerHeaderProps) {
 	const selectedScene = sceneStateStore.currentScene
-	const shouldShowSelector = selectorVariant !== "claw"
+	const shouldShowSelector = showModelSelector || (showModeSelector && selectorVariant !== "claw")
+	const effectiveSelectorVariant = showModelSelector ? "claw" : selectorVariant
 	const hasSceneContent =
 		Boolean(sceneControlNode) || Boolean(selectedScene) || Boolean(scenes?.length)
 
@@ -52,7 +57,7 @@ function MobileComposerHeaderComponent({
 					selectedProject={selectedProject}
 					topicMode={topicMode}
 					agentCode={agentCode}
-					selectorVariant={selectorVariant}
+					selectorVariant={effectiveSelectorVariant}
 					messagesLength={messagesLength}
 					useChatTerminology={useChatTerminology}
 					onModeChange={onModeChange}

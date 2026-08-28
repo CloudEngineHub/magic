@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.mcp._base import BaseMcpTool
@@ -17,16 +17,7 @@ class McpListServersParams(BaseToolParams):
 
 @tool(name="mcp_list_servers")
 class McpListServers(BaseMcpTool[McpListServersParams]):
-    """<!--zh
-    列出当前会话所有可用的 MCP 服务器（含连接状态、工具数量、工具名清单）。
-    用于 MCP 工作流的第一步——决定接下来要不要 connect / list_tools。
-    -->
-    List every MCP server available to the current chat. Each entry reports
-    its current status (connected | disconnected), the number of tools it
-    exposes, and the original tool names. Use this as the entry point of any
-    MCP workflow to decide whether the next step is connect_server or
-    list_tools.
-    """
+    """List chat-scoped MCP servers with connection status and tool counts."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None
@@ -43,11 +34,10 @@ class McpListServers(BaseMcpTool[McpListServersParams]):
     async def get_tool_detail(
         self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None
     ) -> Optional[ToolDetail]:
-        if not result.content or not result.ok:
-            return None
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name="mcp_servers.md", content=result.content),
+        return self._build_mcp_tool_detail(
+            result,
+            file_name="mcp_servers.md",
+            error_title="MCP server listing failed",
         )
 
     async def execute(

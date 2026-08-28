@@ -25,6 +25,7 @@ import {
 } from "@/pages/superMagicMobile/components/MobileDocumentTheme"
 import useMetaSet from "@/routes/hooks/useRoutesMetaSet"
 import { useAntdMobileLocale } from "@/hooks/useAntdMobileLocale"
+import useMonitorSoftKeyboard from "@/hooks/useMonitorSoftKeyboard"
 import MaintenanceNotice from "@/components/global/MaintenanceNotice"
 
 const MobileTabBar = lazy(() => import("./components/MobileTabBar"))
@@ -40,6 +41,10 @@ const BaseLayoutMobile = () => {
 	const location = useLocation()
 	const { styles, cx } = useStyles()
 	const antdMobileLocale = useAntdMobileLocale()
+	const { isUp: isSoftKeyboardOpen } = useMonitorSoftKeyboard({
+		// Restore the bottom safe area as soon as keyboard dismissal begins to avoid a second layout jump.
+		focusOutDelay: 0,
+	})
 
 	// Sync document.title from route meta, same as BaseLayoutPc (chat, contacts, Super Shell, etc.).
 	useMetaSet()
@@ -111,7 +116,8 @@ const BaseLayoutMobile = () => {
 							<MobileTabBar />
 						</Suspense>
 					)}
-					<GlobalSafeArea direction="bottom" />
+					{/* The docked software keyboard already covers the device bottom safe area. */}
+					{!isSoftKeyboardOpen && <GlobalSafeArea direction="bottom" />}
 				</div>
 				{/* <ComponentRender componentName={DefaultComponents.GlobalMobileSidebar} /> */}
 				<OrganizationSwitchPanel />

@@ -1,9 +1,14 @@
 import Konva from "konva"
 import { describe, expect, it, vi } from "vitest"
 import { ElementManager } from "../ElementManager"
-import type { LayerElement } from "../../../document/types"
+import type {
+	ElementType,
+	ElementUpdatePatch,
+	ImageElement,
+	LayerElement,
+} from "../../../document/types"
 import { CanvasDocumentIndex } from "../CanvasDocumentIndex"
-import { GenerationStatus } from "../../../../public/magic-types"
+import { GenerationStatus, type UploadFileResponse } from "../../../../public/magic-types"
 
 interface DragManagerHarness {
 	canvas: {
@@ -57,8 +62,147 @@ function createElement(id: string): LayerElement {
 		y: 0,
 		width: 100,
 		height: 100,
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+		contents: [{ contentId: `${id}-content` }],
 	}
 }
+
+describe("ElementManager element creation names", () => {
+	it("assigns the next unique name through the public create entry", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			doCreate: ReturnType<typeof vi.fn>
+			getElementsDict: ElementManager["getElementsDict"]
+			create: ElementManager["create"]
+		}
+		const existing = { ...createElement("existing"), name: "视频合并" }
+		manager.elements = new Map([[existing.id, { getData: () => existing }]])
+		manager.doCreate = vi.fn((element: LayerElement) => {
+			manager.elements.set(element.id, { getData: () => element })
+		})
+		manager.getElementsDict = () => ({ [existing.id]: existing })
+
+		manager.create({ ...createElement("new"), name: "视频合并" })
+
+		expect(manager.doCreate).toHaveBeenCalledWith(
+			expect.objectContaining({ name: "视频合并(1)" }),
+			{},
+		)
+	})
+
+	it("normalizes Frame dimensions at the public create boundary", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			doCreate: ReturnType<typeof vi.fn>
+			getElementsDict: ElementManager["getElementsDict"]
+			create: ElementManager["create"]
+		}
+		const frame: LayerElement = {
+			id: "frame",
+			type: "frame",
+			x: 10,
+			y: 20,
+			width: 101.2,
+			height: 99.4,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
+		}
+		manager.elements = new Map()
+		manager.doCreate = vi.fn((element: LayerElement) => {
+			manager.elements.set(element.id, { getData: () => element })
+		})
+		manager.getElementsDict = () => ({})
+
+		manager.create(frame)
+
+		expect(manager.doCreate).toHaveBeenCalledWith(
+			expect.objectContaining({ width: 102, height: 100 }),
+			{},
+		)
+	})
+})
+
+describe("ElementManager document loading", () => {
+	it("preserves persisted Frame dimensions during document loading", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			batchMode: boolean
+			elements: Map<string, unknown>
+			pendingEvents: unknown[]
+			clear: ReturnType<typeof vi.fn>
+			doCreate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			reorderTopLevelElements: ReturnType<typeof vi.fn>
+			replaceAll: ElementManager["replaceAll"]
+		}
+		const frame: LayerElement = {
+			id: "persisted-frame",
+			type: "frame",
+			x: 10,
+			y: 20,
+			width: 101.2,
+			height: 99.4,
+			activeContentId: "persisted-frame-content",
+			mainContentId: "persisted-frame-content",
+			contents: [{ contentId: "persisted-frame-content" }],
+		}
+		manager.batchMode = false
+		manager.elements = new Map()
+		manager.pendingEvents = []
+		manager.clear = vi.fn()
+		manager.doCreate = vi.fn()
+		manager.flush = vi.fn()
+		manager.reorderTopLevelElements = vi.fn()
+
+		manager.replaceAll([frame])
+
+		expect(manager.doCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: frame.id,
+				width: frame.width,
+				height: frame.height,
+			}),
+			{ batch: true },
+		)
+	})
+
+	it("continues loading after one element fails and records the issue", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			batchMode: boolean
+			elements: Map<string, unknown>
+			pendingEvents: unknown[]
+			clear: ReturnType<typeof vi.fn>
+			doCreate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			reorderTopLevelElements: ReturnType<typeof vi.fn>
+			replaceAll: ElementManager["replaceAll"]
+			getLastLoadIssues: ElementManager["getLastLoadIssues"]
+		}
+		manager.batchMode = false
+		manager.elements = new Map()
+		manager.pendingEvents = []
+		manager.clear = vi.fn()
+		manager.doCreate = vi.fn((element: LayerElement) => {
+			if (element.id === "broken") throw new Error("invalid video size")
+		})
+		manager.flush = vi.fn()
+		manager.reorderTopLevelElements = vi.fn()
+
+		manager.replaceAll([createElement("first"), createElement("broken"), createElement("last")])
+
+		expect(manager.doCreate).toHaveBeenCalledTimes(3)
+		expect(manager.getLastLoadIssues()).toEqual([
+			{
+				elementId: "broken",
+				elementType: "rectangle",
+				message: "invalid video size",
+			},
+		])
+		expect(manager.flush).toHaveBeenCalledOnce()
+		expect(manager.reorderTopLevelElements).toHaveBeenCalledOnce()
+	})
+})
 
 describe("ElementManager drag eligibility", () => {
 	it("keeps the selected element draggable in single selection", () => {
@@ -244,7 +388,14 @@ describe("ElementManager transform-safe full updates", () => {
 			y: 16,
 			width: 80,
 			height: 60,
-			status: GenerationStatus.Processing,
+			contents: [
+				{
+					contentId: "content-1",
+					status: GenerationStatus.Processing,
+				},
+			],
+			activeContentId: "content-1",
+			mainContentId: "content-1",
 		} as LayerElement
 		const updateElement = vi.fn((nextData: LayerElement) => {
 			elementData = nextData
@@ -280,8 +431,13 @@ describe("ElementManager transform-safe full updates", () => {
 			expect.objectContaining({
 				x: 140,
 				y: 180,
-				src: "target/image.png",
-				status: GenerationStatus.Completed,
+				contents: [
+					expect.objectContaining({
+						contentId: "content-1",
+						src: "target/image.png",
+						status: GenerationStatus.Completed,
+					}),
+				],
 			}),
 		)
 		expect(rerenderWhenTransformIdle).toHaveBeenCalledTimes(1)
@@ -329,7 +485,9 @@ describe("ElementManager container child lifecycle", () => {
 			y: 0,
 			width: 100,
 			height: 80,
-			src: "./images/child.png",
+			activeContentId: "child-content",
+			mainContentId: "child-content",
+			contents: [{ contentId: "child-content", src: "./images/child.png" }],
 		} as LayerElement
 		const frame = {
 			id: "frame-1",
@@ -338,6 +496,9 @@ describe("ElementManager container child lifecycle", () => {
 			y: 0,
 			width: 300,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [child],
 		} as LayerElement
 
@@ -351,18 +512,44 @@ describe("ElementManager container child lifecycle", () => {
 })
 
 describe("ElementManager document patch export", () => {
-	function createPatchManager(elements: LayerElement[], temporaryElementIds: string[] = []) {
+	function createPatchManager(
+		elements: LayerElement[],
+		temporaryElements: Array<{ id: string; kind?: "upload" | "generation-result" }> = [],
+	) {
 		const manager = Object.create(ElementManager.prototype) as {
 			elements: Map<string, { getData: () => LayerElement }>
-			temporaryElements: Set<string>
+			temporaryElements: Map<
+				string,
+				{
+					kind: "upload" | "generation-result"
+					historyPolicy: "include" | "exclude"
+					clipboardPolicy: "include" | "exclude"
+				}
+			>
 			documentIndex: CanvasDocumentIndex
 			exportDocumentPatch: ElementManager["exportDocumentPatch"]
 			exportDocument: ElementManager["exportDocument"]
+			filterElementsForClipboard: ElementManager["filterElementsForClipboard"]
 		}
 		manager.elements = new Map(
 			elements.map((element) => [element.id, { getData: () => element }]),
 		)
-		manager.temporaryElements = new Set(temporaryElementIds)
+		manager.temporaryElements = new Map(
+			temporaryElements.map(({ id, kind = "generation-result" }) => [
+				id,
+				kind === "upload"
+					? {
+							kind,
+							historyPolicy: "include" as const,
+							clipboardPolicy: "include" as const,
+						}
+					: {
+							kind,
+							historyPolicy: "exclude" as const,
+							clipboardPolicy: "exclude" as const,
+						},
+			]),
+		)
 		manager.documentIndex = new CanvasDocumentIndex()
 		return manager
 	}
@@ -375,7 +562,9 @@ describe("ElementManager document patch export", () => {
 			y: 24,
 			width: 80,
 			height: 60,
-			src: "./images/a.png",
+			activeContentId: "child-content",
+			mainContentId: "child-content",
+			contents: [{ contentId: "child-content", src: "./images/a.png" }],
 			runtimeOnly: true,
 		} as LayerElement
 		const frame = {
@@ -385,6 +574,9 @@ describe("ElementManager document patch export", () => {
 			y: 0,
 			width: 300,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [child],
 		} as LayerElement
 		const manager = createPatchManager([frame, child])
@@ -400,7 +592,7 @@ describe("ElementManager document patch export", () => {
 					element: expect.objectContaining({
 						id: "child-1",
 						type: "image",
-						src: "./images/a.png",
+						contents: [expect.objectContaining({ src: "./images/a.png" })],
 					}),
 				},
 			],
@@ -412,8 +604,8 @@ describe("ElementManager document patch export", () => {
 	})
 
 	it("skips deleted and temporary elements while preserving deleted ids", () => {
-		const temp = { id: "temp-1", type: "rectangle", x: 0, y: 0 } as LayerElement
-		const manager = createPatchManager([temp], ["temp-1"])
+		const temp = createElement("temp-1")
+		const manager = createPatchManager([temp], [{ id: "temp-1" }])
 
 		const patch = manager.exportDocumentPatch({
 			changedElementIds: ["deleted-1", "temp-1"],
@@ -433,11 +625,12 @@ describe("ElementManager document patch export", () => {
 			y: 24,
 			width: 80,
 			height: 60,
-			src: undefined,
+			activeContentId: "temp-content",
+			mainContentId: "temp-content",
+			contents: [{ contentId: "temp-content" }],
 		} as LayerElement
 		const child = {
-			id: "child-1",
-			type: "rectangle",
+			...createElement("child-1"),
 			x: 20,
 			y: 32,
 			width: 40,
@@ -450,9 +643,12 @@ describe("ElementManager document patch export", () => {
 			y: 0,
 			width: 300,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [tempChild, child],
 		} as LayerElement
-		const manager = createPatchManager([frame, tempChild, child], ["temp-child"])
+		const manager = createPatchManager([frame, tempChild, child], [{ id: "temp-child" }])
 
 		expect(manager.exportDocument()).toEqual({
 			elements: [
@@ -466,14 +662,12 @@ describe("ElementManager document patch export", () => {
 				}),
 			],
 		})
+		// 生成结果占位符即使在历史快照中也必须被排除。
 		expect(manager.exportDocument({ includeTemporary: true })).toEqual({
 			elements: [
 				expect.objectContaining({
 					id: "frame-1",
 					children: [
-						expect.objectContaining({
-							id: "temp-child",
-						}),
 						expect.objectContaining({
 							id: "child-1",
 						}),
@@ -481,5 +675,555 @@ describe("ElementManager document patch export", () => {
 				}),
 			],
 		})
+
+		const uploadManager = createPatchManager(
+			[frame, tempChild, child],
+			[{ id: "temp-child", kind: "upload" }],
+		)
+		expect(uploadManager.exportDocument({ includeTemporary: true })).toEqual({
+			elements: [
+				expect.objectContaining({
+					id: "frame-1",
+					children: [
+						expect.objectContaining({ id: "temp-child" }),
+						expect.objectContaining({ id: "child-1" }),
+					],
+				}),
+			],
+		})
+
+		expect(manager.filterElementsForClipboard([frame])).toEqual([
+			expect.objectContaining({
+				id: "frame-1",
+				children: [expect.objectContaining({ id: "child-1" })],
+			}),
+		])
+		expect(uploadManager.filterElementsForClipboard([frame])).toEqual([
+			expect.objectContaining({
+				id: "frame-1",
+				children: [
+					expect.objectContaining({ id: "temp-child" }),
+					expect.objectContaining({ id: "child-1" }),
+				],
+			}),
+		])
+	})
+})
+
+describe("ElementManager generation target commit", () => {
+	function createCommitManager(elementIds: string[]) {
+		const batchUpdate = vi.fn()
+		const emit = vi.fn()
+		const markGenerateImageRequestAsUser = vi.fn()
+		const temporaryElements = new Map(
+			elementIds.map((elementId) => [
+				elementId,
+				{
+					kind: "generation-result" as const,
+					historyPolicy: "exclude" as const,
+					clipboardPolicy: "exclude" as const,
+				},
+			]),
+		)
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			temporaryElements: typeof temporaryElements
+			batchUpdate: typeof batchUpdate
+			canvas: {
+				eventEmitter: { emit: typeof emit }
+				elementDetailsRuntimeManager: {
+					markGenerateImageRequestAsUser: typeof markGenerateImageRequestAsUser
+				}
+			}
+			commitGenerationTargets: ElementManager["commitGenerationTargets"]
+		}
+		manager.elements = new Map(elementIds.map((elementId) => [elementId, {}]))
+		manager.temporaryElements = temporaryElements
+		manager.batchUpdate = batchUpdate
+		manager.canvas = {
+			eventEmitter: { emit },
+			elementDetailsRuntimeManager: { markGenerateImageRequestAsUser },
+		}
+		return {
+			manager,
+			batchUpdate,
+			emit,
+			temporaryElements,
+			markGenerateImageRequestAsUser,
+		}
+	}
+
+	it("validates all targets before one batch update and converts them together", () => {
+		const { manager, batchUpdate, emit, temporaryElements, markGenerateImageRequestAsUser } =
+			createCommitManager(["image-1", "image-2"])
+		batchUpdate.mockImplementation(() => {
+			expect(temporaryElements.has("image-1")).toBe(true)
+			expect(temporaryElements.has("image-2")).toBe(true)
+			expect(emit).not.toHaveBeenCalled()
+		})
+
+		manager.commitGenerationTargets([
+			{
+				elementId: "image-1",
+				persistedPatch: {
+					status: "processing",
+					generateImageRequest: { image_id: "image-task-1" },
+				},
+			},
+			{ elementId: "image-2", persistedPatch: { status: "processing" } },
+		])
+
+		expect(batchUpdate).toHaveBeenCalledTimes(1)
+		expect(batchUpdate).toHaveBeenCalledWith(
+			[
+				{
+					id: "image-1",
+					data: {
+						status: "processing",
+						generateImageRequest: { image_id: "image-task-1" },
+					},
+				},
+				{ id: "image-2", data: { status: "processing" } },
+			],
+			{ silent: false, emitBatchUpdated: false },
+		)
+		expect(temporaryElements.size).toBe(0)
+		expect(emit).toHaveBeenCalledTimes(3)
+		expect(markGenerateImageRequestAsUser).toHaveBeenCalledWith(
+			"image-1",
+			"image-task-1",
+			undefined,
+		)
+		expect(emit).toHaveBeenLastCalledWith({
+			type: "element:batchupdated",
+			data: undefined,
+		})
+	})
+
+	it("does not mutate temporary markers when any target is invalid", () => {
+		const { manager, batchUpdate, temporaryElements } = createCommitManager(["image-1"])
+
+		expect(() =>
+			manager.commitGenerationTargets([
+				{ elementId: "image-1", persistedPatch: { status: "processing" } },
+				{ elementId: "missing", persistedPatch: { status: "processing" } },
+			]),
+		).toThrow("Element missing not found")
+		expect(batchUpdate).not.toHaveBeenCalled()
+		expect(temporaryElements.has("image-1")).toBe(true)
+	})
+
+	it("keeps generation targets temporary when the batch update fails", () => {
+		const { manager, batchUpdate, emit, temporaryElements, markGenerateImageRequestAsUser } =
+			createCommitManager(["image-1", "image-2"])
+		batchUpdate.mockImplementation(() => {
+			throw new Error("update failed")
+		})
+
+		expect(() =>
+			manager.commitGenerationTargets([
+				{ elementId: "image-1", persistedPatch: { status: "processing" } },
+				{ elementId: "image-2", persistedPatch: { status: "processing" } },
+			]),
+		).toThrow("update failed")
+		expect(temporaryElements.has("image-1")).toBe(true)
+		expect(temporaryElements.has("image-2")).toBe(true)
+		expect(markGenerateImageRequestAsUser).not.toHaveBeenCalled()
+		expect(emit).not.toHaveBeenCalled()
+	})
+})
+
+describe("ElementManager Content writes", () => {
+	it("routes image business field patches into the active Content", () => {
+		const manager = Object.create(ElementManager.prototype) as {
+			mergeElementData: (
+				currentData: LayerElement,
+				updates: ElementUpdatePatch,
+				elementId: string,
+			) => LayerElement
+		}
+		const current: ImageElement = {
+			id: "image-1",
+			type: "image",
+			activeContentId: "v1",
+			mainContentId: "v1",
+			contents: [{ contentId: "v1", src: "./images/v1.png" }],
+		}
+
+		const merged = manager.mergeElementData(current, { src: "./images/v2.png" }, current.id)
+		expect(merged.contents[0]).toEqual(
+			expect.objectContaining({ contentId: "v1", src: "./images/v2.png" }),
+		)
+	})
+
+	it("keeps node identity stable while merging Content patches", () => {
+		const manager = Object.create(ElementManager.prototype) as {
+			mergeElementData: (
+				currentData: LayerElement,
+				updates: ElementUpdatePatch & { id?: string; type?: ElementType },
+				elementId: string,
+			) => LayerElement
+		}
+		const current: ImageElement = {
+			id: "image-1",
+			type: "image",
+			activeContentId: "v1",
+			mainContentId: "v1",
+			contents: [{ contentId: "v1", src: "./images/v1.png" }],
+		}
+
+		const merged = manager.mergeElementData(
+			current,
+			{ id: current.id, type: current.type, src: "./images/next.png" },
+			current.id,
+		)
+		if (merged.type !== "image") throw new Error("Expected image Element")
+		expect(merged.id).toBe(current.id)
+		expect(merged.type).toBe(current.type)
+		expect(merged.contents[0]?.src).toBe("./images/next.png")
+	})
+
+	it("rejects creating an Element with invalid Content pointers before rendering", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			doCreate: (elementData: LayerElement, options: object) => void
+		}
+		const invalid: ImageElement = {
+			id: "image-1",
+			type: "image",
+			zIndex: 0,
+			activeContentId: "missing",
+			mainContentId: "content-1",
+			contents: [{ contentId: "content-1", src: "./images/a.png" }],
+		}
+
+		expect(() => manager.doCreate(invalid, {})).toThrow("Invalid v3 element data")
+	})
+
+	it("rejects updates that leave Content pointers invalid before mutating the Element", () => {
+		const current: ImageElement = {
+			id: "image-1",
+			type: "image",
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [{ contentId: "content-1", src: "./images/a.png" }],
+		}
+		const update = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<
+				string,
+				{ getData: () => LayerElement; getNode: () => null; update: typeof update }
+			>
+			doUpdate: (elementId: string, updates: Partial<LayerElement>, options: object) => void
+		}
+		manager.elements = new Map([
+			[
+				current.id,
+				{
+					getData: () => current,
+					getNode: () => null,
+					update,
+				},
+			],
+		])
+
+		expect(() =>
+			manager.doUpdate(current.id, { mainContentId: "missing" } as Partial<LayerElement>, {}),
+		).toThrow("Invalid v3 element data")
+		expect(update).not.toHaveBeenCalled()
+	})
+})
+
+describe("ElementManager batch update completion events", () => {
+	it("does not emit batchupdated when an update throws", () => {
+		const emit = vi.fn()
+		const current: ImageElement = {
+			id: "image-1",
+			type: "image",
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [{ contentId: "content-1", src: "./images/a.png" }],
+		}
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			batchMode: boolean
+			doUpdate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			canvas: { eventEmitter: { emit: typeof emit } }
+			batchUpdate: ElementManager["batchUpdate"]
+		}
+		manager.elements = new Map([["image-1", { getData: () => current }]])
+		manager.batchMode = false
+		manager.doUpdate = vi.fn(() => {
+			throw new Error("update failed")
+		})
+		manager.flush = vi.fn()
+		manager.canvas = { eventEmitter: { emit } }
+
+		expect(() =>
+			manager.batchUpdate([{ id: "image-1", data: { status: "processing" } }]),
+		).toThrow("update failed")
+		expect(manager.flush).toHaveBeenCalledOnce()
+		expect(emit).not.toHaveBeenCalled()
+	})
+
+	it("validates every batch target before applying any update", () => {
+		const image = (id: string): ImageElement => ({
+			id,
+			type: "image",
+			activeContentId: `${id}-content`,
+			mainContentId: `${id}-content`,
+			contents: [{ contentId: `${id}-content`, src: `./images/${id}.png` }],
+		})
+		const first = image("image-1")
+		const second = image("image-2")
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			batchMode: boolean
+			doUpdate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			batchUpdate: ElementManager["batchUpdate"]
+		}
+		manager.elements = new Map([
+			[first.id, { getData: () => first }],
+			[second.id, { getData: () => second }],
+		])
+		manager.batchMode = false
+		manager.doUpdate = vi.fn()
+		manager.flush = vi.fn()
+
+		expect(() =>
+			manager.batchUpdate([
+				{ id: first.id, data: { name: "valid" } },
+				{ id: second.id, data: { activeContentId: "missing" } as Partial<LayerElement> },
+			]),
+		).toThrow("Invalid v3 element data")
+		expect(manager.doUpdate).not.toHaveBeenCalled()
+		expect(manager.flush).not.toHaveBeenCalled()
+	})
+})
+
+describe("ElementManager temporary element creation", () => {
+	function createTemporaryManager() {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			temporaryElements: Map<string, unknown>
+			doCreate: ReturnType<typeof vi.fn>
+			doDelete: ReturnType<typeof vi.fn>
+			getElementsDict: ElementManager["getElementsDict"]
+			createTemporaryElement: ElementManager["createTemporaryElement"]
+		}
+		manager.elements = new Map()
+		manager.temporaryElements = new Map()
+		manager.doCreate = vi.fn()
+		manager.doDelete = vi.fn((elementId: string) => {
+			manager.elements.delete(elementId)
+			manager.temporaryElements.delete(elementId)
+		})
+		manager.getElementsDict = () => ({}) as Record<string, LayerElement>
+		return manager
+	}
+
+	it("marks an element temporary before creation can emit events", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+		manager.doCreate.mockImplementation(() => {
+			expect(manager.temporaryElements.has(element.id)).toBe(true)
+			expect(manager.temporaryElements.get(element.id)).toMatchObject({
+				kind: "generation-result",
+				historyPolicy: "exclude",
+				clipboardPolicy: "exclude",
+			})
+			manager.elements.set(element.id, { getData: () => element })
+		})
+
+		expect(manager.createTemporaryElement(element)).toMatchObject({ elementId: element.id })
+		expect(manager.doCreate).toHaveBeenCalledWith(element, {})
+	})
+
+	it("removes the temporary marker when creation fails", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+		manager.doCreate.mockImplementation(() => {
+			throw new Error("create failed")
+		})
+
+		expect(() => manager.createTemporaryElement(element)).toThrow("create failed")
+		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+
+	it("rolls back an element inserted before a later creation step fails", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+		manager.doCreate.mockImplementation(() => {
+			manager.elements.set(element.id, {})
+			throw new Error("mounted failed")
+		})
+
+		expect(() => manager.createTemporaryElement(element)).toThrow("mounted failed")
+		expect(manager.doDelete).toHaveBeenCalledWith(element.id, { suppressEvents: true })
+		expect(manager.elements.has(element.id)).toBe(false)
+		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+
+	it("removes the temporary marker when no element instance is created", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+
+		expect(() => manager.createTemporaryElement(element)).toThrow(
+			"Element temporary-1 could not be created",
+		)
+		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+
+	it("forwards the normalized upload result to temporary element completion callbacks", () => {
+		const element = createElement("temporary-upload-1")
+		const queueUpload = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			canvas: {
+				canvasFileUploadManager: { queueUpload: typeof queueUpload }
+			}
+			elements: Map<string, unknown>
+			createTemporaryElement: ReturnType<typeof vi.fn>
+			createTemporary: ElementManager["createTemporary"]
+		}
+		manager.canvas = { canvasFileUploadManager: { queueUpload } }
+		manager.elements = new Map()
+		manager.createTemporaryElement = vi.fn((elementData: LayerElement) => {
+			manager.elements.set(elementData.id, {})
+			return { elementId: elementData.id, element: elementData }
+		})
+		const onUploadComplete = vi.fn()
+
+		manager.createTemporary(element, {
+			uploadFiles: [new File(["audio"], "voice.mp3", { type: "audio/mpeg" })],
+			onUploadComplete,
+		})
+		const uploadResult: UploadFileResponse = {
+			path: "./audios/voice.mp3",
+			src: "https://example.test/voice.mp3",
+			fileName: "voice.mp3",
+		}
+		const queuedRequest = queueUpload.mock.calls[0]?.[0] as {
+			onUploadComplete: (result: UploadFileResponse) => void
+		}
+		queuedRequest.onUploadComplete(uploadResult)
+
+		expect(onUploadComplete).toHaveBeenCalledWith(element.id, uploadResult)
+	})
+})
+
+describe("ElementManager runtime-only generation deletion", () => {
+	it("notifies runtime subscribers without emitting a document change", () => {
+		const elementData = createElement("runtime-result")
+		const element = {
+			getData: () => elementData,
+			destroy: vi.fn(),
+		}
+		const runtimeCleanup = vi.fn()
+		const eventEmitter = {
+			emit: vi.fn((event: { type: string; data?: unknown }) => {
+				if (event.type === "element:deleted") runtimeCleanup(event.data)
+			}),
+		}
+		const emitElementChange = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, typeof element>
+			temporaryElements: Map<
+				string,
+				{
+					kind: "generation-result"
+					historyPolicy: "exclude"
+					clipboardPolicy: "exclude"
+				}
+			>
+			canvas: { eventEmitter: typeof eventEmitter }
+			findParentElement: ReturnType<typeof vi.fn>
+			markDocumentIndexDirty: ReturnType<typeof vi.fn>
+			invalidateGeometryForElement: ReturnType<typeof vi.fn>
+			scheduleContentLayerDraw: ReturnType<typeof vi.fn>
+			emitElementChange: typeof emitElementChange
+			delete: ElementManager["delete"]
+		}
+		manager.elements = new Map([[elementData.id, element]])
+		manager.temporaryElements = new Map([
+			[
+				elementData.id,
+				{
+					kind: "generation-result",
+					historyPolicy: "exclude",
+					clipboardPolicy: "exclude",
+				},
+			],
+		])
+		manager.canvas = { eventEmitter }
+		manager.findParentElement = vi.fn(() => null)
+		manager.markDocumentIndexDirty = vi.fn()
+		manager.invalidateGeometryForElement = vi.fn()
+		manager.scheduleContentLayerDraw = vi.fn()
+		manager.emitElementChange = emitElementChange
+
+		manager.delete(elementData.id)
+
+		expect(element.destroy).toHaveBeenCalledOnce()
+		expect(runtimeCleanup).toHaveBeenCalledWith({
+			elementId: elementData.id,
+			persistence: "runtime-only",
+		})
+		expect(emitElementChange).not.toHaveBeenCalled()
+	})
+
+	it("does not create a history entry when batch deleting only runtime placeholders", () => {
+		const historyManager = {
+			disable: vi.fn(),
+			enable: vi.fn(),
+			recordHistoryImmediate: vi.fn(),
+		}
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			temporaryElements: Map<
+				string,
+				{
+					kind: "generation-result"
+					historyPolicy: "exclude"
+					clipboardPolicy: "exclude"
+				}
+			>
+			canvas: {
+				historyManager: typeof historyManager
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			isBatchDeleting: boolean
+			pendingBatchDeleteChangeIds: Set<string>
+			isContentLayerDrawDeferred: boolean
+			doDelete: ReturnType<typeof vi.fn>
+			flushDeferredBatchDeleteEffects: ReturnType<typeof vi.fn>
+			batchDelete: ElementManager["batchDelete"]
+		}
+		manager.elements = new Map([["runtime-result", {}]])
+		manager.temporaryElements = new Map([
+			[
+				"runtime-result",
+				{
+					kind: "generation-result",
+					historyPolicy: "exclude",
+					clipboardPolicy: "exclude",
+				},
+			],
+		])
+		manager.canvas = {
+			historyManager,
+			eventEmitter: { emit: vi.fn() },
+		}
+		manager.isBatchDeleting = false
+		manager.pendingBatchDeleteChangeIds = new Set()
+		manager.isContentLayerDrawDeferred = false
+		manager.doDelete = vi.fn()
+		manager.flushDeferredBatchDeleteEffects = vi.fn()
+
+		manager.batchDelete(["runtime-result"])
+
+		expect(manager.doDelete).toHaveBeenCalledWith("runtime-result")
+		expect(historyManager.recordHistoryImmediate).not.toHaveBeenCalled()
+		expect(historyManager.enable).toHaveBeenCalled()
 	})
 })

@@ -7,8 +7,8 @@ import { withAssistantCard } from "../Card/AssistantCard"
 import { useMessageListContext } from "../../context"
 import { globalConfigStore } from "@/stores/globalConfig"
 import { getAvatarUrl } from "@/utils/avatar"
-import dayjs from "@/lib/dayjs"
-import { cn } from "@/lib/utils"
+import dayjs from "@/infrastructure/vendors/dayjs"
+import { cn } from "@/utils/cn"
 
 export interface WithNodeProps extends NodeProps {
 	role: string

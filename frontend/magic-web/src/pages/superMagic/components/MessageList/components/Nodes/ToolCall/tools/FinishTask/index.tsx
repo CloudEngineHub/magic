@@ -8,13 +8,18 @@ import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/compone
 
 function FinishTask(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 
 	const { styles, cx } = useStyle()
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
+		<div
+			className={styles.node}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
+		>
 			<div className={styles.container}>
 				<Flex className={cx(styles.tag)}>
 					<ToolIconBadge toolName={tool?.name} />

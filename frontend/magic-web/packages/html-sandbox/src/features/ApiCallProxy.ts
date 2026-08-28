@@ -13,6 +13,7 @@ import {
 	type RuntimeLoggerHub,
 	type RuntimeLogRecord,
 } from "../runtime/RuntimeLogger"
+import { serializeApiResult } from "./serializeApiResult"
 
 export type ApiCallStatus = "pending" | "success" | "error" | "timeout"
 
@@ -26,6 +27,9 @@ export interface ApiCallEntry {
 	endTime?: number
 	duration?: number
 	error?: string
+	/** Bounded, structured-clone-safe response value. */
+	result?: unknown
+	resultTruncated?: boolean
 }
 
 type ApiCallEntryListener = (entry: ApiCallEntry) => void
@@ -86,10 +90,10 @@ export class ApiCallProxy {
 				id: `api_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
 				api,
 				event,
-				details: details ? { ...details } : undefined,
 				status: "pending",
 				startTime: Date.now(),
 			}
+			this.applyDetails(entry, details)
 			this.pendingCalls.set(requestId, entry)
 			this.pushEntry(entry)
 			return
@@ -116,10 +120,7 @@ export class ApiCallProxy {
 				if (details?.error) {
 					pending.error = String(details.error)
 				}
-				// Merge any new details
-				if (details) {
-					pending.details = { ...pending.details, ...details }
-				}
+				this.applyDetails(pending, details)
 				this.pendingCalls.delete(requestId)
 				// Notify listener with updated entry
 				this.listener?.(pending)
@@ -129,7 +130,6 @@ export class ApiCallProxy {
 					id: `api_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
 					api,
 					event,
-					details: details ? { ...details } : undefined,
 					status:
 						event === "request:success"
 							? "success"
@@ -141,6 +141,7 @@ export class ApiCallProxy {
 					duration: 0,
 					error: details?.error ? String(details.error) : undefined,
 				}
+				this.applyDetails(entry, details)
 				this.pushEntry(entry)
 			}
 			return
@@ -151,13 +152,29 @@ export class ApiCallProxy {
 			id: `api_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
 			api,
 			event,
-			details: details ? { ...details } : undefined,
 			status: "success",
 			startTime: Date.now(),
 			endTime: Date.now(),
 			duration: 0,
 		}
+		this.applyDetails(entry, details)
 		this.pushEntry(entry)
+	}
+
+	private applyDetails(entry: ApiCallEntry, details?: Record<string, unknown>): void {
+		if (!details) return
+
+		const nextDetails = { ...details }
+		if (Object.prototype.hasOwnProperty.call(nextDetails, "result")) {
+			const serialized = serializeApiResult(nextDetails.result)
+			entry.result = serialized.value
+			entry.resultTruncated = serialized.truncated || undefined
+			delete nextDetails.result
+		}
+
+		if (Object.keys(nextDetails).length > 0) {
+			entry.details = { ...entry.details, ...nextDetails }
+		}
 	}
 
 	private pushEntry(entry: ApiCallEntry): void {

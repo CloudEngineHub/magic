@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { RecordingMarkdownContent } from "../RecordingMarkdownContent"
 import { RECORDING_TIME_CHIP_CLASS } from "../recording-markdown-components"
+import { resolveSingleImageUrl } from "@/pages/superMagic/utils/image-url-resolver"
+
+vi.mock("@/pages/superMagic/utils/image-url-resolver", () => ({
+	resolveSingleImageUrl: vi.fn(async (path: string) => `https://tos.invalid/${path}`),
+}))
 
 describe("RecordingMarkdownContent", () => {
 	it("mounts recording-md-prose with desktop modifier by default", () => {
@@ -34,6 +39,34 @@ describe("RecordingMarkdownContent", () => {
 		expect(root.querySelector(".recording-md-table-wrap table")).toBeInTheDocument()
 	})
 
+	it("resolves project-relative images before rendering", async () => {
+		render(
+			<RecordingMarkdownContent
+				content="![mock image](./images/mock-photo.png)"
+				layout="mobile"
+				attachments={[
+					{
+						file_id: "mock-image-file-id",
+						file_name: "mock-photo.png",
+						relative_file_path: "./images/mock-photo.png",
+					},
+				]}
+				relativeFilePath="./notes/mock-note.md"
+			/>,
+		)
+
+		await act(async () => {
+			await vi.waitFor(() => {
+				expect(resolveSingleImageUrl).toHaveBeenCalledWith(
+					"./images/mock-photo.png",
+					expect.any(Array),
+					"./notes/mock-note.md",
+				)
+			})
+		})
+		expect(screen.getByAltText("mock image")).toBeInTheDocument()
+	})
+
 	it("renders time links as light mono chips instead of solid pills", () => {
 		render(
 			<RecordingMarkdownContent
@@ -63,6 +96,42 @@ describe("RecordingMarkdownContent", () => {
 		expect(speakerLinks[0].className).not.toEqual(speakerLinks[1].className)
 		expect(speakerLinks[0].className).toMatch(/blue/)
 		expect(speakerLinks[1].className).toMatch(/orange/)
+	})
+
+	it("keeps speaker chips intact inside mobile headings", () => {
+		// Verify heading content still renders a single interactive chip with the edited label.
+		render(
+			<RecordingMarkdownContent
+				content="### 项目负责人（Speaker-1）——战略决策与资源统筹者"
+				layout="mobile"
+				speakerNameMap={{ "Speaker-1": "朗读者" }}
+				onSpeakerClick={() => undefined}
+			/>,
+		)
+
+		const heading = screen.getByRole("heading", { level: 3 })
+		const speakerChip = within(heading).getByTestId("recording-detail-speaker-link")
+
+		expect(speakerChip).toHaveAttribute("data-speaker-id", "Speaker-1")
+		expect(speakerChip).toHaveTextContent("朗读者")
+		expect(speakerChip).toHaveClass("recording-speaker-chip")
+	})
+
+	it("truncates long speaker labels while preserving the full tooltip value", () => {
+		// Verify long edited names remain available through the button title while the label can ellipsize in CSS.
+		render(
+			<RecordingMarkdownContent
+				content="### 负责人（Speaker-1）"
+				speakerNameMap={{ "Speaker-1": "这是一个非常长的讲述人名称示例" }}
+				onSpeakerClick={() => undefined}
+			/>,
+		)
+
+		const speakerChip = screen.getByTestId("recording-detail-speaker-link")
+		expect(speakerChip).toHaveAttribute("title", "这是一个非常长的讲述人名称示例")
+		expect(speakerChip.querySelector(".recording-speaker-chip-label")).toHaveTextContent(
+			"这是一个非常长的讲述人名称示例",
+		)
 	})
 
 	it("renders code-wrapped speaker ids as clickable speaker chips", () => {
@@ -116,7 +185,10 @@ describe("RecordingMarkdownContent", () => {
 		)
 
 		expect(container.textContent).not.toContain("MAGIC_PRESERVED_FRAGMENT")
-		expect(screen.getByText("Narrator")).toHaveAttribute("data-speaker-id", "Speaker-1")
+		expect(screen.getByTestId("recording-detail-speaker-link")).toHaveAttribute(
+			"data-speaker-id",
+			"Speaker-1",
+		)
 		expect(screen.getByText("00:22")).toHaveClass(RECORDING_TIME_CHIP_CLASS)
 
 		fireEvent.click(screen.getByText("Narrator"))

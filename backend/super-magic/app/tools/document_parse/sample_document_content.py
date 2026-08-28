@@ -38,27 +38,25 @@ from .path_utils import (
 class SampleDocumentContentParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要抽样阅读的文档绝对路径，不接受相对路径-->
-Absolute document path to sample. Relative paths are not accepted"""
+        description="Absolute document path to sample. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 输出目录的绝对路径，用于保存 samples/ 和 document.reading_state.json-->
-Absolute output directory for samples/ and document.reading_state.json"""
+        description="Absolute output directory for samples/ and document.reading_state.json."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选范围表达式，例如页码或 slide 范围 `1-3,8`-->
-Optional range expression such as pages or slides `1-3,8`"""
+        description="Optional range expression, such as pages or slides `1-3,8`."
+    )
+    goal: str = Field(
+        "",
+        description="Optional user goal used to recommend the document asset extraction strategy."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class SampleDocumentContent(AbstractFileTool[SampleDocumentContentParams], WorkspaceTool[SampleDocumentContentParams]):
-    """<!--zh: 抽样阅读文档，帮助大模型决定后续大文档阅读策略。-->
-    Sample document content so the model can choose the next reading strategy."""
-
-    code_mode_only = True
+    """Sample document content so the model can choose the next reading strategy."""
 
     async def execute(self, tool_context: ToolContext, params: SampleDocumentContentParams) -> ToolResult:
         """Write bounded document samples and update progressive reading state."""
@@ -83,6 +81,7 @@ class SampleDocumentContent(AbstractFileTool[SampleDocumentContentParams], Works
                 ranges=params.ranges,
                 max_units=DEFAULT_SAMPLE_MAX_UNITS,
                 include_images=True,
+                goal=params.goal,
             )
 
             if tool_context:
@@ -100,6 +99,10 @@ class SampleDocumentContent(AbstractFileTool[SampleDocumentContentParams], Works
             f"- Sample range: {result['sample_range']}",
             f"- Has extractable text: {signal['has_extractable_text']}",
             f"- Image dominant: {signal['image_dominant']}",
+            f"- Recommended asset strategy: {result['strategy_context']['recommended_strategy']}",
+            f"- Strategy confidence: {result['strategy_context'].get('confidence', 'unknown')}",
+            f"- Strategy decision: {result['strategy_context'].get('decision_mode', 'automatic')}",
+            f"- Score margin: {result['strategy_context'].get('score_margin', 0)}",
             f"- Recommended next actions: {'; '.join(result['recommendations'])}",
             f"- Reading state: `{output_dir}/document.reading_state.json`",
         ])
@@ -110,6 +113,7 @@ class SampleDocumentContent(AbstractFileTool[SampleDocumentContentParams], Works
                 "sample_path": result["sample_path"],
                 "sample_range": result["sample_range"],
                 "text_signal": signal,
+                "strategy_context": result["strategy_context"],
                 "recommendations": result["recommendations"],
                 "state": result["state"],
             },

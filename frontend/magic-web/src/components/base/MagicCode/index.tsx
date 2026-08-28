@@ -2,6 +2,7 @@ import { useControllableValue, useHover } from "ahooks"
 import { useThemeMode } from "antd-style"
 import { useTranslation } from "react-i18next"
 import { IconCheck, IconCopy } from "@tabler/icons-react"
+import { WrapText } from "lucide-react"
 import useClipboard from "react-use-clipboard"
 
 import MagicButton from "@/components/base/MagicButton"
@@ -13,6 +14,7 @@ import { useMessageRenderContext } from "@/components/business/MessageRenderProv
 import { useFontSize } from "@/providers/AppearanceProvider/hooks"
 import { useHighlight } from "./hooks/useHighlight"
 import { useStyles } from "./style"
+import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
 
 interface MagicCodeProps extends Omit<HTMLAttributes<HTMLDivElement>, "value" | "onChange"> {
 	data?: string
@@ -21,6 +23,7 @@ interface MagicCodeProps extends Omit<HTMLAttributes<HTMLDivElement>, "value" | 
 	isStreaming?: boolean
 	onChange?: (value: string) => void
 	copyText?: string
+	enableWrapToggle?: boolean
 }
 
 // 检测是否为触摸设备
@@ -37,6 +40,7 @@ const MagicCode = memo((props: MagicCodeProps) => {
 		className,
 		isStreaming = false,
 		copyText,
+		enableWrapToggle = false,
 		...rest
 	} = props
 	const [controllableValue] = useControllableValue<string>({
@@ -51,6 +55,11 @@ const MagicCode = memo((props: MagicCodeProps) => {
 	})
 
 	const { t } = useTranslation("interface")
+	const { isWrapped, toggle: toggleWrap } = useCodeBlockWrapPreference(enableWrapToggle)
+	const wrapLabel = t("chat.markdown.wrapCode")
+	const unwrapLabel = t("chat.markdown.unwrapCode")
+	const wrapActionLabel = isWrapped ? unwrapLabel : wrapLabel
+	const copyLabel = copyText ?? t("chat.markdown.copy")
 
 	const { appearance } = useThemeMode()
 
@@ -94,27 +103,57 @@ const MagicCode = memo((props: MagicCodeProps) => {
 			ref={codeContainer}
 			{...rest}
 		>
-			<MagicButton
-				hidden={!shouldShowButton}
-				type="text"
-				className={cx(styles.copy, "magic-code-copy")}
-				onClick={setCopied}
-				size="small"
-				icon={
-					<MagicIcon
-						color="currentColor"
-						component={isCopied ? IconCheck : IconCopy}
-						size={iconSize}
-					/>
-				}
-			>
-				{copyText ?? t("chat.markdown.copy")}
-			</MagicButton>
+			{shouldShowButton ? (
+				<div className={styles.actions}>
+					{enableWrapToggle ? (
+						<MagicButton
+							type="text"
+							className={cx(styles.action, "magic-code-wrap")}
+							onClick={toggleWrap}
+							size="small"
+							aria-label={wrapActionLabel}
+							aria-pressed={isWrapped}
+							tip={wrapActionLabel}
+							icon={<WrapText size={iconSize} />}
+						>
+							{enableWrapToggle ? null : wrapActionLabel}
+						</MagicButton>
+					) : null}
+					<MagicButton
+						type="text"
+						className={cx(styles.action, "magic-code-copy")}
+						onClick={setCopied}
+						size="small"
+						aria-label={copyLabel}
+						tip={copyLabel}
+						icon={
+							<MagicIcon
+								color="currentColor"
+								component={isCopied ? IconCheck : IconCopy}
+								size={iconSize}
+							/>
+						}
+					>
+						{enableWrapToggle ? null : copyLabel}
+					</MagicButton>
+				</div>
+			) : null}
 			{isLoading || isStreaming ? (
-				<code className={cx(styles.inner, styles.raw)}>{controllableValue?.trim()}</code>
+				<code
+					className={cx(
+						styles.inner,
+						styles.raw,
+						enableWrapToggle && (isWrapped ? styles.codeWrapped : styles.codeUnwrapped),
+					)}
+				>
+					{controllableValue?.trim()}
+				</code>
 			) : (
 				<div
-					className={styles.inner}
+					className={cx(
+						styles.inner,
+						enableWrapToggle && (isWrapped ? styles.codeWrapped : styles.codeUnwrapped),
+					)}
 					dangerouslySetInnerHTML={{
 						__html: data as string,
 					}}

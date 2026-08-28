@@ -4,7 +4,7 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { ToolIconBadge } from "../../shared/ToolIconConfig"
 
 function Init(props: NodeProps) {
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const { data } = tool?.detail || {}
 

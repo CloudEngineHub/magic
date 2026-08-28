@@ -1,23 +1,27 @@
 import { useRef, forwardRef, useCallback } from "react"
 import { useMount, useUnmount, useUpdateEffect } from "ahooks"
-import Zoom from "../../ui/canvas-editor/zoom/index"
+import ViewportControls from "../../ui/canvas-editor/viewport-controls"
 import Tools from "../../ui/toolbar/index"
 import Layers from "../../ui/layers/index"
-import ElementTools from "../../ui/element-toolbar/index"
+import ElementToolTopSurface from "../../ui/element-tools/surfaces/ElementToolTopSurface"
 import { useCanvas } from "../providers/CanvasProvider"
 import { useCanvasPanelUI } from "../providers/CanvasUIProvider"
 import { useLayersUI } from "../providers/LayersUIProvider"
 import { Canvas } from "../../runtime/core/Canvas"
-import ImageMessageEditor from "../../ui/editors/image/index"
-import VideoGenerateEditor from "../../ui/editors/video/index"
+import ImageMessageEditor from "../../ui/element-tools/editors/image/index"
+import VideoGenerateEditor from "../../ui/element-tools/editors/video/index"
 import MessageHistory from "../../ui/panels/history/index"
 import VideoFullscreenOverlay from "../../ui/fullscreen/video/index"
 import ImageElementFullscreenOverlay from "../../ui/fullscreen/image-element/index"
+import AudioElementFullscreenOverlay from "../../ui/fullscreen/audio-element/index"
+import MediaResourceFullscreenPreview from "../../ui/fullscreen/media-resource/index"
+import { getCanvasResourceFileName } from "../../runtime/shared/path/canvasResourcePath"
 import { useMagic } from "../providers/MagicProvider"
 import { toPlainObject } from "../../runtime/shared/ids"
 import type { CanvasDesignRef, CanvasDesignProps } from "../../public/props"
 import CanvasTips from "../../ui/panels/tips/index"
 import { FloatingUIProvider } from "../providers/FloatingUIProvider"
+import { BottomFloatingStackProvider } from "../providers/BottomFloatingStackProvider"
 import { useCanvasDesignRef } from "../hooks/canvas/useCanvasDesignRef"
 import { useCanvasEventListeners } from "../hooks/canvas/useCanvasEventListeners"
 import ImageCropPanel from "../../ui/panels/crop/index"
@@ -26,6 +30,7 @@ import ImageEraserPanel from "../../ui/panels/eraser/index"
 import ElementRenameOverlay from "../../ui/panels/rename/index"
 import ElementActionHints from "../../ui/panels/action-hints/index"
 import PluginPanel from "../../ui/panels/plugin/window/index"
+import ElementBottomToolbarHost from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarHost"
 
 import styles from "./index.module.css"
 
@@ -43,8 +48,11 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	const {
 		defaultData,
+		elementDetailsProvenance,
+		onElementDetailsProvenanceChange,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
+		onSelectionChange,
 		elementActionHints,
 		onElementActionHintAction,
 		connectionActionHints,
@@ -60,7 +68,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerRestored,
 	} = marker
 
-	const { autoLoadCacheViewport = true } = viewport
+	const { autoLoadCacheViewport = true, floatingBoundary = null } = viewport
 
 	const { canvas, setCanvas } = useCanvas()
 
@@ -68,7 +76,12 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	const { methods, permissions } = useMagic()
 
-	const { fullscreenMediaElement, setFullscreenMediaElement } = useCanvasPanelUI()
+	const {
+		fullscreenMediaElement,
+		setFullscreenMediaElement,
+		storyboardReferenceImagePreview,
+		setStoryboardReferenceImagePreview,
+	} = useCanvasPanelUI()
 
 	const canvasContainerRef = useRef<HTMLDivElement>(null)
 
@@ -88,6 +101,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
+		onSelectionChange,
 	})
 
 	// 更新视口偏移量
@@ -129,6 +143,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			getDevice: getDevice,
 			t: t,
 		})
+		canvasInstance.elementDetailsRuntimeManager.setOnChange(onElementDetailsProvenanceChange)
 
 		setCanvas(canvasInstance)
 		// 保存到 ref，确保卸载时能拿到实例
@@ -154,7 +169,10 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			}
 			// 使用传入的 defaultCanvasData 或默认空数据
 			// 兼容 useImmer 创建的 Proxy 对象，转换为普通对象
-			canvasInstance.loadDocument(defaultData ? toPlainObject(defaultData) : { elements: [] })
+			canvasInstance.loadDocument(
+				defaultData ? toPlainObject(defaultData) : { elements: [] },
+				{ elementDetailsProvenance },
+			)
 			// 从 storage 读取 viewport 信息并加载
 			if (methods?.getStorage) {
 				const storageData = methods.getStorage()
@@ -190,14 +208,23 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [t, canvas])
 
 	useUpdateEffect(() => {
+		canvas?.elementDetailsRuntimeManager.setOnChange(onElementDetailsProvenanceChange)
+	}, [canvas, onElementDetailsProvenanceChange])
+
+	useUpdateEffect(() => {
 		canvas?.updateDeviceInfo(getDevice)
 	}, [getDevice, canvas])
 
 	useUpdateEffect(() => {
-		canvas?.magicConfigManager.update({
+		const updateResult = canvas?.magicConfigManager.update({
 			methods: methods,
 			permissions: permissions,
 		})
+		if (updateResult?.resourceReferenceResolverChanged) {
+			canvas?.handleResourceReferenceResolverChanged({
+				changedWorkspacePaths: updateResult.resourceReferenceChangedPaths,
+			})
+		}
 		canvas?.invalidateMagicModelListCaches()
 	}, [methods, permissions, canvas, t])
 
@@ -206,39 +233,61 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	}, [layersCollapsed, layersWidth, canvas, updatePadding])
 
 	return (
-		<FloatingUIProvider canvas={canvas}>
-			<div ref={canvasContainerRef} className={styles.canvasContainer} />
-			<ElementActionHints
-				hints={elementActionHints}
-				onAction={onElementActionHintAction}
-				connectionHints={connectionActionHints}
-				onConnectionAction={onConnectionActionHintAction}
-			/>
-			{!readonly && <ElementRenameOverlay />}
-			{!readonly && <ElementTools />}
-			{!readonly && <ImageMessageEditor />}
-			{!readonly && <VideoGenerateEditor />}
-			{!readonly && <ImageCropPanel />}
-			{!readonly && <ImageExtendPanel />}
-			{!readonly && <ImageEraserPanel />}
-			<MessageHistory />
-			{fullscreenMediaElement?.type === "video" ? (
-				<VideoFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
+		<FloatingUIProvider canvas={canvas} floatingBoundary={floatingBoundary}>
+			<BottomFloatingStackProvider>
+				<div ref={canvasContainerRef} className={styles.canvasContainer} />
+				<ElementActionHints
+					hints={elementActionHints}
+					onAction={onElementActionHintAction}
+					connectionHints={connectionActionHints}
+					onConnectionAction={onConnectionActionHintAction}
 				/>
-			) : null}
-			{fullscreenMediaElement?.type === "image" ? (
-				<ImageElementFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
-				/>
-			) : null}
-			<Layers />
-			{!readonly && <Tools />}
-			{!readonly && <PluginPanel />}
-			{!readonly && <CanvasTips />}
-			<Zoom shareHostBottomChrome={shareHostBottomChrome} />
+				{!readonly && <ElementRenameOverlay />}
+				{!readonly && <ElementToolTopSurface />}
+				{!readonly && <ImageMessageEditor />}
+				{!readonly && <VideoGenerateEditor />}
+				{!readonly && <ElementBottomToolbarHost />}
+				{!readonly && <ImageCropPanel />}
+				{!readonly && <ImageExtendPanel />}
+				{!readonly && <ImageEraserPanel />}
+				<MessageHistory />
+				{fullscreenMediaElement?.type === "video" ? (
+					<VideoFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{fullscreenMediaElement?.type === "image" ? (
+					<ImageElementFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{fullscreenMediaElement?.type === "audio" ? (
+					<AudioElementFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{storyboardReferenceImagePreview ? (
+					<MediaResourceFullscreenPreview
+						resource={{
+							kind: "image",
+							path: storyboardReferenceImagePreview.path,
+							fileName:
+								getCanvasResourceFileName(storyboardReferenceImagePreview.path) ||
+								storyboardReferenceImagePreview.path,
+							crop: storyboardReferenceImagePreview.crop,
+						}}
+						onClose={() => setStoryboardReferenceImagePreview(null)}
+					/>
+				) : null}
+				<Layers />
+				{!readonly && <Tools />}
+				{!readonly && <PluginPanel />}
+				{!readonly && <CanvasTips />}
+				<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
+			</BottomFloatingStackProvider>
 		</FloatingUIProvider>
 	)
 })

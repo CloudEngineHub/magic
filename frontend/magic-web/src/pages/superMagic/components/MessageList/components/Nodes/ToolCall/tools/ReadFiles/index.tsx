@@ -45,7 +45,7 @@ export const getLanguageFromFileName = (fileName?: string, extension?: string): 
 
 function ReadFiles(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const fileData = tool?.detail?.data || {}
 
@@ -81,7 +81,12 @@ function ReadFiles(props: NodeProps) {
 	}
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
+		<div
+			className={styles.node}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
+		>
 			<div className={cx(styles.container, { [styles.containerActive]: open })}>
 				<div className={styles.nodeHeader}>
 					<Flex
@@ -104,7 +109,11 @@ function ReadFiles(props: NodeProps) {
 						)}
 					</Flex>
 					{tool.status !== "error" && (
-						<div className={cx(styles.button, "mr-[6px]")} onClick={toggle} data-testid="toggle">
+						<div
+							className={cx(styles.button, "mr-[6px]")}
+							onClick={toggle}
+							data-testid="toggle"
+						>
 							{open ? (
 								<ChevronUp
 									size={16}

@@ -339,7 +339,7 @@ class ResourceShareDomainService
     ): ResourceShareEntity {
         // 1. 查找是否已存在分享（通过 resource_id 查询，不校验 resource_type）
         // 这样可以避免类型转换(13↔12)时查询失败
-        $shareEntity = $this->getShareByResourceId($resourceId);
+        $shareEntity = $this->getShareByResourceIdWithTrashed($resourceId);
 
         // 2. 如果不存在，创建新的分享实体
         if (! $shareEntity) {
@@ -721,7 +721,7 @@ class ResourceShareDomainService
     {
         try {
             // 这里可以扩展为批量删除，目前先用单个删除
-            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType);
+            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType, false);
             if (! $shareEntity) {
                 return true;
             }
@@ -738,13 +738,15 @@ class ResourceShareDomainService
      * @param null|string $userId 当前用户ID（可以为null）
      * @param null|string $userOrganizationCode 当前用户组织编码（可以为null）
      * @param string $shareCode 分享code（用于错误提示）
+     * @param bool $validateOrganization 是否校验分享所属组织与当前用户组织一致，默认 true
      * @throws Exception 如果权限验证失败
      */
     public function validateShareAccess(
         ResourceShareEntity $shareEntity,
         ?string $userId,
         ?string $userOrganizationCode,
-        string $shareCode
+        string $shareCode,
+        bool $validateOrganization = true
     ): void {
         // 团队分享（share_type=2），根据 share_range 区分校验逻辑
         if ($shareEntity->getShareType() == ShareAccessType::TeamShare->value) {
@@ -752,8 +754,7 @@ class ResourceShareDomainService
                 ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$shareCode]);
             }
 
-            // 必须是同一组织
-            if ($shareEntity->getOrganizationCode() !== $userOrganizationCode) {
+            if ($validateOrganization && $shareEntity->getOrganizationCode() !== $userOrganizationCode) {
                 ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$shareCode]);
             }
 

@@ -27,12 +27,12 @@ use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ProviderConfigDomainService;
 use App\Domain\Provider\Service\ProviderModelDomainService;
+use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
-use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 
 /**
  * Mode 应用层公共基类。
@@ -113,6 +113,21 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
     protected function getModeDataIsolation(MagicUserAuthorization $authorization): ModeDataIsolation
     {
         return $this->createModeDataIsolation($authorization);
+    }
+
+    protected function isSystemDefaultAgent(string $identifier): bool
+    {
+        return $this->modeDomainService->isSystemDefaultAgent(
+            $this->createSystemDefaultAgentModeDataIsolation(),
+            $identifier
+        );
+    }
+
+    protected function createSystemDefaultAgentModeDataIsolation(): ModeDataIsolation
+    {
+        $dataIsolation = new ModeDataIsolation(OfficialOrganizationUtil::getOfficialOrganizationCode());
+        $dataIsolation->setOnlyOfficialOrganization(true);
+        return $dataIsolation;
     }
 
     /**

@@ -51,8 +51,17 @@ export function hasVideoGenerationRequestMediaIntent(
 	)
 }
 
-export function hasVideoGenerationRequestUserIntent(
+export function hasVideoGenerationRequestEstimateIntent(
 	request: Partial<GenerateVideoRequest> | null | undefined,
 ): boolean {
 	return Boolean(request?.prompt?.trim()) || hasVideoGenerationRequestMediaIntent(request)
+}
+
+export function hasVideoGenerationRequestSubmitIntent(
+	request: Partial<GenerateVideoRequest> | null | undefined,
+): boolean {
+	if (request?.generation_type === "canvas_composition") {
+		return Boolean(request.composition?.videos?.some((video) => video.path?.trim()))
+	}
+	return Boolean(request?.prompt?.trim())
 }

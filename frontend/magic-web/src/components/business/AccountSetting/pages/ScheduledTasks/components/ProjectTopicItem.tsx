@@ -10,10 +10,18 @@ interface ProjectTopicItemProps {
 	mode: "project" | "topic"
 	workspaceId: string
 	projectId?: string
+	autoSelectFirstOption?: boolean
 	onSelect?: (value: OptionItem | undefined) => void
 }
 
-function ProjectTopicItem({ mode, workspaceId, projectId, onSelect }: ProjectTopicItemProps) {
+/** Renders the optional project/topic form field with shared selection behavior. */
+function ProjectTopicItem({
+	mode,
+	workspaceId,
+	projectId,
+	autoSelectFirstOption = false,
+	onSelect,
+}: ProjectTopicItemProps) {
 	const { t } = useTranslation("interface")
 	const { styles } = useModifyStyles()
 
@@ -22,12 +30,7 @@ function ProjectTopicItem({ mode, workspaceId, projectId, onSelect }: ProjectTop
 			label={
 				<Flex gap={4} align="center">
 					{t(`accountPanel.timedTasks.${mode}`)}
-					<Form.Item
-						name={`${mode}_enabled`}
-						noStyle
-						valuePropName="checked"
-						initialValue={true}
-					>
+					<Form.Item name={`${mode}_enabled`} noStyle valuePropName="checked">
 						<MagicSwitch size="small" />
 					</Form.Item>
 				</Flex>
@@ -60,6 +63,7 @@ function ProjectTopicItem({ mode, workspaceId, projectId, onSelect }: ProjectTop
 								type={mode}
 								workspaceId={workspaceId}
 								projectId={projectId}
+								autoSelectFirstOption={autoSelectFirstOption}
 								onSelect={onSelect}
 							/>
 						</Form.Item>

@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { keyBy } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import { Check, ChevronRight, LogOut, Plus, SquareUserRound } from "lucide-react"
-import { useTranslation } from "react-i18next"
+import { useMainTranslation } from "@/hooks/i18n/useMainTranslation"
 import { useMemoizedFn } from "ahooks"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avatar"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -14,7 +14,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useAccount as useAccountHook } from "@/models/user/hooks"
 import openAccountModal from "@/pages/login/AccountModal"
 import { useClusterConfig } from "@/models/config/hooks"
@@ -29,11 +29,9 @@ import PersonalOrganizationAvatar from "@/assets/resources/personal-organization
 import TeamOrganizationAvatar from "@/assets/resources/team-organization-avatar.svg"
 import { getAvatarUrl } from "@/utils/avatar"
 import { toTestIdSegment } from "@/utils/testid"
-import { i18nStore } from "@/models/config/stores/i18n.store"
 
 export interface OrganizationListItemProps {
 	onClose?: () => void
-	organizationFilter?: (org: User.UserOrganization) => boolean
 }
 
 interface OrganizationOption {
@@ -41,10 +39,7 @@ interface OrganizationOption {
 	magicOrganization?: User.MagicOrganization
 }
 
-const getOrganizationOptions = (
-	account: User.UserAccount,
-	organizationFilter?: (org: User.UserOrganization) => boolean,
-): OrganizationOption[] => {
+const getOrganizationOptions = (account: User.UserAccount): OrganizationOption[] => {
 	const organizationMap = keyBy(account.organizations, "third_platform_organization_code")
 	return Object.values(organizationMap).map((o) => {
 		return {
@@ -55,13 +50,9 @@ const getOrganizationOptions = (
 }
 
 function OrganizationList(props: OrganizationListItemProps) {
-	const { onClose, organizationFilter } = props
-	const { t: tSuper } = useTranslation("super", {
-		i18n: i18nStore.i18n.instance,
-	})
-	const { t: tSidebar } = useTranslation("sidebar", {
-		i18n: i18nStore.i18n.instance,
-	})
+	const { onClose } = props
+	const { t: tSuper } = useMainTranslation("super")
+	const { t: tSidebar } = useMainTranslation("sidebar")
 
 	const { accounts } = useAccountHook()
 	const { clustersConfig } = useClusterConfig()
@@ -298,10 +289,7 @@ function OrganizationList(props: OrganizationListItemProps) {
 										className="w-full [&_[data-slot='scroll-area-scrollbar']]:bg-transparent"
 										viewportClassName="max-h-[50vh] pr-3 scroll-smooth [&>div]:!block"
 									>
-										{getOrganizationOptions(
-											currentAccount,
-											organizationFilter,
-										).map((option) =>
+										{getOrganizationOptions(currentAccount).map((option) =>
 											renderOrganizationItem(currentAccount, option, false),
 										)}
 									</ScrollArea>
@@ -314,7 +302,7 @@ function OrganizationList(props: OrganizationListItemProps) {
 						<>
 							{renderSectionLabel(tSidebar("organizationSwitch.otherAccount"))}
 							{otherAccounts.map((account) => {
-								const options = getOrganizationOptions(account, organizationFilter)
+								const options = getOrganizationOptions(account)
 								const accountIdSegment = toTestIdSegment(account.magic_id)
 								const otherAccountTestId = `user-menus-other-account-${accountIdSegment}`
 								const otherAccountMenuTestId = `user-menus-other-account-menu-${accountIdSegment}`

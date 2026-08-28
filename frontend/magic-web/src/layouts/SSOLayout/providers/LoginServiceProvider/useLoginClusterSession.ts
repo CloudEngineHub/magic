@@ -1,7 +1,14 @@
 import { useDeepCompareEffect, useMemoizedFn, useMount } from "ahooks"
+import { useRef } from "react"
 import { useImmer } from "use-immer"
 import type { ConfigService } from "@/services/config/ConfigService"
-import { LoginDeployment } from "@/pages/login/constants"
+import {
+	LoginDeployment,
+	LOGIN_STRATEGY_QUERY_KEY,
+	LoginValueKey,
+	PRIVATE_DEPLOYMENT_LOGIN_STRATEGY,
+	WIDGET_DEPLOYMENT_CODE_QUERY_KEY,
+} from "@/pages/login/constants"
 import { useClusterCode } from "@/providers/ClusterProvider"
 import { configStore } from "@/models/config"
 import type { ServiceContainer } from "@/services/ServiceContainer"
@@ -10,10 +17,42 @@ interface UseLoginClusterSessionParams {
 	service: ServiceContainer
 }
 
+/** Reads a Widget query value from the login URL or its post-login redirect target. */
+function getWidgetQueryValue(key: string) {
+	if (typeof window === "undefined") return ""
+	const loginUrl = new URL(window.location.href)
+	const directValue = loginUrl.searchParams.get(key)?.trim()
+	if (directValue) return directValue
+
+	const redirectUrl = loginUrl.searchParams.get(LoginValueKey.REDIRECT_URL)
+	if (!redirectUrl) return ""
+
+	try {
+		return new URL(redirectUrl, window.location.origin).searchParams.get(key)?.trim() ?? ""
+	} catch {
+		return ""
+	}
+}
+
+/** Reads the Widget deployment code that should be prefilled before a private deployment is selected. */
+function getWidgetDeploymentCode() {
+	return getWidgetQueryValue(WIDGET_DEPLOYMENT_CODE_QUERY_KEY)
+}
+
+/** Checks whether the Widget explicitly requested the private deployment login form. */
+function hasPrivateDeploymentLoginStrategy() {
+	return getWidgetQueryValue(LOGIN_STRATEGY_QUERY_KEY) === PRIVATE_DEPLOYMENT_LOGIN_STRATEGY
+}
+
 export function useLoginClusterSession(params: UseLoginClusterSessionParams) {
 	const { service } = params
 	// 登录页当前会话使用的局部 cluster / Login-scoped cluster for the current login session.
 	const { clusterCode, setClusterCode } = useClusterCode()
+	// Keep the unconfirmed Widget value separate from clusterCode, which controls requests and account switching.
+	const prefilledDeploymentCode = getWidgetDeploymentCode()
+	const isPrivateDeploymentWidget = hasPrivateDeploymentLoginStrategy()
+	// Clear a remembered deployment only once so a user-confirmed code can become the active cluster.
+	const shouldClearCachedCluster = useRef(isPrivateDeploymentWidget)
 	// 控制当前展示公网还是私有化登录 UI / Controls whether the current UI shows public or private login.
 	const [deployment, setDeployment] = useImmer(LoginDeployment.PublicDeploymentLogin)
 
@@ -29,6 +68,12 @@ export function useLoginClusterSession(params: UseLoginClusterSessionParams) {
 	})
 
 	useMount(() => {
+		if (isPrivateDeploymentWidget) {
+			// Keep the Widget code out of clusterCode until confirmation so it cannot change requests or caches.
+			setDeployment(LoginDeployment.PrivateDeploymentLogin)
+			return
+		}
+
 		// `clusterCodeCache` 表示记住的私有化登录偏好。
 		// 它决定登录页初始展示，但不代表请求已经切到该私有化环境 /
 		// `clusterCodeCache` is the remembered private login preference.
@@ -49,6 +94,13 @@ export function useLoginClusterSession(params: UseLoginClusterSessionParams) {
 			return
 		}
 
+		if (shouldClearCachedCluster.current) {
+			// Prevent an old cached cluster from replacing the unconfirmed Widget form value.
+			setClusterCode("")
+			shouldClearCachedCluster.current = false
+			return
+		}
+
 		// 切回私有化登录时，把缓存私有码恢复到当前登录页局部 cluster /
 		// Private login restores the remembered private code into the login-scoped
 		// cluster for the current page session.
@@ -66,6 +118,7 @@ export function useLoginClusterSession(params: UseLoginClusterSessionParams) {
 	return {
 		clusterCode,
 		deployment,
+		prefilledDeploymentCode,
 		showPrivateDeployment,
 		showPublicDeployment,
 		setPrivateClusterCode,

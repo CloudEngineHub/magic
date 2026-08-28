@@ -1,7 +1,7 @@
 import Konva from "konva"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ElementCornerActionsDecorator } from "../ElementCornerActionsDecorator"
-import { COLORS } from "../../image/ImageElement.config"
+import { COLORS, IMAGE_CONFIG } from "../../image/ImageElement.config"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<(event: { data?: unknown }) => void>>()
@@ -138,6 +138,7 @@ describe("ElementCornerActionsDecorator", () => {
 			clearRect: vi.fn(),
 			fillRect: vi.fn(),
 			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
 			scale: vi.fn(),
 		} as unknown as CanvasRenderingContext2D)
 	})
@@ -303,6 +304,120 @@ describe("ElementCornerActionsDecorator", () => {
 		buttonBg?.fire("touchend", { evt: new Event("touchend") })
 		expect(buttonBg?.fill()).toBe(COLORS.BUTTON_BG)
 		expect(canvas.cursorManager.restoreToolCursor).not.toHaveBeenCalled()
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("reuses the image corner-action visual system for label actions", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas } = createCanvasMock({ hoveredElementId: "image-1" })
+		let label = "替换"
+		let enabled = true
+		let visible = true
+		const onClick = vi.fn()
+		const decorator = new ElementCornerActionsDecorator(group, {
+			elementId: "image-1",
+			canvas: canvas as never,
+			width: 120,
+			height: 80,
+			actions: [
+				{
+					key: "replace",
+					placement: "top-right",
+					label: () => label,
+					minWidth: 40,
+					isEnabled: () => enabled,
+					isVisible: () => visible,
+					disabledCursor: "not-allowed",
+					onClick,
+				},
+			],
+		})
+
+		decorator.create()
+
+		const root = group.findOne<Konva.Group>(".decorator-corner-actions")
+		const action = group.findOne<Konva.Group>(".decorator-corner-action-replace")
+		const visual = group.findOne<Konva.Group>(".decorator-corner-action-replace-visual")
+		const background = group.findOne<Konva.Rect>(".decorator-corner-action-replace-button")
+		const hit = group.findOne<Konva.Rect>(".decorator-corner-action-replace-hit")
+
+		expect(root?.visible()).toBe(true)
+		expect(action?.size()).toEqual({ width: 40, height: 24 })
+		expect(action?.position()).toEqual({ x: 72, y: 8 })
+		expect(background?.size()).toEqual({ width: 40, height: 24 })
+		expect(background?.cornerRadius()).toBe(IMAGE_CONFIG.CORNER_RADIUS)
+		expect(background?.fill()).toBe(COLORS.BUTTON_BG)
+		expect(hit?.size()).toEqual({ width: 56, height: 44 })
+
+		hit?.fire("mouseenter")
+		expect(background?.fill()).toBe(COLORS.BUTTON_BG_HOVER)
+		expect(canvas.cursorManager.setTemporary).toHaveBeenCalledWith("pointer")
+
+		hit?.fire("mousedown", {
+			evt: { clientX: 120, clientY: 48, stopPropagation: vi.fn() },
+		})
+		expect(background?.fill()).toBe("rgba(0, 0, 0, 0.95)")
+		expect(visual?.scaleX()).toBe(0.94)
+		expect(onClick).toHaveBeenCalledWith({ clientX: 120, clientY: 48 })
+
+		hit?.fire("mouseup", { evt: new Event("mouseup") })
+		expect(background?.fill()).toBe(COLORS.BUTTON_BG_HOVER)
+		expect(visual?.scaleX()).toBe(1)
+
+		label = "Replace"
+		decorator.refresh()
+		expect(background?.width()).toBe(72)
+		expect(hit?.width()).toBe(88)
+
+		enabled = false
+		decorator.refresh()
+		hit?.fire("mouseenter")
+		expect(action?.opacity()).toBe(0.55)
+		expect(canvas.cursorManager.setTemporary).toHaveBeenLastCalledWith("not-allowed")
+		hit?.fire("mousedown", { evt: new Event("mousedown") })
+		expect(onClick).toHaveBeenCalledTimes(1)
+
+		visible = false
+		decorator.refresh()
+		expect(action?.visible()).toBe(false)
+		expect(root?.visible()).toBe(false)
+
+		decorator.destroy()
+		stage.destroy()
+	})
+
+	it("lays out multiple actions at the same corner without overlap", () => {
+		const { group, stage } = createStageGroup()
+		const { canvas } = createCanvasMock({ hoveredElementId: "image-1" })
+		const decorator = new ElementCornerActionsDecorator(group, {
+			elementId: "image-1",
+			canvas: canvas as never,
+			width: 120,
+			height: 80,
+			actions: [
+				{
+					key: "info",
+					placement: "top-right",
+					icon: "fullscreen",
+					onClick: vi.fn(),
+				},
+				{
+					key: "replace",
+					placement: "top-right",
+					label: "替换",
+					onClick: vi.fn(),
+				},
+			],
+		})
+
+		decorator.create()
+
+		const info = group.findOne<Konva.Group>(".decorator-corner-action-info")
+		const replace = group.findOne<Konva.Group>(".decorator-corner-action-replace")
+		expect(info?.position()).toEqual({ x: 88, y: 8 })
+		expect(replace?.position()).toEqual({ x: 44, y: 8 })
 
 		decorator.destroy()
 		stage.destroy()

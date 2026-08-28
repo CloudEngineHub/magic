@@ -18,12 +18,15 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Cron\CronExpression;
 use DateTime;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Assembler\TaskConfigAssembler;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MessageScheduleEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\OpenMessageScheduleEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\Query\OpenMessageScheduleQuery;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\MessageScheduleDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\TimeConfigDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\OpenMessageScheduleDetailDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\OpenMessageScheduleListItemDTO;
@@ -54,6 +57,7 @@ class OpenMessageScheduleAppService extends AbstractAppService
         private readonly FileDomainService $fileDomainService,
         private readonly TranslatorInterface $translator,
         private readonly TaskSchedulerDomainService $taskSchedulerDomainService,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         LoggerFactory $loggerFactory,
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -76,6 +80,7 @@ class OpenMessageScheduleAppService extends AbstractAppService
                 $entity->getOpenAgentCode()
             )
         );
+        $this->assertMessageContentAgentAccess($dataIsolation, $entity->getMessageContent());
 
         // 业务校验当前用户是否有权限访问这个topic话题
         $this->getAccessibleProjectWithEditor(
@@ -174,6 +179,10 @@ class OpenMessageScheduleAppService extends AbstractAppService
                 }
 
                 $this->applyOpenMessageContentUpdates($messageSchedule, $entity, $dataIsolation);
+                $this->assertMessageContentAgentAccess(
+                    $dataIsolation,
+                    $messageSchedule->getMessageContent()
+                );
 
                 if ($entity->hasEnabledInput()) {
                     $oldEnabled = $messageSchedule->getEnabled();
@@ -556,6 +565,26 @@ class OpenMessageScheduleAppService extends AbstractAppService
         }
 
         return false;
+    }
+
+    /** 校验 OpenAPI 定时消息的模式与员工/Claw code。 */
+    private function assertMessageContentAgentAccess(DataIsolation $dataIsolation, array $messageContent): void
+    {
+        $superAgent = $messageContent['extra']['super_agent'] ?? [];
+        $topicPattern = trim((string) ($superAgent['topic_pattern'] ?? 'general'));
+        $agentCode = trim((string) ($superAgent['agent_code'] ?? ''));
+
+        [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+            SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            ),
+            $topicPattern,
+            $agentCode
+        );
+        if (! $allowed) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
+        }
     }
 
     private function buildOpenMessageSuperAgentExtra(

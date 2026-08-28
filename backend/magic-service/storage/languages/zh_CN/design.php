@@ -57,6 +57,8 @@ return [
         'timeout' => '视频生成超时',
         'invalid_status' => '视频生成状态异常',
         'first_poll_dispatch_failed' => '视频任务调度失败',
+        'composition_videos_required' => '画布合成至少需要一个视频文件',
+        'estimate_failed' => '操作失败',
     ],
     'third_party_service_error' => '第三方服务错误',
     'attributes' => [
@@ -77,6 +79,12 @@ return [
         'canvas_path' => '扩展画布图片路径',
         'mark' => '标记位置',
         'mark_coordinate' => '标记坐标',
+        'area' => '请求处理失败',
+        'area_coordinate' => '请求处理失败',
+        'image_generation_config' => '请求处理失败',
+        'number' => '请求处理失败',
+        'resolution' => '请求处理失败',
+        'type' => '请求处理失败',
     ],
     'validation' => [
         'reference_images_max' => '参考图片最多只能上传20张',
@@ -84,5 +92,8 @@ return [
         'reference_image_options_max_10' => '参考图片选项最多只能传10项',
         'mark_size' => '标记位置必须包含恰好2个坐标 (x, y)',
         'mark_coordinate_range' => '标记坐标必须在0到1之间',
+        'area_coordinate_range' => '请求处理失败',
+        'area_size' => '请求处理失败',
+        'type_invalid' => '参数无效',
     ],
 ];

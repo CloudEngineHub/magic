@@ -1,8 +1,8 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import { SuperMagicApi } from "@/apis"
 import { clipboard } from "@/utils/clipboard-helpers"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -17,7 +17,7 @@ import { ResourceType, ShareType } from "../Share/types"
 import { generateSharePassword, generateTopicShareMessageText } from "../Share/utils"
 import { SharePasswordField } from "../Share/ShareFields"
 import { useStyles } from "./styles"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ShareListRefreshType } from "@/pages/superMagic/components/ShareManagement/types"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -592,8 +592,7 @@ function TopicSharePopover({
 	children,
 	onSaveSuccess,
 }: TopicSharePopoverProps) {
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const hasDataChangedRef = useRef(false)
 
 	// 处理数据变更标记
@@ -701,9 +700,9 @@ function TopicSharePopover({
 					}
 				}}
 				onFocusOutside={(e) => {
-					// Touch-first desktop layouts can move focus outside during a tap without
-					// expressing a user dismissal intent, so keep the PC popover open.
-					if (isMagicApp || isNoHoverCoarsePointer()) {
+					// Embedded SDK iframes can move focus to the host document during a tap,
+					// which is not an intentional dismissal of the desktop popover.
+					if (isMagicApp || isNoHoverCoarsePointer() || window.parent !== window) {
 						e.preventDefault()
 					}
 				}}

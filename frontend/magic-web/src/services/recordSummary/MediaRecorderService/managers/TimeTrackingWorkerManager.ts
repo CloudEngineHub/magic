@@ -10,6 +10,8 @@
 import type { LoggerInterface } from "../types/RecorderDependencies"
 import TimeTrackingWorker from "../workers/time-tracking-worker?worker"
 
+const WORKER_DELAY_WARNING_COOLDOWN_MS = 60_000
+
 /**
  * Callback function for time check events
  * 时间检查事件的回调函数
@@ -32,6 +34,16 @@ interface TimeCheckMessage {
 	timestamp: number
 }
 
+export interface TimeTrackingWorkerDiagnostics {
+	isRunning: boolean
+	interval: number | null
+	messageCount: number
+	lastMessageTimestamp: number | null
+	lastMessageInterval: number | null
+	lastWorkerTimestamp: number | null
+	lastDeliveryDelay: number | null
+}
+
 /**
  * TimeTrackingWorkerManager manages Web Worker for background time tracking
  * TimeTrackingWorkerManager 管理用于后台时间追踪的 Web Worker
@@ -39,6 +51,13 @@ interface TimeCheckMessage {
 export class TimeTrackingWorkerManager {
 	private worker: Worker | null = null
 	private callback: TimeCheckCallback | null = null
+	private messageCount = 0
+	private lastMessageTimestamp: number | null = null
+	private lastMessageInterval: number | null = null
+	private lastWorkerTimestamp: number | null = null
+	private lastDeliveryDelay: number | null = null
+	private interval: number | null = null
+	private lastDelayedWarningTimestamp: number | null = null
 
 	constructor(private readonly logger: LoggerInterface) {}
 
@@ -51,6 +70,14 @@ export class TimeTrackingWorkerManager {
 	 */
 	start(callback: TimeCheckCallback, interval: number = 1000): void {
 		try {
+			this.messageCount = 0
+			this.lastMessageTimestamp = null
+			this.lastMessageInterval = null
+			this.lastWorkerTimestamp = null
+			this.lastDeliveryDelay = null
+			this.interval = interval
+			this.lastDelayedWarningTimestamp = null
+			const heartbeatMessageInterval = Math.max(1, Math.ceil(60000 / interval))
 			// Create Worker using Vite's ?worker import
 			// 使用 Vite 的 ?worker import 创建 Worker
 			this.worker = new TimeTrackingWorker()
@@ -61,6 +88,45 @@ export class TimeTrackingWorkerManager {
 			// 设置消息处理器
 			this.worker.onmessage = (event: MessageEvent<TimeCheckMessage>) => {
 				if (event.data.type === "timeCheck") {
+					const now = Date.now()
+					this.lastMessageInterval = this.lastMessageTimestamp
+						? now - this.lastMessageTimestamp
+						: null
+					this.lastMessageTimestamp = now
+					this.lastWorkerTimestamp = event.data.timestamp
+					this.lastDeliveryDelay = now - event.data.timestamp
+					this.messageCount++
+					if (
+						this.messageCount === 1 ||
+						this.messageCount % heartbeatMessageInterval === 0
+					) {
+						this.logger.log("TimeTrackingWorker heartbeat", {
+							interval,
+							messageCount: this.messageCount,
+							lastMessageInterval: this.lastMessageInterval,
+							workerTimestamp: this.lastWorkerTimestamp,
+							deliveryDelay: this.lastDeliveryDelay,
+						})
+					}
+					if (
+						this.lastMessageInterval !== null &&
+						this.lastMessageInterval > interval * 2 &&
+						(this.lastDelayedWarningTimestamp === null ||
+							now - this.lastDelayedWarningTimestamp >=
+								WORKER_DELAY_WARNING_COOLDOWN_MS)
+					) {
+						this.logger.warn("TimeTrackingWorker message delayed", {
+							interval,
+							actualInterval: this.lastMessageInterval,
+							messageCount: this.messageCount,
+						})
+						this.lastDelayedWarningTimestamp = now
+					} else if (
+						this.lastMessageInterval !== null &&
+						this.lastMessageInterval <= interval * 2
+					) {
+						this.lastDelayedWarningTimestamp = null
+					}
 					this.callback?.()
 				}
 			}
@@ -68,7 +134,12 @@ export class TimeTrackingWorkerManager {
 			// Handle worker errors
 			// 处理 Worker 错误
 			this.worker.onerror = (error) => {
-				this.logger.error("TimeTrackingWorker error:", error)
+				this.logger.error({
+					eventKey: "time_tracking_worker_failed",
+					errorKind: "worker",
+					error: error,
+					message: "TimeTrackingWorker error:",
+				})
 			}
 
 			// Start periodic checking
@@ -81,7 +152,17 @@ export class TimeTrackingWorkerManager {
 
 			this.logger.log("TimeTrackingWorker started", { interval })
 		} catch (error) {
-			this.logger.error("Failed to start TimeTrackingWorker:", error)
+			this.logger.error({
+				eventKey: "start_time_tracking_worker_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Failed to start TimeTrackingWorker:",
+			})
+			this.worker?.terminate()
+			this.worker = null
+			this.callback = null
+			this.interval = null
+			this.lastDelayedWarningTimestamp = null
 			// Don't throw - allow system to work without Worker fallback
 			// 不抛出异常 - 允许系统在没有 Worker 兜底的情况下工作
 		}
@@ -105,12 +186,31 @@ export class TimeTrackingWorkerManager {
 				// 终止 Worker
 				this.worker.terminate()
 			} catch (error) {
-				this.logger.error("Error stopping TimeTrackingWorker:", error)
+				this.logger.error({
+					eventKey: "stopping_time_tracking_worker_failed",
+					errorKind: "worker",
+					error: error,
+					message: "Error stopping TimeTrackingWorker:",
+				})
 			}
 
 			this.worker = null
 			this.callback = null
+			this.interval = null
+			this.lastDelayedWarningTimestamp = null
 			this.logger.log("TimeTrackingWorker stopped")
+		}
+	}
+
+	getDiagnostics(): TimeTrackingWorkerDiagnostics {
+		return {
+			isRunning: this.isRunning(),
+			interval: this.interval,
+			messageCount: this.messageCount,
+			lastMessageTimestamp: this.lastMessageTimestamp,
+			lastMessageInterval: this.lastMessageInterval,
+			lastWorkerTimestamp: this.lastWorkerTimestamp,
+			lastDeliveryDelay: this.lastDeliveryDelay,
 		}
 	}
 

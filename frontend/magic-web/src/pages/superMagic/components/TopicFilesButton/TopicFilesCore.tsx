@@ -2,7 +2,7 @@ import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react
 import { Loader2, ChevronDown } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { useMemo, useImperativeHandle, forwardRef, useRef } from "react"
+import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -11,8 +11,9 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import CustomTree from "./components/CustomTree/CustomTree"
 import EmptyState from "./components/EmptyState"
 import { useStyles } from "./style"
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { useSuperMagicDropdown } from "../SuperMagicDropdown"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import {
 	useRename,
 	useFileOperations,
@@ -43,7 +44,10 @@ import {
 	useCrossProjectMoveCompensation,
 } from "./hooks"
 import { useFileShortcuts } from "./hooks/useFileShortcuts"
-import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import {
+	useCrossProjectFileOperation,
+	type CrossProjectOperationSuccessResult,
+} from "./hooks/useCrossProjectFileOperation"
 import { useImportFromOtherProject } from "./hooks/useImportFromOtherProject"
 import CrossProjectFileOperationModal from "../SelectPathModal/components/CrossProjectFileOperationModal"
 import ImportFromOtherProjectModal from "../SelectPathModal/components/ImportFromOtherProjectModal"
@@ -68,6 +72,7 @@ import { DuplicateFileModal } from "./components/DuplicateFileModal"
 import { FolderConflictModal } from "./components/FolderConflictModal"
 import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
+import { TopicFileIcon } from "./components/TopicFileIcon"
 import {
 	ProjectFileImagePreviewProvider,
 	resolveProjectFileImagePreviewSource,
@@ -105,7 +110,10 @@ import { DetailType } from "../Detail/types"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
 import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
-import { isMagicSystemFolder } from "./utils/magic-system-folder"
+import {
+	isMagicSystemFolder,
+	resolveProjectInstructionsFileKind,
+} from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
 import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
@@ -113,6 +121,15 @@ import {
 	shouldEnableTopicFileSelection,
 	shouldShowMobileBatchActions,
 } from "./utils/batch-selection"
+import { isSlidesTemplateFolder, toSlidesTemplatePreviewItem } from "./utils/slides-template-folder"
+import { SlidesTemplateFolderIcon } from "./components/SlidesTemplateFolderIcon"
+import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
+import { getAttachmentKey } from "./utils/getAttachmentKey"
+
+export interface TopicFilesExpansionState {
+	hasExpandableFolders: boolean
+	allFoldersExpanded: boolean
+}
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -120,6 +137,9 @@ interface TopicFilesCoreProps {
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	fileFilters?: {
 		documents: boolean
 		multimedia: boolean
@@ -134,6 +154,7 @@ interface TopicFilesCoreProps {
 	onSelectAll?: () => void
 	onDeselectAll?: () => void
 	onSelectionChange?: (selectedCount: number, totalCount: number) => void
+	onExpansionStateChange?: (state: TopicFilesExpansionState) => void
 	allowEdit?: boolean
 	onUpdateAttachments?: () => void
 	afterAddFileToNewTopic?: () => void
@@ -152,17 +173,29 @@ interface TopicFilesCoreProps {
 	// 外部传入的搜索值
 	externalSearchValue?: string
 	// 自定义菜单项过滤器
-	filterMenuItems?: (menuItems: any[]) => any[]
+	filterMenuItems?: (menuItems: any[], item?: AttachmentItem) => any[]
 	// 自定义批量下载菜单过滤器
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读分享场景中的已登录用户复制文件到自己的项目
+	allowCopyTo?: boolean
 	// Allow a read-only host such as a public share to expose batch selection without login.
 	allowReadonlySelection?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	// 刷新加载状态
 	refreshLoading?: boolean
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
+	/** 文件树所属空间及其能力配置。 */
+	spaceConfig?: TopicFilesSpaceConfig
+	/** 判断节点是否允许参与移动和多选等变更操作。 */
+	isItemSelectable?: (item: AttachmentItem) => boolean
+	/** 特殊文件空间允许操作的固定根目录。 */
+	operationRoot?: AttachmentItem
 }
+
+const DEFAULT_ITEM_SELECTABLE = () => true
 
 // 定义 ref 暴露的方法接口
 export interface TopicFilesCoreRef {
@@ -175,6 +208,7 @@ export interface TopicFilesCoreRef {
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
 	openBatchMoveByFileIds: (fileIds: string[]) => void
+	toggleAllFolders: () => void
 	resetAllStates: () => void
 }
 
@@ -185,6 +219,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setUserSelectDetail,
 		onFileClick,
 		projectId,
+		shareCode,
+		sharePassword,
+		onCrossProjectOperationSuccess,
 		fileFilters = {
 			documents: true,
 			multimedia: true,
@@ -197,6 +234,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isSelectMode = false,
 		onSelectModeChange,
 		onSelectionChange,
+		onExpansionStateChange,
 		allowEdit = true,
 		onUpdateAttachments,
 		afterAddFileToNewTopic,
@@ -213,30 +251,39 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		allowDownload,
+		allowCopyTo = false,
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
+		onSaveSlidesTemplate,
+		onConvertToSlidesTemplate,
+		spaceConfig,
+		isItemSelectable = DEFAULT_ITEM_SELECTABLE,
+		operationRoot,
 	},
 	ref,
 ) {
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
+	const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 	// Mobile layouts and no-hover desktop touch layouts must keep file actions reachable.
 	const shouldShowInlineFileAction = isMobile || isNoHoverCoarsePointer()
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = Boolean(userStore.user?.userInfo?.user_id)
-	const selectionEnabled = shouldEnableTopicFileSelection({
+	const selectionEnabledByPermission = shouldEnableTopicFileSelection({
 		isSelectMode,
 		allowEdit,
 		allowDownload,
+		allowCopyTo,
 		hasLogin,
 		allowReadonlySelection,
 	})
+	const selectionEnabled = capabilities.multiSelect && selectionEnabledByPermission
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
-	const canUseDesktopCrossProjectMove = projects.length > 0 && !isChatProject && !isMobile
+	const canUseDesktopCrossProjectMove = capabilities.crossProject && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
 	const downloadProgress = useDownloadProgress()
 
@@ -260,9 +307,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const sharedDuplicateHandler = externalDuplicateHandler || internalDuplicateHandler
 
 	// 拖拽上传 hook
-	const { handleUploadFiles } = useDragUpload({
-		allowUpload: allowEdit,
+	const { handleUploadFiles: handleUploadFilesInternal } = useDragUpload({
+		allowUpload: allowEdit && capabilities.upload,
 		projectId,
+		fileScope: spaceConfig?.scope,
 		selectedProject,
 		selectedTopic,
 		workspaceId,
@@ -299,8 +347,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const {
-		handleUploadFile,
-		handleUploadFolder,
+		handleUploadFile: handleUploadFileInternal,
+		handleUploadFolder: handleUploadFolderInternal,
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
@@ -330,6 +378,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		attachments,
 		selectedTopic,
 		projectId,
+		fileScope: spaceConfig?.scope,
 		// 添加文件创建成功回调
 		onFileCreated: (fileItem: any) => {
 			console.log("🔵 文件创建成功回调:", fileItem)
@@ -394,7 +443,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setVirtualFileName,
 		errorMessage: fileErrorMessage,
 		virtualInputRef: virtualFileInputRef,
-		createVirtualFile,
+		createVirtualFile: createVirtualFileInternal,
 		cancelVirtualFile,
 		handleVirtualFileKeyDown,
 		mergeVirtualFiles,
@@ -414,7 +463,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setVirtualFolderName,
 		errorMessage: folderErrorMessage,
 		virtualInputRef: virtualFolderInputRef,
-		createVirtualFolder,
+		createVirtualFolder: createVirtualFolderInternal,
 		cancelVirtualFolder,
 		handleVirtualFolderKeyDown,
 		mergeVirtualFolders,
@@ -427,6 +476,46 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		onFolderCreate: createFolderAndUpload,
 		onAttachmentsChange,
 	})
+
+	/** 获取特殊文件空间固定根目录的标准路径。 */
+	const operationRootPath = useMemo(() => {
+		if (!operationRoot) return undefined
+
+		const rootName = operationRoot.file_name || operationRoot.name || operationRoot.filename
+		return operationRoot.relative_file_path || (rootName ? `/${rootName}` : undefined)
+	}, [operationRoot])
+
+	/** 在未指定父目录时，将新文件创建到特殊文件空间的固定根目录。 */
+	const createVirtualFile = useMemoizedFn(
+		(type: PresetFileType, key?: string, parentPath?: string) => {
+			createVirtualFileInternal(
+				type,
+				key ?? operationRoot?.file_id,
+				parentPath ?? operationRootPath,
+			)
+		},
+	)
+
+	/** 在未指定父目录时，将新目录创建到特殊文件空间的固定根目录。 */
+	const createVirtualFolder = useMemoizedFn((key?: string, parentPath?: string) => {
+		createVirtualFolderInternal(key ?? operationRoot?.file_id, parentPath ?? operationRootPath)
+	})
+
+	/** 在未指定目标目录时，将文件选择上传定位到特殊文件空间的固定根目录。 */
+	const handleUploadFile = useMemoizedFn((item?: AttachmentItem) => {
+		handleUploadFileInternal(item ?? operationRoot)
+	})
+
+	/** 在未指定目标目录时，将目录选择上传定位到特殊文件空间的固定根目录。 */
+	const handleUploadFolder = useMemoizedFn((item?: AttachmentItem) => {
+		handleUploadFolderInternal(item ?? operationRoot)
+	})
+
+	/** 在未指定拖拽目标时，将外部文件上传到特殊文件空间的固定根目录。 */
+	const handleUploadFiles = useMemoizedFn(
+		(files: File[], targetItem: AttachmentItem | undefined, isFolder: boolean) =>
+			handleUploadFilesInternal(files, targetItem ?? operationRoot, isFolder),
+	)
 
 	const {
 		editingVirtualId: editingVirtualDesignProjectId,
@@ -517,6 +606,83 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			selectedProjectId: selectedProject?.id || projectId,
 		})
 
+	// 复用现有索引收集非空目录，避免在大文件树上再次递归 attachments。
+	const expandableFolderKeys = useMemo(() => {
+		const folderKeys: string[] = []
+		treeIndex.childKeysByKey.forEach((childKeys, key) => {
+			if (childKeys.length > 0) folderKeys.push(key)
+		})
+		return folderKeys
+	}, [treeIndex])
+	const expansionState = useMemo<TopicFilesExpansionState>(() => {
+		const hasExpandableFolders = expandableFolderKeys.length > 0
+		return {
+			hasExpandableFolders,
+			allFoldersExpanded:
+				hasExpandableFolders &&
+				expandableFolderKeys.every((key) => expandedKeySet.has(key)),
+		}
+	}, [expandableFolderKeys, expandedKeySet])
+
+	// 项目切换时也重新上报，避免 Header 沿用上一个项目的展开摘要。
+	useEffect(() => {
+		onExpansionStateChange?.(expansionState)
+	}, [expansionState, onExpansionStateChange, projectId])
+
+	const toggleAllFolders = useMemoizedFn(() => {
+		setExpandedKeys(expansionState.allFoldersExpanded ? [] : expandableFolderKeys)
+	})
+
+	const getFolderSubtreeKeys = useMemoizedFn((item: AttachmentItem): string[] => {
+		const folderEntry =
+			treeIndex.getEntryById(item.file_id) || treeIndex.getEntryByKey(getAttachmentKey(item))
+		if (!folderEntry) return []
+
+		return [folderEntry.key, ...treeIndex.getDescendantKeysByKey(folderEntry.key)]
+	})
+
+	const getExpandableFolderSubtreeKeys = useMemoizedFn((item: AttachmentItem): string[] => {
+		// 展开状态只需要目录 key，文件节点无需写入 expandedKeys。
+		return getFolderSubtreeKeys(item).filter(
+			(key) => (treeIndex.childKeysByKey.get(key)?.length || 0) > 0,
+		)
+	})
+
+	const isFolderContentsExpanded = useMemoizedFn((item: AttachmentItem): boolean => {
+		const expandableSubtreeKeys = getExpandableFolderSubtreeKeys(item)
+		return (
+			expandableSubtreeKeys.length > 0 &&
+			expandableSubtreeKeys.every((key) => expandedKeySet.has(key))
+		)
+	})
+
+	const handleExpandFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		const expandableSubtreeKeys = getExpandableFolderSubtreeKeys(item)
+		if (expandableSubtreeKeys.length === 0) return
+
+		setExpandedKeys((currentKeys) =>
+			Array.from(new Set([...currentKeys.map(String), ...expandableSubtreeKeys])),
+		)
+	})
+
+	const handleCollapseFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		const subtreeKeySet = new Set(getFolderSubtreeKeys(item))
+		if (subtreeKeySet.size === 0) return
+
+		setExpandedKeys((currentKeys) =>
+			currentKeys.filter((key) => !subtreeKeySet.has(String(key))),
+		)
+	})
+
+	const handleToggleFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		if (isFolderContentsExpanded(item)) {
+			handleCollapseFolderContents(item)
+			return
+		}
+
+		handleExpandFolderContents(item)
+	})
+
 	// 文件定位 hook
 	const { locatingFileId } = useLocateFile({
 		treeIndex,
@@ -543,6 +709,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		selectionEnabled,
 		onSelectionChange,
 		onSelectModeChange,
+		isItemSelectable,
 	})
 
 	// 文件分享 hook
@@ -603,20 +770,20 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleTreeNodeDragOver,
 		handleTreeNodeDrop,
 	} = useDragMove({
-		allowMove: allowEdit,
+		allowMove: allowEdit && capabilities.move,
 		onMoveFiles: async (fileIds: string[], targetFolderId: string | null) => {
 			if (fileIds.length === 0) return
 
 			await moveFileHook.batchMoveFilesWithDuplicateCheck({
 				fileIds,
 				projectId: selectedProject?.id || projectId || "",
-				targetParentId: targetFolderId || "",
+				targetParentId: targetFolderId || operationRoot?.file_id || "",
 			})
 		},
 		debug: process.env.NODE_ENV === "development",
 		isMoving: moveFileHook.isMoving, // 传递移动状态
 		// 外部文件上传支持
-		allowExternalDrop: allowEdit,
+		allowExternalDrop: allowEdit && capabilities.upload,
 		onUploadFiles: handleUploadFiles,
 	})
 
@@ -629,7 +796,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 		// 检查所有被拖拽的文件是否已经在根目录
 		for (const item of dragState.draggingItems) {
-			if (isInRootDirectory(item)) {
+			const isInOperationRoot = operationRoot
+				? String(item.parent_id || "") === String(operationRoot.file_id || "")
+				: isInRootDirectory(item)
+			if (isInOperationRoot) {
 				return false // 如果有任何文件已经在根目录，则不允许移动到根目录
 			}
 		}
@@ -656,7 +826,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleFileListAreaDragEnd,
 		handleFileListAreaDrop,
 	} = useFileListAreaDrag({
-		allowEdit,
+		allowEdit: allowEdit && (capabilities.move || capabilities.upload),
 		// 传递新的拖拽移动处理器
 		handleFileDragEnter: handleDragEnter,
 		handleFileDragLeave: handleDragLeave,
@@ -665,7 +835,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		// 传递检查函数
 		canMoveToRoot,
 		// 外部文件上传支持
-		allowExternalDrop: allowEdit,
+		allowExternalDrop: allowEdit && capabilities.upload,
 		onUploadFiles: handleUploadFiles,
 	})
 
@@ -695,8 +865,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getItemId,
 		afterAddFileToCurrentTopic,
 		afterAddFileToNewTopic,
-		selectedWorkspace,
-		selectedProject,
+		selectedWorkspace: spaceConfig?.chatContext?.selectedWorkspace ?? selectedWorkspace,
+		selectedProject: spaceConfig?.chatContext?.selectedProject ?? selectedProject,
+		createAttachmentMention: spaceConfig?.chatContext?.createAttachmentMention,
 	})
 
 	// 确认移动：交由 hook 内部批量处理
@@ -713,17 +884,23 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				return
 			}
 
-			await moveFileHook.confirmMove({ path })
+			const targetPath = path.length === 0 && operationRoot ? [operationRoot] : path
+			await moveFileHook.confirmMove({ path: targetPath })
 		},
 	)
 
 	// 跨项目文件操作 Hook
 	const crossProjectOperation = useCrossProjectFileOperation({
 		projectId,
+		shareCode,
+		sharePassword,
 		selectedWorkspace: selectedWorkspace || null,
 		selectedProject: selectedProject || null,
 		projects,
-		onSuccess: handleCrossProjectOperationSuccess,
+		onSuccess: (result) => {
+			handleCrossProjectOperationSuccess(result)
+			if (result) onCrossProjectOperationSuccess?.(result)
+		},
 	})
 
 	// 导入操作 Hook
@@ -756,6 +933,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					onCancel: sharedDuplicateHandler.handleFolderConflictCancel,
 					onMerge: sharedDuplicateHandler.handleFolderConflictMerge,
 					onKeepBoth: sharedDuplicateHandler.handleFolderConflictKeepBoth,
+					onReplace: sharedDuplicateHandler.handleFolderConflictReplace,
 				}
 			: moveFileHook.folderConflictModalVisible
 				? {
@@ -797,17 +975,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								onKeepBoth: noopFolderConflictHandler,
 							}
 
-	// 创建移动文件处理函数的适配器
+	// Route desktop project moves to the cross-project selector.
 	const handleMoveFileAdapter = useMemoizedFn((item: AttachmentItem) => {
-		// 桌面端普通项目继续复用现有跨项目 Modal；移动端和 chat 项目统一走目录 Sheet。
 		if (canUseDesktopCrossProjectMove) {
 			if (item.file_id) {
-				// 获取文件的父目录路径
 				const parentPath = getParentPathByFileId(item.file_id)
 				crossProjectOperation.openMoveModal([item.file_id], parentPath)
 			}
 		} else {
-			// 否则使用原来的 SelectDirectoryModal
+			// Mobile and chat projects keep the directory selector.
 			moveFileHook.showMoveSelector(item)
 		}
 	})
@@ -839,6 +1015,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 文件快捷键 hook（需要在 useContextMenu 之前调用）
 	const { getShortcutHint } = useFileShortcuts({
+		enabled: capabilities.addToChat,
 		hoveredItemRef,
 		contextMenuItemId,
 		treeIndex,
@@ -854,10 +1031,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	})
 
 	const { getMenuItems, getBatchDownloadLayerMenuItems, deleteConfirmNode } = useContextMenu({
-		handleUploadFile,
-		handleUploadFolder,
-		handleImportFromOtherProject,
-		handleShareItem: handleShareItemFromHook,
+		handleUploadFile: capabilities.upload ? handleUploadFile : undefined,
+		handleUploadFolder: capabilities.upload ? handleUploadFolder : undefined,
+		handleImportFromOtherProject: capabilities.importFromOtherProject
+			? handleImportFromOtherProject
+			: undefined,
+		handleShareItem: capabilities.share ? handleShareItemFromHook : undefined,
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
@@ -867,33 +1046,49 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleOpenFile,
 		handleStartRename,
 		handleShowInfo,
-		handleAddToCurrentChat,
-		handleAddToNewChat,
-		handleMoveFile: handleMoveFileAdapter,
-		handleReplaceFile,
-		onCopyFile: handleCopyFileAdapter,
+		handleAddToCurrentChat: capabilities.addToChat ? handleAddToCurrentChat : undefined,
+		handleAddToNewChat: capabilities.addToChat ? handleAddToNewChat : undefined,
+		handleMoveFile: capabilities.move ? handleMoveFileAdapter : undefined,
+		handleReplaceFile: capabilities.replace ? handleReplaceFile : undefined,
+		onCopyFile: capabilities.crossProject ? handleCopyFileAdapter : undefined,
 		createVirtualFile,
 		createVirtualFolder,
-		createVirtualDesignProject,
-		createVirtualSelfMediaProject,
-		createVirtualAICardProject: (_key?: string, parentPath?: string) => {
-			openAICardDialog(parentPath)
-		},
+		createVirtualDesignProject: capabilities.projectContentCreation
+			? createVirtualDesignProject
+			: undefined,
+		createVirtualSelfMediaProject: capabilities.projectContentCreation
+			? createVirtualSelfMediaProject
+			: undefined,
+		createVirtualAICardProject: capabilities.projectContentCreation
+			? (_key?: string, parentPath?: string) => {
+					openAICardDialog(parentPath)
+				}
+			: undefined,
 		isMoving,
 		selectedItems,
-		handleAddMultipleFilesToCurrentChat,
-		handleAddMultipleFilesToNewChat,
+		handleAddMultipleFilesToCurrentChat: capabilities.addToChat
+			? handleAddMultipleFilesToCurrentChat
+			: undefined,
+		handleAddMultipleFilesToNewChat: capabilities.addToChat
+			? handleAddMultipleFilesToNewChat
+			: undefined,
 		handleDownloadNoWaterMark,
 		preloadWaterMarkFreeModal,
 		isFreeTrialVersion,
 		shouldUseSingleDownloadEntry,
 		getShortcutHint,
-		handleEnterMultiSelectMode,
+		handleEnterMultiSelectMode: capabilities.multiSelect
+			? handleEnterMultiSelectMode
+			: undefined,
 		isSelectMode,
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		treeIndex,
+		isFolderContentsExpanded: externalSearchValue ? undefined : isFolderContentsExpanded,
+		handleToggleFolderContents: externalSearchValue ? undefined : handleToggleFolderContents,
 		attachments,
+		handleSaveSlidesTemplate: onSaveSlidesTemplate,
+		handleConvertToSlidesTemplate: onConvertToSlidesTemplate,
 	})
 
 	// 重置所有状态的方法
@@ -935,14 +1130,16 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		openBatchMoveByFileIds: (fileIds: string[]) => {
 			moveFileHook.openBatchMoveByFileIds(fileIds)
 		},
+		toggleAllFolders,
 		resetAllStates,
 	}))
 
 	// 选择处理
 	const handleSelect = useMemoizedFn((selectedKeys: React.Key[]) => {
 		handleTreeSelect(selectedKeys)
-		// 处理文件选择逻辑
-		if (selectedKeys.length > 0) {
+		// In browse mode, tree clicks only update the tree state and must not
+		// add files or folders to the batch selection.
+		if (isSelectMode && selectedKeys.length > 0) {
 			const item = treeIndex.getItemByKey(selectedKeys[0] as string)
 			if (item) {
 				handleItemSelect(item)
@@ -1031,6 +1228,21 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setUserSelectDetail,
 	})
 
+	const openSlidesTemplate = useMemoizedFn((item: AttachmentItem) => {
+		const previewItem = toSlidesTemplatePreviewItem(item)
+		onFileClick?.(previewItem)
+		setUserSelectDetail?.({
+			type: DetailType.SlidesTemplate,
+			data: {
+				...previewItem,
+				file_id: item.file_id,
+				file_name: item.file_name || item.name || item.display_filename,
+			},
+			currentFileId: item.file_id,
+			attachments,
+		})
+	})
+
 	// 检查文件是否在文件夹的直接子项中（只检查一级，不递归）
 	const isFileInFolder = useMemoizedFn(
 		(folderItem: AttachmentItem, targetFileId: string): boolean => {
@@ -1048,11 +1260,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item || {}
 		const itemId = node.key
 		const { display_config } = item
+		const isSlidesTemplate = isSlidesTemplateFolder(item)
 		const isActiveFile = activeTreeSelectionKey === String(itemId)
 		const hasChildren = !node.isLeaf
 		const isExpanded = expandedKeySet.has(String(node.key))
 
-		const showCheckbox = selectionEnabled
+		const showCheckbox = selectionEnabled && isItemSelectable(item)
 		const isSelected = showCheckbox ? isItemSelected(itemId) : false
 
 		// 检查是否正在定位此文件
@@ -1128,6 +1341,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
+						decoration?.className,
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
 					data-testid="file-item-virtual"
@@ -1318,7 +1532,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			const folderDragHandlers = createFileDragHandlers({
 				item,
 				node,
-				allowEdit,
+				allowEdit: allowEdit && capabilities.move && isItemSelectable(item),
 				isExpanded,
 				dragState,
 				selectedItems,
@@ -1336,6 +1550,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
+						decoration?.className,
 						(shouldHighlightFolder || isActiveFile) && styles.activeFileItemWrapper,
 						isActiveFile && "bg-blue-500/10",
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
@@ -1350,6 +1565,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 						if (tryOpenSelfMediaFromPostRootFolder(item)) return
 						if (tryOpenAICardFromSubFolder(item)) return
+						if (isSlidesTemplateFolder(item)) {
+							openSlidesTemplate(item)
+							return
+						}
 
 						if (isEmpty(item.display_config)) {
 							// 普通文件夹，没有 display_config，直接展开/折叠
@@ -1419,7 +1638,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							}
 						}
 					}}
-					draggable={renamingItemId !== itemId}
+					draggable={
+						renamingItemId !== itemId && capabilities.move && isItemSelectable(item)
+					}
 					{...folderDragHandlers}
 					onMouseEnter={() => setHoveredItem(itemId)}
 					onMouseLeave={() => setHoveredItem(null)}
@@ -1471,6 +1692,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								/>
 							) : !isFolderBusy && isMagicSystemFolder(item) ? (
 								<MagicSystemFolderIcon size={16} />
+							) : isSlidesTemplate ? (
+								<SlidesTemplateFolderIcon size={16} />
 							) : display_config?.type ? (
 								["custom", "micro-app"].includes(display_config?.type) &&
 								(display_config?.type === "custom" || item?.is_directory) ? (
@@ -1562,7 +1785,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							<Checkbox
 								data-testid="folder-checkbox"
 								checked={isFolderIndeterminate ? "indeterminate" : isFolderSelected}
-								disabled={isItemDisabled()}
+								disabled={isItemDisabled(item)}
 								onCheckedChange={() => {
 									handleItemSelect(item)
 								}}
@@ -1579,7 +1802,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const fileDragHandlers = createFileDragHandlers({
 			item,
 			node,
-			allowEdit,
+			allowEdit: allowEdit && capabilities.move && isItemSelectable(item),
 			isExpanded,
 			dragState,
 			selectedItems,
@@ -1602,6 +1825,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			<div
 				className={cx(
 					styles.fileItem,
+					decoration?.className,
 					isLocating && styles.locatingFileItem,
 					isActiveFile && "bg-blue-500/10",
 					contextMenuItemId === itemId && styles.contextMenuActiveItem,
@@ -1667,7 +1891,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						handleOpenFile(item)
 					}
 				}}
-				draggable={renamingItemId !== itemId}
+				draggable={renamingItemId !== itemId && capabilities.move && isItemSelectable(item)}
 				{...fileDragHandlers}
 				onMouseEnter={() => {
 					setHoveredItem(itemId)
@@ -1703,6 +1927,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : null}
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
+						) : resolveProjectInstructionsFileKind(item) ? (
+							<TopicFileIcon magicVariant="magic-file-agent" size={16} />
 						) : item?.display_config?.type === "custom" ||
 						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
 							<CustomFolderMagicIcon
@@ -1784,7 +2010,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				{/* 更多按钮 */}
 				{!showCheckbox &&
 					renamingItemId !== itemId &&
-					(allowEdit || (filterMenuItems && allowDownload !== false)) && (
+					(allowEdit ||
+						(filterMenuItems && (allowDownload !== false || allowCopyTo))) && (
 						<MagicIcon
 							className={cx(
 								styles.attachmentAction,
@@ -1809,7 +2036,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						<Checkbox
 							data-testid="file-checkbox"
 							checked={isSelected}
-							disabled={isItemDisabled()}
+							disabled={isItemDisabled(item)}
 							onCheckedChange={() => {
 								handleItemSelect(item)
 							}}
@@ -1837,7 +2064,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getParentPathByFileId,
 		selectedWorkspace,
 		selectedProject,
-		projects,
 		crossProjectOperation,
 		moveFileHook,
 		onUpdateAttachments,
@@ -1845,33 +2071,39 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isMoving,
 		allowEdit,
 		allowDownload,
+		allowCopyTo,
+		allowMove: capabilities.move,
+		allowCopy: capabilities.crossProject || allowCopyTo,
+		allowShare: capabilities.share,
 		downloadProgress,
 		// 批量分享回调
-		onBatchShareClick: async (fileIds: string[]) => {
-			if (fileIds.length > 0) {
-				// 检查是否存在相似分享
-				try {
-					const similarShares = await SuperMagicApi.findSimilarShares({
-						file_ids: fileIds,
-					})
+		onBatchShareClick: capabilities.share
+			? async (fileIds: string[]) => {
+					if (fileIds.length === 0) return
 
-					if (similarShares && similarShares.length > 0) {
-						// 显示相似分享选择弹窗
-						setSimilarShares(similarShares, fileIds)
-						return
+					// 检查是否存在相似分享
+					try {
+						const similarShares = await SuperMagicApi.findSimilarShares({
+							file_ids: fileIds,
+						})
+
+						if (similarShares && similarShares.length > 0) {
+							// 显示相似分享选择弹窗
+							setSimilarShares(similarShares, fileIds)
+							return
+						}
+					} catch (error) {
+						console.error("Check similar shares failed:", error)
 					}
-				} catch (error) {
-					console.error("Check similar shares failed:", error)
-				}
 
-				// 无相似分享，直接打开分享弹窗
-				setShareFileInfo({
-					projectName: selectedProject?.project_name,
-					fileIds,
-				})
-				setShareModalVisible(true)
-			}
-		},
+					// 无相似分享，直接打开分享弹窗
+					setShareFileInfo({
+						projectName: selectedProject?.project_name,
+						fileIds,
+					})
+					setShareModalVisible(true)
+				}
+			: undefined,
 		isInProject,
 	})
 	const showMobileBatchActions = shouldShowMobileBatchActions({
@@ -2216,6 +2448,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					workspaces={workspaces}
 					fileIds={crossProjectOperation.fileIds}
 					sourceAttachments={attachments}
+					sourceAttachmentsLoading={refreshLoading}
 					initialPath={crossProjectOperation.initialPath}
 					onClose={crossProjectOperation.closeModal}
 					onSubmit={

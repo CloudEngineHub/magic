@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { DEFAULT_TOPIC_ID } from "@/services/superMagic/topicModel/constants"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 
 /**
  * Super Magic Topic Model Store
@@ -33,8 +34,16 @@ class SuperMagicTopicModelStore {
 	/** Agent code when topic_mode is custom_agent (featured mode.identifier) */
 	currentAgentCode: string = ""
 
+	/** Context key whose model data has completed loading */
+	loadedContextKey = ""
+
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
+	}
+
+	/** Whether the language model for the current context is ready for use */
+	get isLanguageModelReady() {
+		return !this.isLoading && Boolean(this.selectedLanguageModel?.model_id)
 	}
 
 	/**
@@ -69,6 +78,11 @@ class SuperMagicTopicModelStore {
 		this.isLoading = loading
 	}
 
+	/** 标记当前上下文的模型已加载完成 */
+	markCurrentContextLoaded(contextKey: string) {
+		this.loadedContextKey = contextKey
+	}
+
 	/**
 	 * Set current context (topic, project, mode)
 	 * This will trigger the service to fetch models via reaction
@@ -82,10 +96,31 @@ class SuperMagicTopicModelStore {
 		topicMode: TopicMode,
 		agentCode?: string | null,
 	) {
-		this.currentTopicId = topicId || ""
-		this.currentProjectId = projectId || ""
+		const nextTopicId = topicId || ""
+		const nextProjectId = projectId || ""
+		const nextAgentCode = agentCode ?? ""
+		const contextChanged =
+			this.currentTopicId !== nextTopicId ||
+			this.currentProjectId !== nextProjectId ||
+			this.currentTopicMode !== topicMode ||
+			this.currentAgentCode !== nextAgentCode
+
+		this.currentTopicId = nextTopicId
+		this.currentProjectId = nextProjectId
 		this.currentTopicMode = topicMode
-		this.currentAgentCode = agentCode ?? ""
+		this.currentAgentCode = nextAgentCode
+
+		if (contextChanged) {
+			this.isLoading = true
+			this.loadedContextKey = ""
+
+			const isWorkspaceHome = !nextTopicId && !nextProjectId
+			if (isWorkspaceHome) {
+				this.selectedLanguageModel = null
+				this.selectedImageModel = null
+				this.selectedVideoModel = null
+			}
+		}
 	}
 
 	/**
@@ -98,8 +133,9 @@ class SuperMagicTopicModelStore {
 		this.isLoading = false
 		this.currentTopicId = DEFAULT_TOPIC_ID
 		this.currentProjectId = ""
-		this.currentTopicMode = "general" as TopicMode
+		this.currentTopicMode = getFallbackTopicModeIdentifier()
 		this.currentAgentCode = ""
+		this.loadedContextKey = ""
 	}
 }
 

@@ -14,21 +14,22 @@ import asyncio
 import json
 import time
 import traceback
-import uuid
 from typing import Any, Dict, List, Optional
 
 from agentlang.chat_history import ToolCall
 from agentlang.config.config import config
+from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.parallel import Parallel
+from pydantic import ValidationError
 
 from app.core.context.agent_context import AgentContext
+from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.core.tool_call_event_manager import ToolCallEventManager
 from app.tools.core.tool_executor import tool_executor
 
 logger = get_logger(__name__)
-
 
 class ToolCallExecutor:
     """工具调用执行器
@@ -58,6 +59,7 @@ class ToolCallExecutor:
         tool_calls: List[ToolCall],
         agent_context: AgentContext,
         is_code_mode: bool = False,
+        preflight_failures: Optional[Dict[str, str]] = None,
     ) -> List[ToolResult]:
         """执行工具调用（自动选择串行或并行模式）
 
@@ -79,18 +81,44 @@ class ToolCallExecutor:
         # 决策逻辑：根据配置和工具数量决定执行模式
         if not self.default_enable_parallel or len(tool_calls) <= 1:
             logger.debug("Using sequential execution mode for tool calls")
-            return await self.execute_sequential(tool_calls, agent_context, is_code_mode=is_code_mode)
+            return await self.execute_sequential(
+                tool_calls,
+                agent_context,
+                is_code_mode=is_code_mode,
+                preflight_failures=preflight_failures,
+            )
         else:
             logger.info(f"Using parallel execution mode for {len(tool_calls)} tool calls")
             return await self.execute_parallel(
                 tool_calls, agent_context, self.default_parallel_timeout
             )
 
+    @staticmethod
+    def _validate_forward_request(request: ToolForwardRequest) -> None:
+        target_tool_name = request.target_tool.name
+        target_params_class = request.target_tool.params_class
+        if not target_tool_name or target_params_class is None:
+            raise ValueError(
+                "Forwarded tool type does not declare a valid name and parameter model."
+            )
+        if not isinstance(request.params, target_params_class):
+            raise TypeError(
+                f"Forwarded tool '{target_tool_name}' requires "
+                f"'{target_params_class.__name__}', got '{type(request.params).__name__}'."
+            )
+
+    @staticmethod
+    def _merge_forward_warning(result: ToolResult, warning: str | None) -> None:
+        if not warning:
+            return
+        result.content = f"{warning}\n\n{result.content}" if result.content else warning
+
     async def execute_sequential(
         self,
         tool_calls: List[ToolCall],
         agent_context: AgentContext,
         is_code_mode: bool = False,
+        preflight_failures: Optional[Dict[str, str]] = None,
     ) -> List[ToolResult]:
         """使用顺序模式执行 Tools 调用
 
@@ -108,6 +136,7 @@ class ToolCallExecutor:
             tool_name = "[unknown]"
             tool_context = None
             tool_arguments_dict = None
+            forward_warning: str | None = None
             # 记录工具执行开始时间
             tool_start_time = time.time()
 
@@ -121,11 +150,72 @@ class ToolCallExecutor:
 
             try:
                 tool_name = tool_call.function.name
-                tool_arguments_dict = self._parse_tool_arguments(tool_call, tool_name)
+                openai_tool_call_for_event = ToolCallEventManager.create_openai_tool_call(
+                    tool_call.id,
+                    tool_call.type,
+                    tool_name,
+                    tool_call.function.arguments,
+                )
+
+                preflight_advice = (preflight_failures or {}).get(tool_call.id)
+                if preflight_advice:
+                    tool_arguments_dict = {}
+                    tool_context = ToolCallEventManager.create_tool_context(
+                        agent_context,
+                        tool_call.id,
+                        tool_name,
+                        tool_arguments_dict,
+                    )
+                    result = ToolResult.error(
+                        "Tool call arguments are invalid. Do not reuse the same arguments. "
+                        f"Retry the '{tool_name}' call with corrected JSON parameters. "
+                        f"Validation advice: {preflight_advice}",
+                        tool_call_id=tool_call.id,
+                        name=tool_name,
+                        use_custom_remark=False,
+                    )
+                    await ToolCallEventManager.trigger_after_tool_call(
+                        agent_context,
+                        openai_tool_call_for_event,
+                        tool_context,
+                        tool_name,
+                        tool_arguments_dict,
+                        result,
+                        0.0,
+                    )
+                    results.append(result)
+                    continue
 
                 try:
-                    logger.info(f"开始执行工具: {tool_name}, 参数: {tool_arguments_dict}")
+                    tool_arguments_dict = self._parse_tool_arguments(tool_call, tool_name)
+                except (json.JSONDecodeError, ValueError) as parse_error:
+                    tool_arguments_dict = {}
+                    tool_context = ToolCallEventManager.create_tool_context(
+                        agent_context,
+                        tool_call.id,
+                        tool_name,
+                        tool_arguments_dict,
+                    )
+                    result = ToolResult.error(
+                        "Tool call arguments are invalid JSON. Retry the tool call with valid JSON parameters. "
+                        f"Parser detail: {parse_error}",
+                        tool_call_id=tool_call.id,
+                        name=tool_name,
+                        use_custom_remark=False,
+                    )
+                    await ToolCallEventManager.trigger_after_tool_call(
+                        agent_context,
+                        openai_tool_call_for_event,
+                        tool_context,
+                        tool_name,
+                        tool_arguments_dict,
+                        result,
+                        0.0,
+                    )
+                    results.append(result)
+                    continue
 
+                try:
                     # 创建工具上下文
                     tool_context = ToolCallEventManager.create_tool_context(
                         agent_context,
@@ -137,6 +227,48 @@ class ToolCallExecutor:
                     # 标记 Code Mode 来源，供工具层做第二道拦截
                     if is_code_mode:
                         tool_context.register_extension("is_code_mode", True)
+
+                    tool_instance = tool_executor.get_tool(tool_name)
+                    if tool_instance is not None:
+                        try:
+                            forward_request = await tool_instance.resolve_forwarded_tool(
+                                tool_context,
+                                tool_arguments_dict,
+                            )
+                        except ValidationError:
+                            # 保留源工具的正常参数校验和错误展示。
+                            forward_request = None
+                        if forward_request is not None:
+                            self._validate_forward_request(forward_request)
+                            tool_name = forward_request.target_tool.name
+                            tool_arguments_dict = forward_request.params.model_dump(
+                                mode="json",
+                                exclude_none=True,
+                            )
+                            forward_warning = forward_request.warning
+                            tool_context = ToolCallEventManager.create_tool_context(
+                                agent_context,
+                                tool_call.id,
+                                tool_name,
+                                tool_arguments_dict,
+                            )
+                            if is_code_mode:
+                                tool_context.register_extension("is_code_mode", True)
+
+                    openai_tool_call_for_event = ToolCallEventManager.create_openai_tool_call(
+                        tool_call.id,
+                        tool_call.type,
+                        tool_name,
+                        json.dumps(tool_arguments_dict, ensure_ascii=False),
+                    )
+                    safe_tool_arguments = tool_executor.sanitize_tool_arguments_for_log(
+                        tool_name,
+                        tool_arguments_dict,
+                    )
+                    logger.info(
+                        f"开始执行工具: {tool_name}, 参数字段: "
+                        f"{tool_executor.get_tool_parameter_names(safe_tool_arguments)}"
+                    )
 
                     # 触发工具调用前事件
                     await ToolCallEventManager.trigger_before_tool_call(
@@ -173,6 +305,7 @@ class ToolCallExecutor:
                         result,
                         result.execution_time,
                     )
+                    self._merge_forward_warning(result, forward_warning)
                 except Exception as e:
                     # 计算执行时间（即使出错）
                     execution_time = (
@@ -225,6 +358,7 @@ class ToolCallExecutor:
                         logger.error(
                             f"触发失败工具调用事件时出错: {event_error}", exc_info=True
                         )
+                    self._merge_forward_warning(result, forward_warning)
 
                 results.append(result)
             except AttributeError as attr_err:
@@ -314,7 +448,10 @@ class ToolCallExecutor:
             context_prefix: 日志上下文前缀（如"并行工具调用："）
 
         Returns:
-            Dict[str, Any]: 解析后的参数字典，最差情况下返回空字典
+            Dict[str, Any]: 解析后的参数字典
+
+        Raises:
+            ValueError: 参数不是 JSON 对象或 JSON 语法无效。
         """
         tool_arguments_str = tool_call.function.arguments
 
@@ -323,12 +460,12 @@ class ToolCallExecutor:
             tool_arguments_dict = json.loads(tool_arguments_str)
             if isinstance(tool_arguments_dict, dict):
                 return tool_arguments_dict
-            else:
-                logger.warning(f"{context_prefix}工具 '{tool_name}' 参数类型异常，使用空字典")
-                return {}
+            logger.warning(f"{context_prefix}工具 '{tool_name}' 参数类型异常，拒绝执行")
+            raise ValueError(
+                f"Invalid arguments for tool '{tool_name}': expected a JSON object"
+            )
         except json.JSONDecodeError as e:
-            logger.warning(f"{context_prefix}工具 '{tool_name}' 参数解析失败: {e}，使用空字典")
-            return {}
+            raise ValueError(f"Invalid JSON arguments for tool '{tool_name}': {e}") from e
 
 
 # 创建全局工具调用执行器实例

@@ -1,0 +1,940 @@
+{
+	"categories": [
+		{
+			"id": "page",
+			"label": { "en_US": "Page", "zh_CN": "页面显示" }
+		},
+		{
+			"id": "visual",
+			"label": { "en_US": "Visuals", "zh_CN": "外观布局" }
+		},
+		{
+			"id": "interaction",
+			"label": { "en_US": "Interaction", "zh_CN": "点击输入" }
+		},
+		{
+			"id": "data",
+			"label": { "en_US": "Data", "zh_CN": "数据展示" }
+		},
+		{
+			"id": "persistence",
+			"label": { "en_US": "Saving", "zh_CN": "保存更新" }
+		},
+		{
+			"id": "access",
+			"label": { "en_US": "Access", "zh_CN": "账号权限" }
+		},
+		{
+			"id": "ai",
+			"label": { "en_US": "AI", "zh_CN": "智能功能" }
+		},
+		{
+			"id": "reliability",
+			"label": { "en_US": "Reliability", "zh_CN": "速度稳定" }
+		}
+	],
+	"issues": [
+		{
+			"category": "page",
+			"checks": {
+				"en_US": [
+					"Whether the real entry page exists and executes",
+					"Whether initialization throws or stops early",
+					"Whether required resources and data load successfully"
+				],
+				"zh_CN": [
+					"入口页面是否真实存在并能执行",
+					"初始化脚本是否报错或提前中断",
+					"页面依赖的资源和数据是否加载成功"
+				]
+			},
+			"description": {
+				"en_US": "The app opens with no visible content or only a blank page.",
+				"zh_CN": "打开应用后看不到任何内容，或者只显示一个空白页面。"
+			},
+			"featured": true,
+			"id": "page-blank",
+			"keywords": {
+				"en_US": ["blank", "white screen", "cannot open", "load failed"],
+				"zh_CN": ["空白", "打不开", "白屏", "加载失败"]
+			},
+			"title": { "en_US": "The page opens blank", "zh_CN": "页面打开后是空白的" }
+		},
+		{
+			"category": "page",
+			"checks": {
+				"en_US": [
+					"Whether initialization has an unresolved wait",
+					"Whether both success and failure clear loading state",
+					"Whether permission, database, or file failures enter a recoverable state"
+				],
+				"zh_CN": [
+					"初始化请求是否有未结束的等待",
+					"成功和失败分支是否都会关闭加载状态",
+					"授权、数据库或文件请求失败时是否进入可恢复状态"
+				]
+			},
+			"description": {
+				"en_US": "The loading state never finishes and content does not appear.",
+				"zh_CN": "加载动画一直不消失，等很久也没有出现内容。"
+			},
+			"featured": true,
+			"id": "page-loading-stuck",
+			"keywords": {
+				"en_US": ["loading", "stuck", "spinner", "no content"],
+				"zh_CN": ["加载中", "卡住", "转圈", "没有内容"]
+			},
+			"title": { "en_US": "The page keeps loading forever", "zh_CN": "页面一直停在加载中" }
+		},
+		{
+			"category": "page",
+			"checks": {
+				"en_US": [
+					"Whether published entry and asset paths match the editor",
+					"Whether anonymous and signed-in access match the feature",
+					"Whether published users lack required data or runtime permissions"
+				],
+				"zh_CN": [
+					"发布入口和资源路径是否与编辑环境一致",
+					"匿名访问和登录要求是否符合功能需要",
+					"发布用户是否缺少必要的数据或运行权限"
+				]
+			},
+			"description": {
+				"en_US": "The app works while editing but loses content or features through the published link.",
+				"zh_CN": "制作页面时可以使用，但通过发布链接打开后内容缺失或功能失效。"
+			},
+			"featured": true,
+			"id": "page-published-different",
+			"keywords": {
+				"en_US": ["publish", "share", "link", "works in preview"],
+				"zh_CN": ["发布", "分享", "链接", "预览正常"]
+			},
+			"title": {
+				"en_US": "Works in editor but fails after publishing",
+				"zh_CN": "编辑时正常，发布后不正常"
+			}
+		},
+		{
+			"category": "page",
+			"checks": {
+				"en_US": [
+					"Whether target pages and links really exist",
+					"Whether relative paths use the micro-app root",
+					"Whether state and back paths survive navigation"
+				],
+				"zh_CN": [
+					"页面文件和链接目标是否真实存在",
+					"相对路径是否以当前微应用根目录为准",
+					"页面切换时状态和返回路径是否正确保留"
+				]
+			},
+			"description": {
+				"en_US": "Links, tabs, or back actions open the wrong page or cannot return.",
+				"zh_CN": "点击链接、标签页或返回按钮后，进入了错误页面或无法返回。"
+			},
+			"featured": false,
+			"id": "page-navigation-broken",
+			"keywords": {
+				"en_US": ["navigation", "link", "back", "page missing"],
+				"zh_CN": ["跳转", "链接", "返回", "页面找不到"]
+			},
+			"title": {
+				"en_US": "Navigation leads to missing content",
+				"zh_CN": "页面跳转后找不到内容"
+			}
+		},
+		{
+			"category": "visual",
+			"checks": {
+				"en_US": [
+					"Size constraints for page containers, overlays, and scroll areas",
+					"Layout with long text, narrow screens, and varying data",
+					"Whether fixed and absolute positioning and stacking are appropriate"
+				],
+				"zh_CN": [
+					"页面容器、弹层和滚动区域的尺寸约束",
+					"长文字、窄窗口和不同数据量下的布局",
+					"固定定位、绝对定位和层级关系是否合理"
+				]
+			},
+			"description": {
+				"en_US": "Text, buttons, cards, or dialogs overlap and some content is cut off.",
+				"zh_CN": "文字、按钮、卡片或弹窗互相遮挡，部分内容看不完整。"
+			},
+			"featured": true,
+			"id": "visual-layout-overflow",
+			"keywords": {
+				"en_US": ["misaligned", "overlap", "overflow", "cut off"],
+				"zh_CN": ["错位", "遮挡", "溢出", "显示不全"]
+			},
+			"title": {
+				"en_US": "Content is misaligned, covered, or overflowing",
+				"zh_CN": "内容错位、遮挡或超出页面"
+			}
+		},
+		{
+			"category": "visual",
+			"checks": {
+				"en_US": [
+					"Horizontal overflow and untappable controls on small screens",
+					"Whether tables have card or grouped-list alternatives",
+					"Usability with drawers, safe areas, and the soft keyboard"
+				],
+				"zh_CN": [
+					"小屏下是否存在横向溢出和不可点击控件",
+					"表格是否提供卡片或分组列表替代",
+					"弹层、安全区和软键盘出现时的可操作性"
+				]
+			},
+			"description": {
+				"en_US": "Mobile has horizontal scrolling, tiny buttons, cramped tables, or keyboard obstruction.",
+				"zh_CN": "手机上出现横向滚动、按钮太小、表格挤压或输入框被键盘挡住。"
+			},
+			"featured": true,
+			"id": "visual-mobile-unusable",
+			"keywords": {
+				"en_US": ["mobile", "small screen", "keyboard", "responsive"],
+				"zh_CN": ["手机", "移动端", "小屏", "键盘遮挡"]
+			},
+			"title": {
+				"en_US": "The app is hard to use on mobile",
+				"zh_CN": "手机上显示或操作不方便"
+			}
+		},
+		{
+			"category": "visual",
+			"checks": {
+				"en_US": [
+					"Clear hierarchy among headings, body, and helper text",
+					"Whether real labels fit buttons and badges",
+					"Whether icon assets, sizing, colors, and accessible names are correct"
+				],
+				"zh_CN": [
+					"标题、正文和辅助文字是否有清晰层级",
+					"按钮和标签在真实文案长度下是否完整",
+					"图标资源、尺寸、颜色和无障碍名称是否正确"
+				]
+			},
+			"description": {
+				"en_US": "Text has low contrast or poor sizing, labels are clipped, or icons are missing.",
+				"zh_CN": "文字对比度低、字号不合适、按钮文字被截断，或者图标没有显示。"
+			},
+			"featured": false,
+			"id": "visual-text-icon",
+			"keywords": {
+				"en_US": ["text", "icon", "contrast", "clipped"],
+				"zh_CN": ["文字", "图标", "看不清", "截断"]
+			},
+			"title": { "en_US": "Text or icons are hard to see", "zh_CN": "文字或图标看不清楚" }
+		},
+		{
+			"category": "visual",
+			"checks": {
+				"en_US": [
+					"Whether charts use real data and correct calculations",
+					"Whether titles, units, legends, and time ranges are clear",
+					"Whether no-data cases show a real empty state"
+				],
+				"zh_CN": [
+					"图表是否使用真实数据并正确计算",
+					"标题、单位、图例和时间范围是否明确",
+					"无数据时是否显示真实空状态而不是假图表"
+				]
+			},
+			"description": {
+				"en_US": "Charts lack titles, units, or legends, show wrong values, or render fake empty charts.",
+				"zh_CN": "图表缺少标题、单位或图例，数值不对应，没数据时仍显示空图。"
+			},
+			"featured": false,
+			"id": "visual-chart-confusing",
+			"keywords": {
+				"en_US": ["chart", "statistics", "unit", "no data"],
+				"zh_CN": ["图表", "统计", "单位", "没有数据"]
+			},
+			"title": {
+				"en_US": "Charts are confusing or show no data",
+				"zh_CN": "图表看不懂或没有数据"
+			}
+		},
+		{
+			"category": "interaction",
+			"checks": {
+				"en_US": [
+					"Whether real listeners are bound to the current element",
+					"Whether dynamic lists use delegated events on a stable container",
+					"Whether overlays, disabled state, or duplicate nodes block clicks"
+				],
+				"zh_CN": [
+					"真实事件监听是否绑定到当前元素",
+					"动态列表是否使用稳定容器上的事件委托",
+					"遮罩层、禁用状态或重复节点是否拦截点击"
+				]
+			},
+			"description": {
+				"en_US": "Clicking a button, menu, list action, or tab produces no change or feedback.",
+				"zh_CN": "点击按钮、菜单、列表操作或标签页后，没有任何变化或反馈。"
+			},
+			"featured": true,
+			"id": "interaction-button-no-response",
+			"keywords": {
+				"en_US": ["button", "click", "no response", "menu"],
+				"zh_CN": ["按钮", "点击", "没反应", "菜单"]
+			},
+			"title": { "en_US": "A button does nothing when clicked", "zh_CN": "按钮点了没有反应" }
+		},
+		{
+			"category": "interaction",
+			"checks": {
+				"en_US": [
+					"Whether field reading consistently gets real input",
+					"Whether required validation, empty values, and errors are correct",
+					"Whether submitting, success, and failure states recover"
+				],
+				"zh_CN": [
+					"字段取值方式是否一致且能读到真实输入",
+					"必填校验、空值处理和错误提示是否正确",
+					"提交中、提交成功和提交失败状态是否能恢复"
+				]
+			},
+			"description": {
+				"en_US": "Filled fields are treated as empty or the submit button remains unavailable.",
+				"zh_CN": "明明填写了内容，提交时仍提示为空，或者提交按钮一直不可用。"
+			},
+			"featured": true,
+			"id": "interaction-form-submit",
+			"keywords": {
+				"en_US": ["form", "submit", "required", "disabled button"],
+				"zh_CN": ["表单", "提交", "必填", "按钮不可用"]
+			},
+			"title": {
+				"en_US": "A completed form cannot be submitted",
+				"zh_CN": "填写表单后无法提交"
+			}
+		},
+		{
+			"category": "interaction",
+			"checks": {
+				"en_US": [
+					"Whether one state source controls opening and closing",
+					"Whether outside click, close, and back actions conflict",
+					"Whether bubbling or duplicate listeners cause reopening"
+				],
+				"zh_CN": [
+					"打开和关闭是否由同一份状态控制",
+					"点击外部、关闭按钮和返回操作是否互相冲突",
+					"事件冒泡或重复绑定是否导致立即重开"
+				]
+			},
+			"description": {
+				"en_US": "A dialog, menu, or side panel cannot close or immediately reopens.",
+				"zh_CN": "弹窗、下拉菜单或侧边面板打开后无法关闭，或者关闭后马上又出现。"
+			},
+			"featured": false,
+			"id": "interaction-dialog-menu",
+			"keywords": {
+				"en_US": ["dialog", "menu", "close", "reopen"],
+				"zh_CN": ["弹窗", "菜单", "关闭", "重复打开"]
+			},
+			"title": { "en_US": "A dialog or menu cannot be closed", "zh_CN": "弹窗或菜单关不掉" }
+		},
+		{
+			"category": "interaction",
+			"checks": {
+				"en_US": [
+					"Whether events or components initialize more than once",
+					"Whether submission has disabled and concurrency guards",
+					"Whether listeners and temporary state are cleaned up"
+				],
+				"zh_CN": [
+					"是否重复绑定事件或重复初始化组件",
+					"提交期间是否有明确禁用和并发保护",
+					"完成或销毁时是否清理监听和临时状态"
+				]
+			},
+			"description": {
+				"en_US": "One click creates duplicate records, notifications, or tasks.",
+				"zh_CN": "点击一次却新增多条记录、弹出多个提示，或者重复发送同一个任务。"
+			},
+			"featured": false,
+			"id": "interaction-duplicate-action",
+			"keywords": {
+				"en_US": ["duplicate", "multiple", "double submit", "repeat"],
+				"zh_CN": ["重复", "多次", "重复提交", "重复发送"]
+			},
+			"title": { "en_US": "One action runs multiple times", "zh_CN": "点一次却执行了多次" }
+		},
+		{
+			"category": "data",
+			"checks": {
+				"en_US": [
+					"Whether the page uses the real table and real table ID",
+					"Whether query results, selected fields, and rendering paths match",
+					"Whether permissions, filters, or empty-state checks hide data"
+				],
+				"zh_CN": [
+					"页面是否连接了真实数据表并使用真实表 ID",
+					"查询结果、返回字段和页面读取路径是否一致",
+					"权限、筛选条件或空状态判断是否错误隐藏数据"
+				]
+			},
+			"description": {
+				"en_US": "The database has records but lists, cards, or statistics show nothing.",
+				"zh_CN": "数据库中已经有内容，但列表、卡片或统计区域没有显示。"
+			},
+			"featured": true,
+			"id": "data-list-empty",
+			"keywords": {
+				"en_US": ["empty data", "empty list", "not found", "not displayed"],
+				"zh_CN": ["数据为空", "列表为空", "查不到", "不显示"]
+			},
+			"title": {
+				"en_US": "The page is empty even though data exists",
+				"zh_CN": "明明有数据，页面却显示为空"
+			}
+		},
+		{
+			"category": "data",
+			"checks": {
+				"en_US": [
+					"Whether search and filters affect the current data source",
+					"Whether query conditions and field names match real data",
+					"Whether clearing, no-results, and failure states work"
+				],
+				"zh_CN": [
+					"搜索和筛选是否真正作用于当前数据源",
+					"查询条件和字段名称是否与真实数据一致",
+					"清除条件、无结果和请求失败状态是否正确"
+				]
+			},
+			"description": {
+				"en_US": "Keywords or filters do not change results or show incorrect content.",
+				"zh_CN": "输入关键词或切换筛选条件后，结果没有变化或显示了错误内容。"
+			},
+			"featured": true,
+			"id": "data-search-filter",
+			"keywords": {
+				"en_US": ["search", "filter", "results unchanged", "query"],
+				"zh_CN": ["搜索", "筛选", "过滤", "结果不变"]
+			},
+			"title": { "en_US": "Search or filters do not work", "zh_CN": "搜索或筛选没有效果" }
+		},
+		{
+			"category": "data",
+			"checks": {
+				"en_US": [
+					"Whether sort fields and directions match the real API",
+					"Whether page, page size, and total stay in sync",
+					"Whether filter changes reset page and prevent stale responses"
+				],
+				"zh_CN": [
+					"排序字段和方向是否符合真实接口格式",
+					"页码、每页数量和总数是否正确同步",
+					"切换条件时是否重置页码并避免旧请求覆盖新结果"
+				]
+			},
+			"description": {
+				"en_US": "Sorting or paging causes duplicates, missing rows, wrong order, or incorrect page counts.",
+				"zh_CN": "切换排序或翻页后出现重复、遗漏、顺序错误，或者页数不准确。"
+			},
+			"featured": false,
+			"id": "data-sort-page",
+			"keywords": {
+				"en_US": ["sort", "pagination", "duplicate", "order"],
+				"zh_CN": ["排序", "分页", "重复", "顺序"]
+			},
+			"title": {
+				"en_US": "Sorting or pagination is incorrect",
+				"zh_CN": "排序或翻页结果不对"
+			}
+		},
+		{
+			"category": "data",
+			"checks": {
+				"en_US": [
+					"Whether statistics use the same real data and conditions as lists",
+					"Whether numeric values, nulls, and time ranges are handled",
+					"Whether create, edit, and delete refresh statistics"
+				],
+				"zh_CN": [
+					"统计是否基于与列表相同的真实数据和条件",
+					"数值类型、空值和时间范围是否正确处理",
+					"新增、编辑和删除后是否同步刷新统计"
+				]
+			},
+			"description": {
+				"en_US": "Summary numbers, charts, and detailed records disagree.",
+				"zh_CN": "顶部数字、图表和列表明细显示的结果不一致。"
+			},
+			"featured": false,
+			"id": "data-statistics-wrong",
+			"keywords": {
+				"en_US": ["wrong statistics", "count", "chart mismatch", "details"],
+				"zh_CN": ["统计错误", "数量不对", "图表不对", "明细"]
+			},
+			"title": {
+				"en_US": "Statistics do not match the records",
+				"zh_CN": "统计数字和明细对不上"
+			}
+		},
+		{
+			"category": "persistence",
+			"checks": {
+				"en_US": [
+					"Whether user data is persisted in MagicBase instead of page state only",
+					"Whether successful saves update from the server response",
+					"Whether failures are incorrectly shown as saved"
+				],
+				"zh_CN": [
+					"用户数据是否真正写入 MagicBase 而不是只保存在页面状态",
+					"保存成功后是否使用服务端返回结果更新页面",
+					"失败时是否错误显示为已保存"
+				]
+			},
+			"description": {
+				"en_US": "New or edited content appears briefly but disappears after reopening.",
+				"zh_CN": "刚新增或修改的内容当时能看到，但刷新或重新打开后消失。"
+			},
+			"featured": true,
+			"id": "persistence-refresh-lost",
+			"keywords": {
+				"en_US": ["lost after refresh", "not saved", "reopen", "data disappeared"],
+				"zh_CN": ["刷新丢失", "没有保存", "重新打开", "数据没了"]
+			},
+			"title": {
+				"en_US": "Data disappears after refreshing",
+				"zh_CN": "刷新页面后刚才的数据没了"
+			}
+		},
+		{
+			"category": "persistence",
+			"checks": {
+				"en_US": [
+					"Whether the real table and fields exist",
+					"Whether submitted data contains only writable business fields",
+					"Whether required fields, types, and insert permission match the schema"
+				],
+				"zh_CN": [
+					"页面使用的数据表和字段是否真实存在",
+					"提交数据是否只包含允许写入的业务字段",
+					"必填字段、字段类型和新增权限是否符合当前表结构"
+				]
+			},
+			"description": {
+				"en_US": "Create or save fails, or the new item never appears in the list.",
+				"zh_CN": "点击新增或保存后提示失败，或者列表里没有新内容。"
+			},
+			"featured": true,
+			"id": "persistence-create-failed",
+			"keywords": {
+				"en_US": ["create failed", "save failed", "new item missing"],
+				"zh_CN": ["新增失败", "保存失败", "创建失败", "没有新数据"]
+			},
+			"title": { "en_US": "Creating new content keeps failing", "zh_CN": "新增内容总是失败" }
+		},
+		{
+			"category": "persistence",
+			"checks": {
+				"en_US": [
+					"Whether actions use the correct record ID and real table",
+					"Whether edit and delete permissions match the current user",
+					"Whether the UI applies real results instead of stale cache"
+				],
+				"zh_CN": [
+					"操作是否使用正确记录 ID 和真实数据表",
+					"编辑和删除权限是否符合当前用户身份",
+					"成功后页面是否使用真实结果更新而不是恢复旧缓存"
+				]
+			},
+			"description": {
+				"en_US": "Edits do not stick, deleted content returns, or only some records can be changed.",
+				"zh_CN": "编辑后没有变化，删除后又出现，或者只有部分内容可以操作。"
+			},
+			"featured": false,
+			"id": "persistence-edit-delete-failed",
+			"keywords": {
+				"en_US": ["edit failed", "delete failed", "cannot update", "cannot delete"],
+				"zh_CN": ["编辑失败", "删除失败", "改不了", "删不掉"]
+			},
+			"title": {
+				"en_US": "Content cannot be edited or deleted",
+				"zh_CN": "内容无法修改或删除"
+			}
+		},
+		{
+			"category": "persistence",
+			"checks": {
+				"en_US": [
+					"Query the real schema and project memory; do not create fields in HTML",
+					"Confirm purpose, type, default, and access of new fields",
+					"If schema changes are needed, present a plan and old-data migration first"
+				],
+				"zh_CN": [
+					"先查询真实表结构和项目记忆，不要在页面中自行创建字段",
+					"确认新字段的用途、类型、默认值和读写权限",
+					"如需变更表结构，先展示计划和旧数据迁移方案并等待确认"
+				]
+			},
+			"description": {
+				"en_US": "The UI has a new feature, but saving lacks fields and old data no longer displays correctly.",
+				"zh_CN": "页面已经增加了新功能，但保存时缺字段，旧数据也无法正常显示。"
+			},
+			"featured": false,
+			"id": "persistence-schema-missing",
+			"keywords": {
+				"en_US": ["missing field", "new feature", "old data", "schema"],
+				"zh_CN": ["缺少字段", "新增功能", "旧数据", "数据结构"]
+			},
+			"title": {
+				"en_US": "A new feature is missing required fields",
+				"zh_CN": "新增功能后缺少需要填写的内容"
+			}
+		},
+		{
+			"category": "access",
+			"checks": {
+				"en_US": [
+					"Whether identity comes from the real signed-in runtime context",
+					"Whether identity-dependent apps disable anonymous mode",
+					"Whether identity failure blocks dependent actions with a clear error"
+				],
+				"zh_CN": [
+					"用户身份是否来自当前运行环境的真实登录信息",
+					"需要登录身份的应用是否禁止匿名运行",
+					"获取身份失败时是否停止相关操作并显示明确错误"
+				]
+			},
+			"description": {
+				"en_US": "Name, avatar, my data, or creator appears as another person, guest, or blank.",
+				"zh_CN": "用户名、头像、我的数据或创建人显示成其他人、访客或空白。"
+			},
+			"featured": true,
+			"id": "access-current-user",
+			"keywords": {
+				"en_US": ["current user", "name", "avatar", "guest"],
+				"zh_CN": ["当前用户", "用户名", "头像", "访客"]
+			},
+			"title": {
+				"en_US": "The page shows the wrong signed-in user",
+				"zh_CN": "页面显示的不是当前登录用户"
+			}
+		},
+		{
+			"category": "access",
+			"checks": {
+				"en_US": [
+					"Confirm whether data should be personal, department, organization, or public",
+					"Check real MagicBase row-read permissions rather than UI filtering only",
+					"Explain impact and wait for plan approval before permission changes"
+				],
+				"zh_CN": [
+					"确认用户期望是个人、部门、组织还是公开数据",
+					"检查真实 MagicBase 行级读取权限而不是只做前端过滤",
+					"权限调整前先说明影响范围并通过计划等待确认"
+				]
+			},
+			"description": {
+				"en_US": "A personal view exposes records submitted or saved by other users.",
+				"zh_CN": "本应只显示自己的内容，却能看到其他用户提交或保存的数据。"
+			},
+			"featured": true,
+			"id": "access-see-others-data",
+			"keywords": {
+				"en_US": ["other users", "privacy", "my data", "isolation"],
+				"zh_CN": ["别人数据", "隐私", "我的数据", "数据隔离"]
+			},
+			"title": {
+				"en_US": "I can see other users' private data",
+				"zh_CN": "我看到了不该看到的其他人数据"
+			}
+		},
+		{
+			"category": "access",
+			"checks": {
+				"en_US": [
+					"Whether UI actions compare stable user IDs with the real creator field",
+					"Whether backend row edit and delete are creator-only",
+					"Do not treat hidden buttons as secure permission"
+				],
+				"zh_CN": [
+					"页面操作是否根据稳定用户 ID 和真实创建人字段判断",
+					"检查后端行级编辑和删除权限是否限制到创建人",
+					"不要把隐藏按钮当成安全权限"
+				]
+			},
+			"description": {
+				"en_US": "Records meant to be owner-managed can be changed or deleted by others.",
+				"zh_CN": "本应只有创建人能操作的数据，却被其他用户修改或删除。"
+			},
+			"featured": false,
+			"id": "access-edit-others-data",
+			"keywords": {
+				"en_US": ["creator", "other user edit", "other user delete", "permission"],
+				"zh_CN": ["创建人", "别人修改", "别人删除", "权限"]
+			},
+			"title": {
+				"en_US": "Other users can edit or delete my data",
+				"zh_CN": "别人可以修改或删除我的数据"
+			}
+		},
+		{
+			"category": "access",
+			"checks": {
+				"en_US": [
+					"Whether admin links depend on the real admin result",
+					"Whether every admin page checks before loading data",
+					"Whether underlying data permissions are protected beyond hiding links"
+				],
+				"zh_CN": [
+					"管理入口是否根据真实管理员结果隐藏",
+					"每个管理页面是否在加载数据前单独校验",
+					"底层数据权限是否同步限制，而不是只隐藏页面入口"
+				]
+			},
+			"description": {
+				"en_US": "Regular users can access admin links, statistics, exports, or sensitive data.",
+				"zh_CN": "普通用户能看到管理入口、统计、导出或其他敏感数据。"
+			},
+			"featured": false,
+			"id": "access-admin-page",
+			"keywords": {
+				"en_US": ["admin", "admin page", "regular user", "sensitive data"],
+				"zh_CN": ["管理员", "管理页面", "普通用户", "敏感数据"]
+			},
+			"title": {
+				"en_US": "Regular users can open admin pages",
+				"zh_CN": "普通用户也能进入管理页面"
+			}
+		},
+		{
+			"category": "ai",
+			"checks": {
+				"en_US": [
+					"Whether model list and selection are really available",
+					"Whether requests include a valid model and required permission",
+					"Whether timeout, denial, and service errors provide retryable feedback"
+				],
+				"zh_CN": [
+					"模型列表和当前选择是否真实可用",
+					"请求是否包含有效模型并具备必要授权",
+					"超时、拒绝授权和服务错误是否给出可重试反馈"
+				]
+			},
+			"description": {
+				"en_US": "Generate, analyze, or summarize actions fail without returning results.",
+				"zh_CN": "点击生成、分析或总结后提示失败，没有返回任何结果。"
+			},
+			"featured": true,
+			"id": "ai-model-failed",
+			"keywords": {
+				"en_US": ["AI failed", "generation failed", "analysis failed", "model"],
+				"zh_CN": ["AI失败", "生成失败", "分析失败", "模型"]
+			},
+			"title": { "en_US": "AI generation keeps failing", "zh_CN": "智能生成一直失败" }
+		},
+		{
+			"category": "ai",
+			"checks": {
+				"en_US": [
+					"Whether both completion and errors end loading",
+					"Whether cancel, retry, and unmount clean old requests",
+					"Whether partial and new results are incorrectly concatenated"
+				],
+				"zh_CN": [
+					"流式完成和错误状态是否都能结束加载",
+					"取消、重试和页面关闭时是否清理旧请求",
+					"部分结果和新结果是否被错误拼接"
+				]
+			},
+			"description": {
+				"en_US": "Only part of the result appears, loading never ends, or retry duplicates content.",
+				"zh_CN": "内容只生成了一部分，加载状态不结束，重新操作还会重复内容。"
+			},
+			"featured": false,
+			"id": "ai-stream-stopped",
+			"keywords": {
+				"en_US": ["stream stopped", "partial", "streaming", "duplicate content"],
+				"zh_CN": ["生成中断", "一半", "流式", "重复内容"]
+			},
+			"title": { "en_US": "Generation stops halfway", "zh_CN": "生成到一半就停了" }
+		},
+		{
+			"category": "ai",
+			"checks": {
+				"en_US": [
+					"Whether agent list and selection come from the real runtime",
+					"Whether complex tasks create a new topic and send a real message",
+					"Whether started, running, completed, and failed states are visible"
+				],
+				"zh_CN": [
+					"员工列表和选中员工是否来自真实运行环境",
+					"复杂任务是否创建了新话题并发送真实消息",
+					"任务开始、进行中、完成和失败状态是否可见"
+				]
+			},
+			"description": {
+				"en_US": "Submitting to an agent creates no visible task, result, or progress.",
+				"zh_CN": "选择员工并提交任务后，没有创建任务、没有结果，也不知道是否开始。"
+			},
+			"featured": true,
+			"id": "ai-agent-no-response",
+			"keywords": {
+				"en_US": ["agent", "task", "not executed", "no result"],
+				"zh_CN": ["员工", "任务", "没有执行", "没有结果"]
+			},
+			"title": {
+				"en_US": "A selected agent does not run the task",
+				"zh_CN": "选择员工后任务没有执行"
+			}
+		},
+		{
+			"category": "ai",
+			"checks": {
+				"en_US": [
+					"Whether the file is really uploaded or saved and accessible",
+					"Whether the task correctly references the real file",
+					"Whether long or multi-step analysis uses an appropriate task workflow"
+				],
+				"zh_CN": [
+					"文件是否真实上传或保存并能被当前项目访问",
+					"发送任务时是否正确引用了真实文件",
+					"长文件或多步骤分析是否交给合适的任务流程而不是页面直接处理"
+				]
+			},
+			"description": {
+				"en_US": "A selected or uploaded file is ignored or produces unrelated analysis.",
+				"zh_CN": "文件已经选择或上传，但智能分析没有读取文件内容或返回了无关结果。"
+			},
+			"featured": false,
+			"id": "ai-file-analysis",
+			"keywords": {
+				"en_US": ["file analysis", "upload", "not read", "irrelevant result"],
+				"zh_CN": ["文件分析", "上传文件", "没有读取", "结果无关"]
+			},
+			"title": {
+				"en_US": "An uploaded file is not analyzed",
+				"zh_CN": "上传文件后没有被分析"
+			}
+		},
+		{
+			"category": "reliability",
+			"checks": {
+				"en_US": [
+					"Whether initialization repeats data requests or serializes independent work",
+					"Whether lists load unnecessary full details",
+					"Whether static content, user actions, and background refresh are separated"
+				],
+				"zh_CN": [
+					"初始化是否重复请求相同数据或串行等待无关任务",
+					"列表是否加载了不需要的全部详情",
+					"静态内容、用户操作和后台刷新是否合理分开"
+				]
+			},
+			"description": {
+				"en_US": "Initial load, tab switching, or returning to a list takes too long.",
+				"zh_CN": "首次打开、切换标签或返回列表时需要等待很久。"
+			},
+			"featured": true,
+			"id": "reliability-slow-start",
+			"keywords": {
+				"en_US": ["slow", "loading slow", "switch slow", "lag"],
+				"zh_CN": ["很慢", "加载慢", "切换慢", "卡顿"]
+			},
+			"title": {
+				"en_US": "Opening or switching pages is slow",
+				"zh_CN": "页面打开或切换很慢"
+			}
+		},
+		{
+			"category": "reliability",
+			"checks": {
+				"en_US": [
+					"Whether too many records are fetched or rendered at once",
+					"Whether paging, filters, and sorting operate on the real source",
+					"Whether repeated calculations, renders, or listeners are excessive"
+				],
+				"zh_CN": [
+					"是否一次渲染或请求过多记录",
+					"分页、筛选和排序是否在真实数据源执行",
+					"重复计算、重复渲染和无效事件监听是否过多"
+				]
+			},
+			"description": {
+				"en_US": "Scrolling, search, filters, or details slow down as records grow.",
+				"zh_CN": "记录增加后滚动、搜索、筛选或打开详情明显变慢。"
+			},
+			"featured": false,
+			"id": "reliability-large-list",
+			"keywords": {
+				"en_US": ["many records", "list lag", "scroll lag", "performance"],
+				"zh_CN": ["数据多", "列表卡", "滚动卡", "性能"]
+			},
+			"title": {
+				"en_US": "The page becomes slow with more data",
+				"zh_CN": "数据一多页面就很卡"
+			}
+		},
+		{
+			"category": "reliability",
+			"checks": {
+				"en_US": [
+					"Whether old selection and loading state reset after switching",
+					"Whether stale requests overwrite newer results",
+					"Whether caches and listeners are scoped to the current page, record, and user"
+				],
+				"zh_CN": [
+					"切换目标后是否重置旧的选择和加载状态",
+					"旧请求是否会覆盖新请求结果",
+					"缓存和监听是否按当前页面、记录和用户正确隔离"
+				]
+			},
+			"description": {
+				"en_US": "Switching records, pages, or users still shows previous data or state.",
+				"zh_CN": "切换记录、页面或账号后，仍然看到上一次的数据或状态。"
+			},
+			"featured": false,
+			"id": "reliability-stale-data",
+			"keywords": {
+				"en_US": ["stale data", "not refreshed", "switch", "cache"],
+				"zh_CN": ["旧数据", "没有刷新", "切换", "缓存"]
+			},
+			"title": {
+				"en_US": "Old content remains after switching",
+				"zh_CN": "切换页面后还是显示旧内容"
+			}
+		},
+		{
+			"category": "reliability",
+			"checks": {
+				"en_US": [
+					"Whether real actions have loading, success, error, and disabled states",
+					"Whether errors explain what happened and the next step",
+					"Whether failures are retryable instead of leaving the page stuck"
+				],
+				"zh_CN": [
+					"所有真实操作是否有 loading、success、error 和 disabled 状态",
+					"错误文案是否说明发生了什么和下一步操作",
+					"失败后页面是否可以重试而不是永久卡住"
+				]
+			},
+			"description": {
+				"en_US": "Nothing changes or errors only appear in the console, leaving the user unsure what to do.",
+				"zh_CN": "点击后没有变化，或者只在控制台报错，用户不知道该怎么处理。"
+			},
+			"featured": false,
+			"id": "reliability-error-feedback",
+			"keywords": {
+				"en_US": ["no feedback", "error", "failed", "console"],
+				"zh_CN": ["没有提示", "错误", "失败", "控制台"]
+			},
+			"title": {
+				"en_US": "An action fails without explanation",
+				"zh_CN": "操作失败了，但页面没有说明"
+			}
+		}
+	],
+	"promptTemplates": {
+		"en_US": "Please inspect and fix the \"{{title}}\" issue in the current micro app.\n\nWhat the user sees: {{description}}\n\nFirst read MICRO-APP.md and inspect the existing pages, real interactions, and real data. Do not guess from the symptom alone.\n\nFocus on:\n{{checks}}\n\nRequirements:\n- Change only what is related to this issue and preserve existing features and data.\n- If the fix changes major functionality, file structure, MagicBase schema, or permissions, present a micro_app_plan and wait for confirmation first.\n- Do not create buttons, charts, filters, or permission effects that do not really work.\n- Verify the user-visible result and explain the cause, changes, and verification result.",
+		"zh_CN": "请检查并修复当前微应用的「{{title}}」问题。\n\n用户看到的现象：{{description}}\n\n请先读取当前项目的 MICRO-APP.md，并结合现有页面、真实交互和真实数据定位原因，不要只根据现象猜测。\n\n重点检查：\n{{checks}}\n\n处理要求：\n- 只修改与问题有关的实现，保留已有功能和数据。\n- 如果涉及较大功能调整、文件结构、MagicBase 表结构或权限变化，先通过 micro_app_plan 展示方案并等待确认。\n- 不要生成不能实际使用的按钮、图表、筛选或权限效果。\n- 修改后验证用户能看到的结果，并说明原因、修改内容和验证结果。"
+	}
+}

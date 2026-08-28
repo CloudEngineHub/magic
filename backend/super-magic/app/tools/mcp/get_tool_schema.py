@@ -7,7 +7,7 @@ from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.mcp.manager import ensure_server_connected
 from app.tools.core import BaseToolParams, tool
@@ -17,31 +17,20 @@ from app.tools.mcp._base import BaseMcpTool
 class McpGetToolSchemaParams(BaseToolParams):
     server_name: str = Field(
         ...,
-        description="""<!--zh: MCP 服务器名称-->
-MCP server name.""",
+        description="MCP server name.",
     )
     tool_name: Union[str, List[str]] = Field(
         ...,
-        description="""<!--zh
-        要查询的工具名，需与 mcp_list_tools 返回的 name 完全一致。
-        可传单个字符串，也可传字符串列表一次拿多个工具的 input schema。
-        -->
-        Tool name(s) to query. Must match the `name` returned by
-        mcp_list_tools exactly. Accepts either a single string or a list of
-        strings to fetch multiple schemas at once.""",
+        description=(
+            "Tool name or names returned by mcp_list_tools. Pass a string or a "
+            "string list to fetch one or more input schemas."
+        ),
     )
 
 
 @tool(name="mcp_get_tool_schema")
 class McpGetToolSchema(BaseMcpTool[McpGetToolSchemaParams]):
-    """<!--zh
-    获取指定 MCP 工具的输入参数 schema，用于在调用前确认参数结构。
-    若服务器尚未连接，会按需先建连再查询。
-    -->
-    Fetch the input schema(s) of one or more MCP tools, so the caller can
-    validate parameters before mcp_call_tool. Connects the target server on
-    demand if it is not yet connected.
-    """
+    """Fetch input schemas for MCP tools, connecting the server when needed."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None
@@ -66,11 +55,10 @@ class McpGetToolSchema(BaseMcpTool[McpGetToolSchemaParams]):
     async def get_tool_detail(
         self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None
     ) -> Optional[ToolDetail]:
-        if not result.content or not result.ok:
-            return None
-        return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name="mcp_tool_schema.md", content=result.content),
+        return self._build_mcp_tool_detail(
+            result,
+            file_name="mcp_tool_schema.md",
+            error_title="MCP tool schema failed",
         )
 
     async def execute(
@@ -110,7 +98,7 @@ class McpGetToolSchema(BaseMcpTool[McpGetToolSchemaParams]):
                 lines.append(f"## {t_name}")
                 if t_info.description:
                     lines.append(f"Description: {t_info.description}")
-                lines.append(f"Input schema:")
+                lines.append("Input schema:")
                 lines.append(f"```json\n{json_mod.dumps(t_info.inputSchema, indent=2, ensure_ascii=False)}\n```")
             else:
                 lines.append(f"## {t_name}")

@@ -12,7 +12,11 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
+import {
+	MODEL_TYPE_IMAGE,
+	MODEL_TYPE_LLM,
+	MODEL_TYPE_VIDEO,
+} from "@/apis/modules/org-ai-model-provider"
 import { useOptionalAddModelStore } from "./AddModel/context"
 import type { ModelItem } from "../types"
 import MyModelsIcon from "../assets/my-models-icon.svg"
@@ -20,13 +24,14 @@ import { MyModelRow } from "./my-models-list/MyModelRow"
 import { buildMyModelGroups } from "./my-models-list/utils"
 import { userStore } from "@/models/user"
 
-const MODEL_TYPE_BY_KEY: Record<"models" | "image_models", number> = {
+const MODEL_TYPE_BY_KEY: Record<"models" | "image_models" | "video_models", number> = {
 	models: MODEL_TYPE_LLM,
 	image_models: MODEL_TYPE_IMAGE,
+	video_models: MODEL_TYPE_VIDEO,
 }
 
 interface MyModelsListProps {
-	modelKey?: "models" | "image_models"
+	modelKey?: "models" | "image_models" | "video_models"
 	selectedModel?: ModelItem | null
 	onModelClick?: (model: ModelItem) => void
 	selectedItemRef?: React.RefObject<HTMLDivElement>
@@ -76,7 +81,12 @@ function MyModelsListInner({
 		<>
 			<div className="last:border-b-0 last:pb-0" data-testid="my-models-list">
 				<div className="flex items-center gap-1 pb-1">
-					<img src={MyModelsIcon} alt="" className="size-4"  data-testid="my-models-list-image"/>
+					<img
+						src={MyModelsIcon}
+						alt=""
+						className="size-4"
+						data-testid="my-models-list-image"
+					/>
 					<span className="text-xs text-foreground">
 						{isPersonalOrganization
 							? t("messageEditor.addModel.myModels")

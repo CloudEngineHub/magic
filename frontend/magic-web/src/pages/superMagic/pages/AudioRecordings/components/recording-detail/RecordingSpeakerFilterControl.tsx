@@ -8,7 +8,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { resolveSpeakerChipStyle } from "../../utils/resolve-speaker-chip-style"
 import {
 	isSpeakerFilterActive,

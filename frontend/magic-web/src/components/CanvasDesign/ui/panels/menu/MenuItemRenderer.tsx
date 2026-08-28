@@ -7,7 +7,6 @@ import {
 } from "../../primitives/shadcn/context-menu"
 import { formatShortcut } from "../../../runtime/shared/lib/index"
 import { cn } from "../../../runtime/shared/lib/utils"
-import classNames from "classnames"
 import type { MenuItem, MenuOption } from "./types"
 import styles from "./index.module.css"
 // import { isValidElement } from "react"
@@ -56,7 +55,7 @@ export function MenuItemRenderer({
 						<ContextMenuSub key={option.id}>
 							<ContextMenuSubTrigger
 								disabled={isDisabled}
-								className={classNames(styles.menuItem)}
+								className={cn(styles.menuItem)}
 							>
 								{/* <div className={styles.menuItemIcon}>{renderIcon()}</div> */}
 								<div className={styles.menuItemLabel}>{option.label}</div>
@@ -114,7 +113,7 @@ export function MenuItemRenderer({
 							}
 							option.onClick?.()
 						}}
-						className={classNames(
+						className={cn(
 							option.id === "delete" ? styles.menuItemDelete : undefined,
 							styles.menuItem,
 						)}

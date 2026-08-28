@@ -17,6 +17,12 @@ describe("isTopicShareAllowed", () => {
 		expect(isTopicShareAllowed([{ status: MessageStatus.REVOKED }])).toBe(false)
 	})
 
+	it("uses Canonical imStatus for share visibility", () => {
+		expect(isTopicShareAllowed([{ status: "read", imStatus: MessageStatus.REVOKED }])).toBe(
+			false,
+		)
+	})
+
 	it.each([
 		{
 			label: "历史撤回后已有普通消息",

@@ -2,7 +2,7 @@ import { Topic, Workspace } from "../../../pages/Workspace/types"
 import { SuperMagicApi } from "@/apis"
 import { useMemoizedFn, useThrottleFn } from "ahooks"
 import { logger as Logger } from "@/utils/log"
-import { Editor } from "@tiptap/core"
+import { Editor } from "@/infrastructure/editors/tiptap/core"
 import { useEffect } from "react"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 
@@ -39,7 +39,12 @@ function useSandboxPreWarm({
 			}
 
 			SuperMagicApi.preWarmSandbox(params).catch((error) => {
-				logger.error("preWarmSandbox error", error)
+				logger.error({
+					eventKey: "pre_warm_sandbox_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "preWarmSandbox error",
+				})
 			})
 		}),
 		{

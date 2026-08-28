@@ -12,16 +12,17 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from agentlang.chat_history.chat_history_models import FunctionCall, ToolCall
 from agentlang.logger import get_logger
 from app.api.http_dto.response import (
     BaseResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
 from app.service.agent_dispatcher import AgentDispatcher
-from app.service.sdk_call_registry import SdkCallRegistry, SdkCallEntry
+from app.service.sdk_call_registry import SdkCallEntry, SdkCallRegistry
 from app.tools.core.tool_call_executor import tool_call_executor
-from agentlang.chat_history.chat_history_models import ToolCall, FunctionCall
+from app.tools.core.tool_executor import tool_executor
 from app.i18n import i18n
 
 router = APIRouter(prefix="/sdk", tags=["SDK"])
@@ -89,8 +90,13 @@ async def sdk_tool_call(request: SdkToolCallRequest):
     tool_call_id = request.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 
     agent_label = agent_context.get_agent_session_label()
+    safe_tool_params = tool_executor.sanitize_tool_arguments_for_log(
+        request.tool_name,
+        request.tool_params,
+    )
     logger.info(
-        f"SDK tool call: {request.tool_name}, params: {request.tool_params}, "
+        f"SDK tool call: {request.tool_name}, parameter fields: "
+        f"{tool_executor.get_tool_parameter_names(safe_tool_params)}, "
         f"tool_call_id: {tool_call_id}, agent: {agent_label}, agent_context_id: {request.agent_context_id}"
     )
 
@@ -102,7 +108,7 @@ async def sdk_tool_call(request: SdkToolCallRequest):
             agent_context_id=request.agent_context_id,
             sdk_execution_id=request.sdk_execution_id,
             tool_call_id=tool_call_id,
-            call_type="tool",
+            tool_name=request.tool_name,
             task=current_task,
         ))
 
@@ -134,6 +140,16 @@ async def sdk_tool_call(request: SdkToolCallRequest):
                 "name": result.name,
                 "data": result.data,
             }
+            if request.sdk_execution_id:
+                error_code = result.data.get("error_code")
+                registry.finish(
+                    request.agent_context_id,
+                    request.sdk_execution_id,
+                    tool_call_id,
+                    ok=result.ok,
+                    summary=result.content,
+                    error_code=error_code if isinstance(error_code, str) else None,
+                )
 
             return create_success_response(
                 message="Tool call succeeded" if result.ok else "Tool call failed",
@@ -142,6 +158,15 @@ async def sdk_tool_call(request: SdkToolCallRequest):
 
         error_msg = "Tool execution returned no result."
         logger.error(error_msg)
+        if request.sdk_execution_id:
+            registry.finish(
+                request.agent_context_id,
+                request.sdk_execution_id,
+                tool_call_id,
+                ok=False,
+                summary=error_msg,
+                error_code="no_result",
+            )
         return create_error_response(
             message=error_msg,
             data={"ok": False, "content": error_msg},
@@ -150,25 +175,45 @@ async def sdk_tool_call(request: SdkToolCallRequest):
     except asyncio.CancelledError:
         # 被中断取消，返回明确的取消响应
         logger.info(f"SDK tool call cancelled: {request.tool_name}, tool_call_id: {tool_call_id}")
+        if request.sdk_execution_id:
+            registry.mark_cancelled(request.agent_context_id, request.sdk_execution_id, tool_call_id)
         return create_error_response(
             message="Tool call cancelled by interruption",
             data={"ok": False, "content": "Tool call cancelled by interruption"},
         )
 
-    except HTTPException:
+    except HTTPException as error:
+        if request.sdk_execution_id:
+            registry.finish(
+                request.agent_context_id,
+                request.sdk_execution_id,
+                tool_call_id,
+                ok=False,
+                summary=str(error.detail),
+                error_code="http_error",
+            )
         raise
 
     except Exception as e:
         logger.error(f"调用工具时发生异常: {e}", exc_info=True)
         logger.error(traceback.format_exc())
+        if request.sdk_execution_id:
+            registry.finish(
+                request.agent_context_id,
+                request.sdk_execution_id,
+                tool_call_id,
+                ok=False,
+                summary=str(e),
+                error_code="exception",
+            )
         return create_error_response(
-            message=f"Tool call failed: {str(e)}",
+            message=f"Tool call failed: {e!s}",
             data={"ok": False, "content": str(e)},
         )
 
     finally:
         if request.sdk_execution_id:
-            registry.unregister(request.agent_context_id, request.sdk_execution_id, tool_call_id)
+            registry.unregister_task(request.agent_context_id, request.sdk_execution_id, tool_call_id)
 
 
 @router.post("/oauth2/access-token", response_model=BaseResponse)
@@ -181,8 +226,8 @@ async def sdk_oauth2_access_token(request: SdkOAuth2AccessTokenRequest):
         OAuth2DependencyError,
         OAuth2TokenRefreshError,
     )
-    from app.infrastructure.oauth2.token_service import OAuth2TokenService
     from app.infrastructure.oauth2.time_utils import format_timestamp
+    from app.infrastructure.oauth2.token_service import OAuth2TokenService
 
     agent_context = AgentContextRegistry.get_instance().get(request.agent_context_id)
     if agent_context is None:
@@ -256,8 +301,13 @@ async def sdk_tool_debug_call(request: SdkDebugToolCallRequest):
 
     tool_call_id = request.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 
+    safe_tool_params = tool_executor.sanitize_tool_arguments_for_log(
+        request.tool_name,
+        request.tool_params,
+    )
     logger.info(
-        f"SDK tool debug call: {request.tool_name}, params: {request.tool_params}, "
+        f"SDK tool debug call: {request.tool_name}, parameter fields: "
+        f"{tool_executor.get_tool_parameter_names(safe_tool_params)}, "
         f"tool_call_id: {tool_call_id}, workspace_path: {request.workspace_path}"
     )
 
@@ -310,7 +360,7 @@ async def sdk_tool_debug_call(request: SdkDebugToolCallRequest):
     except Exception as e:
         logger.error(f"调试调用工具时发生异常: {e}", exc_info=True)
         return create_error_response(
-            message=f"Tool debug call failed: {str(e)}",
+            message=f"Tool debug call failed: {e!s}",
             data={"ok": False, "content": str(e)},
         )
 
@@ -326,7 +376,7 @@ async def sdk_list_tools():
         from app.tools.core.tool_factory import tool_factory
 
         await tool_factory.ensure_definitions_initialized()
-        tool_names = tool_factory.get_tool_names()
+        tool_names = tool_factory.get_code_mode_tool_names()
 
         tools = []
         for name in tool_names:
@@ -350,7 +400,7 @@ async def sdk_list_tools():
     except Exception as e:
         logger.error(f"获取内置工具列表时发生异常: {e}", exc_info=True)
         return create_error_response(
-            message=f"获取工具列表失败: {str(e)}",
+            message=f"获取工具列表失败: {e!s}",
             data={"tools": []},
         )
 
@@ -384,7 +434,7 @@ async def sdk_list_contexts():
     except Exception as e:
         logger.error(f"获取 AgentContext 列表时发生异常: {e}", exc_info=True)
         return create_error_response(
-            message=f"获取 AgentContext 列表失败: {str(e)}",
+            message=f"获取 AgentContext 列表失败: {e!s}",
             data={"contexts": []},
         )
 
@@ -428,6 +478,6 @@ async def sdk_execution_cancel(request: SdkExecutionCancelRequest):
     except Exception as e:
         logger.error(f"取消 SDK 执行时发生异常: {e}", exc_info=True)
         return create_error_response(
-            message=f"Cancel failed: {str(e)}",
+            message=f"Cancel failed: {e!s}",
             data={"cancelled_count": 0},
         )

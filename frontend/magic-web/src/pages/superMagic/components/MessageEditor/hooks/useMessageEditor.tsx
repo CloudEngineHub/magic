@@ -1,9 +1,9 @@
-import { useEditor, JSONContent } from "@tiptap/react"
-import { Document } from "@tiptap/extension-document"
-import { Paragraph } from "@tiptap/extension-paragraph"
-import { Text } from "@tiptap/extension-text"
+import { useEditor, JSONContent } from "@/infrastructure/editors/tiptap/react"
+import { Document } from "@/infrastructure/editors/tiptap/extension-document"
+import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
+import { Text } from "@/infrastructure/editors/tiptap/extension-text"
 import { useRef, useEffect } from "react"
-import { NodeSelection } from "@tiptap/pm/state"
+import { NodeSelection } from "@/infrastructure/editors/tiptap/pm-state"
 import {
 	HardBlock,
 	CodeAwarePasteExtension,
@@ -25,7 +25,7 @@ import { Topic } from "../../../pages/Workspace/types"
 import { type TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ChatApi } from "@/apis"
 import { isEmptyJSONContent } from "../utils"
-import { UndoRedo } from "@tiptap/extensions"
+import { UndoRedo } from "@/infrastructure/editors/tiptap/extensions"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { isAllowedMention as defaultIsAllowedMention } from "../utils/mention"
 import GlobalMentionPanelStore, {
@@ -34,11 +34,19 @@ import GlobalMentionPanelStore, {
 import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
+import FileMentionNodeView from "../components/MentionNodes/file/FileMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
+import {
+	tryAcceptPromptCarouselShortcut,
+	tryNavigatePromptCarouselShortcut,
+} from "../utils/promptCarousel"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
 	placeholder?: string
+	ariaLabel?: string
+	onPromptCarouselAccept?: () => boolean
+	onPromptCarouselNavigate?: (direction: "previous" | "next") => boolean
 	onSend?: (content: JSONContent | undefined) => void
 	onMentionsInsert?: (item: TiptapMentionAttributes) => void
 	onMentionInsertItems?: (items: TiptapMentionAttributes[]) => void
@@ -116,6 +124,9 @@ export const useMessageEditor = ({
 	value,
 	onSend,
 	placeholder,
+	ariaLabel,
+	onPromptCarouselAccept,
+	onPromptCarouselNavigate,
 	onMentionsInsert,
 	onMentionInsertItems,
 	onMentionRemove,
@@ -218,8 +229,17 @@ export const useMessageEditor = ({
 			updateAiCompletionState(editor)
 		},
 		editorProps: {
+			attributes: ariaLabel ? { "aria-label": ariaLabel } : {},
 			handleKeyDown: (_, event) => {
 				event.stopPropagation()
+
+				if (tryNavigatePromptCarouselShortcut(event, onPromptCarouselNavigate)) {
+					return true
+				}
+
+				if (tryAcceptPromptCarouselShortcut(event, onPromptCarouselAccept)) {
+					return true
+				}
 
 				// 其他实际内容输入键触发停止语音录制
 				const isContentKey =
@@ -326,6 +346,8 @@ export const useMessageEditor = ({
 							dataService: mentionPanelStore,
 							nodeViewRenderers: {
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
+								[MentionItemType.PROJECT_FILE]: FileMentionNodeView,
+								[MentionItemType.UPLOAD_FILE]: FileMentionNodeView,
 							},
 							shouldSkipInsertSync,
 							shouldSkipRemoveSync,
@@ -351,16 +373,24 @@ export const useMessageEditor = ({
 	AiCompletionService.setInstance({ editor: tiptapEditor })
 
 	// Handle AI completion based on mobile, aiCompletionEnabled, and focus position
+	const previousAiCompletionEnabledRef = useRef<boolean | null>(null)
+
 	useEffect(() => {
 		if (!tiptapEditor) return
 
 		const isFocusOnPlaceholder = isFocusOnSuperPlaceholder(tiptapEditor)
 		isFocusOnPlaceholderRef.current = isFocusOnPlaceholder
+		const wasEnabled = previousAiCompletionEnabledRef.current
+		const shouldEnable = !isMobile && aiCompletionEnabled && !isFocusOnPlaceholder
+		previousAiCompletionEnabledRef.current = shouldEnable
 
-		if (isMobile || !aiCompletionEnabled || isFocusOnPlaceholder) {
+		if (!shouldEnable) {
 			AiCompletionService.disable()
 		} else {
 			AiCompletionService.enable()
+			if (wasEnabled === false && !tiptapEditor.isEmpty) {
+				AiCompletionService.triggerFetchSuggestion()
+			}
 		}
 
 		return () => {

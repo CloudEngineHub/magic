@@ -3,7 +3,6 @@ import { useSuperMagicNavigate } from "@/pages/superMagic/hooks/useSuperMagicNav
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { openLongTremMemoryModal } from "@/pages/superMagic/components/LongTremMemory"
-import SuperMagicService from "@/pages/superMagic/services"
 import { MenuKey } from "./useMenuItems"
 
 function useGlobalMenuNavigate(onAfterNavigate?: () => void) {
@@ -49,9 +48,7 @@ function useGlobalMenuNavigate(onAfterNavigate?: () => void) {
 				navigate({ name: RouteName.Settings })
 				break
 			case MenuKey.LongTermMemory:
-				openLongTremMemoryModal({
-					onWorkspaceStateChange: SuperMagicService.route.navigateToState,
-				})
+				openLongTremMemoryModal()
 				break
 			default:
 				break

@@ -214,6 +214,19 @@ return [
         'max_record_error' => 'Bilangan rekod maksimum mesti integer antara 0 dan 500',
         'temperature_error' => 'Suhu mesti nombor perpuluhan antara 0 dan 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'URL lampiran luaran mestilah URL HTTP atau HTTPS yang mengandungi hos',
+        'blocked' => 'URL lampiran luaran telah disekat oleh dasar keselamatan SSRF: :reason',
+        'block_reason' => [
+            'invalid_url' => 'format URL tidak sah',
+            'blacklisted' => 'alamat sasaran berada dalam senarai hitam',
+            'protocol_not_allowed' => 'protokol URL tidak dibenarkan',
+            'non_public_ip' => 'alamat sasaran bukan IP awam',
+            'redirect_not_allowed' => 'URL sasaran mempunyai ubah hala yang tidak dibenarkan',
+            'resolve_failed' => 'hos sasaran tidak dapat diselesaikan',
+            'unknown' => 'alamat sasaran tidak mematuhi dasar keselamatan',
+        ],
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Jenis nod tidak disokong',
         'has_circular_dependencies' => '[:label] Pergantungan kitaran wujud',

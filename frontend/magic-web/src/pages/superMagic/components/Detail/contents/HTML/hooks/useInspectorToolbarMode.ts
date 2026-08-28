@@ -6,6 +6,7 @@ import type { useElementInspector } from "@/components/business/ElementInspector
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { roleStore } from "@/pages/superMagic/stores"
+import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 type ElementInspector = ReturnType<typeof useElementInspector>
 
@@ -43,13 +44,21 @@ export function useInspectorToolbarMode(
 
 		if (currentMode === "appendToEditor") {
 			// Append inspector-detail rich node to the current editor
-			const content = buildAgentPromptContent(elementInspector.selectedElement, t, fileInfo)
+			const content = buildAgentPromptContent(
+				elementInspector.selectedElement,
+				t("stylePanel.inspector.agentPromptTitle"),
+				fileInfo,
+			)
 			pubsub.publish(PubSubEvents.Append_Suggestion_To_Editor, content)
 			return
 		}
 
 		// toolbar mode — create new topic with rich content
-		const content = buildAgentPromptContent(elementInspector.selectedElement, t, fileInfo)
+		const content = buildAgentPromptContent(
+			elementInspector.selectedElement,
+			t("stylePanel.inspector.agentPromptTitle"),
+			fileInfo,
+		)
 
 		// In crew/skill/MagiClaw scenarios there's no Create_New_Topic listener;
 		// fall back to setting the input message directly in the current editor.
@@ -58,14 +67,17 @@ export function useInspectorToolbarMode(
 			return
 		}
 
-		// Only specify General mode if it's available in the current project
-		const topicMode = superMagicModeService.isModeValid(TopicMode.General)
-			? TopicMode.General
+		const defaultSelection = resolveDefaultAgentSelection()
+		const topicMode = superMagicModeService.isModeValid(
+			defaultSelection.modeIdentifier,
+			defaultSelection.agentCode,
+		)
+			? (defaultSelection.modeIdentifier as TopicMode)
 			: undefined
 
 		// Sync the role store so tabPattern is consistent with the new topic's mode
 		if (topicMode) {
-			roleStore.setCurrentRole(topicMode)
+			roleStore.applyResolvedRole(topicMode)
 		}
 
 		// Pass content via afterCreate so it is inserted AFTER navigation completes

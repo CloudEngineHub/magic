@@ -23,6 +23,8 @@ interface RequestContext {
 	swCacheOption?: "cache" | "no-cache" | "default"
 	/** Quote 16+ digit JSON integers as strings before parse (snowflake IDs) */
 	parseJsonLargeIntAsString?: boolean
+	/** Internal guard limiting auth recovery to one transport retry. */
+	authRetryAttempt?: 0 | 1
 }
 
 /** Response body */
@@ -262,6 +264,7 @@ export class HttpClient {
 				"enableAuthorizationVerification",
 				"skipAppInitWait",
 				"parseJsonLargeIntAsString",
+				"authRetryAttempt",
 			]),
 		}
 	}

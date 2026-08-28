@@ -1,4 +1,5 @@
 import type { ReactNode, CSSProperties } from "react"
+import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
 	ProjectListItem,
@@ -6,6 +7,8 @@ import type {
 	TaskStatus,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
+import type { FileScope } from "@/apis/modules/fileScope"
+import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
 
 // Base interfaces
 export interface BaseComponentProps {
@@ -17,6 +20,16 @@ export interface BaseComponentProps {
 /** Preview policy declared by the opener and executed by FilesViewer, independent of file source. */
 export interface FilePreviewPolicy {
 	temporary?: boolean
+	/** 允许使用调用方提供的完整文件信息打开，不依赖当前项目附件树。 */
+	standalone?: boolean
+	/** 是否参与文件编辑状态上报和编辑冲突检测。 */
+	editingPresence?: boolean
+	/** 是否允许发起文件分享。 */
+	allowShare?: boolean
+	/** 是否允许查看和切换文件历史版本。 */
+	allowVersionHistory?: boolean
+	/** 文件编辑保存时使用的文件空间。 */
+	fileScope?: FileScope
 	persistTab?: boolean
 	syncWithAttachments?: boolean
 	keepLocalContent?: boolean
@@ -33,7 +46,6 @@ export interface WebsitePreset {
 	url: string
 	description?: string
 	descriptionKey?: string
-	icon?: "nano-banana-pro" | "gpt-image-2"
 	iconSrc?: string
 }
 
@@ -58,7 +70,7 @@ export interface FileItem {
 	resource_version?: string | null
 	version?: string | null
 	display_config?: {
-		type?: "slide" | "design" | "dashboard" | "audio" | "video" | string
+		type?: "slide" | "slide-template" | "design" | "dashboard" | "audio" | "video" | string
 		name?: string
 		description?: string
 		previewPolicy?: FilePreviewPolicy
@@ -68,6 +80,8 @@ export interface FileItem {
 	source?: AttachmentSource
 	project_id?: string
 	is_hidden?: boolean
+	/** Runtime-only navigation context for HTML previews; never persist this field. */
+	htmlNavigation?: HtmlNavigationRequest
 }
 
 // Tab item interface
@@ -143,6 +157,14 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 	// Fullscreen change callback
 	onFullscreenChange?: (isFullscreen: boolean) => void
+	/** Selects the stable desktop presentation strategy for Widget previews. */
+	previewMode?: MagicWidget.PreviewMode
+	/** Changes whenever the parent starts a new preview session after dismissing the previous one. */
+	previewSessionKey?: number
+	/** Hides the preview surface while preserving its cached tabs and content. */
+	onPreviewDismiss?: () => void
+	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
+	persistFileTabs?: boolean
 
 	// Render component props
 	allowEdit?: boolean
@@ -177,6 +199,9 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 	/** 当前项目 tabs 缓存已加载完成时的回调用 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+
+	/** File ids whose tabs cannot be removed by any close action. */
+	nonClosableFileIds?: string[]
 }
 
 // FilesViewer ref interface
@@ -206,6 +231,10 @@ export interface FilesViewerRef {
 		fileExtension?: string
 	}) => void
 	closeKnowledgeBaseTab: (tabId: string) => void
+	/** Promotes the currently active file or playback tab without recreating it. */
+	enterPreviewFullscreen: () => void
+	/** Restores the current preview to its non-fullscreen layout without dismissing it. */
+	exitPreviewFullscreen: () => void
 }
 
 // Tab component props

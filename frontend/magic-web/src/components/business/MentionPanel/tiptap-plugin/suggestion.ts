@@ -1,5 +1,9 @@
-import { ReactRenderer } from "@tiptap/react"
-import { exitSuggestion, type SuggestionOptions, type SuggestionProps } from "@tiptap/suggestion"
+import { ReactRenderer } from "@/infrastructure/editors/tiptap/react"
+import {
+	exitSuggestion,
+	type SuggestionOptions,
+	type SuggestionProps,
+} from "@/infrastructure/editors/tiptap/suggestion"
 
 // Types
 import {

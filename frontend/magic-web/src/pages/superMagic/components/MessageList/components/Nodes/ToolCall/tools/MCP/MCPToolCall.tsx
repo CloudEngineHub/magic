@@ -1,8 +1,8 @@
-import { Suspense, lazy, memo, type ClipboardEvent } from "react"
+import { Suspense, memo, type ClipboardEvent } from "react"
 import { observer } from "mobx-react-lite"
 import type { NodeProps } from "../../../types"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ChevronUp, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -10,13 +10,10 @@ import { defaultOpen } from "../../config"
 import { useToggleWithScrollPreserve } from "../../../shared/hooks/useToggleWithScrollPreserve"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
 import { customTheme, syntaxCustomStyle, syntaxLineNumberStyle } from "./syntaxConfig"
-
-const loadSyntaxHighlighter = () =>
-	import("react-syntax-highlighter").then((module) => ({
-		default: module.Prism,
-	}))
-
-const SyntaxHighlighter = lazy(loadSyntaxHighlighter)
+import {
+	McpSyntaxHighlighter as SyntaxHighlighter,
+	preloadMcpSyntaxHighlighter,
+} from "@/infrastructure/vendors/react-syntax-highlighter/mcp"
 
 interface MCPToolResult {
 	name: string
@@ -69,7 +66,7 @@ const parseExecutionResult = (content: string) => {
 
 function MCPToolCallNode(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const plugins = (tool?.detail?.data?.server_results || []) as Array<MCPToolResult>
 
@@ -80,7 +77,7 @@ function MCPToolCallNode(props: NodeProps) {
 	const [open, toggle] = useToggleWithScrollPreserve(defaultOpen)
 
 	const preloadSyntax = useMemoizedFn(() => {
-		void loadSyntaxHighlighter()
+		preloadMcpSyntaxHighlighter()
 	})
 
 	// Filter line numbers from copied text
@@ -166,7 +163,11 @@ function MCPToolCallNode(props: NodeProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.parameters")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy">
+										<div
+											className={codeBlock}
+											onCopy={handleCopy}
+											data-testid="handle-copy"
+										>
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"
@@ -186,7 +187,11 @@ function MCPToolCallNode(props: NodeProps) {
 										<span className="text-xs font-normal leading-[1.333] text-foreground">
 											{t("mcpTool.result")}
 										</span>
-										<div className={codeBlock} onCopy={handleCopy} data-testid="handle-copy-2">
+										<div
+											className={codeBlock}
+											onCopy={handleCopy}
+											data-testid="handle-copy-2"
+										>
 											<Suspense fallback={null}>
 												<SyntaxHighlighter
 													language="json"

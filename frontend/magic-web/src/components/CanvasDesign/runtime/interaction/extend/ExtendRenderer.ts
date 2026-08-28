@@ -1,5 +1,10 @@
 import Konva from "konva"
 import type { Box } from "konva/lib/shapes/Transformer"
+import {
+	getLocalRectRelativeTo,
+	getNodeTransformRelativeTo,
+	syncNodeTransformRelativeTo,
+} from "../../shared/geometry/nodeTransform"
 import type { Canvas } from "../../core/Canvas"
 import type { ExtendSession, ImageElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
@@ -96,38 +101,33 @@ export class ExtendRenderer {
 		this.imageTransformer?.keepRatio(keepRatio)
 	}
 
-	public render(): void {
+	public render(): boolean {
 		const session = this.canvas.extendManager.getTempSession()
-		if (!session) return
+		if (!session) return false
 
 		const elementData = this.canvas.elementManager.getElementData(this.elementId)
-		if (!elementData || elementData.type !== ElementTypeEnum.Image) return
+		if (!elementData || elementData.type !== ElementTypeEnum.Image) return false
 
 		const elementInstance = this.canvas.elementManager.getElementInstance(this.elementId)
 		const elementNode = elementInstance?.getNode()
-		if (!elementNode || !(elementNode instanceof Konva.Group)) return
+		if (!elementNode || !(elementNode instanceof Konva.Group)) return false
 
 		const renderedImageNode = this.getRenderedImageNode(elementNode)
 		const renderedImage = renderedImageNode?.image()
-		if (!renderedImage) return
+		if (!renderedImage) return false
 
 		const imageWidth = elementNode.width() ?? elementData.width ?? 0
 		const imageHeight = elementNode.height() ?? elementData.height ?? 0
-		if (imageWidth <= 0 || imageHeight <= 0) return
+		if (imageWidth <= 0 || imageHeight <= 0) return false
 
 		this.sourceElementNode = elementNode
 		this.sourceElementVisible = elementNode.visible()
 
 		this.overlayGroup = new Konva.Group({
-			x: elementNode.x(),
-			y: elementNode.y(),
-			scaleX: elementNode.scaleX(),
-			scaleY: elementNode.scaleY(),
-			rotation: elementNode.rotation(),
-			offset: { x: 0, y: 0 },
 			name: EXTEND_OVERLAY_GROUP_NAME,
 			listening: true,
 		})
+		syncNodeTransformRelativeTo(elementNode, this.overlayGroup, this.canvas.controlsLayer)
 
 		this.imageClipGroup = new Konva.Group({
 			name: EXTEND_IMAGE_CLIP_GROUP_NAME,
@@ -364,18 +364,17 @@ export class ExtendRenderer {
 		this.hideSourceElement()
 		this.canvas.overlayLayer.batchDraw()
 		this.canvas.controlsLayer.batchDraw()
+		return true
 	}
 
 	public syncTransform(): void {
 		if (!this.overlayGroup || !this.sourceElementNode) return
 
-		this.overlayGroup.setAttrs({
-			x: this.sourceElementNode.x(),
-			y: this.sourceElementNode.y(),
-			scaleX: this.sourceElementNode.scaleX(),
-			scaleY: this.sourceElementNode.scaleY(),
-			rotation: this.sourceElementNode.rotation(),
-		})
+		syncNodeTransformRelativeTo(
+			this.sourceElementNode,
+			this.overlayGroup,
+			this.canvas.controlsLayer,
+		)
 		this.ensureImageProxyWithinFrame()
 		this.frameTransformer?.forceUpdate()
 		this.imageTransformer?.forceUpdate()
@@ -599,11 +598,11 @@ export class ExtendRenderer {
 	}
 
 	public getImageBounds(): { x: number; y: number; width: number; height: number } | null {
-		if (!this.overlayGroup || !this.imageProxy) return null
+		if (!this.imageProxy) return null
 
-		const box = this.localBoxToLayerRect({
-			x: this.imageProxy.x(),
-			y: this.imageProxy.y(),
+		const box = getLocalRectRelativeTo(this.imageProxy, this.canvas.contentLayer, {
+			x: 0,
+			y: 0,
 			width: this.imageProxy.width(),
 			height: this.imageProxy.height(),
 		})
@@ -614,6 +613,16 @@ export class ExtendRenderer {
 			width: this.normalizeDimension(box.width),
 			height: this.normalizeDimension(box.height),
 		}
+	}
+
+	/** 图片代理本地原点在 contentLayer 坐标系中的位置，不使用旋转后的 AABB 左上角。 */
+	public getImageOriginInContent(): { x: number; y: number } | null {
+		if (!this.imageProxy) return null
+
+		return getNodeTransformRelativeTo(this.imageProxy, this.canvas.contentLayer).point({
+			x: 0,
+			y: 0,
+		})
 	}
 
 	/** 代理图在扩展 overlay 局部坐标系下的轴对齐外接矩形（与 frame 坐标一致，供面板计算扩展框位置） */
@@ -657,26 +666,7 @@ export class ExtendRenderer {
 			return localRect
 		}
 
-		const transform = this.overlayGroup.getTransform()
-		const corners = [
-			{ x: localRect.x, y: localRect.y },
-			{ x: localRect.x + localRect.width, y: localRect.y },
-			{ x: localRect.x, y: localRect.y + localRect.height },
-			{ x: localRect.x + localRect.width, y: localRect.y + localRect.height },
-		]
-		const layerCorners = corners.map((point) => transform.point(point))
-
-		const minX = Math.min(...layerCorners.map((point) => point.x))
-		const minY = Math.min(...layerCorners.map((point) => point.y))
-		const maxX = Math.max(...layerCorners.map((point) => point.x))
-		const maxY = Math.max(...layerCorners.map((point) => point.y))
-
-		return {
-			x: minX,
-			y: minY,
-			width: maxX - minX,
-			height: maxY - minY,
-		}
+		return getLocalRectRelativeTo(this.overlayGroup, this.canvas.contentLayer, localRect)
 	}
 
 	private constrainImagePosition(nextPos: { x: number; y: number }) {

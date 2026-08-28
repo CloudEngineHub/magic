@@ -54,6 +54,7 @@ vi.mock("@/pages/superMagic/pages/Workspace/types", () => ({}))
 vi.mock("@dtyq/magic-admin", () => ({
 	RouteName: {
 		Admin: "admin",
+		AdminPlatformAIModel: "admin-platform-ai-model",
 		AdminPlatformPackage: "admin-platform-package",
 	},
 	RoutePath: {
@@ -61,6 +62,10 @@ vi.mock("@dtyq/magic-admin", () => ({
 	},
 	PlatformPackageRoutes: {
 		path: "/admin/platform-package",
+		element: null,
+	},
+	AiManageRoutes: {
+		path: "/admin/ai-manage",
 		element: null,
 	},
 	otherRoutes: [],
@@ -106,8 +111,8 @@ vi.mock("../styles", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useFileData", () => ({
-	useFileData: () => ({
-		fileData: "<html><body>base</body></html>",
+	useFileData: ({ file_id, content }: { file_id?: string; content?: string }) => ({
+		fileData: file_id ? "<html><body>base</body></html>" : content || "",
 		fileVersion: 1,
 		changeFileVersion: vi.fn(),
 		loading: false,
@@ -534,6 +539,28 @@ describe("HTML", () => {
 		mockIsolatedHTMLRendererProps.mockClear()
 	})
 
+	it("should stop preview loading when the html file is empty", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				data={{
+					...baseProps.data,
+					content: "",
+					display_config: {
+						previewPolicy: { keepLocalContent: true },
+					},
+				}}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("magic-spin")).not.toBeInTheDocument()
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBeInTheDocument()
+	})
+
 	it("should use bundled dashboard template for dashboard index entry html", async () => {
 		render(
 			<HTML
@@ -620,6 +647,75 @@ describe("HTML", () => {
 				htmlRelativeFolderPath: "magic-api-devtools/",
 			}),
 		)
+	})
+
+	it("should pass HTML navigation state to the isolated renderer", async () => {
+		const htmlNavigation = {
+			filePath: "page1.html",
+			search: "?name=%E5%BC%A0%E4%B8%89&mode=preview",
+			hash: "#summary",
+			anchor: "summary",
+		}
+
+		render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation }),
+			)
+		})
+	})
+
+	it("should update the isolated renderer when only the query changes", async () => {
+		const oldNavigation = {
+			filePath: "page1.html",
+			search: "?mode=old",
+			hash: "",
+			anchor: "",
+		}
+		const newNavigation = {
+			filePath: "page1.html",
+			search: "?mode=new",
+			hash: "",
+			anchor: "",
+		}
+
+		const { rerender } = render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: oldNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: oldNavigation }),
+			)
+		})
+
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: newNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: newNavigation }),
+			)
+		})
 	})
 
 	it("should require an exact relative path match for bundled template entry html", () => {

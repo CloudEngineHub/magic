@@ -1,8 +1,8 @@
-import Mention from "@tiptap/extension-mention"
-import type { Editor } from "@tiptap/core"
-import { ReactNodeViewRenderer } from "@tiptap/react"
-import { Suggestion } from "@tiptap/suggestion"
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state"
+import Mention from "@/infrastructure/editors/tiptap/extension-mention"
+import type { Editor } from "@/infrastructure/editors/tiptap/core"
+import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
+import { Suggestion } from "@/infrastructure/editors/tiptap/suggestion"
+import { Plugin, PluginKey, type Transaction } from "@/infrastructure/editors/tiptap/pm-state"
 import { logger as Logger } from "@/utils/log"
 
 const logger = Logger.createLogger("MentionExtension")
@@ -237,6 +237,14 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					"data-data": JSON.stringify(attributes.data || {}),
 				}),
 			},
+			pending: {
+				default: false,
+				rendered: false,
+			},
+			pendingId: {
+				default: null,
+				rendered: false,
+			},
 		}
 	},
 
@@ -394,8 +402,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					return (
 						runActiveEditor(
 							editor,
-							(activeEditor) =>
-								activeEditor.chain().focus().insertContent("@").run(),
+							(activeEditor) => activeEditor.chain().focus().insertContent("@").run(),
 							false,
 						) ?? false
 					)
@@ -448,6 +455,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					oldState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 							oldMentions.set(`${pos}-${uniqueId}`, {
 								item: {
@@ -464,13 +472,14 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					newState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 
 							const isAllowed = this.options.dataService
 								? (this.options.isAllowedMention?.(
-									attrs,
-									this.options.dataService,
-								) ?? true)
+										attrs,
+										this.options.dataService,
+									) ?? true)
 								: true
 
 							if (!isAllowed) {
@@ -563,6 +572,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					oldState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 							oldMentions.set(`${pos}-${uniqueId}`, {
 								item: {
@@ -579,6 +589,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					newState.doc.descendants((node, pos) => {
 						if (node.type.name === "mention") {
 							const attrs = node.attrs as TiptapMentionAttributes
+							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 							newMentions.set(`${pos}-${uniqueId}`, {
 								type: attrs.type,
@@ -702,10 +713,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 
 						let ghostCount = 0
 						mentionContainers.forEach((node) => {
-							if (
-								node.childElementCount === 0 &&
-								!node.textContent?.trim()
-							) {
+							if (node.childElementCount === 0 && !node.textContent?.trim()) {
 								ghostCount++
 							}
 						})
@@ -742,14 +750,18 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 										}
 									})
 								if (stillGhostCount > 0) {
-									logger.warn(
-										"ghost nodes persist after recovery attempt",
-										{ stillGhostCount },
-									)
+									logger.warn("ghost nodes persist after recovery attempt", {
+										stillGhostCount,
+									})
 								}
 							})
 						} catch (e) {
-							logger.error("ghost node recovery failed", e)
+							logger.error({
+								eventKey: "ghost_node_recovery_failed",
+								errorKind: "unknown",
+								error: e,
+								message: "ghost node recovery failed",
+							})
 						}
 					}
 
@@ -777,7 +789,10 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 		const icon = getMentionIcon(attrs)
 		const uniqueId = getMentionUniqueId(attrs)
 
-		if (attrs.type === MentionItemType.FOLDER) {
+		if (
+			attrs.type === MentionItemType.FOLDER ||
+			attrs.type === MentionItemType.MEMORY_DIRECTORY
+		) {
 			displayName = `${displayName}/`
 		}
 

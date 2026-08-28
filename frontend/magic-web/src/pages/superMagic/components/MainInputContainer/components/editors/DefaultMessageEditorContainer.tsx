@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
@@ -26,14 +26,13 @@ import useTopicExamplesPortal from "@/pages/superMagic/hooks/useTopicExamplesPor
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import type { SceneEditorContext, SceneEditorNodes } from "./types"
 import { useOptionalSceneStateStore } from "../../stores"
-import { cn } from "@/lib/utils"
-import {
-	buildPlainTextJSONContent,
-	generateTextFromJSONContent,
-} from "@/pages/superMagic/components/MessageEditor/utils"
+import { cn } from "@/utils/cn"
+import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
+import { buildQueueMessageInput } from "./messageParams"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import { useConversationInputLayout } from "../../../ConversationInputResize/context"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -49,6 +48,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const lt = useLocaleText()
 	const isMobile = useIsMobile()
 	const sceneStateStore = useOptionalSceneStateStore()
+	const inputLayout = useConversationInputLayout()
+	// Only fixed conversation panels ask the shared editor to occupy all available height.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 
 	const internalEditorRef = useRef<MessageEditorRef>(null)
 	const tiptapEditorRef = (editorRef ??
@@ -209,7 +211,18 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			params.value,
 			sceneStateStore?.presetSuffixContent,
 		)
-
+		const sendSelection = resolveAgentSelection(effectiveTopicMode, editorContext?.agentCode)
+		const extra = { ...(params.extra ?? {}) }
+		delete extra.agent_code
+		const normalizedParams: HandleSendParams = {
+			...params,
+			topicMode: sendSelection.topicPattern,
+			extra: sendSelection.agentCode
+				? { ...extra, agent_code: sendSelection.agentCode }
+				: Object.keys(extra).length > 0
+					? extra
+					: undefined,
+		}
 		if (queueContext?.editingQueueItem) {
 			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
 				queueContext.finishEditQueueItem(nextValue, params.mentionItems)
@@ -226,27 +239,37 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			return false
 		}
 
+		// 队列发送和直接发送必须使用同一份业务参数。微应用、Skill、员工等场景会通过
+		// mergeSendParams 修正 topicMode / extra；如果在加入队列后才合并，队列消息会退回默认模式。
+		const defaultParams: HandleSendParams = {
+			...normalizedParams,
+			value: nextValue ?? params.value,
+		}
+		const customParamsPatch = editorContext?.mergeSendParams?.({
+			defaultParams,
+		})
+		const mergedParams = customParamsPatch
+			? { ...defaultParams, ...customParamsPatch }
+			: defaultParams
+		const finalParams: HandleSendParams = mergedParams
+
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
 		if (shouldQueue) {
 			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
 			tiptapEditorRef.current?.clearContentAfterSend()
-			const queueId = await queueContext.addToQueue({
-				content: nextValue ?? params.value,
-				mentionItems: params.mentionItems,
-				selectedModel: params.selectedModel,
-				selectedImageModel: params.selectedImageModel,
-				selectedVideoModel: params.selectedVideoModel,
-				topicMode: params.topicMode,
-			})
+			const queueId = await queueContext.addToQueue(
+				buildQueueMessageInput(finalParams, params.value),
+			)
 			if (!queueId) {
 				// Queue add failed — restore editor content so the user can retry
-				if (nextValue ?? params.value) {
-					tiptapEditorRef.current?.setContent?.(nextValue ?? params.value)
+				if (finalParams.value ?? params.value) {
+					tiptapEditorRef.current?.setContent?.(finalParams.value ?? params.value)
 				}
 				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)
 				return false
 			}
+			sceneStateStore?.incrementSendCount()
 			setFocused(false)
 			return true
 		}
@@ -265,24 +288,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 
 		try {
-			const defaultParams: HandleSendParams = {
-				...params,
-				value: nextValue ?? params.value,
-				extra:
-					effectiveTopicMode === TopicMode.CustomAgent && editorContext?.agentCode
-						? {
-								...params.extra,
-								agent_code: editorContext.agentCode,
-							}
-						: params.extra,
-			}
-			const customParamsPatch = editorContext?.mergeSendParams?.({
-				defaultParams,
-			})
-
-			const finalParams = customParamsPatch
-				? { ...defaultParams, ...customParamsPatch }
-				: defaultParams
 			shouldShowHomeSendLoading = !selectedTopic?.id && !params.isFromQueue
 			hasStartedSend = true
 			isPreparingSendRef.current = true
@@ -301,6 +306,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					selectedWorkspace,
 					setSelectedProject: editorContext?.setSelectedProject,
 					setSelectedTopic: editorContext?.setSelectedTopic,
+					refreshProjectAfterTopicRename: editorContext?.refreshProjectAfterTopicRename,
 					setSelectedWorkspace: editorContext?.setSelectedWorkspace,
 					// 与 _topicStore 回退一致，保证 smartRename 写入 topicStore.topics（历史列表合并依赖）。
 					topicStore: _topicStore,
@@ -432,14 +438,20 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		() =>
 			editorContext
 				? {
-						className: editorContext.className,
+						className: cn(
+							editorContext.className,
+							shouldFillHeight && "h-full min-h-0",
+						),
 						containerClassName: cn(
 							editorContext.containerClassName,
+							shouldFillHeight && "h-full min-h-0",
+							// Let the shared resize controller own the desktop editor ceiling.
+							shouldFillHeight && "!max-h-none",
 							"border border-border",
 						),
 					}
 				: {},
-		[editorContext],
+		[editorContext, shouldFillHeight],
 	)
 
 	return (
@@ -448,6 +460,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				ref={tiptapEditorRef}
 				{...editorStyleProps}
 				placeholder={placeholder}
+				promptCarousel={editorContext?.promptCarousel}
 				onSend={handleSend}
 				isTaskRunning={effectiveIsTaskRunning}
 				onInterrupt={editorContext?.handleInterrupt}
@@ -457,12 +470,14 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				selectedWorkspace={selectedWorkspace}
 				draftKey={draftKey}
 				topicMode={effectiveTopicMode}
+				modelTopicMode={editorContext?.modelTopicMode}
 				size={editorContext?.size ?? "default"}
 				modules={editorContext?.modules}
 				isSending={isSending}
 				sendButtonLoading={isHomePreparingSend}
 				onFocus={handleFocus}
 				onBlur={handleBlur}
+				onReady={editorContext?.onReady}
 				onFileClick={editorContext?.onFileClick}
 				onEnsureProject={handleEnsureProject}
 				attachments={editorContext?.attachments}

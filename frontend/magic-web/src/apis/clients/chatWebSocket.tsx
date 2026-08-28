@@ -14,6 +14,8 @@ import { UrlUtils } from "../utils"
 import { VisibilityListener } from "./chatWebSocket/VisibilityListener"
 import { NetworkListener } from "./chatWebSocket/NetworkListener"
 import { AppActiveListener } from "./chatWebSocket/AppActiveListener"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 const logger = Logger.createLogger("chatWebSocket")
 
@@ -91,6 +93,9 @@ export class ChatWebSocket extends EventBus {
 	// 递增 ACK 计数器，保证未传入 ackId 时能够生成唯一 ID
 	private ackCounter = Date.now()
 
+	/** Prevents the transport from re-authenticating with a known-invalid session. */
+	private reconnectSuppressed = false
+
 	/**
 	 * 初始化WebSocket连接
 	 * @param url WebSocket服务端地址
@@ -103,6 +108,10 @@ export class ChatWebSocket extends EventBus {
 		this.visibilityListener = new VisibilityListener()
 		this.networkListener = new NetworkListener()
 		this.appActiveListener = new AppActiveListener()
+		authEventBus.on(AuthEventName.LoginRequired, () => {
+			this.reconnectSuppressed = true
+			this.close({ suppressReconnect: true })
+		})
 
 		// 设置页面可见性变化回调
 		this.visibilityListener.onVisibleChange((visible) => {
@@ -210,6 +219,8 @@ export class ChatWebSocket extends EventBus {
 	 * 连接失败时触发重连机制
 	 */
 	public connect(options?: { showLoading?: boolean }) {
+		// A later explicit connection attempt represents a new login/session lifecycle.
+		this.reconnectSuppressed = false
 		const { showLoading = true } = options ?? {}
 		// 懒加载初始化页面可见性、网络状态和 App 活跃状态监听器（只在第一次 connect 时初始化）
 		this.visibilityListener.init()
@@ -283,7 +294,12 @@ export class ChatWebSocket extends EventBus {
 
 				const onError = (e: Event) => {
 					cleanup()
-					logger.error("连接失败 (error)", e)
+					logger.error({
+						eventKey: "connect_failed",
+						errorKind: "network",
+						error: e,
+						message: "连接失败 (error)",
+					})
 					if (
 						that.socket &&
 						that.socket.readyState !== WebSocketReadyState.CLOSED &&
@@ -306,7 +322,11 @@ export class ChatWebSocket extends EventBus {
 
 				// 设置连接超时，防止 socket 挂起
 				connectTimer = setTimeout(() => {
-					logger.error("连接超时")
+					logger.error({
+						eventKey: "connect_timeout",
+						errorKind: "timeout",
+						message: "连接超时",
+					})
 					cleanup()
 					if (that.socket && that.socket.readyState === WebSocketReadyState.CONNECTING) {
 						that.socket.close()
@@ -314,7 +334,12 @@ export class ChatWebSocket extends EventBus {
 					resolve(null)
 				}, 10000)
 			} catch (error) {
-				logger.error("连接异常:", error)
+				logger.error({
+					eventKey: "connect_failed",
+					errorKind: "network",
+					error: error,
+					message: "连接异常:",
+				})
 				resolve(null)
 			}
 		})
@@ -375,6 +400,10 @@ export class ChatWebSocket extends EventBus {
 			reconnectAttempts: this.reconnectAttempts,
 		})
 		this.emit("close", event)
+		if (this.reconnectSuppressed) {
+			logger.log("认证会话已失效，跳过 WebSocket 自动重连")
+			return
+		}
 		this.reconnect()
 	}
 
@@ -382,11 +411,16 @@ export class ChatWebSocket extends EventBus {
 	 * 处理连接错误事件
 	 */
 	private handleError = (error: Event) => {
-		logger.error("WebSocket连接错误", {
-			error,
-			readyState: this.socket?.readyState,
-			url: this.socket?.url,
-			reconnectAttempts: this.reconnectAttempts,
+		logger.error({
+			eventKey: "web_socket_connect_failed",
+			errorKind: "network",
+			error: error,
+			message: "WebSocket连接错误",
+			context: {
+				readyState: this.socket?.readyState,
+				url: this.socket?.url,
+				reconnectAttempts: this.reconnectAttempts,
+			},
 		})
 		this.emit("error", error)
 	}
@@ -412,7 +446,12 @@ export class ChatWebSocket extends EventBus {
 					break
 			}
 		} catch (error) {
-			logger.error("onmessage error:", error)
+			logger.error({
+				eventKey: "onmessage_failed",
+				errorKind: "network",
+				error: error,
+				message: "onmessage error:",
+			})
 		}
 	}
 
@@ -545,6 +584,11 @@ export class ChatWebSocket extends EventBus {
 	private reconnect(options?: { immediate?: boolean }) {
 		const { immediate = false } = options ?? {}
 		return new Promise<WebSocket | null>((resolve) => {
+			if (this.reconnectSuppressed) {
+				logger.log("认证会话已失效，忽略 WebSocket 重连请求")
+				resolve(null)
+				return
+			}
 			// 如果已经在连接中，直接返回连接 Promise
 			if (this.connectingPromise) {
 				logger.log("已有连接正在进行，跳过重连")
@@ -717,7 +761,13 @@ export class ChatWebSocket extends EventBus {
 								})
 							} else {
 								cleanup()
-								logger.error("ws response error:", data)
+								logger.error({
+									eventKey: "ws_response_failed",
+									errorKind: "network",
+									message: "ws response error:",
+									// WebSocket 响应可能包含业务正文，只保留受控状态码。
+									context: { data },
+								})
 								reject(data)
 							}
 						}
@@ -767,7 +817,8 @@ export class ChatWebSocket extends EventBus {
 	 * 清理所有定时器资源并终止WebSocket连接
 	 * 用于页面卸载或用户主动断开场景
 	 */
-	public close() {
+	public close(options?: { suppressReconnect?: boolean }) {
+		if (options?.suppressReconnect) this.reconnectSuppressed = true
 		// 1. 停止心跳
 		this.stopHeartbeat()
 
@@ -869,7 +920,12 @@ export class ChatWebSocket extends EventBus {
 									})
 								} else {
 									cleanup()
-									logger.error("业务层错误", response)
+									logger.error({
+										eventKey: "handler_failed",
+										errorKind: "network",
+										error: response,
+										message: "业务层错误",
+									})
 									reject(response[0].data)
 								}
 							}

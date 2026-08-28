@@ -63,6 +63,7 @@ return [
         'error_config_missing' => 'Configuration item :name is missing. Please check the settings or contact the administrator.',
         'embedding_failed' => '[:model_name] embedding failed, error message: [:error_message], please check the embedding configuration',
         'vector_size_not_match' => '[:model_name] vector size does not match, expected size: [:expected_size], actual size: [:actual_size], please check the vector size',
+        'invalid_implementation_interface' => 'Invalid value: :interface',
     ],
     'knowledge_base' => [
         're_vectorized_not_support' => 'Re-vectorization is not supported',
@@ -161,6 +162,7 @@ return [
             'unsupported_routine_type' => 'Unsupported routine type',
             'input_key_conflict' => 'Field name [:key] conflicts with system reserved field, please use a different name',
             'json_schema_validation_failed' => 'JSON Schema format error: :error',
+            'interval_valid' => 'Interval valid',
         ],
         'sub' => [
             'flow_not_found' => 'SubFlow [:flow_code] not found',
@@ -209,10 +211,28 @@ return [
         'knowledge_fragment_remove' => [
             'metadata_business_id_empty' => 'Metadata or business ID cannot be empty',
         ],
+        'cannot_enable_empty_nodes' => 'Cannot enable empty nodes',
+        'knowledge' => [
+            'knowledge_code_empty' => 'Value is required',
+        ],
+        'validation_failed' => 'Operation failed: :error, :node_id, :node_type',
     ],
     'model_config' => [
         'max_record_error' => 'Maximum record count must be an integer between 0 and 500',
         'temperature_error' => 'Temperature must be a decimal between 0 and 1',
+    ],
+    'attachment' => [
+        'invalid_url' => 'External attachment URL must be an HTTP or HTTPS URL with a host',
+        'blocked' => 'External attachment URL was blocked by the SSRF security policy: :reason',
+        'block_reason' => [
+            'invalid_url' => 'invalid URL format',
+            'blacklisted' => 'the target address is blacklisted',
+            'protocol_not_allowed' => 'the URL protocol is not allowed',
+            'non_public_ip' => 'the target address is not a public IP',
+            'redirect_not_allowed' => 'the target URL redirects unexpectedly',
+            'resolve_failed' => 'the target host could not be resolved',
+            'unknown' => 'the target address does not meet the security policy',
+        ],
     ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Unsupported node type',
@@ -314,5 +334,14 @@ return [
         'prefix' => [
             'invalid_format' => 'Invalid cache prefix format',
         ],
+    ],
+    'content' => [
+        'empty' => 'Value is required',
+    ],
+    'mode' => [
+        'not_found' => 'Resource not found: :model_name',
+    ],
+    'node_output' => [
+        'empty' => 'Value is required: :label',
     ],
 ];

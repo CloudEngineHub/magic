@@ -8,13 +8,13 @@ import { userStore } from "@/models/user/stores"
 import { userTransformer } from "@/models/user/transformers"
 import { UserRepository } from "@/models/user/repositories/UserRepository"
 import { AccountRepository } from "@/models/user/repositories/AccountRepository"
-import type { AccountService } from "../AccountService"
 import { AuthApi, ChatApi } from "@/apis"
 import { logger as Logger } from "@/utils/log"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import { env, isDev } from "@/utils/env"
 import { getNativePort } from "@/platform/native"
-import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
+import { authSessionCoordinator } from "@/services/auth/AuthSessionCoordinator"
+import { getAuthFailureReason } from "@/services/auth/AuthFailureClassifier"
 
 const logger = Logger.createLogger("UserService", {
 	enableConfig: { console: !isDev },
@@ -191,9 +191,18 @@ export class UserService {
 				userId: info.user_id,
 				organizationCode: info.organization_code,
 			})
-			AuthApi.getAdminPermission().then((res) => {
-				userStore.user.setIsAdmin(res.is_admin)
-			})
+			Promise.allSettled([AuthApi.getAdminPermission(), AuthApi.getMyPermissionList()]).then(
+				([adminResult, permissionResult]) => {
+					if (adminResult.status === "fulfilled") {
+						userStore.user.setIsAdmin(adminResult.value.is_admin)
+					}
+					if (permissionResult.status === "fulfilled") {
+						userStore.user.setUserPermissions(
+							permissionResult.value.permission_key ?? [],
+						)
+					}
+				},
+			)
 		}
 		return info
 	}
@@ -571,10 +580,16 @@ export class UserService {
 				})
 				.catch(async (err) => {
 					logger.log("ws 登录失败", err)
-					if (err.code === BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED) {
+					const reason = getAuthFailureReason(err?.code)
+					if (reason) {
 						logger.log(err)
-						// accountBusiness.accountLogout() -》 this.deleteAccount()
-						await this.service.get<AccountService>("accountService").deleteAccount()
+						await authSessionCoordinator.invalidate({
+							service: this.service,
+							accountId: userStore.user.userInfo?.magic_id,
+							reason,
+							source: "websocket",
+							returnTo: window.location.href,
+						})
 					}
 				})
 				.finally(() => {

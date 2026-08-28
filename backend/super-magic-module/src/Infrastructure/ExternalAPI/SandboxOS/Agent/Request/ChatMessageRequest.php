@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request;
 
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicProductContext;
 
 /**
  * 聊天消息请求类
@@ -15,11 +16,12 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
  */
 class ChatMessageRequest
 {
-    public function __construct(
+    protected function __construct(
         private string $messageId = '',
         private string $userId = '',
         private string $taskId = '',
         private string $prompt = '',
+        private ?SuperMagicProductContext $superMagicProductContext = null,
         private string $taskMode = 'chat',
         private string $agentMode = '',
         private array $attachments = [],
@@ -41,6 +43,7 @@ class ChatMessageRequest
         string $userId,
         string $taskId,
         string $prompt,
+        SuperMagicProductContext $superMagicProductContext,
         string $taskMode = 'chat',
         string $agentMode = '',
         array $attachments = [],
@@ -52,19 +55,20 @@ class ChatMessageRequest
         ?array $agent = null,
     ): self {
         return new self(
-            $messageId,
-            $userId,
-            $taskId,
-            $prompt,
-            $taskMode,
-            $agentMode,
-            $attachments,
-            $mentions,
-            $mcpConfig,
-            $modelId,
-            $dynamicConfig,
-            $metadata,
-            $agent
+            messageId: $messageId,
+            userId: $userId,
+            taskId: $taskId,
+            prompt: $prompt,
+            superMagicProductContext: $superMagicProductContext,
+            taskMode: $taskMode,
+            agentMode: $agentMode,
+            attachments: $attachments,
+            mentions: $mentions,
+            mcpConfig: $mcpConfig,
+            modelId: $modelId,
+            dynamicConfig: $dynamicConfig,
+            metadata: $metadata,
+            agent: $agent,
         );
     }
 
@@ -298,9 +302,20 @@ class ChatMessageRequest
         return $this;
     }
 
+    public function getSuperMagicProductContext(): ?SuperMagicProductContext
+    {
+        return $this->superMagicProductContext;
+    }
+
+    public function setSuperMagicProductContext(SuperMagicProductContext $superMagicProductContext): self
+    {
+        $this->superMagicProductContext = $superMagicProductContext;
+        return $this;
+    }
+
     public function toArray(): array
     {
-        return [
+        $data = [
             'message_id' => ! empty($this->messageId) ? $this->messageId : (string) IdGenerator::getSnowId(),
             'user_id' => $this->userId,
             'task_id' => $this->taskId,
@@ -316,5 +331,11 @@ class ChatMessageRequest
             'metadata' => $this->metadata,
             'agent' => $this->agent,
         ];
+
+        if ($this->superMagicProductContext !== null) {
+            $data['super_magic_product_context'] = $this->superMagicProductContext->toArray();
+        }
+
+        return $data;
     }
 }

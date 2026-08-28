@@ -45,6 +45,8 @@ class MessageQueueAppService extends AbstractAppService
 
     /**
      * Create message queue.
+     *
+     * @return array{queue_id: string, status: int}
      */
     public function createMessage(RequestContext $requestContext, CreateMessageQueueRequestDTO $requestDTO): array
     {
@@ -102,13 +104,15 @@ class MessageQueueAppService extends AbstractAppService
         ]);
 
         return [
-            'queue_id' => $messageEntity->getId(),
+            'queue_id' => (string) $messageEntity->getId(),
             'status' => $messageEntity->getStatus()->value,
         ];
     }
 
     /**
      * Update message queue.
+     *
+     * @return array{queue_id: string, status: int}
      */
     public function updateMessage(RequestContext $requestContext, int $messageId, UpdateMessageQueueRequestDTO $requestDTO): array
     {
@@ -179,7 +183,7 @@ class MessageQueueAppService extends AbstractAppService
         ]);
 
         return [
-            'queue_id' => $messageEntity->getId(),
+            'queue_id' => (string) $messageEntity->getId(),
             'status' => $messageEntity->getStatus()->value,
         ];
     }

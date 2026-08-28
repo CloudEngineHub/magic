@@ -9,6 +9,7 @@ namespace HyperfTest\Cases\Application\Provider\Service;
 
 use App\Application\Provider\Service\AiAbilityInitializationConfigService;
 use App\Domain\KnowledgeBase\Service\KnowledgeBaseDomainService;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use Hyperf\Contract\ConfigInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -99,6 +100,41 @@ class AiAbilityInitializationConfigServiceTest extends TestCase
             'kimi-k2.5',
             $abilities['knowledge_base_visual_understanding']['config']['model_id']
         );
+    }
+
+    public function testInitializationIncludesAiSearchModelWithEmptyDefaultModel(): void
+    {
+        $service = $this->createService(
+            [
+                'ai_search_model' => [
+                    'code' => 'ai_search_model',
+                    'config' => [
+                        'model_id' => null,
+                    ],
+                ],
+            ],
+            ''
+        );
+
+        $abilities = $service->getAbilitiesForInitialization();
+
+        $this->assertArrayHasKey('ai_search_model', $abilities);
+        $this->assertSame('ai_search_model', $abilities['ai_search_model']['code']);
+        $this->assertNull($abilities['ai_search_model']['config']['model_id']);
+        $this->assertArrayNotHasKey('ai_search_deep_reasoning', $abilities);
+    }
+
+    public function testAiSearchModelDefinitionAndOfficialConfig(): void
+    {
+        $config = require BASE_PATH . '/config/autoload/ai_abilities.php';
+        $ability = $config['abilities']['ai_search_model'];
+
+        $this->assertSame('ai_search_model', AiAbilityCode::AiSearchModel->value);
+        $this->assertSame('AI 搜索模型', AiAbilityCode::AiSearchModel->label());
+        $this->assertStringContainsString('问题理解', AiAbilityCode::AiSearchModel->description());
+        $this->assertSame('ai_search_model', $ability['code']);
+        $this->assertNull($ability['config']['model_id']);
+        $this->assertArrayNotHasKey('ai_search_deep_reasoning', $config['abilities']);
     }
 
     private function createService(array $abilities, string $currentModelId): AiAbilityInitializationConfigService

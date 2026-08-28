@@ -1,18 +1,23 @@
 "use client"
 
-import { NodeViewWrapper, NodeViewContent } from "@tiptap/react"
-import type { NodeViewProps } from "@tiptap/react"
+import { NodeViewWrapper, NodeViewContent } from "@/infrastructure/editors/tiptap/react"
+import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { Suspense, lazy, useEffect, useState } from "react"
+import type { CSSProperties } from "react"
+import {
+	DiffSyntaxHighlighter,
+	loadDiffSyntaxHighlighter,
+} from "@/infrastructure/vendors/react-syntax-highlighter/diff"
+import type { CodeBlockNodeOptions } from "./code-block-node-extension"
 
 const MagicCode = lazy(() => import("@/components/base/MagicCode"))
 const MagicMermaid = lazy(() => import("@/components/base/MagicMermaid"))
 
-const DiffHighlighter = lazy(async () => {
-	const module = await import("react-syntax-highlighter")
-	const diffLanguage = await import("react-syntax-highlighter/dist/esm/languages/hljs/diff")
-	module.Light.registerLanguage("diff", diffLanguage.default)
-	return { default: module.Light }
-})
+interface CodeBlockNodeViewProps extends NodeViewProps {
+	extension: NodeViewProps["extension"] & {
+		options: CodeBlockNodeOptions
+	}
+}
 
 /**
  * React component for rendering CodeBlock nodes
@@ -20,15 +25,14 @@ const DiffHighlighter = lazy(async () => {
  * - Editable: uses NodeViewContent for direct editing
  * - Read-only: uses MagicCode for enhanced display with syntax highlighting
  */
-export function CodeBlockNodeView(props: NodeViewProps) {
-	const { node, editor } = props
+export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
+	const { node, editor, extension } = props
 	const language = node.attrs.language || "text"
-	const [diffStyle, setDiffStyle] = useState<Record<string, unknown> | null>(null)
+	const { enableWrapToggle } = extension.options
+	const [diffStyle, setDiffStyle] = useState<Record<string, CSSProperties> | null>(null)
 	useEffect(() => {
 		if (language !== "diff" || diffStyle) return
-		import("react-syntax-highlighter/dist/esm/styles/hljs").then((styleModule) => {
-			setDiffStyle(styleModule.github)
-		})
+		loadDiffSyntaxHighlighter().then(({ style }) => setDiffStyle(style))
 	}, [language, diffStyle])
 
 	// Track editable state manually since shouldRerenderOnTransaction is false
@@ -85,7 +89,7 @@ export function CodeBlockNodeView(props: NodeViewProps) {
 		return (
 			<NodeViewWrapper as="div" className="diff-code-block-node-view">
 				<Suspense fallback={null}>
-					<DiffHighlighter
+					<DiffSyntaxHighlighter
 						language="diff"
 						style={diffStyle}
 						showLineNumbers={false}
@@ -97,7 +101,7 @@ export function CodeBlockNodeView(props: NodeViewProps) {
 						className="diff-code"
 					>
 						{codeContent}
-					</DiffHighlighter>
+					</DiffSyntaxHighlighter>
 				</Suspense>
 			</NodeViewWrapper>
 		)
@@ -110,6 +114,7 @@ export function CodeBlockNodeView(props: NodeViewProps) {
 					language={language || "text"}
 					data={codeContent}
 					className="code-block-node-view"
+					enableWrapToggle={enableWrapToggle}
 				/>
 			</Suspense>
 		</NodeViewWrapper>

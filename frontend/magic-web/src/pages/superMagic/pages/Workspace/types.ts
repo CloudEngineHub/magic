@@ -42,6 +42,8 @@ export interface ModeItem {
 	agent: {
 		type: AgentType
 		category: "all" | "frequent"
+		/** 当前用户是否可见；旧接口未返回时按可见处理 */
+		is_visible?: boolean
 	}
 	mode: {
 		id: string
@@ -62,6 +64,8 @@ export interface CrewItem {
 	agent: {
 		type: AgentType
 		category: "all" | "frequent"
+		/** 当前用户是否可见；隐藏员工仍会保留在 featured 列表中 */
+		is_visible?: boolean
 	}
 	mode: {
 		id: string
@@ -89,6 +93,8 @@ export interface CrewItemResponse {
 	agent: {
 		type: AgentType
 		category: "all" | "frequent"
+		/** 当前用户是否可见；隐藏员工仍会保留在 featured 列表中 */
+		is_visible?: boolean
 	}
 	mode: {
 		id: string
@@ -187,6 +193,11 @@ export interface Topic {
 	 * 自定义 agent 对应的 code
 	 */
 	agent_code?: string
+}
+
+/** Whether a topic is paused while the agent waits for a user response. */
+export function isTopicWaitingForUser(topic?: Pick<Topic, "task_status"> | null): boolean {
+	return topic?.task_status === TaskStatus.WAITING_FOR_USER
 }
 
 // 消息相关类型

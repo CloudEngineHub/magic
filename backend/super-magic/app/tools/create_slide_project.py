@@ -542,7 +542,7 @@ Note: Ensure valid JSONP syntax after modification (valid JavaScript code)
             # 创建 slide-todo.md 文件（仅当内容非空时）
             if params.todo_list and params.todo_list.strip():
                 try:
-                    async with self._file_versioning_context(tool_context, slide_todo_path, update_timestamp=False):
+                    async with self._file_versioning_context(tool_context, slide_todo_path, track_in_horizon=False):
                         await asyncio.to_thread(slide_todo_path.write_text, params.todo_list, encoding='utf-8')
                     created_files.append(slide_todo_path)
                     logger.info(f"创建 slide-todo.md 文件: {slide_todo_path}")
@@ -553,7 +553,7 @@ Note: Ensure valid JSONP syntax after modification (valid JavaScript code)
             # 创建 slide-images.md 文件（仅当内容非空时）
             if params.slide_images_content and params.slide_images_content.strip():
                 try:
-                    async with self._file_versioning_context(tool_context, slide_images_path, update_timestamp=False):
+                    async with self._file_versioning_context(tool_context, slide_images_path, track_in_horizon=False):
                         await asyncio.to_thread(slide_images_path.write_text, params.slide_images_content, encoding='utf-8')
                     created_files.append(slide_images_path)
                     logger.info(f"创建 slide-images.md 文件: {slide_images_path}")
@@ -569,7 +569,7 @@ Note: Ensure valid JSONP syntax after modification (valid JavaScript code)
 
             # 使用版本控制上下文复制模板文件
             try:
-                async with self._file_versioning_context(tool_context, target_index_path, update_timestamp=False):
+                async with self._file_versioning_context(tool_context, target_index_path, track_in_horizon=False):
                     await async_copy2(source_index_path, target_index_path)
                 created_files.append(target_index_path)
                 logger.info(f"复制入口文件: {target_index_path}")
@@ -593,7 +593,7 @@ window.magicProjectConfigure(window.magicProjectConfig);
 
             # 使用版本控制上下文生成 magic.project.js 配置文件
             try:
-                async with self._file_versioning_context(tool_context, project_js_path, update_timestamp=False):
+                async with self._file_versioning_context(tool_context, project_js_path, track_in_horizon=False):
                     await asyncio.to_thread(project_js_path.write_text, project_js_content, encoding='utf-8')
                 created_files.append(project_js_path)
                 logger.info(f"创建项目配置文件: {project_js_path}")
@@ -605,7 +605,7 @@ window.magicProjectConfigure(window.magicProjectConfig);
             images_already_exists = await asyncio.to_thread(images_path.exists)
             if not images_already_exists:
                 try:
-                    async with self._file_versioning_context(tool_context, images_path, update_timestamp=False):
+                    async with self._file_versioning_context(tool_context, images_path, track_in_horizon=False):
                         await asyncio.to_thread(os.makedirs, images_path, exist_ok=False)
                     created_files.append(images_path)  # 只有新建的文件夹才加入回滚列表
                     logger.info(f"创建图片资源文件夹: {images_path}")
@@ -641,7 +641,7 @@ window.magicProjectConfigure(window.magicProjectConfig);
                 raise FileNotFoundError(f"找不到bridge文件: {source_bridge_path}")
 
             try:
-                async with self._file_versioning_context(tool_context, target_bridge_path, update_timestamp=False):
+                async with self._file_versioning_context(tool_context, target_bridge_path, track_in_horizon=False):
                     await async_copy2(source_bridge_path, target_bridge_path)
                 created_files.append(target_bridge_path)
                 logger.info(f"复制bridge文件: {target_bridge_path}")

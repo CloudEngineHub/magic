@@ -26,4 +26,26 @@ describe("TopicFilesCore", () => {
 		expect(source).toContain('"file-item-action-visible"')
 		expect(source).toContain("(contextMenuItemId === itemId || shouldShowInlineFileAction) &&")
 	})
+
+	it("uses the standard template detector and dedicated folder icon", async () => {
+		const source = await readTopicFilesCoreSource()
+
+		expect(source).toContain("isSlidesTemplateFolder(item)")
+		expect(source).toContain("<SlidesTemplateFolderIcon size={16} />")
+	})
+
+	it("opens a standard template folder as a memory-only PPT template detail", async () => {
+		const source = await readTopicFilesCoreSource()
+
+		expect(source).toContain("toSlidesTemplatePreviewItem(item)")
+		expect(source).toContain("type: DetailType.SlidesTemplate")
+		expect(source).toContain("openSlidesTemplate(item)")
+	})
+
+	it("does not require a preloaded project list for cross-project moves", async () => {
+		const source = await readTopicFilesCoreSource()
+
+		expect(source).toContain("capabilities.crossProject && !isChatProject && !isMobile")
+		expect(source).not.toContain("capabilities.crossProject && projects.length > 0")
+	})
 })

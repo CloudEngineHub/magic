@@ -49,6 +49,12 @@ final class SourceId
 
     public const string SLIDES_TEMPLATE_USE = 'slides_template_use';
 
+    /** Internal system-account embedding calls used to build the slides index. */
+    public const string SLIDES_TEMPLATE_VECTOR_SYNC = 'slides_template_vector_sync';
+
+    /** Internal system-account embedding calls used to build the SkillMarket index. */
+    public const string SKILL_MARKET_VECTOR_SYNC = 'skill_market_vector_sync';
+
     public const array NON_BILLING_SOURCE_IDS = [
         self::RENAME_TOPIC,
         self::SUMMARY_CONTENT,
@@ -63,6 +69,8 @@ final class SourceId
         self::API_PLATFORM,
         self::FOLLOW_UP_SUGGESTIONS,
         self::AI_ABILITY_CONNECTIVITY_TEST,
+        self::SLIDES_TEMPLATE_VECTOR_SYNC,
+        self::SKILL_MARKET_VECTOR_SYNC,
     ];
 
     public static function isNonBilling(string $sourceId): bool

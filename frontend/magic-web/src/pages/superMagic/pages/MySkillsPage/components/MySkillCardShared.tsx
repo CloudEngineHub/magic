@@ -6,7 +6,7 @@ import {
 	type CollaboratorPermission,
 } from "@/pages/superMagic/types/collaboration"
 import SmartTooltip from "@/components/other/SmartTooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
 import type { UserSkillView } from "@/services/skills/SkillsService"
 
@@ -95,6 +95,7 @@ export function resolveTeamSharedSkillPermissions(userRole?: CollaboratorPermiss
 		userRole === CollaboratorPermissionEnum.MANAGE
 	) {
 		return {
+			canOpenEditorPage: true,
 			canEdit: true,
 			canDelete: true,
 		}
@@ -102,15 +103,34 @@ export function resolveTeamSharedSkillPermissions(userRole?: CollaboratorPermiss
 
 	if (userRole === CollaboratorPermissionEnum.EDITABLE) {
 		return {
+			canOpenEditorPage: true,
 			canEdit: true,
 			canDelete: false,
 		}
 	}
 
+	if (userRole === CollaboratorPermissionEnum.READONLY) {
+		return {
+			canOpenEditorPage: true,
+			canEdit: false,
+			canDelete: false,
+		}
+	}
+
 	return {
+		canOpenEditorPage: false,
 		canEdit: false,
 		canDelete: false,
 	}
+}
+
+export function shouldOpenMySkillEditor(
+	cardVariant: MySkillCardVariant,
+	userRole?: CollaboratorPermission,
+) {
+	if (cardVariant === "created") return true
+	if (cardVariant !== "team") return false
+	return resolveTeamSharedSkillPermissions(userRole).canOpenEditorPage
 }
 
 function isUpdatedAfterPublished(

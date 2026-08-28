@@ -1,6 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import type { DesignData } from "../types"
-import { compressCanvasData, MAGIC_PROJECT_VERSION_V2 } from "./magicProjectCompression"
+import { compressCanvasData, MAGIC_PROJECT_VERSION_V3 } from "./magicProjectCompression"
 
 export const DESIGN_PROJECT_CONFIG_FILE_NAME = "magic.project.js"
 
@@ -23,7 +23,7 @@ export interface CreatedDesignProjectFiles {
 
 export function createEmptyDesignProjectData(name: string): DesignData {
 	return {
-		version: MAGIC_PROJECT_VERSION_V2,
+		version: MAGIC_PROJECT_VERSION_V3,
 		type: "design",
 		name,
 		canvas: {

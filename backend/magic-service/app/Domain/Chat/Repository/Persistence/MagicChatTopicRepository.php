@@ -225,11 +225,21 @@ class MagicChatTopicRepository implements MagicChatTopicRepositoryInterface
         if (! empty($pageToken)) {
             $query->where('seq_id', $operator, $pageToken);
         }
-        $query->limit($limit)->orderBy('seq_id', $direction)->select('seq_id');
+        // has_more must be derived from Topic membership rows, before sequence materialization.
+        // A missing sequence detail must not make a partial Topic page look complete.
+        $query->limit($limit + 1)->orderBy('seq_id', $direction)->select('seq_id');
         $seqList = Db::select($query->toSql(), $query->getBindings());
+        $hasMore = count($seqList) > $limit;
+        $seqList = array_slice($seqList, 0, $limit);
         // 根据 seqIds 获取消息详情
         $seqIds = array_column($seqList, 'seq_id');
         $clientSequenceResponses = $this->seqRepository->getConversationMessagesBySeqIds($seqIds, $order);
+        $resultPageToken = empty($seqIds) ? '' : (string) $seqIds[array_key_last($seqIds)];
+
+        $messagesQueryDTO
+            ->setResultHasMore($hasMore)
+            ->setResultPageToken($resultPageToken)
+            ->setResultSnapshotComplete(! $hasMore && count($clientSequenceResponses) === count($seqIds));
 
         return SeqAssembler::sortSeqList($clientSequenceResponses, $order);
     }

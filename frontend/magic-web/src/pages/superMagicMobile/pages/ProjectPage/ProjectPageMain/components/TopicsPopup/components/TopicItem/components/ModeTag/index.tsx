@@ -1,21 +1,22 @@
 import { memo, useMemo } from "react"
 import { computed } from "mobx"
 import { useTranslation } from "react-i18next"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import IconComponent from "@/pages/superMagic/components/IconViewComponent"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconMessageCircleQuestion } from "@tabler/icons-react"
 import type { ModeTagProps } from "./types"
 
-function ModeTag({ mode = TopicMode.General, agentCode }: ModeTagProps) {
+function ModeTag({ mode, agentCode }: ModeTagProps) {
 	const { t } = useTranslation("super")
+	const resolvedMode = mode ?? getFallbackTopicModeIdentifier()
 
 	const config = useMemo(() => {
 		return computed(() => {
-			return superMagicModeService.getModeConfigWithLegacy(mode, t, false, agentCode)
+			return superMagicModeService.getModeConfigWithLegacy(resolvedMode, t, false, agentCode)
 		}).get()
-	}, [mode, t, agentCode])
+	}, [resolvedMode, t, agentCode])
 
 	if (!config) {
 		return (

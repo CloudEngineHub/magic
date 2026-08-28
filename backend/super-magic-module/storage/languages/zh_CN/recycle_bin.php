@@ -10,6 +10,7 @@ return [
         'project' => '项目',
         'topic' => '话题',
         'file' => '文件',
+        'micro_app' => '微应用',
     ],
     'validation' => [
         'resource_ids_must_be_array' => '参数 resource_ids 必须是数组',
@@ -43,6 +44,8 @@ return [
     ],
     'restore' => [
         'project_failed' => '恢复项目失败',
+        'micro_app_failed' => '恢复微应用失败',
+        'micro_app_not_found_or_permanently_deleted' => '微应用不存在或已被永久删除',
         'topic_failed' => '恢复话题失败',
         'unsupported_resource_type' => '不支持的资源类型: :type',
         'workspace_not_found_or_permanently_deleted' => '工作区不存在或已被永久删除',

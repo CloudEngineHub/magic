@@ -23,13 +23,17 @@ class DesignGenerationTaskFactory
         $entity->setAssetType(DesignGenerationAssetType::VIDEO);
         $inputMode = $requestDTO->getInputMode();
         $entity->setGenerationType(
-            ($requestDTO->getReferenceImages() !== []
-                || $requestDTO->getReferenceVideos() !== []
-                || $requestDTO->getReferenceAudios() !== []
-                || $requestDTO->getFrames() !== []
-                || $requestDTO->getMask() !== null)
-                ? DesignGenerationType::IMAGE_TO_VIDEO
-                : DesignGenerationType::TEXT_TO_VIDEO
+            $requestDTO->getGenerationType() !== ''
+                ? $requestDTO->getGenerationType()
+                : (
+                    ($requestDTO->getReferenceImages() !== []
+                        || $requestDTO->getReferenceVideos() !== []
+                        || $requestDTO->getReferenceAudios() !== []
+                        || $requestDTO->getFrames() !== []
+                        || $requestDTO->getMask() !== null)
+                        ? DesignGenerationType::IMAGE_TO_VIDEO
+                        : DesignGenerationType::TEXT_TO_VIDEO
+                )
         );
         $entity->setModelId($requestDTO->getModelId());
         $entity->setPrompt($requestDTO->getPrompt());
@@ -54,6 +58,7 @@ class DesignGenerationTaskFactory
         // request_payload 顶层透传 input_mode，避免在 app / gateway 层丢失输入模式语义。
         $requestPayload = [
             'video_id' => $requestDTO->getVideoId(),
+            'generation_type' => $requestDTO->getGenerationType() !== '' ? $requestDTO->getGenerationType() : null,
             'input_mode' => $inputMode,
             'prompt' => $requestDTO->getPrompt(),
             'model_id' => $requestDTO->getModelId(),
@@ -66,6 +71,7 @@ class DesignGenerationTaskFactory
                 'frames' => $frames,
             ], static fn (mixed $value): bool => $value !== []),
             'generation' => $requestDTO->getGeneration(),
+            'composition' => $requestDTO->getComposition(),
             'callbacks' => $requestDTO->getCallbacks(),
             'execution' => $requestDTO->getExecution(),
             'extensions' => $requestDTO->getExtensions(),
