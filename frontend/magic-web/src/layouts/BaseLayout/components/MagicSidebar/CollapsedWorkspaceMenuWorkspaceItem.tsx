@@ -31,6 +31,7 @@ export interface CollapsedWorkspaceMenuWorkspaceItemProps {
 	openProjectMenuId: string | null
 	onProjectMenuChange: (workspaceId: string | null) => void
 	onRequestCloseAll: () => void
+	keepPopoverOpen?: boolean
 }
 
 const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspaceMenuWorkspaceItem({
@@ -40,6 +41,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	openProjectMenuId,
 	onProjectMenuChange,
 	onRequestCloseAll,
+	keepPopoverOpen = false,
 }: CollapsedWorkspaceMenuWorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
@@ -119,6 +121,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	}, [])
 
 	function handleProjectMenuChange(open: boolean) {
+		if (!open && keepPopoverOpen) return
 		if (!open) {
 			handleCancelCreateProject()
 		}

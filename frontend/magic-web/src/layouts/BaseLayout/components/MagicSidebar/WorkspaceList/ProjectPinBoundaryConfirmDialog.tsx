@@ -12,6 +12,7 @@ interface ConfirmationRequest {
 interface UseProjectPinBoundaryConfirmationResult {
 	requestConfirmation: (request: ConfirmationRequest) => Promise<boolean>
 	confirmationDialog: ReactNode
+	isConfirmationOpen: boolean
 }
 
 /** Reuses the file-area confirmation modal for a completed drop. */
@@ -68,5 +69,5 @@ export function useProjectPinBoundaryConfirmation(): UseProjectPinBoundaryConfir
 		/>
 	) : null
 
-	return { requestConfirmation, confirmationDialog }
+	return { requestConfirmation, confirmationDialog, isConfirmationOpen: pending !== null }
 }

@@ -38,7 +38,8 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const workspaces = workspaceStore.workspaces
 	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
-	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
+	const { requestConfirmation, confirmationDialog, isConfirmationOpen } =
+		useProjectPinBoundaryConfirmation()
 	const { rootRef: dndRootRef } = useCollapsedWorkspaceDnd({
 		workspaces,
 		enabled: isOpen,
@@ -154,6 +155,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 					openProjectMenuId={openProjectMenuId}
 					onProjectMenuChange={setOpenProjectMenuId}
 					onRequestCloseAll={handleCloseAllPopovers}
+					keepPopoverOpen={isConfirmationOpen}
 				/>
 			)
 		})
@@ -167,7 +169,10 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 			<div className="flex w-8 shrink-0 flex-col items-start gap-1">
 				<Popover
 					open={isOpen}
-					onOpenChange={handleWorkspacePopoverOpenChange}
+					onOpenChange={(open) => {
+						if (!open && isConfirmationOpen) return
+						handleWorkspacePopoverOpenChange(open)
+					}}
 					modal={false}
 				>
 					<PopoverTrigger asChild>
