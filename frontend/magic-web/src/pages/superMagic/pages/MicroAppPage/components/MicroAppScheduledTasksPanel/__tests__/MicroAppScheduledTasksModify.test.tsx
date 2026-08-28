@@ -170,7 +170,7 @@ describe("MicroAppScheduledTasksModify", () => {
 		expect(editorProps?.mentionPanelStore).toBe(attachmentOptions.mentionPanelStore)
 	})
 
-	it("keeps the scheduled task editor on the micro-app mode", () => {
+	it("uses the default mode catalog for the micro-app task editor", () => {
 		render(
 			<MicroAppScheduledTasksModify
 				mode="edit"
@@ -185,7 +185,7 @@ describe("MicroAppScheduledTasksModify", () => {
 		)
 
 		const editorProps = mocks.messageEditorProps.at(-1)
-		expect(editorProps?.topicMode).toBe("micro-app")
+		expect(editorProps?.topicMode).toBe("default")
 		expect(editorProps?.setTopicMode).toBeUndefined()
 		expect(editorProps?.showModeToggle).toBeUndefined()
 	})
