@@ -16,6 +16,7 @@ use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\Service\LLMAppService;
 use App\Application\ModelGateway\Service\Video\VideoInputMediaMetadataResolver;
 use App\Application\ModelGateway\Service\VideoOperationAppService;
+use App\Domain\File\Entity\ValueObject\FileDataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
@@ -2745,7 +2746,7 @@ final class InMemoryCloudFileRepository implements CloudFileRepositoryInterface
     {
     }
 
-    public function getSimpleUploadTemporaryCredential(string $organizationCode, StorageBucketType $storage = StorageBucketType::Private, bool $autoDir = true, ?string $contentType = null, bool $sts = false): array
+    public function getSimpleUploadTemporaryCredential(FileDataIsolation $dataIsolation, StorageBucketType $storage = StorageBucketType::Private, bool $autoDir = true, ?string $contentType = null, bool $sts = false): array
     {
         return [];
     }

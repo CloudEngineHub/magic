@@ -38,12 +38,12 @@ class FileAppService extends AbstractAppService
 
     public function getSimpleUploadTemporaryCredential(Authenticatable $authorization, string $storage, ?string $contentType = null, bool $sts = false): array
     {
-        $dataIsolation = $this->createFlowDataIsolation($authorization);
+        $dataIsolation = $this->createFileDataIsolation($authorization);
         $data = $this->fileDomainService->getSimpleUploadTemporaryCredential(
-            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation,
             StorageBucketType::from($storage),
             $contentType,
-            $sts
+            $sts,
         );
         // 如果是本地驱动，那么增加一个临时 key
         if ($data['platform'] === AdapterName::LOCAL) {
@@ -52,6 +52,7 @@ class FileAppService extends AbstractAppService
                 $localCredential,
                 [
                     'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                    'dir' => $data['temporary_credential']['dir'] ?? '',
                 ],
                 (int) ($data['expires'] - time()),
             );
@@ -86,6 +87,10 @@ class FileAppService extends AbstractAppService
             ExceptionBuilder::throw(GenericErrorCode::AccessDenied, 'invalid_credential');
         }
         $organizationCode = $cacheData['organization_code'] ?? '';
+        $credentialDir = $cacheData['dir'] ?? '';
+        if ($credentialDir === '' || ! str_starts_with($key, $credentialDir)) {
+            ExceptionBuilder::throw(GenericErrorCode::AccessDenied, 'invalid_credential');
+        }
 
         $fileArray = $file->toArray();
         $uploadFile = new UploadFile($fileArray['tmp_file'], '', $key, false);

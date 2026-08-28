@@ -124,8 +124,8 @@ importers:
         specifier: ^0.0.2
         version: 0.0.2(dayjs@1.11.18)
       '@dtyq/upload-sdk':
-        specifier: ~0.0.11
-        version: 0.0.11(lodash-es@4.17.21)
+        specifier: ~0.0.12
+        version: 0.0.12(lodash-es@4.17.21)
       '@dtyq/user-selector':
         specifier: ^0.1.15
         version: 0.1.15(82b21e21b05aa9f9f6c0df7a84a76118)
@@ -510,9 +510,6 @@ importers:
       dayjs:
         specifier: ^1.11.13
         version: 1.11.18
-      dompurify:
-        specifier: ^3.2.6
-        version: 3.2.6
       dexie:
         specifier: ^4.0.10
         version: 4.0.11
@@ -528,6 +525,9 @@ importers:
       docx-preview:
         specifier: ^0.3.5
         version: 0.3.5
+      dompurify:
+        specifier: ^3.2.6
+        version: 3.2.6
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@18.3.1)
@@ -1218,8 +1218,8 @@ importers:
         specifier: ~0.0.10
         version: 0.0.11(@types/node@25.9.5)(eslint@8.57.1)(typescript@5.7.3)
       '@dtyq/upload-sdk':
-        specifier: ~0.0.9
-        version: 0.0.9
+        specifier: ~0.0.12
+        version: 0.0.12(lodash-es@4.18.1)
       '@semantic-release/changelog':
         specifier: ^6.0.1
         version: 6.0.3(semantic-release@19.0.3(encoding@0.1.13))
@@ -2469,15 +2469,11 @@ packages:
     peerDependencies:
       dayjs: ^1.11.12
 
-  '@dtyq/upload-sdk@0.0.11':
-    resolution: {integrity: sha512-uVO+4euGoDBQn5YRQ+1m1CUH8g8AvOmMipf4RV+LefqQ4ySqnj/uYnviIK6oHHNN4Tcu3R5GCjox/cZTw3vTvw==}
+  '@dtyq/upload-sdk@0.0.12':
+    resolution: {integrity: sha512-zSDjryMWEvhRTYTr+v/lmbmWUZlRg/fuE5nu9ik/1kI0qqsezQRgDCYUjwb3Qv3uugM6yIjPwQUqgbBdj+xKJA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
-
-  '@dtyq/upload-sdk@0.0.9':
-    resolution: {integrity: sha512-g5VefkfwGi+C5lhAggDWiipARO0rAYi/UrJTks7zUz9B9qIe88ZKsEf2O2bayUMC6gwXHHrwpsFbo2ORPYBqEA==}
-    engines: {node: '>=18.0.0'}
 
   '@dtyq/user-selector@0.1.15':
     resolution: {integrity: sha512-gmDSRNt5m4UN8cfXKukZNn5g+Sx/4tiAAsRsQhAhWkAVSJYJ4GgWj0LV3JH93xt0g1gvx5l1zYoGbhYggFZw+Q==}
@@ -18457,7 +18453,7 @@ snapshots:
     dependencies:
       dayjs: 1.11.18
 
-  '@dtyq/upload-sdk@0.0.11(lodash-es@4.17.21)':
+  '@dtyq/upload-sdk@0.0.12(lodash-es@4.17.21)':
     dependencies:
       '@aws-sdk/client-s3': 3.914.0
       '@babel/runtime': 7.28.4
@@ -18471,14 +18467,14 @@ snapshots:
       - aws-crt
       - debug
 
-  '@dtyq/upload-sdk@0.0.9':
+  '@dtyq/upload-sdk@0.0.12(lodash-es@4.18.1)':
     dependencies:
       '@aws-sdk/client-s3': 3.914.0
       '@babel/runtime': 7.28.4
       buffer: 6.0.3
       crypto-js: 3.3.0
       esdk-obs-browserjs: 3.25.6
-      lodash-es: 4.17.21
+      lodash-es: 4.18.1
       mime: 3.0.0
       process: 0.11.10
     transitivePeerDependencies:

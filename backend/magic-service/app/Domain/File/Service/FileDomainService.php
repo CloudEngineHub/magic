@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\File\Service;
 
 use App\Domain\File\DTO\CloudFileInfoDTO;
+use App\Domain\File\Entity\ValueObject\FileDataIsolation;
 use App\Domain\File\Repository\Persistence\CloudFileRepository;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
@@ -84,9 +85,9 @@ readonly class FileDomainService
         $this->cloudFileRepository->uploadByChunks($organizationCode, $chunkUploadFile, $storage, $autoDir);
     }
 
-    public function getSimpleUploadTemporaryCredential(string $organizationCode, StorageBucketType $storage = StorageBucketType::Private, ?string $contentType = null, bool $sts = false): array
+    public function getSimpleUploadTemporaryCredential(FileDataIsolation $dataIsolation, StorageBucketType $storage = StorageBucketType::Private, ?string $contentType = null, bool $sts = false): array
     {
-        return $this->cloudFileRepository->getSimpleUploadTemporaryCredential($organizationCode, $storage, contentType: $contentType, sts: $sts);
+        return $this->cloudFileRepository->getSimpleUploadTemporaryCredential($dataIsolation, $storage, contentType: $contentType, sts: $sts);
     }
 
     /**
