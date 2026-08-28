@@ -40,6 +40,7 @@ import {
 	type WorkboxRouteContext,
 } from "./cache-route-matchers"
 import type { WarmUpOptions } from "./types"
+import type { ServiceWorkerDiagnostics } from "./sw-diagnostics"
 import { normalizeWarmUpOptions } from "./warmup-tuning"
 
 declare const __SW_WARMUP_ASSETS__: string[]
@@ -117,11 +118,27 @@ export function getConfiguredVendorCacheableHosts(sw: ServiceWorkerGlobalScope):
 /**
  * Loads the Workbox IIFE runtime via importScripts.
  */
-export function loadWorkboxRuntime(runtimeUrl: string): boolean {
+
+export function loadWorkboxRuntime(
+	runtimeUrl: string,
+	diagnostics?: ServiceWorkerDiagnostics,
+): boolean {
+	const startedAt = performance.now()
 	try {
 		importScripts(runtimeUrl)
+		diagnostics?.logWorkboxLoad({
+			runtimeUrl,
+			loaded: true,
+			durationMs: performance.now() - startedAt,
+		})
 		return true
-	} catch {
+	} catch (error) {
+		diagnostics?.logWorkboxLoad({
+			runtimeUrl,
+			loaded: false,
+			durationMs: performance.now() - startedAt,
+			error: error instanceof Error ? error.message : String(error),
+		})
 		return false
 	}
 }
@@ -147,7 +164,10 @@ export function getWorkboxModulePathPrefix(runtimeUrl: string, baseUrl?: string)
 /**
  * Resolves Workbox CDN URL, loads runtime, and registers all CacheFirst buckets.
  */
-export function bootstrapWorkboxCacheRuntime(sw: ServiceWorkerGlobalScope): WorkboxBootstrapResult {
+export function bootstrapWorkboxCacheRuntime(
+	sw: ServiceWorkerGlobalScope,
+	diagnostics?: ServiceWorkerDiagnostics,
+): WorkboxBootstrapResult {
 	const configuredWorkboxRuntimeUrl = getConfiguredWorkboxRuntimeUrl(sw)
 	const resolvedWorkboxRuntimeUrl = configuredWorkboxRuntimeUrl || DEFAULT_WORKBOX_RUNTIME_URL
 
@@ -157,7 +177,7 @@ export function bootstrapWorkboxCacheRuntime(sw: ServiceWorkerGlobalScope): Work
 		)
 	}
 
-	if (!loadWorkboxRuntime(resolvedWorkboxRuntimeUrl)) {
+	if (!loadWorkboxRuntime(resolvedWorkboxRuntimeUrl, diagnostics)) {
 		console.error("[sw] Failed to load Workbox runtime", {
 			attemptedUrl: resolvedWorkboxRuntimeUrl,
 			configuredUrl: configuredWorkboxRuntimeUrl,
@@ -171,7 +191,12 @@ export function bootstrapWorkboxCacheRuntime(sw: ServiceWorkerGlobalScope): Work
 	}
 
 	const vendorCacheableHosts = getConfiguredVendorCacheableHosts(sw)
-	const registration = registerAppCacheRoutes(sw, vendorCacheableHosts, resolvedWorkboxRuntimeUrl)
+	const registration = registerAppCacheRoutes(
+		sw,
+		vendorCacheableHosts,
+		resolvedWorkboxRuntimeUrl,
+		diagnostics,
+	)
 	return {
 		configuredWorkboxRuntimeUrl,
 		resolvedWorkboxRuntimeUrl,
@@ -187,6 +212,7 @@ function registerAppCacheRoutes(
 	sw: ServiceWorkerGlobalScope,
 	vendorCacheableHosts: readonly string[],
 	workboxRuntimeUrl: string,
+	diagnostics?: ServiceWorkerDiagnostics,
 ): CacheRuntimeRegistration {
 	const modulePathPrefix = getWorkboxModulePathPrefix(workboxRuntimeUrl, sw.location.origin)
 	workbox.setConfig?.({ modulePathPrefix: modulePathPrefix || undefined, debug: false })
@@ -201,12 +227,26 @@ function registerAppCacheRoutes(
 	) as ExpirationPluginLike
 
 	const sameOrigin = sw.location.origin
+	// Do not attach empty diagnostic plugin objects when diagnostics are disabled.
+	const appStaticDiagnosticsPlugin = diagnostics?.enabled
+		? diagnostics.createCacheTimingPlugin(APP_STATIC_CACHE_NAME)
+		: null
+	const vendorScriptDiagnosticsPlugin = diagnostics?.enabled
+		? diagnostics.createCacheTimingPlugin(VENDOR_STATIC_CACHE_NAME, {
+				requestDestination: "script",
+				resourceCategory: "cdn-script",
+			})
+		: null
 
 	registerRoute(
 		(context) => isCacheableStaticAsset(context, sameOrigin),
 		new CacheFirst({
 			cacheName: APP_STATIC_CACHE_NAME,
-			plugins: [new CacheableResponsePlugin({ statuses: [200] }), appStaticExpirationPlugin],
+			plugins: [
+				new CacheableResponsePlugin({ statuses: [200] }),
+				appStaticExpirationPlugin,
+				...(appStaticDiagnosticsPlugin ? [appStaticDiagnosticsPlugin] : []),
+			],
 		}),
 	)
 
@@ -314,6 +354,7 @@ function registerAppCacheRoutes(
 					maxEntries: 400,
 					maxAgeSeconds: CACHE_TTL_30_DAYS,
 				}),
+				...(vendorScriptDiagnosticsPlugin ? [vendorScriptDiagnosticsPlugin] : []),
 			],
 		}),
 	)

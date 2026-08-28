@@ -12,6 +12,12 @@ export const WORKBOX_CDN_QUERY_PARAM = "workboxCdnUrl"
 /** Query param listing comma-separated third-party hosts allowed into the vendor cache bucket. */
 export const VENDOR_CACHEABLE_HOSTS_QUERY_PARAM = "vendorCacheHosts"
 
+/** Registration query params used to configure SW timing diagnostics from the main thread. */
+export const SW_DIAGNOSTICS_ENABLED_QUERY_PARAM = "swDiagnostics"
+export const SW_DIAGNOSTICS_CACHE_START_THRESHOLD_QUERY_PARAM = "swDiagCacheStartMs"
+export const SW_DIAGNOSTICS_CACHE_MATCH_THRESHOLD_QUERY_PARAM = "swDiagCacheMatchMs"
+export const SW_DIAGNOSTICS_TOTAL_THRESHOLD_QUERY_PARAM = "swDiagTotalMs"
+
 /** Query marker used by app code to opt fixed-name same-origin resources into SW caching. */
 export const RESOURCE_CACHE_MARK_QUERY_PARAM = "swCache"
 
