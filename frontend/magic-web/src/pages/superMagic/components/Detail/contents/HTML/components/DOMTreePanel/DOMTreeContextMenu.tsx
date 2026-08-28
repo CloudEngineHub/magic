@@ -203,46 +203,95 @@ export function DOMTreeContextMenu({
 				<ArrowDown className="h-4 w-4" />
 				{t("stylePanel.domTree.moveAfterNext")}
 			</ContextMenuItem>
-			<ContextMenuSeparator />
-			<ContextMenuSub>
-				<ContextMenuSubTrigger
-					className={ITEM_CLASS}
-					disabled={(!canInsertInside && !canInsertSibling) || isBusy}
-				>
-					<Plus className="h-4 w-4" />
-					{t("stylePanel.domTree.insert")}
-				</ContextMenuSubTrigger>
-				<ContextMenuSubContent
-					className={cn(
-						"w-64 rounded-lg border-border/80 p-1.5 shadow-xl",
-						TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_MENU,
-					)}
-				>
-					{canInsertInside ? (
-						<>
-							<ContextMenuLabel className={LABEL_CLASS}>
-								{t("stylePanel.domTree.insertInside")}
-							</ContextMenuLabel>
-							<ContextMenuItem
-								className={ITEM_CLASS}
-								disabled={isBusy}
-								onSelect={() => onAddText("inside")}
-							>
-								<Plus className="h-4 w-4" />
-								{t("stylePanel.domTree.addText")}
-							</ContextMenuItem>
-							<ContextMenuItem
-								className={ITEM_CLASS}
-								disabled={isBusy}
-								onSelect={() => onAddImage("inside")}
-							>
-								<ImagePlus className="h-4 w-4" />
-								{t("stylePanel.domTree.addImage")}
-							</ContextMenuItem>
-						</>
-					) : null}
-				</ContextMenuSubContent>
-			</ContextMenuSub>
+			{canInsertInside || canInsertSibling ? (
+				<>
+					<ContextMenuSeparator />
+					<ContextMenuSub>
+						<ContextMenuSubTrigger className={ITEM_CLASS} disabled={isBusy}>
+							<Plus className="h-4 w-4" />
+							{t("stylePanel.domTree.insert")}
+						</ContextMenuSubTrigger>
+						<ContextMenuSubContent
+							className={cn(
+								"w-64 rounded-lg border-border/80 p-1.5 shadow-xl",
+								TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_MENU,
+							)}
+						>
+							{canInsertSibling ? (
+								<>
+									<ContextMenuLabel className={LABEL_CLASS}>
+										{t("stylePanel.domTree.insertBefore")}
+									</ContextMenuLabel>
+									<ContextMenuItem
+										className={ITEM_CLASS}
+										disabled={isBusy}
+										onSelect={() => onAddText("before")}
+									>
+										<Plus className="h-4 w-4" />
+										{t("stylePanel.domTree.addText")}
+									</ContextMenuItem>
+									<ContextMenuItem
+										className={ITEM_CLASS}
+										disabled={isBusy}
+										onSelect={() => onAddImage("before")}
+									>
+										<ImagePlus className="h-4 w-4" />
+										{t("stylePanel.domTree.addImage")}
+									</ContextMenuItem>
+								</>
+							) : null}
+							{canInsertInside ? (
+								<>
+									{canInsertSibling ? <ContextMenuSeparator /> : null}
+									<ContextMenuLabel className={LABEL_CLASS}>
+										{t("stylePanel.domTree.insertInside")}
+									</ContextMenuLabel>
+									<ContextMenuItem
+										className={ITEM_CLASS}
+										disabled={isBusy}
+										onSelect={() => onAddText("inside")}
+									>
+										<Plus className="h-4 w-4" />
+										{t("stylePanel.domTree.addText")}
+									</ContextMenuItem>
+									<ContextMenuItem
+										className={ITEM_CLASS}
+										disabled={isBusy}
+										onSelect={() => onAddImage("inside")}
+									>
+										<ImagePlus className="h-4 w-4" />
+										{t("stylePanel.domTree.addImage")}
+									</ContextMenuItem>
+								</>
+							) : null}
+							{canInsertSibling ? (
+								<>
+									<ContextMenuSeparator />
+									<ContextMenuLabel className={LABEL_CLASS}>
+										{t("stylePanel.domTree.insertAfter")}
+									</ContextMenuLabel>
+									<ContextMenuItem
+										className={ITEM_CLASS}
+										disabled={isBusy}
+										onSelect={() => onAddText("after")}
+									>
+										<Plus className="h-4 w-4" />
+										{t("stylePanel.domTree.addText")}
+									</ContextMenuItem>
+									<ContextMenuItem
+										className={ITEM_CLASS}
+										disabled={isBusy}
+										onSelect={() => onAddImage("after")}
+									>
+										<ImagePlus className="h-4 w-4" />
+										{t("stylePanel.domTree.addImage")}
+									</ContextMenuItem>
+								</>
+							) : null}
+						</ContextMenuSubContent>
+					</ContextMenuSub>
+				</>
+			) : null}
 			<ContextMenuSeparator />
 			<ContextMenuItem
 				className={cn(ITEM_CLASS, "text-destructive")}

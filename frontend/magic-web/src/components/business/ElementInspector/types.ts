@@ -113,10 +113,6 @@ export interface HtmlMultiSelectionRequestTarget {
 	screenshot?: {
 		dataUrl: string
 		rect: InspectedElementRect
-		displaySize?: {
-			width: number
-			height: number
-		}
 		mention?: TiptapMentionAttributes
 	}
 	instruction: string

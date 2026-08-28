@@ -35,7 +35,8 @@ interface BitmapSize {
 	height: number
 }
 
-function getOutputSize(
+/** Prefer the host drag size so iframe zoom does not change the PNG dimensions. */
+export function getCaptureOutputSize(
 	selection: InspectedElementRect,
 	viewportSelection?: ScreenRect,
 ): BitmapSize {
@@ -46,7 +47,7 @@ function getOutputSize(
 }
 
 export interface BitmapCropSelection extends InspectedElementRect {
-	/** Output dimensions stay equal to the user's drag rectangle. */
+	/** Fallback output dimensions in the source surface's CSS pixels. */
 	outputWidth: number
 	outputHeight: number
 }
@@ -116,7 +117,7 @@ export function getRootCaptureSelection(
 	}
 }
 
-/** Map CSS coordinates to source pixels without changing the requested output size. */
+/** Map CSS coordinates to source pixels; the caller may override output size. */
 export function toBitmapCropSelection(
 	selection: InspectedElementRect,
 	bitmap: BitmapSize,
@@ -233,7 +234,7 @@ async function captureSameOriginIframe({
 				width: renderWidth,
 				height: renderHeight,
 			}),
-			getOutputSize(selection, viewportSelection),
+			getCaptureOutputSize(selection, viewportSelection),
 		)
 	} finally {
 		bitmap.close()
@@ -305,7 +306,7 @@ async function captureCurrentTab({
 				width: screenSelection.width * scaleX,
 				height: screenSelection.height * scaleY,
 			},
-			getOutputSize(selection, viewportSelection),
+			getCaptureOutputSize(selection, viewportSelection),
 		)
 	} finally {
 		stream.getTracks().forEach((track) => track.stop())

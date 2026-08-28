@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+	getCaptureOutputSize,
 	getCaptureSurfaceGeometry,
 	getRootCaptureSelection,
 	resolveCaptureScreenSelection,
@@ -8,6 +9,15 @@ import {
 } from "../screenshot"
 
 describe("HTML screenshot geometry", () => {
+	it("uses visual viewport dimensions for the screenshot output", () => {
+		expect(
+			getCaptureOutputSize(
+				{ left: 123, top: 157, width: 780, height: 390 },
+				{ left: 360, top: 320, width: 400, height: 200 },
+			),
+		).toEqual({ width: 400, height: 200 })
+	})
+
 	it("maps iframe CSS coordinates to visual screen coordinates", () => {
 		expect(
 			toRenderedSelection(

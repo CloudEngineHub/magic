@@ -66,4 +66,25 @@ describe("domTree", () => {
 		expect(tree.root.canMove).toBe(false)
 		expect(tree.root.canDelete).toBe(false)
 	})
+
+	it("shows the original relative path for replaced image resources", () => {
+		document.body.innerHTML = `
+			<img
+				src="https://cdn.example.com/project/assets/chart.png?signature=temporary"
+				data-original-path="../assets/chart.png"
+			/>
+		`
+
+		const tree = buildDomTree()
+
+		expect(tree.root.children[0].resource).toBe("../assets/chart.png")
+	})
+
+	it("falls back to the current resource path when no original path is available", () => {
+		document.body.innerHTML = '<img src="images/chart.png" />'
+
+		const tree = buildDomTree()
+
+		expect(tree.root.children[0].resource).toBe("images/chart.png")
+	})
 })

@@ -123,6 +123,7 @@ export function assignEditorNodeIds(root: HTMLElement): void {
 
 function getResource(element: HTMLElement): string | undefined {
 	const value =
+		element.getAttribute("data-original-path") ||
 		element.getAttribute("src") ||
 		element.getAttribute("href") ||
 		element.getAttribute("poster") ||

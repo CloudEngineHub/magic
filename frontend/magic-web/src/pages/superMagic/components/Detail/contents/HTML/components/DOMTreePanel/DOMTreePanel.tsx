@@ -308,27 +308,29 @@ function AddNodeMenu({
 
 	return (
 		<DropdownMenu open={open} onOpenChange={onOpenChange}>
-			<span className="inline-flex" tabIndex={disabled ? 0 : undefined}>
-				<DropdownMenuTrigger asChild>
-					<Button
-						size="icon"
-						variant="ghost"
-						className="h-5 w-5 rounded-sm active:scale-[0.96]"
-						disabled={disabled}
-						aria-label={label}
-						data-testid={testId}
-						onPointerDown={(event) => event.stopPropagation()}
-						onClick={(event) => {
-							event.stopPropagation()
-							// Radix opens from pointerdown. Keep a click fallback for
-							// programmatic and keyboard activation without toggling twice.
-							if (!open) onOpenChange(true)
-						}}
-					>
-						<Icon className="h-3 w-3" />
-					</Button>
-				</DropdownMenuTrigger>
-			</span>
+			<ActionTooltip label={label}>
+				<span className="inline-flex" tabIndex={disabled ? 0 : undefined}>
+					<DropdownMenuTrigger asChild>
+						<Button
+							size="icon"
+							variant="ghost"
+							className="h-5 w-5 rounded-sm active:scale-[0.96]"
+							disabled={disabled}
+							aria-label={label}
+							data-testid={testId}
+							onPointerDown={(event) => event.stopPropagation()}
+							onClick={(event) => {
+								event.stopPropagation()
+								// Radix opens from pointerdown. Keep a click fallback for
+								// programmatic and keyboard activation without toggling twice.
+								if (!open) onOpenChange(true)
+							}}
+						>
+							<Icon className="h-3 w-3" />
+						</Button>
+					</DropdownMenuTrigger>
+				</span>
+			</ActionTooltip>
 			<EditorDropdownMenuContent align="end" className="w-56">
 				<DropdownMenuLabel>{label}</DropdownMenuLabel>
 				{isInside ? (
@@ -957,6 +959,7 @@ function DOMTreePanelInner({
 		const isRootNode =
 			tree?.root.nodeId === node.nodeId || node.tagName.toLowerCase() === "body"
 		const canInsertInside = node.canHaveChildren && (node.editable || isRootNode)
+		// Void elements such as img/input/br can still insert valid sibling nodes.
 		const canInsertSibling = parentMap.has(node.nodeId) && node.editable
 		const isDragged = draggedNodeId === node.nodeId
 		const activeDropPosition = dropTarget?.nodeId === node.nodeId ? dropTarget.position : null
@@ -1338,7 +1341,7 @@ function DOMTreePanelInner({
 							</button>
 							<span
 								className={cn(
-									"pointer-events-none absolute inset-y-1 right-1 z-20 flex h-auto w-[128px] min-w-0 max-w-[calc(100%_-_8px)] items-center justify-end gap-1 overflow-hidden rounded-md border border-border/70 bg-background/95 px-1 opacity-0 shadow-sm transition-[opacity,transform,background-color] duration-150 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100",
+									"pointer-events-none absolute inset-y-1 right-1 z-20 flex h-auto w-max min-w-0 max-w-[calc(100%_-_8px)] items-center justify-end gap-1 overflow-hidden rounded-md border border-border/70 bg-background/95 px-1 opacity-0 shadow-sm transition-[opacity,transform,background-color] duration-150 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100",
 									"translate-x-1",
 									selectedNodeId === node.nodeId &&
 										"bg-sky-50/95 dark:bg-sky-950/95",

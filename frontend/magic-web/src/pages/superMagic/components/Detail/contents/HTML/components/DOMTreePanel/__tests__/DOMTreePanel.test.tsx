@@ -465,7 +465,7 @@ describe("DOMTreePanel", () => {
 			"absolute",
 			"inset-y-1",
 			"right-1",
-			"w-[128px]",
+			"w-max",
 			"rounded-md",
 			"border",
 			"bg-background/95",
@@ -512,7 +512,7 @@ describe("DOMTreePanel", () => {
 		expect(row).toHaveClass("rounded-none")
 		expect(screen.getByTestId("dom-tree-toggle-body")).toHaveClass("h-full", "w-5")
 		expect(screen.getByTestId("dom-tree-drag-handle-section")).toHaveClass("h-full", "w-5")
-		expect(actions).toHaveClass("absolute", "inset-y-1", "w-[128px]", "translate-x-1")
+		expect(actions).toHaveClass("absolute", "inset-y-1", "w-max", "translate-x-1")
 		expect(actions).toHaveClass("rounded-md", "border", "bg-background/95", "px-1")
 	})
 
@@ -707,6 +707,42 @@ describe("DOMTreePanel", () => {
 		)
 	})
 
+	it("shows a tooltip for the add-node action", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "section",
+						tagName: "section",
+						label: "section",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
+
+		const addInsideButton = await screen.findByTestId("dom-tree-add-section")
+		fireEvent.pointerMove(addInsideButton.parentElement as HTMLElement)
+		await waitFor(() =>
+			expect(screen.getByRole("tooltip")).toHaveTextContent(
+				"stylePanel.domTree.addInsideAction",
+			),
+		)
+	})
+
 	it("intercepts the browser context menu on tree rows", async () => {
 		const getDomTree = vi.fn().mockResolvedValue({
 			root: {
@@ -775,9 +811,57 @@ describe("DOMTreePanel", () => {
 			expect(screen.getByText("stylePanel.domTree.insert")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.delete")).toBeInTheDocument()
 		})
-		expect(screen.getByRole("menu")).toHaveClass("!z-[10070]")
+		fireEvent.click(screen.getByText("stylePanel.domTree.insert"))
+		await waitFor(() => {
+			expect(screen.getByText("stylePanel.domTree.insertBefore")).toBeInTheDocument()
+			expect(screen.getByText("stylePanel.domTree.insertInside")).toBeInTheDocument()
+			expect(screen.getByText("stylePanel.domTree.insertAfter")).toBeInTheDocument()
+		})
+		expect(
+			screen.getAllByRole("menu").some((menu) => menu.classList.contains("!z-[10070]")),
+		).toBe(true)
 		fireEvent.click(screen.getByText("stylePanel.domTree.duplicateNode"))
 		await waitFor(() => expect(duplicateDomNode).toHaveBeenCalledWith("section"))
+	})
+
+	it("offers sibling insertion without an inside option for void nodes", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "image",
+						tagName: "img",
+						label: "img",
+						selector: "img",
+						children: [],
+						editable: true,
+						canHaveChildren: false,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
+
+		fireEvent.contextMenu(await screen.findByTestId("dom-tree-node-image"), {
+			clientX: 120,
+			clientY: 80,
+		})
+
+		await screen.findByText("stylePanel.domTree.insert")
+		fireEvent.click(screen.getByText("stylePanel.domTree.insert"))
+		expect(await screen.findByText("stylePanel.domTree.insertBefore")).toBeInTheDocument()
+		expect(screen.getByText("stylePanel.domTree.insertAfter")).toBeInTheDocument()
+		expect(screen.queryByText("stylePanel.domTree.insertInside")).not.toBeInTheDocument()
 	})
 
 	it("opens the context menu without selecting the node", async () => {

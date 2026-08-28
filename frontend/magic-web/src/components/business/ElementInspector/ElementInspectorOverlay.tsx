@@ -257,11 +257,12 @@ export function ElementInspectorOverlay({
 
 		const visualIframeRect = iframe.getBoundingClientRect()
 		const visualParentRect = parent.getBoundingClientRect()
+		const fallbackScale = Math.max(scaleRatio, Number.EPSILON)
 		return toInspectorOverlayVisualRect(visualIframeRect, visualParentRect, {
-			width: parent.clientWidth || visualParentRect.width,
-			height: parent.clientHeight || visualParentRect.height,
+			width: parent.clientWidth || visualParentRect.width / fallbackScale,
+			height: parent.clientHeight || visualParentRect.height / fallbackScale,
 		})
-	}, [iframeRect, iframeRef])
+	}, [iframeRect, iframeRef, scaleRatio])
 
 	// Don't render anything if not active and no selection
 	if (!active && !selectedElement && !activeTarget && pendingTargets.length === 0) return null

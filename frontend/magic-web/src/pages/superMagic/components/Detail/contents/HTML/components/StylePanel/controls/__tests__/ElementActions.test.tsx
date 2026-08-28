@@ -70,7 +70,7 @@ describe("ElementActions", () => {
 		selection.historyIndex = 0
 	})
 
-	it("shows add element only when the selected node can contain children", async () => {
+	it("shows text and image insertion controls for an editable node", async () => {
 		const getDomTree = vi.fn().mockResolvedValue(createTree(true))
 
 		render(<ElementActions editorRef={{ current: { getDomTree } } as never} />)
@@ -109,7 +109,7 @@ describe("ElementActions", () => {
 		})
 	})
 
-	it("does not offer text or image insertion when the node cannot contain children", async () => {
+	it("keeps sibling insertion controls when the node cannot contain children", async () => {
 		selection.selector = "span.label"
 		selection.tagName = "span"
 		const getDomTree = vi.fn().mockResolvedValue(createTree(false))
@@ -117,10 +117,8 @@ describe("ElementActions", () => {
 		render(<ElementActions editorRef={{ current: { getDomTree } } as never} />)
 
 		await waitFor(() => expect(getDomTree).toHaveBeenCalled())
-		expect(screen.queryByTestId("html-style-panel-add-element-button")).not.toBeInTheDocument()
-		expect(
-			screen.queryByTestId("html-style-panel-add-image-element-button"),
-		).not.toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-add-element-button")).toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-add-image-element-button")).toBeInTheDocument()
 		expect(
 			screen.queryByTestId("html-style-panel-replace-image-button"),
 		).not.toBeInTheDocument()
@@ -135,7 +133,7 @@ describe("ElementActions", () => {
 
 		expect(screen.getByTestId("html-style-panel-replace-image-button")).toBeInTheDocument()
 		await waitFor(() => expect(getDomTree).toHaveBeenCalled())
-		expect(screen.queryByTestId("html-style-panel-add-element-button")).not.toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-add-element-button")).toBeInTheDocument()
 	})
 
 	it("opens an in-page dialog instead of the browser prompt for text insertion", async () => {
@@ -146,6 +144,7 @@ describe("ElementActions", () => {
 		render(<ElementActions editorRef={{ current: { getDomTree, insertTextNode } } as never} />)
 
 		fireEvent.click(await screen.findByTestId("html-style-panel-add-element-button"))
+		fireEvent.click(await screen.findByText("stylePanel.domTree.insertInside"))
 
 		expect(await screen.findByRole("dialog")).toBeInTheDocument()
 		expect(promptSpy).not.toHaveBeenCalled()
@@ -173,6 +172,7 @@ describe("ElementActions", () => {
 		render(<ElementActions editorRef={{ current: { getDomTree, insertTextNode } } as never} />)
 
 		fireEvent.click(await screen.findByTestId("html-style-panel-add-element-button"))
+		fireEvent.click(await screen.findByText("stylePanel.domTree.insertInside"))
 		fireEvent.click(
 			await screen.findByRole("button", {
 				name: "stylePanel.domTree.addTextDialog.cancel",
@@ -181,6 +181,47 @@ describe("ElementActions", () => {
 
 		await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
 		expect(insertTextNode).not.toHaveBeenCalled()
+	})
+
+	it("inserts text before the selected node when that placement is chosen", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				...createTree(true).root,
+				children: [
+					{
+						nodeId: "first",
+						selector: "section.first",
+						tagName: "section",
+						label: "section.first",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+					createTree(true).root.children[0],
+				],
+			},
+		})
+		const insertTextNode = vi.fn().mockResolvedValue(undefined)
+
+		render(<ElementActions editorRef={{ current: { getDomTree, insertTextNode } } as never} />)
+
+		fireEvent.click(await screen.findByTestId("html-style-panel-add-element-button"))
+		fireEvent.click(await screen.findByText("stylePanel.domTree.insertBefore"))
+		const input = await screen.findByRole("textbox", {
+			name: "stylePanel.domTree.addTextDialog.inputLabel",
+		})
+		fireEvent.change(input, { target: { value: "Before content" } })
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "stylePanel.domTree.addTextDialog.confirm",
+			}),
+		)
+
+		await waitFor(() =>
+			expect(insertTextNode).toHaveBeenCalledWith("body", "Before content", 1),
+		)
 	})
 
 	it("moves the selected node within its parent like the DOM tree", async () => {

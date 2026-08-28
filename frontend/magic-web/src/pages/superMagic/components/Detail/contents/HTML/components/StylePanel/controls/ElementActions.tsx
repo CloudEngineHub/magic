@@ -1,8 +1,24 @@
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowDown, ArrowUp, Copy, ImagePlus, ImageUp, Trash2, Type } from "lucide-react"
+import {
+	ArrowDown,
+	ArrowUp,
+	Copy,
+	CornerDownRight,
+	ImagePlus,
+	ImageUp,
+	Trash2,
+	Type,
+} from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
+import {
+	DropdownMenu,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import {
 	Dialog,
 	DialogContent,
@@ -17,6 +33,7 @@ import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import type { DomTreeNode } from "../../../iframe-bridge/types/messages"
 import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
+import { EditorDropdownMenuContent } from "../../EditorFloating"
 
 interface ElementActionsProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -25,8 +42,11 @@ interface ElementActionsProps {
 
 interface TextInsertRequest {
 	parentNodeId: string
+	index?: number
 	targetLabel: string
 }
+
+type InsertPlacement = "before" | "inside" | "after"
 
 function findNodeBySelector(node: DomTreeNode, selector: string): DomTreeNode | null {
 	if (node.selector === selector) return node
@@ -95,6 +115,76 @@ function AddElementButton({
 				</Button>
 			</span>
 		</MagicTooltip>
+	)
+}
+
+interface AddElementMenuProps {
+	type: "text" | "image"
+	icon: React.ReactNode
+	label: string
+	testId: string
+	disabled: boolean
+	canInsertInside: boolean
+	canInsertSibling: boolean
+	onInsert: (type: "text" | "image", placement: InsertPlacement) => void
+}
+
+function AddElementMenu({
+	type,
+	icon,
+	label,
+	testId,
+	disabled,
+	canInsertInside,
+	canInsertSibling,
+	onInsert,
+}: AddElementMenuProps) {
+	const { t } = useTranslation("super")
+	const [open, setOpen] = useState(false)
+	return (
+		<DropdownMenu open={open} onOpenChange={setOpen}>
+			<MagicTooltip title={label} contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}>
+				<span className="inline-flex">
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={disabled}
+							className="h-7 w-7 px-0"
+							data-testid={testId}
+							aria-label={label}
+							onClick={() => {
+								if (!open) setOpen(true)
+							}}
+						>
+							{icon}
+						</Button>
+					</DropdownMenuTrigger>
+				</span>
+			</MagicTooltip>
+			<EditorDropdownMenuContent align="start" className="w-48">
+				<DropdownMenuLabel>{label}</DropdownMenuLabel>
+				{canInsertSibling ? (
+					<DropdownMenuItem onSelect={() => onInsert(type, "before")}>
+						<ArrowUp className="h-4 w-4" />
+						{t("stylePanel.domTree.insertBefore")}
+					</DropdownMenuItem>
+				) : null}
+				{canInsertInside ? (
+					<DropdownMenuItem onSelect={() => onInsert(type, "inside")}>
+						<CornerDownRight className="h-4 w-4" />
+						{t("stylePanel.domTree.insertInside")}
+					</DropdownMenuItem>
+				) : null}
+				{canInsertSibling && canInsertInside ? <DropdownMenuSeparator /> : null}
+				{canInsertSibling ? (
+					<DropdownMenuItem onSelect={() => onInsert(type, "after")}>
+						<ArrowDown className="h-4 w-4" />
+						{t("stylePanel.domTree.insertAfter")}
+					</DropdownMenuItem>
+				) : null}
+			</EditorDropdownMenuContent>
+		</DropdownMenu>
 	)
 }
 
@@ -229,7 +319,7 @@ export const ElementActions = observer(function ElementActions({
 	}, [editorRef])
 
 	const handleInsert = useCallback(
-		async (type: "text" | "image") => {
+		async (type: "text" | "image", placement: InsertPlacement) => {
 			if (isInsertInProgressRef.current || !editorRef.current) return
 			const selectors = stylePanelStore.getSelectedSelectors()
 			if (selectors.length !== 1) return
@@ -239,16 +329,29 @@ export const ElementActions = observer(function ElementActions({
 				const tree = await editorRef.current.getDomTree()
 				const selectedNode = tree?.root ? findNodeBySelector(tree.root, selectors[0]) : null
 				if (!selectedNode) throw new Error("未找到当前选中的 DOM 节点")
-				if (!selectedNode.canHaveChildren) throw new Error("当前元素不支持新增子元素")
+				const context = tree?.root ? findNodeContext(tree.root, selectors[0]) : null
+				let parentNodeId: string | undefined
+				let index: number | undefined
+
+				if (placement === "inside") {
+					if (!selectedNode.canHaveChildren) throw new Error("当前元素不支持新增子元素")
+					parentNodeId = selectedNode.nodeId
+				} else {
+					if (!context?.parent) throw new Error("当前元素没有可用的同级插入位置")
+					parentNodeId = context.parent.nodeId
+					index = context.index + (placement === "after" ? 1 : 0)
+				}
+				if (!parentNodeId) throw new Error("当前元素没有可用的插入位置")
 
 				if (type === "text") {
 					setTextInput("")
 					setTextInsertRequest({
-						parentNodeId: selectedNode.nodeId,
+						parentNodeId,
+						index,
 						targetLabel: selectedNode.label || selectedNode.tagName,
 					})
 				} else {
-					await editorRef.current.insertImageNode(selectedNode.nodeId)
+					await editorRef.current.insertImageNode(parentNodeId, index)
 				}
 			} catch (error) {
 				console.error("[StylePanel] Failed to insert DOM node:", error)
@@ -272,7 +375,11 @@ export const ElementActions = observer(function ElementActions({
 
 		try {
 			setIsTextInsertSubmitting(true)
-			await editorRef.current.insertTextNode(request.parentNodeId, text)
+			if (request.index === undefined) {
+				await editorRef.current.insertTextNode(request.parentNodeId, text)
+			} else {
+				await editorRef.current.insertTextNode(request.parentNodeId, text, request.index)
+			}
 			setTextInsertRequest(null)
 			setTextInput("")
 		} catch (error) {
@@ -305,6 +412,7 @@ export const ElementActions = observer(function ElementActions({
 					? findNodeContext(nextTree.root, selectors[0])
 					: null
 				setCanAddInside(nextContext?.node.canHaveChildren === true)
+				setCanAddSibling(Boolean(nextContext?.parent && nextContext.node.editable))
 				setMoveState({
 					canMoveUp: Boolean(nextContext?.node.canMove && nextContext.index > 0),
 					canMoveDown: Boolean(
@@ -323,6 +431,7 @@ export const ElementActions = observer(function ElementActions({
 		[editorRef, stylePanelStore],
 	)
 	const [canAddInside, setCanAddInside] = useState(false)
+	const [canAddSibling, setCanAddSibling] = useState(false)
 
 	useEffect(() => {
 		let cancelled = false
@@ -331,6 +440,7 @@ export const ElementActions = observer(function ElementActions({
 
 		if (!selectedSelector || !editorRef.current) {
 			setCanAddInside(false)
+			setCanAddSibling(false)
 			setMoveState({ canMoveUp: false, canMoveDown: false })
 			return
 		}
@@ -341,6 +451,7 @@ export const ElementActions = observer(function ElementActions({
 		// immediately because the previous node's capabilities are no longer valid.
 		if (selectionChanged) {
 			setCanAddInside(false)
+			setCanAddSibling(false)
 			setMoveState({ canMoveUp: false, canMoveDown: false })
 		}
 
@@ -350,6 +461,7 @@ export const ElementActions = observer(function ElementActions({
 				if (cancelled || !tree?.root) return
 				const context = findNodeContext(tree.root, selectedSelector)
 				setCanAddInside(context?.node.canHaveChildren === true)
+				setCanAddSibling(Boolean(context?.parent && context.node.editable))
 				setMoveState({
 					canMoveUp: Boolean(context?.node.canMove && context.index > 0),
 					canMoveDown: Boolean(
@@ -377,21 +489,27 @@ export const ElementActions = observer(function ElementActions({
 				className="contents [&_button[data-slot=button][data-size=icon]]:w-7 [&_button]:h-7"
 				data-testid="html-style-panel-element-actions"
 			>
-				{canAddInside ? (
+				{canAddInside || canAddSibling ? (
 					<>
-						<AddElementButton
+						<AddElementMenu
+							type="text"
 							icon={<Type className="h-4 w-4" />}
 							label={t("stylePanel.domTree.addText")}
 							testId="html-style-panel-add-element-button"
 							disabled={disabled || !hasSingleSelection}
-							onClick={() => void handleInsert("text")}
+							canInsertInside={canAddInside}
+							canInsertSibling={canAddSibling}
+							onInsert={(type, placement) => void handleInsert(type, placement)}
 						/>
-						<AddElementButton
+						<AddElementMenu
+							type="image"
 							icon={<ImagePlus className="h-4 w-4" />}
 							label={t("stylePanel.domTree.addImage")}
 							testId="html-style-panel-add-image-element-button"
 							disabled={disabled || !hasSingleSelection}
-							onClick={() => void handleInsert("image")}
+							canInsertInside={canAddInside}
+							canInsertSibling={canAddSibling}
+							onInsert={(type, placement) => void handleInsert(type, placement)}
 						/>
 					</>
 				) : null}

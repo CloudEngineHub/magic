@@ -66,7 +66,14 @@ export function buildHtmlMultiSelectionRequest(
 					kind: "screenshot",
 					selector: "",
 					elementLabel: "Screenshot",
-					screenshot: target.screenshot,
+					// Keep host-only display metadata out of the submission contract.
+					screenshot: {
+						dataUrl: target.screenshot.dataUrl,
+						rect: target.screenshot.rect,
+						...(target.screenshot.mention
+							? { mention: target.screenshot.mention }
+							: {}),
+					},
 					instruction: target.instruction.trim().slice(0, MAX_INSTRUCTION_LENGTH),
 				}
 			}
