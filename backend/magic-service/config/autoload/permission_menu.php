@@ -43,9 +43,9 @@ return [
         ],
         'platform.ai.model_management' => [
             'path' => [
-                ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_model', 'label' => '平台模型'],
-                ['key' => 'text_model', 'label' => '文本大模型'],
+                ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
+                ['key' => 'model_management', 'label' => '模型管理', 'order' => 6],
+                ['key' => 'model_provider_list', 'label' => '模型及服务商列表', 'order' => 1],
             ],
             'tag' => '平台模型',
         ],
@@ -289,9 +289,9 @@ return [
         ],
         'workspace.ai.model_management' => [
             'path' => [
-                ['key' => 'ai_management', 'label' => '企业 AI 管理'],
-                ['key' => 'custom_model', 'label' => '自定义大模型'],
-                ['key' => 'text_model', 'label' => '文本大模型'],
+                ['key' => 'ai_management', 'label' => '企业 AI 管理', 'order' => 2],
+                ['key' => 'custom_model', 'label' => '自定义大模型', 'order' => 1],
+                ['key' => 'model_provider_list', 'label' => '模型及服务商列表', 'order' => 1],
             ],
             'tag' => '自定义大模型',
         ],
@@ -330,11 +330,13 @@ return [
      * - value: 可兼容命中的旧资源列表
      */
     'resource_compatibility_mapping' => [
+        'platform.model' => ['platform.ai.model_management'],
         'platform.model.text' => ['platform.ai.model_management'],
-        'platform.model.image' => ['platform.ai.image_generation'],
+        'platform.model.image' => ['platform.ai.image_generation', 'platform.ai.model_management'],
         'platform.model.video' => ['platform.ai.model_management'],
+        'workspace.model' => ['workspace.ai.model_management'],
         'workspace.model.text' => ['workspace.ai.model_management'],
-        'workspace.model.image' => ['workspace.ai.image_generation'],
+        'workspace.model.image' => ['workspace.ai.image_generation', 'workspace.ai.model_management'],
         'workspace.model.video' => ['workspace.ai.model_management'],
         'platform.agent.official' => ['platform.ai.agent_management'],
         'platform.agent.review' => ['platform.ai.agent_management'],
@@ -351,10 +353,14 @@ return [
      * - 但不再在新的权限树里继续展示旧复合资源，避免与目标资源重复出现
      */
     'hidden_resource_keys' => [
-        'platform.ai.model_management',
+        'platform.model.text',
+        'platform.model.image',
+        'platform.model.video',
         'platform.ai.image_generation',
         'platform.ai.mode_management',
-        'workspace.ai.model_management',
+        'workspace.model.text',
+        'workspace.model.image',
+        'workspace.model.video',
         'workspace.ai.image_generation',
         'platform.ai.agent_management',
         'platform.ai.skill_management',
