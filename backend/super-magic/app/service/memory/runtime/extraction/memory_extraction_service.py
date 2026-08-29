@@ -57,22 +57,52 @@ class MemoryExtractionService:
         """指定记忆模型，在完整 fork 末尾追加 user 消息并继续运行。"""
         try:
             from app.core.ai_abilities import get_memory_model_id
+            from app.path_manager import PathManager
             from app.service.agent_runner import (
                 IsolatedAgentModelRequest,
                 IsolatedAgentRunRequest,
                 run_isolated_agent,
             )
+            from app.utils.runtime_storage import (
+                RuntimeEvictionPolicy,
+                ensure_runtime_directory,
+                evict_runtime_directories,
+                get_runtime_config_int,
+                trigger_opportunistic_cleanup,
+            )
 
             source = snapshot.source
+            agent_id = f"memory-after-run-{generation}"
             prompt = await self._prompt_provider.load(source.target)
+            runtime_dir = await ensure_runtime_directory(
+                PathManager.get_memory_after_run_dir()
+                / f"{source.target.agent_name}<{agent_id}>"
+            )
+            trigger_opportunistic_cleanup(
+                "memory_after_run",
+                lambda: evict_runtime_directories(
+                    PathManager.get_memory_after_run_dir(),
+                    policy=RuntimeEvictionPolicy(
+                        max_age_seconds=get_runtime_config_int(
+                            "runtime_cleanup.memory_after_run.max_age_days",
+                            minimum=1,
+                        )
+                        * 24
+                        * 60
+                        * 60,
+                    ),
+                    protected_paths=frozenset({runtime_dir}),
+                ),
+            )
             await run_isolated_agent(
                 IsolatedAgentRunRequest(
                     target=source.target,
-                    agent_id=f"memory-after-run-{generation}",
+                    agent_id=agent_id,
                     prompt=prompt,
                     parent_context=agent_context,
                     models=IsolatedAgentModelRequest(text_model_id=get_memory_model_id()),
                     snapshot=snapshot,
+                    chat_history_dir=runtime_dir,
                 )
             )
         except asyncio.CancelledError:

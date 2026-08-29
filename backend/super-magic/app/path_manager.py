@@ -30,6 +30,7 @@ class PathManager(BasePathManager):
             oauth2/         ← OAuth2 local callback
             verification/   ← 验证脚本产物
             background_compact/ ← 后台压缩临时上下文
+            memory_after_run/ ← 运行后记忆整理临时上下文
             llm_request/    ← LLM 调试日志
             slide-template-maker/ ← 幻灯片模板作者中间文件
         app/i18n/            ← 语言翻译（源码只读目录）
@@ -99,6 +100,7 @@ class PathManager(BasePathManager):
     _runtime_dir_name: ClassVar[str] = ".runtime"
     _runtime_dir: ClassVar[Optional[Path]] = None
     _background_compact_dir_name: ClassVar[str] = "background_compact"
+    _memory_after_run_dir_name: ClassVar[str] = "memory_after_run"
     _llm_request_dir_name: ClassVar[str] = "llm_request"
 
     # 后台 shell 任务日志目录：project_root/.runtime/bg_shell（按需创建）
@@ -617,6 +619,12 @@ class PathManager(BasePathManager):
         """获取后台压缩临时目录。"""
         cls._ensure_app_initialization()
         return cls.get_runtime_dir() / cls._background_compact_dir_name
+
+    @classmethod
+    def get_memory_after_run_dir(cls) -> Path:
+        """获取运行后记忆整理临时目录。"""
+        cls._ensure_app_initialization()
+        return cls.get_runtime_dir() / cls._memory_after_run_dir_name
 
     @classmethod
     def get_llm_request_dir(cls) -> Path:

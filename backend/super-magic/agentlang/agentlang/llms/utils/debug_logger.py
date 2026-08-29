@@ -23,26 +23,17 @@ ENABLE_LLM_SUCCESS_REQUEST_LOG = os.getenv(
     "ENABLE_LLM_SUCCESS_REQUEST_LOG", "false"
 ).lower() in ("true", "1", "yes", "on")
 
-# llm_request 目录最多保留的日志文件数；0 表示不限制（本地开发可用）
-LLM_REQUEST_LOG_MAX_FILES_ENV = "LLM_REQUEST_LOG_MAX_FILES"
-_DEFAULT_LLM_REQUEST_LOG_MAX_FILES = 10
 LLM_REQUEST_LOG_DIR_NAME = "llm_request"
 
 
 def _get_llm_request_log_max_files() -> int:
-    """解析 LLM 请求日志保留上限，非法值回退到默认值。"""
-    raw = os.getenv(LLM_REQUEST_LOG_MAX_FILES_ENV, str(_DEFAULT_LLM_REQUEST_LOG_MAX_FILES))
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Invalid %s=%r, using default %s",
-            LLM_REQUEST_LOG_MAX_FILES_ENV,
-            raw,
-            _DEFAULT_LLM_REQUEST_LOG_MAX_FILES,
-        )
-        return _DEFAULT_LLM_REQUEST_LOG_MAX_FILES
-    return max(0, value)
+    """读取 LLM 请求日志保留上限。"""
+    from app.utils.runtime_storage import get_runtime_config_int
+
+    return get_runtime_config_int(
+        "runtime_cleanup.llm_request.max_file_count",
+        minimum=0,
+    )
 
 def _sanitize_for_filename(value: str) -> str:
     """将输入字符串转换为可安全用于单个文件名片段的值。"""
@@ -145,11 +136,11 @@ async def save_llm_debug_log(
 
 async def prune_llm_request_logs_if_needed() -> None:
     """按配置保留 llm_request 目录下最新的日志文件，清理更旧和积压文件。"""
-    max_files = _get_llm_request_log_max_files()
-    if max_files <= 0:
-        return
-
     try:
+        max_files = _get_llm_request_log_max_files()
+        if max_files <= 0:
+            return
+
         from app.path_manager import PathManager
 
         llm_request_dir = PathManager.get_llm_request_dir()
