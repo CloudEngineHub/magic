@@ -27,9 +27,7 @@ from app.tools.browser.presentation import BrowserRemarkBuilder
 from app.tools.browser.presentation.common import (
     escape_markdown,
     message,
-    page_data,
     page_display_title,
-    safe_page_url,
     string,
     target_text,
     user_error,
@@ -199,9 +197,6 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
 
     def create_browser_tool_detail(self, result: ToolResult, content: str) -> ToolDetail:
         """将具体工具生成的正文包装成统一的 Browser/Markdown 详情。"""
-        if not result.ok:
-            content = ""
-
         output_path = result.data.get("output_path")
         if self.name == "browser_screenshot" and result.ok and isinstance(output_path, str) and output_path:
             relative_file_path = Path(output_path).as_posix()
