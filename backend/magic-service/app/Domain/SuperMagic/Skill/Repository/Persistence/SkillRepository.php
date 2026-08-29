@@ -78,6 +78,22 @@ class SkillRepository extends AbstractRepository implements SkillRepositoryInter
     }
 
     /**
+     * 查询当前用户创建的技能 code。
+     *
+     * @return array<string>
+     */
+    public function findCodesByCreator(SkillDataIsolation $dataIsolation): array
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->skillModel::query());
+
+        return $builder
+            ->where('creator_id', $dataIsolation->getCurrentUserId())
+            ->pluck('code')
+            ->map(static fn ($code): string => (string) $code)
+            ->all();
+    }
+
+    /**
      * 保存 Skill.
      */
     public function save(SkillDataIsolation $dataIsolation, SkillEntity $entity): SkillEntity

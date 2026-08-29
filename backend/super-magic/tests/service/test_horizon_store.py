@@ -1,7 +1,9 @@
+import asyncio
 from dataclasses import fields
 
 import pytest
 
+from app.core.horizon import store as horizon_store_module
 from app.core.horizon.migration import CURRENT_VERSION
 from app.core.horizon.models import (
     FileContextRecord,
@@ -15,7 +17,7 @@ from app.core.horizon.store import (
     HorizonStore,
     _assert_codec_covers_horizon_state,
 )
-from app.utils.async_file_utils import async_read_json, async_write_json
+from app.utils.async_file_utils import async_exists, async_read_json, async_write_json
 
 
 def _full_horizon_state(agent_id: str = "agent-1") -> HorizonState:
@@ -54,7 +56,6 @@ def _full_horizon_state(agent_id: str = "agent-1") -> HorizonState:
         user_preferred_language="zh-CN",
         workspace_files="workspace tree",
         workspace_entries=[{"path": "example.txt"}],
-        memory="memory",
         client_context="client context",
         cli_status="cli status",
         context_usage_baseline_used=100,
@@ -78,6 +79,48 @@ async def test_horizon_store_round_trip_keeps_existing_schema(tmp_path):
         state_field.name for state_field in fields(HorizonState)
     }
     assert await store.load() == state
+
+
+@pytest.mark.asyncio
+async def test_horizon_store_save_overwrites_formal_path_without_rename(tmp_path, monkeypatch):
+    store = HorizonStore(str(tmp_path), "test-agent", "agent-1")
+    initial_state = _full_horizon_state()
+    next_state = _full_horizon_state()
+    next_state.loaded_skills = ["skill-b"]
+    await store.save(initial_state)
+
+    async def fail_rename(*args, **kwargs):
+        raise AssertionError("Horizon save must not rename a temporary file")
+
+    monkeypatch.setattr(horizon_store_module, "async_rename", fail_rename, raising=False)
+
+    await store.save(next_state)
+
+    assert await store.load() == next_state
+    assert not await async_exists(store.path.with_suffix(".tmp"))
+
+
+@pytest.mark.asyncio
+async def test_horizon_store_serializes_concurrent_saves(tmp_path, monkeypatch):
+    store = HorizonStore(str(tmp_path), "test-agent", "agent-1")
+    active_writes = 0
+    max_active_writes = 0
+
+    async def fake_write_path(path, state):
+        nonlocal active_writes, max_active_writes
+        active_writes += 1
+        max_active_writes = max(max_active_writes, active_writes)
+        await asyncio.sleep(0.01)
+        active_writes -= 1
+
+    monkeypatch.setattr(HorizonStore, "_write_path", staticmethod(fake_write_path))
+
+    await asyncio.gather(
+        store.save(_full_horizon_state()),
+        store.save(_full_horizon_state()),
+    )
+
+    assert max_active_writes == 1
 
 
 @pytest.mark.asyncio

@@ -77,9 +77,10 @@ interface SandboxGatewayInterface
      * @param string $workDir Sandbox working directory
      * @param string $projectSpaceRootFileId Project space root directory file ID
      * @param string $userSpaceRootFileId User space root directory file ID
-     * @param array<string, string> $labels Extra pod labels
+     * @param string $topicSpaceRootFileId Topic space root directory file ID
+     * @param array<string, string> $labels 额外 pod 标签
      */
-    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', array $labels = []): GatewayResult;
+    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', array $labels = []): GatewayResult;
 
     /**
      * 删除（停止）沙箱.
@@ -182,6 +183,7 @@ interface SandboxGatewayInterface
      * @param string $projectId 实际项目 ID
      * @param string $projectSpaceRootFileID 项目空间 root file id（来自 task_file 表）
      * @param string $userSpaceRootFileID 用户空间 root file id（可空）
+     * @param string $topicSpaceRootFileID 话题空间 root file id（可空）
      * @param array<string, string> $labels 额外 pod 标签
      */
     public function mountWarmPoolSandbox(
@@ -190,6 +192,7 @@ interface SandboxGatewayInterface
         string $projectId,
         string $projectSpaceRootFileID,
         string $userSpaceRootFileID,
+        string $topicSpaceRootFileID = '',
         array $labels = []
     ): GatewayResult;
 

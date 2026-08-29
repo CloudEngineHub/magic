@@ -7,6 +7,13 @@ import { superMagicStore } from "../stores"
 import { topicStore } from "../stores/core"
 import { buildFilePathAttachments } from "../components/MessageList/utils/attachmentByFilePath"
 import type { FilePathAttachment } from "../components/MessageList/utils/attachmentByFilePath"
+import type { AttachmentItem } from "../components/TopicFilesButton/hooks/types"
+import { isSlidesTemplateFolder } from "../components/TopicFilesButton/utils/slides-template-folder"
+import {
+	isMagicProjectConfigFile,
+	resolveMagicProjectAttachment,
+	type MagicProjectAttachmentFile,
+} from "../components/MessageList/components/MessageAttachment/utils"
 
 interface AutoOpenFileCommonParams {
 	/** 最后一条消息节点（助手侧） */
@@ -19,6 +26,9 @@ interface AutoOpenFileCommonParams {
 	activeFileId?: string | null
 	/** 读取最新活跃文件，避免闭包滞后于缓存恢复的 Update_Active_File_Id */
 	getActiveFileId?: () => string | null | undefined
+	/** 当前项目工作区文件树，用于将 magic.project.js 解析为项目目录 */
+	workspaceFileTree?: MagicProjectAttachmentFile[]
+	workspaceFilesList?: MagicProjectAttachmentFile[]
 }
 
 export interface CheckAndOpenFileByMessagesParams extends AutoOpenFileCommonParams {
@@ -29,6 +39,20 @@ export interface CheckAndOpenFileByMessagesParams extends AutoOpenFileCommonPara
 export interface CheckAndOpenFileByTopicChangedParams {
 	activeFileId?: string | null
 	getActiveFileId?: () => string | null | undefined
+	workspaceFileTree?: MagicProjectAttachmentFile[]
+	workspaceFilesList?: MagicProjectAttachmentFile[]
+}
+
+type AutoOpenAttachmentCandidate = {
+	file_id?: string
+	file_name?: string
+	filename?: string
+	display_filename?: string
+	name?: string
+	file_extension?: string
+	is_directory?: boolean
+	display_config?: { type?: string }
+	children?: AutoOpenAttachmentCandidate[]
 }
 
 /**
@@ -55,16 +79,24 @@ function getPrevMessageFilePathAttachments(
 	return buildFilePathAttachments(prevContent)
 }
 
-function isOpenableAttachment(attachment: {
-	file_id?: string
-	file_extension?: string
-	is_directory?: boolean
-	display_config?: { type?: string }
-}) {
+function getAttachmentName(attachment: AutoOpenAttachmentCandidate): string {
+	return (
+		attachment.file_name ||
+		attachment.filename ||
+		attachment.display_filename ||
+		attachment.name ||
+		""
+	)
+}
+
+function isOpenableAttachment(attachment: AutoOpenAttachmentCandidate) {
 	if (!attachment?.file_id) return false
 
 	if (attachment.is_directory) {
-		return Boolean(attachment.display_config?.type)
+		return (
+			Boolean(attachment.display_config?.type) ||
+			isSlidesTemplateFolder(attachment as AttachmentItem)
+		)
 	}
 
 	// 部分目录附件是浅层数据，只暴露空扩展名。
@@ -73,6 +105,30 @@ function isOpenableAttachment(attachment: {
 	}
 
 	return true
+}
+
+function isTemplateRootAttachment(attachment: AutoOpenAttachmentCandidate): boolean {
+	if (!attachment?.file_id || !attachment.is_directory) return false
+	return (
+		attachment.display_config?.type === "slide-template" ||
+		isSlidesTemplateFolder(attachment as AttachmentItem)
+	)
+}
+
+function isTemplateJsonAttachment(attachment: AutoOpenAttachmentCandidate): boolean {
+	if (!attachment?.file_id || attachment.is_directory) return false
+	return getAttachmentName(attachment).toLowerCase() === "template.json"
+}
+
+/** Prefer template root / template.json over the first ordinary attachment. */
+export function pickPreferredAutoOpenAttachment(
+	attachments: AutoOpenAttachmentCandidate[],
+): AutoOpenAttachmentCandidate | undefined {
+	return (
+		attachments.find(isTemplateRootAttachment) ||
+		attachments.find(isTemplateJsonAttachment) ||
+		attachments.find(isOpenableAttachment)
+	)
 }
 
 /**
@@ -99,6 +155,8 @@ export function useAutoOpenFile() {
 				hasStatusChanged,
 				activeFileId,
 				getActiveFileId,
+				workspaceFileTree = [],
+				workspaceFilesList = [],
 				requireNewMessage = true,
 			} = params
 
@@ -147,11 +205,25 @@ export function useAutoOpenFile() {
 				return
 			}
 
-			// Fallback to the first file from the original attachments.
+			// Prefer template root / template.json, then the first openable attachment.
 			const attachments = lastDetailMessageNode?.attachments || []
+			const firstFileAttachment = pickPreferredAutoOpenAttachment(attachments)
+			if (!firstFileAttachment) return
 
-			const firstFileAttachment = attachments.find(isOpenableAttachment)
-			const firstFileId = firstFileAttachment?.file_id
+			const firstFileName =
+				firstFileAttachment.display_filename ||
+				firstFileAttachment.file_name ||
+				firstFileAttachment.filename
+			const magicProjectResolution = isMagicProjectConfigFile(firstFileName)
+				? resolveMagicProjectAttachment(
+						firstFileAttachment,
+						workspaceFilesList,
+						workspaceFileTree,
+					)
+				: undefined
+			const firstFileToOpen = magicProjectResolution?.projectDirectory || firstFileAttachment
+
+			const firstFileId = firstFileToOpen?.file_id
 
 			if (!firstFileId) return
 
@@ -166,7 +238,7 @@ export function useAutoOpenFile() {
 				if (id != null) return
 				pubsub.publish(PubSubEvents.Open_File_Tab, {
 					fileId: firstFileId,
-					fileData: firstFileAttachment,
+					fileData: firstFileToOpen,
 				})
 			}, 100)
 
@@ -183,7 +255,7 @@ export function useAutoOpenFile() {
 
 	const checkAndOpenFileByTopicChanged = useMemoizedFn(
 		(params: CheckAndOpenFileByTopicChangedParams) => {
-			const { activeFileId, getActiveFileId } = params
+			const { activeFileId, getActiveFileId, workspaceFileTree, workspaceFilesList } = params
 
 			const topicMessages =
 				superMagicStore.messages?.get(selectedTopic?.chat_topic_id || "") || []
@@ -215,6 +287,8 @@ export function useAutoOpenFile() {
 				requireNewMessage: false,
 				activeFileId,
 				getActiveFileId,
+				workspaceFileTree,
+				workspaceFilesList,
 			})
 		},
 	)

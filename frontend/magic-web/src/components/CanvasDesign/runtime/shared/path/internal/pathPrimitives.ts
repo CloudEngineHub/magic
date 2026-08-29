@@ -27,9 +27,15 @@ export function normalizePathSeparators(path: string): string {
 	return path.replace(/\\/g, "/")
 }
 
+/** Opaque asset references are supplied by an upstream asset service and must not be path-normalized. */
+export function isOpaqueAssetReference(path: string): boolean {
+	return /^asset:\/\/[^\s]+$/i.test(path.trim())
+}
+
 export function isRemoteOrSpecialPath(path: string): boolean {
 	const trimmed = path.trim()
 	if (!trimmed) return false
+	if (isOpaqueAssetReference(trimmed)) return true
 	if (/^https?:\/\//i.test(trimmed)) return true
 	if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return true
 	if (/^\/\/[^/]+/.test(trimmed)) return true
@@ -80,129 +86,14 @@ export function buildVirtualResourceScope(
 }
 
 /**
- * 当前画布工程内的弱规范化：统一分隔符、合并重复斜杠、修补历史上传拼接错误。
- *
- * 注意：仅靠字符串不能判断 `./a/b` 与工作区绝对路径 `a/b` 是否同一资源；判断是否为同一资源应使用
- * {@link toCanonicalCanvasResourcePath}（在宿主提供 `resolveAbsolutePath` 时归一到同一逻辑路径）。
- */
-export function toWeakCanvasResourcePath(path: string): string {
-	const trimmed = path.trim()
-	if (!trimmed) return trimmed
-	if (isRemoteOrSpecialPath(trimmed)) return trimmed
-	let p = normalizePathSeparators(trimmed).replace(/\/+/g, "/")
-	p = repairUploadResultJoinedResourcePath(p)
-	return p
-}
-
-/**
- * @deprecated 请使用 {@link toWeakCanvasResourcePath} 或 {@link toCanonicalCanvasResourcePath}
- */
-export function normalizeCanvasResourceCacheKey(path: string): string {
-	return toWeakCanvasResourcePath(path)
-}
-
-/**
- * 同步弱规范化，等同于 {@link toWeakCanvasResourcePath}。
- */
-export function normalizePath(path: string): string {
-	return toWeakCanvasResourcePath(path)
-}
-
-export interface CanonicalResourcePathInfo {
-	rawPath: string
-	weakPath: string
-	canonicalPath: string
-	resolvedPath?: string
-	resolveCandidate?: string
-	usedResolveAbsolutePath: boolean
-	canonicalChanged: boolean
-}
-
-/**
- * 将画布/协议层路径归一为可与宿主对齐的规范键：若注入 `resolveAbsolutePath`，则以其解析结果为准
- *（相对 `./…`、裸路径、前导 `/` 等不同写法在宿主侧合一后再做上传路径清洗）；否则退化为 {@link toWeakCanvasResourcePath}。
- */
-export function getCanonicalResourcePathInfo(
-	path: string,
-	resolveAbsolutePath?: (path: string) => string,
-): CanonicalResourcePathInfo {
-	const rawPath = path
-	const trimmed = path.trim()
-	if (!trimmed) {
-		return {
-			rawPath,
-			weakPath: trimmed,
-			canonicalPath: trimmed,
-			usedResolveAbsolutePath: false,
-			canonicalChanged: rawPath !== trimmed,
-		}
-	}
-	if (isRemoteOrSpecialPath(trimmed)) {
-		return {
-			rawPath,
-			weakPath: trimmed,
-			canonicalPath: trimmed,
-			usedResolveAbsolutePath: false,
-			canonicalChanged: rawPath !== trimmed,
-		}
-	}
-	const weakPath = toWeakCanvasResourcePath(trimmed)
-	if (resolveAbsolutePath) {
-		const resolveCandidates = [trimmed]
-		const stripped = stripCurrentDirectoryPrefix(trimmed)
-		if (stripped && stripped !== trimmed) {
-			resolveCandidates.push(stripped)
-		}
-		for (const candidate of resolveCandidates) {
-			try {
-				const absolute = resolveAbsolutePath(candidate)
-				const canonicalPath = normalizeUploadResultPath(absolute)
-				return {
-					rawPath,
-					weakPath,
-					canonicalPath,
-					resolvedPath: toWeakCanvasResourcePath(absolute),
-					resolveCandidate: candidate,
-					usedResolveAbsolutePath: true,
-					canonicalChanged: canonicalPath !== weakPath,
-				}
-			} catch {
-				// 继续尝试下一个候选，最终再退回工程内弱规范化
-			}
-		}
-	}
-	return {
-		rawPath,
-		weakPath,
-		canonicalPath: weakPath,
-		usedResolveAbsolutePath: false,
-		canonicalChanged: rawPath !== weakPath,
-	}
-}
-
-export function toCanonicalCanvasResourcePath(
-	path: string,
-	resolveAbsolutePath?: (path: string) => string,
-): string {
-	return getCanonicalResourcePathInfo(path, resolveAbsolutePath).canonicalPath
-}
-
-export function areCanvasResourcePathsSame(
-	a: string,
-	b: string,
-	resolveAbsolutePath?: (path: string) => string,
-): boolean {
-	const ka = toCanonicalCanvasResourcePath(a, resolveAbsolutePath)
-	const kb = toCanonicalCanvasResourcePath(b, resolveAbsolutePath)
-	return ka === kb
-}
-
-/**
- * 规范上传接口返回的 path：非 URL 时移除旧格式前导 "/"、合并重复斜杠，并修补目录名与文件名之间漏写斜杠的常见拼接错误（如 .../videosvideo_ → .../videos/video_）。
+ * 规范上传接口返回的 path：保留路径命名空间，只合并重复斜杠并修补目录名与文件名之间漏写斜杠的常见拼接错误。
  */
 export function normalizeUploadResultPath(path: string): string {
 	const trimmed = path.trim()
 	if (!trimmed) {
+		return trimmed
+	}
+	if (isOpaqueAssetReference(trimmed)) {
 		return trimmed
 	}
 	if (/^https?:\/\//i.test(trimmed)) {
@@ -216,13 +107,13 @@ export function normalizeUploadResultPath(path: string): string {
 	let p = trimmed.replace(/\/+/g, "/")
 	// 普通工作区上传仍要修补历史拼接问题；private 上传不经过这里。
 	p = repairUploadResultJoinedResourcePath(p)
-	return p.replace(/^\/+/, "")
+	return p
 }
 
 /**
  * 将接口分字段返回的目录与文件名拼成逻辑 path（不依赖 file_dir 末尾是否带 "/"）。
  */
-export function joinUploadStoragePath(fileDir: string, fileName: string): string {
+export function joinUploadResultPath(fileDir: string, fileName: string): string {
 	const dir = fileDir.trim().replace(/\/+$/, "")
 	const name = fileName.trim().replace(/^\/+/, "")
 	if (!dir) {
@@ -246,7 +137,7 @@ export function normalizeUploadFileResponse<T extends Pick<UploadFileResponse, "
 export function repairUploadResultJoinedResourcePath(path: string): string {
 	// 只修补已知画布资源目录的拼接错误，避免误改用户自定义目录名。
 	return UPLOAD_RESULT_JOIN_REPAIR_RULES.reduce((result, rule) => {
-		const pattern = new RegExp(`/${rule.root}(?=${rule.fileNamePrefix})`, "gi")
-		return result.replace(pattern, `/${rule.root}/`)
+		const pattern = new RegExp(`(^|/)${rule.root}(?=${rule.fileNamePrefix})`, "gi")
+		return result.replace(pattern, `$1${rule.root}/`)
 	}, path)
 }

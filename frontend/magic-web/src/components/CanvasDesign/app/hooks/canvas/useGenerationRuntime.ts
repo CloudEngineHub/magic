@@ -4,7 +4,23 @@ import type { GenerationRuntimeTargetState } from "../../../runtime/generation/G
 
 export function useGenerationRuntime(
 	elementId: string | null,
+	contentId?: string | null,
 ): GenerationRuntimeTargetState | null {
+	const { canvas } = useCanvas()
+	const manager = canvas?.generationRuntimeManager
+	const targetContentId = contentId ?? undefined
+
+	return useSyncExternalStore(
+		(listener) => {
+			if (!manager || !elementId) return () => undefined
+			return manager.subscribeElement(elementId, listener)
+		},
+		() => (manager && elementId ? manager.getTargetState(elementId, targetContentId) : null),
+		() => null,
+	)
+}
+
+export function useGenerationRuntimeRevision(elementId: string | null): number {
 	const { canvas } = useCanvas()
 	const manager = canvas?.generationRuntimeManager
 
@@ -13,7 +29,7 @@ export function useGenerationRuntime(
 			if (!manager || !elementId) return () => undefined
 			return manager.subscribeElement(elementId, listener)
 		},
-		() => (manager && elementId ? manager.getTargetState(elementId) : null),
-		() => null,
+		() => (manager && elementId ? manager.getRevision(elementId) : 0),
+		() => 0,
 	)
 }

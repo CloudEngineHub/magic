@@ -448,4 +448,82 @@ describe("convertFileToTabItem", () => {
 		expect(normalizedTab.fileData.file_id).toBe("index-file")
 		expect(normalizedTab.fileData.is_directory).toBeUndefined()
 	})
+
+	it("uses the template root as the tab when opening template.json", () => {
+		const templateJson = {
+			file_id: "template-json",
+			file_name: "template.json",
+			relative_file_path: "产品发布模板/template.json",
+			parent_id: "template-root",
+		}
+		const slideHtml = {
+			file_id: "slide-1",
+			file_name: "cover.html",
+			relative_file_path: "产品发布模板/slides/cover.html",
+			parent_id: "slides-folder",
+		}
+		const slidesFolder = {
+			file_id: "slides-folder",
+			file_name: "slides",
+			is_directory: true,
+			relative_file_path: "产品发布模板/slides",
+			parent_id: "template-root",
+			children: [slideHtml],
+		}
+		const templateRoot = {
+			file_id: "template-root",
+			file_name: "产品发布模板",
+			is_directory: true,
+			relative_file_path: "产品发布模板",
+			children: [
+				templateJson,
+				{ file_id: "spec", file_name: "visual-spec.md", is_directory: false },
+				{ file_id: "theme", file_name: "theme.css", is_directory: false },
+				slidesFolder,
+			],
+		}
+
+		const rootTab = convertFileToTabItem(templateRoot, [templateRoot])
+		const jsonTab = convertFileToTabItem(templateJson, [templateRoot])
+		const slideTab = convertFileToTabItem(slideHtml, [templateRoot])
+
+		expect(rootTab?.id).toBe("template-root")
+		expect(rootTab?.display_config?.type).toBe("slide-template")
+		expect(jsonTab?.id).toBe("template-root")
+		expect(jsonTab?.fileData.file_id).toBe("template-root")
+		expect(jsonTab?.display_config?.type).toBe("slide-template")
+		expect(slideTab?.id).toBe("slide-1")
+		expect(slideTab?.display_config?.type).not.toBe("slide-template")
+	})
+
+	it("injects slide-template display_config when normalizing a template root tab", () => {
+		const templateRoot = {
+			file_id: "template-root",
+			file_name: "产品发布模板",
+			is_directory: true,
+			relative_file_path: "产品发布模板",
+			children: [
+				{ file_id: "template-json", file_name: "template.json", is_directory: false },
+				{ file_id: "spec", file_name: "visual-spec.md", is_directory: false },
+				{ file_id: "theme", file_name: "theme.css", is_directory: false },
+				{ file_id: "slides", file_name: "slides", is_directory: true, children: [] },
+			],
+		}
+
+		const normalizedTab = normalizeSlideProjectTabItem(
+			{
+				id: "template-root",
+				title: "产品发布模板",
+				active: true,
+				closeable: true,
+				fileData: templateRoot,
+				filePath: "产品发布模板",
+			},
+			[templateRoot],
+		)
+
+		expect(normalizedTab.id).toBe("template-root")
+		expect(normalizedTab.display_config?.type).toBe("slide-template")
+		expect(normalizedTab.fileData.display_config?.type).toBe("slide-template")
+	})
 })

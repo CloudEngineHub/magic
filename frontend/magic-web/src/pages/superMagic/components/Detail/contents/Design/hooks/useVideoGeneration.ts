@@ -21,7 +21,11 @@ import type {
 import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
-import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
+import {
+	resolveDesignCanvasResourceApiUri,
+	resolveDesignWorkspaceDirectoryApiPath,
+	resolveDesignWorkspaceStoragePath,
+} from "../utils/designResourceReferenceResolver"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
 import {
 	calculateUploadDirectory,
@@ -31,6 +35,7 @@ import {
 
 interface UseVideoGenerationOptions {
 	projectId?: string
+	topicId?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -64,6 +69,7 @@ interface UseVideoGenerationReturn {
 export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideoGenerationReturn {
 	const {
 		projectId,
+		topicId,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -108,11 +114,12 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 			const requestParams = await buildDesignVideoRequestParams({
 				params,
 				projectId,
+				topicId,
 				currentFile,
 				flatAttachments,
 				designProjectBasePath,
 				updateAttachments,
-				ensureVideosDir: true,
+				ensureVideosDir: params.generation_type !== "canvas_composition",
 				pathUnresolvedMessage: t("design.errors.designResourcePathUnresolved"),
 			})
 			const result = await SuperMagicApi.generateVideo(requestParams)
@@ -121,7 +128,15 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				status: normalizeVideoGenerationStatus(result.status),
 			} as GenerateVideoResponse
 		},
-		[projectId, currentFile, flatAttachments, designProjectBasePath, t, updateAttachments],
+		[
+			projectId,
+			topicId,
+			currentFile,
+			flatAttachments,
+			designProjectBasePath,
+			t,
+			updateAttachments,
+		],
 	)
 
 	const estimateVideoPoints = useCallback(
@@ -169,26 +184,26 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				result.file_url &&
 				result.file_name
 			) {
-				let filePath = ""
-				if (normalizedResult.file_dir) {
-					const normalizedDir = normalizePath(normalizedResult.file_dir)
-					filePath = normalizedDir
-						? `${normalizedDir}/${normalizedResult.file_name}`
-						: normalizedResult.file_name
-				} else {
-					filePath = normalizedResult.file_name
-				}
-				await syncFileInfoAfterGenerationComplete({
-					projectId,
-					filePath,
-					fileUrl: normalizedResult.file_url,
-					fileName: normalizedResult.file_name,
-					setFileInfoCache,
+				const fileUrl = result.file_url
+				const fileName = result.file_name
+				const normalizedDir = normalizePath(normalizedResult.file_dir || "")
+				const workspacePath = normalizedDir ? `${normalizedDir}/${fileName}` : fileName
+				const filePath = resolveDesignWorkspaceStoragePath(workspacePath, {
+					designProjectBasePath,
 				})
+				if (filePath) {
+					await syncFileInfoAfterGenerationComplete({
+						projectId,
+						filePath,
+						fileUrl,
+						fileName,
+						setFileInfoCache,
+					})
+				}
 			}
 			return normalizedResult
 		},
-		[projectId, setFileInfoCache, t],
+		[designProjectBasePath, projectId, setFileInfoCache, t],
 	)
 
 	return { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult }
@@ -197,6 +212,7 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 interface BuildDesignVideoRequestParamsOptions {
 	params: GenerateVideoRequest
 	projectId: string
+	topicId?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -214,6 +230,7 @@ async function buildDesignVideoRequestParams(
 	const {
 		params,
 		projectId,
+		topicId,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -245,15 +262,35 @@ async function buildDesignVideoRequestParams(
 			fileDir = videosDirPath
 		}
 	}
-	const fileDirWithSlash = fileDir ? `/${fileDir}/` : undefined
+	const fileDirWithSlash = fileDir
+		? resolveDesignWorkspaceDirectoryApiPath(fileDir, {
+				designProjectBasePath,
+				flatAttachments,
+			})
+		: undefined
+	const request = toDesignGenerateVideoRequest(
+		params,
+		designProjectBasePath,
+		flatAttachments,
+		pathUnresolvedMessage,
+	)
+	if (params.generation_type === "canvas_composition") {
+		if (!request.composition?.videos.length) {
+			throw new Error("画布合并任务缺少视频输入")
+		}
+		if (!fileDirWithSlash) {
+			throw new Error(pathUnresolvedMessage)
+		}
+		return {
+			...request,
+			project_id: projectId,
+			file_dir: fileDirWithSlash,
+		}
+	}
 	return {
-		...toDesignGenerateVideoRequest(
-			params,
-			designProjectBasePath,
-			flatAttachments,
-			pathUnresolvedMessage,
-		),
+		...request,
 		project_id: projectId,
+		...(topicId ? { topic_id: topicId } : {}),
 		file_dir: fileDirWithSlash,
 	}
 }
@@ -275,6 +312,9 @@ function toVideoModelItem(model: ServiceProviderModel, groupName: string): Video
 		model_icon: model.icon ?? "",
 		model_status: "normal",
 		sort: 0,
+		...(model.video_generation_config
+			? { video_generation_config: model.video_generation_config }
+			: {}),
 		model_source: "custom",
 		model_group: {
 			id: MY_MODELS_GROUP_ID,
@@ -287,10 +327,27 @@ function toVideoModelItem(model: ServiceProviderModel, groupName: string): Video
 
 function getRepresentativeModelsByModelId(models: ServiceProviderModel[]): ServiceProviderModel[] {
 	const modelMap = new Map<string, ServiceProviderModel>()
+
 	models.forEach((model) => {
-		if (!modelMap.has(model.model_id)) modelMap.set(model.model_id, model)
+		const existing = modelMap.get(model.model_id)
+		if (!existing) {
+			modelMap.set(model.model_id, model)
+			return
+		}
+
+		// 同一 model_id 可能对应多个服务商，优先保留带视频能力配置的记录，
+		// 避免接口第一条为空配置时覆盖后续可用配置。
+		if (!hasUsableVideoGenerationConfig(existing) && hasUsableVideoGenerationConfig(model)) {
+			modelMap.set(model.model_id, model)
+		}
 	})
+
 	return Array.from(modelMap.values())
+}
+
+function hasUsableVideoGenerationConfig(model: ServiceProviderModel): boolean {
+	const config = model.video_generation_config
+	return Boolean(config && Object.keys(config).length > 0)
 }
 
 function toDesignGenerateVideoRequest(
@@ -303,6 +360,31 @@ function toDesignGenerateVideoRequest(
 		...(params.generation || {}),
 	}
 	const normalizedInputs = params.inputs || {}
+	const isCanvasComposition = params.generation_type === "canvas_composition"
+	const compositionExtensions = params.extensions?.output_file_name
+		? { output_file_name: params.extensions.output_file_name }
+		: undefined
+	const composition = params.composition
+		? normalizeGenerateVideoComposition(
+				params.composition,
+				designProjectBasePath,
+				flatAttachments,
+				pathUnresolvedMessage,
+			)
+		: undefined
+
+	if (isCanvasComposition) {
+		return {
+			project_id: params.project_id,
+			video_id: params.video_id,
+			generation_type: params.generation_type,
+			...(Object.keys(normalizedGeneration).length > 0
+				? { generation: normalizedGeneration }
+				: {}),
+			...(composition ? { composition } : {}),
+			...(compositionExtensions ? { extensions: compositionExtensions } : {}),
+		}
+	}
 
 	return {
 		project_id: params.project_id,
@@ -313,6 +395,8 @@ function toDesignGenerateVideoRequest(
 		task: params.task || "generate",
 		file_dir: params.file_dir,
 		file_name: params.file_name,
+		generation_type: params.generation_type,
+		topic_id: params.topic_id,
 		...(Object.keys(normalizedInputs).length > 0
 			? {
 					inputs: normalizeGenerateVideoInputs(
@@ -334,6 +418,35 @@ function toDesignGenerateVideoRequest(
 	}
 }
 
+function normalizeGenerateVideoComposition(
+	composition: NonNullable<GenerateVideoRequest["composition"]>,
+	designProjectBasePath?: string,
+	flatAttachments?: FileItem[],
+	pathUnresolvedMessage?: string,
+): NonNullable<GenerateVideoRequest["composition"]> {
+	const resolve = (input: { path: string }) => {
+		const path = ensureDesignResourceUri(
+			input.path,
+			designProjectBasePath,
+			flatAttachments,
+			pathUnresolvedMessage,
+		)
+		if (!path.startsWith("/")) {
+			throw new Error(pathUnresolvedMessage || "Design composition path unresolved")
+		}
+		return { ...input, path }
+	}
+
+	return {
+		videos: composition.videos.map(resolve),
+		...(composition.audios?.length
+			? { audios: composition.audios.map(resolve) }
+			: composition.audios
+				? { audios: [] }
+				: {}),
+	}
+}
+
 function normalizeGenerateVideoInputs(
 	inputs: NonNullable<GenerateVideoRequest["inputs"]>,
 	designProjectBasePath?: string,
@@ -345,7 +458,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					frames: inputs.frames.map((frame) => ({
 						...frame,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							frame.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -358,7 +471,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_images: inputs.reference_images.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -371,7 +484,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_videos: inputs.reference_videos.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -384,7 +497,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_audios: inputs.reference_audios.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -397,7 +510,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					video: {
 						...inputs.video,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							inputs.video.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -410,7 +523,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					mask: {
 						...inputs.mask,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							inputs.mask.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -423,7 +536,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					audio: inputs.audio.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -435,14 +548,14 @@ function normalizeGenerateVideoInputs(
 	}
 }
 
-function ensureDesignAbsolutePath(
+function ensureDesignResourceUri(
 	path: string,
 	designProjectBasePath?: string,
 	flatAttachments?: FileItem[],
 	pathUnresolvedMessage?: string,
 ): string {
 	if (!path) return path
-	const resolved = toWorkspaceAbsoluteApiPathForOperation(path, {
+	const resolved = resolveDesignCanvasResourceApiUri(path, {
 		designProjectBasePath,
 		flatAttachments,
 	})

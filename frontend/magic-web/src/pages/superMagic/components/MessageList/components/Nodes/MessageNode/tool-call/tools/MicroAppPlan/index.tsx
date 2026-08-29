@@ -66,7 +66,8 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 	const [pendingAction, setPendingAction] = useState<PlanResponseStatus | null>(null)
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
-		{ tool?: ToolDataLike } | undefined
+		| { tool?: ToolDataLike }
+		| undefined
 	const tool = props.toolData || node?.tool
 	const deferredRawArguments = useDeferredValue(tool?.rawArguments)
 	const plan = resolvePlan(

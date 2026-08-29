@@ -141,7 +141,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 					{t("fileUpload.uploadFailed")}
 				</span>
 			)}
-			{isMobile && (
+			{isMobile && deleteNode && (
 				<button
 					type="button"
 					className="relative z-10 inline-flex size-4 shrink-0 items-center justify-center rounded-full"
@@ -181,7 +181,10 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention relative !-top-px !inline-flex max-w-full !overflow-visible !bg-transparent !p-0 !align-middle"
+			className={cn(
+				"magic-mention relative !-top-px !inline-flex max-w-full !overflow-visible !bg-transparent !p-0 !align-middle",
+				mention.pending && "opacity-50",
+			)}
 			contentEditable={false}
 			data-mention-node-view="file"
 			data-type={attrs.type}

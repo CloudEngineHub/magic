@@ -6,6 +6,8 @@ export interface PointsRecordItem {
 	amount: number
 	label: string
 	description: string
+	/** 备注说明；历史数据可能缺失，空值时不展示备注区域。 */
+	remark: string
 	createdAt: string
 	updatedAt: string
 }

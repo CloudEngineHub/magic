@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DRAG_TYPE } from "@/pages/superMagic/components/MessageEditor/utils/drag"
 import { SuperMagicApi } from "@/apis"
+import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { buildDesignAttachmentIndex } from "../../utils/designAttachmentIndex"
 import { resolveDesignDropResourcePaths, useDesignFileDropPaths } from "../useDesignFileDropPaths"
 
 vi.mock("@/apis", () => ({
@@ -20,16 +22,30 @@ function createDataTransfer(payload: unknown): DataTransfer {
 	} as unknown as DataTransfer
 }
 
-function projectFile(relativeFilePath: string, fileName = "asset.png") {
+function projectFile(
+	relativeFilePath: string | undefined,
+	fileName = "asset.png",
+	options?: { fileId?: string; projectId?: string },
+) {
 	return createDataTransfer({
 		type: DRAG_TYPE.ProjectFile,
 		data: {
-			file_id: "938499924873998337",
+			file_id: options?.fileId ?? "938499924873998337",
+			project_id: options?.projectId,
 			file_name: fileName,
 			relative_file_path: relativeFilePath,
 			is_directory: false,
 		},
 	})
+}
+
+function fileItem(fileId: string, relativeFilePath: string): FileItem {
+	return {
+		file_id: fileId,
+		file_name: relativeFilePath.split("/").pop() || "asset.png",
+		relative_file_path: relativeFilePath,
+		is_directory: false,
+	}
 }
 
 describe("resolveDesignDropResourcePaths", () => {
@@ -114,7 +130,7 @@ describe("useDesignFileDropPaths", () => {
 		let paths: string[] = []
 		await act(async () => {
 			paths = await result.current.getDataTransferFileInfo(
-				projectFile("/source/a.png", "a.png"),
+				projectFile("/source/a.png", "a.png", { projectId: "source-project" }),
 			)
 		})
 
@@ -137,11 +153,14 @@ describe("useDesignFileDropPaths", () => {
 
 	it("does not copy a resource already inside the current canvas", async () => {
 		const copyFile = vi.mocked(SuperMagicApi.copyFile)
+		const flatAttachments = [fileItem("938499924873998337", `${DESIGN_A}/images/a.png`)]
 		const { result } = renderHook(() =>
 			useDesignFileDropPaths({
 				projectId: "project-1",
 				currentFile: { id: "canvas-1", name: DESIGN_A },
 				designProjectBasePath: DESIGN_A,
+				flatAttachments,
+				attachmentIndex: buildDesignAttachmentIndex(flatAttachments),
 				updateAttachments: vi.fn(),
 				getOrCreateImagesDir: vi.fn(),
 			}),
@@ -188,7 +207,7 @@ describe("useDesignFileDropPaths", () => {
 		let paths: string[] = []
 		await act(async () => {
 			paths = await result.current.getDataTransferFileInfo(
-				projectFile("/source/a.png", "a.png"),
+				projectFile("/source/a.png", "a.png", { projectId: "source-project" }),
 			)
 		})
 
@@ -199,5 +218,141 @@ describe("useDesignFileDropPaths", () => {
 			expect.objectContaining({ message: "preload failed" }),
 		)
 		consoleWarnSpy.mockRestore()
+	})
+
+	it("uses the attachment node path when the payload path disagrees", async () => {
+		const flatAttachments = [fileItem("current-file", `${DESIGN_A}/images/actual.png`)]
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				flatAttachments,
+				attachmentIndex: buildDesignAttachmentIndex(flatAttachments),
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		let paths: string[] = []
+		await act(async () => {
+			paths = await result.current.getDataTransferFileInfo(
+				projectFile("/wrong/location.png", "payload.png", {
+					fileId: "current-file",
+					projectId: "project-1",
+				}),
+			)
+		})
+
+		expect(paths).toEqual(["./images/actual.png"])
+		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
+	})
+
+	it("uses the selected fileId when two attachment nodes share one path", async () => {
+		const flatAttachments = [
+			fileItem("duplicate-1", "shared/duplicate.png"),
+			fileItem("duplicate-2", "shared/duplicate.png"),
+		]
+		vi.mocked(SuperMagicApi.copyFile).mockResolvedValue({
+			status: "success",
+			files: {
+				file_id: "copied-file",
+				file_name: "duplicate.png",
+				relative_file_path: `${DESIGN_A}/images/duplicate.png`,
+			},
+		} as never)
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				flatAttachments,
+				attachmentIndex: buildDesignAttachmentIndex(flatAttachments),
+				updateAttachments: vi.fn(),
+				getOrCreateImagesDir: vi.fn(async () => ({
+					imagesDirFileId: "images-dir-1",
+					suffixDir: `${DESIGN_A}/images`,
+				})),
+			}),
+		)
+
+		let paths: string[] = []
+		await act(async () => {
+			paths = await result.current.getDataTransferFileInfo(
+				projectFile("/shared/duplicate.png", "duplicate.png", {
+					fileId: "duplicate-2",
+					projectId: "project-1",
+				}),
+			)
+		})
+
+		expect(SuperMagicApi.copyFile).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_id: "duplicate-2",
+				keep_both_file_ids: ["duplicate-2"],
+			}),
+		)
+		expect(paths).toEqual(["./images/duplicate.png"])
+	})
+
+	it("fails closed when a current-project fileId is absent from the attachment snapshot", async () => {
+		const flatAttachments = [fileItem("different-file", `${DESIGN_A}/images/same-name.png`)]
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				flatAttachments,
+				attachmentIndex: buildDesignAttachmentIndex(flatAttachments),
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await expect(
+			result.current.getDataTransferFileInfo(
+				projectFile(`/${DESIGN_A}/images/same-name.png`, "same-name.png", {
+					fileId: "missing-file",
+					projectId: "project-1",
+				}),
+			),
+		).rejects.toThrow("无法通过文件ID定位待拖入资源")
+		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
+	})
+
+	it("copies an external-project file even when its payload path looks current-canvas local", async () => {
+		vi.mocked(SuperMagicApi.copyFile).mockResolvedValue({
+			status: "success",
+			files: {
+				file_id: "copied-external",
+				file_name: "external.png",
+				relative_file_path: `${DESIGN_A}/images/external.png`,
+			},
+		} as never)
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				updateAttachments: vi.fn(),
+				getOrCreateImagesDir: vi.fn(async () => ({
+					imagesDirFileId: "images-dir-1",
+					suffixDir: `${DESIGN_A}/images`,
+				})),
+			}),
+		)
+
+		let paths: string[] = []
+		await act(async () => {
+			paths = await result.current.getDataTransferFileInfo(
+				projectFile(`/${DESIGN_A}/images/external.png`, "external.png", {
+					fileId: "external-file",
+					projectId: "project-2",
+				}),
+			)
+		})
+
+		expect(SuperMagicApi.copyFile).toHaveBeenCalledWith(
+			expect.objectContaining({ file_id: "external-file" }),
+		)
+		expect(paths).toEqual(["./images/external.png"])
 	})
 })

@@ -16,6 +16,7 @@ use App\Application\SuperMagic\File\Service\FileProcessAppService;
 use App\Application\SuperMagic\Message\Chat\Service\ChatAppService;
 use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
+use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
@@ -30,11 +31,13 @@ use App\Domain\ModelGateway\Service\AccessTokenDomainService;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\CreationSource;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Entity\TaskMessageEntity;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\ChatInstruction;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Entity\ScriptTaskEntity;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Event\RunTaskBeforeEvent;
@@ -70,10 +73,12 @@ class HandleTaskMessageAppService extends AbstractAppService
         private readonly TopicTaskAppService $topicTaskAppService,
         private readonly FileProcessAppService $fileProcessAppService,
         private readonly AgentDomainService $agentDomainService,
+        private readonly AgentAppService $agentAppService,
         private readonly AccessTokenDomainService $accessTokenDomainService,
         private readonly MagicUserDomainService $userDomainService,
         private readonly LongTermMemoryDomainService $longTermMemoryDomainService,
         private readonly ProjectDomainService $projectDomainService,
+        private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ChatAppService $chatAppService,
         private readonly ModelGatewayMapper $modelGatewayMapper,
         private readonly DynamicConfigManager $dynamicConfigManager,
@@ -331,7 +336,7 @@ class HandleTaskMessageAppService extends AbstractAppService
         $this->applyAiAbilitiesOverride((string) $taskEntity->getId(), $userMessageDTO->getAiAbilities());
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
+        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
         $taskEntity->setTaskId((string) $taskEntity->getId());
         return $taskEntity;
     }
@@ -512,7 +517,15 @@ class HandleTaskMessageAppService extends AbstractAppService
             memories: $memories
         );
 
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($dataIsolation, $agentContext);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            $dataIsolation,
+            $agentContext,
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode()),
+                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(), $projectEntity->getUserOrganizationCode())
+            )
+        );
 
         $this->topicDomainService->updateTopicSandboxId($dataIsolation, $taskContext->getTopicId(), $sandboxId);
         $this->taskDomainService->updateTaskSandboxId($dataIsolation, $taskContext->getTask()->getId(), $sandboxId);
@@ -520,7 +533,7 @@ class HandleTaskMessageAppService extends AbstractAppService
 
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
-        $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
+        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
 
         return $sandboxId;
     }

@@ -56,11 +56,11 @@ use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\BuiltinSkill;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillMentionSource;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -71,6 +71,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SuperMagic\Agent\DTO\Request\GetMyAvailableAgentsRequestDTO;
@@ -962,12 +963,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $code);
 
-        $versionRecordCount = $this->superMagicAgentVersionDomainService->countVersionsByCode($dataIsolation, $code);
         $descriptionI18n = $agentEntity->getDescriptionI18n();
-        $version = sprintf('%d.0.0', $versionRecordCount + 1);
         $versionDescriptionI18n = is_array($descriptionI18n) ? $descriptionI18n : [];
 
         $latestVersion = $this->superMagicAgentVersionDomainService->findLatestVersionByCreatedAt($dataIsolation, $code);
+        $version = $this->superMagicAgentVersionDomainService->getNextAvailableVersion(
+            $dataIsolation,
+            $code,
+            $latestVersion?->getVersion(),
+        );
         if ($latestVersion !== null) {
             $publishTargetType = $latestVersion->getPublishTargetType()->value;
             $publishTargetValue = $latestVersion->getPublishTargetType()->requiresTargetValue()
@@ -983,12 +987,10 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             versionDescriptionI18n: $versionDescriptionI18n,
             publishTargetType: $publishTargetType,
             publishTargetValue: $publishTargetValue,
-            categoryId: $latestVersion?->getCategoryId(),
             categoryIds: $latestVersion === null || $latestVersion->getId() === null
                 ? []
                 : $this->superMagicAgentCategoryRelationDomainService->getVersionCategoryIds(
                     $latestVersion->getId(),
-                    $latestVersion->getCategoryId()
                 ),
         );
     }
@@ -1162,7 +1164,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $featuredOrderGroups = $this->resolveFeaturedOrderGroups($orderConfig);
         $frequentCodes = $featuredOrderGroups['frequent'];
         $allCodes = $featuredOrderGroups['all'];
-        $configuredCodes = $featuredOrderGroups['query'];
+        $queryAgentCodes = $configuredCodes = $featuredOrderGroups['query'];
 
         if ($configuredCodes !== []) {
             // featured 同时返回显示中和隐藏员工，显示状态由排序分组决定。
@@ -1174,7 +1176,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(),
                 $builtinAgents
             );
-            $queryAgentCodes = array_values(array_diff($configuredCodes, $builtinAgentCodes));
         } else {
             // 保留兜底逻辑，避免后续排序规则变更时首页数据直接为空。
             $queryAgentCodes = array_values(array_unique(array_diff(
@@ -1371,7 +1372,10 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         return array_values(array_unique(array_merge(
             $accessibleSkillCodes,
-            array_values(array_intersect(BuiltinSkill::values(), $skillCodes ?? []))
+            array_values(array_intersect(
+                $this->skillMarketDomainService->getOfficialBuiltinSkillCodes(),
+                $skillCodes ?? []
+            ))
         )));
     }
 
@@ -1625,7 +1629,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 continue;
             }
 
-            $version->setCategoryIds($categoryIdsMap[$versionId] ?? $version->getCategoryIds());
+            $version->setCategoryIds($categoryIdsMap[$versionId] ?? []);
         }
     }
 
@@ -2325,7 +2329,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             sandboxId: $sandboxId,
             skipInitMessage: true
         );
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($contactDataIsolation, $agentContext);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            $contactDataIsolation,
+            $agentContext,
+            // Agent 发布属于工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($contactDataIsolation->getCurrentUserId(), $contactDataIsolation->getCurrentOrganizationCode())
+            )
+        );
 
         $this->topicDomainService->updateTopicStatusAndSandboxId(
             $topicEntity->getId(),
@@ -2405,14 +2417,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     private function buildSystemMentionSkills(): array
     {
         $items = [];
-        foreach (BuiltinSkill::getAllBuiltinSkills() as $builtinSkill) {
+        $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
+        foreach ($this->skillMarketDomainService->getOfficialBuiltinSkillEntities() as $builtinSkill) {
             $items[] = [
-                'id' => $builtinSkill->value,
-                'code' => $builtinSkill->value,
-                'name' => $builtinSkill->getSkillName(),
-                'package_name' => $builtinSkill->value,
-                'description' => $builtinSkill->getSkillDescription(),
-                'logo' => $builtinSkill->getSkillIcon() !== '' ? $builtinSkill->getSkillIcon() : null,
+                'id' => $builtinSkill->getSkillCode(),
+                'code' => $builtinSkill->getSkillCode(),
+                'name' => $builtinSkill->getI18nName($language),
+                'package_name' => $builtinSkill->getPackageName(),
+                'description' => $builtinSkill->getI18nDescription($language),
+                'logo' => $builtinSkill->getLogo() ?: null,
                 'mention_source' => SkillMentionSource::SYSTEM->value,
             ];
         }

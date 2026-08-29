@@ -8,10 +8,10 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from agentlang.environment import Environment
-from pydantic import BaseModel, Field, validator
-
+from pydantic import BaseModel, Field, root_validator, validator
 from app.core.config.communication_config import MessageSubscriptionConfig, STSTokenRefreshConfig
 from app.core.entity.message.message import MessageType
+from app.core.entity.message.personal_preferences import PersonalPreferences
 
 
 class Department(BaseModel):
@@ -57,6 +57,31 @@ class Metadata(BaseModel):
         default=None,
         description="是否跳过发送初始化相关的聊天消息（BEFORE_INIT 和 AFTER_INIT 事件的消息），存在且为 true 时才跳过",
     )
+    personal_preferences: PersonalPreferences = Field(
+        default_factory=PersonalPreferences,
+        description="当前 CHAT 携带的用户个人偏好",
+    )
+
+    @root_validator(pre=True)
+    def migrate_legacy_long_term_memory_field(cls, values):
+        """将历史顶层长期记忆字段转换为个人偏好对象，仅用于输入兼容。"""
+        if not isinstance(values, dict):
+            return values
+        if "personal_preferences" in values or "long_term_memory_enabled" not in values:
+            return values
+
+        migrated_values = dict(values)
+        migrated_values["personal_preferences"] = {
+            "long_term_memory_enabled": values["long_term_memory_enabled"],
+        }
+        return migrated_values
+
+    @validator("personal_preferences", pre=True, always=True)
+    def validate_personal_preferences(cls, value):
+        """个人偏好缺失或结构非法时使用默认配置。"""
+        if isinstance(value, PersonalPreferences) or isinstance(value, dict):
+            return value
+        return {}
 
 
 class SuperMagicWorkspaceContext(BaseModel):
@@ -132,6 +157,8 @@ class AgentMode(str, Enum):
     SUMMARY_CHAT = "summary-chat"  # 音频纪要聊天模式，使用audio-chat.agent
     SUMMARY_VIDEO = "summary-video"  # 视频分析模式，使用video.agent
     DESIGN = "design"         # 画布设计模式，使用design.agent
+    CANVAS = "canvas"         # Canvas 管理模式，使用canvas.agent
+    VIDEO_PRODUCTION = "video-production"  # 视频制作模式，使用video-production.agent
     TEST = "test"  # 工具模式，使用tool.agent
     CREW_CREATOR = "crew-creator"  # Crew管理模式，使用crew-creator.agent
     SKILL_CREATOR = "skill-creator"  # Skill 创作模式，使用skill-creator.agent
@@ -150,6 +177,8 @@ class AgentMode(str, Enum):
             AgentMode.SUMMARY_CHAT: "audio-chat",  # 模式名称保持summary-chat，但使用audio-chat.agent文件
             AgentMode.SUMMARY_VIDEO: "video",  # 模式名称保持summary-video，但使用video.agent文件
             AgentMode.DESIGN: "design",  # 画布设计模式
+            AgentMode.CANVAS: "canvas",  # Canvas 管理模式
+            AgentMode.VIDEO_PRODUCTION: "video-production",  # 视频制作模式
             AgentMode.TEST: "test",
             AgentMode.CREW_CREATOR: "crew-creator",
             AgentMode.SKILL_CREATOR: "skill-creator",

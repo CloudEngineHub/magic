@@ -10,7 +10,9 @@ function createCanvasStub(options: {
 	let currentConnections = options.initialConnections ?? []
 	const eventEmitter = new EventEmitter()
 	const restoredListener = vi.fn()
-	eventEmitter.on("document:restored", restoredListener)
+	eventEmitter.on("document:restored", () => {
+		restoredListener(currentConnections.map((connection) => ({ ...connection })))
+	})
 
 	const canvas = {
 		eventEmitter,
@@ -51,6 +53,9 @@ describe("Canvas.loadDocumentSmart", () => {
 		})
 
 		expect(restoredListener).toHaveBeenCalledTimes(1)
+		expect(restoredListener).toHaveBeenCalledWith([
+			{ id: "edge", sourceElementId: "source", targetElementId: "target" },
+		])
 	})
 
 	it("does not duplicate document:restored when elements already emitted it", () => {

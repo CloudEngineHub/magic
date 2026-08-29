@@ -116,8 +116,8 @@ class SearchCanvasImagesParams(BaseToolParams):
 
     project_path: str = Field(
         ...,
-        description="""<!--zh: 设计项目的相对路径（包含 magic.project.js 的文件夹）。-->
-Relative path to the design project (folder containing magic.project.js).""",
+        description="""<!--zh: 设计项目的相对路径。-->
+Relative path to the design project.""",
     )
     topic_id: str = Field(
         ...,
@@ -157,12 +157,14 @@ class SearchCanvasImages(BaseGenerateCanvasElements[SearchCanvasImagesParams]):
         try:
             # 提前校验项目，以便拿到 project_path 做下载目录
             project_path, error_result = await self._ensure_project_ready(
-                params.project_path, require_magic_project_js=True
+                params.project_path,
+                require_magic_project_js=True,
+                tool_context=tool_context,
             )
             if error_result:
                 return error_result
 
-            workspace_path = Path(self.base_dir)
+            workspace_path = self._get_runtime_workspace_dir(tool_context)
             logger.info(
                 f"开始搜索图片并添加到画布: topic_id={params.topic_id}, "
                 f"tasks={len(params.tasks)}, project={params.project_path}"

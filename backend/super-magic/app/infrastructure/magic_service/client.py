@@ -20,6 +20,7 @@ from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.file import File
 
 from app.utils.credential_utils import sanitize_headers
+from app.utils.async_file_utils import async_unlink, async_write_bytes_iter
 
 from .config import MagicServiceConfig, MagicServiceConfigLoader
 from .constants import FileEditType
@@ -235,6 +236,52 @@ class MagicServiceClient:
             operation_name="设计视频生成",
         )
 
+    async def query_video_generation_result(
+        self,
+        project_id: str,
+        video_id: str,
+    ) -> Dict[str, Any]:
+        """查询设计视频生成结果。"""
+        return await self._request_json(
+            "GET",
+            "/api/v1/design/video-generation-result",
+            operation_name="设计视频生成结果查询",
+            params={"project_id": project_id, "video_id": video_id},
+        )
+
+    async def download_url_to_path(
+        self,
+        download_url: str,
+        target_path: Path,
+        interruption_event: Optional[asyncio.Event] = None,
+    ) -> None:
+        """把远程文件流式下载到指定本地路径。"""
+        session_to_use = self.session or aiohttp.ClientSession()
+        should_close_session = self.session is None
+        try:
+            async with session_to_use.get(
+                download_url,
+                timeout=aiohttp.ClientTimeout(total=900),
+            ) as response:
+                if response.status < 200 or response.status >= 300:
+                    body = await response.text()
+                    raise ApiError(
+                        f"视频文件下载失败，HTTP {response.status}: {body[:200]}"
+                    )
+                async def chunks():
+                    async for chunk in response.content.iter_chunked(1024 * 1024):
+                        if interruption_event is not None and interruption_event.is_set():
+                            raise asyncio.CancelledError
+                        yield chunk
+
+                await async_write_bytes_iter(target_path, chunks())
+        except BaseException:
+            await async_unlink(target_path)
+            raise
+        finally:
+            if should_close_session:
+                await session_to_use.close()
+
     async def estimate_design_video_points(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Estimate points for a design video generation task."""
         return await self._request_json(
@@ -285,6 +332,18 @@ class MagicServiceClient:
             "GET",
             f"/api/v1/open-api/slides-templates/{escaped_code}/file-url",
             operation_name="幻灯片模板文件链接获取",
+            params=self._filter_query_params(access_context),
+        )
+
+    async def get_slides_template_taxonomy(
+        self,
+        access_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Fetch enabled official slide template categories, groups, and tags."""
+        return await self._request_json(
+            "GET",
+            "/api/v1/open-api/slides-templates/taxonomy",
+            operation_name="幻灯片模板分类标签获取",
             params=self._filter_query_params(access_context),
         )
 

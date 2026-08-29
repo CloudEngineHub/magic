@@ -24,6 +24,7 @@ import type {
 import type {
 	SuperMagicAddContentToChatPayload,
 	SuperMagicAddFileToChatPayload,
+	SuperMagicCanvasSelectionMentionsPayload,
 	SuperMagicInsertMarkerToChatPayload,
 	SuperMagicMessageRegisterProgrammaticScrollArgs,
 	SuperMagicMessageScrollToBottomArgs,
@@ -70,6 +71,7 @@ import type {
 	SuperMagicCheckpointRollbackMessage,
 	SuperMagicFileChangeMessage,
 } from "@/types/chat/intermediate_message"
+import type { PersonalPreferencesValue } from "@/utils/personalPreferencesCache"
 
 /**
  * 全局事件名 → 参数类型映射。
@@ -213,6 +215,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Trigger_Document_List_Polling]: []
 	/** 添加文件到聊天输入框：传入标准文件 mention payload。 */
 	[PubSubEvents.Add_File_To_Chat]: SuperMagicAddFileToChatPayload
+	/** 画布选择 mentions：传入画布选择 payload。 */
+	[PubSubEvents.Super_Magic_Canvas_Selection_Mentions]: SuperMagicCanvasSelectionMentionsPayload
 	/** 发送打断消息：可选回调，打断完成后执行。 */
 	[PubSubEvents.Send_Interrupt_Message]: SuperMagicSendInterruptMessageArgs
 	/** 触发创建新话题：零参数。 */
@@ -237,4 +241,9 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Playback_End]: SuperMagicPlaybackEndPayload
 	/** 外部/原生层将拖拽数据投入消息编辑器：传入拖拽数据，消费方自行收窄。 */
 	[PubSubEvents.Insert_Drag_Data_To_Editor]: SuperMagicInsertDragDataToEditorArgs
+	/** 当前用户完整个人偏好更新：携带用户隔离键和服务端确认后的完整值。 */
+	[PubSubEvents.Personal_Preferences_Updated]: {
+		userKey: string
+		value: PersonalPreferencesValue
+	}
 }

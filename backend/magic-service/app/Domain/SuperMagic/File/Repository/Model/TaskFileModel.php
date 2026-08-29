@@ -25,6 +25,7 @@ class TaskFileModel extends AbstractModel
      */
     protected array $fillable = [
         'file_id',
+        'source_file_id',
         'user_id',
         'organization_code',
         'project_id',

@@ -23,6 +23,7 @@ use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -132,7 +133,11 @@ class FileBatchAppService extends AbstractAppService
             return $cachedResponse;
         }
 
-        $targetName = $this->buildBatchDownloadTargetName($projectEntity->getProjectName());
+        $targetName = $this->buildBatchDownloadTargetName(
+            $projectEntity->getProjectName(),
+            $selectedEntities,
+            empty($fileIds),
+        );
         $organizationCode = $projectEntity->getUserOrganizationCode();
         $sandboxId = $this->initializeBatchPackSandbox(
             $requestContext,
@@ -273,7 +278,11 @@ class FileBatchAppService extends AbstractAppService
             return $cachedResponse;
         }
 
-        $targetName = $this->buildBatchDownloadTargetName($projectEntity->getProjectName());
+        $targetName = $this->buildBatchDownloadTargetName(
+            $projectEntity->getProjectName(),
+            $selectedEntities,
+            empty($fileIds),
+        );
         $organizationCode = $projectEntity->getUserOrganizationCode();
         $sandboxId = $this->initializeBatchPackSandbox(
             $requestContext,
@@ -445,12 +454,33 @@ class FileBatchAppService extends AbstractAppService
         return 'batch_' . md5($data);
     }
 
-    private function buildBatchDownloadTargetName(string $projectName): string
-    {
+    /**
+     * @param TaskFileEntity[] $selectedEntities original user selections
+     */
+    private function buildBatchDownloadTargetName(
+        string $projectName,
+        array $selectedEntities,
+        bool $isWholeProject,
+    ): string {
         $timestamp = date('YmdHi');
+        $baseName = $projectName;
+
+        if (! $isWholeProject && count($selectedEntities) === 1) {
+            $selectedEntity = $selectedEntities[0];
+            $resourceName = $selectedEntity->getFileName();
+            if (! $selectedEntity->getIsDirectory()) {
+                $extension = $selectedEntity->getFileExtension();
+                if ($extension !== '' && str_ends_with($resourceName, '.' . $extension)) {
+                    $resourceName = substr($resourceName, 0, -strlen($extension) - 1);
+                } else {
+                    $resourceName = pathinfo($resourceName, PATHINFO_FILENAME);
+                }
+            }
+            $baseName = $resourceName . '_' . $projectName;
+        }
 
         return WorkFileUtil::sanitizeFileName(
-            sprintf('%s_%s.zip', $projectName, $timestamp),
+            sprintf('%s_%s.zip', $baseName, $timestamp),
             sprintf('batch_download_%s.zip', $timestamp)
         );
     }
@@ -598,7 +628,15 @@ class FileBatchAppService extends AbstractAppService
             sandboxId: $sandboxId,
             skipInitMessage: true
         );
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($dataIsolation, $agentContext);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            $dataIsolation,
+            $agentContext,
+            // 批量打包属于工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode)
+            )
+        );
 
         $this->topicDomainService->updateTopicStatusAndSandboxId(
             $topicEntity->getId(),

@@ -30,7 +30,7 @@ skills:
     - name: env-manager
     - name: cli-manager
     - name: skill-creator
-    - name: canvas-designer
+    - name: canvas-manager
     - name: creating-slides
     - name: deep-research
     - name: using-llm

@@ -351,6 +351,8 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
+			// Keep the original editor alignment without a queue, but pin the handle to the queue top when queue content is present.
+			resizeHandlePositionClassName={messageQueue.queue.length > 0 ? "top-0" : "top-6"}
 			// stickyMessageClassName="top-0"
 		/>
 	)

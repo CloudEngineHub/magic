@@ -41,6 +41,10 @@ class _ImageApiPayload:
 class MagicServiceHandler(BaseImageGeneratorHandler):
     """magic-service 图片生成驱动"""
 
+    _BASE64_IMAGE_PATTERN = re.compile(
+        r"^data:(?P<mime_type>image/[^;]+);base64,(?P<data>.*)$",
+        re.DOTALL,
+    )
     _POLL_INTERVAL_SECONDS = 5
     _POLL_TIMEOUT_SECONDS = 1220
 
@@ -80,13 +84,38 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
         )
         return headers
 
+    @classmethod
+    def _sanitize_payload_for_log(cls, payload: dict) -> dict:
+        """脱敏请求中的 Base64 图片，避免日志记录完整图片内容。"""
+        sanitized = dict(payload)
+        sanitized["images"] = [
+            cls._sanitize_image_for_log(image)
+            for image in payload.get("images", [])
+        ]
+        return sanitized
+
+    @classmethod
+    def _sanitize_image_for_log(cls, image: str) -> str | dict[str, object]:
+        """将 Base64 Data URL 转换为仅包含类型和长度的日志摘要。"""
+        match = cls._BASE64_IMAGE_PATTERN.match(image)
+        if match is None:
+            return image
+        return {
+            "type": "base64_image",
+            "mime_type": match.group("mime_type"),
+            "base64_length": len(match.group("data")),
+        }
+
     async def _call_api(self, payload: _ImageApiPayload) -> list[str]:
         """调用 magic-service 异步图片生成 API，轮询完成后返回图片 URL 列表。"""
         url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks"
         headers = self._build_api_headers()
         payload_dict = dataclasses.asdict(payload)
 
-        logger.info(f"提交 magic-service 图片生成任务: {url}, payload: {payload_dict}")
+        sanitized_payload = self._sanitize_payload_for_log(payload_dict)
+        logger.info(
+            f"提交 magic-service 图片生成任务: {url}, payload: {sanitized_payload}"
+        )
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -114,6 +143,7 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
 
             deadline = time.monotonic() + self._POLL_TIMEOUT_SECONDS
             query_url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks/{task_id}"
+            last_logged_status: str | None = None
 
             while True:
                 async with session.get(
@@ -126,9 +156,6 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                         )
 
                     task_data = await response.json()
-                    logger.info(
-                        f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
-                    )
                     if not isinstance(task_data, dict):
                         raise Exception(
                             f"Unexpected generation task query response format. "
@@ -136,6 +163,12 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                         )
 
                 status = str(task_data.get("status") or "").strip().lower()
+                if status != last_logged_status:
+                    logger.info(
+                        f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
+                    )
+                    last_logged_status = status
+
                 if status == "failed":
                     error = task_data.get("error") if isinstance(task_data.get("error"), dict) else {}
                     code = error.get("code")

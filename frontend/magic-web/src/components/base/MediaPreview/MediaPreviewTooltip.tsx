@@ -33,7 +33,7 @@ function AudioPlayer({
 }: {
 	src: string
 	fileName: string
-	audioRef: RefObject<HTMLAudioElement>
+	audioRef: RefObject<HTMLAudioElement | null>
 	onError?: () => void
 	labels: MediaPreviewTooltipProps["audioLabels"]
 }) {

@@ -1,8 +1,8 @@
 import { cx } from "antd-style"
 import RichText from "@/pages/superMagic/components/MessageList/components/Text/components/RichText"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import { useStyles } from "./styles"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
-import SuperTooltip from "@/pages/superMagic/components/SuperTooltip"
 
 export interface CollapsibleTextProps {
 	content: JSONContent | string
@@ -20,7 +20,7 @@ function CollapsibleText({ content, maxLines = 2, className, onFileClick }: Coll
 	)
 
 	return (
-		<SuperTooltip title={tooltipTitle}>
+		<SmartTooltip content={tooltipTitle} maxLines={0} className="w-full">
 			<div
 				className={cx(styles.container, styles.textContainer, styles.collapsed, className)}
 				style={{
@@ -31,7 +31,7 @@ function CollapsibleText({ content, maxLines = 2, className, onFileClick }: Coll
 			>
 				<RichText content={content} onFileClick={onFileClick} />
 			</div>
-		</SuperTooltip>
+		</SmartTooltip>
 	)
 }
 

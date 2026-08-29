@@ -205,6 +205,8 @@ export const PubSubEvents = {
 	Super_Magic_Receive_Shared_Project_Mode: "super_magic_receive_shared_project_mode",
 	/** 超级麦吉 - 添加文件到 MessageEditor */
 	Super_Magic_Add_Files_To_MessageEditor: "super_magic_add_files_to_message_editor",
+	/** 超级麦吉 - 画布选中媒体，预添加到 MessageEditor */
+	Super_Magic_Canvas_Selection_Mentions: "super_magic_canvas_selection_mentions",
 	/** 超级麦吉 - 刷新分享列表 */
 	Refresh_Share_List: "PubSub_Refresh_Share_List",
 	/** 超级麦吉 - 详情页刷新 */
@@ -248,4 +250,6 @@ export const PubSubEvents = {
 	Playback_End: "super_magic_playback_end",
 	/** 超级麦吉 - 向编辑器插入拖拽数据（当前由外部/原生层触发，无 TypeScript publish 侧） */
 	Insert_Drag_Data_To_Editor: "super_magic_insert_drag_data_to_editor",
+	/** 当前用户的完整个人偏好已更新 */
+	Personal_Preferences_Updated: "personal_preferences_updated",
 } as const

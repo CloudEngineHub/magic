@@ -185,6 +185,7 @@ Router::addGroup('/api/v1/admin', static function () {
 
     Router::addGroup('/slides-templates', static function () {
         Router::post('/queries', [AdminSlidesTemplateApi::class, 'queries']);
+        Router::post('/reindex-vector-index', [AdminSlidesTemplateApi::class, 'reindexVectorIndex']);
         Router::get('/{id:\d+}', [AdminSlidesTemplateApi::class, 'detail']);
         Router::post('', [AdminSlidesTemplateApi::class, 'create']);
         Router::put('/{id:\d+}', [AdminSlidesTemplateApi::class, 'update']);

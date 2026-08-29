@@ -8,8 +8,8 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\File\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
-use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
 use App\Domain\SuperMagic\File\Event\FileDeletedEvent;
@@ -58,13 +58,13 @@ class MagicFSFileAppService extends AbstractAppService
      */
     public function listFiles(MagicUserAuthorization $authorization, ListFilesRequestDTO $requestDTO): ListFilesResponseDTO
     {
-        // 校验当前用户对父目录所属项目至少具备 VIEWER 角色
-        $this->resolveAndAuthorizeParentProject($requestDTO->parent_id, $authorization, MemberRole::VIEWER);
+        // 校验当前用户对父目录所属项目至少具备 VIEWER 角色，并取回父目录实体
+        $parentEntity = $this->resolveAndAuthorizeParentProject($requestDTO->parent_id, $authorization, MemberRole::VIEWER);
 
-        // Only return workspace-type files to avoid exposing snapshot/other internal files
+        // 只返回父目录所属空间（project/user/topic）的文件，避免暴露其他内部文件
         $fileEntities = $this->magicFSFileDomainService->listFilesByParentId(
             $requestDTO->parent_id,
-            StorageType::WORKSPACE->value
+            $parentEntity->getSpaceType()
         );
 
         // 转换为 DTO
@@ -167,7 +167,8 @@ class MagicFSFileAppService extends AbstractAppService
             $authorization
         );
 
-        // project_id、user_id 和 organization_code 将从父文件或认证信息中自动获取
+        // project_id、user_id 和 organization_code 将从父文件或认证信息中自动获取；
+        // 空间类型由领域层按父目录 space_type 统一解析
         $fileEntity = $this->magicFSFileDomainService->createFile(
             $requestDTO->name,
             $requestDTO->parent_id,
@@ -178,8 +179,7 @@ class MagicFSFileAppService extends AbstractAppService
             null,                                    // source
             $requestDTO->getFileMetadata(),          // 持久化的插件 flag，如 local_shadow
             $requestDTO->getReuseDeletedFileId(),    // rollback 重放时请求复用已软删除同名的 file_id
-            (int) $messageMetadata->getTopicId(),    // 直接透传 topic_id，作为 task 查不到时的 fallback
-            $requestDTO->getSpaceType()              // 空间类型（如 project、user）
+            (int) $messageMetadata->getTopicId()     // 直接透传 topic_id，作为 task 查不到时的 fallback
         );
 
         // Dispatch file uploaded event so downstream subscribers are notified
@@ -304,14 +304,14 @@ class MagicFSFileAppService extends AbstractAppService
      */
     public function getFileTree(MagicUserAuthorization $authorization, string $fileId, GetFileTreeRequestDTO $requestDTO): FileInfoResponseDTO
     {
-        $this->assertFileAccessible($fileId, $authorization, MemberRole::VIEWER);
+        $fileEntity = $this->assertFileAccessible($fileId, $authorization, MemberRole::VIEWER);
 
-        // 1. 调用领域服务获取文件树数据
+        // 1. 调用领域服务获取文件树数据（按 root 所属空间过滤：project/user/topic）
         $treeData = $this->magicFSFileDomainService->getFileTree(
             $fileId,
             $requestDTO->depth,
             0,
-            StorageType::WORKSPACE->value
+            $fileEntity->getSpaceType()
         );
 
         // 2. 获取根文件和子节点列表
@@ -402,7 +402,7 @@ class MagicFSFileAppService extends AbstractAppService
     protected function assertFileAccessible(string $fileId, MagicUserAuthorization $authorization, MemberRole $requiredRole): TaskFileEntity
     {
         $fileEntity = $this->magicFSFileDomainService->getFileById($fileId);
-        $this->assertWorkspaceFile($fileEntity);
+        $this->assertMountableSpaceFile($fileEntity);
         if ($fileEntity->getProjectId() <= 0) {
             $this->assertUserSpaceFileAccessible($fileEntity, $authorization);
             return $fileEntity;
@@ -428,7 +428,7 @@ class MagicFSFileAppService extends AbstractAppService
         $checkedUserScopes = [];
         foreach (array_unique($fileIds) as $fileId) {
             $fileEntity = $this->magicFSFileDomainService->getFileById((string) $fileId);
-            $this->assertWorkspaceFile($fileEntity);
+            $this->assertMountableSpaceFile($fileEntity);
             $projectId = $fileEntity->getProjectId();
             if ($projectId <= 0) {
                 $scopeKey = $fileEntity->getOrganizationCode() . '|' . $fileEntity->getUserId();
@@ -462,7 +462,7 @@ class MagicFSFileAppService extends AbstractAppService
         }
 
         $parentEntity = $this->magicFSFileDomainService->getFileById($parentId);
-        $this->assertWorkspaceFile($parentEntity);
+        $this->assertMountableSpaceFile($parentEntity);
         if ($parentEntity->getProjectId() <= 0) {
             $this->assertUserSpaceFileAccessible($parentEntity, $authorization);
             return $parentEntity;
@@ -472,11 +472,22 @@ class MagicFSFileAppService extends AbstractAppService
     }
 
     /**
-     * MagicFS 只承载工作区文件；消息内容、快照等内部资源不属于文件系统命名空间。
+     * MagicFS 只承载文件系统命名空间（project/user/topic）的文件；
+     * 消息内容、快照等内部资源不属于文件系统命名空间。
+     *
+     * 判据使用 space_type：storage_type 是历史遗留的物理存储归类字段（已标记废弃，
+     * 后续废除），与文件系统命名空间并非一一对应，不再作为命名空间校验依据。
+     * 过渡期由 FileSpaceType::toStorageType() 建立映射：user→user、topic→topic、
+     * 其余（project）→workspace，保证新写入两字段一致，但鉴权仍以 space_type 为准。
      */
-    protected function assertWorkspaceFile(TaskFileEntity $fileEntity): void
+    protected function assertMountableSpaceFile(TaskFileEntity $fileEntity): void
     {
-        if ($fileEntity->getStorageType() !== StorageType::WORKSPACE) {
+        $spaceType = $fileEntity->getSpaceType();
+        if (! in_array(
+            $spaceType,
+            [FileSpaceType::PROJECT->value, FileSpaceType::USER->value, FileSpaceType::TOPIC->value],
+            true
+        )) {
             ExceptionBuilder::throw(
                 MagicFSErrorCode::FILE_NOT_FOUND,
                 'magicfs.file_not_found',

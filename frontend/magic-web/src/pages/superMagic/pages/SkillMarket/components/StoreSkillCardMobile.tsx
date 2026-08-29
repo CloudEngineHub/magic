@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import dayjs from "@/infrastructure/vendors/dayjs"
-import { Award, CircleUserRound, ShieldCheck } from "lucide-react"
+import { CircleUserRound, ShieldCheck } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import SmartTooltip from "@/components/other/SmartTooltip"
@@ -10,11 +10,13 @@ import { Separator } from "@/components/shadcn-ui/separator"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
 import { normalizeLocale } from "@/utils/locale"
+import { formatSkillInstallCount } from "./skill-card-formatters"
 import { isOfficialStoreSkillPublisher, resolveStoreSkillPublisherLabel } from "./skill-publisher"
 
 interface StoreSkillCardMobileProps {
 	skill: StoreSkillView
 	language: string
+	showFeaturedTag?: boolean
 	onAdd?: (id: string) => void
 	onUpgrade?: (id: string) => void
 	onOpenDetail?: (skill: StoreSkillView) => void
@@ -44,6 +46,7 @@ function normalizeDisplayText(value?: string | null) {
 export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 	skill,
 	language,
+	showFeaturedTag = false,
 	onAdd,
 	onUpgrade,
 	onOpenDetail,
@@ -65,6 +68,8 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 			}),
 		[language, skill.updatedAt, t],
 	)
+	const installCount = formatSkillInstallCount(skill.installCount, language)
+	const showInstallCount = skill.publisherType !== "OFFICIAL_BUILTIN"
 
 	const isAdded = skill.status === "added"
 	const buttonLabel = isAdded
@@ -113,15 +118,13 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 						<p className="min-w-0 flex-1 truncate pt-0.5 text-sm font-medium leading-6 text-foreground">
 							{skill.name}
 						</p>
-						{skill.isFeatured ? (
+						{showFeaturedTag ? (
 							<Badge
 								variant="outline"
-								className="size-6 shrink-0 rounded-md border-transparent bg-orange-50/90 p-1 text-orange-500 hover:bg-orange-50/90 dark:bg-orange-950/30 dark:text-orange-300"
-								aria-label={t("skillsLibrary.featured")}
-								title={t("skillsLibrary.featured")}
+								className="mt-0.5 shrink-0 rounded-md border-transparent bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-600 dark:text-orange-300"
 								data-testid="skills-library-mobile-card-featured"
 							>
-								<Award className="size-4" />
+								{t("skillsLibrary.featured")}
 							</Badge>
 						) : null}
 					</div>
@@ -183,6 +186,16 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 					)}
 					<span className="truncate">{publisherLabel}</span>
 				</div>
+				{showInstallCount && installCount ? (
+					<span
+						className="shrink-0 text-[11px] text-muted-foreground/80"
+						data-testid="skills-library-mobile-card-install-count"
+					>
+						{t("skillsLibrary.installCount", {
+							formattedCount: installCount,
+						})}
+					</span>
+				) : null}
 				<span className="shrink-0 text-xs text-muted-foreground">{updatedAtLabel}</span>
 			</div>
 		</div>

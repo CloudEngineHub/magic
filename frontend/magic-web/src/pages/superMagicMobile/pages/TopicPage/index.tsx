@@ -48,7 +48,6 @@ import PreviewDetailPopup, {
 	PreviewDetailPopupRef,
 } from "../../components/PreviewDetailPopup"
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
-import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
 import { cn } from "@/utils/cn"
@@ -89,6 +88,7 @@ import {
 import { useProjectFirstAttachmentRender } from "@/pages/superMagic/hooks/useProjectFirstAttachmentRender"
 import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
+import { buildMobileFilePreviewDetail } from "./mobileFilePreview"
 
 interface TopicPageProps {
 	onHistoryClick?: () => void
@@ -427,24 +427,10 @@ function TopicPage({
 	})
 
 	// Callback functions
-	const onFileClick = useMemoizedFn((fileItem?: any) => {
-		const fileId = fileItem?.file_id
-		setTimeout(() => {
-			// Also open in preview popup for mobile
-			const fileAttachment = attachmentList.find((item) => item.file_id === fileId)
-			if (fileAttachment) {
-				const fileExtension = fileAttachment.file_extension ?? ""
-				const type = getFileType(fileExtension)
-				setUserSelectDetail({
-					type,
-					data: {
-						file_id: fileId,
-						file_name: fileItem?.file_name || fileAttachment.file_name,
-					},
-					currentFileId: fileId,
-				} as any)
-			}
-		}, 100)
+	const onFileClick = useMemoizedFn((fileItem?: unknown) => {
+		// Open immediately from message metadata; project metadata is merged when available.
+		const previewDetail = buildMobileFilePreviewDetail(fileItem, attachmentList)
+		if (previewDetail) setUserSelectDetail(previewDetail)
 	})
 
 	const onNewTopicClick = useMemoizedFn(() => {
@@ -557,6 +543,11 @@ function TopicPage({
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
+
+	useEffect(() => {
+		// A direct message click may open before the project tree arrives; enrich it afterwards.
+		previewDetailPopupRef.current?.updateAttachments(attachments, attachmentList)
+	}, [attachments, attachmentList])
 
 	// 移动端统一订阅消息节点中的文件预览 / 路径打开事件
 	useMobileFilePreviewPubSub({

@@ -36,6 +36,7 @@ const mockState = vi.hoisted(() => ({
 	scrollTo: vi.fn(),
 	pptMount: vi.fn(),
 	pptUnmount: vi.fn(),
+	tabCacheOptions: undefined as { enableCache?: boolean } | undefined,
 }))
 let restoreBoundingClientRect: (() => void) | undefined
 
@@ -128,14 +129,17 @@ vi.mock("../hooks/useFilesViewer", () => ({
 }))
 
 vi.mock("../hooks/useTabCache", () => ({
-	useTabCache: () => ({
-		addToCache: mockState.noop,
-		getFromCache: () => undefined,
-		removeFromCache: mockState.noop,
-		clearCache: mockState.noop,
-		getCacheStats: () => ({ size: 0, maxSize: 10, keys: [] }),
-		cachedTabIds: [],
-	}),
+	useTabCache: (options: { enableCache?: boolean }) => {
+		mockState.tabCacheOptions = options
+		return {
+			addToCache: mockState.noop,
+			getFromCache: () => undefined,
+			removeFromCache: mockState.noop,
+			clearCache: mockState.noop,
+			getCacheStats: () => ({ size: 0, maxSize: 10, keys: [] }),
+			cachedTabIds: [],
+		}
+	},
 }))
 
 vi.mock("../hooks/useTabContextMenu", () => ({
@@ -232,9 +236,16 @@ afterEach(() => {
 	restoreBoundingClientRect?.()
 	restoreBoundingClientRect = undefined
 	mockState.scrollTo.mockReset()
+	mockState.tabCacheOptions = undefined
 })
 
 describe("FilesViewer fullscreen portal", () => {
+	it("keeps in-session tab caching enabled", () => {
+		render(<FilesViewer />)
+
+		expect(mockState.tabCacheOptions?.enableCache).toBe(true)
+	})
+
 	it("keeps document-flow fullscreen content in the share document tree", () => {
 		const { container } = render(<FilesViewer forceFullscreenMode documentFlowFullscreen />)
 

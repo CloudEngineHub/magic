@@ -1,4 +1,8 @@
-import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
+import {
+	ElementTypeEnum,
+	type VideoElement,
+	type VideoElementContent,
+} from "../../../runtime/document/types"
 import styles from "./index.module.css"
 import IconButton from "../../primitives/custom/IconButton/index"
 import { Copy, ImagePlus, X } from "lucide-react"
@@ -16,6 +20,7 @@ import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsibleProm
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { GenerationStatus, type VideoGenerationInfo } from "../../../public/magic-types"
 import { useGenerationRuntime } from "../../../app/hooks/canvas"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 
 interface VideoMessageHistoryRenderProps {
 	videoElement: VideoElement
@@ -33,17 +38,18 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 	const { videoElement, onPreviewMediaResource } = props
 	const { selectedElements } = useCanvasSelectionUI()
 	const { setMessageHistoryElementId } = useCanvasPanelUI()
-	const { videoModelList } = useMagic()
+	const { videoModelList, methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(videoElement.id)
+	const videoContent = getActiveContent(videoElement)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 
-	const request = generationRuntime?.generateVideoRequest || videoElement.generateVideoRequest
-	const resultMeta = videoElement.videoGenerationResultMeta
+	const request = generationRuntime?.generateVideoRequest || videoContent?.generateVideoRequest
+	const resultMeta = videoContent?.videoGenerationResultMeta
 	const runtime = resultMeta?.runtime
 	const isGenerationRunning = isVideoGenerationRunning({
-		status: videoElement.status,
-		hasSource: Boolean(videoElement.src),
+		status: videoContent?.status,
+		hasSource: Boolean(videoContent?.src),
 		hasVideoId: Boolean(request?.video_id),
 	})
 	const [nowMs, setNowMs] = useState(() => Date.now())
@@ -59,6 +65,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: "video-message-history",
+		interactive: true,
 		enableWheelForwarding: true,
 		enablePointerPanForwarding: true,
 	})
@@ -131,12 +138,12 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 			buildRuntimeRows({
 				runtime: runtime ?? null,
 				isRunning: isGenerationRunning,
-				status: videoElement.status,
-				hasSource: Boolean(videoElement.src),
+				status: videoContent?.status,
+				hasSource: Boolean(videoContent?.src),
 				nowMs,
 				t,
 			}),
-		[runtime, isGenerationRunning, videoElement.status, videoElement.src, nowMs, t],
+		[runtime, isGenerationRunning, videoContent?.status, videoContent?.src, nowMs, t],
 	)
 
 	useEffect(() => {
@@ -182,6 +189,8 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 									tokenConfig={promptPlaceholderTokenConfig}
 									placeholderPaths={promptPlaceholderPaths}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
+									deletedSuffix={t("messageHistory.deletedSuffix", "（已删除）")}
 								/>
 							}
 							emptyLabel={t("messageHistory.noPrompt", "暂无提示词")}
@@ -200,6 +209,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 								<ReferenceImageItem
 									path={startFrame.uri}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
 								/>
 							</div>
 						</div>
@@ -216,6 +226,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 								<ReferenceImageItem
 									path={endFrame.uri}
 									onPreviewMediaResource={onPreviewMediaResource}
+									resolveResourceReference={methods?.resolveResourceReference}
 								/>
 							</div>
 						</div>
@@ -234,6 +245,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 										key={`${item.uri}-${index}`}
 										path={item.uri}
 										onPreviewMediaResource={onPreviewMediaResource}
+										resolveResourceReference={methods?.resolveResourceReference}
 									/>
 								))}
 							</div>
@@ -253,6 +265,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 										key={`${item.uri}-${index}`}
 										path={item.uri}
 										onPreviewMediaResource={onPreviewMediaResource}
+										resolveResourceReference={methods?.resolveResourceReference}
 									/>
 								))}
 							</div>
@@ -272,6 +285,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 										key={`${item.uri}-${index}`}
 										path={item.uri}
 										onPreviewMediaResource={onPreviewMediaResource}
+										resolveResourceReference={methods?.resolveResourceReference}
 									/>
 								))}
 							</div>
@@ -314,7 +328,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 function buildGenerationInfoRows(params: {
 	billingPoints?: number | null
 	generationInfo: VideoGenerationInfo | null
-	request: VideoElement["generateVideoRequest"]
+	request: VideoElementContent["generateVideoRequest"]
 	t: ReturnType<typeof useCanvasDesignI18n>["t"]
 }): MessageHistoryInfoRow[] {
 	const { billingPoints, generationInfo, request, t } = params
@@ -336,7 +350,7 @@ function buildGenerationInfoRows(params: {
 	if (inputModeLabel) {
 		rows.push({
 			key: "generationMode",
-			label: t("messageHistory.generationMode", "生成模式"),
+			label: t("messageHistory.generationMode", "生成方式"),
 			value: inputModeLabel,
 		})
 	}
@@ -362,9 +376,9 @@ function buildGenerationInfoRows(params: {
 }
 
 function buildRuntimeRows(params: {
-	runtime: NonNullable<VideoElement["videoGenerationResultMeta"]>["runtime"] | null
+	runtime: NonNullable<VideoElementContent["videoGenerationResultMeta"]>["runtime"] | null
 	isRunning: boolean
-	status?: VideoElement["status"]
+	status?: VideoElementContent["status"]
 	hasSource: boolean
 	nowMs: number
 	t: ReturnType<typeof useCanvasDesignI18n>["t"]
@@ -422,7 +436,7 @@ function buildRuntimeRows(params: {
 }
 
 function isVideoGenerationRunning(params: {
-	status?: VideoElement["status"]
+	status?: VideoElementContent["status"]
 	hasSource: boolean
 	hasVideoId: boolean
 }): boolean {

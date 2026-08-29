@@ -33,11 +33,7 @@ import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermission
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import { SuperMagicApi } from "@/apis"
-import {
-	workspaceStore,
-	projectStore,
-	topicStore,
-} from "../../stores/core"
+import { workspaceStore, projectStore, topicStore } from "../../stores/core"
 import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"
@@ -67,6 +63,7 @@ import topicReadProgressService from "../../services/topicReadProgressService"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
+import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
 
 /** 任务消息状态变化后延迟拉工作区/项目详情，减轻后端尚未落库时单次请求仍返回 running 的问题 */
 const WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS = 1000
@@ -268,6 +265,14 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		clearActiveDetailTabType()
 		resetAutoOpenFile()
 	}, [selectedProject?.id])
+
+	useSlidesTemplateNavigation({
+		selectedProjectId: selectedProject?.id,
+		attachments,
+		openTemplateFile: handleFileClickWithPanel,
+		setUserSelectDetail,
+		openDelay: 0,
+	})
 
 	const updateDetail = useMemoizedFn(
 		({
@@ -512,6 +517,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						hasStatusChanged,
 						activeFileId,
 						getActiveFileId: () => activeFileIdRef.current,
+						workspaceFileTree: attachments,
+						workspaceFilesList: attachmentList,
 					})
 				})
 			}
@@ -579,9 +586,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			checkAndOpenFileByTopicChanged({
 				activeFileId,
 				getActiveFileId: () => activeFileIdRef.current,
+				workspaceFileTree: attachments,
+				workspaceFilesList: attachmentList,
 			})
 		})
-	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
+	}, [selectedTopic?.id, isSelectedTopicMessagesReady, attachments, attachmentList])
 
 	const updateAttachments = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {

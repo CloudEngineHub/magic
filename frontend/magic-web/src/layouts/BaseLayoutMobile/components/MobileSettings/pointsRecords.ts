@@ -17,6 +17,14 @@ type PointsRecordsResponse =
 	| Array<Record<string, unknown>>
 	| undefined
 
+/** 归一化 remark，兼容 null/undefined 及历史缺失字段。 */
+export function normalizePointsRecordRemark(value: unknown): string {
+	if (value == null) return ""
+
+	const trimmedRemark = String(value).trim()
+	return trimmedRemark
+}
+
 /** 兼容不同积分明细接口包装层，并统一转成设置页视图可消费的数据结构。 */
 export function normalizePointsRecords(response: PointsRecordsResponse, fallbackLabel: string) {
 	const rawList: PointsRecordSourceItem[] = Array.isArray(response)
@@ -41,7 +49,10 @@ export function normalizePointsRecords(response: PointsRecordsResponse, fallback
 				(item as Record<string, unknown>)["reason"] ??
 				fallbackLabel,
 		),
-		description: String(item.description ?? (item as Record<string, unknown>)["remark"] ?? ""),
+		description: String(item.description ?? ""),
+		remark: normalizePointsRecordRemark(
+			item.remark ?? (item as Record<string, unknown>)["remark"],
+		),
 		// 缺失时间时保留空串，让后续分组逻辑统一落入更早分组，避免误归到今天。
 		createdAt: String(item.created_at ?? (item as Record<string, unknown>)["createdAt"] ?? ""),
 		// 详情态优先展示服务端返回的更新时间，没有时回退到创建时间。

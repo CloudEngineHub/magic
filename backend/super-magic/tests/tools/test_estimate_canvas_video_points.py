@@ -62,6 +62,40 @@ def test_design_video_request_builder_keeps_estimate_and_generate_parameters_ali
     }
 
 
+def test_design_video_estimate_request_preserves_provider_asset_uri():
+    task = VideoTaskSpec(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像产品介绍",
+        reference_image_paths=["asset://asset-20260401123823-6d4x2"],
+    )
+    tool = GenerateCanvasVideos(base_dir="/workspace")
+
+    estimate = tool._build_estimate_design_video_request(
+        task=task,
+        project_id="123",
+        model_id="doubao-seedance-2-0-260128",
+        relative_project_path="demo",
+    )
+
+    assert estimate["inputs"]["reference_images"] == [
+        {"uri": "asset://asset-20260401123823-6d4x2"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_normalizes_provider_asset_uri_with_leading_slash(tmp_path):
+    tool = GenerateCanvasVideos(base_dir=str(tmp_path))
+    task = VideoTaskSpec(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像产品介绍",
+        reference_image_paths=["/asset://asset-20260401123823-6d4x2"],
+    )
+
+    await tool._normalize_reference_paths([task], tmp_path, "demo")
+
+    assert task.reference_image_paths == ["asset://asset-20260401123823-6d4x2"]
+
+
 def test_generate_canvas_videos_params_support_estimate_operation():
     params = GenerateCanvasVideosParams(
         project_path="demo",

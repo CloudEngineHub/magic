@@ -140,6 +140,8 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		} = props
 		const editorContainerRef = useRef<HTMLDivElement>(null)
 		const isInternalChangeRef = useRef(false)
+		// 进入编辑且要求文末聚焦时，在用户真正输入前，setContent（如 mention 二次解析）后仍钉回文末。
+		const pinCaretToDocumentEndRef = useRef(autoFocusAtDocumentEnd)
 		const latestFocusedSelectionRangeRef = useRef<MessageEditorSelectionRange | null>(null)
 		const onEnterRef = useRef(onEnter)
 		onEnterRef.current = onEnter
@@ -155,6 +157,10 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		const hoveredMentionPathRef = useRef<string | null>(null)
 		const lastMentionSnapshotRef = useRef<MessageEditorMentionSnapshot | null>(null)
 		const mentionSyncRevisionRef = useRef(0)
+
+		useEffect(() => {
+			pinCaretToDocumentEndRef.current = autoFocusAtDocumentEnd
+		}, [autoFocusAtDocumentEnd])
 
 		useEffect(() => {
 			if (!selectionPersistenceKey) return
@@ -247,6 +253,8 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 				},
 				onUpdate: ({ editor: e }) => {
 					if (isInternalChangeRef.current) return
+					// 用户开始编辑后不再强制钉文末，避免后续外部 setContent 抢走光标。
+					pinCaretToDocumentEndRef.current = false
 					const str = getStringFromContent(e.getJSON())
 					onChangeRef.current?.(str)
 					const mentionCb = onMentionChangeRef.current
@@ -392,6 +400,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 						activeEditor.commands.setContent(contentToSet, {
 							emitUpdate: false,
 						})
+						restorePinnedCaretToDocumentEnd(activeEditor, pinCaretToDocumentEndRef)
 						syncMentionChange(activeEditor)
 						queueMicrotask(() => {
 							isInternalChangeRef.current = false
@@ -405,6 +414,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 						activeEditor.commands.setContent(contentToSet, {
 							emitUpdate: false,
 						})
+						restorePinnedCaretToDocumentEnd(activeEditor, pinCaretToDocumentEndRef)
 						syncMentionChange(activeEditor)
 						queueMicrotask(() => {
 							isInternalChangeRef.current = false
@@ -473,6 +483,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			function getHoveredMentionPath(target: EventTarget | null): string | null {
 				if (!(target instanceof Element)) return null
 				const mentionEl = target.closest<HTMLElement>(".canvas-project-file-mention")
+				if (mentionEl?.dataset.deleted === "true") return null
 				return mentionEl?.dataset.filePath || null
 			}
 
@@ -729,6 +740,16 @@ function focusEditorWithPreservedSelection(
 
 		activeEditor.chain().focus().setTextSelection({ from, to }).run()
 	})
+}
+
+/** setContent 会把选区重置到文首；进入编辑钉文末期间若已聚焦则立刻拉回末尾。 */
+function restorePinnedCaretToDocumentEnd(
+	activeEditor: Editor,
+	pinCaretToDocumentEndRef: { current: boolean },
+) {
+	if (!pinCaretToDocumentEndRef.current) return
+	if (!activeEditor.isFocused) return
+	activeEditor.commands.focus("end")
 }
 
 function resolvePreferredSelectionRange(

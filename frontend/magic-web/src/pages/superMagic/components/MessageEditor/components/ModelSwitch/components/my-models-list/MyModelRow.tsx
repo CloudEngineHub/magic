@@ -42,8 +42,9 @@ export function MyModelRow({
 	const extraProviderEntries = providerEntries.slice(1)
 	const moreProviderCount = extraProviderEntries.length
 
-	const { isPersonalOrganization, isAdmin } = userStore.user
-	const canManageModels = isPersonalOrganization || isAdmin
+	// 企业组织的模型由管理后台维护，模型选择器只允许个人组织用户管理自定义模型。
+	const { isPersonalOrganization } = userStore.user
+	const canManageModels = isPersonalOrganization
 
 	const handleSelect = () => onSelect?.(serviceProviderModelToModelItem(representativeModel))
 

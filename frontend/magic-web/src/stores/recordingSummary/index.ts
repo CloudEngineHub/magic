@@ -225,11 +225,18 @@ class RecordingSummaryStore {
 	 */
 	setIsPaused(isPaused: boolean) {
 		this.status = isPaused ? "paused" : "recording"
+		if (isPaused) this.markLastMessageDefinite()
+	}
+
+	/** Marks the current trailing transcript as complete when realtime ASR stops. */
+	markLastMessageDefinite() {
 		const lastMessage = last(this.message)
-		// 如果暂停了，且最后一条消息不是确定的，则将最后一条消息的definite设置为true
-		if (isPaused && lastMessage && !lastMessage?.definite) {
-			lastMessage.definite = true
-			this.message[this.message.length - 1].definite = true
+		if (lastMessage && !lastMessage.definite) {
+			// Replace the item so observers receive the update even when the array itself is reused.
+			this.message[this.message.length - 1] = {
+				...lastMessage,
+				definite: true,
+			}
 		}
 	}
 

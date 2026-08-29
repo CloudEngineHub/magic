@@ -42,19 +42,23 @@ read_skills(skill_names=["dws"])
 
 ## Authentication
 
+Super Magic runs in an online sandbox. The sandbox does not provide a browser
+that can reach an OAuth loopback callback on `127.0.0.1`, so do not use the
+default interactive login flow. Always use the device flow for DingTalk:
+
+```bash
+dws auth login --device
+```
+
 Before any DingTalk operation, verify auth status first:
 
 ```bash
 dws auth status --format json
 ```
 
-If `authenticated` is `false`, start the login flow. This environment has no browser (Docker/SSH), so always use the device flow:
-
-```bash
-dws auth login --device
-```
-
-The command outputs an authorization URL, then waits with the prompt `Waiting for user authorization`. At this point:
+If `authenticated` is `false`, run the device-flow command above. It outputs an
+authorization URL and waits with the prompt `Waiting for user authorization`.
+At this point:
 1. Show the authorization URL to the user
 2. Ask the user to open the URL in a browser or DingTalk mobile app to complete authorization
 3. The command will automatically detect the authorization and proceed
@@ -64,6 +68,10 @@ To force re-login (e.g. token expired):
 ```bash
 dws auth login --device --force
 ```
+
+Do not replace `--device` with plain `dws auth login` in the online sandbox;
+that starts the loopback flow and can leave authorization unable to return to
+the sandbox.
 
 ---
 

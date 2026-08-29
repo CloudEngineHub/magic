@@ -4,6 +4,7 @@ import type {
 	ImageElement as ImageElementData,
 } from "../../../runtime/document/types"
 import { ElementTypeEnum } from "../../../runtime/document/types"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useCanvasModeUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
@@ -26,6 +27,7 @@ import {
 	CollapsibleBlindsItem,
 } from "../../primitives/custom/CollapsibleBlindsGroup/index"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { ElementFactory } from "../../../runtime/elements/core/ElementFactory"
 import { createExtendImageFiles } from "../../../runtime/resources/image/extendImageComposer"
 import { createExpandImageTaskMeta } from "../../../runtime/resources/image/imageGenerationTaskMeta"
 import {
@@ -61,6 +63,7 @@ type ProcessedPresetChild = {
 
 export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProps) {
 	const { imageElement } = props
+	const activeContent = getActiveImageContent(imageElement)
 	const { t } = useCanvasDesignI18n()
 	const { canvas } = useCanvas()
 	const { methods } = useMagic()
@@ -247,7 +250,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 			!canvas ||
 			!methods?.uploadPrivateFiles ||
 			!methods?.expandImage ||
-			!imageElement.src ||
+			!activeContent.src ||
 			isSubmitting
 		) {
 			return
@@ -265,7 +268,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 
 		let createdElementId: string | undefined
 		let generationAttemptId: string | undefined
-		const imageSrc = imageElement.src
+		const imageSrc = activeContent.src
 
 		void (async () => {
 			try {
@@ -288,7 +291,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					file_path: imageSrc,
 					reference_image_options: buildReferenceImageOptions({
 						filePath: imageSrc,
-						crop: imageElement.crop,
+						crop: activeContent.crop,
 					}),
 				})
 				createdElementId = generateElementId()
@@ -296,16 +299,23 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					frameBounds,
 					currentSession.frame,
 				)
-				const newImageElement: ImageElementData = {
-					id: createdElementId,
-					type: ElementTypeEnum.Image,
-					...expandedResultGeometry,
-					zIndex: canvas.elementManager.getNextZIndexInLevel(),
+				const newImageElement = {
+					...ElementFactory.createElementData(
+						ElementTypeEnum.Image,
+						createdElementId,
+						expandedResultGeometry.x,
+						expandedResultGeometry.y,
+						expandedResultGeometry.width,
+						expandedResultGeometry.height,
+						canvas.elementManager.getNextZIndexInLevel(),
+					),
 					name: `${imageElement.name || elementInstance.getRenderName()} ${t(
 						"elementTools.imageExtend.title",
 						"扩展",
 					)}`,
-				}
+				} as ImageElementData
+				const targetContentId = newImageElement.activeContentId
+				if (!targetContentId) return
 
 				// 扩图包含本地合成和文件上传，整个提交窗口都不能把占位元素导出。
 				canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
@@ -317,6 +327,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					targets: [
 						{
 							elementId: createdElementId,
+							contentId: targetContentId,
 							imageGenerationTaskMeta: placeholderTaskMeta,
 						},
 					],
@@ -327,7 +338,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				const workerResult =
 					await canvas.submitImageWorkerManager.createExtendImagesInWorker({
 						src: imageSrc,
-						crop: imageElement.crop,
+						crop: activeContent.crop,
 						elementSize: {
 							width: imageElement.width,
 							height: imageElement.height,
@@ -373,7 +384,11 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							}
 
 							const files = await createExtendImageFiles({
-								element: imageElement,
+								element: {
+									width: imageElement.width,
+									height: imageElement.height,
+									crop: activeContent.crop,
+								},
 								image: imageSource,
 								naturalWidth: imageInfo.naturalWidth,
 								naturalHeight: imageInfo.naturalHeight,
@@ -391,7 +406,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 						})()
 
 				const { crop } = getImageProcessRequestPayload({
-					crop: imageElement.crop,
+					crop: activeContent.crop,
 					sourceDimensions: compositeResult.sourceDimensions,
 				})
 
@@ -426,17 +441,20 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					throw new Error(t("elementTools.imageExtend.submitFailed", "提交失败，请重试"))
 				}
 
-				const success = await newElementInstance.expandImage({
-					image_id: requestImageId,
-					file_path: imageSrc,
-					canvas_path: canvasPath,
-					mask_path: maskPath,
-					size: compositeResult.size,
-					reference_image_options: buildReferenceImageOptions({
-						filePath: imageSrc,
-						crop,
-					}),
-				})
+				const success = await newElementInstance.expandImage(
+					{
+						image_id: requestImageId,
+						file_path: imageSrc,
+						canvas_path: canvasPath,
+						mask_path: maskPath,
+						size: compositeResult.size,
+						reference_image_options: buildReferenceImageOptions({
+							filePath: imageSrc,
+							crop,
+						}),
+					},
+					{ attemptId: generationAttemptId },
+				)
 				if (!success) {
 					throw new Error(t("elementTools.imageExtend.submitFailed", "提交失败，请重试"))
 				}
@@ -455,7 +473,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				setIsSubmitting(false)
 			}
 		})()
-	}, [canvas, methods, imageElement, isSubmitting, t])
+	}, [activeContent, canvas, methods, imageElement, isSubmitting, t])
 
 	return (
 		<div ref={setRefs} className={styles.imageExtendPanel} data-canvas-ui-component>

@@ -4,10 +4,14 @@ import type { DataDashboard } from "@admin/types/datadashboard"
 export type DashboardT = (key: string, options?: Record<string, unknown>) => string
 
 export type DashboardTabType =
-	DataDashboard.AgentTabType | DataDashboard.MemberTabType | DataDashboard.OrganizationTabType
+	| DataDashboard.AgentTabType
+	| DataDashboard.MemberTabType
+	| DataDashboard.OrganizationTabType
 
 export type DashboardRow =
-	DataDashboard.AgentTabRow | DataDashboard.MemberTabRow | DataDashboard.OrganizationTabRow
+	| DataDashboard.AgentTabRow
+	| DataDashboard.MemberTabRow
+	| DataDashboard.OrganizationTabRow
 export interface MetricCardData {
 	key: string
 	label: string

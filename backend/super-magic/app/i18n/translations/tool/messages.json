@@ -203,6 +203,110 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
+    "create_slide_template_project.before": {
+        "zh_CN": "正在创建模板结构 {{template_id}}",
+        "en_US": "Creating template structure {{template_id}}"
+    },
+    "create_slide_template_project.after_success": {
+        "zh_CN": "已创建模板结构 {{template_id}}",
+        "en_US": "Created template structure {{template_id}}"
+    },
+    "create_slide_template_project.after_failed": {
+        "zh_CN": "模板结构 {{template_id}} 创建失败",
+        "en_US": "Failed to create template structure {{template_id}}"
+    },
+    "finalize_slide_template.before": {
+        "zh_CN": "正在渲染模板预览 {{template_dir}}",
+        "en_US": "Rendering template previews {{template_dir}}"
+    },
+    "finalize_slide_template.after_success": {
+        "zh_CN": "已生成模板预览 {{template_id}}",
+        "en_US": "Generated template previews {{template_id}}"
+    },
+    "finalize_slide_template.after_failed": {
+        "zh_CN": "模板预览 {{template_id}} 生成失败",
+        "en_US": "Failed to generate template previews {{template_id}}"
+    },
+    "prepare_slide_template_source.before": {
+        "zh_CN": "正在准备模板视觉重建素材 {{template_dir}}",
+        "en_US": "Preparing reconstruction source {{template_dir}}"
+    },
+    "prepare_slide_template_source.after_success": {
+        "zh_CN": "已准备模板视觉重建素材 {{template_dir}}",
+        "en_US": "Prepared reconstruction source {{template_dir}}"
+    },
+    "prepare_slide_template_source.after_failed": {
+        "zh_CN": "模板视觉重建素材 {{template_dir}} 准备失败",
+        "en_US": "Failed to prepare reconstruction source {{template_dir}}"
+    },
+    "select_slide_template_source_assets.before": {
+        "zh_CN": "正在审核并筛选模板原始素材 {{template_dir}}",
+        "en_US": "Reviewing and selecting source assets {{template_dir}}"
+    },
+    "select_slide_template_source_assets.after_success": {
+        "zh_CN": "已完成模板原始素材筛选 {{template_dir}}",
+        "en_US": "Selected source assets for {{template_dir}}"
+    },
+    "select_slide_template_source_assets.after_failed": {
+        "zh_CN": "模板原始素材筛选失败 {{template_dir}}",
+        "en_US": "Failed to select source assets for {{template_dir}}"
+    },
+    "query_slide_template_taxonomy.before": {
+        "zh_CN": "正在获取可用的模板分类和标签",
+        "en_US": "Fetching available template categories and tags"
+    },
+    "query_slide_template_taxonomy.after_success": {
+        "zh_CN": "已列出可用的模板分类和标签",
+        "en_US": "Listed available template categories and tags"
+    },
+    "query_slide_template_taxonomy.after_failed": {
+        "zh_CN": "模板分类或标签不可用",
+        "en_US": "Template category or tags are not available"
+    },
+    "review_slide_template_source.before": {
+        "zh_CN": "正在回顾模板源页视觉 {{template_dir}}",
+        "en_US": "Reviewing source pages for {{template_dir}}"
+    },
+    "review_slide_template_source.after_success": {
+        "zh_CN": "已完成模板源页视觉回顾 {{template_dir}}",
+        "en_US": "Reviewed source pages for {{template_dir}}"
+    },
+    "review_slide_template_source.after_failed": {
+        "zh_CN": "模板源页视觉回顾失败 {{template_dir}}",
+        "en_US": "Failed to review source pages for {{template_dir}}"
+    },
+    "install_slides_template.before": {
+        "zh_CN": "正在安装模板 {{template_code}}",
+        "en_US": "Installing template {{template_code}}"
+    },
+    "install_slides_template.after_success": {
+        "zh_CN": "已安装模板 {{template_code}}",
+        "en_US": "Installed template {{template_code}}"
+    },
+    "install_slides_template.after_failed": {
+        "zh_CN": "模板 {{template_code}} 安装失败",
+        "en_US": "Failed to install template {{template_code}}"
+    },
+    "install_slides_template.detail_title": {
+        "zh_CN": "幻灯片模板安装结果",
+        "en_US": "Slide Template Install Result"
+    },
+    "install_slides_template.detail_code": {
+        "zh_CN": "模板 code",
+        "en_US": "Template code"
+    },
+    "install_slides_template.detail_label": {
+        "zh_CN": "模板名称",
+        "en_US": "Template name"
+    },
+    "install_slides_template.detail_directory": {
+        "zh_CN": "安装目录",
+        "en_US": "Installed directory"
+    },
+    "install_slides_template.detail_error": {
+        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
+        "en_US": "Install failed. Check the template code or try again later"
+    },
     "export_document_markdown.before": {
         "zh_CN": "正在导出 {{file_name}}",
         "en_US": "Exporting {{file_name}}"
@@ -1226,6 +1330,618 @@
     "restore_canvas_media.exception": {
         "zh_CN": "恢复画布媒体失败",
         "en_US": "Failed to restore canvas media"
+    },
+    "query_canvas_elements.success": {
+        "zh_CN": "画布节点查询完成",
+        "en_US": "Canvas element query completed"
+    },
+    "query_canvas_elements.exception": {
+        "zh_CN": "画布节点查询失败，请检查项目和节点 ID",
+        "en_US": "Canvas element query failed; check the project and Element IDs"
+    },
+    "get_canvas_overview.success": {
+        "zh_CN": "画布概览读取完成",
+        "en_US": "Canvas overview completed"
+    },
+    "get_canvas_overview.exception": {
+        "zh_CN": "画布概览读取失败，请检查项目",
+        "en_US": "Canvas overview failed; check the project"
+    },
+    "get_canvas_overview.before": {
+        "zh_CN": "正在读取画布概览（第 {{page}} 页，每页最多 {{limit}} 个节点）",
+        "en_US": "Reading canvas overview (page {{page}}, up to {{limit}} Element(s))"
+    },
+    "get_canvas_overview.after_success": {
+        "zh_CN": "已读取第 {{page}}/{{total_pages}} 页，共 {{returned}} 个节点，是否还有下一页：{{has_more}}",
+        "en_US": "Read page {{page}}/{{total_pages}} with {{returned}} Element(s); more pages: {{has_more}}"
+    },
+    "get_canvas_overview.after_failure": {
+        "zh_CN": "概览读取失败：{{failure}}",
+        "en_US": "Overview failed: {{failure}}"
+    },
+    "get_canvas_overview.more_yes": {
+        "zh_CN": "是",
+        "en_US": "yes"
+    },
+    "get_canvas_overview.more_no": {
+        "zh_CN": "否",
+        "en_US": "no"
+    },
+    "get_canvas_overview.detail_title": {
+        "zh_CN": "画布概览",
+        "en_US": "Canvas Overview"
+    },
+    "get_canvas_overview.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "get_canvas_overview.detail_summary": {
+        "zh_CN": "- 节点总数：**{{total}}**，连线总数：**{{connections}}**",
+        "en_US": "- Total Elements: **{{total}}**, Connections: **{{connections}}**"
+    },
+    "get_canvas_overview.detail_page": {
+        "zh_CN": "- 分页：第 **{{page}}/{{total_pages}}** 页，本页 **{{returned}}**，页大小 **{{limit}}**，还有下一页：**{{has_more}}**",
+        "en_US": "- Pagination: **{{page}}/{{total_pages}}**, Current Page **{{returned}}**, Limit **{{limit}}**, More Pages: **{{has_more}}**"
+    },
+    "get_canvas_overview.detail_types": {
+        "zh_CN": "- 类型统计：{{types}}",
+        "en_US": "- Type Distribution: {{types}}"
+    },
+    "get_canvas_overview.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "repair_video_production_connections.success": {
+        "zh_CN": "视频制作连线修复完成",
+        "en_US": "Video production connections repaired"
+    },
+    "repair_video_production_connections.exception": {
+        "zh_CN": "视频制作连线修复失败，请检查节点 ID",
+        "en_US": "Video production connection repair failed; check the Element IDs"
+    },
+    "promote_canvas_content.success": {
+        "zh_CN": "已确认当前画布内容",
+        "en_US": "Canvas content confirmed"
+    },
+    "promote_canvas_content.exception": {
+        "zh_CN": "画布内容确认失败，请检查节点和 Content",
+        "en_US": "Canvas content confirmation failed; check the Element and Content"
+    },
+    "upsert_storyboard.success": {
+        "zh_CN": "视频分镜保存完成",
+        "en_US": "Video storyboard saved"
+    },
+    "upsert_storyboard.exception": {
+        "zh_CN": "视频分镜保存失败，请检查镜头和输出节点",
+        "en_US": "Video storyboard save failed; check the shots and output Elements"
+    },
+    "upsert_storyboard.result_saved": {
+        "zh_CN": "视频分镜“{{name}}”已保存，共 {{shot_count}} 个镜头。",
+        "en_US": "Video storyboard \"{{name}}\" was saved with {{shot_count}} shot(s)."
+    },
+    "upsert_storyboard.update_failed": {
+        "zh_CN": "视频分镜保存失败：{{error}}",
+        "en_US": "Video storyboard update failed: {{error}}"
+    },
+    "upsert_storyboard.anchor_cannot_be_output": {
+        "zh_CN": "不能将视觉参考图 {{element_id}} 直接作为分镜首帧输出，请为该镜头生成独立图片。",
+        "en_US": "Visual anchor {{element_id}} cannot also be a storyboard output; generate a separate image for this shot."
+    },
+    "configure_video_edit.success": {
+        "zh_CN": "视频成片配置完成",
+        "en_US": "Final video configuration completed"
+    },
+    "configure_video_edit.exception": {
+        "zh_CN": "视频成片配置失败，请检查输入顺序",
+        "en_US": "Final video configuration failed; check the input sequence"
+    },
+    "import_canvas_assets.success": {
+        "zh_CN": "画布素材导入完成",
+        "en_US": "Canvas assets imported"
+    },
+    "import_canvas_assets.exception": {
+        "zh_CN": "画布素材导入失败，请检查素材文件",
+        "en_US": "Canvas asset import failed; check the media files"
+    },
+    "compose_canvas_video.success": {
+        "zh_CN": "最终 MP4 合成完成",
+        "en_US": "Final MP4 composition completed"
+    },
+    "compose_canvas_video.exception": {
+        "zh_CN": "最终 MP4 合成失败，请检查输入视频和音频后重试",
+        "en_US": "Final MP4 composition failed. Check the input videos and audio and try again"
+    },
+    "generate_video_production_images.success": {
+        "zh_CN": "视频素材图片生成完成",
+        "en_US": "Video production images generated"
+    },
+    "generate_video_production_images.exception": {
+        "zh_CN": "视频素材图片生成失败，请检查参考素材",
+        "en_US": "Video production image generation failed; check the reference media"
+    },
+    "generate_video_production_videos.success": {
+        "zh_CN": "视频镜头生成任务已提交",
+        "en_US": "Video production shots submitted"
+    },
+    "generate_video_production_videos.exception": {
+        "zh_CN": "视频镜头生成失败，请检查参考素材和模型参数",
+        "en_US": "Video production shot generation failed; check the reference media and model parameters"
+    },
+    "video_production.list_separator": {
+        "zh_CN": "、",
+        "en_US": ", "
+    },
+    "query_canvas_elements.before": {
+        "zh_CN": "正在读取 {{count}} 个指定画布节点",
+        "en_US": "Reading {{count}} specified canvas Element(s)"
+    },
+    "query_canvas_elements.after_success": {
+        "zh_CN": "已读取 {{found_count}} 个节点",
+        "en_US": "Read {{found_count}} Element(s)"
+    },
+    "query_canvas_elements.after_success_with_missing": {
+        "zh_CN": "已读取 {{found_count}} 个节点，另有 {{missing_count}} 个节点未找到",
+        "en_US": "Read {{found_count}} Element(s); {{missing_count}} Element(s) were not found"
+    },
+    "query_canvas_elements.after_failure": {
+        "zh_CN": "查询失败：{{failure}}",
+        "en_US": "Query failed: {{failure}}"
+    },
+    "query_canvas_elements.detail_title": {
+        "zh_CN": "画布节点查询结果",
+        "en_US": "Canvas Element Query Results"
+    },
+    "query_canvas_elements.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "query_canvas_elements.detail_requested": {
+        "zh_CN": "- 请求节点：**{{count}} 个**",
+        "en_US": "- Requested Elements: **{{count}}**"
+    },
+    "query_canvas_elements.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "query_canvas_elements.detail_found": {
+        "zh_CN": "- 已找到：**{{count}} 个**",
+        "en_US": "- Found: **{{count}}**"
+    },
+    "query_canvas_elements.detail_connections": {
+        "zh_CN": "- 相关连线：**{{count}} 条**",
+        "en_US": "- Related connections: **{{count}}**"
+    },
+    "query_canvas_elements.detail_elements_heading": {
+        "zh_CN": "## 节点",
+        "en_US": "## Elements"
+    },
+    "query_canvas_elements.detail_missing_heading": {
+        "zh_CN": "## 未找到",
+        "en_US": "## Not Found"
+    },
+    "query_canvas_elements.unnamed_element": {
+        "zh_CN": "未命名节点",
+        "en_US": "Unnamed Element"
+    },
+    "query_canvas_elements.detail_element": {
+        "zh_CN": "- **{{name}}**：{{element_id}}，类型 {{element_type}}",
+        "en_US": "- **{{name}}**: {{element_id}}, type {{element_type}}"
+    },
+    "promote_canvas_content.active_content": {
+        "zh_CN": "当前 active Content",
+        "en_US": "current active Content"
+    },
+    "promote_canvas_content.before": {
+        "zh_CN": "正在确认节点 {{element_id}} 的 {{content_id}}",
+        "en_US": "Confirming {{content_id}} for Element {{element_id}}"
+    },
+    "promote_canvas_content.after_success": {
+        "zh_CN": "已将 {{content_id}} 设为主内容",
+        "en_US": "Set {{content_id}} as the main Content"
+    },
+    "promote_canvas_content.after_failure": {
+        "zh_CN": "确认失败：{{failure}}",
+        "en_US": "Confirmation failed: {{failure}}"
+    },
+    "promote_canvas_content.detail_title": {
+        "zh_CN": "画布内容确认结果",
+        "en_US": "Canvas Content Confirmation Results"
+    },
+    "promote_canvas_content.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "promote_canvas_content.detail_element_id": {
+        "zh_CN": "- Element ID：{{element_id}}",
+        "en_US": "- Element ID: {{element_id}}"
+    },
+    "promote_canvas_content.detail_main_content_id": {
+        "zh_CN": "- 主 Content ID：{{content_id}}",
+        "en_US": "- Main Content ID: {{content_id}}"
+    },
+    "promote_canvas_content.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "repair_video_production_connections.before": {
+        "zh_CN": "正在检查并修复 {{target_count}} 个节点的直接连线",
+        "en_US": "Checking and repairing direct connections for {{target_count}} target(s)"
+    },
+    "repair_video_production_connections.after_success": {
+        "zh_CN": "已修复连线，共保留 {{connection_count}} 条直接关系",
+        "en_US": "Repaired connections, with {{connection_count}} direct relation(s) retained"
+    },
+    "repair_video_production_connections.after_failure": {
+        "zh_CN": "连线修复失败：{{failure}}",
+        "en_US": "Connection repair failed: {{failure}}"
+    },
+    "repair_video_production_connections.detail_title": {
+        "zh_CN": "视频制作连线修复结果",
+        "en_US": "Video Production Connection Repair Results"
+    },
+    "repair_video_production_connections.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "repair_video_production_connections.detail_targets": {
+        "zh_CN": "- 修复目标：{{count}} 个",
+        "en_US": "- Repaired targets: {{count}}"
+    },
+    "repair_video_production_connections.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "upsert_storyboard.unnamed": {
+        "zh_CN": "未命名分镜",
+        "en_US": "Unnamed storyboard"
+    },
+    "upsert_storyboard.before": {
+        "zh_CN": "正在保存 {{name}}，共 {{shot_count}} 个镜头",
+        "en_US": "Saving {{name}} with {{shot_count}} shot(s)"
+    },
+    "upsert_storyboard.after_success": {
+        "zh_CN": "已保存 {{shot_count}} 个镜头",
+        "en_US": "Saved {{shot_count}} shot(s)"
+    },
+    "upsert_storyboard.after_failure": {
+        "zh_CN": "保存失败：{{failure}}",
+        "en_US": "Save failed: {{failure}}"
+    },
+    "upsert_storyboard.detail_title": {
+        "zh_CN": "视频分镜保存结果",
+        "en_US": "Video Storyboard Save Results"
+    },
+    "upsert_storyboard.detail_name": {
+        "zh_CN": "- 分镜名称：**{{name}}**",
+        "en_US": "- Storyboard name: **{{name}}**"
+    },
+    "upsert_storyboard.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "upsert_storyboard.detail_shot_count": {
+        "zh_CN": "- 镜头数量：**{{count}} 个**",
+        "en_US": "- Shots: **{{count}}**"
+    },
+    "upsert_storyboard.detail_element_id": {
+        "zh_CN": "- Element ID：{{element_id}}",
+        "en_US": "- Element ID: {{element_id}}"
+    },
+    "upsert_storyboard.detail_content_id": {
+        "zh_CN": "- Content ID：{{content_id}}",
+        "en_US": "- Content ID: {{content_id}}"
+    },
+    "upsert_storyboard.detail_connections": {
+        "zh_CN": "- 首帧连线：**{{count}} 条**",
+        "en_US": "- First-frame connections: **{{count}}**"
+    },
+    "upsert_storyboard.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "configure_video_edit.unnamed": {
+        "zh_CN": "未命名成片",
+        "en_US": "Unnamed final video"
+    },
+    "configure_video_edit.unspecified": {
+        "zh_CN": "未指定",
+        "en_US": "Not specified"
+    },
+    "configure_video_edit.before": {
+        "zh_CN": "正在配置 {{name}}：{{video_count}} 段视频，{{audio_count}} 条音频",
+        "en_US": "Configuring {{name}}: {{video_count}} video segment(s), {{audio_count}} audio track(s)"
+    },
+    "configure_video_edit.after_success": {
+        "zh_CN": "已配置 {{video_count}} 段视频和 {{audio_count}} 条音频",
+        "en_US": "Configured {{video_count}} video segment(s) and {{audio_count}} audio track(s)"
+    },
+    "configure_video_edit.after_failure": {
+        "zh_CN": "配置失败：{{failure}}",
+        "en_US": "Configuration failed: {{failure}}"
+    },
+    "configure_video_edit.detail_title": {
+        "zh_CN": "视频成片配置结果",
+        "en_US": "Final Video Configuration Results"
+    },
+    "configure_video_edit.detail_name": {
+        "zh_CN": "- 成片名称：**{{name}}**",
+        "en_US": "- Final video name: **{{name}}**"
+    },
+    "configure_video_edit.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "configure_video_edit.detail_element_id": {
+        "zh_CN": "- Element ID：{{element_id}}",
+        "en_US": "- Element ID: {{element_id}}"
+    },
+    "configure_video_edit.detail_content_id": {
+        "zh_CN": "- Content ID：{{content_id}}",
+        "en_US": "- Content ID: {{content_id}}"
+    },
+    "configure_video_edit.detail_video_count": {
+        "zh_CN": "- 视频输入：**{{count}} 段**",
+        "en_US": "- Video inputs: **{{count}}** segment(s)"
+    },
+    "configure_video_edit.detail_audio_count": {
+        "zh_CN": "- 音频输入：**{{count}} 条**",
+        "en_US": "- Audio inputs: **{{count}}** track(s)"
+    },
+    "configure_video_edit.detail_aspect_ratio": {
+        "zh_CN": "- 画面比例：{{value}}",
+        "en_US": "- Aspect ratio: {{value}}"
+    },
+    "configure_video_edit.detail_resolution": {
+        "zh_CN": "- 分辨率：{{value}}",
+        "en_US": "- Resolution: {{value}}"
+    },
+    "configure_video_edit.detail_format": {
+        "zh_CN": "- 输出格式：{{value}}",
+        "en_US": "- Output format: {{value}}"
+    },
+    "configure_video_edit.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "import_canvas_assets.empty": {
+        "zh_CN": "0 个素材",
+        "en_US": "0 assets"
+    },
+    "import_canvas_assets.before": {
+        "zh_CN": "正在导入 {{summary}}",
+        "en_US": "Importing {{summary}}"
+    },
+    "import_canvas_assets.before_more": {
+        "zh_CN": "{{summary}}等 {{count}} 个",
+        "en_US": "{{summary}} and {{count}} assets"
+    },
+    "import_canvas_assets.after_success": {
+        "zh_CN": "已导入 {{imported_count}} 个素材，复用 {{reused_count}} 个已有素材",
+        "en_US": "Imported {{imported_count}} asset(s) and reused {{reused_count}} existing asset(s)"
+    },
+    "import_canvas_assets.after_failure": {
+        "zh_CN": "导入失败：{{failure}}",
+        "en_US": "Import failed: {{failure}}"
+    },
+    "import_canvas_assets.detail_title": {
+        "zh_CN": "画布素材导入结果",
+        "en_US": "Canvas Asset Import Results"
+    },
+    "import_canvas_assets.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "import_canvas_assets.detail_imported": {
+        "zh_CN": "- 新增素材：**{{count}} 个**",
+        "en_US": "- New assets: **{{count}}**"
+    },
+    "import_canvas_assets.detail_reused": {
+        "zh_CN": "- 复用素材：**{{count}} 个**",
+        "en_US": "- Reused assets: **{{count}}**"
+    },
+    "import_canvas_assets.detail_assets_heading": {
+        "zh_CN": "## 素材结果",
+        "en_US": "## Asset Results"
+    },
+    "import_canvas_assets.detail_asset": {
+        "zh_CN": "- **{{name}}**：类型 {{media_type}}，文件 {{media_path}}，Element {{element_id}}，Content {{content_id}}",
+        "en_US": "- **{{name}}**: type {{media_type}}, file {{media_path}}, Element {{element_id}}, Content {{content_id}}"
+    },
+    "import_canvas_assets.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "compose_canvas_video.unnamed": {
+        "zh_CN": "未命名成片",
+        "en_US": "Unnamed final video"
+    },
+    "compose_canvas_video.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "compose_canvas_video.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "compose_canvas_video.before": {
+        "zh_CN": "正在合成最终视频 {{name}}，编辑方案 {{video_edit_element_id}}",
+        "en_US": "Composing final video {{name}} from edit {{video_edit_element_id}}"
+    },
+    "compose_canvas_video.after_success": {
+        "zh_CN": "最终视频已生成：{{src}}，时长 {{duration}} 秒",
+        "en_US": "Final video generated: {{src}}, duration {{duration}} seconds"
+    },
+    "compose_canvas_video.after_failure": {
+        "zh_CN": "合成失败：{{failure}}",
+        "en_US": "Composition failed: {{failure}}"
+    },
+    "compose_canvas_video.detail_title": {
+        "zh_CN": "最终视频合成结果",
+        "en_US": "Final Video Composition Results"
+    },
+    "compose_canvas_video.detail_name": {
+        "zh_CN": "- 成片名称：**{{name}}**",
+        "en_US": "- Final video name: **{{name}}**"
+    },
+    "compose_canvas_video.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "compose_canvas_video.detail_video_edit": {
+        "zh_CN": "- 编辑方案：{{element_id}}",
+        "en_US": "- Edit: {{element_id}}"
+    },
+    "compose_canvas_video.detail_src": {
+        "zh_CN": "- 输出文件：{{src}}",
+        "en_US": "- Output file: {{src}}"
+    },
+    "compose_canvas_video.detail_dimensions": {
+        "zh_CN": "- 画面尺寸：**{{width}} × {{height}}**",
+        "en_US": "- Dimensions: **{{width}} × {{height}}**"
+    },
+    "compose_canvas_video.detail_duration": {
+        "zh_CN": "- 视频时长：**{{duration}} 秒**",
+        "en_US": "- Duration: **{{duration}} seconds**"
+    },
+    "compose_canvas_video.detail_audio": {
+        "zh_CN": "- 包含音频：**{{value}}**",
+        "en_US": "- Audio included: **{{value}}**"
+    },
+    "compose_canvas_video.detail_element_id": {
+        "zh_CN": "- Element ID：{{element_id}}",
+        "en_US": "- Element ID: {{element_id}}"
+    },
+    "compose_canvas_video.detail_content_id": {
+        "zh_CN": "- Content ID：{{content_id}}",
+        "en_US": "- Content ID: {{content_id}}"
+    },
+    "compose_canvas_video.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "generate_video_production_images.unnamed": {
+        "zh_CN": "未命名图片",
+        "en_US": "Unnamed image"
+    },
+    "generate_video_production_images.empty": {
+        "zh_CN": "0 张图片",
+        "en_US": "0 images"
+    },
+    "generate_video_production_images.before": {
+        "zh_CN": "正在生成 {{summary}}",
+        "en_US": "Generating {{summary}}"
+    },
+    "generate_video_production_images.before_more": {
+        "zh_CN": "{{summary}}等 {{count}} 张",
+        "en_US": "{{summary}} and {{count}} images"
+    },
+    "generate_video_production_images.after_success": {
+        "zh_CN": "已生成 {{succeeded_count}} 张图片，失败 {{failed_count}} 张，画布结果已更新",
+        "en_US": "Generated {{succeeded_count}} image(s), {{failed_count}} failed, and updated the canvas results"
+    },
+    "generate_video_production_images.after_failure": {
+        "zh_CN": "生成失败：{{failure}}",
+        "en_US": "Generation failed: {{failure}}"
+    },
+    "generate_video_production_images.detail_title": {
+        "zh_CN": "视频素材图片生成结果",
+        "en_US": "Video Production Image Generation Results"
+    },
+    "generate_video_production_images.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "generate_video_production_images.detail_task_count": {
+        "zh_CN": "- 任务数量：**{{count}} 个**",
+        "en_US": "- Tasks: **{{count}}**"
+    },
+    "generate_video_production_images.detail_success": {
+        "zh_CN": "- 成功：**{{count}} 张**",
+        "en_US": "- Succeeded: **{{count}}**"
+    },
+    "generate_video_production_images.detail_failed": {
+        "zh_CN": "- 失败：**{{count}} 张**",
+        "en_US": "- Failed: **{{count}}**"
+    },
+    "generate_video_production_images.detail_connections": {
+        "zh_CN": "- 分镜结果绑定：**{{count}} 个**",
+        "en_US": "- Storyboard result bindings: **{{count}}**"
+    },
+    "generate_video_production_images.detail_results_heading": {
+        "zh_CN": "## 生成结果",
+        "en_US": "## Generated Results"
+    },
+    "generate_video_production_images.detail_element": {
+        "zh_CN": "- **{{name}}**：Element {{element_id}}，Content {{content_id}}",
+        "en_US": "- **{{name}}**: Element {{element_id}}, Content {{content_id}}"
+    },
+    "generate_video_production_images.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "generate_video_production_videos.unnamed": {
+        "zh_CN": "未命名镜头",
+        "en_US": "Unnamed shot"
+    },
+    "generate_video_production_videos.empty": {
+        "zh_CN": "0 个镜头",
+        "en_US": "0 shots"
+    },
+    "generate_video_production_videos.before": {
+        "zh_CN": "正在生成 {{summary}}",
+        "en_US": "Generating {{summary}}"
+    },
+    "generate_video_production_videos.before_more": {
+        "zh_CN": "{{summary}}等 {{count}} 个",
+        "en_US": "{{summary}} and {{count}} shots"
+    },
+    "generate_video_production_videos.after_success": {
+        "zh_CN": "已提交 {{succeeded_count}} 个镜头任务，失败 {{failed_count}} 个，画布结果已更新",
+        "en_US": "Submitted {{succeeded_count}} shot task(s), {{failed_count}} failed, and updated the canvas results"
+    },
+    "generate_video_production_videos.after_failure": {
+        "zh_CN": "生成失败：{{failure}}",
+        "en_US": "Generation failed: {{failure}}"
+    },
+    "generate_video_production_videos.detail_title": {
+        "zh_CN": "视频镜头生成结果",
+        "en_US": "Video Shot Generation Results"
+    },
+    "generate_video_production_videos.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "generate_video_production_videos.detail_task_count": {
+        "zh_CN": "- 镜头任务：**{{count}} 个**",
+        "en_US": "- Shot tasks: **{{count}}**"
+    },
+    "generate_video_production_videos.detail_submitted": {
+        "zh_CN": "- 已提交：**{{count}} 个**",
+        "en_US": "- Submitted: **{{count}}**"
+    },
+    "generate_video_production_videos.detail_failed": {
+        "zh_CN": "- 失败：**{{count}} 个**",
+        "en_US": "- Failed: **{{count}}**"
+    },
+    "generate_video_production_videos.detail_connections": {
+        "zh_CN": "- 业务结果绑定：**{{count}} 个**",
+        "en_US": "- Business result bindings: **{{count}}**"
+    },
+    "generate_video_production_videos.detail_results_heading": {
+        "zh_CN": "## 镜头结果",
+        "en_US": "## Shot Results"
+    },
+    "generate_video_production_videos.submitted": {
+        "zh_CN": "已提交",
+        "en_US": "Submitted"
+    },
+    "generate_video_production_videos.detail_element": {
+        "zh_CN": "- **{{name}}**：Element {{element_id}}，Content {{content_id}}，状态 {{status}}",
+        "en_US": "- **{{name}}**: Element {{element_id}}, Content {{content_id}}, status {{status}}"
+    },
+    "generate_video_production_videos.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
     },
     "thinking.start_deep_thinking": {
         "zh_CN": "开始深入思考问题：{{problem}}",
@@ -4447,38 +5163,6 @@
         "zh_CN": "PPTX 转幻灯片模板失败",
         "en_US": "PPTX to Slide Template Failed"
     },
-    "install_slides_template.before": {
-        "zh_CN": "正在安装模板 {{template_code}}",
-        "en_US": "Installing template {{template_code}}"
-    },
-    "install_slides_template.after_success": {
-        "zh_CN": "已安装模板 {{template_code}}",
-        "en_US": "Installed template {{template_code}}"
-    },
-    "install_slides_template.after_failed": {
-        "zh_CN": "模板 {{template_code}} 安装失败",
-        "en_US": "Failed to install template {{template_code}}"
-    },
-    "install_slides_template.detail_title": {
-        "zh_CN": "幻灯片模板安装结果",
-        "en_US": "Slide Template Install Result"
-    },
-    "install_slides_template.detail_code": {
-        "zh_CN": "模板 code",
-        "en_US": "Template code"
-    },
-    "install_slides_template.detail_label": {
-        "zh_CN": "模板名称",
-        "en_US": "Template name"
-    },
-    "install_slides_template.detail_directory": {
-        "zh_CN": "安装目录",
-        "en_US": "Installed directory"
-    },
-    "install_slides_template.detail_error": {
-        "zh_CN": "安装失败，请检查模板 code 或稍后重试",
-        "en_US": "Install failed. Check the template code or try again later"
-    },
     "audio_understanding.file_corrupted": {
         "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
         "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
@@ -4731,30 +5415,6 @@
         "zh_CN": "-",
         "en_US": "-"
     },
-    "call_simple_tool.calling": {
-        "zh_CN": "正在调用工具流",
-        "en_US": "Calling tool flow"
-    },
-    "call_simple_tool.called": {
-        "zh_CN": "工具流调用完成",
-        "en_US": "Tool flow call completed"
-    },
-    "call_simple_tool.failed": {
-        "zh_CN": "工具流调用失败",
-        "en_US": "Tool flow call failed"
-    },
-    "call_simple_agent.calling": {
-        "zh_CN": "正在调用助理",
-        "en_US": "Consulting agent"
-    },
-    "call_simple_agent.called": {
-        "zh_CN": "已收到助理回复",
-        "en_US": "Agent reply received"
-    },
-    "call_simple_agent.failed": {
-        "zh_CN": "助理调用失败",
-        "en_US": "Agent consultation failed"
-    },
     "magicbase.current_micro_app": {
         "zh_CN": "当前微应用",
         "en_US": "Current micro-app"
@@ -4822,5 +5482,797 @@
     "update_html_app_memory.detail_error": {
         "zh_CN": "更新微应用信息失败，请稍后重试或检查参数。",
         "en_US": "Failed to update micro-app information. Try again or check the parameters."
+    },
+    "canvas.operation_failed": {
+        "zh_CN": "画布操作失败",
+        "en_US": "Canvas operation failed"
+    },
+    "canvas.operation_completed": {
+        "zh_CN": "已完成",
+        "en_US": "Completed"
+    },
+    "canvas.operation_processing": {
+        "zh_CN": "处理中",
+        "en_US": "Processing"
+    },
+    "canvas.operation_partial": {
+        "zh_CN": "部分完成",
+        "en_US": "Partially completed"
+    },
+    "canvas.media.image": {
+        "zh_CN": "图片",
+        "en_US": "image"
+    },
+    "canvas.media.video": {
+        "zh_CN": "视频",
+        "en_US": "video"
+    },
+    "canvas.media.image_video": {
+        "zh_CN": "图片和视频",
+        "en_US": "images and videos"
+    },
+    "canvas.generate_pending": {
+        "zh_CN": "准备生成 {{total}} 个{{media}}",
+        "en_US": "Preparing {{total}} {{media}} generation task(s)"
+    },
+    "canvas.generate_status.completed": {
+        "zh_CN": "已生成 {{count}} 个{{media}}",
+        "en_US": "Generated {{count}} {{media}}"
+    },
+    "canvas.generate_status.processing": {
+        "zh_CN": "{{count}} 个{{media}}生成中",
+        "en_US": "{{count}} {{media}} in progress"
+    },
+    "canvas.generate_status.failed": {
+        "zh_CN": "{{count}} 个{{media}}生成失败",
+        "en_US": "{{count}} {{media}} failed"
+    },
+    "canvas.detail.title.connections": {
+        "zh_CN": "画布连线",
+        "en_US": "Canvas connections"
+    },
+    "canvas.detail.title.content_versions_added": {
+        "zh_CN": "新增画布内容版本",
+        "en_US": "Canvas content versions added"
+    },
+    "canvas.detail.title.elements_added": {
+        "zh_CN": "新增画布节点",
+        "en_US": "Canvas elements added"
+    },
+    "canvas.detail.title.generated_images": {
+        "zh_CN": "生成图片",
+        "en_US": "Images generated"
+    },
+    "canvas.detail.title.generated_videos": {
+        "zh_CN": "生成视频",
+        "en_US": "Videos generated"
+    },
+    "canvas.detail.title.generated_media": {
+        "zh_CN": "生成图片和视频",
+        "en_US": "Images and videos generated"
+    },
+    "canvas.detail.title.video_composition": {
+        "zh_CN": "画布视频合成",
+        "en_US": "Canvas video composition"
+    },
+    "canvas.detail.title.content_point_estimate": {
+        "zh_CN": "画布内容积分预估",
+        "en_US": "Canvas content point estimate"
+    },
+    "canvas.detail.title.frames_created": {
+        "zh_CN": "已创建画布画框",
+        "en_US": "Canvas frames created"
+    },
+    "canvas.detail.title.initialization": {
+        "zh_CN": "画布初始化",
+        "en_US": "Canvas initialization"
+    },
+    "canvas.detail.title.layout": {
+        "zh_CN": "画布布局",
+        "en_US": "Canvas layout"
+    },
+    "canvas.detail.title.element_details": {
+        "zh_CN": "画布节点详情",
+        "en_US": "Canvas element details"
+    },
+    "canvas.detail.title.overview": {
+        "zh_CN": "画布概览",
+        "en_US": "Canvas overview"
+    },
+    "canvas.detail.title.content_retry": {
+        "zh_CN": "画布内容重试",
+        "en_US": "Canvas content retry"
+    },
+    "canvas.detail.title.prompt_library_search": {
+        "zh_CN": "画布提示词库搜索",
+        "en_US": "Canvas prompt library search"
+    },
+    "canvas.detail.title.image_search": {
+        "zh_CN": "搜索并导入参考图片",
+        "en_US": "Search and import reference images"
+    },
+    "canvas.detail.title.main_content_selection": {
+        "zh_CN": "画布主内容选择",
+        "en_US": "Canvas main content selection"
+    },
+    "canvas.detail.title.generation_wait": {
+        "zh_CN": "等待画布内容生成",
+        "en_US": "Canvas generation wait"
+    },
+    "canvas.detail.section.input": {
+        "zh_CN": "输入参数",
+        "en_US": "Input parameters"
+    },
+    "canvas.detail.section.output": {
+        "zh_CN": "输出结果",
+        "en_US": "Output result"
+    },
+    "canvas.detail.field.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "canvas.detail.field.project_path": {
+        "zh_CN": "项目路径",
+        "en_US": "Project path"
+    },
+    "canvas.detail.field.state": {
+        "zh_CN": "状态",
+        "en_US": "State"
+    },
+    "canvas.detail.field.item_ref": {
+        "zh_CN": "项目引用",
+        "en_US": "Item reference"
+    },
+    "canvas.detail.field.connection_id": {
+        "zh_CN": "连线 ID",
+        "en_US": "Connection ID"
+    },
+    "canvas.detail.field.source": {
+        "zh_CN": "来源节点",
+        "en_US": "Source element"
+    },
+    "canvas.detail.field.target": {
+        "zh_CN": "目标节点",
+        "en_US": "Target element"
+    },
+    "canvas.detail.field.element_id": {
+        "zh_CN": "节点 ID",
+        "en_US": "Element ID"
+    },
+    "canvas.detail.field.content_id": {
+        "zh_CN": "内容 ID",
+        "en_US": "Content ID"
+    },
+    "canvas.detail.field.type": {
+        "zh_CN": "类型",
+        "en_US": "Type"
+    },
+    "canvas.detail.field.media_type": {
+        "zh_CN": "媒体类型",
+        "en_US": "Media type"
+    },
+    "canvas.detail.field.total": {
+        "zh_CN": "任务总数",
+        "en_US": "Total tasks"
+    },
+    "canvas.detail.field.completed": {
+        "zh_CN": "已生成",
+        "en_US": "Generated"
+    },
+    "canvas.detail.field.processing": {
+        "zh_CN": "生成中",
+        "en_US": "Processing"
+    },
+    "canvas.detail.field.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "canvas.detail.field.frame_element_id": {
+        "zh_CN": "画框节点 ID",
+        "en_US": "Frame element ID"
+    },
+    "canvas.detail.field.child_count": {
+        "zh_CN": "子节点数",
+        "en_US": "Child count"
+    },
+    "canvas.detail.field.position": {
+        "zh_CN": "位置",
+        "en_US": "Position"
+    },
+    "canvas.detail.field.task_id": {
+        "zh_CN": "任务 ID",
+        "en_US": "Task ID"
+    },
+    "canvas.detail.field.timed_out": {
+        "zh_CN": "是否超时",
+        "en_US": "Timed out"
+    },
+    "canvas.detail.field.main_content_id": {
+        "zh_CN": "主内容 ID",
+        "en_US": "Main content ID"
+    },
+    "canvas.detail.field.result_element_id": {
+        "zh_CN": "结果节点 ID",
+        "en_US": "Result element ID"
+    },
+    "canvas.detail.field.result_content_id": {
+        "zh_CN": "结果内容 ID",
+        "en_US": "Result content ID"
+    },
+    "canvas.detail.field.asset_path": {
+        "zh_CN": "素材路径",
+        "en_US": "Asset path"
+    },
+    "canvas.detail.field.rule": {
+        "zh_CN": "规则",
+        "en_US": "Rule"
+    },
+    "canvas.detail.field.points": {
+        "zh_CN": "积分",
+        "en_US": "Points"
+    },
+    "canvas.detail.field.topic": {
+        "zh_CN": "主题",
+        "en_US": "Topic"
+    },
+    "canvas.detail.field.imported": {
+        "zh_CN": "已导入",
+        "en_US": "Imported"
+    },
+    "canvas.detail.field.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "canvas.detail.field.warning": {
+        "zh_CN": "警告",
+        "en_US": "Warning"
+    },
+    "canvas.detail.field.elements": {
+        "zh_CN": "节点数",
+        "en_US": "Elements"
+    },
+    "canvas.detail.field.connections": {
+        "zh_CN": "连线数",
+        "en_US": "Connections"
+    },
+    "canvas.detail.field.page": {
+        "zh_CN": "页码",
+        "en_US": "Page"
+    },
+    "canvas.detail.field.parent": {
+        "zh_CN": "父节点",
+        "en_US": "Parent"
+    },
+    "canvas.detail.field.depth": {
+        "zh_CN": "层级",
+        "en_US": "Depth"
+    },
+    "canvas.detail.field.contents": {
+        "zh_CN": "内容数",
+        "en_US": "Contents"
+    },
+    "canvas.detail.field.children": {
+        "zh_CN": "子节点数",
+        "en_US": "Children"
+    },
+    "canvas.detail.field.query": {
+        "zh_CN": "查询词",
+        "en_US": "Query"
+    },
+    "canvas.detail.field.results": {
+        "zh_CN": "结果数",
+        "en_US": "Results"
+    },
+    "canvas.detail.field.total_matched": {
+        "zh_CN": "匹配总数",
+        "en_US": "Total matched"
+    },
+    "canvas.detail.field.project": {
+        "zh_CN": "项目路径",
+        "en_US": "Project path"
+    },
+    "canvas.detail.field.project_id": {
+        "zh_CN": "项目 ID",
+        "en_US": "Project ID"
+    },
+    "canvas.detail.field.items": {
+        "zh_CN": "项目列表",
+        "en_US": "Items"
+    },
+    "canvas.detail.field.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "canvas.detail.field.content": {
+        "zh_CN": "内容",
+        "en_US": "Content"
+    },
+    "canvas.detail.field.count": {
+        "zh_CN": "数量",
+        "en_US": "Count"
+    },
+    "canvas.detail.field.size": {
+        "zh_CN": "尺寸",
+        "en_US": "Size"
+    },
+    "canvas.detail.field.model_id": {
+        "zh_CN": "模型",
+        "en_US": "Model"
+    },
+    "canvas.detail.field.prompt": {
+        "zh_CN": "提示词",
+        "en_US": "Prompt"
+    },
+    "canvas.detail.field.input_mode": {
+        "zh_CN": "输入模式",
+        "en_US": "Input mode"
+    },
+    "canvas.detail.field.task": {
+        "zh_CN": "任务类型",
+        "en_US": "Task"
+    },
+    "canvas.detail.field.duration_seconds": {
+        "zh_CN": "时长（秒）",
+        "en_US": "Duration (seconds)"
+    },
+    "canvas.detail.field.aspect_ratio": {
+        "zh_CN": "画面比例",
+        "en_US": "Aspect ratio"
+    },
+    "canvas.detail.field.resolution": {
+        "zh_CN": "分辨率",
+        "en_US": "Resolution"
+    },
+    "canvas.detail.field.reference_images": {
+        "zh_CN": "参考图片",
+        "en_US": "Reference images"
+    },
+    "canvas.detail.field.reference_image_paths": {
+        "zh_CN": "参考图片路径",
+        "en_US": "Reference image paths"
+    },
+    "canvas.detail.field.reference_video_paths": {
+        "zh_CN": "参考视频路径",
+        "en_US": "Reference video paths"
+    },
+    "canvas.detail.field.reference_audio_paths": {
+        "zh_CN": "参考音频路径",
+        "en_US": "Reference audio paths"
+    },
+    "canvas.detail.field.frame_start_path": {
+        "zh_CN": "首帧图片路径",
+        "en_US": "Start frame path"
+    },
+    "canvas.detail.field.frame_end_path": {
+        "zh_CN": "尾帧图片路径",
+        "en_US": "End frame path"
+    },
+    "canvas.detail.field.error": {
+        "zh_CN": "错误原因",
+        "en_US": "Error reason"
+    },
+    "canvas.detail.field.output_uri": {
+        "zh_CN": "输出路径",
+        "en_US": "Output path"
+    },
+    "canvas.detail.field.generation_task_id": {
+        "zh_CN": "生成任务 ID",
+        "en_US": "Generation task ID"
+    },
+    "canvas.detail.field.retry_count": {
+        "zh_CN": "重试次数",
+        "en_US": "Retry count"
+    },
+    "canvas.detail.field.production_rule": {
+        "zh_CN": "生产规则",
+        "en_US": "Production rule"
+    },
+    "canvas.detail.field.next_action": {
+        "zh_CN": "下一步",
+        "en_US": "Next step"
+    },
+    "canvas.detail.value.none": {
+        "zh_CN": "无",
+        "en_US": "None"
+    },
+    "canvas.detail.value.provided": {
+        "zh_CN": "已提供（内容不在详情中展开）",
+        "en_US": "Provided (content is not expanded)"
+    },
+    "canvas.detail.value.field_count": {
+        "zh_CN": "共 {{count}} 个字段",
+        "en_US": "{{count}} field(s)"
+    },
+    "canvas.detail.value.unknown": {
+        "zh_CN": "字段",
+        "en_US": "Field"
+    },
+    "canvas.detail.value.item_count": {
+        "zh_CN": "共 {{count}} 项",
+        "en_US": "{{count}} item(s)"
+    },
+    "canvas.detail.value.item_index": {
+        "zh_CN": "第 {{index}} 项",
+        "en_US": "Item {{index}}"
+    },
+    "canvas.detail.value.more_items": {
+        "zh_CN": "其余 {{count}} 项未展开",
+        "en_US": "{{count}} more item(s) not expanded"
+    },
+    "canvas.detail.status.succeeded": {
+        "zh_CN": "成功",
+        "en_US": "Succeeded"
+    },
+    "canvas.detail.status.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "canvas.detail.status.completed": {
+        "zh_CN": "已完成",
+        "en_US": "Completed"
+    },
+    "canvas.detail.status.pending": {
+        "zh_CN": "等待中",
+        "en_US": "Pending"
+    },
+    "canvas.detail.status.processing": {
+        "zh_CN": "处理中",
+        "en_US": "Processing"
+    },
+    "canvas.detail.status.added": {
+        "zh_CN": "已新增",
+        "en_US": "Added"
+    },
+    "canvas.detail.status.removed": {
+        "zh_CN": "已移除",
+        "en_US": "Removed"
+    },
+    "canvas.detail.status.replaced": {
+        "zh_CN": "已替换",
+        "en_US": "Replaced"
+    },
+    "canvas.detail.status.created": {
+        "zh_CN": "已创建",
+        "en_US": "Created"
+    },
+    "canvas.detail.status.not_applied": {
+        "zh_CN": "未应用",
+        "en_US": "Not applied"
+    },
+    "canvas.detail.status.already_removed": {
+        "zh_CN": "已移除（无需重复操作）",
+        "en_US": "Already removed"
+    },
+    "canvas.detail.status.already_replaced": {
+        "zh_CN": "已替换（无需重复操作）",
+        "en_US": "Already replaced"
+    },
+    "canvas.detail.status.unavailable": {
+        "zh_CN": "不可用",
+        "en_US": "Unavailable"
+    },
+    "canvas.detail.status.estimated": {
+        "zh_CN": "已预估",
+        "en_US": "Estimated"
+    },
+    "canvas.detail.status.not_billable": {
+        "zh_CN": "无需计费",
+        "en_US": "Not billable"
+    },
+    "canvas.detail.status.partial": {
+        "zh_CN": "部分完成",
+        "en_US": "Partially completed"
+    },
+    "canvas.detail.status.not_found": {
+        "zh_CN": "未找到",
+        "en_US": "Not found"
+    },
+    "canvas.detail.status.not_applicable": {
+        "zh_CN": "不适用",
+        "en_US": "Not applicable"
+    },
+    "canvas.detail.state.created": {
+        "zh_CN": "已创建",
+        "en_US": "Created"
+    },
+    "canvas.detail.state.already existed": {
+        "zh_CN": "已存在",
+        "en_US": "Already existed"
+    },
+    "canvas.detail.boolean.true": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "canvas.detail.boolean.false": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "canvas.detail.type.frame": {
+        "zh_CN": "画框",
+        "en_US": "Frame"
+    },
+    "canvas.detail.type.group": {
+        "zh_CN": "组",
+        "en_US": "Group"
+    },
+    "canvas.detail.type.image": {
+        "zh_CN": "图片",
+        "en_US": "Image"
+    },
+    "canvas.detail.type.text": {
+        "zh_CN": "文本",
+        "en_US": "Text"
+    },
+    "canvas.detail.type.rectangle": {
+        "zh_CN": "矩形",
+        "en_US": "Rectangle"
+    },
+    "canvas.detail.type.ellipse": {
+        "zh_CN": "椭圆",
+        "en_US": "Ellipse"
+    },
+    "canvas.detail.type.triangle": {
+        "zh_CN": "三角形",
+        "en_US": "Triangle"
+    },
+    "canvas.detail.type.star": {
+        "zh_CN": "星形",
+        "en_US": "Star"
+    },
+    "canvas.detail.type.video": {
+        "zh_CN": "视频",
+        "en_US": "Video"
+    },
+    "canvas.detail.type.audio": {
+        "zh_CN": "音频",
+        "en_US": "Audio"
+    },
+    "canvas.detail.type.storyboard": {
+        "zh_CN": "分镜",
+        "en_US": "Storyboard"
+    },
+    "canvas.detail.type.video-edit": {
+        "zh_CN": "视频成片配置",
+        "en_US": "Video edit"
+    },
+    "canvas.detail.rule.video_generation": {
+        "zh_CN": "视频生成",
+        "en_US": "Video generation"
+    },
+    "canvas.initialize_pending": {
+        "zh_CN": "正在准备画布项目",
+        "en_US": "Preparing the Canvas project"
+    },
+    "canvas.initialize_created": {
+        "zh_CN": "画布项目已创建",
+        "en_US": "Canvas project created"
+    },
+    "canvas.initialize_existing": {
+        "zh_CN": "画布项目已存在",
+        "en_US": "Canvas project already exists"
+    },
+    "canvas.overview_result": {
+        "zh_CN": "共 {{elements}} 个节点，{{connections}} 条连线",
+        "en_US": "Elements: {{elements}}; connections: {{connections}}"
+    },
+    "canvas.element_targets": {
+        "zh_CN": "目标节点：{{targets}}",
+        "en_US": "Target elements: {{targets}}"
+    },
+    "canvas.element_details_result": {
+        "zh_CN": "已返回 {{total}} 个节点的详情",
+        "en_US": "Returned details for {{total}} elements"
+    },
+    "canvas.add_elements_pending": {
+        "zh_CN": "准备新增 {{total}} 个画布节点",
+        "en_US": "Canvas elements to add: {{total}}"
+    },
+    "canvas.add_elements_result": {
+        "zh_CN": "已新增 {{succeeded}}/{{total}} 个画布节点",
+        "en_US": "Canvas elements added: {{succeeded}}/{{total}}"
+    },
+    "canvas.add_contents_pending": {
+        "zh_CN": "准备为 {{total}} 个节点新增内容",
+        "en_US": "Elements receiving new content: {{total}}"
+    },
+    "canvas.add_contents_result": {
+        "zh_CN": "已为 {{succeeded}}/{{total}} 个节点新增内容",
+        "en_US": "Elements updated with content: {{succeeded}}/{{total}}"
+    },
+    "canvas.batch_result": {
+        "zh_CN": "批量操作结果：已完成 {{completed}} 个，处理中 {{processing}} 个，失败 {{failed}} 个，共 {{total}} 个",
+        "en_US": "Batch operation result: {{completed}} completed, {{processing}} processing, {{failed}} failed, {{total}} total"
+    },
+    "canvas.connections_pending": {
+        "zh_CN": "准备更新 {{total}} 项画布连线",
+        "en_US": "Canvas connection updates: {{total}}"
+    },
+    "canvas.connections_result": {
+        "zh_CN": "连线已更新：新增 {{added}} 条，移除 {{removed}} 条，替换 {{replaced}} 条",
+        "en_US": "Connections updated: {{added}} added, {{removed}} removed, {{replaced}} replaced"
+    },
+    "canvas.frame_pending": {
+        "zh_CN": "准备将 {{total}} 个节点创建为画布分组",
+        "en_US": "Preparing to create a canvas group from {{total}} element(s)"
+    },
+    "canvas.frame_result": {
+        "zh_CN": "已创建 {{total}} 个画布分组",
+        "en_US": "Canvas groups created: {{total}}"
+    },
+    "canvas.layout_pending": {
+        "zh_CN": "正在对 {{total}} 个节点应用布局策略：{{strategies}}",
+        "en_US": "Layout targets: {{total}}; strategies: {{strategies}}"
+    },
+    "canvas.layout_result": {
+        "zh_CN": "已更新 {{total}} 个节点的布局",
+        "en_US": "Element layouts updated: {{total}}"
+    },
+    "canvas.retry_pending": {
+        "zh_CN": "准备重试 {{total}} 项失败内容",
+        "en_US": "Failed content items to retry: {{total}}"
+    },
+    "canvas.retry_image_pending": {
+        "zh_CN": "准备重试失败内容，重新生成图片（{{total}} 项）",
+        "en_US": "Preparing to retry {{total}} failed Content item(s) and regenerate images"
+    },
+    "canvas.retry_video_pending": {
+        "zh_CN": "准备重试失败内容，重新生成视频（{{total}} 项）",
+        "en_US": "Preparing to retry {{total}} failed Content item(s) and regenerate videos"
+    },
+    "canvas.retry_result": {
+        "zh_CN": "已重试 {{retried}} 项内容，{{limited}} 项达到重试上限",
+        "en_US": "Content retries: {{retried}}; retry limit reached: {{limited}}"
+    },
+    "canvas.retry_image_result": {
+        "zh_CN": "已重新生成 {{total}} 张图片",
+        "en_US": "Regenerated {{total}} images"
+    },
+    "canvas.retry_video_result": {
+        "zh_CN": "已重新生成 {{total}} 段视频",
+        "en_US": "Regenerated {{total}} videos"
+    },
+    "canvas.retry_image_failed": {
+        "zh_CN": "图片重试失败",
+        "en_US": "Image regeneration failed"
+    },
+    "canvas.retry_video_failed": {
+        "zh_CN": "视频重试失败",
+        "en_US": "Video regeneration failed"
+    },
+    "canvas.select_main_pending": {
+        "zh_CN": "准备为 {{total}} 个节点选择主内容",
+        "en_US": "Main content selections pending: {{total}}"
+    },
+    "canvas.select_main_result": {
+        "zh_CN": "已为 {{total}} 个节点选择主内容",
+        "en_US": "Main content selections completed: {{total}}"
+    },
+    "canvas.select_image_main_pending": {
+        "zh_CN": "准备选择图片主版本（{{total}} 个节点）",
+        "en_US": "Preparing to select the main image version for {{total}} element(s)"
+    },
+    "canvas.select_image_main_result": {
+        "zh_CN": "已采用 {{total}} 个图片版本",
+        "en_US": "Adopted {{total}} image version(s)"
+    },
+    "canvas.select_video_main_pending": {
+        "zh_CN": "准备选择视频主版本（{{total}} 个节点）",
+        "en_US": "Preparing to select the main video version for {{total}} element(s)"
+    },
+    "canvas.select_video_main_result": {
+        "zh_CN": "已采用 {{total}} 个视频版本",
+        "en_US": "Adopted {{total}} video version(s)"
+    },
+    "canvas.items_pending": {
+        "zh_CN": "准备处理 {{total}} 项",
+        "en_US": "Preparing {{total}} items"
+    },
+    "canvas.items_result": {
+        "zh_CN": "已完成 {{succeeded}}/{{total}} 项",
+        "en_US": "Completed {{succeeded}}/{{total}} items"
+    },
+    "canvas.page": {
+        "zh_CN": "第 {{page}} 页，每页 {{limit}} 项",
+        "en_US": "Page {{page}}, {{limit}} items per page"
+    },
+    "canvas.wait_limit": {
+        "zh_CN": "本次最多等待 {{seconds}} 秒",
+        "en_US": "Waiting up to {{seconds}} seconds"
+    },
+    "canvas.wait_pending": {
+        "zh_CN": "正在等待 {{total}} 项生成任务，本次最多等待 {{seconds}} 秒",
+        "en_US": "Generation tasks: {{total}}; waiting up to {{seconds}} seconds"
+    },
+    "canvas.wait_image_pending": {
+        "zh_CN": "正在等待图片生成，本次最多等待 {{seconds}} 秒",
+        "en_US": "Waiting for image generation for up to {{seconds}} seconds"
+    },
+    "canvas.wait_video_pending": {
+        "zh_CN": "正在等待视频生成，本次最多等待 {{seconds}} 秒",
+        "en_US": "Waiting for video generation for up to {{seconds}} seconds"
+    },
+    "canvas.wait_completed": {
+        "zh_CN": "生成任务已全部完成（{{completed}}/{{total}}）",
+        "en_US": "All generation tasks completed ({{completed}}/{{total}})"
+    },
+    "canvas.wait_failed": {
+        "zh_CN": "生成任务均未成功（失败 {{failed}}/{{total}}）",
+        "en_US": "No generation task succeeded ({{failed}}/{{total}} failed)"
+    },
+    "canvas.wait_timeout": {
+        "zh_CN": "等待超时，已完成 {{completed}}/{{total}}，可继续等待原任务",
+        "en_US": "Wait timed out; {{completed}}/{{total}} completed. Continue with the same tasks"
+    },
+    "canvas.wait_partial": {
+        "zh_CN": "生成任务部分完成（完成 {{completed}}，失败 {{failed}}，共 {{total}}）",
+        "en_US": "Generation partially completed ({{completed}} completed, {{failed}} failed, {{total}} total)"
+    },
+    "canvas.wait_processing": {
+        "zh_CN": "生成任务处理中（完成 {{completed}}，处理中 {{processing}}，失败 {{failed}}，共 {{total}}）",
+        "en_US": "Generation tasks processing ({{completed}} completed, {{processing}} processing, {{failed}} failed, {{total}} total)"
+    },
+    "canvas.compose_pending": {
+        "zh_CN": "正在合成视频：{{name}}",
+        "en_US": "Composing video: {{name}}"
+    },
+    "canvas.compose_result": {
+        "zh_CN": "视频已合成：{{path}}",
+        "en_US": "Video composed: {{path}}"
+    },
+    "canvas.estimate_pending": {
+        "zh_CN": "正在预估 {{total}} 项内容的积分",
+        "en_US": "Content items to estimate: {{total}}"
+    },
+    "canvas.estimate_video_pending": {
+        "zh_CN": "正在预估 {{total}} 段视频的生成积分",
+        "en_US": "Estimating video generation points for {{total}} video(s)"
+    },
+    "canvas.estimate_result": {
+        "zh_CN": "预计需要 {{points}} 积分",
+        "en_US": "Estimated {{points}} points"
+    },
+    "canvas.estimate_video_result": {
+        "zh_CN": "预计需要 {{points}} 个视频生成积分",
+        "en_US": "Estimated {{points}} video generation points"
+    },
+    "canvas.estimate_unavailable": {
+        "zh_CN": "暂时无法预估内容积分",
+        "en_US": "Content point estimate is unavailable"
+    },
+    "canvas.estimate_video_unavailable": {
+        "zh_CN": "暂时无法预估视频生成积分",
+        "en_US": "Video generation point estimate is unavailable"
+    },
+    "canvas.estimate_video_failed": {
+        "zh_CN": "视频积分预估失败",
+        "en_US": "Video generation point estimate failed"
+    },
+    "canvas.estimate_video_failed_first_frame": {
+        "zh_CN": "视频积分预估失败：首帧引用文件不可用",
+        "en_US": "Video generation point estimate failed: first-frame reference file unavailable"
+    },
+    "canvas.search_images_pending": {
+        "zh_CN": "正在为 {{topic}} 搜索图片",
+        "en_US": "Searching images for {{topic}}"
+    },
+    "canvas.search_reference_images_pending": {
+        "zh_CN": "正在搜索并导入参考图片：{{topic}}",
+        "en_US": "Searching and importing reference images for {{topic}}"
+    },
+    "canvas.search_images_result": {
+        "zh_CN": "已导入 {{total}} 张候选图片",
+        "en_US": "Imported {{total}} image candidates"
+    },
+    "canvas.search_reference_images_result": {
+        "zh_CN": "已导入 {{total}} 张参考图片",
+        "en_US": "Imported {{total}} reference images"
+    },
+    "canvas.search_reference_images_partial": {
+        "zh_CN": "已导入 {{imported}} 张参考图片，{{failed}} 张导入失败",
+        "en_US": "Imported {{imported}} reference images; {{failed}} failed"
+    },
+    "canvas.search_prompts_pending": {
+        "zh_CN": "正在搜索提示词灵感：{{query}}",
+        "en_US": "Searching prompt inspirations for {{query}}"
     }
 }

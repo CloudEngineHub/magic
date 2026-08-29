@@ -8,6 +8,7 @@ import {
 import type { AudioSourceConfig, AudioSourceType } from "./types/RecorderTypes"
 import { RecorderInitializationError, InvalidStateError } from "./types/RecorderErrors"
 import { logger as Logger } from "@/utils/log"
+import { createRecordingLogger } from "../utils/RecordingLogger"
 
 /**
  * Media recorder service dependencies
@@ -17,7 +18,12 @@ interface MediaRecorderServiceDependencies {
 	audioChunkDB?: AudioChunkDB
 }
 
+export interface StopRecordingOptions {
+	source?: string
+}
+
 const logger = Logger.createLogger("MediaRecorderService")
+const diagnosticsLogger = createRecordingLogger("MediaRecorder")
 
 /**
  * Media recorder service for recording and storing audio chunks
@@ -268,9 +274,21 @@ export class MediaRecorderService {
 	 * Stop recording
 	 * 停止录制
 	 */
-	stopRecording(): Promise<void> {
+	stopRecording(options: StopRecordingOptions = {}): Promise<void> {
 		return new Promise((resolve, reject) => {
+			diagnosticsLogger.log("Media recorder stop requested", {
+				sessionId: this.sessionId,
+				source: options.source || "unknown",
+				isRecording: this.isRecording,
+				adapterState: this.recorderAdapter?.getStatus().state || "unavailable",
+			})
+
 			if (!this.isRecording || !this.recorderAdapter) {
+				diagnosticsLogger.log("Media recorder stop skipped", {
+					sessionId: this.sessionId,
+					source: options.source || "unknown",
+					reason: "not_recording_or_adapter_missing",
+				})
 				resolve()
 				return
 			}
@@ -282,26 +300,39 @@ export class MediaRecorderService {
 					.then(() => {
 						this.isRecording = false
 						this.events.onRecordingStop?.()
+						diagnosticsLogger.log("Media recorder stop completed", {
+							sessionId: this.sessionId,
+							source: options.source || "unknown",
+							adapterState: this.recorderAdapter?.getStatus().state || "unavailable",
+						})
 						logger.report("录音停止成功")
 						resolve()
 					})
 					.catch((error) => {
-						logger.error({
+						diagnosticsLogger.error({
 							eventKey: "stop_recording_failed",
 							errorKind: "unknown",
 							error: error,
 							message: "停止录音失败",
+							context: {
+								sessionId: this.sessionId,
+								source: options.source || "unknown",
+							},
 						})
 						const err = new Error(`Failed to stop recorder: ${error}`)
 						this.events.onRecordingError?.(err)
 						reject(err)
 					})
 			} catch (error) {
-				logger.error({
+				diagnosticsLogger.error({
 					eventKey: "stop_recording_failed",
 					errorKind: "unknown",
 					error: error,
 					message: "停止录音异常",
+					context: {
+						sessionId: this.sessionId,
+						source: options.source || "unknown",
+					},
 				})
 				this.cleanup()
 				reject(new Error(`Failed to stop recorder: ${error}`))
@@ -313,8 +344,8 @@ export class MediaRecorderService {
 	 * Stop recording and cleanup resources
 	 * 停止录制并同步清理资源
 	 */
-	async stopRecordingAndCleanup(): Promise<void> {
-		await this.stopRecording()
+	async stopRecordingAndCleanup(options: StopRecordingOptions = {}): Promise<void> {
+		await this.stopRecording(options)
 		this.cleanup()
 	}
 
@@ -454,19 +485,43 @@ export class MediaRecorderService {
 	 * 处理录音适配器的分片就绪事件
 	 */
 	private async handleChunkReady(chunk: StoredAudioChunk, chunkIndex: number): Promise<void> {
+		const persistStartedAt = Date.now()
 		try {
+			diagnosticsLogger.log("Audio chunk persistence started", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex,
+				size: chunk.size,
+				uploadStatus: chunk.uploadStatus,
+			})
+
 			let success = false
 			try {
 				// Save chunk to IndexedDB
 				await this.audioChunkDB.saveChunk(chunk)
 				success = true
-				console.log("Chunk saved to IndexedDB", {
+				diagnosticsLogger.log("Audio chunk persisted", {
+					sessionId: chunk.sessionId,
 					chunkIndex,
+					chunkId: chunk.id,
 					size: chunk.size,
-					id: chunk.id,
+					uploadStatus: "pending",
+					persistenceDurationMs: Date.now() - persistStartedAt,
 				})
 			} catch (error) {
-				console.error("Failed to save chunk to IndexedDB:", error)
+				diagnosticsLogger.error({
+					eventKey: "persist_audio_chunk_failed",
+					errorKind: "storage",
+					error,
+					message: "Failed to persist audio chunk to IndexedDB",
+					context: {
+						sessionId: chunk.sessionId,
+						chunkId: chunk.id,
+						chunkIndex,
+						size: chunk.size,
+						persistenceDurationMs: Date.now() - persistStartedAt,
+					},
+				})
 				success = false
 			}
 
@@ -474,7 +529,17 @@ export class MediaRecorderService {
 			this.events.onDataAvailable?.(chunk, chunkIndex, success)
 		} catch (error) {
 			const err = new Error(`Failed to handle chunk: ${error}`)
-			console.error("Failed to handle chunk:", error)
+			diagnosticsLogger.error({
+				eventKey: "handle_chunk_ready_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to handle ready audio chunk",
+				context: {
+					sessionId: chunk.sessionId,
+					chunkId: chunk.id,
+					chunkIndex,
+				},
+			})
 			this.events.onRecordingError?.(err)
 		}
 	}

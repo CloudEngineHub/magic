@@ -54,6 +54,7 @@ import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { useRecordingProjectChat } from "./hooks/useRecordingProjectChat"
 import { useRecordingDetailConversationPanelState } from "./hooks/useRecordingDetailConversationPanelState"
 import {
@@ -470,6 +471,13 @@ function AudioRecordingDetailPageDesktop() {
 										fileMap={fileMap}
 										summaryContent={summaryContent}
 										notesContent={texts.notes?.content}
+										attachmentTree={
+											attachmentTree as unknown as AttachmentFile[]
+										}
+										notesFilePath={
+											fileMap?.notes?.relative_file_path ??
+											fileMap?.notes?.path
+										}
 										attachmentList={attachmentList}
 										summaryReady={summaryReady}
 										summarizing={detailSummaryState.status === "generating"}

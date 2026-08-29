@@ -19,6 +19,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Constant\ProjectFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Event\AttachmentsProcessedEvent;
@@ -308,15 +309,19 @@ class FileManagementAppService extends AbstractAppService
                 $taskFileEntity->setSpaceType('user');
             }
 
-            // 通过领域服务计算排序值
-            $sortValue = $this->taskFileDomainService->calculateSortForNewFile(
-                ! empty($requestDTO->getParentId()) ? (int) $requestDTO->getParentId() : null,
-                (int) $requestDTO->getPreFileId(),
-                $projectId
-            );
-
-            // 设置排序值
-            $taskFileEntity->setSort($sortValue);
+            // saveFile 已不再使用 sort 字段，跳过排序值计算，实体保持默认 sort。
+            // 若后续恢复使用：根层级（无 parentId）的项目空间文件需按 space_type=project 过滤，
+            // 避免 topic 空间的 .topic 根节点混入项目根层级的排序计算
+            // $sortSpaceType = empty($requestDTO->getParentId()) && $taskFileEntity->getSpaceType() === FileSpaceType::PROJECT->value
+            //     ? FileSpaceType::PROJECT->value
+            //     : null;
+            // $sortValue = $this->taskFileDomainService->calculateSortForNewFile(
+            //     ! empty($requestDTO->getParentId()) ? (int) $requestDTO->getParentId() : null,
+            //     (int) $requestDTO->getPreFileId(),
+            //     $projectId,
+            //     $sortSpaceType
+            // );
+            // $taskFileEntity->setSort($sortValue);
 
             // 调用领域服务保存文件
             $savedEntity = $this->taskFileDomainService->upsertProjectFileNode(
@@ -327,7 +332,7 @@ class FileManagementAppService extends AbstractAppService
                     operatorUserId: $dataIsolation->getCurrentUserId(),
                     operatorOrganizationCode: $dataIsolation->getCurrentOrganizationCode(),
                     taskFileEntity: $taskFileEntity,
-                    storageTypeOverride: StorageType::WORKSPACE->value,
+                    storageTypeOverride: FileSpaceType::resolveStorageType($taskFileEntity->getSpaceType())->value,
                     isHidden: $requestDTO->getIsHidden()
                 )
             );
@@ -577,8 +582,7 @@ class FileManagementAppService extends AbstractAppService
                     TaskFileSource::PROJECT_DIRECTORY,
                     null,
                     false,
-                    0,
-                    $projectId > 0 ? 'project' : 'user',
+                    0
                 );
             } catch (BusinessException $e) {
                 if ($ignoreDuplicate && $e->getCode() === MagicFSErrorCode::FILE_ALREADY_EXISTS->value) {
@@ -1953,13 +1957,17 @@ class FileManagementAppService extends AbstractAppService
             Db::beginTransaction();
             try {
                 // 6. Create version snapshot (before replacement)
-                $versionEntity = $this->taskFileVersionDomainService->createFileVersion(
-                    $storageOrganizationCode,
-                    $fileEntity,
-                    $isCrossTypeReplace ? 2 : 1  // Cross-type replace uses special marker
-                );
+                $versionEntity = null;
+                $canCreateVersion = $this->taskFileVersionDomainService->canCreateVersion($fileEntity);
+                if ($canCreateVersion) {
+                    $versionEntity = $this->taskFileVersionDomainService->createFileVersion(
+                        $storageOrganizationCode,
+                        $fileEntity,
+                        $isCrossTypeReplace ? 2 : 1  // Cross-type replace uses special marker
+                    );
+                }
 
-                if (empty($versionEntity)) {
+                if ($canCreateVersion && empty($versionEntity)) {
                     $this->logger->warning('Failed to create version snapshot before replace', [
                         'file_id' => $fileId,
                     ]);
@@ -2888,7 +2896,7 @@ class FileManagementAppService extends AbstractAppService
                             operatorUserId: $authorization->getId(),
                             operatorOrganizationCode: $organizationCode,
                             taskFileEntity: $taskFileEntity,
-                            storageTypeOverride: StorageType::WORKSPACE->value,
+                            storageTypeOverride: FileSpaceType::resolveStorageType($taskFileEntity->getSpaceType())->value,
                         ),
                     );
                     $relativePath = $this->buildRelativeFilePathForEntity($savedEntity, 0);

@@ -83,7 +83,7 @@ from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
-from app.tools.core.app_tool_validator import AppToolValidator, app_tool_validator
+from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
 from app.utils.file_utils import (
@@ -93,6 +93,7 @@ from app.utils.file_utils import (
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
+from app.core.prompt.personal_preferences_prompt import apply_personal_preferences
 from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
 from app.core.models.agent_runtime import AgentProviderType
@@ -286,13 +287,9 @@ class Agent(BaseAgent):
         )
 
         # 设置工具验证器，用于过滤无效工具
-        self._tool_validator = (
-            AppToolValidator(
-                ignore_invalid_declarations=True,
-                agent_name=self.agent_name,
-            )
-            if is_user_agent
-            else app_tool_validator
+        self._tool_validator = AppToolValidator(
+            ignore_invalid_declarations=True,
+            agent_name=self.agent_name,
         )
 
         # 存储加载的 skills 列表（必须在 _initialize_agent 之前初始化）
@@ -529,6 +526,11 @@ class Agent(BaseAgent):
         # 在完整 system prompt 末尾统一注入安全规则；大陆环境额外追加内容合规规则
         self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
             is_mainland=Environment.is_mainland(),
+        )
+        self.system_prompt = apply_personal_preferences(
+            self.system_prompt,
+            personal_preferences=self.agent_context.get_personal_preferences(),
+            is_magiclaw=self.agent_context.is_magiclaw(),
         )
 
     def _mount_runtime_tools(self, agent_define: AgentDefine) -> None:

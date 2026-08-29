@@ -33,6 +33,8 @@ import { ModelEmptyState } from "./components/ModelEmptyState"
 import { ModelSwitchTriggerContent } from "./components/ModelSwitchTriggerContent"
 import { ModelTabSwitcher } from "./components/ModelTabSwitcher"
 import { resolveShowSelectedModelName } from "./utils"
+import { useOptionalAddModelStore } from "./components/AddModel/context"
+import { MODEL_TYPE_IMAGE, MODEL_TYPE_VIDEO } from "@/apis/modules/org-ai-model-provider"
 
 export const ModelSwitch = observer(function ModelSwitch({
 	size = "default",
@@ -68,6 +70,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 	const openAddMenuTimerRef = useRef<number | null>(null)
 	// 将 t 保持在当前组件作用域内，便于 i18n Ally 正确识别默认命名空间 super。
 	const { t } = useTranslation("super")
+	const addModelStore = useOptionalAddModelStore()
 
 	const {
 		isOpen,
@@ -100,26 +103,42 @@ export const ModelSwitch = observer(function ModelSwitch({
 	const iconSize = ICON_SIZE_MAP[size]
 	const chevronSize = CHEVRON_SIZE_MAP[size]
 
-	// Check if image_models list is empty
-	const hasImageModels =
+	const hasOfficialImageModels =
 		imageModelList &&
 		imageModelList.length > 0 &&
 		imageModelList.some((item) => (item.image_models ?? []).length > 0)
-	const hasVideoModels =
+	const hasOfficialVideoModels =
 		videoModelList &&
 		videoModelList.length > 0 &&
 		videoModelList.some((item) => (item.video_models ?? []).length > 0)
+	const hasCustomImageModels =
+		addModelStore?.myModels.some((model) => model.model_type === MODEL_TYPE_IMAGE) ?? false
+	const hasCustomVideoModels =
+		addModelStore?.myModels.some((model) => model.model_type === MODEL_TYPE_VIDEO) ?? false
+	const isLoadingCustomModels =
+		(addModelStore?.isLoadingMyModels ?? false) ||
+		(isOpen && addModelStore != null && !addModelStore.hasLoadedMyModels)
+
+	useEffect(() => {
+		if (!isOpen || !addModelStore) return
+		void addModelStore.loadMyModels(false)
+	}, [addModelStore, isOpen])
+
+	const hasAnyImageModels = hasOfficialImageModels || hasCustomImageModels
+	const hasAnyVideoModels = hasOfficialVideoModels || hasCustomVideoModels
 
 	// If activeTab points to an unsupported tab and cannot add models, switch back to "language"
 	const canAddModel = editable && !!onAddModel && canManageModels
 	useEffect(() => {
 		const shouldFallbackToLanguage =
-			(activeTab === "image" && !hasImageModels && !canAddModel) ||
-			(activeTab === "video" && !hasVideoModels)
+			((activeTab === "image" && !hasAnyImageModels) ||
+				(activeTab === "video" && !hasAnyVideoModels)) &&
+			!isLoadingCustomModels &&
+			!canAddModel
 		if (shouldFallbackToLanguage) {
 			setActiveTab("language")
 		}
-	}, [activeTab, hasImageModels, hasVideoModels, canAddModel])
+	}, [activeTab, hasAnyImageModels, hasAnyVideoModels, isLoadingCustomModels, canAddModel])
 
 	useEffect(() => {
 		if (!openAddModelMenuSignal || isMobile || !canAddModel) return
@@ -210,6 +229,17 @@ export const ModelSwitch = observer(function ModelSwitch({
 						<ImageIcon size={16} />
 						{t("messageEditor.addModel.typeImage")}
 					</button>
+					<button
+						className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
+						onClick={() => {
+							void onAddModel("video")
+							setAddMenuOpen(false)
+						}}
+						data-testid="add-model-type-video"
+					>
+						<ClapperboardIcon size={16} />
+						{t("messageEditor.addModel.typeVideo")}
+					</button>
 				</div>
 			)}
 		>
@@ -255,8 +285,8 @@ export const ModelSwitch = observer(function ModelSwitch({
 		</div>
 	)
 
-	const showImageTab = hasImageModels || canAddModel
-	const showVideoTab = hasVideoModels
+	const showImageTab = hasAnyImageModels || canAddModel
+	const showVideoTab = hasAnyVideoModels || canAddModel
 	const showTabSwitcher = showImageTab || showVideoTab
 	const resolvedShowSelectedModelName = resolveShowSelectedModelName({
 		showSelectedModelName,
@@ -274,7 +304,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 	) : null
 
 	const isCurrentTabEmpty =
-		(activeTab === "image" && !hasImageModels) || (activeTab === "video" && !hasVideoModels)
+		((activeTab === "image" && !hasAnyImageModels) ||
+			(activeTab === "video" && !hasAnyVideoModels)) &&
+		!isLoadingCustomModels
 	const currentEmptyState =
 		activeTab === "video"
 			? {

@@ -48,12 +48,17 @@ import type {
 import type {
 	SlidesTemplateCategoryListResponse,
 	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateCodeAvailabilityResponse,
 	SlidesTemplateCountResponse,
 	SlidesTemplateDetail,
+	SaveSlidesTemplatePayload,
+	SlidesTemplateTagListResponse,
 	SlidesTemplateTagGroupItem,
-	SlidesTemplateListResponse,
+	SlidesTemplateTagQueryParams,
+	SlidesTemplateRawListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { normalizeSlidesTemplateResponse } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 
 /** 保存文件内容的响应 */
 export interface SaveFileContentResponse {
@@ -84,6 +89,23 @@ export interface SaveFileContentResponse {
 		duration_ms: number
 	}>
 	completed_at: string
+}
+
+export interface SuperMagicTopicModelExtra {
+	transcription_enabled?: boolean
+	auto_summary_enabled?: boolean
+	model?: Partial<ModelItem>
+}
+
+export interface SuperMagicTopicModelResponse {
+	model?: Partial<ModelItem>
+	image_model?: Partial<ModelItem>
+	video_model?: Partial<ModelItem>
+	extra?: SuperMagicTopicModelExtra
+	/** Compatibility with endpoints that resolve business rejection responses. */
+	success?: boolean
+	code?: string | number
+	message?: string
 }
 
 /** LLM model capabilities */
@@ -549,9 +571,19 @@ export interface ImageGenerationResultsResponse {
 	images: GeneratedImageResultItem[]
 }
 
-/**
- * 发起视频生成请求参数
- */
+/** 视频生成参数；画布合成暂不使用，保留为后续输出配置扩展。 */
+export interface GenerateVideoGeneration {
+	/** 宽高比，如 16:9 */
+	aspect_ratio?: string
+	/** 分辨率，如 1080p */
+	resolution?: string
+	/** 时长（秒） */
+	duration_seconds?: number
+	/** 预留扩展字段 */
+	[key: string]: unknown
+}
+
+/** 发起视频生成请求参数 */
 export interface GenerateVideoRequest {
 	/** 项目 id */
 	project_id?: string
@@ -579,6 +611,22 @@ export interface GenerateVideoRequest {
 	reference_images?: string[]
 	/** 帧 */
 	frames?: Array<{ role: "start" | "end"; uri: string }>
+	/** 生成参数；画布合成当前可省略，保留为后续输出配置扩展 */
+	generation?: GenerateVideoGeneration
+	/** 画布合成输入快照；数组顺序即合并顺序 */
+	composition?: {
+		videos: Array<{ path: string }>
+		audios?: Array<{ path: string }>
+	}
+	/** 当前话题 id（普通视频生成使用） */
+	topic_id?: string
+	/** 扩展配置 */
+	extensions?: {
+		output_file_name?: string
+		[key: string]: unknown
+	}
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**
@@ -611,6 +659,8 @@ export interface GenerateVideoResponse {
 	updated_at: string
 	/** 文件 URL */
 	file_url: string | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 	/** ID */
 	id: string
 }
@@ -646,13 +696,13 @@ export interface VideoGenerationResultResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 类型 */
 	type: unknown
 	/** 状态：pending 待处理，processing 处理中，completed 已完成，failed 失败 */
@@ -664,7 +714,7 @@ export interface VideoGenerationResultResponse {
 	/** 更新时间 */
 	updated_at: string
 	/** 文件 URL */
-	file_url: string
+	file_url: string | null
 	/** 文件 ID */
 	file_id: string
 	/** 海报文件 ID */
@@ -689,6 +739,8 @@ export interface VideoGenerationResultResponse {
 		finished_at?: string | null
 		elapsed_seconds?: number | null
 	} | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**
@@ -791,21 +843,91 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		params: SlidesTemplateQueryParams,
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
-		return fetch.get<SlidesTemplateListResponse>(
-			genRequestUrl("/api/v1/slides-templates", {}, params),
-			{
-				headers: {
-					...(options?.xMagicImageProcess && {
-						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
-					}),
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates", {}, { scope: "official", ...params }),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
 				},
-			},
+			)
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getFavoriteSlidesTemplates(
+		params: Omit<SlidesTemplateQueryParams, "scope">,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates/favorites", {}, params),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
+				},
+			)
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getUsedSlidesTemplates(
+		params: Pick<SlidesTemplateQueryParams, "page" | "page_size">,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates/used", {}, params),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
+				},
+			)
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getSlidesTemplateCodeAvailability(code: string) {
+		return fetch.get<SlidesTemplateCodeAvailabilityResponse>(
+			genRequestUrl("/api/v1/slides-templates/${code}/availability", { code }),
 		)
+	},
+
+	favoriteSlidesTemplate(code: string) {
+		return fetch.post<[]>(genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }))
+	},
+
+	unfavoriteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(
+			genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }),
+		)
+	},
+
+	deleteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(genRequestUrl("/api/v1/slides-templates/${code}", { code }))
 	},
 
 	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
 		return fetch.get<SlidesTemplateCategoryListResponse>(
 			genRequestUrl("/api/v1/slides-template-categories", {}, params),
+		)
+	},
+
+	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams = {}) {
+		return fetch.get<SlidesTemplateTagListResponse>(
+			genRequestUrl("/api/v1/slides-template-tags", {}, params),
 		)
 	},
 
@@ -817,7 +939,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
 		return fetch.get<SlidesTemplateCountResponse>(
-			genRequestUrl("/api/v1/slides-templates/count", {}, params),
+			genRequestUrl("/api/v1/slides-templates/count", {}, { scope: "official", ...params }),
 		)
 	},
 
@@ -832,6 +954,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				},
 			},
 		)
+	},
+
+	saveSlidesTemplate(payload: SaveSlidesTemplatePayload) {
+		return fetch.post<SlidesTemplateDetail>("/api/v1/slides-templates", payload)
 	},
 
 	/**
@@ -2279,18 +2405,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 超级麦吉话题模型配置
 	 */
 	getSuperMagicTopicModel({ topic_id }: { topic_id: string }) {
-		return fetch.get<{
-			model?: Partial<ModelItem>
-			image_model?: Partial<ModelItem>
-			video_model?: Partial<ModelItem>
-			extra?: {
-				transcription_enabled?: boolean
-				auto_summary_enabled?: boolean
-				model?: Partial<ModelItem>
-			}
-		}>(`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`, {
-			enableRequestUnion: true,
-		})
+		return fetch.get<SuperMagicTopicModelResponse>(
+			`/api/v1/contact/users/setting/super-magic/topic-model/${topic_id}`,
+			{
+				enableRequestUnion: true,
+			},
+		)
 	},
 
 	/**
@@ -2310,13 +2430,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		model_id?: string
 		image_model_id?: string
 		video_model_id?: string
-		extra?: {
-			transcription_enabled?: boolean
-			auto_summary_enabled?: boolean
-			model?: Partial<ModelItem>
-		}
+		extra?: SuperMagicTopicModelExtra
 	}) {
-		return fetch.put(
+		return fetch.put<SuperMagicTopicModelResponse>(
 			`/api/v1/contact/users/setting/super-magic/topic-model/${cache_id}`,
 			{
 				...(model_id && {

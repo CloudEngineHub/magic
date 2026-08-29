@@ -61,11 +61,9 @@ return [
         'platform_organization_list' => '组织列表',
         'platform_user_list' => '平台用户列表',
     ],
-    // 顶层错误与校验
     'validate_failed' => '验证失败',
     'business_exception' => '业务异常',
     'access_denied' => '无权限访问',
-    // 组织相关错误（PermissionErrorCode 42***）
     'organization_code_required' => '组织编码必填',
     'organization_name_required' => '组织名称必填',
     'organization_industry_type_required' => '组织行业类型必填',
@@ -163,5 +161,10 @@ return [
         'visibility_config_invalid' => '可见性配置参数错误',
         'only_organization_admin_can_configure_visibility' => '只有组织管理员可以配置可见性',
         'visibility_type_2_requires_users_or_departments' => '部分可见时，必须至少指定一个用户或部门',
+        'user_not_in_organization' => '用户不在当前组织中',
+        'user_not_organization_admin' => '请求处理失败：:userId',
     ],
+    'generic_error' => '权限异常',
+    'invalid_is_display' => '参数无效',
+    'invalid_status' => '参数无效',
 ];

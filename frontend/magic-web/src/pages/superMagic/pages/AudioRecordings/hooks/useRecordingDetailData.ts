@@ -85,11 +85,12 @@ export function useRecordingDetailData(input: UseRecordingDetailDataInput) {
 				list: processed.list,
 				magicProjectConfig,
 				bundleRootPath,
+				preferredAudioFileId: item?.audio_file_id,
 			})
 
 			const [nextTexts, nextAudioUrl] = await Promise.all([
 				loadTextFiles(nextFileMap),
-				loadAudioUrl(nextFileMap.audio),
+				loadAudioUrl(nextFileMap.audio, item?.audio_file_id),
 			])
 			if (controller.signal.aborted || currentProjectId !== activeProjectIdRef.current) return
 
@@ -262,9 +263,10 @@ async function loadTextFiles(fileMap: RecordingDetailFileMap): Promise<Recording
 }
 
 /** Resolves the temporary audio URL. */
-async function loadAudioUrl(file?: AttachmentItem): Promise<string> {
-	if (!file?.file_id) return ""
-	const [urlItem] = await getTemporaryDownloadUrl({ file_ids: [file.file_id] })
+async function loadAudioUrl(file?: AttachmentItem, preferredFileId?: string): Promise<string> {
+	const fileId = preferredFileId || file?.file_id
+	if (!fileId) return ""
+	const [urlItem] = await getTemporaryDownloadUrl({ file_ids: [fileId] })
 	return urlItem?.url ?? ""
 }
 

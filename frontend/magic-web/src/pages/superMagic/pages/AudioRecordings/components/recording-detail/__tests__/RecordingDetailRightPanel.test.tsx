@@ -26,11 +26,22 @@ vi.mock("../RecordingDetailEmptyState", () => ({
 }))
 
 vi.mock("../RecordingMarkdownContent", () => ({
-	RecordingMarkdownContent: () => <div data-testid="markdown-content" />,
+	RecordingMarkdownContent: (props: { attachments?: unknown[]; relativeFilePath?: string }) => (
+		<div
+			data-testid="markdown-content"
+			data-attachment-count={props.attachments?.length ?? 0}
+			data-relative-file-path={props.relativeFilePath ?? ""}
+		/>
+	),
 }))
 
 vi.mock("../RecordingSummaryContent", () => ({
-	RecordingSummaryContent: () => <div data-testid="summary-content" />,
+	RecordingSummaryContent: (props: { attachmentTree?: unknown[] }) => (
+		<div
+			data-testid="summary-content"
+			data-attachment-count={props.attachmentTree?.length ?? 0}
+		/>
+	),
 }))
 
 vi.mock("../resolve-summary-type-label", () => ({
@@ -41,6 +52,7 @@ const baseProps = {
 	fileMap: null,
 	summaryContent: {},
 	attachmentList: [],
+	attachmentTree: [],
 	summaryReady: false,
 	summarizing: false,
 	summaryFailed: false,
@@ -67,5 +79,59 @@ describe("RecordingDetailRightPanel responsive height", () => {
 		expect(panel).toHaveClass("h-full", "min-h-0")
 		expect(panel).not.toHaveClass("min-h-[560px]")
 		expect(screen.getByTestId("summary-tabs")).toBeInTheDocument()
+	})
+
+	it("passes note image lookup context to the markdown renderer", () => {
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				notesContent="![mock](./images/mock.png)"
+				attachmentTree={[
+					{
+						file_id: "mock-file",
+						file_name: "mock.png",
+						relative_file_path: "images/mock.png",
+					},
+				]}
+				notesFilePath="notes/mock.md"
+			/>,
+		)
+
+		const markdown = screen.getByTestId("markdown-content")
+		expect(markdown).toHaveAttribute("data-attachment-count", "1")
+		expect(markdown).toHaveAttribute("data-relative-file-path", "notes/mock.md")
+	})
+
+	it("passes attachment context to markdown summary content", () => {
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: {
+								file_id: "mock-summary-file",
+								file_name: "summary.md",
+								relative_file_path: "summary.md",
+							},
+						},
+					],
+				}}
+				summaryContent={{ summary: "![mock](./images/mock.png)" }}
+				attachmentTree={[
+					{
+						file_id: "mock-image-file",
+						file_name: "mock.png",
+						relative_file_path: "images/mock.png",
+					},
+				]}
+			/>,
+		)
+
+		expect(screen.getByTestId("summary-content")).toHaveAttribute("data-attachment-count", "1")
 	})
 })

@@ -290,9 +290,10 @@ export function RecordingSpeakerChip({
 			onClick={handleClick}
 			data-testid={testId}
 			data-speaker-id={speakerId}
+			title={label}
 		>
 			<span className={cn("recording-speaker-chip-dot", chipStyle.dot)} />
-			{label}
+			<span className="recording-speaker-chip-label">{label}</span>
 		</button>
 	)
 }

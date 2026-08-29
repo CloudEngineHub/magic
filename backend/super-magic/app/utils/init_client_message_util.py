@@ -5,10 +5,9 @@ Provides utilities for reading and accessing initialization configuration data.
 """
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from agentlang.logger import get_logger
-
 from app.core.entity.message.client_message import User
 from app.path_manager import PathManager
 
@@ -375,6 +374,11 @@ class InitClientMessageUtil:
                     f"无法识别的 metadata 类型: {type(metadata)}，跳过 init_client_message 同步"
                 )
                 return
+
+            # 个人偏好是 CHAT 运行时字段，不写入初始化配置文件。
+            chat_metadata.pop("personal_preferences", None)
+            # 兼容尚未迁移的历史 CHAT metadata。
+            chat_metadata.pop("long_term_memory_enabled", None)
 
             init_metadata = init_data.get("metadata")
             if not isinstance(init_metadata, dict):

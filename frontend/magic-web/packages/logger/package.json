@@ -44,8 +44,8 @@
 		"typecheck": "tsc -p ./tsconfig.json --noEmit"
 	},
 	"devDependencies": {
-		"@types/node": "^20.0.0",
 		"@types/lodash-es": "^4.17.12",
+		"@types/node": "^20.0.0",
 		"@typescript-eslint/eslint-plugin": "^6.0.0",
 		"@typescript-eslint/parser": "^6.0.0",
 		"eslint": "^8.0.0",
@@ -58,8 +58,8 @@
 	"peerDependencies": {
 		"@apmplus/web": "^1.0.0",
 		"@arms/rum-browser": "^1.0.0",
-		"lodash-es": "^4.17.21",
-		"@cloudcare/browser-rum": "3.3.6"
+		"@cloudcare/browser-rum": "3.3.6",
+		"lodash-es": "^4.17.21"
 	},
 	"peerDependenciesMeta": {
 		"@apmplus/web": {

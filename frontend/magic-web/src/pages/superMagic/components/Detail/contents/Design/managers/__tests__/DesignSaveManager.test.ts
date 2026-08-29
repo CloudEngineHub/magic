@@ -11,12 +11,21 @@ import type {
 } from "@/components/CanvasDesign/runtime/document/types"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { decompressCanvasData, isCompressedCanvas } from "../../utils/magicProjectCompression"
+import {
+	getElementDetailsSidecarStatus,
+	writeUserElementDetails,
+} from "../../utils/elementDetailsIo"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getFileInfo: vi.fn(),
 		saveFileContent: vi.fn(),
 	},
+}))
+
+vi.mock("../../utils/elementDetailsIo", () => ({
+	getElementDetailsSidecarStatus: vi.fn(),
+	writeUserElementDetails: vi.fn(),
 }))
 
 function createDesignData(
@@ -94,6 +103,27 @@ describe("DesignSaveManager remote checks", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.mocked(SuperMagicApi.saveFileContent).mockResolvedValue({} as never)
+		vi.mocked(getElementDetailsSidecarStatus).mockResolvedValue("missing")
+		vi.mocked(writeUserElementDetails).mockResolvedValue("skipped")
+	})
+
+	it("blocks the main file save when the current sidecar is unsupported", async () => {
+		const data = createDesignData("unsupported")
+		data.version = "3.0.0"
+		const saveManager = createSaveManager(data)
+		vi.spyOn(saveManager, "checkRemoteUpdate").mockResolvedValue({
+			hasUpdate: false,
+			currentVersion: 2,
+			isCheckReliable: true,
+		})
+		vi.mocked(getElementDetailsSidecarStatus).mockResolvedValue("unsupported")
+
+		await expect(saveManager.commitSave()).resolves.toEqual({
+			ok: false,
+			reason: "unsupported-sidecar",
+		})
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+		expect(writeUserElementDetails).not.toHaveBeenCalled()
 	})
 
 	it("stops before writing when the remote version has advanced", async () => {
@@ -195,6 +225,9 @@ describe("DesignSaveManager remote checks", () => {
 		const sourceElement: LayerElement = {
 			id: "source",
 			type: "text",
+			activeContentId: "source-content-1",
+			mainContentId: "source-content-1",
+			contents: [{ contentId: "source-content-1" }],
 			x: 0,
 			y: 0,
 			width: 100,
@@ -203,6 +236,9 @@ describe("DesignSaveManager remote checks", () => {
 		const targetElement: LayerElement = {
 			id: "target",
 			type: "text",
+			activeContentId: "target-content-1",
+			mainContentId: "target-content-1",
+			contents: [{ contentId: "target-content-1" }],
 			x: 200,
 			y: 0,
 			width: 100,

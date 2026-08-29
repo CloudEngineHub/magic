@@ -69,3 +69,21 @@ export const LAYOUT = {
 	/** 内容最小缩放比例，防止内容过小看不清 */
 	MIN_CONTENT_SCALE: 0.3,
 } as const
+
+/**
+ * 将元素内边距限制在统一的屏幕像素范围内。
+ * 返回值为元素局部坐标，调用方仍需结合自身缩放进行定位。
+ */
+export function resolveImageControlCanvasOffset(totalScale: number): number {
+	const baseCanvasOffset = IMAGE_CONFIG.OFFSET
+	if (!Number.isFinite(totalScale) || totalScale <= 0) return baseCanvasOffset
+
+	const screenOffset = baseCanvasOffset * totalScale
+	if (screenOffset > LAYOUT.MAX_SCREEN_OFFSET) {
+		return LAYOUT.MAX_SCREEN_OFFSET / totalScale
+	}
+	if (screenOffset < LAYOUT.MIN_SCREEN_OFFSET) {
+		return LAYOUT.MIN_SCREEN_OFFSET / totalScale
+	}
+	return baseCanvasOffset
+}

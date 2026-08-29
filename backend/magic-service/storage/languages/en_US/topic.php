@@ -11,4 +11,9 @@ return [
     'topic_access_denied' => 'Topic access denied',
     'topic_not_found' => 'Topic not found',
     'topic_not_running' => 'Topic is not in running status',
+    'access_denied' => 'Access denied',
+    'archived' => 'Archived',
+    'delete_failed' => 'Operation failed',
+    'id_required' => 'Value is required',
+    'update_failed' => 'Operation failed',
 ];

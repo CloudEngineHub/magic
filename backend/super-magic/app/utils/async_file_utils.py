@@ -27,6 +27,21 @@ from agentlang.logger import get_logger
 logger = get_logger(__name__)
 
 
+async def async_copy_contents(
+    src: Union[str, Path],
+    dst: Union[str, Path],
+    chunk_size: int = 1024 * 1024,
+) -> None:
+    """以异步分块读写复制文件内容，不处理文件元数据。"""
+    src_path = Path(src)
+    dst_path = Path(dst)
+    await async_mkdir(dst_path.parent, parents=True, exist_ok=True)
+    async with aiofiles.open(src_path, "rb") as source_stream:
+        async with aiofiles.open(dst_path, "wb") as destination_stream:
+            while chunk := await source_stream.read(chunk_size):
+                await destination_stream.write(chunk)
+
+
 async def async_copy2(src: Union[str, Path], dst: Union[str, Path]) -> None:
     """
     异步复制文件，包括内容和元数据

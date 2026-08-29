@@ -91,6 +91,12 @@
 	cursor: pointer;
 }
 
+.tiptapEditor :global(.ProseMirror .canvas-project-file-mention[data-deleted="true"]) {
+	color: rgb(220 38 38);
+	background: rgb(254 226 226);
+	cursor: default;
+}
+
 /* 内置 @ 扩展（imageFileMention） */
 .tiptapEditor :global(.ProseMirror .canvas-image-file-mention) {
 	display: inline;

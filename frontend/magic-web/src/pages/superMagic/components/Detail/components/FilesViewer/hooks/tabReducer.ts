@@ -29,7 +29,12 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 						active: true,
 						active_at: now,
 						title: shouldReplaceFileData ? incomingTab.title : tab.title,
-						fileData: shouldReplaceFileData ? incomingTab.fileData : tab.fileData,
+						fileData: shouldReplaceFileData
+							? incomingTab.fileData
+							: {
+									...tab.fileData,
+									htmlNavigation: incomingTab.fileData.htmlNavigation,
+								},
 						closeable:
 							tab.closeable === false || incomingTab.closeable === false
 								? false

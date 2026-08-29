@@ -29,7 +29,7 @@ import projectFilesStore from "@/stores/projectFiles"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
-import { SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT } from "@/pages/superMagic/components/ConversationInputResize/constants"
+import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { isSelfMediaComposerContext } from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
 
 const ProjectPageInputContainer = lazy(
@@ -78,7 +78,8 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		RetrySendSuperAgentExtra | undefined
+		| RetrySendSuperAgentExtra
+		| undefined
 
 	return {
 		value: retryPayload.content,
@@ -357,16 +358,16 @@ function TopicMessagePanel({
 			size={detailPanelVisible ? "small" : "default"}
 		/>
 	)
-	// Specialized composer controls sit below the editor, so their compact layouts need a larger floor.
-	const inputMinHeight =
-		isSelfMediaComposerContext({
+	// Keep extra-UI capability checks explicit so specialized composers cannot silently use a floor
+	// that is smaller than the controls rendered below their editor.
+	const inputMinHeight = resolveComposerMinInputHeight({
+		isPptMode: topicMode === TopicMode.PPT,
+		isSelfMediaMode: isSelfMediaComposerContext({
 			topicMode,
 			agentCode: selectedTopic?.agent_code ?? undefined,
-		}) ||
-		topicMode === TopicMode.PPT ||
-		topicMode === TopicMode.RecordSummary
-			? SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT
-			: undefined
+		}),
+		isRecordSummaryMode: topicMode === TopicMode.RecordSummary,
+	})
 
 	return (
 		<div
@@ -397,6 +398,7 @@ function TopicMessagePanel({
 					input={inputNode}
 					isConversationPanelCollapsed={isConversationPanelCollapsed}
 					inputMinHeight={inputMinHeight}
+					layoutKey={`${String(topicMode)}:${selectedTopic?.agent_code ?? ""}`}
 				/>
 			)}
 		</div>

@@ -10,6 +10,7 @@ import {
 	MousePointer2,
 	Type,
 	Image as ImageIcon,
+	Mic,
 	Upload,
 } from "lucide-react"
 import { ImageSparkles } from "../primitives/icons/index"
@@ -23,6 +24,7 @@ import { PanTool } from "../../runtime/interaction/tools/PanTool"
 import { MarkerTool } from "../../runtime/interaction/tools/MarkerTool"
 import { TextTool } from "../../runtime/interaction/tools/TextTool"
 import { VideoGeneratorTool } from "../../runtime/interaction/tools/VideoGeneratorTool"
+import { AudioGeneratorTool } from "../../runtime/interaction/tools/AudioGeneratorTool"
 import { ToolTypeEnum, type ToolType } from "../../runtime/document/types"
 import type { ToolOptionItem } from "./types"
 import ToolItemWithPopover from "./ToolItemWithPopover"
@@ -33,17 +35,11 @@ import {
 	getMediaDimensions,
 	isImageFile,
 	isVideoFile,
+	isAudioFile,
 	validateFile,
 } from "../../runtime/shared/ids"
-import {
-	collectObstacleRects,
-	findNextImageVideoPlaceholderPositionNearViewport,
-} from "../../runtime/shared/placement/findNonOverlappingPlacement"
-import {
-	getCanvasCenter,
-	getResolvedMediaPlacementConfig,
-	getViewportCanvasRect,
-} from "../../runtime/shared/placement/elementUtils"
+import { AUDIO_CONFIG } from "../../runtime/elements/audio/AudioElement.config"
+import { resolveNearestFreeMediaPlacement } from "../../runtime/shared/placement/placementEngine"
 
 /**
  * 将 BaseTool 转换为 ToolType
@@ -65,6 +61,9 @@ function toolToToolType(tool: BaseTool | null): ToolType | null {
 	if (tool instanceof VideoGeneratorTool) {
 		return ToolTypeEnum.VideoGenerator
 	}
+	if (tool instanceof AudioGeneratorTool) {
+		return ToolTypeEnum.AudioGenerator
+	}
 	return null
 }
 
@@ -76,6 +75,7 @@ export default function Tools() {
 	const [activeTool, setActiveToolState] = useState<ToolType | null>(null)
 	const imageUploadInputRef = useRef<HTMLInputElement>(null)
 	const videoUploadInputRef = useRef<HTMLInputElement>(null)
+	const audioUploadInputRef = useRef<HTMLInputElement>(null)
 
 	// 监听 Canvas 的工具状态变化
 	useCanvasEvent("tool:change", ({ data }) => {
@@ -101,6 +101,8 @@ export default function Tools() {
 				toolManager.getImageGeneratorTool().createImageAtCenter(imageModelList)
 			} else if (tool === ToolTypeEnum.VideoGenerator) {
 				toolManager.getVideoGeneratorTool().createVideoAtCenter(videoModelList)
+			} else if (tool === ToolTypeEnum.AudioGenerator) {
+				toolManager.getAudioGeneratorTool().createAudioAtCenter()
 			} else if (tool) {
 				toolManager.setActiveToolByType(tool, "ui")
 			} else {
@@ -116,22 +118,10 @@ export default function Tools() {
 		async (file: File) => {
 			if (!canvas) return null
 
-			const obstacles = collectObstacleRects(canvas.elementManager.getAllElements(), (el) => {
-				return (
-					canvas.permissionManager.isVisible(el) && !canvas.permissionManager.isLocked(el)
-				)
-			})
-			const { width, height } = await getMediaDimensions(file)
-			const mediaPlacementConfig = getResolvedMediaPlacementConfig(canvas)
-			const targetPosition = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-				elementWidth: width,
-				elementHeight: height,
-				viewportRect: getViewportCanvasRect(canvas),
-				anchor: getCanvasCenter(canvas),
-				spacing: mediaPlacementConfig.spacing,
-				maxPerRow: mediaPlacementConfig.maxPerRow,
-				maxSearchRings: mediaPlacementConfig.maxSearchRings,
-			})
+			const { width, height } = isAudioFile(file)
+				? { width: AUDIO_CONFIG.DEFAULT_WIDTH, height: AUDIO_CONFIG.DEFAULT_HEIGHT }
+				: await getMediaDimensions(file)
+			const targetPosition = resolveNearestFreeMediaPlacement(canvas, { width, height })
 
 			return {
 				x: targetPosition.x + width / 2,
@@ -142,13 +132,15 @@ export default function Tools() {
 	)
 
 	const handleUploadFiles = useCallback(
-		async (files: File[], type: "image" | "video") => {
+		async (files: File[], type: "image" | "video" | "audio") => {
 			if (!canvas || canvas.readonly || files.length === 0) return
 
 			const validFiles = files.filter((file) => {
 				const validation = validateFile(file)
 				if (!validation.valid) return false
-				return type === "image" ? isImageFile(file) : isVideoFile(file)
+				if (type === "image") return isImageFile(file)
+				if (type === "video") return isVideoFile(file)
+				return isAudioFile(file)
 			})
 			if (validFiles.length === 0) return
 
@@ -178,12 +170,25 @@ export default function Tools() {
 		[handleUploadFiles],
 	)
 
+	const handleAudioUploadChange = useCallback(
+		async (event: ChangeEvent<HTMLInputElement>) => {
+			const files = Array.from(event.target.files || [])
+			event.target.value = ""
+			await handleUploadFiles(files, "audio")
+		},
+		[handleUploadFiles],
+	)
+
 	const openLocalUploadPicker = useCallback(
-		(type: "image" | "video") => {
+		(type: "image" | "video" | "audio") => {
 			if (!canvas || canvas.readonly) return
 
 			const input =
-				type === "image" ? imageUploadInputRef.current : videoUploadInputRef.current
+				type === "image"
+					? imageUploadInputRef.current
+					: type === "video"
+						? videoUploadInputRef.current
+						: audioUploadInputRef.current
 			if (!input) return
 
 			input.value = ""
@@ -255,6 +260,12 @@ export default function Tools() {
 			value: ToolTypeEnum.VideoGenerator,
 		},
 		{
+			label: t("tools.audioGenerator", "音频生成"),
+			icon: Mic,
+			value: ToolTypeEnum.AudioGenerator,
+		},
+		Divider,
+		{
 			label: t("tools.marker", "标记"),
 			icon: MapPinPlusInside,
 			value: ToolTypeEnum.Marker,
@@ -276,6 +287,13 @@ export default function Tools() {
 					icon: Film,
 					onClick: () => {
 						openLocalUploadPicker("video")
+					},
+				},
+				{
+					label: t("tools.uploadAudio", "上传音频"),
+					icon: Mic,
+					onClick: () => {
+						openLocalUploadPicker("audio")
 					},
 				},
 			],
@@ -301,6 +319,14 @@ export default function Tools() {
 				multiple
 				style={{ display: "none" }}
 				onChange={handleVideoUploadChange}
+			/>
+			<input
+				ref={audioUploadInputRef}
+				type="file"
+				accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/x-m4a,audio/m4a,audio/aac,audio/x-aac,.mp3,.wav,.ogg,.m4a,.aac"
+				multiple
+				style={{ display: "none" }}
+				onChange={handleAudioUploadChange}
 			/>
 			{tools.map((item, index) => {
 				if (item === Divider) {

@@ -38,10 +38,10 @@ export function collectMentionItemsFromContent(content?: JSONContent): MentionLi
 	const walk = (node?: JSONContent) => {
 		if (!node) return
 		if (node.type === "mention" && node.attrs) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs as TiptapMentionAttributes,
-			})
+			const attrs = node.attrs as TiptapMentionAttributes
+			if (!attrs.pending) {
+				items.push({ type: "mention", attrs })
+			}
 		} else if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
 			items.push({
 				type: "mention",
@@ -63,10 +63,10 @@ export function collectMentionItemsFromEditor(editor: Editor | null): MentionLis
 	const items: MentionListItem[] = []
 	editor.state.doc.descendants((node) => {
 		if (node.type.name === "mention") {
-			items.push({
-				type: "mention",
-				attrs: node.attrs as TiptapMentionAttributes,
-			})
+			const attrs = node.attrs as TiptapMentionAttributes
+			if (!attrs.pending) {
+				items.push({ type: "mention", attrs })
+			}
 		} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs.fileMention) {
 			items.push({
 				type: "mention",

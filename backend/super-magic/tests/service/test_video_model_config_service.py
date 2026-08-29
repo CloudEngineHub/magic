@@ -104,6 +104,8 @@ def test_build_video_model_info_keeps_selected_model_without_config():
     assert info.strip().endswith("/>")
     assert 'model="kling-v3-omni"' in malformed_info
     assert malformed_info.strip().endswith("/>")
+    assert 'native_mute="false"' in info
+    assert 'mute_fallback="compose"' in info
 
 
 def test_build_video_model_info_handles_invalid_generation_constraint_types():

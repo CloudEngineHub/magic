@@ -210,6 +210,34 @@ describe("recording detail files", () => {
 		expect(result.summaryFiles).toEqual([])
 	})
 
+	it("prefers the project audio file id and supports all imported audio extensions", () => {
+		const preferredAudio = createAttachment({
+			file_id: "preferred-audio",
+			file_name: "uploaded.opus",
+			filename: "uploaded.opus",
+			file_extension: "opus",
+		})
+		const fallbackAudio = createAttachment({
+			file_id: "fallback-audio",
+			file_name: "uploaded.flac",
+			filename: "uploaded.flac",
+			file_extension: "flac",
+		})
+
+		const preferredResult = buildRecordingDetailFileMap({
+			tree: [],
+			list: [preferredAudio, fallbackAudio],
+			preferredAudioFileId: "preferred-audio",
+		})
+		expect(preferredResult.audio?.file_id).toBe("preferred-audio")
+
+		const fallbackResult = buildRecordingDetailFileMap({
+			tree: [],
+			list: [fallbackAudio],
+		})
+		expect(fallbackResult.audio?.file_id).toBe("fallback-audio")
+	})
+
 	it("limits configured lookups to the current audio bundle so sibling bundles cannot steal files", () => {
 		const currentBundleFiles = [
 			createAttachment({

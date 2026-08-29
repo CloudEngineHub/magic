@@ -1,6 +1,10 @@
 import type { TabItem, FileItem } from "../types"
 import type { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
 import { getParentIdFromPath } from "../../../../TopicFilesButton/utils/getParentIdFromPath"
+import {
+	isSlidesTemplateFolder,
+	toSlidesTemplatePreviewItem,
+} from "../../../../TopicFilesButton/utils/slides-template-folder"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 
 function normalizeTabFileId(fileId: unknown): string {
@@ -13,8 +17,59 @@ function getAttachmentFileName(item: FileItem | AttachmentItem): string {
 	return item.display_filename || item.file_name || item.filename || ""
 }
 
+/** 附件树刷新时保留 Tab 内存中的模板预览类型和 HTML 导航状态。 */
+export function mergeAttachmentFileForTab(tab: TabItem, updatedFile: FileItem): FileItem {
+	const displayConfig =
+		tab.fileData.display_config?.type === "slide-template"
+			? tab.fileData.display_config
+			: updatedFile.display_config
+	return {
+		...updatedFile,
+		display_config: displayConfig,
+		htmlNavigation: tab.fileData.htmlNavigation,
+	}
+}
+
 function isSlideProjectFolder(item: FileItem | AttachmentItem | undefined): boolean {
 	return Boolean(item?.is_directory && item?.display_config?.type === "slide")
+}
+
+function isSlideTemplatePreviewFolder(item: FileItem | AttachmentItem | undefined): boolean {
+	return Boolean(item?.is_directory && item?.display_config?.type === "slide-template")
+}
+
+function asAttachmentItem(item: FileItem | AttachmentItem): AttachmentItem {
+	return item as AttachmentItem
+}
+
+/** Map template root (or its template.json) to a slide-template preview tab. */
+function resolveSlidesTemplateTabFile(
+	file: FileItem | AttachmentItem,
+	attachments?: FileItem[] | AttachmentItem[],
+): FileItem | AttachmentItem | null {
+	if (isSlideTemplatePreviewFolder(file)) {
+		return toSlidesTemplatePreviewItem(asAttachmentItem(file)) as FileItem | AttachmentItem
+	}
+
+	if (isSlidesTemplateFolder(asAttachmentItem(file))) {
+		return toSlidesTemplatePreviewItem(asAttachmentItem(file)) as FileItem | AttachmentItem
+	}
+
+	const fileName = getAttachmentFileName(file).toLowerCase()
+	if (fileName !== "template.json" || file.is_directory) return null
+
+	const parentDirectory = findParentDirectory(attachments, file)
+	if (!parentDirectory) return null
+
+	if (
+		isSlideTemplatePreviewFolder(parentDirectory) ||
+		isSlidesTemplateFolder(asAttachmentItem(parentDirectory))
+	) {
+		return toSlidesTemplatePreviewItem(asAttachmentItem(parentDirectory)) as
+			FileItem | AttachmentItem
+	}
+
+	return null
 }
 
 function createFallbackSlideProjectFolder(
@@ -89,13 +144,18 @@ function resolveSlideProjectTabFile(
 	file: FileItem | AttachmentItem,
 	attachments?: FileItem[] | AttachmentItem[],
 ): FileItem | AttachmentItem {
+	const templateTabFile = resolveSlidesTemplateTabFile(file, attachments)
+	if (templateTabFile) return templateTabFile
+
 	if (isSlideProjectFolder(file)) return file
 
 	const fileName = getAttachmentFileName(file).toLowerCase()
 	if (fileName !== "index.html") return file
 
 	const parentDirectory = findParentDirectory(attachments, file)
-	if (isSlideProjectFolder(parentDirectory)) return parentDirectory
+	if (parentDirectory !== undefined && isSlideProjectFolder(parentDirectory)) {
+		return parentDirectory
+	}
 
 	return createFallbackSlideProjectFolder(file) || file
 }
@@ -110,9 +170,13 @@ export function normalizeSlideProjectTabItem(
 
 	const currentTabId = normalizeTabFileId(tab.id)
 	const currentFileId = normalizeTabFileId(tab.fileData.file_id)
-	if (stableFileId === currentTabId && stableFileId === currentFileId) return tab
-
 	const displayConfig = tabFile.display_config || tab.display_config
+	const sameIds = stableFileId === currentTabId && stableFileId === currentFileId
+	const sameDisplayConfigType =
+		tab.fileData.display_config?.type === displayConfig?.type &&
+		tab.display_config?.type === displayConfig?.type
+	if (sameIds && sameDisplayConfigType) return tab
+
 	return {
 		...tab,
 		id: stableFileId,
@@ -287,8 +351,9 @@ export function convertFileToTabItem(
 		return null
 	}
 
-	const resolvedToSlideFolder = tabFile !== file && isSlideProjectFolder(tabFile)
-	const fileDisplayConfig = resolvedToSlideFolder
+	const resolvedToContentFolder =
+		tabFile !== file && (isSlideProjectFolder(tabFile) || isSlideTemplatePreviewFolder(tabFile))
+	const fileDisplayConfig = resolvedToContentFolder
 		? tabFile.display_config
 		: options?.display_config || tabFile.display_config
 	const tabTitle = getFileTabTitle(tabFile, attachments, fileDisplayConfig)

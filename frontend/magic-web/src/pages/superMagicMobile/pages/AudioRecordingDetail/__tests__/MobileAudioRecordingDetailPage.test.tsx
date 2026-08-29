@@ -633,7 +633,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(sourcePanelPropsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				availableSpeakerIds: ["Speaker-1"],
-				scrollPaddingBottom: expect.any(Number),
+				scrollPaddingBottom: expect.any(String),
 				selectedSpeakerIds: ["Speaker-1"],
 				transcriptContent: "Transcript mock",
 				notesContent: "Notes mock",
@@ -674,7 +674,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(summaryPanelPropsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				attachmentList: expect.any(Array),
-				scrollPaddingBottom: expect.any(Number),
+				scrollPaddingBottom: expect.any(String),
 				summaryFiles: [
 					expect.objectContaining({
 						type: "summary",
@@ -838,7 +838,10 @@ describe("MobileAudioRecordingDetailPage", () => {
 
 		fireEvent.click(screen.getByText("Summary"))
 		const latestSummaryPanelProps = summaryPanelPropsMock.mock.calls.at(-1)?.[0] as
-			{ onTimeClick?: (start: number, end?: number) => void } | undefined
+			| {
+					onTimeClick?: (start: number, end?: number) => void
+			  }
+			| undefined
 
 		act(() => {
 			latestSummaryPanelProps?.onTimeClick?.(12, 24)

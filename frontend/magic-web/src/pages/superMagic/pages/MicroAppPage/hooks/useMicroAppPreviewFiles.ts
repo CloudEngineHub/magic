@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import type { HtmlNavigationRequest } from "@/pages/superMagic/components/Detail/contents/HTML/utils/html-navigation"
 import {
 	collectHtmlFiles,
 	getAttachmentId,
@@ -32,12 +33,20 @@ export function useMicroAppPreviewFiles({
 		if (nextFile) setPreviewEntryFile(nextFile)
 	})
 	const handlePreviewOpenFile = useMemoizedFn((fileItem?: unknown) => {
-		const nextFile = fileItem as AttachmentItem | null | undefined
+		const nextFile = fileItem as
+			(AttachmentItem & { htmlNavigation?: HtmlNavigationRequest }) | null | undefined
 		if (!nextFile) return
 
 		const nextFileId = getAttachmentId(nextFile)
 		const matchedFile = previewHtmlFiles.find((item) => getAttachmentId(item) === nextFileId)
-		setPreviewEntryFile(matchedFile || nextFile)
+		setPreviewEntryFile(
+			matchedFile
+				? {
+						...matchedFile,
+						htmlNavigation: nextFile.htmlNavigation,
+					}
+				: nextFile,
+		)
 	})
 
 	useEffect(() => {

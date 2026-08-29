@@ -73,6 +73,8 @@ export interface CrossProjectFileOperationModalProps {
 	workspaces: Workspace[]
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
+	/** Whether the source page is still streaming the current project's attachment tree. */
+	sourceAttachmentsLoading?: boolean
 	initialPath?: AttachmentItem[]
 	includeFixedWorkspaces?: boolean
 	closeOnSubmit?: boolean

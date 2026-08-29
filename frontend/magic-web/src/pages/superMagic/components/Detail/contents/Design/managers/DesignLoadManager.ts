@@ -1,18 +1,30 @@
 import {
 	findMagicProjectJsFile,
-	parseMagicProjectJsContentWithDiagnostics,
 	resolveDesignDirectoryNameFromAttachments,
 	resolveDesignProjectBasePathFromAttachments,
-	normalizeDesignDataPathsAfterLoad,
 	resolveActualDesignCurrentFile,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { SuperMagicApi } from "@/apis"
-import { logger as Logger } from "@/utils/log"
-import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
-import type { DesignProjectStateBag, DesignProjectManagerOptions } from "./types"
+import type {
+	DesignProjectStateBag,
+	DesignProjectManagerOptions,
+	PendingDesignUpgrade,
+} from "./types"
+import {
+	DesignLoadError,
+	loadDesignDataToRuntime,
+	type DesignLoadIssue,
+	type DesignSidecarStatus,
+} from "../utils/designDataLoader"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 
-const logger = Logger.createLogger("canvas-design-load")
+export interface DesignLoadResult {
+	didLoad: boolean
+	pendingUpgrade: PendingDesignUpgrade | null
+	issue?: DesignLoadIssue
+	sidecarStatus: DesignSidecarStatus
+}
 
 interface DesignLoadRequest {
 	identityKey: string
@@ -22,16 +34,16 @@ interface DesignLoadRequest {
 
 interface PendingDesignLoad {
 	identityKey: string
-	promise: Promise<boolean>
+	promise: Promise<DesignLoadResult>
 }
 
 export class DesignLoadManager {
 	private stateBag: DesignProjectStateBag
 	private options: DesignProjectManagerOptions
-
 	private pendingLoad: PendingDesignLoad | null = null
 	private lastLoadedIdentityKey: string | null = null
 	private currentProjectId: string | null = null
+	private lastLoadResult: DesignLoadResult | undefined
 
 	constructor(stateBag: DesignProjectStateBag, options: DesignProjectManagerOptions) {
 		this.stateBag = stateBag
@@ -46,12 +58,25 @@ export class DesignLoadManager {
 		}
 	}
 
+	getCurrentLoadIdentity(): string | null {
+		return this.createLoadRequest()?.identityKey ?? null
+	}
+
+	isCurrentLoadIdentity(identityKey: string | null): boolean {
+		return !!identityKey && this.getCurrentLoadIdentity() === identityKey
+	}
+
 	async loadFromRemote(): Promise<boolean> {
 		const request = this.createLoadRequest()
-		if (!request) return false
+		if (!request) {
+			this.lastLoadResult = { didLoad: false, pendingUpgrade: null, sidecarStatus: "missing" }
+			return false
+		}
 
 		if (this.pendingLoad?.identityKey === request.identityKey) {
-			return this.pendingLoad.promise
+			const result = await this.pendingLoad.promise
+			this.lastLoadResult = result
+			return result.didLoad
 		}
 
 		const pendingLoad: PendingDesignLoad = {
@@ -60,7 +85,9 @@ export class DesignLoadManager {
 		}
 		this.pendingLoad = pendingLoad
 		try {
-			return await pendingLoad.promise
+			const result = await pendingLoad.promise
+			this.lastLoadResult = result
+			return result.didLoad
 		} finally {
 			if (this.pendingLoad === pendingLoad) {
 				this.pendingLoad = null
@@ -68,12 +95,13 @@ export class DesignLoadManager {
 		}
 	}
 
-	getCurrentLoadIdentity(): string | null {
-		return this.createLoadRequest()?.identityKey ?? null
+	getLastLoadResult(): DesignLoadResult | undefined {
+		return this.lastLoadResult
 	}
 
-	isCurrentLoadIdentity(identityKey: string | null): boolean {
-		return !!identityKey && this.getCurrentLoadIdentity() === identityKey
+	async resetAndReload(): Promise<boolean> {
+		this.lastLoadedIdentityKey = null
+		return this.loadFromRemote()
 	}
 
 	private createLoadRequest(): DesignLoadRequest | null {
@@ -85,14 +113,12 @@ export class DesignLoadManager {
 			projectId,
 			attachmentsReady,
 		} = this.options
-
 		const actualCurrentFile = resolveActualDesignCurrentFile({
 			currentFile,
 			flatAttachments,
 			attachments,
 			projectPath,
 		})
-
 		if (
 			!actualCurrentFile?.id ||
 			!actualCurrentFile.name ||
@@ -110,10 +136,10 @@ export class DesignLoadManager {
 	}
 
 	private isCurrentLoadRequest(request: DesignLoadRequest): boolean {
-		return this.createLoadRequest()?.identityKey === request.identityKey
+		return this.getCurrentLoadIdentity() === request.identityKey
 	}
 
-	private async loadFromRemoteInternal(request: DesignLoadRequest): Promise<boolean> {
+	private async loadFromRemoteInternal(request: DesignLoadRequest): Promise<DesignLoadResult> {
 		const {
 			options: {
 				attachments,
@@ -126,125 +152,128 @@ export class DesignLoadManager {
 				isMobile,
 				attachmentIndex,
 			},
-			currentFile: { id: actualCurrentFileId, name: actualCurrentFileName },
+			currentFile: { id: currentFileId, name: currentFileName },
 		} = request
-
-		if (!attachments) return false
+		if (!attachments) {
+			return { didLoad: false, pendingUpgrade: null, sidecarStatus: "missing" }
+		}
 
 		const currentProjectId = projectId ?? null
 		const hasProjectChanged =
 			this.currentProjectId !== null && this.currentProjectId !== currentProjectId
-
 		if (hasProjectChanged) {
 			this.stateBag.setters.setIsReadOnly(
 				!allowEdit || isPlaybackMode || isShareRoute || isMobile,
 			)
 		}
-
 		this.currentProjectId = currentProjectId
 
-		if (this.lastLoadedIdentityKey === request.identityKey) return true
+		if (this.lastLoadedIdentityKey === request.identityKey) {
+			return { didLoad: true, pendingUpgrade: null, sidecarStatus: "missing" }
+		}
 
-		let didApplyDesignData = false
+		let pendingUpgrade: PendingDesignUpgrade | null = null
+		let sidecarStatus: DesignSidecarStatus = "missing"
+		let loadIssue: DesignLoadIssue | undefined
 		try {
 			this.stateBag.setters.setIsInitialLoading(true)
-
 			const result = await findMagicProjectJsFile({
 				attachments,
-				currentFileId: actualCurrentFileId,
-				currentFileName: actualCurrentFileName,
+				currentFileId,
+				currentFileName,
 			})
 			if (!this.isCurrentLoadRequest(request)) {
-				return false
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
+			}
+			if (!result?.fileId || result.content === undefined || result.content === null) {
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
 
-			if (result?.fileId) {
-				if (!result.content) {
-					throw new Error("magic.project.js content is empty")
-				}
-
-				const parsed = parseMagicProjectJsContentWithDiagnostics(result.content)
-				if (
-					!parsed.data ||
-					(parsed.canvasStatus !== "valid-empty" &&
-						parsed.canvasStatus !== "valid-non-empty")
-				) {
-					throw new Error(`Unsafe magic.project.js canvas status: ${parsed.canvasStatus}`)
-				}
-				const parsedData = parsed.data
-				this.stateBag.setters.setMagicProjectJsFileId(result.fileId)
-				const directoryName = resolveDesignDirectoryNameFromAttachments({
-					currentFile: { id: actualCurrentFileId, name: actualCurrentFileName },
-					flatAttachments,
-					attachments,
-					projectPath,
-				})
-				if (directoryName && parsedData.name !== directoryName) {
-					parsedData.name = directoryName
-				}
-
-				const dslBase = resolveDesignProjectBasePathFromAttachments({
-					currentFile: {
-						id: actualCurrentFileId,
-						name: actualCurrentFileName,
-					},
-					flatAttachments,
-					attachments,
-				})
-				if (dslBase) {
-					normalizeDesignDataPathsAfterLoad(parsedData, dslBase, {
-						flatAttachments,
-						attachmentIndex,
-					})
-				}
-
-				// v2：从 sidecar 回填重字段，让画布与生成编辑器拿到完整数据
-				const elementDetailsProvenance = await hydrateDesignDataDetails(parsedData, {
+			const directoryName = resolveDesignDirectoryNameFromAttachments({
+				currentFile: { id: currentFileId, name: currentFileName },
+				flatAttachments,
+				attachments,
+				projectPath,
+			})
+			const dslBase = resolveDesignProjectBasePathFromAttachments({
+				currentFile: { id: currentFileId, name: currentFileName },
+				flatAttachments,
+				attachments,
+			})
+			const loaded = await loadDesignDataToRuntime({
+				content: result.content,
+				nameOverride: directoryName,
+				elementDetailsContext: {
 					attachments,
 					flatAttachments,
 					mainFileId: result.fileId,
 					projectId: projectId ?? undefined,
-				})
-				if (!this.isCurrentLoadRequest(request)) {
-					return false
-				}
+				},
+				pathContext: {
+					projectBasePath: dslBase,
+					flatAttachments,
+					attachmentIndex,
+				},
+				fileId: result.fileId,
+			})
+			if (!this.isCurrentLoadRequest(request)) {
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
+			}
 
-				this.stateBag.setters.setElementDetailsProvenance?.(elementDetailsProvenance)
-				this.stateBag.setters.setDesignData(parsedData)
-				this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedData))
-				didApplyDesignData = true
-				this.lastLoadedIdentityKey = request.identityKey
-
-				if (!isShareRoute && didApplyDesignData) {
-					try {
-						const fileInfo = await SuperMagicApi.getFileInfo({
-							file_id: result.fileId,
-						})
-						if (this.isCurrentLoadRequest(request) && fileInfo?.version !== undefined) {
-							this.stateBag.setMagicProjectJsVersion(fileInfo.version)
-						}
-					} catch {
-						// ignore
-					}
+			const parsedData = loaded.data
+			sidecarStatus = loaded.sidecarStatus
+			loadIssue = loaded.issue
+			if (loaded.needsPersist && sidecarStatus !== "unsupported") {
+				pendingUpgrade = {
+					reason: "legacy-dsl",
+					createdAt: Date.now(),
+					fileId: result.fileId,
+					sourceVersion: loaded.sourceVersion,
+					targetVersion: MAGIC_PROJECT_VERSION_V3,
 				}
 			}
-		} catch (error) {
-			logger.error({
-				eventKey: "canvas_design_remote_load_failed",
-				errorKind: "load",
-				error,
-				message: "Failed to load canvas design data from remote",
-				context: {
-					projectId: projectId ?? null,
-					currentFileId: actualCurrentFileId ?? null,
-				},
-			})
-		}
-		return didApplyDesignData
-	}
+			this.stateBag.setters.setMagicProjectJsFileId(result.fileId)
+			this.stateBag.setters.setSidecarStatus?.(sidecarStatus)
+			this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
+			this.stateBag.setters.setElementDetailsProvenance?.(
+				loaded.elementDetailsProvenance ?? {},
+			)
+			this.stateBag.setters.setDesignData(parsedData)
+			this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedData))
+			this.lastLoadedIdentityKey = request.identityKey
+			this.stateBag.setters.setIsReadOnly(
+				sidecarStatus === "unsupported" ||
+					!allowEdit ||
+					isPlaybackMode ||
+					isShareRoute ||
+					isMobile,
+			)
 
-	async resetAndReload(): Promise<boolean> {
-		this.lastLoadedIdentityKey = null
-		return this.loadFromRemote()
+			if (!isShareRoute) {
+				try {
+					const fileInfo = await SuperMagicApi.getFileInfo({ file_id: result.fileId })
+					if (this.isCurrentLoadRequest(request) && fileInfo?.version !== undefined) {
+						this.stateBag.setMagicProjectJsVersion(fileInfo.version)
+					}
+				} catch {
+					// ignore
+				}
+			}
+
+			return { didLoad: true, pendingUpgrade, issue: loadIssue, sidecarStatus }
+		} catch (error) {
+			loadIssue =
+				error instanceof DesignLoadError
+					? error.issue
+					: {
+							kind: "invalid-envelope",
+							stage: "parse-envelope",
+							message: error instanceof Error ? error.message : String(error),
+						}
+			if (this.isCurrentLoadRequest(request)) {
+				this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
+			}
+			return { didLoad: false, pendingUpgrade: null, issue: loadIssue, sidecarStatus }
+		}
 	}
 }

@@ -16,7 +16,9 @@ class _EventDispatcher:
 
 @pytest.mark.asyncio
 async def test_chat_history_save_and_load_keep_existing_message_format(tmp_path):
-    history = ChatHistory("test-agent", "agent-1", str(tmp_path), _EventDispatcher())
+    history_dir = tmp_path / "chat_history"
+    history = ChatHistory("test-agent", "agent-1", str(history_dir), _EventDispatcher())
+    assert not history_dir.exists()
     history.messages = [
         SystemMessage(content="system", created_at="2026-07-24 00:00:00"),
         UserMessage(content="question", created_at="2026-07-24 00:00:01"),
@@ -34,7 +36,7 @@ async def test_chat_history_save_and_load_keep_existing_message_format(tmp_path)
     assert "duration_ms" not in document[2]
     assert document[2]["duration"] == "1.500s"
 
-    loaded = ChatHistory("test-agent", "agent-1", str(tmp_path), _EventDispatcher())
+    loaded = ChatHistory("test-agent", "agent-1", str(history_dir), _EventDispatcher())
     await loaded.load()
     assert [message.content for message in loaded.messages] == ["system", "question", "answer"]
 

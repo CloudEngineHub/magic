@@ -104,6 +104,15 @@ class SlidesTemplateCategoryEntity extends AbstractEntity
         return $this;
     }
 
+    public function getI18nName(string $language): string
+    {
+        if (! empty($this->nameI18n[$language])) {
+            return (string) $this->nameI18n[$language];
+        }
+
+        return '';
+    }
+
     public function getStatus(): SlidesTemplateCategoryStatus
     {
         return $this->status;

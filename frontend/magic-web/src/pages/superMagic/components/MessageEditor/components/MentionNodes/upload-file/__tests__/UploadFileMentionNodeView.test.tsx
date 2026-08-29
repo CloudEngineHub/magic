@@ -27,6 +27,7 @@ vi.mock("@/hooks/useIsMobile", () => ({
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/stores", () => ({
@@ -84,7 +85,8 @@ describe("UploadFileMentionNodeView", () => {
 			"!overflow-visible",
 			"!bg-transparent",
 			"!p-0",
-			"align-middle",
+			"!align-middle",
+			"!-top-px",
 		)
 		expect(visual).toHaveClass(
 			"h-[18px]",

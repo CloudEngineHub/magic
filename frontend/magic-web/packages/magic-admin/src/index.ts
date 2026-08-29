@@ -13,7 +13,11 @@ export * from "@admin/const/common"
 export { AiModel } from "@admin/const/aiModel"
 
 // 5. 导出鉴权中间件
-export { withAuthMiddleware } from "@admin/layouts/BaseLayout/components/AuthMiddleware"
+export {
+	withAuthMiddleware,
+	type AuthMiddlewareInjectedProps,
+} from "@admin/layouts/BaseLayout/components/AuthMiddleware"
+export { useAdminEntryRedirect } from "@admin/layouts/BaseLayout/hooks/useAdminEntryRedirect"
 
 export { findRouteByPathname, checkItemPermission } from "@admin/utils/routeUtils"
 export {

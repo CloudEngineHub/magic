@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
+import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useRecordingDetailData } from "../useRecordingDetailData"
 
 const queryProjectsMock = vi.hoisted(() => vi.fn())
@@ -37,6 +38,7 @@ describe("useRecordingDetailData", () => {
 			],
 		}))
 		vi.mocked(loadProjectAttachments).mockReset()
+		vi.mocked(getTemporaryDownloadUrl).mockReset()
 	})
 
 	it("aborts the stale attachment request when the route project changes", async () => {
@@ -76,5 +78,43 @@ describe("useRecordingDetailData", () => {
 
 		unmount()
 		expect(signals.get("project-two")?.aborted).toBe(true)
+	})
+
+	it("uses the project audio_file_id when no generated summary bundle exists", async () => {
+		queryProjectsMock.mockResolvedValueOnce({
+			list: [
+				{
+					id: "project-imported",
+					project_name: "Imported recording",
+					created_at: 1710000000,
+					card_status: "not_summarized",
+					current_phase: "merging",
+					phase_status: "completed",
+					audio_source: "imported",
+					audio_file_id: "audio-file-imported",
+				},
+			],
+		})
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [],
+			list: [],
+			total: 0,
+			sourceVersion: "v1",
+			strategy: "count_v1",
+			diagnostics: {},
+		})
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
+			{ file_id: "audio-file-imported", url: "https://example.invalid/audio" },
+		])
+
+		const { result } = renderHook(() =>
+			useRecordingDetailData({ projectId: "project-imported" }),
+		)
+
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["audio-file-imported"],
+		})
+		expect(result.current.audioUrl).toBe("https://example.invalid/audio")
 	})
 })

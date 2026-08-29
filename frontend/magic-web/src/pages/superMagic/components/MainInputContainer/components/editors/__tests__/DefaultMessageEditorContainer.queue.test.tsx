@@ -198,6 +198,7 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 			selectedVideoModel: undefined,
 			topicMode: TopicMode.MicroApp,
 			agentCode: null,
+			dynamicParams: undefined,
 		})
 	})
 

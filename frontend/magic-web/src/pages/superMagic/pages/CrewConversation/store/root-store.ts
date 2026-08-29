@@ -18,7 +18,12 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 export type CrewConversationStatus =
-	"idle" | "loading" | "ready" | "invalid" | "unavailable" | "error"
+	| "idle"
+	| "loading"
+	| "ready"
+	| "invalid"
+	| "unavailable"
+	| "error"
 
 export interface CrewConversationBootstrapOptions {
 	autoHire?: boolean

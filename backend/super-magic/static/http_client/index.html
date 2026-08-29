@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=debug-file-edit-20260806-2">
+    <link rel="stylesheet" href="css/styles.css?v=iteration-IT20260824035-merge-20260825-1">
+    <link rel="stylesheet" href="css/model_picker.css?v=unified-model-picker-6">
 </head>
 
 <body>
@@ -27,6 +28,16 @@
                 <div class="form-group">
                     <label for="authToken">鉴权 Token:</label>
                     <input type="text" id="authToken" placeholder="User-Authorization，留空则取上传配置中的 authorization">
+                </div>
+                <div class="debug-preference-row">
+                    <div class="debug-preference-copy">
+                        <label for="longTermMemoryToggle">长期记忆</label>
+                        <small>控制通用长期记忆的自动读取和自动提取</small>
+                    </div>
+                    <label class="toggle-switch" title="长期记忆开关">
+                        <input type="checkbox" id="longTermMemoryToggle" checked>
+                        <span class="toggle-switch-slider"></span>
+                    </label>
                 </div>
                 <div class="connection-buttons">
                     <button id="subscribeBtn" class="btn secondary">建立消息订阅</button>
@@ -144,6 +155,11 @@
                 <div class="file-preview-tabbar">
                     <div id="filePreviewTabs" class="file-preview-tabs" role="tablist" aria-label="文件预览"></div>
                     <div class="file-preview-actions">
+                        <div id="filePreviewMarkdownMode" class="file-preview-mode-switch" role="group"
+                            aria-label="Markdown 显示模式" style="display:none">
+                            <button type="button" class="file-preview-mode-btn active" data-markdown-mode="rendered">渲染</button>
+                            <button type="button" class="file-preview-mode-btn" data-markdown-mode="source">原文</button>
+                        </div>
                         <button id="filePreviewEditBtn" class="file-preview-action-btn" title="编辑文本文件"
                             style="display:none">编辑</button>
                         <button id="filePreviewSaveBtn" class="file-preview-action-btn file-preview-save-btn"
@@ -152,6 +168,8 @@
                             style="display:none">取消</button>
                         <button id="filePreviewRenderBtn" class="file-preview-action-btn" title="渲染 HTML 预览"
                             style="display:none">渲染预览</button>
+                        <button id="filePreviewCanvasDataToggleBtn" class="file-preview-action-btn"
+                            title="切换画布数据展示方式" style="display:none">显示原始压缩数据</button>
                         <button id="filePreviewOpenBtn" class="file-preview-action-btn" title="在新窗口打开">新窗口打开</button>
                         <button id="filePreviewClose" class="file-preview-close" title="关闭当前预览">✕</button>
                     </div>
@@ -201,6 +219,8 @@
                                 <option value="summary-chat">summary-chat — 音频纪要聊天</option>
                                 <option value="summary-video">summary-video — 视频分析</option>
                                 <option value="design">design — 画布设计</option>
+                                <option value="canvas">canvas — Canvas 管理</option>
+                                <option value="video-production">video-production — 视频制作</option>
                                 <option value="test">test — 工具测试</option>
                                 <option value="skill">skill — Skill 模式</option>
                                 <option value="crew-creator">crew-creator — Crew 管理</option>
@@ -397,7 +417,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
-    <script src="js/client.js?v=debug-file-edit-20260806-3"></script>
+    <script src="js/model_picker.js?v=unified-model-picker-4"></script>
+    <script src="js/client.js?v=iteration-IT20260824035-merge-20260825-1"></script>
 </body>
 
 </html>

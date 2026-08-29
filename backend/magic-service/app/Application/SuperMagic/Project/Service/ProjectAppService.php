@@ -37,6 +37,7 @@ use App\Domain\SuperMagic\Common\RecycleBin\Service\RecycleBinDomainService;
 use App\Domain\SuperMagic\Common\Share\Constant\ResourceType;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
@@ -1667,8 +1668,8 @@ class ProjectAppService extends AbstractAppService
             ];
         }
 
-        // Only return workspace-type files; filter at DB level to avoid loading snapshot/other files
-        $fileTree = $this->magicFSFileDomainService->getFileTree($parentId, -1, 0, StorageType::WORKSPACE->value);
+        // Only return project-space files; filter at DB level to avoid loading snapshot/other files
+        $fileTree = $this->magicFSFileDomainService->getFileTree($parentId, -1, 0, FileSpaceType::PROJECT->value);
         /** @var TaskFileEntity[] $entities */
         $entities = $fileTree['children'] ?? [];
         $fileTypes = $requestDTO->getFileType();
@@ -1701,7 +1702,7 @@ class ProjectAppService extends AbstractAppService
             $dto->isHidden = $entity->getIsHidden();
             $dto->updatedAt = $entity->getUpdatedAt();
             $dto->topicId = (string) $entity->getTopicId();
-            $dto->relativeFilePath = $relativePathMap[$entity->getFileId()] ?? WorkDirectoryUtil::getRelativeFilePath($fileKey, $workDir);
+            $dto->relativeFilePath = $relativePathMap[$entity->getFileId()] ?? '';
             $dto->isDirectory = $entity->getIsDirectory();
             $dto->displayConfig = FileMetadataUtil::decodeJsonObject($entity->getDisplayConfig());
             $dto->metadata = $dto->displayConfig;
@@ -2481,7 +2482,12 @@ class ProjectAppService extends AbstractAppService
         $this->audioProjectDomainService->deleteAudioProjectByProjectId($projectId);
 
         // Delete core project
-        $this->projectDomainService->deleteProject($projectId, $project->getUserId());
+        if ($this->projectDomainService->deleteProject($projectId, $project->getUserId())) {
+            $this->eventDispatcher->dispatch(new ProjectDeletedEvent(
+                $project,
+                $requestContext->getUserAuthorization()
+            ));
+        }
     }
 
     /**
@@ -3115,6 +3121,13 @@ class ProjectAppService extends AbstractAppService
             hiddenType: null,
             dynamicParams: $dynamicParams,
             agentCode: $agentCode,
+        );
+        $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+            $projectEntity->getId(),
+            $topicEntity->getId(),
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $projectEntity->getUserOrganizationCode()
         );
         $this->logger->info(sprintf('创建默认话题成功, topicId=%s', $topicEntity->getId()));
 

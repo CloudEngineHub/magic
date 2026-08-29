@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useTranslation } from "react-i18next"
 
 const { Text } = Typography
 
@@ -49,6 +50,7 @@ export default function AttachmentList({
 	topicId?: string
 	setUserSelectDetail?: (detail: any) => void
 }) {
+	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
 	const { pathname } = useLocation()
 	const isMobile = useIsMobile()
@@ -151,7 +153,7 @@ export default function AttachmentList({
 			const emptyData = {
 				type: "empty",
 				data: {
-					text: "暂不支持预览该文件,请下载该文件",
+					text: t("attachmentList.previewUnsupported"),
 				},
 			}
 			setUserSelectDetail?.(emptyData)
@@ -342,14 +344,14 @@ export default function AttachmentList({
 							className={styles.iconButton}
 						/>
 					</div>
-					<span>项目文件</span>
+					<span>{t("attachmentList.projectFiles")}</span>
 				</div>
 			</div>
 			{!isFileListCollapsed && (
 				<div className={styles.content}>
 					<div className={styles.searchContainer}>
 						<Input
-							placeholder="搜索文件"
+							placeholder={t("attachmentList.searchFiles")}
 							value={fileSearchText}
 							onChange={(e) => setFileSearchText(e.target.value)}
 							className={styles.searchInput}
@@ -373,7 +375,7 @@ export default function AttachmentList({
 								className={styles.emptyTextIcon}
 								data-testid="attachment-list-image-2"
 							/>
-							未找到相关文件
+							{t("attachmentList.noMatch")}
 						</div>
 					)}
 					{attachments?.length === 0 && (
@@ -384,7 +386,7 @@ export default function AttachmentList({
 								className={styles.emptyTextIcon}
 								data-testid="attachment-list-image-3"
 							/>
-							暂无相关文件
+							{t("attachmentList.empty")}
 						</div>
 					)}
 					{/* {showDownloadAll && (
@@ -406,7 +408,7 @@ export default function AttachmentList({
 									stroke={1.5}
 									color="rgba(28, 29, 35, 0.8)"
 								/>
-								<span>下载全部文件</span>
+								<span>{t("attachmentList.downloadAll")}</span>
 							</button>
 						</div>
 					)} */}

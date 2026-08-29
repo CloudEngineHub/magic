@@ -250,7 +250,8 @@ function AIPowerDetailPage() {
 		if (useProvidersConfig) {
 			const providerConfig = (form.getFieldValue(["config", "providers"]) ||
 				providerList.find((item) => item.provider === selectedProvider)) as
-				PlatformPackage.ProviderConfig | undefined
+				| PlatformPackage.ProviderConfig
+				| undefined
 
 			if (!providerConfig) return
 

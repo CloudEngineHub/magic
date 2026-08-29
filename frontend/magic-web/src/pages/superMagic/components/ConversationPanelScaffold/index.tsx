@@ -67,6 +67,8 @@ interface ConversationPanelScaffoldProps {
 	revokedEditorContext?: RevokedMessageEditorContext
 	/** Task list + message queue above editor (e.g. Topic message queue) */
 	editorNodes?: SceneEditorNodes
+	/** Optional page-specific offset for the desktop input resize handle. */
+	resizeHandlePositionClassName?: string
 }
 
 interface AnimatedEmptyStateProps {
@@ -121,6 +123,7 @@ function ConversationPanelScaffold({
 	enableRevokedUserMessageReedit,
 	revokedEditorContext,
 	editorNodes,
+	resizeHandlePositionClassName,
 }: ConversationPanelScaffoldProps) {
 	/** 与全局移动端判定一致，用于在窄屏下去掉根容器多余底边距，避免与全屏输入区叠出双份留白 */
 	const isMobile = useIsMobile()
@@ -161,6 +164,7 @@ function ConversationPanelScaffold({
 		availableRef: bodyRef,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
+	const effectiveInputMinHeight = inputHeight.minHeight ?? 200
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,
@@ -458,8 +462,9 @@ function ConversationPanelScaffold({
 					{inputHeight.enabled ? (
 						<ConversationInputResizeHandle
 							value={inputHeight.effectiveHeight}
-							min={200}
+							min={effectiveInputMinHeight}
 							max={inputHeight.maxHeight}
+							positionClassName={resizeHandlePositionClassName}
 							onResizeStart={inputHeight.startPointerResize}
 							onResize={inputHeight.resizeByPointerDelta}
 							onResizeEnd={inputHeight.finishPointerResize}
@@ -485,7 +490,11 @@ function ConversationPanelScaffold({
 								inputHeight.fillHeight && "h-full min-h-0",
 							)}
 						>
-							<div className="flex w-full flex-col gap-2 [&:empty]:hidden">
+							<div
+								className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"
+								data-conversation-input-accessory
+							>
+								{/* Keep task and queue chrome measurable and non-shrinking in fixed-height mode. */}
 								{editorNodes?.taskDataNode}
 								{editorNodes?.messageQueueNode}
 							</div>

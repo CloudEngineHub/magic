@@ -86,7 +86,7 @@ describe("useConversationInputHeight", () => {
 
 		await waitFor(() => expect(result.current.maxHeight).toBe(400))
 		expect(result.current.effectiveHeight).toBe(240)
-		expect(result.current.fillHeight).toBe(false)
+		expect(result.current.fillHeight).toBe(true)
 
 		containerHeight = 500
 		fireEvent.input(container)
@@ -95,8 +95,28 @@ describe("useConversationInputHeight", () => {
 
 		containerHeight = 260
 		fireEvent.input(container)
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
 		await waitFor(() => expect(result.current.effectiveHeight).toBe(260))
-		expect(result.current.fillHeight).toBe(false)
+		expect(result.current.fillHeight).toBe(true)
+	})
+
+	it("fills the panel when automatic height is expanded by the minimum bound", async () => {
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "auto", height: 240 })
+		containerHeight = 150
+
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "synthetic-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+				minHeight: 260,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(260))
+		expect(result.current.fillHeight).toBe(true)
 	})
 
 	it("lets manual Splitter resizing override automatic measurements until restored", async () => {
@@ -132,7 +152,7 @@ describe("useConversationInputHeight", () => {
 		await waitFor(() => expect(result.current.effectiveHeight).toBe(360))
 		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
 			"test-conversation",
-			{ mode: "auto", height: 320 },
+			{ mode: "auto", height: 240 },
 		)
 	})
 
@@ -158,6 +178,105 @@ describe("useConversationInputHeight", () => {
 			"test-conversation",
 			{ mode: "manual", height: 320 },
 		)
+	})
+
+	it("discards the manual height and returns to the initial auto state on double-click", async () => {
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "auto", height: 240 })
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "reset-height-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+				manualMaxRatio: 0.7,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(240))
+		act(() => {
+			result.current.startPointerResize()
+			result.current.resizeByPointerDelta(-260)
+		})
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(500))
+		act(() => result.current.restoreAutoHeight())
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(240))
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"reset-height-conversation",
+			{ mode: "auto", height: 240 },
+		)
+	})
+
+	it("freezes an expanded height when the employee or mode layout changes", async () => {
+		const { result, rerender } = renderHook(
+			({ layoutKey }: { layoutKey: string }) =>
+				useConversationInputHeight({
+					scope: "test-conversation",
+					layoutKey,
+					enabled: true,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+				}),
+			{ initialProps: { layoutKey: "general:employee-a" } },
+		)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(240))
+		containerHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+
+		rerender({ layoutKey: "general:employee-b" })
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+		expect(storeMocks.setChatInputHeightPreference).toHaveBeenLastCalledWith(
+			"test-conversation",
+			{ mode: "manual", height: 400 },
+		)
+
+		containerHeight = 200
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+	})
+
+	it("does not freeze a layout change that happened while the panel was collapsed", async () => {
+		const { result, rerender } = renderHook(
+			({ enabled, layoutKey }: { enabled: boolean; layoutKey: string }) =>
+				useConversationInputHeight({
+					scope: "collapsed-conversation",
+					layoutKey,
+					enabled,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+				}),
+			{ initialProps: { enabled: false, layoutKey: "summary:initial" } },
+		)
+
+		rerender({ enabled: false, layoutKey: "summary:loaded" })
+		rerender({ enabled: true, layoutKey: "summary:loaded" })
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+
+		expect(storeMocks.setChatInputHeightPreference).not.toHaveBeenCalled()
+	})
+
+	it("preserves automatic height when the panel is collapsed and reopened", async () => {
+		const { result, rerender } = renderHook(
+			({ enabled }: { enabled: boolean }) =>
+				useConversationInputHeight({
+					scope: "collapsed-auto-height",
+					enabled,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+				}),
+			{ initialProps: { enabled: true } },
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		containerHeight = 500
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
+
+		rerender({ enabled: false })
+		rerender({ enabled: true })
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(400))
 	})
 
 	it("keeps automatic growth at fifty percent while allowing a larger manual ceiling", async () => {
@@ -189,5 +308,32 @@ describe("useConversationInputHeight", () => {
 		fireEvent.input(container)
 		await waitFor(() => expect(result.current.maxHeight).toBe(260))
 		expect(result.current.effectiveHeight).toBe(260)
+	})
+
+	it("adds task queue chrome to a manual preference without persisting the temporary offset", async () => {
+		storeMocks.getChatInputHeightPreference.mockReturnValue({ mode: "manual", height: 200 })
+		const { result } = renderHook(() =>
+			useConversationInputHeight({
+				scope: "test-conversation",
+				enabled: true,
+				containerRef: { current: container } as RefObject<HTMLDivElement>,
+				availableRef: { current: available } as RefObject<HTMLDivElement>,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(200))
+
+		const accessory = document.createElement("div")
+		accessory.dataset.conversationInputAccessory = "true"
+		accessory.getBoundingClientRect = () => createRect(72)
+		container.appendChild(accessory)
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(272))
+		expect(result.current.minHeight).toBe(272)
+
+		accessory.remove()
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(200))
+
+		expect(storeMocks.setChatInputHeightPreference).not.toHaveBeenCalled()
 	})
 })

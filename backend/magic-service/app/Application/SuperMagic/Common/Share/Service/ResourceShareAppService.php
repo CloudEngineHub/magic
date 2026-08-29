@@ -2274,7 +2274,8 @@ class ResourceShareAppService extends AbstractShareAppService
                     $allEntities = $this->taskFileDomainService->getFilesWithParentsByIds(array_merge([$fileId], $childFileIds), $projectId);
 
                     // 过滤系统目录（如 .magic 及其子文件）
-                    $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
+                    // 暂不过滤系统目录（如 .magic 及其子文件）
+                    // $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
 
                     // Convert all entities to DTO list once to avoid duplicate relative_file_path calculation
                     // Both list and tree share the same pre-computed array elements, ensuring consistency
@@ -2309,15 +2310,8 @@ class ResourceShareAppService extends AbstractShareAppService
             }
 
             // 过滤系统目录（如 .magic 及其子文件）
-            $folderEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($folderEntities, ['.magic']);
-
-            if (empty($folderEntities)) {
-                return [
-                    'list' => [],
-                    'tree' => [],
-                    'total' => 0,
-                ];
-            }
+            // 暂不过滤系统目录（如 .magic 及其子文件）
+            // $folderEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($folderEntities, ['.magic']);
 
             // 转换为TaskFileItemDTO格式
             $list = $this->convertEntitiesToDtoList($folderEntities, $organizationCode);
@@ -2337,7 +2331,7 @@ class ResourceShareAppService extends AbstractShareAppService
                 $taskFileDto->updatedAt = $fileEntity->getUpdatedAt();
                 $taskFileDto->topicId = (string) $fileEntity->getTopicId();
                 $relativePathMap = $this->buildRelativePathsByParentIds([$fileEntity]);
-                $taskFileDto->relativeFilePath = $relativePathMap[$fileEntity->getFileId()] ?? $fileEntity->getFileKey();
+                $taskFileDto->relativeFilePath = $relativePathMap[$fileEntity->getFileId()] ?? '';
                 $taskFileDto->isDirectory = $fileEntity->getIsDirectory();
                 $taskFileDto->displayConfig = FileMetadataUtil::decodeJsonObject($fileEntity->getDisplayConfig());
                 $taskFileDto->metadata = $taskFileDto->displayConfig;
@@ -2367,15 +2361,9 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 普通文件的情况：只返回文件本身
         // 过滤系统目录（如 .magic 及其子文件）
-        $entities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames([$fileEntity], ['.magic']);
-        if (empty($entities)) {
-            return [
-                'list' => [],
-                'tree' => [],
-                'total' => 0,
-            ];
-        }
-
+        $entities = [$fileEntity];
+        // 暂不过滤系统目录（如 .magic 及其子文件）
+        // $entities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames([$fileEntity], ['.magic']);
         // 转换为TaskFileItemDTO格式
         $list = $this->convertEntitiesToDtoList([$fileEntity], $organizationCode);
 
@@ -2434,15 +2422,8 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         // 过滤系统目录（如 .magic 及其子文件）
-        $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
-
-        if (empty($allEntities)) {
-            return [
-                'list' => [],
-                'tree' => [],
-                'total' => 0,
-            ];
-        }
+        // 暂不过滤系统目录（如 .magic 及其子文件）
+        // $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
 
         $fileIdSet = array_flip($originalFileIds);
 
@@ -2524,15 +2505,8 @@ class ResourceShareAppService extends AbstractShareAppService
             $taskFileDto->updatedAt = $entity->getUpdatedAt();
             $taskFileDto->topicId = (string) $entity->getTopicId();
 
-            // 优先使用 parent_id 父链构建相对路径，保证路径层级与文件树一致。
-            $relativePath = $relativePathMap[$entity->getFileId()] ?? '';
-            if ($relativePath === '') {
-                // 兼容兜底：父链缺失时沿用旧逻辑，避免返回空路径。
-                $relativePath = ! empty($workDir)
-                    ? WorkDirectoryUtil::getRelativeFilePath($fileKey, $workDir)
-                    : $fileKey;
-            }
-            $taskFileDto->relativeFilePath = $relativePath;
+            // 展示路径只由 parent_id 链生成；file_key 仅用于对象存储定位。
+            $taskFileDto->relativeFilePath = $relativePathMap[$entity->getFileId()] ?? '';
 
             $taskFileDto->isDirectory = $entity->getIsDirectory();
             $taskFileDto->displayConfig = FileMetadataUtil::decodeJsonObject($entity->getDisplayConfig());
@@ -2646,7 +2620,8 @@ class ResourceShareAppService extends AbstractShareAppService
         $allEntities = RelativeFilePathUtil::filterByValidParentChain($allEntities);
 
         // 过滤系统目录（如 .magic 及其子文件）
-        $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
+        // 暂不过滤系统目录（如 .magic 及其子文件）
+        // $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
 
         // 转换为DTO列表（会自动过滤根目录）
         $allList = $this->convertEntitiesToDtoList($allEntities, $organizationCode, $workDir);
@@ -2729,7 +2704,8 @@ class ResourceShareAppService extends AbstractShareAppService
         $allEntities = RelativeFilePathUtil::filterByValidParentChain($allEntities);
 
         // 过滤系统目录（如 .magic 及其子文件）
-        $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
+        // 暂不过滤系统目录（如 .magic 及其子文件）
+        // $allEntities = $this->taskFileDomainService->filterOutDescendantsByDirectoryNames($allEntities, ['.magic']);
 
         $allList = $this->convertEntitiesToDtoList($allEntities, $organizationCode, $workDir);
         $total = count($allList);
@@ -3102,6 +3078,13 @@ class ResourceShareAppService extends AbstractShareAppService
                 $chatConversationTopicId,
                 '',
                 $workDir
+            );
+            $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+                $forkProjectEntity->getId(),
+                $topicEntity->getId(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode(),
+                $forkProjectEntity->getUserOrganizationCode()
             );
             $this->logger->info(sprintf('创建默认话题成功, topicId=%s', $topicEntity->getId()));
 

@@ -21,6 +21,8 @@ import { MemoryTreeNodeIcon } from "./MemoryTreeNodeIcon"
 import {
 	buildMemoryTreeNodePathIndex,
 	getMemoryTreeNodeName,
+	isCurrentProjectMemoryDirectory,
+	prioritizeCurrentProjectMemoryDirectory,
 	resolveMemoryTreeNodeTagKey,
 } from "./memoryTreeNodeUtils"
 
@@ -107,6 +109,7 @@ function filterMemoryMenuItems(
 
 /** 项目侧用户记忆文件树，复用项目文件的完整交互能力。 */
 export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
+	projectId,
 	selectedProject,
 	selectedWorkspace,
 	activeFileId,
@@ -116,6 +119,10 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 	const { t } = useTranslation("super/longMemory")
 	const identityKey = memoryFilesStore.currentIdentityKey
 	const { attachments, loadError } = memoryFilesStore.getSnapshot()
+	const orderedAttachments = useMemo(
+		() => prioritizeCurrentProjectMemoryDirectory(attachments, projectId),
+		[attachments, projectId],
+	)
 
 	/** 重新加载当前用户的完整记忆文件树。 */
 	const refreshMemoryFiles = useCallback(
@@ -151,8 +158,8 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 	}, [])
 
 	const memoryNodePathIndex = useMemo(
-		() => buildMemoryTreeNodePathIndex(attachments),
-		[attachments],
+		() => buildMemoryTreeNodePathIndex(orderedAttachments),
+		[orderedAttachments],
 	)
 	const memoryProject = useMemo(
 		() => ({
@@ -217,7 +224,10 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 			const pathSegments = memoryNodePathIndex.get(String(item.file_id || "")) || [
 				getMemoryTreeNodeName(item),
 			]
-			const tagKey = isVirtual ? undefined : resolveMemoryTreeNodeTagKey(pathSegments)
+			const isCurrentProject = isCurrentProjectMemoryDirectory(pathSegments, projectId)
+			const tagKey = isVirtual
+				? undefined
+				: resolveMemoryTreeNodeTagKey(pathSegments, projectId)
 
 			return {
 				icon: <MemoryTreeNodeIcon item={item} pathSegments={pathSegments} />,
@@ -229,9 +239,10 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 						{t(`fileTree.tags.${tagKey}`)}
 					</Badge>
 				) : undefined,
+				className: isCurrentProject ? "bg-emerald-500/10" : undefined,
 			}
 		},
-		[memoryNodePathIndex, t],
+		[memoryNodePathIndex, projectId, t],
 	)
 
 	/** 打开记忆文件时补充独立预览策略。 */
@@ -251,7 +262,7 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 		}
 	}, [refreshMemoryFiles, t])
 
-	const memoryRoot = useMemo(() => attachments.find(isMemoryRoot), [attachments])
+	const memoryRoot = useMemo(() => orderedAttachments.find(isMemoryRoot), [orderedAttachments])
 	const hasMemoryRoot = Boolean(memoryRoot)
 
 	/** 判断节点是否为当前文件树的固定记忆根目录。 */
@@ -284,7 +295,7 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 			className="h-full min-h-0"
 			title={t("longMemory")}
 			showTitle={showTitle}
-			attachments={attachments}
+			attachments={orderedAttachments}
 			projectId={MEMORY_PROJECT_ID}
 			selectedProject={memoryProject}
 			activeFileId={activeFileId}

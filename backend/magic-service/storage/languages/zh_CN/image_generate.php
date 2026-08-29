@@ -10,9 +10,9 @@ return [
     'missing_image_data' => '生成图片数据异常',
     'no_valid_image_generated' => '未生成有效图片',
     'input_image_audit_failed' => '您发送的图片不符合相关规定及要求，无法为您生成对应的图片',
-    'output_image_audit_failed' => '输出图片后审核未通过',
+    'output_image_audit_failed' => '输出图片后包含敏感内容，已被拦截',
     'input_text_audit_failed' => '您发送的文本不符合相关规定及要求，无法为您生成对应的图片',
-    'output_text_audit_failed' => '输出文本后审核未通过',
+    'output_text_audit_failed' => '输出文本后包含敏感内容，已被拦截',
     'text_blocked' => '输入文本包含敏感内容，已被拦截',
     'invalid_prompt' => 'Prompt 内容不合法',
     'prompt_check_failed' => 'Prompt 校验失败',
@@ -104,4 +104,10 @@ return [
     ],
     # 水印相关
     'image_watermark' => 'website/static/img/watermark_zh.png',
+    'gcs_bucket_not_configured' => '请求处理失败',
+    'gcs_upload_failed' => '操作失败',
+    'image_convert_high_model_not_configured' => '请求处理失败',
+    'invalid_response_type' => '参数无效',
+    'upload_failed' => '操作失败',
+    'vertex_ai_does_not_support_file_upload' => '请求处理失败',
 ];

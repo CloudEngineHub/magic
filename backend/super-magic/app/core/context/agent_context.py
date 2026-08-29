@@ -24,6 +24,7 @@ from app.core.config.communication_config import STSTokenRefreshConfig
 from app.core.entity.agent_profile import AgentProfile, DEFAULT_AGENT_PROFILE
 from app.core.entity.attachment import Attachment
 from app.core.entity.message.client_message import AgentMode, ChatClientMessage, InitClientMessage, Metadata, User
+from app.core.entity.message.personal_preferences import PersonalPreferences
 from app.core.entity.project_archive import ProjectArchiveInfo
 from agentlang.event.event import Event, EventType, StoppableEvent
 from agentlang.event.common import BaseEventData
@@ -160,8 +161,13 @@ class AgentContext(BaseAgentContext):
             self.set_chat_history_dir(chat_history_dir)
         except Exception as e:
             logger.warning(f"无法获取聊天历史目录: {e}")
-            chat_history_dir = os.path.join(os.getcwd(), ".chat_history")
+            chat_history_dir = os.path.join(os.getcwd(), ".topic", "chat_history")
             self.set_chat_history_dir(chat_history_dir)
+
+        # 迁移兼容状态：由启动阶段的 topic 持久化状态机设置，默认保守地关闭。
+        # 待旧归档迁移和持久卷灰度验证完成后，可移除该状态及其上传门控兼容逻辑。
+        self._chat_history_persisted = False
+        self._topic_persistence_healthy = False
 
         # 设置默认代理名称
         self.set_agent_name("magic")
@@ -216,6 +222,18 @@ class AgentContext(BaseAgentContext):
     def get_subagent_parent_agent_id(self) -> Optional[str]:
         """获取父 Agent ID；主 Agent 返回 None。"""
         return self._subagent_parent_agent_id
+
+    def mark_chat_history_persisted(self) -> None:
+        self._chat_history_persisted = True
+
+    def is_chat_history_persisted(self) -> bool:
+        return self._chat_history_persisted
+
+    def set_topic_persistence_healthy(self, healthy: bool) -> None:
+        self._topic_persistence_healthy = bool(healthy)
+
+    def is_topic_persistence_healthy(self) -> bool:
+        return self._topic_persistence_healthy
 
     def set_agent_id(self, agent_id: str) -> None:
         """设置运行时 agent_id，并同步更新依赖该 ID 的上下文设施。"""
@@ -483,6 +501,18 @@ class AgentContext(BaseAgentContext):
         if isinstance(msg.agent_mode, AgentMode):
             return msg.agent_mode == AgentMode.MAGICLAW
         return str(msg.agent_mode or "").strip() == AgentMode.MAGICLAW.value
+
+    def get_personal_preferences(self) -> PersonalPreferences:
+        """获取当前 CHAT 的个人偏好，缺失或异常时返回默认配置。"""
+        try:
+            chat_message = self.get_chat_client_message()
+        except Exception as error:
+            logger.debug(f"读取当前 CHAT 个人偏好失败，使用默认配置: {error}")
+            return PersonalPreferences()
+
+        if chat_message is None or chat_message.metadata is None:
+            return PersonalPreferences()
+        return chat_message.metadata.personal_preferences
 
     def set_sandbox_id(self, sandbox_id: str) -> None:
         """设置沙盒ID

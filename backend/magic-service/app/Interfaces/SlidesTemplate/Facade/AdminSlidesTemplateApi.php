@@ -39,7 +39,6 @@ class AdminSlidesTemplateApi extends AbstractApi
             $result['page'],
             $result['total'],
             true,
-            false,
             $result['categories']
         )->toArray();
     }
@@ -100,5 +99,11 @@ class AdminSlidesTemplateApi extends AbstractApi
     {
         $this->adminSlidesTemplateAppService->delete($this->getAuthorization(), $id);
         return [];
+    }
+
+    #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::EDIT)]
+    public function reindexVectorIndex(): array
+    {
+        return $this->adminSlidesTemplateAppService->reindexVectorIndex($this->getAuthorization());
     }
 }

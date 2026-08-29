@@ -42,12 +42,13 @@ interface AudioFullscreenOverlayProps {
 	path: string
 	fileName?: string
 	isOpen: boolean
+	autoPlay?: boolean
 	onClose: () => void
 	closeAriaLabel?: string
 }
 
 export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProps) {
-	const { path, fileName, isOpen, onClose, closeAriaLabel } = props
+	const { path, fileName, isOpen, autoPlay = true, onClose, closeAriaLabel } = props
 	const { t } = useCanvasDesignI18n()
 
 	const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -359,7 +360,7 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 									ref={audioRef}
 									style={{ width: "min(420px, 100%)" }}
 									src={src}
-									autoPlay
+									autoPlay={autoPlay}
 									preload="metadata"
 									onLoadedMetadata={syncAudioStateFromDom}
 									onCanPlay={syncAudioStateFromDom}

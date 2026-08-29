@@ -1,3 +1,6 @@
+from pathlib import Path
+from unittest.mock import AsyncMock
+
 import pytest
 from pydantic import ValidationError
 
@@ -5,16 +8,22 @@ from agentlang.context.tool_context import ToolContext
 from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.agent_model_selection import AgentModelSelection
 from app.core.models.media_model import VideoModelSpec
-from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.exceptions import ApiError
+from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
+from app.tools.design.tools.generate_canvas_images import (
+    GenerateCanvasImages,
+    ImageTaskSpec,
+)
 from app.tools.design.tools.generate_canvas_videos import (
     GenerateCanvasVideos,
     GenerateCanvasVideosParams,
     VideoPlaceholderUpdate,
     VideoTaskSpec,
 )
-from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
+from app.tools.media_generator.video_base import VideoGenerationResponse
+from app.tools.video_generation_utils import VideoInputPayloadBuilder
 
 
 class _FakeMagicServiceResponse:
@@ -86,6 +95,47 @@ async def test_magic_service_client_generate_design_video_forwards_user_auth_and
     assert headers["User-Authorization"] == "test-user-token"
     assert headers["organization-code"] == "test-org"
     assert headers["Magic-Task-Id"] == "task-1"
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_queries_design_video_generation_result(monkeypatch):
+    """视频结果查询接口应使用项目 ID 和视频 ID 作为查询参数。"""
+
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.add_magic_and_user_authorization_headers",
+        lambda headers: headers.update({"User-Authorization": "test-user-token"}),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.get_llm_request_headers",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.get_metadata",
+        lambda: {},
+    )
+    client = MagicServiceClient(config=MagicServiceConfig(api_base_url="http://magic-service.test"))
+    client.session = _FakeMagicServiceSession(
+        _FakeMagicServiceResponse(
+            {
+                "code": 1000,
+                "data": {
+                    "project_id": "project-1",
+                    "video_id": "video-1",
+                    "status": "completed",
+                    "file_url": "https://example.test/video.mp4",
+                },
+            }
+        )
+    )
+
+    result = await client.query_video_generation_result("project-1", "video-1")
+
+    assert result["status"] == "completed"
+    request = client.session.requests[0]
+    assert request["method"] == "GET"
+    assert request["url"] == "http://magic-service.test/api/v1/design/video-generation-result"
+    assert request["json"] is None
+    assert request["params"] == {"project_id": "project-1", "video_id": "video-1"}
 
 
 @pytest.mark.asyncio
@@ -305,6 +355,64 @@ async def test_generate_canvas_videos_normalizes_project_relative_reference_path
     assert task.frame_end_path == "demo-project/frames/end.jpg"
 
 
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_materializes_external_reference_media(tmp_path):
+    """项目外的本地视频生成参考媒体应复制到当前项目的类型目录。"""
+    project_dir = tmp_path / "demo-project"
+    external_dir = tmp_path / ".tmp"
+    project_dir.mkdir()
+    external_dir.mkdir()
+    (external_dir / "reference.png").write_bytes(b"image")
+    (external_dir / "reference.mp4").write_bytes(b"video")
+    (external_dir / "reference.mp3").write_bytes(b"audio")
+
+    tool = GenerateCanvasVideos(base_dir=str(tmp_path))
+    task = VideoTaskSpec(
+        prompt="使用 [image1]、[image2]、[video1] 和 [audio1]",
+        name="外部参考媒体",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
+        reference_image_paths=[".tmp/reference.png", "asset://provider-image"],
+        reference_video_paths=[".tmp/reference.mp4"],
+        reference_audio_paths=[".tmp/reference.mp3"],
+    )
+
+    await tool._materialize_reference_media([task], project_dir, tmp_path)
+
+    assert task.reference_image_paths[0].startswith("demo-project/images/reference-")
+    assert task.reference_image_paths[1] == "asset://provider-image"
+    assert task.reference_video_paths[0].startswith("demo-project/videos/reference-")
+    assert task.reference_audio_paths[0].startswith("demo-project/audio/reference-")
+    assert list((project_dir / "images").glob("reference-*"))
+    assert list((project_dir / "videos").glob("reference-*"))
+    assert list((project_dir / "audio").glob("reference-*"))
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_images_materializes_external_reference_images(tmp_path):
+    """项目外的本地生图参考图应复制到当前项目的 images 目录。"""
+    project_dir = tmp_path / "demo-project"
+    external_dir = tmp_path / ".tmp"
+    project_dir.mkdir()
+    external_dir.mkdir()
+    (external_dir / "reference.png").write_bytes(b"image")
+
+    tool = GenerateCanvasImages(base_dir=str(tmp_path))
+    task = ImageTaskSpec(
+        prompt="基于参考图创作",
+        name="外部参考图",
+        size="640x360",
+        reference_images=[".tmp/reference.png", "https://example.test/reference.png"],
+    )
+
+    await tool._materialize_reference_images([task], project_dir, tmp_path)
+
+    assert task.reference_images[0].startswith("demo-project/images/reference-")
+    assert task.reference_images[1] == "https://example.test/reference.png"
+    assert list((project_dir / "images").glob("reference-*"))
+
+
 def test_video_task_spec_requires_video_and_audio_tokens():
     with pytest.raises(ValidationError, match=r"\[video1\].*\[audio1\]"):
         VideoTaskSpec(
@@ -508,6 +616,18 @@ def test_generate_canvas_videos_builds_generation_without_layout_defaults():
     assert generation == {}
 
 
+def test_generate_canvas_videos_translates_audio_policy_for_legacy_design_api():
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="静音视频",
+        audio_policy="mute",
+    )
+
+    generation = GenerateCanvasVideos._build_design_generation(task, model_id="veo-3.1")
+
+    assert generation == {"generate_audio": False}
+
+
 def test_generate_canvas_videos_params_rejects_size():
     with pytest.raises(ValidationError) as exc:
         GenerateCanvasVideosParams(
@@ -561,11 +681,7 @@ async def test_execute_video_task_carries_error_message_to_result(tmp_path):
     tool = GenerateCanvasVideos()
     tool._model_id = "mock-video-model"
 
-    class FakeMagicServiceClient:
-        async def generate_design_video(self, payload):
-            raise ApiError(explicit_error)
-
-    tool._magic_service_client = FakeMagicServiceClient()
+    tool._video_generator.generate = AsyncMock(side_effect=ApiError(explicit_error))
     task = VideoTaskSpec(
         prompt="森林中的小路。",
         name="错误信息测试",
@@ -604,16 +720,11 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
     tool._model_id = "mock-video-model"
     submitted_payloads = []
 
-    class FakeMagicServiceClient:
-        async def generate_design_video(self, payload):
-            submitted_payloads.append(payload)
-            return {
-                "project_id": payload["project_id"],
-                "video_id": payload["video_id"],
-                "status": "running",
-            }
+    async def generate_video(_handler_name, request):
+        submitted_payloads.append(request.payload)
+        return VideoGenerationResponse(status="running", completed=False)
 
-    tool._magic_service_client = FakeMagicServiceClient()
+    tool._video_generator.generate = generate_video
     monkeypatch.setattr(tool, "_generate_design_video_id", lambda: "video-test-1", raising=False)
 
     task = VideoTaskSpec(
@@ -673,6 +784,128 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
     assert result.placeholder_update.generateVideoRequest == payload
 
 
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_schedules_local_result_sync_after_placeholder_update(
+    monkeypatch,
+    tmp_path,
+):
+    """本地模式应在 processing 占位落盘后调度确定 Content 的后台同步。"""
+    scheduled_requests = []
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.is_local_debug_mode_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.LocalVideoResultSyncService.schedule",
+        scheduled_requests.append,
+    )
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="后台托管视频",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
+        set_as_main=True,
+    )
+    placeholder = ElementDetail(
+        id="element-1",
+        type="video",
+        name="后台托管视频",
+        x=0,
+        y=0,
+        width=1280,
+        height=720,
+        content_id="element-1-content-2",
+    )
+    result = TaskExecutionResult(
+        index=0,
+        success=True,
+        placeholder_update=VideoPlaceholderUpdate(status="processing"),
+        metadata={
+            "is_processing": True,
+            "project_id": "project-1",
+            "video_id": "video-1",
+            "relative_output_path": "./videos/result.mp4",
+            "output_path": str(tmp_path / "videos" / "result.mp4"),
+            "width": 1280,
+            "height": 720,
+        },
+    )
+
+    await tool._after_placeholder_updated(
+        result,
+        task,
+        placeholder,
+        ToolContext(),
+        tmp_path,
+    )
+
+    assert len(scheduled_requests) == 1
+    request = scheduled_requests[0]
+    assert request.project_path == tmp_path
+    assert request.project_id == "project-1"
+    assert request.video_id == "video-1"
+    assert request.element_id == "element-1"
+    assert request.content_id == "element-1-content-2"
+    assert request.output_path == Path(tmp_path / "videos" / "result.mp4")
+    assert request.relative_output_path == "./videos/result.mp4"
+    assert request.width == 1280
+    assert request.height == 720
+    assert request.set_as_main is True
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_does_not_schedule_local_sync_outside_local_mode(
+    monkeypatch,
+    tmp_path,
+):
+    """非本地模式只提交远端任务，不启动本地结果同步。"""
+    schedule = AsyncMock()
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.is_local_debug_mode_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.LocalVideoResultSyncService.schedule",
+        schedule,
+    )
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="后台托管视频",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
+    )
+    placeholder = ElementDetail(
+        id="element-1",
+        type="video",
+        name="后台托管视频",
+        x=0,
+        y=0,
+        width=1280,
+        height=720,
+        content_id="element-1-content-1",
+    )
+    result = TaskExecutionResult(
+        index=0,
+        success=True,
+        placeholder_update=VideoPlaceholderUpdate(status="processing"),
+        metadata={"is_processing": True},
+    )
+
+    await tool._after_placeholder_updated(
+        result,
+        task,
+        placeholder,
+        ToolContext(),
+        tmp_path,
+    )
+
+    schedule.assert_not_called()
+
+
 def test_generate_canvas_videos_extra_info_uses_video_names():
     tool = GenerateCanvasVideos()
     extra_info = tool._collect_extra_info(
@@ -686,6 +919,7 @@ def test_generate_canvas_videos_extra_info_uses_video_names():
                 metadata={
                     "is_processing": True,
                     "element_id": "element-1",
+                    "content_id": "content-1",
                     "element_name": "后台托管视频",
                     "video_id": "video-test-1",
                     "pending_status": "running",
@@ -697,6 +931,7 @@ def test_generate_canvas_videos_extra_info_uses_video_names():
     assert extra_info["pending_videos"] == [
         {
             "element_id": "element-1",
+            "content_id": "content-1",
             "element_name": "后台托管视频",
             "video_id": "video-test-1",
             "status": "running",
@@ -774,6 +1009,136 @@ def test_generate_canvas_videos_request_infers_omni_reference_for_references():
         "reference_audios": [],
         "frames": [],
     }
+
+
+def test_generate_canvas_videos_preserves_provider_asset_uri():
+    """供应商素材 URI 应保持原值，不应被拼接为项目文件路径。"""
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像介绍",
+        reference_image_paths=["asset://virtual-human-asset-id"],
+    )
+
+    payload = tool._build_design_video_request(
+        task=task,
+        project_id="123",
+        video_id="video-test-asset",
+        model_id="mock-video-model",
+        file_dir="/virtual-human-product-video/videos/",
+        relative_project_path="virtual-human-product-video",
+    )
+
+    assert payload["inputs"]["reference_images"] == [
+        {"uri": "asset://virtual-human-asset-id"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_video_input_payload_builder_preserves_provider_asset_uri(tmp_path):
+    """启用 Base64 参考图转换时也不能把供应商 URI 当成本地文件。"""
+    builder = VideoInputPayloadBuilder(tmp_path)
+
+    result = await builder.build_image_input("asset://virtual-human-asset-id")
+
+    assert result == {"uri": "asset://virtual-human-asset-id"}
+
+
+@pytest.mark.asyncio
+async def test_build_transport_video_request_keeps_workspace_paths_when_base64_disabled(
+    monkeypatch,
+    tmp_path,
+):
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="小猫从箱子里探头 [image1]",
+        name="小猫探头",
+        reference_image_paths=["images/cat.png"],
+        frame_start_path="images/start.png",
+    )
+    persisted_payload = {
+        "video_id": "video-test-1",
+        "inputs": {
+            "reference_images": [{"uri": "/project/images/cat.png"}],
+            "reference_videos": [],
+            "reference_audios": [],
+            "frames": [{"role": "start", "uri": "/project/images/start.png"}],
+        },
+    }
+
+    monkeypatch.setattr(
+        "app.tools.video_generation_utils.video_input_utils.config.get",
+        lambda key, default=False: default,
+    )
+
+    transport_payload = await tool._build_transport_video_request(
+        persisted_payload,
+        task,
+        workspace_root=tmp_path,
+    )
+
+    assert transport_payload == persisted_payload
+
+
+@pytest.mark.asyncio
+async def test_build_transport_video_request_converts_images_to_base64_when_enabled(
+    monkeypatch,
+    tmp_path,
+):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir(parents=True)
+    image_path = image_dir / "cat.png"
+    image_path.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="小猫从箱子里探头 [image1]",
+        name="小猫探头",
+        reference_image_paths=["images/cat.png"],
+        frame_start_path="images/cat.png",
+    )
+    persisted_payload = {
+        "video_id": "video-test-1",
+        "inputs": {
+            "reference_images": [{"uri": "/project/images/cat.png"}],
+            "reference_videos": [{"uri": "/project/videos/motion.mp4"}],
+            "reference_audios": [],
+            "frames": [{"role": "start", "uri": "/project/images/cat.png"}],
+        },
+    }
+
+    monkeypatch.setattr(
+        "app.tools.video_generation_utils.video_input_utils.config.get",
+        lambda key, default=False: key == "video_generator.use_base64_reference_images",
+    )
+
+    transport_payload = await tool._build_transport_video_request(
+        persisted_payload,
+        task,
+        workspace_root=tmp_path,
+    )
+
+    assert transport_payload["inputs"]["reference_images"] == [
+        {
+            "source_type": "base64",
+            "base64_data": transport_payload["inputs"]["reference_images"][0]["base64_data"],
+            "mime_type": "image/png",
+        }
+    ]
+    assert transport_payload["inputs"]["frames"] == [
+        {
+            "role": "start",
+            "source_type": "base64",
+            "base64_data": transport_payload["inputs"]["frames"][0]["base64_data"],
+            "mime_type": "image/png",
+        }
+    ]
+    assert transport_payload["inputs"]["reference_videos"] == persisted_payload["inputs"]["reference_videos"]
+    assert persisted_payload["inputs"]["reference_images"] == [{"uri": "/project/images/cat.png"}]
 
 
 def test_generate_canvas_videos_builds_shared_task_request_fields_once():
