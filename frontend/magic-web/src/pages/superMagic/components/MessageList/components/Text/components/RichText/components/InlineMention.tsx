@@ -220,7 +220,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 		)
 	) : isDirectory ? (
 		<span
-			className="magic-mention inline-flex items-center gap-1 align-middle"
+			className="magic-mention !inline-flex items-center gap-1 !align-middle"
 			data-type={data.type}
 			data-data={JSON.stringify(data.data)}
 			onMouseDown={(event) => event.preventDefault()}
