@@ -4,8 +4,6 @@ import type { MessageListScrollAdapter } from "../../message-list-scroll-adapter
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useVirtualMessageScroll } from "../useVirtualMessageScroll"
 
-let resizeObserverCallback: ResizeObserverCallback | undefined
-
 vi.mock("@/utils/pubsub", () => ({
 	default: {
 		subscribe: vi.fn(),
@@ -17,15 +15,6 @@ vi.mock("@/utils/pubsub", () => ({
 		Message_Suppress_Auto_Scroll: "Message_Suppress_Auto_Scroll",
 	},
 }))
-
-class ControlledResizeObserver {
-	constructor(callback: ResizeObserverCallback) {
-		resizeObserverCallback = callback
-	}
-
-	observe = vi.fn()
-	disconnect = vi.fn()
-}
 
 function createViewport({
 	scrollTop: initialScrollTop,
@@ -41,7 +30,7 @@ function createViewport({
 	let scrollTop = initialScrollTop
 	Object.defineProperties(viewport, {
 		clientHeight: { configurable: true, value: clientHeight },
-		scrollHeight: { configurable: true, value: scrollHeight },
+		scrollHeight: { configurable: true, writable: true, value: scrollHeight },
 		scrollTop: {
 			configurable: true,
 			get: () => scrollTop,
@@ -50,56 +39,43 @@ function createViewport({
 			},
 		},
 	})
-	viewport.scrollTo = vi.fn(({ top }: ScrollToOptions) => {
-		viewport.scrollTop = Number(top || 0)
-		viewport.dispatchEvent(new Event("scroll"))
-	}) as typeof viewport.scrollTo
 	return viewport
 }
 
-function createVirtualizer(
-	viewport: HTMLDivElement,
-	options: {
-		startIndex: number
-		starts: number[]
-		totalSize: number
-	},
-) {
-	const virtualizer = {
-		range: { startIndex: options.startIndex, endIndex: options.startIndex + 1 },
-		offsets: new Map(
-			options.starts.map((start, index) => [String.fromCharCode(97 + index), start]),
-		),
-		measurementsCache: options.starts.map((start, index) => ({
-			index,
-			key: index,
-			start,
-			end: start + 80,
-			size: 80,
-			lane: 0,
-		})),
-		getVirtualItems: () => [],
-		getTotalSize: () => options.totalSize,
-		getFirstVisibleItemKey: () => "b",
-		getItemOffset: (key: string) => virtualizer.offsets.get(key),
-		scrollToOffset: vi.fn((offset: number) => {
-			viewport.scrollTop = offset
-			viewport.dispatchEvent(new Event("scroll"))
-		}),
+/** Stands in for virtua's `VirtualizerHandle`: index addressing over a fixed 100px row grid. */
+function createVirtualizer(viewport: HTMLDivElement, itemCount: number) {
+	return {
+		get itemCount() {
+			return itemCount
+		},
+		get scrollOffset() {
+			return viewport.scrollTop
+		},
+		get scrollSize() {
+			return viewport.scrollHeight
+		},
+		get viewportSize() {
+			return viewport.clientHeight
+		},
+		findItemIndex: vi.fn((offset: number) => Math.max(0, Math.floor(offset / 100))),
+		getItemOffset: vi.fn((index: number) => index * 100),
+		getItemSize: vi.fn(() => 100),
+		scrollTo: vi.fn(),
+		scrollToIndex: vi.fn(),
 	} as unknown as MessageListScrollAdapter
+}
 
-	return virtualizer
+function setScrollHeight(viewport: HTMLDivElement, value: number) {
+	Object.defineProperty(viewport, "scrollHeight", { configurable: true, value })
+}
+
+function items(count: number) {
+	return Array.from({ length: count }, (_, index) => ({ key: `message-${index}` }))
 }
 
 describe("useVirtualMessageScroll", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
-		vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
-		resizeObserverCallback = undefined
-		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
-			window.setTimeout(() => callback(performance.now()), 16),
-		)
-		vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle))
 	})
 
 	afterEach(() => {
@@ -109,19 +85,15 @@ describe("useVirtualMessageScroll", () => {
 	})
 
 	it("loads one history page only after an explicit upward gesture", async () => {
-		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 8,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1200,
-		})
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300, scrollHeight: 1200 })
+		const virtualizer = createVirtualizer(viewport, 12)
 		const onPullMore = vi.fn()
 
 		renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
+				items: items(12),
 				topicKey: "topic-1",
 				onPullMore,
 			}),
@@ -143,19 +115,15 @@ describe("useVirtualMessageScroll", () => {
 	})
 
 	it("honors a custom top threshold and does not reuse an intent created outside it", async () => {
-		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 8,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1200,
-		})
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300, scrollHeight: 1200 })
+		const virtualizer = createVirtualizer(viewport, 12)
 		const onPullMore = vi.fn()
 
 		renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
+				items: items(12),
 				topicKey: "topic-1",
 				onPullMore,
 				minTopDistance: 30,
@@ -197,40 +165,34 @@ describe("useVirtualMessageScroll", () => {
 		expect(onPullMore).toHaveBeenCalledTimes(1)
 	})
 
-	it("locks history pagination until the request and view restoration have completed", async () => {
-		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 1,
-			starts: [0, 500, 700],
-			totalSize: 900,
-		})
+	it("locks history pagination until the in-flight request settles", async () => {
+		const viewport = createViewport({ scrollTop: 20, clientHeight: 300, scrollHeight: 900 })
+		const virtualizer = createVirtualizer(viewport, 3)
 		const virtualizerRef = {
 			current: virtualizer,
 		} as MutableRefObject<MessageListScrollAdapter | null>
 		const containerRef = { current: viewport }
 		const initialItems = [{ key: "a" }, { key: "b" }, { key: "c" }]
 		let resolvePullMore: (() => void) | undefined
-		let notifyPullMoreStarted = () => undefined
-		const onPullMore = vi.fn(() => {
-			notifyPullMoreStarted()
-			return new Promise<void>((resolve) => {
-				resolvePullMore = resolve
-			})
-		})
+		const onPullMore = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					resolvePullMore = resolve
+				}),
+		)
 
-		const { result, rerender } = renderHook(
-			({ items }) =>
+		const { rerender } = renderHook(
+			({ list }) =>
 				useVirtualMessageScroll({
 					containerRef,
 					virtualizerRef,
-					items,
+					items: list,
 					topicKey: "topic-1",
 					onPullMore,
 					minTopDistance: 30,
 				}),
-			{ initialProps: { items: initialItems } },
+			{ initialProps: { list: initialItems } },
 		)
-		notifyPullMoreStarted = result.current.notifyPullMoreStarted
 		act(() => {
 			vi.advanceTimersByTime(301)
 			viewport.scrollTop = 20
@@ -251,15 +213,7 @@ describe("useVirtualMessageScroll", () => {
 		})
 		expect(onPullMore).toHaveBeenCalledTimes(1)
 
-		virtualizer.range = { startIndex: 3, endIndex: 4 }
-		virtualizer.offsets = new Map([
-			["x", 0],
-			["y", 100],
-			["a", 200],
-			["b", 900],
-			["c", 1100],
-		])
-		rerender({ items: [{ key: "x" }, { key: "y" }, ...initialItems] })
+		rerender({ list: [{ key: "x" }, { key: "y" }, ...initialItems] })
 		await act(async () => {
 			resolvePullMore?.()
 			await vi.advanceTimersByTimeAsync(64)
@@ -278,19 +232,15 @@ describe("useVirtualMessageScroll", () => {
 	})
 
 	it("does not turn a prior downward wheel into history intent for later layout scrolls", async () => {
-		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 8,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1200,
-		})
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300, scrollHeight: 1200 })
+		const virtualizer = createVirtualizer(viewport, 12)
 		const onPullMore = vi.fn()
 
 		renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
+				items: items(12),
 				topicKey: "topic-1",
 				onPullMore,
 			}),
@@ -311,23 +261,19 @@ describe("useVirtualMessageScroll", () => {
 		expect(onPullMore).not.toHaveBeenCalled()
 	})
 
-	it("ignores wheel gestures originating inside a nested ScrollArea", async () => {
+	it("ignores wheel gestures originating inside a nested scroll viewport", async () => {
 		const viewport = createViewport({ scrollTop: 20, clientHeight: 300, scrollHeight: 1200 })
 		const nestedViewport = document.createElement("div")
 		nestedViewport.dataset.slot = "scroll-area-viewport"
 		viewport.firstElementChild?.appendChild(nestedViewport)
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 0,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1200,
-		})
+		const virtualizer = createVirtualizer(viewport, 12)
 		const onPullMore = vi.fn()
 
 		renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
+				items: items(12),
 				topicKey: "topic-1",
 				onPullMore,
 				minTopDistance: 30,
@@ -346,13 +292,9 @@ describe("useVirtualMessageScroll", () => {
 		expect(onPullMore).not.toHaveBeenCalled()
 	})
 
-	it("restores a prepended page from the same stable message key and intra-row offset", async () => {
-		const viewport = createViewport({ scrollTop: 450, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 1,
-			starts: [0, 500, 700],
-			totalSize: 900,
-		})
+	it("issues no scroll write of its own for a prepended history page", async () => {
+		const viewport = createViewport({ scrollTop: 450, clientHeight: 300, scrollHeight: 900 })
+		const virtualizer = createVirtualizer(viewport, 3)
 		const virtualizerRef = {
 			current: virtualizer,
 		} as MutableRefObject<MessageListScrollAdapter | null>
@@ -360,326 +302,135 @@ describe("useVirtualMessageScroll", () => {
 		const initialItems = [{ key: "a" }, { key: "b" }, { key: "c" }]
 
 		const { result, rerender } = renderHook(
-			({ items }) =>
+			({ list }) =>
 				useVirtualMessageScroll({
 					containerRef,
 					virtualizerRef,
-					items,
+					items: list,
 					topicKey: "topic-1",
 				}),
-			{ initialProps: { items: initialItems } },
+			{ initialProps: { list: initialItems } },
 		)
 
-		// Initial mount intentionally follows the latest message; emulate the user scrolling back
-		// to the row that will be used as the pagination anchor.
-		viewport.scrollTop = 450
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
 		act(() => result.current.notifyPullMoreStarted())
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
 
-		virtualizer.range = { startIndex: 3, endIndex: 4 }
-		virtualizer.offsets = new Map([
-			["x", 0],
-			["y", 100],
-			["a", 200],
-			["b", 900],
-			["c", 1100],
-		])
-		rerender({ items: [{ key: "x" }, { key: "y" }, ...initialItems] })
-
+		setScrollHeight(viewport, 1400)
+		rerender({ list: [{ key: "x" }, { key: "y" }, ...initialItems] })
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(64)
 		})
 
-		expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(850, {
-			align: "start",
-			behavior: "auto",
-		})
-		expect(viewport.scrollTop).toBe(850)
-	})
-
-	it("keeps waiting for a delayed anchor until the correction deadline", async () => {
-		const viewport = createViewport({ scrollTop: 450, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 1,
-			starts: [0, 500, 700],
-			totalSize: 900,
-		})
-		const virtualizerRef = {
-			current: virtualizer,
-		} as MutableRefObject<MessageListScrollAdapter | null>
-		const containerRef = { current: viewport }
-		const initialItems = [{ key: "a" }, { key: "b" }, { key: "c" }]
-		let anchorMounted = true
-		const getItemOffset = virtualizer.getItemOffset
-		virtualizer.getItemOffset = (key: string) => {
-			if (key === "b" && !anchorMounted) return undefined
-			return getItemOffset(key)
-		}
-
-		const { result, rerender } = renderHook(
-			({ items }) =>
-				useVirtualMessageScroll({
-					containerRef,
-					virtualizerRef,
-					items,
-					topicKey: "topic-1",
-				}),
-			{ initialProps: { items: initialItems } },
-		)
-
-		viewport.scrollTop = 450
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
-		act(() => result.current.notifyPullMoreStarted())
-		anchorMounted = false
-		virtualizer.offsets = new Map([
-			["x", 0],
-			["y", 100],
-			["a", 200],
-			["b", 900],
-			["c", 1100],
-		])
-		rerender({ items: [{ key: "x" }, { key: "y" }, ...initialItems] })
-
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(9 * 16)
-		})
-		anchorMounted = true
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(16)
-		})
-
-		expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(850, {
-			align: "start",
-			behavior: "auto",
-		})
-	})
-
-	it("does not restore the history anchor for a middle insertion", async () => {
-		const viewport = createViewport({ scrollTop: 450, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 1,
-			starts: [0, 500, 700],
-			totalSize: 900,
-		})
-		const virtualizerRef = {
-			current: virtualizer,
-		} as MutableRefObject<MessageListScrollAdapter | null>
-		const containerRef = { current: viewport }
-		const initialItems = [{ key: "a" }, { key: "b" }, { key: "c" }]
-
-		const { result, rerender } = renderHook(
-			({ items }) =>
-				useVirtualMessageScroll({
-					containerRef,
-					virtualizerRef,
-					items,
-					topicKey: "topic-1",
-				}),
-			{ initialProps: { items: initialItems } },
-		)
-
-		viewport.scrollTop = 450
-		act(() => result.current.notifyPullMoreStarted())
-		virtualizer.offsets = new Map([
-			["a", 0],
-			["x", 500],
-			["b", 700],
-			["c", 900],
-		])
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
-		rerender({ items: [{ key: "a" }, { key: "x" }, { key: "b" }, { key: "c" }] })
-
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(64)
-		})
-
-		expect(virtualizer.scrollToOffset).not.toHaveBeenCalledWith(650, {
-			align: "start",
-			behavior: "auto",
-		})
+		// `shift` owns viewport stability for prepends; the controller must stay silent.
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
 	})
 
 	it("does not request history when authoritative reconciliation shrinks the list", async () => {
-		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 8,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1200,
-		})
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300, scrollHeight: 1200 })
+		const virtualizer = createVirtualizer(viewport, 12)
 		const onPullMore = vi.fn()
-		const initialItems = Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` }))
+		const initialItems = items(12)
 		const containerRef = { current: viewport }
 		const virtualizerRef = {
 			current: virtualizer,
 		} as MutableRefObject<MessageListScrollAdapter | null>
 		const { rerender } = renderHook(
-			({ items }) =>
+			({ list }) =>
 				useVirtualMessageScroll({
 					containerRef,
 					virtualizerRef,
-					items,
+					items: list,
 					topicKey: "topic-1",
 					onPullMore,
 				}),
-			{ initialProps: { items: initialItems } },
+			{ initialProps: { list: initialItems } },
 		)
 
 		act(() => {
+			vi.advanceTimersByTime(301)
 			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
 			viewport.scrollTop = 100
 			viewport.dispatchEvent(new Event("scroll"))
 		})
-		const scrollCallCountBeforeShrink = vi.mocked(virtualizer.scrollToOffset).mock.calls.length
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
 
 		// A visible-tab HTTP replace can remove local rows. The resulting scrollTop clamp is
 		// a layout side effect, not a request to load older history.
-		rerender({ items: initialItems.slice(0, 4) })
+		rerender({ list: initialItems.slice(0, 4) })
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(500)
 		})
 
 		expect(onPullMore).not.toHaveBeenCalled()
-		expect(virtualizer.scrollToOffset).toHaveBeenCalledTimes(scrollCallCountBeforeShrink)
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
 	})
 
-	it("cancels a pending history anchor when the user explicitly returns to latest", async () => {
-		const viewport = createViewport({ scrollTop: 450, clientHeight: 300 })
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 1,
-			starts: [0, 500, 700],
-			totalSize: 900,
-		})
-		const virtualizerRef = {
-			current: virtualizer,
-		} as MutableRefObject<MessageListScrollAdapter | null>
-		const containerRef = { current: viewport }
-		const initialItems = [{ key: "a" }, { key: "b" }, { key: "c" }]
-
-		const { result, rerender } = renderHook(
-			({ items }) =>
-				useVirtualMessageScroll({
-					containerRef,
-					virtualizerRef,
-					items,
-					topicKey: "topic-1",
-				}),
-			{ initialProps: { items: initialItems } },
-		)
-
-		viewport.scrollTop = 450
-		act(() => result.current.notifyPullMoreStarted())
-		act(() => result.current.scrollToBottom("auto"))
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
-
-		virtualizer.range = { startIndex: 3, endIndex: 4 }
-		virtualizer.offsets = new Map([
-			["x", 0],
-			["y", 100],
-			["a", 200],
-			["b", 900],
-			["c", 1100],
-		])
-		rerender({ items: [{ key: "x" }, { key: "y" }, ...initialItems] })
-
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(64)
-		})
-
-		expect(virtualizer.scrollToOffset).not.toHaveBeenCalledWith(850, {
-			align: "start",
-			behavior: "auto",
-		})
-	})
-
-	it("scrolls past the virtual canvas to include bottom loading and footer content", () => {
-		const viewport = createViewport({
-			scrollTop: 0,
-			clientHeight: 300,
-			scrollHeight: 1200,
-		})
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 0,
-			starts: [0],
-			totalSize: 1000,
-		})
+	it("jumps to the last row when the user explicitly returns to latest", () => {
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 1200 })
+		const virtualizer = createVirtualizer(viewport, 8)
 
 		const { result } = renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: [{ key: "message-0" }],
+				items: items(8),
 				topicKey: "topic-1",
 			}),
 		)
 
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
 		act(() => result.current.scrollToBottom("auto"))
 
-		expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(1200, {
-			align: "end",
-			behavior: "auto",
-		})
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(7, { align: "end", smooth: false })
 	})
 
-	it("keeps auto-follow at the actual bottom when non-virtual footer content grows", () => {
-		const viewport = createViewport({
-			scrollTop: 700,
-			clientHeight: 300,
-			scrollHeight: 1000,
-		})
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 0,
-			starts: [0],
-			totalSize: 1000,
-		})
+	it("follows streaming growth while parked at the bottom", () => {
+		const viewport = createViewport({ scrollTop: 700, clientHeight: 300, scrollHeight: 1000 })
+		const virtualizer = createVirtualizer(viewport, 12)
 
-		renderHook(() =>
+		const { result } = renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: [{ key: "message-0" }],
+				items: items(12),
 				topicKey: "topic-1",
 			}),
 		)
 
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
-		Object.defineProperty(viewport, "scrollHeight", {
-			configurable: true,
-			value: 1200,
-		})
 		act(() => {
-			resizeObserverCallback?.([], {} as ResizeObserver)
-			vi.advanceTimersByTime(16)
+			vi.advanceTimersByTime(301)
 		})
+		act(() => result.current.onVirtualizerChange(virtualizer, false))
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
 
-		expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(1200, {
-			align: "end",
-			behavior: "auto",
-		})
+		setScrollHeight(viewport, 1200)
+		act(() => result.current.onVirtualizerChange(virtualizer, false))
+
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, { align: "end" })
 	})
 
-	it("disables auto-follow immediately when an upward wheel starts near the bottom", async () => {
-		const viewport = createViewport({
-			scrollTop: 699,
-			clientHeight: 300,
-			scrollHeight: 1000,
-		})
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 8,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1000,
-		})
+	it("stops following as soon as an upward wheel starts near the bottom", () => {
+		const viewport = createViewport({ scrollTop: 699, clientHeight: 300, scrollHeight: 1000 })
+		const virtualizer = createVirtualizer(viewport, 12)
 
-		const { unmount } = renderHook(() =>
+		const { result } = renderHook(() =>
 			useVirtualMessageScroll({
 				containerRef: { current: viewport },
 				virtualizerRef: { current: virtualizer },
-				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
+				items: items(12),
 				topicKey: "topic-1",
 			}),
 		)
 
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+		act(() => result.current.onVirtualizerChange(virtualizer, false))
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+
 		act(() => {
 			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }))
 			viewport.scrollTop = 698
@@ -687,47 +438,9 @@ describe("useVirtualMessageScroll", () => {
 			vi.advanceTimersByTime(20)
 		})
 
-		Object.defineProperty(viewport, "scrollHeight", {
-			configurable: true,
-			value: 1200,
-		})
-		act(() => {
-			resizeObserverCallback?.([], {} as ResizeObserver)
-			vi.advanceTimersByTime(16)
-		})
+		setScrollHeight(viewport, 1200)
+		act(() => result.current.onVirtualizerChange(virtualizer, false))
 
-		expect(virtualizer.scrollToOffset).not.toHaveBeenCalled()
-		unmount()
-	})
-
-	it("coalesces duplicate bottom-follow requests from one layout update", async () => {
-		const viewport = createViewport({
-			scrollTop: 700,
-			clientHeight: 300,
-			scrollHeight: 1200,
-		})
-		const virtualizer = createVirtualizer(viewport, {
-			startIndex: 8,
-			starts: Array.from({ length: 12 }, (_, index) => index * 100),
-			totalSize: 1000,
-		})
-
-		const { result } = renderHook(() =>
-			useVirtualMessageScroll({
-				containerRef: { current: viewport },
-				virtualizerRef: { current: virtualizer },
-				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
-				topicKey: "topic-1",
-			}),
-		)
-
-		vi.mocked(virtualizer.scrollToOffset).mockClear()
-		act(() => {
-			result.current.onVirtualizerChange(virtualizer, false)
-			resizeObserverCallback?.([], {} as ResizeObserver)
-			vi.advanceTimersByTime(16)
-		})
-
-		expect(virtualizer.scrollToOffset).toHaveBeenCalledTimes(1)
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
 	})
 })

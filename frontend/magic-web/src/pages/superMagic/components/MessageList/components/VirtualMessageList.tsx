@@ -1,15 +1,18 @@
 import {
+	createContext,
 	forwardRef,
 	memo,
-	type CSSProperties,
 	type MutableRefObject,
 	type ReactNode,
 	useCallback,
+	useContext,
+	useEffect,
 	useLayoutEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react"
-import { GroupedVirtuoso, type GroupProps, type ListRange } from "react-virtuoso"
+import { Virtualizer, type CustomItemComponentProps, type VirtualizerHandle } from "virtua"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -17,12 +20,14 @@ import { observer } from "mobx-react-lite"
 import MessageRenderErrorBoundary from "./MessageRenderErrorBoundary"
 import {
 	ASSISTANT_MESSAGE_ROW_CLASS,
+	getStickyMessageTopOffset,
 	USER_MESSAGE_ROW_CLASS,
 	USER_MESSAGE_STICKY_MASK_CLASS,
 	USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
-} from "../MessageTurnGroupList"
+} from "../sticky-message-classes"
 import {
-	buildGroupedVirtualMessageProjection,
+	findActiveStickyIndex,
+	findNextStickyIndex,
 	getPrependedVirtualItemCount,
 	type VirtualMessageItem,
 } from "../virtual-message-items"
@@ -30,7 +35,9 @@ import type { MessageListScrollAdapter } from "../message-list-scroll-adapter"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
-const INITIAL_FIRST_ITEM_INDEX = 1_000_000
+const FOOTER_ROW_KEY = "__message-list-footer__"
+const STICKY_TOP_CSS_VARIABLE = "--message-group-sticky-top"
+const NO_STICKY_INDEX = -1
 
 function hasTerminalToolStatus(node: Record<string, unknown> | undefined) {
 	if (!node) return false
@@ -47,12 +54,14 @@ function hasTerminalToolStatus(node: Record<string, unknown> | undefined) {
 export interface VirtualMessageListProps {
 	topicId?: string
 	items: Array<VirtualMessageItem>
-	/** Bottom content is rendered by Virtuoso so its measured height participates in scroll layout. */
+	/** Bottom content is the last virtual row so its height is measured by the same virtualizer. */
 	footer?: ReactNode
-	/** Kept optional for call-site compatibility; GroupedVirtuoso derives groups from items. */
+	/** Indices of User rows in `items`; drives which row is pinned while scrolling. */
 	userIndices?: Array<number>
 	isMobile: boolean
 	getScrollElement: () => HTMLDivElement | null
+	/** Height of whatever the caller renders between the scroll container and this list. */
+	startMargin?: number
 	renderNode: (args: { item: VirtualMessageItem }) => ReactNode
 	stickyMessageClassName?: string
 	/** Disable the shared mobile mask when a caller needs the desktop mask appearance. */
@@ -65,39 +74,39 @@ export interface VirtualMessageListProps {
 	onVirtualizerChange?: (instance: MessageListScrollAdapter, sync: boolean) => void
 }
 
-interface VirtualMessageListContext {
-	footer: ReactNode | null
-}
+const StickyIndexContext = createContext(NO_STICKY_INDEX)
 
-const VirtuosoGroup = ({ children, style, ...props }: GroupProps) => (
-	<div
-		data-component="group"
-		{...props}
-		className="sticky z-20"
-		style={{
-			...style,
-			top: "var(--message-group-sticky-top, 0px)",
-		}}
-	>
-		{children}
-	</div>
+/**
+ * virtua positions every row absolutely, which makes native `position: sticky` a no-op. The
+ * pinned User row is switched back into flow so it becomes the container's only in-flow child:
+ * its static position lands at the container top, and `top` then parks it against the viewport.
+ */
+const MessageVirtualItem = forwardRef<HTMLDivElement, CustomItemComponentProps>(
+	function MessageVirtualItem({ children, style, index }, ref) {
+		const activeStickyIndex = useContext(StickyIndexContext)
+		const isSticky = index === activeStickyIndex
+
+		return (
+			<div
+				ref={ref}
+				data-virtual-item-index={index}
+				data-virtual-item-sticky={isSticky ? "true" : undefined}
+				style={
+					isSticky
+						? {
+								...style,
+								position: "sticky",
+								top: `var(${STICKY_TOP_CSS_VARIABLE}, 0px)`,
+								zIndex: 20,
+							}
+						: style
+				}
+			>
+				{children}
+			</div>
+		)
+	},
 )
-
-const VirtuosoList = forwardRef<HTMLDivElement, { children?: ReactNode; style?: CSSProperties }>(
-	({ children, style, ...props }, ref) => (
-		<div ref={ref} {...props} style={{ ...style, width: "100%" }} data-component="item">
-			{children}
-		</div>
-	),
-)
-
-const VIRTUOSO_COMPONENTS = { Group: VirtuosoGroup, List: VirtuosoList }
-
-const VirtuosoFooter = ({ context }: { context: VirtualMessageListContext }) => {
-	if (!context.footer) return null
-
-	return <div data-testid="virtual-message-footer">{context.footer}</div>
-}
 
 const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 	item,
@@ -121,7 +130,7 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 		: undefined
 	if (item.isTool && !hasTerminalToolStatus(canonicalNode) && !hasTerminalToolStatus(item.node)) {
 		// Keep a measured zero-height placeholder while a streaming Tool has no visible body.
-		// This lets Virtuoso observe the transition to a terminal Tool without a phantom gap.
+		// This lets the virtualizer observe the transition to a terminal Tool without a phantom gap.
 		return (
 			<div
 				data-virtual-message-hidden="true"
@@ -207,26 +216,22 @@ function VirtualMessageRow({
 	item,
 	topicId,
 	renderNode,
-	isGroupHeader,
 	stickyMessageClassName,
 	useMobileStickyOverlay,
 	exportMode,
 	selectedKeys,
 	onToggleSelect,
 	limitReached,
-	setItemElement,
 }: {
 	item: VirtualMessageItem
 	topicId?: string
 	renderNode: VirtualMessageListProps["renderNode"]
-	isGroupHeader: boolean
 	stickyMessageClassName?: string
 	useMobileStickyOverlay: boolean
 	exportMode?: boolean
 	selectedKeys?: ReadonlySet<string>
 	onToggleSelect?: (key: string) => void
 	limitReached?: boolean
-	setItemElement: (key: string, element: HTMLElement | null) => void
 }) {
 	const selected = Boolean(selectedKeys?.has(item.turnKey))
 	const selectable = exportMode && item.exportSelectable
@@ -234,12 +239,11 @@ function VirtualMessageRow({
 
 	return (
 		<div
-			ref={(element) => setItemElement(item.key, element)}
 			data-testid="virtual-message-row"
 			data-virtual-message-key={item.key}
-			data-virtual-message-kind={isGroupHeader ? "group" : "item"}
-			// Virtuoso cannot measure a zero-height child. Keep dynamic sidecar rows measurable
-			// while their Store-backed content is still resolving, then let real content expand it.
+			data-virtual-message-kind={item.isUser ? "group" : "item"}
+			// A zero-height child cannot be measured reliably. Keep dynamic sidecar rows
+			// measurable while their Store-backed content resolves, then let content expand it.
 			style={{ minHeight: 1 }}
 			className={cn(
 				"relative w-full",
@@ -269,7 +273,7 @@ function VirtualMessageRow({
 				</div>
 			) : null}
 			<div className={cn("min-w-0", selected && "opacity-95")}>
-				{isGroupHeader ? (
+				{item.isUser ? (
 					<>
 						<div
 							className={cn(
@@ -295,12 +299,16 @@ function VirtualMessageRow({
 	)
 }
 
+const EMPTY_USER_INDICES: Array<number> = []
+
 function VirtualMessageListInner({
 	topicId,
 	items,
 	footer = null,
+	userIndices = EMPTY_USER_INDICES,
 	isMobile,
 	getScrollElement,
+	startMargin = 0,
 	renderNode,
 	stickyMessageClassName,
 	useMobileStickyOverlay = true,
@@ -311,109 +319,83 @@ function VirtualMessageListInner({
 	virtualizerRef,
 	onVirtualizerChange,
 }: VirtualMessageListProps) {
-	const groupedProjection = useMemo(() => buildGroupedVirtualMessageProjection(items), [items])
-	const groupedVirtualSequenceKeys = useMemo(
-		() =>
-			groupedProjection.groups.flatMap((group) => [
-				`group-header-${group.key}`,
-				...group.items.map((item) => item.key),
-			]),
-		[groupedProjection.groups],
-	)
-	const rangeRef = useRef<ListRange | undefined>(undefined)
-	const totalSizeRef = useRef(0)
-	const itemElementsRef = useRef(new Map<string, HTMLElement>())
-	const firstItemIndexRef = useRef(INITIAL_FIRST_ITEM_INDEX)
+	const handleRef = useRef<VirtualizerHandle | null>(null)
+	const canvasRef = useRef<HTMLDivElement | null>(null)
+	const scrollRef = useRef<HTMLElement | null>(null)
 	const previousTopicIdRef = useRef(topicId)
-	const previousVirtualItemsRef = useRef<Array<Pick<VirtualMessageItem, "key">>>([])
+	const previousItemsRef = useRef<Array<Pick<VirtualMessageItem, "key">>>([])
 	const processedSequenceRef = useRef("")
-	const viewport = getScrollElement()
+	const shiftRef = useRef(false)
+	const stickyTopValueRef = useRef<number | null>(null)
+	const [activeStickyIndex, setActiveStickyIndex] = useState(NO_STICKY_INDEX)
+
+	const stickyTopOffset = getStickyMessageTopOffset(isMobile)
+	// Callers may hand over a plain ref that is only populated once their own scroll element
+	// commits, which happens after this subtree. Re-read it every commit so the virtualizer
+	// mounts on the very next render instead of silently rendering nothing.
+	const [viewport, setViewport] = useState<HTMLElement | null>(() => getScrollElement())
+	// Runs on every commit by design; the functional update bails out when the element is
+	// unchanged, so this cannot loop.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	useLayoutEffect(() => {
+		setViewport((previous) => {
+			const next = getScrollElement()
+			return previous === next ? previous : next
+		})
+	})
+	if (scrollRef.current !== viewport) scrollRef.current = viewport
+
+	const rowCount = items.length + (footer ? 1 : 0)
+	const rowCountRef = useRef(rowCount)
+	rowCountRef.current = rowCount
+	const userIndicesRef = useRef(userIndices)
+	userIndicesRef.current = userIndices
+	const startMarginRef = useRef(startMargin)
+	startMarginRef.current = startMargin
 
 	if (previousTopicIdRef.current !== topicId) {
 		previousTopicIdRef.current = topicId
-		firstItemIndexRef.current = INITIAL_FIRST_ITEM_INDEX
-		previousVirtualItemsRef.current = []
+		previousItemsRef.current = []
 		processedSequenceRef.current = ""
+		shiftRef.current = false
+		stickyTopValueRef.current = null
 	}
 
-	const virtualSequenceSignature = groupedProjection.items.map((item) => item.key).join("\u0000")
-	if (processedSequenceRef.current !== virtualSequenceSignature) {
-		// Virtuoso must receive the new data and the matching firstItemIndex in the same render;
-		// waiting for an effect would allow one paint at the old scroll coordinate. The signature
-		// makes this render-phase bookkeeping idempotent across repeated React renders.
-		const prependedCount = getPrependedVirtualItemCount(
-			previousVirtualItemsRef.current,
-			groupedProjection.items,
-		)
-		if (prependedCount > 0) {
-			firstItemIndexRef.current = Math.max(1, firstItemIndexRef.current - prependedCount)
-		}
-		previousVirtualItemsRef.current = groupedProjection.items
-		processedSequenceRef.current = virtualSequenceSignature
+	const sequenceSignature = items.map((item) => item.key).join("\u0000")
+	if (processedSequenceRef.current !== sequenceSignature) {
+		// virtua reads `shift` in the same render that observes the new item count, so this must
+		// be render-phase bookkeeping — an effect would allow one paint at the old coordinate.
+		// `shift` is only safe for pure prepends; a mid-list change would misplace rows instead.
+		shiftRef.current = getPrependedVirtualItemCount(previousItemsRef.current, items) > 0
+		previousItemsRef.current = items
+		processedSequenceRef.current = sequenceSignature
 	}
 
-	const setItemElement = useCallback((key: string, element: HTMLElement | null) => {
-		if (element) itemElementsRef.current.set(key, element)
-		else itemElementsRef.current.delete(key)
-	}, [])
-
-	const getItemOffset = useCallback(
-		(key: string) => {
-			const element = itemElementsRef.current.get(key)
-			const currentViewport = getScrollElement()
-			if (!element || !currentViewport) return undefined
-			const rect = element.getBoundingClientRect()
-			const viewportRect = currentViewport.getBoundingClientRect()
-			return rect.top - viewportRect.top + currentViewport.scrollTop
-		},
-		[getScrollElement],
-	)
-
-	const getFirstVisibleItemKey = useCallback(() => {
-		const currentViewport = getScrollElement()
-		if (!currentViewport) return undefined
-		const viewportTop = currentViewport.getBoundingClientRect().top
-		const viewportBottom = viewportTop + currentViewport.clientHeight
-		const visibleItems: Array<{ key: string; top: number }> = []
-		const visibleGroups: Array<{ key: string; top: number }> = []
-		for (const [key, element] of itemElementsRef.current) {
-			const rect = element.getBoundingClientRect()
-			if (!Number.isFinite(rect.top) || !Number.isFinite(rect.bottom)) continue
-			if (rect.bottom <= viewportTop || rect.top >= viewportBottom) continue
-			if (element.dataset.virtualMessageKind === "group") {
-				visibleGroups.push({ key, top: rect.top })
-				continue
-			}
-			visibleItems.push({ key, top: rect.top })
-		}
-		visibleItems.sort((left, right) => left.top - right.top)
-		if (visibleItems[0]) return visibleItems[0].key
-		visibleGroups.sort((left, right) => left.top - right.top)
-		return visibleGroups[0]?.key
-	}, [getScrollElement])
-
-	const scrollToOffset = useCallback(
-		(offset: number, options?: { align?: "start" | "end"; behavior?: ScrollBehavior }) => {
-			const currentViewport = getScrollElement()
-			if (!currentViewport) return
-			const top = options?.align === "end" ? offset - currentViewport.clientHeight : offset
-			currentViewport.scrollTo({
-				top: Math.max(0, top),
-				behavior: options?.behavior || "auto",
-			})
-		},
-		[getScrollElement],
-	)
+	useLayoutEffect(() => {
+		shiftRef.current = false
+	})
 
 	const adapter = useMemo<MessageListScrollAdapter>(
 		() => ({
-			range: rangeRef.current,
-			getTotalSize: () => totalSizeRef.current,
-			getFirstVisibleItemKey,
-			getItemOffset,
-			scrollToOffset,
+			get itemCount() {
+				return rowCountRef.current
+			},
+			get scrollOffset() {
+				return handleRef.current?.scrollOffset ?? 0
+			},
+			get scrollSize() {
+				return handleRef.current?.scrollSize ?? 0
+			},
+			get viewportSize() {
+				return handleRef.current?.viewportSize ?? 0
+			},
+			findItemIndex: (offset) => handleRef.current?.findItemIndex(offset) ?? 0,
+			getItemOffset: (index) => handleRef.current?.getItemOffset(index) ?? 0,
+			getItemSize: (index) => handleRef.current?.getItemSize(index) ?? 0,
+			scrollTo: (offset) => handleRef.current?.scrollTo(offset),
+			scrollToIndex: (index, options) => handleRef.current?.scrollToIndex(index, options),
 		}),
-		[getFirstVisibleItemKey, getItemOffset, scrollToOffset],
+		[],
 	)
 
 	useLayoutEffect(() => {
@@ -423,146 +405,134 @@ function VirtualMessageListInner({
 		}
 	}, [adapter, virtualizerRef])
 
+	/**
+	 * Absolutely positioned rows lose the push-out that stacked native sticky headers get for
+	 * free. Recreate it by parking the pinned row at `stickyTopOffset` until the next User row
+	 * reaches that line, then translating it up in lockstep so the handoff is seamless.
+	 */
+	const syncSticky = useCallback(() => {
+		const handle = handleRef.current
+		const canvas = canvasRef.current
+		if (!handle || !canvas) return
+
+		const scrollOffset = handle.scrollOffset
+		// Probing at the park line (not the viewport top) makes a row take over exactly when it
+		// would otherwise scroll above that line, which is where native sticky would clamp it.
+		const startIndex = handle.findItemIndex(scrollOffset + stickyTopOffset)
+		const nextActive = findActiveStickyIndex(userIndicesRef.current, startIndex)
+		const activeIndex = nextActive === undefined ? NO_STICKY_INDEX : nextActive
+
+		let top = stickyTopOffset
+		if (activeIndex !== NO_STICKY_INDEX) {
+			const followerIndex = findNextStickyIndex(userIndicesRef.current, activeIndex)
+			if (followerIndex !== undefined) {
+				// getItemOffset is relative to the virtualizer container, scrollOffset to the
+				// scroll element; startMargin is the gap between the two origins.
+				const followerTop =
+					handle.getItemOffset(followerIndex) + startMarginRef.current - scrollOffset
+				const activeHeight = handle.getItemSize(activeIndex)
+				if (followerTop < stickyTopOffset + activeHeight) {
+					top = followerTop - activeHeight
+				}
+			}
+		}
+
+		if (stickyTopValueRef.current !== top) {
+			stickyTopValueRef.current = top
+			canvas.style.setProperty(STICKY_TOP_CSS_VARIABLE, `${top}px`)
+		}
+		setActiveStickyIndex((previous) => (previous === activeIndex ? previous : activeIndex))
+	}, [stickyTopOffset])
+
+	const handleScroll = useCallback(() => {
+		syncSticky()
+	}, [syncSticky])
+
 	const notifyVirtualizerChange = useCallback(() => {
 		onVirtualizerChange?.(adapter, false)
 	}, [adapter, onVirtualizerChange])
-	const handleRangeChanged = useCallback((range: ListRange) => {
-		rangeRef.current = range
-	}, [])
-	const handleTotalListHeightChanged = useCallback(
-		(height: number) => {
-			totalSizeRef.current = height
+
+	// The canvas wraps the virtualizer container, whose height is the projected total size.
+	// Streaming growth, late measurement and the footer all surface through this one signal.
+	useEffect(() => {
+		const canvas = canvasRef.current
+		if (!canvas || typeof ResizeObserver === "undefined") return undefined
+		const observer = new ResizeObserver(() => {
+			syncSticky()
 			notifyVirtualizerChange()
-		},
-		[notifyVirtualizerChange],
+		})
+		observer.observe(canvas)
+		return () => observer.disconnect()
+	}, [notifyVirtualizerChange, syncSticky])
+
+	useLayoutEffect(() => {
+		syncSticky()
+	}, [sequenceSignature, syncSticky])
+
+	const keepMounted = useMemo(
+		() => (activeStickyIndex === NO_STICKY_INDEX ? undefined : [activeStickyIndex]),
+		[activeStickyIndex],
 	)
 
-	const listStyle = useMemo(
-		() =>
-			({
-				"--message-group-sticky-top": isMobile ? "0px" : "40px",
-				width: "100%",
-			}) as CSSProperties,
-		[isMobile],
-	)
-	const virtuosoComponents = useMemo(
-		() => ({ ...VIRTUOSO_COMPONENTS, Footer: VirtuosoFooter }),
-		[],
-	)
-	const virtuosoContext = useMemo<VirtualMessageListContext>(() => ({ footer }), [footer])
-
-	const computeVirtualMessageItemKey = useCallback(
-		(index: number) => {
-			// GroupedVirtuoso's key index includes firstItemIndex and group headers. Resolve
-			// against the physical grouped sequence so prepend updates keep each DOM node
-			// associated with the same message or header.
-			const localPhysicalIndex = index - firstItemIndexRef.current
-			return groupedVirtualSequenceKeys[localPhysicalIndex] || `virtual-message-${index}`
-		},
-		[groupedVirtualSequenceKeys],
-	)
-
-	const renderGroupContent = useCallback(
-		(groupIndex: number) => {
-			const header = groupedProjection.groups[groupIndex]?.header
-			if (!header) {
-				// GroupedVirtuoso still mounts a Group wrapper for leading non-User messages;
-				// a 1px spacer avoids its zero-sized-element warning without adding visible UI.
-				return (
-					<div
-						aria-hidden
-						data-virtual-message-leading-group-spacer="true"
-						style={{ height: 1, minHeight: 1 }}
-					/>
-				)
-			}
-			return (
-				<VirtualMessageRow
-					item={header}
-					topicId={topicId}
-					renderNode={renderNode}
-					isGroupHeader
-					stickyMessageClassName={stickyMessageClassName}
-					useMobileStickyOverlay={isMobile && useMobileStickyOverlay}
-					exportMode={exportMode}
-					selectedKeys={selectedKeys}
-					onToggleSelect={onToggleSelect}
-					limitReached={limitReached}
-					setItemElement={setItemElement}
-				/>
+	const rows = useMemo(() => {
+		const nodes: Array<ReactNode> = items.map((item) => (
+			<VirtualMessageRow
+				key={item.key}
+				item={item}
+				topicId={topicId}
+				renderNode={renderNode}
+				stickyMessageClassName={stickyMessageClassName}
+				useMobileStickyOverlay={isMobile && useMobileStickyOverlay}
+				exportMode={exportMode}
+				selectedKeys={selectedKeys}
+				onToggleSelect={onToggleSelect}
+				limitReached={limitReached}
+			/>
+		))
+		if (footer) {
+			nodes.push(
+				<div
+					key={FOOTER_ROW_KEY}
+					data-testid="virtual-message-footer"
+					style={{ minHeight: 1 }}
+				>
+					{footer}
+				</div>,
 			)
-		},
-		[
-			exportMode,
-			groupedProjection.groups,
-			isMobile,
-			limitReached,
-			onToggleSelect,
-			renderNode,
-			selectedKeys,
-			setItemElement,
-			stickyMessageClassName,
-			topicId,
-			useMobileStickyOverlay,
-		],
-	)
-
-	const renderItemContent = useCallback(
-		(index: number, _groupIndex: number) => {
-			// itemContent's index includes firstItemIndex but excludes group headers. Resolve
-			// it against the flattened ordinary-item projection used by the official pattern.
-			const item = groupedProjection.items[index - firstItemIndexRef.current]
-			if (!item) return null
-			return (
-				<VirtualMessageRow
-					item={item}
-					topicId={topicId}
-					renderNode={renderNode}
-					isGroupHeader={false}
-					stickyMessageClassName={stickyMessageClassName}
-					useMobileStickyOverlay={isMobile && useMobileStickyOverlay}
-					exportMode={exportMode}
-					selectedKeys={selectedKeys}
-					onToggleSelect={onToggleSelect}
-					limitReached={limitReached}
-					setItemElement={setItemElement}
-				/>
-			)
-		},
-		[
-			exportMode,
-			groupedProjection.items,
-			isMobile,
-			limitReached,
-			onToggleSelect,
-			renderNode,
-			selectedKeys,
-			setItemElement,
-			stickyMessageClassName,
-			topicId,
-			useMobileStickyOverlay,
-		],
-	)
+		}
+		return nodes
+	}, [
+		exportMode,
+		footer,
+		isMobile,
+		items,
+		limitReached,
+		onToggleSelect,
+		renderNode,
+		selectedKeys,
+		stickyMessageClassName,
+		topicId,
+		useMobileStickyOverlay,
+	])
 
 	return (
-		<div data-testid="virtual-message-canvas" className="relative w-full">
-			<GroupedVirtuoso
-				groupCounts={groupedProjection.groupCounts}
-				firstItemIndex={firstItemIndexRef.current}
-				customScrollParent={viewport ?? undefined}
-				computeItemKey={computeVirtualMessageItemKey}
-				defaultItemHeight={128}
-				increaseViewportBy={{ top: 260, bottom: 240 }}
-				overscan={{ main: 260, reverse: 240 }}
-				skipAnimationFrameInResizeObserver
-				style={listStyle}
-				components={virtuosoComponents}
-				context={virtuosoContext}
-				rangeChanged={handleRangeChanged}
-				totalListHeightChanged={handleTotalListHeightChanged}
-				groupContent={renderGroupContent}
-				itemContent={renderItemContent}
-			/>
+		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full">
+			{viewport ? (
+				<StickyIndexContext.Provider value={activeStickyIndex}>
+					<Virtualizer
+						ref={handleRef}
+						scrollRef={scrollRef}
+						startMargin={startMargin}
+						shift={shiftRef.current}
+						bufferSize={400}
+						keepMounted={keepMounted}
+						item={MessageVirtualItem}
+						onScroll={handleScroll}
+					>
+						{rows}
+					</Virtualizer>
+				</StickyIndexContext.Provider>
+			) : null}
 		</div>
 	)
 }

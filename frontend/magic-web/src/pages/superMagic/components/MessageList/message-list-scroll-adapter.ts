@@ -3,13 +3,33 @@ export interface MessageListScrollRange {
 	endIndex: number
 }
 
+export interface MessageListScrollToIndexOptions {
+	align?: "start" | "end" | "center"
+	smooth?: boolean
+}
+
+/**
+ * Projection of virtua's `VirtualizerHandle` used by the scroll controller. Every value is served
+ * from the virtualizer's measurement cache, so reading it never forces a synchronous layout the
+ * way the previous `getBoundingClientRect` based adapter did.
+ *
+ * All addressing is by item index. Key-based lookup existed only for the history anchor
+ * restoration loop, which the virtualizer's own `shift` compensation replaces.
+ */
 export interface MessageListScrollAdapter {
 	range?: MessageListScrollRange
-	getTotalSize: () => number
-	getFirstVisibleItemKey: () => string | undefined
-	getItemOffset: (key: string) => number | undefined
-	scrollToOffset: (
-		offset: number,
-		options?: { align?: "start" | "end"; behavior?: ScrollBehavior },
-	) => void
+	/** Item count currently backing the virtualizer, including the footer row. */
+	readonly itemCount: number
+	/** Current scrollTop of the owning scroll element. */
+	readonly scrollOffset: number
+	/** Current scrollHeight of the owning scroll element. */
+	readonly scrollSize: number
+	/** Current offsetHeight of the owning scroll element. */
+	readonly viewportSize: number
+	/** Nearest item index for an offset measured from the start of the scroll container. */
+	findItemIndex: (offset: number) => number
+	getItemOffset: (index: number) => number
+	getItemSize: (index: number) => number
+	scrollTo: (offset: number) => void
+	scrollToIndex: (index: number, options?: MessageListScrollToIndexOptions) => void
 }

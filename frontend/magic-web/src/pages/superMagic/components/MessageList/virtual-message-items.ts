@@ -1,4 +1,3 @@
-import { defaultRangeExtractor, type Range } from "@tanstack/react-virtual"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
 import {
@@ -29,18 +28,6 @@ export interface VirtualMessageProjection {
 	messageKeys: Array<string>
 	messageTurnGroups: Array<MessageTurnGroup>
 	userIndices: Array<number>
-}
-
-export interface GroupedVirtualMessageGroup {
-	key: string
-	header?: VirtualMessageItem
-	items: Array<VirtualMessageItem>
-}
-
-export interface GroupedVirtualMessageProjection {
-	groups: Array<GroupedVirtualMessageGroup>
-	items: Array<VirtualMessageItem>
-	groupCounts: Array<number>
 }
 
 /**
@@ -93,11 +80,22 @@ function hasTerminalMessageStatus(node: SuperMagicMessageItem) {
 	)
 }
 
+const taskLifecycleToolNames = new Set(["finish_task"])
+
+function isTaskLifecycleToolMessage(node: SuperMagicMessageItem) {
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const tool = node?.tool as Record<string, unknown> | undefined
+	const debugTool = debug?.tool as Record<string, unknown> | undefined
+	return [tool?.name, tool?.tool_name, debugTool?.name, debugTool?.tool_name].some(
+		(name) => typeof name === "string" && taskLifecycleToolNames.has(name),
+	)
+}
+
 /**
  * A message may render through Store-backed business sidecars even when its streaming payload
- * is empty. Tool responses are different: their visible branch is AttachmentSection, while
- * tool-call cards are rendered from the Assistant's tool_calls. Do not keep a role=tool row
- * merely because it reached a terminal status, otherwise Virtuoso measures an empty row.
+ * is empty. Ordinary tool responses are different: their visible branch is AttachmentSection,
+ * while tool-call cards are rendered from the Assistant's tool_calls. Keeping one merely because
+ * it reached a terminal status would project an empty measured row.
  */
 function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
 	if (node?.role === "user") return true
@@ -113,6 +111,12 @@ function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
 	]
 
 	if (isToolRoleMessage(node)) {
+		// finish_task projects the task lifecycle rather than a tool result, and it is the row that
+		// carries the terminal status badge plus the follow-up suggestions. A conversational turn
+		// ends with an attachment-free, content-free finish_task, so payload emptiness must not
+		// drop it. Rows that reach here before their terminal status still render as a measured
+		// placeholder instead of an empty gap.
+		if (isTaskLifecycleToolMessage(node)) return true
 		return (
 			payloads.some(hasRenderableMessageValue) ||
 			attachmentPayloads.some(hasRenderableMessageValue)
@@ -125,44 +129,6 @@ function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
 	// Terminal status is retained here because the Store may fill the final Assistant projection
 	// after the historical message enters the list.
 	return attachmentPayloads.some(hasRenderableMessageValue) || hasTerminalMessageStatus(node)
-}
-
-/**
- * Maps the flat message projection to Virtuoso groups. User messages become native sticky
- * group headers, while the remaining messages stay as measured group items.
- */
-export function buildGroupedVirtualMessageProjection(
-	items: ReadonlyArray<VirtualMessageItem>,
-): GroupedVirtualMessageProjection {
-	const groups: Array<GroupedVirtualMessageGroup> = []
-	let currentGroup: GroupedVirtualMessageGroup | undefined
-
-	for (const item of items) {
-		if (item.isUser) {
-			currentGroup = {
-				key: `turn-${item.key}`,
-				header: item,
-				items: [],
-			}
-			groups.push(currentGroup)
-			continue
-		}
-
-		if (!currentGroup) {
-			currentGroup = {
-				key: "leading-messages",
-				items: [],
-			}
-			groups.push(currentGroup)
-		}
-		currentGroup.items.push(item)
-	}
-
-	return {
-		groups,
-		items: groups.flatMap((group) => group.items),
-		groupCounts: groups.map((group) => group.items.length),
-	}
 }
 
 /**
@@ -300,17 +266,25 @@ export function findActiveStickyIndex(
 	return activeIndex
 }
 
-/**
- * TanStack normally mounts only the overscanned range. Add the preceding User so the same
- * ordinary message row can remain sticky without rendering a second clone outside the list.
- */
-export function createStickyRangeExtractor(
+/** The User row that will take over from `activeIndex`, used to drive the sticky push-out. */
+export function findNextStickyIndex(
 	userIndices: ReadonlyArray<number>,
-): (range: Range) => Array<number> {
-	return (range: Range) => {
-		const indices = defaultRangeExtractor(range)
-		const activeStickyIndex = findActiveStickyIndex(userIndices, range.startIndex)
-		if (activeStickyIndex === undefined || indices.includes(activeStickyIndex)) return indices
-		return [activeStickyIndex, ...indices].sort((left, right) => left - right)
+	activeIndex: number,
+): number | undefined {
+	let low = 0
+	let high = userIndices.length - 1
+	let nextIndex: number | undefined
+
+	while (low <= high) {
+		const middle = low + Math.floor((high - low) / 2)
+		const candidate = userIndices[middle]
+		if (candidate > activeIndex) {
+			nextIndex = candidate
+			high = middle - 1
+		} else {
+			low = middle + 1
+		}
 	}
+
+	return nextIndex
 }

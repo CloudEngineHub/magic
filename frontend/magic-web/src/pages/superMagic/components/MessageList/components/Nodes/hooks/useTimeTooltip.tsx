@@ -10,6 +10,7 @@ import { cn } from "@/utils/cn"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { MESSAGE_LIST_VIEWPORT_SELECTOR } from "../../../message-list-viewport"
 
 // 全局tooltip管理器
 class GlobalTooltipManager {
@@ -133,7 +134,7 @@ export function getTimeTooltipPageLeftGutter(fromElement: HTMLElement | null): n
 	let parent: HTMLElement | null = fromElement
 	while (parent) {
 		if (parent.classList.contains("message-list-container")) {
-			const viewport = parent.querySelector("[data-slot='scroll-area-viewport']")
+			const viewport = parent.querySelector(MESSAGE_LIST_VIEWPORT_SELECTOR)
 			const column = viewport?.firstElementChild as HTMLElement | undefined
 			return (column ?? parent).getBoundingClientRect().left
 		}

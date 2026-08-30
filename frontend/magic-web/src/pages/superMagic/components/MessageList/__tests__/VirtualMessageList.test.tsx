@@ -1,56 +1,71 @@
-import { createElement, type ComponentProps, type ReactNode } from "react"
-import { fireEvent, render } from "@testing-library/react"
+import {
+	createElement,
+	forwardRef,
+	useImperativeHandle,
+	type ComponentProps,
+	type ReactElement,
+} from "react"
+import { act, fireEvent, render } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SuperMagicMessageItem } from "../type"
 import { buildVirtualMessageProjection } from "../virtual-message-items"
 import { VirtualMessageList } from "../components/VirtualMessageList"
 
+const ROW_HEIGHT = 100
+
 const virtualState = vi.hoisted(() => ({
 	toolStatus: "completed",
 	canonicalNode: undefined as Record<string, unknown> | undefined,
 	lastProps: undefined as Record<string, any> | undefined,
+	scrollOffset: 0,
+	scrollSize: 2000,
+	viewportSize: 400,
+	resizeCallbacks: [] as ResizeObserverCallback[],
 }))
 
-vi.mock("react-virtuoso", () => ({
-	GroupedVirtuoso: (props: Record<string, any>) => {
+/**
+ * virtua drives layout from a measurement cache; the mock replaces that cache with a fixed grid
+ * so index math (sticky handoff, push-out) can be asserted without a real layout engine.
+ */
+vi.mock("virtua", () => ({
+	Virtualizer: forwardRef((props: Record<string, any>, ref) => {
 		virtualState.lastProps = props
-		const Group = props.components?.Group || "div"
-		const List = props.components?.List || "div"
-		const Footer = props.components?.Footer
-		let itemIndex = 0
-		const groups = (props.groupCounts || []).map((count: number, groupIndex: number) => {
-			const header = createElement(
-				Group,
-				{
-					key: `group-${groupIndex}`,
-					"data-index": groupIndex,
-					"data-item-index": itemIndex,
-					"data-known-size": 80,
-					style: { position: "sticky", top: 0 },
-				},
-				props.groupContent?.(groupIndex),
-			)
-			const groupItems = Array.from({ length: count }, (_, offset) => {
-				const currentIndex = itemIndex + offset
-				const absoluteIndex = currentIndex + (props.firstItemIndex || 0)
-				return createElement(
-					"div",
-					{
-						key: currentIndex,
-						"data-virtuoso-item-index": currentIndex,
-					},
-					props.itemContent?.(absoluteIndex, groupIndex, undefined, undefined),
-				)
-			})
-			itemIndex += count
-			return [header, ...groupItems]
-		})
+		useImperativeHandle(ref, () => ({
+			get scrollOffset() {
+				return virtualState.scrollOffset
+			},
+			get scrollSize() {
+				return virtualState.scrollSize
+			},
+			get viewportSize() {
+				return virtualState.viewportSize
+			},
+			findItemIndex: (offset: number) =>
+				Math.max(0, Math.floor((offset - (props.startMargin || 0)) / ROW_HEIGHT)),
+			getItemOffset: (index: number) => index * ROW_HEIGHT,
+			getItemSize: () => ROW_HEIGHT,
+			scrollTo: vi.fn(),
+			scrollToIndex: vi.fn(),
+		}))
 
-		return createElement(List, { "data-testid": "mock-virtuoso-list" }, [
-			...(groups.flat() as ReactNode[]),
-			Footer ? createElement(Footer, { key: "footer", context: props.context }) : null,
-		])
-	},
+		const Item = props.item || "div"
+		const children = (props.children as Array<ReactElement>) || []
+		return createElement(
+			"div",
+			{ "data-testid": "mock-virtualizer" },
+			children.map((child, index) =>
+				createElement(
+					Item,
+					{
+						key: child.key ?? index,
+						index,
+						style: { position: "absolute", top: index * ROW_HEIGHT },
+					},
+					child,
+				),
+			),
+		)
+	}),
 }))
 
 vi.mock("@/pages/superMagic/stores", () => ({
@@ -69,6 +84,15 @@ vi.mock("react-i18next", async (importOriginal) => {
 	}
 })
 
+class ControlledResizeObserver {
+	constructor(callback: ResizeObserverCallback) {
+		virtualState.resizeCallbacks.push(callback)
+	}
+
+	observe = vi.fn()
+	disconnect = vi.fn()
+}
+
 function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMessageItem {
 	return {
 		super_message_id: id,
@@ -78,21 +102,33 @@ function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMes
 	} as unknown as SuperMagicMessageItem
 }
 
+function createViewport() {
+	return document.createElement("div")
+}
+
 function renderList(
 	items: Array<SuperMagicMessageItem>,
 	options?: Partial<ComponentProps<typeof VirtualMessageList>>,
 ) {
 	const projection = buildVirtualMessageProjection(items)
+	const viewport = createViewport()
 	return render(
 		<VirtualMessageList
 			items={projection.items}
 			userIndices={projection.userIndices}
 			isMobile={false}
-			getScrollElement={() => null}
+			getScrollElement={() => viewport}
 			renderNode={({ item }) => <span>{item.key}</span>}
 			{...options}
 		/>,
 	)
+}
+
+function scrollTo(offset: number) {
+	virtualState.scrollOffset = offset
+	act(() => {
+		virtualState.lastProps?.onScroll?.(offset)
+	})
 }
 
 describe("VirtualMessageList", () => {
@@ -100,9 +136,13 @@ describe("VirtualMessageList", () => {
 		virtualState.toolStatus = "completed"
 		virtualState.canonicalNode = undefined
 		virtualState.lastProps = undefined
+		virtualState.scrollOffset = 0
+		virtualState.scrollSize = 2000
+		virtualState.resizeCallbacks = []
+		vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
 	})
 
-	it("passes grouped counts to Virtuoso and renders each User as one sticky group header", () => {
+	it("renders one flat row per message without group wrappers", () => {
 		const { container } = renderList([
 			message("user-0", "user"),
 			message("assistant-1", "assistant"),
@@ -111,123 +151,206 @@ describe("VirtualMessageList", () => {
 			message("tool-4", "tool"),
 		])
 
-		expect(virtualState.lastProps?.groupCounts).toEqual([2, 1])
 		expect(virtualState.lastProps?.data).toBeUndefined()
+		expect(virtualState.lastProps?.children).toHaveLength(5)
+		expect(container.querySelectorAll('[data-testid="virtual-message-row"]')).toHaveLength(5)
 		expect(container.querySelectorAll('[data-message-id="user-0"]')).toHaveLength(1)
 		expect(container.querySelectorAll('[data-message-id="user-3"]')).toHaveLength(1)
-		expect(container.querySelector('[data-message-id="assistant-1"]')).not.toBeNull()
-		expect(container.querySelector('[data-message-id="tool-4"]')).not.toBeNull()
 		expect(container.querySelector('[data-virtual-message-spacing="true"]')).toHaveClass("h-2")
-		expect(
-			(container.querySelector("[data-virtual-message-kind='group']") as HTMLElement).style
-				.transform,
-		).toBe("")
 	})
 
-	it("uses a measurable spacer for the leading group without a User header", () => {
-		const { container } = renderList([message("leading", "assistant")])
-
-		expect(
-			container.querySelector('[data-virtual-message-leading-group-spacer="true"]'),
-		).toHaveStyle({ height: "1px" })
-	})
-
-	it("renders the footer through Virtuoso so bottom content stays in measured list flow", () => {
+	it("appends the footer as the last virtual row so one virtualizer measures everything", () => {
 		const { container } = renderList([message("user-0", "user")], {
 			footer: <div data-testid="message-list-footer">footer</div>,
 		})
 
+		const rows = virtualState.lastProps?.children as Array<ReactElement>
+		expect(rows).toHaveLength(2)
+		expect(rows[rows.length - 1].key).toContain("footer")
 		expect(container.querySelector('[data-testid="message-list-footer"]')).not.toBeNull()
-		expect(virtualState.lastProps?.components?.Footer).toBeTypeOf("function")
 	})
 
-	it("passes the real scroll parent and uses a desktop sticky offset variable", () => {
-		const viewport = document.createElement("div")
-		const { container } = renderList([message("user-0", "user")], {
-			isMobile: false,
+	it("binds the caller's scroll element and start margin", () => {
+		const viewport = createViewport()
+		renderList([message("user-0", "user")], {
 			getScrollElement: () => viewport,
+			startMargin: 50,
 		})
 
-		expect(virtualState.lastProps?.customScrollParent).toBe(viewport)
-		expect(
-			container.querySelector("[data-virtual-message-kind='group']")?.parentElement,
-		).toHaveStyle({
-			top: "var(--message-group-sticky-top, 0px)",
-		})
-		expect(
-			container.querySelector('[data-message-id="user-0"]')?.parentElement,
-		).not.toHaveClass("before:bg-[rgb(var(--mobile-background-rgb))]", "after:bg-none")
+		expect(virtualState.lastProps?.scrollRef.current).toBe(viewport)
+		expect(virtualState.lastProps?.startMargin).toBe(50)
 	})
 
-	it("does not treat a range-only update as a scroll request", () => {
+	it("does not mount the virtualizer before the caller's scroll element exists", () => {
+		renderList([message("user-0", "user")], { getScrollElement: () => null })
+
+		expect(virtualState.lastProps).toBeUndefined()
+	})
+
+	it("mounts once a caller's ref-based scroll element commits after this subtree", () => {
+		// The share shell passes a plain ref filled by an ancestor, so it is still null while
+		// this list renders. Reading it again on commit is what makes that path work at all.
+		const lateViewport = { current: null as HTMLDivElement | null }
+		const view = renderList([message("user-0", "user")], {
+			getScrollElement: () => lateViewport.current,
+		})
+		expect(virtualState.lastProps).toBeUndefined()
+
+		lateViewport.current = createViewport()
+		view.rerender(
+			<VirtualMessageList
+				items={buildVirtualMessageProjection([message("user-0", "user")]).items}
+				userIndices={[0]}
+				isMobile={false}
+				getScrollElement={() => lateViewport.current}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+		)
+
+		expect(virtualState.lastProps?.scrollRef.current).toBe(lateViewport.current)
+	})
+
+	it("enables shift only for a pure prepend, not for a middle insertion", () => {
+		const initialMessages = [
+			message("user-0", "user"),
+			message("assistant-0", "assistant"),
+			message("user-1", "user"),
+		]
+		const viewport = createViewport()
+		const renderWith = (messages: Array<SuperMagicMessageItem>) => {
+			const projection = buildVirtualMessageProjection(messages)
+			return (
+				<VirtualMessageList
+					items={projection.items}
+					userIndices={projection.userIndices}
+					isMobile={false}
+					getScrollElement={() => viewport}
+					renderNode={({ item }) => <span>{item.key}</span>}
+				/>
+			)
+		}
+
+		const view = render(renderWith(initialMessages))
+		expect(virtualState.lastProps?.shift).toBe(false)
+
+		view.rerender(
+			renderWith([
+				message("history-user", "user"),
+				message("history-assistant", "assistant"),
+				...initialMessages,
+			]),
+		)
+		expect(virtualState.lastProps?.shift).toBe(true)
+
+		view.rerender(
+			renderWith([
+				message("history-user", "user"),
+				message("history-assistant", "assistant"),
+				message("user-0", "user"),
+				message("assistant-0", "assistant"),
+				message("middle-insert", "assistant"),
+				message("user-1", "user"),
+			]),
+		)
+		expect(virtualState.lastProps?.shift).toBe(false)
+	})
+
+	it("keeps the User row above the scroll position mounted and pinned", () => {
+		// Rows: 0 user-0, 1 assistant-1, 2 assistant-2, 3 user-3, 4 assistant-4
+		const { container } = renderList([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+			message("assistant-2", "assistant"),
+			message("user-3", "user"),
+			message("assistant-4", "assistant"),
+		])
+
+		scrollTo(2 * ROW_HEIGHT)
+		expect(virtualState.lastProps?.keepMounted).toEqual([0])
+		expect(
+			container
+				.querySelector('[data-virtual-item-sticky="true"]')
+				?.querySelector("[data-message-id]"),
+		).toHaveAttribute("data-message-id", "user-0")
+
+		scrollTo(4 * ROW_HEIGHT)
+		expect(virtualState.lastProps?.keepMounted).toEqual([3])
+	})
+
+	it("pushes the pinned row out as the next User row reaches the park line", () => {
+		const { container } = renderList([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+			message("user-2", "user"),
+		])
+		const canvas = container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+
+		// Desktop parks the pinned row 40px below the viewport top while nothing crowds it.
+		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("40px")
+
+		// user-2 sits at offset 200; once it is within one row height of the park line the
+		// pinned row must translate up in lockstep so the handoff has no overlap or gap.
+		scrollTo(140)
+		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("-40px")
+	})
+
+	it("offsets the push-out by startMargin because item offsets exclude it", () => {
+		// `getItemOffset` is measured from the virtualizer container while `scrollOffset` is
+		// measured from the scroll element; startMargin is the gap between those two origins.
+		const { container } = renderList(
+			[
+				message("user-0", "user"),
+				message("assistant-1", "assistant"),
+				message("user-2", "user"),
+			],
+			{ startMargin: 50 },
+		)
+		const canvas = container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+
+		// Same geometry as the no-margin case, but every threshold moves 50px later: the
+		// no-margin list already pushes out at 140, this one is still parked.
+		scrollTo(140)
+		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("10px")
+
+		scrollTo(90)
+		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("40px")
+
+		scrollTo(190)
+		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("-40px")
+	})
+
+	it("reports layout growth through the virtualizer change callback", () => {
 		const onVirtualizerChange = vi.fn()
 		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
 			onVirtualizerChange,
 		})
 
-		virtualState.lastProps?.rangeChanged?.({ startIndex: 0, endIndex: 1 })
 		expect(onVirtualizerChange).not.toHaveBeenCalled()
-
-		virtualState.lastProps?.totalListHeightChanged?.(256)
+		act(() => {
+			virtualState.resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver))
+		})
 		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
 	})
 
-	it("uses a stable positive firstItemIndex and decreases it only for prepended ordinary items", () => {
-		const initialMessages = [
-			message("user-0", "user"),
-			message("assistant-0", "assistant"),
-			message("user-1", "user"),
-			message("assistant-1", "assistant"),
-		]
-		const initialProjection = buildVirtualMessageProjection(initialMessages)
-		const view = render(
-			<VirtualMessageList
-				items={initialProjection.items}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
+	it("exposes the virtualizer handle through the scroll adapter", () => {
+		const virtualizerRef = { current: null } as {
+			current: import("../message-list-scroll-adapter").MessageListScrollAdapter | null
+		}
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			virtualizerRef,
+			footer: <div>footer</div>,
+		})
 
-		const initialFirstItemIndex = virtualState.lastProps?.firstItemIndex
-		expect(initialFirstItemIndex).toBeGreaterThan(0)
-
-		const prependedProjection = buildVirtualMessageProjection([
-			message("history-user", "user"),
-			message("history-assistant", "assistant"),
-			...initialMessages,
-		])
-		view.rerender(
-			<VirtualMessageList
-				items={prependedProjection.items}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
-
-		expect(virtualState.lastProps?.firstItemIndex).toBe(initialFirstItemIndex - 1)
-
-		const headerOnlyProjection = buildVirtualMessageProjection([
-			message("header-only-user", "user"),
-			message("history-user", "user"),
-			message("history-assistant", "assistant"),
-			...initialMessages,
-		])
-		view.rerender(
-			<VirtualMessageList
-				items={headerOnlyProjection.items}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => <span>{item.key}</span>}
-			/>,
-		)
-
-		expect(virtualState.lastProps?.firstItemIndex).toBe(initialFirstItemIndex - 1)
-		view.unmount()
+		expect(virtualizerRef.current?.itemCount).toBe(3)
+		expect(virtualizerRef.current?.getItemOffset(2)).toBe(200)
+		virtualizerRef.current?.scrollToIndex(2, { align: "end" })
 	})
 
-	it("filters a non-terminal empty Tool before it reaches Virtuoso", () => {
+	it("filters a non-terminal empty Tool before it reaches the virtualizer", () => {
 		virtualState.toolStatus = "running"
 		const emptyTool = {
 			...message("tool-0", "tool"),
@@ -272,20 +395,13 @@ describe("VirtualMessageList", () => {
 			super_message_id: "assistant-0",
 		}
 		let renderedTopicId = ""
-		const projection = buildVirtualMessageProjection([message("assistant-0", "assistant")])
-
-		render(
-			<VirtualMessageList
-				topicId="chat-topic"
-				items={projection.items}
-				isMobile={false}
-				getScrollElement={() => null}
-				renderNode={({ item }) => {
-					renderedTopicId = String(item.node?.topic_id || "")
-					return <span>{item.key}</span>
-				}}
-			/>,
-		)
+		renderList([message("assistant-0", "assistant")], {
+			topicId: "chat-topic",
+			renderNode: ({ item }) => {
+				renderedTopicId = String(item.node?.topic_id || "")
+				return <span>{item.key}</span>
+			},
+		})
 
 		expect(renderedTopicId).toBe("chat-topic")
 	})

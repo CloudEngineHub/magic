@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest"
 import type { SuperMagicMessageItem } from "../type"
 import {
 	buildVirtualMessageProjection,
-	buildGroupedVirtualMessageProjection,
 	composeVirtualMessageItems,
-	createStickyRangeExtractor,
 	findActiveStickyIndex,
+	findNextStickyIndex,
 	getPrependedVirtualItemCount,
 } from "../virtual-message-items"
 
@@ -22,32 +21,6 @@ function message(
 }
 
 describe("virtual message projection", () => {
-	it("groups each User as a sticky header without losing leading messages", () => {
-		const projection = buildVirtualMessageProjection([
-			message("leading", "assistant"),
-			message("user-1", "user"),
-			message("assistant-1", "assistant"),
-			message("tool-1", "tool"),
-			message("user-2", "user"),
-			message("assistant-2", "assistant"),
-		])
-
-		const grouped = buildGroupedVirtualMessageProjection(projection.items)
-
-		expect(grouped.groupCounts).toEqual([1, 2, 1])
-		expect(grouped.groups.map((group) => group.header?.key)).toEqual([
-			undefined,
-			"user-1",
-			"user-2",
-		])
-		expect(grouped.items.map((item) => item.key)).toEqual([
-			"leading",
-			"assistant-1",
-			"tool-1",
-			"assistant-2",
-		])
-	})
-
 	it("keeps every converted message flat while retaining turn ownership", () => {
 		const projection = buildVirtualMessageProjection([
 			message("leading", "assistant"),
@@ -124,6 +97,23 @@ describe("virtual message projection", () => {
 		const projection = buildVirtualMessageProjection([finishTask])
 
 		expect(projection.items.map((item) => item.key)).toEqual(["finish-task"])
+	})
+
+	it("keeps a payload-free finish_task so the turn keeps its terminal status sidecar", () => {
+		// A conversational turn ends with a finish_task that has neither content nor attachments.
+		// Dropping it would take the task-completed badge and follow-up suggestions with it.
+		const finishTask = {
+			...message("bare-finish-task", "tool"),
+			content: "",
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [],
+			tool: { name: "finish_task" },
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([finishTask])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["bare-finish-task"])
 	})
 
 	it("filters a terminal Tool response when it has no renderable result", () => {
@@ -217,17 +207,11 @@ describe("virtual message projection", () => {
 		expect(findActiveStickyIndex([2, 7, 11], 99)).toBe(11)
 	})
 
-	it("adds only the active User to TanStack's visible range", () => {
-		const rangeExtractor = createStickyRangeExtractor([0, 4])
-
-		expect(
-			rangeExtractor({
-				startIndex: 3,
-				endIndex: 4,
-				overscan: 1,
-				count: 6,
-			}),
-		).toEqual([0, 2, 3, 4, 5])
+	it("finds the User row that will take over the pinned slot", () => {
+		expect(findNextStickyIndex([2, 7, 11], 2)).toBe(7)
+		expect(findNextStickyIndex([2, 7, 11], 7)).toBe(11)
+		expect(findNextStickyIndex([2, 7, 11], 11)).toBeUndefined()
+		expect(findNextStickyIndex([], 0)).toBeUndefined()
 	})
 
 	it("composes revoked messages into the same flat list and limits only the collapsed preview", () => {

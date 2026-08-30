@@ -26,7 +26,6 @@ import { IconArrowBackUp, IconChevronsDown, IconChevronsUp } from "@tabler/icons
 import { SuperMagicMessageItem } from "./type"
 import { Node } from "./components/Nodes"
 import { observer } from "mobx-react-lite"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { superMagicStore } from "../../stores"
 import { optimisticMessageStore } from "../../stores/optimisticMessageStore"
 import { SuperMagicApi } from "@/apis"
@@ -106,7 +105,7 @@ interface MessageListProps {
 	exportApiRef?: (api: MessageListExportApi | null) => void
 	/** Title used as export document header / default file name. */
 	exportTitle?: string
-	/** Optional ref to the ScrollArea viewport (mobile TopicPage scroll coordination). */
+	/** Optional ref to the message list scroll viewport (mobile TopicPage scroll coordination). */
 	viewportRef?: Ref<HTMLDivElement | null>
 	/** Distance from the top at which a fresh upward gesture may load one history page. */
 	historyLoadThresholdPx?: number
@@ -182,9 +181,9 @@ const MessageList = observer(
 
 		const nodesPanelRef = useRef<HTMLDivElement | null>(null)
 		/**
-		 * ScrollArea viewport commits after VirtualMessageList's first render.
-		 * Keep the element in state so the Virtuoso instance receives the real
-		 * custom scroll parent instead of staying bound to the initial null value.
+		 * The scroll viewport commits after VirtualMessageList's first render.
+		 * Keep the element in state so the virtualizer receives the real scroll
+		 * container instead of staying bound to the initial null value.
 		 */
 		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
 		const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
@@ -846,32 +845,43 @@ const MessageList = observer(
 								/>
 							</div>
 						)}
-						<ScrollArea
+						{/*
+						 * Plain scroll element instead of Radix ScrollArea: virtua compensates
+						 * measurement and prepend itself, so the list must own the only scroll
+						 * container. `overflow-anchor: none` keeps the browser's native anchoring
+						 * from fighting that compensation.
+						 */}
+						<div
+							ref={setScrollViewportRef}
+							data-message-list-viewport="true"
+							data-testid="message-list-viewport"
 							className={cn(
-								"h-full w-full",
-								isMobile
-									? "[&>[data-slot='scroll-area-viewport']>div]:px-4"
-									: "[&>[data-slot='scroll-area-viewport']>div]:pl-2 [&>[data-slot='scroll-area-viewport']>div]:pr-3",
-								"[&>[data-slot='scroll-area-viewport']>div]:pt-0",
-								"[&>[data-slot='scroll-area-viewport']>div]:pb-2",
-								"[&>[data-slot='scroll-area-viewport']>div]:!block",
-								"[&>[data-slot='scroll-area-viewport']>div]:!max-w-3xl",
-								"[&>[data-slot='scroll-area-viewport']>div]:!min-w-[unset]",
-								"[&>[data-slot='scroll-area-viewport']>div]:!mx-auto",
-								isMobile
-									? "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[10px]"
-									: "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[50px]",
+								"h-full w-full overflow-y-auto overflow-x-hidden [overflow-anchor:none]",
+								// Restores the thin overlay scrollbar the Radix ScrollArea used to draw.
+								"[scrollbar-color:rgb(var(--border-rgb))_transparent] [scrollbar-width:thin]",
+								"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+								"[&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
 							)}
-							viewportRef={setScrollViewportRef}
 						>
-							{visibleData.length > 0 || !isEmptyStatus ? (
-								<>
+							{/*
+							 * Centered message column. The top padding used to live on the Radix
+							 * wrapper's first child; keeping it on the column means a prepended
+							 * history page cannot carry the spacing away with the old first row.
+							 */}
+							<div
+								className={cn(
+									"mx-auto block min-w-[unset] max-w-3xl pb-2",
+									isMobile ? "px-4 pt-[10px]" : "pl-2 pr-3 pt-[50px]",
+								)}
+							>
+								{visibleData.length > 0 || !isEmptyStatus ? (
 									<VirtualMessageList
 										topicId={currentTopicKey}
 										items={virtualMessageItems}
 										userIndices={userIndices}
 										isMobile={isMobile}
 										getScrollElement={getScrollElement}
+										startMargin={isMobile ? 10 : 50}
 										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
 										renderNode={renderVirtualMessageNode}
@@ -882,11 +892,11 @@ const MessageList = observer(
 										virtualizerRef={virtualizerRef}
 										onVirtualizerChange={onVirtualizerChange}
 									/>
-								</>
-							) : (
-								<Empty />
-							)}
-						</ScrollArea>
+								) : (
+									<Empty />
+								)}
+							</div>
+						</div>
 						{scrollEdgeFadeConfig ? (
 							<ScrollEdgeFadeOverlays
 								fadeColor={scrollEdgeFadeConfig.fadeColor}
