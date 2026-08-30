@@ -66,7 +66,7 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
 
         $fileEntity = $context['file_entity'];
         $projectFileId = $fileEntity->getFileId();
-        if ($projectFileId <= 0 || $fileEntity->getIsDirectory()) {
+        if (! $this->isProjectFile($fileEntity) || $fileEntity->getIsDirectory()) {
             return;
         }
 
@@ -90,7 +90,7 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
         $authorization = $event->getUserAuthorization();
         foreach ($event->getFileEntities() as $fileEntity) {
             $projectFileId = (int) $fileEntity->getFileId();
-            if ($projectFileId <= 0) {
+            if (! $this->isProjectFile($fileEntity)) {
                 continue;
             }
 
@@ -113,7 +113,7 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
     {
         $directoryEntity = $event->getDirectoryEntity();
         $projectFileId = (int) $directoryEntity->getFileId();
-        if ($projectFileId <= 0) {
+        if (! $this->isProjectFile($directoryEntity)) {
             return;
         }
 
@@ -197,5 +197,12 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
                 'error' => $throwable->getMessage(),
             ]);
         }
+    }
+
+    private function isProjectFile(TaskFileEntity $fileEntity): bool
+    {
+        return $fileEntity->getFileId() > 0
+            && $fileEntity->getProjectId() > 0
+            && $fileEntity->getSpaceType() === 'project';
     }
 }
