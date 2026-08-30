@@ -47,6 +47,8 @@ function hasTerminalToolStatus(node: Record<string, unknown> | undefined) {
 export interface VirtualMessageListProps {
 	topicId?: string
 	items: Array<VirtualMessageItem>
+	/** Bottom content is rendered by Virtuoso so its measured height participates in scroll layout. */
+	footer?: ReactNode
 	/** Kept optional for call-site compatibility; GroupedVirtuoso derives groups from items. */
 	userIndices?: Array<number>
 	isMobile: boolean
@@ -61,6 +63,10 @@ export interface VirtualMessageListProps {
 	limitReached?: boolean
 	virtualizerRef?: MutableRefObject<MessageListScrollAdapter | null>
 	onVirtualizerChange?: (instance: MessageListScrollAdapter, sync: boolean) => void
+}
+
+interface VirtualMessageListContext {
+	footer: ReactNode | null
 }
 
 const VirtuosoGroup = ({ children, style, ...props }: GroupProps) => (
@@ -86,6 +92,12 @@ const VirtuosoList = forwardRef<HTMLDivElement, { children?: ReactNode; style?: 
 )
 
 const VIRTUOSO_COMPONENTS = { Group: VirtuosoGroup, List: VirtuosoList }
+
+const VirtuosoFooter = ({ context }: { context: VirtualMessageListContext }) => {
+	if (!context.footer) return null
+
+	return <div data-testid="virtual-message-footer">{context.footer}</div>
+}
 
 const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 	item,
@@ -286,6 +298,7 @@ function VirtualMessageRow({
 function VirtualMessageListInner({
 	topicId,
 	items,
+	footer = null,
 	isMobile,
 	getScrollElement,
 	renderNode,
@@ -432,6 +445,11 @@ function VirtualMessageListInner({
 			}) as CSSProperties,
 		[isMobile],
 	)
+	const virtuosoComponents = useMemo(
+		() => ({ ...VIRTUOSO_COMPONENTS, Footer: VirtuosoFooter }),
+		[],
+	)
+	const virtuosoContext = useMemo<VirtualMessageListContext>(() => ({ footer }), [footer])
 
 	const computeVirtualMessageItemKey = useCallback(
 		(index: number) => {
@@ -534,11 +552,12 @@ function VirtualMessageListInner({
 				customScrollParent={viewport ?? undefined}
 				computeItemKey={computeVirtualMessageItemKey}
 				defaultItemHeight={128}
-				increaseViewportBy={{ top: 160, bottom: 240 }}
-				overscan={{ main: 240, reverse: 240 }}
+				increaseViewportBy={{ top: 260, bottom: 240 }}
+				overscan={{ main: 260, reverse: 240 }}
 				skipAnimationFrameInResizeObserver
 				style={listStyle}
-				components={VIRTUOSO_COMPONENTS}
+				components={virtuosoComponents}
+				context={virtuosoContext}
 				rangeChanged={handleRangeChanged}
 				totalListHeightChanged={handleTotalListHeightChanged}
 				groupContent={renderGroupContent}

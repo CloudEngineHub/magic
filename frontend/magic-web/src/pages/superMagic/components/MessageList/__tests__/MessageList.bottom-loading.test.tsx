@@ -96,14 +96,17 @@ vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList
 	VirtualMessageList: ({
 		items,
 		renderNode,
+		footer,
 	}: {
 		items: Array<{ key: string }>
 		renderNode: (args: { item: any }) => ReactNode
+		footer?: ReactNode
 	}) => (
 		<div data-testid="virtual-message-stream">
 			{items.map((item) => (
 				<div key={item.key}>{renderNode({ item })}</div>
 			))}
+			{footer}
 		</div>
 	),
 }))

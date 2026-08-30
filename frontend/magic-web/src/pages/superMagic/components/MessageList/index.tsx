@@ -283,7 +283,10 @@ const MessageList = observer(
 			? `${topicMembershipRevision}:${activeRevokedAnchor?.seq_id || ""}:${hiddenRevokedOptimisticMessageIds.join("\u0000")}`
 			: undefined
 
-		const visibleData = [...mainDisplayData, ...revokedBranchData]
+		const visibleData = useMemo(
+			() => [...mainDisplayData, ...revokedBranchData],
+			[mainDisplayData, revokedBranchData],
+		)
 
 		const { messages, messageKeys, messageTurnGroups, normalVirtualMessageItems } =
 			useMemo(() => {
@@ -333,7 +336,8 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				{ status?: TaskStatus } | undefined
+				| { status?: TaskStatus }
+				| undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -736,6 +740,92 @@ const MessageList = observer(
 		const renderVirtualMessageNode = useMemoizedFn(({ item }: { item: VirtualMessageItem }) =>
 			renderVirtualMessageContent(item),
 		)
+		const messageListFooter = useMemo(() => {
+			const shouldRenderRevokedActions =
+				revokedDisplayMessages.length > 0 &&
+				!forceHideRevokedMessages &&
+				!isFirstRevokedUserMessagePendingSend
+			const hasFooter =
+				shouldRenderRevokedActions || shouldShowBottomLoading || showAiGeneratedTip
+			if (!hasFooter) return null
+
+			return (
+				<>
+					{shouldRenderRevokedActions ? (
+						<div
+							data-testid="revoked-message-actions"
+							className={cn(
+								"relative z-10 flex items-start gap-1 rounded-lg bg-sidebar px-4 pb-2.5 pt-2.5",
+								maskedRevokedMessages.length > 0 &&
+									!isRevokedMessagesExpanded &&
+									"bg-[linear-gradient(to_bottom,transparent_0%,rgb(var(--sidebar-rgb))_72%)] pt-20",
+							)}
+						>
+							<IconArrowBackUp size={22} />
+							<div className="flex flex-col gap-2.5">
+								<div className="text-sm leading-5 text-foreground">
+									{t("warningCard.undoMessageContentTip")}
+								</div>
+								<div className="flex gap-2.5">
+									{maskedRevokedMessages.length > 0 ? (
+										<Button
+											className={revokedActionButton}
+											onClick={handleRevokedMessagesExpanded}
+										>
+											<div>
+												{isRevokedMessagesExpanded
+													? t("warningCard.collapseContent")
+													: t("warningCard.expandContent")}
+											</div>
+											{isRevokedMessagesExpanded ? (
+												<IconChevronsUp size={16} />
+											) : (
+												<IconChevronsDown size={16} />
+											)}
+										</Button>
+									) : null}
+									<Button
+										className={revokedActionButton}
+										onClick={handleCancelRevokedMessages}
+									>
+										{isCancelRevokedLoading ? (
+											<Spinner className="animate-spin" size={16} />
+										) : null}
+										{t("warningCard.restoreContent")}
+									</Button>
+								</div>
+							</div>
+						</div>
+					) : null}
+					{shouldShowBottomLoading ? (
+						<LoadingMessage
+							messages={visibleData}
+							showLoading={shouldShowBottomLoading}
+							selectedTopic={selectedTopic}
+						/>
+					) : null}
+					{showAiGeneratedTip ? (
+						<div className="mx-auto mb-2.5 mt-2.5 text-center text-xs leading-4 text-muted-foreground">
+							{t("ui.aiGeneratedTip")}
+						</div>
+					) : null}
+				</>
+			)
+		}, [
+			handleCancelRevokedMessages,
+			handleRevokedMessagesExpanded,
+			forceHideRevokedMessages,
+			isCancelRevokedLoading,
+			isFirstRevokedUserMessagePendingSend,
+			isRevokedMessagesExpanded,
+			maskedRevokedMessages.length,
+			revokedDisplayMessages.length,
+			selectedTopic,
+			shouldShowBottomLoading,
+			showAiGeneratedTip,
+			t,
+			visibleData,
+		])
 
 		return (
 			<MessageListProvider value={augmentedMessageListContext}>
@@ -782,6 +872,7 @@ const MessageList = observer(
 										userIndices={userIndices}
 										isMobile={isMobile}
 										getScrollElement={getScrollElement}
+										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
 										renderNode={renderVirtualMessageNode}
 										exportMode={enableExport && exportStore.exportMode}
@@ -791,81 +882,9 @@ const MessageList = observer(
 										virtualizerRef={virtualizerRef}
 										onVirtualizerChange={onVirtualizerChange}
 									/>
-									{revokedDisplayMessages.length > 0 &&
-									!forceHideRevokedMessages &&
-									!isFirstRevokedUserMessagePendingSend ? (
-										<div
-											data-testid="revoked-message-actions"
-											className={cn(
-												"relative z-10 flex items-start gap-1 rounded-lg bg-sidebar px-4 pb-2.5 pt-2.5",
-												maskedRevokedMessages.length > 0 &&
-													!isRevokedMessagesExpanded &&
-													"-mt-20 bg-[linear-gradient(to_bottom,transparent_0%,rgb(var(--sidebar-rgb))_72%)] pt-20",
-											)}
-										>
-											<IconArrowBackUp size={22} />
-											<div className="flex flex-col gap-2.5">
-												<div className="text-sm leading-5 text-foreground">
-													{t("warningCard.undoMessageContentTip")}
-												</div>
-												<div className="flex gap-2.5">
-													{maskedRevokedMessages.length > 0 ? (
-														<Button
-															className={revokedActionButton}
-															onClick={handleRevokedMessagesExpanded}
-														>
-															<div>
-																{isRevokedMessagesExpanded
-																	? t(
-																			"warningCard.collapseContent",
-																		)
-																	: t(
-																			"warningCard.expandContent",
-																		)}
-															</div>
-															{isRevokedMessagesExpanded ? (
-																<IconChevronsUp size={16} />
-															) : (
-																<IconChevronsDown size={16} />
-															)}
-														</Button>
-													) : null}
-													<Button
-														className={revokedActionButton}
-														onClick={handleCancelRevokedMessages}
-													>
-														{isCancelRevokedLoading ? (
-															<Spinner
-																className="animate-spin"
-																size={16}
-															/>
-														) : null}
-														{t("warningCard.restoreContent")}
-													</Button>
-												</div>
-											</div>
-										</div>
-									) : null}
 								</>
 							) : (
 								<Empty />
-							)}
-							{shouldShowBottomLoading && (
-								<LoadingMessage
-									messages={visibleData}
-									showLoading={shouldShowBottomLoading}
-									selectedTopic={selectedTopic}
-								/>
-							)}
-							{showAiGeneratedTip && (
-								<div
-									className={cn(
-										"mx-auto mb-2.5 mt-2.5 text-center text-xs leading-4",
-										"text-muted-foreground",
-									)}
-								>
-									{t("ui.aiGeneratedTip")}
-								</div>
 							)}
 						</ScrollArea>
 						{scrollEdgeFadeConfig ? (

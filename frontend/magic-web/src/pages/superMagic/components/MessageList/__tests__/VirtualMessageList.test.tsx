@@ -16,6 +16,7 @@ vi.mock("react-virtuoso", () => ({
 		virtualState.lastProps = props
 		const Group = props.components?.Group || "div"
 		const List = props.components?.List || "div"
+		const Footer = props.components?.Footer
 		let itemIndex = 0
 		const groups = (props.groupCounts || []).map((count: number, groupIndex: number) => {
 			const header = createElement(
@@ -45,11 +46,10 @@ vi.mock("react-virtuoso", () => ({
 			return [header, ...groupItems]
 		})
 
-		return createElement(
-			List,
-			{ "data-testid": "mock-virtuoso-list" },
-			groups.flat() as ReactNode,
-		)
+		return createElement(List, { "data-testid": "mock-virtuoso-list" }, [
+			...(groups.flat() as ReactNode[]),
+			Footer ? createElement(Footer, { key: "footer", context: props.context }) : null,
+		])
 	},
 }))
 
@@ -130,6 +130,15 @@ describe("VirtualMessageList", () => {
 		expect(
 			container.querySelector('[data-virtual-message-leading-group-spacer="true"]'),
 		).toHaveStyle({ height: "1px" })
+	})
+
+	it("renders the footer through Virtuoso so bottom content stays in measured list flow", () => {
+		const { container } = renderList([message("user-0", "user")], {
+			footer: <div data-testid="message-list-footer">footer</div>,
+		})
+
+		expect(container.querySelector('[data-testid="message-list-footer"]')).not.toBeNull()
+		expect(virtualState.lastProps?.components?.Footer).toBeTypeOf("function")
 	})
 
 	it("passes the real scroll parent and uses a desktop sticky offset variable", () => {
