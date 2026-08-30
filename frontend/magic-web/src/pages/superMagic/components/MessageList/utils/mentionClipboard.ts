@@ -1,6 +1,7 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import {
 	MentionItemType,
+	type DirectoryMentionData,
 	type ProjectFileMentionData,
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
@@ -23,13 +24,25 @@ export interface MentionClipboardRepresentation {
 export function getMentionClipboardRepresentation(
 	attrs: TiptapMentionAttributes,
 ): MentionClipboardRepresentation | null {
-	if (attrs.type !== MentionItemType.PROJECT_FILE && attrs.type !== MentionItemType.UPLOAD_FILE) {
+	let path = ""
+	let label = ""
+
+	if (attrs.type === MentionItemType.FOLDER) {
+		const data = attrs.data as DirectoryMentionData
+		path = data.directory_path
+		label = data.directory_name?.trim() || ""
+	} else if (
+		attrs.type === MentionItemType.PROJECT_FILE ||
+		attrs.type === MentionItemType.UPLOAD_FILE
+	) {
+		const data = attrs.data as ProjectFileMentionData | UploadFileMentionData
+		path = data.relative_file_path || data.file_path || ""
+		label = data.file_name?.trim() || ""
+	} else {
 		return null
 	}
 
-	const data = attrs.data as ProjectFileMentionData | UploadFileMentionData
-	const href = createCanonicalWorkspaceHref(data.relative_file_path || data.file_path || "")
-	const label = data.file_name?.trim()
+	const href = createCanonicalWorkspaceHref(path)
 	if (!href || !label) return null
 	const markdownDestination = href.includes(" ") ? `<${href}>` : href
 

@@ -34,6 +34,7 @@ import {
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { ProjectDirectoryMentionIcon } from "@/pages/superMagic/components/MessageEditor/components/MentionNodes/folder/ProjectDirectoryMentionIcon"
 import {
 	FileReference,
 	getFileExtensionFromPath,
@@ -189,7 +190,9 @@ function InlineDefaultMention(props: InlineMentionProps) {
 				<span className="flex shrink-0 items-center" data-testid="inline-file-mention-icon">
 					<MentionMediaIcon
 						type={
-							data.type as MentionItemType.PROJECT_FILE | MentionItemType.UPLOAD_FILE
+							data.type as
+								| typeof MentionItemType.PROJECT_FILE
+								| typeof MentionItemType.UPLOAD_FILE
 						}
 						data={fileData}
 						size={16}
@@ -223,7 +226,15 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={handleClick}
 		>
-			<TSIcon type="ts-folder" size="16" className="shrink-0" />
+			{data.type === MentionItemType.FOLDER ? (
+				<ProjectDirectoryMentionIcon
+					data={data.data as DirectoryMentionData}
+					workspaceFilesList={projectFilesStore?.workspaceFilesList ?? []}
+					size={16}
+				/>
+			) : (
+				<TSIcon type="ts-folder" size="16" className="shrink-0" />
+			)}
 			<span className="min-w-0 truncate" title={displayName}>
 				{displayName}
 			</span>

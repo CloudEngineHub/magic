@@ -27,7 +27,7 @@ import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBot
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks"
-import { ProjectResourceIcon } from "../ProjectResourceIcon"
+import { ProjectResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/ProjectResourceIcon"
 import { getDirectoriesFromPath, getItemId, getItemName } from "../../utils/attachmentUtils"
 import type { MobileCrossProjectConfig, SelectDirectorySubmitParams } from "./types"
 import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../types"

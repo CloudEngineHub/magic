@@ -31,7 +31,7 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
-import { ProjectResourceIcon } from "../ProjectResourceIcon"
+import { ProjectResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/ProjectResourceIcon"
 
 import type {
 	ProjectResourceSelection,

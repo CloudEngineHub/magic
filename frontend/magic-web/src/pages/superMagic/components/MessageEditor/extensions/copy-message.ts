@@ -1,5 +1,7 @@
 import { Extension, type JSONContent } from "@/infrastructure/editors/tiptap/core"
+import { DOMSerializer, type Node as ProseMirrorNode } from "prosemirror-model"
 import { Plugin, PluginKey } from "prosemirror-state"
+import type { EditorView } from "prosemirror-view"
 import { isAllowedMention, markProjectFileMentionForCopy } from "../utils/mention"
 import type {
 	MentionListItem,
@@ -14,10 +16,19 @@ import {
 } from "@/utils/clipboard-helpers"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
+import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
-import { createProjectFileMentionData } from "@/components/business/MentionPanel/utils/projectReferenceMention"
+import {
+	createDirectoryMentionData,
+	createProjectFileMentionData,
+} from "@/components/business/MentionPanel/utils/projectReferenceMention"
 import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
+import {
+	getClipboardHtml,
+	getClipboardPlainText,
+	getMentionClipboardRepresentation,
+} from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 import {
 	extractWorkspaceMarkdownLinks,
 	parseCanonicalWorkspaceHref,
@@ -34,16 +45,95 @@ type PastePart =
 	| { type: "text"; text: string }
 	| { type: "mention"; attrs: TiptapMentionAttributes }
 
-function createFileMention(
+function createWorkspaceMention(
 	attachments: AttachmentItem[],
 	path: string,
 ): TiptapMentionAttributes | null {
 	const file = findAttachmentByPath(attachments, path)
-	if (!file?.file_id || file.is_directory) return null
+	if (!file?.file_id) return null
+
+	if (file.is_directory || file.type === "directory") {
+		return {
+			type: MentionItemType.FOLDER,
+			data: createDirectoryMentionData(file),
+		}
+	}
 
 	return {
 		type: MentionItemType.PROJECT_FILE,
 		data: createProjectFileMentionData(file),
+	}
+}
+
+function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttributes[]): void {
+	if (node.type.name === "mention" && node.attrs) {
+		mentions.push(node.attrs as TiptapMentionAttributes)
+	} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
+		mentions.push(node.attrs.fileMention as TiptapMentionAttributes)
+	}
+
+	node.forEach((child) => collectMentionAttrs(child, mentions))
+}
+
+function hasPortableProjectMention(mentions: TiptapMentionAttributes[]): boolean {
+	return mentions.some((attrs) => {
+		if (
+			attrs.type !== MentionItemType.PROJECT_FILE &&
+			attrs.type !== MentionItemType.UPLOAD_FILE &&
+			attrs.type !== MentionItemType.FOLDER
+		) {
+			return false
+		}
+
+		try {
+			return Boolean(getMentionClipboardRepresentation(attrs))
+		} catch {
+			return false
+		}
+	})
+}
+
+interface ClipboardPayload {
+	plainText: string
+	htmlWithMetadata: string
+	metadata: Record<string, unknown>
+}
+
+function createClipboardPayload(view: EditorView): ClipboardPayload | null {
+	const { state } = view
+	const { selection } = state
+	if (selection.empty) return null
+
+	const fragment = selection.content()
+	const serializer = DOMSerializer.fromSchema(state.schema)
+	const dom = serializer.serializeFragment(fragment.content)
+	const tempDiv = document.createElement("div")
+	tempDiv.appendChild(dom)
+
+	const mentions: TiptapMentionAttributes[] = []
+	const richTextJson: JSONContent = { type: "doc", content: [] }
+	const richTextContent = richTextJson.content ?? []
+	fragment.content.forEach((node: ProseMirrorNode) => {
+		richTextContent.push(node.toJSON())
+		collectMentionAttrs(node, mentions)
+	})
+
+	if (!hasPortableProjectMention(mentions)) return null
+
+	const metadata: Record<string, unknown> = {
+		richText: JSON.stringify(richTextJson),
+	}
+	if (mentions.length > 0) {
+		metadata.mentions = mentions.map((attrs) => ({ attrs }))
+	}
+
+	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
+	const htmlContent = getClipboardHtml(tempDiv.innerHTML)
+
+	return {
+		plainText: getClipboardPlainText(richTextJson),
+		htmlWithMetadata: `<div data-magic-clipboard="${metadataBase64}">${htmlContent}</div>`,
+		metadata,
 	}
 }
 
@@ -66,7 +156,7 @@ function buildPlainTextPasteParts(text: string, attachments: AttachmentItem[]): 
 	let matchedCount = 0
 	for (const match of matches) {
 		appendText(parts, text.slice(lastIndex, match.startIndex))
-		const attrs = createFileMention(attachments, match.path)
+		const attrs = createWorkspaceMention(attachments, match.path)
 		if (attrs) {
 			parts.push({ type: "mention", attrs })
 			matchedCount++
@@ -155,7 +245,7 @@ function buildHtmlPasteParts(html: string, attachments: AttachmentItem[]): Paste
 
 		if (node.tagName === "A") {
 			const path = parseCanonicalWorkspaceHref(node.getAttribute("href") || "")
-			const attrs = path ? createFileMention(attachments, path) : null
+			const attrs = path ? createWorkspaceMention(attachments, path) : null
 			if (attrs) {
 				parts.push({ type: "mention", attrs })
 				matchedCount++
@@ -285,7 +375,7 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 		return {
 			onMentionsInsert: undefined,
 			dataService: null,
-			getWorkspaceFilesList: () => [],
+			getWorkspaceFilesList: undefined,
 		}
 	},
 
@@ -295,6 +385,39 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 				key: new PluginKey("copyMessage"),
 
 				props: {
+					handleDOMEvents: {
+						copy: (view, event) => {
+							// Only Super Magic editors provide workspace context; other editors keep native copy behavior.
+							if (!this.options.getWorkspaceFilesList) return false
+
+							const clipboardEvent = event as ClipboardEvent
+							const clipboardData = clipboardEvent.clipboardData
+							if (!clipboardData) return false
+
+							const payload = createClipboardPayload(view)
+							if (!payload) return false
+
+							clipboardEvent.preventDefault()
+							clipboardData.setData("text/html", payload.htmlWithMetadata)
+							clipboardData.setData("text/plain", payload.plainText)
+							try {
+								clipboardData.setData(
+									"text/x-magic-message-rich-text",
+									payload.metadata.richText as string,
+								)
+								if (payload.metadata.mentions) {
+									clipboardData.setData(
+										"text/x-magic-message-mentions",
+										JSON.stringify(payload.metadata.mentions),
+									)
+								}
+							} catch {
+								// Some browsers reject custom clipboard MIME types; standard formats remain available.
+							}
+
+							return true
+						},
+					},
 					handlePaste: (_view, event) => {
 						const clipboardData = event.clipboardData
 						if (!clipboardData) return false

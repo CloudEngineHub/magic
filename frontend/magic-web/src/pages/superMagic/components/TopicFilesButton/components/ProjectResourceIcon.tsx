@@ -12,7 +12,7 @@ import {
 	getFileIconType,
 	getFileTreeIconType,
 } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
-import type { AttachmentItem } from "../../TopicFilesButton/hooks"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 
 interface ProjectResourceIconProps {
@@ -27,7 +27,7 @@ interface ProjectResourceIconProps {
 
 function findAttachmentById(items: AttachmentItem[], id: string): AttachmentItem | null {
 	for (const item of items) {
-		if (item.file_id === id) return item
+		if (String(item.file_id ?? "") === id) return item
 		if (item.children?.length) {
 			const found = findAttachmentById(item.children, id)
 			if (found) return found
@@ -47,26 +47,29 @@ export function ProjectResourceIcon({
 	folderClassName,
 	folderTestId,
 }: ProjectResourceIconProps) {
-	const displayConfigType = item.display_config?.type
-	const projectInstructionsFileKind = resolveProjectInstructionsFileKind(item)
+	const isDirectory = item.is_directory === true || item.type === "directory"
+	const resourceItem =
+		isDirectory && item.is_directory !== true ? { ...item, is_directory: true } : item
+	const displayConfigType = resourceItem.display_config?.type
+	const projectInstructionsFileKind = resolveProjectInstructionsFileKind(resourceItem)
 	const isCustomMetadata = displayConfigType === "custom"
 	const isMicroAppMetadata = displayConfigType === "micro-app"
 	const childrenItems =
 		isCustomMetadata || isMicroAppMetadata
-			? getChildrenForCustomMetadataIconPath(item, (id) =>
+			? getChildrenForCustomMetadataIconPath(resourceItem, (id) =>
 					findAttachmentById(resourceTree, id),
 				)
 			: undefined
 
-	if (item.is_directory) {
-		if (isMagicSystemFolder(item)) {
+	if (isDirectory) {
+		if (isMagicSystemFolder(resourceItem)) {
 			return <MagicSystemFolderIcon size={size} />
 		}
 
 		if (isCustomMetadata || isMicroAppMetadata) {
 			return (
 				<CustomFolderMagicIcon
-					displayConfig={item.display_config}
+					displayConfig={resourceItem.display_config}
 					childrenItems={childrenItems}
 					typeFallback={displayConfigType}
 					size={size}
@@ -76,7 +79,10 @@ export function ProjectResourceIcon({
 
 		if (displayConfigType) {
 			return (
-				<MagicFileIcon type={getAttachmentType(item) || item.file_extension} size={size} />
+				<MagicFileIcon
+					type={getAttachmentType(resourceItem) || resourceItem.file_extension}
+					size={size}
+				/>
 			)
 		}
 
@@ -100,7 +106,7 @@ export function ProjectResourceIcon({
 	if (isCustomMetadata) {
 		return (
 			<CustomFolderMagicIcon
-				displayConfig={item.display_config}
+				displayConfig={resourceItem.display_config}
 				childrenItems={childrenItems}
 				typeFallback={displayConfigType}
 				size={size}
@@ -110,7 +116,11 @@ export function ProjectResourceIcon({
 
 	return (
 		<MagicFileIcon
-			type={getFileTreeIconType(item) || getFileIconType(item) || item.file_extension}
+			type={
+				getFileTreeIconType(resourceItem) ||
+				getFileIconType(resourceItem) ||
+				resourceItem.file_extension
+			}
 			size={size}
 		/>
 	)

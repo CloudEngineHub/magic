@@ -1,5 +1,6 @@
 export const FILE_PATH_MENTION_PREFIX = "[@file_path:"
 const WORKSPACE_ROOT_PREFIX = ".workspace/"
+const MAGIC_ROOT_PREFIX = ".magic/"
 
 export interface FilePathMentionMatch {
 	path: string
@@ -81,7 +82,7 @@ export function normalizeWorkspacePathForComparison(path: string): string | null
 	return normalizeWorkspaceRelativePath(withoutRootPrefix)
 }
 
-/** 只接受可移植协议中的 ./ 工作区链接，并且只做一次 URI 解码。 */
+/** 接受规范的 ./ 工作区链接及历史 .workspace/.magic 入口，并且只做一次 URI 解码。 */
 export function parseCanonicalWorkspaceHref(href: string): string | null {
 	if (!href) return null
 
@@ -90,8 +91,9 @@ export function parseCanonicalWorkspaceHref(href: string): string | null {
 	const isWorkspaceRootPrefixedHref =
 		rawHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
 		rawHref.startsWith(`./${WORKSPACE_ROOT_PREFIX}`)
+	const isBareMagicHref = rawHref.startsWith(MAGIC_ROOT_PREFIX)
 	if (
-		(!isCanonicalHref && !isWorkspaceRootPrefixedHref) ||
+		(!isCanonicalHref && !isWorkspaceRootPrefixedHref && !isBareMagicHref) ||
 		rawHref.includes("#") ||
 		rawHref.includes("?")
 	) {
@@ -101,14 +103,23 @@ export function parseCanonicalWorkspaceHref(href: string): string | null {
 	const decoded = decodeURIComponentOnce(rawHref)
 	if (decoded === null) return null
 	if (isCanonicalHref && !decoded.startsWith("./")) return null
-	if (!isCanonicalHref && !decoded.startsWith(WORKSPACE_ROOT_PREFIX)) return null
+	if (
+		!isCanonicalHref &&
+		!decoded.startsWith(WORKSPACE_ROOT_PREFIX) &&
+		!decoded.startsWith(MAGIC_ROOT_PREFIX)
+	)
+		return null
 
 	return normalizeWorkspaceRelativePath(isCanonicalHref ? decoded.slice(2) : decoded)
 }
 
 export function isWorkspaceHrefCandidate(href: string): boolean {
 	const normalizedHref = decodeHtmlEntities(href.trim())
-	return normalizedHref.startsWith("./") || normalizedHref.startsWith(WORKSPACE_ROOT_PREFIX)
+	return (
+		normalizedHref.startsWith("./") ||
+		normalizedHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
+		normalizedHref.startsWith(MAGIC_ROOT_PREFIX)
+	)
 }
 
 function encodePathSegment(segment: string): string {
