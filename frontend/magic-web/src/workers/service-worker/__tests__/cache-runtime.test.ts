@@ -152,5 +152,7 @@ describe("slides template image cache route", () => {
 			maxAgeSeconds: CACHE_TTL_7_DAYS,
 			purgeOnQuotaError: true,
 		})
+		expect(SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(100)
+		expect(FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(60)
 	})
 })

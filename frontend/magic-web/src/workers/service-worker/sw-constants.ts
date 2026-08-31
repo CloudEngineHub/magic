@@ -117,10 +117,10 @@ export const CACHE_TTL_60_DAYS = SECONDS_PER_DAY * 60
 export const APP_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-app-static-assets-v1`
 export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
 // Template cache entries are intentionally capped below the previous 300 + 500 setup.
-// Only cover images enter these buckets, so 60 ordinary and 40 featured entries keep
+// Only cover images enter these buckets, so 100 ordinary and 60 featured entries keep
 // browsing useful without allowing template previews to occupy multiple gigabytes.
-export const SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 60
-export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 40
+export const SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 100
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 60
 // v2 removes legacy opaque buckets after TOS CORS is enabled.
 export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v2`
 export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v2`
