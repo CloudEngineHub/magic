@@ -111,8 +111,12 @@ function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMes
 	} as unknown as SuperMagicMessageItem
 }
 
-function createViewport() {
-	return document.createElement("div")
+function createViewport(scrollHeight?: number) {
+	const viewport = document.createElement("div")
+	if (scrollHeight !== undefined) {
+		Object.defineProperty(viewport, "scrollHeight", { configurable: true, value: scrollHeight })
+	}
+	return viewport
 }
 
 function renderList(
@@ -414,15 +418,17 @@ describe("VirtualMessageList", () => {
 	})
 
 	it("folds the space below the virtualizer into a scroll-to-last write", () => {
-		// Two rows of 100 sit after a 50px start margin, so virtua projects the scroll element at
-		// 250. The caller's message column adds 8px of bottom padding below the virtualizer, and
-		// without it the write lands 8px above the scroll end.
-		virtualState.scrollSize = 258
+		// Two rows of 100 sit after a 50px start margin, so virtua projects 250. The caller's
+		// message column adds 8px of bottom padding below the virtualizer, and without it the
+		// write lands 8px above the scroll end. Only the scroll element knows about that strip —
+		// virtua's own `scrollSize` reports the projected size and nothing else.
+		const viewport = createViewport(258)
 		const virtualizerRef = { current: null } as {
 			current: import("../message-list-scroll-adapter").MessageListScrollAdapter | null
 		}
 		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
 			virtualizerRef,
+			getScrollElement: () => viewport,
 			startMargin: 50,
 		})
 

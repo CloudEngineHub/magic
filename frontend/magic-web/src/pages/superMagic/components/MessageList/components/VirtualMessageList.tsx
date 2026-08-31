@@ -387,14 +387,18 @@ function VirtualMessageListInner({
 	 * after it, and the caller renders its message column's bottom padding there — inside the same
 	 * scroll element, outside virtua's projected size. Aligning the last row's bottom to the
 	 * viewport bottom therefore stops short of the real scroll end by exactly that strip.
-	 * Deriving it from `scrollSize` keeps the caller's padding from having to be restated here.
+	 * Measuring the scroll element keeps the caller's padding from having to be restated here.
+	 *
+	 * `handle.scrollSize` cannot serve this: virtua reports its own projected total size, which
+	 * equals `projectedSize` by construction, so the difference would always collapse to zero.
 	 */
 	const getTrailingSpace = useCallback(() => {
 		const handle = handleRef.current
+		const viewport = scrollRef.current
 		const lastIndex = rowCountRef.current - 1
-		if (!handle || lastIndex < 0) return 0
+		if (!handle || !viewport || lastIndex < 0) return 0
 		const projectedSize = handle.getItemOffset(lastIndex) + handle.getItemSize(lastIndex)
-		return Math.max(0, handle.scrollSize - startMarginRef.current - projectedSize)
+		return Math.max(0, viewport.scrollHeight - startMarginRef.current - projectedSize)
 	}, [])
 
 	const adapter = useMemo<MessageListScrollAdapter>(

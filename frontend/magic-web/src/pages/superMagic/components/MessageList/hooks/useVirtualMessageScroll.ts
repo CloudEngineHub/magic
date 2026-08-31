@@ -26,6 +26,8 @@ const DEFAULT_MIN_TOP_DISTANCE = 400
 const MIN_BOTTOM_DISTANCE = 50
 const BACK_TO_LATEST_OFFSET = 100
 const SHRINK_SUPPRESS_DURATION = 300
+/** Screens left for the animation after an explicit jump has closed the rest instantly. */
+const SMOOTH_TAIL_VIEWPORTS = 1
 
 interface VirtualScrollItem {
 	key: string
@@ -95,15 +97,44 @@ export function useVirtualMessageScroll({
 		guardTimerRef.current = null
 	}, [])
 
+	/**
+	 * A jump to latest is not self-correcting. virtua derives its target from the projected total
+	 * size, which still counts unmeasured rows at their estimate, and its smooth path additionally
+	 * refuses to move while any row in the current range is unmeasured — after 150ms of quiet it
+	 * drops the request outright. Either way the list can settle short of the bottom, and the
+	 * explicit guard suppresses follow-output for its whole duration, so nothing else notices.
+	 * Close the remaining gap once the guard expires, using the instant write whose virtua path
+	 * re-derives the target on every measurement update.
+	 */
+	const reconcileScrollToLatest = useCallback(() => {
+		// An upward gesture during the guard revokes the jump exactly as it revokes follow.
+		if (!autoFollowRef.current) return
+
+		const viewport = containerRef.current
+		const virtualizer = virtualizerRef.current
+		const lastIndex = virtualizer ? virtualizer.itemCount - 1 : -1
+		if (!viewport || !virtualizer || lastIndex < 0) return
+
+		const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+		if (distanceToBottom <= MIN_BOTTOM_DISTANCE) return
+
+		ownershipRef.current = beginExplicitScroll(ownershipRef.current)
+		virtualizer.scrollToIndex(lastIndex, { align: "end" })
+		ownershipRef.current = finishCorrection(ownershipRef.current, "explicit")
+	}, [containerRef, virtualizerRef])
+
 	const startGuard = useCallback(
-		(duration: number) => {
+		(duration: number, reconcileToLatest = false) => {
 			clearGuard()
 			guardTimerRef.current = window.setTimeout(() => {
 				guardTimerRef.current = null
 				ownershipRef.current = finishCorrection(ownershipRef.current, "explicit")
+				// Carried in the closure so `clearGuard` — which a fresh gesture calls — drops the
+				// correction along with the guard it belonged to.
+				if (reconcileToLatest) reconcileScrollToLatest()
 			}, duration)
 		},
-		[clearGuard],
+		[clearGuard, reconcileScrollToLatest],
 	)
 
 	/**
@@ -128,10 +159,25 @@ export function useVirtualMessageScroll({
 
 			pendingScrollToLatestRef.current = false
 			ownershipRef.current = beginExplicitScroll(ownershipRef.current)
-			startGuard(guardDuration)
+			startGuard(guardDuration, true)
+
+			/**
+			 * A history page arrives as rows virtua has never measured, and its smooth path stalls
+			 * on exactly that: it waits for every row in the current range to be measured, then
+			 * abandons the request. Cover the bulk of the distance instantly and leave only the
+			 * last screen — rows the user has already scrolled through, so their sizes are
+			 * cached — to the animation.
+			 */
+			const viewport = containerRef.current
+			if (smooth && viewport && viewport.clientHeight > 0) {
+				const tailStart =
+					viewport.scrollHeight - viewport.clientHeight * (SMOOTH_TAIL_VIEWPORTS + 1)
+				if (tailStart > viewport.scrollTop) virtualizer.scrollTo(tailStart)
+			}
+
 			virtualizer.scrollToIndex(lastIndex, { align: "end", smooth })
 		},
-		[startGuard, virtualizerRef],
+		[containerRef, startGuard, virtualizerRef],
 	)
 
 	const scrollToBottom = useCallback(

@@ -389,6 +389,103 @@ describe("useVirtualMessageScroll", () => {
 		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(7, { align: "end", smooth: false })
 	})
 
+	it("closes most of the distance instantly before animating the tail of a smooth jump", () => {
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 3000 })
+		const virtualizer = createVirtualizer(viewport, 30)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(30),
+				topicKey: "topic-1",
+			}),
+		)
+
+		vi.mocked(virtualizer.scrollTo).mockClear()
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+		act(() => result.current.scrollToBottom("smooth"))
+
+		// virtua's smooth path stalls on unmeasured rows in the range it starts from, which is
+		// exactly the range a history page just filled. Only the last screen may be animated.
+		expect(virtualizer.scrollTo).toHaveBeenCalledWith(2400)
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(29, { align: "end", smooth: true })
+	})
+
+	it("corrects a jump that settled short of the bottom once the guard expires", () => {
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 3000 })
+		const virtualizer = createVirtualizer(viewport, 30)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(30),
+				topicKey: "topic-1",
+			}),
+		)
+
+		act(() => result.current.scrollToBottom("auto"))
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+
+		// The virtualizer never moved the element, standing in for a request virtua dropped or a
+		// target it derived from estimated row sizes.
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(29, { align: "end" })
+	})
+
+	it("issues no correction when the jump already reached the bottom", () => {
+		const viewport = createViewport({ scrollTop: 700, clientHeight: 300, scrollHeight: 1000 })
+		const virtualizer = createVirtualizer(viewport, 10)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(10),
+				topicKey: "topic-1",
+			}),
+		)
+
+		act(() => result.current.scrollToBottom("auto"))
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
+	})
+
+	it("drops the pending correction when an upward gesture takes over during the guard", () => {
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 3000 })
+		const virtualizer = createVirtualizer(viewport, 30)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(30),
+				topicKey: "topic-1",
+			}),
+		)
+
+		act(() => result.current.scrollToBottom("auto"))
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+
+		act(() => {
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+		})
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
+	})
+
 	it("carries the arrival jump across the commit where the virtualizer is not yet addressable", () => {
 		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 1200 })
 		let mounted = false
