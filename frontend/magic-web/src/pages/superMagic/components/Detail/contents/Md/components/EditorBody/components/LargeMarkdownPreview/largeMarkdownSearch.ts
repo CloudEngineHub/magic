@@ -13,6 +13,7 @@ export interface MarkdownSearchRequest {
 	chunks: VirtualMarkdownChunk[]
 	query: string
 	caseSensitive: boolean
+	useRegex?: boolean
 }
 
 const MAX_SEARCH_RESULTS = 1000
@@ -33,10 +34,17 @@ export function searchMarkdown({
 	chunks,
 	query,
 	caseSensitive,
+	useRegex = false,
 }: MarkdownSearchRequest): MarkdownSearchResult[] {
 	if (!query) return []
 
-	const matcher = new RegExp(escapeRegExp(query), caseSensitive ? "g" : "gi")
+	let matcher: RegExp
+	try {
+		matcher = new RegExp(useRegex ? query : escapeRegExp(query), caseSensitive ? "gu" : "giu")
+	} catch {
+		// Keep an incomplete regex from breaking the preview while the user is typing.
+		return []
+	}
 	const results: MarkdownSearchResult[] = []
 	let match: RegExpExecArray | null
 

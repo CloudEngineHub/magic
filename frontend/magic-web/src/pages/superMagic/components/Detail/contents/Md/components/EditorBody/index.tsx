@@ -278,6 +278,8 @@ function EditorBody({
 						ref={actualEditorRef}
 						content={isEditMode ? editContent || content : processedContent || content}
 						enableCodeBlockWrap
+						enableReadonlySearch={enableSearch}
+						isTabActive={isTabActive}
 						onUpdate={({ editor: _editor }) => {
 							const content =
 								(

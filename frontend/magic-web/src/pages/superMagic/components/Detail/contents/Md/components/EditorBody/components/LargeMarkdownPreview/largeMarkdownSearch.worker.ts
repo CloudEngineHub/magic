@@ -12,6 +12,7 @@ interface SearchMessage {
 	requestId: number
 	query: string
 	caseSensitive: boolean
+	useRegex: boolean
 }
 
 type WorkerMessage = InitMessage | SearchMessage
@@ -32,6 +33,7 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
 		chunks,
 		query: message.query,
 		caseSensitive: message.caseSensitive,
+		useRegex: message.useRegex,
 	})
 	self.postMessage({ requestId: message.requestId, results })
 }

@@ -334,11 +334,13 @@ interface LargeMarkdownSearchToolbarProps {
 	documentFlow: boolean
 	query: string
 	caseSensitive: boolean
+	useRegex: boolean
 	resultIndex: number
 	resultCount: number
 	inputRef: RefObject<HTMLInputElement>
 	onQueryChange: (query: string) => void
 	onToggleCaseSensitive: () => void
+	onToggleRegex: () => void
 	onPrevious: () => void
 	onNext: () => void
 	onClose: () => void
@@ -349,11 +351,13 @@ function LargeMarkdownSearchToolbar({
 	documentFlow,
 	query,
 	caseSensitive,
+	useRegex,
 	resultIndex,
 	resultCount,
 	inputRef,
 	onQueryChange,
 	onToggleCaseSensitive,
+	onToggleRegex,
 	onPrevious,
 	onNext,
 	onClose,
@@ -420,6 +424,16 @@ function LargeMarkdownSearchToolbar({
 						>
 							Aa
 						</button>
+						<button
+							className="search-panel-inline-btn"
+							data-active={useRegex}
+							onClick={onToggleRegex}
+							title={t("toolbar.searchReplace.useRegex")}
+							type="button"
+							aria-label={t("toolbar.searchReplace.useRegex")}
+						>
+							.*
+						</button>
 					</div>
 					<span className="search-panel-count">{resultCountText}</span>
 					<button
@@ -477,6 +491,7 @@ export default function LargeMarkdownPreview({
 	const [searchVisible, setSearchVisible] = useState(false)
 	const [searchQuery, setSearchQuery] = useState("")
 	const [caseSensitive, setCaseSensitive] = useState(false)
+	const [useRegex, setUseRegex] = useState(false)
 	const [searchResults, setSearchResults] = useState<MarkdownSearchResult[]>([])
 	const [searchResultIndex, setSearchResultIndex] = useState(0)
 	const { prefersColorScheme } = useTheme()
@@ -564,16 +579,19 @@ export default function LargeMarkdownPreview({
 					requestId,
 					query: searchQuery,
 					caseSensitive,
+					useRegex,
 				})
 				return
 			}
 
-			setSearchResults(searchMarkdown({ content, chunks, query: searchQuery, caseSensitive }))
+			setSearchResults(
+				searchMarkdown({ content, chunks, query: searchQuery, caseSensitive, useRegex }),
+			)
 			setSearchResultIndex(0)
 		}, 80)
 
 		return () => window.clearTimeout(timer)
-	}, [caseSensitive, chunks, content, searchEnabled, searchQuery])
+	}, [caseSensitive, chunks, content, searchEnabled, searchQuery, useRegex])
 
 	useEffect(() => {
 		if (!searchEnabled || !searchVisible) return
@@ -712,11 +730,13 @@ export default function LargeMarkdownPreview({
 				documentFlow={documentFlow}
 				query={searchQuery}
 				caseSensitive={caseSensitive}
+				useRegex={useRegex}
 				resultIndex={searchResultIndex}
 				resultCount={searchResults.length}
 				inputRef={searchInputRef}
 				onQueryChange={setSearchQuery}
 				onToggleCaseSensitive={() => setCaseSensitive((value) => !value)}
+				onToggleRegex={() => setUseRegex((value) => !value)}
 				onPrevious={goToPreviousSearchResult}
 				onNext={goToNextSearchResult}
 				onClose={closeSearch}

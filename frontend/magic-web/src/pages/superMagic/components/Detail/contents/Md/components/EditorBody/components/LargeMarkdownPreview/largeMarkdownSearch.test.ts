@@ -33,4 +33,28 @@ describe("searchMarkdown", () => {
 		expect(results).toHaveLength(MAX_SEARCH_RESULTS)
 		expect(results[0]?.preview).toContain("a+b")
 	})
+
+	it("supports regular expression matching and ignores invalid patterns", () => {
+		const content = "Alpha 123\nBeta 456\nGamma"
+		const chunks = splitMarkdownIntoVirtualChunks(content)
+
+		expect(
+			searchMarkdown({
+				content,
+				chunks,
+				query: "[A-Za-z]+ \\d+",
+				caseSensitive: false,
+				useRegex: true,
+			}),
+		).toHaveLength(2)
+		expect(
+			searchMarkdown({
+				content,
+				chunks,
+				query: "[",
+				caseSensitive: false,
+				useRegex: true,
+			}),
+		).toEqual([])
+	})
 })
