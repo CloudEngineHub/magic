@@ -191,9 +191,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     /**
      * 根据项目ID和fileKey获取文件.
      */
-    public function getByProjectIdAndFileKey(int $projectId, string $fileKey): ?TaskFileEntity
+    public function getByProjectIdAndFileKey(int $projectId, string $fileKey, bool $withTrash = false): ?TaskFileEntity
     {
-        $model = $this->model::query()
+        $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
+        $model = $query
             ->where('project_id', $projectId)
             ->where('file_key', $fileKey)
             ->first();

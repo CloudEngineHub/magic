@@ -165,9 +165,9 @@ class TaskFileDomainService
     /**
      * Get file by project ID and file key.
      */
-    public function getByProjectIdAndFileKey(int $projectId, string $fileKey): ?TaskFileEntity
+    public function getByProjectIdAndFileKey(int $projectId, string $fileKey, bool $withTrash = false): ?TaskFileEntity
     {
-        return $this->taskFileRepository->getByProjectIdAndFileKey($projectId, $fileKey);
+        return $this->taskFileRepository->getByProjectIdAndFileKey($projectId, $fileKey, $withTrash);
     }
 
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity
@@ -3351,7 +3351,11 @@ class TaskFileDomainService
                 $fileName,
                 $dto->isWithTrash()
             );
-            $existingByFileKey = $this->taskFileRepository->getByFileKey($fileKey, withTrash: $dto->isWithTrash());
+            $existingByFileKey = $this->taskFileRepository->getByProjectIdAndFileKey(
+                $dto->getProjectId(),
+                $fileKey,
+                $dto->isWithTrash()
+            );
 
             if ($existingByName !== null
                 && $existingByFileKey !== null
