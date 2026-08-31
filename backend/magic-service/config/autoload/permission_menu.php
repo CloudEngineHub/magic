@@ -376,6 +376,7 @@ return [
      */
     'official_organization_hidden_resource_keys' => [
         'admin.ai.application.menu',
+        'workspace.ai.model_management',
         'workspace.model.text',
         'workspace.model.image',
         'workspace.model.video',
