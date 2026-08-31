@@ -20,13 +20,20 @@ function message(
 	} as unknown as SuperMagicMessageItem
 }
 
+function toolMessageWithAttachment(superMessageId: string): SuperMagicMessageItem {
+	return {
+		...message(superMessageId, "tool"),
+		attachments: [{ filename: "result.json" }],
+	} as unknown as SuperMagicMessageItem
+}
+
 describe("virtual message projection", () => {
 	it("keeps every converted message flat while retaining turn ownership", () => {
 		const projection = buildVirtualMessageProjection([
 			message("leading", "assistant"),
 			message("user-1", "user"),
 			message("assistant-1", "assistant"),
-			message("tool-1", "tool"),
+			toolMessageWithAttachment("tool-1"),
 			message("user-2", "user"),
 			message("assistant-2", "assistant"),
 		])
@@ -79,6 +86,60 @@ describe("virtual message projection", () => {
 		expect(projection.items.map((item) => item.key)).toEqual(["user", "assistant"])
 		expect(projection.items[1]?.index).toBe(1)
 		expect(projection.items[1]?.sourceIndex).toBe(2)
+	})
+
+	it("filters a Tool whose only payload is text the renderer never shows", () => {
+		// MessageNode renders AttachmentSection and nothing else for role=tool, so a text-only
+		// result would otherwise be projected as a measured row that paints nothing.
+		const textOnlyTool = {
+			...message("text-only-tool", "tool"),
+			content: "tool call succeeded",
+			tool_calls: [{ id: "call-1" }],
+			attachments: [],
+			tool: { name: "read_files", status: "finished" },
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([
+			message("user", "user"),
+			message("assistant", "assistant"),
+			textOnlyTool,
+		])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["user", "assistant"])
+	})
+
+	it("keeps an attachment-free Tool when the previous message mentions file paths", () => {
+		// AttachmentSection derives a file list from the preceding message's [@file_path:...]
+		// mentions, so emptiness cannot be decided from the Tool row alone.
+		const assistantWithMention = {
+			...message("assistant-mention", "assistant"),
+			content: "已生成 [@file_path:报告/结论.md]",
+		} as unknown as SuperMagicMessageItem
+		const attachmentFreeTool = {
+			...message("tool-after-mention", "tool"),
+			content: "ok",
+			attachments: [],
+			tool: { name: "write_file", status: "finished" },
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([assistantWithMention, attachmentFreeTool])
+
+		expect(projection.items.map((item) => item.key)).toEqual([
+			"assistant-mention",
+			"tool-after-mention",
+		])
+	})
+
+	it("keeps a Tool that renders through a typed node instead of MessageNode", () => {
+		const typedTool = {
+			...message("typed-tool", "tool"),
+			type: "tool_call",
+			attachments: [],
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([typedTool])
+
+		expect(projection.items).toHaveLength(1)
 	})
 
 	it("keeps an empty-payload Tool when its business result carries attachments", () => {
