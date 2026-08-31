@@ -48,6 +48,8 @@ export interface FileInfo {
 
 /** UI overrides for file-share scenarios such as recording detail sharing. */
 export interface FileShareUiConfig {
+	displayNameByFileId?: Record<string, string> // UI-only labels keyed by original file ID
+	displayNameByFileName?: Record<string, string> // Fallback labels for refreshed attachment IDs
 	/** Reuses the existing project_mode semantic so recording shares do not invent another scene field. */
 	projectMode?: string | null
 	hideShareProjectToggle?: boolean
@@ -110,6 +112,8 @@ export interface ShareModalProps extends Omit<ShareProps, "type">, MagicModalPro
 	defaultSelectedFileIds?: string[] // 默认选中的文件ID列表
 	requiredFileIds?: string[] // 提交时始终补齐的文件ID（不改变UI可见选择）
 	defaultOpenFileId?: string // 默认打开的文件ID
+	displayNameByFileId?: Record<string, string> // UI-only labels keyed by original file ID
+	displayNameByFileName?: Record<string, string> // Fallback labels for refreshed attachment IDs
 	projectName?: string // 项目名称（用于项目分享模式）
 	projectId?: string // 项目ID（用于创建分享时使用，可选，如果不传则从API获取）
 	onCancel?: (e?: React.MouseEvent<HTMLButtonElement>) => void

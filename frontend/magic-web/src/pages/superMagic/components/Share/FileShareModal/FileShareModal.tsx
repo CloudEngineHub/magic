@@ -49,6 +49,8 @@ interface FileShareModalProps {
 	defaultSelectedFileIds?: string[] // 默认选中的文件ID列表
 	requiredFileIds?: string[] // 提交时始终保留的录音依赖文件ID
 	defaultOpenFileId?: string // 默认打开的文件ID
+	displayNameByFileId?: Record<string, string> // UI-only labels keyed by original file ID
+	displayNameByFileName?: Record<string, string> // Fallback labels for refreshed attachment IDs
 	resourceId?: string // 外层传入的资源ID（如从列表管理页面传入）
 	shareMode?: ShareMode // 分享模式：文件或项目
 	projectName?: string // 项目名称（用于项目分享模式）
@@ -82,6 +84,8 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		defaultSelectedFileIds,
 		requiredFileIds = [],
 		defaultOpenFileId: externalDefaultOpenFileId,
+		displayNameByFileId: displayNameByFileIdProp,
+		displayNameByFileName: displayNameByFileNameProp,
 		resourceId: externalResourceId,
 		shareMode,
 		projectName,
@@ -91,6 +95,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		onCancelShareSuccess,
 		fileShareUiConfig,
 	} = props
+	const displayNameByFileId =
+		displayNameByFileIdProp ?? fileShareUiConfig?.displayNameByFileId ?? {}
+	const displayNameByFileName =
+		displayNameByFileNameProp ?? fileShareUiConfig?.displayNameByFileName ?? {}
 
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
@@ -629,15 +637,26 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				const fileList = fileTreeRes.list || []
 
 				// Set attachments after selectedFileIds, so the sync effect can find the files
-				setAttachments(fileTree)
-				setAttachmentList(fileList)
+				setAttachments(
+					applyShareDisplayNames(fileTree, displayNameByFileId, displayNameByFileName),
+				)
+				setAttachmentList(
+					applyShareDisplayNames(fileList, displayNameByFileId, displayNameByFileName),
+				)
 			}
 		} catch (error) {
 			console.error("Failed to fetch resource data:", error)
 			// Remove from fetched set on error to allow retry
 			fetchedResourceIds.current.delete(externalResourceId)
 		}
-	}, [externalResourceId, forceViewFileList, lockShareProject, projectId])
+	}, [
+		displayNameByFileId,
+		displayNameByFileName,
+		externalResourceId,
+		forceViewFileList,
+		lockShareProject,
+		projectId,
+	])
 
 	// 防抖版本的 fetchResourceData
 	const { run: debouncedFetchResourceData } = useDebounceFn(fetchResourceData, {
@@ -1152,3 +1171,39 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		</div>
 	)
 })
+
+/** Applies recording-specific labels to fetched attachment copies without mutating API data. */
+function applyShareDisplayNames<T extends { file_id?: string; children?: T[] }>(
+	items: T[],
+	displayNameByFileId: Record<string, string>,
+	displayNameByFileName: Record<string, string>,
+): T[] {
+	return items.map((item) => ({
+		...item,
+		...((item.file_id && displayNameByFileId[item.file_id]) ||
+		getShareDisplayNameByFileName(item, displayNameByFileName)
+			? {
+					share_display_name:
+						displayNameByFileId[item.file_id || ""] ||
+						getShareDisplayNameByFileName(item, displayNameByFileName),
+				}
+			: {}),
+		...(item.children
+			? {
+					children: applyShareDisplayNames(
+						item.children,
+						displayNameByFileId,
+						displayNameByFileName,
+					),
+				}
+			: {}),
+	}))
+}
+
+/** Resolves a fallback label by stable attachment filename when an edit refresh changes IDs. */
+function getShareDisplayNameByFileName<
+	T extends { file_name?: string; filename?: string; name?: string },
+>(item: T, displayNameByFileName: Record<string, string>) {
+	const fileName = item.file_name || item.filename || item.name
+	return fileName ? displayNameByFileName[fileName] : undefined
+}

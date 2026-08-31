@@ -16,6 +16,8 @@ import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Shar
 export interface RecordingShareManagementDialogProps {
 	open: boolean
 	projectId: string
+	displayNameByFileId?: Record<string, string>
+	displayNameByFileName?: Record<string, string>
 	onClose: () => void
 }
 
@@ -27,12 +29,12 @@ const STATUS_OPTIONS = [
 	SharedTopicFilterStatus.Expired,
 	SharedTopicFilterStatus.Cancelled,
 ]
-const RECORDING_SHARE_UI_CONFIG = createRecordingShareUiConfig()
-
 /** PC recording-only share-management shell; the global share manager keeps its original tabs. */
 function RecordingShareManagementDialog({
 	open,
 	projectId,
+	displayNameByFileId,
+	displayNameByFileName,
 	onClose,
 }: RecordingShareManagementDialogProps) {
 	const { t: tAudio } = useTranslation("audioRecordings")
@@ -42,6 +44,11 @@ function RecordingShareManagementDialog({
 	)
 	const [currentPage, setCurrentPage] = useState(1)
 	const [totalPages, setTotalPages] = useState(0)
+	const recordingShareUiConfig = {
+		...createRecordingShareUiConfig(),
+		displayNameByFileId,
+		displayNameByFileName,
+	}
 
 	useEffect(() => {
 		// Reset scene-local filters when the dialog is reopened for another recording project.
@@ -133,7 +140,7 @@ function RecordingShareManagementDialog({
 						currentPage={currentPage}
 						pageSize={PAGE_SIZE}
 						onTotalPagesChange={handleTotalPagesChange}
-						fileShareUiConfig={RECORDING_SHARE_UI_CONFIG}
+						fileShareUiConfig={recordingShareUiConfig}
 					/>
 				</div>
 

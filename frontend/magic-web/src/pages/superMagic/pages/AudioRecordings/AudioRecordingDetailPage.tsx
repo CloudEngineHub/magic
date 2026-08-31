@@ -577,6 +577,8 @@ function AudioRecordingDetailPageDesktop() {
 					attachmentList={shareControls.attachmentList}
 					projectName={displayTitle}
 					defaultSelectedFileIds={shareControls.defaultSelectedFileIds}
+					displayNameByFileId={shareControls.displayNameByFileId}
+					displayNameByFileName={shareControls.displayNameByFileName}
 					requiredFileIds={shareControls.requiredFileIds}
 					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
 					fileShareUiConfig={createRecordingShareUiConfig()}
@@ -585,6 +587,8 @@ function AudioRecordingDetailPageDesktop() {
 				<RecordingShareManagementDialog
 					open={shareControls.shareManagementOpen}
 					projectId={projectId}
+					displayNameByFileId={shareControls.displayNameByFileId}
+					displayNameByFileName={shareControls.displayNameByFileName}
 					onClose={shareControls.closeManageShare}
 				/>
 				<AudioRecordingCopyDialog controller={copyController} />
