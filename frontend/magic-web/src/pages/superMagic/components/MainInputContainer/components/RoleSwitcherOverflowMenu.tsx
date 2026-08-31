@@ -75,7 +75,8 @@ export function RoleSwitcherOverflowMenu({
 	const [isAvatarTransitionVisible, setIsAvatarTransitionVisible] = useState(true)
 	const avatarModesRef = useRef(avatarModes)
 	const avatarTransitionFrameRef = useRef<number | null>(null)
-	const shouldShowAvatarGroup = !isScrolled && !isPopoverOpen && avatarModes.length > 0
+	// Keep the trigger width stable while the employee list is scrolled.
+	const shouldShowAvatarGroup = !isPopoverOpen && avatarModes.length > 0
 	const showAvatarGroup = shouldShowAvatarGroup && isAvatarTransitionVisible
 
 	useEffect(() => {
