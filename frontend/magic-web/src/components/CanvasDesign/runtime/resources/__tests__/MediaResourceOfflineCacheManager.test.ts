@@ -284,6 +284,60 @@ describe("MediaResourceOfflineCacheManager", () => {
 		expect(refreshCachedResource).not.toHaveBeenCalled()
 	})
 
+	it("batches cache-hit access touch after the writeback interval", async () => {
+		vi.useFakeTimers()
+		try {
+			const manager = createOfflineCacheManager({
+				getVirtualResourceScope: () => "workspace/project/design/demo",
+			})
+			const entry = {
+				namespace: "workspace/project/design/demo",
+				path: "/画布A/images/example.png",
+				url: "https://canvas.test/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/画布A/images/example.png",
+				cacheKey: "cache-key",
+				mediaType: "image" as const,
+				lastAccessedAt: 0,
+				updatedAt: 0,
+			}
+			;(
+				manager as unknown as { canUseServiceWorkerCache: () => boolean }
+			).canUseServiceWorkerCache = () => true
+			;(manager as unknown as { getEntry: () => Promise<typeof entry> }).getEntry = vi
+				.fn()
+				.mockResolvedValue(entry)
+			const postMessage = vi.fn().mockResolvedValue(undefined)
+			;(
+				manager as unknown as {
+					postMessageToServiceWorker: (message: unknown) => Promise<void>
+				}
+			).postMessageToServiceWorker = postMessage
+			Object.defineProperty(globalThis, "caches", {
+				configurable: true,
+				value: {
+					open: vi.fn().mockResolvedValue({
+						match: vi.fn().mockResolvedValue(new Response("cached")),
+					}),
+				},
+			})
+
+			await Promise.all([
+				manager.getCachedResource("./images/example.png", "image"),
+				manager.getCachedResource("./images/example.png", "image"),
+			])
+			expect(postMessage).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1000)
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+			expect(postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "CANVAS_MEDIA_CACHE_TOUCH_BATCH",
+				}),
+			)
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("keeps explicit cache warm as an opt-in path", async () => {
 		const postMessage = vi.fn()
 		const controller = {

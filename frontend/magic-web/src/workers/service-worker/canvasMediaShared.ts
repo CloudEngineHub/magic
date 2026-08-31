@@ -29,6 +29,23 @@ const VIRTUAL_RESOURCE_DESIGN_RESOURCE_SEGMENT = "/design-resource/"
 export type CanvasMediaType = "image" | "video" | "audio"
 
 const VIRTUAL_RESOURCE_MEDIA_TYPES = new Set<CanvasMediaType>(["image", "video", "audio"])
+const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const TOUCH_FLUSH_IDLE_DELAY_MS = 1000
+
+type CanvasMediaTouch = { id: string; lastAccessedAt: number }
+const pendingTouches = new Map<string, CanvasMediaTouch>()
+let touchFlushTimer: ReturnType<typeof setTimeout> | null = null
+const lastTouchWriteAt = new Map<string, number>()
+
+type FetchResourceBlobResult =
+	| { response: Response }
+	| {
+			blob: Blob
+			headers: Headers
+			metadata: ReturnType<typeof getResponseMetadata>
+			status: number
+			statusText: string
+	  }
 
 type CanvasMediaEntry = {
 	id?: string
@@ -56,10 +73,7 @@ type CanvasMediaRefreshResult = {
 }
 
 let maxBytes = DEFAULT_MAX_BYTES
-const inflightResourceMap = new Map<
-	string,
-	Promise<Awaited<ReturnType<typeof fetchResourceBlobOnce>>>
->()
+const inflightResourceMap = new Map<string, Promise<FetchResourceBlobResult>>()
 
 /**
  * 将 `design-resource/` 之后的资源路径规范成与主线程 IndexedDB `entry.path` 可比较的键。
@@ -119,6 +133,14 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 	return new Promise((resolve, reject) => {
 		request.onsuccess = () => resolve(request.result)
 		request.onerror = () => reject(request.error)
+	})
+}
+
+function transactionToPromise(transaction: IDBTransaction): Promise<void> {
+	return new Promise((resolve, reject) => {
+		transaction.oncomplete = () => resolve()
+		transaction.onerror = () => reject(transaction.error)
+		transaction.onabort = () => reject(transaction.error)
 	})
 }
 
@@ -258,7 +280,7 @@ export function parseVirtualResourceRequest(
 	)
 	const rawNamespaceSegments = rawNamespaceWithMediaType.replace(/^\/+|\/+$/g, "").split("/")
 	const mediaType = rawNamespaceSegments.pop()
-	if (!mediaType || !VIRTUAL_RESOURCE_MEDIA_TYPES.has(mediaType)) return null
+	if (!mediaType || !VIRTUAL_RESOURCE_MEDIA_TYPES.has(mediaType as CanvasMediaType)) return null
 
 	const rawNamespace = rawNamespaceSegments.join("/")
 	const namespace = normalizeResourceNamespace(rawNamespace)
@@ -340,6 +362,52 @@ async function touchEntry(
 		...updates,
 		lastAccessedAt: Date.now(),
 	})
+}
+
+function queueTouch(entry: CanvasMediaEntry): void {
+	const now = Date.now()
+	const id = String(entry.id || "")
+	if (!id) return
+	const lastWrittenAt = lastTouchWriteAt.get(id) ?? entry.lastAccessedAt ?? 0
+	if (now - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+	pendingTouches.set(id, { id, lastAccessedAt: now })
+	if (touchFlushTimer !== null) return
+	touchFlushTimer = setTimeout(() => {
+		touchFlushTimer = null
+		void flushPendingTouches()
+	}, TOUCH_FLUSH_IDLE_DELAY_MS)
+}
+
+async function flushPendingTouches(touches?: CanvasMediaTouch[]): Promise<void> {
+	const updates = touches ?? Array.from(pendingTouches.values())
+	if (!touches) pendingTouches.clear()
+	if (updates.length === 0) return
+	try {
+		const db = await openDb()
+		const transaction = db.transaction(STORE_NAME, "readwrite")
+		const store = transaction.objectStore(STORE_NAME)
+		const appliedIds = new Set<string>()
+		updates.forEach((update) => {
+			const request = store.get(update.id)
+			request.onsuccess = () => {
+				const current = request.result as CanvasMediaEntry | undefined
+				if (!current) return
+				const lastWrittenAt = Math.max(
+					current.lastAccessedAt || 0,
+					lastTouchWriteAt.get(update.id) || 0,
+				)
+				if (update.lastAccessedAt - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+				store.put({ ...current, lastAccessedAt: update.lastAccessedAt })
+				appliedIds.add(update.id)
+			}
+		})
+		await transactionToPromise(transaction)
+		updates
+			.filter((update) => appliedIds.has(update.id))
+			.forEach((update) => lastTouchWriteAt.set(update.id, update.lastAccessedAt))
+	} catch {
+		// Touch metadata is best effort and must not affect media reads.
+	}
 }
 
 async function enforceMaxBytes(
@@ -463,7 +531,7 @@ async function putResponseInCache(
 	await enforceMaxBytes()
 }
 
-async function fetchResourceBlobOnce(entry: CanvasMediaEntry) {
+async function fetchResourceBlobOnce(entry: CanvasMediaEntry): Promise<FetchResourceBlobResult> {
 	const cacheKey = getCacheKey(entry)
 	const existingPromise = inflightResourceMap.get(cacheKey)
 	if (existingPromise) return existingPromise
@@ -544,16 +612,13 @@ export async function handleCanvasMediaRequest(request: Request): Promise<Respon
 		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		const cachedResponse = await cache.match(getCacheKey(entry))
 		if (cachedResponse) {
-			await touchEntry(entry)
+			queueTouch(entry)
 			return buildRangeResponse(cachedResponse, request)
 		}
 
 		const result = await fetchResourceBlobOnce(entry)
-		if ("blob" in result && result.blob) {
-			return buildRangeResponse(createResponseFromBlobResult(result), request)
-		}
-
-		return buildRangeResponse(result.response, request)
+		if ("response" in result) return buildRangeResponse(result.response, request)
+		return buildRangeResponse(createResponseFromBlobResult(result), request)
 	} catch {
 		const entry = await getEntryByPath(
 			virtualRequest.resourcePath,
@@ -603,6 +668,11 @@ export function handleCanvasMediaMessage(event: ExtendableMessageEvent): boolean
 					})
 				}),
 		)
+		return true
+	}
+
+	if (data.type === "CANVAS_MEDIA_CACHE_TOUCH_BATCH" && Array.isArray(data.touches)) {
+		event.waitUntil(flushPendingTouches(data.touches))
 		return true
 	}
 

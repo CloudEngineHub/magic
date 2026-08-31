@@ -35,7 +35,8 @@ class FakeIdbRequest<T> {
 	public onsuccess: ((this: IDBRequest<T>, ev: Event) => unknown) | null = null
 	public onerror: ((this: IDBRequest<T>, ev: Event) => unknown) | null = null
 	public onupgradeneeded:
-		((this: IDBOpenDBRequest, ev: IDBVersionChangeEvent) => unknown) | null = null
+		| ((this: IDBOpenDBRequest, ev: IDBVersionChangeEvent) => unknown)
+		| null = null
 
 	public succeed(result: T): void {
 		this.result = result
@@ -75,6 +76,22 @@ class FakeObjectStore {
 	}
 }
 
+class FakeTransaction {
+	public oncomplete: (() => void) | null = null
+	public onerror: (() => void) | null = null
+	public onabort: (() => void) | null = null
+
+	public constructor(private readonly records: Map<string, StoredCanvasEntry>) {
+		queueMicrotask(() => {
+			queueMicrotask(() => this.oncomplete?.())
+		})
+	}
+
+	public objectStore(): FakeObjectStore {
+		return new FakeObjectStore(this.records)
+	}
+}
+
 class FakeDatabase {
 	private readonly stores = new Map<string, Map<string, StoredCanvasEntry>>()
 
@@ -88,19 +105,13 @@ class FakeDatabase {
 		return new FakeObjectStore(store)
 	}
 
-	public transaction(name: string): { objectStore: (storeName: string) => FakeObjectStore } {
+	public transaction(name: string): FakeTransaction {
 		if (!this.stores.has(name)) {
 			this.stores.set(name, new Map<string, StoredCanvasEntry>())
 		}
-		return {
-			objectStore: (storeName: string) => {
-				const store = this.stores.get(storeName)
-				if (!store) {
-					throw new Error(`Missing object store: ${storeName}`)
-				}
-				return new FakeObjectStore(store)
-			},
-		}
+		const store = this.stores.get(name)
+		if (!store) throw new Error(`Missing object store: ${name}`)
+		return new FakeTransaction(store)
 	}
 }
 
@@ -183,6 +194,18 @@ async function saveCanvasEntry(
 	await new Promise<void>((resolve) => {
 		const request = store.put(entry)
 		request.onsuccess = () => resolve()
+	})
+}
+
+async function readCanvasEntry(id: string): Promise<StoredCanvasEntry | undefined> {
+	const openRequest = indexedDB.open(CANVAS_MEDIA_DB_NAME, CANVAS_MEDIA_OFFLINE_CACHE_VERSION)
+	const db = await new Promise<IDBDatabase>((resolve) => {
+		openRequest.onsuccess = () => resolve(openRequest.result)
+	})
+	const store = db.transaction("resources", "readonly").objectStore("resources")
+	return new Promise<StoredCanvasEntry | undefined>((resolve) => {
+		const request = store.get(id)
+		request.onsuccess = () => resolve(request.result)
 	})
 }
 
@@ -397,5 +420,53 @@ describe("canvasMediaShared", () => {
 
 		expect(handled).toBe(true)
 		expect(waitUntil).toHaveBeenCalledTimes(1)
+	})
+
+	it("accepts batched cache-hit touch messages", async () => {
+		const waitUntil = vi.fn((promise: Promise<unknown>) => promise)
+		const event = {
+			data: {
+				type: "CANVAS_MEDIA_CACHE_TOUCH_BATCH",
+				touches: [],
+			},
+			waitUntil,
+		} as unknown as ExtendableMessageEvent
+
+		expect(handleCanvasMediaMessage(event)).toBe(true)
+		expect(waitUntil).toHaveBeenCalledTimes(1)
+		await waitUntil.mock.results[0]?.value
+	})
+
+	it("updates metadata for a non-empty touch batch and suppresses touches within 24 hours", async () => {
+		const id = "workspace/project/design/touch-batch/image/images/touch.png"
+		const initialAccess = 0
+		const firstTouch = 2 * 24 * 60 * 60 * 1000
+		await saveCanvasEntry({
+			id,
+			namespace: "workspace/project/design/touch-batch",
+			path: "images/touch.png",
+			mediaType: "image",
+			lastAccessedAt: initialAccess,
+			updatedAt: initialAccess,
+		})
+
+		const dispatchTouch = async (lastAccessedAt: number) => {
+			const waitUntil = vi.fn((promise: Promise<unknown>) => promise)
+			const event = {
+				data: {
+					type: "CANVAS_MEDIA_CACHE_TOUCH_BATCH",
+					touches: [{ id, lastAccessedAt }],
+				},
+				waitUntil,
+			} as unknown as ExtendableMessageEvent
+			expect(handleCanvasMediaMessage(event)).toBe(true)
+			await waitUntil.mock.results[0]?.value
+		}
+
+		await dispatchTouch(firstTouch)
+		expect((await readCanvasEntry(id))?.lastAccessedAt).toBe(firstTouch)
+
+		await dispatchTouch(firstTouch + 60 * 60 * 1000)
+		expect((await readCanvasEntry(id))?.lastAccessedAt).toBe(firstTouch)
 	})
 })

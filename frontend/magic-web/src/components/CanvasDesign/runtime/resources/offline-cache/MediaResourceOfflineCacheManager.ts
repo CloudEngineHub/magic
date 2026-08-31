@@ -130,6 +130,8 @@ const VIRTUAL_RESOURCE_FALLBACK_COOLDOWN_MS = 60_000
 const VIRTUAL_RESOURCE_REPAIR_THROTTLE_MS = 30_000
 const SERVICE_WORKER_READY_TIMEOUT_MS = 1500
 const BACKGROUND_CACHE_WARM_CONCURRENCY = 2
+const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const TOUCH_FLUSH_IDLE_DELAY_MS = 1000
 
 function readServiceWorkerController(): ServiceWorker | null {
 	if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null
@@ -262,6 +264,9 @@ export class MediaResourceOfflineCacheManager {
 		backgroundWarmFailedCount: 0,
 	}
 	private registerPromises = new Map<string, Promise<void>>()
+	private pendingTouches = new Map<string, { id: string; lastAccessedAt: number }>()
+	private lastTouchWriteAt = new Map<string, number>()
+	private touchTimerId: ReturnType<typeof setTimeout> | null = null
 
 	private readonly getResolveResourceReference?: () => ResolveCanvasResourceReference | undefined
 	private readonly getVirtualResourceScope?: () => string | undefined
@@ -317,11 +322,44 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	public destroy(): void {
+		if (this.touchTimerId !== null) {
+			clearTimeout(this.touchTimerId)
+			this.touchTimerId = null
+		}
+		void this.flushPendingTouches()
 		this.deactivateConsumer()
 		this.registerPromises.clear()
 		this.cachePromises.clear()
 		this.backgroundCacheWarmQueue = []
 		this.activeBackgroundCacheWarmCount = 0
+	}
+
+	private queueTouch(entry: CachedMediaResource): void {
+		const now = Date.now()
+		const id = buildResourceId(entry.namespace, entry.mediaType, entry.path)
+		const lastWrittenAt = this.lastTouchWriteAt.get(id) ?? entry.lastAccessedAt
+		if (now - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+		this.pendingTouches.set(id, { id, lastAccessedAt: now })
+		if (this.touchTimerId !== null) return
+		this.touchTimerId = setTimeout(() => {
+			this.touchTimerId = null
+			void this.flushPendingTouches()
+		}, TOUCH_FLUSH_IDLE_DELAY_MS)
+	}
+
+	private async flushPendingTouches(): Promise<void> {
+		const touches = Array.from(this.pendingTouches.values())
+		this.pendingTouches.clear()
+		if (touches.length === 0 || !this.canUseServiceWorkerCache()) return
+		try {
+			await this.postMessageToServiceWorker({
+				type: "CANVAS_MEDIA_CACHE_TOUCH_BATCH",
+				touches,
+			})
+		} catch {
+			return
+		}
+		touches.forEach(({ id, lastAccessedAt }) => this.lastTouchWriteAt.set(id, lastAccessedAt))
 	}
 
 	public isEnabled(): boolean {
@@ -513,15 +551,7 @@ export class MediaResourceOfflineCacheManager {
 		}
 		this.stats.cacheHitCount += 1
 
-		await this.touchEntry(entry)
-		await this.postMessageToServiceWorker({
-			type: "CANVAS_MEDIA_CACHE_REGISTER",
-			entry: {
-				...entry,
-				lastAccessedAt: Date.now(),
-			},
-			maxBytes: this.getMaxBytes(),
-		})
+		this.queueTouch(entry)
 		return entry
 	}
 
@@ -836,13 +866,6 @@ export class MediaResourceOfflineCacheManager {
 			lastAccessedAt: entry.lastAccessedAt,
 			updatedAt: entry.updatedAt,
 		}
-	}
-
-	private async touchEntry(entry: CachedMediaResource): Promise<void> {
-		await this.saveEntry({
-			...entry,
-			lastAccessedAt: Date.now(),
-		})
 	}
 
 	private async deleteCachedResource(params: RemoveCachedResourceParams): Promise<void> {
