@@ -843,9 +843,11 @@ readonly class VideoOperationAppService
             self::AUDIT_STATUS_FAIL,
         );
 
-        $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
-        if ($previousExceptions !== []) {
-            $businessParams['previous_exceptions'] = $previousExceptions;
+        if ($throwable instanceof Throwable) {
+            $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
+            if ($previousExceptions !== []) {
+                $businessParams['previous_exceptions'] = $previousExceptions;
+            }
         }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
