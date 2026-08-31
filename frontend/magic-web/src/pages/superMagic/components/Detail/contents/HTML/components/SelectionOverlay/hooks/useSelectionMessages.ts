@@ -27,6 +27,10 @@ export function useSelectionMessages({
 	// Use ref to track current selected elements without causing effect re-registration
 	const selectedInfoListRef = useRef<SelectedInfo[]>(selectedInfoList)
 	selectedInfoListRef.current = selectedInfoList
+	// Message handlers are async because text editing must be disabled before the
+	// next selection is applied. Ignore work started by an older selection event
+	// so a delayed deselection cannot clear a newer selection.
+	const selectionRevisionRef = useRef(0)
 
 	useEffect(() => {
 		const handleMessage = async (event: MessageEvent) => {
@@ -54,6 +58,7 @@ export function useSelectionMessages({
 						stylePanelStore.setTextSelection(null)
 					}
 				} else if (type === "ELEMENT_SELECTED") {
+					const selectionRevision = ++selectionRevisionRef.current
 					// Single element selected - show selection highlight
 					const rect = payload?.rect
 					const selector = payload?.selector
@@ -90,6 +95,7 @@ export function useSelectionMessages({
 								}
 							}
 						}
+						if (selectionRevision !== selectionRevisionRef.current) return
 
 						setSelectedInfoList([
 							{
@@ -129,6 +135,7 @@ export function useSelectionMessages({
 						// No longer auto-enable text editing on selection
 					}
 				} else if (type === "ELEMENTS_SELECTED") {
+					const selectionRevision = ++selectionRevisionRef.current
 					// Multiple elements selected - show all selection highlights
 					const elements = payload?.elements
 
@@ -147,6 +154,7 @@ export function useSelectionMessages({
 								}
 							}
 						}
+						if (selectionRevision !== selectionRevisionRef.current) return
 
 						// Map elements to SelectedInfo format
 						const newSelectedInfoList: SelectedInfo[] = elements.map((el) => ({
@@ -191,37 +199,39 @@ export function useSelectionMessages({
 						)
 					}
 				} else if (type === "ELEMENT_DESELECTED") {
+					const selectionRevision = ++selectionRevisionRef.current
 					// Single element deselected - clear selection highlight (backward compatibility)
 					// Use ref to avoid stale closure
 					const previousSelectors = selectedInfoListRef.current.map(
 						(info) => info.selector,
 					)
 					for (const prevSelector of previousSelectors) {
-						if (editorRef?.current) {
-							try {
-								await editorRef.current.disableTextEditing(prevSelector)
-							} catch (error) {
-								// Ignore error if element is already non-editable
-								console.debug("[SelectionOverlay] Text editing already disabled")
-							}
+						if (!editorRef?.current) continue
+						try {
+							await editorRef.current.disableTextEditing(prevSelector)
+						} catch (error) {
+							// Ignore error if element is already non-editable
+							console.debug("[SelectionOverlay] Text editing already disabled")
 						}
 					}
+					if (selectionRevision !== selectionRevisionRef.current) return
 					setSelectedInfoList([])
 				} else if (type === "ELEMENTS_DESELECTED") {
+					const selectionRevision = ++selectionRevisionRef.current
 					// All elements deselected - clear all selection highlights
 					// Use ref to avoid stale closure
 					const previousSelectors = selectedInfoListRef.current.map(
 						(info) => info.selector,
 					)
 					for (const prevSelector of previousSelectors) {
-						if (editorRef?.current) {
-							try {
-								await editorRef.current.disableTextEditing(prevSelector)
-							} catch (error) {
-								// Ignore error
-							}
+						if (!editorRef?.current) continue
+						try {
+							await editorRef.current.disableTextEditing(prevSelector)
+						} catch (error) {
+							// Ignore error
 						}
 					}
+					if (selectionRevision !== selectionRevisionRef.current) return
 					setSelectedInfoList([])
 				} else if (type === "ELEMENT_HOVERED") {
 					// Element hovered - show hover highlight
@@ -234,6 +244,7 @@ export function useSelectionMessages({
 					// Hover ended - clear hover highlight
 					setHoveredRect(null)
 				} else if (type === "SELECTION_MODE_CHANGED") {
+					selectionRevisionRef.current += 1
 					// Selection mode changed
 					const newSelectionMode = payload?.isSelectionMode
 					setIsSelectionMode(newSelectionMode)

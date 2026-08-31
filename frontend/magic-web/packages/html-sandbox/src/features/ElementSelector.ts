@@ -662,21 +662,19 @@ export class ElementSelector {
 
 		// In single select mode, check if we need to clear previous selections
 		if (!multiSelect) {
-			// If the same element is already selected and is in text editing mode,
-			// don't clear selection to avoid interrupting text editing
-			const isTextEditing = element.getAttribute("data-text-editing") === "true"
-
-			if (isAlreadySelected && isTextEditing) {
-				// Just refresh the selection info without clearing
+			// Refresh an existing selection in place. Clearing first emits a
+			// deselection event and can race with the refreshed selection event.
+			// This is especially visible after moving an image in the DOM tree.
+			if (isAlreadySelected && this.selectedElements.size === 1) {
 				this.notifySelectionChanged()
 				console.log(
-					"[ElementSelector] Element already selected and editing, refreshing:",
+					"[ElementSelector] Element already selected, refreshing:",
 					getElementSelector(element),
 				)
 				return
 			}
 
-			// Clear previous selections for different element or non-editing state
+			// Clear previous selections when switching elements or leaving multi-select mode.
 			this.clearSelection()
 		}
 

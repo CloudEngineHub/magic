@@ -84,6 +84,42 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should refresh an already selected image without emitting deselection", () => {
+			container.innerHTML = '<img id="image" src="test.jpg" />'
+			const element = container.querySelector("#image") as HTMLElement
+
+			selector.selectElement(element)
+			sendEventSpy.mockClear()
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledTimes(1)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isImageElement: true,
+				}),
+			)
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+		})
+
+		it("should reduce a multi-selection to the clicked element in single-select mode", () => {
+			container.innerHTML = '<div id="first">First</div><div id="second">Second</div>'
+			const first = container.querySelector("#first") as HTMLElement
+			const second = container.querySelector("#second") as HTMLElement
+
+			selector.selectElement(first)
+			selector.selectElement(second, true)
+			sendEventSpy.mockClear()
+			selector.selectElement(second)
+
+			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({ selector: expect.stringContaining("div#second") }),
+			)
+			expect(selector.getSelectedCount()).toBe(1)
+		})
+
 		it("should ignore body element", () => {
 			selector.selectElement(document.body)
 			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENT_SELECTED", expect.anything())
