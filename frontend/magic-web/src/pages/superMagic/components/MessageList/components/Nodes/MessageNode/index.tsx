@@ -29,16 +29,17 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	)
 
 	if (node?.role === "tool") {
+		// AttachmentSection is this role's only visible output, so the spacing has to travel with
+		// it. A wrapper here would keep emitting a 12px gap for every result that renders nothing.
 		return (
-			<div className="mb-3">
-				<AttachmentSection
-					node={node}
-					fallbackNode={props.node}
-					prevSuperMessageId={props.prevNode?.super_message_id}
-					onFileClick={props.onFileClick}
-					onSelectDetail={props.onSelectDetail}
-				/>
-			</div>
+			<AttachmentSection
+				className="mb-3"
+				node={node}
+				fallbackNode={props.node}
+				prevSuperMessageId={props.prevNode?.super_message_id}
+				onFileClick={props.onFileClick}
+				onSelectDetail={props.onSelectDetail}
+			/>
 		)
 	}
 

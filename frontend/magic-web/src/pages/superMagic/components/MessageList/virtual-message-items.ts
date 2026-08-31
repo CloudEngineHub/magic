@@ -1,5 +1,6 @@
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
+import { canToolMessageRender } from "./message-render-contract"
 import {
 	buildMessageKeysAndTurnGroups,
 	isToolRoleMessage,
@@ -97,7 +98,10 @@ function isTaskLifecycleToolMessage(node: SuperMagicMessageItem) {
  * while tool-call cards are rendered from the Assistant's tool_calls. Keeping one merely because
  * it reached a terminal status would project an empty measured row.
  */
-function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
+function shouldIncludeVirtualMessage(
+	node: SuperMagicMessageItem,
+	previousNode?: SuperMagicMessageItem,
+) {
 	if (node?.role === "user") return true
 	const payloads = [node?.content, node?.reasoning_content, node?.tool_calls]
 	const debug = node?.debug as Record<string, unknown> | undefined
@@ -117,10 +121,13 @@ function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
 		// drop it. Rows that reach here before their terminal status still render as a measured
 		// placeholder instead of an empty gap.
 		if (isTaskLifecycleToolMessage(node)) return true
-		return (
-			payloads.some(hasRenderableMessageValue) ||
-			attachmentPayloads.some(hasRenderableMessageValue)
-		)
+		// A Tool's own payload is deliberately excluded: MessageNode renders AttachmentSection
+		// and nothing else for this role, so text-only results would project an empty row.
+		return canToolMessageRender({
+			node: node as unknown as Record<string, unknown>,
+			fallbackNode: node,
+			previousContent: previousNode?.content,
+		})
 	}
 
 	if (payloads.some(hasRenderableMessageValue)) return true
@@ -151,7 +158,9 @@ export function buildVirtualMessageProjection(
 		if (isUser) {
 			currentTurnKey = `turn-${key}`
 		}
-		if (!shouldIncludeVirtualMessage(node)) {
+		// AttachmentSection reads file-path mentions from the message before this one, and the
+		// renderer resolves that neighbour the same way (`messages[sourceIndex - 1]`).
+		if (!shouldIncludeVirtualMessage(node, messages[sourceIndex - 1])) {
 			return
 		}
 

@@ -180,7 +180,11 @@ describe("VirtualMessageList", () => {
 			message("assistant-1", "assistant"),
 			message("assistant-2", "assistant"),
 			message("user-3", "user"),
-			message("tool-4", "tool"),
+			// A Tool row only survives projection when it has something for AttachmentSection.
+			{
+				...message("tool-4", "tool"),
+				attachments: [{ filename: "result.html" }],
+			} as unknown as SuperMagicMessageItem,
 		])
 
 		expect(virtualState.lastProps?.data).toBeUndefined()
