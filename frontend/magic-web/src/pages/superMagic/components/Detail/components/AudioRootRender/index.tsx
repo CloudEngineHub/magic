@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { saveMediaSpeakersAndMagicProjectJs } from "../../contents/HTML/media/utils"
@@ -20,6 +21,7 @@ import { RecordingDetailWorkbench } from "@/pages/superMagic/pages/AudioRecordin
 import { RecordingDetailLeftColumn } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailLeftColumn"
 import { RecordingDetailRightPanel } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRightPanel"
 import { RecordingDetailSpeakerDialog } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailSpeakerDialog"
+import { MobileAudioFolderContent } from "./MobileAudioFolderContent"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import {
 	RecordingDetailEmptyState,
@@ -39,6 +41,7 @@ interface AudioRootRenderProps {
 export default function AudioRootRender(props: AudioRootRenderProps) {
 	const { data, attachments = [], attachmentList = [], projectId = "", isFileShare } = props
 	const shareRoute = useShareRoute()
+	const isMobile = useIsMobile()
 	const isReadonlyShare = Boolean(isFileShare || shareRoute.isShareRoute)
 	const targetProjectId = projectId || data.project_id || data.file_id
 	const detail = useShareRecordingDetailData({
@@ -55,18 +58,25 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 		[data, attachments, attachmentList],
 	)
 
-	if (!detail.loading && detail.error && fallbackHtml) {
+	if (!isMobile && !detail.loading && detail.error && fallbackHtml) {
 		// The generated HTML remains the compatibility path when the attachment bundle cannot load.
 		return <HTML {...props} data={fallbackHtml as never} />
 	}
 
 	return (
 		<RecordingDetailProvider capabilities={capabilities}>
-			<AudioFolderWorkbench
-				projectId={targetProjectId}
-				canEditSpeakers={capabilities.canEditSpeakers}
-				detail={detail}
-			/>
+			{isMobile ? (
+				<MobileAudioFolderContent
+					canEditSpeakers={capabilities.canEditSpeakers}
+					detail={detail}
+				/>
+			) : (
+				<AudioFolderWorkbench
+					projectId={targetProjectId}
+					canEditSpeakers={capabilities.canEditSpeakers}
+					detail={detail}
+				/>
+			)}
 		</RecordingDetailProvider>
 	)
 }

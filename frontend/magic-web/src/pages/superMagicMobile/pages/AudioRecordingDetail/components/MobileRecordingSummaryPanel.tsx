@@ -33,6 +33,9 @@ interface MobileRecordingSummaryPanelProps {
 	searchScopeRef?: RefObject<HTMLDivElement | null>
 	searchActive?: boolean
 	onActiveTypeChange?: (type: string) => void
+	/** Hides the nested summary switcher when an embedding preview owns the tab row. */
+	showTypeTabs?: boolean
+	activeType?: string
 }
 
 /** Renders dynamic completed-summary tabs from the project file map. */
@@ -48,10 +51,14 @@ export function MobileRecordingSummaryPanel({
 	searchScopeRef,
 	searchActive = false,
 	onActiveTypeChange,
+	showTypeTabs = true,
+	activeType: controlledActiveType,
 }: MobileRecordingSummaryPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeType, setActiveType] = useState<string>(summaryFiles[0]?.type ?? "")
-	const activeFile = summaryFiles.find((file) => file.type === activeType) ?? summaryFiles[0]
+	const resolvedActiveType = controlledActiveType ?? activeType
+	const activeFile =
+		summaryFiles.find((file) => file.type === resolvedActiveType) ?? summaryFiles[0]
 	const content = activeFile ? summaryContent[activeFile.type] : undefined
 
 	useEffect(() => {
@@ -69,22 +76,24 @@ export function MobileRecordingSummaryPanel({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-summary-panel">
 			{/* Match the source tab header height so switching between Source and Summary never shifts content vertically. */}
-			<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
-				<div className="flex w-max">
-					{summaryFiles.map((file) => (
-						<SummaryTabButton
-							key={file.type}
-							active={file.type === activeFile?.type}
-							label={resolveSummaryTypeLabel(file.type, t)}
-							type={file.type}
-							onClick={() => {
-								setActiveType(file.type)
-								onActiveTypeChange?.(file.type)
-							}}
-						/>
-					))}
+			{showTypeTabs ? (
+				<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
+					<div className="flex w-max">
+						{summaryFiles.map((file) => (
+							<SummaryTabButton
+								key={file.type}
+								active={file.type === activeFile?.type}
+								label={resolveSummaryTypeLabel(file.type, t)}
+								type={file.type}
+								onClick={() => {
+									setActiveType(file.type)
+									onActiveTypeChange?.(file.type)
+								}}
+							/>
+						))}
+					</div>
 				</div>
-			</div>
+			) : null}
 
 			{/*
 			 * metrics tab: render directly in the panel's flex column so that flex-1

@@ -35,6 +35,9 @@ interface MobileRecordingSourcePanelProps {
 	notesFilePath?: string
 	searchScopeRef?: RefObject<HTMLDivElement | null>
 	onActiveTabChange?: (tab: MobileRecordingSourceTab) => void
+	/** Allows embedded previews to provide one outer tab row instead of this source switcher. */
+	showTabBar?: boolean
+	activeTab?: MobileRecordingSourceTab
 }
 
 /** Shows completed source attachments: transcript timeline and readonly notes markdown. */
@@ -55,9 +58,12 @@ export function MobileRecordingSourcePanel({
 	notesFilePath,
 	searchScopeRef,
 	onActiveTabChange,
+	showTabBar = true,
+	activeTab: controlledActiveTab,
 }: MobileRecordingSourcePanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTab, setActiveTab] = useState<MobileRecordingSourceTab>("transcript")
+	const resolvedActiveTab = controlledActiveTab ?? activeTab
 	const segments = useMemo(
 		() => parseTranscriptMarkdown(transcriptContent ?? ""),
 		[transcriptContent],
@@ -71,7 +77,8 @@ export function MobileRecordingSourcePanel({
 	)
 	const hasTranscriptContent = segments.length > 0
 	const hasNotesContent = Boolean(notesContent?.trim())
-	const activeTabHasContent = activeTab === "transcript" ? hasTranscriptContent : hasNotesContent
+	const activeTabHasContent =
+		resolvedActiveTab === "transcript" ? hasTranscriptContent : hasNotesContent
 	const speakerLabels = useMemo(
 		() =>
 			Object.fromEntries(
@@ -86,46 +93,48 @@ export function MobileRecordingSourcePanel({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-source-panel">
 			{/* Keep the source switcher height stable when the transcript-only speaker filter appears. */}
-			<div className="sticky top-0 z-10 flex min-h-[68px] items-center gap-2 bg-[#f7f7f8] px-4 py-3">
-				<div className="flex min-w-0 flex-1">
-					<SourceTabButton
-						active={activeTab === "transcript"}
-						label={t("detail.tabs.transcript")}
-						onClick={() => {
-							setActiveTab("transcript")
-							onActiveTabChange?.("transcript")
-						}}
-					/>
-					<SourceTabButton
-						active={activeTab === "notes"}
-						label={t("detail.tabs.notes")}
-						onClick={() => {
-							setActiveTab("notes")
-							onActiveTabChange?.("notes")
-						}}
-					/>
+			{showTabBar ? (
+				<div className="sticky top-0 z-10 flex min-h-[68px] items-center gap-2 bg-[#f7f7f8] px-4 py-3">
+					<div className="flex min-w-0 flex-1">
+						<SourceTabButton
+							active={activeTab === "transcript"}
+							label={t("detail.tabs.transcript")}
+							onClick={() => {
+								setActiveTab("transcript")
+								onActiveTabChange?.("transcript")
+							}}
+						/>
+						<SourceTabButton
+							active={activeTab === "notes"}
+							label={t("detail.tabs.notes")}
+							onClick={() => {
+								setActiveTab("notes")
+								onActiveTabChange?.("notes")
+							}}
+						/>
+					</div>
+					{resolvedActiveTab === "transcript" &&
+					availableSpeakerIds &&
+					selectedSpeakerIds &&
+					onSelectedSpeakerIdsChange ? (
+						<RecordingSpeakerFilterControl
+							speakerIds={availableSpeakerIds}
+							selectedIds={selectedSpeakerIds}
+							onChange={onSelectedSpeakerIdsChange}
+							labels={speakerLabels}
+							title={t("detail.speakerFilterTitle")}
+							presentation="sheet"
+						/>
+					) : null}
 				</div>
-				{activeTab === "transcript" &&
-				availableSpeakerIds &&
-				selectedSpeakerIds &&
-				onSelectedSpeakerIdsChange ? (
-					<RecordingSpeakerFilterControl
-						speakerIds={availableSpeakerIds}
-						selectedIds={selectedSpeakerIds}
-						onChange={onSelectedSpeakerIdsChange}
-						labels={speakerLabels}
-						title={t("detail.speakerFilterTitle")}
-						presentation="sheet"
-					/>
-				) : null}
-			</div>
+			) : null}
 
 			{/* 来源正文统一收敛为唯一滚动口，避免外层 main 与内层内容区同时滚动导致阴影错位。 */}
 			<ScrollEdgeFadeContainer
 				fadeColor="mobile-background"
 				className="min-h-0 flex-1"
 				scrollClassName="px-4"
-				contentDeps={[activeTab, segments.length, hasNotesContent]}
+				contentDeps={[resolvedActiveTab, segments.length, hasNotesContent]}
 				onScroll={onContentScroll}
 			>
 				<div
@@ -139,7 +148,7 @@ export function MobileRecordingSourcePanel({
 					)}
 					style={{ paddingBottom: scrollPaddingBottom }}
 				>
-					{activeTab === "transcript" ? (
+					{resolvedActiveTab === "transcript" ? (
 						<TranscriptList
 							segments={visibleSegments}
 							playing={playing}
