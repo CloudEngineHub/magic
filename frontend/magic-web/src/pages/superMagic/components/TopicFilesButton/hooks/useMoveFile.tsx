@@ -31,13 +31,18 @@ interface UseMoveFileOptions {
 	attachments?: AttachmentItem[]
 	attachmentIndex?: AttachmentIndex
 	onMoveSuccess?: () => void
-	handleMoveFile?: (fileId: string, targetParentId: string) => Promise<boolean>
+	handleMoveFile?: (
+		fileId: string,
+		targetParentId: string,
+		keepBothFileIds?: string[],
+	) => Promise<boolean>
 	// 批量移动相关
 	selectedItems?: Set<string>
 	setSelectedItems?: (items: Set<string>) => void
 	getItemId?: (item: AttachmentItem) => string
 	allFiles?: AttachmentItem[]
 	onSelectModeChange?: (isSelectMode: boolean) => void
+	useDetailedDuplicateConflict?: boolean
 }
 
 const MOVE_TASK_TIMEOUT_MS = 120000
@@ -55,6 +60,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		getItemId,
 		allFiles,
 		onSelectModeChange,
+		useDetailedDuplicateConflict = false,
 	} = options
 
 	// 移动弹窗状态
@@ -144,17 +150,21 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 	useEffect(() => clearMoveTimers, [clearMoveTimers])
 
-	// 显示移动选择器
-	const showMoveSelector = useCallback((item: AttachmentItem) => {
-		setCurrentMoveItem(item)
-		setIsBatchMode(false)
-		// 单个文件移动时，禁用其父文件夹（如果是文件夹的话）
-		const disabled = item.is_directory && item.file_id ? [item.file_id] : []
-		setDisabledFolderIds(disabled)
-		// 点击移动时始终从当前项目根目录开始选择目标位置。
-		setDefaultPath([])
-		setVisible(true)
-	}, [])
+	// Open the move picker.
+	const showMoveSelector = useCallback(
+		(item: AttachmentItem) => {
+			setCurrentMoveItem(item)
+			setIsBatchMode(false)
+			// Disable the selected folder as a target.
+			const disabled = item.is_directory && item.file_id ? [item.file_id] : []
+			setDisabledFolderIds(disabled)
+			setDefaultPath(
+				item.file_id ? (attachmentIndex?.getParentItemsById(item.file_id) ?? []) : [],
+			)
+			setVisible(true)
+		},
+		[attachmentIndex],
+	)
 
 	// 显示批量移动选择器
 	const showBatchMoveSelector = useCallback(
@@ -678,7 +688,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				return
 			}
 
-			const executeSingleMove = async () => {
+			const executeSingleMove = async (keepBothFileIds: string[] = []) => {
 				if (!currentMoveItem?.file_id) return
 
 				if (!handleMoveFile && projectId) {
@@ -698,6 +708,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 								),
 								projectId,
 								targetParentId,
+								keepBothFileIds,
 							})
 							return
 						}
@@ -717,8 +728,13 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 					if (handleMoveFile) {
 						setMoveProgress(50)
-						// 使用传入的 handleMoveFile 函数
-						success = await handleMoveFile(currentMoveItem.file_id, targetParentId)
+						// Use the injected move handler.
+						success = await handleMoveFile(
+							currentMoveItem.file_id,
+							targetParentId,
+							undefined,
+							keepBothFileIds,
+						)
 						if (success) {
 							setMoveProgress(100)
 							hideMoveSelector()
@@ -735,10 +751,11 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						}
 					} else {
 						setMoveProgress(50)
-						// 直接调用 API
+						// Call the API directly.
 						await SuperMagicApi.moveFile({
 							file_id: currentMoveItem.file_id,
 							target_parent_id: targetParentId,
+							keep_both_file_ids: keepBothFileIds,
 						})
 						setMoveProgress(100)
 						magicToast.success(t("topicFiles.success.fileMoved"))
@@ -787,10 +804,22 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				if (!shouldContinue) return
 			}
 
-			// 检查单个文件移动是否存在同名冲突
+			// Check for a name conflict.
 			const hasConflict = checkSingleFileConflict(currentMoveItem, targetFolderPath)
 
 			if (hasConflict) {
+				if (useDetailedDuplicateConflict) {
+					const duplicates = detectDuplicateFilesForMove(
+						[currentMoveItem.file_id],
+						attachments,
+						attachments,
+						data.path,
+					)
+					const userChoice = await moveDuplicateHandler.checkDuplicates(duplicates)
+					if (!userChoice.shouldProceed) return
+					executeSingleMove(userChoice.keepBothIds)
+					return
+				}
 				// 显示覆盖确认对话框
 				showOverwriteConfirm([currentMoveItem], () => {
 					// 用户确认后执行单个移动
@@ -820,6 +849,8 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			projectId,
 			setSelectedItems,
 			showOverwriteConfirm,
+			moveDuplicateHandler,
+			useDetailedDuplicateConflict,
 			t,
 		],
 	)
