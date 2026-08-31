@@ -133,7 +133,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
             'sts' => false,
             'role_session_name' => 'magic',
             // Use configuration name in file path for automatic recognition when getting links later
-            'dir' => $autoDir ? $organizationCode . '/open/' . md5($storage->value) : '',
+            'dir' => $autoDir ? $this->getFullPrefix($organizationCode) . md5($storage->value) : '',
             'content_type' => $contentType,
         ]);
         $uploadOptions = ($options['internal_endpoint'] ?? false) === true
@@ -158,7 +158,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
             'sts' => true,  // Use STS mode for chunk upload
             'role_session_name' => 'magic',
             // Use organization code + storage hash in path for automatic link recognition
-            'dir' => $autoDir ? $organizationCode . '/open/' . md5($storage->value) : '',
+            'dir' => $autoDir ? $this->getFullPrefix($organizationCode) . md5($storage->value) : '',
             'expires' => 3600, // STS credential valid for 1 hour, sufficient for chunk upload
         ]);
 
@@ -344,7 +344,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
 
     public function getFullPrefix(string $organizationCode): string
     {
-        $appId = 'open';
+        $appId = $this->getStorageAppId();
         return "{$organizationCode}/{$appId}/";
     }
 
