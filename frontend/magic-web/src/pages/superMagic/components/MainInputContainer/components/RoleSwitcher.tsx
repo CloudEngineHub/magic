@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMount } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -77,12 +77,40 @@ function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollCon
 }
 
 function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
-	const modeList = superMagicModeService.modeList.filter(isModeVisibleToCurrentUser)
+	const availableModeList = superMagicModeService.modeList
+	const modeList = useMemo(
+		() => availableModeList.filter(isModeVisibleToCurrentUser),
+		[availableModeList],
+	)
 	const isModeListLoading = superMagicModeService.isModeListLoading
 	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
 		activeKey: role,
 		itemCount: modeList.length,
 	})
+	const [isModeListScrolled, setIsModeListScrolled] = useState(false)
+	const isModeListScrolledRef = useRef(false)
+
+	useEffect(() => {
+		const container = scrollContainerRef.current
+		if (!container) return
+
+		const updateScrollState = () => {
+			const nextIsScrolled = container.scrollLeft > 1
+			if (nextIsScrolled === isModeListScrolledRef.current) return
+
+			isModeListScrolledRef.current = nextIsScrolled
+			setIsModeListScrolled(nextIsScrolled)
+		}
+
+		updateScrollState()
+		container.addEventListener("scroll", updateScrollState, { passive: true })
+		window.addEventListener("resize", updateScrollState)
+
+		return () => {
+			container.removeEventListener("scroll", updateScrollState)
+			window.removeEventListener("resize", updateScrollState)
+		}
+	}, [scrollContainerRef, modeList.length])
 	const navigate = useNavigate()
 	const { t } = useTranslation("crew/create")
 
@@ -191,6 +219,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 				<RoleSwitcherOverflowMenu
 					modeList={modeList}
 					role={role}
+					isScrolled={isModeListScrolled}
 					onSelectMode={(modeIdentifier) => onActionClick?.(modeIdentifier)}
 				/>
 			) : (
