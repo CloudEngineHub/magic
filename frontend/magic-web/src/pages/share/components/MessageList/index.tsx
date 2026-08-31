@@ -1,6 +1,6 @@
 import { Node } from "@/pages/superMagic/components/MessageList/components/Nodes"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-import { memo, type RefObject, useCallback, useMemo } from "react"
+import { memo, type MutableRefObject, type RefObject, useCallback, useMemo } from "react"
 import { useStyles } from "./style"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -15,6 +15,7 @@ import type { ProjectFilesStore } from "@/stores/projectFiles"
 import { buildVirtualMessageProjection } from "@/pages/superMagic/components/MessageList/virtual-message-items"
 import { VirtualMessageList } from "@/pages/superMagic/components/MessageList/components/VirtualMessageList"
 import { MessageViewStateProvider } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
+import type { MessageListScrollAdapter } from "@/pages/superMagic/components/MessageList/message-list-scroll-adapter"
 
 function MessageList({
 	topicId,
@@ -24,6 +25,8 @@ function MessageList({
 	stickyMessageClassName,
 	projectFilesStore,
 	scrollContainerRef,
+	virtualizerRef,
+	onVirtualizerChange,
 }: {
 	topicId: string
 	messageList: any[]
@@ -38,6 +41,18 @@ function MessageList({
 	projectFilesStore?: ProjectFilesStore
 	/** Scroll owner supplied by the share shell; virtualization does not create a nested viewport. */
 	scrollContainerRef: RefObject<HTMLDivElement | null>
+	/**
+	 * Handed to the shell so its own scroll writes can address rows instead of guessing at
+	 * `scrollHeight`, which stays an estimate until virtua has measured every row it projects.
+	 */
+	virtualizerRef?: MutableRefObject<MessageListScrollAdapter | null>
+	/**
+	 * Fires once the virtualizer is addressable and again on every canvas resize. The shell
+	 * commits its scroll element after this subtree, so the list mounts a render later than the
+	 * shell's own effects run: a scroll asked for in that window reaches nothing and needs
+	 * re-issuing here.
+	 */
+	onVirtualizerChange?: (virtualizer: MessageListScrollAdapter) => void
 }) {
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
@@ -64,6 +79,10 @@ function MessageList({
 		}
 	}, [projectFilesStore])
 	const getScrollElement = useCallback(() => scrollContainerRef.current, [scrollContainerRef])
+	// Stable identity so the memoized list is not rebuilt on every shell render.
+	const handleVirtualizerChange = useMemoizedFn((virtualizer: MessageListScrollAdapter) =>
+		onVirtualizerChange?.(virtualizer),
+	)
 
 	return (
 		<MessageListProvider value={value}>
@@ -75,7 +94,12 @@ function MessageList({
 						userIndices={virtualProjection.userIndices}
 						isMobile={isMobile}
 						useMobileStickyOverlay={false}
+						// The share shell has no header over its scroll viewport, so the pinned
+						// turn parks flush with the top instead of below the workspace's line.
+						stickyTopOffset={0}
 						getScrollElement={getScrollElement}
+						virtualizerRef={virtualizerRef}
+						onVirtualizerChange={handleVirtualizerChange}
 						stickyMessageClassName={stickyMessageClassName}
 						renderNode={({ item }) => {
 							const index = item.sourceIndex

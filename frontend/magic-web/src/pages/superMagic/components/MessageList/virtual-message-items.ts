@@ -1,4 +1,3 @@
-import { defaultRangeExtractor, type Range } from "@tanstack/react-virtual"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
 import {
@@ -32,6 +31,107 @@ export interface VirtualMessageProjection {
 }
 
 /**
+ * Detects an inverse-pagination update without relying on raw page counts. The previous
+ * projection must remain a contiguous sequence after a positive offset; a concurrent tail
+ * append is valid, while middle inserts, replacements, and filtered/reordered updates are not.
+ */
+export function getPrependedVirtualItemCount(
+	previousItems: ReadonlyArray<Pick<VirtualMessageItem, "key">>,
+	nextItems: ReadonlyArray<Pick<VirtualMessageItem, "key">>,
+) {
+	if (previousItems.length === 0 || nextItems.length <= previousItems.length) return 0
+
+	for (let offset = 1; offset <= nextItems.length - previousItems.length; offset += 1) {
+		let matchesPreviousSequence = true
+		for (let index = 0; index < previousItems.length; index += 1) {
+			if (nextItems[offset + index]?.key !== previousItems[index]?.key) {
+				matchesPreviousSequence = false
+				break
+			}
+		}
+		if (matchesPreviousSequence) return offset
+	}
+	return 0
+}
+
+function hasRenderableMessageValue(value: unknown) {
+	if (value == null) return false
+	if (typeof value === "string") return value.trim().length > 0
+	if (Array.isArray(value)) return value.length > 0
+	if (typeof value === "object") return Object.keys(value).length > 0
+	return true
+}
+
+const terminalMessageStatuses = new Set([
+	"completed",
+	"finished",
+	"failed",
+	"error",
+	"suspended",
+	"response_missing",
+])
+
+function hasTerminalMessageStatus(node: SuperMagicMessageItem) {
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const tool = node?.tool as Record<string, unknown> | undefined
+	const debugTool = debug?.tool as Record<string, unknown> | undefined
+	return [node?.status, debug?.status, tool?.status, debugTool?.status].some(
+		(status) => typeof status === "string" && terminalMessageStatuses.has(status),
+	)
+}
+
+const taskLifecycleToolNames = new Set(["finish_task"])
+
+function isTaskLifecycleToolMessage(node: SuperMagicMessageItem) {
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const tool = node?.tool as Record<string, unknown> | undefined
+	const debugTool = debug?.tool as Record<string, unknown> | undefined
+	return [tool?.name, tool?.tool_name, debugTool?.name, debugTool?.tool_name].some(
+		(name) => typeof name === "string" && taskLifecycleToolNames.has(name),
+	)
+}
+
+/**
+ * A message may render through Store-backed business sidecars even when its streaming payload
+ * is empty. Ordinary tool responses are different: their visible branch is AttachmentSection,
+ * while tool-call cards are rendered from the Assistant's tool_calls. Keeping one merely because
+ * it reached a terminal status would project an empty measured row.
+ */
+function shouldIncludeVirtualMessage(node: SuperMagicMessageItem) {
+	if (node?.role === "user") return true
+	const payloads = [node?.content, node?.reasoning_content, node?.tool_calls]
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const tool = node?.tool as Record<string, unknown> | undefined
+	const debugTool = debug?.tool as Record<string, unknown> | undefined
+	const attachmentPayloads = [
+		node?.attachments,
+		debug?.attachments,
+		tool?.attachments,
+		debugTool?.attachments,
+	]
+
+	if (isToolRoleMessage(node)) {
+		// finish_task projects the task lifecycle rather than a tool result, and it is the row that
+		// carries the terminal status badge plus the follow-up suggestions. A conversational turn
+		// ends with an attachment-free, content-free finish_task, so payload emptiness must not
+		// drop it. Rows that reach here before their terminal status still render as a measured
+		// placeholder instead of an empty gap.
+		if (isTaskLifecycleToolMessage(node)) return true
+		return (
+			payloads.some(hasRenderableMessageValue) ||
+			attachmentPayloads.some(hasRenderableMessageValue)
+		)
+	}
+
+	if (payloads.some(hasRenderableMessageValue)) return true
+
+	// Assistant sidecar UI can be rendered from fields outside the streaming payload trio.
+	// Terminal status is retained here because the Store may fill the final Assistant projection
+	// after the historical message enters the list.
+	return attachmentPayloads.some(hasRenderableMessageValue) || hasTerminalMessageStatus(node)
+}
+
+/**
  * Builds the shared data projection for both the virtual DOM and turn-based export logic.
  * Keeping both products in one pass prevents DOM virtualization from changing business ownership.
  */
@@ -43,21 +143,23 @@ export function buildVirtualMessageProjection(
 	const items: Array<VirtualMessageItem> = []
 	let currentTurnKey = "leading-messages"
 
-	messages.forEach((node, index) => {
-		const key = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
+	messages.forEach((node, sourceIndex) => {
+		const key = getMessageNodeKey(node) || `${node?.role || "message"}-${sourceIndex}`
 		const isUser = isUserRoleMessage(node)
 		const isTool = isToolRoleMessage(node)
 
 		if (isUser) {
 			currentTurnKey = `turn-${key}`
-			userIndices.push(index)
+		}
+		if (!shouldIncludeVirtualMessage(node)) {
+			return
 		}
 
 		items.push({
 			key,
 			node,
-			index,
-			sourceIndex: index,
+			index: items.length,
+			sourceIndex,
 			role: node?.role,
 			turnKey: currentTurnKey,
 			isUser,
@@ -66,6 +168,7 @@ export function buildVirtualMessageProjection(
 			renderMode: "message",
 			exportSelectable: currentTurnKey !== "leading-messages",
 		})
+		if (isUser) userIndices.push(items.length - 1)
 	})
 
 	return { items, messageKeys, messageTurnGroups, userIndices }
@@ -163,17 +266,25 @@ export function findActiveStickyIndex(
 	return activeIndex
 }
 
-/**
- * TanStack normally mounts only the overscanned range. Add the preceding User so the same
- * ordinary message row can remain sticky without rendering a second clone outside the list.
- */
-export function createStickyRangeExtractor(
+/** The User row that will take over from `activeIndex`, used to drive the sticky push-out. */
+export function findNextStickyIndex(
 	userIndices: ReadonlyArray<number>,
-): (range: Range) => Array<number> {
-	return (range: Range) => {
-		const indices = defaultRangeExtractor(range)
-		const activeStickyIndex = findActiveStickyIndex(userIndices, range.startIndex)
-		if (activeStickyIndex === undefined || indices.includes(activeStickyIndex)) return indices
-		return [activeStickyIndex, ...indices].sort((left, right) => left - right)
+	activeIndex: number,
+): number | undefined {
+	let low = 0
+	let high = userIndices.length - 1
+	let nextIndex: number | undefined
+
+	while (low <= high) {
+		const middle = low + Math.floor((high - low) / 2)
+		const candidate = userIndices[middle]
+		if (candidate > activeIndex) {
+			nextIndex = candidate
+			high = middle - 1
+		} else {
+			low = middle + 1
+		}
 	}
+
+	return nextIndex
 }

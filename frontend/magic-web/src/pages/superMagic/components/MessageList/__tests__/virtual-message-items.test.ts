@@ -3,8 +3,9 @@ import type { SuperMagicMessageItem } from "../type"
 import {
 	buildVirtualMessageProjection,
 	composeVirtualMessageItems,
-	createStickyRangeExtractor,
 	findActiveStickyIndex,
+	findNextStickyIndex,
+	getPrependedVirtualItemCount,
 } from "../virtual-message-items"
 
 function message(
@@ -15,6 +16,7 @@ function message(
 		super_message_id: superMessageId,
 		app_message_id: `app-${superMessageId}`,
 		role,
+		content: `${role} message`,
 	} as unknown as SuperMagicMessageItem
 }
 
@@ -56,6 +58,148 @@ describe("virtual message projection", () => {
 		])
 	})
 
+	it("filters non-user messages whose explicit render payload is empty", () => {
+		const emptyTool = {
+			...message("empty-tool", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+		} as unknown as SuperMagicMessageItem
+		const visibleAssistant = {
+			...message("assistant", "assistant"),
+			content: "visible",
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([
+			message("user", "user"),
+			emptyTool,
+			visibleAssistant,
+		])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["user", "assistant"])
+		expect(projection.items[1]?.index).toBe(1)
+		expect(projection.items[1]?.sourceIndex).toBe(2)
+	})
+
+	it("keeps an empty-payload Tool when its business result carries attachments", () => {
+		const finishTask = {
+			...message("finish-task", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [{ filename: "missing_animals.json" }],
+			debug: {
+				status: "running",
+				tool: { name: "finish_task", status: "finished" },
+			},
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([finishTask])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["finish-task"])
+	})
+
+	it("keeps a payload-free finish_task so the turn keeps its terminal status sidecar", () => {
+		// A conversational turn ends with a finish_task that has neither content nor attachments.
+		// Dropping it would take the task-completed badge and follow-up suggestions with it.
+		const finishTask = {
+			...message("bare-finish-task", "tool"),
+			content: "",
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [],
+			tool: { name: "finish_task" },
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([finishTask])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["bare-finish-task"])
+	})
+
+	it("filters a terminal Tool response when it has no renderable result", () => {
+		const emptyFinishedTool = {
+			...message("empty-finished-tool", "tool"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			attachments: [],
+			tool: { name: "read_files", status: "finished" },
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([emptyFinishedTool])
+
+		expect(projection.items).toEqual([])
+	})
+
+	it("keeps a terminal empty-payload Assistant for Store-backed status sidecars", () => {
+		const assistant = {
+			...message("finished-assistant", "assistant"),
+			content: null,
+			reasoning_content: null,
+			tool_calls: null,
+			status: "finished",
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([assistant])
+
+		expect(projection.items.map((item) => item.key)).toEqual(["finished-assistant"])
+	})
+
+	it("filters a non-user message with no payload or business sidecar", () => {
+		const emptyAssistant = {
+			...message("empty-assistant", "assistant"),
+			content: undefined,
+			reasoning_content: undefined,
+			tool_calls: undefined,
+		} as unknown as SuperMagicMessageItem
+
+		const projection = buildVirtualMessageProjection([emptyAssistant])
+
+		expect(projection.items).toEqual([])
+	})
+
+	it("counts only a strict prefix when the previous virtual sequence is preserved as a suffix", () => {
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "x" }, { key: "y" }, { key: "a" }, { key: "b" }],
+			),
+		).toBe(2)
+
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "a" }, { key: "b" }, { key: "c" }],
+			),
+		).toBe(0)
+
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "x" }, { key: "b" }],
+			),
+		).toBe(0)
+	})
+
+	it("allows concurrent tail appends while preserving the historical prepend count", () => {
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "x" }, { key: "a" }, { key: "b" }, { key: "new-tail" }],
+			),
+		).toBe(1)
+	})
+
+	it("does not count an empty previous sequence or a repeated history page", () => {
+		expect(getPrependedVirtualItemCount([], [{ key: "x" }])).toBe(0)
+		expect(
+			getPrependedVirtualItemCount(
+				[{ key: "a" }, { key: "b" }],
+				[{ key: "a" }, { key: "b" }],
+			),
+		).toBe(0)
+	})
+
 	it("finds the latest User at or before the visible start", () => {
 		expect(findActiveStickyIndex([2, 7, 11], 1)).toBeUndefined()
 		expect(findActiveStickyIndex([2, 7, 11], 2)).toBe(2)
@@ -63,17 +207,11 @@ describe("virtual message projection", () => {
 		expect(findActiveStickyIndex([2, 7, 11], 99)).toBe(11)
 	})
 
-	it("adds only the active User to TanStack's visible range", () => {
-		const rangeExtractor = createStickyRangeExtractor([0, 4])
-
-		expect(
-			rangeExtractor({
-				startIndex: 3,
-				endIndex: 4,
-				overscan: 1,
-				count: 6,
-			}),
-		).toEqual([0, 2, 3, 4, 5])
+	it("finds the User row that will take over the pinned slot", () => {
+		expect(findNextStickyIndex([2, 7, 11], 2)).toBe(7)
+		expect(findNextStickyIndex([2, 7, 11], 7)).toBe(11)
+		expect(findNextStickyIndex([2, 7, 11], 11)).toBeUndefined()
+		expect(findNextStickyIndex([], 0)).toBeUndefined()
 	})
 
 	it("composes revoked messages into the same flat list and limits only the collapsed preview", () => {
