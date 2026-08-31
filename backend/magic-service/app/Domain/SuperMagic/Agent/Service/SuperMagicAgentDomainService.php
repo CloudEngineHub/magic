@@ -70,6 +70,17 @@ readonly class SuperMagicAgentDomainService
     }
 
     /**
+     * 跨组织按 code 查询 Agent。仅供已经通过公开访问校验的资源上下文解析使用。
+     *
+     * @param array<string> $codes
+     * @return array<string, SuperMagicAgentEntity>
+     */
+    public function findByCodesWithoutOrganizationFilter(array $codes): array
+    {
+        return $this->superMagicAgentRepository->findByCodesWithoutOrganizationFilter($codes);
+    }
+
+    /**
      * @return array{total: int, list: array<SuperMagicAgentEntity>}
      */
     public function queries(SuperMagicAgentDataIsolation $dataIsolation, SuperMagicAgentQuery $query, Page $page): array

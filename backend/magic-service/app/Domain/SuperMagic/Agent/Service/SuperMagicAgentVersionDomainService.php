@@ -125,6 +125,17 @@ class SuperMagicAgentVersionDomainService
     }
 
     /**
+     * 获取跨组织公开 Agent 的当前已发布版本。
+     *
+     * @param array<string> $codes
+     * @return array<string, AgentVersionEntity>
+     */
+    public function getLatestPublishedByCodesWithoutOrganizationFilter(array $codes): array
+    {
+        return $this->agentVersionRepository->findLatestPublishedByCodesWithoutOrganizationFilter($codes);
+    }
+
+    /**
      * @return array{total: int, list: AgentVersionEntity[]}
      */
     public function queries(
