@@ -5,8 +5,26 @@ export const MAX_REGEX_QUERY_LENGTH = 256
  * This keeps ordinary patterns such as `^`, `.*`, and `a*` valid while blocking obvious ReDoS cases.
  */
 export function isPotentiallyUnsafeRegex(value: string): boolean {
+	const hasBackreference = /\\[1-9]/.test(value)
+	const hasOverlappingQuantifiedAlternation = Array.from(
+		value.matchAll(/\(([^()]*)\)(?:[+*]|\{\d)/g),
+	).some(([, body]) => {
+		const alternatives = body.split("|")
+		return alternatives.some((left, index) =>
+			alternatives.some(
+				(right, otherIndex) =>
+					index !== otherIndex &&
+					Boolean(left) &&
+					Boolean(right) &&
+					right.startsWith(left),
+			),
+		)
+	})
+
 	return (
 		value.length > MAX_REGEX_QUERY_LENGTH ||
+		hasBackreference ||
+		hasOverlappingQuantifiedAlternation ||
 		/\([^()\n]*[+*](?:[^()\n]*)\)(?:[+*]|\{\d)/.test(value)
 	)
 }

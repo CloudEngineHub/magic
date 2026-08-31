@@ -80,15 +80,17 @@ describe("searchMarkdown", () => {
 		const content = "a".repeat(100)
 		const chunks = splitMarkdownIntoVirtualChunks(content)
 
-		expect(
-			searchMarkdown({
-				content,
-				chunks,
-				query: "(a+)+",
-				caseSensitive: false,
-				useRegex: true,
-			}),
-		).toEqual([])
+		for (const query of ["(a+)+", "^(a|aa)+$"]) {
+			expect(
+				searchMarkdown({
+					content,
+					chunks,
+					query,
+					caseSensitive: false,
+					useRegex: true,
+				}),
+			).toEqual([])
+		}
 		expect(
 			searchMarkdown({
 				content,
