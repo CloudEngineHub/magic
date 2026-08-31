@@ -205,7 +205,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			</span>
 		) : (
 			<span
-				className="magic-mention"
+				className="magic-mention !inline-flex max-w-full !overflow-visible !rounded-none !bg-transparent !p-0 !align-middle"
 				data-type={data.type}
 				data-data={JSON.stringify(data.data)}
 				onMouseDown={(event) => event.preventDefault()}
