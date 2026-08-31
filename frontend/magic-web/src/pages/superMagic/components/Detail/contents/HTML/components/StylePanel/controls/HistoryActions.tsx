@@ -8,6 +8,7 @@ import { Undo2, Redo2 } from "lucide-react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface HistoryActionsProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -90,7 +91,7 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 							onClick={handleUndo}
 							disabled={!canUndo}
 						>
@@ -108,7 +109,7 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 							onClick={handleRedo}
 							disabled={!canRedo}
 						>

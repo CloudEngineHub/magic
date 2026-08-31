@@ -4,6 +4,7 @@ import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Bold, Italic, Underline, Strikethrough } from "lucide-react"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface TextFormatToolsProps {
 	isBold: boolean
@@ -57,7 +58,7 @@ export function TextFormatTools({
 								onFormat("fontWeight", pressed ? "700" : "400")
 							}
 							disabled={disabled}
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 						>
 							<Bold className="h-4 w-4" />
 						</Toggle>
@@ -77,7 +78,7 @@ export function TextFormatTools({
 								onFormat("fontStyle", pressed ? "italic" : "normal")
 							}
 							disabled={disabled}
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 						>
 							<Italic className="h-4 w-4" />
 						</Toggle>
@@ -97,7 +98,7 @@ export function TextFormatTools({
 								handleTextDecorationChange("underline", pressed)
 							}
 							disabled={disabled}
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 						>
 							<Underline className="h-4 w-4" />
 						</Toggle>
@@ -117,7 +118,7 @@ export function TextFormatTools({
 								handleTextDecorationChange("line-through", pressed)
 							}
 							disabled={disabled}
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 						>
 							<Strikethrough className="h-4 w-4" />
 						</Toggle>

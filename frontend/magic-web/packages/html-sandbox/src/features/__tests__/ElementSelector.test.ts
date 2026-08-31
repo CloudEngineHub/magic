@@ -138,7 +138,7 @@ describe("ElementSelector", () => {
 
 		it("should include flex item and parent flex context in computed styles", () => {
 			container.innerHTML = `
-				<div id="layout" style="display: flex; flex-direction: row; align-items: stretch;">
+				<div id="layout" style="display: flex; flex-direction: row; justify-content: flex-start; align-items: stretch;">
 					<main id="content" style="flex: 1 1 0%; min-width: 0;">Content</main>
 				</div>
 			`
@@ -150,8 +150,10 @@ describe("ElementSelector", () => {
 				"ELEMENT_SELECTED",
 				expect.objectContaining({
 					computedStyles: expect.objectContaining({
+						parentSelector: expect.stringContaining("div#layout"),
 						parentDisplay: "flex",
 						parentFlexDirection: "row",
+						parentJustifyContent: "flex-start",
 						parentAlignItems: "stretch",
 						flexGrow: "1",
 						flexShrink: "1",
@@ -588,6 +590,26 @@ describe("ElementSelector", () => {
 				"ELEMENT_SELECTED",
 				expect.objectContaining({
 					isTextElement: true,
+					hasDirectTextContent: false,
+				}),
+			)
+		})
+
+		it("should report direct text separately from descendant text", () => {
+			container.innerHTML = `
+				<div id="mixed">
+					Direct text
+					<span>Descendant text</span>
+				</div>
+			`
+			const element = container.querySelector("#mixed") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					hasDirectTextContent: true,
 				}),
 			)
 		})

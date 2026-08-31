@@ -18,7 +18,7 @@ vi.mock("../StylePanel", () => ({
 }))
 
 describe("ElementContextPanel", () => {
-	it("gives the style content a bounded height so the scroll area can scroll", () => {
+	it("renders a compact bottom-toolbar surface", () => {
 		const boundaryRef = createRef<HTMLDivElement>()
 
 		render(
@@ -28,7 +28,6 @@ describe("ElementContextPanel", () => {
 					anchor={{ top: 80, left: 80, width: 120, height: 40 }}
 					selector="section.hero"
 					boundaryRef={boundaryRef}
-					onClose={vi.fn()}
 				/>
 			</div>,
 		)
@@ -36,24 +35,27 @@ describe("ElementContextPanel", () => {
 		const panel = document.querySelector("[data-html-context-panel]")
 		if (!panel) throw new Error("context panel was not rendered")
 
-		expect(panel).toHaveStyle({ height: "420px", maxHeight: "420px" })
-		expect(panel).toHaveClass("flex", "flex-col")
-		const viewport = panel.querySelector('[data-slot="scroll-area-viewport"]')
-		expect(viewport).toHaveClass(
-			"h-full",
-			"min-h-0",
-			"touch-pan-y",
-			"overflow-x-hidden",
-			"overflow-y-auto",
-		)
-		expect(viewport).toHaveStyle({ overflowX: "hidden", overflowY: "auto" })
-		expect(panel.querySelector('[data-slot="scroll-area"]')).toHaveClass("min-h-0", "flex-1")
-		expect(panel.querySelector('[data-slot="scroll-area"]')).not.toHaveClass("overflow-hidden")
+		expect(panel).toHaveStyle({ height: "48px" })
+		expect(panel).toHaveClass("flex", "items-center", "rounded-lg")
 		expect(panel.querySelector('[data-testid="mock-style-panel"]')?.parentElement).toHaveClass(
-			"pr-3",
+			"min-w-0",
+			"w-max",
 		)
-		const closeButton = panel.querySelector('button[aria-label="stylePanel.closeContextPanel"]')
-		expect(closeButton).toHaveClass("absolute", "right-2", "top-2", "z-20")
-		expect(closeButton?.parentElement).not.toHaveClass("h-7")
+		expect(panel.querySelector('button[aria-label="stylePanel.closeContextPanel"]')).toBeNull()
+	})
+
+	it.each([
+		["above", { top: -80, left: 80, width: 120, height: 40 }],
+		["below", { top: window.innerHeight + 20, left: 80, width: 120, height: 40 }],
+	])("hides the toolbar when the selected element is completely %s the viewport", (_, anchor) => {
+		render(
+			<ElementContextPanel
+				editorRef={{ current: null }}
+				anchor={anchor}
+				selector="section.hero"
+			/>,
+		)
+
+		expect(document.querySelector("[data-html-context-panel]")).toBeNull()
 	})
 })

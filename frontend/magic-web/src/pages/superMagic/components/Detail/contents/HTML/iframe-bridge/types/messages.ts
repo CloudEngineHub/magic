@@ -424,7 +424,11 @@ export interface ElementSelectedPayload {
 		width: string
 		height: string
 		display: string
+		parentSelector?: string
 		parentDisplay?: string
+		parentFlexDirection?: string
+		parentJustifyContent?: string
+		parentAlignItems?: string
 		position: string
 
 		// 边距
@@ -475,6 +479,8 @@ export interface ElementSelectedPayload {
 	rotation?: number
 	/** 是否为文本元素 */
 	isTextElement?: boolean
+	/** 是否包含元素自身的非空文本节点（不包含后代元素文本） */
+	hasDirectTextContent?: boolean
 	/** 文本内容 */
 	textContent?: string
 	/** 元素当前的内联 CSS 声明 */

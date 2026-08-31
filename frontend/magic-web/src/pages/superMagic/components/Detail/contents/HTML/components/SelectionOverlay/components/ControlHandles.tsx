@@ -1,4 +1,6 @@
-import { RotateCw, Move, Trash2, Copy } from "lucide-react"
+import { RotateCw, Move } from "lucide-react"
+// 恢复复制、删除按钮时，同时启用以下图标：Copy、Trash2。
+// import { Copy, Trash2 } from "lucide-react"
 import type { ResizeHandleConfig, ElementRect } from "../types"
 import { RotationIndicator } from "./RotationIndicator"
 
@@ -32,15 +34,12 @@ interface ControlHandlesProps {
 export function ControlHandles({
 	isMoving,
 	onMoveHandleMouseDown,
-	onDuplicate,
-	onDelete,
 	resizeHandles,
 	onResizeHandleMouseDown,
 	rotation,
 	onRotateHandleMouseDown,
 	transformedRect,
 	containerElement,
-	showActionHandles = true,
 }: ControlHandlesProps) {
 	return (
 		<>
@@ -60,8 +59,8 @@ export function ControlHandles({
 				<Move size={12} className="text-primary-foreground" />
 			</div>
 
-			{/* Duplicate handle - top right corner (left of delete) */}
-			{/* Hidden when selection box is too small to avoid crowding */}
+			{/* 暂时隐藏复制和删除按钮，保留对应回调与快捷键逻辑。 */}
+			{/*
 			{showActionHandles && (
 				<div
 					role="button"
@@ -79,8 +78,6 @@ export function ControlHandles({
 				</div>
 			)}
 
-			{/* Delete handle - top right corner */}
-			{/* Hidden when selection box is too small to avoid crowding */}
 			{showActionHandles && (
 				<div
 					role="button"
@@ -97,6 +94,7 @@ export function ControlHandles({
 					<Trash2 size={12} className="text-destructive-foreground" />
 				</div>
 			)}
+			*/}
 
 			{/* Resize handles */}
 			{resizeHandles.map((handle) => (

@@ -6,6 +6,7 @@ import type { HtmlSelectionTarget, InspectedElementInfo } from "../types"
 
 const captureAcquire = vi.hoisted(() => vi.fn().mockResolvedValue({}))
 const captureRelease = vi.hoisted(() => vi.fn())
+const suppressCaptureCursor = vi.hoisted(() => vi.fn(() => vi.fn()))
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -20,6 +21,7 @@ vi.mock("../screenshot", async (importOriginal) => ({
 		acquire: captureAcquire,
 		release: captureRelease,
 	})),
+	suppressCaptureCursor,
 	supportsCurrentTabCapture: vi.fn(() => true),
 	shouldPrewarmCurrentTabCapture: vi.fn(() => true),
 }))
@@ -217,6 +219,54 @@ describe("ElementInspectorOverlay", () => {
 				)
 			})
 		} finally {
+			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
+		}
+	})
+
+	it("hides the cursor before automatic preview waits for capture frames", async () => {
+		suppressCaptureCursor.mockClear()
+		const scheduledFrames: FrameRequestCallback[] = []
+		const requestAnimationFrame = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) => {
+				scheduledFrames.push(callback)
+				return scheduledFrames.length
+			})
+		const rect = {
+			top: 0,
+			left: 0,
+			width: 640,
+			height: 360,
+			bottom: 360,
+			right: 640,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect
+		const originalGetBoundingClientRect = HTMLIFrameElement.prototype.getBoundingClientRect
+		HTMLIFrameElement.prototype.getBoundingClientRect = () => rect
+
+		try {
+			const iframeRef = { current: null as HTMLIFrameElement | null }
+			render(
+				<div>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={createInfo()}
+						onClearSelection={vi.fn()}
+						hideInfoCard
+						onCaptureElementScreenshot={vi.fn()}
+					/>
+				</div>,
+			)
+
+			await waitFor(() => expect(suppressCaptureCursor).toHaveBeenCalledOnce())
+			expect(scheduledFrames.length).toBeGreaterThan(0)
+		} finally {
+			requestAnimationFrame.mockRestore()
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
 		}
 	})

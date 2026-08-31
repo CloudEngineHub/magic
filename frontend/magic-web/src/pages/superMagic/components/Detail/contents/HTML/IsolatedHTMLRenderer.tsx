@@ -12,6 +12,7 @@ import {
 } from "react"
 import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
 import { filterInjectedTags, preserveOriginalTrailingNewline } from "./utils"
+import { getHtmlSandboxRuntimeUrl } from "./utils/html-sandbox-runtime-url"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
@@ -73,6 +74,39 @@ import type { CanonicalContentDimensions } from "./utils/slide-dimensions"
 // PPTControlBar is anchored to the same canvas edge as the inspector panel.
 // Keep a small visual gap so the two pieces of chrome remain independently usable.
 const PPT_INSPECTOR_PANEL_BOTTOM_OFFSET = 72
+
+/**
+ * Nested HTML documents may relay navigation directly to the host window. Check
+ * that such a source actually belongs to the current iframe before accepting it.
+ */
+function isNestedIframeSource(
+	rootWindow: Window | null | undefined,
+	source: MessageEventSource | null,
+): boolean {
+	if (!rootWindow || !source || source === rootWindow) return false
+
+	const visited = new Set<Window>()
+	const visit = (currentWindow: Window): boolean => {
+		if (visited.has(currentWindow)) return false
+		visited.add(currentWindow)
+
+		try {
+			for (let index = 0; index < currentWindow.frames.length; index += 1) {
+				const childWindow = currentWindow.frames[index]
+				if (childWindow === source) return true
+				if (visit(childWindow)) return true
+			}
+		} catch {
+			// Cross-origin frame trees expose only a restricted WindowProxy surface.
+			// If the tree cannot be inspected, fail closed for nested messages.
+			return false
+		}
+
+		return false
+	}
+
+	return visit(rootWindow)
+}
 
 export interface IsolatedHTMLRendererRef {
 	getIframeElement: () => HTMLIFrameElement | null
@@ -429,6 +463,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			permissionController,
 		} = props
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
+		// The shared shell can load the runtime bundle built by this host deployment.
+		const htmlSandboxRuntimeUrl = useMemo(() => getHtmlSandboxRuntimeUrl(), [])
 		const htmlSandboxShellUrl = useMemo(
 			() => externalRenderSiteUrl || "/husky.html",
 			[externalRenderSiteUrl],
@@ -506,6 +542,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								content: request.content,
 								locationSearch: request.locationSearch,
 								locationAnchor: request.locationAnchor,
+								runtimeUrl: request.runtimeUrl,
 								navigationRequestId: request.requestId,
 							},
 							iframeTargetOrigin,
@@ -564,9 +601,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			selector?: string
 		} | null>(null)
 		const [isContextPanelDismissed, setIsContextPanelDismissed] = useState(false)
-		const handleDismissContextPanel = useCallback(() => {
-			setIsContextPanelDismissed(true)
-		}, [])
 		const selectedElementSelector = selectedElementViewportRect?.selector
 
 		// Keep the selected element and edit mode when the user dismisses the panel.
@@ -937,7 +971,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		}, [devConsoleEnabled, setDevConsoleEnabled])
 
 		// Element inspector (independent, can be triggered from DevConsole or elsewhere)
-		const elementInspector = useElementInspector({ iframeRef, targetOrigin: iframeTargetOrigin })
+		const elementInspector = useElementInspector({
+			iframeRef,
+			targetOrigin: iframeTargetOrigin,
+		})
 		const inspectorFileInfo = useMemo(() => {
 			if (!fileId) return undefined
 			const file = findAttachmentByFileId(
@@ -1450,6 +1487,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				content: fullContent,
 				locationSearch: htmlNavigation?.search || "",
 				locationAnchor: htmlNavigation?.hash || "",
+				runtimeUrl: htmlSandboxRuntimeUrl,
 			}
 			lastPreparedContentKeyRef.current = contentKey
 			// shell 未 ready 时只保存最新请求，ready 后再发送。
@@ -1584,6 +1622,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						content: fullContent,
 						locationSearch: htmlNavigation?.search || "",
 						locationAnchor: htmlNavigation?.hash || "",
+						runtimeUrl: htmlSandboxRuntimeUrl,
 					}
 
 					try {
@@ -1643,6 +1682,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				documentFlowFullscreen,
 				dynamicResourceInterceptionConfig,
 				fileId,
+				htmlSandboxRuntimeUrl,
 				getStorageMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
@@ -1821,40 +1861,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			})
 		}
 
-		// 创建消息监听器
-		const iframeMessageTypes = useMemo(
-			() =>
-				new Set<string>([
-					"iframeReady",
-					"pageLoaded",
-					"contentLoaded",
-					"domReady",
-					"renderComplete",
-					"pageFullyLoaded",
-					"contentMetrics",
-					"linkClicked",
-					"DOWNLOAD_IMAGE",
-					"REQUEST_IMAGE_UPLOAD",
-					"AI_OPTIMIZATION_ACTION",
-					"DOM_CLICK",
-					"saveContent",
-					"MAGIC_RELOAD_REQUEST",
-					"MAGIC_SET_INPUT_MESSAGE",
-					"MAGIC_UPLOAD_FILES_REQUEST",
-					"MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
-					"MAGIC_DOWNLOAD_FILES_REQUEST",
-					"MAGIC_GET_AGENTS_REQUEST",
-					"MAGIC_CREATE_TOPIC_AND_SEND_REQUEST",
-					"MAGIC_SEND_MESSAGE_REQUEST",
-					"MAGIC_I18N_LANG_SUBSCRIBE",
-					"DRAG_POSITION_RESPONSE",
-					HTML_SANDBOX_TELEMETRY_MESSAGE,
-					MEDIA_MESSAGE_TYPES.SPEAKER_EDITED,
-					MEDIA_MESSAGE_TYPES.IMAGE_URL_REQUEST,
-				]),
-			[],
-		)
-
 		const buildMessageLogContext = useMemoizedFn(
 			(
 				event: MessageEvent,
@@ -1886,44 +1892,37 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					: ""
 			const isExpectedSource = event.source === iframeRef.current?.contentWindow
 			const isExpectedOrigin = event.origin === iframeTargetOrigin
-			const isAllowedType = messageType ? iframeMessageTypes.has(messageType) : false
-			const shouldStrictlyValidatePreviewSource =
-				Boolean(messageType) &&
-				[
-					"iframeReady",
-					"pageLoaded",
-					"contentLoaded",
-					"domReady",
-					"renderComplete",
-					"pageFullyLoaded",
-					"contentMetrics",
-				].includes(messageType)
 			const isAllowedTelemetryOrigin =
 				messageType === HTML_SANDBOX_TELEMETRY_MESSAGE &&
 				Boolean(event.origin) &&
 				(event.origin === iframeTargetOrigin || event.origin === window.location.origin)
+			// Nested same-origin documents relay navigation through the host window. They
+			// also report telemetry. Both cases must come from a verified descendant;
+			// nested documents cannot invoke host capabilities that mutate the application.
+			const isExpectedNestedSource =
+				(messageType === "linkClicked" || messageType === HTML_SANDBOX_TELEMETRY_MESSAGE) &&
+				isNestedIframeSource(iframeRef.current?.contentWindow, event.source)
+			const isTrustedNestedMessage =
+				isExpectedNestedSource &&
+				((messageType === "linkClicked" && isExpectedOrigin) || isAllowedTelemetryOrigin)
+			const isTrustedMessage =
+				(isExpectedSource && isExpectedOrigin) || isTrustedNestedMessage
 
-			// 只处理来自iframe的消息，兼容钉钉 WebView source 不一致
-			if (!isExpectedSource && !isAllowedType) {
+			// All host capabilities require the exact iframe source and origin. The only
+			// exceptions are verified nested navigation and telemetry, whose source is a
+			// descendant window rather than the top-level iframe window.
+			if (!isTrustedMessage) {
 				if (messageType === "linkClicked" || Boolean(event.data?.href)) {
 					logger.report(
-						"忽略 iframe link 消息：source 不匹配且类型不在白名单",
+						"忽略 iframe 消息：source 或 origin 不匹配",
 						buildMessageLogContext(event, messageType, {
 							isExpectedSource,
-							isAllowedType,
+							isExpectedOrigin,
 						}),
 					)
 				}
 				return
 			}
-
-			if (shouldStrictlyValidatePreviewSource && (!isExpectedSource || !isExpectedOrigin))
-				return
-
-			// Nested HTML documents may report through the cross-origin parent, so their
-			// source window is not always the top-level iframe. The origin remains a
-			// required boundary for navigation messages.
-			if (messageType === "linkClicked" && !isExpectedOrigin) return
 
 			const requestBoundMessageTypes = [
 				"contentLoaded",
@@ -2109,7 +2108,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							"回放模式忽略 iframe 链接点击",
 							buildMessageLogContext(event, messageType, {
 								isExpectedSource,
-								isAllowedType,
+								isExpectedOrigin,
 							}),
 						)
 						return
@@ -2128,7 +2127,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							// 保留历史上报中的完整链接和错误详情，便于定位 iframe 跳转失败。
 							context: buildMessageLogContext(event, messageType, {
 								isExpectedSource,
-								isAllowedType,
+								isExpectedOrigin,
 								href,
 								autoEdit,
 							}),
@@ -2154,7 +2153,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							"忽略跨实例图片上传消息：source 不匹配",
 							buildMessageLogContext(event, messageType, {
 								isExpectedSource,
-								isAllowedType,
+								isExpectedOrigin,
 							}),
 						)
 						return
@@ -2252,7 +2251,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					message: "处理 iframe message 失败",
 					context: buildMessageLogContext(event, messageType, {
 						isExpectedSource,
-						isAllowedType,
+						isExpectedOrigin,
 					}),
 				})
 			}
@@ -2448,7 +2447,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								selector={selectedElementViewportRect?.selector}
 								open={!isContextPanelDismissed}
 								disabled={isSaving}
-								onClose={handleDismissContextPanel}
 								boundaryRef={domTreeOpen ? canvasViewportRef : undefined}
 							/>
 						</>

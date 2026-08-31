@@ -5,6 +5,7 @@ import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 import { EditorPopoverContent } from "../../EditorFloating"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface StylePopoverButtonProps {
 	icon: ReactNode
@@ -44,8 +45,8 @@ export function StylePopoverButton({
 									size={showLabel ? "sm" : "icon"}
 									className={
 										showLabel
-											? "h-7 gap-1.5 rounded-md px-2"
-											: "h-7 w-7 rounded-md"
+											? `h-7 gap-1.5 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`
+											: `h-7 w-7 ${STYLE_PANEL_STYLES.toolbarButton}`
 									}
 									disabled={disabled}
 									data-testid={triggerTestId}
@@ -66,7 +67,8 @@ export function StylePopoverButton({
 				)}
 			</TooltipPrimitive.Root>
 			<EditorPopoverContent
-				className={`w-80 ${contentClassName || ""}`.trim()}
+				collisionPadding={8}
+				className={`w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] max-h-[min(30rem,calc(100vh-1rem))] overflow-y-auto ${contentClassName || ""}`.trim()}
 				align="start"
 				data-testid={contentTestId}
 			>

@@ -11,6 +11,35 @@ interface CaptureOptions {
 	currentTabSession?: CurrentTabCaptureSession
 }
 
+/** Hide every page-defined cursor before a rendered-tab frame is captured. */
+export function suppressCaptureCursor(iframe: HTMLIFrameElement): () => void {
+	const iframeDocument = (() => {
+		try {
+			return iframe.contentDocument
+		} catch {
+			return null
+		}
+	})()
+	const documents = Array.from(
+		new Set([document, iframeDocument].filter((value): value is Document => Boolean(value))),
+	)
+	const styles = documents.map((captureDocument) => {
+		const style = captureDocument.createElement("style")
+		style.setAttribute("data-element-inspector-capture-cursor", "true")
+		style.textContent = `
+			*, *::before, *::after {
+				cursor: none !important;
+			}
+		`
+		;(captureDocument.head ?? captureDocument.documentElement).appendChild(style)
+		return style
+	})
+
+	return () => {
+		styles.forEach((style) => style.remove())
+	}
+}
+
 export interface CurrentTabCaptureSession {
 	acquire: () => Promise<MediaStream>
 	release: () => void

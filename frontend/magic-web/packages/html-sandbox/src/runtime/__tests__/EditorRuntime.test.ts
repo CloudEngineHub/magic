@@ -8,6 +8,7 @@ import { MESSAGE_PROTOCOL_VERSION, MessageCategory } from "../../core/types"
 import type { RequestMessage } from "../../core/types"
 
 describe("EditorRuntime", () => {
+	const parentOrigin = window.location.origin
 	let runtime: EditorRuntime
 	let postMessageSpy: ReturnType<typeof vi.spyOn>
 
@@ -68,7 +69,7 @@ describe("EditorRuntime", () => {
 						version: "1.0.0",
 					}),
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 	})
@@ -100,7 +101,7 @@ describe("EditorRuntime", () => {
 					requestId: "req-123",
 					success: true,
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 
@@ -127,7 +128,7 @@ describe("EditorRuntime", () => {
 				expect.objectContaining({
 					success: true,
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 
@@ -157,7 +158,7 @@ describe("EditorRuntime", () => {
 						html: expect.any(String),
 					}),
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 
@@ -191,7 +192,7 @@ describe("EditorRuntime", () => {
 						root: expect.objectContaining({ tagName: "body" }),
 					}),
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 
@@ -234,7 +235,7 @@ describe("EditorRuntime", () => {
 						}),
 					}),
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 	})
@@ -536,7 +537,7 @@ describe("EditorRuntime", () => {
 						isEditMode: true,
 					}),
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 
@@ -756,7 +757,7 @@ describe("EditorRuntime", () => {
 						isEditMode: false,
 					}),
 				}),
-				"*",
+				parentOrigin,
 			)
 		})
 

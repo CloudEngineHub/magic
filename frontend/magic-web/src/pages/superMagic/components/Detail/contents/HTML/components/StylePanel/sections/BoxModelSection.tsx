@@ -4,7 +4,6 @@ import { useDebounceFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { DimensionInput, NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
-import { STYLE_PANEL_STYLES } from "../styles"
 
 type BoxSide = "top" | "right" | "bottom" | "left"
 type BoxValues = Record<BoxSide, string>
@@ -47,7 +46,7 @@ function EdgeInput({ label, value, onChange }: EdgeInputProps) {
 			value={value}
 			onChange={onChange}
 			inputMode="decimal"
-			className="h-5 w-9 rounded-sm border border-transparent bg-transparent px-0.5 text-center font-mono text-[10px] tabular-nums text-foreground shadow-none outline-none transition-[background-color,border-color,box-shadow,color] duration-150 ease-out placeholder:text-muted-foreground/50 hover:border-primary/35 hover:bg-primary/5 hover:text-primary focus-visible:border-primary/70 focus-visible:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default"
+			className="h-5 w-8 rounded-sm border border-transparent bg-transparent px-0.5 text-center font-mono text-[10px] tabular-nums text-foreground shadow-none outline-none transition-[background-color,border-color,box-shadow,color] duration-150 ease-out placeholder:text-muted-foreground/50 hover:border-primary/35 hover:bg-primary/5 hover:text-primary focus-visible:border-primary/70 focus-visible:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default"
 			aria-label={label}
 			data-testid={`box-model-edge-${label}`}
 		/>
@@ -77,7 +76,7 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 			<div className="pointer-events-none absolute left-1 top-0.5 max-w-[calc(100%-3rem)] truncate text-[9px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
 				{label}
 			</div>
-			<div className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] grid-rows-[1.15rem_minmax(2rem,auto)_1.15rem]">
+			<div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_1.5rem] grid-rows-[1.15rem_minmax(2rem,auto)_1.15rem]">
 				{onChange && (
 					<>
 						<div className="group/edge col-start-2 row-start-1 flex items-center justify-center rounded-sm transition-colors hover:bg-background/35">
@@ -183,14 +182,6 @@ const BoxModelSection = observer(function BoxModelSection({
 
 	return (
 		<div className="min-w-0 space-y-2" data-testid="html-style-panel-box-model">
-			<div className={STYLE_PANEL_STYLES.subsectionTitle}>
-				<div className="truncate text-[11px] font-semibold">
-					{t("stylePanel.layoutStyles")}
-				</div>
-				<div className="shrink-0 text-[9px] text-muted-foreground/80">
-					{t("stylePanel.boxModel")}
-				</div>
-			</div>
 			<div className="grid min-w-0 grid-cols-2 gap-2 [&>*]:min-w-0">
 				<DimensionInput
 					label={t("stylePanel.width")}

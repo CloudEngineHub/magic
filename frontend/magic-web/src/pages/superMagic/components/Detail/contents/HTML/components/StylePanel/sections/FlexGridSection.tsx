@@ -168,7 +168,10 @@ function GridOptionControl({
 	const iconMap = DISTRIBUTION_ICONS[axis]
 
 	return (
-		<div className="grid grid-cols-3 gap-1 rounded-md border border-border/70 bg-muted/35 p-1">
+		<div
+			className="grid gap-1 rounded-md border border-border/70 bg-muted/35 p-1"
+			style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+		>
 			{options.map((option) => {
 				const IconComponent = iconMap[option]
 				return (
@@ -422,7 +425,7 @@ const FlexGridSection = observer(function FlexGridSection({
 	}
 
 	return (
-		<div className="min-w-0 space-y-3" data-testid="html-style-panel-flex-grid-section">
+		<div className="min-w-0 space-y-2" data-testid="html-style-panel-flex-grid-section">
 			<div className={STYLE_PANEL_STYLES.subsectionTitle}>
 				<span className="flex h-6 w-6 items-center justify-center rounded-sm border border-border/70 bg-muted/35 text-muted-foreground">
 					<Grid2X2 className="h-3.5 w-3.5" />
@@ -500,7 +503,7 @@ const FlexGridSection = observer(function FlexGridSection({
 						onChange={(value) => updateInput("gridTemplateRows", value, setRows)}
 						hint={t("stylePanel.templateRowsHint")}
 					/>
-					<div className="grid grid-cols-2 gap-2">
+					<div className="space-y-2">
 						<CompactField
 							id="grid-auto-columns"
 							label={t("stylePanel.gridAutoColumns")}
@@ -567,7 +570,7 @@ const FlexGridSection = observer(function FlexGridSection({
 					</div>
 
 					{isGrid ? (
-						<div className="grid grid-cols-2 gap-2">
+						<div className="space-y-2">
 							<div className="space-y-1">
 								<Label className="text-[10px] font-medium text-muted-foreground">
 									{t("stylePanel.justifyContent")}
@@ -765,7 +768,7 @@ const FlexGridSection = observer(function FlexGridSection({
 			) : null}
 
 			{isGrid ? (
-				<div className="grid grid-cols-2 gap-2">
+				<div className="space-y-2">
 					<div className="space-y-1">
 						<Label className="text-[10px] font-medium text-muted-foreground">
 							{t("stylePanel.justifyItems")}

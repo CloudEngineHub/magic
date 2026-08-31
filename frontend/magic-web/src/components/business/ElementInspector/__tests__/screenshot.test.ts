@@ -10,6 +10,7 @@ import {
 	resolveCaptureScreenSelection,
 	resolveCurrentTabScreenSelection,
 	resolveCaptureRoot,
+	suppressCaptureCursor,
 	shouldCaptureCurrentTab,
 	shouldMaterializePseudoElement,
 	shouldPrewarmCurrentTabCapture,
@@ -20,6 +21,45 @@ import {
 } from "../screenshot"
 
 describe("HTML screenshot geometry", () => {
+	it("suppresses cursors in host and iframe documents during capture", () => {
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+		const iframeDocument = iframe.contentDocument
+		if (!iframeDocument) throw new Error("Screenshot iframe document was not created")
+
+		const hostTarget = document.createElement("div")
+		hostTarget.style.cursor = "crosshair"
+		document.body.appendChild(hostTarget)
+		const iframeTarget = iframeDocument.createElement("div")
+		iframeTarget.style.cursor = "text"
+		iframeDocument.body.appendChild(iframeTarget)
+
+		const restoreCursor = suppressCaptureCursor(iframe)
+
+		try {
+			const hostStyle = document.querySelector<HTMLStyleElement>(
+				"style[data-element-inspector-capture-cursor]",
+			)
+			const iframeStyle = iframeDocument.querySelector<HTMLStyleElement>(
+				"style[data-element-inspector-capture-cursor]",
+			)
+
+			expect(hostStyle?.textContent).toContain("cursor: none !important")
+			expect(iframeStyle?.textContent).toContain("cursor: none !important")
+		} finally {
+			restoreCursor()
+			expect(hostTarget.style.cursor).toBe("crosshair")
+			expect(iframeTarget.style.cursor).toBe("text")
+			iframe.remove()
+			hostTarget.remove()
+		}
+
+		expect(document.querySelector("style[data-element-inspector-capture-cursor]")).toBeNull()
+		expect(
+			iframeDocument.querySelector("style[data-element-inspector-capture-cursor]"),
+		).toBeNull()
+	})
+
 	it("detects whether rendered tab capture is available", () => {
 		const previousMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
 		try {

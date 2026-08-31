@@ -14,6 +14,7 @@ export interface SelectedInfo {
 	rotation?: number
 	isImageElement?: boolean
 	isTextElement?: boolean
+	hasDirectTextContent?: boolean
 	textContent?: string
 	inlineStyles?: Record<string, string>
 	attributes?: {

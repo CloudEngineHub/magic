@@ -4,6 +4,7 @@ import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { AArrowUp, AArrowDown } from "lucide-react"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface FontSizeAdjusterProps {
 	onAdjust: (direction: "increase" | "decrease") => void
@@ -27,7 +28,7 @@ export function FontSizeAdjuster({ onAdjust, disabled }: FontSizeAdjusterProps) 
 							size="sm"
 							onClick={() => onAdjust("increase")}
 							disabled={disabled}
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 						>
 							<AArrowUp className="h-4 w-4" />
 						</Button>
@@ -46,7 +47,7 @@ export function FontSizeAdjuster({ onAdjust, disabled }: FontSizeAdjusterProps) 
 							size="sm"
 							onClick={() => onAdjust("decrease")}
 							disabled={disabled}
-							className="h-7 w-7 rounded-md p-0"
+							className={STYLE_PANEL_STYLES.iconButton}
 						>
 							<AArrowDown className="h-4 w-4" />
 						</Button>

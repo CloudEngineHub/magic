@@ -65,6 +65,7 @@ export function useSelectionMessages({
 					const intrinsicHeight = payload?.intrinsicHeight
 					const intrinsicAspectRatio = payload?.intrinsicAspectRatio
 					const isTextElement = payload?.isTextElement ?? false
+					const hasDirectTextContent = payload?.hasDirectTextContent
 					const textContent = payload?.textContent
 
 					if (rect && selector) {
@@ -98,6 +99,7 @@ export function useSelectionMessages({
 								rotation,
 								isImageElement,
 								isTextElement,
+								hasDirectTextContent,
 								textContent,
 								inlineStyles: payload?.inlineStyles,
 								attributes: payload?.attributes,
@@ -115,6 +117,7 @@ export function useSelectionMessages({
 							tagName,
 							isImageElement,
 							isTextElement,
+							hasDirectTextContent,
 							textContent,
 							intrinsicWidth,
 							intrinsicHeight,
@@ -153,6 +156,7 @@ export function useSelectionMessages({
 							rotation: el.rotation ?? 0,
 							isImageElement: el.isImageElement ?? false,
 							isTextElement: el.isTextElement,
+							hasDirectTextContent: el.hasDirectTextContent,
 							textContent: el.textContent,
 							inlineStyles: el.inlineStyles,
 							attributes: el.attributes,
@@ -174,6 +178,7 @@ export function useSelectionMessages({
 							intrinsicHeight: el.intrinsicHeight,
 							intrinsicAspectRatio: el.intrinsicAspectRatio,
 							isTextElement: el.isTextElement,
+							hasDirectTextContent: el.hasDirectTextContent,
 							textContent: el.textContent,
 							inlineStyles: el.inlineStyles,
 							computedStyles: el.computedStyles || {},

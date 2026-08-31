@@ -19,6 +19,7 @@ function buildRefreshedSelectedElement(
 		intrinsicHeight: previousElement.intrinsicHeight,
 		intrinsicAspectRatio: previousElement.intrinsicAspectRatio,
 		isTextElement: previousElement.isTextElement,
+		hasDirectTextContent: previousElement.hasDirectTextContent,
 		textContent: previousElement.textContent,
 		inlineStyles: previousElement.inlineStyles,
 		attributes: previousElement.attributes,

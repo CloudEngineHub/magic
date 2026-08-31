@@ -288,8 +288,62 @@ describe("ElementActions", () => {
 		await waitFor(() => expect(moveDomNode).toHaveBeenCalledWith("selected", "body", 3))
 	})
 
+	it("keeps moving down available when the selector changes after moving", async () => {
+		const createSibling = (nodeId: string, selector: string) => ({
+			nodeId,
+			selector,
+			tagName: "section",
+			label: selector,
+			children: [],
+			editable: true,
+			canHaveChildren: true,
+			canDelete: true,
+			canMove: true,
+		})
+		const createTreeWithChildren = (children: ReturnType<typeof createSibling>[]) => ({
+			root: {
+				nodeId: "body",
+				selector: "body",
+				tagName: "body",
+				label: "body",
+				children,
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const initialTree = createTreeWithChildren([
+			createSibling("first", "section:nth-of-type(1)"),
+			createSibling("selected", selection.selector),
+			createSibling("third", "section:nth-of-type(3)"),
+			createSibling("last", "section:nth-of-type(4)"),
+		])
+		const movedTree = createTreeWithChildren([
+			createSibling("first", "section:nth-of-type(1)"),
+			createSibling("third", "section:nth-of-type(2)"),
+			createSibling("selected", "section:nth-of-type(3)"),
+			createSibling("last", "section:nth-of-type(4)"),
+		])
+		const getDomTree = vi
+			.fn()
+			.mockResolvedValueOnce(initialTree)
+			.mockResolvedValueOnce(initialTree)
+			.mockResolvedValueOnce(movedTree)
+		const moveDomNode = vi.fn().mockResolvedValue(undefined)
+
+		render(<ElementActions editorRef={{ current: { getDomTree, moveDomNode } } as never} />)
+
+		const moveDown = await screen.findByTestId("html-style-panel-move-down-button")
+		expect(moveDown).toBeEnabled()
+
+		fireEvent.click(moveDown)
+		await waitFor(() => expect(moveDomNode).toHaveBeenCalledWith("selected", "body", 3))
+		expect(moveDown).toBeEnabled()
+	})
+
 	it.each(["absolute", "fixed"])(
-		"allows DOM-order actions for an element using position: %s",
+		"hides DOM-order actions for an element using position: %s",
 		async (position) => {
 			selection.position = position
 			const getDomTree = vi.fn().mockResolvedValue({
@@ -310,13 +364,12 @@ describe("ElementActions", () => {
 
 			render(<ElementActions editorRef={{ current: { getDomTree, moveDomNode } } as never} />)
 
-			const moveUp = await screen.findByTestId("html-style-panel-move-up-button")
-			const moveDown = screen.getByTestId("html-style-panel-move-down-button")
-			expect(moveUp).toBeEnabled()
-			expect(moveDown).toBeEnabled()
-
-			fireEvent.click(moveUp)
-			await waitFor(() => expect(moveDomNode).toHaveBeenCalledWith("selected", "body", 0))
+			await waitFor(() => expect(getDomTree).toHaveBeenCalled())
+			expect(screen.queryByTestId("html-style-panel-move-up-button")).not.toBeInTheDocument()
+			expect(
+				screen.queryByTestId("html-style-panel-move-down-button"),
+			).not.toBeInTheDocument()
+			expect(moveDomNode).not.toHaveBeenCalled()
 		},
 	)
 })

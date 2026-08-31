@@ -10,6 +10,16 @@ interface PanelPosition {
 	placement: ContextPanelPlacement
 }
 
+export interface ContextToolbarPosition {
+	left: number
+	top: number
+	width: number
+	placement: "bottom" | "top"
+}
+
+/** Space occupied by the rotate handle, its connector and angle indicator. */
+export const CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE = 56
+
 interface PanelCandidate extends PanelPosition {
 	/** Whether the candidate has enough room for a useful panel. */
 	usable: boolean
@@ -190,5 +200,60 @@ export function getContextPanelPosition(
 		width: candidate.width,
 		maxHeight: candidate.maxHeight,
 		placement: candidate.placement,
+	}
+}
+
+/**
+ * Position the compact element toolbar above the selection whenever possible.
+ * Use the bottom side only when the toolbar cannot fit above. The toolbar
+ * remains horizontally centered and clamped to the canvas.
+ */
+export function getContextToolbarPosition(
+	anchor: ElementRect,
+	toolbar: { width: number; height: number },
+	viewport: { left?: number; top?: number; width: number; height: number },
+	gap = 8,
+): ContextToolbarPosition {
+	const viewportLeft = viewport.left ?? 0
+	const viewportTop = viewport.top ?? 0
+	const inset = 8
+	const viewportRight = viewportLeft + viewport.width
+	const viewportBottom = viewportTop + viewport.height
+	const bounds = {
+		left: viewportLeft + inset,
+		top: viewportTop + inset,
+		right: viewportRight - inset,
+		bottom: viewportBottom - inset,
+	}
+	const width = Math.max(1, Math.min(toolbar.width, bounds.right - bounds.left))
+	const height = Math.max(1, Math.min(toolbar.height, bounds.bottom - bounds.top))
+	const centeredLeft = anchor.left + anchor.width / 2 - width / 2
+	const clampedLeft = clamp(centeredLeft, bounds.left, bounds.right - width)
+	const bottomTop = anchor.top + anchor.height + gap
+	const topTop = anchor.top - height - gap - CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE
+	const fitsAbove = topTop >= bounds.top
+	const fitsBelow = bottomTop + height <= bounds.bottom
+	const visibleAbove = Math.max(
+		0,
+		anchor.top - bounds.top - gap - CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE,
+	)
+	const visibleBelow = Math.max(0, bounds.bottom - anchor.top - anchor.height - gap)
+	const placement = fitsAbove
+		? "top"
+		: fitsBelow
+			? "bottom"
+			: visibleAbove >= visibleBelow
+				? "top"
+				: "bottom"
+	const top =
+		placement === "top"
+			? clamp(topTop, bounds.top, bounds.bottom - height)
+			: clamp(bottomTop, bounds.top, bounds.bottom - height)
+
+	return {
+		left: clampedLeft,
+		top,
+		width,
+		placement,
 	}
 }

@@ -5,6 +5,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface ColorPickerProps {
 	value: string
@@ -76,7 +77,7 @@ export function ColorPicker({ value, onChange, onChangeComplete, disabled }: Col
 					<Button
 						variant="ghost"
 						size="icon"
-						className="relative h-7 w-7 rounded-md p-0 transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]"
+						className={`relative ${STYLE_PANEL_STYLES.iconButton}`}
 						disabled={disabled}
 						onClick={handleClick}
 					>

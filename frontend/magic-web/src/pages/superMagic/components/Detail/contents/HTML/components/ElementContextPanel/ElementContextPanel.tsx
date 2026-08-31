@@ -3,12 +3,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { StylePanel } from "../StylePanel"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import type { ElementRect } from "../SelectionOverlay/types"
-import { getContextPanelPosition } from "./contextPanelPosition"
+import { getContextToolbarPosition } from "./contextPanelPosition"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import { X } from "lucide-react"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 interface Props {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -16,13 +14,46 @@ interface Props {
 	selector?: string
 	disabled?: boolean
 	open?: boolean
-	onClose?: () => void
 	/** The canvas column bounds. The DOM tree is rendered outside this area. */
 	boundaryRef?: React.RefObject<HTMLElement | null>
 }
 
-const MIN_CONTEXT_PANEL_HEIGHT = 420
-const MAX_CONTEXT_PANEL_HEIGHT = 720
+const CONTEXT_TOOLBAR_WIDTH = 680
+const CONTEXT_TOOLBAR_HEIGHT = 48
+const CONTEXT_TOOLBAR_CLOSE_DURATION = 240
+// The panel width includes its 1px border and 4px horizontal padding on both sides.
+// Keep that chrome outside the measured toolbar content so a fit-content toolbar
+// does not create a false 10px overflow.
+const CONTEXT_TOOLBAR_HORIZONTAL_CHROME = 10
+
+function getVisibleViewport(
+	boundaryRef?: React.RefObject<HTMLElement | null>,
+): { left: number; top: number; right: number; bottom: number } {
+	const boundaryRect = boundaryRef?.current?.getBoundingClientRect()
+	const boundary =
+		boundaryRect && boundaryRect.width > 0 && boundaryRect.height > 0
+			? boundaryRect
+			: undefined
+	const left = Math.max(0, boundary?.left ?? 0)
+	const top = Math.max(0, boundary?.top ?? 0)
+	const right = Math.min(window.innerWidth, boundary?.right ?? window.innerWidth)
+	const bottom = Math.min(window.innerHeight, boundary?.bottom ?? window.innerHeight)
+	return { left, top, right, bottom }
+}
+
+function intersectsViewport(
+	anchor: ElementRect | null,
+	boundaryRef?: React.RefObject<HTMLElement | null>,
+): boolean {
+	if (!anchor || typeof window === "undefined") return false
+	const viewport = getVisibleViewport(boundaryRef)
+	return (
+		anchor.left < viewport.right &&
+		anchor.left + anchor.width > viewport.left &&
+		anchor.top < viewport.bottom &&
+		anchor.top + anchor.height > viewport.top
+	)
+}
 
 export function ElementContextPanel({
 	editorRef,
@@ -30,36 +61,48 @@ export function ElementContextPanel({
 	selector,
 	disabled,
 	open = true,
-	onClose,
 	boundaryRef,
 }: Props) {
-	const { t } = useTranslation("super")
 	const panelRef = useRef<HTMLDivElement>(null)
+	const toolbarContentRef = useRef<HTMLDivElement>(null)
+	const toolbarViewportRef = useRef<HTMLDivElement>(null)
 	const [position, setPosition] = useState({
 		left: 8,
 		top: 8,
-		width: 360,
-		height: MIN_CONTEXT_PANEL_HEIGHT,
-		maxHeight: MAX_CONTEXT_PANEL_HEIGHT,
+		width: CONTEXT_TOOLBAR_WIDTH,
+		height: CONTEXT_TOOLBAR_HEIGHT,
 	})
-	const [isOpen, setIsOpen] = useState(false)
 	const hasAnchor = Boolean(open && anchor && selector)
+	const [isOpen, setIsOpen] = useState(false)
+	const [shouldRender, setShouldRender] = useState(hasAnchor)
+	const [isToolbarOverflowing, setIsToolbarOverflowing] = useState(false)
+	const hasVisibleAnchor = intersectsViewport(anchor, boundaryRef)
+	const shouldShowPanel = hasAnchor && hasVisibleAnchor
 	useEffect(() => {
 		if (typeof window === "undefined") return
-		if (!hasAnchor) {
+		if (!shouldShowPanel) {
 			setIsOpen(false)
-			return
+			const closeTimer = window.setTimeout(
+				() => setShouldRender(false),
+				CONTEXT_TOOLBAR_CLOSE_DURATION,
+			)
+			return () => window.clearTimeout(closeTimer)
 		}
+		setShouldRender(true)
 		setIsOpen(false)
 		const frame = window.requestAnimationFrame(() => setIsOpen(true))
 		return () => window.cancelAnimationFrame(frame)
-	}, [hasAnchor, selector])
+	}, [selector, shouldShowPanel])
 	useLayoutEffect(() => {
 		if (!anchor || !selector || !panelRef.current) return
 		let frame: number | null = null
 		const updateNow = () => {
 			frame = null
-			const boundary = boundaryRef?.current?.getBoundingClientRect()
+			const boundaryRect = boundaryRef?.current?.getBoundingClientRect()
+			const boundary =
+				boundaryRect && boundaryRect.width > 0 && boundaryRect.height > 0
+					? boundaryRect
+					: undefined
 			const viewport = boundary
 				? (() => {
 						// A flex canvas can be taller than the visible browser viewport. The
@@ -78,45 +121,38 @@ export function ElementContextPanel({
 					})()
 				: { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
 			const availableWidth = Math.max(0, viewport.width - 16)
-			const panelWidth = Math.min(360, availableWidth)
+			const contentWidth = toolbarContentRef.current?.scrollWidth || CONTEXT_TOOLBAR_WIDTH
+			// Let the toolbar grow to its measured content width. The viewport becomes
+			// scrollable only when the canvas is narrower than the controls themselves;
+			// an arbitrary desktop width must not create a scrollbar on a wide canvas.
+			const toolbarWidth = Math.min(
+				contentWidth + CONTEXT_TOOLBAR_HORIZONTAL_CHROME,
+				availableWidth,
+			)
 			const measuredHeight = Math.max(
-				panelRef.current?.scrollHeight || 0,
+				CONTEXT_TOOLBAR_HEIGHT,
 				panelRef.current?.getBoundingClientRect().height || 0,
 			)
-			// The first measurement can happen before the selected-element controls have
-			// finished rendering. Keep the panel usable instead of locking in a short
-			// height that prevents the rest of the controls from being reached.
-			const contentHeight = Math.max(MIN_CONTEXT_PANEL_HEIGHT, measuredHeight || 0)
-			const panelHeight = Math.min(
-				MAX_CONTEXT_PANEL_HEIGHT,
-				contentHeight,
-				Math.max(48, viewport.height - 16),
-			)
-			const next = getContextPanelPosition(
+			const next = getContextToolbarPosition(
 				anchor,
 				{
-					width: panelWidth,
-					height: panelHeight,
+					width: toolbarWidth,
+					height: measuredHeight,
 				},
 				viewport,
 				8,
 			)
-			// Give the panel a definite bounded height so its grid row can establish
-			// a real viewport for ScrollArea instead of growing with the content.
-			const boundedHeight = Math.max(48, Math.min(panelHeight, next.maxHeight))
 			const nextPosition = {
 				left: next.left,
 				top: next.top,
 				width: next.width,
-				height: boundedHeight,
-				maxHeight: boundedHeight,
+				height: measuredHeight,
 			}
 			setPosition((previous) =>
 				previous.left === nextPosition.left &&
 				previous.top === nextPosition.top &&
 				previous.width === nextPosition.width &&
-				previous.height === nextPosition.height &&
-				previous.maxHeight === nextPosition.maxHeight
+				previous.height === nextPosition.height
 					? previous
 					: nextPosition,
 			)
@@ -125,6 +161,11 @@ export function ElementContextPanel({
 			if (frame !== null) return
 			frame = window.requestAnimationFrame(updateNow)
 		}
+		const updateOverflow = () => {
+			const viewport = toolbarViewportRef.current
+			if (!viewport) return
+			setIsToolbarOverflowing(viewport.scrollWidth > viewport.clientWidth + 1)
+		}
 		const updateFromScroll = (event: Event) => {
 			// Scrolling the panel content must not feed back into panel positioning.
 			// Only canvas/page scrolling changes the anchor's viewport coordinates.
@@ -132,27 +173,38 @@ export function ElementContextPanel({
 			update()
 		}
 		updateNow()
+		updateOverflow()
 		window.addEventListener("resize", update)
+		window.addEventListener("resize", updateOverflow)
 		window.addEventListener("scroll", updateFromScroll, true)
 		const resizeObserver =
 			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update)
 		// Do not observe the panel itself. Updating maxHeight changes its measured
 		// size and would feed the layout result back into this observer.
 		if (boundaryRef?.current) resizeObserver?.observe(boundaryRef.current)
+		if (toolbarContentRef.current) resizeObserver?.observe(toolbarContentRef.current)
+		if (toolbarViewportRef.current) resizeObserver?.observe(toolbarViewportRef.current)
+		const overflowObserver =
+			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateOverflow)
+		if (toolbarContentRef.current) overflowObserver?.observe(toolbarContentRef.current)
+		if (toolbarViewportRef.current) overflowObserver?.observe(toolbarViewportRef.current)
 		return () => {
 			window.removeEventListener("resize", update)
+			window.removeEventListener("resize", updateOverflow)
 			window.removeEventListener("scroll", updateFromScroll, true)
 			resizeObserver?.disconnect()
+			overflowObserver?.disconnect()
 			if (frame !== null) window.cancelAnimationFrame(frame)
 		}
-	}, [anchor, boundaryRef, selector])
-	if (!open || !anchor || !selector || typeof document === "undefined") return null
+	}, [anchor, boundaryRef, selector, shouldRender])
+	if (!shouldRender || !shouldShowPanel || !anchor || !selector || typeof document === "undefined")
+		return null
 	return createPortal(
 		<div
 			ref={panelRef}
 			data-html-context-panel="true"
 			className={cn(
-				"pointer-events-none fixed box-border flex max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] flex-col overflow-hidden rounded-xl border bg-card/95 opacity-0 shadow-[0_12px_32px_rgba(0,0,0,0.16)] blur-[2px] backdrop-blur transition-[transform,opacity,filter,height] [transition-duration:400ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
+				"group/context-toolbar pointer-events-none fixed box-border flex max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-center overflow-visible rounded-lg border border-border/60 bg-card/95 p-1 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:240ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
 				TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL,
 			)}
 			data-open={isOpen}
@@ -161,28 +213,23 @@ export function ElementContextPanel({
 				top: position.top,
 				width: position.width,
 				height: position.height,
-				maxHeight: position.maxHeight,
 			}}
 		>
-			{onClose ? (
-				<button
-					type="button"
-					onClick={onClose}
-					aria-label={t("stylePanel.closeContextPanel")}
-					title={t("stylePanel.closeContextPanel")}
-					className="absolute right-2 top-2 z-20 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]"
-				>
-					<X className="h-4 w-4" />
-				</button>
-			) : null}
 			<ScrollArea
-				type="always"
-				className="min-h-0 w-full flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:!w-full"
-				viewportClassName="h-full max-h-full min-h-0 w-full touch-pan-y overscroll-contain overflow-x-hidden overflow-y-auto"
-				viewportStyle={{ overflowX: "hidden", overflowY: "auto" }}
-				onWheel={(event) => event.stopPropagation()}
+				type="auto"
+				scrollbarOrientation="horizontal"
+				className={cn(
+					"min-w-0 flex-1",
+					// Radix positions the horizontal scrollbar over the viewport. Reserve
+					// its height only while the toolbar actually overflows, so buttons
+					// remain fully visible without adding empty space in the normal state.
+					isToolbarOverflowing && "pb-2.5",
+					!isToolbarOverflowing && "[&_[data-slot='scroll-area-scrollbar']]:hidden",
+				)}
+				viewportClassName="w-full overflow-x-auto overflow-y-hidden"
+				viewportRef={toolbarViewportRef}
 			>
-				<div className="w-full min-w-0 px-1.5 pb-1.5 pr-3">
+				<div ref={toolbarContentRef} className="w-max min-w-0">
 					<StylePanel editorRef={editorRef} variant="context" disabled={disabled} />
 				</div>
 			</ScrollArea>

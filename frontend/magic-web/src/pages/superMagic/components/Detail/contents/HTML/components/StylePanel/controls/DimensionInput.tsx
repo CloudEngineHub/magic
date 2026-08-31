@@ -137,11 +137,11 @@ export function DimensionInput({
 				{fixedUnit ? null : (
 					<Select value={unitValue} onValueChange={handleUnitChange}>
 						<SelectTrigger
-							size={compact ? "sm" : "default"}
+							size="sm"
 							className={
 								compact
 									? `${STYLE_PANEL_STYLES.control} !h-7 w-full`
-									: `${STYLE_PANEL_STYLES.control} w-20`
+									: `${STYLE_PANEL_STYLES.control} !h-7 w-20`
 							}
 							data-testid={testIdPrefix ? `${testIdPrefix}-unit-trigger` : undefined}
 						>

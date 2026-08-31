@@ -10,6 +10,33 @@ import { EditorSelectContent } from "../../EditorFloating"
 
 const OBJECT_FIT_VALUES = ["fill", "contain", "cover", "none", "scale-down"] as const
 const OBJECT_POSITION_VALUES = ["center", "top", "right", "bottom", "left"] as const
+type ObjectPositionValue = (typeof OBJECT_POSITION_VALUES)[number]
+
+const OBJECT_POSITION_ALIASES: Record<string, ObjectPositionValue> = {
+	"50% 50%": "center",
+	"center center": "center",
+	"50% 0%": "top",
+	"center top": "top",
+	"top center": "top",
+	"100% 50%": "right",
+	"right center": "right",
+	"center right": "right",
+	"50% 100%": "bottom",
+	"center bottom": "bottom",
+	"bottom center": "bottom",
+	"0% 50%": "left",
+	"left center": "left",
+	"center left": "left",
+}
+
+function normalizeObjectPosition(value?: string): ObjectPositionValue | undefined {
+	const normalized = value?.trim().toLowerCase().replace(/\s+/g, " ")
+	if (!normalized) return undefined
+	if (OBJECT_POSITION_VALUES.includes(normalized as ObjectPositionValue)) {
+		return normalized as ObjectPositionValue
+	}
+	return OBJECT_POSITION_ALIASES[normalized]
+}
 
 /** Controls that only make sense for an actual image element. */
 const ImageSection = observer(function ImageSection({
@@ -20,7 +47,7 @@ const ImageSection = observer(function ImageSection({
 	const { t } = useTranslation("super")
 	const computedStyles = selectedElement?.computedStyles
 	const objectFit = computedStyles?.objectFit || "fill"
-	const objectPosition = computedStyles?.objectPosition || "center"
+	const objectPosition = normalizeObjectPosition(computedStyles?.objectPosition) || "center"
 
 	const replaceImage = useCallback(async () => {
 		if (!editorRef.current || !selectedElement) return

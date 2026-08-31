@@ -25,6 +25,8 @@ interface ElementInfo {
 	}
 	rotation?: number
 	isTextElement?: boolean
+	/** Whether the element itself contains non-whitespace text nodes. */
+	hasDirectTextContent?: boolean
 	textContent?: string
 	inlineStyles?: Record<string, string>
 	attributes?: {
@@ -100,6 +102,7 @@ export class ElementSelector {
 			const inlineStyles = this.getInlineStyles(element)
 			const { rect, rotation } = this.getElementRectWithRotation(element)
 			const isText = this.isTextElement(element)
+			const hasDirectTextContent = this.hasDirectTextContent(element)
 			const textContent = element.textContent?.trim() || ""
 			const imageMetadata = this.getImageMetadata(element)
 			const attributes = this.getCommonAttributes(element)
@@ -113,6 +116,7 @@ export class ElementSelector {
 				rect,
 				rotation,
 				isTextElement: isText,
+				hasDirectTextContent,
 				textContent: isText ? textContent : undefined,
 				attributes,
 			})
@@ -249,12 +253,20 @@ export class ElementSelector {
 				styles[prop] = value
 			}
 		})
+		if (styles.display === "flex" && styles.justifyContent === "normal") {
+			styles.justifyContent = "flex-start"
+		}
 
 		const parent = element.parentElement
 		if (parent) {
 			const parentComputed = window.getComputedStyle(parent)
+			styles.parentSelector = getElementSelector(parent)
 			styles.parentDisplay = parentComputed.display
 			styles.parentFlexDirection = parentComputed.flexDirection
+			styles.parentJustifyContent =
+				parentComputed.display === "flex" && parentComputed.justifyContent === "normal"
+					? "flex-start"
+					: parentComputed.justifyContent
 			styles.parentAlignItems = parentComputed.alignItems
 		}
 
@@ -520,6 +532,17 @@ export class ElementSelector {
 	}
 
 	/**
+	 * Check only the element's own text nodes, excluding text rendered by descendants.
+	 * This distinction is used by the host toolbar to avoid showing font-size controls
+	 * for containers whose content is entirely provided by child elements.
+	 */
+	private hasDirectTextContent(element: HTMLElement): boolean {
+		return Array.from(element.childNodes).some(
+			(node) => node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()),
+		)
+	}
+
+	/**
 	 * Extract rotation angle from transform matrix
 	 */
 	private extractRotation(element: HTMLElement): number {
@@ -748,6 +771,7 @@ export class ElementSelector {
 			const inlineStyles = this.getInlineStyles(element)
 			const { rect, rotation } = this.getElementRectWithRotation(element)
 			const isText = this.isTextElement(element)
+			const hasDirectTextContent = this.hasDirectTextContent(element)
 			const textContent = element.textContent?.trim() || ""
 			const imageMetadata = this.getImageMetadata(element)
 			const attributes = this.getCommonAttributes(element)
@@ -761,6 +785,7 @@ export class ElementSelector {
 				rect,
 				rotation,
 				isTextElement: isText,
+				hasDirectTextContent,
 				textContent: isText ? textContent : undefined,
 				attributes,
 			})

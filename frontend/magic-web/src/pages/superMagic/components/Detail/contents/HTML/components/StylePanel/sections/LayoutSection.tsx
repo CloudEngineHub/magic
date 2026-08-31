@@ -6,6 +6,7 @@ import type { StyleSectionProps } from "../types"
 import { Label } from "@/components/shadcn-ui/label"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { EditorSelectContent } from "../../EditorFloating"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 const DISPLAY_VALUES = ["block", "inline", "inline-block", "flex", "grid", "none"] as const
 
@@ -97,7 +98,7 @@ const LayoutSection = observer(function LayoutSection({
 					value={currentDisplay}
 					onValueChange={(value) => onStyleChange?.("display", value)}
 				>
-					<SelectTrigger id="display">
+					<SelectTrigger id="display" size="sm" className={STYLE_PANEL_STYLES.control}>
 						<SelectValue />
 					</SelectTrigger>
 					<EditorSelectContent>

@@ -204,6 +204,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				intrinsicHeight: payload.intrinsicHeight,
 				intrinsicAspectRatio: payload.intrinsicAspectRatio,
 				isTextElement: payload.isTextElement,
+				hasDirectTextContent: payload.hasDirectTextContent,
 				textContent: payload.textContent,
 				inlineStyles: payload.inlineStyles,
 				attributes: payload.attributes,

@@ -34,6 +34,7 @@ import type { DomTreeNode } from "../../../iframe-bridge/types/messages"
 import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { EditorDropdownMenuContent } from "../../EditorFloating"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface ElementActionsProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -63,12 +64,12 @@ interface NodeContext {
 	index: number
 }
 
-function findNodeContext(
+function findNodeContextBy(
 	node: DomTreeNode,
-	selector: string,
+	matches: (node: DomTreeNode) => boolean,
 	parent: DomTreeNode | null = null,
 ): NodeContext | null {
-	if (node.selector === selector) {
+	if (matches(node)) {
 		return {
 			node,
 			parent,
@@ -76,10 +77,26 @@ function findNodeContext(
 		}
 	}
 	for (const child of node.children) {
-		const match = findNodeContext(child, selector, node)
+		const match = findNodeContextBy(child, matches, node)
 		if (match) return match
 	}
 	return null
+}
+
+function findNodeContext(
+	node: DomTreeNode,
+	selector: string,
+	parent: DomTreeNode | null = null,
+): NodeContext | null {
+	return findNodeContextBy(node, (candidate) => candidate.selector === selector, parent)
+}
+
+function findNodeContextById(
+	node: DomTreeNode,
+	nodeId: string,
+	parent: DomTreeNode | null = null,
+): NodeContext | null {
+	return findNodeContextBy(node, (candidate) => candidate.nodeId === nodeId, parent)
 }
 
 interface AddElementButtonProps {
@@ -107,7 +124,7 @@ function AddElementButton({
 					size="sm"
 					disabled={disabled}
 					onClick={onClick}
-					className="h-7 w-7 px-0"
+					className={`h-7 w-7 px-0 ${STYLE_PANEL_STYLES.toolbarButton}`}
 					data-testid={testId}
 					aria-label={label}
 				>
@@ -150,7 +167,7 @@ function AddElementMenu({
 							variant="ghost"
 							size="sm"
 							disabled={disabled}
-							className="h-7 w-7 px-0"
+							className={`h-7 w-7 px-0 ${STYLE_PANEL_STYLES.toolbarButton}`}
 							data-testid={testId}
 							aria-label={label}
 							onClick={() => {
@@ -202,6 +219,10 @@ export const ElementActions = observer(function ElementActions({
 	const selectors = stylePanelStore.getSelectedSelectors()
 	const hasSingleSelection = selectors.length === 1
 	const selectedSelector = hasSingleSelection ? selectors[0] : null
+	const selectedPosition =
+		stylePanelStore.selectedElement?.computedStyles?.position?.toLowerCase()
+	const isOutOfDocumentFlow =
+		hasSingleSelection && (selectedPosition === "absolute" || selectedPosition === "fixed")
 	const isSingleImageSelected =
 		hasSingleSelection && stylePanelStore.selectedElement?.tagName?.toLowerCase() === "img"
 
@@ -409,7 +430,7 @@ export const ElementActions = observer(function ElementActions({
 				)
 				const nextTree = await editorRef.current.getDomTree()
 				const nextContext = nextTree?.root
-					? findNodeContext(nextTree.root, selectors[0])
+					? findNodeContextById(nextTree.root, context.node.nodeId)
 					: null
 				setCanAddInside(nextContext?.node.canHaveChildren === true)
 				setCanAddSibling(Boolean(nextContext?.parent && nextContext.node.editable))
@@ -514,22 +535,26 @@ export const ElementActions = observer(function ElementActions({
 					</>
 				) : null}
 
-				<AddElementButton
-					icon={<ArrowUp className="h-4 w-4" />}
-					label={t("stylePanel.domTree.moveUp")}
-					tooltip={t("stylePanel.domTree.moveUp")}
-					testId="html-style-panel-move-up-button"
-					disabled={disabled || !hasSingleSelection || !moveState.canMoveUp}
-					onClick={() => void handleMove(-1)}
-				/>
-				<AddElementButton
-					icon={<ArrowDown className="h-4 w-4" />}
-					label={t("stylePanel.domTree.moveDown")}
-					tooltip={t("stylePanel.domTree.moveDown")}
-					testId="html-style-panel-move-down-button"
-					disabled={disabled || !hasSingleSelection || !moveState.canMoveDown}
-					onClick={() => void handleMove(1)}
-				/>
+				{isOutOfDocumentFlow ? null : (
+					<>
+						<AddElementButton
+							icon={<ArrowUp className="h-4 w-4" />}
+							label={t("stylePanel.domTree.moveUp")}
+							tooltip={t("stylePanel.domTree.moveUp")}
+							testId="html-style-panel-move-up-button"
+							disabled={disabled || !hasSingleSelection || !moveState.canMoveUp}
+							onClick={() => void handleMove(-1)}
+						/>
+						<AddElementButton
+							icon={<ArrowDown className="h-4 w-4" />}
+							label={t("stylePanel.domTree.moveDown")}
+							tooltip={t("stylePanel.domTree.moveDown")}
+							testId="html-style-panel-move-down-button"
+							disabled={disabled || !hasSingleSelection || !moveState.canMoveDown}
+							onClick={() => void handleMove(1)}
+						/>
+					</>
+				)}
 
 				{isSingleImageSelected ? (
 					<MagicTooltip
@@ -542,7 +567,7 @@ export const ElementActions = observer(function ElementActions({
 								size="sm"
 								disabled={disabled}
 								onClick={handleReplaceImage}
-								className="h-7 px-2"
+								className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`}
 								data-testid="html-style-panel-replace-image-button"
 							>
 								<ImageUp className="h-4 w-4" />
@@ -562,7 +587,7 @@ export const ElementActions = observer(function ElementActions({
 							size="sm"
 							disabled={disabled || !hasSingleSelection}
 							onClick={handleDuplicate}
-							className="h-7 px-2"
+							className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`}
 							data-testid="html-style-panel-duplicate-button"
 						>
 							<Copy className="h-4 w-4" />
@@ -581,7 +606,7 @@ export const ElementActions = observer(function ElementActions({
 							size="sm"
 							disabled={disabled || !hasSingleSelection}
 							onClick={handleDelete}
-							className="h-7 px-2 hover:bg-destructive/10 hover:text-destructive"
+							className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton} hover:bg-destructive/10 hover:text-destructive hover:shadow-sm`}
 							data-testid="html-style-panel-delete-button"
 						>
 							<Trash2 className="h-4 w-4" />

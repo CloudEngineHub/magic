@@ -75,7 +75,7 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 				<Link2 className="h-3.5 w-3.5 text-muted-foreground" />
 				<span>{t("stylePanel.linkSettings")}</span>
 			</div>
-			<div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-2">
+			<div className="space-y-2 px-1">
 				{inputField(
 					"href",
 					t("stylePanel.linkUrl"),

@@ -1,5 +1,6 @@
 import { observer } from "mobx-react-lite"
-import { useCallback, useEffect, useState } from "react"
+import type { CSSProperties, ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Button } from "@/components/shadcn-ui/button"
@@ -13,14 +14,11 @@ import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelConte
 import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import type { StylePanelProps } from "./types"
 import LayoutSection from "./sections/LayoutSection"
-import BoxModelSection from "./sections/BoxModelSection"
 import FlexGridSection from "./sections/FlexGridSection"
 import ImageSection from "./sections/ImageSection"
-import { AnchorSection } from "./sections/AnchorSection"
 import BackgroundSection from "./sections/BackgroundSection"
 import BorderSection from "./sections/BorderSection"
 import ShadowSection from "./sections/ShadowSection"
-import { CustomCSSSection } from "./sections/CustomCSSSection"
 import {
 	HistoryActions,
 	FontFamilySelector,
@@ -32,10 +30,37 @@ import {
 	StylePopoverButton,
 	ElementActions,
 	SizePopover,
+	ContextMorePopover,
 } from "./controls"
 import { useShowButtonText } from "@/hooks/useShowButtonText"
-import { STYLE_PANEL_STYLES } from "./styles"
 import { getElementCapabilities } from "./capabilities"
+
+const CONTEXT_TOOLBAR_STAGGER_MS = 40
+
+function ContextToolbarMotion({
+	children,
+	index,
+	enabled,
+}: {
+	children: ReactNode
+	index: number
+	enabled: boolean
+}) {
+	if (!enabled) return <>{children}</>
+
+	return (
+		<div
+			className="translate-y-1 opacity-0 transition-[opacity,transform] duration-220 ease-out [transition-delay:0ms] group-data-[open=true]/context-toolbar:translate-y-0 group-data-[open=true]/context-toolbar:opacity-100 group-data-[open=true]/context-toolbar:[transition-delay:var(--context-toolbar-delay)] motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none"
+			style={
+				{
+					"--context-toolbar-delay": `${index * CONTEXT_TOOLBAR_STAGGER_MS}ms`,
+				} as CSSProperties
+			}
+		>
+			{children}
+		</div>
+	)
+}
 
 /**
  * Rich text editor style toolbar component
@@ -62,6 +87,43 @@ export const StylePanel = observer(function StylePanel({
 	const [textContent, setTextContent] = useState("")
 
 	const showButtonLabel = useShowButtonText(800)
+
+	// In a flex context, alignment is controlled by the flex container's
+	// justify-content rather than the selected text element's text-align.
+	const computedStyles =
+		selectedElement?.computedStyles ||
+		(stylePanelStore.selectedElements.length > 0
+			? stylePanelStore.selectedElements[0]?.computedStyles
+			: undefined)
+	const isFlexContainer = computedStyles?.display === "flex"
+	const isFlexItem = computedStyles?.parentDisplay === "flex"
+	const flexAlignment = useMemo(() => {
+		if (stylePanelStore.textSelection?.hasSelection || !selectedElement) return null
+
+		if (isFlexContainer) {
+			return {
+				value: computedStyles?.justifyContent || "flex-start",
+				direction: computedStyles?.flexDirection || "row",
+				targetSelector: selectedElement.selector,
+			}
+		}
+
+		if (isFlexItem && computedStyles?.parentSelector) {
+			return {
+				value: computedStyles.parentJustifyContent || "flex-start",
+				direction: computedStyles.parentFlexDirection || "row",
+				targetSelector: computedStyles.parentSelector,
+			}
+		}
+
+		return null
+	}, [
+		computedStyles,
+		isFlexContainer,
+		isFlexItem,
+		selectedElement,
+		stylePanelStore.textSelection?.hasSelection,
+	])
 
 	/**
 	 * Sync local state with selected element styles
@@ -209,6 +271,29 @@ export const StylePanel = observer(function StylePanel({
 		[handleStyleChange],
 	)
 
+	const handleAlignment = useCallback(
+		async (value: string) => {
+			if (!flexAlignment) {
+				handleAlign(value)
+				return
+			}
+
+			if (!editorRef.current) return
+
+			await editorRef.current.setBatchStyles(flexAlignment.targetSelector, {
+				justifyContent: value,
+			})
+			onStyleChange?.(flexAlignment.targetSelector, "justifyContent", value)
+
+			// Refresh the selected element so parentJustifyContent reflects the new
+			// value when the selected node is a flex item.
+			if (selectedElement?.selector) {
+				await editorRef.current.refreshSelectedElement(selectedElement.selector)
+			}
+		},
+		[editorRef, flexAlignment, handleAlign, onStyleChange, selectedElement?.selector],
+	)
+
 	/**
 	 * Handle linked size updates so image ratio locking can commit width/height together.
 	 */
@@ -281,13 +366,6 @@ export const StylePanel = observer(function StylePanel({
 		[stylePanelStore, editorRef],
 	)
 
-	// Get current computed styles
-	// In multi-select mode, use first element's styles as reference for UI state
-	const computedStyles =
-		selectedElement?.computedStyles ||
-		(stylePanelStore.selectedElements.length > 0
-			? stylePanelStore.selectedElements[0]?.computedStyles
-			: undefined)
 	const isBold = !!(computedStyles?.fontWeight && parseInt(computedStyles.fontWeight) >= 700)
 	const isItalic = computedStyles?.fontStyle === "italic"
 	const hasUnderline = computedStyles?.textDecoration?.includes("underline") ?? false
@@ -295,6 +373,7 @@ export const StylePanel = observer(function StylePanel({
 	const textAlign = computedStyles?.textAlign || "left"
 	const currentColor = computedStyles?.color || "#000000"
 	const capabilities = getElementCapabilities(selectedElement)
+	const showAlignmentTools = capabilities.showParagraph || Boolean(flexAlignment)
 
 	// Disable controls when no element is selected or when saving
 	// Check both single and multi-select modes
@@ -304,9 +383,9 @@ export const StylePanel = observer(function StylePanel({
 	const showElementControls = variant !== "global"
 	const contextClassName =
 		variant === "context"
-			? "w-full max-w-full flex-col items-stretch gap-2 overflow-x-hidden border-0 bg-transparent p-1"
+			? "w-max min-w-full flex-nowrap gap-1 overflow-visible border-0 bg-transparent px-0 py-0"
 			: ""
-	const contextInnerClassName = variant === "context" ? "w-full flex-col items-stretch gap-1" : ""
+	const toolbarSeparatorClassName = variant === "context" ? "mx-1 !h-4 bg-border/70" : "mx-1 !h-4"
 	const textContentField = capabilities.showTypography ? (
 		<div className="w-full min-w-0 basis-full">
 			<label className="mb-2 block text-xs font-medium text-muted-foreground">
@@ -316,392 +395,307 @@ export const StylePanel = observer(function StylePanel({
 					onChange={(event) => setTextContent(event.target.value)}
 					onBlur={(event) => handleTextContentCommit(event.target.value)}
 					placeholder={t("stylePanel.textContentPlaceholder")}
-					rows={2}
+					rows={4}
 					maxLength={5000}
 					disabled={isDisabled}
-					className="min-h-16 resize-y rounded-md px-2 py-1.5 text-sm"
+					className="min-h-24 resize-y rounded-md px-2 py-1.5 text-sm"
 				/>
 			</label>
 		</div>
 	) : null
-
-	if (variant === "context") {
-		return (
-			<TooltipProvider delayDuration={300}>
-				<div className={cn("flex w-full min-w-0 flex-col gap-2", className)}>
-					<div className={STYLE_PANEL_STYLES.section}>
-						<div className={STYLE_PANEL_STYLES.sectionTitle}>
-							{t("stylePanel.elementActions")}
-						</div>
-						<div className={STYLE_PANEL_STYLES.toolbarGroup}>
-							<ElementActions editorRef={editorRef} disabled={disabled} />
-						</div>
-					</div>
-
-					{capabilities.showTypography ? (
-						<div className={STYLE_PANEL_STYLES.section}>
-							<div className={STYLE_PANEL_STYLES.sectionTitle}>
-								{t("stylePanel.text")}
-							</div>
-							{textContentField}
-							<div className="grid min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)] items-center gap-1.5">
-								<FontFamilySelector
-									value={fontFamily}
-									onChange={handleFontFamilyChange}
-									disabled={isDisabled}
-									className="w-full"
-								/>
-								<FontSizeSelector
-									value={fontSize}
-									onChange={setFontSize}
-									onApply={handleFontSizeApply}
-									disabled={isDisabled}
-									className="w-full"
-								/>
-							</div>
-							<div className="flex items-center justify-start gap-2">
-								<TextFormatTools
-									isBold={isBold}
-									isItalic={isItalic}
-									hasUnderline={hasUnderline}
-									hasLineThrough={hasLineThrough}
-									onFormat={handleFormat}
-									disabled={isDisabled}
-								/>
-								<ColorPicker
-									value={currentColor}
-									onChangeComplete={(value) => handleStyleChange("color", value)}
-									disabled={isDisabled}
-								/>
-							</div>
-						</div>
-					) : null}
-
-					{capabilities.isLink && selectedElement ? (
-						<AnchorSection
-							selectedElement={selectedElement}
-							disabled={isDisabled}
-							onUpdate={updateAttributes}
-						/>
-					) : null}
-
-					{capabilities.showParagraph ? (
-						<div className={STYLE_PANEL_STYLES.section}>
-							<div className={STYLE_PANEL_STYLES.sectionTitle}>
-								{t("stylePanel.paragraph")}
-							</div>
-							<div className="flex items-center justify-start gap-1 rounded-md border border-border/60 bg-muted/20 p-0.5">
-								<TextAlignTools
-									textAlign={textAlign}
-									onAlign={handleAlign}
-									disabled={isDisabled}
-								/>
-							</div>
-						</div>
-					) : null}
-
-					<div className={STYLE_PANEL_STYLES.section}>
-						<div className={STYLE_PANEL_STYLES.sectionTitle}>
-							{t("stylePanel.appearanceAndLayout")}
-						</div>
-						<div className="min-w-0 space-y-1.5">
-							{capabilities.showImage ? (
-								<div className={STYLE_PANEL_STYLES.group}>
-									<SizePopover
-										selectedElement={selectedElement}
-										disabled={isDisabled}
-										showLabel
-										inline
-										onStyleChange={(property, value) =>
-											handleStyleChange(property, value)
-										}
-										onBatchStyleChange={handleBatchStyleChange}
-									/>
-								</div>
-							) : null}
-							<div className={STYLE_PANEL_STYLES.group}>
-								<BoxModelSection
-									selectedElement={selectedElement}
-									editorRef={editorRef}
-									onStyleChange={handleStyleChange}
-									showDimensions={!capabilities.showImage}
-								/>
-							</div>
-							{capabilities.showImage ? (
-								<div className={STYLE_PANEL_STYLES.group}>
-									<ImageSection
-										selectedElement={selectedElement}
-										editorRef={editorRef}
-										onStyleChange={handleStyleChange}
-									/>
-								</div>
-							) : null}
-							{capabilities.showFlexGrid ? (
-								<div className={STYLE_PANEL_STYLES.group}>
-									<FlexGridSection
-										selectedElement={selectedElement}
-										editorRef={editorRef}
-										onStyleChange={handleStyleChange}
-									/>
-								</div>
-							) : null}
-							{capabilities.showBackground ? (
-								<div className={STYLE_PANEL_STYLES.group}>
-									<div className={STYLE_PANEL_STYLES.subsectionTitle}>
-										{t("stylePanel.background")}
-									</div>
-									<BackgroundSection
-										selectedElement={selectedElement}
-										editorRef={editorRef}
-										onStyleChange={handleStyleChange}
-									/>
-								</div>
-							) : null}
-							<div className={STYLE_PANEL_STYLES.group}>
-								<div className={STYLE_PANEL_STYLES.subsectionTitle}>
-									{t("stylePanel.border")}
-								</div>
-								<BorderSection
-									selectedElement={selectedElement}
-									editorRef={editorRef}
-									onStyleChange={handleStyleChange}
-								/>
-							</div>
-							<div className={STYLE_PANEL_STYLES.group}>
-								<div className={STYLE_PANEL_STYLES.subsectionTitle}>
-									{t("stylePanel.shadow")}
-								</div>
-								<ShadowSection
-									selectedElement={selectedElement}
-									editorRef={editorRef}
-									onStyleChange={handleStyleChange}
-								/>
-							</div>
-						</div>
-					</div>
-
-					<CustomCSSSection
-						selectedElement={selectedElement}
-						disabled={isDisabled}
-						onApply={handleBatchStyleChange}
-					/>
-				</div>
-			</TooltipProvider>
-		)
-	}
+	const contextMorePopover = (
+		<ContextMorePopover
+			selectedElement={selectedElement}
+			editorRef={editorRef}
+			disabled={isDisabled}
+			showTypography={capabilities.showTypography}
+			showFlexGrid={capabilities.showFlexGrid}
+			showImage={capabilities.showImage}
+			showBackground={capabilities.showBackground}
+			isLink={capabilities.isLink}
+			fontFamilySelector={
+				<FontFamilySelector
+					value={fontFamily}
+					onChange={handleFontFamilyChange}
+					disabled={isDisabled}
+				/>
+			}
+			textContentField={textContentField}
+			onStyleChange={handleStyleChange}
+			onBatchStyleChange={handleBatchStyleChange}
+			onUpdateAttributes={updateAttributes}
+		/>
+	)
 
 	return (
 		<TooltipProvider delayDuration={300}>
 			<div
 				className={cn(
-					"border-b bg-card/95 px-2 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-card/60",
+					variant === "context"
+						? "px-0 py-0"
+						: "border-b bg-card/95 px-2 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-card/60",
 					contextClassName,
 					toolbarEndRef
 						? "flex w-full min-w-0 items-center gap-2"
-						: "flex flex-wrap items-center gap-1",
+						: variant === "context"
+							? "flex min-w-0 flex-nowrap items-center gap-1"
+							: "flex flex-wrap items-center gap-1",
 					className,
 				)}
 			>
 				<div
 					className={cn(
-						"flex items-center gap-1",
-						contextInnerClassName,
-						toolbarEndRef ? "min-w-0 flex-1 flex-wrap" : "flex-wrap",
+						"flex min-w-0 items-center gap-1",
+						variant === "context"
+							? "flex-nowrap"
+							: toolbarEndRef
+								? "min-w-0 flex-1 flex-wrap"
+								: "flex-wrap",
 					)}
 				>
 					{showGlobal ? <HistoryActions editorRef={editorRef} /> : null}
 					{showGlobal && showElementControls ? (
-						<Separator
-							orientation={variant === "context" ? "horizontal" : "vertical"}
-							className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
-						/>
+						<Separator orientation="vertical" className={toolbarSeparatorClassName} />
 					) : null}
 
 					{showElementControls ? (
 						<>
 							{/* Element actions (duplicate, delete) */}
-							<ElementActions editorRef={editorRef} disabled={disabled} />
+							<ContextToolbarMotion enabled={variant === "context"} index={0}>
+								<ElementActions editorRef={editorRef} disabled={disabled} />
+							</ContextToolbarMotion>
 							<Separator
-								orientation={variant === "context" ? "horizontal" : "vertical"}
-								className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
+								orientation="vertical"
+								className={toolbarSeparatorClassName}
 							/>
 
 							{capabilities.showTypography ? (
 								<>
-									{textContentField}
-									<FontFamilySelector
-										value={fontFamily}
-										onChange={handleFontFamilyChange}
-										disabled={isDisabled}
-									/>
-									<FontSizeSelector
-										value={fontSize}
-										onChange={setFontSize}
-										onApply={handleFontSizeApply}
-										disabled={isDisabled}
-									/>
+									{variant !== "context" ? textContentField : null}
+									{variant !== "context" ? (
+										<FontFamilySelector
+											value={fontFamily}
+											onChange={handleFontFamilyChange}
+											disabled={isDisabled}
+										/>
+									) : null}
+									{capabilities.showFontSize ? (
+										<ContextToolbarMotion
+											enabled={variant === "context"}
+											index={1}
+										>
+											<FontSizeSelector
+												value={fontSize}
+												onChange={setFontSize}
+												onApply={handleFontSizeApply}
+												disabled={isDisabled}
+												className={
+													variant === "context"
+														? "w-20 shrink-0"
+														: undefined
+												}
+											/>
+										</ContextToolbarMotion>
+									) : null}
+								</>
+							) : null}
+
+							{capabilities.showFontSizeAdjuster ? (
+								<ContextToolbarMotion enabled={variant === "context"} index={2}>
 									<FontSizeAdjuster
 										onAdjust={handleFontSizeAdjust}
 										disabled={isDisabled}
 									/>
+								</ContextToolbarMotion>
+							) : null}
+
+							{variant !== "context" ||
+							capabilities.showTypography ||
+							capabilities.showFontSizeAdjuster ? (
+								<Separator
+									orientation="vertical"
+									className={toolbarSeparatorClassName}
+								/>
+							) : null}
+
+							{capabilities.showTypography ? (
+								<ContextToolbarMotion enabled={variant === "context"} index={3}>
+									<TextFormatTools
+										isBold={isBold}
+										isItalic={isItalic}
+										hasUnderline={hasUnderline}
+										hasLineThrough={hasLineThrough}
+										onFormat={handleFormat}
+										disabled={isDisabled}
+									/>
+								</ContextToolbarMotion>
+							) : null}
+
+							{variant !== "context" || capabilities.showTypography ? (
+								<Separator
+									orientation="vertical"
+									className={toolbarSeparatorClassName}
+								/>
+							) : null}
+
+							{showAlignmentTools ? (
+								<ContextToolbarMotion enabled={variant === "context"} index={4}>
+									<TextAlignTools
+										value={flexAlignment?.value || textAlign}
+										onAlign={handleAlignment}
+										mode={flexAlignment ? "flex" : "text"}
+										flexDirection={flexAlignment?.direction}
+										disabled={isDisabled}
+										compact={variant === "context"}
+									/>
+								</ContextToolbarMotion>
+							) : null}
+
+							{variant !== "context" || showAlignmentTools ? (
+								<Separator
+									orientation="vertical"
+									className={toolbarSeparatorClassName}
+								/>
+							) : null}
+
+							{capabilities.showTypography ? (
+								<ContextToolbarMotion enabled={variant === "context"} index={5}>
+									<ColorPicker
+										value={currentColor}
+										onChangeComplete={(value) =>
+											handleStyleChange("color", value)
+										}
+										disabled={isDisabled}
+									/>
+								</ContextToolbarMotion>
+							) : null}
+
+							{variant !== "context" || capabilities.showTypography ? (
+								<Separator
+									orientation="vertical"
+									className={toolbarSeparatorClassName}
+								/>
+							) : null}
+
+							{variant !== "context" || !capabilities.isText ? (
+								<>
+									{/* Size settings */}
+									<SizePopover
+										selectedElement={selectedElement}
+										disabled={isDisabled}
+										showLabel={variant === "context" ? true : showButtonLabel}
+										onStyleChange={(property, value) =>
+											handleStyleChange(property, value)
+										}
+										onBatchStyleChange={handleBatchStyleChange}
+									/>
+
+									<Separator
+										orientation="vertical"
+										className={toolbarSeparatorClassName}
+									/>
 								</>
 							) : null}
 
-							<Separator
-								orientation={variant === "context" ? "horizontal" : "vertical"}
-								className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
-							/>
-
-							{capabilities.showTypography ? (
-								<TextFormatTools
-									isBold={isBold}
-									isItalic={isItalic}
-									hasUnderline={hasUnderline}
-									hasLineThrough={hasLineThrough}
-									onFormat={handleFormat}
-									disabled={isDisabled}
-								/>
-							) : null}
-
-							<Separator
-								orientation={variant === "context" ? "horizontal" : "vertical"}
-								className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
-							/>
-
-							{capabilities.showParagraph ? (
-								<TextAlignTools
-									textAlign={textAlign}
-									onAlign={handleAlign}
-									disabled={isDisabled}
-								/>
-							) : null}
-
-							<Separator
-								orientation={variant === "context" ? "horizontal" : "vertical"}
-								className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
-							/>
-
-							{capabilities.showTypography ? (
-								<ColorPicker
-									value={currentColor}
-									onChangeComplete={(value) => handleStyleChange("color", value)}
-									disabled={isDisabled}
-								/>
-							) : null}
-
-							<Separator
-								orientation={variant === "context" ? "horizontal" : "vertical"}
-								className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
-							/>
-
-							{/* Size settings */}
-							<SizePopover
-								selectedElement={selectedElement}
-								disabled={isDisabled}
-								showLabel={variant === "context" ? true : showButtonLabel}
-								onStyleChange={(property, value) =>
-									handleStyleChange(property, value)
-								}
-								onBatchStyleChange={handleBatchStyleChange}
-							/>
-
-							<Separator
-								orientation={variant === "context" ? "horizontal" : "vertical"}
-								className={variant === "context" ? "my-1 w-full" : "mx-1 !h-4"}
-							/>
-
-							{/* Layout settings */}
-							<StylePopoverButton
-								icon={<LayoutPanelTop className="h-4 w-4" />}
-								tooltip={t("stylePanel.layoutSettings")}
-								title={t("stylePanel.layout")}
-								disabled={isDisabled}
-								showLabel={variant === "context" ? true : showButtonLabel}
-							>
-								<LayoutSection
-									selectedElement={selectedElement}
-									editorRef={editorRef}
-									onStyleChange={handleStyleChange}
-								/>
-							</StylePopoverButton>
-
-							{capabilities.showFlexGrid ? (
-								<StylePopoverButton
-									icon={<LayoutPanelTop className="h-4 w-4" />}
-									tooltip={t("stylePanel.flexGridLayout")}
-									title={t("stylePanel.flexGrid")}
-									disabled={isDisabled}
-									showLabel={variant === "context" ? true : showButtonLabel}
-								>
-									<FlexGridSection
-										selectedElement={selectedElement}
-										editorRef={editorRef}
-										onStyleChange={handleStyleChange}
-									/>
-								</StylePopoverButton>
-							) : null}
-
-							{capabilities.showImage ? (
-								<StylePopoverButton
-									icon={<Paintbrush className="h-4 w-4" />}
-									tooltip={t("stylePanel.imageSettings")}
-									title={t("stylePanel.imageSettings")}
-									disabled={isDisabled}
-									showLabel={variant === "context" ? true : showButtonLabel}
-								>
-									<ImageSection
-										selectedElement={selectedElement}
-										editorRef={editorRef}
-										onStyleChange={handleStyleChange}
-									/>
-								</StylePopoverButton>
-							) : null}
-
-							{capabilities.showBackground ? (
-								<StylePopoverButton
-									icon={<Paintbrush className="h-4 w-4" />}
-									tooltip={t("stylePanel.backgroundSettings")}
-									title={t("stylePanel.background")}
-									disabled={isDisabled}
-									showLabel={variant === "context" ? true : showButtonLabel}
-								>
-									<BackgroundSection
-										selectedElement={selectedElement}
-										editorRef={editorRef}
-										onStyleChange={handleStyleChange}
-									/>
-								</StylePopoverButton>
-							) : null}
-
-							{/* Border settings */}
-							<StylePopoverButton
-								icon={<RectangleHorizontal className="h-4 w-4" />}
-								tooltip={t("stylePanel.borderSettings")}
-								title={t("stylePanel.border")}
-								disabled={isDisabled}
-								showLabel={variant === "context" ? true : showButtonLabel}
-							>
-								<BorderSection
-									selectedElement={selectedElement}
-									editorRef={editorRef}
-									onStyleChange={handleStyleChange}
-								/>
-							</StylePopoverButton>
-
-							{/* Shadow & effects */}
-							<StylePopoverButton
-								icon={<ScanEye className="h-4 w-4" />}
-								tooltip={t("stylePanel.shadowAndEffects")}
-								title={t("stylePanel.shadow")}
-								disabled={isDisabled}
-								showLabel={variant === "context" ? true : showButtonLabel}
-							>
-								<ShadowSection
-									selectedElement={selectedElement}
-									editorRef={editorRef}
-									onStyleChange={handleStyleChange}
-								/>
-							</StylePopoverButton>
+							{variant === "context" ? (
+								<ContextToolbarMotion enabled index={6}>
+									{contextMorePopover}
+								</ContextToolbarMotion>
+							) : (
+								<>
+									{/* Layout settings */}
+									<StylePopoverButton
+										icon={<LayoutPanelTop className="h-4 w-4" />}
+										tooltip={t("stylePanel.layoutSettings")}
+										title={t("stylePanel.layout")}
+										disabled={isDisabled}
+										showLabel={variant === "context" ? true : showButtonLabel}
+									>
+										<LayoutSection
+											selectedElement={selectedElement}
+											editorRef={editorRef}
+											onStyleChange={handleStyleChange}
+										/>
+									</StylePopoverButton>
+									{capabilities.showFlexGrid ? (
+										<StylePopoverButton
+											icon={<LayoutPanelTop className="h-4 w-4" />}
+											tooltip={t("stylePanel.flexGridLayout")}
+											title={t("stylePanel.flexGrid")}
+											disabled={isDisabled}
+											showLabel={
+												variant === "context" ? true : showButtonLabel
+											}
+										>
+											<FlexGridSection
+												selectedElement={selectedElement}
+												editorRef={editorRef}
+												onStyleChange={handleStyleChange}
+											/>
+										</StylePopoverButton>
+									) : null}
+									{capabilities.showImage ? (
+										<StylePopoverButton
+											icon={<Paintbrush className="h-4 w-4" />}
+											tooltip={t("stylePanel.imageSettings")}
+											title={t("stylePanel.imageSettings")}
+											disabled={isDisabled}
+											showLabel={
+												variant === "context" ? true : showButtonLabel
+											}
+										>
+											<ImageSection
+												selectedElement={selectedElement}
+												editorRef={editorRef}
+												onStyleChange={handleStyleChange}
+											/>
+										</StylePopoverButton>
+									) : null}
+									{capabilities.showBackground ? (
+										<StylePopoverButton
+											icon={<Paintbrush className="h-4 w-4" />}
+											tooltip={t("stylePanel.backgroundSettings")}
+											title={t("stylePanel.background")}
+											disabled={isDisabled}
+											showLabel={
+												variant === "context" ? true : showButtonLabel
+											}
+										>
+											<BackgroundSection
+												selectedElement={selectedElement}
+												editorRef={editorRef}
+												onStyleChange={handleStyleChange}
+											/>
+										</StylePopoverButton>
+									) : null}
+									<StylePopoverButton
+										icon={<RectangleHorizontal className="h-4 w-4" />}
+										tooltip={t("stylePanel.borderSettings")}
+										title={t("stylePanel.border")}
+										disabled={isDisabled}
+										showLabel={variant === "context" ? true : showButtonLabel}
+									>
+										<BorderSection
+											selectedElement={selectedElement}
+											editorRef={editorRef}
+											onStyleChange={handleStyleChange}
+										/>
+									</StylePopoverButton>
+									<StylePopoverButton
+										icon={<ScanEye className="h-4 w-4" />}
+										tooltip={t("stylePanel.shadowAndEffects")}
+										title={t("stylePanel.shadow")}
+										disabled={isDisabled}
+										showLabel={variant === "context" ? true : showButtonLabel}
+									>
+										<ShadowSection
+											selectedElement={selectedElement}
+											editorRef={editorRef}
+											onStyleChange={handleStyleChange}
+										/>
+									</StylePopoverButton>
+								</>
+							)}
 						</>
 					) : null}
 				</div>

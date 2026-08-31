@@ -6,6 +6,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Type } from "lucide-react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 interface TextEditToggleProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -52,7 +53,7 @@ export function TextEditToggle({
 						pressed={isEnabled}
 						onPressedChange={handleToggle}
 						disabled={disabled}
-						className="h-7 w-7 rounded-md p-0"
+						className={STYLE_PANEL_STYLES.iconButton}
 					>
 						<Type className="h-4 w-4" />
 					</Toggle>

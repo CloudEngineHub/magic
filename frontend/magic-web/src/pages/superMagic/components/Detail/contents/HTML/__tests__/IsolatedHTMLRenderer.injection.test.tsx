@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
@@ -27,6 +28,13 @@ const virtualStorageMocks = vi.hoisted(() => ({
 		},
 	})),
 	getFullContent: vi.fn((content: string) => `<!doctype html>${content}`),
+}))
+
+const iframeMessageMocks = vi.hoisted(() => ({
+	handleAgentMessage: vi.fn(async () => true),
+	handleMagicUploadFiles: vi.fn(),
+	handleMagicAddFilesToMessage: vi.fn(),
+	handleMagicDownloadFiles: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -319,7 +327,7 @@ vi.mock("../iframe-api/hooks/useIframeLLM", () => ({
 
 vi.mock("../iframe-api/hooks/useIframeAgent", () => ({
 	useIframeAgent: () => ({
-		handleAgentMessage: vi.fn(async () => false),
+		handleAgentMessage: iframeMessageMocks.handleAgentMessage,
 	}),
 }))
 
@@ -339,9 +347,9 @@ vi.mock("../hooks/useIframeAgentActions", () => ({
 
 vi.mock("../iframe-api/hooks/useMagicFiles", () => ({
 	useMagicFiles: () => ({
-		handleMagicUploadFiles: vi.fn(),
-		handleMagicAddFilesToMessage: vi.fn(),
-		handleMagicDownloadFiles: vi.fn(),
+		handleMagicUploadFiles: iframeMessageMocks.handleMagicUploadFiles,
+		handleMagicAddFilesToMessage: iframeMessageMocks.handleMagicAddFilesToMessage,
+		handleMagicDownloadFiles: iframeMessageMocks.handleMagicDownloadFiles,
 	}),
 }))
 
@@ -384,13 +392,14 @@ function dispatchIframeMessage(
 	type: string,
 	origin = window.location.origin,
 	extraData: Record<string, unknown> = {},
+	source: Window | null = iframe.contentWindow,
 ) {
 	act(() => {
 		window.dispatchEvent(
 			new MessageEvent("message", {
 				data: { type, ...extraData },
 				origin,
-				source: iframe.contentWindow,
+				source,
 			}),
 		)
 	})
@@ -658,6 +667,45 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		expect(openNewTab).toHaveBeenCalledWith("current-file", "/target.html", true)
 	})
 
+	it("accepts same-origin link messages from a nested iframe of the current preview", async () => {
+		const openNewTab = vi.fn()
+		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const nestedSource = {} as Window
+		vi.spyOn(iframe.contentWindow as Window, "frames", "get").mockReturnValue([
+			nestedSource,
+		] as unknown as Window[])
+
+		dispatchIframeMessage(
+			iframe,
+			"linkClicked",
+			window.location.origin,
+			{ href: "/nested-target.html" },
+			nestedSource,
+		)
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("history-file", "/nested-target.html", false)
+	})
+
+	it("ignores same-origin link messages from an unrelated source", async () => {
+		const openNewTab = vi.fn()
+		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(
+			iframe,
+			"linkClicked",
+			window.location.origin,
+			{ href: "/target.html" },
+			window,
+		)
+		await flushReactEffects()
+
+		expect(openNewTab).not.toHaveBeenCalled()
+	})
+
 	it("ignores link messages from an unexpected origin", async () => {
 		const openNewTab = vi.fn()
 		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
@@ -669,5 +717,80 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		await flushReactEffects()
 
 		expect(openNewTab).not.toHaveBeenCalled()
+	})
+
+	it("ignores input messages from an unexpected source", async () => {
+		const publish = vi.spyOn(pubsub, "publish")
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(
+			iframe,
+			"MAGIC_SET_INPUT_MESSAGE",
+			window.location.origin,
+			{ message: "forged input" },
+			window,
+		)
+		await flushReactEffects()
+
+		expect(publish).not.toHaveBeenCalledWith(PubSubEvents.Set_Input_Message, "forged input")
+	})
+
+	it("accepts input messages from the current iframe source", async () => {
+		const publish = vi.spyOn(pubsub, "publish")
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "MAGIC_SET_INPUT_MESSAGE", window.location.origin, {
+			message: "trusted input",
+		})
+		await flushReactEffects()
+
+		expect(publish).toHaveBeenCalledWith(PubSubEvents.Set_Input_Message, "trusted input")
+	})
+
+	it("ignores privileged legacy messages from an unexpected source", async () => {
+		const saveEditContent = vi.fn()
+		const publish = vi.spyOn(pubsub, "publish")
+		render(
+			<IsolatedHTMLRenderer {...defaultProps} isEditMode saveEditContent={saveEditContent} />,
+		)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const forgedSource = window
+		dispatchIframeMessage(
+			iframe,
+			"MAGIC_DOWNLOAD_FILES_REQUEST",
+			window.location.origin,
+			{ requestId: "forged-download", filePaths: ["secret.txt"] },
+			forgedSource,
+		)
+		dispatchIframeMessage(
+			iframe,
+			"MAGIC_SEND_MESSAGE_REQUEST",
+			window.location.origin,
+			{ requestId: "forged-send", message: "forged message" },
+			forgedSource,
+		)
+		dispatchIframeMessage(
+			iframe,
+			"saveContent",
+			window.location.origin,
+			{ content: "forged content" },
+			forgedSource,
+		)
+		dispatchIframeMessage(iframe, "MAGIC_SET_INPUT_MESSAGE", "https://untrusted.example", {
+			message: "wrong-origin input",
+		})
+		await flushReactEffects()
+
+		expect(iframeMessageMocks.handleMagicDownloadFiles).not.toHaveBeenCalled()
+		expect(iframeMessageMocks.handleAgentMessage).not.toHaveBeenCalled()
+		expect(saveEditContent).not.toHaveBeenCalled()
+		expect(publish).not.toHaveBeenCalledWith(PubSubEvents.Set_Input_Message, expect.anything())
+		expect(publish).not.toHaveBeenCalledWith(
+			PubSubEvents.Set_Input_Message,
+			"wrong-origin input",
+		)
 	})
 })

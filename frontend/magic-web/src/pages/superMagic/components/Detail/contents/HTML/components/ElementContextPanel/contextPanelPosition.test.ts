@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { getContextPanelPosition } from "./contextPanelPosition"
+import { getContextPanelPosition, getContextToolbarPosition } from "./contextPanelPosition"
 
 describe("getContextPanelPosition", () => {
 	const getOverlapArea = (
@@ -119,5 +119,59 @@ describe("getContextPanelPosition", () => {
 		expect(getOverlapArea({ ...result, height: result.maxHeight }, anchor)).toBeLessThanOrEqual(
 			260,
 		)
+	})
+})
+
+describe("getContextToolbarPosition", () => {
+	it("centers the fit-content toolbar above the selected element", () => {
+		const result = getContextToolbarPosition(
+			{ left: 200, top: 200, width: 200, height: 40 },
+			{ width: 320, height: 48 },
+			{ width: 800, height: 600 },
+		)
+
+		expect(result).toEqual({ left: 140, top: 88, width: 320, placement: "top" })
+	})
+
+	it("falls below when there is not enough room above", () => {
+		const result = getContextToolbarPosition(
+			{ left: 200, top: 20, width: 200, height: 40 },
+			{ width: 320, height: 48 },
+			{ width: 800, height: 600 },
+		)
+
+		expect(result).toEqual({ left: 140, top: 68, width: 320, placement: "bottom" })
+	})
+
+	it("falls above when there is not enough room below", () => {
+		const result = getContextToolbarPosition(
+			{ left: 200, top: 500, width: 200, height: 40 },
+			{ width: 320, height: 48 },
+			{ width: 800, height: 600 },
+		)
+
+		expect(result).toEqual({ left: 140, top: 388, width: 320, placement: "top" })
+	})
+
+	it("uses the side with more visible room when neither side fully fits", () => {
+		const result = getContextToolbarPosition(
+			{ left: 200, top: 100, width: 200, height: 40 },
+			{ width: 320, height: 120 },
+			{ width: 800, height: 220 },
+		)
+
+		expect(result.placement).toBe("bottom")
+		expect(result.top).toBe(92)
+	})
+
+	it("limits width only when the viewport is narrower than the content", () => {
+		const result = getContextToolbarPosition(
+			{ left: 80, top: 100, width: 120, height: 40 },
+			{ width: 680, height: 48 },
+			{ width: 400, height: 600 },
+		)
+
+		expect(result.width).toBe(384)
+		expect(result.left).toBe(8)
 	})
 })

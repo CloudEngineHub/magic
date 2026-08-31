@@ -29,6 +29,8 @@ export function getElementCapabilities(element: SelectedElementInfo | null) {
 			isVoid: false,
 			isContainer: false,
 			showTypography: false,
+			showFontSize: false,
+			showFontSizeAdjuster: false,
 			showParagraph: false,
 			showImage: false,
 			showLayout: false,
@@ -49,6 +51,10 @@ export function getElementCapabilities(element: SelectedElementInfo | null) {
 	const isLink = tagName === "a"
 	const isVoid = VOID_TAGS.has(tagName)
 	const isContainer = !isVoid
+	const hasDirectText = element.hasDirectTextContent === true
+	const showTypography = isText && hasDirectText
+	const showFontSize = showTypography
+	const showFontSizeAdjuster = isContainer && !isImage
 	const parentDisplay = element.computedStyles.parentDisplay
 
 	return {
@@ -56,8 +62,10 @@ export function getElementCapabilities(element: SelectedElementInfo | null) {
 		isText,
 		isVoid,
 		isContainer,
-		showTypography: isText,
-		showParagraph: isText,
+		showTypography,
+		showFontSize,
+		showFontSizeAdjuster,
+		showParagraph: showTypography,
 		showImage: isImage,
 		showLayout: true,
 		showFlexGrid:
