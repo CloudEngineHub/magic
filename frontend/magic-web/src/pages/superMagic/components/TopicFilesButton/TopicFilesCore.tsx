@@ -6,6 +6,7 @@ import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "rea
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import MagicSpin from "@/components/base/MagicSpin"
 import MagicIcon from "@/components/base/MagicIcon"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import CustomTree from "./components/CustomTree/CustomTree"
@@ -2242,7 +2243,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							data-testid="topic-files-list-loading"
 						>
 							<div className="flex flex-col items-center gap-3">
-								<Loader2 size={20} className="animate-spin text-muted-foreground" />
+								<MagicSpin spinning />
 								<p className="text-sm text-muted-foreground">
 									{t("topicFiles.loadingFiles")}
 								</p>
