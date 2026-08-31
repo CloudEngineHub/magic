@@ -1738,6 +1738,14 @@ class ProjectAppService extends AbstractAppService
             ];
         }
 
+        // The project authorization above is bound to the route/token project. A
+        // caller-supplied parent_id must belong to that same project before it can
+        // be used as the root of a file-tree traversal.
+        $parentFile = $this->magicFSFileDomainService->getFileById($parentId);
+        if ((int) $parentFile->getProjectId() !== (int) $requestDTO->getProjectId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+        }
+
         // Only return workspace-type files; filter at DB level to avoid loading snapshot/other files
         $fileTree = $this->magicFSFileDomainService->getFileTree($parentId, -1, 0, StorageType::WORKSPACE->value);
         /** @var TaskFileEntity[] $entities */
