@@ -11,7 +11,7 @@ import {
 	type PersistableMessage,
 	type WebSocketRecordSource,
 } from "./persistence"
-import { notifyAskUserV2BrowserNotificationFromMessageNode } from "../services/askUserBrowserNotificationService"
+import { notifyAskUserV2BrowserNotificationFromToolCalls } from "../services/askUserBrowserNotificationService"
 import { ASK_USER_TOOL } from "../components/MessageList/utils/askUserConstants"
 import {
 	getRawMessageNode,
@@ -5109,6 +5109,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				messageChunk.correlation_id,
 			)
 		}
+		if (toolCallDeltas.length > 0 || isFinalChunk) {
+			this.notifyAskUserV2BrowserNotification(topicId, streamState.tool_calls)
+		}
 		if (isFinalChunk) {
 			this.publishStreamEnded(
 				topicId,
@@ -7427,6 +7430,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	private isAskUserToolCall(tc: ToolCall) {
 		return tc.function?.name === ASK_USER_TOOL.name || tc.tool?.name === ASK_USER_TOOL.name
+	}
+
+	private notifyAskUserV2BrowserNotification(
+		topicId: string,
+		toolCalls: ToolCall[] | undefined,
+		messageSendTime?: number,
+	) {
+		if (!topicId || !Array.isArray(toolCalls) || toolCalls.length === 0) return
+		if (!toolCalls.some((toolCall) => this.isAskUserToolCall(toolCall))) return
+
+		const toolResponseMap = this.toolResponseMap.get(topicId)
+		const hydratedToolCalls = toolCalls.map((toolCall) => {
+			const toolId = String(toolCall?.id || "").trim()
+			const mappedTool = toolId ? toolResponseMap?.get(toolId) : undefined
+			if (!mappedTool) return toolCall
+			return { ...toolCall, tool: mappedTool }
+		})
+
+		notifyAskUserV2BrowserNotificationFromToolCalls({
+			topicId,
+			toolCalls: hydratedToolCalls,
+			messageSendTime,
+		})
 	}
 
 	private isSettledToolResponse(response?: ToolResponseState) {
