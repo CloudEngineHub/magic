@@ -62,6 +62,12 @@ export interface VirtualMessageListProps {
 	getScrollElement: () => HTMLDivElement | null
 	/** Height of whatever the caller renders between the scroll container and this list. */
 	startMargin?: number
+	/**
+	 * Distance from the viewport top at which the pinned User turn parks. Defaults to the
+	 * workspace's header line, so a shell that has no such header must state its own — before
+	 * virtualization this was the caller's `top-*` class on the sticky row itself.
+	 */
+	stickyTopOffset?: number
 	renderNode: (args: { item: VirtualMessageItem }) => ReactNode
 	stickyMessageClassName?: string
 	/** Disable the shared mobile mask when a caller needs the desktop mask appearance. */
@@ -309,6 +315,7 @@ function VirtualMessageListInner({
 	isMobile,
 	getScrollElement,
 	startMargin = 0,
+	stickyTopOffset: stickyTopOffsetProp,
 	renderNode,
 	stickyMessageClassName,
 	useMobileStickyOverlay = true,
@@ -329,7 +336,7 @@ function VirtualMessageListInner({
 	const stickyTopValueRef = useRef<number | null>(null)
 	const [activeStickyIndex, setActiveStickyIndex] = useState(NO_STICKY_INDEX)
 
-	const stickyTopOffset = getStickyMessageTopOffset(isMobile)
+	const stickyTopOffset = stickyTopOffsetProp ?? getStickyMessageTopOffset(isMobile)
 	// Callers may hand over a plain ref that is only populated once their own scroll element
 	// commits, which happens after this subtree. Re-read it every commit so the virtualizer
 	// mounts on the very next render instead of silently rendering nothing.
@@ -495,9 +502,18 @@ function VirtualMessageListInner({
 		syncSticky()
 	}, [sequenceSignature, syncSticky])
 
+	/**
+	 * virtua clamps its own render range to the item count but takes `keepMounted` verbatim, so an
+	 * index left over from a longer list resolves to no child and throws while rendering. The
+	 * pinned index is state driven by scroll and measurement, so it always trails a render that
+	 * shortens the list — replaying a shared topic restarts it from empty.
+	 */
 	const keepMounted = useMemo(
-		() => (activeStickyIndex === NO_STICKY_INDEX ? undefined : [activeStickyIndex]),
-		[activeStickyIndex],
+		() =>
+			activeStickyIndex === NO_STICKY_INDEX || activeStickyIndex >= rowCount
+				? undefined
+				: [activeStickyIndex],
+		[activeStickyIndex, rowCount],
 	)
 
 	const rows = useMemo(() => {

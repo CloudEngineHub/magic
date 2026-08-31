@@ -1,7 +1,5 @@
 import { cn } from "@/utils/cn"
 
-export const USER_MESSAGE_STICKY_POSITION_CLASS = "sticky z-20"
-
 export const USER_MESSAGE_STICKY_MASK_CLASS = cn(
 	"isolate overflow-visible",
 	"[--sticky-message-mask-bg:rgb(var(--sidebar-rgb))] [--sticky-message-mask-fade-from:rgb(var(--sidebar-rgb))]",
@@ -10,22 +8,11 @@ export const USER_MESSAGE_STICKY_MASK_CLASS = cn(
 	"[&>*]:relative [&>*]:z-[1]",
 )
 
-export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
-	USER_MESSAGE_STICKY_POSITION_CLASS,
-	USER_MESSAGE_STICKY_MASK_CLASS,
-)
-
 /** Mobile keeps the same sticky User row but uses the mobile page background without a fade tail. */
 export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 	"before:bg-[rgb(var(--mobile-background-rgb))]",
 	"after:bg-none",
 )
-
-export function getUserMessageStickyTopClass(
-	isMobile: boolean,
-): "top-0 [--sticky-message-top:0px]" | "top-[40px] [--sticky-message-top:40px]" {
-	return isMobile ? "top-0 [--sticky-message-top:0px]" : "top-[40px] [--sticky-message-top:40px]"
-}
 
 /** Extra classes applied to the row wrapper when the message is from the user */
 export const USER_MESSAGE_ROW_CLASS = "flex min-w-0 justify-end"

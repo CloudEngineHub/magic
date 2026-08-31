@@ -22,6 +22,8 @@ const virtualState = vi.hoisted(() => ({
 	viewportSize: 400,
 	resizeCallbacks: [] as ResizeObserverCallback[],
 	scrollToIndexCalls: [] as Array<[number, Record<string, unknown> | undefined]>,
+	/** Every render's pinned indices against the rows actually available to resolve them. */
+	keepMountedRenders: [] as Array<{ keepMounted?: Array<number>; rowCount: number }>,
 }))
 
 /**
@@ -31,6 +33,10 @@ const virtualState = vi.hoisted(() => ({
 vi.mock("virtua", () => ({
 	Virtualizer: forwardRef((props: Record<string, any>, ref) => {
 		virtualState.lastProps = props
+		virtualState.keepMountedRenders.push({
+			keepMounted: props.keepMounted,
+			rowCount: ((props.children as Array<unknown>) || []).length,
+		})
 		useImperativeHandle(ref, () => ({
 			get scrollOffset() {
 				return virtualState.scrollOffset
@@ -143,6 +149,7 @@ describe("VirtualMessageList", () => {
 		virtualState.scrollSize = 2000
 		virtualState.resizeCallbacks = []
 		virtualState.scrollToIndexCalls = []
+		virtualState.keepMountedRenders = []
 		vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
 	})
 
@@ -281,6 +288,44 @@ describe("VirtualMessageList", () => {
 		expect(virtualState.lastProps?.keepMounted).toEqual([3])
 	})
 
+	it("drops the pinned row from keepMounted once the list no longer reaches it", () => {
+		// virtua clamps its own range but renders keepMounted verbatim, so a stale index resolves
+		// to no child and throws. Replaying a shared topic restarts the list from empty.
+		const viewport = createViewport()
+		const renderWith = (messages: Array<SuperMagicMessageItem>) => {
+			const projection = buildVirtualMessageProjection(messages)
+			return (
+				<VirtualMessageList
+					items={projection.items}
+					userIndices={projection.userIndices}
+					isMobile={false}
+					getScrollElement={() => viewport}
+					renderNode={({ item }) => <span>{item.key}</span>}
+				/>
+			)
+		}
+
+		const view = render(
+			renderWith([
+				message("user-0", "user"),
+				message("assistant-1", "assistant"),
+				message("assistant-2", "assistant"),
+				message("user-3", "user"),
+				message("assistant-4", "assistant"),
+			]),
+		)
+
+		scrollTo(4 * ROW_HEIGHT)
+		expect(virtualState.lastProps?.keepMounted).toEqual([3])
+
+		view.rerender(renderWith([message("user-0", "user")]))
+
+		const outOfRange = virtualState.keepMountedRenders.filter(({ keepMounted, rowCount }) =>
+			(keepMounted ?? []).some((index) => index >= rowCount),
+		)
+		expect(outOfRange).toEqual([])
+	})
+
 	it("pushes the pinned row out as the next User row reaches the park line", () => {
 		const { container } = renderList([
 			message("user-0", "user"),
@@ -298,6 +343,20 @@ describe("VirtualMessageList", () => {
 		// pinned row must translate up in lockstep so the handoff has no overlap or gap.
 		scrollTo(140)
 		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("-40px")
+	})
+
+	it("lets a shell without a header park the pinned turn flush with the viewport top", () => {
+		// The workspace parks below its header line; the share shell has no header. Before
+		// virtualization this was the caller's `top-*` class on the sticky row itself.
+		const { container } = renderList(
+			[message("user-0", "user"), message("assistant-1", "assistant")],
+			{ stickyTopOffset: 0 },
+		)
+		const canvas = container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+
+		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("0px")
 	})
 
 	it("offsets the push-out by startMargin because item offsets exclude it", () => {
