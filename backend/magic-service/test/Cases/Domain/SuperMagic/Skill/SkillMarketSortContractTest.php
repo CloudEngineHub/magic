@@ -128,7 +128,7 @@ final class SkillMarketSortContractTest extends TestCase
         self::assertStringContainsString('instanceof SkillMarketInstalledEvent', $source);
     }
 
-    public function testSkillUsageEventsAreOnlyEnabledForSandboxFileUrlRequests(): void
+    public function testSkillFileUrlRequestsUseTheSameServiceMethod(): void
     {
         $servicePath = dirname(__DIR__, 5) . '/app/Application/SuperMagic/Skill/Service/SkillAppService.php';
         $sandboxApiPath = dirname(__DIR__, 5) . '/app/Interfaces/SuperMagic/Agent/Facade/Sandbox/SkillSandboxApi.php';
@@ -141,8 +141,11 @@ final class SkillMarketSortContractTest extends TestCase
         self::assertIsString($serviceSource);
         self::assertIsString($sandboxApiSource);
         self::assertIsString($skillApiSource);
-        self::assertStringContainsString('getSkillFileUrlsByIdsForSandbox', $serviceSource);
-        self::assertStringContainsString('getSkillFileUrlsByIdsForSandbox($requestContext, $requestDTO)', $sandboxApiSource);
+        self::assertStringContainsString('public function getSkillFileUrlsByIds(', $serviceSource);
+        self::assertStringNotContainsString('bool $recordUsage', $serviceSource);
+        self::assertStringContainsString('getSkillFileUrlsByIds($requestContext, $requestDTO)', $sandboxApiSource);
+        self::assertStringContainsString('new SkillMarketUsedEvent(', $serviceSource);
+        self::assertStringNotContainsString('if ($recordUsage)', $serviceSource);
         self::assertStringContainsString('getSkillFileUrlsByIds($requestContext, $requestDTO)', $skillApiSource);
         self::assertStringNotContainsString('getSkillFileUrlsByIds($requestContext, $requestDTO,', $skillApiSource);
     }
