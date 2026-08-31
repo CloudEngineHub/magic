@@ -912,6 +912,39 @@ class VideoQueueDomainServiceTest extends TestCase
         $this->assertSame(['seedance' => ['camera_movement' => 'truck left']], $operation->getRawRequest()['extensions']);
     }
 
+    public function testCreateOperationRejectsInputModeNotDeclaredByVideoModel(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'doubao-seedance-2-0-260128',
+            'task' => 'edit',
+            'prompt' => 'edit the source video',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => 'https://example.com/source.mp4'],
+                ],
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('input_mode video_edit is not supported by the current video model');
+
+        $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'doubao-seedance-2-0-260128',
+            'provider-model-seedance-v2',
+            ProviderCode::VolcengineArk,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'input_modes' => [
+                    VideoInputMode::Standard->value => ['supported_fields' => []],
+                    VideoInputMode::OmniReference->value => ['supported_fields' => ['reference_videos']],
+                ],
+            ]),
+        );
+    }
+
     public function testCreateOperationNormalizesReferenceInputsAndInputModeIntoCanonicalInputs(): void
     {
         $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
