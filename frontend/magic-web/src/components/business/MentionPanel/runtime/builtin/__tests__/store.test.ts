@@ -442,6 +442,45 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(skillMatch?.type).toBe(MentionItemType.SKILL)
 		})
 
+		it("should prefer the skill identifier over unrelated description matches", async () => {
+			vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([
+				{
+					id: "creating-slides",
+					code: "creating-slides",
+					name: "Create Slides",
+					description:
+						"Slide/PPT creation skill that provides complete slide creation capabilities. CRITICAL - When user message contains [@slide_project:...] mention, load this skill first.",
+					logo: null,
+					mention_source: "system",
+					package_name: "creating-slides",
+				},
+				{
+					id: "canvas-designer",
+					code: "canvas-designer",
+					name: "Canvas Designer",
+					description:
+						"Core canvas design skill covering project management. CRITICAL - When user message contains [@design_canvas_project:...] mention, load this skill first.",
+					logo: null,
+					mention_source: "system",
+					package_name: "canvas-designer",
+				},
+				{
+					id: "skill-creator",
+					code: "skill-creator",
+					name: "Skill Creator",
+					description: "Create and evaluate skills.",
+					logo: null,
+					mention_source: "system",
+					package_name: "skill-creator",
+				},
+			])
+
+			await mentionPanelStore.preLoadList()
+			const results = await searchItems("skill-cre")
+
+			expect(results.map((item) => item.name)).toEqual(["Skill Creator"])
+		})
+
 		it("should prioritize exact matches after HTML priority", async () => {
 			await mentionPanelStore.preLoadList()
 			const results = await searchItems("awesome-page.html")

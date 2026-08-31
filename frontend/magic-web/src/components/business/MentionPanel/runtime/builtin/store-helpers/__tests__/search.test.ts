@@ -25,6 +25,10 @@ describe("search helpers", () => {
 		expect(matchesQuery("component.tsx", "xyz")).toBe(false)
 	})
 
+	it("matches skill identifiers across display-name separators", () => {
+		expect(matchesQuery("Skill Creator", "skill-cre")).toBe(true)
+	})
+
 	it("sorts files before tools and prefers html files", () => {
 		const results = sortSearchResults(
 			[
@@ -50,5 +54,27 @@ describe("search helpers", () => {
 		)
 
 		expect(results.map((item) => item.id)).toEqual(["html", "tsx", "tool"])
+	})
+
+	it("ranks a package-name match before description-only matches", () => {
+		const results = sortSearchResults(
+			[
+				createMentionItem({
+					id: "canvas",
+					type: MentionItemType.SKILL,
+					name: "Canvas Designer",
+					description: "Core canvas design skill with a critical marker.",
+				}),
+				createMentionItem({
+					id: "skill-creator",
+					type: MentionItemType.SKILL,
+					name: "Skill Creator",
+					package_name: "skill-creator",
+				}),
+			],
+			"skill-cre",
+		)
+
+		expect(results.map((item) => item.id)).toEqual(["skill-creator", "canvas"])
 	})
 })
