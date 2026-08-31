@@ -149,8 +149,13 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 统一查询一次已存在的分享（如果存在），避免重复查询
         // 用于区分创建场景和更新场景，以及获取数据库中的原值
-        // 只用 resource_id 查询，不校验 resource_type，避免类型转换(13↔12)时查询失败
-        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed($dto->resourceId);
+        // Existing shares are scoped by resource type and organization. A resource ID
+        // alone is caller-controlled and must not select another tenant's share.
+        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed(
+            $dto->resourceId,
+            $resourceType->value,
+            $organizationCode,
+        );
 
         // 校验 file_ids 必填条件（问题2修复：使用 hasField() 判断，区分"不传"和"传空数组"）
         $isFileCollectionType = $resourceType === ResourceType::FileCollection;
@@ -267,12 +272,15 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         // 4. 验证资源所有者权限（只允许项目创建者分享，协作者不允许）
+        // This check must also run when updating an existing share. The existing
+        // record is selected from caller-controlled input and cannot authorize a
+        // different real resource (notably project_id for Project shares).
+        if (! $factory->hasSharePermission($realResourceId, $userId, $organizationCode)) {
+            ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
+        }
+
         if ($existingShare) {
             if ($existingShare->getCreatedUid() !== $userId) {
-                ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
-            }
-        } else {
-            if (! $factory->hasSharePermission($realResourceId, $userId, $organizationCode)) {
                 ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
             }
         }
