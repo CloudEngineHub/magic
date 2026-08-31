@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { MentionItemType, type MentionItem } from "../../../../types"
-import { fuzzyMatch, matchesQuery, sortSearchResults } from "../search"
+import type { MentionPanelPluginHost } from "../../registry-types"
+
+const { pluginSearch } = vi.hoisted(() => ({
+	pluginSearch: vi.fn(() => []),
+}))
+
+vi.mock("../../registry", () => ({
+	mentionPanelSearchPlugins: [{ id: "capture-query", search: pluginSearch }],
+}))
+
+import { fuzzyMatch, matchesQuery, searchBuiltinMentionItems, sortSearchResults } from "../search"
 
 function createMentionItem(overrides: Partial<MentionItem>): MentionItem {
 	return {
@@ -27,6 +37,22 @@ describe("search helpers", () => {
 
 	it("matches skill identifiers across display-name separators", () => {
 		expect(matchesQuery("Skill Creator", "skill-cre")).toBe(true)
+	})
+
+	it("preserves separators in the query passed to search plugins", async () => {
+		pluginSearch.mockClear()
+		const pluginHost = {} as MentionPanelPluginHost
+
+		await searchBuiltinMentionItems({
+			query: "  Foo_Bar  ",
+			pluginHost,
+		})
+
+		expect(pluginSearch).toHaveBeenCalledWith({
+			store: pluginHost,
+			query: "Foo_Bar",
+			normalizedQuery: "foo_bar",
+		})
 	})
 
 	it("sorts files before tools and prefers html files", () => {

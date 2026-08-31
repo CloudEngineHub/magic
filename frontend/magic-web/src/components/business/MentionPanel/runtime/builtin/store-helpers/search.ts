@@ -12,13 +12,14 @@ export async function searchBuiltinMentionItems(params: {
 	const { query, pluginHost } = params
 	if (!query || query.trim() === "") return []
 
-	const normalizedQuery = normalizeSearchText(query.trim())
+	const pluginQuery = query.trim()
+	const normalizedQuery = pluginQuery.toLowerCase()
 	const results = (
 		await Promise.all(
 			mentionPanelSearchPlugins.map((plugin) =>
 				plugin.search({
 					store: pluginHost,
-					query,
+					query: pluginQuery,
 					normalizedQuery,
 				}),
 			),
@@ -57,7 +58,9 @@ export function sortSearchResults(results: MentionItem[], normalizedQuery: strin
 }
 
 function getSearchMatchPriority(item: MentionItem, normalizedQuery: string): number {
-	const candidates = [item.name, item.package_name].filter(Boolean)
+	const candidates: string[] = [item.name, item.package_name].filter(
+		(value): value is string => typeof value === "string" && value.length > 0,
+	)
 	const normalizedCandidates = candidates.map(normalizeSearchText)
 
 	if (normalizedCandidates.some((candidate) => candidate === normalizedQuery)) return 0
