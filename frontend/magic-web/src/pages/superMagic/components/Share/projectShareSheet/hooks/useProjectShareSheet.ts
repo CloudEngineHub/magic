@@ -145,7 +145,14 @@ function createSelectedHierarchyNode(item: AttachmentItem): SelectedFileHierarch
 
 	return {
 		id: itemId,
-		name: item.name || item.file_name || item.display_filename || item.filename || "",
+		// Prefer the recording-only UI label while preserving original attachment identity.
+		name:
+			item.share_display_name ||
+			item.name ||
+			item.file_name ||
+			item.display_filename ||
+			item.filename ||
+			"",
 		isDirectory: Boolean(item.is_directory),
 		fileExtension: item.file_extension,
 		children: (item.children || [])
