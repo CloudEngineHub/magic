@@ -498,6 +498,25 @@ export default function LargeMarkdownPreview({
 	const [searchResultIndex, setSearchResultIndex] = useState(0)
 	const { prefersColorScheme } = useTheme()
 	const searchEnabled = enableSearch && isTabActive
+	const createSearchWorker = useCallback(() => {
+		const nextWorker = new SearchWorker()
+		nextWorker.onmessage = (event: MessageEvent<SearchWorkerResponse>) => {
+			if (searchWorkerRef.current !== nextWorker) return
+			if (
+				event.data.requestId === searchRequestIdRef.current &&
+				searchWorkerTimeoutRef.current !== null
+			) {
+				window.clearTimeout(searchWorkerTimeoutRef.current)
+				searchWorkerTimeoutRef.current = null
+			}
+			if (event.data.requestId !== searchRequestIdRef.current) return
+			setSearchResults(event.data.results)
+			setSearchResultIndex(0)
+		}
+		nextWorker.postMessage({ type: "init", content, chunks })
+		searchWorkerRef.current = nextWorker
+		return nextWorker
+	}, [chunks, content])
 	const resultsByChunk = useMemo(() => {
 		const resultMap = new Map<number, MarkdownSearchResult[]>()
 		searchResults.forEach((result) => {
@@ -537,21 +556,7 @@ export default function LargeMarkdownPreview({
 		searchRequestIdRef.current += 1
 		let worker: Worker | null = null
 		try {
-			worker = new SearchWorker()
-			worker.onmessage = (event: MessageEvent<SearchWorkerResponse>) => {
-				if (
-					event.data.requestId === searchRequestIdRef.current &&
-					searchWorkerTimeoutRef.current !== null
-				) {
-					window.clearTimeout(searchWorkerTimeoutRef.current)
-					searchWorkerTimeoutRef.current = null
-				}
-				if (event.data.requestId !== searchRequestIdRef.current) return
-				setSearchResults(event.data.results)
-				setSearchResultIndex(0)
-			}
-			worker.postMessage({ type: "init", content, chunks })
-			searchWorkerRef.current = worker
+			worker = createSearchWorker()
 		} catch {
 			// Vitest and older embedded browsers may not expose module workers. Literal searches
 			// can use the bounded synchronous fallback; regex searches remain disabled to protect
@@ -561,15 +566,27 @@ export default function LargeMarkdownPreview({
 
 		return () => {
 			worker?.terminate()
+			if (searchWorkerRef.current && searchWorkerRef.current !== worker) {
+				searchWorkerRef.current.terminate()
+			}
+			searchWorkerRef.current = null
 			if (searchWorkerTimeoutRef.current !== null) {
 				window.clearTimeout(searchWorkerTimeoutRef.current)
 				searchWorkerTimeoutRef.current = null
 			}
-			if (searchWorkerRef.current === worker) searchWorkerRef.current = null
 		}
-	}, [chunks, content, searchEnabled])
+	}, [createSearchWorker, searchEnabled])
 
 	useEffect(() => {
+		// Every search-state transition invalidates the previous request first. This
+		// includes clearing the query, so a late worker response can never repopulate
+		// results for an empty search box.
+		searchRequestIdRef.current += 1
+		if (searchWorkerTimeoutRef.current !== null) {
+			window.clearTimeout(searchWorkerTimeoutRef.current)
+			searchWorkerTimeoutRef.current = null
+		}
+
 		if (!searchEnabled) {
 			setSearchVisible(false)
 			setSearchQuery("")
@@ -577,13 +594,7 @@ export default function LargeMarkdownPreview({
 			setSearchResultIndex(0)
 			return
 		}
-		if (searchWorkerTimeoutRef.current !== null) {
-			window.clearTimeout(searchWorkerTimeoutRef.current)
-			searchWorkerTimeoutRef.current = null
-		}
-
-		const requestId = searchRequestIdRef.current + 1
-		searchRequestIdRef.current = requestId
+		const requestId = searchRequestIdRef.current
 		if (!searchQuery) {
 			setSearchResults([])
 			setSearchResultIndex(0)
@@ -609,6 +620,13 @@ export default function LargeMarkdownPreview({
 					searchWorkerTimeoutRef.current = null
 					setSearchResults([])
 					setSearchResultIndex(0)
+					// Recreate the worker immediately so a subsequent search does not
+					// permanently lose regex support for this preview instance.
+					try {
+						createSearchWorker()
+					} catch {
+						searchWorkerRef.current = null
+					}
 				}, SEARCH_WORKER_TIMEOUT_MS)
 				worker.postMessage({
 					type: "search",
@@ -634,7 +652,7 @@ export default function LargeMarkdownPreview({
 		}, 80)
 
 		return () => window.clearTimeout(timer)
-	}, [caseSensitive, chunks, content, searchEnabled, searchQuery, useRegex])
+	}, [caseSensitive, chunks, content, createSearchWorker, searchEnabled, searchQuery, useRegex])
 
 	useEffect(() => {
 		if (!searchEnabled || !searchVisible) return
