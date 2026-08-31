@@ -538,6 +538,11 @@ class FileManagementAppService extends AbstractAppService
                         organizationCode: $dataIsolation->getCurrentOrganizationCode(),
                         projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
                     );
+                } else {
+                    $parentEntity = $this->taskFileDomainService->getDirectoryByIdAndProject($parentId, $projectId);
+                    if ($parentEntity === null) {
+                        ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.parent_file_not_found'));
+                    }
                 }
             } else {
                 // 用户空间没有项目根节点，必须由父目录锚定并使用文件 owner 鉴权。

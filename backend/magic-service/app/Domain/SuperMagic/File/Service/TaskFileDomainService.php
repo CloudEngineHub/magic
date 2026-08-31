@@ -108,6 +108,14 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据项目ID获取项目目录，避免跨项目使用 parent_id。
+     */
+    public function getDirectoryByIdAndProject(int $parentId, int $projectId): ?TaskFileEntity
+    {
+        return $this->taskFileRepository->getDirectoryByIdAndProject($parentId, $projectId);
+    }
+
+    /**
      * 根据文件编号获取文件实体，不限制文件所属空间。
      */
     public function getFileEntityById(int $fileId): TaskFileEntity
