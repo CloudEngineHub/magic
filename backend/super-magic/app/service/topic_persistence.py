@@ -87,6 +87,66 @@ class TopicPersistenceManager:
     def ensure_directories(self) -> None:
         self.chat_history_dir.mkdir(parents=True, exist_ok=True)
 
+    def has_chat_history_data(self) -> bool:
+        """Return whether the topic chat-history source contains usable data."""
+        try:
+            return any(
+                entry.name != "llm_request" and not entry.name.startswith(".")
+                for entry in self.chat_history_dir.iterdir()
+            )
+        except OSError as error:
+            logger.warning("检查 topic 聊天记录失败: %s", error)
+            return False
+
+    def restore_topic_chat_history(self, target_dir: Path) -> None:
+        """Replace a local chat-history directory with the topic source atomically."""
+        self._replace_directory(self.chat_history_dir, Path(target_dir))
+
+    @staticmethod
+    def replace_directory(source_dir: Path, target_dir: Path) -> None:
+        """Replace a target directory with a staged source directory."""
+        TopicPersistenceManager._replace_directory(Path(source_dir), Path(target_dir))
+
+    def clear_topic_chat_history(self) -> None:
+        """Remove topic chat-history contents while retaining the directory itself."""
+        self.chat_history_dir.mkdir(parents=True, exist_ok=True)
+        for entry in self.chat_history_dir.iterdir():
+            if entry.name == ".git":
+                continue
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+
+    @staticmethod
+    def _replace_directory(source_dir: Path, target_dir: Path) -> None:
+        """Copy through staging and replace the target without merging stale files."""
+        source_dir = Path(source_dir)
+        target_dir = Path(target_dir)
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=".chat-history-restore-", dir=target_dir.parent
+        ) as temp_dir:
+            staged_dir = Path(temp_dir) / target_dir.name
+            shutil.copytree(
+                source_dir,
+                staged_dir,
+                ignore=shutil.ignore_patterns(".git"),
+            )
+            backup_dir = target_dir.with_name(f".{target_dir.name}.restore-backup")
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+            if target_dir.exists():
+                target_dir.rename(backup_dir)
+            try:
+                staged_dir.rename(target_dir)
+            except Exception:
+                if backup_dir.exists() and not target_dir.exists():
+                    backup_dir.rename(target_dir)
+                raise
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+
     def is_healthy(self, topic_id: Optional[str]) -> bool:
         """Return true when the sandbox-provided topic directories are available."""
         if not topic_id:

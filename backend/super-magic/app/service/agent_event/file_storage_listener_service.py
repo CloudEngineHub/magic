@@ -45,7 +45,7 @@ from app.infrastructure.storage.factory import StorageFactory
 from app.infrastructure.storage.types import StorageResponse
 from app.path_manager import PathManager
 from app.service.agent_event.base_listener_service import BaseListenerService
-from app.service.topic_persistence import should_upload_component
+from app.service.topic_persistence import TopicPersistenceManager
 from app.utils.init_client_message_util import InitClientMessageUtil
 from app.utils.path_utils import get_workspace_dir, get_storage_dir_with_fallback
 
@@ -503,12 +503,6 @@ class FileStorageListenerService:
                 logger.error("无法获取topic_id，无法进行分离式打包")
                 return
 
-            persistence_healthy = agent_context.is_topic_persistence_healthy()
-            upload_chat_history = should_upload_component(
-                persistence_healthy=persistence_healthy,
-                component_persisted=agent_context.is_chat_history_persisted(),
-            )
-
             # Load local manifest to check current state
             # local_manifest = FileStorageListenerService._load_local_manifest()
 
@@ -535,12 +529,24 @@ class FileStorageListenerService:
             #     project_archive_info = local_manifest or ProjectArchiveInfo(archives={})
 
             # Process and upload chat history archive
-            if upload_chat_history:
-                await FileStorageListenerService._process_chat_history_archive(
-                    chat_history_dir, topic_id, storage_service
-                )
+            uploaded = await FileStorageListenerService._process_chat_history_archive(
+                chat_history_dir, topic_id, storage_service
+            )
+            if uploaded:
+                persistence = TopicPersistenceManager(PathManager.get_project_root())
+                try:
+                    await asyncio.to_thread(persistence.clear_topic_chat_history)
+                except Exception as error:
+                    # 清理失败不应覆盖 Agent 结果，也不应阻断 checkpoint 的后续同步。
+                    logger.warning(
+                        "聊天历史归档已上传，但清理 .topic/chat_history 失败，后续启动将重试: %s",
+                        error,
+                        exc_info=True,
+                    )
+                else:
+                    logger.info("聊天历史归档上传成功，已清理 .topic/chat_history")
             else:
-                logger.info("聊天历史已由持久卷持久化，跳过归档上传")
+                logger.warning("聊天历史归档上传失败，保留 .topic/chat_history 作为恢复源")
 
             # 每轮只上传本轮 checkpoint 归档与 manifest（不再整目录打包全量上传）
             await FileStorageListenerService._sync_checkpoints_archive(topic_id, storage_service)
@@ -653,7 +659,7 @@ class FileStorageListenerService:
         chat_history_dir: str,
         topic_id: str,
         storage_service
-    ) -> None:
+    ) -> bool:
         """
         Process chat history archive: compress if changed and upload
 
@@ -664,12 +670,16 @@ class FileStorageListenerService:
         """
         if not os.path.isdir(chat_history_dir) or not os.listdir(chat_history_dir):
             logger.info("聊天历史目录为空或不存在，跳过处理")
-            return
+            return False
 
-        await FileStorageListenerService._archive_and_upload_single_chat_history(chat_history_dir, topic_id, storage_service)
+        return await FileStorageListenerService._archive_and_upload_single_chat_history(
+            chat_history_dir, topic_id, storage_service
+        )
 
     @staticmethod
-    async def _archive_and_upload_single_chat_history(chat_history_dir: str, topic_id: str, storage_service) -> None:
+    async def _archive_and_upload_single_chat_history(
+        chat_history_dir: str, topic_id: str, storage_service
+    ) -> bool:
         """
         Compress and upload a single chat history archive.
 
@@ -721,9 +731,11 @@ class FileStorageListenerService:
                     options=None
                 )
                 logger.info(f"聊天历史归档上传成功: {object_key}")
+                return True
 
         except Exception as e:
             logger.error(f"处理聊天历史归档时出错: {e}", exc_info=True)
+            return False
 
     @staticmethod
     async def _sync_checkpoints_archive(topic_id: str, storage_service) -> None:

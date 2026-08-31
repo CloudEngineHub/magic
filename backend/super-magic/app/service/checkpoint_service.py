@@ -180,8 +180,9 @@ class CheckpointService(Base):
                 file_snapshots=[]
             )
 
-            # 注意：聊天历史快照现在通过事件机制自动处理，不再在创建checkpoint时进行
-            # 聊天历史会在每次变更时自动备份到当前checkpoint的chat_history_snapshots目录
+            # 注意：聊天历史快照由事件监听器维护——BEFORE_MAIN_AGENT_RUN 在创建
+            # checkpoint 后立即拍 initial 整目录快照；CHAT_HISTORY_CHANGED 在每次
+            # 聊天记录保存后刷新 latest 整目录快照。本服务不直接复制聊天历史。
 
             # 保存checkpoint信息
             success = await self.metadata_manager.save_checkpoint_info(checkpoint_info)

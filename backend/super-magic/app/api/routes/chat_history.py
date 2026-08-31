@@ -46,7 +46,7 @@ def build_chat_history_archive(source_dir: Path, dest_zip_path: str) -> str:
 
 @router.get("/download")
 async def download_chat_history(background_tasks: BackgroundTasks):
-    """打包并下载 .topic/chat_history 目录，保持旧 zip 顶层结构兼容。"""
+    """打包并下载本地 .chat_history 目录，保持旧 zip 顶层结构兼容。"""
     try:
         # 检查目录是否存在
         chat_history_dir = PathManager.get_chat_history_dir()

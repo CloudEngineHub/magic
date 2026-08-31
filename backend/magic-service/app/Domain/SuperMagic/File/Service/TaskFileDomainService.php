@@ -127,6 +127,32 @@ class TaskFileDomainService
         return $fileEntity->getSpaceType() === FileSpaceType::PROJECT->value;
     }
 
+    /**
+     * Filter a batch of file entities to project-space files without issuing
+     * one database query per entity.
+     *
+     * @param TaskFileEntity[] $fileEntities
+     * @return TaskFileEntity[]
+     */
+    public function filterProjectSpaceFiles(array $fileEntities): array
+    {
+        return array_values(array_filter(
+            $fileEntities,
+            fn (TaskFileEntity $fileEntity): bool => $this->isProjectSpaceFile($fileEntity)
+        ));
+    }
+
+    /**
+     * Batch-load project-space files by IDs.
+     *
+     * @param int[] $fileIds
+     * @return TaskFileEntity[]
+     */
+    public function getProjectSpaceFilesByIds(array $fileIds, int $projectId = 0): array
+    {
+        return $this->getFilesByIds($fileIds, $projectId, FileSpaceType::PROJECT->value);
+    }
+
     public function shouldEnterRecycleBin(TaskFileEntity $fileEntity, DeleteEventSource $source): bool
     {
         return $fileEntity->getFileId() > 0

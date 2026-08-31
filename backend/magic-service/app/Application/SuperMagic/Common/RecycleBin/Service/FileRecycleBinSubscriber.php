@@ -98,7 +98,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
     private function handleFilesBatchDeleted(FilesBatchDeletedEvent $event): void
     {
         $fileEntities = array_values(array_filter(
-            $event->getAllEntities(),
+            $this->taskFileDomainService->filterProjectSpaceFiles($event->getAllEntities()),
             fn (TaskFileEntity $fileEntity): bool => $this->taskFileDomainService->shouldEnterRecycleBin($fileEntity, $event->getSource())
         ));
         if (empty($fileEntities)) {

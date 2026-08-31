@@ -161,7 +161,7 @@ class AgentContext(BaseAgentContext):
             self.set_chat_history_dir(chat_history_dir)
         except Exception as e:
             logger.warning(f"无法获取聊天历史目录: {e}")
-            chat_history_dir = os.path.join(os.getcwd(), ".topic", "chat_history")
+            chat_history_dir = os.path.join(os.getcwd(), ".chat_history")
             self.set_chat_history_dir(chat_history_dir)
 
         # 迁移兼容状态：由启动阶段的 topic 持久化状态机设置，默认保守地关闭。
