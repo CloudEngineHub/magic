@@ -43,10 +43,12 @@ function createViewport({
 }
 
 /** Stands in for virtua's `VirtualizerHandle`: index addressing over a fixed 100px row grid. */
-function createVirtualizer(viewport: HTMLDivElement, itemCount: number) {
+function createVirtualizer(viewport: HTMLDivElement, itemCount: number, isMounted = () => true) {
 	return {
 		get itemCount() {
-			return itemCount
+			// The list publishes its adapter one commit before the virtualizer behind it mounts,
+			// and nothing is addressable until then.
+			return isMounted() ? itemCount : 0
 		},
 		get scrollOffset() {
 			return viewport.scrollTop
@@ -385,6 +387,31 @@ describe("useVirtualMessageScroll", () => {
 		act(() => result.current.scrollToBottom("auto"))
 
 		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(7, { align: "end", smooth: false })
+	})
+
+	it("carries the arrival jump across the commit where the virtualizer is not yet addressable", () => {
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 1200 })
+		let mounted = false
+		const virtualizer = createVirtualizer(viewport, 12, () => mounted)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(12),
+				topicKey: "topic-1",
+			}),
+		)
+
+		// The jump raised on arrival had nothing to write to, so it must not have been spent.
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
+
+		mounted = true
+		act(() => result.current.onVirtualizerChange(virtualizer, false))
+
+		// Note the absence of a size increase: the parked jump lands on the virtualizer becoming
+		// addressable, which is the only signal it gets when the list arrives already complete.
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, { align: "end" })
 	})
 
 	it("follows streaming growth while parked at the bottom", () => {

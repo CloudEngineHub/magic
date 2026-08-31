@@ -77,6 +77,8 @@ export function useVirtualMessageScroll({
 	 * topic must land at the latest message even though its viewport starts at offset 0.
 	 */
 	const autoFollowRef = useRef(true)
+	/** A jump to latest that was raised before the virtualizer could serve it. */
+	const pendingScrollToLatestRef = useRef(false)
 	const guardTimerRef = useRef<number | null>(null)
 	const previousScrollTopRef = useRef(0)
 	const isUserScrollInteractionRef = useRef(false)
@@ -104,26 +106,40 @@ export function useVirtualMessageScroll({
 		[clearGuard],
 	)
 
-	const scrollToLatest = useCallback(
-		(smooth: boolean) => {
+	/**
+	 * Both jumps that matter on arrival — mount and topic switch — run while the list has
+	 * published its adapter but not yet the virtualizer behind it, because the scroll element
+	 * only exists after that first render. Writing there is a no-op, and claiming `explicit`
+	 * ownership for it is actively harmful: it suppresses the follow-output signal that fires
+	 * the moment the virtualizer does mount, which is the only thing left able to carry the
+	 * intent out. So park the intent instead and let that signal flush it.
+	 */
+	const requestScrollToLatest = useCallback(
+		(smooth: boolean, guardDuration: number) => {
+			autoFollowRef.current = true
+			userHistoryIntentRef.current = false
+
 			const virtualizer = virtualizerRef.current
-			if (!virtualizer) return
-			const lastIndex = virtualizer.itemCount - 1
-			if (lastIndex < 0) return
+			const lastIndex = virtualizer ? virtualizer.itemCount - 1 : -1
+			if (!virtualizer || lastIndex < 0) {
+				pendingScrollToLatestRef.current = true
+				return
+			}
+
+			pendingScrollToLatestRef.current = false
+			ownershipRef.current = beginExplicitScroll(ownershipRef.current)
+			startGuard(guardDuration)
 			virtualizer.scrollToIndex(lastIndex, { align: "end", smooth })
 		},
-		[virtualizerRef],
+		[startGuard, virtualizerRef],
 	)
 
 	const scrollToBottom = useCallback(
 		(behavior: ScrollBehavior = "smooth") => {
-			autoFollowRef.current = true
-			userHistoryIntentRef.current = false
-			ownershipRef.current = beginExplicitScroll(ownershipRef.current)
-			startGuard(behavior === "smooth" ? 1000 : 300)
-			scrollToLatest(behavior === "smooth")
+			const smooth = behavior === "smooth"
+			requestScrollToLatest(smooth, smooth ? 1000 : 300)
 		},
-		[scrollToLatest, startGuard],
+		[requestScrollToLatest],
 	)
 
 	/**
@@ -155,6 +171,7 @@ export function useVirtualMessageScroll({
 		lastScrollSizeRef.current = 0
 		historyLoadStateRef.current = "idle"
 		historyRequestIdRef.current += 1
+		pendingScrollToLatestRef.current = false
 		ownershipRef.current = initialScrollOwnership()
 		previousItemCountRef.current = items.length
 	}
@@ -346,6 +363,21 @@ export function useVirtualMessageScroll({
 		const previousScrollSize = lastScrollSizeRef.current
 		lastScrollSizeRef.current = scrollSize
 
+		const lastIndex = instance.itemCount - 1
+		if (lastIndex < 0) return
+
+		// The virtualizer has just become writable, so a parked jump can finally land. It does
+		// not have to wait for the size to grow the way follow-output does, but an upward
+		// gesture in the meantime revokes it exactly as it revokes follow.
+		if (pendingScrollToLatestRef.current) {
+			pendingScrollToLatestRef.current = false
+			if (!autoFollowRef.current) return
+			ownershipRef.current = beginExplicitScroll(ownershipRef.current)
+			instance.scrollToIndex(lastIndex, { align: "end" })
+			ownershipRef.current = finishCorrection(ownershipRef.current, "explicit")
+			return
+		}
+
 		if (
 			!canFollowOutput(ownershipRef.current, {
 				totalSizeIncreased: scrollSize > previousScrollSize,
@@ -355,8 +387,6 @@ export function useVirtualMessageScroll({
 			return
 		}
 
-		const lastIndex = instance.itemCount - 1
-		if (lastIndex < 0) return
 		ownershipRef.current = beginFollowOutput(ownershipRef.current)
 		instance.scrollToIndex(lastIndex, { align: "end" })
 		ownershipRef.current = finishCorrection(ownershipRef.current, "follow-output")
@@ -365,13 +395,8 @@ export function useVirtualMessageScroll({
 	useEffect(() => {
 		pubsub.subscribe(
 			PubSubEvents.Message_Scroll_To_Bottom,
-			(options?: { behavior?: ScrollBehavior; time?: number }) => {
-				autoFollowRef.current = true
-				userHistoryIntentRef.current = false
-				ownershipRef.current = beginExplicitScroll(ownershipRef.current)
-				startGuard(options?.time || 1000)
-				scrollToLatest(options?.behavior !== "auto")
-			},
+			(options?: { behavior?: ScrollBehavior; time?: number }) =>
+				requestScrollToLatest(options?.behavior !== "auto", options?.time || 1000),
 		)
 		pubsub.subscribe(
 			PubSubEvents.Message_Register_Programmatic_Scroll,
@@ -390,7 +415,7 @@ export function useVirtualMessageScroll({
 			pubsub.unsubscribe(PubSubEvents.Message_Register_Programmatic_Scroll)
 			pubsub.unsubscribe(PubSubEvents.Message_Suppress_Auto_Scroll, handleSuppressAutoScroll)
 		}
-	}, [scrollToLatest, startGuard])
+	}, [requestScrollToLatest, startGuard])
 
 	useEffect(() => () => clearGuard(), [clearGuard])
 

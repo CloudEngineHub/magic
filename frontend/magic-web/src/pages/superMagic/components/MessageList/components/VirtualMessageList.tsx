@@ -375,10 +375,27 @@ function VirtualMessageListInner({
 		shiftRef.current = false
 	})
 
+	/**
+	 * `startMargin` tells virtua about the space before the list, but nothing describes the space
+	 * after it, and the caller renders its message column's bottom padding there — inside the same
+	 * scroll element, outside virtua's projected size. Aligning the last row's bottom to the
+	 * viewport bottom therefore stops short of the real scroll end by exactly that strip.
+	 * Deriving it from `scrollSize` keeps the caller's padding from having to be restated here.
+	 */
+	const getTrailingSpace = useCallback(() => {
+		const handle = handleRef.current
+		const lastIndex = rowCountRef.current - 1
+		if (!handle || lastIndex < 0) return 0
+		const projectedSize = handle.getItemOffset(lastIndex) + handle.getItemSize(lastIndex)
+		return Math.max(0, handle.scrollSize - startMarginRef.current - projectedSize)
+	}, [])
+
 	const adapter = useMemo<MessageListScrollAdapter>(
 		() => ({
 			get itemCount() {
-				return rowCountRef.current
+				// Rows only become addressable once the virtualizer is behind them; reporting
+				// them earlier would let the controller guard a write that goes nowhere.
+				return handleRef.current ? rowCountRef.current : 0
 			},
 			get scrollOffset() {
 				return handleRef.current?.scrollOffset ?? 0
@@ -393,9 +410,18 @@ function VirtualMessageListInner({
 			getItemOffset: (index) => handleRef.current?.getItemOffset(index) ?? 0,
 			getItemSize: (index) => handleRef.current?.getItemSize(index) ?? 0,
 			scrollTo: (offset) => handleRef.current?.scrollTo(offset),
-			scrollToIndex: (index, options) => handleRef.current?.scrollToIndex(index, options),
+			scrollToIndex: (index, options) => {
+				// Only a bottom-aligned write on the final row is asking for the scroll end; any
+				// other row wants its own bottom on the viewport line, untouched.
+				const targetsScrollEnd =
+					options?.align === "end" && index === rowCountRef.current - 1
+				handleRef.current?.scrollToIndex(
+					index,
+					targetsScrollEnd ? { ...options, offset: getTrailingSpace() } : options,
+				)
+			},
 		}),
-		[],
+		[getTrailingSpace],
 	)
 
 	useLayoutEffect(() => {

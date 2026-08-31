@@ -21,6 +21,7 @@ const virtualState = vi.hoisted(() => ({
 	scrollSize: 2000,
 	viewportSize: 400,
 	resizeCallbacks: [] as ResizeObserverCallback[],
+	scrollToIndexCalls: [] as Array<[number, Record<string, unknown> | undefined]>,
 }))
 
 /**
@@ -45,7 +46,9 @@ vi.mock("virtua", () => ({
 			getItemOffset: (index: number) => index * ROW_HEIGHT,
 			getItemSize: () => ROW_HEIGHT,
 			scrollTo: vi.fn(),
-			scrollToIndex: vi.fn(),
+			scrollToIndex: (index: number, opts?: Record<string, unknown>) => {
+				virtualState.scrollToIndexCalls.push([index, opts])
+			},
 		}))
 
 		const Item = props.item || "div"
@@ -139,6 +142,7 @@ describe("VirtualMessageList", () => {
 		virtualState.scrollOffset = 0
 		virtualState.scrollSize = 2000
 		virtualState.resizeCallbacks = []
+		virtualState.scrollToIndexCalls = []
 		vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
 	})
 
@@ -348,6 +352,28 @@ describe("VirtualMessageList", () => {
 		expect(virtualizerRef.current?.itemCount).toBe(3)
 		expect(virtualizerRef.current?.getItemOffset(2)).toBe(200)
 		virtualizerRef.current?.scrollToIndex(2, { align: "end" })
+	})
+
+	it("folds the space below the virtualizer into a scroll-to-last write", () => {
+		// Two rows of 100 sit after a 50px start margin, so virtua projects the scroll element at
+		// 250. The caller's message column adds 8px of bottom padding below the virtualizer, and
+		// without it the write lands 8px above the scroll end.
+		virtualState.scrollSize = 258
+		const virtualizerRef = { current: null } as {
+			current: import("../message-list-scroll-adapter").MessageListScrollAdapter | null
+		}
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			virtualizerRef,
+			startMargin: 50,
+		})
+
+		virtualizerRef.current?.scrollToIndex(1, { align: "end" })
+		expect(virtualState.scrollToIndexCalls).toEqual([[1, { align: "end", offset: 8 }]])
+
+		// A bottom-aligned write on any earlier row still means "this row's bottom on the
+		// viewport line", which the trailing strip has nothing to do with.
+		virtualizerRef.current?.scrollToIndex(0, { align: "end" })
+		expect(virtualState.scrollToIndexCalls[1]).toEqual([0, { align: "end" }])
 	})
 
 	it("filters a non-terminal empty Tool before it reaches the virtualizer", () => {

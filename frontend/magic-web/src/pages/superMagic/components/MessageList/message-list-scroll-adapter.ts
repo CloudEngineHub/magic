@@ -18,7 +18,12 @@ export interface MessageListScrollToIndexOptions {
  */
 export interface MessageListScrollAdapter {
 	range?: MessageListScrollRange
-	/** Item count currently backing the virtualizer, including the footer row. */
+	/**
+	 * Item count currently backing the virtualizer, including the footer row. Zero until the
+	 * virtualizer mounts, which makes this the readiness signal for any index-addressed write:
+	 * the adapter is published one commit earlier, while the scroll element it needs is still
+	 * null, and writes issued in that window are dropped.
+	 */
 	readonly itemCount: number
 	/** Current scrollTop of the owning scroll element. */
 	readonly scrollOffset: number
