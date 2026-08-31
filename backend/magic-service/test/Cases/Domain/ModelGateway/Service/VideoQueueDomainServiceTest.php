@@ -12,6 +12,7 @@ use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\ModelGateway\Repository\VideoQueueOperationRepositoryInterface;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
@@ -134,6 +135,56 @@ class VideoQueueDomainServiceTest extends TestCase
                 return $this->get($name);
             }
         });
+    }
+
+    public function testVideoGenerationConfigQueriesDeclaredInputModes(): void
+    {
+        $config = new VideoGenerationConfig([
+            'supported_inputs' => ['text_prompt'],
+            'input_modes' => [
+                VideoInputMode::Standard->value => ['supported_fields' => []],
+            ],
+        ]);
+
+        $this->assertTrue($config->hasInputModes());
+        $this->assertTrue($config->supportsInputMode(VideoInputMode::Standard->value));
+        $this->assertFalse($config->supportsInputMode(VideoInputMode::VideoEdit->value));
+        $this->assertTrue($config->hasSupportedInputs());
+        $this->assertTrue($config->supportsInput('text_prompt'));
+        $this->assertFalse($config->supportsInput('video_extension'));
+    }
+
+    public function testCreateOperationRejectsExtendWhenModelLacksVideoExtensionCapability(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'video-model',
+            'task' => 'extend',
+            'prompt' => 'extend the source video',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => 'https://example.com/source.mp4'],
+                ],
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('task extend is not supported by the current video model');
+
+        $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'video-model',
+            'provider-video-model',
+            ProviderCode::Cloudsway,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'supported_inputs' => ['text_prompt'],
+                'input_modes' => [
+                    VideoInputMode::Standard->value => ['supported_fields' => []],
+                ],
+            ]),
+        );
     }
 
     public function testCreateOperationCanonicalizes4kAndKeepsCanonicalSections(): void
@@ -940,6 +991,81 @@ class VideoQueueDomainServiceTest extends TestCase
                 'input_modes' => [
                     VideoInputMode::Standard->value => ['supported_fields' => []],
                     VideoInputMode::OmniReference->value => ['supported_fields' => ['reference_videos']],
+                ],
+            ]),
+        );
+    }
+
+    public function testCreateOperationRejectsEditTaskWithStandardInputMode(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'kling-v3-omni',
+            'task' => 'edit',
+            'input_mode' => VideoInputMode::Standard->value,
+            'prompt' => 'edit the source video',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => 'https://example.com/source.mp4'],
+                ],
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('input_mode is invalid');
+
+        $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'kling-v3-omni',
+            'provider-model-keling-omni',
+            ProviderCode::Keling,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'input_modes' => [
+                    VideoInputMode::Standard->value => ['supported_fields' => []],
+                    VideoInputMode::VideoEdit->value => ['supported_fields' => ['reference_videos']],
+                ],
+            ]),
+        );
+    }
+
+    public function testCreateOperationRejectsEditTaskWithOmniReferenceInputMode(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'kling-v3-omni',
+            'task' => 'edit',
+            'input_mode' => VideoInputMode::OmniReference->value,
+            'prompt' => 'edit the source video',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => 'https://example.com/source.mp4'],
+                ],
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('input_mode is invalid');
+
+        $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'kling-v3-omni',
+            'provider-model-keling-omni',
+            ProviderCode::Keling,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'input_modes' => [
+                    VideoInputMode::Standard->value => ['supported_fields' => []],
+                    VideoInputMode::OmniReference->value => [
+                        'supported_fields' => ['reference_videos'],
+                        'task' => VideoTaskType::Generate->value,
+                    ],
+                    VideoInputMode::VideoEdit->value => [
+                        'supported_fields' => ['reference_videos'],
+                        'task' => VideoTaskType::Edit->value,
+                    ],
                 ],
             ]),
         );

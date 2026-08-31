@@ -31,8 +31,8 @@ use RuntimeException;
 /**
  * 视频队列领域服务。
  *
- * 统一视频参数设计落地后，这里不再自己拦 provider/model 的参数支持性，
- * 只消费外部传入的 VideoGenerationConfig 并执行领域规则：
+ * 统一视频参数设计落地后，这里消费外部传入的 VideoGenerationConfig，
+ * 并执行请求与模型能力的领域规则：
  * - 规范化请求
  * - 基础结构 / 类型校验
  * - 创建 / 更新视频任务实体
@@ -533,9 +533,7 @@ readonly class VideoQueueDomainService
             $referenceVideoInputs,
             $referenceAudioInputs,
         );
-        // 统一约定后，所有需要视频素材的任务都从 reference_videos 取输入。
-        $this->assertTaskRequirements($task, $referenceVideoInputs);
-        $this->assertCapability($task, $compositionMode, $videoGenerationConfig);
+        $this->assertSupportedRequestMode($task, $compositionMode, $videoGenerationConfig);
         $this->assertCompositionModeRequirements(
             $task,
             $compositionMode,
@@ -729,35 +727,31 @@ readonly class VideoQueueDomainService
         return self::KELING_DIMENSIONS_TO_RESOLUTION[$dimensions] ?? null;
     }
 
-    private function assertCapability(string $task, string $compositionMode, VideoGenerationConfig $videoGenerationConfig): void
-    {
-        $requiredInputMode = match ($task) {
-            VideoTaskType::Generate->value => $compositionMode,
-            VideoTaskType::Edit->value => VideoInputMode::VideoEdit->value,
-            default => null,
-        };
-        $inputModes = $videoGenerationConfig->toArray()['input_modes'] ?? [];
-        if (
-            $requiredInputMode !== null
-            && is_array($inputModes)
-            && $inputModes !== []
-            && ! array_key_exists($requiredInputMode, $inputModes)
-        ) {
+    private function assertSupportedRequestMode(
+        string $task,
+        string $compositionMode,
+        VideoGenerationConfig $videoGenerationConfig
+    ): void {
+        $taskType = VideoTaskType::from($task);
+        if (! $taskType->supportsInputMode($compositionMode)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+        }
+
+        if ($videoGenerationConfig->hasInputModes() && ! $videoGenerationConfig->supportsInputMode($compositionMode)) {
             ExceptionBuilder::throw(
                 MagicApiErrorCode::ValidateFailed,
-                sprintf('input_mode %s is not supported by the current video model', $requiredInputMode),
+                sprintf('input_mode %s is not supported by the current video model', $compositionMode),
             );
         }
-    }
 
-    private function assertTaskRequirements(string $task, array $referenceVideoInputs): void
-    {
-        if (in_array($task, [
-            VideoTaskType::Extend->value,
-            VideoTaskType::Edit->value,
-            VideoTaskType::Upscale->value,
-        ], true) && $referenceVideoInputs === []) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_videos is required');
+        $requiredInput = $taskType->requiredSupportedInput();
+        if ($requiredInput !== null
+            && $videoGenerationConfig->hasSupportedInputs()
+            && ! $videoGenerationConfig->supportsInput($requiredInput)) {
+            ExceptionBuilder::throw(
+                MagicApiErrorCode::ValidateFailed,
+                sprintf('task %s is not supported by the current video model', $task),
+            );
         }
     }
 
@@ -771,13 +765,7 @@ readonly class VideoQueueDomainService
     ): string {
         $mode = strtolower(trim((string) $value));
         if ($mode !== '') {
-            if (! in_array($mode, [
-                VideoInputMode::Standard->value,
-                VideoInputMode::ImageReference->value,
-                VideoInputMode::OmniReference->value,
-                VideoInputMode::VideoEdit->value,
-                VideoInputMode::KeyframeGuided->value,
-            ], true)) {
+            if (! VideoInputMode::isRequestValid($mode)) {
                 ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
             }
 
@@ -816,20 +804,16 @@ readonly class VideoQueueDomainService
         array $referenceVideoInputs,
         array $referenceAudioInputs
     ): void {
+        if (VideoTaskType::from($task)->requiresReferenceVideo() && $referenceVideoInputs === []) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_videos is required');
+        }
+
         if ($compositionMode === VideoInputMode::Standard->value) {
             return;
         }
 
         if ($compositionMode === VideoInputMode::VideoEdit->value) {
-            if ($task !== VideoTaskType::Edit->value) {
-                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-            }
-
             return;
-        }
-
-        if ($task !== VideoTaskType::Generate->value) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
         }
 
         if ($compositionMode === VideoInputMode::ImageReference->value) {

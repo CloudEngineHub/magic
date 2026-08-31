@@ -58,6 +58,26 @@ class VideoGenerationConfig extends AbstractValueObject
         ];
     }
 
+    public function hasInputModes(): bool
+    {
+        return $this->inputModes !== [];
+    }
+
+    public function supportsInputMode(string $inputMode): bool
+    {
+        return array_key_exists($inputMode, $this->inputModes);
+    }
+
+    public function hasSupportedInputs(): bool
+    {
+        return $this->supportedInputs !== [];
+    }
+
+    public function supportsInput(string $input): bool
+    {
+        return in_array($input, $this->supportedInputs, true);
+    }
+
     public function jsonSerialize(): array
     {
         return $this->toArray();
