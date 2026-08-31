@@ -72,6 +72,28 @@ interface AgentMarketRepositoryInterface
     public function findById(int $id): ?AgentMarketEntity;
 
     /**
+     * 批量查询仍然可用于市场展示的记录，供向量结果做最终数据库校验。
+     *
+     * @param int[] $ids
+     * @return array<int, AgentMarketEntity>
+     */
+    public function findVisibleByIds(array $ids): array;
+
+    /**
+     * Batch query market records visible to the current search context.
+     *
+     * @param int[] $ids
+     * @return array<int, AgentMarketEntity>
+     */
+    public function findVisibleByIdsForSearch(array $ids, AgentMarketQuery $query): array;
+
+    /** @return int[] IDs are returned in ascending order for keyset pagination. */
+    public function findVectorIndexIds(string $afterId = '0', int $limit = 100): array;
+
+    /** Count all records eligible for the Agent Market vector index. */
+    public function countVectorIndexRecords(): int;
+
+    /**
      * 查询引用指定分类的有效市场 Agent 数量。
      */
     public function countByCategoryId(int $categoryId): int;
@@ -102,9 +124,6 @@ interface AgentMarketRepositoryInterface
      * @return AgentMarketEntity 保存后的实体
      */
     public function saveOrUpdate(SuperMagicAgentDataIsolation $dataIsolation, AgentMarketEntity $entity): AgentMarketEntity;
-
-    /** @return int[] */
-    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array;
 
     public function offlineByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool;
 
