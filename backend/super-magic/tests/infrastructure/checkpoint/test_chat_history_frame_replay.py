@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType
+from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor, TOPIC_SPACE
 from app.path_manager import PathManager
 
@@ -93,6 +94,12 @@ class FrameWorld:
             get_latest_content_file_path=lambda cid, fid, space=None: (
                 self.checkpoints_root / cid / _partition(space) / "file_snapshots" / fid / "latest_content"
             ),
+            get_initial_chat_history_snapshots_dir=lambda cid: (
+                self.checkpoints_root / cid / "initial_chat_history_snapshots"
+            ),
+            get_latest_chat_history_snapshots_dir=lambda cid: (
+                self.checkpoints_root / cid / "latest_chat_history_snapshots"
+            ),
         )
         metadata_manager = SimpleNamespace(
             get_checkpoints_between_in_checkpoint_manifest=AsyncMock(return_value=(direction, checkpoint_ids)),
@@ -104,6 +111,7 @@ class FrameWorld:
         executor = RollbackExecutor.__new__(RollbackExecutor)
         executor.storage = storage
         executor.metadata_manager = metadata_manager
+        executor.chat_history_snapshot_manager = ChatHistorySnapshotManager()
         return executor
 
     def mount_file(self, prefix: str, rel: str) -> Path:
@@ -224,6 +232,31 @@ async def test_missing_topic_frames_skips_gracefully(world: FrameWorld):
     assert success is True
 
 
+async def test_start_rollback_restores_local_chat_history_dir(world: FrameWorld, tmp_path, monkeypatch):
+    """端到端：start_rollback 在帧重放之外，还应恢复本地 .chat_history 整目录快照。"""
+    chat_history_dir = tmp_path / ".chat_history"
+    monkeypatch.setattr(
+        PathManager, "get_chat_history_dir", classmethod(lambda cls: chat_history_dir), raising=True,
+    )
+
+    # current=C2 回滚到 target=C1 时，反向范围是 [C2]，取 C2 的 initial
+    # 快照（= C2 回合开始前 = C1 回合结束后的状态）
+    initial_dir = world.checkpoints_root / "C2" / "initial_chat_history_snapshots"
+    initial_dir.mkdir(parents=True)
+    (initial_dir / "main<1>.json").write_text("dir snapshot", encoding="utf-8")
+
+    chat_history_dir.mkdir(parents=True)
+    (chat_history_dir / "main<1>.json").write_text("stale", encoding="utf-8")
+
+    world.add_frames("C1", [])
+    world.add_frames("C2", [])
+
+    executor = world.build_executor("backward", ["C2"])
+    success, _ = await executor.start_rollback("C1")
+    assert success is True
+    assert (chat_history_dir / "main<1>.json").read_text(encoding="utf-8") == "dir snapshot"
+
+
 async def test_relative_path_entry_resolves_to_workspace(world: FrameWorld, monkeypatch, tmp_path):
     """相对路径条目（space 为空串）按 project 分区解析帧、按 workspace 根解析恢复目标。"""
     workspace_root = tmp_path / "workspace"
@@ -242,8 +275,12 @@ async def test_relative_path_entry_resolves_to_workspace(world: FrameWorld, monk
     assert (workspace_root / "legacy.txt").read_bytes() == b"legacy old"
 
 
-def test_checkpoint_listener_no_longer_snapshots_chat_history():
-    """回归：监听器不再注册 CHAT_HISTORY_CHANGED，全量快照链路已下线。
+def test_checkpoint_listener_snapshots_chat_history_again():
+    """回归：聊天历史回到本地目录后，监听器恢复整目录快照链路。
+
+    运行期聊天历史在本地 .chat_history/，不在 magicfs 挂载内、无帧可记，
+    由监听器在 checkpoint 创建时拍 initial 快照、每次保存时拍 latest 快照，
+    回滚时由 RollbackExecutor 按方向恢复。
 
     该模块所在包的 __init__ 会拉起重依赖（wecom SDK 等），本地单测环境
     无法直接 import；因此对源码做静态断言。
@@ -253,7 +290,7 @@ def test_checkpoint_listener_no_longer_snapshots_chat_history():
         / "app/service/agent_event/checkpoint_listener_service.py"
     ).read_text(encoding="utf-8")
 
-    assert "CHAT_HISTORY_CHANGED" not in source
-    assert "ChatHistorySnapshotManager" not in source
-    assert "_save_initial_chat_history_snapshot" not in source
+    assert "CHAT_HISTORY_CHANGED" in source
+    assert "ChatHistorySnapshotManager" in source
+    assert "_save_initial_chat_history_snapshot" in source
     assert "BEFORE_MAIN_AGENT_RUN" in source
