@@ -26,14 +26,15 @@ const CONTEXT_TOOLBAR_CLOSE_DURATION = 240
 // does not create a false 10px overflow.
 const CONTEXT_TOOLBAR_HORIZONTAL_CHROME = 10
 
-function getVisibleViewport(
-	boundaryRef?: React.RefObject<HTMLElement | null>,
-): { left: number; top: number; right: number; bottom: number } {
+function getVisibleViewport(boundaryRef?: React.RefObject<HTMLElement | null>): {
+	left: number
+	top: number
+	right: number
+	bottom: number
+} {
 	const boundaryRect = boundaryRef?.current?.getBoundingClientRect()
 	const boundary =
-		boundaryRect && boundaryRect.width > 0 && boundaryRect.height > 0
-			? boundaryRect
-			: undefined
+		boundaryRect && boundaryRect.width > 0 && boundaryRect.height > 0 ? boundaryRect : undefined
 	const left = Math.max(0, boundary?.left ?? 0)
 	const top = Math.max(0, boundary?.top ?? 0)
 	const right = Math.min(window.innerWidth, boundary?.right ?? window.innerWidth)
@@ -76,11 +77,13 @@ export function ElementContextPanel({
 	const [isOpen, setIsOpen] = useState(false)
 	const [shouldRender, setShouldRender] = useState(hasAnchor)
 	const [isToolbarOverflowing, setIsToolbarOverflowing] = useState(false)
+	const wasVisibleRef = useRef(false)
 	const hasVisibleAnchor = intersectsViewport(anchor, boundaryRef)
 	const shouldShowPanel = hasAnchor && hasVisibleAnchor
 	useEffect(() => {
 		if (typeof window === "undefined") return
 		if (!shouldShowPanel) {
+			wasVisibleRef.current = false
 			setIsOpen(false)
 			const closeTimer = window.setTimeout(
 				() => setShouldRender(false),
@@ -89,10 +92,25 @@ export function ElementContextPanel({
 			return () => window.clearTimeout(closeTimer)
 		}
 		setShouldRender(true)
+		// Keep an already visible toolbar open while the selected element changes.
+		// This updates its contents and position without replaying the entrance motion.
+		if (wasVisibleRef.current) {
+			setIsOpen(true)
+			return
+		}
+		wasVisibleRef.current = true
 		setIsOpen(false)
-		const frame = window.requestAnimationFrame(() => setIsOpen(true))
-		return () => window.cancelAnimationFrame(frame)
-	}, [selector, shouldShowPanel])
+		// Let the closed state render for one frame before opening the panel. Without
+		// this extra frame, child toolbar transitions can be skipped by the browser.
+		let openFrame: number | null = null
+		const frame = window.requestAnimationFrame(() => {
+			openFrame = window.requestAnimationFrame(() => setIsOpen(true))
+		})
+		return () => {
+			window.cancelAnimationFrame(frame)
+			if (openFrame !== null) window.cancelAnimationFrame(openFrame)
+		}
+	}, [shouldShowPanel])
 	useLayoutEffect(() => {
 		if (!anchor || !selector || !panelRef.current) return
 		let frame: number | null = null
@@ -197,14 +215,20 @@ export function ElementContextPanel({
 			if (frame !== null) window.cancelAnimationFrame(frame)
 		}
 	}, [anchor, boundaryRef, selector, shouldRender])
-	if (!shouldRender || !shouldShowPanel || !anchor || !selector || typeof document === "undefined")
+	if (
+		!shouldRender ||
+		!shouldShowPanel ||
+		!anchor ||
+		!selector ||
+		typeof document === "undefined"
+	)
 		return null
 	return createPortal(
 		<div
 			ref={panelRef}
 			data-html-context-panel="true"
 			className={cn(
-				"group/context-toolbar pointer-events-none fixed box-border flex max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-center overflow-visible rounded-lg border border-border/60 bg-card/95 p-1 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:240ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
+				"group/context-toolbar pointer-events-none fixed box-border flex max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-center overflow-visible rounded-lg border border-border/60 bg-card/95 p-1 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:160ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
 				TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL,
 			)}
 			data-open={isOpen}
@@ -230,7 +254,12 @@ export function ElementContextPanel({
 				viewportRef={toolbarViewportRef}
 			>
 				<div ref={toolbarContentRef} className="w-max min-w-0">
-					<StylePanel editorRef={editorRef} variant="context" disabled={disabled} />
+					<StylePanel
+						editorRef={editorRef}
+						variant="context"
+						disabled={disabled}
+						contextToolbarOpen={isOpen}
+					/>
 				</div>
 			</ScrollArea>
 		</div>,

@@ -79,6 +79,41 @@ describe("DOMTreePanel", () => {
 		})
 	})
 
+	it("renders a thumbnail beside image-backed nodes", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "root",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "hero",
+						tagName: "section",
+						label: "section.hero",
+						thumbnailUrl: "https://cdn.example.com/hero.webp",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
+
+		const thumbnail = await screen.findByTestId("dom-tree-thumbnail-hero")
+		expect(thumbnail.querySelector("img")).toHaveAttribute(
+			"src",
+			"https://cdn.example.com/hero.webp",
+		)
+	})
+
 	it("virtualizes a large visible tree", async () => {
 		const children = Array.from({ length: 220 }, (_, index) => ({
 			nodeId: `node-${index}`,
@@ -707,9 +742,9 @@ describe("DOMTreePanel", () => {
 		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
 
 		expect(screen.getByTestId("html-dom-tree-panel")).toHaveClass(
-			"my-2",
-			"h-[calc(100%_-_1rem)]",
-			"rounded-xl",
+			"h-full",
+			"border-l",
+			"min-h-0",
 			"bg-background/95",
 		)
 		await screen.findByTestId("dom-tree-node-section")

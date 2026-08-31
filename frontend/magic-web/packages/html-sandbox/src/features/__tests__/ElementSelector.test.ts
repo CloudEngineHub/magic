@@ -112,7 +112,8 @@ describe("ElementSelector", () => {
 			sendEventSpy.mockClear()
 			selector.selectElement(second)
 
-			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+			expect(sendEventSpy).toHaveBeenCalledTimes(1)
 			expect(sendEventSpy).toHaveBeenCalledWith(
 				"ELEMENT_SELECTED",
 				expect.objectContaining({ selector: expect.stringContaining("div#second") }),

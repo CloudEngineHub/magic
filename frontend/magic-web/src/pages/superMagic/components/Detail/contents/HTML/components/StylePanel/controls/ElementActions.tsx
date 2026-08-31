@@ -1,5 +1,6 @@
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import {
 	ArrowDown,
 	ArrowUp,
@@ -16,7 +17,6 @@ import {
 	DropdownMenu,
 	DropdownMenuItem,
 	DropdownMenuLabel,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import {
@@ -35,10 +35,13 @@ import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelCo
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { EditorDropdownMenuContent } from "../../EditorFloating"
 import { STYLE_PANEL_STYLES } from "../styles"
+import type { ContextToolbarItemMotion } from "../types"
 
 interface ElementActionsProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
 	disabled?: boolean
+	/** Optional per-button enter transition used by the contextual toolbar. */
+	itemMotion?: ContextToolbarItemMotion
 }
 
 interface TextInsertRequest {
@@ -193,7 +196,6 @@ function AddElementMenu({
 						{t("stylePanel.domTree.insertInside")}
 					</DropdownMenuItem>
 				) : null}
-				{canInsertSibling && canInsertInside ? <DropdownMenuSeparator /> : null}
 				{canInsertSibling ? (
 					<DropdownMenuItem onSelect={() => onInsert(type, "after")}>
 						<ArrowDown className="h-4 w-4" />
@@ -212,6 +214,7 @@ function AddElementMenu({
 export const ElementActions = observer(function ElementActions({
 	editorRef,
 	disabled = false,
+	itemMotion,
 }: ElementActionsProps) {
 	const { t } = useTranslation("super")
 	const stylePanelStore = useStylePanelStore()
@@ -453,6 +456,10 @@ export const ElementActions = observer(function ElementActions({
 	)
 	const [canAddInside, setCanAddInside] = useState(false)
 	const [canAddSibling, setCanAddSibling] = useState(false)
+	const renderItem = (children: ReactNode) => {
+		if (!itemMotion) return children
+		return itemMotion(children)
+	}
 
 	useEffect(() => {
 		let cancelled = false
@@ -512,107 +519,121 @@ export const ElementActions = observer(function ElementActions({
 			>
 				{canAddInside || canAddSibling ? (
 					<>
-						<AddElementMenu
-							type="text"
-							icon={<Type className="h-4 w-4" />}
-							label={t("stylePanel.domTree.addText")}
-							testId="html-style-panel-add-element-button"
-							disabled={disabled || !hasSingleSelection}
-							canInsertInside={canAddInside}
-							canInsertSibling={canAddSibling}
-							onInsert={(type, placement) => void handleInsert(type, placement)}
-						/>
-						<AddElementMenu
-							type="image"
-							icon={<ImagePlus className="h-4 w-4" />}
-							label={t("stylePanel.domTree.addImage")}
-							testId="html-style-panel-add-image-element-button"
-							disabled={disabled || !hasSingleSelection}
-							canInsertInside={canAddInside}
-							canInsertSibling={canAddSibling}
-							onInsert={(type, placement) => void handleInsert(type, placement)}
-						/>
+						{renderItem(
+							<AddElementMenu
+								type="text"
+								icon={<Type className="h-4 w-4" />}
+								label={t("stylePanel.domTree.addText")}
+								testId="html-style-panel-add-element-button"
+								disabled={disabled || !hasSingleSelection}
+								canInsertInside={canAddInside}
+								canInsertSibling={canAddSibling}
+								onInsert={(type, placement) => void handleInsert(type, placement)}
+							/>,
+						)}
+						{renderItem(
+							<AddElementMenu
+								type="image"
+								icon={<ImagePlus className="h-4 w-4" />}
+								label={t("stylePanel.domTree.addImage")}
+								testId="html-style-panel-add-image-element-button"
+								disabled={disabled || !hasSingleSelection}
+								canInsertInside={canAddInside}
+								canInsertSibling={canAddSibling}
+								onInsert={(type, placement) => void handleInsert(type, placement)}
+							/>,
+						)}
 					</>
 				) : null}
 
 				{isOutOfDocumentFlow ? null : (
 					<>
-						<AddElementButton
-							icon={<ArrowUp className="h-4 w-4" />}
-							label={t("stylePanel.domTree.moveUp")}
-							tooltip={t("stylePanel.domTree.moveUp")}
-							testId="html-style-panel-move-up-button"
-							disabled={disabled || !hasSingleSelection || !moveState.canMoveUp}
-							onClick={() => void handleMove(-1)}
-						/>
-						<AddElementButton
-							icon={<ArrowDown className="h-4 w-4" />}
-							label={t("stylePanel.domTree.moveDown")}
-							tooltip={t("stylePanel.domTree.moveDown")}
-							testId="html-style-panel-move-down-button"
-							disabled={disabled || !hasSingleSelection || !moveState.canMoveDown}
-							onClick={() => void handleMove(1)}
-						/>
+						{renderItem(
+							<AddElementButton
+								icon={<ArrowUp className="h-4 w-4" />}
+								label={t("stylePanel.domTree.moveUp")}
+								tooltip={t("stylePanel.domTree.moveUp")}
+								testId="html-style-panel-move-up-button"
+								disabled={disabled || !hasSingleSelection || !moveState.canMoveUp}
+								onClick={() => void handleMove(-1)}
+							/>,
+						)}
+						{renderItem(
+							<AddElementButton
+								icon={<ArrowDown className="h-4 w-4" />}
+								label={t("stylePanel.domTree.moveDown")}
+								tooltip={t("stylePanel.domTree.moveDown")}
+								testId="html-style-panel-move-down-button"
+								disabled={disabled || !hasSingleSelection || !moveState.canMoveDown}
+								onClick={() => void handleMove(1)}
+							/>,
+						)}
 					</>
 				)}
 
-				{isSingleImageSelected ? (
+				{isSingleImageSelected
+					? renderItem(
+							<MagicTooltip
+								title={t("stylePanel.replaceImage")}
+								contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
+							>
+								<span>
+									<Button
+										variant="ghost"
+										size="sm"
+										disabled={disabled}
+										onClick={handleReplaceImage}
+										className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`}
+										data-testid="html-style-panel-replace-image-button"
+									>
+										<ImageUp className="h-4 w-4" />
+									</Button>
+								</span>
+							</MagicTooltip>,
+						)
+					: null}
+
+				{/* Duplicate button */}
+				{renderItem(
 					<MagicTooltip
-						title={t("stylePanel.replaceImage")}
+						title={t("stylePanel.duplicateElement")}
 						contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
 					>
 						<span>
 							<Button
 								variant="ghost"
 								size="sm"
-								disabled={disabled}
-								onClick={handleReplaceImage}
+								disabled={disabled || !hasSingleSelection}
+								onClick={handleDuplicate}
 								className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`}
-								data-testid="html-style-panel-replace-image-button"
+								data-testid="html-style-panel-duplicate-button"
 							>
-								<ImageUp className="h-4 w-4" />
+								<Copy className="h-4 w-4" />
 							</Button>
 						</span>
-					</MagicTooltip>
-				) : null}
-
-				{/* Duplicate button */}
-				<MagicTooltip
-					title={t("stylePanel.duplicateElement")}
-					contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
-				>
-					<span>
-						<Button
-							variant="ghost"
-							size="sm"
-							disabled={disabled || !hasSingleSelection}
-							onClick={handleDuplicate}
-							className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`}
-							data-testid="html-style-panel-duplicate-button"
-						>
-							<Copy className="h-4 w-4" />
-						</Button>
-					</span>
-				</MagicTooltip>
+					</MagicTooltip>,
+				)}
 
 				{/* Delete button */}
-				<MagicTooltip
-					title={t("stylePanel.deleteElement")}
-					contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
-				>
-					<span>
-						<Button
-							variant="ghost"
-							size="sm"
-							disabled={disabled || !hasSingleSelection}
-							onClick={handleDelete}
-							className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton} hover:bg-destructive/10 hover:text-destructive hover:shadow-sm`}
-							data-testid="html-style-panel-delete-button"
-						>
-							<Trash2 className="h-4 w-4" />
-						</Button>
-					</span>
-				</MagicTooltip>
+				{renderItem(
+					<MagicTooltip
+						title={t("stylePanel.deleteElement")}
+						contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
+					>
+						<span>
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={disabled || !hasSingleSelection}
+								onClick={handleDelete}
+								className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton} hover:bg-destructive/10 hover:text-destructive hover:shadow-sm`}
+								data-testid="html-style-panel-delete-button"
+							>
+								<Trash2 className="h-4 w-4" />
+							</Button>
+						</span>
+					</MagicTooltip>,
+				)}
 			</div>
 			<Dialog
 				open={textInsertRequest !== null}

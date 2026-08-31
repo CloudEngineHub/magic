@@ -1,6 +1,6 @@
 import { observer } from "mobx-react-lite"
-import type { CSSProperties, ReactNode } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import type { ReactNode } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Button } from "@/components/shadcn-ui/button"
@@ -12,7 +12,7 @@ import { LayoutPanelTop, Paintbrush, PanelRight, ScanEye, RectangleHorizontal } 
 import { useSelectedElement } from "./hooks/useSelectedElement"
 import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
-import type { StylePanelProps } from "./types"
+import type { ContextToolbarItemMotion, StylePanelProps } from "./types"
 import LayoutSection from "./sections/LayoutSection"
 import FlexGridSection from "./sections/FlexGridSection"
 import ImageSection from "./sections/ImageSection"
@@ -35,30 +35,69 @@ import {
 import { useShowButtonText } from "@/hooks/useShowButtonText"
 import { getElementCapabilities } from "./capabilities"
 
-const CONTEXT_TOOLBAR_STAGGER_MS = 40
+const CONTEXT_TOOLBAR_STAGGER_MS = 16
 
+// The floating panel mounts before its open frame is requested. Drive the child
+// state explicitly so the staggered transition also runs for the first render.
 function ContextToolbarMotion({
 	children,
-	index,
 	enabled,
+	open = true,
+	as = "div",
 }: {
 	children: ReactNode
-	index: number
 	enabled: boolean
+	open?: boolean
+	as?: "div" | "span"
 }) {
+	const motionRef = useRef<HTMLElement | null>(null)
+	const [isEntered, setIsEntered] = useState(false)
+
+	useLayoutEffect(() => {
+		if (!enabled || !motionRef.current) return
+
+		const panel = motionRef.current.closest<HTMLElement>("[data-html-context-panel]")
+		if (!panel) return
+
+		const items = Array.from(
+			panel.querySelectorAll<HTMLElement>("[data-context-toolbar-motion-item]"),
+		)
+		const itemIndex = items.indexOf(motionRef.current)
+		if (itemIndex >= 0) {
+			motionRef.current.style.setProperty(
+				"--context-toolbar-delay",
+				`${itemIndex * CONTEXT_TOOLBAR_STAGGER_MS}ms`,
+			)
+		}
+	})
+
+	useEffect(() => {
+		if (!enabled || !open) {
+			setIsEntered(false)
+			return
+		}
+
+		const frame = window.requestAnimationFrame(() => setIsEntered(true))
+		return () => window.cancelAnimationFrame(frame)
+	}, [enabled, open])
+
 	if (!enabled) return <>{children}</>
+	const MotionTag = as
 
 	return (
-		<div
-			className="translate-y-1 opacity-0 transition-[opacity,transform] duration-220 ease-out [transition-delay:0ms] group-data-[open=true]/context-toolbar:translate-y-0 group-data-[open=true]/context-toolbar:opacity-100 group-data-[open=true]/context-toolbar:[transition-delay:var(--context-toolbar-delay)] motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none"
-			style={
-				{
-					"--context-toolbar-delay": `${index * CONTEXT_TOOLBAR_STAGGER_MS}ms`,
-				} as CSSProperties
-			}
+		<MotionTag
+			ref={motionRef}
+			data-context-toolbar-motion-item="true"
+			className={cn(
+				"transition-[opacity,transform] ease-out will-change-[opacity,transform] [transition-duration:160ms] motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none",
+				as === "span" && "inline-flex",
+				open && isEntered
+					? "translate-y-0 opacity-100 [transition-delay:var(--context-toolbar-delay)]"
+					: "translate-y-2 opacity-0 [transition-delay:0ms]",
+			)}
 		>
 			{children}
-		</div>
+		</MotionTag>
 	)
 }
 
@@ -75,6 +114,7 @@ export const StylePanel = observer(function StylePanel({
 	variant = "full",
 	domTreeOpen = false,
 	onToggleDomTree,
+	contextToolbarOpen = true,
 }: StylePanelProps) {
 	const { t } = useTranslation("super")
 	const { selectedElement, updateStyle, updateBatchStyles, updateAttributes } =
@@ -426,6 +466,18 @@ export const StylePanel = observer(function StylePanel({
 			onUpdateAttributes={updateAttributes}
 		/>
 	)
+	const renderContextToolbarItem = useCallback<ContextToolbarItemMotion>(
+		(children) => (
+			<ContextToolbarMotion
+				as="span"
+				enabled={variant === "context"}
+				open={contextToolbarOpen}
+			>
+				{children}
+			</ContextToolbarMotion>
+		),
+		[contextToolbarOpen, variant],
+	)
 
 	return (
 		<TooltipProvider delayDuration={300}>
@@ -461,9 +513,13 @@ export const StylePanel = observer(function StylePanel({
 					{showElementControls ? (
 						<>
 							{/* Element actions (duplicate, delete) */}
-							<ContextToolbarMotion enabled={variant === "context"} index={0}>
-								<ElementActions editorRef={editorRef} disabled={disabled} />
-							</ContextToolbarMotion>
+							<ElementActions
+								editorRef={editorRef}
+								disabled={disabled}
+								itemMotion={
+									variant === "context" ? renderContextToolbarItem : undefined
+								}
+							/>
 							<Separator
 								orientation="vertical"
 								className={toolbarSeparatorClassName}
@@ -479,34 +535,32 @@ export const StylePanel = observer(function StylePanel({
 											disabled={isDisabled}
 										/>
 									) : null}
-									{capabilities.showFontSize ? (
-										<ContextToolbarMotion
-											enabled={variant === "context"}
-											index={1}
-										>
-											<FontSizeSelector
-												value={fontSize}
-												onChange={setFontSize}
-												onApply={handleFontSizeApply}
-												disabled={isDisabled}
-												className={
-													variant === "context"
-														? "w-20 shrink-0"
-														: undefined
-												}
-											/>
-										</ContextToolbarMotion>
-									) : null}
+									{capabilities.showFontSize
+										? renderContextToolbarItem(
+												<FontSizeSelector
+													value={fontSize}
+													onChange={setFontSize}
+													onApply={handleFontSizeApply}
+													disabled={isDisabled}
+													className={
+														variant === "context"
+															? "w-20 shrink-0"
+															: undefined
+													}
+												/>,
+											)
+										: null}
 								</>
 							) : null}
 
 							{capabilities.showFontSizeAdjuster ? (
-								<ContextToolbarMotion enabled={variant === "context"} index={2}>
-									<FontSizeAdjuster
-										onAdjust={handleFontSizeAdjust}
-										disabled={isDisabled}
-									/>
-								</ContextToolbarMotion>
+								<FontSizeAdjuster
+									onAdjust={handleFontSizeAdjust}
+									disabled={isDisabled}
+									itemMotion={
+										variant === "context" ? renderContextToolbarItem : undefined
+									}
+								/>
 							) : null}
 
 							{variant !== "context" ||
@@ -519,16 +573,17 @@ export const StylePanel = observer(function StylePanel({
 							) : null}
 
 							{capabilities.showTypography ? (
-								<ContextToolbarMotion enabled={variant === "context"} index={3}>
-									<TextFormatTools
-										isBold={isBold}
-										isItalic={isItalic}
-										hasUnderline={hasUnderline}
-										hasLineThrough={hasLineThrough}
-										onFormat={handleFormat}
-										disabled={isDisabled}
-									/>
-								</ContextToolbarMotion>
+								<TextFormatTools
+									isBold={isBold}
+									isItalic={isItalic}
+									hasUnderline={hasUnderline}
+									hasLineThrough={hasLineThrough}
+									onFormat={handleFormat}
+									disabled={isDisabled}
+									itemMotion={
+										variant === "context" ? renderContextToolbarItem : undefined
+									}
+								/>
 							) : null}
 
 							{variant !== "context" || capabilities.showTypography ? (
@@ -539,16 +594,17 @@ export const StylePanel = observer(function StylePanel({
 							) : null}
 
 							{showAlignmentTools ? (
-								<ContextToolbarMotion enabled={variant === "context"} index={4}>
-									<TextAlignTools
-										value={flexAlignment?.value || textAlign}
-										onAlign={handleAlignment}
-										mode={flexAlignment ? "flex" : "text"}
-										flexDirection={flexAlignment?.direction}
-										disabled={isDisabled}
-										compact={variant === "context"}
-									/>
-								</ContextToolbarMotion>
+								<TextAlignTools
+									value={flexAlignment?.value || textAlign}
+									onAlign={handleAlignment}
+									mode={flexAlignment ? "flex" : "text"}
+									flexDirection={flexAlignment?.direction}
+									disabled={isDisabled}
+									compact={variant === "context"}
+									itemMotion={
+										variant === "context" ? renderContextToolbarItem : undefined
+									}
+								/>
 							) : null}
 
 							{variant !== "context" || showAlignmentTools ? (
@@ -558,17 +614,17 @@ export const StylePanel = observer(function StylePanel({
 								/>
 							) : null}
 
-							{capabilities.showTypography ? (
-								<ContextToolbarMotion enabled={variant === "context"} index={5}>
-									<ColorPicker
-										value={currentColor}
-										onChangeComplete={(value) =>
-											handleStyleChange("color", value)
-										}
-										disabled={isDisabled}
-									/>
-								</ContextToolbarMotion>
-							) : null}
+							{capabilities.showTypography
+								? renderContextToolbarItem(
+										<ColorPicker
+											value={currentColor}
+											onChangeComplete={(value) =>
+												handleStyleChange("color", value)
+											}
+											disabled={isDisabled}
+										/>,
+									)
+								: null}
 
 							{variant !== "context" || capabilities.showTypography ? (
 								<Separator
@@ -577,13 +633,13 @@ export const StylePanel = observer(function StylePanel({
 								/>
 							) : null}
 
-							{variant !== "context" || !capabilities.isText ? (
+							{variant !== "context" ? (
 								<>
-									{/* Size settings */}
+									{/* Size settings stay in the full toolbar; contextual actions use More Styles. */}
 									<SizePopover
 										selectedElement={selectedElement}
 										disabled={isDisabled}
-										showLabel={variant === "context" ? true : showButtonLabel}
+										showLabel={showButtonLabel}
 										onStyleChange={(property, value) =>
 											handleStyleChange(property, value)
 										}
@@ -598,9 +654,7 @@ export const StylePanel = observer(function StylePanel({
 							) : null}
 
 							{variant === "context" ? (
-								<ContextToolbarMotion enabled index={6}>
-									{contextMorePopover}
-								</ContextToolbarMotion>
+								renderContextToolbarItem(contextMorePopover)
 							) : (
 								<>
 									{/* Layout settings */}

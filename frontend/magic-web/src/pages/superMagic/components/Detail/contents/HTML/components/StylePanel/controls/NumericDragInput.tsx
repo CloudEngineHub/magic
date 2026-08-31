@@ -8,6 +8,7 @@ interface NumericDragInputProps extends Omit<
 > {
 	value: string | number
 	onChange: (value: string) => void
+	onCommit?: (value: string) => void
 	step?: number
 	min?: number
 	max?: number
@@ -35,6 +36,7 @@ function formatValue(value: number, precision?: number): string {
 export function NumericDragInput({
 	value,
 	onChange,
+	onCommit,
 	step = 1,
 	min,
 	max,
@@ -53,6 +55,7 @@ export function NumericDragInput({
 		startValue: number
 		target: HTMLInputElement | null
 		pointerId: number | null
+		pendingValue: string | null
 	} | null>(null)
 	const [isDragging, setIsDragging] = useState(false)
 
@@ -61,11 +64,21 @@ export function NumericDragInput({
 		return Number.isFinite(parsed) ? parsed : null
 	}, [value])
 
-	const commit = useCallback(
+	const updateValue = useCallback(
 		(nextValue: number) => {
-			onChange(formatValue(clamp(nextValue, min, max), precision))
+			const formattedValue = formatValue(clamp(nextValue, min, max), precision)
+			onChange(formattedValue)
+			return formattedValue
 		},
 		[max, min, onChange, precision],
+	)
+
+	const commit = useCallback(
+		(nextValue: number) => {
+			const formattedValue = updateValue(nextValue)
+			onCommit?.(formattedValue)
+		},
+		[onCommit, updateValue],
 	)
 
 	const nudge = useCallback(
@@ -85,10 +98,15 @@ export function NumericDragInput({
 			const delta = drag.startY - event.clientY
 			if (Math.abs(delta) < 2) return
 			event.preventDefault()
-			commit(drag.startValue + Math.round(delta / dragSensitivity) * step)
+			drag.pendingValue = updateValue(
+				drag.startValue + Math.round(delta / dragSensitivity) * step,
+			)
 		}
-		const finishDrag = () => {
+		const finishDrag = (shouldCommit: boolean) => {
 			const drag = dragRef.current
+			if (shouldCommit && drag?.pendingValue !== null && drag?.pendingValue !== undefined) {
+				onCommit?.(drag.pendingValue)
+			}
 			if (
 				drag?.target &&
 				drag.pointerId !== null &&
@@ -101,14 +119,16 @@ export function NumericDragInput({
 		}
 		const captureOptions = { capture: true, passive: false }
 		window.addEventListener("pointermove", handleWindowPointerMove, captureOptions)
-		window.addEventListener("pointerup", finishDrag)
-		window.addEventListener("pointercancel", finishDrag)
+		const handlePointerUp = () => finishDrag(true)
+		const handlePointerCancel = () => finishDrag(false)
+		window.addEventListener("pointerup", handlePointerUp)
+		window.addEventListener("pointercancel", handlePointerCancel)
 		return () => {
 			window.removeEventListener("pointermove", handleWindowPointerMove, captureOptions)
-			window.removeEventListener("pointerup", finishDrag)
-			window.removeEventListener("pointercancel", finishDrag)
+			window.removeEventListener("pointerup", handlePointerUp)
+			window.removeEventListener("pointercancel", handlePointerCancel)
 		}
-	}, [commit, dragSensitivity, isDragging, step])
+	}, [dragSensitivity, isDragging, onCommit, step, updateValue])
 
 	return (
 		<Input
@@ -130,6 +150,7 @@ export function NumericDragInput({
 							startValue: current,
 							target: event.currentTarget,
 							pointerId: event.pointerId ?? null,
+							pendingValue: null,
 						}
 						event.currentTarget.setPointerCapture?.(event.pointerId)
 						setIsDragging(true)

@@ -109,7 +109,12 @@ vi.mock("../controls", () => ({
 		/>
 	),
 	ColorPicker: () => <div data-testid="color-picker" />,
-	ElementActions: () => <div data-testid="element-actions" />,
+	ElementActions: ({ itemMotion }: { itemMotion?: (children: ReactNode) => ReactNode }) =>
+		itemMotion ? (
+			itemMotion(<div data-testid="element-actions" />)
+		) : (
+			<div data-testid="element-actions" />
+		),
 	SizePopover: () => <div data-testid="style-popover-stylePanel.size" />,
 	DimensionInput: () => <div data-testid="dimension-input" />,
 	NumericDragInput: () => <div data-testid="numeric-drag-input" />,
@@ -183,6 +188,13 @@ describe("StylePanel", () => {
 		expect(screen.getByTestId("style-popover-stylePanel.size")).toBeInTheDocument()
 	})
 
+	it("should keep the size control out of the context toolbar", () => {
+		render(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		expect(screen.queryByTestId("style-popover-stylePanel.size")).not.toBeInTheDocument()
+		expect(screen.getByTestId("style-panel-more-styles-trigger")).toBeInTheDocument()
+	})
+
 	it("should hide text controls and show image controls for image nodes", () => {
 		render(<StylePanel editorRef={{ current: null }} />)
 
@@ -233,6 +245,24 @@ describe("StylePanel", () => {
 		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 		expect(screen.getByTestId("font-family-selector")).toBeInTheDocument()
 		expect(document.querySelectorAll('[data-slot="separator"]')).toHaveLength(5)
+	})
+
+	it("should animate element actions with the context toolbar open state", async () => {
+		const { rerender } = render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="context"
+				contextToolbarOpen={false}
+			/>,
+		)
+
+		const elementActions = screen.getByTestId("element-actions")
+		expect(elementActions.parentElement).toHaveClass("translate-y-2", "opacity-0")
+
+		rerender(<StylePanel editorRef={{ current: null }} variant="context" contextToolbarOpen />)
+		await waitFor(() =>
+			expect(elementActions.parentElement).toHaveClass("translate-y-0", "opacity-100"),
+		)
 	})
 
 	it("should keep only font-size adjustment for containers with descendant-only text", () => {

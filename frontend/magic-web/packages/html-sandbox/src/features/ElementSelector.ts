@@ -674,8 +674,10 @@ export class ElementSelector {
 				return
 			}
 
-			// Clear previous selections when switching elements or leaving multi-select mode.
-			this.clearSelection()
+			// Clear the previous selection without notifying the host. The new
+			// selection is emitted immediately below, so sending an intermediate
+			// deselection would make the canvas and inspector flash.
+			this.clearSelectedElementsState()
 		}
 
 		// Add element to selection
@@ -738,6 +740,14 @@ export class ElementSelector {
 	 * Clear all selections
 	 */
 	clearSelection() {
+		this.clearSelectedElementsState()
+
+		// Notify parent window to clear selection highlight
+		this.bridge.sendEvent("ELEMENTS_DESELECTED", {})
+	}
+
+	/** Clear selected elements and editor-owned state without emitting an event. */
+	private clearSelectedElementsState() {
 		// Remove editor-owned DOM state without changing author inline styles.
 		this.selectedElements.forEach((element) => {
 			if (element.getAttribute("data-text-editing") === "true") {
@@ -747,9 +757,6 @@ export class ElementSelector {
 		})
 
 		this.selectedElements.clear()
-
-		// Notify parent window to clear selection highlight
-		this.bridge.sendEvent("ELEMENTS_DESELECTED", {})
 	}
 
 	/**

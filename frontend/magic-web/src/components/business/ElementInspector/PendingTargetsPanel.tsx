@@ -32,7 +32,7 @@ interface PendingTargetsPanelProps {
 	bottomOffset?: number
 }
 
-/** Fixed collection bar; target details remain available while the current element is highlighted. */
+/** Compact floating collection control; target details open on hover or focus. */
 export function PendingTargetsPanel({
 	targets,
 	submitState,
@@ -47,21 +47,29 @@ export function PendingTargetsPanel({
 	bottomOffset = 16,
 }: PendingTargetsPanelProps) {
 	const { t } = useTranslation("super")
-	const [isExpanded, setIsExpanded] = useState(true)
+	const [isExpanded, setIsExpanded] = useState(false)
 	const isSubmitting = submitState === "submitting"
 	const hasEmptyInstruction = targets.some((target) => !target.instruction.trim())
 	const canSubmit = targets.length > 0 && !hasEmptyInstruction && !isSubmitting
 
 	return (
 		<div
-			className="pointer-events-auto absolute left-1/2 z-30 w-[min(680px,calc(100%-24px))] -translate-x-1/2 overflow-hidden rounded-2xl border bg-popover/95 shadow-xl backdrop-blur-sm"
+			className="pointer-events-auto absolute right-3 z-30 w-[min(360px,calc(100%-24px))] overflow-hidden rounded-xl bg-popover/95 shadow-[0_12px_32px_hsl(var(--foreground)/0.16)] ring-1 ring-foreground/10 backdrop-blur-sm"
 			style={{ bottom: bottomOffset }}
+			onMouseEnter={() => targets.length > 0 && setIsExpanded(true)}
+			onMouseLeave={() => setIsExpanded(false)}
+			onFocusCapture={() => targets.length > 0 && setIsExpanded(true)}
+			onBlurCapture={(event) => {
+				if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+					setIsExpanded(false)
+				}
+			}}
 			data-testid="element-inspector-pending-panel"
 		>
 			{targets.length > 0 && isExpanded && (
 				<div
 					id="element-inspector-pending-target-list"
-					className="max-h-36 space-y-1 overflow-y-auto border-b p-2.5"
+					className="max-h-48 space-y-1 overflow-y-auto border-b border-border/60 p-2"
 					data-testid="element-inspector-pending-target-list"
 				>
 					{targets.map((target) => (
@@ -124,9 +132,9 @@ export function PendingTargetsPanel({
 				</div>
 			)}
 
-			<div className="flex min-h-14 items-center gap-2 px-3 py-2.5">
+			<div className="flex min-h-12 items-center gap-1.5 px-2 py-2">
 				<div
-					className="flex items-center gap-0.5 rounded-xl bg-muted/70 p-1 shadow-inner"
+					className="flex items-center gap-0.5 rounded-lg bg-muted/70 p-0.5"
 					role="group"
 					aria-label={t("stylePanel.inspector.selectionMode")}
 				>
@@ -139,7 +147,7 @@ export function PendingTargetsPanel({
 							variant="ghost"
 							size="icon-sm"
 							className={cn(
-								"h-9 w-9 rounded-lg transition-[background-color,color,box-shadow,transform] active:scale-[0.96]",
+								"h-8 w-8 rounded-md transition-[background-color,color,box-shadow,transform] active:scale-[0.96]",
 								selectionMode === "element"
 									? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
 									: "text-muted-foreground hover:bg-background/80 hover:text-foreground",
@@ -161,7 +169,7 @@ export function PendingTargetsPanel({
 								variant="ghost"
 								size="icon-sm"
 								className={cn(
-									"h-9 w-9 rounded-lg transition-[background-color,color,box-shadow,transform] active:scale-[0.96]",
+									"h-8 w-8 rounded-md transition-[background-color,color,box-shadow,transform] active:scale-[0.96]",
 									selectionMode === "screenshot"
 										? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
 										: "text-muted-foreground hover:bg-background/80 hover:text-foreground",
@@ -176,12 +184,10 @@ export function PendingTargetsPanel({
 					)}
 				</div>
 
-				<div className="h-6 w-px bg-border" />
-
 				<button
 					type="button"
 					className={cn(
-						"flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-sm text-muted-foreground",
+						"flex min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground",
 						"hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 						"disabled:pointer-events-none disabled:opacity-50",
 					)}
@@ -213,7 +219,7 @@ export function PendingTargetsPanel({
 						<Button
 							variant="ghost"
 							size="sm"
-							className="h-9 rounded-lg px-3 transition-transform active:scale-[0.96]"
+							className="h-8 rounded-md px-2.5 text-xs transition-transform active:scale-[0.96]"
 							onClick={onExit}
 						>
 							{t("stylePanel.inspector.exit")}
@@ -222,7 +228,7 @@ export function PendingTargetsPanel({
 					<Button
 						variant="default"
 						size="sm"
-						className="h-9 gap-1.5 rounded-lg px-4 transition-transform active:scale-[0.96]"
+						className="h-8 gap-1 rounded-md px-3 text-xs transition-transform active:scale-[0.96]"
 						disabled={!canSubmit}
 						onClick={onSubmit}
 						data-testid="element-inspector-submit-button"

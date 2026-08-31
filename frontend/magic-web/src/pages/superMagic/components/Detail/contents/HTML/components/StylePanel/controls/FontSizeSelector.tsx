@@ -82,6 +82,7 @@ export function FontSizeSelector({
 				<NumericDragInput
 					value={value}
 					onChange={handleInput}
+					onCommit={onApply}
 					onBlur={handleBlur}
 					onKeyDown={handleKeyDown}
 					disabled={disabled}

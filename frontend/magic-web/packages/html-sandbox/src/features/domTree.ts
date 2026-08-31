@@ -43,6 +43,8 @@ export interface DomTreeNode {
 	label: string
 	textContent?: string
 	resource?: string
+	/** Resolved image source used for the lightweight DOM-tree thumbnail. */
+	thumbnailUrl?: string
 	children: DomTreeNode[]
 	/** Whether the canvas can select this node. Root nodes remain selectable. */
 	canSelect?: boolean
@@ -131,6 +133,69 @@ function getResource(element: HTMLElement): string | undefined {
 	return value?.trim() || undefined
 }
 
+function resolveThumbnailUrl(value: string | null | undefined): string | undefined {
+	const raw = value?.trim()
+	if (!raw || raw.startsWith("#")) return undefined
+	if (raw.startsWith("data:")) return raw
+
+	try {
+		return new URL(raw, document.baseURI).href
+	} catch {
+		return raw
+	}
+}
+
+function getBackgroundImageUrl(value: string | undefined): string | undefined {
+	if (!value || value === "none") return undefined
+	const match = value.match(/url\(\s*(?:"([\s\S]*?)"|'([\s\S]*?)'|([^)]*?))\s*\)/i)
+	return resolveThumbnailUrl(match?.[1] || match?.[2] || match?.[3])
+}
+
+function getInlineBackgroundValues(styleAttribute: string | null): string[] {
+	if (!styleAttribute) return []
+
+	return Array.from(
+		styleAttribute.matchAll(/(?:^|;)\s*background(?:-image)?\s*:\s*([^;]+)/gi),
+		(match) => match[1],
+	)
+}
+
+/** Prefer the element's own visual source before inheriting one from children. */
+function getDirectThumbnailUrl(element: HTMLElement): string | undefined {
+	const tagName = element.tagName.toLowerCase()
+	if (tagName === "img") {
+		const image = element as HTMLImageElement
+		return resolveThumbnailUrl(image.currentSrc || element.getAttribute("src") || image.src)
+	}
+	if (tagName === "source") {
+		const source = element as HTMLSourceElement
+		return resolveThumbnailUrl(source.src || element.getAttribute("src"))
+	}
+
+	const computedStyle = window.getComputedStyle(element)
+	const backgroundCandidates = [
+		element.style.backgroundImage,
+		element.style.background,
+		computedStyle.backgroundImage,
+		computedStyle.background,
+	]
+
+	for (const candidate of backgroundCandidates) {
+		const thumbnailUrl = getBackgroundImageUrl(candidate)
+		if (thumbnailUrl) return thumbnailUrl
+	}
+
+	// Some DOM emulators do not expose shorthand values through CSSOM. Keep
+	// the raw fallback limited to actual background declarations so unrelated
+	// URL-bearing properties such as mask-image are not treated as thumbnails.
+	for (const candidate of getInlineBackgroundValues(element.getAttribute("style")).reverse()) {
+		const thumbnailUrl = getBackgroundImageUrl(candidate)
+		if (thumbnailUrl) return thumbnailUrl
+	}
+
+	return undefined
+}
+
 function getLabel(element: HTMLElement): string {
 	const tagName = element.tagName.toLowerCase()
 	const id = element.id ? `#${element.id}` : ""
@@ -209,6 +274,7 @@ function describeNode(
 		// Descendant text is rendered by the corresponding child rows.
 		textContent: getDirectTextContent(element),
 		resource: getResource(element),
+		thumbnailUrl: getDirectThumbnailUrl(element),
 		canSelect: !isExcluded && selectorIsUnique,
 		editable: !disabledReason,
 		canHaveChildren,
@@ -250,7 +316,6 @@ function buildNode(element: HTMLElement, isRoot = false): DomTreeNode {
 			stack.push(childNodes[index])
 		}
 	}
-
 	return root
 }
 

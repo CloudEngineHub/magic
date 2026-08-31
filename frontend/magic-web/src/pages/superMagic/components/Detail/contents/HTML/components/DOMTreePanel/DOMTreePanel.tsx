@@ -1015,7 +1015,7 @@ function DOMTreePanelInner({
 	return (
 		<TooltipProvider delayDuration={200}>
 			<aside
-				className="relative my-2 flex h-[calc(100%_-_1rem)] min-h-0 min-w-[260px] max-w-[520px] shrink-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-background/95 shadow-[-10px_0_24px_-18px_rgba(15,23,42,0.5)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
+				className="relative flex h-full border-l border-border/80 min-h-0 min-w-[260px] max-w-[520px] shrink-0 flex-col overflow-hidden bg-background/95 shadow-[-10px_0_24px_-18px_rgba(15,23,42,0.2)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
 				style={{
 					width,
 					minWidth: "min(260px, 100%)",

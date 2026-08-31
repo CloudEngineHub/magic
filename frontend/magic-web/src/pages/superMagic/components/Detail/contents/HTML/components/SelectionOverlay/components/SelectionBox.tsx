@@ -57,7 +57,6 @@ export const SelectionBox = memo(function SelectionBox({
 	return (
 		<>
 			<motion.div
-				key={info.selector}
 				className="pointer-events-none absolute border-2 border-primary"
 				initial={{ opacity: 0, scale: 0.97 }}
 				animate={{

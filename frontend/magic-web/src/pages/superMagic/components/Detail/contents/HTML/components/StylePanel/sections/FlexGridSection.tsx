@@ -1,5 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { createElement, useCallback, useEffect, useState } from "react"
+import { createElement, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	AlignHorizontalDistributeCenter,
@@ -19,9 +19,11 @@ import {
 	ArrowRight,
 	ArrowUp,
 	Grid2X2,
-	type LucideIcon,
+	Link2,
 	StretchHorizontal,
 	StretchVertical,
+	type LucideIcon,
+	Unlink2,
 } from "lucide-react"
 import { useDebounceFn } from "ahooks"
 import { Input } from "@/components/shadcn-ui/input"
@@ -282,6 +284,7 @@ function CompactField({
 	label,
 	value,
 	onChange,
+	onCommit,
 	hint,
 	numeric = false,
 	numericUnit = "px",
@@ -291,6 +294,7 @@ function CompactField({
 	label: string
 	value: string
 	onChange: (value: string) => void
+	onCommit?: (value: string) => void
 	hint?: string
 	numeric?: boolean
 	numericUnit?: string
@@ -306,6 +310,10 @@ function CompactField({
 		(nextValue: string) => onChange(nextValue ? `${nextValue}${unitPart}` : ""),
 		[onChange, unitPart],
 	)
+	const handleNumericCommit = useCallback(
+		(nextValue: string) => onCommit?.(nextValue ? `${nextValue}${unitPart}` : ""),
+		[onCommit, unitPart],
+	)
 
 	return (
 		<div className="min-w-0 space-y-1">
@@ -318,6 +326,12 @@ function CompactField({
 						id={id}
 						value={numberPart}
 						onChange={handleNumericChange}
+						onCommit={onCommit ? handleNumericCommit : undefined}
+						onBlur={
+							onCommit
+								? (event) => handleNumericCommit(event.currentTarget.value)
+								: undefined
+						}
 						min={numericMin}
 						aria-label={label}
 						className="h-8 w-full min-w-0 rounded-md border-border/70 bg-background px-2.5 pr-8 font-mono text-[12px] tabular-nums transition-[background-color,border-color,box-shadow] duration-150 hover:border-primary/45 hover:bg-primary/5 focus-visible:border-primary/70 focus-visible:bg-primary/5 focus-visible:ring-2 focus-visible:ring-primary/20"
@@ -358,18 +372,28 @@ const FlexGridSection = observer(function FlexGridSection({
 	const isGrid = display === "grid"
 	const isFlexItem = parentDisplay === "flex"
 	const isGridItem = parentDisplay === "grid"
-	const [gap, setGap] = useState(styles?.gap || "0px")
-	const [rowGap, setRowGap] = useState(getGapAxisValue(styles?.rowGap ?? styles?.gap, 0))
-	const [columnGap, setColumnGap] = useState(getGapAxisValue(styles?.columnGap ?? styles?.gap, 1))
+	// `gap` is still a valid fallback for older inline styles, but the UI edits
+	// the explicit row/column properties so linking never relies on shorthand parsing.
+	const initialRowGap = getGapAxisValue(styles?.rowGap ?? styles?.gap, 0)
+	const initialColumnGap = getGapAxisValue(styles?.columnGap ?? styles?.gap, 1)
+	const [rowGap, setRowGap] = useState(initialRowGap)
+	const [columnGap, setColumnGap] = useState(initialColumnGap)
+	const [isGapLinked, setIsGapLinked] = useState(initialRowGap === initialColumnGap)
 	const [columns, setColumns] = useState(styles?.gridTemplateColumns || "none")
 	const [rows, setRows] = useState(styles?.gridTemplateRows || "none")
+	const previousSelectorRef = useRef(selectedElement?.selector)
 
 	useEffect(() => {
-		setGap(styles?.gap || "0px")
-		setRowGap(getGapAxisValue(styles?.rowGap ?? styles?.gap, 0))
-		setColumnGap(getGapAxisValue(styles?.columnGap ?? styles?.gap, 1))
+		const nextRowGap = getGapAxisValue(styles?.rowGap ?? styles?.gap, 0)
+		const nextColumnGap = getGapAxisValue(styles?.columnGap ?? styles?.gap, 1)
+		setRowGap(nextRowGap)
+		setColumnGap(nextColumnGap)
 		setColumns(styles?.gridTemplateColumns || "none")
 		setRows(styles?.gridTemplateRows || "none")
+		if (previousSelectorRef.current !== selectedElement?.selector) {
+			setIsGapLinked(nextRowGap === nextColumnGap)
+			previousSelectorRef.current = selectedElement?.selector
+		}
 	}, [
 		selectedElement?.selector,
 		styles?.columnGap,
@@ -380,15 +404,37 @@ const FlexGridSection = observer(function FlexGridSection({
 	])
 
 	const { run: applyDebounced } = useDebounceFn(
-		(property: string, value: string) => onStyleChange?.(property, value),
+		(changes: Record<string, string>) => {
+			Object.entries(changes).forEach(([property, value]) => onStyleChange?.(property, value))
+		},
 		{ wait: 250 },
 	)
 	const updateInput = useCallback(
 		(property: string, value: string, setValue: (value: string) => void) => {
 			setValue(value)
-			if (value.trim()) applyDebounced(property, value)
+			if (value.trim()) applyDebounced({ [property]: value })
 		},
 		[applyDebounced],
+	)
+	const updateGapInput = useCallback((axis: "row" | "column", value: string) => {
+		if (axis === "row") {
+			setRowGap(value)
+		} else {
+			setColumnGap(value)
+		}
+	}, [])
+	// Preview both fields during editing, then submit the final value only from
+	// NumericDragInput's commit callback (pointer release, keyboard nudge, or blur).
+	const commitGapInput = useCallback(
+		(axis: "row" | "column", value: string) => {
+			if (!value.trim()) return
+			if (isGapLinked) {
+				applyDebounced({ rowGap: value, columnGap: value })
+			} else {
+				applyDebounced({ [axis === "row" ? "rowGap" : "columnGap"]: value })
+			}
+		},
+		[applyDebounced, isGapLinked],
 	)
 	const getValueLabel = useCallback(
 		(value: string) => t(`stylePanel.layoutValues.${VALUE_LABEL_KEYS[value] || value}`, value),
@@ -542,20 +588,14 @@ const FlexGridSection = observer(function FlexGridSection({
 
 			{isFlex || isGrid ? (
 				<>
-					<div className="grid min-w-0 grid-cols-3 gap-2">
-						<CompactField
-							id="layout-gap"
-							label={t("stylePanel.gap")}
-							value={gap}
-							onChange={(value) => updateInput("gap", value, setGap)}
-							numeric
-							numericMin={0}
-						/>
+					{/* Keep the link action beside the two controls without adding another panel layer. */}
+					<div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
 						<CompactField
 							id="layout-row-gap"
 							label={t("stylePanel.rowGap")}
 							value={rowGap}
-							onChange={(value) => updateInput("rowGap", value, setRowGap)}
+							onChange={(value) => updateGapInput("row", value)}
+							onCommit={(value) => commitGapInput("row", value)}
 							numeric
 							numericMin={0}
 						/>
@@ -563,10 +603,33 @@ const FlexGridSection = observer(function FlexGridSection({
 							id="layout-column-gap"
 							label={t("stylePanel.columnGap")}
 							value={columnGap}
-							onChange={(value) => updateInput("columnGap", value, setColumnGap)}
+							onChange={(value) => updateGapInput("column", value)}
+							onCommit={(value) => commitGapInput("column", value)}
 							numeric
 							numericMin={0}
 						/>
+						<button
+							type="button"
+							data-testid="layout-gap-link-toggle"
+							aria-label={
+								isGapLinked ? t("stylePanel.unlinkGaps") : t("stylePanel.linkGaps")
+							}
+							title={
+								isGapLinked ? t("stylePanel.unlinkGaps") : t("stylePanel.linkGaps")
+							}
+							aria-pressed={isGapLinked}
+							onClick={() => setIsGapLinked((linked) => !linked)}
+							className={cn(
+								"mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]",
+								isGapLinked && "bg-muted text-foreground",
+							)}
+						>
+							{isGapLinked ? (
+								<Link2 className="h-3.5 w-3.5" />
+							) : (
+								<Unlink2 className="h-3.5 w-3.5" />
+							)}
+						</button>
 					</div>
 
 					{isGrid ? (

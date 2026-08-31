@@ -78,6 +78,33 @@ interface Props {
 	children?: React.ReactNode
 }
 
+function NodeThumbnail({ nodeId, src }: { nodeId: string; src: string }) {
+	const [failed, setFailed] = React.useState(false)
+
+	React.useEffect(() => {
+		setFailed(false)
+	}, [src])
+
+	if (failed) return null
+
+	return (
+		<span
+			className="inline-flex h-5 w-5 shrink-0 overflow-hidden rounded-sm bg-muted/40 outline outline-1 outline-black/10 dark:outline-white/10"
+			data-testid={`dom-tree-thumbnail-${nodeId}`}
+			aria-hidden="true"
+		>
+			<img
+				src={src}
+				alt=""
+				loading="lazy"
+				draggable={false}
+				className="h-full w-full object-cover"
+				onError={() => setFailed(true)}
+			/>
+		</span>
+	)
+}
+
 export function DOMTreeRow({
 	node,
 	depth,
@@ -340,6 +367,9 @@ export function DOMTreeRow({
 									<span className="truncate">{semanticLabel}</span>
 								</span>
 							</NodeDetailsPopover>
+							{node.thumbnailUrl ? (
+								<NodeThumbnail nodeId={node.nodeId} src={node.thumbnailUrl} />
+							) : null}
 							{node.dynamicWarning ? (
 								<ActionTooltip label={getNodeHint(node)}>
 									<span

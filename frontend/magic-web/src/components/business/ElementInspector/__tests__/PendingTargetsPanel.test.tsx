@@ -111,7 +111,7 @@ describe("PendingTargetsPanel", () => {
 		).not.toBeInTheDocument()
 	})
 
-	it("expands and collapses the pending target list from the bottom bar", () => {
+	it("keeps the target list collapsed until the compact panel is hovered", () => {
 		render(
 			<PendingTargetsPanel
 				targets={[
@@ -142,18 +142,56 @@ describe("PendingTargetsPanel", () => {
 		)
 
 		const toggle = screen.getByTestId("element-inspector-pending-target-toggle")
+		const panel = screen.getByTestId("element-inspector-pending-panel")
 		const getTargetList = () => screen.queryByTestId("element-inspector-pending-target-list")
 
-		expect(toggle).toHaveAttribute("aria-expanded", "true")
-		expect(getTargetList()).toBeInTheDocument()
-
-		fireEvent.click(toggle)
 		expect(toggle).toHaveAttribute("aria-expanded", "false")
 		expect(getTargetList()).not.toBeInTheDocument()
 
-		fireEvent.click(toggle)
+		fireEvent.mouseEnter(panel)
 		expect(toggle).toHaveAttribute("aria-expanded", "true")
 		expect(getTargetList()).toBeInTheDocument()
+
+		fireEvent.mouseLeave(panel)
+		expect(toggle).toHaveAttribute("aria-expanded", "false")
+		expect(getTargetList()).not.toBeInTheDocument()
+	})
+
+	it("expands the target list while keyboard focus stays inside the panel", () => {
+		render(
+			<PendingTargetsPanel
+				targets={[
+					{
+						id: "#hero",
+						kind: "element",
+						info: {
+							selector: "#hero",
+							tagName: "section",
+							id: "hero",
+							classList: [],
+							rect: { top: 0, left: 0, width: 100, height: 80 },
+							margin: { top: 0, right: 0, bottom: 0, left: 0 },
+							padding: { top: 0, right: 0, bottom: 0, left: 0 },
+							border: { top: 0, right: 0, bottom: 0, left: 0 },
+							computedStyles: {},
+							attributes: {},
+							textContent: "",
+						},
+						instruction: "Update hero",
+					},
+				]}
+				submitState="idle"
+				onEdit={vi.fn()}
+				onRemove={vi.fn()}
+				onSubmit={vi.fn()}
+			/>,
+		)
+
+		const toggle = screen.getByTestId("element-inspector-pending-target-toggle")
+		fireEvent.focus(toggle)
+
+		expect(toggle).toHaveAttribute("aria-expanded", "true")
+		expect(screen.getByTestId("element-inspector-pending-target-list")).toBeInTheDocument()
 	})
 
 	it("keeps the pending panel above a bottom toolbar when an inset is provided", () => {

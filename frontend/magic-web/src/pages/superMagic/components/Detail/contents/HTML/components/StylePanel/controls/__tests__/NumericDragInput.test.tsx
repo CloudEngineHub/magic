@@ -10,6 +10,7 @@ function ControlledNumericInput({
 }: {
 	initialValue: string
 	onChange?: (value: string) => void
+	onCommit?: (value: string) => void
 	step?: number
 	min?: number
 	max?: number
@@ -50,12 +51,14 @@ function firePointerEvent(
 describe("NumericDragInput", () => {
 	it("adjusts the value by vertical drag", () => {
 		const onPointerDown = vi.fn()
+		const onCommit = vi.fn()
 		render(
 			<ControlledNumericInput
 				initialValue="10"
 				step={2}
 				dragSensitivity={4}
 				onPointerDown={onPointerDown}
+				onCommit={onCommit}
 			/>,
 		)
 		const input = screen.getByRole("textbox", { name: "numeric value" })
@@ -67,9 +70,15 @@ describe("NumericDragInput", () => {
 		const moveEvent = firePointerEvent(window, "pointermove", 92)
 
 		expect(input).toHaveValue("14")
+		expect(onCommit).not.toHaveBeenCalled()
 		expect(moveEvent.defaultPrevented).toBe(true)
+		firePointerEvent(window, "pointermove", 84)
+		expect(input).toHaveValue("18")
+		expect(onCommit).not.toHaveBeenCalled()
 
-		firePointerEvent(window, "pointerup", 92)
+		firePointerEvent(window, "pointerup", 84)
+		expect(onCommit).toHaveBeenCalledTimes(1)
+		expect(onCommit).toHaveBeenCalledWith("18")
 		expect(input).not.toHaveAttribute("data-dragging", "true")
 	})
 

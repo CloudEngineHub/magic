@@ -88,6 +88,53 @@ describe("domTree", () => {
 		expect(tree.root.children[0].resource).toBe("images/chart.png")
 	})
 
+	it("resolves image sources for thumbnails without replacing the original resource path", () => {
+		document.body.innerHTML = `
+			<img
+				src="https://cdn.example.com/project/assets/chart.png?signature=temporary"
+				data-original-path="../assets/chart.png"
+			/>
+		`
+
+		const tree = buildDomTree()
+		const image = tree.root.children[0]
+
+		expect(image.resource).toBe("../assets/chart.png")
+		expect(image.thumbnailUrl).toBe(
+			"https://cdn.example.com/project/assets/chart.png?signature=temporary",
+		)
+	})
+
+	it("uses a background image for the node without duplicating descendant image thumbnails", () => {
+		document.body.innerHTML = `
+			<section class="hero" style="background: url('/images/hero.webp') center / cover no-repeat">
+				<div class="content"><img src="images/chart.png" /></div>
+			</section>
+		`
+
+		const tree = buildDomTree()
+		const hero = tree.root.children[0]
+		const content = hero.children[0]
+
+		expect(hero.thumbnailUrl).toBe("http://localhost:3000/images/hero.webp")
+		expect(content.thumbnailUrl).toBeUndefined()
+		expect(content.children[0].thumbnailUrl).toBe("http://localhost:3000/images/chart.png")
+	})
+
+	it("does not treat a plain image container as an image-backed node", () => {
+		document.body.innerHTML = `
+			<div class="image-container"><img src="images/chart.png" /></div>
+		`
+
+		const tree = buildDomTree()
+		const container = tree.root.children[0]
+
+		expect(container.tagName).toBe("div")
+		expect(container.thumbnailUrl).toBeUndefined()
+		expect(container.children[0].tagName).toBe("img")
+		expect(container.children[0].thumbnailUrl).toBe("http://localhost:3000/images/chart.png")
+	})
+
 	it("keeps duplicate ids non-editable without per-node document queries", () => {
 		document.body.innerHTML = `
 			<section id="duplicate">First</section>

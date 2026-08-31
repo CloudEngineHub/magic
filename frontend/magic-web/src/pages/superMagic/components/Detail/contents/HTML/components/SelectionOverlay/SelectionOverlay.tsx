@@ -339,7 +339,9 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 				{transformedSelections.map(
 					({ selector, info, viewportRect, transformedRect, transform }) => (
 						<SelectionBox
-							key={selector}
+							// Keep the single-selection box mounted while switching nodes so
+							// Framer Motion animates new bounds instead of replaying entrance.
+							key={isMultiSelect ? selector : "single-selection"}
 							info={info}
 							transformedRect={transformedRect}
 							viewportRect={viewportRect}

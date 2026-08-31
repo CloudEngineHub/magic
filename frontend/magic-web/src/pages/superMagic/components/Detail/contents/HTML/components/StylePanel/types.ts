@@ -1,4 +1,4 @@
-import type { Ref } from "react"
+import type { ReactNode, Ref } from "react"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 
 /**
@@ -146,10 +146,15 @@ export interface StylePanelProps {
 
 	/** Whether the element inspector is currently active */
 	inspectorActive?: boolean
+	/** Controls the staggered enter state when rendered in the floating context toolbar. */
+	contextToolbarOpen?: boolean
 
 	/** Called when user clicks the inspector button to toggle inspector mode */
 	onStartInspector?: () => void
 }
+
+/** Renders one contextual toolbar item with its individual enter transition. */
+export type ContextToolbarItemMotion = (children: ReactNode) => ReactNode
 
 /**
  * 样式配置区域的通用 Props

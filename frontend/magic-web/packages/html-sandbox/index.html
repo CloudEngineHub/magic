@@ -432,7 +432,8 @@
 					!parsedRuntimeUrl.pathname.endsWith("/husky-runtime.js") ||
 					parsedRuntimeUrl.search ||
 					parsedRuntimeUrl.hash ||
-					(parsedRuntimeUrl.protocol !== "http:" && parsedRuntimeUrl.protocol !== "https:")
+					(parsedRuntimeUrl.protocol !== "http:" &&
+						parsedRuntimeUrl.protocol !== "https:")
 				) {
 					console.warn("[RenderSite] runtime URL rejected")
 					return Promise.resolve(false)
@@ -477,7 +478,9 @@
 						runtimeState.loading = false
 						runtimeState.failedRuntimeUrl = runtimeUrl
 						if (script && script.parentNode) script.parentNode.removeChild(script)
-						console.error("[RenderSite] runtime load timed out", { runtimeUrl: runtimeUrl })
+						console.error("[RenderSite] runtime load timed out", {
+							runtimeUrl: runtimeUrl,
+						})
 						sendRuntimeErrorTelemetry({
 							errorType: "runtimeLoad",
 							message: "iframe runtime script load timed out",
@@ -498,6 +501,10 @@
 						script.setAttribute("data-runtime", "true")
 						script.setAttribute("data-runtime-source", "host")
 						script.async = true
+						// The host runtime is served from the parent application's origin.
+						// Explicit CORS mode is required for classic scripts loaded by the
+						// cross-origin sandbox shell, especially in Vite dev environments.
+						script.crossOrigin = "anonymous"
 						script.src = runtimeUrl
 						script.onload = function () {
 							if (settled) return

@@ -266,6 +266,8 @@ export interface DomTreeNode {
 	label: string
 	textContent?: string
 	resource?: string
+	/** Resolved image source used for the DOM-tree thumbnail. */
+	thumbnailUrl?: string
 	children: DomTreeNode[]
 	/** Whether the canvas can select this node. Kept optional for older runtimes. */
 	canSelect?: boolean

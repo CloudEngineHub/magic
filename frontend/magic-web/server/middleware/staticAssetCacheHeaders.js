@@ -34,6 +34,9 @@ function setStaticAssetCacheHeaders(res, pathname) {
 	if (isMagicHtmlSandboxRuntime(pathname)) {
 		// This stable runtime URL must revalidate on every deployment so a shared
 		// HTML Sandbox shell does not execute a stale compatibility bundle.
+		// The runtime is loaded by the cross-origin sandbox shell as an anonymous
+		// classic script, so it must explicitly allow cross-origin requests.
+		res.setHeader("Access-Control-Allow-Origin", "*")
 		res.setHeader("Cache-Control", NEGOTIATED_CACHE_CONTROL)
 		return
 	}

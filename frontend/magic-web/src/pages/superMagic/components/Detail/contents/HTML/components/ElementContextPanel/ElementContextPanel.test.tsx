@@ -44,6 +44,27 @@ describe("ElementContextPanel", () => {
 		expect(panel.querySelector('button[aria-label="stylePanel.closeContextPanel"]')).toBeNull()
 	})
 
+	it("keeps the toolbar mounted when switching selected elements", () => {
+		const { rerender } = render(
+			<ElementContextPanel
+				editorRef={{ current: null }}
+				anchor={{ top: 80, left: 80, width: 120, height: 40 }}
+				selector="section.hero"
+			/>,
+		)
+		const stylePanel = document.querySelector('[data-testid="mock-style-panel"]')
+
+		rerender(
+			<ElementContextPanel
+				editorRef={{ current: null }}
+				anchor={{ top: 120, left: 120, width: 120, height: 40 }}
+				selector="section.card"
+			/>,
+		)
+
+		expect(document.querySelector('[data-testid="mock-style-panel"]')).toBe(stylePanel)
+	})
+
 	it.each([
 		["above", { top: -80, left: 80, width: 120, height: 40 }],
 		["below", { top: window.innerHeight + 20, left: 80, width: 120, height: 40 }],

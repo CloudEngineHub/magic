@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Toggle } from "@/components/shadcn-ui/toggle"
 import { TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -16,6 +17,7 @@ import {
 } from "lucide-react"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 import { STYLE_PANEL_STYLES } from "../styles"
+import type { ContextToolbarItemMotion } from "../types"
 
 interface TextAlignToolsProps {
 	value: string
@@ -25,6 +27,7 @@ interface TextAlignToolsProps {
 	flexDirection?: string
 	/** Context toolbars omit justify to keep the frequent-action row compact. */
 	compact?: boolean
+	itemMotion?: ContextToolbarItemMotion
 }
 
 /**
@@ -37,8 +40,10 @@ export function TextAlignTools({
 	mode = "text",
 	flexDirection = "row",
 	compact = false,
+	itemMotion,
 }: TextAlignToolsProps) {
 	const { t } = useTranslation("super")
+	const renderItem = (children: ReactNode) => itemMotion?.(children) ?? children
 	const isFlex = mode === "flex"
 	const isVertical = flexDirection.includes("column")
 	const isReverse = flexDirection.endsWith("reverse")
@@ -83,96 +88,61 @@ export function TextAlignTools({
 					const Icon = flexIcons[index]
 					const label = `${t("stylePanel.justifyContent")}: ${getFlexLabel(flexValue)}`
 					return (
-						<TooltipPrimitive.Root key={flexValue}>
-							<TooltipTrigger asChild>
-								<span>
-									<Toggle
-										size="sm"
-										pressed={value === flexValue}
-										onPressedChange={() => onAlign(flexValue)}
-										disabled={disabled}
-										className={STYLE_PANEL_STYLES.iconButton}
-									>
-										<Icon className="h-4 w-4" />
-									</Toggle>
-								</span>
-							</TooltipTrigger>
-							{renderTooltip(label)}
-						</TooltipPrimitive.Root>
+						<Fragment key={flexValue}>
+							{renderItem(
+								<TooltipPrimitive.Root>
+									<TooltipTrigger asChild>
+										<span>
+											<Toggle
+												size="sm"
+												pressed={value === flexValue}
+												onPressedChange={() => onAlign(flexValue)}
+												disabled={disabled}
+												className={STYLE_PANEL_STYLES.iconButton}
+											>
+												<Icon className="h-4 w-4" />
+											</Toggle>
+										</span>
+									</TooltipTrigger>
+									{renderTooltip(label)}
+								</TooltipPrimitive.Root>,
+							)}
+						</Fragment>
 					)
 				})}
 			</div>
 		)
 	}
 
+	const renderTextAlignment = (
+		alignment: "left" | "center" | "right" | "justify",
+		Icon: typeof AlignLeft,
+	) =>
+		renderItem(
+			<TooltipPrimitive.Root>
+				<TooltipTrigger asChild>
+					<span>
+						<Toggle
+							size="sm"
+							pressed={value === alignment}
+							onPressedChange={() => onAlign(alignment)}
+							disabled={disabled}
+							className={STYLE_PANEL_STYLES.iconButton}
+						>
+							<Icon className="h-4 w-4" />
+						</Toggle>
+					</span>
+				</TooltipTrigger>
+				{renderTooltip(getTextLabel(alignment))}
+			</TooltipPrimitive.Root>,
+		)
+
 	return (
 		<div className="flex items-center gap-0.5">
-			<TooltipPrimitive.Root>
-				<TooltipTrigger asChild>
-					<span>
-						<Toggle
-							size="sm"
-							pressed={value === "left"}
-							onPressedChange={() => onAlign("left")}
-							disabled={disabled}
-							className={STYLE_PANEL_STYLES.iconButton}
-						>
-							<AlignLeft className="h-4 w-4" />
-						</Toggle>
-					</span>
-				</TooltipTrigger>
-				{renderTooltip(getTextLabel("left"))}
-			</TooltipPrimitive.Root>
-			<TooltipPrimitive.Root>
-				<TooltipTrigger asChild>
-					<span>
-						<Toggle
-							size="sm"
-							pressed={value === "center"}
-							onPressedChange={() => onAlign("center")}
-							disabled={disabled}
-							className={STYLE_PANEL_STYLES.iconButton}
-						>
-							<AlignCenter className="h-4 w-4" />
-						</Toggle>
-					</span>
-				</TooltipTrigger>
-				{renderTooltip(getTextLabel("center"))}
-			</TooltipPrimitive.Root>
-			<TooltipPrimitive.Root>
-				<TooltipTrigger asChild>
-					<span>
-						<Toggle
-							size="sm"
-							pressed={value === "right"}
-							onPressedChange={() => onAlign("right")}
-							disabled={disabled}
-							className={STYLE_PANEL_STYLES.iconButton}
-						>
-							<AlignRight className="h-4 w-4" />
-						</Toggle>
-					</span>
-				</TooltipTrigger>
-				{renderTooltip(getTextLabel("right"))}
-			</TooltipPrimitive.Root>
-			{compact ? null : (
-				<TooltipPrimitive.Root>
-					<TooltipTrigger asChild>
-						<span>
-							<Toggle
-								size="sm"
-								pressed={value === "justify"}
-								onPressedChange={() => onAlign("justify")}
-								disabled={disabled}
-								className={STYLE_PANEL_STYLES.iconButton}
-							>
-								<AlignJustify className="h-4 w-4" />
-							</Toggle>
-						</span>
-					</TooltipTrigger>
-					{renderTooltip(getTextLabel("justify"))}
-				</TooltipPrimitive.Root>
-			)}
+			{renderTextAlignment("left", AlignLeft)}
+			{renderTextAlignment("center", AlignCenter)}
+			{renderTextAlignment("right", AlignRight)}
+			{compact ? null : renderTextAlignment("justify", AlignJustify)}
 		</div>
 	)
 }

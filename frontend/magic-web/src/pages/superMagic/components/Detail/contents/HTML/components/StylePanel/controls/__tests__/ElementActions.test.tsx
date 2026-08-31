@@ -84,6 +84,33 @@ describe("ElementActions", () => {
 		).not.toBeInTheDocument()
 	})
 
+	it("applies the motion wrapper to each visible action item", async () => {
+		const getDomTree = vi.fn().mockResolvedValue(createTree(true))
+		const itemMotion = vi.fn((children: ReactNode) => (
+			<span data-testid="element-action-motion">{children}</span>
+		))
+
+		render(
+			<ElementActions
+				editorRef={{ current: { getDomTree } } as never}
+				itemMotion={itemMotion}
+			/>,
+		)
+
+		await screen.findByTestId("html-style-panel-add-element-button")
+		expect(screen.getAllByTestId("element-action-motion")).toHaveLength(6)
+		expect(
+			screen
+				.getByTestId("html-style-panel-add-element-button")
+				.closest('[data-testid="element-action-motion"]'),
+		).toBeInTheDocument()
+		expect(
+			screen
+				.getByTestId("html-style-panel-delete-button")
+				.closest('[data-testid="element-action-motion"]'),
+		).toBeInTheDocument()
+	})
+
 	it("keeps structural actions visible while refreshing after a style history change", async () => {
 		let resolveRefresh: ((tree: ReturnType<typeof createTree>) => void) | undefined
 		const pendingRefresh = new Promise<ReturnType<typeof createTree>>((resolve) => {

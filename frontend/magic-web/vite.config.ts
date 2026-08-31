@@ -35,7 +35,10 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
+function getBaseViteConfig(
+	env: NodeJS.ProcessEnv = process.env,
+	mode?: string,
+): UserConfig {
 	// Env overlay resolution runs before this factory so every config decision
 	// observes the same winning physical files as import.meta.env and child tasks.
 	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
@@ -43,7 +46,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				.map((host) => host.trim())
 				.filter(Boolean)
 		: []
-	const isDev = env.NODE_ENV === "development"
+	const isDev = mode === "development" || env.NODE_ENV === "development"
 	const devServerPort = env.PORT ? Number(env.PORT) : undefined
 	const isHttpsDevServer = isDev && devServerPort === 443
 	const isVisualizer = env.VISUALIZER === "true"
@@ -91,6 +94,10 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 		server: {
 			host: "0.0.0.0", // 监听所有地址
 			allowedHosts,
+			// The development shell may be hosted by husky.pages while it loads
+			// this app's local /husky-runtime.js. Allow that cross-origin script
+			// request without changing the production Vite configuration.
+			cors: isDev ? { origin: "*" } : undefined,
 			proxy: isDev ? resolveMicroAppInstallDevProxy(env) : {},
 		},
 		preview: {
@@ -361,7 +368,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 
 export default defineConfig(({ mode }): UserConfig => {
 	const overlayViteConfig = getOverlayViteConfig({ projectRoot: __dirname, mode })
-	const baseViteConfig = getBaseViteConfig(process.env)
+	const baseViteConfig = getBaseViteConfig(process.env, mode)
 
 	if (process.env.DUMP_VITE_CONFIG === "1") {
 		const requireModule = createRequire(import.meta.url)
