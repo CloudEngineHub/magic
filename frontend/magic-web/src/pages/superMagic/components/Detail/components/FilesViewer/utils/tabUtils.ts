@@ -30,12 +30,14 @@ export function mergeAttachmentFileForTab(tab: TabItem, updatedFile: FileItem): 
 	}
 }
 
-function isSlideProjectFolder(item: FileItem | AttachmentItem | undefined): boolean {
-	return Boolean(item?.is_directory && item?.display_config?.type === "slide")
-}
-
 function isSlideTemplatePreviewFolder(item: FileItem | AttachmentItem | undefined): boolean {
 	return Boolean(item?.is_directory && item?.display_config?.type === "slide-template")
+}
+
+/** Identifies content folders whose index.html must share the folder tab identity. */
+function isProjectBundleFolder(item: FileItem | AttachmentItem | undefined): boolean {
+	const type = item?.display_config?.type
+	return Boolean(item?.is_directory && (type === "audio" || type === "slide"))
 }
 
 function asAttachmentItem(item: FileItem | AttachmentItem): AttachmentItem {
@@ -66,22 +68,20 @@ function resolveSlidesTemplateTabFile(
 		isSlidesTemplateFolder(asAttachmentItem(parentDirectory))
 	) {
 		return toSlidesTemplatePreviewItem(asAttachmentItem(parentDirectory)) as
-			FileItem | AttachmentItem
+			| FileItem
+			| AttachmentItem
 	}
 
 	return null
 }
 
-function createFallbackSlideProjectFolder(
+/** Builds a temporary bundle root when cached attachments have not loaded yet. */
+function createFallbackProjectFolder(
 	file: FileItem | AttachmentItem,
 ): (FileItem | AttachmentItem) | undefined {
-	// 旧缓存可能保存的是 PPT 目录下 index.html 的 file_id。
-	// 如果缓存恢复早于附件树加载，无法通过 attachments 找到父目录，会导致：
-	// 默认恢复 tab 使用 index.html id，用户再点击文件树里的 PPT 目录时使用目录 id，
-	// 同一个 PPT 项目被打开成两个 tab。此时先用 index.html.parent_id 作为稳定 tab id，
-	// 等附件树同步完成后，再由同步逻辑用真实目录节点刷新 fileData。
 	const parentId = normalizeTabFileId(file.parent_id)
-	if (!parentId || file.display_config?.type !== "slide") return undefined
+	const type = file.display_config?.type
+	if (!parentId || (type !== "audio" && type !== "slide")) return undefined
 
 	const relativeFilePath = file.relative_file_path || ""
 	const folderPath = relativeFilePath.includes("/")
@@ -140,31 +140,27 @@ function findParentDirectory(
 	return undefined
 }
 
-function resolveSlideProjectTabFile(
+/** Resolves slide templates and audio/slide bundle entries to one canonical folder file. */
+function resolveProjectTabFile(
 	file: FileItem | AttachmentItem,
 	attachments?: FileItem[] | AttachmentItem[],
 ): FileItem | AttachmentItem {
 	const templateTabFile = resolveSlidesTemplateTabFile(file, attachments)
 	if (templateTabFile) return templateTabFile
-
-	if (isSlideProjectFolder(file)) return file
-
-	const fileName = getAttachmentFileName(file).toLowerCase()
-	if (fileName !== "index.html") return file
+	if (isProjectBundleFolder(file)) return file
+	if (getAttachmentFileName(file).toLowerCase() !== "index.html") return file
 
 	const parentDirectory = findParentDirectory(attachments, file)
-	if (parentDirectory !== undefined && isSlideProjectFolder(parentDirectory)) {
-		return parentDirectory
-	}
-
-	return createFallbackSlideProjectFolder(file) || file
+	if (isProjectBundleFolder(parentDirectory)) return parentDirectory
+	return createFallbackProjectFolder(file) || file
 }
 
-export function normalizeSlideProjectTabItem(
+/** Normalizes cached bundle tabs before ID-based deduplication. */
+export function normalizeProjectTabItem(
 	tab: TabItem,
 	attachments?: FileItem[] | AttachmentItem[],
 ): TabItem {
-	const tabFile = resolveSlideProjectTabFile(tab.fileData, attachments)
+	const tabFile = resolveProjectTabFile(tab.fileData, attachments)
 	const stableFileId = normalizeTabFileId(tabFile.file_id)
 	if (!stableFileId) return tab
 
@@ -172,10 +168,11 @@ export function normalizeSlideProjectTabItem(
 	const currentFileId = normalizeTabFileId(tab.fileData.file_id)
 	const displayConfig = tabFile.display_config || tab.display_config
 	const sameIds = stableFileId === currentTabId && stableFileId === currentFileId
-	const sameDisplayConfigType =
+	const sameTabShape =
+		tab.fileData.is_directory === tabFile.is_directory &&
 		tab.fileData.display_config?.type === displayConfig?.type &&
 		tab.display_config?.type === displayConfig?.type
-	if (sameIds && sameDisplayConfigType) return tab
+	if (sameIds && sameTabShape) return tab
 
 	return {
 		...tab,
@@ -345,14 +342,15 @@ export function convertFileToTabItem(
 		return null
 	}
 
-	const tabFile = resolveSlideProjectTabFile(file, attachments)
+	const tabFile = resolveProjectTabFile(file, attachments)
 	const stableFileId = normalizeTabFileId(tabFile.file_id)
 	if (!stableFileId) {
 		return null
 	}
 
 	const resolvedToContentFolder =
-		tabFile !== file && (isSlideProjectFolder(tabFile) || isSlideTemplatePreviewFolder(tabFile))
+		tabFile !== file &&
+		(isProjectBundleFolder(tabFile) || isSlideTemplatePreviewFolder(tabFile))
 	const fileDisplayConfig = resolvedToContentFolder
 		? tabFile.display_config
 		: options?.display_config || tabFile.display_config

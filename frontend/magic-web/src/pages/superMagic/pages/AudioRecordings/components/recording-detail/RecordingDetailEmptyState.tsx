@@ -363,7 +363,7 @@ export function RecordingDetailPageSkeleton() {
 			data-testid="recording-detail-page-skeleton-scroll"
 		>
 			<div
-				className="grid h-full min-h-0 w-full gap-6 px-8 pb-8 duration-300 animate-in fade-in"
+				className="grid h-full min-h-0 w-full gap-6 px-8 pb-8 pt-4 duration-300 animate-in fade-in"
 				style={{
 					minWidth: RECORDING_DETAIL_WORKBENCH_MIN_WIDTH,
 					gridTemplateColumns: `minmax(${RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH}px, ${RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH}px) minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
