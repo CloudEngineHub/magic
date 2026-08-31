@@ -86,6 +86,11 @@ const StickyIndexContext = createContext(NO_STICKY_INDEX)
  * virtua positions every row absolutely, which makes native `position: sticky` a no-op. The
  * pinned User row is switched back into flow so it becomes the container's only in-flow child:
  * its static position lands at the container top, and `top` then parks it against the viewport.
+ *
+ * It has to be native sticky. Writing the row's offset from the scroll handler instead puts the
+ * pin a frame behind a scroll the compositor has already painted, which reads as the row shaking
+ * against the viewport for as long as it is held. A row is only ever pinned from a static
+ * position at or above the park line, so sticky always resolves it to exactly `top`.
  */
 const MessageVirtualItem = forwardRef<HTMLDivElement, CustomItemComponentProps>(
 	function MessageVirtualItem({ children, style, index }, ref) {
@@ -446,6 +451,11 @@ function VirtualMessageListInner({
 	 * Absolutely positioned rows lose the push-out that stacked native sticky headers get for
 	 * free. Recreate it by parking the pinned row at `stickyTopOffset` until the next User row
 	 * reaches that line, then translating it up in lockstep so the handoff is seamless.
+	 *
+	 * A pinned row may only ever leave the park line on its way out under the next one. Holding
+	 * it anywhere above that line while it is meant to be read puts it in the shell's header,
+	 * so the boundary between pinned and released has to stay where the two positions coincide:
+	 * the row's own natural slot on the park line.
 	 */
 	const syncSticky = useCallback(() => {
 		const handle = handleRef.current
@@ -457,21 +467,43 @@ function VirtualMessageListInner({
 		// would otherwise scroll above that line, which is where native sticky would clamp it.
 		const startIndex = handle.findItemIndex(scrollOffset + stickyTopOffset)
 		const nextActive = findActiveStickyIndex(userIndicesRef.current, startIndex)
-		const activeIndex = nextActive === undefined ? NO_STICKY_INDEX : nextActive
+		let activeIndex = nextActive === undefined ? NO_STICKY_INDEX : nextActive
+
+		/**
+		 * Row 0 sits at offset 0 by construction, so any other value means virtua is positioning
+		 * from a shifted origin — what it does with a row that grows during a smooth scroll, and
+		 * does not always undo. Every row is displaced by the same amount then, which is survivable
+		 * on its own; holding one of them back against a park line the others do not share is not,
+		 * because it is the one carrying an opaque mask at `z-20`.
+		 */
+		if (handle.getItemOffset(0) !== 0) activeIndex = NO_STICKY_INDEX
 
 		let top = stickyTopOffset
 		if (activeIndex !== NO_STICKY_INDEX) {
+			// getItemOffset is relative to the virtualizer container, scrollOffset to the
+			// scroll element; startMargin is the gap between the two origins.
+			const activeTop =
+				handle.getItemOffset(activeIndex) + startMarginRef.current - scrollOffset
+			const activeHeight = handle.getItemSize(activeIndex)
 			const followerIndex = findNextStickyIndex(userIndicesRef.current, activeIndex)
 			if (followerIndex !== undefined) {
-				// getItemOffset is relative to the virtualizer container, scrollOffset to the
-				// scroll element; startMargin is the gap between the two origins.
 				const followerTop =
 					handle.getItemOffset(followerIndex) + startMarginRef.current - scrollOffset
-				const activeHeight = handle.getItemSize(activeIndex)
 				if (followerTop < stickyTopOffset + activeHeight) {
 					top = followerTop - activeHeight
 				}
 			}
+
+			/**
+			 * `findItemIndex` clamps a negative probe to row 0, so a list that opens with a User
+			 * row always reports that row as parked, scrolled or not. Pinning is not free in that
+			 * state: it lifts the row to `z-20`, and its opaque mask then paints over the top of
+			 * the reply instead of being covered by it. A pin is only real when it holds the row
+			 * away from where the scroll position would otherwise leave it — which also rules it
+			 * out for a viewport that cannot scroll at all, and for two User rows with nothing
+			 * between them, where the push-out already cancels the park exactly.
+			 */
+			if (activeTop >= top) activeIndex = NO_STICKY_INDEX
 		}
 
 		if (stickyTopValueRef.current !== top) {

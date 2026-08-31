@@ -161,6 +161,25 @@ export function useVirtualMessageScroll({
 			ownershipRef.current = beginExplicitScroll(ownershipRef.current)
 			startGuard(guardDuration, true)
 
+			const viewport = containerRef.current
+			const distanceToBottom = viewport
+				? viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+				: 0
+
+			/**
+			 * Moving scrollTop during a smooth scroll would cancel it, so virtua answers a row
+			 * that grows mid-animation by shifting the origin every row is positioned from
+			 * instead, and hands the shift back at the end of a scroll it did not drive itself —
+			 * which its own animation never is. Whatever the rows grew by therefore stays in the
+			 * origin until the next gesture, lifting the whole list out the top of the viewport.
+			 *
+			 * Sending a message walks straight into it, because the new User row is measured for
+			 * the first time while the animation runs. It is also the case with nothing to
+			 * animate: following output keeps the list at the bottom, so the jump it asks for is
+			 * already there. Spend the animation only where there is really distance to cover.
+			 */
+			const animate = smooth && distanceToBottom > MIN_BOTTOM_DISTANCE
+
 			/**
 			 * A history page arrives as rows virtua has never measured, and its smooth path stalls
 			 * on exactly that: it waits for every row in the current range to be measured, then
@@ -168,14 +187,13 @@ export function useVirtualMessageScroll({
 			 * last screen — rows the user has already scrolled through, so their sizes are
 			 * cached — to the animation.
 			 */
-			const viewport = containerRef.current
-			if (smooth && viewport && viewport.clientHeight > 0) {
+			if (animate && viewport && viewport.clientHeight > 0) {
 				const tailStart =
 					viewport.scrollHeight - viewport.clientHeight * (SMOOTH_TAIL_VIEWPORTS + 1)
 				if (tailStart > viewport.scrollTop) virtualizer.scrollTo(tailStart)
 			}
 
-			virtualizer.scrollToIndex(lastIndex, { align: "end", smooth })
+			virtualizer.scrollToIndex(lastIndex, { align: "end", smooth: animate })
 		},
 		[containerRef, startGuard, virtualizerRef],
 	)

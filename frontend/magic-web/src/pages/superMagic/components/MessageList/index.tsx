@@ -871,7 +871,7 @@ const MessageList = observer(
 							<div
 								className={cn(
 									"mx-auto block min-w-[unset] max-w-3xl pb-2",
-									isMobile ? "px-4 pt-[10px]" : "pl-2 pr-3 pt-[50px]",
+									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
 								)}
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (

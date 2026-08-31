@@ -22,6 +22,8 @@ const virtualState = vi.hoisted(() => ({
 	viewportSize: 400,
 	resizeCallbacks: [] as ResizeObserverCallback[],
 	scrollToIndexCalls: [] as Array<[number, Record<string, unknown> | undefined]>,
+	/** virtua's global origin shift; row offsets are served as `cached - originShift`. */
+	originShift: 0,
 	/** Every render's pinned indices against the rows actually available to resolve them. */
 	keepMountedRenders: [] as Array<{ keepMounted?: Array<number>; rowCount: number }>,
 }))
@@ -49,7 +51,7 @@ vi.mock("virtua", () => ({
 			},
 			findItemIndex: (offset: number) =>
 				Math.max(0, Math.floor((offset - (props.startMargin || 0)) / ROW_HEIGHT)),
-			getItemOffset: (index: number) => index * ROW_HEIGHT,
+			getItemOffset: (index: number) => index * ROW_HEIGHT - virtualState.originShift,
 			getItemSize: () => ROW_HEIGHT,
 			scrollTo: vi.fn(),
 			scrollToIndex: (index: number, opts?: Record<string, unknown>) => {
@@ -111,6 +113,16 @@ function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMes
 	} as unknown as SuperMagicMessageItem
 }
 
+/**
+ * The pin is released once the turn stops running past the fold, so a list that asserts pinning
+ * has to be taller than the 400px mock viewport by more than the park travel.
+ */
+function assistantTail(count: number, from: number) {
+	return Array.from({ length: count }, (_, offset) =>
+		message(`assistant-${from + offset}`, "assistant"),
+	)
+}
+
 function createViewport(scrollHeight?: number) {
 	const viewport = document.createElement("div")
 	if (scrollHeight !== undefined) {
@@ -144,6 +156,10 @@ function scrollTo(offset: number) {
 	})
 }
 
+function pinnedViewportTop(canvas: HTMLElement) {
+	return Number.parseFloat(canvas.style.getPropertyValue("--message-group-sticky-top"))
+}
+
 describe("VirtualMessageList", () => {
 	beforeEach(() => {
 		virtualState.toolStatus = "completed"
@@ -154,6 +170,7 @@ describe("VirtualMessageList", () => {
 		virtualState.resizeCallbacks = []
 		virtualState.scrollToIndexCalls = []
 		virtualState.keepMountedRenders = []
+		virtualState.originShift = 0
 		vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
 	})
 
@@ -271,13 +288,13 @@ describe("VirtualMessageList", () => {
 	})
 
 	it("keeps the User row above the scroll position mounted and pinned", () => {
-		// Rows: 0 user-0, 1 assistant-1, 2 assistant-2, 3 user-3, 4 assistant-4
+		// Rows: 0 user-0, 1 assistant-1, 2 assistant-2, 3 user-3, 4..9 assistant-4..9
 		const { container } = renderList([
 			message("user-0", "user"),
 			message("assistant-1", "assistant"),
 			message("assistant-2", "assistant"),
 			message("user-3", "user"),
-			message("assistant-4", "assistant"),
+			...assistantTail(6, 4),
 		])
 
 		scrollTo(2 * ROW_HEIGHT)
@@ -315,7 +332,7 @@ describe("VirtualMessageList", () => {
 				message("assistant-1", "assistant"),
 				message("assistant-2", "assistant"),
 				message("user-3", "user"),
-				message("assistant-4", "assistant"),
+				...assistantTail(6, 4),
 			]),
 		)
 
@@ -341,26 +358,127 @@ describe("VirtualMessageList", () => {
 		) as HTMLElement
 
 		// Desktop parks the pinned row 40px below the viewport top while nothing crowds it.
-		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("40px")
+		expect(pinnedViewportTop(canvas)).toBe(40)
 
 		// user-2 sits at offset 200; once it is within one row height of the park line the
 		// pinned row must translate up in lockstep so the handoff has no overlap or gap.
 		scrollTo(140)
-		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("-40px")
+		expect(pinnedViewportTop(canvas)).toBe(-40)
+	})
+
+	it("stops pinning while the virtualizer is positioning from a shifted origin", () => {
+		// A row that grows during a smooth scroll is answered by shifting the origin every row is
+		// positioned from, since moving scrollTop would cancel the animation — and the shift is
+		// handed back only at the end of a scroll virtua did not drive itself. Left behind, it
+		// displaces every row equally, which is survivable; holding one of them against a park
+		// line the others do not share is not, since that one carries an opaque mask at z-20.
+		const { container } = renderList([message("user-0", "user"), ...assistantTail(5, 1)], {
+			startMargin: 50,
+		})
+
+		scrollTo(100)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
+
+		virtualState.originShift = 140
+		scrollTo(100)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+	})
+
+	it("holds the pin with native sticky rather than a scroll-driven offset", () => {
+		// The park line is expressed against the viewport, so the compositor has to resolve the
+		// pin. Writing the row's offset from the scroll handler instead leaves it one frame
+		// behind a scroll that has already been painted, which reads as the row shaking against
+		// the viewport for as long as it is held — every turn, in a long conversation.
+		const { container } = renderList([message("user-0", "user"), ...assistantTail(5, 1)], {
+			startMargin: 50,
+		})
+
+		scrollTo(100)
+		const pinned = container.querySelector<HTMLElement>('[data-virtual-item-sticky="true"]')
+		expect(pinned?.style.position).toBe("sticky")
+		expect(pinned?.style.top).toBe("var(--message-group-sticky-top, 0px)")
+	})
+
+	it("leaves the first User row unpinned while it still sits in its natural slot", () => {
+		// A list that opens with a User row is the shape of a conversation started from empty.
+		// `findItemIndex` clamps the negative probe to row 0 and reports it as parked, but the
+		// column's 50px top padding puts it 10px below the 40px park line — lifting it there
+		// would paint its fade tail over the top of the reply instead of the other way round.
+		const { container } = renderList([message("user-0", "user"), ...assistantTail(5, 1)], {
+			startMargin: 50,
+		})
+
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+
+		// At 10 the row's natural slot is the park line itself, so the pin would still be a
+		// no-op; past that it is genuinely being held back.
+		scrollTo(10)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+
+		scrollTo(20)
+		expect(
+			container
+				.querySelector('[data-virtual-item-sticky="true"]')
+				?.querySelector("[data-message-id]"),
+		).toHaveAttribute("data-message-id", "user-0")
+	})
+
+	it("leaves a shell with no start margin unpinned while its viewport cannot scroll", () => {
+		// The share shell parks flush with the top and renders no column padding, so the first
+		// User row's natural slot is the park line. Nothing has scrolled and nothing can, yet
+		// pinning would still lift the row over the reply underneath it.
+		const { container } = renderList(
+			[message("user-0", "user"), message("assistant-1", "assistant")],
+			{ stickyTopOffset: 0 },
+		)
+
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+	})
+
+	it("leaves two adjacent User rows unpinned because the push-out cancels the park", () => {
+		// With no reply between them the follower reaches the park line exactly as the active
+		// row would, so the pin has nothing to hold back.
+		const { container } = renderList(
+			[message("user-0", "user"), message("user-1", "user"), ...assistantTail(4, 2)],
+			{ startMargin: 50 },
+		)
+
+		scrollTo(100)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+	})
+
+	it("never parks a readable pinned row above the park line", () => {
+		// The shell's header owns everything above that line, so a row held there reads as the
+		// message escaping the list. Only the push-out under the next User row may go above it,
+		// and that row covers the outgoing one as it goes.
+		const { container } = renderList([message("user-0", "user"), ...assistantTail(5, 1)], {
+			startMargin: 50,
+		})
+		const canvas = container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+
+		for (const offset of [10, 60, 100, 160, 210, 500]) {
+			scrollTo(offset)
+			const pinned = container.querySelector('[data-virtual-item-sticky="true"]')
+			if (!pinned) continue
+			expect(pinnedViewportTop(canvas)).toBe(40)
+		}
 	})
 
 	it("lets a shell without a header park the pinned turn flush with the viewport top", () => {
 		// The workspace parks below its header line; the share shell has no header. Before
 		// virtualization this was the caller's `top-*` class on the sticky row itself.
-		const { container } = renderList(
-			[message("user-0", "user"), message("assistant-1", "assistant")],
-			{ stickyTopOffset: 0 },
-		)
+		const { container } = renderList([message("user-0", "user"), ...assistantTail(5, 1)], {
+			stickyTopOffset: 0,
+		})
 		const canvas = container.querySelector(
 			'[data-testid="virtual-message-canvas"]',
 		) as HTMLElement
 
-		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("0px")
+		scrollTo(100)
+		expect(pinnedViewportTop(canvas)).toBe(0)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
 	})
 
 	it("offsets the push-out by startMargin because item offsets exclude it", () => {
@@ -381,13 +499,13 @@ describe("VirtualMessageList", () => {
 		// Same geometry as the no-margin case, but every threshold moves 50px later: the
 		// no-margin list already pushes out at 140, this one is still parked.
 		scrollTo(140)
-		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("10px")
+		expect(pinnedViewportTop(canvas)).toBe(10)
 
 		scrollTo(90)
-		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("40px")
+		expect(pinnedViewportTop(canvas)).toBe(40)
 
 		scrollTo(190)
-		expect(canvas.style.getPropertyValue("--message-group-sticky-top")).toBe("-40px")
+		expect(pinnedViewportTop(canvas)).toBe(-40)
 	})
 
 	it("reports layout growth through the virtualizer change callback", () => {

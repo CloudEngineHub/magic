@@ -412,6 +412,32 @@ describe("useVirtualMessageScroll", () => {
 		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(29, { align: "end", smooth: true })
 	})
 
+	it("refuses to animate a jump that has no distance to cover", () => {
+		// Sending a message asks for a smooth jump while following output already holds the list
+		// at the bottom. Animating anyway opens the window in which virtua answers a row that
+		// grows by shifting the origin every row is positioned from — the new User row is
+		// measured for the first time inside it — and it hands that shift back only at the end
+		// of a scroll it did not drive itself, which its own animation never is.
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 300 })
+		const virtualizer = createVirtualizer(viewport, 4)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(4),
+				topicKey: "topic-1",
+			}),
+		)
+
+		vi.mocked(virtualizer.scrollTo).mockClear()
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+		act(() => result.current.scrollToBottom("smooth"))
+
+		expect(virtualizer.scrollTo).not.toHaveBeenCalled()
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(3, { align: "end", smooth: false })
+	})
+
 	it("corrects a jump that settled short of the bottom once the guard expires", () => {
 		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 3000 })
 		const virtualizer = createVirtualizer(viewport, 30)
