@@ -72,6 +72,7 @@ interface SearchWorkerResponse {
 // Keep the empty prop identity stable so memoized chunks without matches do not re-render
 // while the current search result is being moved between other chunks.
 const EMPTY_SEARCH_RESULTS: MarkdownSearchResult[] = []
+const SEARCH_WORKER_TIMEOUT_MS = 1500
 
 const VirtualMarkdownList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 	function VirtualMarkdownList({ className, style, ...props }, ref) {
@@ -485,6 +486,7 @@ export default function LargeMarkdownPreview({
 	const rootRef = useRef<HTMLDivElement>(null)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const searchWorkerRef = useRef<Worker | null>(null)
+	const searchWorkerTimeoutRef = useRef<number | null>(null)
 	const searchRequestIdRef = useRef(0)
 	const searchNavigationIdRef = useRef(0)
 	const virtuosoScrollerRef = useRef<HTMLElement | Window | null>(null)
@@ -537,6 +539,13 @@ export default function LargeMarkdownPreview({
 		try {
 			worker = new SearchWorker()
 			worker.onmessage = (event: MessageEvent<SearchWorkerResponse>) => {
+				if (
+					event.data.requestId === searchRequestIdRef.current &&
+					searchWorkerTimeoutRef.current !== null
+				) {
+					window.clearTimeout(searchWorkerTimeoutRef.current)
+					searchWorkerTimeoutRef.current = null
+				}
 				if (event.data.requestId !== searchRequestIdRef.current) return
 				setSearchResults(event.data.results)
 				setSearchResultIndex(0)
@@ -544,13 +553,18 @@ export default function LargeMarkdownPreview({
 			worker.postMessage({ type: "init", content, chunks })
 			searchWorkerRef.current = worker
 		} catch {
-			// Vitest and older embedded browsers may not expose module workers. The search
-			// request effect below falls back to the same bounded synchronous implementation.
+			// Vitest and older embedded browsers may not expose module workers. Literal searches
+			// can use the bounded synchronous fallback; regex searches remain disabled to protect
+			// the main thread from pathological expressions.
 			searchWorkerRef.current = null
 		}
 
 		return () => {
 			worker?.terminate()
+			if (searchWorkerTimeoutRef.current !== null) {
+				window.clearTimeout(searchWorkerTimeoutRef.current)
+				searchWorkerTimeoutRef.current = null
+			}
 			if (searchWorkerRef.current === worker) searchWorkerRef.current = null
 		}
 	}, [chunks, content, searchEnabled])
@@ -563,6 +577,10 @@ export default function LargeMarkdownPreview({
 			setSearchResultIndex(0)
 			return
 		}
+		if (searchWorkerTimeoutRef.current !== null) {
+			window.clearTimeout(searchWorkerTimeoutRef.current)
+			searchWorkerTimeoutRef.current = null
+		}
 
 		const requestId = searchRequestIdRef.current + 1
 		searchRequestIdRef.current = requestId
@@ -574,13 +592,38 @@ export default function LargeMarkdownPreview({
 
 		const timer = window.setTimeout(() => {
 			if (searchWorkerRef.current) {
-				searchWorkerRef.current.postMessage({
+				const worker = searchWorkerRef.current
+				searchWorkerTimeoutRef.current = window.setTimeout(() => {
+					if (
+						searchWorkerRef.current !== worker ||
+						searchRequestIdRef.current !== requestId
+					) {
+						return
+					}
+
+					// A worker can be terminated safely when a pathological regex exceeds the
+					// budget. Do not fall back to the main thread for this request, or the UI
+					// could still freeze while trying the same expression synchronously.
+					worker.terminate()
+					searchWorkerRef.current = null
+					searchWorkerTimeoutRef.current = null
+					setSearchResults([])
+					setSearchResultIndex(0)
+				}, SEARCH_WORKER_TIMEOUT_MS)
+				worker.postMessage({
 					type: "search",
 					requestId,
 					query: searchQuery,
 					caseSensitive,
 					useRegex,
 				})
+				return
+			}
+			if (useRegex) {
+				// Regex searches must not fall back to the main thread: an unsupported or timed-out
+				// worker must never allow a pathological expression to freeze the preview UI.
+				setSearchResults([])
+				setSearchResultIndex(0)
 				return
 			}
 

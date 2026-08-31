@@ -1,4 +1,5 @@
 import type { VirtualMarkdownChunk } from "../../largeMarkdown"
+import { MAX_REGEX_QUERY_LENGTH, isPotentiallyUnsafeRegex, tryCreateRegex } from "@/utils/safeRegex"
 
 export interface MarkdownSearchResult {
 	id: string
@@ -17,9 +18,16 @@ export interface MarkdownSearchRequest {
 }
 
 const MAX_SEARCH_RESULTS = 1000
-
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function advanceByCodePoint(content: string, index: number): number {
+	const first = content.charCodeAt(index)
+	const second = content.charCodeAt(index + 1)
+	return first >= 0xd800 && first <= 0xdbff && second >= 0xdc00 && second <= 0xdfff
+		? index + 2
+		: index + 1
 }
 
 function getChunkIndex(chunks: VirtualMarkdownChunk[], start: number, end: number): number {
@@ -37,18 +45,18 @@ export function searchMarkdown({
 	useRegex = false,
 }: MarkdownSearchRequest): MarkdownSearchResult[] {
 	if (!query) return []
-
-	let matcher: RegExp
-	try {
-		matcher = new RegExp(useRegex ? query : escapeRegExp(query), caseSensitive ? "gu" : "giu")
-	} catch {
-		// Keep an incomplete regex from breaking the preview while the user is typing.
-		return []
-	}
+	const matcher = tryCreateRegex(
+		useRegex ? query : escapeRegExp(query),
+		caseSensitive ? "gu" : "giu",
+		useRegex,
+	)
+	if (!matcher) return []
 	const results: MarkdownSearchResult[] = []
 	let match: RegExpExecArray | null
 
-	while ((match = matcher.exec(content)) !== null && results.length < MAX_SEARCH_RESULTS) {
+	let iterations = 0
+	while (iterations < MAX_SEARCH_RESULTS && (match = matcher.exec(content)) !== null) {
+		iterations += 1
 		const start = match.index
 		const end = start + match[0].length
 		const previewStart = Math.max(0, start - 24)
@@ -61,11 +69,15 @@ export function searchMarkdown({
 			preview: content.slice(previewStart, previewEnd),
 		})
 
-		// Guard against the empty-match behaviour if this helper is changed to accept patterns later.
-		if (match[0].length === 0) matcher.lastIndex += 1
+		// RegExp.exec does not advance lastIndex for zero-length global matches. Advance by one
+		// Unicode code point to guarantee progress without splitting surrogate pairs.
+		if (match[0].length === 0) {
+			const nextIndex = advanceByCodePoint(content, matcher.lastIndex)
+			matcher.lastIndex = nextIndex > matcher.lastIndex ? nextIndex : matcher.lastIndex + 1
+		}
 	}
 
 	return results
 }
 
-export { MAX_SEARCH_RESULTS }
+export { MAX_REGEX_QUERY_LENGTH, MAX_SEARCH_RESULTS, isPotentiallyUnsafeRegex }

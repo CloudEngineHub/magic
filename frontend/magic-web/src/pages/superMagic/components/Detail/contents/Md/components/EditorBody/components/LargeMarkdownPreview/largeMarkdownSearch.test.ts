@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { splitMarkdownIntoVirtualChunks } from "../../largeMarkdown"
-import { MAX_SEARCH_RESULTS, searchMarkdown } from "./largeMarkdownSearch"
+import { MAX_REGEX_QUERY_LENGTH, MAX_SEARCH_RESULTS, searchMarkdown } from "./largeMarkdownSearch"
 
 describe("searchMarkdown", () => {
 	it("returns literal matches with source offsets and chunk indexes", () => {
@@ -52,6 +52,48 @@ describe("searchMarkdown", () => {
 				content,
 				chunks,
 				query: "[",
+				caseSensitive: false,
+				useRegex: true,
+			}),
+		).toEqual([])
+	})
+
+	it("advances zero-length regex matches without repeating the same offset", () => {
+		const content = "😀ab"
+		const chunks = splitMarkdownIntoVirtualChunks(content)
+
+		for (const query of ["^", ".*", "a*"]) {
+			const results = searchMarkdown({
+				content,
+				chunks,
+				query,
+				caseSensitive: false,
+				useRegex: true,
+			})
+			const offsets = results.map((result) => result.start)
+			expect(new Set(offsets).size).toBe(offsets.length)
+			expect(offsets).toEqual([...offsets].sort((a, b) => a - b))
+		}
+	})
+
+	it("rejects oversized and obviously nested-quantifier patterns", () => {
+		const content = "a".repeat(100)
+		const chunks = splitMarkdownIntoVirtualChunks(content)
+
+		expect(
+			searchMarkdown({
+				content,
+				chunks,
+				query: "(a+)+",
+				caseSensitive: false,
+				useRegex: true,
+			}),
+		).toEqual([])
+		expect(
+			searchMarkdown({
+				content,
+				chunks,
+				query: "a".repeat(MAX_REGEX_QUERY_LENGTH + 1),
 				caseSensitive: false,
 				useRegex: true,
 			}),
