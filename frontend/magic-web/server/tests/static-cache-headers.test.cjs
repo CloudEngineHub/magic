@@ -44,7 +44,7 @@ test("sets negotiated cache headers for the HTML Sandbox runtime", () => {
 	assert.equal(MAGIC_HTML_SANDBOX_RUNTIME_PATH, "/husky-runtime.js")
 	setStaticAssetCacheHeaders(response, `/app/dist${MAGIC_HTML_SANDBOX_RUNTIME_PATH}`)
 
-	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "*")
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
 	assert.equal(response.getHeader("Cache-Control"), "no-cache")
 	assert.equal(response.getHeader("Pragma"), undefined)
 	assert.equal(response.getHeader("Expires"), undefined)

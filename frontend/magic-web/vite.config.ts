@@ -21,9 +21,11 @@ import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import { resolveMicroAppInstallDevProxy } from "./vite/micro-app-install-proxy"
 import Inspect from "vite-plugin-inspect"
 import { codeInspectorPlugin } from "code-inspector-plugin"
+import createHtmlSandboxRuntimePlugin from "./plugins/vite-plugin-html-sandbox-runtime"
 
 /** 环境变量前缀 */
 const ENV_PREFIX = "MAGIC_"
+const requireModule = createRequire(import.meta.url)
 
 function formatLucideComponentImportName(componentName: string): string {
 	return `${componentName
@@ -35,10 +37,7 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(
-	env: NodeJS.ProcessEnv = process.env,
-	mode?: string,
-): UserConfig {
+function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
 	// Env overlay resolution runs before this factory so every config decision
 	// observes the same winning physical files as import.meta.env and child tasks.
 	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
@@ -94,10 +93,6 @@ function getBaseViteConfig(
 		server: {
 			host: "0.0.0.0", // 监听所有地址
 			allowedHosts,
-			// The development shell may be hosted by husky.pages while it loads
-			// this app's local /husky-runtime.js. Allow that cross-origin script
-			// request without changing the production Vite configuration.
-			cors: isDev ? { origin: "*" } : undefined,
 			proxy: isDev ? resolveMicroAppInstallDevProxy(env) : {},
 		},
 		preview: {
@@ -237,6 +232,7 @@ function getBaseViteConfig(
 			],
 		},
 		plugins: [
+			isDev && createHtmlSandboxRuntimePlugin(env),
 			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
@@ -371,7 +367,6 @@ export default defineConfig(({ mode }): UserConfig => {
 	const baseViteConfig = getBaseViteConfig(process.env, mode)
 
 	if (process.env.DUMP_VITE_CONFIG === "1") {
-		const requireModule = createRequire(import.meta.url)
 		const { writeViteConfigDumps } = requireModule("./scripts/dump-vite-config.cjs")
 		writeViteConfigDumps(
 			__dirname,
