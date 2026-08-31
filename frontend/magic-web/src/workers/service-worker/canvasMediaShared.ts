@@ -19,7 +19,13 @@ export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 3
 const DB_BASE_NAME = "canvas-media-resource-offline-cache"
 export const CANVAS_MEDIA_DB_NAME = `${DB_BASE_NAME}-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
 export const CANVAS_MEDIA_CACHE_NAME = `canvas-media-resources-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
-const LEGACY_CANVAS_MEDIA_CACHE_VERSIONS = [1, 2] as const
+// Every older version is obsolete once the current SW activates. Generate this
+// list from the current version so future bumps cannot accidentally leave a
+// stale Canvas media namespace behind.
+const LEGACY_CANVAS_MEDIA_CACHE_VERSIONS = Array.from(
+	{ length: Math.max(0, CANVAS_MEDIA_OFFLINE_CACHE_VERSION - 1) },
+	(_, index) => index + 1,
+)
 const STORE_NAME = "resources"
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
 const DEFAULT_RESOURCE_NAMESPACE = "__global__"
@@ -160,7 +166,8 @@ function deleteDatabaseBestEffort(factory: IDBFactory, name: string): Promise<vo
 
 /**
  * Best-effort cleanup for obsolete Canvas media namespaces.
- * Only known v1/v2 namespaces are removed; current v3 is never included.
+ * Every version older than the current one is removed; the current version is
+ * never included and remains available for active Canvas resources.
  */
 export async function cleanupLegacyCanvasMediaStorage(options?: {
 	indexedDBFactory?: IDBFactory
