@@ -264,10 +264,7 @@ class FileChangeNotificationSubscriber implements ListenerInterface
     private function handleBatchDeleted(FilesBatchDeletedEvent $event): void
     {
         $projectId = $event->getProjectId();
-        $fileEntities = array_values(array_filter(
-            $event->getAllEntities(),
-            fn (TaskFileEntity $fileEntity): bool => $this->isProjectSpaceFile($fileEntity)
-        ));
+        $fileEntities = $this->taskFileDomainService->filterProjectSpaceFiles($event->getAllEntities());
         if (empty($fileEntities) || $this->shouldSkipRecycleBinDeleteForBatch($fileEntities, $event->getSource())) {
             return;
         }
