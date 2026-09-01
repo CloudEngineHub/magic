@@ -36,6 +36,7 @@ const mockState = vi.hoisted(() => ({
 	scrollTo: vi.fn(),
 	pptMount: vi.fn(),
 	pptUnmount: vi.fn(),
+	renderPropsType: "html" as "html" | "md",
 	tabCacheOptions: undefined as { enableCache?: boolean } | undefined,
 }))
 let restoreBoundingClientRect: (() => void) | undefined
@@ -103,7 +104,7 @@ vi.mock("../hooks/useFilesViewer", () => ({
 		closeTabsToRight: mockState.noop,
 		getRenderProps: (tab?: { fileData?: MockFileData }) => ({
 			isFullscreen: false,
-			type: "html",
+			type: mockState.renderPropsType,
 			data: tab?.fileData,
 			attachmentList: tab?.fileData ? [tab.fileData] : [],
 		}),
@@ -223,6 +224,7 @@ beforeEach(() => {
 			updated_at: "2026-07-28T00:00:00Z",
 		},
 	})
+	mockState.renderPropsType = "html"
 	Object.defineProperty(HTMLElement.prototype, "scrollTo", {
 		configurable: true,
 		value: mockState.scrollTo,
@@ -252,24 +254,30 @@ describe("FilesViewer fullscreen portal", () => {
 		expect(container.querySelector('[data-testid="files-viewer-content"]')).toBeTruthy()
 	})
 
-	it("does not remount non-PPT content when entering or exiting viewer fullscreen", () => {
-		const { rerender } = render(<FilesViewer />)
-		const initialContent = screen.getByTestId("files-viewer-content")
+	it.each(["html", "md"] as const)(
+		"does not remount %s content when entering or exiting viewer fullscreen",
+		(renderPropsType) => {
+			mockState.renderPropsType = renderPropsType
+			const { rerender } = render(<FilesViewer />)
+			const initialContent = screen.getByTestId("files-viewer-content")
 
-		rerender(<FilesViewer forceFullscreenMode />)
+			rerender(<FilesViewer forceFullscreenMode />)
 
-		expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
-		expect(
-			document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")?.style.zIndex,
-		).toBe("calc(var(--z-index-detail-fullscreen) + 1)")
+			expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
+			expect(
+				document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")?.style
+					.zIndex,
+			).toBe("calc(var(--z-index-detail-fullscreen) + 1)")
 
-		rerender(<FilesViewer forceFullscreenMode={false} />)
+			rerender(<FilesViewer forceFullscreenMode={false} />)
 
-		expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
-		expect(
-			document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")?.style.zIndex,
-		).toBe("10")
-	})
+			expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
+			expect(
+				document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")?.style
+					.zIndex,
+			).toBe("10")
+		},
+	)
 
 	it("does not remount PPT content when entering or exiting viewer fullscreen", () => {
 		mockState.tab.fileData = {

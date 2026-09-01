@@ -45,7 +45,6 @@ import CommonWebsitePresetDialog, {
 } from "./components/CommonWebsitePresetDialog"
 import StablePPTPortalSurface from "./components/StablePPTPortalSurface"
 import StablePreviewPortalSurface from "./components/StablePreviewPortalSurface"
-import { DetailType } from "../../types"
 import {
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getWebsiteTabData,
@@ -551,9 +550,7 @@ const FilesViewer = memo(
 						!props.documentFlowFullscreen &&
 						shouldUsePPTRootRender(renderProps.type, renderProps.data)
 					const usesStablePreviewPortal =
-						!usesStablePptPortal &&
-						!props.documentFlowFullscreen &&
-						renderProps.type === DetailType.Html
+						!usesStablePptPortal && !props.documentFlowFullscreen
 
 					return {
 						isActive,
