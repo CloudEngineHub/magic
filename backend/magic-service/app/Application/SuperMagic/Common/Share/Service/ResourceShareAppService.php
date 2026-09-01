@@ -9,6 +9,7 @@ namespace App\Application\SuperMagic\Common\Share\Service;
 
 use App\Application\SuperMagic\Common\Share\Factory\ShareableResourceFactory;
 use App\Application\SuperMagic\File\Service\FileManagementAppService;
+use App\Application\SuperMagic\File\Service\TaskFileAuthorizationService;
 use App\Application\SuperMagic\Message\Chat\Service\ChatAppService;
 use App\Application\SuperMagic\Project\Event\Publish\ProjectForkPublisher;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
@@ -37,6 +38,7 @@ use App\Domain\SuperMagic\File\Service\FileCollectionDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Event\ForkProjectStartEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectForkEvent;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
@@ -108,6 +110,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly TopicRepositoryInterface $topicRepository,
         private readonly TaskDomainService $taskDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
+        private readonly TaskFileAuthorizationService $taskFileAuthorizationService,
         private readonly FileDomainService $fileDomainService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly ProjectMemberDomainService $projectMemberDomainService,
@@ -1618,8 +1621,13 @@ class ResourceShareAppService extends AbstractShareAppService
         // 1. 从DTO获取文件ID数组
         $fileIds = $dto->getFileIds();
 
-        // 2. 调用Domain层批量查询,直接返回Entity数组
-        return $this->shareDomainService->getFilesByIds($fileIds);
+        // 2. 仅允许项目分享者读取项目文件，按实际项目归属批量鉴权。
+        return $this->taskFileAuthorizationService->authorizeFilesByIds(
+            $userAuthorization,
+            $fileIds,
+            MemberRole::EDITOR,
+            false,
+        );
     }
 
     /**

@@ -92,6 +92,7 @@ class FileManagementAppService extends AbstractAppService
         private readonly FileAppService $fileAppService,
         private readonly TopicDomainService $topicDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
+        private readonly TaskFileAuthorizationService $taskFileAuthorizationService,
         private readonly TaskFileVersionDomainService $taskFileVersionDomainService,
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly FileBatchOperationStatusManager $batchOperationStatusManager,
@@ -2922,7 +2923,12 @@ class FileManagementAppService extends AbstractAppService
      */
     private function getFileUrlsGroupedByProject(MagicUserAuthorization $authorization, array $fileIds, string $downloadMode, array $options, array $fileVersions): array
     {
-        $fileEntities = $this->taskFileDomainService->getFilesByIds($fileIds);
+        $fileEntities = $this->taskFileAuthorizationService->authorizeFilesByIds(
+            $authorization,
+            $fileIds,
+            MemberRole::VIEWER,
+            true,
+        );
         if (empty($fileEntities)) {
             return [];
         }
@@ -2940,23 +2946,14 @@ class FileManagementAppService extends AbstractAppService
                 $groupFileEntities
             );
 
-            $projectEntity = $this->getAccessibleProjectForTaskFile(
-                $groupFileEntities[0],
-                $authorization,
-                MemberRole::VIEWER,
-            );
-            if ($projectEntity === null) {
-                // 用户空间没有项目权限，逐文件校验 task_files owner 信息。
-                foreach ($groupFileEntities as $groupFileEntity) {
-                    $this->getAccessibleProjectForTaskFile(
-                        $groupFileEntity,
-                        $authorization,
-                        MemberRole::VIEWER,
-                    );
+            if ($groupFileEntities[0]->isProjectFile()) {
+                $groupProject = $this->projectDomainService->getProjectNotUserId((int) $groupProjectId);
+                if ($groupProject === null) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
                 }
-                $organizationCode = $groupFileEntities[0]->getOrganizationCode();
+                $organizationCode = $groupProject->getUserOrganizationCode();
             } else {
-                $organizationCode = $projectEntity->getUserOrganizationCode();
+                $organizationCode = $groupFileEntities[0]->getOrganizationCode();
             }
 
             $urls = $this->taskFileDomainService->getFileUrls(
