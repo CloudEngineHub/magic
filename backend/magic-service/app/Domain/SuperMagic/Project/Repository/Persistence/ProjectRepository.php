@@ -9,6 +9,7 @@ namespace App\Domain\SuperMagic\Project\Repository\Persistence;
 
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Model\ProjectModel;
 use App\Infrastructure\Core\AbstractRepository;
@@ -200,7 +201,8 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         }
 
         // 默认过滤已删除的数据
-        $query->whereNull('p.deleted_at');
+        $query->whereNull('p.deleted_at')
+            ->whereNotIn('p.project_mode', ProjectMode::getQueryFilterModes());
 
         // 应用查询条件
         foreach ($conditions as $field => $value) {
