@@ -1350,6 +1350,25 @@ export default memo(function HTML(props: HTMLProps) {
 					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
 					render: () => (
 						<div className="flex items-center gap-1">
+							{showAIOptimizationButton && !isEditMode && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => void handleQuickSelection()}
+									aria-pressed={isQuickSelecting}
+									title={quickSelectionTitle}
+									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
+									data-testid="html-ai-pick-button"
+								>
+									<Crosshair
+										size={16}
+										className={isQuickSelecting ? "text-primary" : undefined}
+									/>
+									<span className={isQuickSelecting ? "text-primary" : undefined}>
+										{quickSelectionLabel}
+									</span>
+								</Button>
+							)}
 							{showFileEditButton && (
 								<FileEditButtons
 									isEditMode={isEditMode}
@@ -1364,18 +1383,6 @@ export default memo(function HTML(props: HTMLProps) {
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
-								/>
-							)}
-							{showAIOptimizationButton && !isEditMode && (
-								<ActionButton
-									icon={<Crosshair size={16} />}
-									onClick={() => void handleQuickSelection()}
-									title={quickSelectionTitle}
-									text={quickSelectionLabel}
-									showText
-									textClassName={isQuickSelecting ? "text-primary" : undefined}
-									buttonClassName="border border-border"
-									data-testid="html-ai-pick-button"
 								/>
 							)}
 							{showAIOptimizationButton && !isEditMode && (

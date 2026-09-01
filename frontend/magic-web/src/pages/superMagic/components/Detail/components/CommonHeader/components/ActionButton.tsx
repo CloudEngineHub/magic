@@ -25,7 +25,6 @@ interface ActionButtonProps {
 	disabled?: boolean
 	loading?: boolean
 	className?: string
-	buttonClassName?: string
 	size?: number
 	rightIconSize?: number
 	stroke?: number
@@ -49,7 +48,6 @@ export default memo(function ActionButton({
 	disabled = false,
 	loading = false,
 	className = "",
-	buttonClassName = "",
 	size = 18,
 	rightIconSize,
 	stroke = 1.25,
@@ -83,7 +81,6 @@ export default memo(function ActionButton({
 				title={title}
 				className={cn(
 					"h-6 select-none rounded-lg px-1.5 text-foreground transition-colors",
-					buttonClassName,
 					isDisabled
 						? "cursor-not-allowed"
 						: "cursor-pointer hover:bg-accent active:bg-accent/80",
