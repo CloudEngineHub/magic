@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Infrastructure\Observability;
 
@@ -8,12 +11,12 @@ use GuzzleHttp\Psr7\ServerRequest;
 use Kkguan\Service\Opentracer\Utils\W3cTraceContextNormalizer;
 use PHPUnit\Framework\TestCase;
 use Zipkin\Endpoint;
-use Zipkin\Reporter;
-use Zipkin\Recording\Span;
 use Zipkin\Propagation\TraceContext;
+use Zipkin\Recording\Span;
+use Zipkin\Reporter;
 use Zipkin\Samplers\BinarySampler;
-use Zipkin\TracingBuilder;
 use Zipkin\Tracer;
+use Zipkin\TracingBuilder;
 
 /**
  * @internal

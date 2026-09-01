@@ -9,12 +9,12 @@ namespace App\Application\SuperMagic\Project\Event\Subscribe;
 
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentDomainService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
 use App\Domain\SuperMagic\File\Event\FileDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
-use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
