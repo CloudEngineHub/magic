@@ -815,9 +815,12 @@ export function useWorkspaceListDnd({
 						: targetStoreOrder
 				const projectDropPosition = preview.position || "after"
 				const projectTargetId = preview.type === "project" ? preview.projectId : undefined
+				const isPinnedWorkspaceDrop = preview.type === "workspace" && project.is_pinned
 				const preProjectId =
 					preview.type === "workspace"
-						? undefined
+						? isPinnedWorkspaceDrop
+							? null
+							: undefined
 						: isProjectPinGroupBoundaryInsertion(
 									[project, ...targetProjects],
 									active.projectId,
@@ -833,28 +836,33 @@ export function useWorkspaceListDnd({
 								)
 				const nextProjectId =
 					preview.type === "workspace"
-						? undefined
+						? isPinnedWorkspaceDrop
+							? null
+							: undefined
 						: getSuccessorId(
 								targetDecisionOrder.map((id) => ({ id })),
 								active.projectId,
 								projectTargetId,
 								projectDropPosition,
 							)
-				const pinAction = getProjectPinBoundaryAction(
-					[project, ...targetProjects],
-					active.projectId,
-					preview.type === "project" ? preview.projectId : undefined,
-					preview.position || "after",
-				)
+				const pinAction = isPinnedWorkspaceDrop
+					? null
+					: getProjectPinBoundaryAction(
+							[project, ...targetProjects],
+							active.projectId,
+							preview.type === "project" ? preview.projectId : undefined,
+							preview.position || "after",
+						)
 				const pinState = pinAction
 					? pinAction === "pin"
 					: project.is_pinned
 						? true
 						: undefined
 				const usePinApi = Boolean(
-					pinState === true &&
-					preview.type === "project" &&
-					targetProjects.find((item) => item.id === projectTargetId)?.is_pinned,
+					isPinnedWorkspaceDrop ||
+					(pinState === true &&
+						preview.type === "project" &&
+						targetProjects.find((item) => item.id === projectTargetId)?.is_pinned),
 				)
 				if (pinAction) {
 					const confirmed = await requestPinBoundaryConfirmation({

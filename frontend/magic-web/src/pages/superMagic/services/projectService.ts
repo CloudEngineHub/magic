@@ -803,11 +803,14 @@ class ProjectService {
 
 			if (workspaceId && hasOrdering) {
 				const nextProjects = previousProjects.filter((item) => item.id !== project.id)
-				const insertIndex = getInsertIndexByAnchors(
-					nextProjects.map((item) => item.id),
-					preProjectId,
-					nextProjectId,
-				)
+				const insertIndex =
+					preProjectId === null
+						? 0
+						: getInsertIndexByAnchors(
+								nextProjects.map((item) => item.id),
+								preProjectId,
+								nextProjectId,
+							)
 				if (insertIndex === null) return
 				nextProjects.splice(Math.min(insertIndex, nextProjects.length), 0, {
 					...project,
