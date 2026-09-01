@@ -18,6 +18,7 @@ import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import { preloadProjectPage } from "@/pages/superMagic/pages/ProjectPage/utils"
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import { canDragSidebarProject } from "../projectDndUtils"
 
 function ProjectItem({
 	project,
@@ -42,10 +43,7 @@ function ProjectItem({
 	const suppressItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
-	const canDrag =
-		!dndDisabled &&
-		!isWorkspaceShortcut &&
-		(!isCollaborationProjectStatus || canManageProject(project.user_role) || !project.user_role)
+	const canDrag = canDragSidebarProject(project, dndDisabled)
 	const {
 		isEditing,
 		setIsEditing,

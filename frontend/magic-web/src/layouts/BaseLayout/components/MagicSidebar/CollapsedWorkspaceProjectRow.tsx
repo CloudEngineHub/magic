@@ -3,7 +3,6 @@ import { Ellipsis } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import { isCollaborationProject, isWorkspaceShortcutProject } from "@/pages/superMagic/constants"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
 import ProjectActionsDropdown from "@/pages/superMagic/components/ProjectActionsDropdown"
@@ -13,6 +12,7 @@ import { canManageProject } from "@/pages/superMagic/utils/permission"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import { canDragSidebarProject } from "./projectDndUtils"
 
 type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void>
 
@@ -55,11 +55,7 @@ function CollapsedWorkspaceProjectRow({
 	const suppressProjectItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
-	const isWorkspaceShortcut = isWorkspaceShortcutProject(project)
-	const isCollaborationProjectStatus = isCollaborationProject(project)
-	const canDrag =
-		!isWorkspaceShortcut &&
-		(!isCollaborationProjectStatus || canManageProject(project.user_role) || !project.user_role)
+	const canDrag = canDragSidebarProject(project)
 
 	const {
 		isEditing,
