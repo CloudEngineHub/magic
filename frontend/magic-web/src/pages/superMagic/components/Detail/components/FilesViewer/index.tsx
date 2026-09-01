@@ -44,6 +44,8 @@ import CommonWebsitePresetDialog, {
 	type CommonWebsitePresetFormValues,
 } from "./components/CommonWebsitePresetDialog"
 import StablePPTPortalSurface from "./components/StablePPTPortalSurface"
+import StablePreviewPortalSurface from "./components/StablePreviewPortalSurface"
+import { DetailType } from "../../types"
 import {
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getWebsiteTabData,
@@ -316,7 +318,7 @@ const FilesViewer = memo(
 				// Tab ids may contain file-path characters that are invalid inside CSS selectors.
 				const activeTabElement = Array.from(
 					container.querySelectorAll<HTMLElement>("[data-tab-id]"),
-				).find((element) => element.dataset.tabId === activeTab.id)
+				).find((element) => element.dataset.tabId === activeTab?.id)
 
 				if (activeTabElement) {
 					// 计算目标tab相对于容器的位置
@@ -331,7 +333,7 @@ const FilesViewer = memo(
 						behavior: "smooth",
 					})
 				}
-			}, [activeTab, tabs])
+			}, [activeTab?.id, tabs.length])
 
 			// 渲染tab项
 			const renderTabItem = (tab: TabItemType, index: number) => {
@@ -548,10 +550,15 @@ const FilesViewer = memo(
 					const usesStablePptPortal =
 						!props.documentFlowFullscreen &&
 						shouldUsePPTRootRender(renderProps.type, renderProps.data)
+					const usesStablePreviewPortal =
+						!usesStablePptPortal &&
+						!props.documentFlowFullscreen &&
+						renderProps.type === DetailType.Html
 
 					return {
 						isActive,
 						usesStablePptPortal,
+						usesStablePreviewPortal,
 						node: (
 							<TabCache
 								key={tab.id}
@@ -565,7 +572,7 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
-								fillPortalSurface={usesStablePptPortal}
+								fillPortalSurface={usesStablePptPortal || usesStablePreviewPortal}
 							/>
 						),
 					}
@@ -587,18 +594,29 @@ const FilesViewer = memo(
 				props.userSelectDetail,
 				openFileTab,
 			])
-			const inlineCachedTabs = cachedTabRenders
-				.filter((entry) => !entry.usesStablePptPortal)
-				.map((entry) => entry.node)
 			const stablePptCachedTabs = cachedTabRenders
 				.filter((entry) => entry.usesStablePptPortal)
+				.map((entry) => entry.node)
+			const inlineCachedTabs = cachedTabRenders
+				.filter((entry) => !entry.usesStablePptPortal && !entry.usesStablePreviewPortal)
+				.map((entry) => entry.node)
+			const stablePreviewCachedTabs = cachedTabRenders
+				.filter((entry) => entry.usesStablePreviewPortal)
 				.map((entry) => entry.node)
 			const hasActiveStablePptTab = cachedTabRenders.some(
 				(entry) => entry.usesStablePptPortal && entry.isActive,
 			)
+			const hasActiveStablePreviewTab = cachedTabRenders.some(
+				(entry) => entry.usesStablePreviewPortal && entry.isActive,
+			)
 			const hasStablePptTabs = stablePptCachedTabs.length > 0
+			const hasStablePreviewTabs = stablePreviewCachedTabs.length > 0
 			const shouldShowStablePptSurface =
 				hasActiveStablePptTab && Boolean(currentTab) && !isRestoringFileTabs
+			const shouldShowStablePreviewSurface =
+				hasActiveStablePreviewTab && Boolean(currentTab) && !isRestoringFileTabs
+			const [stablePreviewSurfaceAnchor, setStablePreviewSurfaceAnchor] =
+				useState<HTMLDivElement | null>(null)
 			const [stablePptSurfaceAnchor, setStablePptSurfaceAnchor] =
 				useState<HTMLDivElement | null>(null)
 
@@ -707,13 +725,22 @@ const FilesViewer = memo(
 									</div>
 								) : (
 									<>
-										{/* Non-PPT tabs keep the existing FilesViewer rendering path. */}
+										{/* Cached preview tabs use stable body portals outside document-flow share mode. */}
 										{inlineCachedTabs}
-										{hasActiveStablePptTab ? (
+										{hasActiveStablePreviewTab || hasActiveStablePptTab ? (
 											<div
-												ref={setStablePptSurfaceAnchor}
+												ref={
+													hasActiveStablePreviewTab
+														? setStablePreviewSurfaceAnchor
+														: setStablePptSurfaceAnchor
+												}
 												className="relative min-h-0 flex-1"
-												data-files-viewer-ppt-anchor="true"
+												data-files-viewer-preview-anchor={
+													hasActiveStablePreviewTab ? "true" : undefined
+												}
+												data-files-viewer-ppt-anchor={
+													hasActiveStablePptTab ? "true" : undefined
+												}
 											/>
 										) : null}
 									</>
@@ -738,6 +765,16 @@ const FilesViewer = memo(
 
 			return (
 				<>
+					<StablePreviewPortalSurface
+						anchor={stablePreviewSurfaceAnchor}
+						enabled={
+							Boolean(currentTab) && !isRestoringFileTabs && hasStablePreviewTabs
+						}
+						isFullscreen={effectiveIsFullscreen}
+						visible={shouldShowStablePreviewSurface}
+					>
+						{stablePreviewCachedTabs}
+					</StablePreviewPortalSurface>
 					<StablePPTPortalSurface
 						anchor={stablePptSurfaceAnchor}
 						borderRadius={

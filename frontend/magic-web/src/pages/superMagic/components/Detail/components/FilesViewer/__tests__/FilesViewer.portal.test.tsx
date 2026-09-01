@@ -103,7 +103,7 @@ vi.mock("../hooks/useFilesViewer", () => ({
 		closeTabsToRight: mockState.noop,
 		getRenderProps: (tab?: { fileData?: MockFileData }) => ({
 			isFullscreen: false,
-			type: tab?.fileData?.display_config?.type === "slide" ? "html" : "md",
+			type: "html",
 			data: tab?.fileData,
 			attachmentList: tab?.fileData ? [tab.fileData] : [],
 		}),
@@ -252,18 +252,23 @@ describe("FilesViewer fullscreen portal", () => {
 		expect(container.querySelector('[data-testid="files-viewer-content"]')).toBeTruthy()
 	})
 
-	it("keeps non-PPT content on the existing viewer portal path", () => {
-		const { container, rerender } = render(<FilesViewer />)
-		const inlineContent = container.querySelector('[data-testid="files-viewer-content"]')
-
-		expect(inlineContent).toBeTruthy()
+	it("does not remount non-PPT content when entering or exiting viewer fullscreen", () => {
+		const { rerender } = render(<FilesViewer />)
+		const initialContent = screen.getByTestId("files-viewer-content")
 
 		rerender(<FilesViewer forceFullscreenMode />)
 
-		expect(container.querySelector('[data-testid="files-viewer-content"]')).toBeNull()
-		const fullscreenContent = screen.getByTestId("files-viewer-content")
-		expect(fullscreenContent).toBeInTheDocument()
-		expect(fullscreenContent).not.toBe(inlineContent)
+		expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
+		expect(
+			document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")?.style.zIndex,
+		).toBe("calc(var(--z-index-detail-fullscreen) + 1)")
+
+		rerender(<FilesViewer forceFullscreenMode={false} />)
+
+		expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
+		expect(
+			document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")?.style.zIndex,
+		).toBe("10")
 	})
 
 	it("does not remount PPT content when entering or exiting viewer fullscreen", () => {
