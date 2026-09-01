@@ -2145,6 +2145,8 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertTrue($isDone);
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
         $this->assertSame('provider task id is invalid', $operationRepository->operations[$operation->getId()]->getErrorMessage());
+        $this->assertSame([], $operationRepository->activeSlots['org-test:user-test'] ?? []);
+        $this->assertCount(2, $this->eventDispatcher->events);
     }
 
     public function testManagedPollDispatchesFailedEventWhenProviderReturnsFailedStatus(): void
