@@ -63,6 +63,7 @@ interface MicroAppCardProps {
 	onManageCollaborators?: () => void
 	managingCollaborators?: boolean
 	canDelete?: boolean
+	canRename?: boolean
 	canManageCollaborators?: boolean
 }
 
@@ -83,6 +84,7 @@ export default function MicroAppCard({
 	onManageCollaborators,
 	managingCollaborators = false,
 	canDelete = true,
+	canRename = true,
 	canManageCollaborators = false,
 }: MicroAppCardProps) {
 	const { t } = useTranslation("super")
@@ -263,10 +265,12 @@ export default function MicroAppCard({
 						<ExternalLink className="size-4" />
 						{t("microAppsPage.actions.openInNewWindow")}
 					</ContextMenuItem>
-					<ContextMenuItem onSelect={onRename}>
-						<Pencil className="size-4" />
-						{t("microAppsPage.actions.rename")}
-					</ContextMenuItem>
+					{canRename ? (
+						<ContextMenuItem onSelect={onRename}>
+							<Pencil className="size-4" />
+							{t("microAppsPage.actions.rename")}
+						</ContextMenuItem>
+					) : null}
 					{canManageCollaborators && onManageCollaborators ? (
 						<ContextMenuItem
 							onSelect={onManageCollaborators}
@@ -299,17 +303,19 @@ export default function MicroAppCard({
 				>
 					<SheetTitle className="px-2 pb-3 pt-1 text-left text-base">{title}</SheetTitle>
 					<div className="overflow-hidden rounded-2xl bg-card">
-						<button
-							type="button"
-							className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60"
-							onClick={() => {
-								setMobileMenuOpen(false)
-								onRename()
-							}}
-						>
-							<Pencil className="size-4" />
-							{t("microAppsPage.actions.rename")}
-						</button>
+						{canRename ? (
+							<button
+								type="button"
+								className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60"
+								onClick={() => {
+									setMobileMenuOpen(false)
+									onRename()
+								}}
+							>
+								<Pencil className="size-4" />
+								{t("microAppsPage.actions.rename")}
+							</button>
+						) : null}
 						{canManageCollaborators && onManageCollaborators ? (
 							<>
 								<div className="ml-12 h-px bg-border/60" />

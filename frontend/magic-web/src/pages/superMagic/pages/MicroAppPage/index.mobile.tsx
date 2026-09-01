@@ -236,7 +236,9 @@ function MicroAppPageMobileInner({
 					) : null}
 				</div>
 
-				<MicroAppConversationFloatingButton onClick={() => setConversationOpen(true)} />
+				{!isReadOnly ? (
+					<MicroAppConversationFloatingButton onClick={() => setConversationOpen(true)} />
+				) : null}
 			</div>
 
 			<MicroAppPageOverlays
@@ -264,7 +266,7 @@ function MicroAppPageMobileInner({
 					/>
 				</Suspense>
 			) : null}
-			{conversationOpen ? (
+			{conversationOpen && !isReadOnly ? (
 				<Suspense fallback={null}>
 					<MicroAppMobileConversation
 						open={conversationOpen}
