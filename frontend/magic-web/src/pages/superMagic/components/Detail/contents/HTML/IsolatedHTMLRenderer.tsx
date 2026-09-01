@@ -129,6 +129,8 @@ export interface IsolatedHTMLRendererRef {
 	consumeInspectorEscape?: () => boolean
 	/** Start element inspector in append mode (selection enters the multi-target draft flow) */
 	startInspectorAppend: () => void
+	/** Start immediate element selection and append the Tiptap detail node to the input. */
+	startInspectorQuickSelect?: () => void
 }
 //HTML预览增强组件 iframe里面的内容尺寸，用于计算缩放比例
 export interface IsolatedHTMLRendererContentMetrics {
@@ -253,6 +255,8 @@ interface IsolatedHTMLRendererProps {
 	devConsoleEnabled?: boolean
 	/** AI 选取（appendToEditor）状态变化回调 */
 	onAppendPickingChange?: (picking: boolean) => void
+	/** 即时元素选取状态变化回调 */
+	onQuickSelectionChange?: (picking: boolean) => void
 	/** 元素选取状态变化回调 */
 	onInspectorActiveChange?: (active: boolean) => void
 	/** Enable content-level inspector fallback for renderers without runtime support. */
@@ -454,6 +458,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			onDevConsoleClose,
 			devConsoleEnabled,
 			onAppendPickingChange,
+			onQuickSelectionChange,
 			onInspectorActiveChange,
 			enableInlineInspectorFallback = false,
 			permissionController,
@@ -984,11 +989,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			hideInfoCard: inspectorHideInfoCard,
 			startInToolbarMode,
 			startInAppendMode,
+			startInQuickSelectionMode,
 			selectionMode: inspectorSelectionMode,
 			updateSelectionMode: updateInspectorSelectionMode,
 			captureScreenshotTarget: captureInspectorScreenshotTarget,
 			attachElementScreenshot: attachInspectorElementScreenshot,
 			isAppendPicking,
+			isQuickSelecting,
 			activeTarget: inspectorActiveTarget,
 			draftInstruction: inspectorDraftInstruction,
 			setDraftInstruction: setInspectorDraftInstruction,
@@ -1008,6 +1015,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		useEffect(() => {
 			onAppendPickingChange?.(isAppendPicking)
 		}, [isAppendPicking, onAppendPickingChange])
+
+		useEffect(() => {
+			onQuickSelectionChange?.(isQuickSelecting)
+		}, [isQuickSelecting, onQuickSelectionChange])
 
 		useEffect(() => {
 			onInspectorActiveChange?.(elementInspector.active)
@@ -1669,6 +1680,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					inspectorCapturePrewarmRef.current?.()
 					startInAppendMode()
 				},
+				startInspectorQuickSelect: () => {
+					startInQuickSelectionMode()
+				},
 			}),
 			[
 				containIframeOverscroll,
@@ -1697,6 +1711,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				enableInlineInspectorFallback,
 				consumeInspectorEscape,
 				startInAppendMode,
+				startInQuickSelectionMode,
 				startInToolbarMode,
 				resetInspectorSelection,
 				virtualStorageContext,
@@ -2626,13 +2641,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														submitState={inspectorSubmitState}
 														submitError={inspectorSubmitError}
 														onEditPendingTarget={
-															editInspectorPendingTarget
+															isAppendPicking
+																? editInspectorPendingTarget
+																: undefined
 														}
 														onRemovePendingTarget={
-															removeInspectorPendingTarget
+															isAppendPicking
+																? removeInspectorPendingTarget
+																: undefined
 														}
 														onSubmitPendingTargets={
-															submitInspectorPendingTargets
+															isAppendPicking
+																? submitInspectorPendingTargets
+																: undefined
 														}
 														selectionMode={inspectorSelectionMode}
 														onSelectionModeChange={
@@ -2646,7 +2667,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 															captureInspectorScreenshotTarget
 														}
 														onCaptureElementScreenshot={
-															isAppendPicking
+															isAppendPicking || isQuickSelecting
 																? attachInspectorElementScreenshot
 																: undefined
 														}
@@ -2654,7 +2675,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 															registerInspectorCapturePrewarm
 														}
 														onExitMultiSelection={
-															resetInspectorSelection
+															isAppendPicking
+																? resetInspectorSelection
+																: undefined
 														}
 														scaleRatio={scaleRatio}
 													/>

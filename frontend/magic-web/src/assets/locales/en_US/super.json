@@ -6723,6 +6723,8 @@
 			"uploadError": "File processing failed",
 			"uploadSuccess": "Upload successful"
 		},
+		"exitSelectElement": "Exit Select",
+		"exitSelectElementDescription": "Exit element selection",
 		"expandTitle": "Expand Project Files",
 		"export": "Export",
 		"exportCancel": "Cancel Export",
@@ -6857,8 +6859,8 @@
 		"resourceLoadFailed": "{{count}} resource(s) timed out and downloads were skipped",
 		"search": "Search Files",
 		"selectAll": "Select All",
-		"selectElement": "Select Element to Edit",
-		"selectElementDescription": "Click an element on the page to fill its style info into the chat",
+		"selectElement": "Select",
+		"selectElementDescription": "Click an element to capture it and insert its info into the input",
 		"selectFiles": "Select",
 		"source": "Source File",
 		"success": {

@@ -6734,6 +6734,8 @@
 			"uploadError": "文件处理失败",
 			"uploadSuccess": "上传成功"
 		},
+		"exitSelectElement": "退出选取",
+		"exitSelectElementDescription": "退出当前元素选取",
 		"expandTitle": "展开项目文件",
 		"export": "导出",
 		"exportCancel": "终止导出",
@@ -6868,8 +6870,8 @@
 		"resourceLoadFailed": "{{count}} 个资源加载超时，已跳过资源下载",
 		"search": "搜索文件",
 		"selectAll": "全选",
-		"selectElement": "选取元素进行编辑",
-		"selectElementDescription": "点击选取页面中的元素，将其样式信息自动填入对话框",
+		"selectElement": "选取",
+		"selectElementDescription": "点击页面元素，自动截图并将元素信息插入输入框",
 		"selectFiles": "多选",
 		"source": "源文件",
 		"success": {

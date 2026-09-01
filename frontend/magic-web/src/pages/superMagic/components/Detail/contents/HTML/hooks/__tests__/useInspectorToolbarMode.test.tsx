@@ -142,6 +142,102 @@ describe("useInspectorToolbarMode", () => {
 		expect(result.current.pendingTargets).toHaveLength(1)
 	})
 
+	it("captures the selected element and appends its Tiptap node", async () => {
+		const selectedElement = createInfo()
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: null,
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+		} as unknown as ReturnType<typeof useElementInspector>
+		const translate = (key: string) => key
+		const { result, rerender } = renderHook(() =>
+			useInspectorToolbarMode(inspector, translate, fileInfo),
+		)
+		const prepareScreenshot = vi.fn()
+		const appendContent = vi.fn()
+		pubsub.subscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
+		pubsub.subscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
+
+		try {
+			act(() => result.current.startInQuickSelectionMode())
+			expect(result.current.isQuickSelecting).toBe(true)
+			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
+				selectedElement
+			rerender()
+
+			const screenshot = {
+				dataUrl: "data:image/png;base64,shot",
+				rect: selectedElement.rect,
+			}
+			act(() => result.current.attachElementScreenshot(selectedElement.selector, screenshot))
+
+			expect(prepareScreenshot).toHaveBeenCalledWith(
+				expect.objectContaining({
+					targetId: "element:#hero",
+					dataUrl: screenshot.dataUrl,
+				}),
+			)
+			const request = prepareScreenshot.mock.calls[0]?.[0]
+			const screenshotMention = {
+				type: "project_file",
+				data: { file_id: "shot-1", file_name: "hero.png", file_path: ".tmp/hero.png" },
+			}
+			await act(async () => request.onSuccess(screenshotMention))
+
+			expect(appendContent).toHaveBeenCalledOnce()
+			const content = appendContent.mock.calls[0]?.[0]
+			expect(content.content[0].content[0].attrs.selector).toBe("#hero")
+			expect(content.content[0].content[0].attrs.screenshotMention).toEqual(screenshotMention)
+			expect(result.current.isQuickSelecting).toBe(false)
+			expect(result.current.pendingTargets).toHaveLength(0)
+			expect(result.current.inspectorModeRef.current).toBe("devConsole")
+		} finally {
+			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
+			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
+		}
+	})
+
+	it("cancels immediate selection before a screenshot completes", () => {
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: null,
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+		} as unknown as ReturnType<typeof useElementInspector>
+		const translate = (key: string) => key
+		const { result } = renderHook(() => useInspectorToolbarMode(inspector, translate, fileInfo))
+
+		act(() => result.current.startInQuickSelectionMode())
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+		})
+
+		expect(result.current.inspectorModeRef.current).toBe("devConsole")
+		expect(inspector.clearSelection).toHaveBeenCalledOnce()
+		expect(inspector.stop).toHaveBeenCalled()
+	})
+
 	it("clears a previous element selection before entering screenshot mode", () => {
 		const fileInfo = {
 			fileId: "file-1",

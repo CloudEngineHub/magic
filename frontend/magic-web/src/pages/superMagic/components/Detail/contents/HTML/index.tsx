@@ -63,7 +63,7 @@ import {
 	downloadFileContent,
 } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, ShieldCheck, Terminal } from "lucide-react"
+import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { env } from "@/utils/env"
 import { logger as Logger } from "@/utils/log"
@@ -505,12 +505,24 @@ export default memo(function HTML(props: HTMLProps) {
 	const htmlRendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const fileId = displayData?.file_id as string | undefined
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
+	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
 	const handleAIEdit = useMemoizedFn(() => {
 		if (isAppendPicking) {
 			htmlRendererRef.current?.stopInspector()
 		} else {
 			htmlRendererRef.current?.startInspectorAppend()
 		}
+	})
+	const handleQuickSelection = useMemoizedFn(async () => {
+		if (isQuickSelecting) {
+			await htmlRendererRef.current?.requestInspectorExit?.()
+			return
+		}
+		if (isAppendPicking) {
+			const canStart = (await htmlRendererRef.current?.requestInspectorExit?.()) ?? true
+			if (!canStart) return
+		}
+		htmlRendererRef.current?.startInspectorQuickSelect()
 	})
 
 	useEffect(() => {
@@ -1284,6 +1296,12 @@ export default memo(function HTML(props: HTMLProps) {
 	const { guideTourOpen, setGuideTourOpen, guideTourSteps } = useHTMLGuideTour({
 		isMobile,
 	})
+	const quickSelectionLabel = isQuickSelecting
+		? t("topicFiles.exitSelectElement")
+		: t("topicFiles.selectElement")
+	const quickSelectionTitle = isQuickSelecting
+		? t("topicFiles.exitSelectElementDescription")
+		: t("topicFiles.selectElementDescription")
 
 	// 通知编辑按钮已准备好
 	useEffect(() => {
@@ -1356,9 +1374,17 @@ export default memo(function HTML(props: HTMLProps) {
 									isPrimaryActive={isAppendPicking}
 									attachmentList={attachmentList}
 									fileId={displayData?.file_id}
-									onStartInspector={() => {
-										htmlRendererRef.current?.startInspectorAppend()
-									}}
+								/>
+							)}
+							{showAIOptimizationButton && !isEditMode && (
+								<ActionButton
+									icon={<Crosshair size={16} />}
+									onClick={() => void handleQuickSelection()}
+									title={quickSelectionTitle}
+									text={quickSelectionLabel}
+									showText
+									textClassName={isQuickSelecting ? "text-primary" : undefined}
+									data-testid="html-ai-pick-button"
 								/>
 							)}
 						</div>
@@ -1415,6 +1441,7 @@ export default memo(function HTML(props: HTMLProps) {
 			displayData?.file_id,
 			handleCancel,
 			handleAIEdit,
+			handleQuickSelection,
 			handleEdit,
 			handleExportPDF,
 			handleExportPPT,
@@ -1434,6 +1461,9 @@ export default memo(function HTML(props: HTMLProps) {
 			showExportButton,
 			showFileEditButton,
 			isAppendPicking,
+			isQuickSelecting,
+			quickSelectionLabel,
+			quickSelectionTitle,
 			canManageHtmlPermissions,
 			handleOpenHtmlPermissionManager,
 			isDataAnalysis,
@@ -1615,6 +1645,7 @@ export default memo(function HTML(props: HTMLProps) {
 									}}
 									onDevConsoleClose={() => updateDevConsoleEnabled(false)}
 									onAppendPickingChange={setIsAppendPicking}
+									onQuickSelectionChange={setIsQuickSelecting}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
 								{!isPreviewRenderReady && !documentFlowFullscreen && (

@@ -18,6 +18,7 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { roleStore } from "@/pages/superMagic/stores"
 import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 
 type ElementInspector = ReturnType<typeof useElementInspector>
 
@@ -28,12 +29,13 @@ export interface InspectorFileInfo {
 	filePath: string
 }
 
-type InspectorMode = "devConsole" | "toolbar" | "multiSelection"
+type InspectorMode = "devConsole" | "toolbar" | "multiSelection" | "quickSelection"
 type SelectionMode = "element" | "screenshot"
 
 /**
  * Coordinates toolbar inspection and the multi-target HTML editing flow.
- * Selecting an element only opens a local draft; the Agent is notified on submit.
+ * Multi-selection keeps a local draft; quick selection appends one inspected
+ * element to the current editor after its screenshot is prepared.
  */
 export function useInspectorToolbarMode(
 	elementInspector: ElementInspector,
@@ -50,6 +52,10 @@ export function useInspectorToolbarMode(
 	const modeRef = useRef<InspectorMode>("devConsole")
 	const exitRequestRef = useRef<Promise<boolean> | null>(null)
 	const previousFileIdRef = useRef(fileInfo?.fileId)
+	const quickSelectionRef = useRef<{
+		selector: string
+		info: NonNullable<ElementInspector["selectedElement"]>
+	} | null>(null)
 	const fileId = fileInfo?.fileId
 	const fileName = fileInfo?.fileName
 	const filePath = fileInfo?.filePath
@@ -98,6 +104,17 @@ export function useInspectorToolbarMode(
 		if (modeRef.current === "devConsole" || !selectedElement) return
 
 		const info = selectedElement
+		if (modeRef.current === "quickSelection") {
+			// Keep the selected node until its automatic screenshot has been captured.
+			// The screenshot callback completes the insertion so the Tiptap node can
+			// carry the uploaded image mention in the same transaction.
+			if (quickSelectionRef.current?.selector !== info.selector) {
+				quickSelectionRef.current = { selector: info.selector, info }
+			}
+			stopInspector()
+			return
+		}
+
 		if (
 			modeRef.current === "multiSelection" &&
 			activeTarget?.kind === "element" &&
@@ -186,6 +203,14 @@ export function useInspectorToolbarMode(
 		startInspector()
 	}, [startInspector, updateMode])
 
+	const startInQuickSelectionMode = useCallback(() => {
+		quickSelectionRef.current = null
+		setSubmitError(null)
+		setSelectionMode("element")
+		updateMode("quickSelection")
+		startInspector()
+	}, [startInspector, updateMode])
+
 	const updateSelectionMode = useCallback(
 		(nextMode: SelectionMode) => {
 			setSelectionMode(nextMode)
@@ -238,8 +263,39 @@ export function useInspectorToolbarMode(
 				})
 				return changed ? next : targets
 			})
+
+			if (modeRef.current !== "quickSelection") return
+			const quickSelection = quickSelectionRef.current
+			if (!quickSelection || quickSelection.selector !== selector) return
+
+			const targetId = `element:${selector}`
+			const insertElement = (screenshotMention?: TiptapMentionAttributes | null) => {
+				const content = buildAgentPromptContent(
+					quickSelection.info,
+					t("stylePanel.inspector.agentPromptTitle"),
+					stableFileInfo,
+					screenshotMention,
+				)
+				pubsub.publish(PubSubEvents.Append_Content_To_Editor, content)
+				quickSelectionRef.current = null
+				clearSelection()
+				updateMode("devConsole")
+			}
+
+			if (!pubsub.hasListeners(PubSubEvents.Prepare_Html_Screenshot)) {
+				insertElement()
+				return
+			}
+
+			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
+				targetId,
+				dataUrl: screenshot.dataUrl,
+				fileName: getHtmlScreenshotFileName(targetId),
+				onSuccess: (mention: TiptapMentionAttributes) => insertElement(mention),
+				onError: () => insertElement(),
+			})
 		},
-		[],
+		[clearSelection, stableFileInfo, t, updateMode],
 	)
 
 	const confirmTarget = useCallback(() => {
@@ -320,6 +376,7 @@ export function useInspectorToolbarMode(
 	)
 
 	const resetSelection = useCallback(() => {
+		quickSelectionRef.current = null
 		setActiveTarget(null)
 		setDraftInstruction("")
 		setPendingTargets([])
@@ -334,6 +391,10 @@ export function useInspectorToolbarMode(
 	// AI 选取模式在元素确认后仍会保留提交列表，因此不能只依赖
 	// useElementInspector 的 active 状态来处理 Escape。
 	const requestExit = useCallback((): Promise<boolean> => {
+		if (modeRef.current === "quickSelection") {
+			resetSelection()
+			return Promise.resolve(true)
+		}
 		if (modeRef.current !== "multiSelection") return Promise.resolve(true)
 		if (pendingTargets.length === 0) {
 			resetSelection()
@@ -371,14 +432,20 @@ export function useInspectorToolbarMode(
 	}, [pendingTargets.length, resetSelection, t])
 
 	const consumeEscape = useCallback(() => {
-		if (modeRef.current !== "multiSelection") return false
+		if (modeRef.current !== "multiSelection" && modeRef.current !== "quickSelection") {
+			return false
+		}
 		void requestExit()
 		return true
 	}, [requestExit])
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || modeRef.current !== "multiSelection") return
+			if (
+				event.key !== "Escape" ||
+				(modeRef.current !== "multiSelection" && modeRef.current !== "quickSelection")
+			)
+				return
 			consumeEscape()
 			event.preventDefault()
 			event.stopImmediatePropagation()
@@ -444,6 +511,7 @@ export function useInspectorToolbarMode(
 	return {
 		hideInfoCard: mode !== "devConsole",
 		isAppendPicking: mode === "multiSelection",
+		isQuickSelecting: mode === "quickSelection",
 		selectionMode,
 		updateSelectionMode,
 		captureScreenshotTarget,
@@ -464,6 +532,7 @@ export function useInspectorToolbarMode(
 		submitPendingTargets,
 		startInToolbarMode,
 		startInAppendMode,
+		startInQuickSelectionMode,
 		inspectorModeRef: modeRef,
 	}
 }
