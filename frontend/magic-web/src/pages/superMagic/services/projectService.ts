@@ -18,6 +18,7 @@ import {
 } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
+import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -254,8 +255,11 @@ class ProjectService {
 			}
 		}
 
+		const { requestId, options } = createOrderRequestOptions()
+		let orderingRequestCompleted = false
+		const usesPinEndpoint = isPinned !== undefined && previousProject != null
 		try {
-			if (isPinned !== undefined && previousProject) {
+			if (usesPinEndpoint) {
 				// Pin-boundary moves use the pin endpoint because it owns both pin state and ordering.
 				await this.pinProject(
 					previousProject,
@@ -265,13 +269,17 @@ class ProjectService {
 					nextProjectId,
 				)
 			} else {
-				await SuperMagicApi.moveProject({
-					source_project_id: projectId,
-					target_workspace_id: workspaceId,
-					pre_project_id: preProjectId,
-					next_project_id: nextProjectId,
-				})
+				await SuperMagicApi.moveProject(
+					{
+						source_project_id: projectId,
+						target_workspace_id: workspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+					},
+					options,
+				)
 			}
+			orderingRequestCompleted = true
 			await projectStore.loadProjectsForWorkspace(workspaceId, true, true)
 			this.syncSelectedProjectAfterMove(
 				projectId,
@@ -279,6 +287,19 @@ class ProjectService {
 				projectStore.getProjectsByWorkspace(workspaceId),
 			)
 		} catch (error) {
+			if (!orderingRequestCompleted && !usesPinEndpoint)
+				reportOrderApiError({
+					endpoint: "/api/v1/super-agent/projects/move",
+					params: {
+						source_project_id: projectId,
+						target_workspace_id: workspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+						...(isPinned === undefined ? {} : { is_pin: isPinned }),
+					},
+					requestId,
+					error,
+				})
 			const currentProjectIds = projectStore
 				.getProjectsByWorkspace(workspaceId)
 				.map((project) => project.id)
@@ -644,17 +665,22 @@ class ProjectService {
 			)
 		})
 
+		const moveRequest = createOrderRequestOptions()
+		let orderingRequestCompleted = false
 		try {
 			if (usePinApi) {
 				await this.pinProject(project, true, targetWorkspaceId, preProjectId, nextProjectId)
 			} else {
-				await SuperMagicApi.moveProjectToNewWorkspace({
-					source_project_id: project.id,
-					target_workspace_id: targetWorkspaceId,
-					target_workspace_name: targetWorkspaceName,
-					pre_project_id: preProjectId,
-					next_project_id: nextProjectId,
-				})
+				await SuperMagicApi.moveProjectToNewWorkspace(
+					{
+						source_project_id: project.id,
+						target_workspace_id: targetWorkspaceId,
+						target_workspace_name: targetWorkspaceName,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+					},
+					moveRequest.options,
+				)
 				if (isPinned !== undefined) {
 					await this.pinProject(
 						project,
@@ -665,6 +691,7 @@ class ProjectService {
 					)
 				}
 			}
+			orderingRequestCompleted = true
 			await Promise.all([
 				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
 				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
@@ -675,6 +702,18 @@ class ProjectService {
 				projectStore.getProjectsByWorkspace(targetWorkspaceId),
 			)
 		} catch (error) {
+			if (!orderingRequestCompleted && !usePinApi)
+				reportOrderApiError({
+					endpoint: "/api/v1/super-agent/projects/move",
+					params: {
+						source_project_id: project.id,
+						target_workspace_id: targetWorkspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+					},
+					requestId: moveRequest.requestId,
+					error,
+				})
 			// A forced refresh is the safest rollback because either side may have
 			// been changed by another tab while the move was in flight.
 			await Promise.all([
@@ -748,11 +787,18 @@ class ProjectService {
 		})
 
 		return this.getOrCreateRequest(requestKey, async () => {
+			const { requestId, options } = createOrderRequestOptions()
 			const workspaceId = targetWorkspaceId || project.workspace_id
 			const hasOrdering = preProjectId !== undefined || nextProjectId !== undefined
 			const previousProjects = workspaceId
 				? projectStore.getProjectsByWorkspace(workspaceId)
 				: []
+			// The pin endpoint only orders within the pinned section.
+			const shouldIncludePinNextProject =
+				preProjectId !== null &&
+				nextProjectId != null &&
+				previousProjects.some((item) => item.id === nextProjectId && item.is_pinned)
+			const pinNextProjectId = shouldIncludePinNextProject ? nextProjectId : undefined
 			let optimisticProjectIds: string[] | null = null
 
 			if (workspaceId && hasOrdering) {
@@ -785,19 +831,27 @@ class ProjectService {
 			try {
 				// Use appropriate API based on project type
 				if (isOtherCollaborationProject(project)) {
-					await SuperMagicApi.updateCollaborationProjectPinStatus(project.id, {
-						is_pin: isPin,
-						target_workspace_id: targetWorkspaceId,
-						pre_project_id: preProjectId,
-						next_project_id: nextProjectId,
-					})
+					await SuperMagicApi.updateCollaborationProjectPinStatus(
+						project.id,
+						{
+							is_pin: isPin,
+							target_workspace_id: targetWorkspaceId,
+							pre_project_id: preProjectId,
+							next_project_id: pinNextProjectId,
+						},
+						options,
+					)
 				} else {
-					await SuperMagicApi.updateProjectPinStatus(project.id, {
-						is_pin: isPin,
-						target_workspace_id: targetWorkspaceId,
-						pre_project_id: preProjectId,
-						next_project_id: nextProjectId,
-					})
+					await SuperMagicApi.updateProjectPinStatus(
+						project.id,
+						{
+							is_pin: isPin,
+							target_workspace_id: targetWorkspaceId,
+							pre_project_id: preProjectId,
+							next_project_id: pinNextProjectId,
+						},
+						options,
+					)
 				}
 
 				if (projectStore.selectedProject?.id === project.id) {
@@ -809,6 +863,19 @@ class ProjectService {
 					})
 				}
 			} catch (error) {
+				reportOrderApiError({
+					endpoint: isOtherCollaborationProject(project)
+						? `/api/v1/super-agent/collaboration-projects/${project.id}/pin`
+						: `/api/v1/super-agent/projects/${project.id}/pin`,
+					params: {
+						is_pin: isPin,
+						target_workspace_id: targetWorkspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: pinNextProjectId,
+					},
+					requestId,
+					error,
+				})
 				if (
 					workspaceId &&
 					hasOrdering &&

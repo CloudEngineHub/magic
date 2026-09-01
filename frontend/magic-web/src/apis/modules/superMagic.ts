@@ -1436,19 +1436,26 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * 保存侧栏工作区顺序。
 	 */
-	moveWorkspace({
-		id,
-		pre_workspace_id,
-		next_workspace_id,
-	}: {
-		id: string
-		pre_workspace_id: string | null
-		next_workspace_id: string | null
-	}) {
-		return fetch.put<{ workspace?: Workspace }>(`/api/v1/super-agent/workspaces/${id}`, {
+	moveWorkspace(
+		{
+			id,
 			pre_workspace_id,
 			next_workspace_id,
-		})
+		}: {
+			id: string
+			pre_workspace_id: string | null
+			next_workspace_id: string | null
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.put<{ workspace?: Workspace }>(
+			`/api/v1/super-agent/workspaces/${id}`,
+			{
+				pre_workspace_id,
+				next_workspace_id,
+			},
+			options,
+		)
 	},
 
 	/**
@@ -2225,26 +2232,27 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * 保存指定工作区内的项目顺序。
 	 */
-	moveProject({
-		source_project_id,
-		target_workspace_id,
-		pre_project_id,
-		next_project_id,
-		target_project_name,
-	}: {
-		source_project_id: string
-		target_workspace_id: string
-		pre_project_id?: string | null
-		next_project_id?: string | null
-		target_project_name?: string
-	}) {
-		return fetch.post("/api/v1/super-agent/projects/move", {
+	moveProject(
+		{
 			source_project_id,
 			target_workspace_id,
-			...(pre_project_id === undefined ? {} : { pre_project_id }),
-			...(next_project_id === undefined ? {} : { next_project_id }),
+			pre_project_id,
+			next_project_id,
 			target_project_name,
-		})
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.post(
+			"/api/v1/super-agent/projects/move",
+			{
+				source_project_id,
+				target_workspace_id,
+				...(pre_project_id === undefined ? {} : { pre_project_id }),
+				...(next_project_id === undefined ? {} : { next_project_id }),
+				target_project_name,
+			},
+			options,
+		)
 	},
 
 	/**
@@ -2687,29 +2695,36 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param target_project_name 目标项目名称（后端若支持则在移动时同步改名）
 	 * @returns 移动项目结果
 	 */
-	moveProjectToNewWorkspace({
-		source_project_id,
-		target_workspace_id,
-		target_workspace_name,
-		target_project_name,
-		pre_project_id,
-		next_project_id,
-	}: {
-		source_project_id: string
-		target_workspace_id: string
-		target_workspace_name?: string
-		target_project_name?: string
-		pre_project_id?: string | null
-		next_project_id?: string | null
-	}) {
-		return fetch.post("/api/v1/super-agent/projects/move", {
+	moveProjectToNewWorkspace(
+		{
 			source_project_id,
 			target_workspace_id,
 			target_workspace_name,
 			target_project_name,
-			...(pre_project_id === undefined ? {} : { pre_project_id }),
-			...(next_project_id === undefined ? {} : { next_project_id }),
-		})
+			pre_project_id,
+			next_project_id,
+		}: {
+			source_project_id: string
+			target_workspace_id: string
+			target_workspace_name?: string
+			target_project_name?: string
+			pre_project_id?: string | null
+			next_project_id?: string | null
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.post(
+			"/api/v1/super-agent/projects/move",
+			{
+				source_project_id,
+				target_workspace_id,
+				target_workspace_name,
+				target_project_name,
+				...(pre_project_id === undefined ? {} : { pre_project_id }),
+				...(next_project_id === undefined ? {} : { next_project_id }),
+			},
+			options,
+		)
 	},
 
 	/**
@@ -2960,17 +2975,24 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			pre_project_id?: string | null
 			next_project_id?: string | null
 		},
+		options?: Omit<RequestConfig, "url">,
 	) {
-		return fetch.put(`/api/v1/super-agent/projects/${project_id}/pin`, {
-			is_pin: data.is_pin,
-			...(data.target_workspace_id === undefined
-				? {}
-				: { target_workspace_id: data.target_workspace_id }),
-			...(data.pre_project_id === undefined ? {} : { pre_project_id: data.pre_project_id }),
-			...(data.next_project_id === undefined
-				? {}
-				: { next_project_id: data.next_project_id }),
-		})
+		return fetch.put(
+			`/api/v1/super-agent/projects/${project_id}/pin`,
+			{
+				is_pin: data.is_pin,
+				...(data.target_workspace_id === undefined
+					? {}
+					: { target_workspace_id: data.target_workspace_id }),
+				...(data.pre_project_id === undefined
+					? {}
+					: { pre_project_id: data.pre_project_id }),
+				...(data.next_project_id === undefined
+					? {}
+					: { next_project_id: data.next_project_id }),
+			},
+			options,
+		)
 	},
 
 	/**

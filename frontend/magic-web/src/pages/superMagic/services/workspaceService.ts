@@ -6,6 +6,7 @@ import { type Workspace } from "../pages/Workspace/types"
 import { SHARE_WORKSPACE_ID } from "../constants"
 import { RequestConfig } from "@/apis/core/HttpClient"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
+import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 
 export interface FetchWorkspacesParams {
 	isAutoSelect?: boolean
@@ -168,12 +169,18 @@ class WorkspaceService {
 			workspaceStore.reorderWorkspaces(nextWorkspaceIds)
 		})
 
+		const { requestId, options } = createOrderRequestOptions()
+		let orderingRequestCompleted = false
 		try {
-			await SuperMagicApi.moveWorkspace({
-				id: workspaceId,
-				pre_workspace_id: preWorkspaceId,
-				next_workspace_id: nextWorkspaceId,
-			})
+			await SuperMagicApi.moveWorkspace(
+				{
+					id: workspaceId,
+					pre_workspace_id: preWorkspaceId,
+					next_workspace_id: nextWorkspaceId,
+				},
+				options,
+			)
+			orderingRequestCompleted = true
 			await this.fetchWorkspaces({
 				page: 1,
 				pageSize: Math.max(20, previousWorkspaceIds.length),
@@ -181,6 +188,17 @@ class WorkspaceService {
 				isSelectLast: false,
 			})
 		} catch (error) {
+			if (!orderingRequestCompleted)
+				reportOrderApiError({
+					endpoint: `/api/v1/super-agent/workspaces/${workspaceId}`,
+					params: {
+						id: workspaceId,
+						pre_workspace_id: preWorkspaceId,
+						next_workspace_id: nextWorkspaceId,
+					},
+					requestId,
+					error,
+				})
 			const currentWorkspaceIds = workspaceStore.workspaces.map((workspace) => workspace.id)
 			if (isSameOrder(currentWorkspaceIds, optimisticWorkspaceIds)) {
 				runInAction(() => {

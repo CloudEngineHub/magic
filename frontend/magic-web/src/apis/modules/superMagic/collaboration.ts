@@ -253,17 +253,24 @@ export const generateCollaborationApi = (fetch: HttpClient) => ({
 			pre_project_id?: string | null
 			next_project_id?: string | null
 		},
+		options?: Omit<RequestConfig, "url">,
 	) {
-		return fetch.put(`/api/v1/super-agent/collaboration-projects/${projectId}/pin`, {
-			is_pin: data.is_pin,
-			...(data.target_workspace_id === undefined
-				? {}
-				: { target_workspace_id: data.target_workspace_id }),
-			...(data.pre_project_id === undefined ? {} : { pre_project_id: data.pre_project_id }),
-			...(data.next_project_id === undefined
-				? {}
-				: { next_project_id: data.next_project_id }),
-		})
+		return fetch.put(
+			`/api/v1/super-agent/collaboration-projects/${projectId}/pin`,
+			{
+				is_pin: data.is_pin,
+				...(data.target_workspace_id === undefined
+					? {}
+					: { target_workspace_id: data.target_workspace_id }),
+				...(data.pre_project_id === undefined
+					? {}
+					: { pre_project_id: data.pre_project_id }),
+				...(data.next_project_id === undefined
+					? {}
+					: { next_project_id: data.next_project_id }),
+			},
+			options,
+		)
 	},
 
 	/**
