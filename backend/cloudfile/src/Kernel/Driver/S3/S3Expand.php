@@ -21,6 +21,7 @@ use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
 use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
 use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
+use Dtyq\CloudFile\Kernel\Utils\StsPolicyBuilder;
 use Exception;
 use GuzzleHttp\Psr7\Utils;
 use League\Flysystem\FileAttributes;
@@ -243,80 +244,9 @@ class S3Expand implements ExpandInterface
             ],
         ]);
 
-        // Build policy based on sts type
+        // Build policy based on sts types
         $dir = $credentialPolicy->getDir();
-        $bucketArn = "arn:aws:s3:::{$this->getBucket()}";
-
-        // Build object resource ARN(s) covering the target directory.
-        //
-        // When $dir is non-empty it always ends with '/' (enforced by CredentialPolicy::formatDirPath).
-        // MinIO STS evaluates '*' as "one or more characters" in some configurations, which means
-        // the pattern "dir/*" does NOT match the directory marker "dir/" itself (empty suffix).
-        // To ensure both the folder marker and all objects inside are covered, we emit two ARNs:
-        //   1. The exact directory marker:  "arn:...bucket/dir/"
-        //   2. All objects inside:          "arn:...bucket/dir/*"
-        if (! empty($dir)) {
-            $dirArn = "{$bucketArn}/{$dir}"; // e.g. "arn:aws:s3:::xxxxx/xxx/xxx/xx/workspace/"
-            $objectResource = [
-                $dirArn,        // directory marker: ".../workspace/"
-                $dirArn . '*',  // all objects inside: ".../workspace/*"
-            ];
-        } else {
-            $objectResource = "{$bucketArn}/*";
-        }
-
-        $stsPolicy = match ($credentialPolicy->getStsType()) {
-            'list_objects' => [
-                'Version' => '2012-10-17',
-                'Statement' => [
-                    [
-                        'Effect' => 'Allow',
-                        'Action' => [
-                            's3:ListBucket',
-                            's3:ListBucketVersions',
-                        ],
-                        'Resource' => $bucketArn,
-                        'Condition' => [
-                            'StringLike' => [
-                                's3:prefix' => [
-                                    "{$dir}",
-                                    "{$dir}*",
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-            'del_objects' => [
-                'Version' => '2012-10-17',
-                'Statement' => [
-                    [
-                        'Effect' => 'Allow',
-                        'Action' => [
-                            's3:DeleteObject',
-                            's3:DeleteObjectVersion',
-                        ],
-                        'Resource' => $objectResource,
-                    ],
-                ],
-            ],
-            default => [
-                'Version' => '2012-10-17',
-                'Statement' => [
-                    [
-                        'Effect' => 'Allow',
-                        'Action' => [
-                            's3:PutObject',
-                            's3:GetObject',
-                            's3:AbortMultipartUpload',
-                            's3:ListMultipartUploadParts',
-                            's3:GetObjectVersion',
-                        ],
-                        'Resource' => $objectResource,
-                    ],
-                ],
-            ],
-        };
+        $stsPolicy = (new StsPolicyBuilder())->buildS3($this->getBucket(), $dir, $credentialPolicy->getStsTypes());
 
         $result = RetryExecutor::execute(static function () use ($expires, $roleArn, $roleSessionName, $stsClient, $stsPolicy) {
             $result = $stsClient->assumeRole([
