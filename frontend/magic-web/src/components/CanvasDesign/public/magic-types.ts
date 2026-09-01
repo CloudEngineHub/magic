@@ -930,8 +930,8 @@ export interface DownloadImageOptions {
  * 获取高清图片生成配置响应数据
  */
 export interface GetConvertHightConfigResponse {
-	/** 是否支持转高清，如果没有配置则不支持转高清 */
-	supported: boolean
+	/** 后台是否开启转高清能力 */
+	enabled: boolean
 	/** 支持的尺寸配置列表 */
 	image_size_config?: {
 		sizes: {
@@ -940,8 +940,24 @@ export interface GetConvertHightConfigResponse {
 			/** 尺寸值，格式为 "宽度x高度"，如 "1024x1024" */
 			value: string
 			/** 分辨率等级，如 "1K", "2K", "4K" */
-			scale: string
+			scale: string | null
 		}[]
+	}
+}
+
+/** 获取 AI 能力可用性响应数据 */
+export interface AiAbilityAvailability {
+	abilities: {
+		image_convert_high: GetConvertHightConfigResponse
+		image_remove_background: {
+			enabled: boolean
+		}
+		image_eraser: {
+			enabled: boolean
+		}
+		image_expand: {
+			enabled: boolean
+		}
 	}
 }
 
@@ -1483,6 +1499,11 @@ export interface CanvasDesignMethods {
 	 * @returns Promise<高清图片生成配置响应数据>
 	 */
 	getConvertHightConfig: () => Promise<GetConvertHightConfigResponse>
+	/**
+	 * 获取画布 AI 能力可用性
+	 * @returns Promise<AI 能力可用性响应数据>
+	 */
+	getAiAbilityAvailability?: () => Promise<AiAbilityAvailability>
 	/**
 	 * 查询图片生成结果
 	 * @param params 查询参数

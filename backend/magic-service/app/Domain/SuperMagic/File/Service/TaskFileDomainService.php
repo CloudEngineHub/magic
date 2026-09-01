@@ -394,8 +394,14 @@ class TaskFileDomainService
                         ['metadata' => WorkDirectoryUtil::generateDefaultWorkDirMetadata()]
                     );
                     $newFile = $this->copyTaskFileEntity(
-                        $sourceFile, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(),
-                        $targetRootFile->getProjectId(), $targetTopicId ?? $targetRootFile->getTopicId(), $targetKey, $parentId, $newFileId
+                        $sourceFile,
+                        $dataIsolation->getCurrentUserId(),
+                        $dataIsolation->getCurrentOrganizationCode(),
+                        $targetRootFile->getProjectId(),
+                        $targetTopicId ?? $targetRootFile->getTopicId(),
+                        $targetKey,
+                        $parentId,
+                        $newFileId
                     );
                     $newFile->setSource(TaskFileSource::COPY);
                     $created = $this->taskFileRepository->insert($newFile);
@@ -441,67 +447,6 @@ class TaskFileDomainService
         }
         foreach ($groups as $newParentId => $fileIds) {
             $this->taskFileRepository->batchUpdateParentId($fileIds, $newParentId, $userId);
-        }
-    }
-
-    private function setPendingNewFileId(array &$pendingParentIds, int $sourceFileId, int $newFileId): void
-    {
-        foreach ($pendingParentIds as &$pending) {
-            if (($pending['source_file_id'] ?? null) === $sourceFileId) {
-                $pending['new_id'] = $newFileId;
-                return;
-            }
-        }
-    }
-
-    private function copyFileBatch(DataIsolation $dataIsolation, array $copyBatch, array $copyEntities, TaskFileEntity $targetRootFile, array &$sourceToTarget, array &$pendingParentIds, array &$result, ?int $targetTopicId = null): void
-    {
-        try {
-            $lastError = null;
-            for ($attempt = 1; $attempt <= self::FILE_COPY_MAX_ATTEMPTS; ++$attempt) {
-                try {
-                    $copyResult = $this->sandboxGateway->copyFiles($dataIsolation, $copyBatch);
-                    if ($copyResult->isSuccess()) {
-                        $lastError = null;
-                        break;
-                    }
-                    $lastError = new RuntimeException($copyResult->getMessage() ?: 'Sandbox file copy failed');
-                } catch (Throwable $e) {
-                    $lastError = $e;
-                }
-
-                $this->logger->warning('TaskFile tree batch copy attempt failed', [
-                    'attempt' => $attempt,
-                    'max_attempts' => self::FILE_COPY_MAX_ATTEMPTS,
-                    'batch_size' => count($copyBatch),
-                    'source_file_keys' => array_map(
-                        static fn (array $copyItem): string => (string) ($copyItem['source_oss_path'] ?? ''),
-                        $copyBatch
-                    ),
-                    'error' => $lastError->getMessage(),
-                ]);
-            }
-            if ($lastError !== null) {
-                throw $lastError;
-            }
-            foreach ($copyEntities as [$sourceFile, $targetKey, $parentId, $newFileId]) {
-                $newFile = $this->copyTaskFileEntity(
-                    $sourceFile, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(),
-                    $targetRootFile->getProjectId(), $targetTopicId ?? $targetRootFile->getTopicId(), $targetKey, $parentId, $newFileId
-                );
-                $newFile->setSource(TaskFileSource::COPY);
-                $created = $this->taskFileRepository->insert($newFile);
-                $sourceToTarget[$sourceFile->getFileId()] = $created->getFileId();
-                $result['source_to_target_file_keys'][$sourceFile->getFileKey()] = $created->getFileKey();
-                $this->setPendingNewFileId($pendingParentIds, $sourceFile->getFileId(), $created->getFileId());
-                ++$result['copied'];
-            }
-        } catch (Throwable $e) {
-            $result['failed'] += count($copyEntities);
-            foreach ($copyEntities as [$sourceFile]) {
-                $result['failed_file_keys'][] = $sourceFile->getFileKey();
-            }
-            $this->logger->error('TaskFile tree batch copy failed', ['batch_size' => count($copyBatch), 'error' => $e->getMessage()]);
         }
     }
 
@@ -4219,6 +4164,73 @@ class TaskFileDomainService
     public function batchInsertWavFiles(DataIsolation $dataIsolation, int $projectId, int $parentId, array $wavFiles): void
     {
         $this->taskFileRepository->batchInsertWavFiles($dataIsolation, $projectId, $parentId, $wavFiles);
+    }
+
+    private function setPendingNewFileId(array &$pendingParentIds, int $sourceFileId, int $newFileId): void
+    {
+        foreach ($pendingParentIds as &$pending) {
+            if (($pending['source_file_id'] ?? null) === $sourceFileId) {
+                $pending['new_id'] = $newFileId;
+                return;
+            }
+        }
+    }
+
+    private function copyFileBatch(DataIsolation $dataIsolation, array $copyBatch, array $copyEntities, TaskFileEntity $targetRootFile, array &$sourceToTarget, array &$pendingParentIds, array &$result, ?int $targetTopicId = null): void
+    {
+        try {
+            $lastError = null;
+            for ($attempt = 1; $attempt <= self::FILE_COPY_MAX_ATTEMPTS; ++$attempt) {
+                try {
+                    $copyResult = $this->sandboxGateway->copyFiles($dataIsolation, $copyBatch);
+                    if ($copyResult->isSuccess()) {
+                        $lastError = null;
+                        break;
+                    }
+                    $lastError = new RuntimeException($copyResult->getMessage() ?: 'Sandbox file copy failed');
+                } catch (Throwable $e) {
+                    $lastError = $e;
+                }
+
+                $this->logger->warning('TaskFile tree batch copy attempt failed', [
+                    'attempt' => $attempt,
+                    'max_attempts' => self::FILE_COPY_MAX_ATTEMPTS,
+                    'batch_size' => count($copyBatch),
+                    'source_file_keys' => array_map(
+                        static fn (array $copyItem): string => (string) ($copyItem['source_oss_path'] ?? ''),
+                        $copyBatch
+                    ),
+                    'error' => $lastError->getMessage(),
+                ]);
+            }
+            if ($lastError !== null) {
+                throw $lastError;
+            }
+            foreach ($copyEntities as [$sourceFile, $targetKey, $parentId, $newFileId]) {
+                $newFile = $this->copyTaskFileEntity(
+                    $sourceFile,
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $targetRootFile->getProjectId(),
+                    $targetTopicId ?? $targetRootFile->getTopicId(),
+                    $targetKey,
+                    $parentId,
+                    $newFileId
+                );
+                $newFile->setSource(TaskFileSource::COPY);
+                $created = $this->taskFileRepository->insert($newFile);
+                $sourceToTarget[$sourceFile->getFileId()] = $created->getFileId();
+                $result['source_to_target_file_keys'][$sourceFile->getFileKey()] = $created->getFileKey();
+                $this->setPendingNewFileId($pendingParentIds, $sourceFile->getFileId(), $created->getFileId());
+                ++$result['copied'];
+            }
+        } catch (Throwable $e) {
+            $result['failed'] += count($copyEntities);
+            foreach ($copyEntities as [$sourceFile]) {
+                $result['failed_file_keys'][] = $sourceFile->getFileKey();
+            }
+            $this->logger->error('TaskFile tree batch copy failed', ['batch_size' => count($copyBatch), 'error' => $e->getMessage()]);
+        }
     }
 
     private function getMagicFSFileDomainService(): MagicFSFileDomainService
