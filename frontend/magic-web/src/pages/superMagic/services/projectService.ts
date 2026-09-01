@@ -17,6 +17,7 @@ import {
 	getCachedChatWorkspaceId,
 } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { topicStore, workspaceStore } from "../stores/core"
+import { getInsertIndexByAnchors } from "./orderUtils"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -239,15 +240,7 @@ class ProjectService {
 		const sourceIndex = previousIds.indexOf(projectId)
 		if (sourceIndex === -1) return
 		const nextIds = previousIds.filter((id) => id !== projectId)
-		const insertIndex =
-			preProjectId !== null && preProjectId !== undefined
-				? nextIds.indexOf(preProjectId) + 1
-				: nextProjectId !== null && nextProjectId !== undefined
-					? (() => {
-							const nextIndex = nextIds.indexOf(nextProjectId)
-							return nextIndex === -1 ? nextIds.length : nextIndex
-						})()
-					: nextIds.length
+		const insertIndex = getInsertIndexByAnchors(nextIds, preProjectId, nextProjectId)
 		nextIds.splice(Math.max(0, insertIndex), 0, projectId)
 		runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, nextIds))
 		if (isPinned !== undefined) {
@@ -625,16 +618,11 @@ class ProjectService {
 		const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
 		const targetIndex =
 			preProjectId !== undefined || nextProjectId !== undefined
-				? preProjectId !== null && preProjectId !== undefined
-					? targetProjects.findIndex((item) => item.id === preProjectId) + 1
-					: nextProjectId !== null && nextProjectId !== undefined
-						? (() => {
-								const nextIndex = targetProjects.findIndex(
-									(item) => item.id === nextProjectId,
-								)
-								return nextIndex === -1 ? targetProjects.length : nextIndex
-							})()
-						: targetProjects.length
+				? getInsertIndexByAnchors(
+						targetProjects.map((item) => item.id),
+						preProjectId,
+						nextProjectId,
+					)
 				: undefined
 
 		runInAction(() => {

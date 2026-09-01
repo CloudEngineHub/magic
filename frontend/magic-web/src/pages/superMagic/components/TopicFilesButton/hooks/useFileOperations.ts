@@ -1692,6 +1692,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			targetParentId: string,
 			preFileId?: string,
 			keepBothFileIds?: string[],
+			showLoadingToast = true,
 		) => {
 			if (!fileId) {
 				magicToast.error(t("topicFiles.error.moveFileParamsRequired"))
@@ -1702,8 +1703,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			let data: any = null
 
 			try {
-				// 显示移动进度
-				magicToast.loading({ content: t("topicFiles.moving"), duration: 0 })
+				// Use Toast unless the caller owns progress UI.
+				if (showLoadingToast) {
+					magicToast.loading({ content: t("topicFiles.moving"), duration: 0 })
+				}
 
 				data = await SuperMagicApi.moveFile({
 					file_id: fileId,

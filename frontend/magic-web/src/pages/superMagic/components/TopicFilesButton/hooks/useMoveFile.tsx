@@ -34,7 +34,9 @@ interface UseMoveFileOptions {
 	handleMoveFile?: (
 		fileId: string,
 		targetParentId: string,
+		preFileId?: string,
 		keepBothFileIds?: string[],
+		showLoadingToast?: boolean,
 	) => Promise<boolean>
 	// 批量移动相关
 	selectedItems?: Set<string>
@@ -286,7 +288,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 	// 显示覆盖确认对话框
 	const showOverwriteConfirm = useCallback(
-		(conflictItems: AttachmentItem[], onConfirm: () => void) => {
+		(conflictItems: AttachmentItem[], onConfirm: () => void | Promise<void>) => {
 			const isMultiple = conflictItems.length > 1
 			let content: string
 
@@ -734,6 +736,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 							targetParentId,
 							undefined,
 							keepBothFileIds,
+							false,
 						)
 						if (success) {
 							setMoveProgress(100)
@@ -817,13 +820,13 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					)
 					const userChoice = await moveDuplicateHandler.checkDuplicates(duplicates)
 					if (!userChoice.shouldProceed) return
-					executeSingleMove(userChoice.keepBothIds)
+					await executeSingleMove(userChoice.keepBothIds)
 					return
 				}
 				// 显示覆盖确认对话框
 				showOverwriteConfirm([currentMoveItem], () => {
 					// 用户确认后执行单个移动
-					executeSingleMove()
+					return executeSingleMove()
 				})
 				return
 			}

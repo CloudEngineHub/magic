@@ -1404,6 +1404,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 获取工作区列表
 	 * @param page
 	 * @param page_size
+	 * @param pin_priority Whether the backend should return pinned workspaces first.
 	 */
 	getWorkspaces({
 		page,
@@ -1411,18 +1412,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		workspace_type,
 		auto_create,
 		workspace_name,
+		pin_priority = true,
 	}: {
 		page: number
 		page_size: number
 		workspace_type?: string
 		auto_create?: boolean
 		workspace_name?: string
+		pin_priority?: boolean
 	}) {
 		return fetch.get(
 			genRequestUrl(
 				"/api/v1/super-agent/workspaces/queries",
 				{},
-				{ page, page_size, workspace_type, auto_create, workspace_name },
+				{ page, page_size, workspace_type, auto_create, workspace_name, pin_priority },
 			),
 			{
 				enableRequestUnion: true,
