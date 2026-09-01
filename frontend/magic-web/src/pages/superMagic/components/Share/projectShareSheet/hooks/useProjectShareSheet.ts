@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { NodeType, type TreeNode } from "@dtyq/user-selector"
@@ -491,12 +491,20 @@ export function useProjectShareSheet({
 	const [recordingDependencyFileIds, setRecordingDependencyFileIds] = useState<string[]>([])
 	const [recordingDependencyAnalysisLoading, setRecordingDependencyAnalysisLoading] =
 		useState(false)
+	// Keep the latest analysis promise available so submission can await the exact current inputs.
+	const recordingDependencyAnalysisRef = useRef<{
+		selectedFileIds: string[]
+		attachments: NonNullable<ProjectShareSheetProps["dependencyAttachments"]>
+		bundleRootPath?: string
+		promise: ReturnType<typeof resolveShareDocumentDependencies>
+	} | null>(null)
 	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
 	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
 	const activeMode = editingShareMode || effectiveMode
 
 	useEffect(() => {
 		if (!isAudioRecordingScene || !dependencyAttachments) {
+			recordingDependencyAnalysisRef.current = null
 			setRecordingDependencyFileIds([])
 			setRecordingDependencyAnalysisLoading(false)
 			return
@@ -504,11 +512,19 @@ export function useProjectShareSheet({
 
 		let cancelled = false
 		setRecordingDependencyAnalysisLoading(true)
-		void resolveShareDocumentDependencies({
+		const analysisPromise = resolveShareDocumentDependencies({
 			selectedFileIds,
 			attachments: dependencyAttachments,
 			bundleRootPath: dependencyBundleRootPath,
+			requireBundleRootPath: true,
 		})
+		recordingDependencyAnalysisRef.current = {
+			selectedFileIds: [...selectedFileIds],
+			attachments: dependencyAttachments,
+			bundleRootPath: dependencyBundleRootPath,
+			promise: analysisPromise,
+		}
+		void analysisPromise
 			.then((result) => {
 				if (cancelled) return
 				setRecordingDependencyFileIds(result.dependencyFileIds)
@@ -998,20 +1014,34 @@ export function useProjectShareSheet({
 			return
 		}
 
-		// Recording shares keep the visible picker unchanged and only augment the payload
-		// so readonly/share pages always receive the bundle entry files they depend on.
-		const submittedFileIds = isAudioRecordingScene
-			? mergeRecordingShareFileIds(
-					mergeRecordingShareFileIds(
-						selectedIdsForSubmission,
-						recordingDependencyFileIds,
-					),
-					recordingRequiredFileIds,
-				)
-			: selectedIdsForSubmission
-
 		setSaving(true)
 		try {
+			// Await the current recording analysis so the payload cannot use stale dependency state.
+			let dependencyFileIds = recordingDependencyFileIds
+			if (isAudioRecordingScene && dependencyAttachments) {
+				const currentAnalysis = recordingDependencyAnalysisRef.current
+				if (
+					!currentAnalysis ||
+					currentAnalysis.attachments !== dependencyAttachments ||
+					currentAnalysis.bundleRootPath !== dependencyBundleRootPath ||
+					currentAnalysis.selectedFileIds.length !== selectedFileIds.length ||
+					!currentAnalysis.selectedFileIds.every(
+						(fileId, index) => fileId === selectedFileIds[index],
+					)
+				) {
+					throw new Error("Recording dependency analysis is not ready")
+				}
+				dependencyFileIds = (await currentAnalysis.promise).dependencyFileIds
+			}
+
+			// Recording shares keep the visible picker unchanged and augment only the submitted payload.
+			const submittedFileIds = isAudioRecordingScene
+				? mergeRecordingShareFileIds(
+						mergeRecordingShareFileIds(selectedIdsForSubmission, dependencyFileIds),
+						recordingRequiredFileIds,
+					)
+				: selectedIdsForSubmission
+
 			// Reuse the existing resource for edits and allocate a new ID only for creation.
 			let resourceId = editResourceId
 			if (!resourceId) {

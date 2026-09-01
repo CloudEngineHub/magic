@@ -690,6 +690,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 		if (documentDependencyAnalysisError) {
 			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
+			return
 		}
 
 		setIsSaving(true)

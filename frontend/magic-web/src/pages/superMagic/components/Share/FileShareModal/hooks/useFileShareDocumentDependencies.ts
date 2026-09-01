@@ -47,6 +47,8 @@ export function useFileShareDocumentDependencies({
 	const [multiDocumentDependencyFileIds, setMultiDocumentDependencyFileIds] = useState<string[]>(
 		[],
 	)
+	const [multiDocumentDependencyAnalysisError, setMultiDocumentDependencyAnalysisError] =
+		useState<Error | null>(null)
 	const [isMultiDocumentAnalysisLoading, setIsMultiDocumentAnalysisLoading] = useState(false)
 
 	const autoSelectedFileIdSet = useMemo(() => new Set(autoSelectedFileIds), [autoSelectedFileIds])
@@ -77,6 +79,7 @@ export function useFileShareDocumentDependencies({
 	useEffect(() => {
 		if (!analyzeSelectedDocuments || !autoIncludeDocumentDependencies || shareProject) {
 			setMultiDocumentDependencyFileIds([])
+			setMultiDocumentDependencyAnalysisError(null)
 			setIsMultiDocumentAnalysisLoading(false)
 			return
 		}
@@ -87,10 +90,12 @@ export function useFileShareDocumentDependencies({
 			selectedFileIds,
 			attachments: dependencyAttachments,
 			bundleRootPath: dependencyBundleRootPath,
+			requireBundleRootPath: analyzeSelectedDocuments && autoIncludeDocumentDependencies,
 		})
 			.then((result) => {
 				if (cancelled) return
 				setMultiDocumentDependencyFileIds(result.dependencyFileIds)
+				setMultiDocumentDependencyAnalysisError(null)
 				if (result.missingResourcePaths.length > 0) {
 					console.warn("Some share document resources could not be resolved", result)
 				}
@@ -99,6 +104,9 @@ export function useFileShareDocumentDependencies({
 				if (!cancelled) {
 					console.warn("Share document dependency analysis failed", error)
 					setMultiDocumentDependencyFileIds([])
+					setMultiDocumentDependencyAnalysisError(
+						error instanceof Error ? error : new Error(String(error)),
+					)
 				}
 			})
 			.finally(() => {
@@ -216,7 +224,9 @@ export function useFileShareDocumentDependencies({
 	])
 
 	return {
-		analysisError: analysisFileId && hasCurrentAnalysisResult ? staticDependencies.error : null,
+		analysisError:
+			multiDocumentDependencyAnalysisError ||
+			(analysisFileId && hasCurrentAnalysisResult ? staticDependencies.error : null),
 		dependencyFileCount: analyzeSelectedDocuments
 			? multiDocumentDependencyFileIds.length
 			: staticDependencies.dependencyFileIds.length,

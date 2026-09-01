@@ -1,5 +1,14 @@
 import { resolveSingleDocumentStaticDependencies } from "@/pages/superMagic/utils/staticDependencies"
-import type { StaticDependencyAttachment } from "@/pages/superMagic/utils/staticDependencies"
+import type {
+	StaticDependencyAttachment,
+	StaticDependencyResult,
+} from "@/pages/superMagic/utils/staticDependencies"
+
+// Scope cached work to the attachment snapshot so discarded snapshots can be garbage-collected.
+const dependencyAnalysisCache = new WeakMap<
+	StaticDependencyAttachment[],
+	Map<string, Promise<StaticDependencyResult>>
+>()
 
 interface ResolveShareDocumentDependenciesInput {
 	/** IDs selected by the user; only supported document types are analyzed. */
@@ -8,6 +17,8 @@ interface ResolveShareDocumentDependenciesInput {
 	attachments: StaticDependencyAttachment[]
 	/** Optional bundle root used to prevent cross-recording matches. */
 	bundleRootPath?: string
+	/** Rejects unscoped analysis when the caller requires recording-bundle isolation. */
+	requireBundleRootPath?: boolean
 }
 
 interface ResolveShareDocumentDependenciesResult {
@@ -23,22 +34,42 @@ export async function resolveShareDocumentDependencies({
 	selectedFileIds,
 	attachments,
 	bundleRootPath,
+	requireBundleRootPath = false,
 }: ResolveShareDocumentDependenciesInput): Promise<ResolveShareDocumentDependenciesResult> {
+	if (requireBundleRootPath && !normalizePath(bundleRootPath)) {
+		throw new Error("Recording dependency analysis requires a bundle root path")
+	}
+
 	const scopedAttachments = scopeAttachmentsToBundle(attachments, bundleRootPath)
 	const scopedIds = new Set(scopedAttachments.map((file) => file.file_id).filter(Boolean))
 	const documentIds = selectedFileIds.filter((fileId) => scopedIds.has(fileId))
 
 	const results = await Promise.all(
 		documentIds.map(async (fileId) => {
-			try {
-				return await resolveSingleDocumentStaticDependencies({
+			const cacheKey = `${normalizePath(bundleRootPath)}:${fileId}`
+			let snapshotCache = dependencyAnalysisCache.get(attachments)
+			if (!snapshotCache) {
+				snapshotCache = new Map()
+				dependencyAnalysisCache.set(attachments, snapshotCache)
+			}
+
+			let analysisPromise = snapshotCache.get(cacheKey)
+			if (!analysisPromise) {
+				analysisPromise = resolveSingleDocumentStaticDependencies({
 					fileIds: [fileId],
 					attachments: scopedAttachments,
 				})
-			} catch (error) {
+				snapshotCache.set(cacheKey, analysisPromise)
+				analysisPromise.catch(() => {
+					// Failed work must not poison retries while the snapshot remains active.
+					snapshotCache?.delete(cacheKey)
+				})
+			}
+
+			return analysisPromise.catch((error) => {
 				console.warn("Failed to resolve share document dependencies", { fileId, error })
 				return null
-			}
+			})
 		}),
 	)
 
