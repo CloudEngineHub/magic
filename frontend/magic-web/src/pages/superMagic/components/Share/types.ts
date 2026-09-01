@@ -1,4 +1,5 @@
 import type { MagicModalProps } from "@/components/base/MagicModal"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 /** Share type */
 export enum ShareType {
@@ -48,6 +49,13 @@ export interface FileInfo {
 
 /** UI overrides for file-share scenarios such as recording detail sharing. */
 export interface FileShareUiConfig {
+	/** Full attachment snapshot used only to resolve hidden document dependencies. */
+	dependencyAttachments?: AttachmentItem[]
+	/** Recording bundle root used to prevent cross-bundle dependency matching. */
+	dependencyBundleRootPath?: string
+	/** Enables silent multi-document dependency inclusion for specialized shares. */
+	analyzeSelectedDocuments?: boolean
+	autoIncludeDocumentDependencies?: boolean
 	displayNameByFileId?: Record<string, string> // UI-only labels keyed by original file ID
 	displayNameByFileName?: Record<string, string> // Fallback labels for refreshed attachment IDs
 	/** Reuses the existing project_mode semantic so recording shares do not invent another scene field. */

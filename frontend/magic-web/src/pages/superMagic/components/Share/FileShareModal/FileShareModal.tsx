@@ -158,6 +158,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [attachmentList, setAttachmentList] = useState<any[]>([])
 	const {
 		projectMode,
+		dependencyAttachments,
+		dependencyBundleRootPath,
+		analyzeSelectedDocuments = false,
+		autoIncludeDocumentDependencies = false,
 		hideShareProjectToggle = false,
 		hideShowFileListSetting = false,
 		forceViewFileList,
@@ -336,6 +340,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		setSelectedFileIds,
 		attachments,
 		shareProject: effectiveShareProject,
+		dependencyAttachments,
+		dependencyBundleRootPath,
+		analyzeSelectedDocuments,
+		autoIncludeDocumentDependencies,
 	})
 	const submittedFileIds = useMemo(
 		() => mergeRecordingShareFileIds(documentDependencyFileIdsForSubmission, requiredFileIds),

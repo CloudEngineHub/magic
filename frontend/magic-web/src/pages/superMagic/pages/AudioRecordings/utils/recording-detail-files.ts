@@ -72,6 +72,7 @@ export function buildRecordingDetailFileMap(input: {
 	const files = flattenRecordingAttachments(input.tree, input.list)
 	const scopedFiles = scopeFilesToBundle(files, input.bundleRootPath)
 	const magicProject = scopedFiles.find(isMagicProjectFile) || files.find(isMagicProjectFile)
+	const bundleRootPath = input.bundleRootPath ?? resolveIndexHtmlBundleRoot(input, magicProject)
 	const indexHtml = findIndexHtmlInBundle(files, resolveIndexHtmlBundleRoot(input, magicProject))
 	const configFiles = input.magicProjectConfig?.files ?? {}
 
@@ -94,6 +95,7 @@ export function buildRecordingDetailFileMap(input: {
 		findByConfiguredName("notes") ?? findByNameHint(scopedFiles, ["notes", "笔记", "流式识别"])
 
 	return {
+		bundleRootPath,
 		audio,
 		transcript,
 		notes,

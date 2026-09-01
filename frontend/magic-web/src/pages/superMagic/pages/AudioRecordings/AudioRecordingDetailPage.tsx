@@ -581,7 +581,10 @@ function AudioRecordingDetailPageDesktop() {
 					displayNameByFileName={shareControls.displayNameByFileName}
 					requiredFileIds={shareControls.requiredFileIds}
 					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
-					fileShareUiConfig={createRecordingShareUiConfig()}
+					fileShareUiConfig={createRecordingShareUiConfig({
+						dependencyAttachments: attachmentList,
+						dependencyBundleRootPath: fileMap?.bundleRootPath,
+					})}
 				/>
 
 				<RecordingShareManagementDialog

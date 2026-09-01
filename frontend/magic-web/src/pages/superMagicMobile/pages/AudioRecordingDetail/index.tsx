@@ -1263,6 +1263,8 @@ export default function MobileAudioRecordingDetailPage() {
 				projectName={displayTitle}
 				attachments={recordingShareSelection.shareableFiles}
 				attachmentList={recordingShareSelection.shareableFiles}
+				dependencyAttachments={attachmentList}
+				dependencyBundleRootPath={fileMap?.bundleRootPath}
 				fileMap={fileMap ?? undefined}
 				defaultSelectedFileIds={recordingShareSelection.defaultSelectedFileIds}
 			/>

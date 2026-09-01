@@ -33,6 +33,8 @@ export interface RecordingDetailFileRef {
 }
 
 export interface RecordingDetailFileMap {
+	/** Root path of the recording bundle used to scope shared document dependencies. */
+	bundleRootPath?: string
 	audio?: AttachmentItem
 	transcript?: AttachmentItem
 	notes?: AttachmentItem

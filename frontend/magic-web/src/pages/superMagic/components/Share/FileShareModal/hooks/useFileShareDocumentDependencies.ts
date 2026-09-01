@@ -11,12 +11,20 @@ import {
 	mergeStaticDependencyFileIds,
 	type StaticDependencyAttachment,
 } from "@/pages/superMagic/utils/staticDependencies"
+import { resolveShareDocumentDependencies } from "./resolveShareDocumentDependencies"
 
 interface UseFileShareDocumentDependenciesParams {
 	selectedFileIds: string[]
 	setSelectedFileIds: Dispatch<SetStateAction<string[]>>
 	attachments: StaticDependencyAttachment[]
 	shareProject: boolean
+	/** Full attachment snapshot used by recording shares for hidden resource lookup. */
+	dependencyAttachments?: StaticDependencyAttachment[]
+	/** Root folder that bounds recording dependency resolution. */
+	dependencyBundleRootPath?: string
+	/** Enables multi-document, silent dependency inclusion for recording shares. */
+	analyzeSelectedDocuments?: boolean
+	autoIncludeDocumentDependencies?: boolean
 }
 
 /**
@@ -28,10 +36,18 @@ export function useFileShareDocumentDependencies({
 	setSelectedFileIds,
 	attachments,
 	shareProject,
+	dependencyAttachments = attachments,
+	dependencyBundleRootPath,
+	analyzeSelectedDocuments = false,
+	autoIncludeDocumentDependencies = false,
 }: UseFileShareDocumentDependenciesParams) {
 	const [includeDocumentDependencies, setIncludeDocumentDependencies] = useState(true)
 	const [autoSelectedFileIds, setAutoSelectedFileIds] = useState<string[]>([])
 	const [dependencyOwnerFileId, setDependencyOwnerFileId] = useState<string | null>(null)
+	const [multiDocumentDependencyFileIds, setMultiDocumentDependencyFileIds] = useState<string[]>(
+		[],
+	)
+	const [isMultiDocumentAnalysisLoading, setIsMultiDocumentAnalysisLoading] = useState(false)
 
 	const autoSelectedFileIdSet = useMemo(() => new Set(autoSelectedFileIds), [autoSelectedFileIds])
 	const manuallySelectedFileIds = useMemo(
@@ -53,10 +69,53 @@ export function useFileShareDocumentDependencies({
 					: ""
 			: ""
 	const staticDependencies = useSingleDocumentStaticDependencies({
-		active: Boolean(analysisFileId),
+		active: Boolean(analysisFileId) && !analyzeSelectedDocuments,
 		fileIds: analysisFileId ? [analysisFileId] : [],
 		attachments,
 	})
+
+	useEffect(() => {
+		if (!analyzeSelectedDocuments || !autoIncludeDocumentDependencies || shareProject) {
+			setMultiDocumentDependencyFileIds([])
+			setIsMultiDocumentAnalysisLoading(false)
+			return
+		}
+
+		let cancelled = false
+		setIsMultiDocumentAnalysisLoading(true)
+		void resolveShareDocumentDependencies({
+			selectedFileIds,
+			attachments: dependencyAttachments,
+			bundleRootPath: dependencyBundleRootPath,
+		})
+			.then((result) => {
+				if (cancelled) return
+				setMultiDocumentDependencyFileIds(result.dependencyFileIds)
+				if (result.missingResourcePaths.length > 0) {
+					console.warn("Some share document resources could not be resolved", result)
+				}
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					console.warn("Share document dependency analysis failed", error)
+					setMultiDocumentDependencyFileIds([])
+				}
+			})
+			.finally(() => {
+				if (!cancelled) setIsMultiDocumentAnalysisLoading(false)
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [
+		analyzeSelectedDocuments,
+		autoIncludeDocumentDependencies,
+		dependencyAttachments,
+		dependencyBundleRootPath,
+		selectedFileIds,
+		shareProject,
+	])
 	const hasCurrentAnalysisResult = staticDependencies.fileId === analysisFileId
 	const hasResolvedDependencies =
 		hasCurrentAnalysisResult &&
@@ -132,29 +191,45 @@ export function useFileShareDocumentDependencies({
 	const selectedFileIdsForSubmission = shouldIncludeDependencies
 		? selectedFileIds
 		: selectedFileIds.filter((fileId) => !autoSelectedFileIdSet.has(fileId))
-	const fileIdsForSubmission = useMemo(
-		() =>
-			mergeStaticDependencyFileIds(
-				selectedFileIdsForSubmission,
-				staticDependencies.dependencyFileIds,
-				shouldIncludeDependencies,
-			),
-		[
+	const fileIdsForSubmission = useMemo(() => {
+		if (analyzeSelectedDocuments && autoIncludeDocumentDependencies) {
+			return mergeStaticDependencyFileIds(
+				selectedFileIds,
+				multiDocumentDependencyFileIds,
+				true,
+			)
+		}
+
+		return mergeStaticDependencyFileIds(
 			selectedFileIdsForSubmission,
-			shouldIncludeDependencies,
 			staticDependencies.dependencyFileIds,
-		],
-	)
+			shouldIncludeDependencies,
+		)
+	}, [
+		analyzeSelectedDocuments,
+		autoIncludeDocumentDependencies,
+		multiDocumentDependencyFileIds,
+		selectedFileIds,
+		selectedFileIdsForSubmission,
+		shouldIncludeDependencies,
+		staticDependencies.dependencyFileIds,
+	])
 
 	return {
 		analysisError: analysisFileId && hasCurrentAnalysisResult ? staticDependencies.error : null,
-		dependencyFileCount: staticDependencies.dependencyFileIds.length,
+		dependencyFileCount: analyzeSelectedDocuments
+			? multiDocumentDependencyFileIds.length
+			: staticDependencies.dependencyFileIds.length,
 		dependencyFileType: staticDependencies.fileType,
 		fileIdsForSubmission,
 		handleFileIdsChange,
 		includeDocumentDependencies,
-		isAnalyzing: Boolean(analysisFileId) && staticDependencies.isLoading,
-		showDependencyOption: Boolean(analysisFileId) && hasResolvedDependencies,
+		isAnalyzing:
+			analyzeSelectedDocuments && autoIncludeDocumentDependencies
+				? isMultiDocumentAnalysisLoading
+				: Boolean(analysisFileId) && staticDependencies.isLoading,
+		showDependencyOption:
+			!analyzeSelectedDocuments && Boolean(analysisFileId) && hasResolvedDependencies,
 		setIncludeDocumentDependencies,
 	}
 }

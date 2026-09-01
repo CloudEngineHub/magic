@@ -48,6 +48,7 @@ import {
 	mergeRecordingShareFileIds,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
+import { resolveShareDocumentDependencies } from "@/pages/superMagic/components/Share/FileShareModal/hooks/resolveShareDocumentDependencies"
 
 /**
  * Constructs the base default values for the share form.
@@ -436,6 +437,8 @@ export function useProjectShareSheet({
 	projectName,
 	attachments,
 	attachmentList,
+	dependencyAttachments,
+	dependencyBundleRootPath,
 	fileMap,
 	defaultSelectedFileIds,
 	defaultOpenFileId,
@@ -485,9 +488,48 @@ export function useProjectShareSheet({
 		createInitialFormState(isAudioRecordingScene),
 	)
 	const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
+	const [recordingDependencyFileIds, setRecordingDependencyFileIds] = useState<string[]>([])
+	const [recordingDependencyAnalysisLoading, setRecordingDependencyAnalysisLoading] =
+		useState(false)
 	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
 	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
 	const activeMode = editingShareMode || effectiveMode
+
+	useEffect(() => {
+		if (!isAudioRecordingScene || !dependencyAttachments) {
+			setRecordingDependencyFileIds([])
+			setRecordingDependencyAnalysisLoading(false)
+			return
+		}
+
+		let cancelled = false
+		setRecordingDependencyAnalysisLoading(true)
+		void resolveShareDocumentDependencies({
+			selectedFileIds,
+			attachments: dependencyAttachments,
+			bundleRootPath: dependencyBundleRootPath,
+		})
+			.then((result) => {
+				if (cancelled) return
+				setRecordingDependencyFileIds(result.dependencyFileIds)
+				if (result.missingResourcePaths.length > 0) {
+					console.warn("Some recording share resources could not be resolved", result)
+				}
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					console.warn("Recording share dependency analysis failed", error)
+					setRecordingDependencyFileIds([])
+				}
+			})
+			.finally(() => {
+				if (!cancelled) setRecordingDependencyAnalysisLoading(false)
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [dependencyAttachments, dependencyBundleRootPath, isAudioRecordingScene, selectedFileIds])
 
 	const shareProject = useShareProject({
 		attachments: shareableAttachments,
@@ -959,7 +1001,13 @@ export function useProjectShareSheet({
 		// Recording shares keep the visible picker unchanged and only augment the payload
 		// so readonly/share pages always receive the bundle entry files they depend on.
 		const submittedFileIds = isAudioRecordingScene
-			? mergeRecordingShareFileIds(selectedIdsForSubmission, recordingRequiredFileIds)
+			? mergeRecordingShareFileIds(
+					mergeRecordingShareFileIds(
+						selectedIdsForSubmission,
+						recordingDependencyFileIds,
+					),
+					recordingRequiredFileIds,
+				)
 			: selectedIdsForSubmission
 
 		setSaving(true)
@@ -1268,7 +1316,10 @@ export function useProjectShareSheet({
 		selectedShare,
 		loading: projectShareList.loading || fileShareList.loading,
 		saving,
-		isCheckingShare: activeMode === "project" ? shareProject.isCheckingShare : false,
+		isCheckingShare:
+			activeMode === "project"
+				? shareProject.isCheckingShare
+				: recordingDependencyAnalysisLoading,
 		advancedOpen,
 		defaultSelectedFileIds: effectiveSelectedFileIds,
 		selectedFileIds,
