@@ -140,7 +140,9 @@ export function getDownstreamContent<TContent extends ElementContentBase>(
 export function isImageContentUsableDownstream(
 	content: ImageElementContent | undefined,
 ): content is ImageElementContent {
-	return Boolean(content?.src && (content.status === undefined || content.status === "completed"))
+	// src is the durable resource signal used by downstream consumers. status can
+	// be missing or stale after persistence/recovery and must not hide a usable image.
+	return Boolean(content?.src)
 }
 
 export function getUsableDownstreamImageContent(

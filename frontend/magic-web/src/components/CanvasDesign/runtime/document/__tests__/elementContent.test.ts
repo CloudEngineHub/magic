@@ -12,6 +12,7 @@ import {
 	getMainContent,
 	getPendingVideoGenerationContent,
 	hasPendingVideoGenerationContent,
+	isImageContentUsableDownstream,
 	isContentGenerationPending,
 	setMainContent,
 	switchActiveContent,
@@ -48,6 +49,24 @@ describe("elementContent", () => {
 		expect(getActiveContent(element)?.contentId).toBe("c2")
 		expect(getMainContent(element)?.contentId).toBe("c1")
 		expect(getContentById(element, "c1")?.src).toBe("one.png")
+	})
+
+	it("uses src as the downstream image availability signal", () => {
+		expect(
+			isImageContentUsableDownstream({
+				contentId: "processing-with-src",
+				src: "image.png",
+				status: "processing",
+			}),
+		).toBe(true)
+		expect(
+			isImageContentUsableDownstream({
+				contentId: "failed-with-src",
+				src: "image.png",
+				status: "failed",
+			}),
+		).toBe(true)
+		expect(isImageContentUsableDownstream({ contentId: "without-src" })).toBe(false)
 	})
 
 	it("updates, appends, switches and sets main without mutating input", () => {
