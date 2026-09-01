@@ -193,6 +193,38 @@ export function clearAskUserV2BrowserNotification({
 	clearAskUserNotification(buildScopedNotificationKey(topicId, notificationKey))
 }
 
+const suspendedAskUserTopicIds = new Set<string>()
+
+function getAskUserNotificationKeysForTopic(topicId: string) {
+	const prefix = `${topicId}:`
+	const keys = new Set<string>()
+	pendingAskUserNotifications.forEach((_, key) => {
+		if (key.startsWith(prefix)) keys.add(key)
+	})
+	activeAskUserNotifications.forEach((_, key) => {
+		if (key.startsWith(prefix)) keys.add(key)
+	})
+	askUserExpireTimers.forEach((_, key) => {
+		if (key.startsWith(prefix)) keys.add(key)
+	})
+	notifiedAskUserKeys.forEach((key) => {
+		if (key.startsWith(prefix)) keys.add(key)
+	})
+	return keys
+}
+
+export function setAskUserTopicSuspended(topicId: string, suspended: boolean) {
+	if (!topicId) return
+	if (suspended) {
+		suspendedAskUserTopicIds.add(topicId)
+		getAskUserNotificationKeysForTopic(topicId).forEach((key) => {
+			clearAskUserNotification(key)
+		})
+		return
+	}
+	suspendedAskUserTopicIds.delete(topicId)
+}
+
 function tryNotifyAskUser(notificationKey: string) {
 	const pendingNotification = pendingAskUserNotifications.get(notificationKey)
 	if (!pendingNotification) return
@@ -235,6 +267,7 @@ function ensureVisibilityListener() {
 }
 
 function notifyAskUserToolCall(topicId: string, toolCall: ToolCall) {
+	if (suspendedAskUserTopicIds.has(topicId)) return
 	const tool = toolCall.tool
 	const toolName = tool?.name || toolCall.function?.name
 	if (toolName !== ASK_USER_TOOL.name) return

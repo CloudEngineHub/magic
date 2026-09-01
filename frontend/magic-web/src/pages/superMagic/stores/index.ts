@@ -11,7 +11,10 @@ import {
 	type PersistableMessage,
 	type WebSocketRecordSource,
 } from "./persistence"
-import { notifyAskUserV2BrowserNotificationFromToolCalls } from "../services/askUserBrowserNotificationService"
+import {
+	notifyAskUserV2BrowserNotificationFromToolCalls,
+	setAskUserTopicSuspended,
+} from "../services/askUserBrowserNotificationService"
 import { ASK_USER_TOOL } from "../components/MessageList/utils/askUserConstants"
 import {
 	getRawMessageNode,
@@ -1458,6 +1461,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const streamKey = this.getEventEntityKey("stream", topicId, streamIdentity)
 		const transition = this.eventTransitions.startStream(streamKey)
 		if (!transition.started) return transition.generation
+		setAskUserTopicSuspended(topicId, false)
 		this.eventTransitions.beginTopicExecution(this.getTopicExecutionKey(topicId), {
 			executionId: this.getTopicExecutionId(taskId, correlationId, transition.generation),
 			correlationId,
@@ -7362,6 +7366,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	private handleTopicSuspended(topicId: string, source: SuperMagicEventSource) {
+		setAskUserTopicSuspended(topicId, true)
 		const topicMeta = this.topicMeta.get(topicId)
 		const toolResponseMap = this.toolResponseMap.get(topicId) || new Map()
 		const previousToolResponses = new Map(toolResponseMap)
