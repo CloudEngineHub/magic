@@ -4503,12 +4503,12 @@
 			"canvasOpenFailureWarning": "该操作会删除画布项目入口文件，可能导致画布无法打开。",
 			"emptyLabel": "空文件夹",
 			"fileCount": "{{count}} 个文件",
-			"intro": "将永久删除以下 {{count}} 个项目：",
+			"intro": "以下 {{count}} 个项目将移入回收站：",
 			"magicWarningMulti": "你选择删除的文件中包含 .magic 系统文件夹。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
 			"magicWarningSingle": ".magic 文件夹包含系统运行的关键文件。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
 			"rootFiles": "{{count}} 个文件",
 			"title": "删除文件",
-			"warning": "此操作无法撤销。"
+			"warning": "你可以在回收站中恢复或彻底删除。"
 		},
 		"emptyFolder": "空文件夹",
 		"fabFilesAria": "添加文件或文件夹",

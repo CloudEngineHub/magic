@@ -4501,12 +4501,12 @@
 			"canvasOpenFailureWarning": "This operation will delete the canvas project entry file. The canvas may fail to open.",
 			"emptyLabel": "Empty folder",
 			"fileCount": "{{count}} files",
-			"intro": "Permanently delete the following {{count}} items:",
+			"intro": "The following {{count}} item(s) will be moved to Trash:",
 			"magicWarningMulti": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
 			"magicWarningSingle": "The .magic folder holds files required for core features. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
 			"rootFiles": "{{count}} files",
 			"title": "Delete files",
-			"warning": "This action cannot be undone."
+			"warning": "You can restore them or permanently delete them from Trash."
 		},
 		"emptyFolder": "Empty folder",
 		"fabFilesAria": "Add file or folder",
