@@ -727,7 +727,7 @@ export class ImageResourceManager {
 	): LoadedResource | null {
 		if (entry.staleDecodedVariants.has(variant)) return null
 		const resource = this.getResourceForVariant(entry, variant)
-		if (!resource?.ossSrc) return null
+		if (!resource?.ossSrc || resource.closed) return null
 		this.touchDecodedResource(entry, resource)
 		this.setFailureReason(entry, null)
 		return {

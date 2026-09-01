@@ -32,7 +32,7 @@ const mediaLimits: ReferenceAssetPerTypeLimits = {
 	reference_images: { min: 0, max: 2 },
 	reference_videos: { min: 0, max: 1 },
 	reference_audios: { min: 0, max: 1 },
-	total: { min: 0, max: 3 },
+	total: { min: 0, max: 4 },
 }
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver({
@@ -111,6 +111,24 @@ describe("filterReferenceResourcePanelBatchItems", () => {
 		expect(selected.map((item) => item.data.file_path)).toEqual([
 			"project/a.png",
 			"project/clip.mp4",
+		])
+	})
+
+	it("filters mixed project batches item by item", () => {
+		const selected = filterReferenceResourcePanelBatchItems({
+			items: [
+				panelItem("project/a.png"),
+				panelItem("project/clip.mp4"),
+				panelItem("project/sound.mp3"),
+				panelItem("project/readme.txt"),
+			],
+			assetLimits: mediaLimits,
+			currentAssetCounts: { images: 2, videos: 0, audios: 0 },
+		})
+
+		expect(selected.map((item) => item.data.file_path)).toEqual([
+			"project/clip.mp4",
+			"project/sound.mp3",
 		])
 	})
 

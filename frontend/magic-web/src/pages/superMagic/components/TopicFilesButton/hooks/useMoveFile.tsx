@@ -21,6 +21,7 @@ import {
 	getCanvasProjectOperationImpact,
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
+import { repairCanvasProjectsBeforeFileOperation } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
@@ -345,18 +346,26 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
-		(canvasRisk: CanvasProjectOperationRisk) =>
+		(canvasRisk: CanvasProjectOperationRisk, repairFailures: string[] = []) =>
 			new Promise<boolean>((resolve) => {
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				const riskContent = canvasRisk.shouldWarn
+					? t(
+							impact === "open-failure"
+								? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
+								: impact === "content-loss"
+									? "topicFiles.canvasOperationRisk.moveContentLossContent"
+									: "topicFiles.canvasOperationRisk.moveMixedContent",
+						)
+					: ""
+				const repairContent = repairFailures.length
+					? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+							failures: repairFailures.join("\n"),
+						})
+					: ""
 				MagicModal.confirm({
 					title: t("topicFiles.canvasOperationRisk.title"),
-					content: t(
-						impact === "open-failure"
-							? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
-							: impact === "content-loss"
-								? "topicFiles.canvasOperationRisk.moveContentLossContent"
-								: "topicFiles.canvasOperationRisk.moveMixedContent",
-					),
+					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: (
 						<IconAlertTriangleFilled
 							size={20}
@@ -418,6 +427,38 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					"Failed to resolve document static dependencies before moving:",
 					error,
 				)
+			}
+
+			const sameProjectMove = !targetProjectId || targetProjectId === projectId
+			const pathOperationFileIds = effectiveFileIds.filter(
+				(fileId) => !keepBothFileIds.includes(fileId),
+			)
+			if (sameProjectMove) {
+				const canvasRisk =
+					pathOperationFileIds.length > 0
+						? await detectCanvasProjectOperationRisk({
+								attachments,
+								fileIds: pathOperationFileIds,
+								operation: "move",
+							})
+						: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+				const repairResult = await repairCanvasProjectsBeforeFileOperation({
+					attachments,
+					attachmentIndex,
+					fileIds: effectiveFileIds,
+					operation: "move",
+					projectId,
+				})
+				if (canvasRisk.shouldWarn || repairResult.hasFailures) {
+					const shouldContinue = await confirmCanvasProjectRisk(
+						canvasRisk,
+						repairResult.failures.map(
+							(failure) =>
+								`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
+						),
+					)
+					if (!shouldContinue) return
+				}
 			}
 
 			const moveTaskId = beginMoveTask()
@@ -506,6 +547,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			attachmentIndex,
 			attachments,
 			beginMoveTask,
+			confirmCanvasProjectRisk,
 			finishMoveTask,
 			hideMoveSelector,
 			onMoveSuccess,
@@ -565,18 +607,6 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						)
 					: new Map()
 
-			if (conflictDetectionIds.length > 0) {
-				const canvasRisk = await detectCanvasProjectOperationRisk({
-					attachments: sourceAttachments,
-					fileIds: conflictDetectionIds,
-					operation: "move",
-				})
-				if (canvasRisk.shouldWarn) {
-					const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-					if (!shouldContinue) return
-				}
-			}
-
 			if (folderConflicts.size > 0) {
 				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
 				if (!folderChoice.shouldProceed) return
@@ -610,14 +640,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				keepBothFileIds,
 			})
 		},
-		[
-			attachmentIndex,
-			attachments,
-			batchMoveFiles,
-			confirmCanvasProjectRisk,
-			folderConflictHandler,
-			moveDuplicateHandler,
-		],
+		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
 	)
 
 	// 确认移动文件
@@ -657,18 +680,6 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				const conflictCheckIds = batchFileIds.filter(
 					(fileId) => !sameParentKeepBothIds.includes(fileId),
 				)
-
-				if (conflictCheckIds.length > 0) {
-					const canvasRisk = await detectCanvasProjectOperationRisk({
-						attachments,
-						fileIds: conflictCheckIds,
-						operation: "move",
-					})
-					if (canvasRisk.shouldWarn) {
-						const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-						if (!shouldContinue) return
-					}
-				}
 
 				// 检查批量移动是否存在同名冲突
 				const { hasConflict, conflictItems } = checkBatchFilesConflict(
@@ -723,6 +734,31 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				}
 
 				try {
+					const canvasRisk = await detectCanvasProjectOperationRisk({
+						attachments,
+						items: [currentMoveItem],
+						operation: "move",
+					})
+					const repairResult = currentMoveItem.is_directory
+						? await repairCanvasProjectsBeforeFileOperation({
+								attachments,
+								attachmentIndex,
+								items: [currentMoveItem],
+								operation: "move",
+								projectId,
+							})
+						: { hasFailures: false, failures: [] }
+					if (canvasRisk.shouldWarn || repairResult.hasFailures) {
+						const shouldContinue = await confirmCanvasProjectRisk(
+							canvasRisk,
+							repairResult.failures.map(
+								(failure) =>
+									`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
+							),
+						)
+						if (!shouldContinue) return
+					}
+
 					setIsMoving(true)
 					setMoveProgress(0)
 
@@ -797,17 +833,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				return
 			}
 
-			const canvasRisk = await detectCanvasProjectOperationRisk({
-				attachments,
-				items: [currentMoveItem],
-				operation: "move",
-			})
-			if (canvasRisk.shouldWarn) {
-				const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-				if (!shouldContinue) return
-			}
-
-			// Check for a name conflict.
+			// 检查单个文件移动是否存在同名冲突
 			const hasConflict = checkSingleFileConflict(currentMoveItem, targetFolderPath)
 
 			if (hasConflict) {

@@ -38,6 +38,7 @@ export interface SourceListSelectionOption {
 export interface SourceListSlotOption {
 	kind: "slot"
 	label: string
+	disabled?: boolean
 	secondaryLabel?: string
 	value: string
 	slotIndex: number
