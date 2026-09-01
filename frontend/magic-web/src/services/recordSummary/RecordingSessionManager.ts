@@ -1,4 +1,8 @@
-import type { RecordingSession, SessionRestoreOptions } from "@/types/recordSummary"
+import type {
+	RecordingSession,
+	ServerTerminationSource,
+	SessionRestoreOptions,
+} from "@/types/recordSummary"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
@@ -369,6 +373,37 @@ export class RecordingSessionManager {
 	}
 
 	/**
+	 * Mark a session as ended by the server while retaining its local data.
+	 * 服务端结束任务时保留会话和本地分片，避免误删可恢复数据。
+	 */
+	markServerCancelledSession(
+		code?: number,
+		source: ServerTerminationSource = "server_task_ended",
+	): RecordingSession | null {
+		if (!this.currentSession) return null
+
+		this.currentSession.status = "server_cancelled"
+		this.currentSession.termination = {
+			source,
+			code,
+			at: Date.now(),
+		}
+		this.currentSession.lastActivityTime = Date.now()
+
+		const cancelledSession = { ...this.currentSession }
+		logger.report("服务端结束录音会话，保留本地数据", {
+			code,
+			duration: cancelledSession.totalDuration,
+			chunkCount: cancelledSession.currentChunkIndex,
+		})
+
+		this.persistHistoryImmediate()
+		this.currentSession = null
+
+		return cancelledSession
+	}
+
+	/**
 	 * Pause current session
 	 * 暂停当前会话
 	 */
@@ -508,7 +543,9 @@ export class RecordingSessionManager {
 			typeof obj.lastActivityTime === "number" &&
 			typeof obj.totalDuration === "number" &&
 			typeof obj.status === "string" &&
-			["recording", "paused", "completed", "cancelled"].includes(obj.status as string)
+			["recording", "paused", "server_cancelled", "completed", "cancelled"].includes(
+				obj.status as string,
+			)
 		)
 	}
 }

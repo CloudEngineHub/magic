@@ -57,8 +57,9 @@ const redactUploadErrorMessage = (message: string): string =>
 	message
 		.replace(/https?:\/\/[^\s]+/gi, "[url]")
 		.replace(
-			/\b(authorization|access[_-]?token|refresh[_-]?token|token)\s*[:=]\s*[^\s,;]+/gi,
-			"$1=[redacted]",
+			/("|')?(authorization|access[_-]?token|refresh[_-]?token|token)\1\s*[:=]\s*(?:Bearer\s+)?("[^"]*"|'[^']*'|[^,\s}]+)/gi,
+			(_, quote: string | undefined, key: string) =>
+				`${quote ?? ""}${key}${quote ?? ""}=[redacted]`,
 		)
 
 const getUploadErrorDetails = (error: unknown): UploadErrorDetails => {
@@ -135,6 +136,25 @@ const getUploadErrorKind = (error: unknown): string => {
 	return "unknown"
 }
 
+const createUploadError = (error: unknown): Error => {
+	const details = getUploadErrorDetails(error)
+	const uploadError = new Error(`Upload failed: ${details.message}`)
+	if (details.name) uploadError.name = details.name
+	const numericStatus = Number(details.status)
+	const numericCode = Number(details.code)
+	const code =
+		(Number.isFinite(numericCode) ? numericCode : undefined) ??
+		(numericStatus >= 43200 && numericStatus < 43400 ? numericStatus : undefined)
+	Object.assign(uploadError, {
+		...(details.status !== undefined ? { status: details.status } : {}),
+		...(code !== undefined ? { code } : {}),
+		...(details.requestId ? { requestId: details.requestId } : {}),
+	})
+	return uploadError
+}
+
+const UPLOAD_PROGRESS_LOG_COOLDOWN_MS = 10_000
+
 export interface PlaceholderUploadProgress {
 	total: number
 	completed: number
@@ -181,6 +201,7 @@ export class ChunkUploader {
 	private retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
 	private retryTimers = new Map<string, NodeJS.Timeout>() // chunkId -> timer
 	private sessionCleanupRequested = new Set<string>()
+	private activeUploadCancels = new Map<string, () => void>()
 
 	// Network monitoring
 	private networkMonitor: NetworkMonitor
@@ -560,6 +581,9 @@ export class ChunkUploader {
 
 		// Get upload credentials
 		const customCredentials = await this.getUploadCredentials(chunk.sessionId)
+		if (this.sessionCleanupRequested.has(chunk.sessionId)) {
+			throw new Error("Session upload stopped")
+		}
 		logger.log("Audio chunk upload request started", {
 			sessionId: chunk.sessionId,
 			chunkId: chunk.id,
@@ -573,28 +597,7 @@ export class ChunkUploader {
 
 		return new Promise((resolve, reject) => {
 			let settled = false
-			// The SDK currently has no hard timeout, so guard the business queue
-			// against XHRs that never call success/fail and would pin sessionActiveUploads.
-			const timeout = setTimeout(() => {
-				if (settled) return
-				settled = true
-				logger.warn("Audio chunk upload request timed out", {
-					sessionId: chunk.sessionId,
-					chunkId: chunk.id,
-					chunkIndex: chunk.index,
-					timeoutMs: DEFAULT_UPLOAD_TIMEOUT_MS,
-					uploadDurationMs: Date.now() - uploadStartedAt,
-				})
-				reject(new Error(`Upload timed out after ${DEFAULT_UPLOAD_TIMEOUT_MS}ms`))
-			}, DEFAULT_UPLOAD_TIMEOUT_MS)
-			const settle = (callback: () => void) => {
-				if (settled) return
-				settled = true
-				clearTimeout(timeout)
-				callback()
-			}
-
-			const { success, fail } = this.uploadInstance.upload({
+			const uploadTask = this.uploadInstance.upload({
 				file: audioFile,
 				fileName: uploadFileName,
 				customCredentials,
@@ -604,6 +607,37 @@ export class ChunkUploader {
 					content_type: mimeType,
 				}),
 			})
+			if (typeof uploadTask.cancel === "function") {
+				this.activeUploadCancels.set(chunk.id, uploadTask.cancel.bind(uploadTask))
+			}
+			// The SDK currently has no hard timeout, so guard the business queue
+			// against XHRs that never call success/fail and would pin sessionActiveUploads.
+			const timeout = setTimeout(() => {
+				if (settled) return
+				settled = true
+				this.cancelActiveUpload(chunk.id, chunk.sessionId, "timeout")
+				logger.warn("Audio chunk upload request timed out", {
+					sessionId: chunk.sessionId,
+					chunkId: chunk.id,
+					chunkIndex: chunk.index,
+					timeoutMs: DEFAULT_UPLOAD_TIMEOUT_MS,
+					uploadDurationMs: Date.now() - uploadStartedAt,
+				})
+				reject(
+					createUploadError(
+						new Error(`Upload timed out after ${DEFAULT_UPLOAD_TIMEOUT_MS}ms`),
+					),
+				)
+			}, DEFAULT_UPLOAD_TIMEOUT_MS)
+			const settle = (callback: () => void) => {
+				if (settled) return
+				settled = true
+				clearTimeout(timeout)
+				this.activeUploadCancels.delete(chunk.id)
+				callback()
+			}
+
+			const { success, fail } = uploadTask
 
 			success?.((res) => {
 				if (res?.data?.path) {
@@ -649,7 +683,7 @@ export class ChunkUploader {
 						chunkIndex: chunk.index,
 						uploadDurationMs: Date.now() - uploadStartedAt,
 					})
-					reject(new Error(`Upload failed: ${error || "Unknown error"}`))
+					reject(createUploadError(error))
 				})
 			})
 		})
@@ -977,7 +1011,7 @@ export class ChunkUploader {
 					logger.error({
 						eventKey: "refresh_token_failed",
 						errorKind: "permission",
-						error: refreshError,
+						error: new Error(getUploadErrorDetails(refreshError).message),
 						message: `认证错误后刷新令牌失败：`,
 					})
 				})
@@ -1070,11 +1104,11 @@ export class ChunkUploader {
 			}
 			return await this.tokenManager.getToken(sessionId, topicId)
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error)
+			const errorMessage = getUploadErrorDetails(error).message
 			logger.error({
 				eventKey: "get_session_upload_failed",
 				errorKind: "unknown",
-				error: error,
+				error: new Error(errorMessage),
 				message: `获取会话 ${sessionId} 上传凭证失败：`,
 			})
 			throw new Error(`Failed to get upload credentials: ${errorMessage}`)
@@ -1131,6 +1165,8 @@ export class ChunkUploader {
 	): Promise<boolean> {
 		return new Promise((resolve, reject) => {
 			const timers: { interval?: NodeJS.Timeout; timeout?: NodeJS.Timeout } = {}
+			let lastProgressSignature: string | null = null
+			let lastProgressLogTimestamp = 0
 			const cleanup = () => {
 				if (timers.interval) clearInterval(timers.interval)
 				if (timers.timeout) clearTimeout(timers.timeout)
@@ -1138,7 +1174,16 @@ export class ChunkUploader {
 			const checkProgress = async () => {
 				try {
 					const progress = await this.audioChunkDB.getSessionUploadProgress(sessionId)
-					logger.log(`会话 ${sessionId} 上传进度：`, progress)
+					const progressSignature = `${progress.pending}:${progress.uploaded}:${progress.failed}`
+					const now = Date.now()
+					if (
+						progressSignature !== lastProgressSignature ||
+						now - lastProgressLogTimestamp >= UPLOAD_PROGRESS_LOG_COOLDOWN_MS
+					) {
+						logger.log(`会话 ${sessionId} 上传进度：`, progress)
+						lastProgressSignature = progressSignature
+						lastProgressLogTimestamp = now
+					}
 
 					if (progress.completed) {
 						cleanup()
@@ -1175,6 +1220,8 @@ export class ChunkUploader {
 	): Promise<SessionUploadProgress> {
 		return new Promise((resolve, reject) => {
 			const timers: { interval?: NodeJS.Timeout; timeout?: NodeJS.Timeout } = {}
+			let lastProgressSignature: string | null = null
+			let lastProgressLogTimestamp = 0
 			const cleanup = () => {
 				if (timers.interval) clearInterval(timers.interval)
 				if (timers.timeout) clearTimeout(timers.timeout)
@@ -1182,7 +1229,16 @@ export class ChunkUploader {
 			const checkProgress = async () => {
 				try {
 					const progress = await this.audioChunkDB.getSessionUploadProgress(sessionId)
-					logger.log(`会话 ${sessionId} 上传终态进度：`, progress)
+					const progressSignature = `${progress.pending}:${progress.uploaded}:${progress.failed}`
+					const now = Date.now()
+					if (
+						progressSignature !== lastProgressSignature ||
+						now - lastProgressLogTimestamp >= UPLOAD_PROGRESS_LOG_COOLDOWN_MS
+					) {
+						logger.log(`会话 ${sessionId} 上传终态进度：`, progress)
+						lastProgressSignature = progressSignature
+						lastProgressLogTimestamp = now
+					}
 					onProgress?.(progress)
 
 					if (progress.settled) {
@@ -1319,25 +1375,9 @@ export class ChunkUploader {
 	 * @param sessionId 会话ID
 	 */
 	clearSessionChunks(sessionId: string, reason: string = "session_cleanup"): Promise<void> {
-		this.sessionCleanupRequested.add(sessionId)
 		const queueLength = this.sessionQueues.get(sessionId)?.length || 0
 		const activeChunkId = this.sessionActiveUploads.get(sessionId) || null
-		logger.log("Audio chunk cleanup requested", {
-			sessionId,
-			queueLength,
-			activeChunkId,
-			reason,
-		})
-
-		// Clear retry info for this session
-		this.clearSessionRetryInfo(sessionId)
-		// Clear session queue
-		this.sessionQueues.delete(sessionId)
-		// Clear session active upload
-		this.sessionActiveUploads.delete(sessionId)
-		// Clear topic mapping
-		this.sessionTopicMap.delete(sessionId)
-		this.sessionProjectMap.delete(sessionId)
+		this.stopSessionUploads(sessionId, reason)
 
 		return this.audioChunkDB
 			.deletePendingSessionChunks(sessionId)
@@ -1368,6 +1408,24 @@ export class ChunkUploader {
 		this.activeUploadIds.delete(chunkId)
 		if (this.sessionActiveUploads.get(sessionId) === chunkId) {
 			this.sessionActiveUploads.delete(sessionId)
+		}
+	}
+
+	private cancelActiveUpload(chunkId: string, sessionId: string, reason: string): void {
+		const cancel = this.activeUploadCancels.get(chunkId)
+		if (!cancel) return
+
+		try {
+			cancel()
+		} catch (error) {
+			logger.warn("取消上传请求失败", {
+				sessionId,
+				chunkId,
+				reason,
+				errorName: error instanceof Error ? error.name : "unknown",
+			})
+		} finally {
+			this.activeUploadCancels.delete(chunkId)
 		}
 	}
 
@@ -1561,6 +1619,7 @@ export class ChunkUploader {
 		// Clear all active uploads
 		this.activeUploads.clear()
 		this.activeUploadIds.clear()
+		this.activeUploadCancels.clear()
 		this.sessionActiveUploads.clear()
 	}
 
@@ -1591,7 +1650,7 @@ export class ChunkUploader {
 			logger.error({
 				eventKey: "refresh_session_token_failed",
 				errorKind: "permission",
-				error: error,
+				error: new Error(getUploadErrorDetails(error).message),
 				message: `刷新会话 ${sessionId} 令牌失败：`,
 			})
 			throw error
@@ -1642,6 +1701,30 @@ export class ChunkUploader {
 			}
 			this.clearRetryCount(activeChunkId)
 		}
+	}
+
+	/**
+	 * Stop a session's queue while preserving IndexedDB chunks for recovery or export.
+	 * 服务端结束任务时停止后续上传，但保留 IndexedDB 分片供恢复或导出。
+	 */
+	stopSessionUploads(sessionId: string, reason: string = "session_stop"): void {
+		this.sessionCleanupRequested.add(sessionId)
+		const queueLength = this.sessionQueues.get(sessionId)?.length || 0
+		const activeChunkId = this.sessionActiveUploads.get(sessionId) || null
+		if (activeChunkId) {
+			this.cancelActiveUpload(activeChunkId, sessionId, reason)
+		}
+		this.clearSessionRetryInfo(sessionId)
+		this.sessionQueues.delete(sessionId)
+		this.sessionActiveUploads.delete(sessionId)
+		this.sessionTopicMap.delete(sessionId)
+		this.sessionProjectMap.delete(sessionId)
+		logger.report("停止会话分片上传但保留本地数据", {
+			sessionId,
+			queueLength,
+			activeChunkId,
+			reason,
+		})
 	}
 
 	/**

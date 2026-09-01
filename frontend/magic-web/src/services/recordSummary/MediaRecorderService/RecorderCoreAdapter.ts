@@ -94,6 +94,7 @@ export class RecorderCoreAdapter {
 		| ((this: AudioContext, event: Event) => void)
 		| null = null
 	private audioContextStateChangeUsesEventListener = false
+	private audioTrackEndedHandlers = new Map<MediaStreamTrack, () => void>()
 	private audioContextDiagnosticsTarget: AudioContext | null = null
 	private lastAudioWorkletMetrics: {
 		processedSamples: number
@@ -713,6 +714,7 @@ export class RecorderCoreAdapter {
 			this.visibilityChangeHandler = null
 			this.detachAudioContextDiagnostics()
 			this.audioContext = null // Reference will be cleaned up by resourceManager
+			this.detachAudioTrackDiagnostics()
 			this.lastAudioCallbackTimestamp = null
 			this.audioCallbackCount = 0
 			this.lastAudioCallbackWarningTimestamp = null
@@ -955,6 +957,7 @@ export class RecorderCoreAdapter {
 			// Store AudioContext reference for visualization
 			this.audioContext = audioContext
 			this.attachAudioContextDiagnostics(audioContext)
+			this.attachAudioTrackDiagnostics(mediaStream)
 
 			this.dependencies.logger.log("AudioContext created for AudioWorklet", {
 				requestedSampleRate: this.config.sampleRate,
@@ -1140,6 +1143,7 @@ export class RecorderCoreAdapter {
 				this.dependencies.logger.warn("No media stream available for script processor")
 				return
 			}
+			this.attachAudioTrackDiagnostics(mediaStream)
 
 			try {
 				// Create AudioContext
@@ -1428,6 +1432,37 @@ export class RecorderCoreAdapter {
 				streamDiagnosticsError: error instanceof Error ? error.message : String(error),
 			}
 		}
+	}
+
+	private attachAudioTrackDiagnostics(stream: MediaStream): void {
+		const tracks = typeof stream.getAudioTracks === "function" ? stream.getAudioTracks() : []
+		for (const track of tracks) {
+			if (this.audioTrackEndedHandlers.has(track)) continue
+			const handler = () => {
+				this.dependencies.logger.report({
+					namespace: "recordingAudioTrack",
+					data: {
+						event: "ended",
+						sessionId: this.sessionId,
+						readyState: track.readyState,
+						muted: track.muted,
+						enabled: track.enabled,
+					},
+				})
+			}
+			if (typeof track.addEventListener !== "function") continue
+			track.addEventListener("ended", handler)
+			this.audioTrackEndedHandlers.set(track, handler)
+		}
+	}
+
+	private detachAudioTrackDiagnostics(): void {
+		for (const [track, handler] of this.audioTrackEndedHandlers) {
+			if (typeof track.removeEventListener === "function") {
+				track.removeEventListener("ended", handler)
+			}
+		}
+		this.audioTrackEndedHandlers.clear()
 	}
 
 	private connectSourceToNode(

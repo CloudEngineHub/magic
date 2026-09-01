@@ -7,6 +7,8 @@ const testState = vi.hoisted(() => ({
 	chunks: new Map<string, StoredAudioChunk>(),
 	uploadBehaviors: [] as Array<"success" | "fail" | "hang">,
 	uploadCalls: [] as Array<{ name: string; size: number; type: string }>,
+	uploadCancels: [] as Array<ReturnType<typeof vi.fn>>,
+	uploadFailureError: null as unknown,
 }))
 
 vi.mock("@/services/recordSummary/utils/RecordingLogger", () => {
@@ -25,7 +27,10 @@ vi.mock("@dtyq/upload-sdk", () => ({
 		upload: vi.fn(({ file }: { file: File }) => {
 			testState.uploadCalls.push({ name: file.name, size: file.size, type: file.type })
 			const behavior = testState.uploadBehaviors.shift() ?? "success"
+			const cancel = vi.fn()
+			testState.uploadCancels.push(cancel)
 			return {
+				cancel,
 				success: (callback: (response: { data: { path: string } }) => void) => {
 					if (behavior === "success") {
 						queueMicrotask(() =>
@@ -37,7 +42,12 @@ vi.mock("@dtyq/upload-sdk", () => ({
 				},
 				fail: (callback: (error: Error) => void) => {
 					if (behavior === "fail") {
-						queueMicrotask(() => callback(new Error("upload failed")))
+						queueMicrotask(() =>
+							callback(
+								(testState.uploadFailureError as Error | null) ??
+									new Error("upload failed"),
+							),
+						)
 					}
 				},
 			}
@@ -140,6 +150,8 @@ describe("ChunkUploader", () => {
 		testState.chunks.clear()
 		testState.uploadBehaviors.length = 0
 		testState.uploadCalls.length = 0
+		testState.uploadCancels.length = 0
+		testState.uploadFailureError = null
 	})
 
 	it("times out a hung chunk, marks it failed after max retries, and continues the session queue", async () => {
@@ -176,6 +188,7 @@ describe("ChunkUploader", () => {
 		expect(testState.chunks.get(firstChunk.id)?.uploadStatus).toBe("failed")
 		expect(testState.chunks.get(secondChunk.id)?.uploadStatus).toBe("uploaded")
 		expect(testState.uploadCalls).toHaveLength(3)
+		expect(testState.uploadCancels[0]).toHaveBeenCalledTimes(1)
 	})
 
 	it("starts only one active upload per session when multiple pending chunks are queued", async () => {
@@ -229,6 +242,30 @@ describe("ChunkUploader", () => {
 		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
 	})
 
+	it("cancels an in-flight SDK upload when stopping a session and keeps the chunk", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("hang")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+
+		uploader.stopSessionUploads("session-1", "task_end")
+
+		expect(testState.uploadCancels[0]).toHaveBeenCalledTimes(1)
+		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
+	})
+
 	it("does not restart uploads after a session cleanup request", async () => {
 		const chunk = createChunk(0)
 		testState.chunks.set(chunk.id, chunk)
@@ -246,6 +283,36 @@ describe("ChunkUploader", () => {
 		await uploader.uploadSession("session-1", "topic-1", "project-1")
 
 		expect(testState.uploadCalls).toHaveLength(0)
+	})
+
+	it("preserves SDK status and request identifiers on upload failures", async () => {
+		const chunk = createChunk(0)
+		testState.uploadBehaviors.push("fail")
+		testState.uploadFailureError = Object.assign(new Error("task ended"), {
+			status: 43202,
+			requestId: "request-1",
+		})
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+			},
+			createBatchSaveReporter(),
+		)
+		const internalUploader = uploader as unknown as {
+			sessionTopicMap: Map<string, string>
+			sessionProjectMap: Map<string, string>
+		}
+		internalUploader.sessionTopicMap.set("session-1", "topic-1")
+		internalUploader.sessionProjectMap.set("session-1", "project-1")
+
+		await expect(uploader.uploadChunk(chunk)).rejects.toMatchObject({
+			status: 43202,
+			code: 43202,
+			requestId: "request-1",
+		})
 	})
 
 	it("uses the persisted MIME type when the Blob type is unavailable", async () => {

@@ -9,7 +9,9 @@ import { StoredAudioChunk } from "@/services/recordSummary/MediaRecorderService/
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 
 // 录制状态枚举
-export type RecordingStatus = "init" | "recording" | "paused"
+export type RecordingStatus = "init" | "recording" | "paused" | "server_cancelled"
+
+export type ServerTerminationSource = "server_auto_summary" | "server_task_ended"
 
 // 分片状态枚举
 export type ChunkStatus = "pending" | "uploading" | "uploaded" | "failed"
@@ -83,6 +85,12 @@ export interface RecordingSession {
 	 * Missing means legacy sessions keep the historical default of enabled.
 	 */
 	transcriptionEnabled?: boolean
+	/** Server-side termination metadata for sessions kept for recovery/audit. */
+	termination?: {
+		source: ServerTerminationSource
+		code?: number
+		at: number
+	}
 }
 
 // 合并后的分片数据

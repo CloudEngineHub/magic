@@ -51,7 +51,12 @@ import { createRecordingLogger } from "./utils/RecordingLogger"
 import { DEFAULT_RECORDING_CONFIG } from "./utils/config"
 import { RECORD_SUMMARY_EVENT_CALLBACK, RECORD_SUMMARY_EVENTS } from "./const/events"
 import { TypedEventEmitter } from "./utils/TypedEventEmitter"
-import { ERROR_CODE_TASK_ENDED, isTaskEndError, defaultErrorManager } from "./RecordingErrorManager"
+import {
+	ERROR_CODE_TASK_ENDED,
+	ERROR_CODES,
+	isTaskEndError,
+	defaultErrorManager,
+} from "./RecordingErrorManager"
 import { imageMigrationService } from "./ImageMigrationService"
 import { RecordingStatusReporter, RecordingSummaryStatus } from "./RecordingStatusReporter"
 import MagicModal from "@/components/base/MagicModal"
@@ -375,7 +380,7 @@ class RecordSummaryService {
 
 		// Register error handler for task end events
 		defaultErrorManager.onTaskEnd((error) => {
-			this.handleTaskEnd(error.sessionId)
+			return this.handleTaskEnd(error.sessionId, error.code)
 		})
 
 		// 监听用户登出事件
@@ -383,6 +388,7 @@ class RecordSummaryService {
 	}
 
 	private eventEmitter = new TypedEventEmitter<RECORD_SUMMARY_EVENT_CALLBACK>()
+	private handlingTaskEndSessions = new Set<string>()
 
 	/**
 	 * 监听事件
@@ -3605,23 +3611,28 @@ class RecordSummaryService {
 	}
 
 	/**
-	 * Handle task end event (error code 43200)
-	 * 处理任务结束事件（错误码 43200）
+	 * Handle server-side task termination events.
+	 * 处理服务端结束任务事件。
 	 * 服务端状态已经结束，只需要强制停止本地的录制相关实例
 	 */
-	private handleTaskEnd = async (sessionId: string) => {
+	private handleTaskEnd = async (sessionId: string, errorCode?: number) => {
 		logger.warn(
-			`检测到任务结束（错误码 ${ERROR_CODE_TASK_ENDED}），强制停止本地录制会话 ${sessionId}`,
+			`检测到任务结束（错误码 ${errorCode ?? ERROR_CODE_TASK_ENDED}），停止本地录制会话 ${sessionId}`,
 		)
-
-		const currentSession = this.sessionManager.getCurrentSession()
-		// Only stop if this is the current active session
-		if (!currentSession || currentSession.id !== sessionId) {
-			logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+		if (this.handlingTaskEndSessions.has(sessionId)) {
+			logger.log("任务结束处理已在进行中，忽略重复事件", { sessionId })
 			return
 		}
+		this.handlingTaskEndSessions.add(sessionId)
 
 		try {
+			const currentSession = this.sessionManager.getCurrentSession()
+			// Only stop if this is the current active session
+			if (!currentSession || currentSession.id !== sessionId) {
+				logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+				return
+			}
+
 			// Stop recording services (voice and media recorder)
 			// This includes stopping duration timer
 			await this.stopRecordingServices("task_end")
@@ -3635,21 +3646,35 @@ class RecordSummaryService {
 
 			// Stop periodic reporting (server already knows task ended)
 			this.statusReporter.stopPeriodicReport()
-
-			// Clear chunk upload queue for this session
-			this.chunkUploader.clearSessionChunks(sessionId, "task_end")
+			this.chunkUploader.stopSessionUploads(sessionId, "task_end")
 			this.batchSaveReporter.clearSession(sessionId)
 
-			// Cancel session
-			this.sessionManager.cancelSession()
-
-			// Clear persistence data
-			this.recordingPersistence.clearAll()
+			// 保留本地分片和会话记录。服务端已结束任务，但这里删除数据会让
+			// 上传失败的分片无法恢复，也会丢失后续排查所需的本地记录。
+			const terminationSource =
+				errorCode === ERROR_CODES.TASK_IS_SUMMARIZING
+					? "server_auto_summary"
+					: "server_task_ended"
+			const cancelledSession = this.sessionManager.markServerCancelledSession(
+				errorCode,
+				terminationSource,
+			)
+			if (cancelledSession) {
+				this.recordingPersistence.saveSession(cancelledSession)
+				const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
+				logger.report("服务端自动总结后保留本地录音数据", {
+					sessionId,
+					errorCode,
+					status: cancelledSession.status,
+					queueStatus,
+					chunkIndex: cancelledSession.currentChunkIndex,
+				})
+			}
 
 			// Reset store state
 			recordSummaryStore.reset()
 
-			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}`)
+			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}，已保留本地数据`)
 		} catch (error) {
 			logger.error({
 				eventKey: "task_end_event_failed",
@@ -3657,6 +3682,8 @@ class RecordSummaryService {
 				error: error,
 				message: `处理任务结束事件失败：`,
 			})
+		} finally {
+			this.handlingTaskEndSessions.delete(sessionId)
 		}
 	}
 
