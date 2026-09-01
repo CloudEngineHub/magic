@@ -867,6 +867,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												store.updateSlideContents(newContents)
 											}}
 											allowEdit={effectiveAllowEdit}
+											showButtonText={shouldShowButtonText}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)
 											}
@@ -893,7 +894,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}}
 											onRefreshSlide={handleRefreshSlide}
 											onManualSave={handleManualSave}
-											showButtonText={shouldShowButtonText}
 											mainFileId={mainFileId}
 											mainFileName={mainFileName}
 											allowDownload={allowDownload}

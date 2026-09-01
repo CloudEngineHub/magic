@@ -41,14 +41,20 @@ function renderPopover(scrollHeight: number, containerHeight = 500) {
 describe("ElementEditPopover", () => {
 	it("does not show a scrollbar when the content fits", () => {
 		const popover = renderPopover(240)
+		const content = screen.getByTestId("element-inspector-edit-content")
 
-		expect(popover).toHaveStyle({ overflowY: "hidden" })
+		expect(popover).toHaveStyle({ overflow: "hidden" })
+		expect(content).toHaveClass("overflow-y-auto")
+		expect(screen.getByTestId("element-inspector-edit-footer")).toHaveClass("shrink-0")
 	})
 
 	it("only enables scrolling when content exceeds the available height", () => {
 		const popover = renderPopover(360, 280)
+		const content = screen.getByTestId("element-inspector-edit-content")
 
-		expect(popover).toHaveStyle({ overflowY: "auto" })
+		expect(popover).toHaveStyle({ height: "272px", overflow: "hidden" })
+		expect(content).toHaveClass("overflow-y-auto")
+		expect(screen.getByTestId("element-inspector-edit-footer")).toHaveClass("shrink-0")
 	})
 
 	it("shows the screenshot loading state in the preview area", () => {

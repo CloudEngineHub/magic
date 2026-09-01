@@ -146,10 +146,11 @@ export function ElementEditPopover({
 					left: position.left,
 					top: position.top,
 					width: position.width,
-					// A narrow canvas may be shorter than the editor; keep the footer reachable
-					// by scrolling the popover instead of letting it cover the selected area.
+					height: position.height,
+					// Keep the action bar fixed while only the content area scrolls. This
+					// prevents the confirm/cancel buttons from being pushed below the viewport.
 					maxHeight: position.height,
-					overflowY: position.height < measuredHeight ? "auto" : "hidden",
+					overflow: "hidden",
 				}}
 				data-testid="element-inspector-edit-popover"
 			>
@@ -163,7 +164,10 @@ export function ElementEditPopover({
 					<X size={15} />
 				</Button>
 
-				<div className="space-y-2.5 p-3.5">
+				<div
+					className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3.5"
+					data-testid="element-inspector-edit-content"
+				>
 					<div className="flex min-w-0 items-center gap-2 pr-8">
 						<span
 							className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_rgb(var(--primary-rgb)/0.14)]"
@@ -206,7 +210,10 @@ export function ElementEditPopover({
 					/>
 				</div>
 
-				<div className="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-3.5 py-2.5">
+				<div
+					className="flex shrink-0 items-center gap-2 border-t border-border/60 bg-muted/20 px-3.5 py-2.5"
+					data-testid="element-inspector-edit-footer"
+				>
 					{onDelete && (
 						<Button
 							variant="ghost"

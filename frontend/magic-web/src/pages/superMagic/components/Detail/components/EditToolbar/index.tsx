@@ -6,6 +6,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import ViewModeSwitcher from "../ViewModeSwitcher"
 import AIEditButton from "./AIEditButton"
+import ConditionalTooltip from "./ConditionalTooltip"
 import FileEditButtons from "./FileEditButtons"
 import ExportDropdown from "./ExportDropdown"
 import { VersionHistorySelector } from "../PPTRender/components/VersionHistorySelector"
@@ -121,6 +122,10 @@ export interface EditToolbarProps {
 	onStartInspectorAppend?: () => void
 	/** AI 选取是否正在进行中 */
 	isAppendPicking?: boolean
+	/** 触发即时元素选取并写入输入框 */
+	onStartInspectorQuickSelect?: () => void
+	/** 即时元素选取是否正在进行中 */
+	isQuickSelecting?: boolean
 	/** Optional guard run before actions that leave the current selection flow. */
 	beforeAction?: BeforeAction
 }
@@ -162,9 +167,10 @@ function EditToolbar({
 	showDownload = true,
 	style,
 	projectId,
-	onStartInspector,
 	onStartInspectorAppend,
 	isAppendPicking = false,
+	onStartInspectorQuickSelect,
+	isQuickSelecting = false,
 	beforeAction,
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
@@ -529,6 +535,9 @@ function EditToolbar({
 	const showServerUpdateButton = isEditMode && hasServerUpdate
 	const showAIOptimizationButton = showAIOptimization && !isEditMode
 	const showFileEditButtons = showFileEdit
+	const quickSelectionLabel = t(
+		isQuickSelecting ? "topicFiles.exitSelectElement" : "topicFiles.selectElement",
+	)
 	const showVersionHistorySelector =
 		showVersionHistory && !isEditMode && fileId && onVersionChange && fetchFileVersions
 	const showRefreshButton = showRefresh && !isEditMode && onRefresh
@@ -603,23 +612,41 @@ function EditToolbar({
 						</Button>
 					)}
 
-					{/* AI 编辑按钮 */}
-					{showAIOptimizationButton && fileId && (
-						<AIEditButton
-							showButtonText={shouldShowButtonText}
-							attachmentList={attachmentList}
-							fileId={fileId}
-							onStartInspector={onStartInspector}
-						/>
-					)}
+					{/* AI 选取按钮 */}
+					{showFileEditButtons &&
+						!isEditMode &&
+						(onStartInspectorQuickSelect || onStartInspectorAppend) && (
+							<ConditionalTooltip
+								showText={shouldShowButtonText}
+								title={quickSelectionLabel}
+							>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={onStartInspectorQuickSelect || onStartInspectorAppend}
+									aria-pressed={isQuickSelecting}
+									className={cn(
+										"h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs",
+										isQuickSelecting && "text-primary",
+									)}
+								>
+									<Crosshair
+										size={16}
+										className={cn(isQuickSelecting && "animate-pulse")}
+									/>
+									{shouldShowButtonText && <span>{quickSelectionLabel}</span>}
+								</Button>
+							</ConditionalTooltip>
+						)}
 
-					{/* 在线编辑按钮 */}
+					{/* 编辑按钮 */}
 					{showFileEditButtons && (
 						<FileEditButtons
 							interactionDisabled={interactionDisabled}
 							isEditMode={isEditMode}
 							isSaving={isSaving}
 							showButtonText={shouldShowButtonText}
+							editLabel={t("common.edit")}
 							onEdit={() => runToolbarAction(() => onEdit?.())}
 							onSave={onSave}
 							onSaveAndExit={onSaveAndExit}
@@ -627,28 +654,19 @@ function EditToolbar({
 						/>
 					)}
 
-					{/* AI 选取按钮 */}
-					{showFileEditButtons && !isEditMode && onStartInspectorAppend && (
-						<ActionButton
-							icon={
-								<Crosshair
-									size={16}
-									className={cn(isAppendPicking && "animate-pulse")}
-								/>
-							}
-							onClick={onStartInspectorAppend}
-							title={t(
-								"topicFiles.aiPickTooltip",
-								"点击后选取页面元素，让 AI 对其进行修改",
-							)}
-							text={t("topicFiles.aiPick", "AI 选取")}
-							showText={shouldShowButtonText}
-							className={cn(
-								isAppendPicking &&
-									"bg-primary/10 text-primary ring-1 ring-primary/30",
-							)}
+					{/* AI 编辑按钮 */}
+					{showAIOptimizationButton && fileId && (
+						<AIEditButton
+							showButtonText={shouldShowButtonText}
+							maxItems={3}
+							onPrimaryAction={onStartInspectorAppend}
+							isPrimaryActive={isAppendPicking}
+							attachmentList={attachmentList}
+							fileId={fileId}
 						/>
 					)}
+
+					<div className="mx-1 h-4 w-px bg-border" />
 
 					{/* 刷新按钮 */}
 					{showRefreshButton && (
@@ -666,8 +684,6 @@ function EditToolbar({
 							disabled={isRefreshing}
 						/>
 					)}
-
-					<div className="mx-1 h-4 w-px bg-border" />
 
 					{/* 全屏按钮 */}
 
