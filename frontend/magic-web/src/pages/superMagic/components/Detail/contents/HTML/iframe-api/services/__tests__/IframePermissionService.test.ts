@@ -460,4 +460,148 @@ describe("IframePermissionService", () => {
 		expect(await service.authorize("llm.use")).toBe(true)
 		expect(confirmPermission).toHaveBeenCalledTimes(2)
 	})
+
+	it("shares one in-flight decision for concurrent requests with the same scope", async () => {
+		let resolveConfirmation!: (result: { allowed: boolean; ttlMs: number | null }) => void
+		const confirmPermission = vi.fn(
+			() =>
+				new Promise<{ allowed: boolean; ttlMs: number | null }>((resolve) => {
+					resolveConfirmation = resolve
+				}),
+		)
+		const { service } = createService({ confirmPermission })
+
+		const first = service.authorize("llm.use")
+		const second = service.authorize("llm.use")
+		await flushPermissionQueue()
+
+		expect(confirmPermission).toHaveBeenCalledOnce()
+		resolveConfirmation({ allowed: true, ttlMs: 60 * 60 * 1000 })
+
+		expect(await Promise.all([first, second])).toEqual([true, true])
+	})
+
+	it("processes different scopes in FIFO order without overlapping confirmations", async () => {
+		const confirmations: Array<(result: { allowed: boolean; ttlMs: number | null }) => void> =
+			[]
+		const confirmPermission = vi.fn(
+			() =>
+				new Promise<{ allowed: boolean; ttlMs: number | null }>((resolve) => {
+					confirmations.push(resolve)
+				}),
+		)
+		const { service } = createService({
+			confirmPermission,
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Manifest App",
+					permissions: { scopes: ["llm.use", "project.files.download"] },
+				},
+			},
+		})
+
+		const first = service.authorize("llm.use")
+		const second = service.authorize("project.files.download")
+		await flushPermissionQueue()
+
+		expect(confirmPermission).toHaveBeenCalledOnce()
+		expect(confirmPermission.mock.calls[0][0].scopes).toEqual(["llm.use"])
+
+		confirmations[0]({ allowed: true, ttlMs: 60 * 60 * 1000 })
+		await flushPermissionQueue()
+
+		expect(confirmPermission).toHaveBeenCalledTimes(2)
+		expect(confirmPermission.mock.calls[1][0].scopes).toEqual(["project.files.download"])
+		confirmations[1]({ allowed: true, ttlMs: 60 * 60 * 1000 })
+
+		expect(await Promise.all([first, second])).toEqual([true, true])
+	})
+
+	it("rechecks persisted grants for a later queued request", async () => {
+		const confirmPermission = vi.fn(async () => ({
+			allowed: true,
+			ttlMs: 60 * 60 * 1000,
+		}))
+		const { service } = createService({
+			confirmPermission,
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Manifest App",
+					permissions: { scopes: ["llm.use", "project.files.download"] },
+				},
+			},
+		})
+
+		const first = service.authorizeMany(["llm.use", "project.files.download"])
+		const second = service.authorize("llm.use")
+
+		expect(await Promise.all([first, second])).toEqual([true, true])
+		expect(confirmPermission).toHaveBeenCalledOnce()
+	})
+
+	it("shares one-time access only with the current concurrent batch", async () => {
+		const confirmPermission = vi.fn(async () => ({ allowed: true, ttlMs: 0 }))
+		const { service } = createService({
+			confirmPermission,
+			appConfigState: { status: "absent" },
+		})
+
+		const first = service.authorize("project.message.write")
+		const second = service.authorize("project.message.write")
+		expect(await Promise.all([first, second])).toEqual([true, true])
+		expect(confirmPermission).toHaveBeenCalledOnce()
+
+		expect(await service.authorize("project.message.write")).toBe(true)
+		expect(confirmPermission).toHaveBeenCalledTimes(2)
+	})
+
+	it("shares a denial with concurrent waiters without caching it", async () => {
+		const confirmPermission = vi.fn(async () => ({ allowed: false, ttlMs: 0 }))
+		const { service } = createService({ confirmPermission })
+
+		const first = service.authorize("llm.use")
+		const second = service.authorize("llm.use")
+		expect(await Promise.all([first, second])).toEqual([false, false])
+		expect(confirmPermission).toHaveBeenCalledOnce()
+
+		expect(await service.authorize("llm.use")).toBe(false)
+		expect(confirmPermission).toHaveBeenCalledTimes(2)
+	})
+
+	it("resolves queued and in-flight requests as denied when disposed", async () => {
+		let resolveConfirmation!: (result: { allowed: boolean; ttlMs: number | null }) => void
+		const confirmPermission = vi.fn(
+			() =>
+				new Promise<{ allowed: boolean; ttlMs: number | null }>((resolve) => {
+					resolveConfirmation = resolve
+				}),
+		)
+		const { service } = createService({
+			confirmPermission,
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Manifest App",
+					permissions: { scopes: ["llm.use", "project.files.download"] },
+				},
+			},
+		})
+
+		const first = service.authorize("llm.use")
+		const second = service.authorize("project.files.download")
+		await flushPermissionQueue()
+		service.dispose()
+
+		expect(await first).toBe(false)
+		expect(await second).toBe(false)
+		resolveConfirmation({ allowed: true, ttlMs: 60 * 60 * 1000 })
+
+		expect(confirmPermission).toHaveBeenCalledOnce()
+	})
 })
+
+function flushPermissionQueue() {
+	return new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
