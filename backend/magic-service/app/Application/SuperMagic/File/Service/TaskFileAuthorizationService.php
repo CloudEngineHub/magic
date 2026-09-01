@@ -1,13 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Application\SuperMagic\File\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
-use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -91,15 +94,5 @@ class TaskFileAuthorizationService extends AbstractAppService
         }
 
         return $entities;
-    }
-
-    private function hasTaskFileOwnerPermission(
-        TaskFileEntity $fileEntity,
-        MagicUserAuthorization $authorization,
-    ): bool {
-        return $fileEntity->getUserId() !== ''
-            && $fileEntity->getOrganizationCode() !== ''
-            && $fileEntity->getUserId() === $authorization->getId()
-            && $fileEntity->getOrganizationCode() === $authorization->getOrganizationCode();
     }
 }
