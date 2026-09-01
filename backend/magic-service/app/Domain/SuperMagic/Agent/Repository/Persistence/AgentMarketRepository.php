@@ -345,6 +345,17 @@ class AgentMarketRepository extends AbstractRepository implements AgentMarketRep
         return $entity;
     }
 
+    /** @return int[] */
+    public function findIdsByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): array
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->agentMarketModel::query());
+
+        return $builder->where('agent_code', $agentCode)
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
     public function offlineByAgentCode(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): bool
     {
         $builder = $this->createBuilder($dataIsolation, $this->agentMarketModel::query());
