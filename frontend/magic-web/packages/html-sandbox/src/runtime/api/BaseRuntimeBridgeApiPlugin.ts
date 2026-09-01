@@ -8,7 +8,7 @@
 
 import type { RuntimePlugin } from "../RuntimePlugin"
 import { runtimeLoggerHub, type RuntimeLogger } from "../RuntimeLogger"
-import { getParentOrigin } from "../../utils/parentOrigin"
+import { postMessageToParent } from "../../utils/parentOrigin"
 
 export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 	protected readonly logger: RuntimeLogger
@@ -94,7 +94,7 @@ export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 				}
 			}
 			window.addEventListener("message", handler)
-			window.parent.postMessage({ type, requestId, ...payload }, getParentOrigin(), transfer)
+			postMessageToParent({ type, requestId, ...payload }, transfer)
 		})
 	}
 }

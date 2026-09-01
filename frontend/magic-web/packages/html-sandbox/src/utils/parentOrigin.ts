@@ -46,6 +46,17 @@ export function getParentOrigin(): string {
 	return cachedOrigin
 }
 
+/** Send to the parent using the resolved origin, optionally transferring buffers. */
+export function postMessageToParent(message: unknown, transfer?: Transferable[]): boolean {
+	const origin = getParentOrigin()
+	if (transfer && transfer.length > 0) {
+		window.parent.postMessage(message, origin, transfer)
+	} else {
+		window.parent.postMessage(message, origin)
+	}
+	return true
+}
+
 /**
  * Validate whether a MessageEvent comes from the trusted parent origin.
  * The source and exact origin must both match. Unknown origins are rejected by
