@@ -35,6 +35,8 @@ export interface UseIframeFSOptions {
 	appConfig: HTMLAppConfig | null
 	/** 项目 ID，用于删除等需要 project_id 的操作 */
 	projectId?: string
+	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
+	projectContextUnavailableError?: string
 	/** 创建新文件时的上传函数，复用现有上传链路 */
 	uploadFn: UploadFn
 	/** 更新已存在文件内容的函数（不重新上传 OSS） */
@@ -86,6 +88,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		fileList,
 		appConfig,
 		projectId,
+		projectContextUnavailableError,
 		uploadFn,
 		saveContentFn,
 		mkdirFn,
@@ -116,6 +119,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 			fileList,
 			appConfig,
 			projectId,
+			projectContextUnavailableError,
 			uploadFn,
 			saveContentFn: stableSaveContentFn,
 			mkdirFn,
@@ -136,6 +140,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		entryPath,
 		appConfig,
 		projectId,
+		projectContextUnavailableError,
 		uploadFn,
 		stableSaveContentFn,
 		mkdirFn,

@@ -2915,6 +2915,7 @@
 			"updateDurationSuccess": "Authorization duration updated",
 			"version": "App version"
 		},
+		"projectContextUnavailable": "This feature is not supported in share mode. Try sharing through collaboration instead.",
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
 			"content": "The HTML micro-app wants to {{operation}} a {{targetType}} outside the app directory: {{path}}. App directory: {{appRootDir}}.",

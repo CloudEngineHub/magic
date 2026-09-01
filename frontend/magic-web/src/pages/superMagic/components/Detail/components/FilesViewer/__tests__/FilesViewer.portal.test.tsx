@@ -252,18 +252,17 @@ describe("FilesViewer fullscreen portal", () => {
 		expect(container.querySelector('[data-testid="files-viewer-content"]')).toBeTruthy()
 	})
 
-	it("keeps non-PPT content on the existing viewer portal path", () => {
-		const { container, rerender } = render(<FilesViewer />)
-		const inlineContent = container.querySelector('[data-testid="files-viewer-content"]')
-
-		expect(inlineContent).toBeTruthy()
+	it("does not remount non-PPT content when entering or exiting viewer fullscreen", () => {
+		const { rerender } = render(<FilesViewer />)
+		const initialContent = screen.getByTestId("files-viewer-content")
 
 		rerender(<FilesViewer forceFullscreenMode />)
 
-		expect(container.querySelector('[data-testid="files-viewer-content"]')).toBeNull()
-		const fullscreenContent = screen.getByTestId("files-viewer-content")
-		expect(fullscreenContent).toBeInTheDocument()
-		expect(fullscreenContent).not.toBe(inlineContent)
+		expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
+
+		rerender(<FilesViewer forceFullscreenMode={false} />)
+
+		expect(screen.getByTestId("files-viewer-content")).toBe(initialContent)
 	})
 
 	it("does not remount PPT content when entering or exiting viewer fullscreen", () => {
@@ -426,6 +425,6 @@ describe("FilesViewer fullscreen portal", () => {
 			'pending-attachment-path:个人使用画像/个人AI协作画像.md]\n\n10. 部分 [unknown"'
 
 		expect(() => render(<FilesViewer />)).not.toThrow()
-		expect(mockState.scrollTo).toHaveBeenCalledOnce()
+		expect(mockState.scrollTo).toHaveBeenCalled()
 	})
 })

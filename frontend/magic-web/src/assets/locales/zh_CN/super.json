@@ -2916,6 +2916,7 @@
 			"updateDurationSuccess": "授权时长已更新",
 			"version": "应用版本"
 		},
+		"projectContextUnavailable": "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。",
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
 			"content": "HTML 微应用请求{{operation}}应用目录外的{{targetType}}：{{path}}。应用目录：{{appRootDir}}。",

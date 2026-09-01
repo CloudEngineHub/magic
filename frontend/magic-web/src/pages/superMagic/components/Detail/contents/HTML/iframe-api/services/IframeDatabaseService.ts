@@ -38,6 +38,8 @@ export interface IframeDatabaseConfig {
 	postToIframe: (message: object) => void
 	/** 获取当前项目 ID 的函数（由主站上下文注入） */
 	getProjectId: () => string | undefined
+	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
+	projectContextUnavailableError?: string
 }
 
 export class IframeDatabaseService {
@@ -93,7 +95,9 @@ export class IframeDatabaseService {
 
 	private getProjectIdOrThrow(): string {
 		const projectId = this.cfg.getProjectId()
-		if (!projectId) throw new Error("No project selected")
+		if (!projectId) {
+			throw new Error(this.cfg.projectContextUnavailableError || "No project selected")
+		}
 		return projectId
 	}
 

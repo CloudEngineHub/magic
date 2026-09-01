@@ -58,6 +58,7 @@ export interface HandleSendParams {
 	shouldClearEditorAfterSend?: boolean
 	throwOnError?: boolean
 	extra?: Record<string, unknown>
+	targetTopic?: Topic | null
 }
 
 export interface SendContentParams {
