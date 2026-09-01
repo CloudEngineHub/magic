@@ -132,7 +132,7 @@ class ContentService:
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
 
     async def select_main(self, project_path: str, items: Sequence[SelectMainContentCommand]) -> SelectMainContentsResult:
-        """只修改用户明确选择的 main Content 指针。"""
+        """选择用户明确指定的 main Content，并同步 active Content 指针。"""
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
@@ -153,6 +153,7 @@ class ContentService:
                     raise CanvasDomainError("MAIN_CONTENT_NOT_COMPLETED", "The selected Content is not completed.")
                 previous = element.main_content_id
                 element.main_content_id = content.content_id
+                element.active_content_id = content.content_id
                 results.append(SelectMainContentResultItem(
                     item_ref=item.item_ref,
                     status="completed",
