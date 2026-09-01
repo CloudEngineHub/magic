@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react"
 import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
+import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
 import { InspectorDetailComponent } from "../component"
 
 vi.mock("@/infrastructure/editors/tiptap/react", () => ({
@@ -60,7 +61,11 @@ describe("InspectorDetailComponent", () => {
 				},
 			},
 		} as unknown as NodeViewProps
-		render(<InspectorDetailComponent {...props} />)
+		render(
+			<TooltipProvider>
+				<InspectorDetailComponent {...props} />
+			</TooltipProvider>,
+		)
 
 		await act(async () => {
 			screen.getByTestId("set-expanded").click()
