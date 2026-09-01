@@ -156,11 +156,12 @@ readonly class VolcengineArkVideoClient
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
             ]);
-            throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage),
-                $exception,
-                $httpStatus
-            );
+            $message = $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage);
+            $exceptionFactory = $this->isDeterministicHttpFailure($httpStatus)
+                ? ProviderVideoException::nonRetriable(...)
+                : ProviderVideoException::retriable(...);
+
+            throw $exceptionFactory($message, $exception, $httpStatus);
         } catch (ProviderVideoException $exception) {
             throw $exception;
         } catch (Throwable $throwable) {
@@ -208,5 +209,13 @@ readonly class VolcengineArkVideoClient
         }
 
         return __('video.errors.generic') ?: '视频生成失败，请检查输入内容或稍后重试。';
+    }
+
+    private function isDeterministicHttpFailure(?int $httpStatus): bool
+    {
+        return $httpStatus !== null
+            && $httpStatus >= 400
+            && $httpStatus < 500
+            && ! in_array($httpStatus, [408, 409, 429], true);
     }
 }
