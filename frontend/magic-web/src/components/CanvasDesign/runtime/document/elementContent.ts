@@ -86,8 +86,9 @@ export function supportsVisualUnderstanding(type: string): boolean {
 	return type === ElementTypeEnum.Image || type === ElementTypeEnum.Video
 }
 
-export function createContentId(prefix = "content"): string {
-	return `${prefix}-${generateContentUuid()}`
+/** 所有新建 Content 使用统一的 content-<uuid> 命名，类型语义由元素和字段结构表达。 */
+export function createContentId(): string {
+	return `content-${generateContentUuid()}`
 }
 
 function generateContentUuid(): string {
@@ -451,10 +452,6 @@ export function getPendingVideoGenerationContent(
 
 export function hasPendingVideoGenerationContent(element: VideoElement): boolean {
 	return Boolean(getPendingVideoGenerationContent(element))
-}
-
-export function createImageContentId(): string {
-	return createContentId("content")
 }
 
 export function appendImageContent(

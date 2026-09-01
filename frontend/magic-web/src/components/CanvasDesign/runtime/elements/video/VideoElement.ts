@@ -373,7 +373,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			return false
 		}
 
-		const contentId = createContentId("content")
+		const contentId = createContentId()
 		const recoveryContent = this.getVideoContent()
 		const requestWithId: GenerateVideoRequest = {
 			...request,

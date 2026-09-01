@@ -90,8 +90,8 @@ describe("elementContent", () => {
 		expect(deleteActiveContent(deleted?.element ?? element)).toBeNull()
 	})
 
-	it("creates namespaced Content IDs", () => {
-		expect(createContentId("image-content")).toMatch(/^image-content-/)
+	it("creates canonical Content IDs", () => {
+		expect(createContentId()).toMatch(/^content-/)
 	})
 
 	it("finds a pending video Content even when another version is active", () => {

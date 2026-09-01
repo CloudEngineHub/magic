@@ -8,7 +8,7 @@ import type {
 import { ElementTypeEnum } from "../../document/types"
 import {
 	appendImageContent,
-	createImageContentId,
+	createContentId,
 	deleteActiveImageContent,
 	getActiveImageContent as resolveActiveImageContent,
 	getActiveImageContentId,
@@ -703,7 +703,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!generateImage) return false
 		if (!request.model_id || !request.prompt?.trim()) return false
 
-		const contentId = createImageContentId()
+		const contentId = createContentId()
 		const requestWithId: GenerateImageRequest = {
 			...request,
 			prompt: request.prompt.trim(),
