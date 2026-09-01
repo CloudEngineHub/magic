@@ -40,6 +40,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { Button } from "@/components/shadcn-ui/button"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { useVirtualMessageScroll } from "./hooks/useVirtualMessageScroll"
+import { useStalledGenerationLoading } from "./hooks/useStalledGenerationLoading"
 import RevokedEditableUserMessage from "./components/RevokedEditableUserMessage"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import {
@@ -423,23 +424,32 @@ const MessageList = observer(
 			superMagicStore.getActiveStreamSuperMessageIds(currentTopicKey)
 		// 活跃 StreamState 和占位消息行都不代表用户已经看到流式进度；
 		// projected node 尚未形成可见内容时需要保留底部兜底 Loading。
+		// 此外,生成中但推进停住(content 流完等待 tool_call chunk、
+		// 两条消息之间的空档)时,经防抖后也重新显示 Loading。
+		const bottomLoadingVisibility = resolveBottomLoadingVisibility({
+			showLoading: Boolean(showLoading),
+			isTopicTaskRunning: currentTopicStatus === TaskStatus.RUNNING,
+			activeStreamSuperMessageIds,
+			visibleMessages: effectiveVisibleMessages,
+			resolveMessageNode: (superMessageId) =>
+				superMagicStore.getMessageNode(superMessageId) as
+					| {
+							reasoning_content?: unknown
+							content?: unknown
+							tool_calls?: unknown
+					  }
+					| undefined,
+			resolveStreamState: (superMessageId) =>
+				superMagicStore.getStreamState(currentTopicKey, superMessageId),
+		})
+		const isStalledLoadingVisible = useStalledGenerationLoading(
+			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
+				bottomLoadingVisibility.isGenerationStalled,
+			{ resetKey: currentTopicKey },
+		)
 		const shouldShowBottomLoading =
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
-			resolveBottomLoadingVisibility({
-				showLoading: Boolean(showLoading),
-				activeStreamSuperMessageIds,
-				visibleMessages: effectiveVisibleMessages,
-				resolveMessageNode: (superMessageId) =>
-					superMagicStore.getMessageNode(superMessageId) as
-						| {
-								reasoning_content?: unknown
-								content?: unknown
-								tool_calls?: unknown
-						  }
-						| undefined,
-				resolveStreamStage: (superMessageId) =>
-					superMagicStore.getStreamState(currentTopicKey, superMessageId)?.stage,
-			})
+			(bottomLoadingVisibility.showImmediately || isStalledLoadingVisible)
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
 			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||
