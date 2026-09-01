@@ -141,8 +141,16 @@ export interface HtmlScreenshotUploadRequest {
 	targetId: string
 	dataUrl: string
 	fileName?: string
+	/** Drop the in-memory prepared mention after the success callback consumes it. */
+	releaseAfterSuccess?: boolean
 	onSuccess?: (mention: TiptapMentionAttributes) => void
 	onError?: (error: unknown) => void
+}
+
+/** Updates the screenshot mention on an already inserted inspector-detail node. */
+export interface HtmlInspectorScreenshotUpdate {
+	targetId: string
+	screenshotMention: TiptapMentionAttributes
 }
 
 export type HtmlMultiSelectionSubmitState = "idle" | "submitting" | "succeeded" | "failed"

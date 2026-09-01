@@ -9,6 +9,7 @@ import {
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { getInspectorDetailHeaderLabel } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/display"
 import { InspectorScreenshotPreview } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/InspectorScreenshotPreview"
+import { setMagicNodeDragData } from "@/pages/superMagic/components/MessageEditor/extensions/node-drag"
 
 interface InspectorDetailReadOnlyProps {
 	attrs: {
@@ -36,7 +37,7 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 	})()
 	const styleEntries = Object.entries(parsedStyles)
 
-	const headerLabel = getInspectorDetailHeaderLabel(t)
+	const headerLabel = getInspectorDetailHeaderLabel(t, attrs.textContent)
 	const fileData =
 		attrs.fileMention?.type === MentionItemType.PROJECT_FILE
 			? (attrs.fileMention.data as ProjectFileMentionData)
@@ -48,12 +49,23 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			className={cn(
 				"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
 				expanded ? "w-full" : "w-auto",
-				!expanded && "h-6 rounded-md border border-border/60 bg-muted/30 px-1.5",
+				!expanded &&
+					"h-5 rounded-md border border-border/60 bg-muted/30 px-1.5 text-xs leading-5",
 				expanded &&
 					"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
 			)}
 			onClick={() => setExpanded((v) => !v)}
 			data-testid="set-expanded"
+			draggable
+			onDragStart={(event) =>
+				setMagicNodeDragData(
+					event.nativeEvent,
+					"inspector-detail",
+					attrs as unknown as Record<string, unknown>,
+					undefined,
+					event.currentTarget,
+				)
+			}
 		>
 			<Crosshair size={12} className="flex-shrink-0 text-primary" />
 			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
@@ -69,11 +81,22 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 	return (
 		<span
 			className={cn(
-				"inspector-detail-read-only select-none transition-colors",
+				"inspector-detail-read-only cursor-grab select-none transition-colors active:cursor-grabbing",
 				expanded
 					? "my-1 block w-full rounded-md border border-primary/50 bg-primary/5"
-					: "magic-mention !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-middle",
+					: "magic-mention relative top-[1px] !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-baseline",
 			)}
+			draggable
+			data-magic-editor-node
+			onDragStart={(event) =>
+				setMagicNodeDragData(
+					event.nativeEvent,
+					"inspector-detail",
+					attrs as unknown as Record<string, unknown>,
+					undefined,
+					event.currentTarget,
+				)
+			}
 		>
 			{!expanded && attrs.screenshotMention ? (
 				<InspectorScreenshotPreview

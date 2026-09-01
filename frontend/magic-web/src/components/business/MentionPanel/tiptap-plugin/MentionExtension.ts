@@ -154,6 +154,7 @@ export function deleteNextTextCharAfterMention(
  */
 export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 	name: "mention",
+	draggable: true,
 
 	priority: 1000, // Higher priority to override default mention
 

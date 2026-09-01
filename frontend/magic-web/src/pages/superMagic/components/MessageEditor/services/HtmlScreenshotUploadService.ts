@@ -4,60 +4,25 @@ import { FileApi, SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
 import { logger as Logger } from "@/utils/log"
 import { UploadSource } from "../types"
-import { base64ToFile } from "../utils/fileConverter"
 import { superMagicUploadTokenService } from "./UploadTokenService"
+import { htmlScreenshotStorage, type StoredHtmlScreenshot } from "./HtmlScreenshotStorage"
 import type { SaveUploadFileToProjectResponse } from "@/pages/superMagic/utils/api"
 
-const TEMP_UPLOAD_DIR_NAME = ".tmp"
-
-export interface UploadHtmlScreenshotParams {
+export interface StoreHtmlScreenshotParams {
 	dataUrl: string
 	fileName: string
-	projectId: string
-	topicId?: string
-	onProgress?: (progress: number) => void
 }
 
 const logger = Logger.createLogger("HtmlScreenshotUpload")
 
 /**
- * Uploads inspector screenshots without entering the message editor attachment store.
- * Screenshots are implementation details of an HTML edit request, so they are saved
- * directly into the hidden workspace temp directory and only exposed as a project-file mention.
+ * Screenshots are transient inspector context, not workspace files. Keep the bitmap in the
+ * existing IndexedDB image store until the message is sent, then save it as a topic attachment.
+ * This avoids creating a project folder during selection while retaining a server-side file
+ * reference for the agent request.
  */
 class HtmlScreenshotUploadService {
 	private readonly uploader = new Upload()
-	private readonly tempDirectoryIds = new Map<string, string>()
-	private readonly tempDirectoryPromises = new Map<string, Promise<string>>()
-
-	private async ensureTempDirectory(projectId: string) {
-		const cachedDirectoryId = this.tempDirectoryIds.get(projectId)
-		if (cachedDirectoryId) return cachedDirectoryId
-
-		const pendingDirectory = this.tempDirectoryPromises.get(projectId)
-		if (pendingDirectory) return pendingDirectory
-
-		const createDirectory = (async () => {
-			const response = await SuperMagicApi.createFile({
-				project_id: projectId,
-				file_name: TEMP_UPLOAD_DIR_NAME,
-				is_directory: true,
-				ignore_duplicate: true,
-			})
-			if (!response?.file_id) {
-				throw new Error("无法创建截图临时目录")
-			}
-			this.tempDirectoryIds.set(projectId, response.file_id)
-			return response.file_id
-		})()
-
-		this.tempDirectoryPromises.set(projectId, createDirectory)
-		try {
-			return await createDirectory
-		} finally {
-			this.tempDirectoryPromises.delete(projectId)
-		}
-	}
 
 	private async uploadToOss(
 		file: File,
@@ -98,30 +63,48 @@ class HtmlScreenshotUploadService {
 		})
 	}
 
-	async uploadScreenshot({
+	async storeScreenshot({
 		dataUrl,
+		fileName,
+	}: StoreHtmlScreenshotParams): Promise<StoredHtmlScreenshot> {
+		try {
+			return await htmlScreenshotStorage.store(dataUrl, fileName)
+		} catch (error) {
+			logger.error({
+				eventKey: "html_screenshot_store_failed",
+				errorKind: "storage",
+				error,
+				message: "html screenshot storage failed",
+			})
+			throw error instanceof Error ? error : new Error("截图保存失败")
+		}
+	}
+
+	async uploadStoredScreenshot({
+		storageId,
 		fileName,
 		projectId,
 		topicId,
 		onProgress,
-	}: UploadHtmlScreenshotParams): Promise<SaveUploadFileToProjectResponse> {
-		if (!projectId) throw new Error("当前项目不可用，无法上传截图")
+	}: {
+		storageId: string
+		fileName: string
+		projectId: string
+		topicId: string
+		onProgress?: (progress: number) => void
+	}): Promise<SaveUploadFileToProjectResponse> {
+		if (!projectId || !topicId) throw new Error("当前话题不可用，无法保存截图")
 
 		try {
-			const [parentId, file] = await Promise.all([
-				this.ensureTempDirectory(projectId),
-				base64ToFile(dataUrl, fileName),
-			])
+			const blob = await htmlScreenshotStorage.getBlob(storageId)
+			if (!blob) throw new Error("截图缓存已过期，请重新选择")
+			const file = new File([blob], fileName, { type: blob.type || "image/png" })
 			const customCredentials = await superMagicUploadTokenService.getUploadToken(projectId)
-			const tempCredentials = superMagicUploadTokenService.changeDir(
-				customCredentials,
-				TEMP_UPLOAD_DIR_NAME,
-			)
 			const uploadResult = await this.uploadToOss(
 				file,
 				fileName,
 				projectId,
-				tempCredentials,
+				customCredentials,
 				onProgress,
 			)
 			const [reportResult] = await FileApi.reportFileUploads([
@@ -136,25 +119,25 @@ class HtmlScreenshotUploadService {
 
 			const [saveResult] = (await SuperMagicApi.batchSaveFiles({
 				project_id: projectId,
-				parent_id: parentId,
 				files: [
 					{
 						project_id: projectId,
-						topic_id: topicId ?? "",
+						topic_id: topicId,
 						task_id: "",
 						file_key: uploadResult.key,
 						file_name: fileName,
 						file_size: uploadResult.size,
 						file_type: "user_upload",
-						storage_type: "workspace",
+						storage_type: "topic",
 						source: UploadSource.Home,
-						relative_file_path: `${TEMP_UPLOAD_DIR_NAME}/${fileName}`,
+						relative_file_path: fileName,
 						is_hidden: true,
 					},
 				],
 			})) as SaveUploadFileToProjectResponse[]
-			if (!saveResult?.file_id) throw new Error("截图保存到工作区失败")
+			if (!saveResult?.file_id) throw new Error("截图保存到话题失败")
 
+			await htmlScreenshotStorage.delete(storageId)
 			return { ...saveResult, is_hidden: true }
 		} catch (error) {
 			logger.error({
@@ -165,6 +148,10 @@ class HtmlScreenshotUploadService {
 			})
 			throw error instanceof Error ? error : new Error("截图上传失败")
 		}
+	}
+
+	async getStoredScreenshotBlob(storageId: string): Promise<Blob | null> {
+		return htmlScreenshotStorage.getBlob(storageId)
 	}
 }
 

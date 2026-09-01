@@ -20,6 +20,7 @@ import {
 	validateMentionItems,
 } from "../utils/mention"
 import { superMagicUploadTokenService } from "./UploadTokenService"
+import { htmlScreenshotUploadService } from "./HtmlScreenshotUploadService"
 import { MentionItemsStatistics } from "./types"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SuperMagicApi } from "@/apis"
@@ -132,7 +133,31 @@ export class MentionItemsProcessor {
 			return { mentionItems: processedItems, content }
 		}
 
-		const saveResults = await this.saveTempFilesToProject(validItems, projectId, topicId)
+		const screenshotItems = validItems.filter((item) => {
+			const data = item.attrs.data as UploadFileMentionData
+			return data.is_html_screenshot && Boolean(data.storage_id)
+		})
+		const regularItems = validItems.filter((item) => !screenshotItems.includes(item))
+		const [regularSaveResults, screenshotSaveResults] = await Promise.all([
+			regularItems.length > 0
+				? this.saveTempFilesToProject(regularItems, projectId, topicId)
+				: Promise.resolve([]),
+			Promise.all(
+				screenshotItems.map(async (item) => {
+					const data = item.attrs.data as UploadFileMentionData
+					const result = await htmlScreenshotUploadService.uploadStoredScreenshot({
+						storageId: data.storage_id as string,
+						fileName: data.file_name,
+						projectId,
+						topicId: topicId ?? "",
+					})
+					// The local storage ID is the upload mention's identity until the
+					// server returns a project file. Keep it as the transform key.
+					return { ...result, file_key: data.file_path ?? result.file_key }
+				}),
+			),
+		])
+		const saveResults = [...regularSaveResults, ...screenshotSaveResults]
 		const transformedResult = transformMentionItemsToProjectFiles(
 			content,
 			processedItems,

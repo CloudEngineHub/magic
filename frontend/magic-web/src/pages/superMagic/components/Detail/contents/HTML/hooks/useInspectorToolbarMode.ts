@@ -39,8 +39,8 @@ interface InspectorToolbarModeOptions {
 
 /**
  * Coordinates toolbar inspection and the multi-target HTML editing flow.
- * Multi-selection keeps a local draft; quick selection appends one inspected
- * element to the current editor after its screenshot is prepared.
+ * Multi-selection keeps a local draft; quick selection inserts one inspected
+ * element immediately and enriches it after its screenshot is prepared.
  */
 export function useInspectorToolbarMode(
 	elementInspector: ElementInspector,
@@ -59,9 +59,11 @@ export function useInspectorToolbarMode(
 	const modeRef = useRef<InspectorMode>("devConsole")
 	const exitRequestRef = useRef<Promise<boolean> | null>(null)
 	const previousFileIdRef = useRef(fileInfo?.fileId)
+	const quickSelectionSequenceRef = useRef(0)
 	const quickSelectionRef = useRef<{
 		selector: string
-		info: NonNullable<ElementInspector["selectedElement"]>
+		targetId: string
+		screenshotRequested: boolean
 	} | null>(null)
 	const fileId = fileInfo?.fileId
 	const fileName = fileInfo?.fileName
@@ -112,11 +114,25 @@ export function useInspectorToolbarMode(
 
 		const info = selectedElement
 		if (modeRef.current === "quickSelection") {
-			// Keep the selected node until its automatic screenshot has been captured.
-			// The screenshot callback completes the insertion so the Tiptap node can
-			// carry the uploaded image mention in the same transaction.
-			if (quickSelectionRef.current?.selector !== info.selector) {
-				quickSelectionRef.current = { selector: info.selector, info }
+			// Insert the inspector node immediately. The screenshot is prepared in the
+			// background and updates this node through a separate editor event.
+			if (!quickSelectionRef.current) {
+				quickSelectionSequenceRef.current += 1
+				quickSelectionRef.current = {
+					selector: info.selector,
+					targetId: `element:${info.selector}:${Date.now()}:${quickSelectionSequenceRef.current}`,
+					screenshotRequested: false,
+				}
+				pubsub.publish(
+					PubSubEvents.Append_Content_To_Editor,
+					buildAgentPromptContent(
+						info,
+						t("stylePanel.inspector.agentPromptTitle"),
+						stableFileInfo,
+						undefined,
+						quickSelectionRef.current.targetId,
+					),
+				)
 			}
 			stopInspector()
 			return
@@ -271,38 +287,40 @@ export function useInspectorToolbarMode(
 				return changed ? next : targets
 			})
 
-			if (modeRef.current !== "quickSelection") return
 			const quickSelection = quickSelectionRef.current
 			if (!quickSelection || quickSelection.selector !== selector) return
 
-			const targetId = `element:${selector}`
-			const insertElement = (screenshotMention?: TiptapMentionAttributes | null) => {
-				const content = buildAgentPromptContent(
-					quickSelection.info,
-					t("stylePanel.inspector.agentPromptTitle"),
-					stableFileInfo,
-					screenshotMention,
-				)
-				pubsub.publish(PubSubEvents.Append_Content_To_Editor, content)
+			if (quickSelection.screenshotRequested) return
+			quickSelection.screenshotRequested = true
+			const finishScreenshot = (screenshotMention?: TiptapMentionAttributes) => {
+				if (quickSelectionRef.current !== quickSelection) return
+				if (screenshotMention) {
+					pubsub.publish(PubSubEvents.Update_Html_Inspector_Screenshot, {
+						targetId: quickSelection.targetId,
+						screenshotMention,
+					})
+				}
 				quickSelectionRef.current = null
 				clearSelection()
+				stopInspector()
 				updateMode("devConsole")
 			}
 
 			if (!pubsub.hasListeners(PubSubEvents.Prepare_Html_Screenshot)) {
-				insertElement()
+				finishScreenshot()
 				return
 			}
 
 			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-				targetId,
+				targetId: quickSelection.targetId,
 				dataUrl: screenshot.dataUrl,
-				fileName: getHtmlScreenshotFileName(targetId),
-				onSuccess: (mention: TiptapMentionAttributes) => insertElement(mention),
-				onError: () => insertElement(),
+				fileName: getHtmlScreenshotFileName(quickSelection.targetId),
+				releaseAfterSuccess: true,
+				onSuccess: finishScreenshot,
+				onError: () => finishScreenshot(),
 			})
 		},
-		[clearSelection, stableFileInfo, t, updateMode],
+		[clearSelection, stopInspector, updateMode],
 	)
 
 	const confirmTarget = useCallback(() => {

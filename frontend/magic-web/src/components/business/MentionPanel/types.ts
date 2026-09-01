@@ -170,6 +170,9 @@ export interface UploadFileMentionData {
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"
 	upload_error?: string
+	/** IndexedDB-backed HTML inspector screenshot, materialized only when sent. */
+	is_html_screenshot?: boolean
+	storage_id?: string
 }
 
 export interface CloudFileMentionData {

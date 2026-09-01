@@ -3,6 +3,7 @@ import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import { INSPECTOR_DETAIL_TYPE } from "./const"
 import type { InspectorDetailAttrs, InspectorDetailOptions } from "./types"
 import { InspectorDetailComponent } from "./component"
+import { createMagicNodeDragPlugin } from "../node-drag"
 
 /**
  * Renders element-inspector context (selector, size, styles, text preview)
@@ -14,7 +15,7 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	inline: true,
 	atom: true,
 	selectable: true,
-	draggable: false,
+	draggable: true,
 
 	addAttributes() {
 		return {
@@ -110,6 +111,11 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 						? { "data-screenshot-mention": JSON.stringify(attrs.screenshotMention) }
 						: {},
 			},
+			targetId: {
+				default: null,
+				parseHTML: (el) => el.getAttribute("data-target-id"),
+				renderHTML: (attrs) => (attrs.targetId ? { "data-target-id": attrs.targetId } : {}),
+			},
 		}
 	},
 
@@ -160,6 +166,10 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 
 	addNodeView() {
 		return ReactNodeViewRenderer(InspectorDetailComponent)
+	},
+
+	addProseMirrorPlugins() {
+		return [createMagicNodeDragPlugin()]
 	},
 
 	addCommands() {

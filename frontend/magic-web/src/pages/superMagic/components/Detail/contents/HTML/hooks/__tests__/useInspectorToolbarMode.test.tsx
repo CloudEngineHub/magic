@@ -142,7 +142,7 @@ describe("useInspectorToolbarMode", () => {
 		expect(result.current.pendingTargets).toHaveLength(1)
 	})
 
-	it("captures the selected element and appends its Tiptap node", async () => {
+	it("inserts the selected element before its screenshot is prepared", async () => {
 		const selectedElement = createInfo()
 		const fileInfo = {
 			fileId: "file-1",
@@ -166,14 +166,17 @@ describe("useInspectorToolbarMode", () => {
 		)
 		const prepareScreenshot = vi.fn()
 		const appendContent = vi.fn()
+		const updateScreenshot = vi.fn()
 		pubsub.subscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
 		pubsub.subscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
+		pubsub.subscribe(PubSubEvents.Update_Html_Inspector_Screenshot, updateScreenshot)
 
 		try {
 			act(() => result.current.startInQuickSelectionMode())
 			expect(result.current.isQuickSelecting).toBe(true)
 			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
 				selectedElement
+			rerender()
 			rerender()
 
 			const screenshot = {
@@ -182,10 +185,18 @@ describe("useInspectorToolbarMode", () => {
 			}
 			act(() => result.current.attachElementScreenshot(selectedElement.selector, screenshot))
 
+			expect(appendContent).toHaveBeenCalledOnce()
+			const content = appendContent.mock.calls[0]?.[0]
+			expect(content.content[0].content[0].attrs.selector).toBe("#hero")
+			expect(content.content[0].content[0].attrs.targetId).toEqual(
+				expect.stringMatching(/^element:#hero:\d+:1$/),
+			)
+			expect(content.content[0].content[0].attrs.screenshotMention).toBeUndefined()
 			expect(prepareScreenshot).toHaveBeenCalledWith(
 				expect.objectContaining({
-					targetId: "element:#hero",
+					targetId: expect.stringMatching(/^element:#hero:\d+:1$/),
 					dataUrl: screenshot.dataUrl,
+					releaseAfterSuccess: true,
 				}),
 			)
 			const request = prepareScreenshot.mock.calls[0]?.[0]
@@ -195,16 +206,18 @@ describe("useInspectorToolbarMode", () => {
 			}
 			await act(async () => request.onSuccess(screenshotMention))
 
+			expect(updateScreenshot).toHaveBeenCalledWith({
+				targetId: expect.stringMatching(/^element:#hero:\d+:1$/),
+				screenshotMention,
+			})
 			expect(appendContent).toHaveBeenCalledOnce()
-			const content = appendContent.mock.calls[0]?.[0]
-			expect(content.content[0].content[0].attrs.selector).toBe("#hero")
-			expect(content.content[0].content[0].attrs.screenshotMention).toEqual(screenshotMention)
 			expect(result.current.isQuickSelecting).toBe(false)
 			expect(result.current.pendingTargets).toHaveLength(0)
 			expect(result.current.inspectorModeRef.current).toBe("devConsole")
 		} finally {
 			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
 			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
+			pubsub.unsubscribe(PubSubEvents.Update_Html_Inspector_Screenshot, updateScreenshot)
 		}
 	})
 

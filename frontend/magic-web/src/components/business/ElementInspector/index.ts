@@ -17,6 +17,7 @@ export type {
 	HtmlMultiSelectionRequest,
 	HtmlMultiSelectionRequestTarget,
 	HtmlScreenshotUploadRequest,
+	HtmlInspectorScreenshotUpdate,
 	HtmlMultiSelectionSubmitState,
 } from "./types"
 export { INSPECTOR_MSG } from "./types"

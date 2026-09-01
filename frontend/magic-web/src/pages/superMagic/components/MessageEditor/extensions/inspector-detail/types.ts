@@ -29,6 +29,8 @@ export interface InspectorDetailAttrs {
 	fileMention?: TiptapMentionAttributes | null
 	/** Optional screenshot mention rendered inside the inspector detail card. */
 	screenshotMention?: TiptapMentionAttributes | null
+	/** Transient identity used to enrich a quick-selected node after screenshot upload. */
+	targetId?: string | null
 }
 
 export interface InspectorDetailOptions {}

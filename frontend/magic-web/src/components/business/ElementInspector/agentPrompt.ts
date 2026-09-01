@@ -16,6 +16,7 @@ export function buildAgentPromptContent(
 	title: string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
 	screenshotMention?: TiptapMentionAttributes | null,
+	targetId?: string,
 ): JSONContent {
 	const paragraphs: JSONContent[] = []
 	const fileMention = fileInfo
@@ -99,6 +100,7 @@ export function buildAgentPromptContent(
 					selectorMatchCount: info.selectorMatchCount ?? -1,
 					fileMention,
 					screenshotMention,
+					...(targetId ? { targetId } : {}),
 				},
 			},
 		],

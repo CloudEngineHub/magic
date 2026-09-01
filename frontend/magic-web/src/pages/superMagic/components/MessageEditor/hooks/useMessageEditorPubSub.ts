@@ -5,13 +5,18 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DraftStore } from "../stores"
 import type { SendMessageByContentPayload } from "../types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { SuperMagicWidgetEditorCommandPayload } from "@/pages/superMagic/events/message"
-import type { HtmlMultiSelectionRequest } from "@/components/business/ElementInspector"
+import type {
+	HtmlInspectorScreenshotUpdate,
+	HtmlMultiSelectionRequest,
+	HtmlScreenshotUploadRequest,
+} from "@/components/business/ElementInspector"
 import {
 	buildHtmlMultiSelectionPromptContent,
 	getHtmlScreenshotFileName,
 } from "@/components/business/ElementInspector"
-import { MentionItemType } from "@/components/business/MentionPanel/types"
+import { serializeInspectorContent } from "../extensions/inspector-detail"
 import { htmlScreenshotUploadService } from "../services/HtmlScreenshotUploadService"
 import {
 	insertMentionFromDroppedData,
@@ -64,6 +69,14 @@ function safeEditorFocus(editor: Editor | null) {
 	})
 }
 
+/** Keep an inserted inspector target visibly selected instead of leaving the caret after it. */
+function insertInspectorNodeAndSelect(editor: Editor, node: JSONContent) {
+	const position = editor.state.selection.from
+	const inserted = editor.commands.insertContent(node)
+	if (inserted) editor.commands.setNodeSelection(position)
+	return inserted
+}
+
 /** Converts Widget plain text into the editor document written by setInput. */
 function createPlainTextDocument(content: string): JSONContent {
 	return {
@@ -109,8 +122,6 @@ function useMessageEditorPubSub({
 	updateContent,
 	enableMessageSendByContent,
 	onSendMessageByContent,
-	projectId,
-	topicId,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
 	const preparedScreenshotMentionsRef = useRef(new Map<string, TiptapMentionAttributes>())
@@ -118,7 +129,7 @@ function useMessageEditorPubSub({
 		new Map<string, Promise<TiptapMentionAttributes>>(),
 	)
 
-	const uploadScreenshot = useMemoizedFn(
+	const prepareScreenshot = useMemoizedFn(
 		(targetId: string, dataUrl: string, fileName: string) => {
 			const prepared = preparedScreenshotMentionsRef.current.get(targetId)
 			if (prepared) return Promise.resolve(prepared)
@@ -127,22 +138,23 @@ function useMessageEditorPubSub({
 			if (preparing) return preparing
 
 			const promise = (async () => {
-				if (!projectId) throw new Error("当前项目不可用，无法上传截图")
-				const savedFile = await htmlScreenshotUploadService.uploadScreenshot({
+				const storedScreenshot = await htmlScreenshotUploadService.storeScreenshot({
 					dataUrl,
 					fileName,
-					projectId,
-					topicId,
 				})
 				const mention: TiptapMentionAttributes = {
-					type: MentionItemType.PROJECT_FILE,
+					type: MentionItemType.UPLOAD_FILE,
 					data: {
-						file_id: savedFile.file_id,
-						file_name: savedFile.file_name,
-						file_path: savedFile.relative_file_path ?? savedFile.file_key,
-						file_extension: savedFile.file_name.split(".").pop() ?? "",
-						file_size: savedFile.file_size,
+						file_id: storedScreenshot.storageId,
+						file_name: storedScreenshot.fileName,
+						file_path: storedScreenshot.storageId,
+						file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
+						file_size: storedScreenshot.fileSize,
+						file: storedScreenshot.file,
 						is_hidden: true,
+						is_html_screenshot: true,
+						storage_id: storedScreenshot.storageId,
+						upload_status: "done",
 					},
 				}
 				preparedScreenshotMentionsRef.current.set(targetId, mention)
@@ -159,15 +171,9 @@ function useMessageEditorPubSub({
 	)
 
 	useEffect(() => {
-		const handlePrepareHtmlScreenshot = async (request: {
-			targetId: string
-			dataUrl: string
-			fileName?: string
-			onSuccess?: (mention: TiptapMentionAttributes) => void
-			onError?: (error: unknown) => void
-		}) => {
+		const handlePrepareHtmlScreenshot = async (request: HtmlScreenshotUploadRequest) => {
 			try {
-				const mention = await uploadScreenshot(
+				const mention = await prepareScreenshot(
 					request.targetId,
 					request.dataUrl,
 					request.fileName ?? `html-screenshot-${Date.now()}.png`,
@@ -175,13 +181,58 @@ function useMessageEditorPubSub({
 				request.onSuccess?.(mention)
 			} catch (error) {
 				request.onError?.(error)
+			} finally {
+				if (request.releaseAfterSuccess) {
+					preparedScreenshotMentionsRef.current.delete(request.targetId)
+				}
 			}
 		}
 		pubsub.subscribe(PubSubEvents.Prepare_Html_Screenshot, handlePrepareHtmlScreenshot)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, handlePrepareHtmlScreenshot)
 		}
-	}, [uploadScreenshot])
+	}, [prepareScreenshot])
+
+	useEffect(() => {
+		const handleUpdateHtmlInspectorScreenshot = (update: HtmlInspectorScreenshotUpdate) => {
+			if (!update.targetId || !update.screenshotMention) return
+
+			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				const { state } = activeEditor.view
+				const transaction = state.tr
+				let updated = false
+
+				state.doc.descendants((node, pos) => {
+					if (updated) return false
+					if (
+						node.type.name !== INSPECTOR_DETAIL_TYPE ||
+						node.attrs.targetId !== update.targetId
+					)
+						return true
+
+					transaction.setNodeMarkup(pos, undefined, {
+						...node.attrs,
+						screenshotMention: update.screenshotMention,
+					})
+					updated = true
+					return false
+				})
+
+				if (updated) activeEditor.view.dispatch(transaction)
+			})
+		}
+
+		pubsub.subscribe(
+			PubSubEvents.Update_Html_Inspector_Screenshot,
+			handleUpdateHtmlInspectorScreenshot,
+		)
+		return () => {
+			pubsub.unsubscribe(
+				PubSubEvents.Update_Html_Inspector_Screenshot,
+				handleUpdateHtmlInspectorScreenshot,
+			)
+		}
+	}, [activeEditorRef])
 
 	useEffect(() => {
 		const handleSubmitHtmlMultiSelection = async (request: HtmlMultiSelectionRequest) => {
@@ -196,7 +247,7 @@ function useMessageEditorPubSub({
 								[
 									target.id ?? `screenshot:${index}`,
 									target.screenshot?.mention ??
-										(await uploadScreenshot(
+										(await prepareScreenshot(
 											target.id ?? `screenshot:${index}`,
 											target.screenshot?.dataUrl ?? "",
 											getHtmlScreenshotFileName(
@@ -218,8 +269,20 @@ function useMessageEditorPubSub({
 					"HTML 页面修改目标",
 					screenshotMentions,
 				)
+				const serializedContent = serializeInspectorContent(content, {
+					title: "HTML 页面修改目标",
+					selector: "选择器",
+					size: "尺寸",
+					computedStyles: "计算样式",
+					textContent: "文本内容",
+					elementAttributes: "元素属性",
+					resource: "资源信息",
+					domContext: "DOM 上下文",
+					elementHtml: "元素片段",
+					selectorMatchCount: "选择器匹配数",
+				})
 				await onSendMessageByContent({
-					jsonContent: content,
+					jsonContent: serializedContent,
 					shouldClearEditorAfterSend: true,
 				})
 				screenshotTargets.forEach((target, index) => {
@@ -237,7 +300,7 @@ function useMessageEditorPubSub({
 				handleSubmitHtmlMultiSelection,
 			)
 		}
-	}, [onSendMessageByContent, uploadScreenshot])
+	}, [onSendMessageByContent, prepareScreenshot])
 
 	useEffect(() => {
 		const handleAddFileToChat = (data: {
@@ -407,7 +470,7 @@ function useMessageEditorPubSub({
 					inspectorNode?.type === INSPECTOR_DETAIL_TYPE
 
 				if (isSingleInspectorNode && inspectorNode) {
-					activeEditor.commands.insertContent(inspectorNode)
+					insertInspectorNodeAndSelect(activeEditor, inspectorNode)
 					activeEditor.commands.focus()
 					return
 				}
@@ -446,7 +509,7 @@ function useMessageEditorPubSub({
 
 			if (isSingleInspectorNode && inspectorNode) {
 				runActiveEditor(activeEditorRef.current, (activeEditor) => {
-					activeEditor.commands.insertContent(inspectorNode)
+					insertInspectorNodeAndSelect(activeEditor, inspectorNode)
 				})
 				safeEditorFocus(activeEditorRef.current)
 				return

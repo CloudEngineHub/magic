@@ -32,6 +32,7 @@ import {
 } from "@/pages/superMagic/components/MessageEditor/hooks/useMarkerClickHandler"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
+import { setMagicNodeDragData } from "@/pages/superMagic/components/MessageEditor/extensions/node-drag"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 interface InlineMentionProps {
@@ -47,7 +48,20 @@ function InlineMarkerMention(props: InlineMentionProps) {
 	const { data, markerClickScene = "messageList", messageContent, projectFilesStore } = props
 
 	return (
-		<span className="magic-marker-mention inline-flex align-bottom">
+		<span
+			className="magic-marker-mention inline-flex cursor-grab align-bottom active:cursor-grabbing"
+			draggable
+			data-magic-editor-node
+			onDragStart={(event) =>
+				setMagicNodeDragData(
+					event.nativeEvent,
+					"mention",
+					data as unknown as Record<string, unknown>,
+					undefined,
+					event.currentTarget,
+				)
+			}
+		>
 			<MarkerAtItem
 				data={data}
 				markerClickScene={markerClickScene}
@@ -189,6 +203,17 @@ function InlineDefaultMention(props: InlineMentionProps) {
 				)}
 				data-type={data.type}
 				data-data={JSON.stringify(data.data)}
+				draggable
+				data-magic-editor-node
+				onDragStart={(event) =>
+					setMagicNodeDragData(
+						event.nativeEvent,
+						"mention",
+						data as unknown as Record<string, unknown>,
+						undefined,
+						event.currentTarget,
+					)
+				}
 				onMouseDown={(event) => event.preventDefault()}
 				onClick={handleClick}
 			>

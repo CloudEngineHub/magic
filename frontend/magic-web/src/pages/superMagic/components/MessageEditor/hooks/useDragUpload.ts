@@ -7,6 +7,7 @@ import {
 	SelfMediaCardDragData,
 } from "../utils/drag"
 import { dragLogger } from "../utils/dragLogger"
+import { MAGIC_NODE_DRAG_MIME } from "../extensions/node-drag"
 
 interface UseDragUploadProps {
 	enableFileDrop?: boolean
@@ -48,6 +49,11 @@ export function useDragUpload({
 	const [isDragOver, setIsDragOver] = useState(false)
 	const dragCounterRef = useRef(0)
 
+	const isMagicNodeDrag = useCallback(
+		(e: React.DragEvent) => e.dataTransfer.types.includes(MAGIC_NODE_DRAG_MIME),
+		[],
+	)
+
 	const resetDragState = useCallback(() => {
 		dragCounterRef.current = 0
 		setIsDragOver(false)
@@ -55,6 +61,10 @@ export function useDragUpload({
 
 	const handleDragEnter = useCallback(
 		(e: React.DragEvent) => {
+			// Node drags are handled by the ProseMirror plugin. Letting the upload
+			// container consume them would incorrectly show the file-upload overlay.
+			if (isMagicNodeDrag(e)) return
+
 			e.preventDefault()
 			e.stopPropagation()
 
@@ -79,32 +89,39 @@ export function useDragUpload({
 				setIsDragOver(true)
 			}
 		},
-		[enableFileDrop],
+		[enableFileDrop, isMagicNodeDrag],
 	)
 
-	const handleDragLeave = useCallback((e: React.DragEvent) => {
-		e.preventDefault()
-		e.stopPropagation()
+	const handleDragLeave = useCallback(
+		(e: React.DragEvent) => {
+			if (isMagicNodeDrag(e)) return
 
-		// 📋 日志记录：拖拽离开
-		dragLogger.logDragLeave({
-			targetElement: (e.currentTarget as HTMLElement)?.dataset?.testid || "unknown",
-			dragCounter: dragCounterRef.current - 1,
-			isDragOver: dragCounterRef.current - 1 === 0 ? false : undefined,
-		})
+			e.preventDefault()
+			e.stopPropagation()
 
-		if (dragCounterRef.current <= 0) {
-			return
-		}
+			// 📋 日志记录：拖拽离开
+			dragLogger.logDragLeave({
+				targetElement: (e.currentTarget as HTMLElement)?.dataset?.testid || "unknown",
+				dragCounter: dragCounterRef.current - 1,
+				isDragOver: dragCounterRef.current - 1 === 0 ? false : undefined,
+			})
 
-		dragCounterRef.current -= 1
-		if (dragCounterRef.current === 0) {
-			setIsDragOver(false)
-		}
-	}, [])
+			if (dragCounterRef.current <= 0) {
+				return
+			}
+
+			dragCounterRef.current -= 1
+			if (dragCounterRef.current === 0) {
+				setIsDragOver(false)
+			}
+		},
+		[isMagicNodeDrag],
+	)
 
 	const handleDragOver = useCallback(
 		(e: React.DragEvent) => {
+			if (isMagicNodeDrag(e)) return
+
 			e.preventDefault()
 			e.stopPropagation()
 
@@ -129,11 +146,13 @@ export function useDragUpload({
 				setIsDragOver(true)
 			}
 		},
-		[enableFileDrop],
+		[enableFileDrop, isMagicNodeDrag],
 	)
 
 	const handleDrop = useCallback(
 		(e: React.DragEvent) => {
+			if (isMagicNodeDrag(e)) return
+
 			e.preventDefault()
 			e.stopPropagation()
 			resetDragState()
@@ -183,7 +202,7 @@ export function useDragUpload({
 				onFilesDropped?.(e.dataTransfer.files, e.dataTransfer)
 			}
 		},
-		[onFilesDropped, onDataDropped, resetDragState],
+		[onFilesDropped, onDataDropped, isMagicNodeDrag, resetDragState],
 	)
 
 	// Fallback: cover ESC cancel and drag-out-of-window cases

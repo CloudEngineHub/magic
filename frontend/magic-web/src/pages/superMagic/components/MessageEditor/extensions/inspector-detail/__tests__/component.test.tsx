@@ -1,5 +1,5 @@
 import type { ElementType, PropsWithChildren } from "react"
-import { act, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
@@ -31,7 +31,7 @@ describe("InspectorDetailComponent", () => {
 	it("keeps the collapsed chip tall enough and separates its border from the caret", () => {
 		const props = {
 			node: {
-				attrs: {},
+				attrs: { textContent: "hello" },
 			},
 		} as unknown as NodeViewProps
 		const { container } = render(<InspectorDetailComponent {...props} />)
@@ -39,10 +39,66 @@ describe("InspectorDetailComponent", () => {
 		const wrapper = container.querySelector('[data-type="inspector-detail"]')
 		const button = screen.getByTestId("set-expanded")
 
-		expect(wrapper).toHaveClass("!inline-flex", "!overflow-visible", "!bg-transparent")
-		expect(wrapper).toHaveClass("!py-0", "!pl-0", "!pr-1")
+		expect(wrapper).toHaveClass(
+			"!inline-flex",
+			"!overflow-visible",
+			"!bg-transparent",
+			"relative",
+			"top-[1px]",
+			"!align-baseline",
+		)
+		expect(wrapper).toHaveAttribute("draggable", "true")
+		expect(wrapper).toHaveAttribute("data-magic-editor-node")
+		expect(wrapper).toHaveClass("!p-0")
 		expect(wrapper).not.toHaveClass("border", "border-border/60")
-		expect(button).toHaveClass("h-6", "rounded-md", "border", "border-border/60", "bg-muted/30")
+		expect(button).toHaveClass(
+			"h-5",
+			"rounded-md",
+			"border",
+			"border-border/60",
+			"bg-muted/30",
+			"text-xs",
+			"leading-5",
+		)
+		expect(button).toHaveTextContent("hello")
+	})
+
+	it("shows a layout-safe highlight when the inspector detail node is selected", () => {
+		const props = {
+			node: {
+				attrs: { textContent: "hello" },
+			},
+			selected: true,
+		} as unknown as NodeViewProps
+		const { container } = render(<InspectorDetailComponent {...props} />)
+
+		expect(container.querySelector('[data-type="inspector-detail"]')).toHaveClass(
+			"select-none",
+			"!outline-none",
+		)
+		expect(screen.getByTestId("set-expanded")).toHaveClass("border-primary/70", "bg-primary/10")
+	})
+
+	it("waits for a click before selecting so mouse drag can start", () => {
+		const setNodeSelection = vi.fn()
+		const props = {
+			node: {
+				attrs: { textContent: "hello" },
+			},
+			editor: { commands: { setNodeSelection } },
+			getPos: () => 3,
+		} as unknown as NodeViewProps
+		render(<InspectorDetailComponent {...props} />)
+
+		const button = screen.getByTestId("set-expanded")
+		fireEvent.mouseDown(button, { button: 0 })
+		fireEvent.dragStart(button)
+
+		expect(setNodeSelection).not.toHaveBeenCalled()
+
+		fireEvent.click(button)
+
+		expect(setNodeSelection).toHaveBeenCalledWith(3)
 	})
 
 	it("renders the screenshot preview inside the expanded detail card", async () => {
@@ -60,6 +116,8 @@ describe("InspectorDetailComponent", () => {
 					},
 				},
 			},
+			editor: { commands: { setNodeSelection: vi.fn() } },
+			getPos: () => 3,
 		} as unknown as NodeViewProps
 		render(
 			<TooltipProvider>

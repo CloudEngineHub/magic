@@ -14,6 +14,24 @@ vi.mock("@/pages/superMagic/hooks/useFileUrl", () => ({
 }))
 
 describe("InspectorDetailReadOnly", () => {
+	it("uses the selected element text as the header label", () => {
+		render(
+			<InspectorDetailReadOnly
+				attrs={{
+					selector: "div.map-axis-y",
+					tagName: "div",
+					size: "32 × 128 px",
+					computedStyles: "{}",
+					styleCount: 0,
+					textContent: "增长压力",
+				}}
+			/>,
+		)
+
+		expect(screen.getByTestId("set-expanded")).toHaveTextContent("增长压力")
+		expect(screen.getByTestId("set-expanded")).not.toHaveTextContent("已选取的元素")
+	})
+
 	it("matches the collapsed editor chip height and inline alignment", () => {
 		const { container } = render(
 			<InspectorDetailReadOnly
@@ -36,10 +54,20 @@ describe("InspectorDetailReadOnly", () => {
 			"!overflow-visible",
 			"!bg-transparent",
 			"!p-0",
-			"!align-middle",
+			"relative",
+			"top-[1px]",
+			"!align-baseline",
 		)
 		expect(wrapper).not.toHaveClass("border", "border-border/60")
-		expect(button).toHaveClass("h-6", "rounded-md", "border", "border-border/60", "bg-muted/30")
+		expect(button).toHaveClass(
+			"h-5",
+			"rounded-md",
+			"border",
+			"border-border/60",
+			"bg-muted/30",
+			"text-xs",
+			"leading-5",
+		)
 	})
 
 	it("renders the screenshot preview in the expanded read-only card", async () => {
