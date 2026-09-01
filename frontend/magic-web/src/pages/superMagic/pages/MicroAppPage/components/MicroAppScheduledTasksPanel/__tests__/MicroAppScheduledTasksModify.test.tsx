@@ -1,5 +1,5 @@
 import React from "react"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import globalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import type {
@@ -14,6 +14,13 @@ import { applyMicroAppScheduledTaskContext } from "../utils"
 const mocks = vi.hoisted(() => ({
 	useAttachments: vi.fn(),
 	messageEditorProps: [] as MessageEditorProps[],
+	setSelectedImageModel: vi.fn(),
+	setSelectedVideoModel: vi.fn(),
+	editorModels: {
+		language: null as MessageEditorRef["selectedModel"],
+		image: null as MessageEditorRef["selectedImageModel"],
+		video: null as MessageEditorRef["selectedVideoModel"],
+	},
 }))
 
 vi.mock("antd", async (importOriginal) => {
@@ -82,9 +89,19 @@ vi.mock(
 						getJSON: () => ({ type: "doc", content: [] }),
 					},
 					mentionItems: [],
-					selectedModel: null,
+					get selectedModel() {
+						return mocks.editorModels.language
+					},
+					get selectedImageModel() {
+						return mocks.editorModels.image
+					},
+					get selectedVideoModel() {
+						return mocks.editorModels.video
+					},
 					setContent: vi.fn(),
 					setSelectedModel: vi.fn(),
+					setSelectedImageModel: mocks.setSelectedImageModel,
+					setSelectedVideoModel: mocks.setSelectedVideoModel,
 				}))
 				return <div data-testid="micro-app-message-editor" />
 			},
@@ -111,6 +128,11 @@ describe("MicroAppScheduledTasksModify", () => {
 		mocks.messageEditorProps.length = 0
 		mocks.useAttachments.mockReset()
 		mocks.useAttachments.mockReturnValue({ attachments: [], updateAttachments: vi.fn() })
+		mocks.setSelectedImageModel.mockReset()
+		mocks.setSelectedVideoModel.mockReset()
+		mocks.editorModels.language = null
+		mocks.editorModels.image = null
+		mocks.editorModels.video = null
 	})
 
 	it("renders the current workspace and project instead of stale task context", () => {
@@ -188,6 +210,31 @@ describe("MicroAppScheduledTasksModify", () => {
 		expect(editorProps?.topicMode).toBe("default")
 		expect(editorProps?.setTopicMode).toBeUndefined()
 		expect(editorProps?.showModeToggle).toBeUndefined()
+	})
+
+	it("restores image and video models when editing a task", async () => {
+		const imageModel = { model_id: "image-model" }
+		const videoModel = { model_id: "video-model" }
+
+		render(
+			<MicroAppScheduledTasksModify
+				mode="edit"
+				context={{ workspaceId: "workspace-1", projectId: "project-1" }}
+				initialValues={{
+					message_content: {
+						content: "{}",
+						extra: {
+							super_agent: { image_model: imageModel, video_model: videoModel },
+						},
+					},
+				}}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mocks.setSelectedImageModel).toHaveBeenCalledWith(imageModel)
+			expect(mocks.setSelectedVideoModel).toHaveBeenCalledWith(videoModel)
+		})
 	})
 
 	it("forces the submitted task to use the current micro app context", () => {

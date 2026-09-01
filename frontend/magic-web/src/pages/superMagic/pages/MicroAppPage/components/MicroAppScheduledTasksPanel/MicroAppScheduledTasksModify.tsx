@@ -32,7 +32,10 @@ import mcpTempStorage from "@/components/business/AccountSetting/pages/Scheduled
 import type { FormValues } from "@/components/business/AccountSetting/pages/ScheduledTasks/types"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { ProjectFilesStore } from "@/stores/projectFiles"
-import { getNextRunTime } from "@/components/business/AccountSetting/pages/ScheduledTasks/utils"
+import {
+	getNextRunTime,
+	serializeScheduledTaskModel,
+} from "@/components/business/AccountSetting/pages/ScheduledTasks/utils"
 import type { MicroAppScheduledTasksModifyProps } from "./types"
 import { applyMicroAppScheduledTaskContext } from "./utils"
 
@@ -184,6 +187,12 @@ export function MicroAppScheduledTasksModify({
 
 			setPromptRequired(false)
 			const content = tiptapEditorRef.current?.editor?.getJSON() ?? {}
+			const imageModel = serializeScheduledTaskModel(
+				tiptapEditorRef.current?.selectedImageModel,
+			)
+			const videoModel = serializeScheduledTaskModel(
+				tiptapEditorRef.current?.selectedVideoModel,
+			)
 			onSubmit?.(
 				applyMicroAppScheduledTaskContext(
 					{
@@ -208,6 +217,8 @@ export function MicroAppScheduledTasksModify({
 									// Ignore legacy values so editing an old task repairs its mode on save.
 									topic_pattern: runtimeTopicMode,
 									model: tiptapEditorRef.current?.selectedModel,
+									...(imageModel && { image_model: imageModel }),
+									...(videoModel && { video_model: videoModel }),
 								},
 							},
 						},
@@ -254,6 +265,12 @@ export function MicroAppScheduledTasksModify({
 		if (content) tiptapEditorRef.current.setContent?.(content)
 		tiptapEditorRef.current.setSelectedModel?.(
 			initialValues.message_content.extra?.super_agent?.model || null,
+		)
+		tiptapEditorRef.current.setSelectedImageModel?.(
+			initialValues.message_content.extra?.super_agent?.image_model || null,
+		)
+		tiptapEditorRef.current.setSelectedVideoModel?.(
+			initialValues.message_content.extra?.super_agent?.video_model || null,
 		)
 	}, [initialValues, loading])
 
