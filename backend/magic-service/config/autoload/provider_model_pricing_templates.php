@@ -220,6 +220,38 @@ return [
             ],
         ],
         [
+            'code' => BillingType::VideoResolutionTokens->value,
+            'label' => '视频按分辨率 Token 计费',
+            'category' => Category::VGM->value,
+            'billing_type' => BillingType::VideoResolutionTokens->value,
+            'items' => [
+                ['billing_object' => BillingObject::videoToken('480p')->value, 'label' => '480P 视频输出 Token'],
+                ['billing_object' => BillingObject::videoTokenCost('480p')->value, 'label' => '480P 视频输出 Token 成本'],
+                ['billing_object' => BillingObject::videoToken('720p')->value, 'label' => '720P 视频输出 Token'],
+                ['billing_object' => BillingObject::videoTokenCost('720p')->value, 'label' => '720P 视频输出 Token 成本'],
+                ['billing_object' => BillingObject::videoToken('1080p')->value, 'label' => '1080P 视频输出 Token'],
+                ['billing_object' => BillingObject::videoTokenCost('1080p')->value, 'label' => '1080P 视频输出 Token 成本'],
+                ['billing_object' => BillingObject::videoToken('4k')->value, 'label' => '4K 视频输出 Token'],
+                ['billing_object' => BillingObject::videoTokenCost('4k')->value, 'label' => '4K 视频输出 Token 成本'],
+            ],
+        ],
+        [
+            'code' => BillingType::VideoResolutionReferenceVideoTokens->value,
+            'label' => '视频按分辨率与参考视频 Token 计费',
+            'category' => Category::VGM->value,
+            'billing_type' => BillingType::VideoResolutionReferenceVideoTokens->value,
+            'items' => [
+                ['billing_object' => BillingObject::videoReferenceVideoToken('480p')->value, 'label' => '480P 参考视频 Token'],
+                ['billing_object' => BillingObject::videoReferenceVideoTokenCost('480p')->value, 'label' => '480P 参考视频 Token 成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoToken('720p')->value, 'label' => '720P 参考视频 Token'],
+                ['billing_object' => BillingObject::videoReferenceVideoTokenCost('720p')->value, 'label' => '720P 参考视频 Token 成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoToken('1080p')->value, 'label' => '1080P 参考视频 Token'],
+                ['billing_object' => BillingObject::videoReferenceVideoTokenCost('1080p')->value, 'label' => '1080P 参考视频 Token 成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoToken('4k')->value, 'label' => '4K 参考视频 Token'],
+                ['billing_object' => BillingObject::videoReferenceVideoTokenCost('4k')->value, 'label' => '4K 参考视频 Token 成本'],
+            ],
+        ],
+        [
             'code' => BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
             'label' => '可灵视频按分辨率与输入条件视频时长计费',
             'category' => Category::VGM->value,
@@ -455,6 +487,21 @@ return [
             'category' => Category::VGM->value,
             'template_codes' => [
                 BillingType::VideoResolutionDuration->value,
+            ],
+        ],
+        [
+            'provider_code' => ProviderCode::DashScope->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [
+                BillingType::VideoResolutionDuration->value,
+            ],
+        ],
+        [
+            'provider_code' => ProviderCode::Gemini->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [
+                BillingType::VideoResolutionTokens->value,
+                BillingType::VideoResolutionReferenceVideoTokens->value,
             ],
         ],
         [

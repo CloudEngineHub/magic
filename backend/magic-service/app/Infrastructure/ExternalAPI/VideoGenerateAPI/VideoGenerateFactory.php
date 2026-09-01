@@ -11,8 +11,10 @@ use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterFactoryInterf
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeVideoAdapterRouter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
+use InvalidArgumentException;
 
 /**
  * 视频 provider adapter 工厂。
@@ -28,6 +30,7 @@ readonly class VideoGenerateFactory implements VideoGenerationProviderAdapterFac
         private VolcengineArkSeedanceVideoAdapter $volcengineArkSeedanceVideoAdapter,
         private DashScopeVideoAdapterRouter $dashScopeVideoAdapterRouter,
         private MiniMaxH3VideoAdapter $miniMaxH3VideoAdapter,
+        private ?GeminiVideoAdapterRouter $geminiVideoAdapterRouter = null,
     ) {
     }
 
@@ -38,7 +41,9 @@ readonly class VideoGenerateFactory implements VideoGenerationProviderAdapterFac
             VideoGenerateProviderType::DashScope => $this->dashScopeVideoAdapterRouter,
             VideoGenerateProviderType::Keling => $this->kelingVideoAdapterRouter,
             VideoGenerateProviderType::VolcengineArk => $this->volcengineArkSeedanceVideoAdapter,
-            VideoGenerateProviderType::MiniMax => $this->miniMaxH3VideoAdapter
+            VideoGenerateProviderType::MiniMax => $this->miniMaxH3VideoAdapter,
+            VideoGenerateProviderType::Gemini => $this->geminiVideoAdapterRouter
+                ?? throw new InvalidArgumentException('Gemini video adapter is not configured.'),
         };
     }
 

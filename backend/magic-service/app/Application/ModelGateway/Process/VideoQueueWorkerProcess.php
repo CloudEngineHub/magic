@@ -11,6 +11,9 @@ use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\ModelGateway\Service\QueueCoreDomainService;
 use App\Domain\ModelGateway\Service\QueueOperationExecutionDomainService;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
+use App\ErrorCode\VideoGenerateErrorCode;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Process\AbstractProcess;
@@ -109,7 +112,13 @@ class VideoQueueWorkerProcess extends AbstractProcess
     private function handleExecutionFailure(VideoQueueOperationEntity $operation, Throwable $throwable): void
     {
         try {
-            $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
+            $errorCode = 'EXECUTION_FAILED';
+            $message = '';
+            if ($throwable instanceof ProviderVideoException) {
+                $errorCode = $this->resolveProviderFailureCode($throwable);
+                $message = $this->resolveProviderFailureMessage($throwable);
+            }
+            $this->videoQueueDomainService->finishExecutionFailure($operation, $message, $errorCode);
             $this->queueCoreDomainService->finish(
                 $operation,
                 $this->videoQueueDomainService->operationTtlSeconds(),
@@ -123,5 +132,31 @@ class VideoQueueWorkerProcess extends AbstractProcess
                 'error' => $finishThrowable->getMessage(),
             ]);
         }
+    }
+
+    private function resolveProviderFailureCode(ProviderVideoException $throwable): string
+    {
+        $errorCode = $throwable->getErrorCode();
+        if ($errorCode !== null && ctype_digit($errorCode)) {
+            $videoErrorCode = VideoGenerateErrorCode::tryFrom((int) $errorCode);
+            if ($videoErrorCode instanceof VideoGenerateErrorCode) {
+                return (string) $videoErrorCode->value;
+            }
+        }
+
+        return 'PROVIDER_FAILED';
+    }
+
+    private function resolveProviderFailureMessage(ProviderVideoException $throwable): string
+    {
+        $errorCode = $throwable->getErrorCode();
+        if ($errorCode !== null && ctype_digit($errorCode)) {
+            $videoErrorCode = VideoGenerateErrorCode::tryFrom((int) $errorCode);
+            if ($videoErrorCode instanceof VideoGenerateErrorCode) {
+                return ProviderVideoErrorMapper::message($videoErrorCode);
+            }
+        }
+
+        return '';
     }
 }

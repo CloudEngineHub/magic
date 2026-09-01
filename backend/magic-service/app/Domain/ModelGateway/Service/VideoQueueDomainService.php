@@ -22,7 +22,9 @@ use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\ModelGateway\Repository\VideoQueueOperationRepositoryInterface;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\ErrorCode\MagicApiErrorCode;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -233,14 +235,29 @@ readonly class VideoQueueDomainService
         );
     }
 
-    public function finishExecutionFailure(VideoQueueOperationEntity $operation, string $message): void
+    public function finishExecutionFailure(VideoQueueOperationEntity $operation, string $message, ?string $errorCode = null): void
     {
+        $code = $errorCode ?? 'EXECUTION_FAILED';
+        $videoErrorCode = $this->resolveVideoErrorCode($errorCode);
+        if ($videoErrorCode instanceof VideoGenerateErrorCode) {
+            $code = (string) $videoErrorCode->value;
+            $message = $this->resolveVideoErrorMessage($videoErrorCode);
+        } elseif ($errorCode === 'PROVIDER_FAILED') {
+            $message = $this->resolvePublicErrorMessage($message);
+        } elseif ($errorCode !== null && $errorCode !== 'EXECUTION_FAILED') {
+            $code = 'PROVIDER_FAILED';
+            $message = $this->resolveVideoErrorMessage(VideoGenerateErrorCode::GENERAL_ERROR);
+        } else {
+            $code = 'EXECUTION_FAILED';
+            $message = $this->resolveVideoErrorMessage(VideoGenerateErrorCode::GENERAL_ERROR);
+        }
+
         $this->finish(
             $operation,
             VideoOperationStatus::FAILED,
             [],
-            'EXECUTION_FAILED',
-            $this->resolvePublicErrorMessage($message),
+            $code,
+            $message,
         );
     }
 
@@ -461,23 +478,21 @@ readonly class VideoQueueDomainService
         $frames = [];
         foreach ($requestData['inputs']['frames'] ?? [] as $frame) {
             $role = trim((string) ($frame['role'] ?? ''));
-            $uri = trim((string) ($frame['uri'] ?? ''));
-            if ($role !== '' && $uri !== '') {
-                $frames[] = [
-                    'role' => $role,
-                    'uri' => $uri,
-                ];
+            $media = is_array($frame) ? $this->normalizeReferenceMedia($frame, 'inputs.frames') : [];
+            if ($role !== '' && $media !== []) {
+                $frames[] = ['role' => $role] + $media;
             }
         }
 
         $referenceImages = [];
         foreach ($requestData['inputs']['reference_images'] ?? [] as $referenceImage) {
-            $uri = trim((string) ($referenceImage['uri'] ?? ''));
-            if ($uri === '') {
+            if (! is_array($referenceImage)) {
                 continue;
             }
-
-            $item = ['uri' => $uri];
+            $item = $this->normalizeReferenceMedia($referenceImage, 'inputs.reference_images');
+            if ($item === []) {
+                continue;
+            }
             $type = $this->normalizeReferenceImageType($referenceImage['type'] ?? null);
             if ($type !== '') {
                 $item['type'] = $type;
@@ -791,32 +806,14 @@ readonly class VideoQueueDomainService
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_videos is required');
         }
 
-        switch ($compositionMode) {
-            case VideoInputMode::Standard->value:
-            case VideoInputMode::VideoEdit->value:
-                return;
-            case VideoInputMode::ImageReference->value:
-                if ($referenceImages === []) {
-                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_images is required');
-                }
-                if ($referenceVideoInputs !== [] || $referenceAudioInputs !== [] || $frames !== []) {
-                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-                }
-                return;
-            case VideoInputMode::OmniReference->value:
-                if ($frames !== []) {
-                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-                }
-                return;
-            case VideoInputMode::KeyframeGuided->value:
-                if ($frames === []) {
-                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.frames is required');
-                }
-                if ($referenceImages !== [] || $referenceVideoInputs !== [] || $referenceAudioInputs !== []) {
-                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-                }
-                return;
-        }
+        $this->assertCompositionModeRequirements(
+            $task,
+            $compositionMode,
+            $frames,
+            $referenceImages,
+            $referenceVideoInputs,
+            $referenceAudioInputs,
+        );
     }
 
     private function normalizeCompositionMode(
@@ -857,6 +854,69 @@ readonly class VideoQueueDomainService
         return VideoInputMode::Standard->value;
     }
 
+    /**
+     * @param list<array{uri: string, type?: string}> $referenceImages
+     */
+    private function assertCompositionModeRequirements(
+        string $task,
+        string $compositionMode,
+        array $frames,
+        array $referenceImages,
+        array $referenceVideoInputs,
+        array $referenceAudioInputs
+    ): void {
+        if ($compositionMode === VideoInputMode::Standard->value) {
+            return;
+        }
+
+        if ($compositionMode === VideoInputMode::VideoEdit->value) {
+            if ($task !== VideoTaskType::Edit->value || $referenceImages !== [] || $frames !== []) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+            }
+
+            return;
+        }
+
+        if ($task !== VideoTaskType::Generate->value) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+        }
+
+        if ($compositionMode === VideoInputMode::ImageReference->value) {
+            if ($referenceImages === []) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_images is required');
+            }
+            if ($referenceVideoInputs !== [] || $referenceAudioInputs !== [] || $frames !== []) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+            }
+
+            return;
+        }
+
+        if ($compositionMode === VideoInputMode::OmniReference->value) {
+            if ($referenceImages === [] && $referenceVideoInputs === [] && $referenceAudioInputs === []) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'omni_reference inputs are required');
+            }
+            if ($frames !== []) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+            }
+
+            return;
+        }
+
+        $hasStartFrame = false;
+        foreach ($frames as $frame) {
+            $role = strtolower(trim((string) ($frame['role'] ?? '')));
+            $hasStartFrame = $hasStartFrame || in_array($role, ['start', 'first'], true);
+        }
+
+        if (! $hasStartFrame) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.frames.start is required');
+        }
+        if ($referenceImages !== [] || $referenceVideoInputs !== [] || $referenceAudioInputs !== []) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+        }
+    }
+
     private function finishSucceeded(VideoQueueOperationEntity $operation, array $result): void
     {
         $output = $result['output'] ?? null;
@@ -875,14 +935,23 @@ readonly class VideoQueueDomainService
     private function finishFailed(VideoQueueOperationEntity $operation, array $result): void
     {
         $error = $result['error'] ?? [];
+        $providerErrorCode = is_array($error) && (is_string($error['code'] ?? null) || is_int($error['code'] ?? null))
+            ? $error['code']
+            : null;
+        $videoErrorCode = $this->resolveVideoErrorCode($providerErrorCode);
+        $errorCode = $videoErrorCode instanceof VideoGenerateErrorCode
+            ? (string) $videoErrorCode->value
+            : 'PROVIDER_FAILED';
+        $errorMessage = $videoErrorCode instanceof VideoGenerateErrorCode
+            ? $this->resolveVideoErrorMessage($videoErrorCode)
+            : $this->resolveVideoErrorMessage(VideoGenerateErrorCode::GENERAL_ERROR);
+
         $this->finish(
             $operation,
             VideoOperationStatus::FAILED,
             [],
-            is_array($error) && is_string($error['code'] ?? null) ? $error['code'] : 'PROVIDER_FAILED',
-            $this->resolvePublicErrorMessage(
-                is_array($error) && is_string($error['message'] ?? null) ? $error['message'] : null
-            ),
+            $errorCode,
+            $errorMessage,
         );
     }
 
@@ -955,11 +1024,25 @@ readonly class VideoQueueDomainService
     private function resolvePublicErrorMessage(?string $message): string
     {
         $normalized = trim((string) $message);
-        if ($normalized === '') {
-            return self::ERROR_MESSAGE_FAILED;
+        if ($normalized !== '') {
+            return $normalized;
         }
 
-        return $normalized;
+        return self::ERROR_MESSAGE_FAILED;
+    }
+
+    private function resolveVideoErrorCode(null|int|string $errorCode): ?VideoGenerateErrorCode
+    {
+        if ($errorCode === null || (! is_int($errorCode) && ! ctype_digit($errorCode))) {
+            return null;
+        }
+
+        return VideoGenerateErrorCode::tryFrom((int) $errorCode);
+    }
+
+    private function resolveVideoErrorMessage(VideoGenerateErrorCode $errorCode): string
+    {
+        return ProviderVideoErrorMapper::message($errorCode);
     }
 
     private function normalizeAspectRatio(mixed $value): ?string
@@ -983,12 +1066,38 @@ readonly class VideoQueueDomainService
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s is invalid', $field));
         }
 
-        $uri = trim((string) ($value['uri'] ?? ''));
-        if ($uri === '') {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.uri is required', $field));
+        $normalized = $this->normalizeReferenceMedia($value, $field);
+        if ($normalized === []) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.uri or %s.base64 is required', $field, $field));
         }
 
-        return ['uri' => $uri];
+        return $normalized;
+    }
+
+    /** @return array<string, mixed> */
+    private function normalizeReferenceMedia(array $value, string $field): array
+    {
+        $uri = $this->normalizeOptionalString($value['uri'] ?? null);
+        $base64 = $this->normalizeOptionalString($value['base64'] ?? ($value['base64_data'] ?? null));
+        if ($uri === null && $base64 === null) {
+            return [];
+        }
+
+        $normalized = [];
+        if ($uri !== null) {
+            $normalized['uri'] = $uri;
+        }
+        if ($base64 !== null) {
+            $normalized['base64'] = $base64;
+        }
+        $mimeType = $this->normalizeOptionalString($value['mime_type'] ?? null);
+        if ($mimeType !== null) {
+            $normalized['mime_type'] = strtolower($mimeType);
+        }
+        if (array_key_exists('duration_seconds', $value) && is_numeric($value['duration_seconds'])) {
+            $normalized['duration_seconds'] = (int) $value['duration_seconds'];
+        }
+        return $normalized;
     }
 
     /**

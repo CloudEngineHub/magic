@@ -18,6 +18,7 @@ use App\Domain\ModelGateway\Repository\VideoQueueOperationRepositoryInterface;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\ErrorCode\MagicApiErrorCode;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
 use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface;
@@ -29,6 +30,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmni
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelingTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
@@ -996,6 +998,40 @@ class VideoQueueDomainServiceTest extends TestCase
         );
     }
 
+    public function testCreateOperationAcceptsVideoEditInputModeWithReferenceVideo(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'doubao-seedance-2-0-260128',
+            'task' => 'edit',
+            'input_mode' => VideoInputMode::VideoEdit->value,
+            'prompt' => 'replace the sky',
+            'inputs' => [
+                'reference_videos' => [
+                    ['uri' => 'https://example.com/source.mp4'],
+                ],
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $operation = $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'doubao-seedance-2-0-260128',
+            'provider-model-seedance-v2',
+            ProviderCode::VolcengineArk,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'supported_inputs' => ['text_prompt', 'reference_videos', VideoInputMode::VideoEdit->value],
+                'reference_images' => ['max_count' => 0, 'reference_types' => [], 'style_supported' => false],
+                'generation' => ['durations' => [5, 10], 'resolutions' => ['720p', '1080p']],
+                'constraints' => [],
+            ]),
+        );
+
+        $this->assertSame(VideoInputMode::VideoEdit->value, $operation->getRawRequest()['input_mode']);
+        $this->assertSame('https://example.com/source.mp4', $operation->getRawRequest()['inputs']['reference_videos'][0]['uri']);
+    }
+
     public function testCreateOperationRejectsEditTaskWithStandardInputMode(): void
     {
         $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
@@ -1457,20 +1493,108 @@ class VideoQueueDomainServiceTest extends TestCase
         );
     }
 
-    public function testFinishExecutionFailureKeepsProviderSpecificMessage(): void
+    public function testFinishExecutionFailureKeepsProviderSafeMessageWithProviderFailedCode(): void
     {
         $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
         $operation = $this->createFailedOperation();
 
         $service->finishExecutionFailure(
             $operation,
-            'cloudsway video post failed: cURL error 35: TLS connect error',
+            '视频服务暂时不可用，请稍后重试。',
+            'PROVIDER_FAILED',
         );
 
         $response = $service->buildOperationResponse($operation, []);
 
-        $this->assertSame('cloudsway video post failed: cURL error 35: TLS connect error', $response->getError()?->getMessage());
+        $this->assertSame('PROVIDER_FAILED', $response->getError()?->getCode());
+        $this->assertSame('视频服务暂时不可用，请稍后重试。', $response->getError()?->getMessage());
         $this->assertArrayNotHasKey('provider', $response->toArray());
+    }
+
+    public function testFinishExecutionFailurePersistsMappedVideoErrorCode(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $operation = $this->createFailedOperation();
+
+        $service->finishExecutionFailure(
+            $operation,
+            '提示词不符合要求，请调整后重试。',
+            (string) VideoGenerateErrorCode::INVALID_PROMPT->value,
+        );
+
+        $response = $service->buildOperationResponse($operation, []);
+
+        $this->assertSame((string) VideoGenerateErrorCode::INVALID_PROMPT->value, $response->getError()?->getCode());
+        $this->assertSame(ProviderVideoErrorMapper::message(VideoGenerateErrorCode::INVALID_PROMPT), $response->getError()?->getMessage());
+    }
+
+    public function testFinishExecutionFailureDoesNotExposeUnknownInternalMessage(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $operation = $this->createFailedOperation();
+
+        $service->finishExecutionFailure($operation, 'database password leaked in exception');
+
+        $response = $service->buildOperationResponse($operation, []);
+
+        $this->assertSame('EXECUTION_FAILED', $response->getError()?->getCode());
+        $this->assertSame(ProviderVideoErrorMapper::message(VideoGenerateErrorCode::GENERAL_ERROR), $response->getError()?->getMessage());
+        $this->assertStringNotContainsString('database password', (string) $response->getError()?->getMessage());
+    }
+
+    public function testFinishExecutionFailureNormalizesUnknownProviderCodeToProviderFailed(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $operation = $this->createFailedOperation();
+
+        $service->finishExecutionFailure($operation, 'raw provider response', 'provider-code');
+
+        $response = $service->buildOperationResponse($operation, []);
+
+        $this->assertSame('PROVIDER_FAILED', $response->getError()?->getCode());
+        $this->assertSame(ProviderVideoErrorMapper::message(VideoGenerateErrorCode::GENERAL_ERROR), $response->getError()?->getMessage());
+        $this->assertStringNotContainsString('raw provider response', (string) $response->getError()?->getMessage());
+    }
+
+    public function testSyncWithExecutionResultKeepsMappedVideoErrorCodeAndCompatibleDto(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $operation = $this->createFailedOperation();
+
+        $service->syncWithExecutionResult($operation, 'provider-task-1', [
+            'status' => 'failed',
+            'error' => [
+                'code' => (string) VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED->value,
+                'message' => '生成视频可能包含敏感内容，请调整提示词或素材后重试。',
+            ],
+        ]);
+
+        $response = $service->buildOperationResponse($operation, []);
+
+        $this->assertSame('failed', $response->getStatus());
+        $this->assertSame((string) VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED->value, $response->getError()?->getCode());
+        $this->assertSame(ProviderVideoErrorMapper::message(VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED), $response->getError()?->getMessage());
+        $this->assertArrayNotHasKey('provider', $response->toArray());
+    }
+
+    public function testSyncWithExecutionResultDoesNotExposeProviderMessageForMappedVideoErrorCode(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $operation = $this->createFailedOperation();
+
+        $service->syncWithExecutionResult($operation, 'provider-task-raw-message', [
+            'status' => 'failed',
+            'error' => [
+                'code' => (string) VideoGenerateErrorCode::INVALID_PROMPT->value,
+                'message' => 'provider internal details must not be exposed',
+            ],
+        ]);
+
+        $response = $service->buildOperationResponse($operation, []);
+
+        $this->assertSame((string) VideoGenerateErrorCode::INVALID_PROMPT->value, $response->getError()?->getCode());
+        $this->assertSame(ProviderVideoErrorMapper::message(VideoGenerateErrorCode::INVALID_PROMPT), $response->getError()?->getMessage());
+        $this->assertStringNotContainsString('provider internal details', (string) $response->getError()?->getMessage());
     }
 
     public function testCreateOperationPersistsProjectTopicTaskAndSourceContext(): void

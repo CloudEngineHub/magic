@@ -19,19 +19,20 @@ final class ProviderVideoException extends RuntimeException
         string $message,
         private readonly bool $retriable,
         private readonly ?int $httpStatus = null,
+        private readonly ?string $errorCode = null,
         ?Throwable $previous = null,
     ) {
         parent::__construct($message, 0, $previous);
     }
 
-    public static function retriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null): self
+    public static function retriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null, ?string $errorCode = null): self
     {
-        return new self($message, true, $httpStatus, $previous);
+        return new self($message, true, $httpStatus, $errorCode, $previous);
     }
 
-    public static function nonRetriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null): self
+    public static function nonRetriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null, ?string $errorCode = null): self
     {
-        return new self($message, false, $httpStatus, $previous);
+        return new self($message, false, $httpStatus, $errorCode, $previous);
     }
 
     public function isRetriable(): bool
@@ -42,6 +43,11 @@ final class ProviderVideoException extends RuntimeException
     public function getHttpStatus(): ?int
     {
         return $this->httpStatus;
+    }
+
+    public function getErrorCode(): ?string
+    {
+        return $this->errorCode;
     }
 
     public function getOriginalErrorMessage(): string

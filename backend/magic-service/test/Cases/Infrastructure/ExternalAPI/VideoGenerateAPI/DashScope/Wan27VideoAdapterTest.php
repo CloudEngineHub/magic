@@ -11,16 +11,56 @@ use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan27VideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan27GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\TranslatorInterface;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 
 /**
  * @internal
  */
 class Wan27VideoAdapterTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        ApplicationContext::setContainer(new readonly class implements ContainerInterface {
+            public function get(string $id): mixed
+            {
+                return $id === TranslatorInterface::class ? new class implements TranslatorInterface {
+                    public function trans(string $key, array $replace = [], ?string $locale = null): string
+                    {
+                        return $key;
+                    }
+
+                    public function transChoice(string $key, $number, array $replace = [], ?string $locale = null): string
+                    {
+                        return $key;
+                    }
+
+                    public function getLocale(): string
+                    {
+                        return 'zh_CN';
+                    }
+
+                    public function setLocale(string $locale)
+                    {
+                        return $this;
+                    }
+                } : null;
+            }
+
+            public function has(string $id): bool
+            {
+                return $id === TranslatorInterface::class;
+            }
+        });
+    }
+
     public function testBuildProviderPayloadMapsStandardToTextToVideo(): void
     {
         $adapter = $this->createAdapter();
@@ -53,8 +93,10 @@ class Wan27VideoAdapterTest extends TestCase
             'seed' => 123,
             'watermark' => false,
             'prompt_extend' => true,
+            'audio' => true,
         ], $payload['parameters']);
-        $this->assertContains('generation.generate_audio', $operation->getIgnoredParams());
+        $this->assertSame(true, $payload['parameters']['audio']);
+        $this->assertContains('generation.generate_audio', $operation->getAcceptedParams());
         $this->assertContains('generation.aspect_ratio', $operation->getAcceptedParams());
     }
 
@@ -82,6 +124,31 @@ class Wan27VideoAdapterTest extends TestCase
             ['type' => 'first_frame', 'url' => 'https://localhost/ref.png'],
         ], $payload['input']['media']);
         $this->assertSame('720P', $payload['parameters']['resolution']);
+    }
+
+    public function testBuildProviderPayloadNormalizesBase64ReferenceImageToDataUri(): void
+    {
+        $payload = $this->createAdapter()->buildProviderPayload($this->createOperation([
+            'input_mode' => VideoInputMode::ImageReference->value,
+            'inputs' => ['reference_images' => [[
+                'base64' => base64_encode('png-bytes'),
+                'mime_type' => 'image/png',
+            ]]],
+        ]));
+
+        self::assertSame('data:image/png;base64,' . base64_encode('png-bytes'), $payload['input']['media'][0]['url']);
+    }
+
+    public function testBuildProviderPayloadRejectsMalformedBase64ReferenceImage(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->createAdapter()->buildProviderPayload($this->createOperation([
+            'input_mode' => VideoInputMode::ImageReference->value,
+            'inputs' => ['reference_images' => [[
+                'base64' => 'not valid base64!!!',
+                'mime_type' => 'image/png',
+            ]]],
+        ]));
     }
 
     public function testBuildProviderPayloadMapsKeyframeGuidedToFirstAndLastFrame(): void
@@ -198,9 +265,45 @@ class Wan27VideoAdapterTest extends TestCase
 
         $this->assertSame('failed', $failed['status']);
         $this->assertSame([], $failed['output']);
-        $this->assertSame('PROVIDER_FAILED', $failed['error']['code']);
-        $this->assertSame('task canceled', $failed['error']['message']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $failed['error']['code']);
+        $this->assertSame('视频生成失败，请检查输入内容或稍后重试。', $failed['error']['message']);
         $this->assertSame('Canceled', $failed['error']['provider_code']);
+        $this->assertSame('task canceled', $failed['error']['provider_message']);
+    }
+
+    public function testRejectsGenerationValuesOutsideWan27Capability(): void
+    {
+        foreach ([
+            ['resolution' => '4k'],
+            ['duration_seconds' => 1],
+            ['aspect_ratio' => '4:3'],
+        ] as $generation) {
+            try {
+                $this->createAdapter()->buildProviderPayload($this->createOperation(['generation' => $generation]));
+                $this->fail('Expected invalid Wan2.7 generation value to be rejected.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString('Wan 2.7', $exception->getMessage());
+            }
+        }
+    }
+
+    public function testRejectsWan27R2vSubmissionWithoutReferenceUrls(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->createAdapter()->buildProviderPayload($this->createOperation([
+            'input_mode' => VideoInputMode::OmniReference->value,
+            'inputs' => [],
+        ]));
+    }
+
+    public function testAudioOutputAndPayloadFollowCapabilityDeclaration(): void
+    {
+        $operation = $this->createOperation(['generation' => ['generate_audio' => false]]);
+        $adapter = $this->createAdapter();
+
+        self::assertFalse($adapter->resolveHasAudioOutput('wan2.7', '', $operation->getRawRequest()));
+        self::assertTrue($adapter->resolveHasAudioOutput('wan2.7', '', ['generation' => ['generate_audio' => true]]));
+        self::assertSame(false, $adapter->buildProviderPayload($operation)['parameters']['audio']);
     }
 
     private function createAdapter(?DashScopeTransportInterface $transport = null): Wan27VideoAdapter

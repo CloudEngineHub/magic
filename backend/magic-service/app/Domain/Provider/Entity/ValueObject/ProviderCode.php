@@ -165,7 +165,11 @@ enum ProviderCode: string
                 default => false,
             },
             Category::VGM => match ($this) {
-                self::Keling, self::DashScope, self::VolcengineArk, self::MiniMax => true,
+                self::Keling,
+                self::DashScope,
+                self::VolcengineArk,
+                self::MiniMax,
+                self::Gemini => true,
                 default => false,
             },
             default => false,

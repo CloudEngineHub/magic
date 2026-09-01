@@ -37,9 +37,11 @@ use App\Domain\Operation\Event\OperationUsageFinishedEvent;
 use App\Domain\Operation\Event\OperationUsageWillStartEvent;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\ErrorCode\MagicApiErrorCode;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -68,7 +70,11 @@ readonly class VideoOperationAppService
 
     private const string INTERNAL_PROBE_RESULT_KEY = '__video_media_probe_result';
 
-    private const int PROBE_DOWNLOAD_MAX_BYTES = 104857600;
+    private const int PROVIDER_VIDEO_DOWNLOAD_MAX_BYTES = 104857600;
+
+    private const int PROVIDER_VIDEO_CONNECT_TIMEOUT_SECONDS = 10;
+
+    private const int PROVIDER_VIDEO_READ_TIMEOUT_SECONDS = 30;
 
     private const int STREAM_BUFFER_BYTES = 8192;
 
@@ -218,7 +224,11 @@ readonly class VideoOperationAppService
 
             $providerTaskId = $this->queueOperationExecutionDomainService->submit($operation, $config);
         } catch (ProviderVideoException $throwable) {
-            $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
+            $this->videoQueueDomainService->finishExecutionFailure(
+                $operation,
+                $this->resolveProviderFailureMessage($throwable),
+                $this->resolveProviderFailureCode($throwable),
+            );
             // provider 明确拒绝提交后任务不会继续运行，需要立即释放本次占用的个人槽位。
             $this->videoQueueDomainService->releaseUserActiveOperation($operation);
             $this->dispatchVideoGenerateFailedEvent(
@@ -228,15 +238,24 @@ readonly class VideoOperationAppService
                 $throwable
             );
             $this->videoQueueDomainService->deleteOperation($operation);
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $throwable->getMessage(), throwable: $throwable);
+            ExceptionBuilder::throw(
+                MagicApiErrorCode::ValidateFailed,
+                $this->resolveProviderFailureMessage($throwable),
+                throwable: $throwable,
+            );
         } catch (Throwable $throwable) {
             // 非业务异常会中断提交流程，释放槽位避免残留运行态阻塞后续提交。
+            $this->videoQueueDomainService->finishExecutionFailure($operation, '', 'EXECUTION_FAILED');
             $this->videoQueueDomainService->releaseUserActiveOperation($operation);
             if ($operationUsageEventDispatched) {
                 $this->dispatchOperationUsageFinished($operation, OperationUsageFinishedEvent::STATUS_FAILED);
             }
             $this->videoQueueDomainService->deleteOperation($operation);
-            throw $throwable;
+            ExceptionBuilder::throw(
+                MagicApiErrorCode::ValidateFailed,
+                __('video_generate.general_error'),
+                throwable: $throwable,
+            );
         }
         $this->logger->info('video operation submitted', [
             'operation_id' => $operation->getId(),
@@ -407,7 +426,7 @@ readonly class VideoOperationAppService
                 return;
             }
 
-            $this->videoQueueDomainService->finishExecutionFailure($operation, 'video operation lost before provider submission');
+            $this->videoQueueDomainService->finishExecutionFailure($operation, '', 'EXECUTION_FAILED');
             $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams);
             $this->videoQueueDomainService->saveOperation($operation);
             $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
@@ -524,7 +543,11 @@ readonly class VideoOperationAppService
                 'provider_task_id' => $providerTaskId,
                 'error' => $throwable->getMessage(),
             ]);
-            $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
+            $this->videoQueueDomainService->finishExecutionFailure(
+                $operation,
+                $this->resolveProviderFailureMessage($throwable),
+                $this->resolveProviderFailureCode($throwable),
+            );
             try {
                 $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams, $throwable);
             } finally {
@@ -549,6 +572,32 @@ readonly class VideoOperationAppService
             ]);
             throw $throwable;
         }
+    }
+
+    private function resolveProviderFailureCode(ProviderVideoException $throwable): string
+    {
+        $errorCode = $throwable->getErrorCode();
+        if ($errorCode !== null && ctype_digit($errorCode)) {
+            $videoErrorCode = VideoGenerateErrorCode::tryFrom((int) $errorCode);
+            if ($videoErrorCode instanceof VideoGenerateErrorCode) {
+                return (string) $videoErrorCode->value;
+            }
+        }
+
+        return 'PROVIDER_FAILED';
+    }
+
+    private function resolveProviderFailureMessage(ProviderVideoException $throwable): string
+    {
+        $errorCode = $throwable->getErrorCode();
+        if ($errorCode !== null && ctype_digit($errorCode)) {
+            $videoErrorCode = VideoGenerateErrorCode::tryFrom((int) $errorCode);
+            if ($videoErrorCode instanceof VideoGenerateErrorCode) {
+                return ProviderVideoErrorMapper::message($videoErrorCode);
+            }
+        }
+
+        return ProviderVideoErrorMapper::message(VideoGenerateErrorCode::GENERAL_ERROR);
     }
 
     /**
@@ -1019,26 +1068,60 @@ readonly class VideoOperationAppService
     private function normalizeExecutionResult(VideoQueueOperationEntity $operation, array $result): array
     {
         $providerResult = is_array($result['provider_result'] ?? null) ? $result['provider_result'] : null;
-        if ($providerResult === null) {
-            return $result;
-        }
-
-        $result['provider_result'] = $this->stripProviderVideoBytes($providerResult);
         $output = is_array($result['output'] ?? null) ? $result['output'] : [];
-        if (trim((string) ($output['video_url'] ?? '')) !== '') {
+        if ($providerResult !== null) {
+            $result['provider_result'] = $this->stripProviderVideoBytes($providerResult);
+        }
+
+        $storedFileKey = $this->buildStoredVideoFileKey($operation);
+        if ($storedFileKey !== null) {
+            try {
+                $fileLink = $this->fileDomainService->getLink(
+                    $operation->getOrganizationCode(),
+                    $storedFileKey,
+                    StorageBucketType::Private,
+                );
+                $storedUrl = trim((string) $fileLink?->getUrl());
+                if ($storedUrl !== '') {
+                    $output['video_url'] = $storedUrl;
+                    $result['output'] = $output;
+                    return $result;
+                }
+            } catch (Throwable) {
+            }
+        }
+
+        $providerVideo = $providerResult === null ? null : $this->extractProviderVideoBytes($providerResult);
+        $videoUrl = trim((string) ($output['video_url'] ?? ''));
+        if ($providerVideo === null && $videoUrl === '' && $providerResult !== null) {
+            $videoUrl = $this->extractProviderVideoUrl($providerResult) ?? '';
+        }
+        if ($providerVideo === null && $videoUrl === '') {
             return $result;
         }
 
-        $providerVideo = $this->extractProviderVideoBytes($providerResult);
-        if ($providerVideo === null) {
-            return $result;
+        try {
+            if ($providerVideo !== null) {
+                $uploadResult = $this->uploadProviderVideoBytes(
+                    $operation,
+                    $providerVideo['bytes_base64_encoded'],
+                    $providerVideo['mime_type'],
+                );
+            } else {
+                $downloadedVideo = $this->downloadProviderVideo($videoUrl);
+                $uploadResult = $this->uploadProviderVideoBytes(
+                    $operation,
+                    base64_encode($downloadedVideo['bytes']),
+                    $downloadedVideo['mime_type'],
+                );
+            }
+        } catch (Throwable $throwable) {
+            throw ProviderVideoException::nonRetriable(
+                'video output download failed',
+                $throwable,
+                errorCode: (string) VideoGenerateErrorCode::VIDEO_DOWNLOAD_FAILED->value,
+            );
         }
-
-        $uploadResult = $this->uploadProviderVideoBytes(
-            $operation,
-            $providerVideo['bytes_base64_encoded'],
-            $providerVideo['mime_type'],
-        );
         $output['video_url'] = $uploadResult['video_url'];
         if ($uploadResult['probe_result'] !== null) {
             $result[self::INTERNAL_PROBE_RESULT_KEY] = $uploadResult['probe_result'];
@@ -1046,6 +1129,151 @@ readonly class VideoOperationAppService
         $result['output'] = $output;
 
         return $result;
+    }
+
+    private function extractProviderVideoUrl(array $providerResult): ?string
+    {
+        $candidates = [$providerResult];
+        if (is_array($providerResult['data'] ?? null)) {
+            $candidates[] = $providerResult['data'];
+        }
+        if (is_array($providerResult['output'] ?? null)) {
+            $candidates[] = $providerResult['output'];
+        }
+        foreach ($candidates as $candidate) {
+            if (is_array($candidate['output'] ?? null)) {
+                $candidates[] = $candidate['output'];
+            }
+        }
+        foreach ($candidates as $candidate) {
+            foreach (['video_url', 'video_uri', 'videoUri', 'uri'] as $key) {
+                $value = trim((string) ($candidate[$key] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+            $response = is_array($candidate['response'] ?? null) ? $candidate['response'] : [];
+            $videos = is_array($response['videos'] ?? null) ? $response['videos'] : [];
+            foreach ($videos as $video) {
+                if (! is_array($video)) {
+                    continue;
+                }
+                foreach (['video_url', 'video_uri', 'videoUri', 'uri', 'url'] as $key) {
+                    $value = trim((string) ($video[$key] ?? ''));
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array{bytes: string, mime_type: string} */
+    private function downloadProviderVideo(string $url): array
+    {
+        $parts = parse_url($url);
+        if (! is_array($parts) || ! in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)) {
+            throw new RuntimeException('provider video url protocol is not allowed');
+        }
+        $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: false);
+        $remoteStream = null;
+        $headers = [];
+        for ($redirect = 0; $redirect <= 3; ++$redirect) {
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => self::PROVIDER_VIDEO_READ_TIMEOUT_SECONDS,
+                    'connect_timeout' => self::PROVIDER_VIDEO_CONNECT_TIMEOUT_SECONDS,
+                    'follow_location' => 0,
+                    'ignore_errors' => false,
+                ],
+                'ssl' => [
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                ],
+            ]);
+            $remoteStream = @fopen($safeUrl, 'rb', false, $context);
+            if (! is_resource($remoteStream)) {
+                throw new RuntimeException('provider video download stream failed');
+            }
+            $meta = stream_get_meta_data($remoteStream);
+            $headers = is_array($meta['wrapper_data'] ?? null) ? $meta['wrapper_data'] : [];
+            $location = null;
+            $isRedirect = false;
+            foreach ($headers as $header) {
+                if (preg_match('/^HTTP\/\S+\s+(30[12378])\b/i', (string) $header) === 1) {
+                    $isRedirect = true;
+                }
+                if (stripos((string) $header, 'location:') === 0) {
+                    $location = trim((string) preg_replace('/^location:\s*/i', '', (string) $header));
+                }
+            }
+            if (! $isRedirect || $location === null || $location === '') {
+                break;
+            }
+            fclose($remoteStream);
+            $remoteStream = null;
+            if ($redirect === 3) {
+                throw new RuntimeException('provider video redirect limit exceeded');
+            }
+            $safeUrl = SSRFUtil::getSafeUrl($this->resolveRedirectUrl($safeUrl, $location), replaceIp: false, allowRedirect: false);
+        }
+        if (! is_resource($remoteStream)) {
+            throw new RuntimeException('provider video download stream failed');
+        }
+        try {
+            $mimeType = '';
+            foreach ($headers as $header) {
+                if (stripos((string) $header, 'content-type:') === 0) {
+                    $mimeType = trim((string) preg_replace('/^content-type:\s*/i', '', (string) $header));
+                    $mimeType = trim((string) explode(';', $mimeType, 2)[0]);
+                    break;
+                }
+            }
+            if ($mimeType !== '' && ! str_starts_with(strtolower($mimeType), 'video/')) {
+                throw new RuntimeException('provider video content type is not video');
+            }
+            $bytes = '';
+            $downloadedBytes = 0;
+            while (! feof($remoteStream)) {
+                $buffer = fread($remoteStream, self::STREAM_BUFFER_BYTES);
+                if ($buffer === false) {
+                    throw new RuntimeException('provider video download read failed');
+                }
+                if ($buffer === '') {
+                    continue;
+                }
+                $downloadedBytes += strlen($buffer);
+                if ($downloadedBytes > self::PROVIDER_VIDEO_DOWNLOAD_MAX_BYTES) {
+                    throw new RuntimeException('provider video exceeds max size');
+                }
+                $bytes .= $buffer;
+            }
+
+            return [
+                'bytes' => $bytes,
+                'mime_type' => $mimeType !== '' ? $mimeType : 'video/mp4',
+            ];
+        } finally {
+            fclose($remoteStream);
+        }
+    }
+
+    private function resolveRedirectUrl(string $baseUrl, string $location): string
+    {
+        if (preg_match('#^https?://#i', $location) === 1) {
+            return $location;
+        }
+        $parts = parse_url($baseUrl);
+        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
+            throw new RuntimeException('provider video redirect target is invalid');
+        }
+        if (str_starts_with($location, '/')) {
+            return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . $location;
+        }
+        $path = isset($parts['path']) ? dirname($parts['path']) : '/';
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . rtrim($path, '/') . '/' . $location;
     }
 
     /**
@@ -1202,50 +1430,9 @@ readonly class VideoOperationAppService
 
     private function downloadProbeSourceToTempFile(string $url, string $tempPath): void
     {
-        // Probe sources come from provider execution results; keep the URL safety checks,
-        // but skip the extra redirect probe so we do not depend on live network behavior here.
-        $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: true);
-        $context = stream_context_create([
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ],
-        ]);
-        $remoteStream = fopen($safeUrl, 'rb', false, $context);
-        $localStream = fopen($tempPath, 'wb');
-        if (! is_resource($remoteStream) || ! is_resource($localStream)) {
-            if (is_resource($remoteStream)) {
-                fclose($remoteStream);
-            }
-            if (is_resource($localStream)) {
-                fclose($localStream);
-            }
-            throw new RuntimeException('open video probe stream failed');
-        }
-
-        try {
-            $downloadedBytes = 0;
-            while (! feof($remoteStream)) {
-                $buffer = fread($remoteStream, self::STREAM_BUFFER_BYTES);
-                if ($buffer === false) {
-                    throw new RuntimeException('read video probe stream failed');
-                }
-                if ($buffer === '') {
-                    continue;
-                }
-
-                $downloadedBytes += strlen($buffer);
-                if ($downloadedBytes > self::PROBE_DOWNLOAD_MAX_BYTES) {
-                    throw new RuntimeException('video probe file exceeds max size');
-                }
-
-                if (fwrite($localStream, $buffer) === false) {
-                    throw new RuntimeException('write video probe temp file failed');
-                }
-            }
-        } finally {
-            fclose($remoteStream);
-            fclose($localStream);
+        $downloaded = $this->downloadProviderVideo($url);
+        if (file_put_contents($tempPath, $downloaded['bytes']) === false) {
+            throw new RuntimeException('write video probe temp file failed');
         }
     }
 

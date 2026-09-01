@@ -308,6 +308,8 @@ use App\Infrastructure\ExternalAPI\Sms\Volcengine\Template;
 use App\Infrastructure\ExternalAPI\Sms\Volcengine\VolceApiClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Transport\ApiKeyDashScopeTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Transport\ApiKeyGeminiTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoProviderOperationExecutor;
 use App\Infrastructure\ImageGenerate\DefaultFontProvider;
@@ -368,6 +370,7 @@ $dependencies = [
     // domain 通过这个工厂接口拿到 adapter，保持依赖方向正确。
     VideoGenerationProviderAdapterFactoryInterface::class => VideoGenerateFactory::class,
     DashScopeTransportInterface::class => ApiKeyDashScopeTransport::class,
+    GeminiTransportInterface::class => ApiKeyGeminiTransport::class,
     MagicTokenRepositoryInterface::class => MagicTokenRepository::class,
     TemplateInterface::class => Template::class,
 

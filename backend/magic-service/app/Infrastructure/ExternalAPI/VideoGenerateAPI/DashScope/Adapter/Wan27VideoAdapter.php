@@ -12,9 +12,13 @@ use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan27GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ReferenceMediaPayload;
+use InvalidArgumentException;
 
 class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
 {
@@ -52,7 +56,15 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
 
     public function resolveHasAudioOutput(string $modelVersion, string $modelId, array $request): bool
     {
-        return true;
+        $capability = $this->capabilityProvider->resolveGenerationConfig($modelVersion, $modelId);
+        $capabilityData = $capability?->toArray() ?? [];
+        $generationConfig = is_array($capabilityData['generation'] ?? null) ? $capabilityData['generation'] : [];
+        if (! (bool) ($generationConfig['supports_generate_audio'] ?? false)) {
+            return false;
+        }
+
+        $generation = is_array($request['generation'] ?? null) ? $request['generation'] : [];
+        return (bool) ($generation['generate_audio'] ?? true);
     }
 
     public function buildProviderPayload(VideoQueueOperationEntity $operation): array
@@ -61,6 +73,13 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
         $inputMode = $this->resolveInputMode($request);
         $inputs = is_array($request['inputs'] ?? null) ? $request['inputs'] : [];
         $generation = is_array($request['generation'] ?? null) ? $request['generation'] : [];
+        $capability = $this->capabilityProvider->resolveGenerationConfig($operation->getModelVersion(), $operation->getModel());
+        if ($capability === null) {
+            throw new InvalidArgumentException('Wan 2.7 capability is unavailable.');
+        }
+        $capabilityData = $capability->toArray();
+        $generationConfig = is_array($capabilityData['generation'] ?? null) ? $capabilityData['generation'] : [];
+        $this->validateGeneration($generation, $generationConfig);
         $model = $this->capabilityProvider->resolveProviderModelName($inputMode);
 
         $input = [
@@ -82,6 +101,9 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
 
         if ($model === 'wan2.7-r2v') {
             $input['reference_urls'] = $this->extractReferenceUrls($inputs, $acceptedParams);
+            if ($input['reference_urls'] === []) {
+                throw new InvalidArgumentException('Wan 2.7 R2V requires reference URLs.');
+            }
             $parameters = [
                 'size' => $this->resolveR2vSize($generation, $acceptedParams, $ignoredParams, $usedGenerationFields),
                 'duration' => $duration,
@@ -126,11 +148,15 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
             $usedGenerationFields[] = 'enhance_prompt';
         }
 
-        if (array_key_exists('generate_audio', $generation)) {
+        if (array_key_exists('generate_audio', $generation) && ! (bool) ($generationConfig['supports_generate_audio'] ?? false)) {
             $ignoredParams[] = 'generation.generate_audio';
+        } elseif (array_key_exists('generate_audio', $generation)) {
+            $parameters['audio'] = (bool) $generation['generate_audio'];
+            $acceptedParams[] = 'generation.generate_audio';
+            $usedGenerationFields[] = 'generate_audio';
         }
         foreach (array_keys($generation) as $field) {
-            if (in_array($field, $usedGenerationFields, true) || $field === 'generate_audio') {
+            if (in_array($field, $usedGenerationFields, true)) {
                 continue;
             }
 
@@ -186,6 +212,34 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
             default => 'processing',
         };
 
+        if ($status === 'succeeded' && $videoUrl === null) {
+            return [
+                'status' => 'failed',
+                'provider_result' => $detail,
+                'output' => [],
+                'error' => [
+                    'code' => (string) VideoGenerateErrorCode::MISSING_VIDEO_DATA->value,
+                    'message' => ProviderVideoErrorMapper::message(VideoGenerateErrorCode::MISSING_VIDEO_DATA),
+                    'provider_code' => null,
+                    'provider_task_id' => $providerTaskId,
+                ],
+            ];
+        }
+
+        $providerCode = $this->firstNonEmptyString(
+            $output['code'] ?? null,
+            $detail['code'] ?? null,
+            is_array($output['error'] ?? null) ? ($output['error']['code'] ?? null) : null,
+            is_array($detail['error'] ?? null) ? ($detail['error']['code'] ?? null) : null,
+        );
+        $providerMessage = $this->firstNonEmptyString(
+            $output['task_status_msg'] ?? null,
+            $output['message'] ?? null,
+            is_array($output['error'] ?? null) ? ($output['error']['message'] ?? null) : null,
+            $detail['message'] ?? null,
+        );
+        $errorCode = ProviderVideoErrorMapper::resolve($providerCode);
+
         return [
             'status' => $status,
             'provider_result' => $detail,
@@ -195,11 +249,35 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
                 'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
             ],
             'error' => $status === 'failed' ? [
-                'code' => 'PROVIDER_FAILED',
-                'message' => (string) ($output['message'] ?? $detail['message'] ?? 'video generation failed'),
-                'provider_code' => isset($output['code']) ? (string) $output['code'] : (isset($detail['code']) ? (string) $detail['code'] : null),
+                'code' => (string) $errorCode->value,
+                'message' => ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
+                'provider_code' => $providerCode,
+                'provider_message' => $providerMessage,
             ] : null,
         ];
+    }
+
+    private function validateGeneration(array $generation, array $capability): void
+    {
+        $resolution = strtolower(trim((string) ($generation['resolution'] ?? ($capability['default_resolution'] ?? '720p'))));
+        $resolutions = is_array($capability['resolutions'] ?? null) ? $capability['resolutions'] : [];
+        if (! in_array($resolution, $resolutions, true)) {
+            throw new InvalidArgumentException('Wan 2.7 resolution is invalid.');
+        }
+
+        $duration = (int) ($generation['duration_seconds'] ?? ($capability['default_duration_seconds'] ?? 5));
+        $durations = is_array($capability['durations'] ?? null) ? $capability['durations'] : [];
+        if (! in_array($duration, $durations, true)) {
+            throw new InvalidArgumentException('Wan 2.7 duration is invalid.');
+        }
+
+        if (array_key_exists('aspect_ratio', $generation)) {
+            $aspectRatio = strtolower(trim((string) $generation['aspect_ratio']));
+            $aspectRatios = is_array($capability['aspect_ratios'] ?? null) ? $capability['aspect_ratios'] : [];
+            if (! in_array($aspectRatio, $aspectRatios, true)) {
+                throw new InvalidArgumentException('Wan 2.7 aspect ratio is invalid.');
+            }
+        }
     }
 
     private function resolveInputMode(array $request): string
@@ -259,7 +337,7 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
 
         $firstFrame = $this->firstNonEmptyString(
             $this->extractFrameUri($frames, 'start'),
-            $this->extractFirstUri($referenceImages),
+            $this->extractFirstUri($referenceImages, 'Wan 2.7 reference image', 'image/png'),
         );
         if ($firstFrame !== null) {
             $media[] = ['type' => 'first_frame', 'url' => $firstFrame];
@@ -274,7 +352,7 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
             $acceptedParams[] = 'inputs.frames.end';
         }
 
-        $firstClip = $this->extractFirstUri($referenceVideos);
+        $firstClip = $this->extractFirstUri($referenceVideos, 'Wan 2.7 reference video', 'video/mp4');
         if ($firstClip !== null) {
             $media[] = ['type' => 'first_clip', 'url' => $firstClip];
             $acceptedParams[] = 'inputs.reference_videos';
@@ -293,10 +371,11 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
                     continue;
                 }
 
-                $uri = $this->normalizeOptionalString($reference['uri'] ?? null);
-                if ($uri !== null) {
-                    $urls[] = $uri;
-                }
+                $urls[] = ReferenceMediaPayload::normalize(
+                    $reference,
+                    'Wan 2.7 ' . $field . ' entry',
+                    str_starts_with($field, 'reference_video') ? 'video/mp4' : 'image/png',
+                );
             }
             if ($references !== []) {
                 $acceptedParams[] = 'inputs.' . $field;
@@ -323,26 +402,22 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
             }
 
             $role = strtolower(trim((string) ($frame['role'] ?? '')));
-            $uri = $this->normalizeOptionalString($frame['uri'] ?? null);
-            if ($role === $targetRole && $uri !== null) {
-                return $uri;
+            if ($role === $targetRole) {
+                return ReferenceMediaPayload::normalize($frame, 'Wan 2.7 frame', 'image/png');
             }
         }
 
         return null;
     }
 
-    private function extractFirstUri(array $references): ?string
+    private function extractFirstUri(array $references, string $context = 'Wan 2.7 reference media', string $defaultMimeType = 'image/png'): ?string
     {
         foreach ($references as $reference) {
             if (! is_array($reference)) {
                 continue;
             }
 
-            $uri = $this->normalizeOptionalString($reference['uri'] ?? null);
-            if ($uri !== null) {
-                return $uri;
-            }
+            return ReferenceMediaPayload::normalize($reference, $context, $defaultMimeType);
         }
 
         return null;

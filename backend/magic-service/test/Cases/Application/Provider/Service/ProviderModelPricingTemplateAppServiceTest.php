@@ -57,6 +57,42 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
         self::assertContains(BillingObject::videoReferenceVideoTokenCost('4k')->value, $billingObjects);
     }
 
+    public function testDashScopeWanUsesResolutionDurationTemplate(): void
+    {
+        $config = require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php';
+        $service = new ProviderModelPricingTemplateAppService($config);
+
+        $templates = $service->queries(Category::VGM, ProviderCode::DashScope, 'wan3.0-video');
+
+        self::assertSame([
+            BillingType::VideoResolutionDuration->value,
+        ], array_column($templates, 'code'));
+        self::assertContains([
+            'provider_code' => ProviderCode::DashScope->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [BillingType::VideoResolutionDuration->value],
+        ], $config['provider_templates']);
+    }
+
+    public function testGeminiVideoUsesResolutionTokenTemplates(): void
+    {
+        $config = require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php';
+        $service = new ProviderModelPricingTemplateAppService($config);
+
+        $templates = $service->queries(Category::VGM, ProviderCode::Gemini, 'gemini-omni-1.1-flash');
+
+        self::assertSame([
+            BillingType::VideoResolutionTokens->value,
+            BillingType::VideoResolutionReferenceVideoTokens->value,
+        ], array_column($templates, 'code'));
+        $billingObjects = array_merge(...array_map(
+            static fn (array $template): array => array_column($template['items'], 'billing_object'),
+            $templates
+        ));
+        self::assertContains(BillingObject::videoToken('720p')->value, $billingObjects);
+        self::assertContains(BillingObject::videoReferenceVideoToken('720p')->value, $billingObjects);
+    }
+
     public function testQueriesFallsBackToCategoryDefaultsWhenProviderTemplateMissing(): void
     {
         $service = new ProviderModelPricingTemplateAppService($this->templatesConfig());
