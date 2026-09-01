@@ -9,6 +9,7 @@ import { useIframeAgentActions } from "../useIframeAgentActions"
 const mocks = vi.hoisted(() => ({
 	publish: vi.fn(),
 	createTopic: vi.fn(),
+	getTopicDetail: vi.fn(),
 	setSelectedTopic: vi.fn(),
 	setScopedTopics: vi.fn(),
 	setScopedSelectedTopic: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		createTopic: mocks.createTopic,
+		getTopicDetail: mocks.getTopicDetail,
 	},
 }))
 
@@ -78,12 +80,18 @@ vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
 
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	resolveMessageSendContext: (context: unknown) => context,
+	processMessageMentions: async (content: unknown) => content,
 }))
 
 describe("useIframeAgentActions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.createTopic.mockResolvedValue({ id: "topic-1" })
+		mocks.getTopicDetail.mockImplementation(async ({ id }: { id: string }) => ({
+			id,
+			chat_topic_id: `chat-${id}`,
+			chat_conversation_id: `conversation-${id}`,
+		}))
 		mocks.dispatchMessage.mockResolvedValue(true)
 		mocks.hasListeners.mockReturnValue(false)
 	})
@@ -146,8 +154,13 @@ describe("useIframeAgentActions", () => {
 			await result.current.createTopicAndSend({ message: "hello" })
 		})
 
-		expect(mocks.setScopedSelectedTopic).toHaveBeenCalledWith({ id: "topic-1" })
-		expect(mocks.setScopedTopics).toHaveBeenCalledWith([{ id: "topic-1" }, { id: "old-topic" }])
+		expect(mocks.setScopedSelectedTopic).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "topic-1" }),
+		)
+		expect(mocks.setScopedTopics).toHaveBeenCalledWith([
+			expect.objectContaining({ id: "topic-1" }),
+			{ id: "old-topic" },
+		])
 		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				options: expect.objectContaining({
@@ -158,7 +171,7 @@ describe("useIframeAgentActions", () => {
 					}),
 				}),
 				context: expect.objectContaining({
-					selectedTopic: { id: "topic-1" },
+					selectedTopic: expect.objectContaining({ id: "topic-1" }),
 				}),
 			}),
 		)
@@ -267,7 +280,9 @@ describe("useIframeAgentActions", () => {
 
 		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
-				context: expect.objectContaining({ selectedTopic: { id: "topic-1" } }),
+				context: expect.objectContaining({
+					selectedTopic: expect.objectContaining({ id: "topic-1" }),
+				}),
 			}),
 		)
 		expect(mocks.publish).not.toHaveBeenCalled()

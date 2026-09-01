@@ -1,7 +1,9 @@
 import { SuperMagicApi } from "@/apis"
 import { ProjectStorage } from "@/components/Agent/MCP/service/MCPStorageService"
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
+import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
 import { stripProjectResourceMentionDisplayMetadata } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import type {
@@ -77,6 +79,23 @@ export interface PreparedPanelSendResult {
 export interface EnsuredMessageProjectResult {
 	currentProject: ProjectListItem
 	currentTopic: Topic | null
+}
+
+export async function processMessageMentions(
+	content: JSONContent,
+	projectId: string,
+	topicId?: string,
+): Promise<JSONContent> {
+	const mentionItems = collectMentionItemsFromContent(content)
+	if (mentionItems.length === 0) return content
+
+	const result = await mentionItemsProcessor.processMentionItems(
+		content,
+		mentionItems,
+		projectId,
+		topicId,
+	)
+	return stripProjectResourceMentionDisplayMetadata(result.content, result.mentionItems).content
 }
 
 export function resolveMessageSendContext(
