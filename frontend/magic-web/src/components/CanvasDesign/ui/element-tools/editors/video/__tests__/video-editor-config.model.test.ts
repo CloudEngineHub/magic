@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { VideoInputModeConfig, VideoModelItem } from "../../../../../public/magic-types"
 import {
 	canAddReferenceAsset,
+	canReplaceReferenceAssetByCounts,
 	resolveReferenceAssetLimits,
 	validateReferenceAssetsByLimits,
 	resolveSelectableInputModeForAvailableModes,
@@ -186,5 +187,53 @@ describe("omni reference asset limits", () => {
 				ignoreModeMaxCountForTotal: true,
 			}).some((issue) => issue.reason === "variant"),
 		).toBe(true)
+	})
+
+	it("validates replacement after removing the old asset from the counts", () => {
+		const config: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos"],
+			variants: [
+				{
+					code: "image-and-video",
+					limits: {
+						reference_images: { min: 1, max: 1 },
+						reference_videos: { min: 1, max: 1 },
+					},
+				},
+			],
+		}
+
+		expect(
+			canReplaceReferenceAssetByCounts(
+				config,
+				{ images: 1, videos: 1, audios: 0 },
+				"image",
+				"image",
+			),
+		).toBe(true)
+		expect(
+			canReplaceReferenceAssetByCounts(
+				config,
+				{ images: 1, videos: 1, audios: 0 },
+				"image",
+				"video",
+			),
+		).toBe(false)
+	})
+
+	it("rejects replacement that would exceed effective limits", () => {
+		const config: VideoInputModeConfig = {
+			supported_fields: ["reference_images"],
+			reference_images: { max_count: 2 },
+		}
+
+		expect(
+			canReplaceReferenceAssetByCounts(
+				config,
+				{ images: 3, videos: 0, audios: 0 },
+				"image",
+				"image",
+			),
+		).toBe(false)
 	})
 })

@@ -61,7 +61,9 @@ import {
 	buildReferenceAssetInfos,
 	buildReferenceAssetInputs,
 	canAddReferenceAsset,
+	canReplaceReferenceAssetByCounts,
 	clampReferenceAssetsToLimits,
+	countReferenceAssets,
 	getAvailableInputModes,
 	getAvailableInputTabs,
 	getDefaultInputTab,
@@ -69,6 +71,7 @@ import {
 	getMaxFrameCount,
 	getMaxReferenceImageCount,
 	resolveReferenceAssetLimits,
+	validateReferenceAssetsByLimits,
 	resolveVideoFrameRoleSupport,
 	getRequestInputTab,
 	hasVideoInputs,
@@ -492,7 +495,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 	const getEffectiveReferenceAssetInfos = useCallback(() => {
 		const additionalInfos = getAdditionalReferenceAssetInfos?.() ?? []
-		if (additionalInfos.length === 0) return referenceImageInfos
+		if (additionalInfos.length === 0) return [...referenceImageInfos]
 		const existingIdentities = new Set(
 			referenceImageInfos.map((info) =>
 				getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
@@ -617,20 +620,34 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							supportsReferenceAudios ? "audio" : null,
 						].filter((kind): kind is VideoReferenceAssetKind => Boolean(kind)),
 			)
-			const replacing = Boolean(selectedResourceSlot?.path)
-			const nextAssets = getEffectiveReferenceAssetInfos()
+			const selectedPath = selectedResourceSlot?.path
+			const replacing = Boolean(selectedPath)
+			const effectiveAssets = getEffectiveReferenceAssetInfos()
+			const replacedInfo = selectedPath
+				? effectiveAssets.find((info) =>
+						areCanvasResourceReferencesSame(
+							info.path,
+							selectedPath,
+							resolveResourceReference,
+						),
+					)
+				: undefined
+			if (replacing && !replacedInfo) return []
+			const nextAssets = replacedInfo
+				? effectiveAssets.filter((info) => info !== replacedInfo)
+				: [...effectiveAssets]
 			const seenIdentities = new Set(
 				nextAssets.map((info) =>
 					getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 				),
 			)
-			return files.filter((file) => {
+			const filesToCheck = replacing ? files.slice(0, 1) : files
+			return filesToCheck.filter((file) => {
 				const kind = classifyReferenceAssetFile({
 					fileName: file.name,
 					mimeType: file.type,
 				})
 				if (kind === "unknown" || !allowedKinds.has(kind)) return false
-				if (replacing) return true
 				const identity = [
 					"local",
 					file.name.toLowerCase(),
@@ -639,12 +656,25 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					file.type.toLowerCase(),
 				].join(":")
 				if (seenIdentities.has(identity)) return false
-				if (
-					!canAddReferenceAsset(currentInputModeConfig, nextAssets, kind, {
-						ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
-					})
-				)
+				const limitOptions = {
+					ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+				}
+				if (replacedInfo) {
+					if (
+						!canReplaceReferenceAssetByCounts(
+							currentInputModeConfig,
+							countReferenceAssets(effectiveAssets),
+							replacedInfo.assetType,
+							kind,
+							limitOptions,
+						)
+					)
+						return false
+				} else if (
+					!canAddReferenceAsset(currentInputModeConfig, nextAssets, kind, limitOptions)
+				) {
 					return false
+				}
 				seenIdentities.add(identity)
 				nextAssets.push({ path: identity, src: "", fileName: file.name, assetType: kind })
 				return true
@@ -952,6 +982,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							: undefined
 					: undefined
 			const previousInfo = referenceImageInfos[slotIndex]
+			if (expectedAssetTypes?.length && !expectedAssetTypes.includes(assetType)) return
+			const isSelectedSlotReplacement = Boolean(
+				selectedSlot?.inputTab === "reference" &&
+				selectedSlot.path &&
+				previousInfo?.path &&
+				areCanvasResourceReferencesSame(
+					selectedSlot.path,
+					previousInfo.path,
+					resolveResourceReference,
+				),
+			)
 			if (
 				Boolean(
 					previousInfo?.path &&
@@ -975,6 +1016,25 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					resetSelectedResourceSlot()
 				}
 				return
+			}
+			if (isSelectedSlotReplacement) {
+				const effectiveCurrentInfos = getEffectiveReferenceAssetInfos()
+				const effectiveNextInfos = effectiveCurrentInfos.map((info) =>
+					areCanvasResourceReferencesSame(
+						info.path,
+						previousInfo.path,
+						resolveResourceReference,
+					)
+						? normalizedFileInfo
+						: info,
+				)
+				if (
+					validateReferenceAssetsByLimits(currentInputModeConfig, effectiveNextInfos, {
+						ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+					}).length > 0
+				) {
+					return
+				}
 			}
 			const deduped = referenceImageInfos.filter(
 				(info) =>
@@ -1052,6 +1112,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			scheduleReferenceMentionInserts,
 			resetSelectedResourceSlot,
 			currentInputModeConfig,
+			getEffectiveReferenceAssetInfos,
 			referenceImageInfos,
 			protectedReferencePaths,
 			resolveResourceReference,
@@ -1128,25 +1189,44 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const uploadReferenceFiles = useCallback(
 		async (files: File[]) => {
 			if (isUploading || !supportsReferenceAssets || files.length === 0) return
+			const selectedSlot = selectedResourceSlotRef.current
+			const replacementSlot =
+				selectedSlot?.inputTab === "reference" && selectedSlot.path ? selectedSlot : null
+			const replacementPath = replacementSlot?.path
 			const acceptedFiles = filterSelectedReferenceFiles(files)
-			if (acceptedFiles.length < files.length) {
+			const filesToUpload = replacementSlot ? acceptedFiles.slice(0, 1) : acceptedFiles
+			if (filesToUpload.length < files.length) {
 				toast.info(
 					t("videoEditor.referenceAssetPartialSkipped", {
 						defaultValue: "部分素材因类型不支持、重复或达到上限已跳过",
 					}),
 				)
 			}
-			if (acceptedFiles.length === 0) return
+			if (filesToUpload.length === 0) return
 
-			const startSlot = currentReferenceImages.length
+			const startSlot = replacementSlot
+				? replacementSlot.slotIndex
+				: currentReferenceImages.length
 			batchUploadBaseRef.current = {
 				inputTab: "reference",
 				startSlot,
 			}
-			await rawUploadFiles(acceptedFiles, {
-				currentReferenceFiles: currentReferenceImages,
-				maxSelectedFiles: files.length,
-				ignoreReferenceFileCapacity: true,
+			await rawUploadFiles(filesToUpload, {
+				currentReferenceFiles:
+					replacementSlot && replacementPath
+						? selectedReferenceFiles.filter(
+								(path) =>
+									!areCanvasResourceReferencesSame(
+										path,
+										replacementPath,
+										resolveResourceReference,
+									),
+							)
+						: currentReferenceImages,
+				maxReferenceFiles:
+					replacementSlot && replacementPath ? selectedReferenceMaxFiles : undefined,
+				maxSelectedFiles: replacementSlot ? 1 : filesToUpload.length,
+				ignoreReferenceFileCapacity: !replacementSlot,
 			})
 		},
 		[
@@ -1154,6 +1234,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			supportsReferenceAssets,
 			filterSelectedReferenceFiles,
 			currentReferenceImages,
+			resolveResourceReference,
+			selectedReferenceFiles,
+			selectedReferenceMaxFiles,
 			rawUploadFiles,
 			t,
 		],

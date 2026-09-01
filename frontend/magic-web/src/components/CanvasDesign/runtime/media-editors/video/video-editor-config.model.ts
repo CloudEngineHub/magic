@@ -7,6 +7,7 @@ import type {
 export {
 	canAddReferenceAsset,
 	canAddReferenceAssetByCounts,
+	canReplaceReferenceAssetByCounts,
 	clampReferenceAssetsToLimits,
 	countReferenceAssets,
 	countVideoReferenceAssetInfosByKind,

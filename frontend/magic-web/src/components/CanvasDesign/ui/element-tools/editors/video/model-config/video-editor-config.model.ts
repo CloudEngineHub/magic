@@ -28,6 +28,7 @@ import {
 import {
 	canAddReferenceAsset,
 	canAddReferenceAssetByCounts,
+	canReplaceReferenceAssetByCounts,
 	clampReferenceAssetsToLimits,
 	countReferenceAssets,
 	countVideoReferenceAssetInfosByKind,
@@ -46,6 +47,7 @@ import type {
 export {
 	canAddReferenceAsset,
 	canAddReferenceAssetByCounts,
+	canReplaceReferenceAssetByCounts,
 	clampReferenceAssetsToLimits,
 	countReferenceAssets,
 	countVideoReferenceAssetInfosByKind,

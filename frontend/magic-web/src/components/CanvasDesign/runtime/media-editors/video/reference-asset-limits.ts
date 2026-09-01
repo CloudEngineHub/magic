@@ -300,6 +300,40 @@ export function canAddReferenceAssetByCounts(
 	return true
 }
 
+/**
+ * 判断替换一个既有素材后，完整素材集合是否仍满足数量与变体约束。
+ * 替换语义先扣除旧素材，再按新增素材执行增量容量检查，最后校验替换后的完整组合。
+ */
+export function canReplaceReferenceAssetByCounts(
+	modeConfig: VideoInputModeConfig | undefined,
+	currentCounts: ReferenceAssetCounts,
+	replacedKind: ReferenceAssetKind,
+	nextKind: ReferenceAssetKind,
+	options: ResolveReferenceAssetLimitsOptions = {},
+): boolean {
+	const remainingCounts = { ...currentCounts }
+	if (replacedKind === "image") remainingCounts.images -= 1
+	if (replacedKind === "video") remainingCounts.videos -= 1
+	if (replacedKind === "audio") remainingCounts.audios -= 1
+
+	if (remainingCounts.images < 0 || remainingCounts.videos < 0 || remainingCounts.audios < 0)
+		return false
+
+	if (!canAddReferenceAssetByCounts(modeConfig, remainingCounts, nextKind, options)) {
+		return false
+	}
+
+	const nextCounts = { ...remainingCounts }
+	if (nextKind === "image") nextCounts.images += 1
+	if (nextKind === "video") nextCounts.videos += 1
+	if (nextKind === "audio") nextCounts.audios += 1
+
+	return (
+		validateReferenceAssetsByLimits(modeConfig, countsToAssets(nextCounts), options).length ===
+		0
+	)
+}
+
 export function validateReferenceAssetsByLimits(
 	modeConfig: VideoInputModeConfig | undefined,
 	assets: ReferenceAssetLike[] = [],
