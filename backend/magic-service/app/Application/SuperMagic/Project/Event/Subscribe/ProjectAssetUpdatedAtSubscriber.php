@@ -9,12 +9,12 @@ namespace App\Application\SuperMagic\Project\Event\Subscribe;
 
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentDomainService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
 use App\Domain\SuperMagic\File\Event\FileDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
-use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
@@ -39,7 +39,7 @@ use Throwable;
  * - #[Listener] 将该类注册为 Hyperf 事件监听器；
  * - #[AsyncListener] 使事件以异步方式处理，避免阻塞主业务请求。
  */
-#[AsyncListener]
+#[AsyncListener(driver: 'coroutine')]
 #[Listener]
 class ProjectAssetUpdatedAtSubscriber implements ListenerInterface
 {
