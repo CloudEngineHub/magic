@@ -1128,7 +1128,7 @@ describe("StyleManager", () => {
 
 			expect(element.getAttribute("href")).toBe("/new")
 			expect(element.getAttribute("target")).toBe("_blank")
-			expect(element.getAttribute("rel")).toBe("noopener")
+			expect(element.getAttribute("rel")).toBe("noopener noreferrer")
 			expect(element.getAttribute("aria-label")).toBe("Open link")
 		})
 
@@ -1158,6 +1158,39 @@ describe("StyleManager", () => {
 			await styleManager.updateElementAttributes("a#test", { download: "" })
 
 			expect(element.hasAttribute("download")).toBe(false)
+		})
+
+		it("should reject executable href schemes before changing the element", async () => {
+			container.innerHTML = "<a id='test' href='/safe'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await expect(
+				styleManager.updateElementAttributes("a#test", {
+					href: " javascript:alert(1)",
+				}),
+			).rejects.toThrow("Unsafe href URL protocol")
+
+			expect(element.getAttribute("href")).toBe("/safe")
+			expect(commandHistory.getUndoStackSize()).toBe(0)
+		})
+
+		it("should not restore an unsafe pre-existing href during undo", async () => {
+			container.innerHTML = "<a id='test' href='javascript:alert(1)'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", { title: "Updated" })
+			await styleManager.undo()
+
+			expect(element.hasAttribute("href")).toBe(false)
+		})
+
+		it("should add noopener and noreferrer for blank targets", async () => {
+			container.innerHTML = "<a id='test' href='/page'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", { target: "_blank" })
+
+			expect(element.getAttribute("rel")).toBe("noopener noreferrer")
 		})
 	})
 })

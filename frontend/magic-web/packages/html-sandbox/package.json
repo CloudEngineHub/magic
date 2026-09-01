@@ -38,6 +38,10 @@
 			"types": "./src/utils/parentOrigin.ts",
 			"import": "./dist/utils/parentOrigin.js"
 		},
+		"./utils/safeUrl": {
+			"types": "./src/utils/safeUrl.ts",
+			"import": "./dist/utils/safeUrl.js"
+		},
 		"./telemetry": {
 			"types": "./src/telemetry/index.ts",
 			"import": "./dist/telemetry/index.js"

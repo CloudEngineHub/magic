@@ -165,7 +165,10 @@ export function registerCommandHandlers(config: CommandHandlersConfig): void {
 			attributes: Record<string, string | null>
 		}
 		await styleManager.updateElementAttributes(selector, attributes)
-		EditorLogger.info("Update element attributes", { selector, attributes })
+		EditorLogger.info("Update element attributes", {
+			selector,
+			updatedKeys: Object.keys(attributes),
+		})
 		return { success: true }
 	})
 

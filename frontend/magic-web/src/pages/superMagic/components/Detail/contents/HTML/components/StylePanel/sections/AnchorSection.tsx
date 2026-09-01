@@ -12,6 +12,7 @@ import { cn } from "@/utils/cn"
 import type { SelectedElementInfo } from "../types"
 import { STYLE_PANEL_STYLES } from "../styles"
 import { EditorSelectContent } from "../../EditorFloating"
+import { isSafeHref } from "@dtyq/html-sandbox/utils/safeUrl"
 
 interface AnchorSectionProps {
 	selectedElement: SelectedElementInfo
@@ -36,6 +37,10 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 
 	const commit = async (field: AnchorField, value: string) => {
 		const normalized = value.trim()
+		if (field === "href" && !isSafeHref(normalized)) {
+			setDraft((current) => ({ ...current, href: attributes.href ?? "" }))
+			return
+		}
 		const nextValue = normalized || null
 		setDraft((current) => ({ ...current, [field]: normalized }))
 		if ((attributes[field] ?? "") === normalized) return

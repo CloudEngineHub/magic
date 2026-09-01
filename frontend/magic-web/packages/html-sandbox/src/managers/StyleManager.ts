@@ -19,6 +19,7 @@ import type { TextStyleManager } from "./TextStyleManager"
 import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
 import { camelToKebab } from "../utils/css"
+import { normalizeSafeHref } from "../utils/safeUrl"
 import {
 	assignEditorNodeIds,
 	assignUniqueIdsToClone,
@@ -97,6 +98,7 @@ const COMMON_ATTRIBUTE_NAMES: Record<string, string> = {
 function setCommonAttribute(element: HTMLElement, name: string, value: string | null): void {
 	const attributeName = COMMON_ATTRIBUTE_NAMES[name]
 	if (!attributeName) return
+	if (name === "href") value = normalizeSafeHref(value)
 	if (value === null || value.trim() === "") {
 		element.removeAttribute(attributeName)
 		return
@@ -106,10 +108,16 @@ function setCommonAttribute(element: HTMLElement, name: string, value: string | 
 
 function readCommonAttributes(element: HTMLElement): Record<string, string | null> {
 	return Object.fromEntries(
-		Object.entries(COMMON_ATTRIBUTE_NAMES).map(([key, attributeName]) => [
-			key,
-			element.getAttribute(attributeName),
-		]),
+		Object.entries(COMMON_ATTRIBUTE_NAMES).map(([key, attributeName]) => {
+			const value = element.getAttribute(attributeName)
+			if (key !== "href" || value === null) return [key, value]
+			try {
+				return [key, normalizeSafeHref(value)]
+			} catch {
+				// Do not allow undo to restore an unsafe href already present in the DOM.
+				return [key, null]
+			}
+		}),
 	)
 }
 
@@ -894,14 +902,33 @@ export class StyleManager {
 	): Promise<void> {
 		const element = findElement(selector)
 		const previousAttributes = readCommonAttributes(element)
+		const normalizedAttributes = Object.fromEntries(
+			Object.entries(attributes).map(([name, value]) => [
+				name,
+				name === "href" ? normalizeSafeHref(value) : value?.trim() || null,
+			]),
+		) as Record<string, string | null>
 
-		for (const [name, value] of Object.entries(attributes)) {
+		const nextTarget =
+			"target" in normalizedAttributes
+				? normalizedAttributes.target
+				: previousAttributes.target
+		if (nextTarget === "_blank") {
+			const currentRel =
+				"rel" in normalizedAttributes ? normalizedAttributes.rel : previousAttributes.rel
+			const relTokens = new Set((currentRel ?? "").split(/\s+/).filter(Boolean))
+			relTokens.add("noopener")
+			relTokens.add("noreferrer")
+			normalizedAttributes.rel = Array.from(relTokens).join(" ")
+		}
+
+		for (const [name, value] of Object.entries(normalizedAttributes)) {
 			setCommonAttribute(element, name, value)
 		}
 
 		this.commandHistory.push({
 			commandType: "UPDATE_ELEMENT_ATTRIBUTES",
-			payload: { selector, attributes },
+			payload: { selector, attributes: normalizedAttributes },
 			previousState: { selector, attributes: previousAttributes },
 			timestamp: Date.now(),
 			metadata: {

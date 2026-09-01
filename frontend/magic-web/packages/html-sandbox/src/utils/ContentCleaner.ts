@@ -3,6 +3,8 @@
  * Cleans injected editor elements from HTML
  */
 
+import { normalizeSafeHref } from "./safeUrl"
+
 export class ContentCleaner {
 	/**
 	 * Clean serialized document HTML without modifying author-owned inline styles.
@@ -16,6 +18,9 @@ export class ContentCleaner {
 
 		// Clean editing attributes
 		this.cleanEditingAttributes(doc)
+
+		// Apply the same href policy used by editor commands before persisting HTML.
+		this.cleanUnsafeHrefAttributes(doc)
 
 		// Serialize document
 		return this.serializeDocument(doc)
@@ -63,6 +68,31 @@ export class ContentCleaner {
 		// Clean html and body attributes
 		doc.documentElement?.removeAttribute("data-injected")
 		doc.body?.removeAttribute("data-injected")
+	}
+
+	private static cleanUnsafeHrefAttributes(doc: Document): void {
+		doc.querySelectorAll<HTMLAnchorElement>("a[href], area[href]").forEach((element) => {
+			const href = element.getAttribute("href")
+			if (href === null) return
+			try {
+				const normalizedHref = normalizeSafeHref(href)
+				if (normalizedHref === null) {
+					element.removeAttribute("href")
+				} else {
+					element.setAttribute("href", normalizedHref)
+				}
+			} catch {
+				element.removeAttribute("href")
+			}
+
+			if (element.getAttribute("target") !== "_blank") return
+			const relTokens = new Set(
+				(element.getAttribute("rel") ?? "").split(/\s+/).filter(Boolean),
+			)
+			relTokens.add("noopener")
+			relTokens.add("noreferrer")
+			element.setAttribute("rel", Array.from(relTokens).join(" "))
+		})
 	}
 
 	/**
