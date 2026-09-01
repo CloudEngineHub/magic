@@ -135,6 +135,7 @@ export class CanvasImagePresentationScheduler {
 	private readonly targetElementIdsByPath = new Map<string, Set<string>>()
 	private readonly pendingTasks = new Map<string, PendingPresentationTask>()
 	private readonly subscriptionCleanups: Array<() => void> = []
+	private readonly closedImages = new WeakSet<object>()
 	private phase: ImagePresentationPhase = "idle"
 	private frameHandle: FrameHandle | null = null
 	private generation = 0
@@ -150,6 +151,13 @@ export class CanvasImagePresentationScheduler {
 			}),
 			this.canvas.eventEmitter.on("resource:image:display-loaded", ({ data }) => {
 				this.enqueueForElement(data.elementId, data.path, data.resource)
+			}),
+			this.canvas.eventEmitter.on("resource:image:will-close", ({ data }) => {
+				this.closedImages.add(data.image)
+				this.pendingTasks.forEach((task, elementId) => {
+					if (task.resource.image === data.image) this.dropPendingTask(elementId)
+				})
+				this.updateCurrentCounts()
 			}),
 		]
 	}
@@ -333,6 +341,7 @@ export class CanvasImagePresentationScheduler {
 	}
 
 	private enqueueTask(target: InternalPresentationTarget, resource: LoadedResource): boolean {
+		if (this.closedImages.has(resource.image)) return false
 		if (!this.isResourceEligible(target, resource)) return false
 		const consumer = this.getConsumer(target.elementId)
 		if (!consumer) return false
@@ -373,6 +382,7 @@ export class CanvasImagePresentationScheduler {
 		target: InternalPresentationTarget,
 		resource: LoadedResource,
 	): boolean {
+		if (this.closedImages.has(resource.image)) return false
 		if (getVariantRank(resource.variant) > getVariantRank(target.variant)) {
 			if (this.phase === "moving") this.stats.movingUpgradeDeferredCount += 1
 			return false
@@ -402,7 +412,8 @@ export class CanvasImagePresentationScheduler {
 
 	private getConsumer(elementId: string): ImagePresentationConsumer | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId) as
-			Partial<ImagePresentationConsumer> | undefined
+			| Partial<ImagePresentationConsumer>
+			| undefined
 		if (
 			!element ||
 			typeof element.getDisplayResourceVariant !== "function" ||
@@ -445,6 +456,11 @@ export class CanvasImagePresentationScheduler {
 		// A resource larger than the frame budget is still admitted alone, guaranteeing
 		// progress without combining multiple expensive Konva image swaps in one frame.
 		for (const task of tasks) {
+			if (this.closedImages.has(task.resource.image)) {
+				this.pendingTasks.delete(task.elementId)
+				this.stats.staleDropCount += 1
+				continue
+			}
 			const resourcePixels = Math.max(
 				1,
 				task.resource.sourceWidth * task.resource.sourceHeight,

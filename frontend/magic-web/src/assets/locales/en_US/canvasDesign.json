@@ -285,6 +285,40 @@
 			"description": "Let AI help you easily generate various creative images!",
 			"title": "Canvas is empty"
 		},
+		"filter": {
+			"empty": "No layers match the current filters",
+			"locked": {
+				"all": "All",
+				"label": "Lock status",
+				"locked": "Locked",
+				"unlocked": "Unlocked"
+			},
+			"open": "Filter layers",
+			"reset": "Reset",
+			"title": "Filter",
+			"typeLabel": "Element type",
+			"types": {
+				"all": "All types",
+				"audio": "Audio",
+				"ellipse": "Ellipse",
+				"frame": "Frame",
+				"group": "Group",
+				"image": "Image",
+				"rectangle": "Rectangle",
+				"star": "Star",
+				"storyboard": "Storyboard",
+				"text": "Text",
+				"triangle": "Triangle",
+				"video": "Video",
+				"videoEdit": "Video editing"
+			},
+			"visibility": {
+				"all": "All",
+				"hidden": "Hidden",
+				"label": "Visibility",
+				"visible": "Visible"
+			}
+		},
 		"search": {
 			"clear": "Clear search",
 			"empty": "No matching layers found",
@@ -656,10 +690,13 @@
 		"reEditFromSaved": "Re-edit",
 		"reEnter": "Re-enter",
 		"referenceAsset": "Omni Mode",
+		"referenceAssetAllTypesMaxReached": "Image, video, and audio limits have all been reached",
+		"referenceAssetPartialSkipped": "Some media were skipped because they were unsupported, duplicated, or over the limit",
 		"referenceAssetTotalMaxReached": "Up to {{max}} reference assets are allowed",
 		"referenceAssetTotalMinNotMet": "At least {{min}} reference assets are required",
 		"referenceAssetTypeMaxReached": "Up to {{max}} {{assetType}} are allowed",
 		"referenceAssetTypeMinNotMet": "At least {{min}} {{assetType}} are required",
+		"referenceAssetVariantNotMet": "The selected media combination does not meet the model requirements",
 		"referenceImage": "Image",
 		"referenceImageWithIndex": "Image {{index}}",
 		"referenceSourceMaterial": "Sources",

@@ -147,8 +147,13 @@ export function classifyReferenceAssetFile(options: {
 	filePath?: string
 	fileName?: string
 	fileExtension?: string
+	mimeType?: string
 }): ReferenceAssetFileClass {
-	const { filePath, fileName, fileExtension } = options
+	const { filePath, fileName, fileExtension, mimeType } = options
+	const normalizedMimeType = mimeType?.toLowerCase().split(";", 1)[0] || ""
+	if (normalizedMimeType.startsWith("image/")) return "image"
+	if (normalizedMimeType.startsWith("video/")) return "video"
+	if (normalizedMimeType.startsWith("audio/")) return "audio"
 	const ext = normalizeReferenceExtension(fileExtension || filePath || fileName || "")
 	if (!ext) return "unknown"
 	if (SUPPORTED_IMAGE_EXTENSIONS.includes(ext as (typeof SUPPORTED_IMAGE_EXTENSIONS)[number]))
@@ -235,6 +240,10 @@ export function filterReferenceResourcePanelBatchItems<
 	currentReferenceFiles?: string[]
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	canAcceptNextAsset?: (
+		fileClass: ReferenceAssetFileClass,
+		currentAssetCounts: ReferenceAssetTypeCounts,
+	) => boolean
 	maxBatchItems?: number
 	resolveResourceReference?: ResolveCanvasResourceReference
 }): T[] {
@@ -244,6 +253,7 @@ export function filterReferenceResourcePanelBatchItems<
 		currentReferenceFiles = [],
 		assetLimits,
 		currentAssetCounts,
+		canAcceptNextAsset,
 		maxBatchItems,
 		resolveResourceReference,
 	} = options
@@ -272,16 +282,20 @@ export function filterReferenceResourcePanelBatchItems<
 
 		const consumesSlot = !selectionKey || !currentPathSet.has(selectionKey)
 		if (consumesSlot) {
+			const fileClass = classifyReferenceAssetFile({
+				filePath: item.data.file_path,
+				fileName: item.data.file_name,
+				fileExtension: item.data.file_extension,
+			})
+			if (fileClass === "unknown") continue
 			if (maxReferenceFiles !== undefined && nextReferenceFileCount + 1 > maxReferenceFiles) {
 				continue
 			}
 
 			if (assetLimits && nextAssetCounts) {
-				const fileClass = classifyReferenceAssetFile({
-					filePath: item.data.file_path,
-					fileName: item.data.file_name,
-					fileExtension: item.data.file_extension,
-				})
+				if (canAcceptNextAsset && !canAcceptNextAsset(fileClass, nextAssetCounts)) {
+					continue
+				}
 				if (!canAcceptNextReferenceAsset(fileClass, assetLimits, nextAssetCounts)) {
 					continue
 				}

@@ -455,7 +455,8 @@ export class StoryboardGenerationController {
 		height: number,
 		index: number,
 	): ImageElementData {
-		const contentId = createContentId("image-content")
+		// Content ID 使用统一的 content-<uuid> 命名；类型语义由 Element/Content 结构表达。
+		const contentId = createContentId()
 		return {
 			...BASE_ELEMENT_DATA_DEFAULTS,
 			id,

@@ -38,7 +38,7 @@ import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useLayersUI } from "../../../app/providers/LayersUIProvider"
 import { useElementMenu } from "../../panels/menu/ElementMenuContext"
 import { useMagic } from "../../../app/providers/MagicProvider"
-import type { CanvasDesignStorageData } from "../../../public/magic-types"
+import type { CanvasDesignStorageData, CanvasLayersFilterState } from "../../../public/magic-types"
 import { RectanglePreview } from "../previews/RectanglePreview"
 import { EllipsePreview } from "../previews/EllipsePreview"
 import { TrianglePreview } from "../previews/TrianglePreview"
@@ -47,49 +47,20 @@ import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { LayerTreeData } from "../types"
 import { convertLayerToTreeNode } from "../layerTreeAdapter"
 import LayerImageLowPreview from "../previews/ImageLowPreview"
+import {
+	DEFAULT_LAYERS_FILTER,
+	collectExpandableNodeIds,
+	filterLayerTreeData,
+	hasActiveLayersFilter,
+	normalizeLayersFilter,
+} from "../layerFilters"
+import LayersFilterPopover, { LayersFilterForm } from "./LayersFilterPopover"
 
 const LAYER_TREE_VIRTUAL_THRESHOLD = 80
 const LAYER_TREE_ROW_HEIGHT = 34
 
 function normalizeLayerSearchKeyword(value: string) {
 	return value.trim().toLowerCase()
-}
-
-function filterLayerTreeData(
-	nodes: TreeNode<LayerTreeData>[],
-	keyword: string,
-): TreeNode<LayerTreeData>[] {
-	if (!keyword) {
-		return nodes
-	}
-
-	return nodes.reduce<TreeNode<LayerTreeData>[]>((result, node) => {
-		const isMatched = normalizeLayerSearchKeyword(node.label).includes(keyword)
-		if (isMatched) {
-			result.push(node)
-			return result
-		}
-
-		const filteredChildren = node.children ? filterLayerTreeData(node.children, keyword) : []
-		if (filteredChildren.length) {
-			result.push({
-				...node,
-				children: filteredChildren,
-			})
-		}
-
-		return result
-	}, [])
-}
-
-function collectExpandableNodeIds(nodes: TreeNode<LayerTreeData>[], result = new Set<string>()) {
-	nodes.forEach((node) => {
-		if (node.children?.length) {
-			result.add(node.id)
-			collectExpandableNodeIds(node.children, result)
-		}
-	})
-	return result
 }
 
 export default function LayersDrawer() {
@@ -125,6 +96,17 @@ export default function LayersDrawer() {
 	// 监听画布 hover 事件，同步到图层面板
 	const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
 	const [layerSearchValue, setLayerSearchValue] = useState("")
+	const [isLayersFilterOpen, setIsLayersFilterOpen] = useState(false)
+	const [layersFilter, setLayersFilter] = useState<CanvasLayersFilterState>(() => {
+		if (methods?.getStorage) {
+			try {
+				return normalizeLayersFilter(methods.getStorage()?.layersFilter)
+			} catch (error) {
+				console.error("加载 layersFilter 状态失败:", error)
+			}
+		}
+		return { ...DEFAULT_LAYERS_FILTER }
+	})
 
 	// 订阅并获取画布数据
 	const elements = useCanvasData((manager) => manager.getAllElements(), ["element:change"], {
@@ -153,16 +135,17 @@ export default function LayersDrawer() {
 		[layerSearchValue],
 	)
 	const isLayerSearching = normalizedLayerSearchKeyword.length > 0
+	const isLayerFiltering = hasActiveLayersFilter(layersFilter)
 	const filteredTreeData = useMemo(
-		() => filterLayerTreeData(treeData, normalizedLayerSearchKeyword),
-		[treeData, normalizedLayerSearchKeyword],
+		() => filterLayerTreeData(treeData, normalizedLayerSearchKeyword, layersFilter),
+		[treeData, normalizedLayerSearchKeyword, layersFilter],
 	)
 	const searchExpandedElementIds = useMemo(() => {
-		if (!isLayerSearching) {
+		if (!isLayerSearching && !isLayerFiltering) {
 			return expandedElementIds
 		}
 		return collectExpandableNodeIds(filteredTreeData, new Set(expandedElementIds))
-	}, [expandedElementIds, filteredTreeData, isLayerSearching])
+	}, [expandedElementIds, filteredTreeData, isLayerFiltering, isLayerSearching])
 
 	// 获取选中的元素 ID（只读下与画布选区一致，便于高亮与定位）
 	const selectedIds = useMemo(() => selectedElementIds, [selectedElementIds])
@@ -216,6 +199,30 @@ export default function LayersDrawer() {
 		event.stopPropagation()
 		setLayerSearchValue("")
 	}, [])
+
+	const updateLayersFilter = useCallback(
+		<K extends keyof CanvasLayersFilterState>(key: K, value: CanvasLayersFilterState[K]) => {
+			setLayersFilter((previous) => ({ ...previous, [key]: value }))
+		},
+		[],
+	)
+
+	const resetLayersFilter = useCallback(() => {
+		setLayersFilter({ ...DEFAULT_LAYERS_FILTER })
+	}, [])
+
+	useEffect(() => {
+		if (!methods?.saveStorage) return
+		try {
+			const existingData = methods.getStorage() || {}
+			methods.saveStorage({
+				...existingData,
+				layersFilter: hasActiveLayersFilter(layersFilter) ? layersFilter : undefined,
+			})
+		} catch (error) {
+			console.error("保存 layersFilter 状态失败:", error)
+		}
+	}, [layersFilter, methods])
 
 	const renderLayerNode = useCallback(
 		(node: TreeNode<LayerTreeData>, context: RenderNodeContext) => {
@@ -484,41 +491,66 @@ export default function LayersDrawer() {
 			<div className={styles.layersDrawerHeader}>
 				<span className={styles.layersDrawerTitle}>{t("layers.title", "图层")}</span>
 				{!collapsed && !!elements?.length && (
-					<div
-						className={cn(
-							styles.layersDrawerSearch,
-							layerSearchValue && styles.layersDrawerSearchActive,
-						)}
-					>
-						<Search size={14} className={styles.layersSearchIcon} />
-						<Input
-							className={styles.layersSearchInput}
-							value={layerSearchValue}
-							placeholder={t("layers.search.placeholder", "搜索图层")}
-							onChange={handleLayerSearchChange}
-							onClick={(event) => event.stopPropagation()}
-							onKeyDown={(event) => event.stopPropagation()}
-						/>
-						{layerSearchValue && (
-							<IconButton
-								className={styles.layersSearchClearButton}
-								aria-label={t("layers.search.clear", "清空搜索")}
-								onClick={handleClearLayerSearch}
-							>
-								<X size={12} strokeWidth={2.5} />
-							</IconButton>
-						)}
+					<div className={styles.layersDrawerHeaderActions}>
+						<div
+							className={cn(
+								styles.layersDrawerSearch,
+								layerSearchValue && styles.layersDrawerSearchActive,
+							)}
+						>
+							<Search size={14} className={styles.layersSearchIcon} />
+							<Input
+								className={styles.layersSearchInput}
+								value={layerSearchValue}
+								placeholder={t("layers.search.placeholder", "搜索图层")}
+								onChange={handleLayerSearchChange}
+								onClick={(event) => event.stopPropagation()}
+								onKeyDown={(event) => event.stopPropagation()}
+							/>
+							{layerSearchValue && (
+								<IconButton
+									className={styles.layersSearchClearButton}
+									aria-label={t("layers.search.clear", "清空搜索")}
+									onClick={handleClearLayerSearch}
+								>
+									<X size={12} strokeWidth={2.5} />
+								</IconButton>
+							)}
+						</div>
+						<div className={styles.layersFilterActions}>
+							{isLayersFilterOpen && (
+								<button
+									type="button"
+									className={styles.layersFilterReset}
+									disabled={!isLayerFiltering}
+									onClick={resetLayersFilter}
+								>
+									{t("layers.filter.reset", "重置")}
+								</button>
+							)}
+							<LayersFilterPopover
+								filter={layersFilter}
+								isActive={isLayerFiltering}
+								isOpen={isLayersFilterOpen}
+								onOpenChange={setIsLayersFilterOpen}
+								onFilterChange={updateLayersFilter}
+							/>
+						</div>
 					</div>
 				)}
 			</div>
+			{!collapsed && isLayersFilterOpen && (
+				<LayersFilterForm filter={layersFilter} onFilterChange={updateLayersFilter} />
+			)}
+			{!collapsed && isLayersFilterOpen && <div className={styles.layersFilterDivider} />}
 			<div className={styles.layersDrawerBody}>
 				{!collapsed &&
 					(elements?.length ? (
 						filteredTreeData.length ? (
 							<Tree
 								key={
-									isLayerSearching
-										? `search:${normalizedLayerSearchKeyword}`
+									isLayerSearching || isLayerFiltering
+										? `filter:${normalizedLayerSearchKeyword}:${layersFilter.visibility}:${layersFilter.locked}:${layersFilter.types.join(",")}`
 										: "layers"
 								}
 								data={filteredTreeData}
@@ -530,9 +562,13 @@ export default function LayersDrawer() {
 								virtualize
 								virtualThreshold={LAYER_TREE_VIRTUAL_THRESHOLD}
 								virtualRowHeight={LAYER_TREE_ROW_HEIGHT}
-								initialScrollTop={isLayerSearching ? 0 : getLayersScrollTop()}
+								initialScrollTop={
+									isLayerSearching || isLayerFiltering ? 0 : getLayersScrollTop()
+								}
 								onScrollTopChange={
-									isLayerSearching ? undefined : handleLayersScrollTopChange
+									isLayerSearching || isLayerFiltering
+										? undefined
+										: handleLayersScrollTopChange
 								}
 								onSelect={(_nodes, ids) => {
 									// 智能判断：只有当选中状态发生变化时才自动聚焦
@@ -562,7 +598,9 @@ export default function LayersDrawer() {
 							/>
 						) : (
 							<div className={styles.layersSearchEmpty}>
-								{t("layers.search.empty", "未找到匹配图层")}
+								{isLayerFiltering
+									? t("layers.filter.empty", "当前筛选条件下没有匹配图层")
+									: t("layers.search.empty", "未找到匹配图层")}
 							</div>
 						)
 					) : (

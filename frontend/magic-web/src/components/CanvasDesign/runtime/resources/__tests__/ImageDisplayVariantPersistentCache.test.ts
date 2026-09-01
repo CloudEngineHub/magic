@@ -46,7 +46,7 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		vi.stubGlobal("indexedDB", new IDBFactory())
 	})
 
-	it("coalesces same-tick low reads into one IndexedDB batch", async () => {
+	it("coalesces same-tick low reads without immediate access writes", async () => {
 		const cache = new ImageDisplayVariantPersistentCache({ now: () => 10 })
 		const internals = cache as unknown as {
 			getDb: ReturnType<typeof vi.fn>
@@ -73,15 +73,11 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		expect(results).toHaveLength(100)
 		expect(internals.readRecordsByLookupKeys).toHaveBeenCalledTimes(1)
 		expect(internals.readRecordsByLookupKeys.mock.calls[0]?.[1]).toHaveLength(100)
-		expect(internals.touchRecords).toHaveBeenCalledTimes(1)
+		expect(internals.touchRecords).not.toHaveBeenCalled()
 	})
 
-	it("does not block low restore on the batched lastAccessAt update", async () => {
+	it("returns low restore without waiting for access writeback", async () => {
 		const cache = new ImageDisplayVariantPersistentCache({ now: () => 20 })
-		let resolvePut!: () => void
-		const putPending = new Promise<void>((resolve) => {
-			resolvePut = resolve
-		})
 		const internals = cache as unknown as {
 			getDb: ReturnType<typeof vi.fn>
 			readRecordsByLookupKeys: ReturnType<typeof vi.fn>
@@ -92,7 +88,7 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			const lookupKey = lookupKeys[0] ?? ""
 			return new Map([[lookupKey, [createRecord(lookupKey)]]])
 		})
-		internals.touchRecords = vi.fn(() => putPending)
+		internals.touchRecords = vi.fn(async () => undefined)
 
 		const record = await cache.getLatest({
 			scope: "scope-a",
@@ -102,9 +98,97 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		})
 
 		expect(record?.lastAccessAt).toBe(20)
-		expect(internals.touchRecords).toHaveBeenCalledTimes(1)
-		resolvePut()
-		await putPending
+		expect(internals.touchRecords).not.toHaveBeenCalled()
+	})
+
+	it("writes access time only after the 24-hour interval", async () => {
+		vi.useFakeTimers()
+		try {
+			const cache = new ImageDisplayVariantPersistentCache({
+				now: () => 24 * 60 * 60 * 1000 + 20,
+			})
+			const internals = cache as unknown as {
+				getDb: ReturnType<typeof vi.fn>
+				readRecordsByLookupKeys: ReturnType<typeof vi.fn>
+				touchRecords: ReturnType<typeof vi.fn>
+				flushPendingTouches: () => Promise<void>
+			}
+			internals.getDb = vi.fn(async () => ({}) as IDBDatabase)
+			internals.readRecordsByLookupKeys = vi.fn(async (_db, lookupKeys: string[]) => {
+				const lookupKey = lookupKeys[0] ?? ""
+				return new Map([[lookupKey, [createRecord(lookupKey, { lastAccessAt: 1 })]]])
+			})
+			internals.touchRecords = vi.fn(async () => undefined)
+
+			await cache.getLatest({
+				scope: "scope-a",
+				path: "images/a.png",
+				variant: "low",
+				rendition: "image-process",
+			})
+			expect(internals.touchRecords).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1000)
+			await internals.flushPendingTouches()
+			expect(internals.touchRecords).toHaveBeenCalledTimes(1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("removes the access index during v4 upgrade without deleting blobs", async () => {
+		const lookupKey = JSON.stringify(["scope-a", "image-process", "images/a.png", "low"])
+		const oldDbRequest = indexedDB.open("canvas-design-image-display-variant-cache-v1", 3)
+		const oldDb = await new Promise<IDBDatabase>((resolve, reject) => {
+			oldDbRequest.onupgradeneeded = () => {
+				const store = oldDbRequest.result.createObjectStore("resources", { keyPath: "key" })
+				store.createIndex("lookupKey", "lookupKey", { unique: false })
+				store.createIndex("lastAccessAt", "lastAccessAt", { unique: false })
+			}
+			oldDbRequest.onsuccess = () => resolve(oldDbRequest.result)
+			oldDbRequest.onerror = () => reject(oldDbRequest.error)
+		})
+		const transaction = oldDb.transaction("resources", "readwrite")
+		const store = transaction.objectStore("resources")
+		await new Promise<void>((resolve, reject) => {
+			const request = store.put(createRecord(lookupKey))
+			request.onsuccess = () => undefined
+			request.onerror = () => reject(request.error)
+			transaction.oncomplete = () => resolve()
+			transaction.onerror = () => reject(transaction.error)
+		})
+		oldDb.close()
+		const verifyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+			const request = indexedDB.open("canvas-design-image-display-variant-cache-v1", 3)
+			request.onsuccess = () => resolve(request.result)
+			request.onerror = () => reject(request.error)
+		})
+		const raw = await new Promise<unknown>((resolve, reject) => {
+			const request = verifyDb
+				.transaction("resources", "readonly")
+				.objectStore("resources")
+				.get(`record:${lookupKey}`)
+			request.onsuccess = () => resolve(request.result)
+			request.onerror = () => reject(request.error)
+		})
+		expect(raw).toBeTruthy()
+		verifyDb.close()
+
+		const cache = new ImageDisplayVariantPersistentCache()
+		const record = await cache.getLatest({
+			scope: "scope-a",
+			path: "images/a.png",
+			variant: "low",
+			rendition: "image-process",
+		})
+		expect(record?.byteSize).toBe(3)
+		const upgraded = await new Promise<IDBDatabase>((resolve, reject) => {
+			const request = indexedDB.open("canvas-design-image-display-variant-cache-v1")
+			request.onsuccess = () => resolve(request.result)
+			request.onerror = () => reject(request.error)
+		})
+		const upgradedStore = upgraded.transaction("resources", "readonly").objectStore("resources")
+		expect([...upgradedStore.indexNames]).toEqual(["lookupKey"])
+		upgraded.close()
 	})
 
 	it("coalesces low cache pruning after a write burst", async () => {
@@ -319,7 +403,7 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		if (!db) throw new Error("Expected IndexedDB")
 		const key = [
 			"canvas-display-image",
-			"v3",
+			"v4",
 			encodeURIComponent("scope-a"),
 			encodeURIComponent("image-process"),
 			encodeURIComponent("images/a.png"),
