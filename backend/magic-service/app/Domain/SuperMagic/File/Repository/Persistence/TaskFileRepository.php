@@ -109,6 +109,35 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return $list;
     }
 
+    public function getFilesByIdsWithTrash(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
+    {
+        if (empty($fileIds)) {
+            return [];
+        }
+
+        $chunks = array_chunk(array_values(array_unique($fileIds)), 500);
+        $list = [];
+
+        foreach ($chunks as $chunk) {
+            /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
+            $query = $this->model::withTrashed()->whereIn('file_id', $chunk);
+
+            if ($projectId > 0) {
+                $query->where('project_id', $projectId);
+            }
+
+            if ($spaceType !== null) {
+                $query->where('space_type', $spaceType);
+            }
+
+            foreach ($query->get() as $model) {
+                $list[] = new TaskFileEntity($model->toArray());
+            }
+        }
+
+        return $list;
+    }
+
     /**
      * @return TaskFileEntity[]
      */

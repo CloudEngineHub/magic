@@ -641,6 +641,17 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据文件ID批量获取文件实体，包含已软删除记录.
+     *
+     * @param array<int|string> $fileIds
+     * @return TaskFileEntity[]
+     */
+    public function getFilesByIdsWithTrash(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
+    {
+        return $this->taskFileRepository->getFilesByIdsWithTrash($fileIds, $projectId, $spaceType);
+    }
+
+    /**
      * Get the latest updated file by project ID.
      */
     public function getLatestUpdatedByProjectId(int $projectId): string
