@@ -33,7 +33,11 @@ from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
-from app.service.topic_persistence import TopicPersistenceManager, safe_extract_archive
+from app.service.topic_persistence import (
+    TopicPersistenceManager,
+    get_chat_history_excluded_dir_names,
+    safe_extract_archive,
+)
 
 logger = get_logger(__name__)
 
@@ -382,7 +386,7 @@ class AgentService(Base):
                 safe_extract_archive,
                 temp_file_path,
                 chat_history_dir,
-                skip_top_level="llm_request",
+                skip_top_levels=get_chat_history_excluded_dir_names(),
                 strip_top_level=".chat_history",
             )
             logger.info(f"聊天历史解压完成，处理 {extracted_count} 个条目")

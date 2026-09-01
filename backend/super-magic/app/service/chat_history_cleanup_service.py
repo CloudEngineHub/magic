@@ -166,7 +166,7 @@ class ChatHistoryCleanupService:
             target_entries=max_entries,
         )
         await evict_runtime_files(
-            PathManager.get_llm_request_dir(),
+            PathManager.get_llm_requests_dir(),
             policy=policy,
             suffixes=(".log",),
         )
@@ -176,13 +176,13 @@ class ChatHistoryCleanupService:
         root_files = await self._root_file_stats(root)
         subagent_stats = await self._directory_stats(PathManager.get_subagents_chat_history_dir())
         compacted_stats = await self._directory_stats(root / "compacted")
-        llm_stats = await self._directory_stats(PathManager.get_llm_request_dir())
+        llm_stats = await self._directory_stats(PathManager.get_llm_requests_dir())
         logger.info(
             "聊天记录存储统计: "
             f"main_files={root_files[0]}/{root_files[1]}B, "
             f"subagents={subagent_stats[0]}/{subagent_stats[1]}B, "
             f"compacted={compacted_stats[0]}/{compacted_stats[1]}B, "
-            f"llm_request={llm_stats[0]}/{llm_stats[1]}B"
+            f"llm_requests={llm_stats[0]}/{llm_stats[1]}B"
         )
 
     async def _root_file_stats(self, root: Path) -> tuple[int, int]:

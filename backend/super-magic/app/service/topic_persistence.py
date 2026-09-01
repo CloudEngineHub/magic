@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import os
+from collections.abc import Collection
 import json
+import os
 import shutil
 import tempfile
 import zipfile
@@ -12,6 +13,7 @@ from pathlib import PurePosixPath
 from typing import Dict, Optional
 
 from agentlang.logger import get_logger
+from app.path_manager import PathManager
 
 logger = get_logger(__name__)
 
@@ -20,6 +22,15 @@ CHAT_HISTORY_DIR_NAME = "chat_history"
 MIGRATION_STATE_FILE_NAME = ".migration_state.json"
 PERSISTENCE_STATE_FILE_NAME = ".persistence_state.json"
 STATE_SCHEMA_VERSION = 1
+LEGACY_LLM_REQUESTS_DIR_NAME = "llm_request"
+
+
+def get_chat_history_excluded_dir_names() -> frozenset[str]:
+    """Return current and legacy LLM log directories excluded from chat history."""
+    return frozenset({
+        LEGACY_LLM_REQUESTS_DIR_NAME,
+        PathManager.get_llm_requests_dir_name(),
+    })
 
 
 def should_upload_component(*, persistence_healthy: bool, component_persisted: bool) -> bool:
@@ -31,7 +42,7 @@ def safe_extract_archive(
     archive_path: str,
     target_dir: Path,
     *,
-    skip_top_level: Optional[str] = None,
+    skip_top_levels: Collection[str] = (),
     strip_top_level: Optional[str] = None,
 ) -> int:
     """Extract locally, filter unsafe/ignored members, then copy once to the target."""
@@ -48,7 +59,7 @@ def safe_extract_archive(
                 effective_parts = path.parts
                 if strip_top_level and effective_parts and effective_parts[0] == strip_top_level:
                     effective_parts = effective_parts[1:]
-                if skip_top_level and skip_top_level in effective_parts:
+                if skip_top_levels and any(name in effective_parts for name in skip_top_levels):
                     continue
                 members.append(member)
             zip_ref.extractall(temp_root, members=members)
@@ -169,11 +180,12 @@ class TopicPersistenceManager:
                 continue
             try:
                 entries = list(legacy_dir.iterdir())
+                excluded_dir_names = get_chat_history_excluded_dir_names()
                 with tempfile.TemporaryDirectory(prefix=f".topic-migrate-{name}-") as temp_dir:
                     staged_dir = Path(temp_dir) / name
                     staged_dir.mkdir()
                     for entry in entries:
-                        if name == "chat_history" and entry.name == "llm_request":
+                        if name == "chat_history" and entry.name in excluded_dir_names:
                             continue
                         destination = staged_dir / entry.name
                         if entry.is_dir() and not entry.is_symlink():
@@ -217,6 +229,7 @@ class TopicPersistenceManager:
         directory = self.chat_history_dir
         try:
             entries = directory.iterdir()
-            return any(entry.name != "llm_request" for entry in entries)
+            excluded_dir_names = get_chat_history_excluded_dir_names()
+            return any(entry.name not in excluded_dir_names for entry in entries)
         except OSError:
             return False

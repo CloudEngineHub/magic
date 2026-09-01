@@ -31,7 +31,7 @@ class PathManager(BasePathManager):
             verification/   ← 验证脚本产物
             background_compact/ ← 后台压缩临时上下文
             memory_after_run/ ← 运行后记忆整理临时上下文
-            llm_request/    ← LLM 调试日志
+            llm_requests/   ← LLM 调试日志
             slide-template-maker/ ← 幻灯片模板作者中间文件
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）
@@ -101,7 +101,7 @@ class PathManager(BasePathManager):
     _runtime_dir: ClassVar[Optional[Path]] = None
     _background_compact_dir_name: ClassVar[str] = "background_compact"
     _memory_after_run_dir_name: ClassVar[str] = "memory_after_run"
-    _llm_request_dir_name: ClassVar[str] = "llm_request"
+    _llm_requests_dir_name: ClassVar[str] = "llm_requests"
 
     # 后台 shell 任务日志目录：project_root/.runtime/bg_shell（按需创建）
     _bg_shell_dir_name: ClassVar[str] = "bg_shell"
@@ -627,10 +627,15 @@ class PathManager(BasePathManager):
         return cls.get_runtime_dir() / cls._memory_after_run_dir_name
 
     @classmethod
-    def get_llm_request_dir(cls) -> Path:
+    def get_llm_requests_dir_name(cls) -> str:
+        """获取 LLM 调试日志临时目录名。"""
+        return cls._llm_requests_dir_name
+
+    @classmethod
+    def get_llm_requests_dir(cls) -> Path:
         """获取 LLM 调试日志临时目录。"""
         cls._ensure_app_initialization()
-        return cls.get_runtime_dir() / cls._llm_request_dir_name
+        return cls.get_runtime_dir() / cls._llm_requests_dir_name
 
     @classmethod
     def get_bg_shell_dir(cls) -> Path:

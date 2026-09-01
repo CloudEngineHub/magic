@@ -88,9 +88,11 @@ owner：     SnippetEnvironment、run_python_snippet、run_sdk_snippet
 实现归属：  通用 evict_runtime_files()。
 
 -------------------------------------------------------------------------------
-[05] llm_request
+[05] llm_requests
 -------------------------------------------------------------------------------
-路径：      .runtime/llm_request/<model>_<time>_<status>.log
+路径：      .runtime/llm_requests/<model>_<time>_<status>.log
+兼容边界：  `.runtime` 只使用 `llm_requests`；`.topic` 迁移和归档同时排除旧的
+            `llm_request` 和当前的 `llm_requests`。
 内容：      LLM 调试请求日志；失败请求总是记录，成功请求由
             ENABLE_LLM_SUCCESS_REQUEST_LOG 控制。
 owner：     agentlang/agentlang/llms/utils/debug_logger.py、ChatHistoryCleanupService
@@ -180,7 +182,7 @@ owner：     SlideTemplateBuilder
     │   │   └── <temporary>.py
     │   └── run_sdk/                      直接子文件，临时 SDK 脚本
     │       └── <temporary>.py
-    ├── llm_request/                      直接子文件，LLM 调试日志
+    ├── llm_requests/                     直接子文件，LLM 调试日志
     │   └── <model>_<time>_<status>.log
     ├── background_compact/               一个目录代表一次后台压缩运行
     │   └── <agent-name><agent-id>/
@@ -444,7 +446,7 @@ LLM 调试日志只有一个线上清理入口：
     total_max_bytes
 
 `chat_history_cleanup` 中的配置仍然只服务 `.topic/chat_history` 的持久化历史，不控制
-`.runtime/llm_request`。`verification/real_compaction` 仍由
+`.runtime/llm_requests`。`verification/real_compaction` 仍由
 `scripts/verify_real_compaction.py` 自己管理，不读取 `runtime_cleanup`。
 
 ===============================================================================

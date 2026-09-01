@@ -45,7 +45,10 @@ from app.infrastructure.storage.factory import StorageFactory
 from app.infrastructure.storage.types import StorageResponse
 from app.path_manager import PathManager
 from app.service.agent_event.base_listener_service import BaseListenerService
-from app.service.topic_persistence import should_upload_component
+from app.service.topic_persistence import (
+    get_chat_history_excluded_dir_names,
+    should_upload_component,
+)
 from app.utils.init_client_message_util import InitClientMessageUtil
 from app.utils.path_utils import get_workspace_dir, get_storage_dir_with_fallback
 
@@ -691,8 +694,11 @@ class FileStorageListenerService:
                 zip_path = f"{archive_path}.zip"
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_ref:
                     source_dir = Path(chat_history_dir)
+                    excluded_dir_names = get_chat_history_excluded_dir_names()
                     for root, dirnames, filenames in os.walk(source_dir):
-                        dirnames[:] = [dirname for dirname in dirnames if dirname != "llm_request"]
+                        dirnames[:] = [
+                            dirname for dirname in dirnames if dirname not in excluded_dir_names
+                        ]
                         root_path = Path(root)
                         relative_root = root_path.relative_to(source_dir)
                         for dirname in dirnames:

@@ -23,9 +23,6 @@ ENABLE_LLM_SUCCESS_REQUEST_LOG = os.getenv(
     "ENABLE_LLM_SUCCESS_REQUEST_LOG", "false"
 ).lower() in ("true", "1", "yes", "on")
 
-LLM_REQUEST_LOG_DIR_NAME = "llm_request"
-
-
 def _get_llm_request_log_max_files() -> int:
     """读取 LLM 请求日志保留上限。"""
     from app.utils.runtime_storage import get_runtime_config_int
@@ -97,7 +94,7 @@ async def save_llm_debug_log(
         from app.path_manager import PathManager
         from app.utils.runtime_storage import ensure_runtime_directory
 
-        llm_request_dir = await ensure_runtime_directory(PathManager.get_llm_request_dir())
+        llm_requests_dir = await ensure_runtime_directory(PathManager.get_llm_requests_dir())
 
         # 计算耗时（毫秒）
         duration_ms = _calculate_duration_ms(start_timestamp, end_timestamp)
@@ -106,7 +103,7 @@ async def save_llm_debug_log(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
         safe_model_id = _sanitize_for_filename(debug_info.model_id)
         filename = f"{safe_model_id}_{timestamp}_{duration_ms}_{status}.log"
-        file_path = llm_request_dir / filename
+        file_path = llm_requests_dir / filename
 
         # 构建调试日志内容
         log_content = _build_log_content(
@@ -135,7 +132,7 @@ async def save_llm_debug_log(
 
 
 async def prune_llm_request_logs_if_needed() -> None:
-    """按配置保留 llm_request 目录下最新的日志文件，清理更旧和积压文件。"""
+    """按配置保留 llm_requests 目录下最新的日志文件，清理更旧和积压文件。"""
     try:
         max_files = _get_llm_request_log_max_files()
         if max_files <= 0:
@@ -143,13 +140,13 @@ async def prune_llm_request_logs_if_needed() -> None:
 
         from app.path_manager import PathManager
 
-        llm_request_dir = PathManager.get_llm_request_dir()
-        await _prune_llm_request_logs(llm_request_dir, max_files)
+        llm_requests_dir = PathManager.get_llm_requests_dir()
+        await _prune_llm_request_logs(llm_requests_dir, max_files)
     except Exception as e:
         logger.warning("清理 LLM 请求日志时出错: %s", e)
 
 
-async def _prune_llm_request_logs(llm_request_dir: Path, max_files: int) -> None:
+async def _prune_llm_request_logs(llm_requests_dir: Path, max_files: int) -> None:
     """保留目录下最新的 max_files 个 .log 文件，删除更旧的。"""
     if max_files <= 0:
         return
@@ -158,10 +155,10 @@ async def _prune_llm_request_logs(llm_request_dir: Path, max_files: int) -> None
         from app.utils.async_file_utils import async_exists, async_scandir, async_unlink
 
         # 调试日志目录按需创建；目录尚不存在时没有需要清理的内容
-        if not await async_exists(llm_request_dir):
+        if not await async_exists(llm_requests_dir):
             return
 
-        entries = await async_scandir(llm_request_dir)
+        entries = await async_scandir(llm_requests_dir)
         log_entries = [
             entry for entry in entries
             if entry.is_file() and entry.name.endswith(".log")
