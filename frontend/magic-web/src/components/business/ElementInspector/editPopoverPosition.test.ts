@@ -49,4 +49,17 @@ describe("getElementEditPopoverPosition", () => {
 		expect(result.width).toBe(232)
 		expect(result.height).toBe(172)
 	})
+
+	it("keeps its measured size while the portal container is not laid out", () => {
+		const result = getElementEditPopoverPosition(
+			{ left: 40, top: 40, width: 120, height: 80 },
+			{ width: 0, height: 0 },
+			{ width: 300, height: 260 },
+		)
+
+		expect(result.width).toBe(300)
+		expect(result.height).toBe(260)
+		expect(result.left).toBe(0)
+		expect(result.top).toBe(0)
+	})
 })

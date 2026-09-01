@@ -42,11 +42,20 @@ export function ElementEditPopover({
 }: ElementEditPopoverProps) {
 	const { t } = useTranslation("super")
 	const width = Math.min(300, Math.max(1, containerWidth - 16))
+	const targetLabel =
+		targetKind === "screenshot"
+			? t("stylePanel.inspector.screenshot")
+			: info
+				? getShortSelector(info)
+				: t("stylePanel.inspector.element")
+	const hasDeleteAction = Boolean(onDelete)
 	// The footer is part of the rendered popover, so the old fixed 204px estimate
 	// understated the real height and made edge selections choose the wrong side.
 	const [measuredHeight, setMeasuredHeight] = useState(260)
 	const [isConfirming, setIsConfirming] = useState(false)
 	const popoverRef = useRef<HTMLDivElement>(null)
+	const contentRef = useRef<HTMLDivElement>(null)
+	const footerRef = useRef<HTMLDivElement>(null)
 	const confirmTimerRef = useRef<number | null>(null)
 	const successCheckRef = useRef<HTMLSpanElement>(null)
 	const [flightStyle, setFlightStyle] = useState<CSSProperties | null>(null)
@@ -106,14 +115,13 @@ export function ElementEditPopover({
 		)
 	}
 	useLayoutEffect(() => {
-		const popover = popoverRef.current
-		if (!popover) return
+		const content = contentRef.current
+		const footer = footerRef.current
+		if (!content || !footer) return
 		const updateSize = () => {
-			// `getBoundingClientRect().height` is already constrained by maxHeight,
-			// which makes the measured value self-fulfilling and leaves a scrollbar
-			// even when the actual content would fit. scrollHeight keeps the natural
-			// content height available for the placement calculation.
-			const nextHeight = popover.scrollHeight
+			// Measure the content and footer separately. Reading the outer popover
+			// would feed its constrained height back into the next layout.
+			const nextHeight = content.scrollHeight + footer.offsetHeight
 			if (nextHeight > 0) {
 				setMeasuredHeight((previous) => (previous === nextHeight ? previous : nextHeight))
 			}
@@ -121,21 +129,15 @@ export function ElementEditPopover({
 		updateSize()
 		if (typeof ResizeObserver === "undefined") return
 		const observer = new ResizeObserver(updateSize)
-		observer.observe(popover)
+		observer.observe(content)
+		observer.observe(footer)
 		return () => observer.disconnect()
-	}, [])
+	}, [hasDeleteAction, screenshotDataUrl, screenshotLoading, targetLabel])
 	const position = getElementEditPopoverPosition(
 		box,
 		{ width: containerWidth, height: containerHeight },
 		{ width, height: measuredHeight },
 	)
-	const targetLabel =
-		targetKind === "screenshot"
-			? t("stylePanel.inspector.screenshot")
-			: info
-				? getShortSelector(info)
-				: t("stylePanel.inspector.element")
-
 	return (
 		<>
 			<div
@@ -165,7 +167,8 @@ export function ElementEditPopover({
 				</Button>
 
 				<div
-					className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3.5"
+					ref={contentRef}
+					className="no-scrollbar min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3.5"
 					data-testid="element-inspector-edit-content"
 				>
 					<div className="flex min-w-0 items-center gap-2 pr-8">
@@ -211,6 +214,7 @@ export function ElementEditPopover({
 				</div>
 
 				<div
+					ref={footerRef}
 					className="flex shrink-0 items-center gap-2 border-t border-border/60 bg-muted/20 px-3.5 py-2.5"
 					data-testid="element-inspector-edit-footer"
 				>

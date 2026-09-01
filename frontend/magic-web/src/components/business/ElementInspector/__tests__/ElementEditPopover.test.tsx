@@ -44,7 +44,7 @@ describe("ElementEditPopover", () => {
 		const content = screen.getByTestId("element-inspector-edit-content")
 
 		expect(popover).toHaveStyle({ overflow: "hidden" })
-		expect(content).toHaveClass("overflow-y-auto")
+		expect(content).toHaveClass("overflow-y-auto", "no-scrollbar")
 		expect(screen.getByTestId("element-inspector-edit-footer")).toHaveClass("shrink-0")
 	})
 
@@ -53,8 +53,34 @@ describe("ElementEditPopover", () => {
 		const content = screen.getByTestId("element-inspector-edit-content")
 
 		expect(popover).toHaveStyle({ height: "272px", overflow: "hidden" })
-		expect(content).toHaveClass("overflow-y-auto")
+		expect(content).toHaveClass("overflow-y-auto", "no-scrollbar")
 		expect(screen.getByTestId("element-inspector-edit-footer")).toHaveClass("shrink-0")
+	})
+
+	it("does not derive the next height from the constrained outer popover", () => {
+		Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+			configurable: true,
+			get() {
+				return this.getAttribute("data-testid") === "element-inspector-edit-content"
+					? 360
+					: 1
+			},
+		})
+
+		render(
+			<ElementEditPopover
+				box={{ left: 40, top: 40, width: 120, height: 80 }}
+				containerWidth={640}
+				containerHeight={500}
+				instruction=""
+				onInstructionChange={vi.fn()}
+				onConfirm={vi.fn()}
+				onCancel={vi.fn()}
+			/>,
+		)
+		const popover = screen.getByTestId("element-inspector-edit-popover")
+
+		expect(popover).toHaveStyle({ height: "360px" })
 	})
 
 	it("shows the screenshot loading state in the preview area", () => {

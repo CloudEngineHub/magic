@@ -50,16 +50,24 @@ export function getElementEditPopoverPosition(
 	gap = 8,
 	inset = 4,
 ): ElementEditPopoverPosition {
-	const maxWidth = Math.max(1, container.width - inset * 2)
-	const maxHeight = Math.max(1, container.height - inset * 2)
+	// A portal host can report zero dimensions for one render while it is being
+	// attached. Keep the measured popover size instead of collapsing it to 1px.
+	const hasContainerWidth = container.width > 0
+	const hasContainerHeight = container.height > 0
+	const maxWidth = hasContainerWidth
+		? Math.max(1, container.width - inset * 2)
+		: Math.max(1, popover.width)
+	const maxHeight = hasContainerHeight
+		? Math.max(1, container.height - inset * 2)
+		: Math.max(1, popover.height)
 	const width = Math.min(Math.max(1, popover.width), maxWidth)
 	const naturalHeight = Math.max(1, popover.height)
 	const height = Math.min(naturalHeight, maxHeight)
 	const bounds = {
-		left: inset,
-		top: inset,
-		right: Math.max(inset, container.width - inset),
-		bottom: Math.max(inset, container.height - inset),
+		left: hasContainerWidth ? inset : 0,
+		top: hasContainerHeight ? inset : 0,
+		right: hasContainerWidth ? Math.max(inset, container.width - inset) : width,
+		bottom: hasContainerHeight ? Math.max(inset, container.height - inset) : height,
 	}
 	const target = box
 
