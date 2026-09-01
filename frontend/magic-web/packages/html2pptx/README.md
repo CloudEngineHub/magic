@@ -21,9 +21,9 @@ pnpm run build
 pnpm run test
 ```
 
-Run the complete open-source P6 streaming gate (package checks, runtime
-surface checks, 200/300-page Node pressure, and Chromium/Worker/OPFS smoke).
-The Chromium gate requires Puppeteer's pinned browser:
+Run the complete open-source P6 validation (typecheck, tests, 200/300-page
+Node pressure, and Chromium/Worker/OPFS smoke). The Chromium checks require
+Puppeteer's pinned browser:
 
 ```bash
 pnpm exec puppeteer browsers install chrome
@@ -31,10 +31,8 @@ pnpm run ci:p6
 ```
 
 `ci:p6` writes ignored machine-readable reports under `benchmarks/results/`.
-It fails on a missing Worker, unavailable OPFS capability that is not reported
-structurally, a broken CJS/ESM or declaration entry, a root-absolute worker
-asset, a failed 200/300-page sample, a non-ZIP64 archive, a sink ACK mismatch,
-or a partial-file cleanup/terminal telemetry error.
+It runs the package typecheck, tests, build, browser capability checks, and
+the Node/Chromium benchmark suites.
 
 ## Benchmark
 
@@ -89,8 +87,13 @@ source or build configuration is part of this open-source package.
 
 `exportPPTXStreaming` is the forward-only large-export API. Its built-in packaging path requires
 the PptxGenJS v5 streaming runtime to provide `beginStreaming()`, `writeTo()`, and
-`createOpfsStagingStore()`. Applications must use the PptxGenJS v5 build selected by this branch
-or inject an equivalent runtime through the package runtime hooks.
+`createOpfsStagingStore()`. This repository obtains that runtime from the public registry
+`pptxgenjs@4.0.1` and applies the committed pnpm patch
+`patches/pptxgenjs@4.0.1.patch`; the patched package keeps the registry base version for pnpm
+resolution while exposing the v5 runtime. Run `pnpm install --frozen-lockfile` from
+`frontend/magic-web` so the lockfile-selected patch is applied. The committed patch, the
+`pnpm.patchedDependencies` entry in `package.json`, and the lockfile are the complete installation
+chain; no local PptxGenJS `.tgz` or separate metadata file is required.
 
 ### Packaging Worker URL
 

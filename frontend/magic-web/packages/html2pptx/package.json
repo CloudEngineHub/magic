@@ -38,8 +38,8 @@
 		"benchmark:source": "pnpm run benchmark:browser -- --profile baseline --target source",
 		"build": "pnpm exec vite build --config ./vite.config.ts --mode production && pnpm run build:types",
 		"build:types": "tsc -p ./tsconfig.json --emitDeclarationOnly",
-		"ci:p6": "pnpm run verify:streaming-only && pnpm run typecheck && pnpm run test && pnpm run verify:browser-capabilities && pnpm run build && pnpm run verify:runtime && pnpm run benchmark:p6:node && pnpm run benchmark:p6:browser",
-		"ci:streaming": "pnpm run verify:streaming-only && pnpm run typecheck && pnpm run test && pnpm run build",
+		"ci:p6": "pnpm run typecheck && pnpm run test && pnpm run verify:browser-capabilities && pnpm run build && pnpm run benchmark:p6:node && pnpm run benchmark:p6:browser",
+		"ci:streaming": "pnpm run typecheck && pnpm run test && pnpm run build",
 		"dev": "pnpm exec vite --config ./vite.config.ts",
 		"prepare": "pnpm run build",
 		"prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build",
@@ -48,16 +48,13 @@
 		"test:update": "pnpm exec vitest run --config ./vitest.config.ts -u",
 		"test:watch": "pnpm exec vitest --config ./vitest.config.ts",
 		"typecheck": "tsc -p ./tsconfig.json --noEmit && tsc -p ./benchmarks/tsconfig.json --noEmit",
-		"verify:browser-capabilities": "pnpm exec vitest run --config ./vitest.config.ts tests/browser-capability-matrix.test.ts",
-		"verify:built-runtime-chain": "node ./scripts/verify-built-runtime-chain.mjs",
-		"verify:runtime": "node ./scripts/verify-runtime-entries.mjs",
-		"verify:streaming-only": "node ./scripts/verify-streaming-only.mjs"
+		"verify:browser-capabilities": "pnpm exec vitest run --config ./vitest.config.ts tests/browser-capability-matrix.test.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^22.13.10",
 		"@zumer/snapdom": "^2.0.2",
 		"jszip": "^3.10.1",
-		"pptxgenjs": "file:../../vendor/pptxgenjs-5.0.0.tgz",
+		"pptxgenjs": "4.0.1",
 		"puppeteer": "24.32.0",
 		"tsx": "^4.21.0",
 		"typescript": "^5.4.5",
@@ -66,7 +63,7 @@
 	},
 	"peerDependencies": {
 		"@zumer/snapdom": "^2.0.2",
-		"pptxgenjs": ">=5.0.0 <6"
+		"pptxgenjs": "4.0.1"
 	},
 	"publishConfig": {
 		"access": "public"

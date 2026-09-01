@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
+import { createRequire } from "node:module"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { resolve } from "node:path"
@@ -8,16 +10,38 @@ import type { PackagingRuntimeIdentity } from "./src/packaging/streaming-types"
 const projectRoot = fileURLToPath(new URL(".", import.meta.url))
 const magicWebRoot = resolve(projectRoot, "../..")
 const packageJsonPath = resolve(projectRoot, "package.json")
-const vendorManifestPath = resolve(magicWebRoot, "vendor/pptxgenjs-5.0.0.manifest.json")
+const pptxgenjsPatchPath = resolve(magicWebRoot, "patches/pptxgenjs@4.0.1.patch")
+const installedPptxgenjsPackageJsonPath = resolve(
+	projectRoot,
+	"node_modules/pptxgenjs/package.json",
+)
+const installedPptxgenjsRequire = createRequire(installedPptxgenjsPackageJsonPath)
+
+// The upstream commit is provenance for the implementation carried by the
+// patch.  It is kept as a code constant alongside the patch gate; the patch
+// bytes themselves provide the artifact fingerprint below, so no sidecar
+// metadata file is needed for installation or runtime identity.
+const PPTXGENJS_SOURCE_COMMIT = "413429d2e0d4b7fa75291424fe88ba30b3ec794c"
+const PPTXGENJS_NAME = "pptxgenjs"
+const PPTXGENJS_BASE_VERSION = "4.0.1"
 
 interface Html2PptxPackageManifest {
 	version?: unknown
 }
 
-interface PptxGenJsVendorManifest {
+interface PptxGenJsInstalledPackageManifest {
+	name?: unknown
 	version?: unknown
-	sourceCommit?: unknown
-	sha256?: unknown
+}
+
+interface PptxGenJsRuntimePresentation {
+	version?: unknown
+	beginStreaming?: unknown
+	writeTo?: unknown
+}
+
+interface PptxGenJsRuntimeModule {
+	default?: unknown
 }
 
 export function getPackagingRuntimeIdentity(
@@ -26,26 +50,28 @@ export function getPackagingRuntimeIdentity(
 ): PackagingRuntimeIdentity {
 	const runtimeEdition = edition ?? resolveEdition(environment)
 	const packageManifest = readJson<Html2PptxPackageManifest>(packageJsonPath)
-	const vendorManifest = readJson<PptxGenJsVendorManifest>(vendorManifestPath)
 	const html2pptxVersion = requireNonEmptyString(
 		packageManifest.version,
 		`${packageJsonPath} version`,
 	)
-	const pptxgenjsVersion = requireNonEmptyString(
-		vendorManifest.version,
-		`${vendorManifestPath} version`,
+	const installedPackageManifest = readJson<PptxGenJsInstalledPackageManifest>(
+		installedPptxgenjsPackageJsonPath,
 	)
-	const sourceCommit = requireNonEmptyString(
-		vendorManifest.sourceCommit,
-		`${vendorManifestPath} sourceCommit`,
+	const installedName = requireNonEmptyString(
+		installedPackageManifest.name,
+		`${installedPptxgenjsPackageJsonPath} name`,
 	)
-	const sha256 = requireNonEmptyString(
-		vendorManifest.sha256,
-		`${vendorManifestPath} sha256`,
+	const installedBaseVersion = requireNonEmptyString(
+		installedPackageManifest.version,
+		`${installedPptxgenjsPackageJsonPath} version`,
 	)
-	if (!/^[0-9a-f]{64}$/.test(sha256)) {
-		throw new Error(`${vendorManifestPath} sha256 must be 64 lowercase hexadecimal characters`)
+	if (installedName !== PPTXGENJS_NAME || installedBaseVersion !== PPTXGENJS_BASE_VERSION) {
+		throw new Error(
+			`${installedPptxgenjsPackageJsonPath} must resolve the patched ${PPTXGENJS_NAME}@${PPTXGENJS_BASE_VERSION} package; found ${installedName}@${installedBaseVersion}`,
+		)
 	}
+	const pptxgenjsVersion = readInstalledPptxGenJsRuntimeVersion()
+	const patchSha256 = sha256(readFileSync(pptxgenjsPatchPath))
 
 	return Object.freeze({
 		protocolVersion: 2,
@@ -55,8 +81,8 @@ export function getPackagingRuntimeIdentity(
 			firstNonEmpty(environment.HTML2PPTX_BUILD_ID, environment.MAGIC_BUILD_ID) ??
 			readMagicGitCommit(),
 		pptxgenjsVersion,
-		sourceCommit,
-		artifactHash: `sha256:${sha256}`,
+		sourceCommit: PPTXGENJS_SOURCE_COMMIT,
+		artifactHash: `sha256:${patchSha256}`,
 	})
 }
 
@@ -137,6 +163,52 @@ function requireNonEmptyString(value: unknown, label: string): string {
 		throw new Error(`${label} must be a non-empty string`)
 	}
 	return value.trim()
+}
+
+function readInstalledPptxGenJsRuntimeVersion(): string {
+	let runtimeModule: unknown
+	try {
+		runtimeModule = installedPptxgenjsRequire(PPTXGENJS_NAME) as PptxGenJsRuntimeModule
+	} catch (error) {
+		throw new Error(
+			`Unable to load the installed patched ${PPTXGENJS_NAME} runtime`,
+			{ cause: error },
+		)
+	}
+
+	const runtimeConstructor =
+		typeof runtimeModule === "function"
+			? runtimeModule
+			: (runtimeModule as PptxGenJsRuntimeModule | undefined)?.default
+	if (typeof runtimeConstructor !== "function") {
+		throw new Error(
+			`${installedPptxgenjsPackageJsonPath} does not expose a PptxGenJS constructor`,
+		)
+	}
+
+	let presentation: PptxGenJsRuntimePresentation
+	try {
+		presentation = new (runtimeConstructor as new () => PptxGenJsRuntimePresentation)()
+	} catch (error) {
+		throw new Error("Unable to instantiate the installed patched PptxGenJS runtime", {
+			cause: error,
+		})
+	}
+
+	const version = requireNonEmptyString(
+		presentation.version,
+		`${installedPptxgenjsPackageJsonPath} runtime version`,
+	)
+	if (typeof presentation.beginStreaming !== "function" || typeof presentation.writeTo !== "function") {
+		throw new Error(
+			`${installedPptxgenjsPackageJsonPath} runtime must expose beginStreaming() and writeTo()`,
+		)
+	}
+	return version
+}
+
+function sha256(bytes: Uint8Array): string {
+	return createHash("sha256").update(bytes).digest("hex")
 }
 
 function firstNonEmpty(...values: (string | undefined)[]): string | undefined {

@@ -8,8 +8,8 @@ import type {
 import type { SerializablePPTNode } from "../ir/serialize"
 
 /**
- * Immutable identity for the html2pptx runtime and its vendored PptxGenJS
- * artifact. The identity is injected into both the main bundle and the
+ * Immutable identity for the html2pptx runtime and its patched PptxGenJS
+ * runtime. The identity is injected into both the main bundle and the
  * Packaging Worker at build time so a stale Worker cannot silently package
  * with a different protocol or runtime.
  */

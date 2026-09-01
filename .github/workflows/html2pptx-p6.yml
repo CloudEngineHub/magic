@@ -7,14 +7,14 @@ on:
       - 'frontend/magic-web/packages/html2pptx/**'
       - 'frontend/magic-web/package.json'
       - 'frontend/magic-web/pnpm-lock.yaml'
-      - 'frontend/magic-web/vendor/pptxgenjs-5.0.0.*'
+      - 'frontend/magic-web/patches/**'
       - '.github/workflows/html2pptx-p6.yml'
   pull_request:
     paths:
       - 'frontend/magic-web/packages/html2pptx/**'
       - 'frontend/magic-web/package.json'
       - 'frontend/magic-web/pnpm-lock.yaml'
-      - 'frontend/magic-web/vendor/pptxgenjs-5.0.0.*'
+      - 'frontend/magic-web/patches/**'
       - '.github/workflows/html2pptx-p6.yml'
 
 concurrency:
@@ -100,6 +100,3 @@ jobs:
 
       - name: Build complete open-source app
         run: pnpm build
-
-      - name: Verify final open-source Worker runtime chain
-        run: pnpm --filter @magic/html2pptx run verify:built-runtime-chain

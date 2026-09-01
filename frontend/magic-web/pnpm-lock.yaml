@@ -62,6 +62,9 @@ overrides:
   marked: 15.0.12
 
 patchedDependencies:
+  pptxgenjs@4.0.1:
+    hash: 5460b1ebc0ade0376d0c719e2b2d0dd6df0da46d3fdb176febebcd750368b26b
+    path: patches/pptxgenjs@4.0.1.patch
   tiptap-markdown@0.9.0:
     hash: dff3f968e3e70a1e0f1d3b502ab6441e71149a5ca5125a8c10915c43448d90f5
     path: patches/tiptap-markdown.patch
@@ -656,8 +659,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7
       pptxgenjs:
-        specifier: file:./vendor/pptxgenjs-5.0.0.tgz
-        version: file:vendor/pptxgenjs-5.0.0.tgz
+        specifier: 4.0.1
+        version: 4.0.1(patch_hash=5460b1ebc0ade0376d0c719e2b2d0dd6df0da46d3fdb176febebcd750368b26b)
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -1176,8 +1179,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       pptxgenjs:
-        specifier: file:../../vendor/pptxgenjs-5.0.0.tgz
-        version: file:vendor/pptxgenjs-5.0.0.tgz
+        specifier: 4.0.1
+        version: 4.0.1(patch_hash=5460b1ebc0ade0376d0c719e2b2d0dd6df0da46d3fdb176febebcd750368b26b)
       puppeteer:
         specifier: 24.32.0
         version: 24.32.0(typescript@5.8.3)
@@ -13168,10 +13171,8 @@ packages:
   pptx-preview@1.0.7:
     resolution: {integrity: sha512-YByocJuyxAR4YB4Q3+VAxdLfEvA5LojG1gAJsx2Mw0QU5FJPps/2fkJOupJ6oBbA+KdWRpuAk6G6T34rKCHVxw==}
 
-  pptxgenjs@file:vendor/pptxgenjs-5.0.0.tgz:
-    resolution: {integrity: sha512-0xFSb4aATIh9U8hHJwZidqoapG7SzQAsJ7QY1c94Tdcmbqw5MTcMMp8WgXRza1c8+o/Zwp5HpXe+F9YuUIHiAA==, tarball: file:vendor/pptxgenjs-5.0.0.tgz}
-    version: 5.0.0
-    engines: {node: '>=18'}
+  pptxgenjs@4.0.1:
+    resolution: {integrity: sha512-TeJISr8wouAuXw4C1F/mC33xbZs/FuEG6nH9FG1Zj+nuPcGMP5YRHl6X+j3HSUnS1f3at6k75ZZXPMZlA5Lj9A==}
 
   preact@10.12.1:
     resolution: {integrity: sha512-l8386ixSsBdbreOAkqtrwqHwdvR35ID8c3rKPa8lCWuO86dBi32QWHV4vfsZK1utLLFMvw+Z5Ad4XLkZzchscg==}
@@ -32176,7 +32177,7 @@ snapshots:
       tslib: 2.8.1
       uuid: 10.0.0
 
-  pptxgenjs@file:vendor/pptxgenjs-5.0.0.tgz:
+  pptxgenjs@4.0.1(patch_hash=5460b1ebc0ade0376d0c719e2b2d0dd6df0da46d3fdb176febebcd750368b26b):
     dependencies:
       '@zip.js/zip.js': 2.8.34
 
