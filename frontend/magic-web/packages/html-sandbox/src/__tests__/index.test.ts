@@ -48,4 +48,35 @@ describe("iframe runtime message boundary", () => {
 			}),
 		)
 	})
+
+	it("accepts parent requests to scroll inspector targets into view", () => {
+		const scrollToSelector = vi.spyOn(ElementInspectorHandler.prototype, "scrollToSelector")
+		const scrollToPosition = vi.spyOn(ElementInspectorHandler.prototype, "scrollToPosition")
+		vi.spyOn(window, "scrollTo").mockImplementation(() => undefined)
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				source: window,
+				origin: window.location.origin,
+				data: {
+					type: "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR",
+					selector: "#hero",
+				},
+			}),
+		)
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				source: window,
+				origin: window.location.origin,
+				data: {
+					type: "MAGIC_INSPECTOR_SCROLL_TO_POSITION",
+					left: 40,
+					top: 700,
+				},
+			}),
+		)
+
+		expect(scrollToSelector).toHaveBeenCalledWith("#hero")
+		expect(scrollToPosition).toHaveBeenCalledWith({ left: 40, top: 700 })
+	})
 })

@@ -12,6 +12,7 @@
 
 import { getElementSelector, isInjectedElement } from "../utils/dom"
 import { getParentOrigin } from "../utils/parentOrigin"
+import { snapdom } from "@zumer/snapdom"
 
 // Mirror the constants from the shared types (iframe-runtime is a separate build)
 const INSPECTOR_MSG = {
@@ -22,7 +23,123 @@ const INSPECTOR_MSG = {
 	HOVER_END: "MAGIC_INSPECTOR_HOVER_END",
 	TRACK: "MAGIC_INSPECTOR_TRACK",
 	RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED",
+	SCROLL_CHANGED: "MAGIC_INSPECTOR_SCROLL_CHANGED",
+	SCROLL_TO_SELECTOR: "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR",
+	SCROLL_TO_POSITION: "MAGIC_INSPECTOR_SCROLL_TO_POSITION",
+	SCREENSHOT_REQUEST: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
+	SCREENSHOT_ACK: "MAGIC_INSPECTOR_SCREENSHOT_ACK",
+	SCREENSHOT_RESPONSE: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
 } as const
+
+interface ScreenshotRequest {
+	requestId: string
+	selection: { top: number; left: number; width: number; height: number }
+	outputSize: { width: number; height: number }
+}
+
+function isFiniteRect(rect: ScreenshotRequest["selection"]): boolean {
+	return Object.values(rect).every((value) => Number.isFinite(value) && value >= 0)
+}
+
+function isFiniteSize(size: ScreenshotRequest["outputSize"]): boolean {
+	return Object.values(size).every((value) => Number.isFinite(value) && value > 0)
+}
+
+function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): HTMLElement {
+	const explicitRoot = document.querySelector<HTMLElement>("[data-magic-capture-root]")
+	if (explicitRoot) return explicitRoot
+
+	const roots = Array.from(
+		document.querySelectorAll<HTMLElement>(".slide-container, main.ft-canvas, main.slide"),
+	)
+	const centerX = selection.left + selection.width / 2
+	const centerY = selection.top + selection.height / 2
+	const containingRoot = roots
+		.map((root) => ({ root, rect: root.getBoundingClientRect() }))
+		.filter(
+			({ rect }) =>
+				centerX >= rect.left &&
+				centerX <= rect.right &&
+				centerY >= rect.top &&
+				centerY <= rect.bottom,
+		)
+		.sort((a, b) => a.rect.width * a.rect.height - b.rect.width * b.rect.height)[0]
+
+	return containingRoot?.root ?? document.body
+}
+
+async function waitForCaptureFrame(): Promise<void> {
+	if (document.fonts?.ready) await document.fonts.ready.catch(() => undefined)
+	await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+async function captureScreenshotBlob(request: ScreenshotRequest): Promise<Blob> {
+	if (
+		!request.requestId ||
+		!isFiniteRect(request.selection) ||
+		!isFiniteSize(request.outputSize)
+	) {
+		throw new Error("Invalid iframe screenshot request")
+	}
+	const outputWidth = Math.min(Math.max(Math.round(request.outputSize.width), 1), 4096)
+	const outputHeight = Math.min(Math.max(Math.round(request.outputSize.height), 1), 4096)
+	const root = resolveCaptureRoot(request.selection)
+	const rootRect = root.getBoundingClientRect()
+	if (rootRect.width <= 0 || rootRect.height <= 0) throw new Error("Capture root has no size")
+
+	const style = document.createElement("style")
+	style.setAttribute("data-magic-inspector-screenshot", "true")
+	style.textContent = `
+		*, *::before, *::after {
+			animation: none !important;
+			transition: none !important;
+			caret-color: transparent !important;
+			cursor: none !important;
+		}
+	`
+	;(document.head ?? document.documentElement).appendChild(style)
+	try {
+		await waitForCaptureFrame()
+		const result = await snapdom(root, {
+			width: rootRect.width,
+			height: rootRect.height,
+			dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 3),
+			backgroundColor: "#ffffff",
+		})
+		const sourceBlob = await result.toBlob({ type: "png" })
+		const bitmap = await createImageBitmap(sourceBlob)
+		try {
+			const canvas = document.createElement("canvas")
+			canvas.width = outputWidth
+			canvas.height = outputHeight
+			const context = canvas.getContext("2d")
+			if (!context) throw new Error("Canvas 2D context is unavailable")
+			const scaleX = bitmap.width / Math.max(rootRect.width, 1)
+			const scaleY = bitmap.height / Math.max(rootRect.height, 1)
+			const left = Math.max(0, (request.selection.left - rootRect.left) * scaleX)
+			const top = Math.max(0, (request.selection.top - rootRect.top) * scaleY)
+			const width = Math.max(
+				1,
+				Math.min(request.selection.width * scaleX, bitmap.width - left),
+			)
+			const height = Math.max(
+				1,
+				Math.min(request.selection.height * scaleY, bitmap.height - top),
+			)
+			context.drawImage(bitmap, left, top, width, height, 0, 0, outputWidth, outputHeight)
+			return await new Promise<Blob>((resolve, reject) => {
+				canvas.toBlob((blob) => {
+					if (blob) resolve(blob)
+					else reject(new Error("Failed to encode iframe screenshot"))
+				}, "image/png")
+			})
+		} finally {
+			bitmap.close()
+		}
+	} finally {
+		style.remove()
+	}
+}
 
 interface BoxModelSides {
 	top: number
@@ -319,12 +436,90 @@ export class ElementInspectorHandler {
 	private trackedElements = new Map<string, Element>()
 	private lastTrackedRects = new Map<string, InspectedElementInfo["rect"]>()
 	private rectRefreshScheduled = false
+	private scrollRefreshScheduled = false
 	private trackingListenersAttached = false
+
+	scrollToSelector(selector: string): void {
+		if (!selector.trim()) return
+		try {
+			document.querySelector<HTMLElement>(selector)?.scrollIntoView({
+				behavior: "auto",
+				block: "center",
+				inline: "nearest",
+			})
+		} catch {
+			// Ignore invalid selectors and pages that do not expose the target.
+		}
+	}
+
+	scrollToPosition(offset: { left: number; top: number }): void {
+		if (!Number.isFinite(offset.left) || !Number.isFinite(offset.top)) return
+		try {
+			window.scrollTo({
+				left: Math.max(0, offset.left),
+				top: Math.max(0, offset.top),
+				behavior: "auto",
+			})
+		} catch {
+			// Ignore disconnected or restricted documents.
+		}
+	}
+
+	async captureScreenshot(request: ScreenshotRequest): Promise<void> {
+		window.parent.postMessage(
+			{
+				type: INSPECTOR_MSG.SCREENSHOT_ACK,
+				requestId: request.requestId,
+				timestamp: Date.now(),
+			},
+			getParentOrigin(),
+		)
+		try {
+			const blob = await captureScreenshotBlob(request)
+			window.parent.postMessage(
+				{
+					type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
+					requestId: request.requestId,
+					success: true,
+					blob,
+					timestamp: Date.now(),
+				},
+				getParentOrigin(),
+			)
+		} catch (error) {
+			window.parent.postMessage(
+				{
+					type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
+					requestId: request.requestId,
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+					timestamp: Date.now(),
+				},
+				getParentOrigin(),
+			)
+		}
+	}
 
 	private postTrackedRects(rects: { selector: string; rect: InspectedElementInfo["rect"] }[]) {
 		try {
 			window.parent.postMessage(
 				{ type: INSPECTOR_MSG.RECTS_CHANGED, rects, timestamp: Date.now() },
+				getParentOrigin(),
+			)
+		} catch {
+			// ignore
+		}
+	}
+
+	private postScrollOffset() {
+		try {
+			window.parent.postMessage(
+				{
+					type: INSPECTOR_MSG.SCROLL_CHANGED,
+					left: Math.max(0, window.scrollX || window.pageXOffset || 0),
+					top: Math.max(0, window.scrollY || window.pageYOffset || 0),
+					timestamp: Date.now(),
+				},
 				getParentOrigin(),
 			)
 		} catch {
@@ -382,17 +577,31 @@ export class ElementInspectorHandler {
 		window.requestAnimationFrame(this.refreshTrackedRects)
 	}
 
+	private scheduleScrollRefresh = () => {
+		if (this.scrollRefreshScheduled) return
+		this.scrollRefreshScheduled = true
+		window.requestAnimationFrame(() => {
+			this.scrollRefreshScheduled = false
+			this.postScrollOffset()
+		})
+	}
+
+	private scheduleRefresh = () => {
+		this.scheduleRectRefresh()
+		this.scheduleScrollRefresh()
+	}
+
 	private attachTrackingListeners() {
 		if (this.trackingListenersAttached) return
-		document.addEventListener("scroll", this.scheduleRectRefresh, true)
-		window.addEventListener("resize", this.scheduleRectRefresh)
+		document.addEventListener("scroll", this.scheduleRefresh, true)
+		window.addEventListener("resize", this.scheduleRefresh)
 		this.trackingListenersAttached = true
 	}
 
 	private detachTrackingListeners() {
 		if (!this.trackingListenersAttached) return
-		document.removeEventListener("scroll", this.scheduleRectRefresh, true)
-		window.removeEventListener("resize", this.scheduleRectRefresh)
+		document.removeEventListener("scroll", this.scheduleRefresh, true)
+		window.removeEventListener("resize", this.scheduleRefresh)
 		this.trackingListenersAttached = false
 	}
 
@@ -412,11 +621,11 @@ export class ElementInspectorHandler {
 				this.lastTrackedRects.delete(selector)
 			}
 		}
-		if (nextSelectors.size === 0) {
-			this.detachTrackingListeners()
-			return
-		}
+		// Screenshot selection has no tracked selector, but still needs the
+		// iframe scroll position to keep arbitrary regions anchored.
 		this.attachTrackingListeners()
+		this.postScrollOffset()
+		if (nextSelectors.size === 0) return
 		for (const selector of nextSelectors) this.getTrackedElement(selector)
 		this.scheduleRectRefresh()
 	}

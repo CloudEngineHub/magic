@@ -91,7 +91,83 @@ describe("HTML inspector agent prompt", () => {
 			.flatMap((paragraph) => paragraph.content ?? [])
 			.filter((node) => node.type === "mention")
 
-		expect(mentions).toHaveLength(2)
-		expect(mentions[1]?.attrs?.type).toBe(MentionItemType.UPLOAD_FILE)
+		expect(mentions).toHaveLength(1)
+		expect(mentions[0]?.attrs?.type).toBe(MentionItemType.PROJECT_FILE)
+		const inspectorDetail = content.content?.[3]?.content?.[0]
+		expect(inspectorDetail?.type).toBe("inspector-detail")
+		expect(inspectorDetail?.attrs?.screenshotMention?.type).toBe(MentionItemType.UPLOAD_FILE)
+	})
+
+	it("reuses the inspector-detail node for normalized element targets", () => {
+		const content = buildHtmlMultiSelectionPromptContent(
+			{ fileId: "html-1", fileName: "index.html", filePath: "index.html" },
+			[
+				{
+					id: "target-1",
+					kind: "element",
+					selector: "section.hero > h1",
+					elementLabel: "h1",
+					textContent: "Welcome",
+					domContext: {
+						parentSelector: "section.hero",
+						siblingIndex: 1,
+						sameTagSiblingCount: 1,
+						sameTagIndex: 1,
+					},
+					instruction: "Change this heading",
+				},
+			],
+			"HTML 页面修改目标",
+		)
+
+		const detail = content.content?.[3]?.content?.[0]
+		expect(detail?.type).toBe("inspector-detail")
+		expect(detail?.attrs).toMatchObject({
+			selector: "section.hero > h1",
+			textContent: "Welcome",
+		})
+		expect(JSON.parse(detail?.attrs?.domContext ?? "{}")).toEqual({
+			parentSelector: "section.hero",
+			siblingIndex: 1,
+			sameTagSiblingCount: 1,
+			sameTagIndex: 1,
+		})
+	})
+
+	it("keeps a normalized element screenshot on the inspector-detail node", () => {
+		const content = buildHtmlMultiSelectionPromptContent(
+			{ fileId: "html-1", fileName: "index.html", filePath: "index.html" },
+			[
+				{
+					id: "target-1",
+					kind: "element",
+					selector: "section.hero",
+					elementLabel: "section",
+					screenshot: {
+						dataUrl: "data:image/png;base64,abc",
+						rect: { top: 0, left: 0, width: 300, height: 120 },
+					},
+					instruction: "Keep it",
+				},
+			],
+			"HTML 页面修改目标",
+			new Map([
+				[
+					"target-1",
+					{
+						type: MentionItemType.UPLOAD_FILE,
+						data: {
+							file_id: "image-1",
+							file_name: "hero.png",
+							file_extension: "png",
+							file_path: "hero.png",
+						},
+					},
+				],
+			]),
+		)
+
+		const detail = content.content?.[3]?.content?.[0]
+		expect(detail?.attrs?.screenshotMention?.data?.file_id).toBe("image-1")
 	})
 })

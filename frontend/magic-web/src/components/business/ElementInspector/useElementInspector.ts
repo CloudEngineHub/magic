@@ -13,7 +13,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import type { InspectedElementInfo, InspectedElementRect } from "./types"
+import type { InspectedElementInfo, InspectedElementRect, InspectorScrollOffset } from "./types"
 import { INSPECTOR_MSG } from "./types"
 
 interface UseElementInspectorOptions {
@@ -42,6 +42,12 @@ interface UseElementInspectorReturn {
 	setTrackedSelectors: (selectors: string[]) => void
 	/** Latest viewport rectangles reported by the iframe for tracked targets. */
 	trackedRects: Record<string, InspectedElementRect>
+	/** Latest iframe document scroll offset reported by the runtime. */
+	iframeScrollOffset: InspectorScrollOffset | null
+	/** Scroll an iframe element into view through the runtime. */
+	scrollToSelector: (selector: string) => void
+	/** Scroll the iframe document to an absolute position through the runtime. */
+	scrollToPosition: (offset: InspectorScrollOffset) => void
 }
 
 function areRectsEqual(a: InspectedElementRect | undefined, b: InspectedElementRect): boolean {
@@ -58,6 +64,7 @@ export function useElementInspector({
 	const [hoveredElement, setHoveredElement] = useState<InspectedElementInfo | null>(null)
 	const [selectedElement, setSelectedElement] = useState<InspectedElementInfo | null>(null)
 	const [trackedRects, setTrackedRects] = useState<Record<string, InspectedElementRect>>({})
+	const [iframeScrollOffset, setIframeScrollOffset] = useState<InspectorScrollOffset | null>(null)
 	const activeRef = useRef(false)
 	const trackedSelectorsRef = useRef<string[]>([])
 	const inspectorTargetOrigin = targetOrigin ?? window.location.origin
@@ -85,6 +92,7 @@ export function useElementInspector({
 		activeRef.current = true
 		setHoveredElement(null)
 		setSelectedElement(null)
+		setIframeScrollOffset(null)
 		sendToIframe(INSPECTOR_MSG.START)
 		sendToIframe(INSPECTOR_MSG.TRACK, { selectors: trackedSelectorsRef.current })
 	}, [sendToIframe])
@@ -107,6 +115,25 @@ export function useElementInspector({
 	const clearSelection = useCallback(() => {
 		setSelectedElement(null)
 	}, [])
+
+	const scrollToSelector = useCallback(
+		(selector: string) => {
+			if (!selector.trim()) return
+			sendToIframe(INSPECTOR_MSG.SCROLL_TO_SELECTOR, { selector })
+		},
+		[sendToIframe],
+	)
+
+	const scrollToPosition = useCallback(
+		({ left, top }: InspectorScrollOffset) => {
+			if (!Number.isFinite(left) || !Number.isFinite(top)) return
+			sendToIframe(INSPECTOR_MSG.SCROLL_TO_POSITION, {
+				left: Math.max(0, left),
+				top: Math.max(0, top),
+			})
+		},
+		[sendToIframe],
+	)
 
 	const setTrackedSelectors = useCallback(
 		(selectors: string[]) => {
@@ -141,6 +168,7 @@ export function useElementInspector({
 			setHoveredElement(null)
 			setSelectedElement(null)
 			setTrackedRects({})
+			setIframeScrollOffset(null)
 			if (activeRef.current) {
 				postToIframe({ type: INSPECTOR_MSG.START, timestamp: Date.now() })
 			}
@@ -202,12 +230,24 @@ export function useElementInspector({
 				setHoveredElement(null)
 				setSelectedElement(null)
 				setTrackedRects({})
+				setIframeScrollOffset(null)
 				trackedSelectorsRef.current = []
 				return
 			}
 			if (!event.data?.type) return
 
 			switch (event.data.type) {
+				case INSPECTOR_MSG.SCROLL_CHANGED: {
+					const left = Number(event.data.left)
+					const top = Number(event.data.top)
+					if (!Number.isFinite(left) || !Number.isFinite(top) || left < 0 || top < 0) {
+						return
+					}
+					setIframeScrollOffset((current) =>
+						current?.left === left && current.top === top ? current : { left, top },
+					)
+					break
+				}
 				case INSPECTOR_MSG.RECTS_CHANGED: {
 					const rects = Array.isArray(event.data.rects) ? event.data.rects : []
 					if (rects.length === 0) return
@@ -290,5 +330,8 @@ export function useElementInspector({
 		clearSelection,
 		setTrackedSelectors,
 		trackedRects,
+		iframeScrollOffset,
+		scrollToSelector,
+		scrollToPosition,
 	}
 }

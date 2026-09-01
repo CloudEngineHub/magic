@@ -7,6 +7,7 @@ export {
 export type {
 	InspectedElementInfo,
 	InspectedElementRect,
+	InspectorScrollOffset,
 	InspectedElementDomContext,
 	BoxModelSides,
 	HtmlSelectionTarget,

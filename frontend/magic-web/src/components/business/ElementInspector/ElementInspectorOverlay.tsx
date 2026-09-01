@@ -15,7 +15,7 @@ import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "rea
 import { createPortal } from "react-dom"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
-import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
+import { Crosshair, X, Copy, Loader2, MessageCircle, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import type {
 	HtmlMultiSelectionSubmitState,
@@ -23,6 +23,7 @@ import type {
 	HtmlSelectionTarget,
 	InspectedElementInfo,
 	InspectedElementRect,
+	InspectorScrollOffset,
 } from "./types"
 import {
 	fromInspectorOverlayRect,
@@ -34,16 +35,19 @@ import { buildAgentPromptContent } from "./agentPrompt"
 import { formatElementSize, getShortSelector } from "./format"
 import { ElementEditPopover } from "./ElementEditPopover"
 import { PendingTargetsPanel } from "./PendingTargetsPanel"
-import { ScreenshotSelectionOverlay } from "./ScreenshotSelectionOverlay"
+import {
+	ScreenshotSelectionOverlay,
+	type ScreenshotCapturePhase,
+} from "./ScreenshotSelectionOverlay"
 import {
 	captureIframeRegion,
 	createCurrentTabCaptureSession,
 	type CurrentTabCaptureSession,
-	shouldPrewarmCurrentTabCapture,
 	supportsCurrentTabCapture,
 	suppressCaptureCursor,
 	toRenderedSelection,
 	waitForStableCaptureRect,
+	waitForNextAnimationFrame,
 } from "./screenshot"
 import { getHtmlSelectionTargetRect } from "./selection"
 
@@ -61,6 +65,25 @@ function readIframeScrollOffset(iframe: HTMLIFrameElement) {
 	} catch {
 		return { left: 0, top: 0 }
 	}
+}
+
+function isRectVisibleInContainer(
+	box: { left: number; top: number; width: number; height: number },
+	container: { width: number; height: number },
+) {
+	// During the first render a portal host may not have layout measurements yet.
+	// Keep the popover mounted until the browser gives us real dimensions.
+	if (container.width <= 0 || container.height <= 0) return true
+	if (box.width <= 0 || box.height <= 0) {
+		return false
+	}
+
+	return (
+		box.left < container.width &&
+		box.top < container.height &&
+		box.left + box.width > 0 &&
+		box.top + box.height > 0
+	)
 }
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -84,6 +107,8 @@ interface ElementInspectorOverlayProps {
 	onSendToAgent?: (content: JSONContent) => void
 	/** When true, suppresses the floating ElementInfoCard after selection (for toolbar-triggered mode) */
 	hideInfoCard?: boolean
+	/** Keeps the multi-selection collection bar mounted while a selected element is being resolved. */
+	multiSelectionActive?: boolean
 	/** Current target being edited in the multi-selection flow. */
 	activeTarget?: HtmlSelectionTarget | null
 	draftInstruction?: string
@@ -108,15 +133,19 @@ interface ElementInspectorOverlayProps {
 	) => void
 	onCaptureElementScreenshot?: (selector: string, screenshot: HtmlSelectionScreenshot) => void
 	onCapturePrewarmReady?: (prewarm: (() => void) | null) => void
+	/** Exact origin used by the cross-origin iframe screenshot bridge. */
+	iframeTargetOrigin?: string
 	onExitMultiSelection?: () => void
-	/** Bottom distance for the pending-target panel when another toolbar occupies the canvas edge. */
-	pendingPanelBottomOffset?: number
+	/** Top distance for the draggable pending-target panel. */
+	pendingPanelTopOffset?: number
 	/** Stable canvas viewport used to position the pending-target panel outside scaled content. */
 	panelContainerRef?: React.RefObject<HTMLDivElement | null>
 	/** Scale ratio of the iframe (for coordinate conversion) */
 	scaleRatio?: number
 	/** Latest iframe viewport rects for selected and pending element targets. */
 	trackedRects?: Record<string, InspectedElementRect>
+	/** Scroll offset reported by a cross-origin iframe runtime. */
+	iframeScrollOffset?: InspectorScrollOffset
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -131,6 +160,7 @@ export function ElementInspectorOverlay({
 	onInsertToConsole,
 	onSendToAgent,
 	hideInfoCard = false,
+	multiSelectionActive = false,
 	activeTarget = null,
 	draftInstruction = "",
 	onDraftInstructionChange,
@@ -148,17 +178,20 @@ export function ElementInspectorOverlay({
 	onCaptureScreenshot,
 	onCaptureElementScreenshot,
 	onCapturePrewarmReady,
+	iframeTargetOrigin,
 	onExitMultiSelection,
-	pendingPanelBottomOffset,
+	pendingPanelTopOffset,
 	panelContainerRef,
 	scaleRatio = 1,
 	trackedRects = {},
+	iframeScrollOffset: reportedIframeScrollOffset,
 }: ElementInspectorOverlayProps) {
 	const { t } = useTranslation("super")
 	const overlayRef = useRef<HTMLDivElement>(null)
 	const [iframeRect, setIframeRect] = useState<DOMRect | null>(null)
 	const [iframeScrollOffset, setIframeScrollOffset] = useState({ left: 0, top: 0 })
-	const [isScreenshotCapturing, setIsScreenshotCapturing] = useState(false)
+	const [screenshotCapturePhase, setScreenshotCapturePhase] =
+		useState<ScreenshotCapturePhase>("idle")
 	const [captureUsesCurrentTab, setCaptureUsesCurrentTab] = useState(false)
 	const [panelPortalHost, setPanelPortalHost] = useState<HTMLDivElement | null>(null)
 	const effectiveSelectionMode = screenshotSupported ? selectionMode : "element"
@@ -263,8 +296,9 @@ export function ElementInspectorOverlay({
 	}, [iframeRef, active])
 
 	useEffect(() => {
-		const iframe = iframeRef.current
-		setCaptureUsesCurrentTab(Boolean(iframe && shouldPrewarmCurrentTabCapture(iframe)))
+		// Cross-origin pages can now answer screenshot requests from inside the iframe.
+		// Do not pre-authorize display capture merely by entering screenshot mode.
+		setCaptureUsesCurrentTab(false)
 	}, [iframeRect, iframeRef])
 
 	// Screenshot targets are arbitrary rectangles rather than selectors. Keep
@@ -383,7 +417,10 @@ export function ElementInspectorOverlay({
 		[selectedElement, toOverlayRect, iframeRect, trackedRects],
 	)
 	const captureRegion = useCallback(
-		async (overlayRect: InspectedElementRect) => {
+		async (
+			overlayRect: InspectedElementRect,
+			beforeCurrentTabCapture?: () => Promise<void>,
+		) => {
 			const iframe = iframeRef.current
 			if (!iframe) throw new Error("HTML screenshot capture is unavailable")
 			const overlay = overlayRef.current
@@ -420,6 +457,8 @@ export function ElementInspectorOverlay({
 					iframe,
 					selection: iframeSelection,
 					viewportSelection,
+					iframeTargetOrigin,
+					beforeCurrentTabCapture,
 					currentTabSession: currentTabCaptureSessionRef.current ?? undefined,
 				})
 				const displaySize = {
@@ -436,14 +475,17 @@ export function ElementInspectorOverlay({
 				restoreCaptureCursor()
 			}
 		},
-		[getOverlayGeometry, iframeRef],
+		[getOverlayGeometry, iframeRef, iframeTargetOrigin],
 	)
 	const handleCaptureScreenshot = useCallback(
-		async (overlayRect: InspectedElementRect) => {
+		async (
+			overlayRect: InspectedElementRect,
+			beforeCurrentTabCapture?: () => Promise<void>,
+		) => {
 			if (!onCaptureScreenshot) {
 				throw new Error("HTML screenshot capture is unavailable")
 			}
-			const result = await captureRegion(overlayRect)
+			const result = await captureRegion(overlayRect, beforeCurrentTabCapture)
 			onCaptureScreenshot(
 				result.dataUrl,
 				result.rect,
@@ -455,11 +497,14 @@ export function ElementInspectorOverlay({
 	)
 	const captureElementPreview = useCallback(
 		async (overlayRect: InspectedElementRect) => {
-			setIsScreenshotCapturing(true)
+			setScreenshotCapturePhase("loading")
 			try {
-				return await captureRegion(overlayRect)
+				return await captureRegion(overlayRect, async () => {
+					setScreenshotCapturePhase("capturing")
+					await waitForNextAnimationFrame()
+				})
 			} finally {
-				setIsScreenshotCapturing(false)
+				setScreenshotCapturePhase("idle")
 			}
 		},
 		[captureRegion],
@@ -560,21 +605,17 @@ export function ElementInspectorOverlay({
 			if (target.kind === "element") {
 				return trackedRects[target.info.selector] ?? target.info.rect
 			}
-			return getHtmlSelectionTargetRect(target, iframeScrollOffset)
+			return getHtmlSelectionTargetRect(
+				target,
+				reportedIframeScrollOffset ?? iframeScrollOffset,
+			)
 		},
-		[iframeScrollOffset, trackedRects],
+		[iframeScrollOffset, reportedIframeScrollOffset, trackedRects],
 	)
 	const prewarmCurrentTabCapture = useCallback(async () => {
-		if (!screenshotSupported) return
-		const iframe = iframeRef.current
-		if (!iframe || !shouldPrewarmCurrentTabCapture(iframe)) return
-
-		try {
-			await currentTabCaptureSessionRef.current?.acquire()
-		} catch {
-			// Permission denial is handled when the user starts a capture.
-		}
-	}, [iframeRef, screenshotSupported])
+		// Keep this callback for the host API, but never trigger a browser permission
+		// prompt before the user has confirmed a screenshot rectangle.
+	}, [])
 
 	useEffect(() => {
 		onCapturePrewarmReady?.(() => {
@@ -595,7 +636,14 @@ export function ElementInspectorOverlay({
 	)
 
 	// Don't render anything if not active and no selection
-	if (!active && !selectedElement && !activeTarget && pendingTargets.length === 0) return null
+	if (
+		!active &&
+		!selectedElement &&
+		!activeTarget &&
+		pendingTargets.length === 0 &&
+		!multiSelectionActive
+	)
+		return null
 	const overlayScale = getOverlayScale()
 	const overlaySize = getOverlaySize()
 	const activeTargetBox = activeTarget
@@ -611,9 +659,16 @@ export function ElementInspectorOverlay({
 	const panelSize = getPanelSize()
 	const activeTargetPanelBox = activeTargetBox ? toPanelRect(activeTargetBox) : null
 	const editPopoverBox = activeTargetPanelBox ?? activeTargetBox
+	const editPopoverContainer = activeTargetPanelBox ? panelSize : overlaySize
+	const isEditPopoverTargetVisible = editPopoverBox
+		? isRectVisibleInContainer(editPopoverBox, editPopoverContainer)
+		: false
+	const isEditingPendingTarget =
+		activeTarget !== null && pendingTargets.some((target) => target.id === activeTarget.id)
 	const editPopover =
 		activeTarget &&
 		editPopoverBox &&
+		isEditPopoverTargetVisible &&
 		onDraftInstructionChange &&
 		onConfirmTarget &&
 		onCancelTarget ? (
@@ -624,14 +679,24 @@ export function ElementInspectorOverlay({
 				box={editPopoverBox}
 				containerWidth={activeTargetPanelBox ? panelSize.width : overlaySize.width}
 				containerHeight={activeTargetPanelBox ? panelSize.height : overlaySize.height}
+				screenshotLoading={
+					screenshotCapturePhase !== "idle" &&
+					activeTarget.kind === "element" &&
+					!activeTarget.screenshot?.dataUrl
+				}
 				instruction={draftInstruction}
 				onInstructionChange={onDraftInstructionChange}
 				onConfirm={onConfirmTarget}
 				onCancel={onCancelTarget}
+				onDelete={
+					isEditingPendingTarget && onRemovePendingTarget
+						? () => onRemovePendingTarget(activeTarget.id)
+						: undefined
+				}
 			/>
 		) : null
 	const pendingPanel =
-		(pendingTargets.length > 0 || active || activeTarget) &&
+		(pendingTargets.length > 0 || active || activeTarget || multiSelectionActive) &&
 		onEditPendingTarget &&
 		onRemovePendingTarget &&
 		onSubmitPendingTargets ? (
@@ -646,8 +711,20 @@ export function ElementInspectorOverlay({
 				onSelectionModeChange={handleSelectionModeChange}
 				screenshotSupported={screenshotSupported}
 				onExit={onExitMultiSelection}
-				bottomOffset={pendingPanelBottomOffset}
+				topOffset={pendingPanelTopOffset}
 			/>
+		) : null
+	const screenshotLoading =
+		screenshotCapturePhase === "loading" ? (
+			<div
+				className="pointer-events-none absolute left-4 top-4 z-[100] flex items-center gap-2 rounded-full border border-primary/25 bg-primary px-3 py-1.5 text-xs text-primary-foreground shadow-[0_6px_18px_rgb(var(--primary-rgb)/0.28)]"
+				data-testid="element-inspector-screenshot-loading"
+				role="status"
+				aria-live="polite"
+			>
+				<Loader2 size={14} className="animate-spin" />
+				{t("stylePanel.inspector.screenshotProcessing")}
+			</div>
 		) : null
 	const pendingPanelContent = panelContainerRef
 		? panelPortalHost
@@ -655,8 +732,13 @@ export function ElementInspectorOverlay({
 					<div
 						className="pointer-events-none absolute inset-0 z-40"
 						data-element-inspector-panel-portal="true"
-						style={{ visibility: isScreenshotCapturing ? "hidden" : undefined }}
+						style={{
+							zIndex: screenshotCapturePhase === "loading" ? 100 : 40,
+							visibility:
+								screenshotCapturePhase === "capturing" ? "hidden" : undefined,
+						}}
 					>
+						{screenshotLoading}
 						{editPopover}
 						{pendingPanel}
 					</div>,
@@ -670,8 +752,13 @@ export function ElementInspectorOverlay({
 			ref={overlayRef}
 			className="pointer-events-none absolute inset-0 z-40"
 			data-element-inspector-overlay="true"
-			style={{ overflow: "hidden", visibility: isScreenshotCapturing ? "hidden" : undefined }}
+			style={{
+				overflow: "hidden",
+				zIndex: screenshotCapturePhase === "loading" ? 100 : 40,
+				visibility: screenshotCapturePhase === "capturing" ? "hidden" : undefined,
+			}}
 		>
+			{!panelPortalHost && screenshotLoading}
 			{/* Transparent event-capture layer when active — allows pointer events through to iframe */}
 			{active && (
 				<div
@@ -698,7 +785,10 @@ export function ElementInspectorOverlay({
 					selectionBounds={screenshotSelectionBounds}
 					captureUsesCurrentTab={captureUsesCurrentTab}
 					onCapture={handleCaptureScreenshot}
-					onCaptureStateChange={setIsScreenshotCapturing}
+					onCaptureStateChange={(capturing) => {
+						if (!capturing) setScreenshotCapturePhase("idle")
+					}}
+					onCapturePhaseChange={setScreenshotCapturePhase}
 				/>
 			)}
 
@@ -723,6 +813,13 @@ export function ElementInspectorOverlay({
 								box={box}
 								overlayScale={overlayScale}
 								containerWidth={overlaySize.width}
+								showLabel={false}
+							/>
+							<CommentMarker
+								box={box}
+								containerWidth={overlaySize.width}
+								containerHeight={overlaySize.height}
+								content={target.instruction}
 							/>
 							<PendingTargetHighlight
 								box={box}
@@ -746,6 +843,13 @@ export function ElementInspectorOverlay({
 								target.screenshot.displaySize?.height ??
 									target.screenshot.rect.height,
 							)}
+							showLabel={false}
+						/>
+						<CommentMarker
+							box={box}
+							containerWidth={overlaySize.width}
+							containerHeight={overlaySize.height}
+							content={target.instruction}
 						/>
 						<PendingTargetHighlight
 							box={box}
@@ -764,6 +868,18 @@ export function ElementInspectorOverlay({
 						overlayScale={overlayScale}
 						containerWidth={overlaySize.width}
 						animate={false}
+						showLabel={false}
+					/>
+					<CommentMarker
+						box={selectBox}
+						containerWidth={overlaySize.width}
+						containerHeight={overlaySize.height}
+						content={getSelectedElementComment(
+							selectedElement.selector,
+							activeTarget,
+							pendingTargets,
+							draftInstruction,
+						)}
 					/>
 
 					{/* Info card */}
@@ -788,30 +904,49 @@ export function ElementInspectorOverlay({
 				activeTargetBox &&
 				activeTarget.info &&
 				activeTarget.info.selector !== selectedElement?.selector && (
-					<ElementHighlight
-						info={{
-							...activeTarget.info,
-							rect:
-								trackedRects[activeTarget.info.selector] ?? activeTarget.info.rect,
-						}}
-						box={activeTargetBox}
-						overlayScale={overlayScale}
-						containerWidth={overlaySize.width}
-					/>
+					<>
+						<ElementHighlight
+							info={{
+								...activeTarget.info,
+								rect:
+									trackedRects[activeTarget.info.selector] ??
+									activeTarget.info.rect,
+							}}
+							box={activeTargetBox}
+							overlayScale={overlayScale}
+							containerWidth={overlaySize.width}
+							showLabel={false}
+						/>
+						<CommentMarker
+							box={activeTargetBox}
+							containerWidth={overlaySize.width}
+							containerHeight={overlaySize.height}
+							content={draftInstruction || activeTarget.instruction}
+						/>
+					</>
 				)}
 
 			{activeTarget?.kind === "screenshot" && activeTargetBox && (
-				<ScreenshotHighlight
-					box={activeTargetBox}
-					containerWidth={overlaySize.width}
-					label={t("stylePanel.inspector.screenshot")}
-					size={formatElementSize(
-						activeTarget.screenshot.displaySize?.width ??
-							activeTarget.screenshot.rect.width,
-						activeTarget.screenshot.displaySize?.height ??
-							activeTarget.screenshot.rect.height,
-					)}
-				/>
+				<>
+					<ScreenshotHighlight
+						box={activeTargetBox}
+						containerWidth={overlaySize.width}
+						label={t("stylePanel.inspector.screenshot")}
+						size={formatElementSize(
+							activeTarget.screenshot.displaySize?.width ??
+								activeTarget.screenshot.rect.width,
+							activeTarget.screenshot.displaySize?.height ??
+								activeTarget.screenshot.rect.height,
+						)}
+						showLabel={false}
+					/>
+					<CommentMarker
+						box={activeTargetBox}
+						containerWidth={overlaySize.width}
+						containerHeight={overlaySize.height}
+						content={draftInstruction || activeTarget.instruction}
+					/>
+				</>
 			)}
 
 			{!panelPortalHost && editPopover}
@@ -829,6 +964,7 @@ function ElementHighlight({
 	overlayScale,
 	containerWidth,
 	animate = false,
+	showLabel = true,
 }: {
 	info: InspectedElementInfo
 	box: { left: number; top: number; width: number; height: number }
@@ -836,17 +972,19 @@ function ElementHighlight({
 	containerWidth: number
 	/** Tracked rectangles refresh on every animation frame, so retained targets must not ease behind scrolling. */
 	animate?: boolean
+	/** Selected targets use a comment marker instead of the selector label. */
+	showLabel?: boolean
 }) {
 	return (
 		<>
 			<div
-				className="pointer-events-none absolute border-2 border-blue-500"
+				className="pointer-events-none absolute border-2 border-primary"
 				style={{
 					left: box.left,
 					top: box.top,
 					width: box.width,
 					height: box.height,
-					backgroundColor: "rgba(59, 130, 246, 0.1)",
+					backgroundColor: "rgb(var(--primary-rgb) / 0.1)",
 					transition: animate
 						? "left 50ms ease-out, top 50ms ease-out, width 50ms ease-out, height 50ms ease-out"
 						: undefined,
@@ -872,8 +1010,111 @@ function ElementHighlight({
 				/>
 			)}
 
-			<HoverLabel info={info} box={box} containerWidth={containerWidth} />
+			{showLabel && <HoverLabel info={info} box={box} containerWidth={containerWidth} />}
 		</>
+	)
+}
+
+function getSelectedElementComment(
+	selector: string,
+	activeTarget: HtmlSelectionTarget | null,
+	pendingTargets: HtmlSelectionTarget[],
+	draftInstruction: string,
+) {
+	if (activeTarget?.kind === "element" && activeTarget.info.selector === selector) {
+		return draftInstruction || activeTarget.instruction
+	}
+
+	return (
+		pendingTargets.find(
+			(target) => target.kind === "element" && target.info.selector === selector,
+		)?.instruction ?? ""
+	)
+}
+
+function CommentMarker({
+	box,
+	containerWidth,
+	containerHeight,
+	content,
+}: {
+	box: { left: number; top: number; width: number; height: number }
+	containerWidth: number
+	containerHeight: number
+	content: string
+}) {
+	const { t } = useTranslation("super")
+	const [expanded, setExpanded] = useState(false)
+	const [pinned, setPinned] = useState(false)
+	if (!isRectVisibleInContainer(box, { width: containerWidth, height: containerHeight })) {
+		return null
+	}
+	// Keep geometry placement aligned with the 28px visual marker and its button.
+	const markerSize = 28
+	const panelWidth = 220
+	const markerLeft = Math.min(
+		Math.max(4, box.left + box.width - markerSize / 2),
+		Math.max(4, containerWidth - markerSize - 4),
+	)
+	const opensLeft = markerLeft + panelWidth > containerWidth
+	const text = content.trim() || t("stylePanel.inspector.emptyDescription")
+	const markerContainerLeft =
+		expanded && opensLeft ? markerLeft - panelWidth + markerSize : markerLeft
+
+	return (
+		<div
+			className={`pointer-events-auto absolute z-20 flex items-start overflow-visible border shadow-sm backdrop-blur-sm ${
+				expanded
+					? "w-[220px] rounded-2xl border-border/70 bg-background/95 shadow-[0_14px_36px_hsl(var(--foreground)/0.18)]"
+					: "h-[28px] w-[28px] rounded-full border-primary/30 bg-primary text-primary-foreground shadow-[0_4px_12px_rgb(var(--primary-rgb)/0.28)]"
+			}`}
+			style={{ left: markerContainerLeft, top: Math.max(4, box.top) }}
+			onMouseEnter={() => setExpanded(true)}
+			onMouseLeave={() => {
+				if (!pinned) setExpanded(false)
+			}}
+			onFocusCapture={() => setExpanded(true)}
+			onBlurCapture={(event) => {
+				if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !pinned) {
+					setExpanded(false)
+				}
+			}}
+			data-testid="element-inspector-comment-marker"
+		>
+			<div className={`flex min-w-0 items-start ${opensLeft ? "flex-row-reverse" : ""}`}>
+				<button
+					type="button"
+					className="inspector-comment-marker-button flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[background-color,transform,box-shadow] duration-150 ease-out hover:scale-[1.04] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:scale-[0.96]"
+					aria-label={t("stylePanel.inspector.comment")}
+					aria-expanded={expanded}
+					onClick={(event) => {
+						event.preventDefault()
+						event.stopPropagation()
+						const nextPinned = !pinned
+						setPinned(nextPinned)
+						setExpanded(nextPinned)
+					}}
+				>
+					<MessageCircle size={15} />
+				</button>
+				<div
+					className={`min-w-0 overflow-hidden text-xs text-foreground transition-[opacity,transform] duration-150 ease-out ${
+						expanded
+							? "max-w-[184px] translate-x-0 px-2 py-1.5 opacity-100"
+							: "max-w-0 -translate-x-1 px-0 py-0 opacity-0"
+					}`}
+					aria-hidden={!expanded}
+					data-testid="element-inspector-comment-content"
+				>
+					<div className="mb-0.5 text-[11px] font-semibold text-primary">
+						{t("stylePanel.inspector.comment")}
+					</div>
+					<div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words leading-5">
+						{text}
+					</div>
+				</div>
+			</div>
+		</div>
 	)
 }
 
@@ -903,25 +1144,34 @@ function ScreenshotHighlight({
 	containerWidth,
 	label,
 	size,
+	showLabel = true,
 }: {
 	box: { left: number; top: number; width: number; height: number }
 	containerWidth: number
 	label: string
 	size: string
+	showLabel?: boolean
 }) {
 	return (
 		<>
 			<div
-				className="pointer-events-none absolute border-2 border-blue-500"
+				className="pointer-events-none absolute border-2 border-primary"
 				style={{
 					left: box.left,
 					top: box.top,
 					width: box.width,
 					height: box.height,
-					backgroundColor: "rgba(59, 130, 246, 0.1)",
+					backgroundColor: "rgb(var(--primary-rgb) / 0.1)",
 				}}
 			/>
-			<SelectionLabel label={label} size={size} box={box} containerWidth={containerWidth} />
+			{showLabel && (
+				<SelectionLabel
+					label={label}
+					size={size}
+					box={box}
+					containerWidth={containerWidth}
+				/>
+			)}
 		</>
 	)
 }
@@ -1083,9 +1333,7 @@ function ElementInfoCard({
 					<span className="flex-shrink-0 text-muted-foreground">
 						{t("stylePanel.inspector.selector")}:
 					</span>
-					<span className="flex-1 break-all font-mono text-blue-600 dark:text-blue-400">
-						{info.selector}
-					</span>
+					<span className="flex-1 break-all font-mono text-primary">{info.selector}</span>
 				</div>
 
 				{/* Box model summary */}

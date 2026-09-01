@@ -17,6 +17,11 @@ export interface InspectedElementRect {
 	height: number
 }
 
+export interface InspectorScrollOffset {
+	left: number
+	top: number
+}
+
 /** Box-model dimensions (margin / border / padding) */
 export interface BoxModelSides {
 	top: number
@@ -159,4 +164,37 @@ export const INSPECTOR_MSG = {
 	TRACK: "MAGIC_INSPECTOR_TRACK",
 	/** iframe → parent: tracked element rectangles changed after scrolling */
 	RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED",
+	/** iframe → parent: iframe document scroll position changed */
+	SCROLL_CHANGED: "MAGIC_INSPECTOR_SCROLL_CHANGED",
+	/** parent → iframe: scroll an element into the iframe viewport */
+	SCROLL_TO_SELECTOR: "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR",
+	/** parent → iframe: scroll the iframe document to an absolute position */
+	SCROLL_TO_POSITION: "MAGIC_INSPECTOR_SCROLL_TO_POSITION",
+	/** parent → iframe: capture a rendered region without display-media permission */
+	SCREENSHOT_REQUEST: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
+	/** iframe → parent: confirms that the runtime supports screenshot requests */
+	SCREENSHOT_ACK: "MAGIC_INSPECTOR_SCREENSHOT_ACK",
+	/** iframe → parent: rendered region capture response */
+	SCREENSHOT_RESPONSE: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
 } as const
+
+export interface InspectorScreenshotRequest {
+	type: typeof INSPECTOR_MSG.SCREENSHOT_REQUEST
+	requestId: string
+	/** Rectangle relative to the iframe viewport in CSS pixels. */
+	selection: InspectedElementRect
+	/** Output dimensions in host viewport CSS pixels. */
+	outputSize: {
+		width: number
+		height: number
+	}
+}
+
+export interface InspectorScreenshotResponse {
+	type: typeof INSPECTOR_MSG.SCREENSHOT_RESPONSE
+	requestId: string
+	success: boolean
+	/** PNG returned through structured clone; the parent converts it to a data URL. */
+	blob?: Blob
+	error?: string
+}

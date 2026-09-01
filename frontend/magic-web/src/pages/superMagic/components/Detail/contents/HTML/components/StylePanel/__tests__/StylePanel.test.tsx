@@ -109,6 +109,16 @@ vi.mock("../controls", () => ({
 		/>
 	),
 	ColorPicker: () => <div data-testid="color-picker" />,
+	BackgroundImageButton: ({
+		selectedElement,
+	}: {
+		selectedElement?: { isImageElement?: boolean; tagName?: string } | null
+	}) =>
+		selectedElement &&
+		!selectedElement.isImageElement &&
+		selectedElement.tagName?.toLowerCase() !== "img" ? (
+			<div data-testid="background-image-button" />
+		) : null,
 	ElementActions: ({ itemMotion }: { itemMotion?: (children: ReactNode) => ReactNode }) =>
 		itemMotion ? (
 			itemMotion(<div data-testid="element-actions" />)
@@ -241,6 +251,12 @@ describe("StylePanel", () => {
 		expect(screen.getByTestId("font-size-selector")).toBeInTheDocument()
 		expect(screen.getByTestId("text-format-tools")).toBeInTheDocument()
 		expect(screen.getByTestId("text-align-tools")).toBeInTheDocument()
+		const colorPicker = screen.getByTestId("color-picker")
+		const backgroundImageButton = screen.getByTestId("background-image-button")
+		expect(
+			colorPicker.compareDocumentPosition(backgroundImageButton) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
 		expect(screen.getByTestId("style-panel-more-styles-trigger")).toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 		expect(screen.getByTestId("font-family-selector")).toBeInTheDocument()

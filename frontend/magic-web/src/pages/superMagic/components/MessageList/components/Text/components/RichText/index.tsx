@@ -189,8 +189,13 @@ const RichText = memo(
 					const collectMentions = (n: Node) => {
 						if (n.type.name === "mention" && n.attrs) {
 							mentions.push(n.attrs as TiptapMentionAttributes)
-						} else if (n.type.name === INSPECTOR_DETAIL_TYPE && n.attrs.fileMention) {
-							mentions.push(n.attrs.fileMention as TiptapMentionAttributes)
+						} else if (n.type.name === INSPECTOR_DETAIL_TYPE) {
+							if (n.attrs.fileMention) {
+								mentions.push(n.attrs.fileMention as TiptapMentionAttributes)
+							}
+							if (n.attrs.screenshotMention) {
+								mentions.push(n.attrs.screenshotMention as TiptapMentionAttributes)
+							}
 						}
 						n.forEach((child) => collectMentions(child))
 					}

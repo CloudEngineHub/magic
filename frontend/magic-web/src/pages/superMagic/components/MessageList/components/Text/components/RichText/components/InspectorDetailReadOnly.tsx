@@ -8,6 +8,7 @@ import {
 } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { getInspectorDetailHeaderLabel } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/display"
+import { InspectorScreenshotPreview } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/InspectorScreenshotPreview"
 
 interface InspectorDetailReadOnlyProps {
 	attrs: {
@@ -18,6 +19,7 @@ interface InspectorDetailReadOnlyProps {
 		styleCount: number
 		textContent: string
 		fileMention?: TiptapMentionAttributes | null
+		screenshotMention?: TiptapMentionAttributes | null
 	}
 }
 
@@ -40,6 +42,29 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			? (attrs.fileMention.data as ProjectFileMentionData)
 			: null
 
+	const headerButton = (
+		<button
+			type="button"
+			className={cn(
+				"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
+				expanded ? "w-full" : "w-auto",
+				!expanded && "h-6 rounded-md border border-border/60 bg-muted/30 px-1.5",
+				expanded &&
+					"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
+			)}
+			onClick={() => setExpanded((v) => !v)}
+			data-testid="set-expanded"
+		>
+			<Crosshair size={12} className="flex-shrink-0 text-primary" />
+			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
+			{expanded ? (
+				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
+			) : (
+				<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
+			)}
+		</button>
+	)
+
 	// RichText 会统一覆盖 .magic-mention；折叠态在这里恢复与编辑器一致的行内布局和高度。
 	return (
 		<span
@@ -50,29 +75,20 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 					: "magic-mention !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-middle",
 			)}
 		>
-			<button
-				type="button"
-				className={cn(
-					"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
-					expanded ? "w-full" : "w-auto",
-					!expanded && "h-6 rounded-md border border-border/60 bg-muted/30 px-1.5",
-					expanded &&
-						"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
-				)}
-				onClick={() => setExpanded((v) => !v)}
-				data-testid="set-expanded"
-			>
-				<Crosshair size={12} className="flex-shrink-0 text-primary" />
-				<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
-				{expanded ? (
-					<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
-				) : (
-					<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
-				)}
-			</button>
+			{!expanded && attrs.screenshotMention ? (
+				<InspectorScreenshotPreview
+					mention={attrs.screenshotMention}
+					trigger={headerButton}
+				/>
+			) : (
+				headerButton
+			)}
 
 			{expanded && (
 				<span className="block space-y-1 px-2 py-1.5 text-[11px] text-foreground/70">
+					{attrs.screenshotMention && (
+						<InspectorScreenshotPreview mention={attrs.screenshotMention} />
+					)}
 					{fileData && (
 						<span className="flex gap-1.5">
 							<span className="flex-shrink-0 text-foreground/50">

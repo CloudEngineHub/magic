@@ -40,6 +40,7 @@ interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
 	styleCount?: number
 	textContent?: string
 	fileMention?: TiptapMentionAttributes | null
+	screenshotMention?: TiptapMentionAttributes | null
 }
 
 export default {
@@ -220,6 +221,7 @@ export default {
 				styleCount: { default: 0 },
 				textContent: { default: "" },
 				fileMention: { default: null },
+				screenshotMention: { default: null },
 			},
 			parseDOM: [
 				{
@@ -232,6 +234,9 @@ export default {
 						styleCount: Number(dom.getAttribute("data-style-count")) || 0,
 						textContent: dom.getAttribute("data-text-content") || "",
 						fileMention: safeParseJsonAttr(dom.getAttribute("data-file-mention")),
+						screenshotMention: safeParseJsonAttr(
+							dom.getAttribute("data-screenshot-mention"),
+						),
 					}),
 				},
 			],
@@ -248,6 +253,9 @@ export default {
 						"data-text-content": node.attrs.textContent,
 						"data-file-mention": node.attrs.fileMention
 							? JSON.stringify(node.attrs.fileMention)
+							: undefined,
+						"data-screenshot-mention": node.attrs.screenshotMention
+							? JSON.stringify(node.attrs.screenshotMention)
 							: undefined,
 						class: "inspector-detail-node",
 					},

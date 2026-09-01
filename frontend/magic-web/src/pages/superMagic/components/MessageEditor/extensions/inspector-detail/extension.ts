@@ -94,6 +94,22 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 						? { "data-file-mention": JSON.stringify(attrs.fileMention) }
 						: {},
 			},
+			screenshotMention: {
+				default: null,
+				parseHTML: (el) => {
+					const raw = el.getAttribute("data-screenshot-mention")
+					if (!raw) return null
+					try {
+						return JSON.parse(raw)
+					} catch {
+						return null
+					}
+				},
+				renderHTML: (attrs) =>
+					attrs.screenshotMention
+						? { "data-screenshot-mention": JSON.stringify(attrs.screenshotMention) }
+						: {},
+			},
 		}
 	},
 

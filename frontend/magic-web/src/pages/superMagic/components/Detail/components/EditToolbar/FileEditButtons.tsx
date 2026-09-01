@@ -18,6 +18,8 @@ interface FileEditButtonsProps {
 	isSaving?: boolean
 	/** 是否显示按钮文字 */
 	showButtonText?: boolean
+	/** 编辑入口文案，未传入时使用通用文案 */
+	editLabel?: string
 	/** 编辑按钮点击回调 */
 	onEdit?: () => void | Promise<void>
 	/** Optional guard run before entering edit mode. */
@@ -35,6 +37,7 @@ function FileEditButtons({
 	isEditMode = false,
 	isSaving = false,
 	showButtonText = false,
+	editLabel,
 	onEdit,
 	beforeAction,
 	onSave,
@@ -109,11 +112,12 @@ function FileEditButtons({
 	}, [interactionDisabled, isEditMode, handleSave, handleSaveAndExit, handleCancel, isMac])
 
 	const showSaving = isSaving || isSavingLocal
+	const resolvedEditLabel = editLabel ?? t("fileViewer.edit")
 
 	return (
 		<div className="flex items-center gap-1" id={HTMLGuideTourElementId.HTMLFileEditButton}>
 			{!isEditMode ? (
-				<ConditionalTooltip showText={showButtonText} title={t("fileViewer.edit")}>
+				<ConditionalTooltip showText={showButtonText} title={resolvedEditLabel}>
 					<Button
 						variant="outline"
 						size="sm"
@@ -122,7 +126,7 @@ function FileEditButtons({
 						className={outlineActionButtonClassName}
 					>
 						<FilePenLine size={16} />
-						{showButtonText && <span>{t("fileViewer.edit")}</span>}
+						{showButtonText && <span>{resolvedEditLabel}</span>}
 					</Button>
 				</ConditionalTooltip>
 			) : (

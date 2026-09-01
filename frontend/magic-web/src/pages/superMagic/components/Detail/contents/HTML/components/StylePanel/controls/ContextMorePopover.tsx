@@ -27,6 +27,8 @@ interface ContextMorePopoverProps {
 	showFlexGrid: boolean
 	showImage: boolean
 	showBackground: boolean
+	showBorder: boolean
+	showShadow: boolean
 	isLink: boolean
 	fontFamilySelector: ReactNode
 	textContentField: ReactNode
@@ -36,9 +38,8 @@ interface ContextMorePopoverProps {
 }
 
 /**
- * One secondary panel keeps the contextual toolbar compact. Tabs prevent
- * layout, appearance, and element-specific settings from becoming nested
- * popovers that compete for attention.
+ * One secondary panel keeps the contextual toolbar compact. Tabs keep each
+ * style family independent without stacking several nested popovers.
  */
 export function ContextMorePopover({
 	selectedElement,
@@ -48,6 +49,8 @@ export function ContextMorePopover({
 	showFlexGrid,
 	showImage,
 	showBackground,
+	showBorder,
+	showShadow,
 	isLink,
 	fontFamilySelector,
 	textContentField,
@@ -57,7 +60,18 @@ export function ContextMorePopover({
 }: ContextMorePopoverProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
-	const firstTab = showTypography || isLink ? "text" : showImage ? "image" : "layout"
+	const firstTab =
+		showTypography || isLink
+			? "text"
+			: showImage
+				? "image"
+				: showBackground
+					? "background"
+					: showBorder
+						? "border"
+						: showShadow
+							? "shadow"
+							: "layout"
 	const [tab, setTab] = useState(firstTab)
 	useEffect(() => {
 		setTab(firstTab)
@@ -65,11 +79,11 @@ export function ContextMorePopover({
 
 	const tabs = [
 		...(showTypography || isLink ? [{ value: "text", label: t("stylePanel.text") }] : []),
-		{ value: "layout", label: t("stylePanel.layout") },
-		...(showBackground
-			? [{ value: "appearance", label: t("stylePanel.appearanceAndLayout") }]
-			: []),
+		...(showBackground ? [{ value: "background", label: t("stylePanel.background") }] : []),
+		...(showBorder ? [{ value: "border", label: t("stylePanel.border") }] : []),
+		...(showShadow ? [{ value: "shadow", label: t("stylePanel.shadow") }] : []),
 		...(showImage ? [{ value: "image", label: t("stylePanel.imageSettings") }] : []),
+		{ value: "layout", label: t("stylePanel.layout") },
 		{ value: "advanced", label: t("stylePanel.customCSS.title") },
 	]
 
@@ -161,20 +175,32 @@ export function ContextMorePopover({
 								) : null}
 							</TabsContent>
 							<TabsContent
-								value="appearance"
+								value="background"
 								className="mt-0 space-y-2"
-								data-testid="style-panel-more-appearance"
+								data-testid="style-panel-more-background"
 							>
 								<BackgroundSection
 									selectedElement={selectedElement}
 									editorRef={editorRef}
 									onStyleChange={onStyleChange}
 								/>
+							</TabsContent>
+							<TabsContent
+								value="border"
+								className="mt-0 space-y-2"
+								data-testid="style-panel-more-border"
+							>
 								<BorderSection
 									selectedElement={selectedElement}
 									editorRef={editorRef}
 									onStyleChange={onStyleChange}
 								/>
+							</TabsContent>
+							<TabsContent
+								value="shadow"
+								className="mt-0 space-y-2"
+								data-testid="style-panel-more-shadow"
+							>
 								<ShadowSection
 									selectedElement={selectedElement}
 									editorRef={editorRef}

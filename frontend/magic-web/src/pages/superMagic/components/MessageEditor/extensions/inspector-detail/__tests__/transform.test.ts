@@ -17,6 +17,16 @@ const fileMention = {
 	},
 }
 
+const screenshotMention = {
+	type: MentionItemType.PROJECT_FILE,
+	data: {
+		file_id: "screenshot-1",
+		file_name: "hero.png",
+		file_path: "/hero.png",
+		file_extension: "png",
+	},
+}
+
 const labels = {
 	title: "Selected element",
 	selector: "Selector",
@@ -171,5 +181,42 @@ describe("inspector-detail transform", () => {
 
 		const schema = new Schema(schemaConfig as SchemaSpec)
 		expect(() => schema.nodeFromJSON(transformed)).not.toThrow()
+	})
+
+	it("round-trips a screenshot mention inside the inspector detail", () => {
+		const serialized = serializeInspectorContent(
+			{
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [
+							{
+								type: INSPECTOR_DETAIL_TYPE,
+								attrs: {
+									title: labels.title,
+									selector: "#hero",
+									tagName: "section",
+									size: "300 × 120 px",
+									computedStyles: "{}",
+									styleCount: 0,
+									textContent: "Hero",
+									screenshotMention,
+								},
+							},
+						],
+					},
+				],
+			},
+			labels,
+		)
+
+		const transformed = transformInspectorContent(serialized)
+		const attrs = transformed.content?.[0]?.content?.[0]?.attrs
+		expect(attrs?.screenshotMention).toEqual(screenshotMention)
+
+		const schema = new Schema(schemaConfig as SchemaSpec)
+		const parsed = schema.nodeFromJSON(transformed)
+		expect(parsed.firstChild?.firstChild?.attrs.screenshotMention).toEqual(screenshotMention)
 	})
 })

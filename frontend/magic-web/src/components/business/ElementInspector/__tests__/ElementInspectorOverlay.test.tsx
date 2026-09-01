@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createRef, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { ElementInspectorOverlay } from "../ElementInspectorOverlay"
@@ -6,6 +6,9 @@ import type { HtmlSelectionTarget, InspectedElementInfo } from "../types"
 
 const captureAcquire = vi.hoisted(() => vi.fn().mockResolvedValue({}))
 const captureRelease = vi.hoisted(() => vi.fn())
+const captureIframeRegion = vi.hoisted(() =>
+	vi.fn().mockResolvedValue("data:image/png;base64,shot"),
+)
 const suppressCaptureCursor = vi.hoisted(() => vi.fn(() => vi.fn()))
 
 vi.mock("react-i18next", () => ({
@@ -16,7 +19,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../screenshot", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../screenshot")>()),
-	captureIframeRegion: vi.fn().mockResolvedValue("data:image/png;base64,shot"),
+	captureIframeRegion,
 	createCurrentTabCaptureSession: vi.fn(() => ({
 		acquire: captureAcquire,
 		release: captureRelease,
@@ -93,7 +96,43 @@ describe("ElementInspectorOverlay", () => {
 		}
 	})
 
-	it("uses the waiting-state highlight and shows element information after selection", () => {
+	it("keeps the pending panel mounted while a multi-selection target resolves", () => {
+		const onEditPendingTarget = vi.fn()
+		const onRemovePendingTarget = vi.fn()
+		const onSubmitPendingTargets = vi.fn()
+		const { rerender } = render(
+			<ElementInspectorOverlay
+				active
+				multiSelectionActive
+				iframeRef={{ current: null }}
+				hoveredElement={null}
+				selectedElement={null}
+				onClearSelection={vi.fn()}
+				onEditPendingTarget={onEditPendingTarget}
+				onRemovePendingTarget={onRemovePendingTarget}
+				onSubmitPendingTargets={onSubmitPendingTargets}
+			/>,
+		)
+		const panel = screen.getByTestId("element-inspector-pending-panel")
+
+		rerender(
+			<ElementInspectorOverlay
+				active={false}
+				multiSelectionActive
+				iframeRef={{ current: null }}
+				hoveredElement={null}
+				selectedElement={null}
+				onClearSelection={vi.fn()}
+				onEditPendingTarget={onEditPendingTarget}
+				onRemovePendingTarget={onRemovePendingTarget}
+				onSubmitPendingTargets={onSubmitPendingTargets}
+			/>,
+		)
+
+		expect(screen.getByTestId("element-inspector-pending-panel")).toBe(panel)
+	})
+
+	it("replaces the selected element label with a collapsible comment marker", () => {
 		const rect = {
 			top: 0,
 			left: 0,
@@ -125,13 +164,24 @@ describe("ElementInspectorOverlay", () => {
 				</div>,
 			)
 
-			expect(screen.getByTestId("element-inspector-selection-label")).toHaveTextContent(
-				"div.row-item.ai",
-			)
-			expect(screen.getByTestId("element-inspector-selection-label")).toHaveTextContent(
-				"320 × 44",
-			)
-			const highlight = document.querySelector(".border-blue-500")
+			expect(
+				screen.queryByTestId("element-inspector-selection-label"),
+			).not.toBeInTheDocument()
+			const marker = screen.getByTestId("element-inspector-comment-marker")
+			expect(marker.querySelector("button")).toHaveClass("inspector-comment-marker-button")
+			expect(marker).toHaveClass("overflow-visible")
+			expect(marker).not.toHaveClass("overflow-hidden")
+			const commentContent = screen.getByTestId("element-inspector-comment-content")
+			expect(commentContent).toHaveClass("max-w-0")
+			fireEvent.mouseEnter(marker)
+			expect(commentContent).toHaveClass("max-w-[184px]")
+			expect(commentContent).toHaveTextContent("stylePanel.inspector.emptyDescription")
+			fireEvent.click(marker.querySelector("button"))
+			fireEvent.mouseLeave(marker)
+			expect(commentContent).toHaveClass("max-w-[184px]")
+			fireEvent.click(marker.querySelector("button"))
+			expect(commentContent).toHaveClass("max-w-0")
+			const highlight = document.querySelector(".border-primary")
 			expect(highlight).toBeInTheDocument()
 			expect(highlight).toHaveStyle({ transition: "" })
 		} finally {
@@ -171,7 +221,7 @@ describe("ElementInspectorOverlay", () => {
 				</div>,
 			)
 
-			expect(document.querySelector(".border-blue-500")).toHaveStyle({
+			expect(document.querySelector(".border-primary")).toHaveStyle({
 				transition: "",
 			})
 		} finally {
@@ -223,6 +273,71 @@ describe("ElementInspectorOverlay", () => {
 		}
 	})
 
+	it("shows loading while the selected element preview is being captured", async () => {
+		let resolveCapture!: (dataUrl: string) => void
+		captureIframeRegion.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveCapture = resolve
+				}),
+		)
+		const rect = {
+			top: 0,
+			left: 0,
+			width: 640,
+			height: 360,
+			bottom: 360,
+			right: 640,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect
+		const originalGetBoundingClientRect = HTMLIFrameElement.prototype.getBoundingClientRect
+		HTMLIFrameElement.prototype.getBoundingClientRect = () => rect
+		const onCaptureElementScreenshot = vi.fn()
+
+		try {
+			const iframeRef = { current: null as HTMLIFrameElement | null }
+			render(
+				<div>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={createInfo()}
+						onClearSelection={vi.fn()}
+						hideInfoCard
+						onCaptureElementScreenshot={onCaptureElementScreenshot}
+					/>
+				</div>,
+			)
+
+			await waitFor(() => {
+				const loading = screen.getByTestId("element-inspector-screenshot-loading")
+				expect(loading).toBeInTheDocument()
+				expect(loading).toHaveClass("left-4", "top-4")
+				expect(loading).not.toHaveClass("right-4")
+				expect(
+					document.querySelector('[data-element-inspector-overlay="true"]'),
+				).not.toHaveStyle({ visibility: "hidden" })
+			})
+
+			await waitFor(() => expect(resolveCapture).toBeTypeOf("function"))
+			await act(async () => {
+				resolveCapture("data:image/png;base64,shot")
+			})
+			await waitFor(() => {
+				expect(onCaptureElementScreenshot).toHaveBeenCalledOnce()
+				expect(
+					screen.queryByTestId("element-inspector-screenshot-loading"),
+				).not.toBeInTheDocument()
+			})
+		} finally {
+			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
+		}
+	})
+
 	it("hides the cursor before automatic preview waits for capture frames", async () => {
 		suppressCaptureCursor.mockClear()
 		const scheduledFrames: FrameRequestCallback[] = []
@@ -263,8 +378,16 @@ describe("ElementInspectorOverlay", () => {
 				</div>,
 			)
 
+			await waitFor(() => expect(scheduledFrames.length).toBeGreaterThanOrEqual(1))
+			await act(async () => {
+				scheduledFrames.shift()?.(0)
+			})
+			await waitFor(() => expect(scheduledFrames.length).toBeGreaterThanOrEqual(1))
+			await act(async () => {
+				scheduledFrames.shift()?.(0)
+			})
 			await waitFor(() => expect(suppressCaptureCursor).toHaveBeenCalledOnce())
-			expect(scheduledFrames.length).toBeGreaterThan(0)
+			expect(suppressCaptureCursor).toHaveBeenCalled()
 		} finally {
 			requestAnimationFrame.mockRestore()
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
@@ -312,7 +435,7 @@ describe("ElementInspectorOverlay", () => {
 		}
 	})
 
-	it("prewarms current-tab capture for AI element selection", async () => {
+	it("does not prewarm current-tab capture before a screenshot is confirmed", async () => {
 		captureAcquire.mockClear()
 		const iframeRef = { current: null as HTMLIFrameElement | null }
 		let prewarm: (() => void) | null = null
@@ -337,9 +460,8 @@ describe("ElementInspectorOverlay", () => {
 			expect(prewarm).toEqual(expect.any(Function))
 		})
 		prewarm?.()
-		await waitFor(() => {
-			expect(captureAcquire).toHaveBeenCalledOnce()
-		})
+		await Promise.resolve()
+		expect(captureAcquire).not.toHaveBeenCalled()
 	})
 
 	it("does not capture selected elements when screenshot capture is unsupported", async () => {
@@ -430,10 +552,14 @@ describe("ElementInspectorOverlay", () => {
 				</div>,
 			)
 
-			expect(screen.getByTestId("element-inspector-selection-label")).toHaveTextContent(
-				"div.row-item.ai",
+			expect(
+				screen.queryByTestId("element-inspector-selection-label"),
+			).not.toBeInTheDocument()
+			fireEvent.mouseEnter(screen.getByTestId("element-inspector-comment-marker"))
+			expect(screen.getByTestId("element-inspector-comment-content")).toHaveTextContent(
+				"Move it",
 			)
-			expect(document.querySelector(".border-blue-500")).toBeInTheDocument()
+			expect(document.querySelector(".border-primary")).toBeInTheDocument()
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
 		}
@@ -499,6 +625,223 @@ describe("ElementInspectorOverlay", () => {
 			expect(screen.getByRole("textbox")).toHaveValue("Move it")
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
+		}
+	})
+
+	it("keeps the element editor attached to the current selection box while scrolling", async () => {
+		const iframeRect = {
+			top: 0,
+			left: 0,
+			width: 640,
+			height: 360,
+			bottom: 360,
+			right: 640,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect
+		const panelRect = {
+			...iframeRect,
+			width: 900,
+			right: 900,
+		} as DOMRect
+		const originalIframeRect = HTMLIFrameElement.prototype.getBoundingClientRect
+		const originalElementRect = HTMLElement.prototype.getBoundingClientRect
+		HTMLIFrameElement.prototype.getBoundingClientRect = () => iframeRect
+		HTMLElement.prototype.getBoundingClientRect = function () {
+			if (this.dataset.testid === "inspector-panel") return panelRect
+			if (this.querySelector?.("iframe")) return iframeRect
+			return originalElementRect.call(this)
+		}
+
+		const info = createInfo()
+		const target: HtmlSelectionTarget = {
+			id: info.selector,
+			kind: "element",
+			info,
+			instruction: "Move it",
+		}
+		const iframeRef = { current: null as HTMLIFrameElement | null }
+		const panelContainerRef = createRef<HTMLDivElement>()
+
+		try {
+			const { rerender } = render(
+				<div
+					data-testid="inspector-panel"
+					ref={panelContainerRef}
+					style={{ width: 900, height: 360 }}
+				>
+					<div style={{ width: 640, height: 360 }}>
+						<iframe ref={iframeRef} />
+						<ElementInspectorOverlay
+							active={false}
+							iframeRef={iframeRef}
+							hoveredElement={null}
+							selectedElement={null}
+							onClearSelection={vi.fn()}
+							activeTarget={target}
+							draftInstruction={target.instruction}
+							onDraftInstructionChange={vi.fn()}
+							onConfirmTarget={vi.fn()}
+							onCancelTarget={vi.fn()}
+							pendingTargets={[target]}
+							onEditPendingTarget={vi.fn()}
+							onRemovePendingTarget={vi.fn()}
+							onSubmitPendingTargets={vi.fn()}
+							panelContainerRef={panelContainerRef}
+							trackedRects={{ [info.selector]: { ...info.rect, top: 40 } }}
+						/>
+					</div>
+				</div>,
+			)
+
+			let initialPopoverTop = ""
+			await waitFor(() => {
+				initialPopoverTop = screen.getByTestId("element-inspector-edit-popover").style.top
+				expect(initialPopoverTop).not.toBe("")
+			})
+
+			rerender(
+				<div
+					data-testid="inspector-panel"
+					ref={panelContainerRef}
+					style={{ width: 900, height: 360 }}
+				>
+					<div style={{ width: 640, height: 360 }}>
+						<iframe ref={iframeRef} />
+						<ElementInspectorOverlay
+							active={false}
+							iframeRef={iframeRef}
+							hoveredElement={null}
+							selectedElement={null}
+							onClearSelection={vi.fn()}
+							activeTarget={target}
+							draftInstruction={target.instruction}
+							onDraftInstructionChange={vi.fn()}
+							onConfirmTarget={vi.fn()}
+							onCancelTarget={vi.fn()}
+							pendingTargets={[target]}
+							onEditPendingTarget={vi.fn()}
+							onRemovePendingTarget={vi.fn()}
+							onSubmitPendingTargets={vi.fn()}
+							panelContainerRef={panelContainerRef}
+							trackedRects={{ [info.selector]: { ...info.rect, top: 140 } }}
+						/>
+					</div>
+				</div>,
+			)
+
+			await waitFor(() => {
+				const popover = screen.getByTestId("element-inspector-edit-popover")
+				expect(popover.style.top).not.toBe(initialPopoverTop)
+			})
+		} finally {
+			HTMLIFrameElement.prototype.getBoundingClientRect = originalIframeRect
+			HTMLElement.prototype.getBoundingClientRect = originalElementRect
+		}
+	})
+
+	it("hides the element editor after the selected box leaves the viewport", async () => {
+		const iframeRect = {
+			top: 0,
+			left: 0,
+			width: 640,
+			height: 360,
+			bottom: 360,
+			right: 640,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect
+		const panelRect = { ...iframeRect, width: 900, right: 900 } as DOMRect
+		const originalIframeRect = HTMLIFrameElement.prototype.getBoundingClientRect
+		const originalElementRect = HTMLElement.prototype.getBoundingClientRect
+		HTMLIFrameElement.prototype.getBoundingClientRect = () => iframeRect
+		HTMLElement.prototype.getBoundingClientRect = function () {
+			if (this.dataset.testid === "inspector-panel") return panelRect
+			if (this.querySelector?.("iframe")) return iframeRect
+			return originalElementRect.call(this)
+		}
+
+		const info = createInfo()
+		const target: HtmlSelectionTarget = {
+			id: info.selector,
+			kind: "element",
+			info,
+			instruction: "Move it",
+		}
+		const iframeRef = { current: null as HTMLIFrameElement | null }
+		const panelContainerRef = createRef<HTMLDivElement>()
+
+		try {
+			const { rerender } = render(
+				<div
+					data-testid="inspector-panel"
+					ref={panelContainerRef}
+					style={{ width: 900, height: 360 }}
+				>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={null}
+						onClearSelection={vi.fn()}
+						activeTarget={target}
+						draftInstruction={target.instruction}
+						onDraftInstructionChange={vi.fn()}
+						onConfirmTarget={vi.fn()}
+						onCancelTarget={vi.fn()}
+						pendingTargets={[target]}
+						onEditPendingTarget={vi.fn()}
+						onRemovePendingTarget={vi.fn()}
+						onSubmitPendingTargets={vi.fn()}
+						panelContainerRef={panelContainerRef}
+						trackedRects={{ [info.selector]: { ...info.rect, top: -100 } }}
+					/>
+				</div>,
+			)
+
+			await waitFor(() => {
+				expect(
+					screen.queryByTestId("element-inspector-edit-popover"),
+				).not.toBeInTheDocument()
+			})
+
+			rerender(
+				<div
+					data-testid="inspector-panel"
+					ref={panelContainerRef}
+					style={{ width: 900, height: 360 }}
+				>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={null}
+						onClearSelection={vi.fn()}
+						activeTarget={target}
+						draftInstruction={target.instruction}
+						onDraftInstructionChange={vi.fn()}
+						onConfirmTarget={vi.fn()}
+						onCancelTarget={vi.fn()}
+						pendingTargets={[target]}
+						onEditPendingTarget={vi.fn()}
+						onRemovePendingTarget={vi.fn()}
+						onSubmitPendingTargets={vi.fn()}
+						panelContainerRef={panelContainerRef}
+						trackedRects={{ [info.selector]: { ...info.rect, top: 120 } }}
+					/>
+				</div>,
+			)
+
+			await waitFor(() => {
+				expect(screen.getByTestId("element-inspector-edit-popover")).toBeInTheDocument()
+			})
+		} finally {
+			HTMLIFrameElement.prototype.getBoundingClientRect = originalIframeRect
+			HTMLElement.prototype.getBoundingClientRect = originalElementRect
 		}
 	})
 
@@ -606,6 +949,14 @@ describe("ElementInspectorOverlay", () => {
 				})
 				expect(screen.getByTestId("element-inspector-edit-popover")).toBeInTheDocument()
 			})
+			expect(
+				screen.queryByTestId("element-inspector-selection-label"),
+			).not.toBeInTheDocument()
+			const commentMarker = screen.getByTestId("element-inspector-comment-marker")
+			fireEvent.mouseEnter(commentMarker)
+			expect(screen.getByTestId("element-inspector-comment-content")).toHaveTextContent(
+				"stylePanel.inspector.emptyDescription",
+			)
 			const popover = screen.getByTestId("element-inspector-edit-popover")
 			expect(popover.parentElement).toHaveAttribute("data-element-inspector-panel-portal")
 			expect(popover.parentElement?.parentElement).toBe(panelContainerRef.current)
@@ -613,7 +964,7 @@ describe("ElementInspectorOverlay", () => {
 			fireEvent.change(textarea, { target: { value: "Move this section lower" } })
 			expect(textarea).toHaveValue("Move this section lower")
 			fireEvent.click(screen.getByRole("button", { name: "stylePanel.inspector.confirm" }))
-			expect(onConfirmTarget).toHaveBeenCalledOnce()
+			await waitFor(() => expect(onConfirmTarget).toHaveBeenCalledOnce(), { timeout: 1000 })
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalIframeRect
 			HTMLElement.prototype.getBoundingClientRect = originalElementRect
@@ -678,7 +1029,7 @@ describe("ElementInspectorOverlay", () => {
 				configurable: true,
 				value: 0,
 			})
-			const highlight = document.querySelector(".border-blue-500")
+			const highlight = document.querySelector(".border-primary")
 			expect(highlight).toHaveStyle({ top: "780px" })
 
 			Object.defineProperty(iframe.contentWindow, "scrollY", {
@@ -686,6 +1037,85 @@ describe("ElementInspectorOverlay", () => {
 				value: 700,
 			})
 			fireEvent.scroll(iframe.contentDocument)
+			await waitFor(() => expect(highlight).toHaveStyle({ top: "80px" }))
+		} finally {
+			HTMLIFrameElement.prototype.getBoundingClientRect = originalIframeRect
+			HTMLElement.prototype.getBoundingClientRect = originalElementRect
+		}
+	})
+
+	it("uses the runtime scroll offset when the iframe is cross-origin", async () => {
+		const iframeRect = {
+			top: 0,
+			left: 0,
+			width: 640,
+			height: 360,
+			bottom: 360,
+			right: 640,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect
+		const originalIframeRect = HTMLIFrameElement.prototype.getBoundingClientRect
+		const originalElementRect = HTMLElement.prototype.getBoundingClientRect
+		HTMLIFrameElement.prototype.getBoundingClientRect = () => iframeRect
+		HTMLElement.prototype.getBoundingClientRect = function () {
+			if (this.querySelector?.("iframe")) return iframeRect
+			return originalElementRect.call(this)
+		}
+
+		const iframeRef = { current: null as HTMLIFrameElement | null }
+		const target: HtmlSelectionTarget = {
+			id: "screenshot:cross-origin-scroll",
+			kind: "screenshot",
+			screenshot: {
+				dataUrl: "data:image/png;base64,shot",
+				rect: { left: 20, top: 80, width: 200, height: 120 },
+				documentRect: { left: 20, top: 780, width: 200, height: 120 },
+			},
+			instruction: "Keep this area",
+		}
+
+		try {
+			const { rerender } = render(
+				<div style={{ width: 640, height: 360 }}>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={null}
+						onClearSelection={vi.fn()}
+						pendingTargets={[target]}
+						onEditPendingTarget={vi.fn()}
+						onRemovePendingTarget={vi.fn()}
+						onSubmitPendingTargets={vi.fn()}
+						iframeScrollOffset={{ left: 0, top: 0 }}
+					/>
+				</div>,
+			)
+
+			const highlight = document.querySelector(".border-primary")
+			expect(highlight).toHaveStyle({ top: "780px" })
+
+			rerender(
+				<div style={{ width: 640, height: 360 }}>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={null}
+						onClearSelection={vi.fn()}
+						pendingTargets={[target]}
+						onEditPendingTarget={vi.fn()}
+						onRemovePendingTarget={vi.fn()}
+						onSubmitPendingTargets={vi.fn()}
+						iframeScrollOffset={{ left: 0, top: 700 }}
+					/>
+				</div>,
+			)
+
 			await waitFor(() => expect(highlight).toHaveStyle({ top: "80px" }))
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalIframeRect

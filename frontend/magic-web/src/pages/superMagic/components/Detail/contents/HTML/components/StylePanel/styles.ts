@@ -5,6 +5,7 @@
  */
 export const STYLE_PANEL_STYLES = {
 	section: "min-w-0 space-y-2",
+	sectionContent: "min-w-0 space-y-3",
 	sectionTitle: "flex min-h-7 items-center text-sm font-semibold leading-5 text-foreground",
 	subsectionTitle:
 		"flex min-h-6 items-center justify-between gap-2 py-1 text-[11px] font-semibold leading-4 text-foreground",

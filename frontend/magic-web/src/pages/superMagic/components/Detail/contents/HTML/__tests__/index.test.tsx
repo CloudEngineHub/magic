@@ -225,7 +225,13 @@ vi.mock("@/components/base/MagicSpin", () => ({
 }))
 
 vi.mock("../../../components/EditToolbar/AIEditButton", () => ({
-	default: () => <div data-testid="ai-edit-button" />,
+	default: (props: { maxItems?: number; onPrimaryAction?: () => void }) => (
+		<div
+			data-testid="ai-edit-button"
+			data-max-items={props.maxItems}
+			data-has-primary-action={Boolean(props.onPrimaryAction)}
+		/>
+	),
 }))
 
 vi.mock("../../../components/EditToolbar/FileEditButtons", () => ({
@@ -234,15 +240,17 @@ vi.mock("../../../components/EditToolbar/FileEditButtons", () => ({
 		onSave,
 		onSaveAndExit,
 		onCancel,
+		editLabel,
 	}: {
 		onEdit?: () => void
 		onSave?: () => void
 		onSaveAndExit?: () => void
 		onCancel?: () => void
+		editLabel?: string
 	}) => (
 		<div data-testid="file-edit-buttons">
 			<button type="button" data-testid="html-edit-button" onClick={onEdit}>
-				edit
+				{editLabel ?? "edit"}
 			</button>
 			<button type="button" data-testid="html-save-button" onClick={onSave}>
 				save
@@ -541,6 +549,43 @@ describe("HTML", () => {
 		mockGetFileContentById.mockReset()
 		mockProcessHtmlContent.mockClear()
 		mockIsolatedHTMLRendererProps.mockClear()
+	})
+
+	it("should use the HTML-specific edit label and show only three AI edit items", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				setIsEditMode={vi.fn()}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute("data-max-items", "3")
+			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
+				"data-has-primary-action",
+				"true",
+			)
+			expect(screen.getByTestId("html-edit-button")).toHaveTextContent("common.edit")
+		})
+	})
+
+	it("should hide the AI edit button in code preview mode", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="code"
+				isEditMode={false}
+				setIsEditMode={vi.fn()}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("ai-edit-button")).not.toBeInTheDocument()
+		})
 	})
 
 	it("should stop preview loading when the html file is empty", async () => {

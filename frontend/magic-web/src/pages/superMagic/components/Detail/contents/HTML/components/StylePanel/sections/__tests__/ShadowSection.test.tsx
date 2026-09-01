@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ChangeEvent, InputHTMLAttributes } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import ShadowSection from "../ShadowSection"
@@ -44,6 +44,24 @@ vi.mock("@/components/shadcn-ui/checkbox", () => ({
 	),
 }))
 
+vi.mock("@/components/shadcn-ui/switch", () => ({
+	Switch: ({
+		checked,
+		onCheckedChange,
+		...props
+	}: {
+		checked: boolean
+		onCheckedChange: (value: boolean) => void
+	}) => (
+		<button
+			{...props}
+			role="switch"
+			aria-checked={checked}
+			onClick={() => onCheckedChange(!checked)}
+		/>
+	),
+}))
+
 vi.mock("../../controls", () => ({
 	NumericDragInput: ({
 		value,
@@ -78,6 +96,7 @@ describe("ShadowSection", () => {
 	})
 
 	afterEach(() => {
+		cleanup()
 		vi.useRealTimers()
 	})
 
@@ -91,7 +110,8 @@ describe("ShadowSection", () => {
 
 		expect(screen.getByLabelText("stylePanel.shadowOffsetX")).toHaveValue("1")
 		expect(screen.getByLabelText("stylePanel.shadowOffsetY")).toHaveValue("2")
-		expect(screen.getByLabelText("stylePanel.shadowBlur")).toHaveValue("3")
+		expect(screen.getByText("3px")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "stylePanel.shadowAdvanced" }))
 		expect(screen.getByLabelText("stylePanel.shadowSpread")).toHaveValue("4")
 
 		rerender(
@@ -106,8 +126,49 @@ describe("ShadowSection", () => {
 
 		expect(screen.getByLabelText("stylePanel.shadowOffsetX")).toHaveValue("5")
 		expect(screen.getByLabelText("stylePanel.shadowOffsetY")).toHaveValue("6")
-		expect(screen.getByLabelText("stylePanel.shadowBlur")).toHaveValue("7")
+		expect(screen.getByText("7px")).toBeInTheDocument()
 		expect(screen.getByLabelText("stylePanel.shadowSpread")).toHaveValue("8")
+	})
+
+	it("parses the color-first format returned by computed styles", () => {
+		render(
+			<ShadowSection
+				selectedElement={createSelectedElement(
+					"#target",
+					"rgba(17, 17, 17, 0.2) 5px 6px 7px 8px",
+				)}
+				editorRef={{ current: null }}
+			/>,
+		)
+
+		expect(screen.getByLabelText("stylePanel.shadowOffsetX")).toHaveValue("5")
+		expect(screen.getByLabelText("stylePanel.shadowOffsetY")).toHaveValue("6")
+		expect(screen.getByText("7px")).toBeInTheDocument()
+	})
+
+	it("toggles the shadow off and restores it with the switch", () => {
+		const onStyleChange = vi.fn()
+		render(
+			<ShadowSection
+				selectedElement={createSelectedElement("#target", "none")}
+				editorRef={{ current: null }}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		const toggle = screen.getByRole("switch", { name: "stylePanel.shadowEnabled" })
+		expect(toggle).toHaveAttribute("aria-checked", "false")
+
+		fireEvent.click(toggle)
+		expect(toggle).toHaveAttribute("aria-checked", "true")
+		expect(onStyleChange).toHaveBeenLastCalledWith(
+			"boxShadow",
+			"0px 4px 6px 0px rgba(0, 0, 0, 0.1)",
+		)
+
+		fireEvent.click(toggle)
+		expect(toggle).toHaveAttribute("aria-checked", "false")
+		expect(onStyleChange).toHaveBeenLastCalledWith("boxShadow", "none")
 	})
 
 	it("cancels a pending shadow update when external styles are restored", () => {
@@ -150,7 +211,7 @@ describe("ShadowSection", () => {
 		)
 
 		fireEvent.click(screen.getAllByTestId("shadow-slider")[0])
-		expect(screen.getByLabelText("stylePanel.shadowOffsetX")).toHaveValue("10")
+		expect(screen.getByText("16px")).toBeInTheDocument()
 
 		rerender(
 			<ShadowSection
@@ -160,10 +221,10 @@ describe("ShadowSection", () => {
 			/>,
 		)
 
-		expect(screen.getByLabelText("stylePanel.shadowOffsetX")).toHaveValue("10")
+		expect(screen.getByText("16px")).toBeInTheDocument()
 		act(() => vi.advanceTimersByTime(100))
 
-		expect(onStyleChange).toHaveBeenCalledWith("boxShadow", "10px 4px 6px 0px rgb(0, 0, 0)")
+		expect(onStyleChange).toHaveBeenCalledWith("boxShadow", "0px 4px 16px 0px rgb(0, 0, 0)")
 	})
 
 	it("syncs opacity when computed styles change for the same element", () => {

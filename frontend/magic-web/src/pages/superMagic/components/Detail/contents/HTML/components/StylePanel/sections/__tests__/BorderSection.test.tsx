@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ChangeEvent, InputHTMLAttributes, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import BorderSection from "../BorderSection"
@@ -9,30 +9,31 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
-vi.mock("@/components/shadcn-ui/select", () => ({
-	Select: ({
-		value,
-		onValueChange,
+vi.mock("@/components/shadcn-ui/button", () => ({
+	Button: ({
 		children,
+		...props
+	}: { children: ReactNode } & InputHTMLAttributes<HTMLButtonElement>) => (
+		<button {...props}>{children}</button>
+	),
+}))
+
+vi.mock("@/components/shadcn-ui/switch", () => ({
+	Switch: ({
+		checked,
+		onCheckedChange,
+		...props
 	}: {
-		value: string
-		onValueChange: (value: string) => void
-		children: ReactNode
+		checked: boolean
+		onCheckedChange: (value: boolean) => void
 	}) => (
-		<select
-			aria-label="border style"
-			value={value}
-			onChange={(event) => onValueChange(event.target.value)}
-		>
-			{children}
-		</select>
+		<button
+			{...props}
+			role="switch"
+			aria-checked={checked}
+			onClick={() => onCheckedChange(!checked)}
+		/>
 	),
-	SelectContent: ({ children }: { children: ReactNode }) => children,
-	SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
-		<option value={value}>{children}</option>
-	),
-	SelectTrigger: ({ children }: { children: ReactNode }) => children,
-	SelectValue: () => null,
 }))
 
 vi.mock("../../controls", () => ({
@@ -74,6 +75,11 @@ function createSelectedElement(
 describe("BorderSection", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		cleanup()
+		vi.useRealTimers()
 	})
 
 	it("syncs local controls when the selected element changes", () => {
@@ -132,7 +138,7 @@ describe("BorderSection", () => {
 		expect(screen.getByLabelText("stylePanel.borderRadius")).toHaveValue("8")
 	})
 
-	it("adds a visible default width when enabling a border style", () => {
+	it("enables a visible default width when choosing a border style", () => {
 		const onStyleChange = vi.fn()
 		render(
 			<BorderSection
@@ -142,13 +148,70 @@ describe("BorderSection", () => {
 			/>,
 		)
 
-		fireEvent.change(screen.getByRole("combobox", { name: "border style" }), {
-			target: { value: "dashed" },
-		})
+		fireEvent.click(
+			screen.getByRole("button", { name: "stylePanel.borderStyleOptions.dashed" }),
+		)
 
 		expect(onStyleChange).toHaveBeenNthCalledWith(1, "borderWidth", "1px")
 		expect(onStyleChange).toHaveBeenNthCalledWith(2, "borderStyle", "dashed")
 		expect(screen.getByLabelText("stylePanel.borderWidth")).toHaveValue("1")
+	})
+
+	it("toggles the border and applies the default style when enabled", () => {
+		const onStyleChange = vi.fn()
+		render(
+			<BorderSection
+				selectedElement={createSelectedElement("#target", "0px", "none", "#000000", "0px")}
+				editorRef={{ current: null }}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("switch", { name: "stylePanel.borderEnabled" }))
+
+		expect(onStyleChange).toHaveBeenNthCalledWith(1, "borderWidth", "1px")
+		expect(onStyleChange).toHaveBeenNthCalledWith(2, "borderStyle", "solid")
+		expect(screen.getByTestId("html-style-panel-border-preview").firstElementChild).toHaveStyle(
+			{
+				borderWidth: "1px",
+			},
+		)
+	})
+
+	it("applies a quick width preset and updates the preview", () => {
+		const onStyleChange = vi.fn()
+		render(
+			<BorderSection
+				selectedElement={createSelectedElement("#target", "1px", "solid", "#000000", "0px")}
+				editorRef={{ current: null }}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "4" }))
+
+		act(() => vi.advanceTimersByTime(300))
+		expect(onStyleChange).toHaveBeenCalledWith("borderWidth", "4px")
+		expect(screen.getByLabelText("stylePanel.borderWidth")).toHaveValue("4")
+	})
+
+	it("updates the preview immediately when the color changes", () => {
+		render(
+			<BorderSection
+				selectedElement={createSelectedElement("#target", "1px", "solid", "#000000", "0px")}
+				editorRef={{ current: null }}
+			/>,
+		)
+
+		fireEvent.change(screen.getByLabelText("stylePanel.borderColor"), {
+			target: { value: "#ff0000" },
+		})
+
+		expect(screen.getByTestId("html-style-panel-border-preview").firstElementChild).toHaveStyle(
+			{
+				borderColor: "rgb(255, 0, 0)",
+			},
+		)
 	})
 
 	it("enables a solid border when a positive width is entered", () => {

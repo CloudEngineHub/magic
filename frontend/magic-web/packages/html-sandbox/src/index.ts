@@ -345,6 +345,23 @@ function handleRuntimeMessage(event: MessageEvent): void {
 		elementInspector.updateTrackedSelectors(event.data.selectors)
 		return
 	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR") {
+		elementInspector.scrollToSelector(
+			typeof event.data.selector === "string" ? event.data.selector : "",
+		)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCROLL_TO_POSITION") {
+		elementInspector.scrollToPosition({
+			left: Number(event.data.left),
+			top: Number(event.data.top),
+		})
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCREENSHOT_REQUEST") {
+		void elementInspector.captureScreenshot(event.data)
+		return
+	}
 
 	// DevTools toggle (parent → iframe)
 	if (event.data.type === DEVTOOLS_MSG.TOGGLE) {

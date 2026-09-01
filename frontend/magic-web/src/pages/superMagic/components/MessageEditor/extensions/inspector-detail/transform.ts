@@ -80,6 +80,7 @@ function parseInspectorMarker(text: string) {
 		inlineBefore: Boolean(metadataMarkerCount & 1),
 		inlineAfter: Boolean(metadataMarkerCount & 2),
 		hasFileMention: Boolean(metadataMarkerCount & 4),
+		hasScreenshotMention: Boolean(metadataMarkerCount & 8),
 	}
 }
 
@@ -103,6 +104,7 @@ function extractInspectorAttrs(
 	elementHtml: string
 	selectorMatchCount: number
 	fileMention?: TiptapMentionAttributes | null
+	screenshotMention?: TiptapMentionAttributes | null
 } {
 	let selector = ""
 	let size = ""
@@ -217,7 +219,7 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 
 		// Detect the marker at the start of a paragraph
 		if (node.type === "paragraph" && text.startsWith(INSPECTOR_DETAIL_MARKER)) {
-			const { titleText, inlineBefore, inlineAfter, hasFileMention } =
+			const { titleText, inlineBefore, inlineAfter, hasFileMention, hasScreenshotMention } =
 				parseInspectorMarker(text)
 
 			// Collect following detail paragraphs
@@ -249,12 +251,19 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 				// Remove preceding plain paragraph if it's a duplicate of the title
 				// (old format stored title as a separate paragraph before the marker)
 				if (newContent.length > 0) {
-					const prev = newContent[newContent.length - 1]
-					const fileMention = getOnlyMention(prev)
+					const screenshotMention = getOnlyMention(newContent[newContent.length - 1])
+					if (screenshotMention && hasScreenshotMention) {
+						attrs.screenshotMention = screenshotMention
+						newContent.pop()
+					}
+					const fileMention = getOnlyMention(newContent[newContent.length - 1])
 					if (fileMention && (hasFileMention || !inlineBefore)) {
 						attrs.fileMention = fileMention
 						newContent.pop()
-					} else if (prev.type === "paragraph" && getFirstText(prev) === titleText) {
+					} else if (
+						newContent[newContent.length - 1]?.type === "paragraph" &&
+						getFirstText(newContent[newContent.length - 1]) === titleText
+					) {
 						newContent.pop()
 					}
 				}
@@ -346,6 +355,7 @@ export function serializeInspectorContent(
 			elementHtml?: string
 			selectorMatchCount?: number
 			fileMention?: TiptapMentionAttributes | null
+			screenshotMention?: TiptapMentionAttributes | null
 		}
 
 		const content: JSONContent[] = []
@@ -353,12 +363,19 @@ export function serializeInspectorContent(
 		if (attrs.fileMention) {
 			content.push(para({ type: "mention", attrs: attrs.fileMention }))
 		}
+		if (attrs.screenshotMention) {
+			content.push(para({ type: "mention", attrs: attrs.screenshotMention }))
+		}
 
 		// Title with marker
 		const metadataMarkerCount =
 			(inlinePosition.before ? 1 : 0) +
 			(inlinePosition.after ? 2 : 0) +
-			(attrs.fileMention ? 4 : 0)
+			// The file marker is only needed when inline content precedes the
+			// inspector node; standalone file mentions are inferred from the
+			// paragraph immediately before the title for backward compatibility.
+			(attrs.fileMention && inlinePosition.before ? 4 : 0) +
+			(attrs.screenshotMention ? 8 : 0)
 		content.push(
 			para(text(`${INSPECTOR_DETAIL_MARKER.repeat(1 + metadataMarkerCount)}${labels.title}`)),
 		)

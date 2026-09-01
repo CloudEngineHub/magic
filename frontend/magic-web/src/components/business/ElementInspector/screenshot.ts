@@ -1,5 +1,5 @@
 import { snapdom, type SnapdomPlugin } from "@zumer/snapdom"
-import type { InspectedElementRect } from "./types"
+import { INSPECTOR_MSG, type InspectedElementRect } from "./types"
 
 interface CaptureOptions {
 	iframe: HTMLIFrameElement
@@ -9,6 +9,10 @@ interface CaptureOptions {
 	viewportSelection?: ScreenRect
 	/** Reusable current-tab capture session owned by the active inspector. */
 	currentTabSession?: CurrentTabCaptureSession
+	/** Exact origin of the rendered iframe, used by the screenshot bridge. */
+	iframeTargetOrigin?: string
+	/** Hide host inspector chrome before falling back to rendered-tab capture. */
+	beforeCurrentTabCapture?: () => Promise<void>
 }
 
 /** Hide every page-defined cursor before a rendered-tab frame is captured. */
@@ -75,6 +79,102 @@ interface ScreenRect {
 	top: number
 	width: number
 	height: number
+}
+
+const IFRAME_SCREENSHOT_ACK_TIMEOUT_MS = 500
+const IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS = 15_000
+
+/** Yield until the browser can process a visual state update. */
+export function waitForNextAnimationFrame(): Promise<void> {
+	return new Promise<void>((resolve) => {
+		if (typeof requestAnimationFrame === "function") {
+			requestAnimationFrame(() => resolve())
+			return
+		}
+		setTimeout(resolve, 0)
+	})
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader()
+		reader.onload = () => {
+			if (typeof reader.result === "string") resolve(reader.result)
+			else reject(new Error("Iframe screenshot response is not a data URL"))
+		}
+		reader.onerror = () => reject(reader.error ?? new Error("Failed to read iframe screenshot"))
+		reader.readAsDataURL(blob)
+	})
+}
+
+function getIframeTargetOrigin(iframe: HTMLIFrameElement, configuredOrigin?: string): string {
+	if (configuredOrigin) return configuredOrigin
+	try {
+		return new URL(iframe.src || window.location.href, window.location.href).origin
+	} catch {
+		return window.location.origin
+	}
+}
+
+/** Ask the iframe runtime to rasterize its own DOM without display-media permission. */
+export async function captureWithIframeRuntime(options: CaptureOptions): Promise<string | null> {
+	const targetWindow = options.iframe.contentWindow
+	if (!targetWindow) return null
+
+	const requestId = `inspector-screenshot-${Date.now()}-${Math.random().toString(36).slice(2)}`
+	const targetOrigin = getIframeTargetOrigin(options.iframe, options.iframeTargetOrigin)
+
+	return new Promise((resolve) => {
+		let settled = false
+		let timeoutId: number
+		const cleanup = () => {
+			window.removeEventListener("message", handleMessage)
+			window.clearTimeout(timeoutId)
+		}
+		const finish = (value: string | null) => {
+			if (settled) return
+			settled = true
+			cleanup()
+			resolve(value)
+		}
+		const handleMessage = (event: MessageEvent) => {
+			if (event.source !== targetWindow || event.origin !== targetOrigin) return
+			const data = event.data
+			if (!data || data.requestId !== requestId) return
+			if (data.type === INSPECTOR_MSG.SCREENSHOT_ACK) {
+				window.clearTimeout(timeoutId)
+				timeoutId = window.setTimeout(
+					() => finish(null),
+					IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS,
+				)
+				return
+			}
+			if (data.type !== INSPECTOR_MSG.SCREENSHOT_RESPONSE) return
+			if (!data.success || !(data.blob instanceof Blob)) {
+				finish(null)
+				return
+			}
+			void blobToDataUrl(data.blob).then(
+				(value) => finish(value),
+				() => finish(null),
+			)
+		}
+		timeoutId = window.setTimeout(() => finish(null), IFRAME_SCREENSHOT_ACK_TIMEOUT_MS)
+		window.addEventListener("message", handleMessage)
+		try {
+			targetWindow.postMessage(
+				{
+					type: INSPECTOR_MSG.SCREENSHOT_REQUEST,
+					requestId,
+					selection: options.selection,
+					outputSize: getCaptureOutputSize(options.selection, options.viewportSelection),
+				},
+				targetOrigin,
+			)
+		} catch {
+			finish(null)
+		}
+	})
 }
 
 interface CaptureWindowMetrics {
@@ -853,6 +953,9 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 		iframeDocument = null
 	}
 	if (!iframeDocument?.body || shouldCaptureCurrentTab(iframeDocument.body, options.selection)) {
+		const iframeScreenshot = await captureWithIframeRuntime(options)
+		if (iframeScreenshot) return iframeScreenshot
+		await options.beforeCurrentTabCapture?.()
 		return captureCurrentTab(options)
 	}
 

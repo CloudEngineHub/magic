@@ -71,10 +71,6 @@ import {
 } from "@/components/business/ElementInspector"
 import type { CanonicalContentDimensions } from "./utils/slide-dimensions"
 
-// PPTControlBar is anchored to the same canvas edge as the inspector panel.
-// Keep a small visual gap so the two pieces of chrome remain independently usable.
-const PPT_INSPECTOR_PANEL_BOTTOM_OFFSET = 72
-
 /**
  * Nested HTML documents may relay navigation directly to the host window. Check
  * that such a source actually belongs to the current iframe before accepting it.
@@ -2601,6 +2597,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 															elementInspector.selectedElement
 														}
 														trackedRects={elementInspector.trackedRects}
+														iframeScrollOffset={
+															elementInspector.iframeScrollOffset ??
+															undefined
+														}
 														onClearSelection={
 															elementInspector.clearSelection
 														}
@@ -2614,6 +2614,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 															)
 														}}
 														hideInfoCard={inspectorHideInfoCard}
+														multiSelectionActive={isAppendPicking}
 														activeTarget={inspectorActiveTarget}
 														draftInstruction={inspectorDraftInstruction}
 														onDraftInstructionChange={
@@ -2637,14 +2638,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														onSelectionModeChange={
 															updateInspectorSelectionMode
 														}
-														pendingPanelBottomOffset={
-															isPptRender &&
-															!isFullscreen &&
-															!isEditMode
-																? PPT_INSPECTOR_PANEL_BOTTOM_OFFSET
-																: 16
-														}
+														pendingPanelTopOffset={16}
 														panelContainerRef={inspectorViewportRef}
+														iframeTargetOrigin={iframeTargetOrigin}
+														screenshotSupported
 														onCaptureScreenshot={
 															captureInspectorScreenshotTarget
 														}

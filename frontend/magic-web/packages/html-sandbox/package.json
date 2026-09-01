@@ -63,6 +63,9 @@
 		"test:watch": "pnpm exec vitest --config ./vitest.config.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
+	"dependencies": {
+		"@zumer/snapdom": "^2.0.2"
+	},
 	"devDependencies": {
 		"@types/node": "^22.16.4",
 		"typescript": "^5.4.5",

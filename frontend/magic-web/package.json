@@ -217,6 +217,7 @@
 		"antd-mobile": "^5.39.0",
 		"antd-style": "^3.6.2",
 		"audio-recorder-polyfill": "^0.4.1",
+		"border-beam": "^1.3.0",
 		"canvas-confetti": "^1.9.3",
 		"canvas-size": "^2.0.0",
 		"class-variance-authority": "^0.7.1",

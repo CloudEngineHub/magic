@@ -7,6 +7,7 @@ import { Label } from "@/components/shadcn-ui/label"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import type { StyleSectionProps } from "../types"
 import { EditorSelectContent } from "../../EditorFloating"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 const OBJECT_FIT_VALUES = ["fill", "contain", "cover", "none", "scale-down"] as const
 const OBJECT_POSITION_VALUES = ["center", "top", "right", "bottom", "left"] as const
@@ -57,7 +58,10 @@ const ImageSection = observer(function ImageSection({
 	}, [editorRef, selectedElement])
 
 	return (
-		<div className="min-w-0 space-y-3" data-testid="html-style-panel-image-section">
+		<div
+			className={STYLE_PANEL_STYLES.sectionContent}
+			data-testid="html-style-panel-image-section"
+		>
 			<div className="flex items-center justify-between gap-2">
 				<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
 					{t("stylePanel.imageSettings")}

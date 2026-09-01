@@ -318,21 +318,11 @@ export const ElementActions = observer(function ElementActions({
 	}, [editorRef, stylePanelStore])
 
 	const handleReplaceImage = useCallback(async () => {
-		if (isReplaceImageInProgressRef.current) {
-			console.log("[StylePanel] Replace image already in progress, ignoring")
-			return
-		}
-
-		if (!editorRef?.current) {
-			console.warn("[StylePanel] No editor ref")
-			return
-		}
+		if (isReplaceImageInProgressRef.current || !editorRef.current) return
 
 		try {
 			isReplaceImageInProgressRef.current = true
-			await editorRef.current.runImageAction({
-				action: "replace-element-image",
-			})
+			await editorRef.current.runImageAction({ action: "replace-element-image" })
 		} catch (error) {
 			console.error("[StylePanel] Failed to replace image:", error)
 		} finally {
@@ -582,7 +572,7 @@ export const ElementActions = observer(function ElementActions({
 										variant="ghost"
 										size="sm"
 										disabled={disabled}
-										onClick={handleReplaceImage}
+										onClick={() => void handleReplaceImage()}
 										className={`h-7 px-2 ${STYLE_PANEL_STYLES.toolbarButton}`}
 										data-testid="html-style-panel-replace-image-button"
 									>

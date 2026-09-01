@@ -214,4 +214,58 @@ describe("useMoveHandle", () => {
 
 		expect(onMoveStart).toHaveBeenCalledOnce()
 	})
+
+	it("keeps an active drag when the parent rerenders", async () => {
+		const applyStylesTemporary = vi.fn().mockResolvedValue(undefined)
+		editorRef.current = {
+			beginBatchOperation: vi.fn().mockResolvedValue(undefined),
+			endBatchOperation: vi.fn().mockResolvedValue(undefined),
+			cancelBatchOperation: vi.fn().mockResolvedValue(undefined),
+			applyStylesTemporary,
+			refreshSelectedElement: vi.fn().mockResolvedValue(undefined),
+		} as unknown as HTMLEditorV2Ref
+
+		const pointerTarget = {
+			setPointerCapture: vi.fn(),
+			releasePointerCapture: vi.fn(),
+		}
+		const { result, rerender } = renderHook(
+			({ onMoveStart }: { onMoveStart: () => void }) =>
+				useMoveHandle({
+					editorRef,
+					isPptRender: false,
+					scaleRatio: 1,
+					selectedInfo,
+					setSelectedInfo: vi.fn(),
+					setHoveredRect: vi.fn(),
+					setIsSelectionMode: vi.fn(),
+					iframeRef: { current: null },
+					onMoveStart,
+				}),
+			{ initialProps: { onMoveStart: vi.fn() } },
+		)
+
+		await act(async () => {
+			await result.current.onMoveHandleMouseDown({
+				clientX: 100,
+				clientY: 100,
+				pointerId: 1,
+				currentTarget: pointerTarget,
+				preventDefault: vi.fn(),
+				stopPropagation: vi.fn(),
+			})
+		})
+
+		// Selection state updates can rerender the parent immediately after pointerdown.
+		rerender({ onMoveStart: vi.fn() })
+		act(() => {
+			document.dispatchEvent(createPointerLikeEvent("pointermove", 120, 130, 1))
+		})
+
+		expect(applyStylesTemporary).toHaveBeenCalledWith("div.move-target", {
+			position: "relative",
+			top: "30px",
+			left: "20px",
+		})
+	})
 })

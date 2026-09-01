@@ -213,6 +213,44 @@ describe("useInspectorToolbarMode", () => {
 		expect(result.current.draftInstruction).toBe("Make the heading larger")
 	})
 
+	it("scrolls a screenshot target into view before editing it", () => {
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const scrollToPosition = vi.fn()
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: null,
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+			scrollToSelector: vi.fn(),
+			scrollToPosition,
+		} as unknown as ReturnType<typeof useElementInspector>
+		const target = {
+			id: "screenshot:1",
+			kind: "screenshot" as const,
+			screenshot: {
+				dataUrl: "data:image/png;base64,shot",
+				rect: { left: 40, top: 80, width: 240, height: 120 },
+				documentRect: { left: 40, top: 780, width: 240, height: 120 },
+			},
+			instruction: "Keep this area",
+		}
+		const translate = (key: string) => key
+		const { result } = renderHook(() => useInspectorToolbarMode(inspector, translate, fileInfo))
+
+		act(() => result.current.editPendingTarget(target))
+
+		expect(scrollToPosition).toHaveBeenCalledWith({ left: 40, top: 700 })
+	})
+
 	it("exits AI selection mode when Escape is pressed", () => {
 		const fileInfo = {
 			fileId: "file-1",

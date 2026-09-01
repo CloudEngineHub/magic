@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
 	createCurrentTabCaptureSession,
+	captureWithIframeRuntime,
 	createPseudoElementsCapturePlugin,
 	freezeDocumentForCapture,
 	getCaptureOutputSize,
@@ -79,6 +80,43 @@ describe("HTML screenshot geometry", () => {
 				Object.defineProperty(navigator, "mediaDevices", previousMediaDevices)
 			}
 		}
+	})
+
+	it("receives a cross-origin screenshot from the iframe runtime without display capture", async () => {
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+
+		const selection = { left: 12, top: 18, width: 80, height: 60 }
+		const capture = captureWithIframeRuntime({
+			iframe,
+			selection,
+			viewportSelection: { left: 100, top: 120, ...selection },
+			iframeTargetOrigin: "https://husky.example.test",
+		})
+		const request = targetWindow.postMessage.mock.calls[0]?.[0]
+		expect(request).toMatchObject({
+			type: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
+			selection,
+			outputSize: { width: 160, height: 120 },
+		})
+
+		const event = new MessageEvent("message", {
+			origin: "https://husky.example.test",
+			data: {
+				type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+				requestId: request.requestId,
+				success: true,
+				blob: new Blob(["png"], { type: "image/png" }),
+			},
+		})
+		Object.defineProperty(event, "source", { configurable: true, value: targetWindow })
+		window.dispatchEvent(event)
+
+		await expect(capture).resolves.toMatch(/^data:image\/png;base64,/)
 	})
 	it("materializes pseudo-elements in the detached clone without changing the page", async () => {
 		document.body.innerHTML = '<div id="capture-root"><div id="card"></div></div>'

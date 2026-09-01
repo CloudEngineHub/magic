@@ -65,7 +65,7 @@ const LayoutSection = observer(function LayoutSection({
 	)
 
 	return (
-		<div className="space-y-4">
+		<div className={STYLE_PANEL_STYLES.sectionContent}>
 			<div className="space-y-2">
 				<h4 className="text-sm font-medium">{t("stylePanel.layoutStyles")}</h4>
 			</div>

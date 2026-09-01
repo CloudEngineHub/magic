@@ -10,6 +10,7 @@ import {
 } from "@/components/business/MentionPanel/types"
 import type { InspectorDetailAttrs } from "./types"
 import { getInspectorDetailHeaderLabel } from "./display"
+import { InspectorScreenshotPreview } from "./InspectorScreenshotPreview"
 
 export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node }) => {
 	const attrs = node.attrs as InspectorDetailAttrs
@@ -53,6 +54,30 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node }) => {
 			? (attrs.fileMention.data as ProjectFileMentionData)
 			: null
 
+	const headerButton = (
+		<button
+			type="button"
+			className={cn(
+				"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
+				expanded ? "w-full" : "w-auto",
+				!expanded && "h-6 rounded-md border border-border/60 bg-muted/30 px-1.5",
+				expanded &&
+					"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
+			)}
+			onClick={() => setExpanded((v) => !v)}
+			contentEditable={false}
+			data-testid="set-expanded"
+		>
+			<Crosshair size={12} className="flex-shrink-0 text-primary" />
+			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
+			{expanded ? (
+				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
+			) : (
+				<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
+			)}
+		</button>
+	)
+
 	// 折叠态的视觉边框放在按钮上，NodeView 右侧保留透明空间，避免原生光标贴住边框。
 	return (
 		<NodeViewWrapper
@@ -65,28 +90,15 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node }) => {
 					: "magic-mention !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !py-0 !pl-0 !pr-1 align-middle",
 			)}
 		>
-			{/* Collapsed header — always visible */}
-			<button
-				type="button"
-				className={cn(
-					"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
-					expanded ? "w-full" : "w-auto",
-					!expanded && "h-6 rounded-md border border-border/60 bg-muted/30 px-1.5",
-					expanded &&
-						"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
-				)}
-				onClick={() => setExpanded((v) => !v)}
-				contentEditable={false}
-				data-testid="set-expanded"
-			>
-				<Crosshair size={12} className="flex-shrink-0 text-primary" />
-				<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
-				{expanded ? (
-					<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
-				) : (
-					<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
-				)}
-			</button>
+			{/* The collapsed chip is also the screenshot preview trigger. */}
+			{!expanded && attrs.screenshotMention ? (
+				<InspectorScreenshotPreview
+					mention={attrs.screenshotMention}
+					trigger={headerButton}
+				/>
+			) : (
+				headerButton
+			)}
 
 			{/* Expanded detail panel */}
 			{expanded && (
@@ -94,6 +106,9 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({ node }) => {
 					className="block space-y-1 px-2 py-1.5 text-[11px] text-foreground/70"
 					contentEditable={false}
 				>
+					{attrs.screenshotMention && (
+						<InspectorScreenshotPreview mention={attrs.screenshotMention} />
+					)}
 					{fileData && (
 						<span className="flex gap-1.5">
 							<span className="flex-shrink-0 text-foreground/50">

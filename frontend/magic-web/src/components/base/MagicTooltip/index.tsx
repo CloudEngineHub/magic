@@ -24,6 +24,8 @@ interface MagicTooltipProps {
 	contentClassName?: string
 	/** Explicit layer value for editor-owned tooltips. */
 	contentZIndex?: number
+	/** Distance between the trigger and tooltip content. */
+	sideOffset?: number
 	/** Disable the tooltip while another menu or popover is open. */
 	disabled?: boolean
 }
@@ -49,6 +51,7 @@ export function MagicTooltip({
 	getPopupContainer,
 	contentClassName,
 	contentZIndex,
+	sideOffset,
 	disabled = false,
 }: MagicTooltipProps) {
 	const isMobile = useIsMobile()
@@ -74,6 +77,7 @@ export function MagicTooltip({
 			<TooltipTrigger asChild>{children}</TooltipTrigger>
 			<TooltipContent
 				side={side}
+				sideOffset={sideOffset}
 				className={contentClassName || "z-tooltip"}
 				container={container}
 				zIndex={contentZIndex}

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { snapdom } from "@zumer/snapdom"
 import { ElementInspectorHandler } from "../ElementInspectorHandler"
 import { getElementSelector } from "../../utils/dom"
+
+vi.mock("@zumer/snapdom", () => ({
+	snapdom: vi.fn(),
+}))
 
 describe("ElementInspectorHandler", () => {
 	let container: HTMLDivElement
@@ -125,5 +130,131 @@ describe("ElementInspectorHandler", () => {
 		} finally {
 			requestAnimationFrame.mockRestore()
 		}
+	})
+
+	it("reports the iframe scroll offset for cross-origin parents", () => {
+		const handler = new ElementInspectorHandler()
+		const requestAnimationFrame = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation((callback) => {
+				callback(0)
+				return 1
+			})
+		const originalScrollX = window.scrollX
+		const originalScrollY = window.scrollY
+		Object.defineProperty(window, "scrollX", { configurable: true, value: 24 })
+		Object.defineProperty(window, "scrollY", { configurable: true, value: 480 })
+
+		try {
+			handler.updateTrackedSelectors([])
+			postMessageSpy.mockClear()
+			document.dispatchEvent(new Event("scroll", { bubbles: true }))
+
+			const scrollMessage = postMessageSpy.mock.calls.find(
+				([message]) =>
+					(message as { type?: string }).type === "MAGIC_INSPECTOR_SCROLL_CHANGED",
+			)
+			expect(scrollMessage?.[0]).toMatchObject({
+				type: "MAGIC_INSPECTOR_SCROLL_CHANGED",
+				left: 24,
+				top: 480,
+			})
+		} finally {
+			Object.defineProperty(window, "scrollX", { configurable: true, value: originalScrollX })
+			Object.defineProperty(window, "scrollY", { configurable: true, value: originalScrollY })
+			requestAnimationFrame.mockRestore()
+		}
+	})
+
+	it("scrolls to a requested selector", () => {
+		const handler = new ElementInspectorHandler()
+		const target = document.createElement("section")
+		target.id = "hero"
+		container.appendChild(target)
+		const scrollIntoView = vi.fn()
+		Object.defineProperty(target, "scrollIntoView", {
+			configurable: true,
+			value: scrollIntoView,
+		})
+
+		handler.scrollToSelector("#hero")
+
+		expect(scrollIntoView).toHaveBeenCalledWith({
+			behavior: "auto",
+			block: "center",
+			inline: "nearest",
+		})
+	})
+
+	it("scrolls to a requested document position", () => {
+		const handler = new ElementInspectorHandler()
+		const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined)
+
+		try {
+			handler.scrollToPosition({ left: -20, top: 700 })
+
+			expect(scrollTo).toHaveBeenCalledWith({
+				behavior: "auto",
+				left: 0,
+				top: 700,
+			})
+		} finally {
+			scrollTo.mockRestore()
+		}
+	})
+
+	it("captures a requested region and returns a PNG blob to the parent", async () => {
+		const handler = new ElementInspectorHandler()
+		vi.spyOn(document.body, "getBoundingClientRect").mockReturnValue({
+			top: 0,
+			left: 0,
+			width: 320,
+			height: 240,
+			right: 320,
+			bottom: 240,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect)
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			callback(0)
+			return 1
+		})
+		vi.stubGlobal(
+			"createImageBitmap",
+			vi.fn(async () => ({
+				width: 320,
+				height: 240,
+				close: vi.fn(),
+			})),
+		)
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			drawImage: vi.fn(),
+		} as never)
+		vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
+			callback(new Blob(["cropped"], { type: "image/png" }))
+		})
+		vi.mocked(snapdom).mockResolvedValue({
+			toBlob: vi.fn().mockResolvedValue(new Blob(["source"], { type: "image/png" })),
+		} as never)
+
+		await handler.captureScreenshot({
+			requestId: "request-1",
+			selection: { top: 10, left: 20, width: 80, height: 60 },
+			outputSize: { width: 80, height: 60 },
+		})
+
+		const response = postMessageSpy.mock.calls.at(-1)?.[0] as {
+			type: string
+			requestId: string
+			success: boolean
+			blob: Blob
+		}
+		expect(response).toMatchObject({
+			type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+			requestId: "request-1",
+			success: true,
+		})
+		expect(response.blob).toBeInstanceOf(Blob)
 	})
 })

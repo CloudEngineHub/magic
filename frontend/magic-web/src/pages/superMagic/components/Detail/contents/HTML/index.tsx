@@ -63,9 +63,8 @@ import {
 	downloadFileContent,
 } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
+import { AlertTriangle, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/utils/cn"
 import { env } from "@/utils/env"
 import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -1227,17 +1226,24 @@ export default memo(function HTML(props: HTMLProps) {
 		if (isMediaScenario) {
 			return false
 		}
-		return !isMobile && allowEdit && !isEditMode && activeHistory.isNewestVersion
+		return (
+			!isMobile &&
+			!isCodeViewMode &&
+			allowEdit &&
+			!isEditMode &&
+			activeHistory.isNewestVersion
+		)
 	}, [
 		isReadonlyPreview,
 		isMediaScenario,
+		isCodeViewMode,
 		isMobile,
 		allowEdit,
 		isEditMode,
 		activeHistory.isNewestVersion,
 	])
 
-	/** 是否显示 在线编辑 按钮 */
+	/** 是否显示编辑按钮 */
 	const showFileEditButton = useMemo(() => {
 		if (isReadonlyPreview) {
 			return false
@@ -1279,7 +1285,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isMobile,
 	})
 
-	// 通知在线编辑按钮已准备好
+	// 通知编辑按钮已准备好
 	useEffect(() => {
 		if (showFileEditButton) {
 			pubsub.publish(
@@ -1326,21 +1332,12 @@ export default memo(function HTML(props: HTMLProps) {
 					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
 					render: () => (
 						<div className="flex items-center gap-1">
-							{showAIOptimizationButton && !isEditMode && (
-								<AIEditButton
-									showButtonText
-									attachmentList={attachmentList}
-									fileId={displayData?.file_id}
-									onStartInspector={() => {
-										htmlRendererRef.current?.startInspectorAppend()
-									}}
-								/>
-							)}
 							{showFileEditButton && (
 								<FileEditButtons
 									isEditMode={isEditMode}
 									isSaving={false}
 									showButtonText
+									editLabel={t("common.edit")}
 									onEdit={handleEdit}
 									beforeAction={() =>
 										htmlRendererRef.current?.requestInspectorExit?.() ??
@@ -1351,27 +1348,17 @@ export default memo(function HTML(props: HTMLProps) {
 									onCancel={handleCancel}
 								/>
 							)}
-							{showFileEditButton && !isEditMode && (
-								<ActionButton
-									icon={
-										<Crosshair
-											size={16}
-											className={cn(isAppendPicking && "animate-pulse")}
-										/>
-									}
-									onClick={() => {
+							{showAIOptimizationButton && !isEditMode && (
+								<AIEditButton
+									showButtonText
+									maxItems={3}
+									onPrimaryAction={handleAIEdit}
+									isPrimaryActive={isAppendPicking}
+									attachmentList={attachmentList}
+									fileId={displayData?.file_id}
+									onStartInspector={() => {
 										htmlRendererRef.current?.startInspectorAppend()
 									}}
-									title={t(
-										"topicFiles.aiPickTooltip",
-										"点击后选取页面元素，让 AI 对其进行修改",
-									)}
-									text={t("topicFiles.aiPick", "AI 选取")}
-									showText
-									className={cn(
-										isAppendPicking &&
-											"bg-primary/10 text-primary ring-1 ring-primary/30",
-									)}
 								/>
 							)}
 						</div>
@@ -1427,6 +1414,7 @@ export default memo(function HTML(props: HTMLProps) {
 			attachmentList,
 			displayData?.file_id,
 			handleCancel,
+			handleAIEdit,
 			handleEdit,
 			handleExportPDF,
 			handleExportPPT,

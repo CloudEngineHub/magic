@@ -39,6 +39,12 @@ export function useMoveHandle({
 	const moveStartRectRef = useRef<ElementRect | null>(null)
 	const pendingMoveRef = useRef<{ selector: string; styles: Record<string, string> } | null>(null)
 	const pointerCaptureRef = useRef<PointerCaptureState | null>(null)
+	// Parent callbacks may be inline functions. Keep them out of the drag
+	// lifecycle dependencies so a parent re-render cannot stop an active move.
+	const onMoveStartRef = useRef(onMoveStart)
+	const onMoveEndRef = useRef(onMoveEnd)
+	onMoveStartRef.current = onMoveStart
+	onMoveEndRef.current = onMoveEnd
 	// Store initial top/left values for the current element
 	const initialPositionRef = useRef<{ top: number; left: number }>({ top: 0, left: 0 })
 	const positionModeRef = useRef<string>("relative")
@@ -241,8 +247,8 @@ export function useMoveHandle({
 
 		// A completed move should keep the selection box, but must not open the
 		// contextual style panel automatically.
-		onMoveEnd?.()
-	}, [editorRef, onMoveEnd])
+		onMoveEndRef.current?.()
+	}, [editorRef])
 
 	// Monitor selectedInfo changes - stop moving if element changes
 	useEffect(() => {
@@ -347,7 +353,7 @@ export function useMoveHandle({
 
 			event.preventDefault()
 			event.stopPropagation()
-			onMoveStart?.()
+			onMoveStartRef.current?.()
 
 			// Safety: If already moving, stop first to clean up state
 			if (isMovingRef.current) {
@@ -460,7 +466,7 @@ export function useMoveHandle({
 			document.body.style.userSelect = "none"
 			document.body.style.cursor = "grabbing"
 		},
-		[editorRef, onMoveStart, setHoveredRect, setIsSelectionMode, stopMove],
+		[editorRef, setHoveredRect, setIsSelectionMode, stopMove],
 	)
 
 	useEffect(() => {

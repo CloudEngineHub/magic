@@ -66,6 +66,8 @@ export function useInspectorToolbarMode(
 		stop: stopInspector,
 		clearSelection,
 		setTrackedSelectors,
+		scrollToSelector,
+		scrollToPosition,
 	} = elementInspector
 
 	// Keep only the small set of element targets that can be visible in the
@@ -285,20 +287,37 @@ export function useInspectorToolbarMode(
 
 	const editPendingTarget = useCallback(
 		(target: HtmlSelectionTarget) => {
+			if (target.kind === "element") {
+				scrollToSelector?.(target.info.selector)
+			} else {
+				const documentRect = target.screenshot.documentRect ?? target.screenshot.rect
+				scrollToPosition?.({
+					left: documentRect.left,
+					top: Math.max(0, documentRect.top - 80),
+				})
+			}
 			setActiveTarget(target)
 			setDraftInstruction(target.instruction)
 			setSubmitError(null)
 			updateMode("multiSelection")
 			stopInspector()
 		},
-		[stopInspector, updateMode],
+		[scrollToPosition, scrollToSelector, stopInspector, updateMode],
 	)
 
-	const removePendingTarget = useCallback((targetId: string) => {
-		setPendingTargets((targets) => targets.filter((target) => target.id !== targetId))
-		setSubmitState("idle")
-		setSelectionMode("element")
-	}, [])
+	const removePendingTarget = useCallback(
+		(targetId: string) => {
+			setPendingTargets((targets) => targets.filter((target) => target.id !== targetId))
+			setSubmitState("idle")
+			setSelectionMode("element")
+			if (activeTarget?.id !== targetId) return
+			setActiveTarget(null)
+			setDraftInstruction("")
+			clearSelection()
+			startInspector()
+		},
+		[activeTarget?.id, clearSelection, startInspector],
+	)
 
 	const resetSelection = useCallback(() => {
 		setActiveTarget(null)

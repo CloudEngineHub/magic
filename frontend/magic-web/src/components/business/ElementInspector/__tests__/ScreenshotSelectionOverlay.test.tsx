@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { ScreenshotSelectionOverlay } from "../ScreenshotSelectionOverlay"
 import { CurrentTabCaptureError } from "../screenshot"
@@ -25,12 +25,15 @@ describe("ScreenshotSelectionOverlay", () => {
 		})
 
 		await waitFor(() => {
-			expect(onCapture).toHaveBeenCalledWith({
-				left: 0,
-				top: 0,
-				width: 640,
-				height: 360,
-			})
+			expect(onCapture).toHaveBeenCalledWith(
+				{
+					left: 0,
+					top: 0,
+					width: 640,
+					height: 360,
+				},
+				expect.any(Function),
+			)
 		})
 	})
 
@@ -60,12 +63,15 @@ describe("ScreenshotSelectionOverlay", () => {
 
 		fireEvent.keyDown(overlay, { key: "Enter" })
 		await waitFor(() => {
-			expect(onCapture).toHaveBeenCalledWith({
-				left: 0,
-				top: 180,
-				width: 640,
-				height: 360,
-			})
+			expect(onCapture).toHaveBeenCalledWith(
+				{
+					left: 0,
+					top: 180,
+					width: 640,
+					height: 360,
+				},
+				expect.any(Function),
+			)
 		})
 
 		onCapture.mockClear()
@@ -88,12 +94,15 @@ describe("ScreenshotSelectionOverlay", () => {
 			new MouseEvent("pointerup", { bubbles: true, clientX: 260, clientY: 420 }),
 		)
 		await waitFor(() => {
-			expect(onCapture).toHaveBeenCalledWith({
-				left: 20,
-				top: 210,
-				width: 140,
-				height: 160,
-			})
+			expect(onCapture).toHaveBeenCalledWith(
+				{
+					left: 20,
+					top: 210,
+					width: 140,
+					height: 160,
+				},
+				expect.any(Function),
+			)
 		})
 	})
 
@@ -138,12 +147,15 @@ describe("ScreenshotSelectionOverlay", () => {
 		firePointer("pointerup", 340, 210)
 
 		await waitFor(() => {
-			expect(onCapture).toHaveBeenCalledWith({
-				left: 40,
-				top: 40,
-				width: 200,
-				height: 120,
-			})
+			expect(onCapture).toHaveBeenCalledWith(
+				{
+					left: 40,
+					top: 40,
+					width: 200,
+					height: 120,
+				},
+				expect.any(Function),
+			)
 		})
 	})
 
@@ -178,12 +190,15 @@ describe("ScreenshotSelectionOverlay", () => {
 		firePointer("pointerup", 460, 230)
 
 		await waitFor(() => {
-			expect(onCapture).toHaveBeenCalledWith({
-				left: 80,
-				top: 40,
-				width: 400,
-				height: 200,
-			})
+			expect(onCapture).toHaveBeenCalledWith(
+				{
+					left: 80,
+					top: 40,
+					width: 400,
+					height: 200,
+				},
+				expect.any(Function),
+			)
 		})
 	})
 
@@ -253,14 +268,15 @@ describe("ScreenshotSelectionOverlay", () => {
 		})
 	})
 
-	it("hides the selection UI until capture completes", async () => {
+	it("shows loading before hiding the selection UI for capture", async () => {
 		let resolveCapture!: () => void
-		const onCapture = vi.fn(
-			() =>
-				new Promise<void>((resolve) => {
-					resolveCapture = resolve
-				}),
-		)
+		let hideCaptureChrome!: () => Promise<void>
+		const onCapture = vi.fn((_: unknown, beforeCurrentTabCapture?: () => Promise<void>) => {
+			hideCaptureChrome = beforeCurrentTabCapture ?? (async () => undefined)
+			return new Promise<void>((resolve) => {
+				resolveCapture = resolve
+			})
+		})
 		const onCaptureStateChange = vi.fn()
 		render(
 			<ScreenshotSelectionOverlay
@@ -277,9 +293,21 @@ describe("ScreenshotSelectionOverlay", () => {
 		await waitFor(() => {
 			expect(onCaptureStateChange).toHaveBeenCalledWith(true)
 			expect(overlay).toHaveAttribute("data-capturing", "true")
-			expect(overlay).toHaveStyle({ visibility: "hidden" })
-			expect(onCapture).toHaveBeenCalled()
+			expect(overlay).toHaveAttribute("data-capture-phase", "loading")
+			expect(overlay).not.toHaveStyle({ visibility: "hidden" })
+			expect(
+				screen.getByText("stylePanel.inspector.screenshotProcessing"),
+			).toBeInTheDocument()
 		})
+
+		await waitFor(() => expect(onCapture).toHaveBeenCalled())
+		expect(overlay).not.toHaveStyle({ visibility: "hidden" })
+
+		await act(async () => {
+			await hideCaptureChrome()
+		})
+		expect(overlay).toHaveAttribute("data-capture-phase", "capturing")
+		expect(overlay).toHaveStyle({ visibility: "hidden" })
 
 		await waitFor(() => expect(resolveCapture).toBeTypeOf("function"))
 		resolveCapture()

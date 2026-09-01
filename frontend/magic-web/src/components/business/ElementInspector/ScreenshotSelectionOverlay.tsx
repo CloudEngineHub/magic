@@ -2,7 +2,9 @@ import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Camera, Loader2 } from "lucide-react"
 import type { InspectedElementRect } from "./types"
-import { CurrentTabCaptureError } from "./screenshot"
+import { CurrentTabCaptureError, waitForNextAnimationFrame } from "./screenshot"
+
+export type ScreenshotCapturePhase = "loading" | "capturing" | "idle"
 
 interface ScreenshotSelectionOverlayProps {
 	containerWidth: number
@@ -16,8 +18,12 @@ interface ScreenshotSelectionOverlayProps {
 	}
 	/** Whether the capture must use the rendered browser tab instead of iframe DOM. */
 	captureUsesCurrentTab?: boolean
-	onCapture: (rect: InspectedElementRect) => Promise<void>
+	onCapture: (
+		rect: InspectedElementRect,
+		beforeCurrentTabCapture?: () => Promise<void>,
+	) => Promise<void>
 	onCaptureStateChange?: (capturing: boolean) => void
+	onCapturePhaseChange?: (phase: ScreenshotCapturePhase) => void
 }
 
 /** Captures a rectangle drawn over the rendered HTML without blocking element mode. */
@@ -27,11 +33,13 @@ export function ScreenshotSelectionOverlay({
 	selectionBounds,
 	onCapture,
 	onCaptureStateChange,
+	onCapturePhaseChange,
 	captureUsesCurrentTab = false,
 }: ScreenshotSelectionOverlayProps) {
 	const { t } = useTranslation("super")
 	const [selection, setSelection] = useState<InspectedElementRect | null>(null)
 	const [isCapturing, setIsCapturing] = useState(false)
+	const [capturePhase, setCapturePhase] = useState<ScreenshotCapturePhase>("idle")
 	const [captureError, setCaptureError] = useState<string | null>(null)
 	const startPointRef = useRef<{ left: number; top: number } | null>(null)
 
@@ -115,16 +123,20 @@ export function ScreenshotSelectionOverlay({
 		setSelection(rect)
 		setCaptureError(null)
 		setIsCapturing(true)
+		setCapturePhase("loading")
 		onCaptureStateChange?.(true)
+		onCapturePhaseChange?.("loading")
 		try {
-			await new Promise<void>((resolve) => {
-				if (typeof requestAnimationFrame === "function") {
-					requestAnimationFrame(() => resolve())
-					return
-				}
-				setTimeout(resolve, 0)
+			// Two frames give the browser a paint opportunity before screenshot
+			// work starts. The fallback callback hides inspector chrome only when
+			// the rendered browser tab, rather than the iframe itself, is captured.
+			await waitForNextAnimationFrame()
+			await waitForNextAnimationFrame()
+			await onCapture(rect, async () => {
+				setCapturePhase("capturing")
+				onCapturePhaseChange?.("capturing")
+				await waitForNextAnimationFrame()
 			})
-			await onCapture(rect)
 			setSelection(null)
 		} catch (error) {
 			console.warn("HTML screenshot capture failed", error)
@@ -152,8 +164,10 @@ export function ScreenshotSelectionOverlay({
 				setCaptureError(t("stylePanel.inspector.screenshotCaptureFailed"))
 			}
 		} finally {
+			setCapturePhase("idle")
 			setIsCapturing(false)
 			onCaptureStateChange?.(false)
+			onCapturePhaseChange?.("idle")
 		}
 	}
 
@@ -173,7 +187,7 @@ export function ScreenshotSelectionOverlay({
 
 	return (
 		<div
-			className="pointer-events-auto absolute inset-0 z-20 cursor-crosshair bg-black/15"
+			className="pointer-events-auto absolute inset-0 z-[90] cursor-crosshair bg-black/15"
 			tabIndex={0}
 			onPointerDown={handlePointerDown}
 			onPointerMove={handlePointerMove}
@@ -183,22 +197,33 @@ export function ScreenshotSelectionOverlay({
 			aria-label={t("stylePanel.inspector.screenshotHint")}
 			data-testid="html-screenshot-selection-overlay"
 			data-capturing={isCapturing ? "true" : "false"}
-			style={{ visibility: isCapturing ? "hidden" : undefined }}
+			data-capture-phase={capturePhase}
+			style={{ visibility: capturePhase === "capturing" ? "hidden" : undefined }}
 		>
 			<div
-				className="absolute flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white shadow-lg"
-				style={{
-					left: drawableArea.left + drawableArea.width / 2,
-					top: Math.max(4, drawableArea.top + 16),
-				}}
+				className={
+					isCapturing
+						? "absolute right-4 top-4 z-[100] flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white shadow-lg"
+						: "absolute flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white shadow-lg"
+				}
+				style={
+					isCapturing
+						? undefined
+						: {
+								left: drawableArea.left + drawableArea.width / 2,
+								top: Math.max(4, drawableArea.top + 16),
+							}
+				}
 			>
 				{isCapturing ? (
 					<Loader2 size={13} className="animate-spin" />
 				) : (
 					<Camera size={13} />
 				)}
-				{t("stylePanel.inspector.screenshotHint")}
-				{captureUsesCurrentTab && (
+				{isCapturing
+					? t("stylePanel.inspector.screenshotProcessing")
+					: t("stylePanel.inspector.screenshotHint")}
+				{!isCapturing && captureUsesCurrentTab && (
 					<span className="ml-1 opacity-80">
 						{t("stylePanel.inspector.screenshotCurrentTabHint")}
 					</span>

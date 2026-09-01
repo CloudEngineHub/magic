@@ -15,6 +15,7 @@ export function buildAgentPromptContent(
 	info: InspectedElementInfo,
 	title: string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
+	screenshotMention?: TiptapMentionAttributes | null,
 ): JSONContent {
 	const paragraphs: JSONContent[] = []
 	const fileMention = fileInfo
@@ -97,6 +98,7 @@ export function buildAgentPromptContent(
 					elementHtml: info.elementHtml ?? "",
 					selectorMatchCount: info.selectorMatchCount ?? -1,
 					fileMention,
+					screenshotMention,
 				},
 			},
 		],
@@ -123,9 +125,47 @@ function buildFileMention(fileInfo: {
 	}
 }
 
-function buildInspectorDetailNode(info: InspectedElementInfo, title: string): JSONContent {
-	const content = buildAgentPromptContent(info, title)
+function buildInspectorDetailNode(
+	info: InspectedElementInfo,
+	title: string,
+	screenshotMention?: TiptapMentionAttributes | null,
+): JSONContent {
+	const content = buildAgentPromptContent(info, title, undefined, screenshotMention)
 	return content.content?.[0]?.content?.[0] ?? { type: "text", text: info.tagName }
+}
+
+/**
+ * Reuse the inspector-detail node when a multi-selection request has already
+ * been normalized to its transport shape and no longer contains full element
+ * inspection data.
+ */
+function buildInspectorDetailNodeFromTarget(
+	target: HtmlMultiSelectionRequestTarget,
+	title: string,
+	screenshotMention?: TiptapMentionAttributes | null,
+): JSONContent {
+	const tagName =
+		target.selector.match(/(?:^|\s|>)\s*([a-z][a-z0-9-]*)/i)?.[1] ??
+		target.elementLabel.match(/^[a-z][a-z0-9-]*/i)?.[0] ??
+		""
+	return {
+		type: INSPECTOR_DETAIL_TYPE,
+		attrs: {
+			title,
+			selector: target.selector,
+			tagName,
+			size: "",
+			computedStyles: "{}",
+			styleCount: 0,
+			textContent: target.textContent ?? "",
+			elementAttributes: "{}",
+			resource: "",
+			domContext: target.domContext ? JSON.stringify(target.domContext) : "{}",
+			elementHtml: target.elementHtml ?? "",
+			selectorMatchCount: -1,
+			screenshotMention,
+		},
+	}
 }
 
 /** Build the message content used by multi-target HTML editing submission. */
@@ -181,23 +221,17 @@ export function buildHtmlMultiSelectionPromptContent(
 					type: "text",
 					text: `目标 ${index + 1}（${label}）：${target.instruction}`,
 				},
-				...(screenshotMention ? [{ type: "mention", attrs: screenshotMention }] : []),
 			],
 		})
 		if (info) {
 			content.push({
 				type: "paragraph",
-				content: [buildInspectorDetailNode(info, title)],
+				content: [buildInspectorDetailNode(info, title, screenshotMention)],
 			})
 		} else {
 			content.push({
 				type: "paragraph",
-				content: [
-					{
-						type: "text",
-						text: `选择器：${target.selector}${target.textContent ? `；文本内容：${target.textContent}` : ""}`,
-					},
-				],
+				content: [buildInspectorDetailNodeFromTarget(target, title, screenshotMention)],
 			})
 		}
 	})

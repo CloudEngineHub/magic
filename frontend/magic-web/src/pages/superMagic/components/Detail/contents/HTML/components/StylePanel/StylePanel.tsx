@@ -29,6 +29,7 @@ import {
 	ColorPicker,
 	StylePopoverButton,
 	ElementActions,
+	BackgroundImageButton,
 	SizePopover,
 	ContextMorePopover,
 } from "./controls"
@@ -414,6 +415,10 @@ export const StylePanel = observer(function StylePanel({
 	const currentColor = computedStyles?.color || "#000000"
 	const capabilities = getElementCapabilities(selectedElement)
 	const showAlignmentTools = capabilities.showParagraph || Boolean(flexAlignment)
+	const showBackgroundImageAction =
+		selectedElement !== null &&
+		!selectedElement.isImageElement &&
+		selectedElement.tagName.toLowerCase() !== "img"
 
 	// Disable controls when no element is selected or when saving
 	// Check both single and multi-select modes
@@ -452,6 +457,8 @@ export const StylePanel = observer(function StylePanel({
 			showFlexGrid={capabilities.showFlexGrid}
 			showImage={capabilities.showImage}
 			showBackground={capabilities.showBackground}
+			showBorder={capabilities.showBorder}
+			showShadow={capabilities.showShadow}
 			isLink={capabilities.isLink}
 			fontFamilySelector={
 				<FontFamilySelector
@@ -626,7 +633,24 @@ export const StylePanel = observer(function StylePanel({
 									)
 								: null}
 
-							{variant !== "context" || capabilities.showTypography ? (
+							{showBackgroundImageAction ? (
+								<>
+									<BackgroundImageButton
+										selectedElement={selectedElement}
+										editorRef={editorRef}
+										disabled={isDisabled}
+										itemMotion={
+											variant === "context"
+												? renderContextToolbarItem
+												: undefined
+										}
+									/>
+									<Separator
+										orientation="vertical"
+										className={toolbarSeparatorClassName}
+									/>
+								</>
+							) : variant !== "context" || capabilities.showTypography ? (
 								<Separator
 									orientation="vertical"
 									className={toolbarSeparatorClassName}

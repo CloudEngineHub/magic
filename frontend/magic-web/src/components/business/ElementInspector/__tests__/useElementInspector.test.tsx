@@ -63,6 +63,36 @@ describe("useElementInspector", () => {
 		}
 	})
 
+	it("accepts cross-origin iframe scroll offsets from the runtime", () => {
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+		const iframeRef = { current: iframe }
+		const iframeWindow = iframe.contentWindow
+		if (!iframeWindow) throw new Error("iframe contentWindow is unavailable")
+		const targetOrigin = "https://husky.example.com"
+
+		try {
+			const { result } = renderHook(() => useElementInspector({ iframeRef, targetOrigin }))
+			act(() => {
+				window.dispatchEvent(
+					new MessageEvent("message", {
+						source: iframeWindow,
+						origin: targetOrigin,
+						data: {
+							type: INSPECTOR_MSG.SCROLL_CHANGED,
+							left: 12,
+							top: 640,
+						},
+					}),
+				)
+			})
+
+			expect(result.current.iframeScrollOffset).toEqual({ left: 12, top: 640 })
+		} finally {
+			iframe.remove()
+		}
+	})
+
 	it("ignores inspector messages from an unexpected iframe origin", () => {
 		const iframe = document.createElement("iframe")
 		document.body.appendChild(iframe)
@@ -118,6 +148,32 @@ describe("useElementInspector", () => {
 
 			expect(postMessage).toHaveBeenCalledWith(
 				expect.objectContaining({ type: INSPECTOR_MSG.START }),
+				targetOrigin,
+			)
+		} finally {
+			postMessage.mockRestore()
+			iframe.remove()
+		}
+	})
+
+	it("scrolls the iframe to a requested selector", () => {
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+		const iframeRef = { current: iframe }
+		const iframeWindow = iframe.contentWindow
+		if (!iframeWindow) throw new Error("iframe contentWindow is unavailable")
+		const postMessage = vi.spyOn(iframeWindow, "postMessage")
+		const targetOrigin = "https://husky.example.com"
+
+		try {
+			const { result } = renderHook(() => useElementInspector({ iframeRef, targetOrigin }))
+			act(() => result.current.scrollToSelector("#hero"))
+
+			expect(postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: INSPECTOR_MSG.SCROLL_TO_SELECTOR,
+					selector: "#hero",
+				}),
 				targetOrigin,
 			)
 		} finally {

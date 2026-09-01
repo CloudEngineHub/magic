@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
 import { EditorSelectContent } from "../../EditorFloating"
+import { STYLE_PANEL_STYLES } from "../styles"
 
 type BackgroundType = "solid" | "linear-gradient" | "radial-gradient" | "image"
 
@@ -268,7 +269,10 @@ const BackgroundSection = observer(function BackgroundSection({
 	)
 
 	return (
-		<div className="min-w-0 space-y-3" data-testid="html-style-panel-background-section">
+		<div
+			className={STYLE_PANEL_STYLES.sectionContent}
+			data-testid="html-style-panel-background-section"
+		>
 			<div className="min-w-0 space-y-1">
 				<Label className="text-[11px] font-medium leading-4 text-muted-foreground">
 					{t("stylePanel.backgroundType")}

@@ -36,4 +36,38 @@ describe("uploadMentionService inspector-detail mentions", () => {
 
 		expect(items).toEqual([{ type: "mention", attrs: fileMention }])
 	})
+
+	it("collects screenshot mentions stored inside inspector-detail attrs", () => {
+		const screenshotMention = {
+			type: MentionItemType.PROJECT_FILE,
+			data: {
+				file_id: "screenshot-1",
+				file_name: "hero.png",
+				file_path: ".tmp/hero.png",
+				file_extension: "png",
+				is_hidden: true,
+			},
+		}
+
+		const items = collectMentionItemsFromContent({
+			type: "doc",
+			content: [
+				{
+					type: INSPECTOR_DETAIL_TYPE,
+					attrs: {
+						title: "Selected element",
+						selector: "body > section.hero",
+						tagName: "section",
+						size: "300 x 120 px",
+						computedStyles: "{}",
+						styleCount: 0,
+						textContent: "Hero",
+						screenshotMention,
+					},
+				},
+			],
+		})
+
+		expect(items).toEqual([{ type: "mention", attrs: screenshotMention }])
+	})
 })
