@@ -1010,7 +1010,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			resetSelection: resetInspectorSelection,
 			requestExit: requestInspectorExit,
 			consumeEscape: consumeInspectorEscape,
-		} = useInspectorToolbarMode(elementInspector, t, inspectorFileInfo)
+		} = useInspectorToolbarMode(elementInspector, t, inspectorFileInfo, {
+			disableTargetScroll: Boolean(isPptRender),
+		})
 
 		useEffect(() => {
 			onAppendPickingChange?.(isAppendPicking)

@@ -32,6 +32,11 @@ export interface InspectorFileInfo {
 type InspectorMode = "devConsole" | "toolbar" | "multiSelection" | "quickSelection"
 type SelectionMode = "element" | "screenshot"
 
+interface InspectorToolbarModeOptions {
+	/** Disable target auto-scroll for previews whose coordinate space is scaled. */
+	disableTargetScroll?: boolean
+}
+
 /**
  * Coordinates toolbar inspection and the multi-target HTML editing flow.
  * Multi-selection keeps a local draft; quick selection appends one inspected
@@ -41,7 +46,9 @@ export function useInspectorToolbarMode(
 	elementInspector: ElementInspector,
 	t: TFunction<"super">,
 	fileInfo?: InspectorFileInfo,
+	options: InspectorToolbarModeOptions = {},
 ) {
+	const { disableTargetScroll = false } = options
 	const [mode, setMode] = useState<InspectorMode>("devConsole")
 	const [activeTarget, setActiveTarget] = useState<HtmlSelectionTarget | null>(null)
 	const [draftInstruction, setDraftInstruction] = useState("")
@@ -337,20 +344,27 @@ export function useInspectorToolbarMode(
 		setActiveTarget(null)
 		setDraftInstruction("")
 		clearSelection()
+		if (modeRef.current === "multiSelection") {
+			setSelectionMode("element")
+			startInspector()
+			return
+		}
 		updateMode("devConsole")
 		stopInspector()
-	}, [clearSelection, stopInspector, updateMode])
+	}, [clearSelection, startInspector, stopInspector, updateMode])
 
 	const editPendingTarget = useCallback(
 		(target: HtmlSelectionTarget) => {
-			if (target.kind === "element") {
-				scrollToSelector?.(target.info.selector)
-			} else {
-				const documentRect = target.screenshot.documentRect ?? target.screenshot.rect
-				scrollToPosition?.({
-					left: documentRect.left,
-					top: Math.max(0, documentRect.top - 80),
-				})
+			if (!disableTargetScroll) {
+				if (target.kind === "element") {
+					scrollToSelector?.(target.info.selector)
+				} else {
+					const documentRect = target.screenshot.documentRect ?? target.screenshot.rect
+					scrollToPosition?.({
+						left: documentRect.left,
+						top: Math.max(0, documentRect.top - 80),
+					})
+				}
 			}
 			setActiveTarget(target)
 			setDraftInstruction(target.instruction)
@@ -358,7 +372,7 @@ export function useInspectorToolbarMode(
 			updateMode("multiSelection")
 			stopInspector()
 		},
-		[scrollToPosition, scrollToSelector, stopInspector, updateMode],
+		[disableTargetScroll, scrollToPosition, scrollToSelector, stopInspector, updateMode],
 	)
 
 	const removePendingTarget = useCallback(

@@ -347,6 +347,97 @@ describe("useInspectorToolbarMode", () => {
 		expect(scrollToPosition).toHaveBeenCalledWith({ left: 40, top: 700 })
 	})
 
+	it("does not scroll a target in PPT preview mode", () => {
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const scrollToSelector = vi.fn()
+		const scrollToPosition = vi.fn()
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: null,
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+			scrollToSelector,
+			scrollToPosition,
+		} as unknown as ReturnType<typeof useElementInspector>
+		const target = {
+			id: "element:1",
+			kind: "element" as const,
+			info: createInfo(),
+			instruction: "Keep this area",
+		}
+		const screenshotTarget = {
+			id: "screenshot:1",
+			kind: "screenshot" as const,
+			screenshot: {
+				dataUrl: "data:image/png;base64,shot",
+				rect: { left: 40, top: 80, width: 240, height: 120 },
+				documentRect: { left: 40, top: 780, width: 240, height: 120 },
+			},
+			instruction: "Keep this area",
+		}
+		const translate = (key: string) => key
+		const { result } = renderHook(() =>
+			useInspectorToolbarMode(inspector, translate, fileInfo, {
+				disableTargetScroll: true,
+			}),
+		)
+
+		act(() => result.current.editPendingTarget(target))
+
+		expect(scrollToSelector).not.toHaveBeenCalled()
+		expect(scrollToPosition).not.toHaveBeenCalled()
+
+		act(() => result.current.editPendingTarget(screenshotTarget))
+
+		expect(scrollToSelector).not.toHaveBeenCalled()
+		expect(scrollToPosition).not.toHaveBeenCalled()
+	})
+
+	it("keeps the collection bar open when cancelling the current target", () => {
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: null,
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+		} as unknown as ReturnType<typeof useElementInspector>
+		const translate = (key: string) => key
+		const { result } = renderHook(() => useInspectorToolbarMode(inspector, translate, fileInfo))
+		const target = {
+			id: "element:1",
+			kind: "element" as const,
+			info: createInfo(),
+			instruction: "Keep this area",
+		}
+
+		act(() => result.current.startInAppendMode())
+		act(() => result.current.editPendingTarget(target))
+		act(() => result.current.cancelTarget())
+
+		expect(result.current.inspectorModeRef.current).toBe("multiSelection")
+		expect(result.current.isAppendPicking).toBe(true)
+		expect(result.current.activeTarget).toBeNull()
+		expect(inspector.start).toHaveBeenCalledTimes(2)
+	})
+
 	it("exits AI selection mode when Escape is pressed", () => {
 		const fileInfo = {
 			fileId: "file-1",
