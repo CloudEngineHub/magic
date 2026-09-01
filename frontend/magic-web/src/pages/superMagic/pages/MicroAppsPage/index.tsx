@@ -285,7 +285,7 @@ function MicroAppsPageDesktop() {
 									collaboratorManagement.loadingAppId === app.app_id
 								}
 								canDelete={app.can_delete}
-								canRename={!app.user_role || canEditProject(app.user_role)}
+								canRename={canEditProject(app.user_role)}
 								canManageCollaborators={
 									collaboratorManagement.canManageCollaborators &&
 									canManageProjectCollaborators(app.user_role)
