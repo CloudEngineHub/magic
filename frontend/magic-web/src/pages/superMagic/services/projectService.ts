@@ -17,7 +17,7 @@ import {
 	getCachedChatWorkspaceId,
 } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { topicStore, workspaceStore } from "../stores/core"
-import { getInsertIndexByAnchors } from "./orderUtils"
+import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -241,7 +241,9 @@ class ProjectService {
 		if (sourceIndex === -1) return
 		const nextIds = previousIds.filter((id) => id !== projectId)
 		const insertIndex = getInsertIndexByAnchors(nextIds, preProjectId, nextProjectId)
+		if (insertIndex === null) return
 		nextIds.splice(Math.max(0, insertIndex), 0, projectId)
+		const optimisticProjectIds = [...nextIds]
 		runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, nextIds))
 		if (isPinned !== undefined) {
 			const movedProject = projectStore
@@ -277,7 +279,12 @@ class ProjectService {
 				projectStore.getProjectsByWorkspace(workspaceId),
 			)
 		} catch (error) {
-			runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, previousIds))
+			const currentProjectIds = projectStore
+				.getProjectsByWorkspace(workspaceId)
+				.map((project) => project.id)
+			if (isSameOrder(currentProjectIds, optimisticProjectIds)) {
+				runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, previousIds))
+			}
 			if (previousProject && isPinned !== undefined) {
 				projectStore.updateProject(previousProject)
 			}
@@ -624,6 +631,7 @@ class ProjectService {
 						nextProjectId,
 					)
 				: undefined
+		if (targetIndex === null) return
 
 		runInAction(() => {
 			projectStore.moveProjectBetweenWorkspaces(
@@ -745,26 +753,22 @@ class ProjectService {
 			const previousProjects = workspaceId
 				? projectStore.getProjectsByWorkspace(workspaceId)
 				: []
+			let optimisticProjectIds: string[] | null = null
 
 			if (workspaceId && hasOrdering) {
 				const nextProjects = previousProjects.filter((item) => item.id !== project.id)
-				const insertIndex =
-					preProjectId !== undefined && preProjectId !== null
-						? Math.max(
-								0,
-								nextProjects.findIndex((item) => item.id === preProjectId) + 1,
-							)
-						: nextProjectId !== undefined && nextProjectId !== null
-							? Math.max(
-									0,
-									nextProjects.findIndex((item) => item.id === nextProjectId),
-								)
-							: nextProjects.length
+				const insertIndex = getInsertIndexByAnchors(
+					nextProjects.map((item) => item.id),
+					preProjectId,
+					nextProjectId,
+				)
+				if (insertIndex === null) return
 				nextProjects.splice(Math.min(insertIndex, nextProjects.length), 0, {
 					...project,
 					workspace_id: workspaceId,
 					is_pinned: isPin,
 				})
+				optimisticProjectIds = nextProjects.map((item) => item.id)
 				runInAction(() => {
 					projectStore.reorderProjectsInWorkspace(
 						workspaceId,
@@ -805,7 +809,16 @@ class ProjectService {
 					})
 				}
 			} catch (error) {
-				if (workspaceId && hasOrdering) {
+				if (
+					workspaceId &&
+					hasOrdering &&
+					optimisticProjectIds &&
+					projectStore
+						.getProjectsByWorkspace(workspaceId)
+						.every((item, index) => item.id === optimisticProjectIds?.[index]) &&
+					projectStore.getProjectsByWorkspace(workspaceId).length ===
+						optimisticProjectIds.length
+				) {
 					runInAction(() => {
 						projectStore.setProjectsForWorkspace(workspaceId, previousProjects)
 					})

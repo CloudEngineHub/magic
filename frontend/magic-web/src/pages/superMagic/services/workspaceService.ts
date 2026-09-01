@@ -5,7 +5,7 @@ import projectStore from "../stores/core/project"
 import { type Workspace } from "../pages/Workspace/types"
 import { SHARE_WORKSPACE_ID } from "../constants"
 import { RequestConfig } from "@/apis/core/HttpClient"
-import { getInsertIndexByAnchors } from "./orderUtils"
+import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 
 export interface FetchWorkspacesParams {
 	isAutoSelect?: boolean
@@ -161,7 +161,9 @@ class WorkspaceService {
 			preWorkspaceId,
 			nextWorkspaceId,
 		)
+		if (insertIndex === null) return
 		nextWorkspaceIds.splice(Math.max(0, insertIndex), 0, workspaceId)
+		const optimisticWorkspaceIds = [...nextWorkspaceIds]
 		runInAction(() => {
 			workspaceStore.reorderWorkspaces(nextWorkspaceIds)
 		})
@@ -179,9 +181,12 @@ class WorkspaceService {
 				isSelectLast: false,
 			})
 		} catch (error) {
-			runInAction(() => {
-				workspaceStore.reorderWorkspaces(previousWorkspaceIds)
-			})
+			const currentWorkspaceIds = workspaceStore.workspaces.map((workspace) => workspace.id)
+			if (isSameOrder(currentWorkspaceIds, optimisticWorkspaceIds)) {
+				runInAction(() => {
+					workspaceStore.reorderWorkspaces(previousWorkspaceIds)
+				})
+			}
 			throw error
 		}
 	}
