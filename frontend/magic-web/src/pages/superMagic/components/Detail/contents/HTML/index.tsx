@@ -1367,16 +1367,6 @@ export default memo(function HTML(props: HTMLProps) {
 								/>
 							)}
 							{showAIOptimizationButton && !isEditMode && (
-								<AIEditButton
-									showButtonText
-									maxItems={3}
-									onPrimaryAction={handleAIEdit}
-									isPrimaryActive={isAppendPicking}
-									attachmentList={attachmentList}
-									fileId={displayData?.file_id}
-								/>
-							)}
-							{showAIOptimizationButton && !isEditMode && (
 								<ActionButton
 									icon={<Crosshair size={16} />}
 									onClick={() => void handleQuickSelection()}
@@ -1384,7 +1374,18 @@ export default memo(function HTML(props: HTMLProps) {
 									text={quickSelectionLabel}
 									showText
 									textClassName={isQuickSelecting ? "text-primary" : undefined}
+									buttonClassName="border border-border"
 									data-testid="html-ai-pick-button"
+								/>
+							)}
+							{showAIOptimizationButton && !isEditMode && (
+								<AIEditButton
+									showButtonText
+									maxItems={3}
+									onPrimaryAction={handleAIEdit}
+									isPrimaryActive={isAppendPicking}
+									attachmentList={attachmentList}
+									fileId={displayData?.file_id}
 								/>
 							)}
 						</div>
