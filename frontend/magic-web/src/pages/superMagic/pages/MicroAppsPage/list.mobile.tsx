@@ -10,7 +10,10 @@ import {
 	MicroAppEmptyIllustration,
 	MicroAppSearchEmptyIllustration,
 } from "@/pages/superMagic/components/MicroAppStateIllustration"
-import { canManageCollaborators as canManageProjectCollaborators } from "@/pages/superMagic/utils/permission"
+import {
+	canEditProject,
+	canManageCollaborators as canManageProjectCollaborators,
+} from "@/pages/superMagic/utils/permission"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import MicroAppCard from "./components/MicroAppCard"
@@ -211,6 +214,7 @@ export default function MicroAppsListPageMobile() {
 										collaboratorManagement.loadingAppId === app.app_id
 									}
 									canDelete={app.can_delete}
+									canRename={canEditProject(app.user_role)}
 									canManageCollaborators={
 										collaboratorManagement.canManageCollaborators &&
 										canManageProjectCollaborators(app.user_role)

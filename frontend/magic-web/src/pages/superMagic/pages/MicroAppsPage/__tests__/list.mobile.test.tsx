@@ -23,6 +23,7 @@ interface MockMicroAppCardProps {
 	coverUrl?: string
 	statusLabel?: string
 	canDelete?: boolean
+	canRename?: boolean
 	canManageCollaborators?: boolean
 	onClick: () => void
 	testId: string
@@ -48,6 +49,7 @@ vi.mock("../components/MicroAppCard", () => ({
 		coverUrl,
 		statusLabel,
 		canDelete,
+		canRename,
 		canManageCollaborators,
 		onClick,
 		testId,
@@ -57,6 +59,7 @@ vi.mock("../components/MicroAppCard", () => ({
 			data-testid={testId}
 			data-cover-url={coverUrl}
 			data-can-delete={canDelete}
+			data-can-rename={canRename}
 			data-can-manage-collaborators={canManageCollaborators}
 			onClick={onClick}
 		>
@@ -144,6 +147,32 @@ describe("MicroAppsListPageMobile", () => {
 
 		expect(screen.getByTestId("micro-apps-mobile-app-app-1")).toHaveAttribute(
 			"data-can-manage-collaborators",
+			"false",
+		)
+	})
+
+	it("hides rename when the app role is missing", () => {
+		mocks.useMicroAppsPage.mockReturnValueOnce({
+			...mocks.useMicroAppsPage(),
+			apps: [
+				{
+					app_id: "app-unknown-role",
+					app_name: "未知权限应用",
+					app_description: "",
+					creator_id: "user-1",
+					cover_url: "",
+					publish_status: "unpublished",
+					updated_at: null,
+					can_delete: false,
+					project_id: "project-unknown-role",
+				},
+			],
+		})
+
+		render(<MicroAppsListPageMobile />)
+
+		expect(screen.getByTestId("micro-apps-mobile-app-app-unknown-role")).toHaveAttribute(
+			"data-can-rename",
 			"false",
 		)
 	})
