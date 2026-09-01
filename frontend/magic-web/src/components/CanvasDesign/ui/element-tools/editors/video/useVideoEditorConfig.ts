@@ -71,7 +71,6 @@ import {
 	getMaxFrameCount,
 	getMaxReferenceImageCount,
 	resolveReferenceAssetLimits,
-	validateReferenceAssetsByLimits,
 	resolveVideoFrameRoleSupport,
 	getRequestInputTab,
 	hasVideoInputs,
@@ -1019,19 +1018,16 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			}
 			if (isSelectedSlotReplacement) {
 				const effectiveCurrentInfos = getEffectiveReferenceAssetInfos()
-				const effectiveNextInfos = effectiveCurrentInfos.map((info) =>
-					areCanvasResourceReferencesSame(
-						info.path,
-						previousInfo.path,
-						resolveResourceReference,
-					)
-						? normalizedFileInfo
-						: info,
-				)
 				if (
-					validateReferenceAssetsByLimits(currentInputModeConfig, effectiveNextInfos, {
-						ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
-					}).length > 0
+					!canReplaceReferenceAssetByCounts(
+						currentInputModeConfig,
+						countReferenceAssets(effectiveCurrentInfos),
+						previousInfo.assetType,
+						assetType,
+						{
+							ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+						},
+					)
 				) {
 					return
 				}

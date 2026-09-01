@@ -6187,6 +6187,7 @@
 			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
 			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
 			"renameOpenFailureContent": "该操作会重命名画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"renameProjectNameSyncFailed": "重命名成功，但画布名称同步失败",
 			"title": "画布项目风险提示"
 		},
 		"clawPlaygroundTags": {

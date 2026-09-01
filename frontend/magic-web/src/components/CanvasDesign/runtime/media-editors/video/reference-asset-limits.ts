@@ -301,8 +301,8 @@ export function canAddReferenceAssetByCounts(
 }
 
 /**
- * 判断替换一个既有素材后，完整素材集合是否仍满足数量与变体约束。
- * 替换语义先扣除旧素材，再按新增素材执行增量容量检查，最后校验替换后的完整组合。
+ * 判断替换一个既有素材后，素材集合是否仍可继续构建合法变体。
+ * 替换语义先扣除旧素材，再按新增素材执行增量容量检查；变体最小数量由提交阶段校验。
  */
 export function canReplaceReferenceAssetByCounts(
 	modeConfig: VideoInputModeConfig | undefined,
@@ -323,15 +323,12 @@ export function canReplaceReferenceAssetByCounts(
 		return false
 	}
 
-	const nextCounts = { ...remainingCounts }
-	if (nextKind === "image") nextCounts.images += 1
-	if (nextKind === "video") nextCounts.videos += 1
-	if (nextKind === "audio") nextCounts.audios += 1
-
-	return (
-		validateReferenceAssetsByLimits(modeConfig, countsToAssets(nextCounts), options).length ===
-		0
-	)
+	// Replacement is an incremental edit. `canAddReferenceAssetByCounts` above
+	// already checked supported fields, type/total maxima, and whether the new
+	// counts can still fit at least one variant. Do not run the submit-time
+	// completeness validation here: a draft may legitimately be missing a
+	// variant minimum until the user adds the remaining reference assets.
+	return true
 }
 
 export function validateReferenceAssetsByLimits(

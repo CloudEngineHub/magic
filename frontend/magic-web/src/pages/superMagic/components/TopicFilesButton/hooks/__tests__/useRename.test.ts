@@ -5,7 +5,10 @@ import MagicModal from "@/components/base/MagicModal"
 import { useRename } from "../useRename"
 import type { AttachmentItem } from "../types"
 import { detectCanvasProjectOperationRisk } from "../../utils/canvasProjectOperationRisk"
-import { repairCanvasProjectsBeforeFileOperation } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import {
+	repairCanvasProjectsBeforeFileOperation,
+	syncCanvasProjectNameAfterFileOperation,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -17,6 +20,7 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		success: vi.fn(),
 		error: vi.fn(),
+		warning: vi.fn(),
 	},
 }))
 
@@ -42,6 +46,7 @@ vi.mock(
 	"@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair",
 	() => ({
 		repairCanvasProjectsBeforeFileOperation: vi.fn(),
+		syncCanvasProjectNameAfterFileOperation: vi.fn(),
 		formatCanvasPathRepairFailures: vi.fn(() => "repair failed"),
 	}),
 )
@@ -69,6 +74,11 @@ describe("useRename", () => {
 			failures: [],
 			hasFailures: false,
 			requiresConfirmation: false,
+		})
+		vi.mocked(syncCanvasProjectNameAfterFileOperation).mockResolvedValue({
+			syncedFileIds: [],
+			failures: [],
+			hasFailures: false,
 		})
 	})
 
@@ -135,10 +145,14 @@ describe("useRename", () => {
 		})
 
 		expect(repairCanvasProjectsBeforeFileOperation).toHaveBeenCalledTimes(1)
+		expect(syncCanvasProjectNameAfterFileOperation).toHaveBeenCalledTimes(1)
 		expect(SuperMagicApi.renameFile).toHaveBeenCalledTimes(1)
 		expect(
 			vi.mocked(repairCanvasProjectsBeforeFileOperation).mock.invocationCallOrder[0],
 		).toBeLessThan(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0])
+		expect(
+			vi.mocked(syncCanvasProjectNameAfterFileOperation).mock.invocationCallOrder[0],
+		).toBeGreaterThan(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0])
 	})
 
 	it("文件重命名不触发画布路径修复", async () => {
@@ -165,6 +179,7 @@ describe("useRename", () => {
 
 		expect(repairCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
 		expect(SuperMagicApi.renameFile).toHaveBeenCalledTimes(1)
+		expect(syncCanvasProjectNameAfterFileOperation).not.toHaveBeenCalled()
 	})
 
 	it("路径修复失败时取消不会调用重命名接口", async () => {
@@ -202,5 +217,27 @@ describe("useRename", () => {
 		})
 
 		expect(SuperMagicApi.renameFile).not.toHaveBeenCalled()
+		expect(syncCanvasProjectNameAfterFileOperation).not.toHaveBeenCalled()
+	})
+
+	it("重命名接口失败时不提前同步画布名称", async () => {
+		vi.mocked(detectCanvasProjectOperationRisk).mockResolvedValue({
+			shouldWarn: false,
+			riskTypes: [],
+			affectedProjectNames: [],
+		})
+		vi.mocked(SuperMagicApi.renameFile).mockRejectedValue(new Error("rename failed"))
+
+		const { result } = renderHook(() => useRename({ attachments: [imagesDir] }))
+		act(() => {
+			result.current.handleStartRename(imagesDir)
+			result.current.setRenameValue("media")
+		})
+
+		await act(async () => {
+			await result.current.handleRenameConfirm()
+		})
+
+		expect(syncCanvasProjectNameAfterFileOperation).not.toHaveBeenCalled()
 	})
 })

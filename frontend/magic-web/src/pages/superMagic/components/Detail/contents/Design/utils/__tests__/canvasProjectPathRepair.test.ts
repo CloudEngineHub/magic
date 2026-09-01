@@ -3,7 +3,10 @@ import { SuperMagicApi } from "@/apis"
 import { getFileContentById, getFileContentsByIds } from "@/pages/superMagic/utils/api"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { compressCanvasData, decompressCanvasData } from "../magicProjectCompression"
-import { repairCanvasProjectsBeforeFileOperation } from "../canvasProjectPathRepair"
+import {
+	repairCanvasProjectsBeforeFileOperation,
+	syncCanvasProjectNameAfterFileOperation,
+} from "../canvasProjectPathRepair"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -157,7 +160,7 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		)
 	})
 
-	it("repairs v1 paths and synchronizes a renamed canvas root name", async () => {
+	it("repairs v1 paths without persisting a pending canvas root name", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			projectContent("1.0.0", {
 				elements: [{ type: "image", contents: [{ src: "/Canvas/images/a.png" }] }],
@@ -168,7 +171,6 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: attachments(),
 			items: [attachments()[0]],
 			operation: "rename",
-			rename: { oldName: "Canvas", newName: "Renamed" },
 		})
 
 		expect(result.failures).toEqual([])
@@ -177,8 +179,46 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
 		const saved = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0]
 		expect(saved.file_id).toBe("main")
-		expect(saved.content).toContain('"name": "Renamed"')
+		expect(saved.content).toContain('"name": "Canvas"')
 		expect(saved.content).toContain('"src": "./images/a.png"')
+	})
+
+	it("syncs a renamed canvas root name in a separate post-operation step", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", { elements: [] }) as never,
+		)
+
+		const result = await syncCanvasProjectNameAfterFileOperation({
+			attachments: attachments(),
+			items: [attachments()[0]],
+			newName: "Renamed",
+		})
+
+		expect(result).toEqual({ syncedFileIds: ["main"], failures: [], hasFailures: false })
+		expect(getFileContentsByIds).toHaveBeenCalledWith(["main"], { responseType: "text" })
+		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0].content).toContain(
+			'"name": "Renamed"',
+		)
+	})
+
+	it("does not persist a new canvas name when post-operation sync fails", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", { elements: [] }) as never,
+		)
+		vi.mocked(SuperMagicApi.saveFileContent).mockRejectedValue(new Error("save failed"))
+
+		const result = await syncCanvasProjectNameAfterFileOperation({
+			attachments: attachments(),
+			items: [attachments()[0]],
+			newName: "Renamed",
+		})
+
+		expect(result).toMatchObject({
+			syncedFileIds: [],
+			hasFailures: true,
+			failures: [expect.objectContaining({ message: "save failed" })],
+		})
 	})
 
 	it("repairs dirty absolute paths in a v3 compressed canvas without upgrading it", async () => {
@@ -192,7 +232,6 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: attachments(),
 			items: [attachments()[0]],
 			operation: "rename",
-			rename: { oldName: "Canvas", newName: "Renamed" },
 		})
 
 		expect(result.failures).toEqual([])
@@ -206,7 +245,7 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			canvas: string
 		}
 		expect(savedConfig.version).toBe("3.0.0")
-		expect(savedConfig.name).toBe("Renamed")
+		expect(savedConfig.name).toBe("Canvas")
 		expect(savedConfig.canvas).toMatch(/^MAGICPROJECTDESIGNDATA:\/\//)
 		expect(decompressCanvasData(savedConfig.canvas)).toEqual({
 			elements: [{ type: "image", contents: [{ src: "./images/a.png" }] }],
@@ -286,8 +325,11 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 
 		expect(result.failures).toEqual([])
 		expect(getFileContentsByIds).toHaveBeenCalledTimes(2)
-		expect(getFileContentsByIds.mock.calls[0]).toEqual([["main"], { responseType: "text" }])
-		expect(getFileContentsByIds.mock.calls[1]).toEqual([
+		expect(vi.mocked(getFileContentsByIds).mock.calls[0]).toEqual([
+			["main"],
+			{ responseType: "text" },
+		])
+		expect(vi.mocked(getFileContentsByIds).mock.calls[1]).toEqual([
 			["agent-details", "user-details"],
 			{ responseType: "text" },
 		])
@@ -422,7 +464,6 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: tree,
 			items: [tree[0]],
 			operation: "move",
-			rename: { oldName: "Canvas", newName: "Moved" },
 		})
 
 		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
@@ -515,11 +556,10 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: tree,
 			items: [tree[0]],
 			operation: "rename",
-			rename: { oldName: "Parent", newName: "Renamed Parent" },
 		})
 
 		const saved = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0]
-		expect(saved.content).not.toContain('"name": "Renamed Parent"')
+		expect(saved.content).toContain('"name": "Canvas"')
 		expect(saved.content).toContain('"src": "./images/a.png"')
 	})
 
@@ -772,7 +812,7 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		)
 	})
 
-	it("updates a renamed canvas root name even when a sidecar needs confirmation", async () => {
+	it("keeps the old canvas name when path repair needs confirmation", async () => {
 		const tree = [
 			...attachments(),
 			{
@@ -783,7 +823,10 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			},
 		] as any
 		vi.mocked(getFileContentById).mockImplementation(async (fileId: string) => {
-			if (fileId === "main") return projectContent("2.0.0", { elements: [] }) as never
+			if (fileId === "main")
+				return projectContent("2.0.0", {
+					elements: [{ type: "image", contents: [{ src: "/Canvas/images/a.png" }] }],
+				}) as never
 			throw new Error("sidecar read failed")
 		})
 
@@ -791,11 +834,14 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: tree,
 			items: [tree[0]],
 			operation: "rename",
-			rename: { oldName: "Canvas", newName: "Renamed Canvas" },
 		})
 
 		expect(result.hasFailures).toBe(true)
 		const saved = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0]
-		expect(saved.content).toContain('"name": "Renamed Canvas"')
+		expect(saved.content).toContain('"name": "Canvas"')
+		const savedConfig = parseMagicProjectConfigContent(saved.content) as { canvas: string }
+		expect(decompressCanvasData(savedConfig.canvas)).toEqual({
+			elements: [{ type: "image", contents: [{ src: "./images/a.png" }] }],
+		})
 	})
 })

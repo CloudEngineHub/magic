@@ -15,6 +15,7 @@ import {
 import {
 	formatCanvasPathRepairFailures,
 	repairCanvasProjectsBeforeFileOperation,
+	syncCanvasProjectNameAfterFileOperation,
 } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 export interface UseRenameOptions {
@@ -354,7 +355,6 @@ export function useRename(options: UseRenameOptions = {}) {
 						items: [currentItem],
 						operation: "rename",
 						projectId: options.projectId,
-						rename: { oldName: originalName, newName: trimmedName },
 					})
 				: null
 			if (canvasRisk.shouldWarn || repairResult?.hasFailures) {
@@ -405,6 +405,34 @@ export function useRename(options: UseRenameOptions = {}) {
 				file_id: fileId,
 				target_name: trimmedName,
 			})
+
+			if (currentItem.is_directory) {
+				try {
+					const nameSyncResult = await syncCanvasProjectNameAfterFileOperation({
+						attachments: attachments || [],
+						items: [currentItem],
+						projectId: options.projectId,
+						newName: trimmedName,
+					})
+					if (nameSyncResult.hasFailures) {
+						console.error("画布名称同步失败:", nameSyncResult.failures)
+						magicToast.warning(
+							t(
+								"topicFiles.canvasOperationRisk.renameProjectNameSyncFailed",
+								"重命名成功，但画布名称同步失败",
+							),
+						)
+					}
+				} catch (error) {
+					console.error("画布名称同步失败:", error)
+					magicToast.warning(
+						t(
+							"topicFiles.canvasOperationRisk.renameProjectNameSyncFailed",
+							"重命名成功，但画布名称同步失败",
+						),
+					)
+				}
+			}
 
 			// 如果有onAttachmentsChange回调，使用本地更新
 			if (onAttachmentsChange && attachments) {

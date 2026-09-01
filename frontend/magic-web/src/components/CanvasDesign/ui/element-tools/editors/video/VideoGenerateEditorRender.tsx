@@ -336,7 +336,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					config.currentInputModeConfig,
 					buildVideoReferenceAssetInfosFromReferences(references),
 					{ ignoreModeMaxCountForTotal: config.selectedInputMode === "omni_reference" },
-				).some((issue) => issue.rule === "max")
+				).some((issue) => issue.rule === "max" && issue.reason !== "variant")
 				return hasMaxIssue ? "over-limit" : null
 			},
 		}

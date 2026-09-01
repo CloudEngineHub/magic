@@ -236,4 +236,28 @@ describe("omni reference asset limits", () => {
 			),
 		).toBe(false)
 	})
+
+	it("allows replacing an asset while a variant minimum is still incomplete", () => {
+		const config: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos"],
+			variants: [
+				{
+					code: "image-and-video",
+					limits: {
+						reference_images: { min: 1, max: 1 },
+						reference_videos: { min: 1, max: 1 },
+					},
+				},
+			],
+		}
+
+		expect(
+			canReplaceReferenceAssetByCounts(
+				config,
+				{ images: 1, videos: 0, audios: 0 },
+				"image",
+				"image",
+			),
+		).toBe(true)
+	})
 })

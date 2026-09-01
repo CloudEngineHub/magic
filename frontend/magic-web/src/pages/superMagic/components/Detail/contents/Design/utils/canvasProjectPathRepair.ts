@@ -26,10 +26,6 @@ export interface CanvasProjectPathRepairOptions {
 	items?: AttachmentItem[]
 	operation: CanvasProjectPathRepairOperation
 	projectId?: string
-	rename?: {
-		oldName: string
-		newName: string
-	}
 }
 
 export interface CanvasProjectPathRepairFailure {
@@ -60,6 +56,22 @@ export interface CanvasProjectPathRepairResult {
 	requiresConfirmation: boolean
 }
 
+export interface CanvasProjectNameSyncOptions {
+	attachments: AttachmentItem[]
+	flatAttachments?: AttachmentItem[]
+	attachmentIndex?: AttachmentIndex
+	fileIds?: string[]
+	items?: AttachmentItem[]
+	projectId?: string
+	newName: string
+}
+
+export interface CanvasProjectNameSyncResult {
+	syncedFileIds: string[]
+	failures: CanvasProjectPathRepairFailure[]
+	hasFailures: boolean
+}
+
 interface CanvasProjectInfo {
 	rootPath: string
 	projectName: string
@@ -75,13 +87,22 @@ interface PendingFileSave {
 	projectRootPath: string
 }
 
+type AttachmentCollectionOptions = Pick<
+	CanvasProjectPathRepairOptions,
+	"attachments" | "flatAttachments" | "attachmentIndex"
+>
+
+interface PersistPendingFileSavesResult {
+	successfulFiles: PendingFileSave[]
+	failures: CanvasProjectPathRepairFailure[]
+}
+
 interface ProjectCheckState {
 	project: CanvasProjectInfo
 	resourceLookup: ResourceLookup
 	projectResult: CanvasProjectPathRepairProjectResult
 	projectFailures: CanvasProjectPathRepairFailure[]
 	projectSaves: PendingFileSave[]
-	mainContent?: string
 }
 
 interface ResourceLookup {
@@ -280,6 +301,48 @@ function getSaveFailureMessage(response: unknown, fileId: string): string | null
 		(file) => String(file?.file_id || "") === String(fileId),
 	)
 	return savedFile ? null : "save-result-missing"
+}
+
+function resolveFlatAttachmentItems(options: AttachmentCollectionOptions): AttachmentItem[] {
+	return options.flatAttachments?.length
+		? options.flatAttachments
+		: options.attachmentIndex
+			? options.attachmentIndex.allKeys
+					.map((key) => options.attachmentIndex?.getItemByKey(key))
+					.filter((item): item is AttachmentItem => Boolean(item))
+			: flattenAttachments(options.attachments || [])
+}
+
+async function persistPendingFileSaves(
+	pendingSaves: PendingFileSave[],
+): Promise<PersistPendingFileSavesResult> {
+	if (pendingSaves.length === 0) return { successfulFiles: [], failures: [] }
+
+	const saveResult = await Promise.allSettled([
+		SuperMagicApi.saveFileContent(
+			pendingSaves.map((file) => ({ file_id: file.fileId, content: file.content })),
+		),
+	])
+	const result = saveResult[0]
+	const successfulFiles: PendingFileSave[] = []
+	const failures: CanvasProjectPathRepairFailure[] = []
+	for (const file of pendingSaves) {
+		const message = !result
+			? "save-result-missing"
+			: result.status === "fulfilled"
+				? getSaveFailureMessage(result.value, file.fileId)
+				: result.reason instanceof Error
+					? result.reason.message
+					: String(result.reason)
+		if (message) {
+			failures.push({
+				projectName: file.projectName,
+				fileName: file.fileName,
+				message,
+			})
+		} else successfulFiles.push(file)
+	}
+	return { successfulFiles, failures }
 }
 
 function resourceRelativePath(rootPath: string, workspacePath: string): string | null {
@@ -618,13 +681,7 @@ function rewriteSidecar(
 export async function repairCanvasProjectsBeforeFileOperation(
 	options: CanvasProjectPathRepairOptions,
 ): Promise<CanvasProjectPathRepairResult> {
-	const flatItems = options.flatAttachments?.length
-		? options.flatAttachments
-		: options.attachmentIndex
-			? options.attachmentIndex.allKeys
-					.map((key) => options.attachmentIndex?.getItemByKey(key))
-					.filter((item): item is AttachmentItem => Boolean(item))
-			: flattenAttachments(options.attachments || [])
+	const flatItems = resolveFlatAttachmentItems(options)
 	const selectedItems = selectedOperationItems(options, flatItems)
 	if (selectedItems.length === 0) {
 		return {
@@ -683,7 +740,6 @@ export async function repairCanvasProjectsBeforeFileOperation(
 
 		try {
 			const rewritten = rewriteMainFile(mainContent, project, resourceLookup)
-			state.mainContent = mainContent
 			if (rewritten.unresolvedPaths.length > 0)
 				projectFailures.push({
 					projectName: project.projectName,
@@ -767,33 +823,7 @@ export async function repairCanvasProjectsBeforeFileOperation(
 	}
 
 	for (const state of checkedProjects) {
-		const { project, projectResult, projectSaves } = state
-		const isRootRename =
-			options.operation === "rename" &&
-			Boolean(options.rename) &&
-			selectedItems.some(
-				(item) => item.is_directory && itemPath(item, flatItems) === project.rootPath,
-			)
-		if (state.mainContent && isRootRename && options.rename) {
-			const currentMainContent =
-				projectSaves.find((save) => save.fileId === String(project.mainFile.file_id))
-					?.content ?? state.mainContent
-			const named = updateProjectName(currentMainContent, options.rename.newName)
-			if (named.changed) {
-				const existingMain = projectSaves.find(
-					(save) => save.fileId === String(project.mainFile.file_id),
-				)
-				if (existingMain) existingMain.content = named.content
-				else
-					projectSaves.unshift({
-						fileId: String(project.mainFile.file_id),
-						fileName: MAGIC_PROJECT_FILE_NAME,
-						content: named.content,
-						projectName: project.projectName,
-						projectRootPath: project.rootPath,
-					})
-			}
-		}
+		const { projectResult, projectSaves } = state
 		projectResult.changedFileIds.push(...projectSaves.map((save) => save.fileId))
 		projectResult.changed = projectSaves.length > 0
 	}
@@ -804,80 +834,18 @@ export async function repairCanvasProjectsBeforeFileOperation(
 
 	// Read checks above remain parallel, but all changed files can be persisted
 	// in one batch to avoid a request per main/sidecar file.
-	const saveResult =
-		pendingSaves.length > 0
-			? await Promise.allSettled([
-					SuperMagicApi.saveFileContent(
-						pendingSaves.map((file) => ({
-							file_id: file.fileId,
-							content: file.content,
-						})),
-					),
-				])
-			: []
-	const repairedFileIds: string[] = []
-	const repairedFiles: CanvasProjectPathRepairResult["repairedFiles"] = []
-	if (pendingSaves.length > 0) {
-		const result = saveResult[0]
-		if (!result) {
-			for (const file of pendingSaves) {
-				failures.push({
-					projectName: file.projectName,
-					fileName: file.fileName,
-					message: "save-result-missing",
-				})
-				const project = projectResults.find(
-					(item) => item.rootPath === file.projectRootPath,
-				)
-				if (project)
-					project.changedFileIds = project.changedFileIds.filter(
-						(id) => id !== file.fileId,
-					)
-			}
-		} else {
-			pendingSaves.forEach((file) => {
-				if (result.status === "fulfilled") {
-					const saveFailure = getSaveFailureMessage(result.value, file.fileId)
-					if (!saveFailure) {
-						repairedFileIds.push(file.fileId)
-						repairedFiles.push({
-							fileId: file.fileId,
-							fileName: file.fileName,
-							projectName: file.projectName,
-						})
-						return
-					}
-					failures.push({
-						projectName: file.projectName,
-						fileName: file.fileName,
-						message: saveFailure,
-					})
-					const project = projectResults.find(
-						(item) => item.rootPath === file.projectRootPath,
-					)
-					if (project)
-						project.changedFileIds = project.changedFileIds.filter(
-							(id) => id !== file.fileId,
-						)
-				} else {
-					failures.push({
-						projectName: file.projectName,
-						fileName: file.fileName,
-						message:
-							result.reason instanceof Error
-								? result.reason.message
-								: String(result.reason),
-					})
-					const project = projectResults.find(
-						(item) => item.rootPath === file.projectRootPath,
-					)
-					if (project)
-						project.changedFileIds = project.changedFileIds.filter(
-							(id) => id !== file.fileId,
-						)
-				}
-			})
-		}
+	const saveResult = await persistPendingFileSaves(pendingSaves)
+	failures.push(...saveResult.failures)
+	const repairedFileIds = saveResult.successfulFiles.map((file) => file.fileId)
+	const repairedFiles: CanvasProjectPathRepairResult["repairedFiles"] =
+		saveResult.successfulFiles.map((file) => ({
+			fileId: file.fileId,
+			fileName: file.fileName,
+			projectName: file.projectName,
+		}))
+	const successfulFileIds = new Set(repairedFileIds)
+	for (const project of projectResults) {
+		project.changedFileIds = project.changedFileIds.filter((id) => successfulFileIds.has(id))
 	}
 	for (const project of projectResults) project.changed = project.changedFileIds.length > 0
 
@@ -888,6 +856,82 @@ export async function repairCanvasProjectsBeforeFileOperation(
 		failures,
 		hasFailures: failures.length > 0,
 		requiresConfirmation: failures.length > 0,
+	}
+}
+
+/**
+ * 在画布根目录重命名成功后，同步 magic.project.js 中的画布名称。
+ *
+ * 该步骤必须发生在真正的目录 rename 成功之后；路径修复仍由
+ * repairCanvasProjectsBeforeFileOperation 在操作前完成，以保证取消或失败时
+ * 不会提前持久化新的画布名称。
+ */
+export async function syncCanvasProjectNameAfterFileOperation(
+	options: CanvasProjectNameSyncOptions,
+): Promise<CanvasProjectNameSyncResult> {
+	const flatItems = resolveFlatAttachmentItems(options)
+	const selectedItems = selectedOperationItems(
+		{
+			attachments: options.attachments,
+			flatAttachments: options.flatAttachments,
+			attachmentIndex: options.attachmentIndex,
+			fileIds: options.fileIds,
+			items: options.items,
+			operation: "rename",
+			projectId: options.projectId,
+		},
+		flatItems,
+	)
+	const projects = collectCanvasProjects(flatItems, options.projectId).filter((project) =>
+		selectedItems.some(
+			(item) => item.is_directory && itemPath(item, flatItems) === project.rootPath,
+		),
+	)
+	if (projects.length === 0) {
+		return { syncedFileIds: [], failures: [], hasFailures: false }
+	}
+
+	const mainFileIds = projects.map((project) => String(project.mainFile.file_id))
+	const mainContents = await getFileContentsByIds(mainFileIds, { responseType: "text" })
+	const failures: CanvasProjectPathRepairFailure[] = []
+	const pendingSaves: PendingFileSave[] = []
+	for (const project of projects) {
+		const fileId = String(project.mainFile.file_id)
+		const content = mainContents.successes.get(fileId)
+		if (typeof content !== "string" || !content.trim()) {
+			failures.push({
+				projectName: project.projectName,
+				fileName: MAGIC_PROJECT_FILE_NAME,
+				message: mainContents.failures.get(fileId)?.message ?? "empty-file-content",
+			})
+			continue
+		}
+
+		try {
+			const named = updateProjectName(content, options.newName)
+			if (named.changed)
+				pendingSaves.push({
+					fileId,
+					fileName: MAGIC_PROJECT_FILE_NAME,
+					content: named.content,
+					projectName: project.projectName,
+					projectRootPath: project.rootPath,
+				})
+		} catch (error) {
+			failures.push({
+				projectName: project.projectName,
+				fileName: MAGIC_PROJECT_FILE_NAME,
+				message: error instanceof Error ? error.message : String(error),
+			})
+		}
+	}
+
+	const saveResult = await persistPendingFileSaves(pendingSaves)
+	failures.push(...saveResult.failures)
+	return {
+		syncedFileIds: saveResult.successfulFiles.map((file) => file.fileId),
+		failures,
+		hasFailures: failures.length > 0,
 	}
 }
 
