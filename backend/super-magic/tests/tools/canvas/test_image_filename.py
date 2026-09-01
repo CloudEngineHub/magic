@@ -21,5 +21,5 @@ def test_build_image_filename_uses_unique_key_to_avoid_concurrent_collisions() -
 
     assert first != second
     assert first == build_image_filename("mock image", generated_at, "content-a")
-    assert first.startswith("mock image_20260901123456_")
-    assert second.startswith("mock image_20260901123456_")
+    assert first.endswith("_20260901123456")
+    assert second.endswith("_20260901123456")

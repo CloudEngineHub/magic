@@ -17,7 +17,7 @@ def build_image_filename(
     timestamp = (generated_at or datetime.now()).strftime("%Y%m%d%H%M%S")
     if unique_key:
         unique_suffix = hashlib.sha256(unique_key.encode("utf-8")).hexdigest()[:12]
-        return f"{clean_name}_{timestamp}_{unique_suffix}"
+        return f"{clean_name}_{unique_suffix}_{timestamp}"
     return f"{clean_name}_{timestamp}"
 
 
