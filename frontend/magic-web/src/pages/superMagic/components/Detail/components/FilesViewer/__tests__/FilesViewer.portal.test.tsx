@@ -17,6 +17,7 @@ interface MockTab {
 	title: string
 	active: boolean
 	closeable: boolean
+	refreshKey?: string
 	fileData: MockFileData
 }
 
@@ -36,7 +37,9 @@ const mockState = vi.hoisted(() => ({
 	scrollTo: vi.fn(),
 	pptMount: vi.fn(),
 	pptUnmount: vi.fn(),
-	renderPropsType: "html" as "html" | "md",
+	previewMount: vi.fn(),
+	previewUnmount: vi.fn(),
+	renderPropsType: "html" as "html" | "md" | "image",
 	tabCacheOptions: undefined as { enableCache?: boolean } | undefined,
 }))
 let restoreBoundingClientRect: (() => void) | undefined
@@ -164,12 +167,25 @@ vi.mock("../components/TabCache", async () => {
 		return <div data-testid="ppt-content" />
 	}
 
+	function MockPreviewContent() {
+		useEffect(() => {
+			mockState.previewMount()
+			return () => mockState.previewUnmount()
+		}, [])
+
+		return <div data-testid="files-viewer-content" />
+	}
+
 	return {
-		default: ({ tab }: { tab: { fileData?: MockFileData } }) =>
+		default: ({
+			tab,
+		}: {
+			tab: { id: string; refreshKey?: string; fileData?: MockFileData }
+		}) =>
 			tab.fileData?.display_config?.type === "slide" ? (
 				<MockPPTContent />
 			) : (
-				<div data-testid="files-viewer-content" />
+				<MockPreviewContent key={tab.refreshKey || tab.id} />
 			),
 	}
 })
@@ -223,6 +239,7 @@ beforeEach(() => {
 			file_extension: "md",
 			updated_at: "2026-07-28T00:00:00Z",
 		},
+		refreshKey: "refresh-1",
 	})
 	mockState.renderPropsType = "html"
 	Object.defineProperty(HTMLElement.prototype, "scrollTo", {
@@ -231,6 +248,8 @@ beforeEach(() => {
 	})
 	mockState.pptMount.mockReset()
 	mockState.pptUnmount.mockReset()
+	mockState.previewMount.mockReset()
+	mockState.previewUnmount.mockReset()
 })
 
 afterEach(() => {
@@ -255,7 +274,7 @@ describe("FilesViewer fullscreen portal", () => {
 	})
 
 	it.each(["html", "md"] as const)(
-		"does not remount %s content when entering or exiting viewer fullscreen",
+		"keeps %s content mounted while entering and exiting viewer fullscreen",
 		(renderPropsType) => {
 			mockState.renderPropsType = renderPropsType
 			const { rerender } = render(<FilesViewer />)
@@ -278,6 +297,28 @@ describe("FilesViewer fullscreen portal", () => {
 			).toBe("10")
 		},
 	)
+
+	it("renders image content exactly once in the stable preview surface", () => {
+		mockState.renderPropsType = "image"
+
+		const { rerender } = render(<FilesViewer />)
+		const initialPortal = document.querySelector("[data-files-viewer-preview-portal]")
+
+		expect(screen.getByTestId("files-viewer-content")).toBeInTheDocument()
+		expect(document.querySelectorAll('[data-testid="files-viewer-content"]')).toHaveLength(1)
+		expect(mockState.previewMount).toHaveBeenCalledOnce()
+		expect(initialPortal).toBeInTheDocument()
+
+		// A type change during attachment refresh must keep one Render instance per refresh key.
+		mockState.renderPropsType = "html"
+		mockState.tab.refreshKey = "refresh-2"
+		rerender(<FilesViewer activeFileId="refresh-2" />)
+
+		expect(document.querySelector("[data-files-viewer-preview-portal]")).toBe(initialPortal)
+		expect(document.querySelectorAll('[data-testid="files-viewer-content"]')).toHaveLength(1)
+		expect(mockState.previewMount).toHaveBeenCalledTimes(2)
+		expect(mockState.previewUnmount).toHaveBeenCalledOnce()
+	})
 
 	it("does not remount PPT content when entering or exiting viewer fullscreen", () => {
 		mockState.tab.fileData = {

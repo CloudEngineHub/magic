@@ -4,9 +4,11 @@ import { createPortal } from "react-dom"
 
 interface StablePreviewPortalSurfaceProps {
 	anchor: HTMLElement | null
+	borderRadius?: string
 	children: ReactNode
 	enabled: boolean
 	isFullscreen: boolean
+	isPpt?: boolean
 	visible: boolean
 }
 
@@ -34,9 +36,11 @@ function isAnchorTreeVisible(anchor: HTMLElement): boolean {
  */
 export default function StablePreviewPortalSurface({
 	anchor,
+	borderRadius = "0px",
 	children,
 	enabled,
 	isFullscreen,
+	isPpt = false,
 	visible,
 }: StablePreviewPortalSurfaceProps) {
 	const hostRef = useRef<HTMLDivElement | null>(null)
@@ -44,6 +48,7 @@ export default function StablePreviewPortalSurface({
 		const host = document.createElement("div")
 		host.className = "fixed overflow-hidden bg-background"
 		host.dataset.filesViewerPreviewPortal = "true"
+		if (isPpt) host.dataset.filesViewerPptPortal = "true"
 		host.style.display = "none"
 		host.style.pointerEvents = "none"
 		host.style.visibility = "hidden"
@@ -87,14 +92,17 @@ export default function StablePreviewPortalSurface({
 		)
 		const layoutSignature =
 			isVisible && rect
-				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}`
-				: `hidden|${isFullscreen}`
+				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${isPpt}`
+				: `hidden|${isFullscreen}|${borderRadius}|${isPpt}`
 		if (layoutSignatureRef.current === layoutSignature) return
 		layoutSignatureRef.current = layoutSignature
 
 		host.style.pointerEvents = isVisible ? "auto" : "none"
 		host.style.display = isVisible ? "block" : "none"
 		host.style.visibility = isVisible ? "visible" : "hidden"
+		host.style.borderRadius = borderRadius
+		if (isPpt) host.dataset.filesViewerPptPortal = "true"
+		else delete host.dataset.filesViewerPptPortal
 		// The fullscreen viewer shell has the base fullscreen z-index and a white background.
 		// Keep the iframe surface one layer above it so the shell cannot cover the preview.
 		host.style.zIndex = isFullscreen ? "calc(var(--z-index-detail-fullscreen) + 1)" : "10"
@@ -107,7 +115,7 @@ export default function StablePreviewPortalSurface({
 		host.style.left = `${rect.left}px`
 		host.style.width = `${rect.width}px`
 		host.style.height = `${rect.height}px`
-	}, [anchor, host, isFullscreen, visible])
+	}, [anchor, borderRadius, host, isFullscreen, isPpt, visible])
 
 	useLayoutEffect(() => {
 		syncSurface()
@@ -149,7 +157,7 @@ export default function StablePreviewPortalSurface({
 			window.visualViewport?.removeEventListener("scroll", scheduleSync)
 			if (animationFrame) window.cancelAnimationFrame(animationFrame)
 		}
-	}, [anchor, host, syncSurface, visible])
+	}, [anchor, enabled, host, syncSurface, visible])
 
 	return enabled && host ? createPortal(children, host, "files-viewer-stable-preview") : null
 }
