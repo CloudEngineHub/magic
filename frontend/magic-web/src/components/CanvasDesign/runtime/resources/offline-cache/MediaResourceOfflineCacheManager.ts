@@ -8,8 +8,10 @@ import {
 	CANVAS_MEDIA_DB_NAME,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	getCacheKey,
-	normalizeResourceNamespace,
+	encodeResourcePathForUrl,
+	normalizeResourceNamespaceForStorage,
 	normalizeResourcePathForLookup,
+	normalizeResourcePathForStorage,
 } from "@/workers/service-worker/canvasMediaShared"
 import { isAppServiceWorkerFeatureEnabled } from "@/workers/service-worker/register"
 
@@ -17,8 +19,7 @@ import { isAppServiceWorkerFeatureEnabled } from "@/workers/service-worker/regis
  * 画布媒体离线缓存（主线程 IndexedDB + 主 SW Canvas 虚拟资源通道）。
  *
  * 与 SW 配合时的根因备忘：
- * - 虚拟 URL 命中 SW 后，IDB 查找键须与 SW 内 `normalizeResourcePathForLookup` 一致（见 SW 文件头注释：fetch
- *   pathname 可能为 percent-encoded，主线程写入为 Unicode 明文）。
+ * - 虚拟 URL 的每个路径段必须单独编码；SW 从 pathname 解码一次后，再与主线程使用相同的存储路径规范化。
  * - `resolveResourceUrl` / `rememberResolvedResource` / `ensureServiceWorker` 使用 `isOfflineCacheFeatureOn`，
  *   勿仅用 `isEnabled()`（后者含 `isActiveConsumer`），否则 Canvas 销毁后仍在飞行的换链会退回 OSS 直链。
  */
@@ -166,9 +167,9 @@ function buildResourceId(
 	resourcePath: string,
 ): string {
 	return joinUrlPathSegments(
-		normalizeResourceNamespace(namespace),
+		normalizeResourceNamespaceForStorage(namespace),
 		mediaType,
-		normalizeResourcePathForLookup(resourcePath),
+		normalizeResourcePathForStorage(resourcePath),
 	)
 }
 
@@ -205,14 +206,16 @@ function getVirtualResourceUrlForResourcePath(
 	mediaType: MediaResourceOfflineCacheMediaType,
 	namespacePath?: string,
 ): string {
+	const resolvedNamespacePath =
+		namespacePath ?? normalizeResourcePathForLookup(window.location.pathname)
 	return joinUrlPathSegments(
 		window.location.origin,
 		VIRTUAL_RESOURCE_ROUTE_PREFIX,
 		VIRTUAL_RESOURCE_PATH_SEGMENT,
-		namespacePath || window.location.pathname,
+		encodeResourcePathForUrl(resolvedNamespacePath),
 		mediaType,
 		VIRTUAL_RESOURCE_DESIGN_RESOURCE_SEGMENT,
-		resourcePath,
+		encodeResourcePathForUrl(resourcePath),
 	)
 }
 
@@ -289,7 +292,7 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	private getResourceNamespace(): string {
-		return normalizeResourceNamespace(this.getVirtualResourceScope?.())
+		return normalizeResourceNamespaceForStorage(this.getVirtualResourceScope?.())
 	}
 
 	private getVirtualResourceUrl(
@@ -311,7 +314,7 @@ export class MediaResourceOfflineCacheManager {
 		return getVirtualResourceUrlForResourcePath(
 			resourcePath,
 			mediaType,
-			normalizeResourceNamespace(namespace),
+			normalizeResourceNamespaceForStorage(namespace),
 		)
 	}
 
@@ -796,7 +799,7 @@ export class MediaResourceOfflineCacheManager {
 		const db = await this.openDb()
 		const transaction = db.transaction(STORE_NAME, "readwrite")
 		const store = transaction.objectStore(STORE_NAME)
-		const namespace = normalizeResourceNamespace(entry.namespace)
+		const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
 		const derivedCacheKey = this.getVirtualResourceUrlForNamespace(
 			entry.path,
 			namespace,
@@ -844,7 +847,7 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	private toCachedMediaResource(entry: StoredCachedMediaResource): CachedMediaResource {
-		const namespace = normalizeResourceNamespace(entry.namespace)
+		const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
 		const url =
 			entry.url ||
 			this.getVirtualResourceUrlForNamespace(entry.path, namespace, entry.mediaType)

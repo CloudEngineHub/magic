@@ -130,6 +130,52 @@ describe("MediaResourceOfflineCacheManager", () => {
 		expect(result?.url).toContain("/sw/canvas-design-media/")
 	})
 
+	it("encodes URL delimiters in virtual resource paths", async () => {
+		const postMessage = vi.fn()
+		const controller = {
+			scriptURL: `${window.location.origin}/sw.js`,
+			postMessage,
+		} as unknown as ServiceWorker
+		const registration = {
+			active: controller,
+			scope: "/",
+		} as unknown as ServiceWorkerRegistration
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve(registration),
+				register: vi.fn(),
+				getRegistrations: vi.fn().mockResolvedValue([registration]),
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		const manager = createOfflineCacheManager({
+			getVirtualResourceScope: () => "workspace/project/design/demo#1",
+		})
+		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
+			.fn()
+			.mockResolvedValue(undefined)
+		;(manager as unknown as { getEntry: () => Promise<null> }).getEntry = vi
+			.fn()
+			.mockResolvedValue(null)
+
+		const result = await manager.rememberResolvedResource({
+			path: "./images/真丝系列#13 娃娃领?x%25.png",
+			url: "https://oss.example.com/images/source.png",
+			mediaType: "image",
+		})
+
+		expect(result?.url).toContain("%2313%20")
+		expect(result?.url).toContain("%3Fx%2525.png")
+		expect(result?.url).toContain("demo%231/image/")
+		expect(new URL(result?.url ?? "").hash).toBe("")
+		expect(new URL(result?.url ?? "").search).toBe("")
+	})
+
 	it("falls back to the source url when app service worker mode is disabled", async () => {
 		vi.stubEnv("MAGIC_SW_MODE", "off")
 		const register = vi.fn()

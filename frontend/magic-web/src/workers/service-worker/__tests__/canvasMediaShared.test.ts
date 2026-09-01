@@ -5,6 +5,7 @@ import {
 	CANVAS_MEDIA_DB_NAME,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	cleanupLegacyCanvasMediaStorage,
+	encodeResourcePathForUrl,
 	handleCanvasMediaMessage,
 	handleCanvasMediaRequest,
 	parseVirtualResourceRequest,
@@ -176,7 +177,7 @@ function buildVirtualUrl(
 	path: string,
 	mediaType: StoredCanvasEntry["mediaType"] = "image",
 ): string {
-	return `${TEST_ORIGIN}/sw/canvas-design-media/workspace/project/design/demo/${mediaType}/design-resource/${path}`
+	return `${TEST_ORIGIN}/sw/canvas-design-media/workspace/project/design/demo/${mediaType}/design-resource/${encodeResourcePathForUrl(path)}`
 }
 
 async function saveCanvasEntry(
@@ -226,9 +227,9 @@ describe("canvasMediaShared", () => {
 	})
 
 	it("uses a new cache namespace when path key semantics change", () => {
-		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(3)
-		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v3")
-		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v3")
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(4)
+		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v4")
+		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v4")
 	})
 
 	it("deletes only legacy Canvas media IndexedDB and CacheStorage namespaces", async () => {
@@ -250,10 +251,12 @@ describe("canvasMediaShared", () => {
 		expect(deletedDatabases).toEqual([
 			"canvas-media-resource-offline-cache-v1",
 			"canvas-media-resource-offline-cache-v2",
+			"canvas-media-resource-offline-cache-v3",
 		])
-		expect(cacheStorage.delete).toHaveBeenCalledTimes(2)
+		expect(cacheStorage.delete).toHaveBeenCalledTimes(3)
 		expect(cacheStorage.delete).toHaveBeenNthCalledWith(1, "canvas-media-resources-v1")
 		expect(cacheStorage.delete).toHaveBeenNthCalledWith(2, "canvas-media-resources-v2")
+		expect(cacheStorage.delete).toHaveBeenNthCalledWith(3, "canvas-media-resources-v3")
 		expect(deletedDatabases).not.toContain(CANVAS_MEDIA_DB_NAME)
 		expect(cacheStorage.delete).not.toHaveBeenCalledWith(CANVAS_MEDIA_CACHE_NAME)
 	})
@@ -304,13 +307,49 @@ describe("canvasMediaShared", () => {
 		})
 	})
 
-	it("parses audio virtual urls without changing the v3 cache namespace", () => {
+	it("encodes URL delimiters in path segments and restores them during lookup", () => {
+		const resourcePath = "images/真丝系列#13 娃娃领?x%25.png"
+		const requestUrl = buildVirtualUrl(resourcePath)
+		expect(parseVirtualResourceRequest(requestUrl)?.resourcePath).toBe(resourcePath)
+
+		expect(requestUrl).toContain("%2313%20")
+		expect(requestUrl).toContain("%3Fx%2525.png")
+		expect(parseVirtualResourceRequest(requestUrl)).toEqual({
+			namespace: "workspace/project/design/demo",
+			mediaType: "image",
+			resourcePath,
+		})
+	})
+
+	it("serves cached resources whose filenames contain URL delimiters", async () => {
+		const resourcePath = "images/真丝系列#13 娃娃领?x%25.png"
+		const requestUrl = buildVirtualUrl(resourcePath)
+		const entry: StoredCanvasEntry = {
+			id: `workspace/project/design/demo/image/${resourcePath}`,
+			namespace: "workspace/project/design/demo",
+			path: resourcePath,
+			mediaType: "image",
+			cacheKey: requestUrl,
+			sourceUrl: "https://oss.example.com/images/source.png",
+		}
+
+		await saveCanvasEntry(entry)
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
+		await cache.put(requestUrl, new Response("cached-delimited-image", { status: 200 }))
+
+		const response = await handleCanvasMediaRequest(new Request(requestUrl))
+
+		expect(response?.status).toBe(200)
+		expect(await response?.text()).toBe("cached-delimited-image")
+	})
+
+	it("parses audio virtual urls without changing the v4 cache namespace", () => {
 		expect(parseVirtualResourceRequest(buildVirtualUrl("audios/voice.mp3", "audio"))).toEqual({
 			namespace: "workspace/project/design/demo",
 			mediaType: "audio",
 			resourcePath: "audios/voice.mp3",
 		})
-		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(3)
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(4)
 	})
 
 	it("returns cached canvas response when cache entry exists", async () => {
