@@ -302,6 +302,12 @@ class SkillVersionDomainService
             $versionEntity->setPublishedAt(date('Y-m-d H:i:s'));
             $versionEntity->setIsCurrentVersion(true);
 
+            // A private release supersedes the existing market listing.
+            $this->skillMarketDomainService->updateAllPublishStatusBySkillCode(
+                $skillEntity->getCode(),
+                PublishStatus::OFFLINE->value,
+            );
+
             $this->skillVersionRepository->clearCurrentVersion($dataIsolation, $skillEntity->getCode());
             $versionEntity = $this->saveSkillVersion($dataIsolation, $versionEntity);
 

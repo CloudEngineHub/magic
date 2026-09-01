@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
-"""聊天记录目录快照与恢复。
+"""聊天记录目录的整目录快照与恢复。
 
-目录边界：
+运行期聊天历史位于本地普通目录 ``.chat_history/``，不在 magicfs 挂载
+范围内，magicfs 无法按文件记录内容帧，因此 checkpoint 采用整目录复制：
 
-    .chat_history/  = 话题的持久状态，需要 checkpoint 和归档
-    .runtime/       = 可重新生成的运行数据，不需要 checkpoint，不进入归档
-    .workspace/     = 用户文件，由现有文件 checkpoint 机制单独处理
-    .checkpoints/   = checkpoint 自身，不能复制进自己
+    .chat_history/      = 运行期聊天记录持久状态，需要随 checkpoint 备份
+    .topic/chat_history/ = 话题卷上的启动交接源，不属于本快照的源/目标
+    .runtime/           = 可重新生成的运行数据，不在快照源目录内
+    .checkpoints/       = checkpoint 自身，不能复制进自己
 
-因此 checkpoint 复制整个 ``.chat_history/``，包括 ``compacted/``、
+因此每个 checkpoint 复制整个 ``.chat_history/``，包括 ``compacted/``、
 ``subagents/`` 和根目录辅助 JSON；``.runtime/`` 不在快照源目录内，
 不会被复制，也不会在恢复时被删除。
 """
@@ -35,7 +36,7 @@ def _should_skip_chat_history_entry(entry_name: str) -> bool:
 
 
 class ChatHistorySnapshotManager:
-    """按话题目录保存和恢复完整聊天记录持久状态。"""
+    """按 checkpoint 保存和恢复完整聊天记录持久状态。"""
 
     async def create_initial_chat_history_snapshot(
         self,

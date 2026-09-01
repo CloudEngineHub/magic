@@ -27,13 +27,13 @@ Canvas Manager - 画布实时 IO 事务入口
 
 import asyncio
 import inspect
-import random
-import time
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from agentlang.logger import get_logger
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.manager.canvas_lock_manager import canvas_lock_manager
+from app.tools.design.manager.canvas_manager_protocol import CanvasManagerProtocol
 from app.tools.design.utils.magic_project_design_parser import (
     BaseElement,
     CanvasConfig,
@@ -100,23 +100,53 @@ class CanvasStatistics:
         self.canvas_bounds: Optional[Tuple[float, float, float, float]] = None
 
 
-class CanvasManager:
-    """唯一的画布实时读写入口。"""
+class CanvasManager(CanvasManagerProtocol):
+    """V1 画布实时读写入口，具体实现 CanvasManagerProtocol。"""
+
+    # 旧格式保留统一读写接口，但不处理独立 Content 版本和 Element Connection 参数。
+    supports_connections = False
+
+    def supports_content_versions(self) -> bool:
+        """V1/V2 使用兼容写法，不支持独立的多 Content 版本。"""
+        return False
 
     def __init__(self, project_path: str):
         self.project_path = project_path
 
+    async def initialize_project(self, name: str, project_type: str = "design") -> None:
+        """按旧版明文结构创建空项目；具体版本由子类覆盖。"""
+        config = MagicProjectConfig(
+            version="1.0.0",
+            type=project_type,
+            name=name,
+            canvas=CanvasConfig(
+                viewport=ViewportState(scale=1.0, x=0, y=0),
+                elements=[],
+            ),
+        )
+        await write_magic_project_js(self.project_path, config)
+
     async def _read_current_canvas_once(self) -> MagicProjectConfig:
         """执行一次真实文件读取，不做锁编排。"""
-        max_retries = 3
-        retry_delay = 0.2
+        max_retries = 20
+        retry_delay = 0.5
         last_error: Optional[Exception] = None
 
         for attempt in range(max_retries):
             try:
                 return await read_magic_project_js(self.project_path)
-            except Exception as error:  # noqa: BLE001
+            except FileNotFoundError:
+                # 路径错误不是文件写入延迟，立即返回给调用方修正。
+                raise
+            except (OSError, ValueError) as error:
                 last_error = error
+                error_text = str(error).lower()
+                retryable = isinstance(error, OSError) or any(
+                    marker in error_text
+                    for marker in ("is empty", "still being written")
+                )
+                if not retryable:
+                    raise
                 if attempt == max_retries - 1:
                     break
                 logger.debug(
@@ -281,6 +311,15 @@ class CanvasManager:
             config=config,
         )
         return results[0] if results else None
+
+    async def resolve_content_target(
+        self,
+        content_id: str,
+        config: Optional[MagicProjectConfig] = None,
+    ) -> Optional[tuple[str, Optional[str]]]:
+        """在旧格式中把外部 Content ID 兼容为 Element ID。"""
+        element = await self.get_element_by_id(content_id, config=config)
+        return (element.id, None) if element is not None else None
 
     async def get_elements_by_type(
         self,
@@ -478,7 +517,9 @@ class CanvasManager:
         element_id: str,
         updates: Dict[str, object],
         config: MagicProjectConfig,
+        content_id: Optional[str] = None,
     ) -> bool:
+        """更新元素；旧格式兼容接收但忽略 content_id。"""
         element = await self.get_element_by_id(element_id, config=config)
         if element is None:
             return False
@@ -562,9 +603,24 @@ class CanvasManager:
         return await self.update_element(element_id, {"locked": locked}, config=config)
 
     def generate_element_id(self) -> str:
-        timestamp = int(time.time() * 1000)
-        random_suffix = random.randint(10000, 99999)
-        return f"element-{timestamp}{random_suffix}"
+        """生成与前端约定一致的 Element ID。"""
+        return CanvasIdGenerator.generate_element_id()
+
+    def generate_initial_content_id(self, element_id: str) -> str:
+        """生成与前端约定一致的首个 Content ID。"""
+        return CanvasIdGenerator.generate_initial_content_id(element_id)
+
+    def generate_content_id(
+        self,
+        element_id: str,
+        existing_content_ids: Sequence[str],
+    ) -> str:
+        """生成与前端约定一致的顺序 Content ID。"""
+        return CanvasIdGenerator.generate_content_id(element_id, existing_content_ids)
+
+    def generate_connection_id(self) -> str:
+        """生成与前端约定一致的 Connection ID。"""
+        return CanvasIdGenerator.generate_connection_id()
 
     async def element_exists(
         self,

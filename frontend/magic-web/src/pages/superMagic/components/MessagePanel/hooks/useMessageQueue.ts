@@ -25,6 +25,7 @@ export interface QueuedMessage {
 	id: string
 	content: JSONContent
 	mentionItems: MentionListItem[]
+	dynamicParams?: Record<string, unknown>
 	selectedModel?: ModelItem
 	selectedImageModel?: ModelItem
 	selectedVideoModel?: ModelItem
@@ -285,6 +286,7 @@ function useMessageQueue({
 				image_model?: ModelItem
 				video_model?: ModelItem
 				client_queue_sync_id?: string
+				dynamic_params?: Record<string, unknown>
 			}
 		}
 		content: string
@@ -303,6 +305,7 @@ function useMessageQueue({
 			selectedVideoModel?: ModelItem
 			topicMode?: TopicMode
 			agentCode?: string
+			dynamicParams?: Record<string, unknown>
 			clientSyncId?: string
 		} => {
 			try {
@@ -323,8 +326,10 @@ function useMessageQueue({
 					const videoModel = messageContent.extra?.super_agent?.video_model
 					const agentCode = messageContent.extra?.super_agent?.agent_code
 					const clientSyncId = messageContent.extra?.super_agent?.client_queue_sync_id
+					const dynamicParams = messageContent.extra?.super_agent?.dynamic_params
 					const topicPattern = messageContent.extra?.super_agent?.topic_pattern as
-						TopicMode | undefined
+						| TopicMode
+						| undefined
 
 					return {
 						content: jsonContent,
@@ -338,6 +343,7 @@ function useMessageQueue({
 							: undefined,
 						topicMode: topicPattern,
 						agentCode,
+						dynamicParams,
 						clientSyncId,
 					}
 				}
@@ -424,6 +430,7 @@ function useMessageQueue({
 							selectedVideoModel,
 							topicMode,
 							agentCode,
+							dynamicParams,
 							clientSyncId,
 						} = deserializeMessageContent(item.message_content)
 						return {
@@ -435,6 +442,7 @@ function useMessageQueue({
 							selectedVideoModel,
 							topicMode,
 							agentCode,
+							dynamicParams,
 							clientSyncId,
 							timestamp: new Date(item.created_at).getTime(),
 							status: mapStatus(item.status),
@@ -643,6 +651,7 @@ function useMessageQueue({
 		agentCode?: string,
 		inputMode?: string,
 		clientSyncId?: string,
+		dynamicParams?: Record<string, unknown>,
 	) => {
 		const modelObj = selectedModel
 			? {
@@ -686,6 +695,7 @@ function useMessageQueue({
 					topic_pattern: sendSelection.topicPattern,
 					...(sendSelection.agentCode && { agent_code: sendSelection.agentCode }),
 					...(clientSyncId && { client_queue_sync_id: clientSyncId }),
+					...(dynamicParams && { dynamic_params: dynamicParams }),
 					model: modelObj,
 					...(imageModelObj && { image_model: imageModelObj }),
 					...(videoModelObj && { video_model: videoModelObj }),
@@ -725,6 +735,7 @@ function useMessageQueue({
 					queueMessage.agentCode,
 					"plan",
 					nextClientSyncId,
+					queueMessage.dynamicParams,
 				)
 
 				await SuperMagicApi.addMessageToQueue({
@@ -797,6 +808,7 @@ function useMessageQueue({
 			selectedVideoModel?: ModelItem | null
 			topicMode?: TopicMode
 			agentCode?: string | null
+			dynamicParams?: Record<string, unknown>
 		}) => {
 			if (!projectId || !topicId) {
 				magicToast.error(t("messageQueue.missingInfo"))
@@ -818,6 +830,7 @@ function useMessageQueue({
 					selectedVideoModel: params.selectedVideoModel ?? undefined,
 					topicMode: params.topicMode,
 					agentCode: selectedAgentCode,
+					dynamicParams: params.dynamicParams,
 					clientSyncId: localQueueId,
 					timestamp: getNextLocalQueueTimestamp(currentTopicContext),
 					status: "pending",
@@ -846,6 +859,8 @@ function useMessageQueue({
 					params.topicMode,
 					selectedAgentCode,
 					"plan", // 默认input_mode
+					undefined,
+					params.dynamicParams,
 				)
 
 				// 调用后端API添加到队列
@@ -1324,6 +1339,8 @@ function useMessageQueue({
 					finalTopicMode,
 					finalAgentCode,
 					"plan", // 默认input_mode
+					undefined,
+					editingQueueItem.dynamicParams,
 				)
 
 				// 设置编辑loading状态

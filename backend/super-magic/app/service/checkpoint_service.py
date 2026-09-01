@@ -11,10 +11,9 @@ Checkpoint业务服务
 
 from datetime import datetime
 from typing import Optional, List
-from app.core.entity.checkpoint import CheckpointInfo, ChatHistorySnapshot, VirtualCheckpoint
+from app.core.entity.checkpoint import CheckpointInfo, VirtualCheckpoint
 from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
-from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.path_manager import PathManager
 from agentlang.config.config import config
 from agentlang.logger import get_logger
@@ -30,7 +29,6 @@ class CheckpointService(Base):
     def __init__(self):
         self.storage = CheckpointStorage()
         self.metadata_manager = CheckpointMetadataManager()
-        self.chat_history_snapshot_manager = ChatHistorySnapshotManager()
 
         # 初始化标志
         self._initialized = False
@@ -182,8 +180,9 @@ class CheckpointService(Base):
                 file_snapshots=[]
             )
 
-            # 注意：聊天历史快照现在通过事件机制自动处理，不再在创建checkpoint时进行
-            # 聊天历史会在每次变更时自动备份到当前checkpoint的chat_history_snapshots目录
+            # 注意：聊天历史快照由事件监听器维护——BEFORE_MAIN_AGENT_RUN 在创建
+            # checkpoint 后立即拍 initial 整目录快照；CHAT_HISTORY_CHANGED 在每次
+            # 聊天记录保存后刷新 latest 整目录快照。本服务不直接复制聊天历史。
 
             # 保存checkpoint信息
             success = await self.metadata_manager.save_checkpoint_info(checkpoint_info)
@@ -226,7 +225,7 @@ class CheckpointService(Base):
         """清理超出数量限制的旧checkpoint"""
         try:
             # 从配置文件读取数量限制
-            limit = max_checkpoints or config.get("checkpoint.max_count", 10)
+            limit = max_checkpoints or config.get("checkpoint.max_count", 3)
 
             # 检查是否启用自动清理
             auto_cleanup = config.get("checkpoint.auto_cleanup", True)

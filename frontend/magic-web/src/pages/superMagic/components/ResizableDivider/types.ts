@@ -1,5 +1,5 @@
 export interface ResizableDividerProps {
-	onMouseDown: (e: React.MouseEvent) => void
+	onResizeStart: (clientX: number) => void
 	position?: "left" | "right"
 	isDragging?: boolean
 	onHoverChange?: (isHovering: boolean) => void

@@ -2,6 +2,7 @@ import Konva from "konva"
 import type { ToolOptions } from "./BaseTool"
 import { BaseTool } from "./BaseTool"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import { getActiveImageContent } from "../../document/elementContent"
 import { CropRenderer } from "../crop/CropRenderer"
 import { ExtendRenderer } from "../extend/ExtendRenderer"
 import {
@@ -762,7 +763,10 @@ export class SelectionTool extends BaseTool {
 		}
 
 		const originElement = this.canvas.elementManager.getElementData(originElementId)
-		if (originElement?.type !== ElementTypeEnum.Image || !originElement.src) {
+		if (
+			originElement?.type !== ElementTypeEnum.Image ||
+			!getActiveImageContent(originElement).src
+		) {
 			return false
 		}
 
@@ -805,7 +809,8 @@ export class SelectionTool extends BaseTool {
 		for (const elementId of candidateIds) {
 			if (seen.has(elementId)) continue
 			const element = this.canvas.elementManager.getElementData(elementId)
-			if (element?.type !== ElementTypeEnum.Image || !element.src) continue
+			if (element?.type !== ElementTypeEnum.Image || !getActiveImageContent(element).src)
+				continue
 			seen.add(elementId)
 			imageElementIds.push(elementId)
 		}

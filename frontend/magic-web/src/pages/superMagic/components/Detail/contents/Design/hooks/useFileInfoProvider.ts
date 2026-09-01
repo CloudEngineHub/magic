@@ -187,10 +187,19 @@ export function useFileInfoProvider(
 				designProjectBasePath,
 				designProjectId,
 				attachmentIndex,
-				opts,
+				{
+					...opts,
+					hasAttachmentSnapshot: attachmentsReady === true,
+				},
 			)
 		},
-		[flatAttachments, designProjectBasePath, designProjectId, attachmentIndex],
+		[
+			flatAttachments,
+			designProjectBasePath,
+			designProjectId,
+			attachmentIndex,
+			attachmentsReady,
+		],
 	)
 
 	return {

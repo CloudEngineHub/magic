@@ -1,5 +1,6 @@
 import type { UserAction, EditActionOptions } from "../types"
 import { ElementTypeEnum } from "../../document/types"
+import { selectionContainsReplacingMedia } from "../mediaReplacementGuards"
 
 /**
  * 编辑操作相关的用户动作
@@ -23,6 +24,7 @@ export const editActions: UserAction[] = [
 		canExecute: (canvas) => {
 			const selectedIds = canvas.selectionManager.getSelectedIds()
 			if (selectedIds.length === 0) return false
+			if (selectionContainsReplacingMedia(canvas)) return false
 			// 检查是否所有选中元素都支持PNG导出
 			const selectedElements = selectedIds.map((id) => {
 				const element = canvas.elementManager.getElementData(id)
@@ -44,7 +46,7 @@ export const editActions: UserAction[] = [
 		},
 		execute: async (canvas) => {
 			const selectedIds = canvas.selectionManager.getSelectedIds()
-			if (selectedIds.length > 0) {
+			if (selectedIds.length > 0 && !selectionContainsReplacingMedia(canvas)) {
 				await canvas.clipboardManager.copyElementsAsPNG(selectedIds)
 			}
 		},

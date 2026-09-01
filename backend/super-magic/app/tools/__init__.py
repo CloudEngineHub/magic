@@ -154,17 +154,47 @@ from app.tools.audio_understanding import AudioUnderstanding
 from app.tools.setup_audio_project import SetupAudioProject
 from app.tools.analyze_audio_project import AnalyzeAudioProject
 
-# 设计模式工具
+# 设计模式工具（兼容导出）
+# TODO(下一版本): app.tools.canvas 已替代新的 Canvas Agent 工具集，
+# 完成旧调用迁移后移除本段注册。
 import app.tools.design.manager  # pyright: ignore[reportUnusedImport]
 import app.tools.design.utils  # pyright: ignore[reportUnusedImport]
 import app.tools.design  # pyright: ignore[reportUnusedImport]
 from app.tools.design.tools import (
+    ComposeCanvasVideo,
+    ConfigureVideoEdit,
     CreateCanvas,
     GenerateCanvasImages,
     GenerateCanvasVideos,
+    GenerateVideoProductionImages,
+    GenerateVideoProductionVideos,
+    ImportCanvasAssets,
+    PromoteCanvasContent,
+    QueryCanvasElements,
+    GetCanvasOverview,
+    RepairVideoProductionConnections,
     RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
+    UpsertStoryboard,
+)
+
+# 独立 Canvas Agent 工具集；不复用旧 Design Canvas 工具实现
+from app.tools.canvas import (
+    AddCanvasContents,
+    AddCanvasElements,
+    FrameCanvasElements,
+    InitializeCanvas,
+    LayoutCanvasElements,
+    ManageCanvasConnections,
+    QueryCanvasElementDetails,
+    QueryCanvasOverview,
+    RetryCanvasContentGeneration,
+    SelectCanvasMainContent,
+    WaitCanvasGeneration,
+    EstimateCanvasContentPoints,
+    SearchCanvasImages as CanvasSearchCanvasImages,
+    SearchCanvasImagePrompts,
 )
 
 # 用户信息工具
@@ -224,7 +254,8 @@ from app.tools.remote import (
     CallSimpleTool,
 )
 
-# Import design package modules to ensure they are available in encrypted environment
+# 兼容加密环境中的旧 Design 包导入。
+# TODO(下一版本): 旧 Design 目录删除时同步移除这些导入。
 import app.tools.design.manager
 import app.tools.design.utils
 import app.tools.design
@@ -401,12 +432,38 @@ __all__ = [
     "UploadSkill",
 
     # 设计模式工具
+    # 以下旧 Design 工具仅保留兼容导出，下一版本随 app.tools.design 一并移除。
+    "ComposeCanvasVideo",
+    "ConfigureVideoEdit",
     "CreateCanvas",
     "GenerateCanvasImages",
     "GenerateCanvasVideos",
+    "GenerateVideoProductionImages",
+    "GenerateVideoProductionVideos",
+    "ImportCanvasAssets",
+    "PromoteCanvasContent",
+    "QueryCanvasElements",
+    "GetCanvasOverview",
+    "RepairVideoProductionConnections",
     "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
+    "UpsertStoryboard",
+
+    # 独立 Canvas Agent 工具
+    "AddCanvasContents",
+    "AddCanvasElements",
+    "InitializeCanvas",
+    "LayoutCanvasElements",
+    "ManageCanvasConnections",
+    "QueryCanvasElementDetails",
+    "QueryCanvasOverview",
+    "RetryCanvasContentGeneration",
+    "SelectCanvasMainContent",
+    "WaitCanvasGeneration",
+    "EstimateCanvasContentPoints",
+    "CanvasSearchCanvasImages",
+    "SearchCanvasImagePrompts",
 
     # MCP 工具集
     "McpAddServer",

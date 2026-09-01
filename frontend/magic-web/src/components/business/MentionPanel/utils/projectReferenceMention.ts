@@ -51,6 +51,33 @@ export function normalizeProjectReferencePath(path: string | number | null | und
 	return String(path).replace(/^\/+/, "")
 }
 
+export function normalizeProjectFileResourcePath(path: string | number | null | undefined): string {
+	return String(path ?? "")
+		.trim()
+		.replace(/\\/g, "/")
+		.replace(/^\.\/+/, "")
+		.replace(/\/+/g, "/")
+		.replace(/\/$/, "")
+}
+
+export function getProjectFileResourceIdentity(
+	file: {
+		file_id?: string | number | null
+		file_path?: string | number | null
+		relative_file_path?: string | number | null
+	},
+	fallbackPath?: string | number | null,
+): string {
+	if (file.file_id !== null && file.file_id !== undefined && String(file.file_id).length > 0) {
+		return `project-file:id:${String(file.file_id)}`
+	}
+
+	const normalizedPath = normalizeProjectFileResourcePath(
+		file.relative_file_path ?? file.file_path ?? fallbackPath,
+	)
+	return normalizedPath ? `project-file:path:${normalizedPath}` : ""
+}
+
 function normalizeComparableProjectReferencePath(path: string | number | null | undefined): string {
 	return normalizeProjectReferencePath(path).replace(/\/+$/, "")
 }

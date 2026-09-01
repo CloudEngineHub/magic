@@ -2,6 +2,8 @@ import { useMemo } from "react"
 import { Plug, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useCreation, useRequest } from "ahooks"
+
+import { Avatar, AvatarFallback, AvatarGroup, AvatarImage } from "@/components/shadcn-ui/avatar"
 import {
 	MCPManagerService,
 	OfficialStrategy,
@@ -26,10 +28,19 @@ function PluginTips({ onConnectClick }: PluginTipsProps) {
 		cacheKey: "plugin-tips-mcp-list",
 	})
 
-	const iconList = useMemo(
-		() => (data ?? []).filter((item) => item.icon).slice(0, MAX_DISPLAY_ICONS),
-		[data],
-	)
+	const iconList = useMemo(() => {
+		const availableIcons = (data ?? []).filter((item) => item.icon)
+		const shuffledIcons = [...availableIcons]
+
+		for (let index = shuffledIcons.length - 1; index > 0; index -= 1) {
+			const randomIndex = Math.floor(Math.random() * (index + 1))
+			const currentIcon = shuffledIcons[index]
+			shuffledIcons[index] = shuffledIcons[randomIndex]
+			shuffledIcons[randomIndex] = currentIcon
+		}
+
+		return shuffledIcons.slice(0, MAX_DISPLAY_ICONS)
+	}, [data])
 
 	return (
 		<button
@@ -47,21 +58,26 @@ function PluginTips({ onConnectClick }: PluginTipsProps) {
 			{/* Icon Group - Tool integration icons */}
 			{iconList.length > 0 && (
 				<div className="flex items-center pr-1.5">
-					{iconList.map((tool) => (
-						<div
-							key={tool.id}
-							className="-mr-1.5 flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-background shadow-xs"
-							title={tool.name}
-						>
-							<img
-								src={tool.icon}
-								alt={tool.name}
-								className="size-3.5 rounded-xs object-contain"
-								draggable={false}
-								data-testid="plugin-tips-image"
-							/>
-						</div>
-					))}
+					<AvatarGroup>
+						{iconList.map((tool) => (
+							<Avatar
+								key={tool.id}
+								className="size-6 border-2 border-white bg-background shadow-sm !ring-white"
+								title={tool.name}
+							>
+								<AvatarImage
+									src={tool.icon}
+									alt={tool.name}
+									className="size-full rounded-full object-cover"
+									draggable={false}
+									data-testid="plugin-tips-image"
+								/>
+								<AvatarFallback className="text-[10px]">
+									{tool.name.charAt(0).toUpperCase()}
+								</AvatarFallback>
+							</Avatar>
+						))}
+					</AvatarGroup>
 				</div>
 			)}
 

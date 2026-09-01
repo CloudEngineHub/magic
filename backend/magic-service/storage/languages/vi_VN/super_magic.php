@@ -82,6 +82,8 @@ return [
     ],
     'task' => [
         'prompt_length_exceeded' => 'Văn bản nhập vào quá dài. Vui lòng tải lên dưới dạng tệp và tham chiếu trong hộp thoại.',
+        'sandbox_init_failed' => 'Môi trường chạy gặp lỗi. Vui lòng thử lại sau.',
+        'chat_task_start_failed' => 'Không thể bắt đầu tác vụ. Vui lòng thử lại sau.',
     ],
     'magic_claw' => [
         'create_system_error' => 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.',

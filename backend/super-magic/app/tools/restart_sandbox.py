@@ -9,6 +9,7 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
+from app.core.horizon.models import ResumptionTrigger
 from app.infrastructure.magic_service.sandbox_types import SandboxRestartScheduleData
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.tools.core.sandbox_rebuild_scheduler import (
@@ -37,7 +38,25 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
             raise asyncio.CancelledError("Sandbox restart interrupted before scheduling")
 
         delay_seconds = SANDBOX_REBUILD_DELAY_SECONDS
+        resumption = None
         try:
+            # 先把“重启完成后还要继续验证并回复用户”持久化到 Horizon。
+            # 这样当前进程随后退出时，新 runtime 仍然能找到这项待办。
+            resumption = await sandbox_context.agent_context.horizon.schedule_resumption(
+                source="sandbox_restart",
+                trigger=ResumptionTrigger.RUNTIME_READY,
+                content=(
+                    "The sandbox restart requested in the previous turn has completed and "
+                    "the Agent runtime is available again. Verify the current sandbox status "
+                    "with get_sandbox_info, then tell the user whether it recovered successfully. "
+                    "Do not claim success unless verification succeeds."
+                ),
+            )
+            resumption_id = resumption.id
+
+            async def _cancel_resumption() -> None:
+                await sandbox_context.agent_context.horizon.cancel_resumption(resumption_id)
+
             schedule_sandbox_rebuild(
                 agent_context=sandbox_context.agent_context,
                 config=sandbox_context.config,
@@ -45,8 +64,15 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
                 operation="restart",
                 delay_seconds=delay_seconds,
                 logger=logger,
+                on_cancel=_cancel_resumption,
             )
+        except asyncio.CancelledError:
+            if resumption is not None:
+                await sandbox_context.agent_context.horizon.cancel_resumption(resumption.id)
+            raise
         except Exception as exc:
+            if resumption is not None:
+                await sandbox_context.agent_context.horizon.cancel_resumption(resumption.id)
             logger.error("Unable to schedule sandbox restart: %s", exc, exc_info=True)
             return ToolResult.error(
                 f"Unable to schedule the current sandbox restart: {exc}",
@@ -64,8 +90,11 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
                 "The unconditional restart of the current sandbox has been scheduled. "
                 f"The sandbox is scheduled to be rebuilt in {delay_seconds} seconds. "
                 "Reply to the user now and do not call more tools. "
+                f"A new user message or interruption within the next {delay_seconds} seconds "
+                "will cancel the pending restart. Tell the user about this cancellation boundary. "
                 "This confirms scheduling, not completion; after the sandbox is available again, "
-                "use get_sandbox_info to verify its status."
+                "the runtime will automatically resume this conversation and use get_sandbox_info "
+                "to verify its status."
             ),
             data=payload,
             extra_info=payload,

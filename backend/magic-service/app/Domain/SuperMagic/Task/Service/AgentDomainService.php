@@ -19,8 +19,6 @@ use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInter
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\UserInfoValueObject;
-use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
-use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\ChatInstruction;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageMetadata;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageType;
@@ -33,6 +31,7 @@ use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentInitContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\InitializationMetadataDTO;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Repository\Facade\TopicRepositoryInterface;
@@ -71,7 +70,6 @@ use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Carbon\Carbon;
 use Hyperf\Codec\Json;
-use Hyperf\Context\ApplicationContext;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Server\Exception\ServerException;
 use Psr\Log\LoggerInterface;
@@ -103,7 +101,6 @@ class AgentDomainService
         private readonly TopicRepositoryInterface $topicRepository,
         private readonly WorkspaceRepositoryInterface $workspaceRepository,
         private readonly TaskMessageRepositoryInterface $taskMessageRepository,
-        private readonly TaskFileRepositoryInterface $taskFileRepository,
     ) {
         $this->logger = $loggerFactory->get('sandbox');
     }
@@ -232,6 +229,7 @@ class AgentDomainService
     public function ensureSandboxInitialized(
         DataIsolation $dataIsolation,
         AgentContext $agentContext,
+        ?SandboxRootFileIds $rootFileIds = null,
         ?callable $interruptChecker = null
     ): string {
         $topicEntity = $agentContext->getTopicEntity();
@@ -327,33 +325,9 @@ class AgentDomainService
             }
 
             // Step 2: Get root file IDs for sandbox initialization
-            $projectSpaceRootFileId = '';
-            $userSpaceRootFileId = '';
-            try {
-                $projectId = $agentContext->getProjectEntity()->getId();
-                $rootDir = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
-                if ($rootDir !== null) {
-                    $projectSpaceRootFileId = (string) $rootDir->getFileId();
-                }
-            } catch (Throwable $e) {
-                $this->logger->warning('[Sandbox][Domain] Failed to get project space root file id for sandbox initialization', [
-                    'error' => $e->getMessage(),
-                ]);
-            }
-
-            // Step 2.1: Get or create user space root directory
-            try {
-                $taskFileDomainService = ApplicationContext::getContainer()->get(TaskFileDomainService::class);
-                $userSpaceRootFileId = (string) $taskFileDomainService->findOrCreateUserRootDirectory(
-                    $dataIsolation->getCurrentUserId(),
-                    $dataIsolation->getCurrentOrganizationCode()
-                );
-            } catch (Throwable $e) {
-                $this->logger->warning('[Sandbox][Domain] Failed to get user space root file id for sandbox initialization', [
-                    'error' => $e->getMessage(),
-                ]);
-            }
-
+            $projectSpaceRootFileId = $rootFileIds?->getProjectSpaceRootFileId() ?? '';
+            $userSpaceRootFileId = $rootFileIds?->getUserSpaceRootFileId() ?? '';
+            $topicSpaceRootFileId = $rootFileIds?->getTopicSpaceRootFileId() ?? '';
             // Step 2.5: Warm pool fast path.
             // Only attempt when the caller didn't ask for a specific sandbox id
             // (those are typically reconnects to an existing pod) AND we have
@@ -363,7 +337,8 @@ class AgentDomainService
                 $dataIsolation,
                 $agentContext,
                 $projectSpaceRootFileId,
-                $userSpaceRootFileId
+                $userSpaceRootFileId,
+                $topicSpaceRootFileId
             );
             if ($warmSandboxId !== null) {
                 $sandboxId = $warmSandboxId;
@@ -378,6 +353,7 @@ class AgentDomainService
                     workDir: $agentContext?->getInitContext()->getWorkDir() ?? '',
                     projectSpaceRootFileId: $projectSpaceRootFileId,
                     userSpaceRootFileId: $userSpaceRootFileId,
+                    topicSpaceRootFileId: $topicSpaceRootFileId,
                     topicId: $topicEntity->getId(),
                     agentCode: $this->resolveAgentCodeLabel($topicEntity)
                 );
@@ -443,7 +419,7 @@ class AgentDomainService
     /**
      * 调用沙箱网关，创建沙箱容器，如果 sandboxId 不存在，系统会默认创建一个.
      */
-    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
+    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
     {
         $this->logger->debug('[Sandbox][App] Creating sandbox', [
             'project_id' => $projectId,
@@ -451,6 +427,7 @@ class AgentDomainService
             'project_oss_path' => $workDir,
             'project_space_root_file_id' => $projectSpaceRootFileId,
             'user_space_root_file_id' => $userSpaceRootFileId,
+            'topic_space_root_file_id' => $topicSpaceRootFileId,
             'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
         ]);
 
@@ -462,7 +439,7 @@ class AgentDomainService
         if ($agentCode !== null && $agentCode !== '') {
             $labels['agent-code'] = $agentCode;
         }
-        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $labels);
+        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $labels);
 
         // 添加详细的调试日志，检查 result 对象
         $this->logger->debug('[Sandbox][App] Gateway result analysis', [
@@ -1276,7 +1253,9 @@ class AgentDomainService
         DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
-        string $workDir
+        string $workDir,
+        string $projectSpaceRootFileId = '',
+        string $topicSpaceRootFileId = ''
     ): string {
         $userId = $dataIsolation->getCurrentUserId();
         $this->logger->debug('[Sandbox][Domain] Ensuring sandbox container is running', [
@@ -1311,25 +1290,11 @@ class AgentDomainService
             }
         }
 
-        // Get root file ID for sandbox creation
-        $projectSpaceRootFileId = '';
-        try {
-            $rootDir = $this->taskFileRepository->findRootDirectoryByProjectId((int) $projectId);
-            if ($rootDir !== null) {
-                $projectSpaceRootFileId = (string) $rootDir->getFileId();
-            }
-        } catch (Throwable $e) {
-            $this->logger->warning('[Sandbox][Domain] Failed to get project space root file id', [
-                'project_id' => $projectId,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
         // Create sandbox container. Per-call user identity flows through
         // as a DataIsolation value object – the gateway forwards the
         // authorization token on the HTTP request so the in-pod
         // agfs-server / super-magic agent auth middleware can validate it.
-        $createResult = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '');
+        $createResult = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '', $topicSpaceRootFileId);
 
         if (! $createResult->isSuccess()) {
             $this->logger->error('[Sandbox][Domain] Failed to create sandbox container', [
@@ -1410,14 +1375,15 @@ class AgentDomainService
     public function mountReferencedProjects(
         DataIsolation $dataIsolation,
         string $sandboxId,
-        array $projectIds
+        array $projectIds,
+        array $projectRootFileIds = []
     ): void {
         if (empty($projectIds)) {
             return;
         }
 
         foreach ($projectIds as $projectId) {
-            $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId);
+            $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId, (string) ($projectRootFileIds[(int) $projectId] ?? $projectRootFileIds[$projectId] ?? ''));
         }
     }
 
@@ -1555,7 +1521,8 @@ class AgentDomainService
         DataIsolation $dataIsolation,
         AgentContext $agentContext,
         string $projectSpaceRootFileId,
-        string $userSpaceRootFileId
+        string $userSpaceRootFileId,
+        string $topicSpaceRootFileId = ''
     ): ?string {
         $topicEntity = $agentContext->getTopicEntity();
 
@@ -1609,6 +1576,7 @@ class AgentDomainService
                 projectId: (string) $agentContext->getProjectEntity()->getId(),
                 projectSpaceRootFileId: $projectSpaceRootFileId,
                 userSpaceRootFileId: $userSpaceRootFileId,
+                topicSpaceRootFileId: $topicSpaceRootFileId,
                 labels: $this->buildSandboxLabels($topicEntity),
                 topicId: (string) $topicEntity->getId()
             );
@@ -2073,10 +2041,12 @@ class AgentDomainService
     private function mountSingleReferencedProject(
         DataIsolation $dataIsolation,
         string $sandboxId,
-        string $projectId
+        string $projectId,
+        string $rootFileId = ''
     ): void {
-        $taskFileDomainService = ApplicationContext::getContainer()->get(TaskFileDomainService::class);
-        $rootFileId = (string) $taskFileDomainService->getProjectRootFileId((int) $projectId);
+        if ($rootFileId === '') {
+            throw new RuntimeException('Missing referenced project root file id');
+        }
 
         $result = $this->gateway->mountReferencedProject(
             $dataIsolation,

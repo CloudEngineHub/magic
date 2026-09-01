@@ -34,10 +34,6 @@ Router::addGroup('/api/v1/open-api', function () {
     Router::get('/slides-templates/taxonomy', [SlidesTemplateApi::class, 'getTaxonomy']);
     Router::get('/slides-templates/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
 }, ['middleware' => [ApiKeyMiddleware::class]]);
-// Slides template APIs（Deprecated)
-Router::addGroup('/api/v1/slides-templates', static function () {
-    Router::get('/{code}/file-url', [SlidesTemplateApi::class, 'getFileUrl']);
-}, ['middleware' => [ApiKeyMiddleware::class]]);
 
 // Contact user lookup APIs
 Router::addGroup('/api/v1/open-api', function () {

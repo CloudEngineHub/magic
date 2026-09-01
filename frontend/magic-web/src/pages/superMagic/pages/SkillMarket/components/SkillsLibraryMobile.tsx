@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { reaction } from "mobx"
 import { configStore } from "@/models/config"
-import { Check, ChevronLeft, Loader2, RefreshCw, Search } from "lucide-react"
+import { Check, ChevronLeft, Loader2, Search } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -10,7 +10,6 @@ import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { Skills } from "@/enhance/lucide-react"
-import { cn } from "@/utils/cn"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
@@ -48,7 +47,6 @@ function SkillsLibraryMobile() {
 		if (!lifecycle.initialized) {
 			lifecycle.initialized = true
 			void skillsStore.fetchSkills()
-			void skillsStore.fetchFeaturedSkills()
 			void skillsStore.fetchCategories()
 		}
 
@@ -116,8 +114,10 @@ function SkillsLibraryMobile() {
 	)
 
 	const handleCategoryChange = useCallback(
-		(categoryIds: string[]) => {
-			void skillsStore.setCategoryIds(categoryIds).catch(() => undefined)
+		(categoryIds: string[], isFeatured?: 0 | 1) => {
+			void skillsStore
+				.fetchSkills({ page: 1, category_ids: categoryIds, is_featured: isFeatured })
+				.catch(() => undefined)
 		},
 		[skillsStore],
 	)
@@ -125,10 +125,6 @@ function SkillsLibraryMobile() {
 	const handleOpenDetail = useCallback((skill: StoreSkillView) => {
 		setSelectedSkill(skill)
 	}, [])
-
-	const handleRefreshFeatured = useCallback(() => {
-		void skillsStore.fetchNextFeaturedSkills()
-	}, [skillsStore])
 
 	const handleRetrySkills = useCallback(() => {
 		void skillsStore.retrySkills().catch(() => undefined)
@@ -220,6 +216,20 @@ function SkillsLibraryMobile() {
 				</div>
 			</header>
 
+			<div
+				className="shrink-0 border-b border-border bg-background px-3"
+				data-testid="skills-library-mobile-filter"
+			>
+				<SkillCategoryFilter
+					categories={skillsStore.categories}
+					selectedCategoryIds={skillsStore.categoryIds}
+					selectedIsFeatured={skillsStore.isFeatured}
+					loading={skillsStore.categoriesLoading}
+					error={skillsStore.categoriesError}
+					onChange={handleCategoryChange}
+				/>
+			</div>
+
 			<Sheet open={searchOpen} onOpenChange={handleSearchOpenChange}>
 				<SheetContent side="bottom" className="rounded-t-xl px-4 pb-6">
 					<SheetHeader className="text-left">
@@ -253,82 +263,6 @@ function SkillsLibraryMobile() {
 				viewportRef={scrollViewportRef}
 			>
 				<div className="flex min-w-0 flex-col gap-2.5 px-2 pb-6 pt-2">
-					<section
-						className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 shadow-xs"
-						data-testid="featured-skills-mobile-section"
-					>
-						<div className="flex min-h-8 items-center justify-between gap-2 border-b border-border pb-2">
-							<h2 className="text-sm font-semibold text-foreground">
-								{t("skillsLibrary.featuredSkills")}
-							</h2>
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs text-muted-foreground"
-								disabled={
-									skillsStore.featuredLoading || !skillsStore.canRefreshFeatured
-								}
-								onClick={handleRefreshFeatured}
-								data-testid="featured-skills-mobile-refresh"
-							>
-								<RefreshCw
-									className={cn(
-										"size-3.5",
-										skillsStore.featuredLoading && "animate-spin",
-									)}
-									aria-hidden
-								/>
-								{skillsStore.featuredError
-									? t("skillsLibrary.retryFeatured")
-									: t("skillsLibrary.refreshFeatured")}
-							</Button>
-						</div>
-
-						{skillsStore.featuredError ? (
-							<div
-								className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
-								role="status"
-								data-testid="featured-skills-mobile-error"
-							>
-								{t("skillsLibrary.featuredLoadFailed")}
-							</div>
-						) : null}
-
-						{skillsStore.featuredLoading && skillsStore.featuredList.length === 0 ? (
-							<div
-								className="flex items-center justify-center py-8"
-								data-testid="featured-skills-mobile-loading"
-							>
-								<Loader2 className="size-5 animate-spin text-muted-foreground" />
-							</div>
-						) : skillsStore.featuredList.length > 0 ? (
-							<div
-								className="flex min-w-0 flex-col gap-2.5"
-								data-testid="featured-skills-mobile-list"
-							>
-								{skillsStore.featuredList.map((skill) => (
-									<StoreSkillCardMobile
-										key={`featured-${skill.id}`}
-										skill={skill}
-										language={i18n.language}
-										showFeaturedTag
-										onAdd={handleAdd}
-										onUpgrade={handleUpgrade}
-										onOpenDetail={handleOpenDetail}
-									/>
-								))}
-							</div>
-						) : null}
-					</section>
-
-					<SkillCategoryFilter
-						categories={skillsStore.categories}
-						selectedCategoryIds={skillsStore.categoryIds}
-						loading={skillsStore.categoriesLoading}
-						error={skillsStore.categoriesError}
-						onChange={handleCategoryChange}
-					/>
-
 					{skillsStore.listError ? (
 						<div
 							className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"

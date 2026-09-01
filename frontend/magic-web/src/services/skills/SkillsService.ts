@@ -252,11 +252,7 @@ export class SkillsService {
 
 	private mapStoreSkill(item: StoreSkillItem): StoreSkillView {
 		const name =
-			item.name?.trim() ||
-			item.package_name?.trim() ||
-			item.code ||
-			item.skill_code ||
-			""
+			item.name?.trim() || item.package_name?.trim() || item.code || item.skill_code || ""
 		const description = item.description?.trim() || ""
 
 		return {

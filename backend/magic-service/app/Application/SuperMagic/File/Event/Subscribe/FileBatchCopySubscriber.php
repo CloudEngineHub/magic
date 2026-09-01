@@ -408,6 +408,7 @@ class FileBatchCopySubscriber extends ConsumerMessage
         );
         $createdDirectory->setMetadata($oldFileEntity->getMetadata());
         $createdDirectory->setDisplayConfig($oldFileEntity->getDisplayConfig());
+        $createdDirectory->setSourceFileId($oldFileEntity->getFileId());
         return $this->taskFileDomainService->updateById($createdDirectory);
     }
 

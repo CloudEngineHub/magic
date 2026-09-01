@@ -8,9 +8,12 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Infrastructure\I18n;
 
 use PHPUnit\Framework\TestCase;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 
 /**
  * 校验后端语言资源与源码中的国际化调用保持一致。
+ * @internal
  */
 class LanguageResourceCompletenessTest extends TestCase
 {
@@ -186,7 +189,7 @@ class LanguageResourceCompletenessTest extends TestCase
             if (! is_dir($root)) {
                 continue;
             }
-            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root));
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root));
             foreach ($iterator as $file) {
                 if (! $file->isFile() || $file->getExtension() !== 'php') {
                     continue;

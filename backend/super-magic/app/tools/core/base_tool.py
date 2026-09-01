@@ -873,7 +873,6 @@ class BaseTool(Generic[T], ABC):
         """
         logger = get_logger(__name__)
 
-        # 注意：移除了这里的 "additionalProperties": False
         parameters = {
             "type": "object",
             "properties": {},
@@ -890,12 +889,15 @@ class BaseTool(Generic[T], ABC):
                 if 'properties' in schema:
                     parameters['properties'] = schema['properties']
 
+                if 'additionalProperties' in schema:
+                    # 保留参数模型的 extra 策略，使提供给模型的 Schema 与运行时校验一致。
+                    parameters['additionalProperties'] = schema['additionalProperties']
+
                 if 'required' in schema:
                     parameters['required'] = schema['required']
                 else:
-                    # 如果原始 schema 没有 required，则默认所有非 Optional 字段为必填
-                    if 'properties' in parameters:
-                         parameters['required'] = list(parameters['properties'].keys())
+                    # Pydantic 在没有必填字段时会省略 required，不能把所有默认字段误标为必填。
+                    parameters['required'] = self._get_required_param_names(params_class)
 
                 # 全局参数已删除，不再需要强制必填验证
 
@@ -930,6 +932,26 @@ class BaseTool(Generic[T], ABC):
         # 递归移除人类注解（唯一过滤出口）
         self._remove_annotations_recursive(result)
         return result
+
+    @staticmethod
+    def _get_required_param_names(params_class: type[BaseToolParams]) -> list[str]:
+        """按 Pydantic 字段定义恢复真正的必填参数名称。"""
+        model_fields = getattr(params_class, "model_fields", None)
+        if isinstance(model_fields, dict):
+            return [
+                name
+                for name, field in model_fields.items()
+                if field.is_required()
+            ]
+
+        legacy_fields = getattr(params_class, "__fields__", None)
+        if isinstance(legacy_fields, dict):
+            return [
+                name
+                for name, field in legacy_fields.items()
+                if bool(getattr(field, "required", False))
+            ]
+        return []
 
     @staticmethod
     def _remove_annotations_recursive(obj):

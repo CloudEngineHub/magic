@@ -4,7 +4,6 @@
 有几个 task 就生成几张图，并发执行，无变体/组图模式。
 """
 
-from app.i18n import i18n
 import asyncio
 import random
 import time
@@ -18,7 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import ToolDetail, DisplayType
+from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
@@ -27,9 +27,20 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
-from app.tools.generate_images import GenerateImages, GenerateImagesParams, ImageGenerationTask as CanvasImageGenTask
+from app.tools.design.video_production.service.media_generation_service import (
+    MediaGenerationService,
+    MediaSourceType,
+)
+from app.tools.generate_images import (
+    GenerateImages,
+    GenerateImagesParams,
+)
+from app.tools.generate_images import (
+    ImageGenerationTask as CanvasImageGenTask,
+)
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
-from app.utils.async_file_utils import async_exists
+from app.tools.video_generation_utils import is_provider_asset_uri
+from app.utils.async_file_utils import async_exists, async_mkdir
 
 logger = get_logger(__name__)
 
@@ -49,7 +60,8 @@ class ImagePlaceholderUpdate(PlaceholderUpdate):
     src: Optional[str] = None
     width: Optional[float] = None
     height: Optional[float] = None
-    generateImageRequest: Optional[Dict[str, Any]] = None
+    # 保持既有 Canvas DSL 驼峰字段名，避免写回结构变化。
+    generateImageRequest: Optional[Dict[str, Any]] = None  # noqa: N815
 
 
 @dataclass
@@ -146,10 +158,19 @@ Reference image paths. Pass [] for text-only generation. Reference images serve 
     )
     element_id: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选。传入时复用画布上已有的元素（如上次生成失败的占位符），工具直接在该元素上重新生成并更新，不新建占位符。不传时新建占位符。-->
-Optional. When provided, the tool reuses an existing canvas element (e.g. a failed placeholder from a previous attempt) and regenerates in place without creating a new placeholder. Omit to create a new element."""
+        description="""<!--zh: 可选。已有画布 Element ID。只传该字段时在节点中追加新的 Content；不传时可通过 content_id 定位，二者都不传则新建节点。-->
+Optional existing canvas Element ID. Passing it alone appends a new Content to the Element; content_id may locate an existing Content, and omitting both creates a new Element."""
     )
-
+    content_id: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 可选。要重试或更新的已有 Content ID。Content 必须存在；与 element_id 同时传入时还会校验归属关系。-->
+Optional existing Content ID to retry or update. It must exist; when supplied with element_id, the tool also validates that it belongs to that Element.""",
+    )
+    set_as_main: bool = Field(
+        default=False,
+        description="""<!--zh: 是否在生成完成后立即把新 Content 设为主内容，默认 false。通常保持 false，由用户在页面确认后再设为主内容。-->
+Whether to make the newly completed Content the main Content immediately. Defaults to false; normally keep it false so the user can confirm it in the UI.""",
+    )
     @model_validator(mode="before")
     @classmethod
     def fill_reference_images_default(cls, values: Any) -> Any:
@@ -210,7 +231,7 @@ Image generation task list. Each task produces one image. Maximum 6 tasks. Each 
         if error_type == "extra_forbidden" and field_name == "element_id":
             return (
                 "参数 'element_id' 不能放在顶层。"
-                "它属于 tasks 列表中每个 task 对象的字段，用于复用已有的失败占位符。"
+                "它属于 tasks 列表中每个 task 对象的字段。"
                 "正确写法：tasks=[{..., 'element_id': 'element-xxx'}]"
             )
         return None
@@ -231,6 +252,15 @@ class GenerateCanvasImages(BaseGenerateCanvasElements[GenerateCanvasImagesParams
     Generate AI images and automatically add them to the canvas, one image per task. Each task independently specifies its prompt, size, and reference images; all tasks run concurrently.
     """
 
+    def __init__(
+        self,
+        image_model_id: Optional[str] = None,
+        **data: Any,
+    ) -> None:
+        """初始化画布生图工具，并保存内部显式图片模型。"""
+        super().__init__(**data)
+        self._image_model_id = image_model_id
+
     def get_prompt_hint(self) -> str:
         return """\
 <!--zh
@@ -245,8 +275,8 @@ class GenerateCanvasImages(BaseGenerateCanvasElements[GenerateCanvasImagesParams
 【size 选取】
 用户明确指定时填入；未指定时：reference_images 非空则省略 size（系统自动从面积最大的参考图读取尺寸），reference_images 为空则必须填写，否则报错。
 
-【element_id 与重试】
-当某个任务生成失败时，结果中会包含该元素的 element_id。重试时在对应 task 中传入 element_id，工具会复用已有占位符原地重新生成，而不会新建占位符。不传 element_id 时，始终新建占位符。
+【element_id、content_id 与重试】
+只传 element_id 时复用已有 Element，并由系统自动生成 Content ID、追加新的候选内容。传入 content_id 表示重试或更新这个确定且已经存在的 Content；content_id 不存在时会报错。element_id 与 content_id 同时传入时还会校验归属关系。set_as_main 默认 false；仅在用户已经明确确认本次结果应成为主内容时传 true。
 
 【prompt 质量】
 将用户的简短描述扩写为包含主体、风格、构图、光线、色调的完整描述。描述越模糊，生成结果越随机。
@@ -262,23 +292,31 @@ Both cases require explicit reference_images — never omit it.
 [Size selection]
 Fill in size when the user explicitly states one. Otherwise: if reference_images is non-empty, omit size — the system automatically reads the largest reference image's dimensions. If reference_images is empty, size is required; omitting it will cause an error.
 
-[element_id and retry]
-When a task fails, the result includes the element_id of the failed placeholder. To retry, pass that element_id in the task — the tool regenerates in place without creating a new placeholder. Omitting element_id always creates a new placeholder.
+[element_id, content_id, and retry]
+Passing only element_id reuses the existing Element and appends a new candidate Content with a backend-generated ID. Passing content_id retries or updates that exact existing Content; a missing Content is rejected. Supplying both IDs also validates their ownership. set_as_main defaults to false; pass true only when the user has explicitly confirmed that this result should become the main Content.
 
 [Prompt quality]
 Expand brief user descriptions into full prompts covering subject, style, composition, lighting, and color tone. Vague inputs produce vague outputs.
 """
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        self._generate_tool = GenerateImages()
-
     async def execute(
         self, tool_context: ToolContext, params: GenerateCanvasImagesParams
     ) -> ToolResult:
         try:
-            workspace_root = Path(self.base_dir)
-            project_prefix = params.project_path.strip("/")
+            workspace_root = self._get_runtime_workspace_dir(tool_context)
+            project_path, project_error = await self._ensure_project_ready(
+                params.project_path,
+                require_magic_project_js=True,
+                tool_context=tool_context,
+            )
+            if project_error:
+                return project_error
+            project_prefix = project_path.relative_to(workspace_root).as_posix()
+            await self._materialize_reference_images(
+                params.tasks,
+                project_path,
+                workspace_root,
+            )
             normalize_error = await self._normalize_tasks(params.tasks, workspace_root, project_prefix)
             if normalize_error:
                 return normalize_error
@@ -289,6 +327,34 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                 f"生成图片到画布失败: {e!s}",
                 extra_info={"error_type": "design.error_unexpected"}
             )
+
+    async def _materialize_reference_images(
+        self,
+        tasks: List[ImageTaskSpec],
+        project_path: Path,
+        workspace_root: Path,
+    ) -> None:
+        """将本地项目外参考图复制到当前项目的 images 目录。"""
+        for task in tasks:
+            materialized_paths: list[str] = []
+            for reference_path in task.reference_images:
+                normalized = str(reference_path or "").strip()
+                if (
+                    not normalized
+                    or normalized.startswith(("http://", "https://"))
+                    or is_provider_asset_uri(normalized)
+                ):
+                    materialized_paths.append(reference_path)
+                    continue
+                materialized_paths.append(
+                    await MediaGenerationService.materialize_reference_path(
+                        normalized,
+                        MediaSourceType.IMAGE,
+                        project_path,
+                        workspace_root,
+                    )
+                )
+            task.reference_images = materialized_paths
 
     # ------------------------------------------------------------------
     # 实现抽象接口
@@ -326,6 +392,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             output_path=output_path,
             project_path=project_path,
             tool_context=tool_context,
+            image_model_id=kwargs.get("image_model_id"),
         )
 
         if result.success:
@@ -357,14 +424,15 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         project_path: Path,
     ) -> Dict[str, Any]:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        await asyncio.to_thread((project_path / "images").mkdir, parents=True, exist_ok=True)
-        workspace_path = Path(self.base_dir)
+        await async_mkdir(project_path / "images", parents=True, exist_ok=True)
+        workspace_path = self._get_runtime_workspace_dir(tool_context)
         relative_project_path = project_path.relative_to(workspace_path)
         output_path = str(relative_project_path / "images")
         return {
             "timestamp": timestamp,
             "output_path": output_path,
             "workspace_path": workspace_path,
+            "image_model_id": self._image_model_id,
         }
 
     def _build_created_element_dict(
@@ -379,6 +447,8 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "width": placeholder.width,
             "height": placeholder.height,
         }
+        if placeholder.content_id:
+            d["content_id"] = placeholder.content_id
         if task_result.is_success:
             update = task_result.placeholder_update
             if isinstance(update, ImagePlaceholderUpdate) and update.src:
@@ -405,7 +475,18 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             result += "\n\nSucceeded:"
             for r in success_results:
                 p = placeholders[r.index]
-                result += f"\n- {p.name}"
+                content_suffix = f', content_id="{p.content_id}"' if p.content_id else ""
+                update = r.placeholder_update
+                media_suffix = ""
+                if isinstance(update, ImagePlaceholderUpdate):
+                    if update.src:
+                        media_suffix += f', media_path="{update.src}"'
+                    if update.width is not None and update.height is not None:
+                        media_suffix += f', dimensions="{int(update.width)}x{int(update.height)}"'
+                result += (
+                    f'\n- {p.name} (element_id="{p.id}"{content_suffix}, '
+                    f'status="completed"{media_suffix})'
+                )
 
         failed_results = [r for r in task_results if r.is_failed]
         if failed_results:
@@ -427,7 +508,11 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                 # p.retry_count 已在 _run_generate_flow 递增，反映本轮失败后的新计数
                 can_retry = p.retry_count < self.MAX_GENERATION_ATTEMPTS
                 if can_retry:
-                    line = f'\n- name="{p.name}", element_id="{p.id}"'
+                    content_suffix = f', content_id="{p.content_id}"' if p.content_id else ""
+                    line = (
+                        f'\n- name="{p.name}", element_id="{p.id}"'
+                        f'{content_suffix}, status="failed"'
+                    )
                 else:
                     line = f'\n- name="{p.name}" [max attempts reached, do not retry]'
                 if r.error_message:
@@ -451,6 +536,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         output_path: str,
         project_path: Path,
         tool_context: ToolContext,
+        image_model_id: Optional[str] = None,
     ) -> ImageGenerationResult:
         """生成单张图片，委托 generate_images 执行（含重试、下载、保存）"""
         mode = "edit" if task.reference_images else "generate"
@@ -469,7 +555,14 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         _start_dt = datetime.now()
         _t0 = time.monotonic()
         try:
-            gen_result = await self._generate_tool.execute_purely(tool_context, gen_params)
+            generate_tool = GenerateImages(
+                base_dir=self._get_runtime_workspace_dir(tool_context),
+            )
+            gen_result = await generate_tool.execute_purely(
+                tool_context,
+                gen_params,
+                model_id=image_model_id,
+            )
         except Exception as exc:
             error_msg = f"Task {idx + 1} 异常: {exc!s}"
             logger.error(error_msg, exc_info=True)

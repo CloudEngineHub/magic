@@ -1,5 +1,11 @@
 import Konva from "konva"
-import type { LayerElement, CanvasDocument, ImageElement } from "../../document/types"
+import type {
+	LayerElement,
+	CanvasDocument,
+	ImageElement,
+	ElementType,
+	ElementUpdatePatch,
+} from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import type {
 	CanvasElementChangePayload,
@@ -16,10 +22,21 @@ import { ImageElement as ImageElementClass } from "../image/ImageElement"
 import { VideoElement as VideoElementClass } from "../video/VideoElement"
 import { exportCanvasDocument, exportLayerElement } from "../../document/exportDocument"
 import { syncCropConfigOnResize } from "../../resources/image/imageCropUtils"
-import { normalizeSize } from "../../shared/normalize/normalizeUtils"
+import { normalizeFrameCreationSize, normalizeSize } from "../../shared/normalize/normalizeUtils"
 import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
+import {
+	getActiveImageContent,
+	updateImageContent,
+	getActiveContent,
+	getElementContentFields,
+	updateContent,
+} from "../../document/elementContent"
+import type { UploadFileResponse } from "../../../public/magic-types"
+import { validateElementData } from "../../document/validateElement"
+import { generateUniqueElementName } from "../../shared/ids"
+import { getAllExistingNames } from "../../shared/placement/elementUtils"
 
 /**
  * 更新模式
@@ -32,6 +49,8 @@ export type UpdateMode = "full" | "data-only" | "node-only"
 export interface ElementOperationOptions {
 	/** 不触发 element:updated 事件（不记录历史） */
 	silent?: boolean
+	/** 触发持久化更新事件，但不将本次更新加入用户撤回栈 */
+	historyPolicy?: "include" | "exclude"
 	/** 强制重新渲染 */
 	forceRerender?: boolean
 	/** 批量操作模式（延迟事件触发，需要手动调用 flush） */
@@ -46,6 +65,17 @@ export interface ElementOperationOptions {
 	skipZIndexReorder?: boolean
 	/** 批量更新成功后是否发送 element:batchupdated；事务调用方可延后到正式提交后发送 */
 	emitBatchUpdated?: boolean
+}
+
+export interface ElementCreateResult<T extends LayerElement = LayerElement> {
+	elementId: string
+	element: T
+}
+
+export interface ElementLoadIssue {
+	elementId: string
+	elementType: LayerElement["type"]
+	message: string
 }
 
 export interface ElementManagerDocumentPatch {
@@ -99,7 +129,13 @@ const TEMPORARY_ELEMENT_METADATA: Record<TemporaryElementKind, TemporaryElementM
 
 export interface CommitGenerationTarget {
 	elementId: string
-	persistedPatch: Partial<LayerElement>
+	contentId?: string
+	persistedPatch: ElementUpdatePatch
+}
+
+type ElementMutationPatch = ElementUpdatePatch & {
+	id?: string
+	type?: ElementType
 }
 
 /**
@@ -119,6 +155,7 @@ export class ElementManager {
 	private elementListeningDisabled = false
 	private viewportGestureUnsubscribe?: () => void
 	private batchMode = false
+	private lastLoadIssues: ElementLoadIssue[] = []
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
 	private isContentLayerDrawDeferred = false
@@ -152,15 +189,27 @@ export class ElementManager {
 	 * 创建元素
 	 * @param elementData - 元素数据
 	 * @param options - 操作选项
+	 * 主动创建的 Frame 会在此统一规范化宽高；文档加载不经过此入口。
 	 * @throws 如果元素已存在
 	 */
-	public create(elementData: LayerElement, options?: ElementOperationOptions): void {
+	public create<T extends LayerElement>(
+		elementData: T,
+		options?: ElementOperationOptions,
+	): ElementCreateResult<T> | null {
 		if (this.elements.has(elementData.id)) {
 			throw new Error(
 				`Element ${elementData.id} already exists. Use update() or upsert() instead.`,
 			)
 		}
-		this.doCreate(elementData, options || {})
+		const resolvedElement = this.resolveUniqueElementName(
+			this.normalizeCreatedElementData(elementData),
+		)
+		this.doCreate(resolvedElement, options || {})
+		const createdElement = this.elements.get(resolvedElement.id)?.getData()
+		if (!createdElement) {
+			return null
+		}
+		return { elementId: resolvedElement.id, element: createdElement as T }
 	}
 
 	/**
@@ -171,26 +220,33 @@ export class ElementManager {
 		elementData: LayerElement,
 		options?: ElementOperationOptions,
 		temporaryKind: TemporaryElementKind = "generation-result",
-	): string {
+	): ElementCreateResult {
 		if (this.elements.has(elementData.id)) {
 			throw new Error(`Element ${elementData.id} already exists`)
 		}
 
-		this.markElementTemporary(elementData.id, temporaryKind)
+		const elementWithUniqueName = this.resolveUniqueElementName(
+			this.normalizeCreatedElementData(elementData),
+		)
+		this.markElementTemporary(elementWithUniqueName.id, temporaryKind)
 		try {
-			this.doCreate(elementData, options || {})
-			if (!this.elements.has(elementData.id)) {
-				throw new Error(`Element ${elementData.id} could not be created`)
+			this.doCreate(elementWithUniqueName, options || {})
+			if (!this.elements.has(elementWithUniqueName.id)) {
+				throw new Error(`Element ${elementWithUniqueName.id} could not be created`)
 			}
 		} catch (error) {
-			if (this.elements.has(elementData.id)) {
-				this.doDelete(elementData.id, { suppressEvents: true })
+			if (this.elements.has(elementWithUniqueName.id)) {
+				this.doDelete(elementWithUniqueName.id, { suppressEvents: true })
 			} else {
-				this.temporaryElements.delete(elementData.id)
+				this.temporaryElements.delete(elementWithUniqueName.id)
 			}
 			throw error
 		}
-		return elementData.id
+		const createdElement = this.elements.get(elementWithUniqueName.id)?.getData()
+		if (!createdElement) {
+			throw new Error(`Element ${elementWithUniqueName.id} could not be created`)
+		}
+		return { elementId: elementWithUniqueName.id, element: createdElement }
 	}
 
 	/**
@@ -204,15 +260,15 @@ export class ElementManager {
 		elementData: LayerElement,
 		uploadContext: {
 			uploadFiles: File[]
-			onUploadComplete?: (elementId: string) => void
+			onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 			onUploadFailed?: (elementId: string, error: Error) => void
 		},
 	): string {
 		// 创建元素实例（与正式元素相同的渲染逻辑）
-		this.createTemporaryElement(elementData, { silent: false }, "upload")
+		const createResult = this.createTemporaryElement(elementData, { silent: false }, "upload")
 
 		// 获取元素实例
-		const element = this.elements.get(elementData.id)
+		const element = this.elements.get(createResult.elementId)
 
 		// 如果是 ImageElement，创建 ossSrc Promise
 		if (element instanceof ImageElementClass) {
@@ -223,11 +279,11 @@ export class ElementManager {
 		const { uploadFiles, onUploadComplete, onUploadFailed } = uploadContext
 		if (uploadFiles.length > 0) {
 			this.canvas.canvasFileUploadManager.queueUpload({
-				elementId: elementData.id,
+				elementId: createResult.elementId,
 				file: uploadFiles[0],
 				onUploadComplete: (result) => {
 					// 存储上传结果到元素实例（用于后续处理）
-					const element = this.elements.get(elementData.id)
+					const element = this.elements.get(createResult.elementId)
 					if (
 						element instanceof ImageElementClass ||
 						element instanceof VideoElementClass
@@ -235,16 +291,16 @@ export class ElementManager {
 						element.uploadResult = result
 					}
 					// 触发原始回调
-					onUploadComplete?.(elementData.id)
+					onUploadComplete?.(createResult.elementId, result)
 				},
 				onUploadFailed: (error) => {
 					// 触发原始回调
-					onUploadFailed?.(elementData.id, error)
+					onUploadFailed?.(createResult.elementId, error)
 				},
 			})
 		}
 
-		return elementData.id
+		return createResult.elementId
 	}
 
 	/**
@@ -263,7 +319,7 @@ export class ElementManager {
 	 */
 	public convertToPermament(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		if (!this.temporaryElements.has(elementId)) {
@@ -324,11 +380,23 @@ export class ElementManager {
 
 		// batchUpdate 成功后才登记 user，避免写 DSL 失败时留下虚假的任务所有权。
 		for (const target of targets) {
-			const request = (target.persistedPatch as Partial<ImageElement>).generateImageRequest
+			const imagePatch = target.persistedPatch as Record<string, unknown>
+			const request = target.contentId
+				? (
+						imagePatch.contents as
+							| Array<{
+									contentId: string
+									generateImageRequest?: { image_id?: string }
+							  }>
+							| undefined
+					)?.find((content) => content.contentId === target.contentId)
+						?.generateImageRequest
+				: (imagePatch.generateImageRequest as { image_id?: string } | undefined)
 			if (request?.image_id) {
 				this.canvas.elementDetailsRuntimeManager?.markGenerateImageRequestAsUser(
 					target.elementId,
 					request.image_id,
+					target.contentId,
 				)
 			}
 		}
@@ -354,7 +422,7 @@ export class ElementManager {
 	 */
 	public update(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		const element = this.elements.get(elementId)
@@ -394,7 +462,7 @@ export class ElementManager {
 	 */
 	public updateNode(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: { forceUpdate?: boolean },
 	): void {
 		this.update(elementId, updates, {
@@ -410,7 +478,7 @@ export class ElementManager {
 	 */
 	public updateData(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		this.update(elementId, updates, {
@@ -437,7 +505,7 @@ export class ElementManager {
 		if (this.elements.has(elementData.id)) {
 			this.doUpdate(elementData.id, elementData, options || {})
 		} else {
-			this.doCreate(elementData, options || {})
+			this.doCreate(this.normalizeCreatedElementData(elementData), options || {})
 		}
 	}
 
@@ -446,9 +514,20 @@ export class ElementManager {
 	 * @param updates - 更新数组，每项包含 id 和要更新的数据
 	 */
 	public batchUpdate(
-		updates: Array<{ id: string; data: Partial<LayerElement> }>,
+		updates: Array<{ id: string; data: ElementUpdatePatch }>,
 		options?: ElementOperationOptions,
 	): void {
+		// 在任何 Element 落入 Runtime 前完成整批校验，避免后续目标非法时留下部分更新。
+		const stagedDataByElementId = new Map<string, LayerElement>()
+		for (const { id, data } of updates) {
+			const element = this.elements.get(id)
+			if (!element) continue
+			const currentData = stagedDataByElementId.get(id) ?? element.getData()
+			const nextData = this.mergeElementData(currentData, data, id)
+			validateElementData(nextData)
+			stagedDataByElementId.set(id, nextData)
+		}
+
 		this.batchMode = true
 		let succeeded = false
 		try {
@@ -522,12 +601,35 @@ export class ElementManager {
 	 */
 	public replaceAll(elementsData: LayerElement[]): void {
 		this.clear()
+		this.lastLoadIssues = []
 		this.batchMode = true
 		try {
 			// 规范化 zIndex：按原有顺序排序后，重新分配连续的 zIndex
 			const normalizedElements = this.normalizeZIndex(elementsData)
 			normalizedElements.forEach((elementData) => {
-				this.doCreate(elementData, { batch: true })
+				const pendingEventCount = this.pendingEvents.length
+				try {
+					this.doCreate(elementData, { batch: true })
+				} catch (error) {
+					// 丢弃该元素失败前产生的批量事件，避免 flush 时发布半成品状态。
+					this.pendingEvents.length = pendingEventCount
+
+					// 单个元素渲染失败不应阻断其他元素和连接的加载。
+					// 如果元素已经部分挂载，先回滚其运行时实例，避免留下半成品。
+					if (this.elements.has(elementData.id)) {
+						try {
+							this.doDelete(elementData.id, { suppressEvents: true })
+						} catch {
+							// 保留原始加载错误，避免清理失败覆盖根因。
+						}
+					}
+
+					this.lastLoadIssues.push({
+						elementId: elementData.id,
+						elementType: elementData.type,
+						message: error instanceof Error ? error.message : String(error),
+					})
+				}
 			})
 		} finally {
 			this.batchMode = false
@@ -535,6 +637,11 @@ export class ElementManager {
 			// 重新排列顶层元素的渲染顺序，确保 Konva 节点顺序与 zIndex 一致
 			this.reorderTopLevelElements()
 		}
+	}
+
+	/** 获取最近一次批量加载中失败的元素。 */
+	public getLastLoadIssues(): ElementLoadIssue[] {
+		return [...this.lastLoadIssues]
 	}
 
 	/**
@@ -617,12 +724,55 @@ export class ElementManager {
 		this.documentIndex.markDirty()
 	}
 
-	private updateChangesDocumentTopology(updates: Partial<LayerElement>): boolean {
+	private updateChangesDocumentTopology(updates: ElementMutationPatch): boolean {
 		return Object.prototype.hasOwnProperty.call(updates, "children")
 	}
 
 	private getElementSrc(data: LayerElement): string | undefined {
-		return "src" in data ? data.src : undefined
+		const content = getActiveContent(data)
+		return content && "src" in content && typeof content.src === "string"
+			? content.src
+			: undefined
+	}
+
+	private mergeElementData(
+		currentData: LayerElement,
+		updates: ElementMutationPatch,
+		elementId: string,
+	): LayerElement {
+		if (updates.id !== undefined && updates.id !== elementId) {
+			throw new Error(`Element ${elementId} id cannot be changed`)
+		}
+		if (updates.type !== undefined && updates.type !== currentData.type) {
+			throw new Error(`Element ${elementId} type cannot be changed`)
+		}
+		const contentFields = new Set(getElementContentFields(currentData.type))
+		const contentPatch: Record<string, unknown> = {}
+		const elementUpdates: Record<string, unknown> = {
+			...(updates as unknown as Record<string, unknown>),
+		}
+		for (const field of contentFields) {
+			if (!Object.prototype.hasOwnProperty.call(elementUpdates, field)) continue
+			contentPatch[field] = elementUpdates[field]
+			delete elementUpdates[field]
+		}
+
+		const currentRecord = currentData as unknown as Record<string, unknown>
+		const nextContentElement =
+			Object.keys(contentPatch).length > 0
+				? updateContent(
+						currentData as never,
+						(currentRecord.activeContentId as string | null | undefined) ?? undefined,
+						contentPatch as never,
+					)
+				: currentData
+
+		return {
+			...(nextContentElement as unknown as LayerElement),
+			...elementUpdates,
+			id: elementId,
+			type: currentData.type,
+		} as LayerElement
 	}
 
 	private buildElementNameChange(
@@ -646,13 +796,32 @@ export class ElementManager {
 	// ==================== 私有实现方法 ====================
 
 	/**
+	 * 规范化主动创建的元素数据。
+	 * 文档加载使用 replaceAll()/doCreate()，因此不会改写历史 DSL。
+	 */
+	private normalizeCreatedElementData<T extends LayerElement>(elementData: T): T {
+		if (
+			elementData.type !== ElementTypeEnum.Frame ||
+			elementData.width === undefined ||
+			elementData.height === undefined
+		) {
+			return elementData
+		}
+
+		return {
+			...elementData,
+			...normalizeFrameCreationSize(elementData.width, elementData.height),
+		}
+	}
+
+	/**
 	 * 规范化更新数据（提取公共逻辑）
 	 */
 	private normalizeUpdates(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
-	): Partial<LayerElement> {
+	): ElementMutationPatch {
 		const normalizedUpdates = { ...updates }
 		const currentData = element.getData()
 
@@ -676,15 +845,18 @@ export class ElementManager {
 				currentData.type === ElementTypeEnum.Image
 					? (currentData as ImageElement)
 					: undefined
-			const normalizedImageUpdates = normalizedUpdates as Partial<ImageElement>
+			const normalizedImageUpdates = normalizedUpdates as Record<string, unknown>
+			const activeImageContent = imageData ? getActiveImageContent(imageData) : undefined
 			const hasExplicitCropField = Object.prototype.hasOwnProperty.call(
-				normalizedImageUpdates,
+				normalizedUpdates,
 				"crop",
 			)
 			const shouldSyncCropOnResize =
-				!!imageData?.crop && !hasExplicitCropField && !options?.skipImageCropResizeSync
+				!!activeImageContent?.crop &&
+				!hasExplicitCropField &&
+				!options?.skipImageCropResizeSync
 
-			if (shouldSyncCropOnResize && imageData && imageData.crop) {
+			if (shouldSyncCropOnResize && imageData && activeImageContent?.crop) {
 				const imageInfo =
 					element instanceof ImageElementClass ? element.getImageInfo() : undefined
 				const sourceDimensions = imageInfo
@@ -697,8 +869,8 @@ export class ElementManager {
 							height: imageData.height ?? 0,
 						}
 
-				normalizedImageUpdates.crop = syncCropConfigOnResize({
-					crop: imageData.crop,
+				const nextCrop = syncCropConfigOnResize({
+					crop: activeImageContent.crop,
 					prevElementSize: {
 						width: imageData.width ?? 0,
 						height: imageData.height ?? 0,
@@ -709,6 +881,14 @@ export class ElementManager {
 					},
 					sourceDimensions,
 				})
+				const nextImage = updateImageContent(
+					imageData,
+					imageData.activeContentId ?? undefined,
+					{ crop: nextCrop },
+				)
+				normalizedImageUpdates.contents = nextImage.contents
+				normalizedImageUpdates.activeContentId = nextImage.activeContentId
+				normalizedImageUpdates.mainContentId = nextImage.mainContentId
 			}
 		}
 
@@ -720,7 +900,7 @@ export class ElementManager {
 	 */
 	private updateNodeOnly(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
 	): void {
 		const node = element.getNode()
@@ -763,12 +943,13 @@ export class ElementManager {
 	 */
 	private updateDataOnly(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
 	): void {
 		// 获取当前数据并合并更新
 		const currentData = element.getData()
-		const newData = { ...currentData, ...updates, id: element.getId() } as LayerElement
+		const newData = this.mergeElementData(currentData, updates, element.getId())
+		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
 
 		// 更新元素的内部数据（不触发 node 更新）
@@ -787,6 +968,7 @@ export class ElementManager {
 					data: newData,
 					previousData: currentData,
 					nameChange,
+					...(options?.historyPolicy ? { historyPolicy: options.historyPolicy } : {}),
 				},
 			})
 			this.emitElementChange([element.getId()], {
@@ -810,6 +992,7 @@ export class ElementManager {
 			const parentId = this.findParentIdForElement(finalElementData.id)
 			finalElementData.zIndex = this.getNextZIndexInLevel(parentId)
 		}
+		validateElementData(finalElementData)
 
 		const element = this.createElementInstance(finalElementData)
 		if (!element) {
@@ -876,7 +1059,7 @@ export class ElementManager {
 	 */
 	private doUpdate(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options: ElementOperationOptions,
 	): void {
 		const element = this.elements.get(elementId)
@@ -902,7 +1085,8 @@ export class ElementManager {
 			}
 		}
 
-		const newData = { ...currentData, ...updates, id: elementId } as LayerElement
+		const newData = this.mergeElementData(currentData, updates, elementId)
+		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
 
 		// 检测 zIndex 是否改变
@@ -936,7 +1120,13 @@ export class ElementManager {
 		if (!options.silent) {
 			this.emitEvent({
 				type: "element:updated",
-				data: { elementId, data: newData, previousData: currentData, nameChange },
+				data: {
+					elementId,
+					data: newData,
+					previousData: currentData,
+					nameChange,
+					...(options.historyPolicy ? { historyPolicy: options.historyPolicy } : {}),
+				},
 			})
 			this.emitElementChange([elementId], {
 				nameChanges: nameChange ? [nameChange] : undefined,
@@ -1205,6 +1395,7 @@ export class ElementManager {
 				case "element:video:generate-submit-started":
 				case "element:video:generate-submit-failed":
 				case "element:video:fullscreenClick":
+				case "element:audio:fullscreenClick":
 				case "element:image:resultUpdated":
 				case "element:image:loaded":
 				case "element:image:ossSrcReady":
@@ -1709,6 +1900,29 @@ export class ElementManager {
 		return dict
 	}
 
+	/** 为通过公开 create 入口进入运行时的新元素统一分配唯一名称。 */
+	private resolveUniqueElementName(elementData: LayerElement): LayerElement {
+		const existingNames = getAllExistingNames(this)
+
+		const resolve = (element: LayerElement): LayerElement => {
+			let resolved = element
+			if (element.name) {
+				const uniqueName = generateUniqueElementName(element.name, existingNames)
+				if (uniqueName !== element.name) resolved = { ...resolved, name: uniqueName }
+				existingNames.add(uniqueName)
+			}
+			if ("children" in element && Array.isArray(element.children)) {
+				const children = element.children.map(resolve)
+				if (children.some((child, index) => child !== element.children?.[index])) {
+					resolved = { ...resolved, children } as LayerElement
+				}
+			}
+			return resolved
+		}
+
+		return resolve(elementData)
+	}
+
 	public exportDocumentPatch(options: {
 		changedElementIds: string[]
 		deletedElementIds?: string[]
@@ -1760,12 +1974,7 @@ export class ElementManager {
 	 * 导出时「无 crop」不会写出 crop 字段，若合并时缺少该键，{ ...current, ...snapshot } 会错误保留旧 crop（撤销裁剪不生效）。
 	 */
 	private normalizeLayerElementFromSnapshot(data: LayerElement): LayerElement {
-		if (data.type !== ElementTypeEnum.Image) {
-			return data
-		}
-		if (!Object.prototype.hasOwnProperty.call(data, "crop")) {
-			return { ...(data as ImageElement), crop: undefined }
-		}
+		// v3 快照会整体替换 contents；Content 内缺失 crop 已能自然表达“撤销裁剪”。
 		return data
 	}
 
@@ -1774,7 +1983,7 @@ export class ElementManager {
 	 * 只更新变化的元素，避免全量重新渲染
 	 * 在加载时创建深拷贝，确保内部数据不受外部影响（如 useImmer 冻结）
 	 */
-	public loadDocumentSmart(doc: CanvasDocument): void {
+	public loadDocumentSmart(doc: CanvasDocument): boolean {
 		// 深拷贝传入的数据，确保内部数据独立，不受外部状态管理工具影响
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		const newElements = docCopy.elements || []
@@ -1878,18 +2087,16 @@ export class ElementManager {
 			this.batchMode = false
 			this.flush()
 			resumeImageBatchPollingManagers(this.canvas)
-
-			// 触发文档恢复事件，通知所有管理器更新（如 name labels、hover 等）
-			// 因为批量模式不会触发 element:updated 事件，需要手动通知
-			if (
-				toUpdate.length > 0 ||
-				toCreate.length > 0 ||
-				toDelete.length > 0 ||
-				toMoveTopLevel.length > 0
-			) {
-				this.canvas.eventEmitter.emit({ type: "document:restored", data: undefined })
-			}
 		}
+
+		// 由 Canvas 在元素与连接都恢复完成后统一发出 document:restored。
+		// ElementManager 单独恢复时不能保证连接管理器已经切换到同一份文档。
+		return (
+			toUpdate.length > 0 ||
+			toCreate.length > 0 ||
+			toDelete.length > 0 ||
+			toMoveTopLevel.length > 0
+		)
 	}
 
 	private moveElementToContentLayer(elementId: string): void {
@@ -2047,7 +2254,9 @@ export class ElementManager {
 
 		// 销毁所有子节点，但保留背景
 		const background = this.canvas.contentLayer.findOne(".canvas-background") as
-			Konva.Shape | Konva.Group | null
+			| Konva.Shape
+			| Konva.Group
+			| null
 		this.canvas.contentLayer.destroyChildren()
 
 		// 如果背景存在，重新添加到 layer

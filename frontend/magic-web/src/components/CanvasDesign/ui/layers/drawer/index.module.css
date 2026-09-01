@@ -134,6 +134,12 @@
 	border-radius: var(--border-radius-rounded-lg, 10px);
 }
 
+.layers-drawer-collapse-trigger:focus,
+.layers-drawer-collapse-trigger:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+
 .layer-node {
 	display: flex;
 	gap: var(--spacing-2, 8px);

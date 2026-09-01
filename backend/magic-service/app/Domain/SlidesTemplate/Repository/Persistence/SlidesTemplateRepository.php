@@ -85,6 +85,96 @@ class SlidesTemplateRepository extends AbstractRepository implements SlidesTempl
         );
     }
 
+    /** Load vector-hit IDs while preserving Qdrant similarity order. */
+    public function findByIds(SlidesTemplateDataIsolation $dataIsolation, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('strval', $ids))));
+        if ($ids === []) {
+            return [];
+        }
+
+        $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query());
+        /** @var array<int, SlidesTemplateModel> $models */
+        $models = $builder->whereIn('id', $ids)->get()->all();
+        $map = [];
+        foreach ($models as $model) {
+            $map[(string) $model->id] = SlidesTemplateFactory::modelToEntity($model);
+        }
+
+        $result = [];
+        foreach ($ids as $id) {
+            if (isset($map[$id])) {
+                $result[] = $map[$id];
+            }
+        }
+        return $result;
+    }
+
+    /** Load vector-hit IDs using MySQL as the authoritative visibility source. */
+    public function findVisibleByIds(
+        SlidesTemplateDataIsolation $dataIsolation,
+        array $ids,
+    ): array {
+        $ids = array_values(array_unique(array_filter(array_map('strval', $ids))));
+        if ($ids === []) {
+            return [];
+        }
+
+        $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->whereIn('id', $ids)
+            // MySQL is the final authority: semantic results must be enabled.
+            ->where('status', SlidesTemplateStatus::Enabled->value);
+        /** @var array<int, SlidesTemplateModel> $models */
+        $models = $builder->get()->all();
+        $map = [];
+        foreach ($models as $model) {
+            $map[(string) $model->id] = SlidesTemplateFactory::modelToEntity($model);
+        }
+
+        $result = [];
+        foreach ($ids as $id) {
+            if (isset($map[$id])) {
+                $result[] = $map[$id];
+            }
+        }
+        return $result;
+    }
+
+    /** Read one organization-scoped ID batch for asynchronous full synchronization. */
+    public function findIdsForSync(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $organizationCode,
+        array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
+        string $afterId,
+        int $limit
+    ): array {
+        $builder = $this->createBuilder($dataIsolation, SlidesTemplateModel::query())
+            ->where('organization_code', $organizationCode)
+            ->where('owner_type', SlidesTemplateOwnerType::Official->value)
+            ->where('status', 1)
+            ->where('id', '>', $afterId)
+            ->orderBy('id')
+            ->limit(max(1, $limit));
+        if ($templateIds !== []) {
+            $builder->whereIn('id', $templateIds);
+        }
+        if ($categoryCode !== null) {
+            $builder->where('category_code', $categoryCode);
+        }
+        if ($tagMatch === 'all') {
+            foreach ($tagCodes as $tagCode) {
+                $this->whereHasEnabledTag($builder, [$tagCode]);
+            }
+        } elseif ($tagCodes !== []) {
+            $this->whereHasEnabledTag($builder, $tagCodes);
+        }
+        return array_map('strval', $builder->pluck('id')->all());
+    }
+
+    /** Keep database search behavior unchanged: search_text filters, sort/id order results. */
     public function queries(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateQuery $query, Page $page): array
     {
         $builder = $this->createQueryBuilder($dataIsolation, $query);

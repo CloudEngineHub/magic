@@ -96,9 +96,9 @@ async def maybe_auto_connect_im_channels_for_local_dev() -> None:
             )
             return
 
-        from app.channel.startup import auto_connect_channels_for_current_sandbox
+        from app.channel.startup import auto_connect_channels_for_current_topic
 
-        await auto_connect_channels_for_current_sandbox()
+        await auto_connect_channels_for_current_topic()
         logger.info(f"{_LOCAL_IM_AUTO_CONNECT_ENV}=true，已触发本地 IM 渠道自动连接")
     except Exception as e:
         logger.warning(f"本地 IM 渠道自动连接失败，不影响 ws-server 启动: {e}")
@@ -184,6 +184,15 @@ async def lifespan(app: FastAPI):
 
     # 执行启动时残留文件清理检查
     await cleanup_stale_files_on_startup()
+
+    # 恢复通用沙箱任务，避免服务重启后丢失页面提交的合成任务。
+    try:
+        from app.service.sandbox_task.task_manager import SandboxTaskManager
+        from app.api.routes.sandbox_tasks import _run_capability
+        recovered = await SandboxTaskManager.instance().recover(_run_capability)
+        logger.info("通用沙箱任务恢复完成: {}", recovered)
+    except Exception as e:
+        logger.error("通用沙箱任务恢复失败: {}", e)
 
     logger.info(f"HTTP API服务将监听端口：{get_api_port()}")
     try:

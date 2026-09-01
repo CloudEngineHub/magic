@@ -17,6 +17,7 @@ describe("parseMagicProjectJsContentWithDiagnostics", () => {
 		`)
 
 		expect(result.canvasStatus).toBe("valid-empty")
+		expect(result.sourceVersion).toBe("1.0.0")
 		expect(result.data?.canvas?.elements).toEqual([])
 	})
 

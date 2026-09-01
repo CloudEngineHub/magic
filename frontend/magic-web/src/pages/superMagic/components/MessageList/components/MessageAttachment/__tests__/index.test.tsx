@@ -8,9 +8,12 @@ const resolveSingleDocumentStaticDependenciesMock = vi.fn()
 const supportsStaticDependenciesMock = vi.fn()
 const startDownloadMock = vi.fn()
 const warningMock = vi.fn()
+const openMessageFileMock = vi.fn()
+const useIsMobileMock = vi.hoisted(() => vi.fn(() => false))
 
 const projectFilesStoreMock = {
 	workspaceFilesList: [] as Array<Record<string, unknown>>,
+	workspaceFileTree: [] as Array<Record<string, unknown>>,
 	currentSelectedProject: { id: "project-1" },
 }
 
@@ -60,15 +63,16 @@ vi.mock("@/components/base/MagicIcon", () => ({
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({
-	useIsMobile: () => false,
+	useIsMobile: () => useIsMobileMock(),
 }))
 
-vi.mock("../../utils/openMessageFile", () => ({
-	openMessageFile: vi.fn(),
+vi.mock("@/pages/superMagic/components/MessageList/utils/openMessageFile", () => ({
+	openMessageFile: (...args: unknown[]) => openMessageFileMock(...args),
 }))
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 }))
 
 describe("MessageAttachment", () => {
@@ -79,8 +83,105 @@ describe("MessageAttachment", () => {
 		supportsStaticDependenciesMock.mockReset()
 		startDownloadMock.mockReset()
 		warningMock.mockReset()
+		openMessageFileMock.mockReset()
+		useIsMobileMock.mockReturnValue(false)
 		projectFilesStoreMock.workspaceFilesList = []
+		projectFilesStoreMock.workspaceFileTree = []
 		supportsStaticDependenciesMock.mockReturnValue(false)
+	})
+
+	it("opens the resolved project directory for magic.project.js attachments", () => {
+		const projectDirectory = {
+			file_id: "project-directory",
+			file_name: "generated-project",
+			file_extension: "",
+			is_directory: true,
+			display_config: { type: "slide", name: "项目演示" },
+		}
+		const magicProjectFile = {
+			file_id: "magic-project-file",
+			file_name: "magic.project.js",
+			file_extension: "js",
+			parent_id: "project-directory",
+		}
+		projectFilesStoreMock.workspaceFilesList = [magicProjectFile, projectDirectory]
+		projectFilesStoreMock.workspaceFileTree = [
+			{
+				...projectDirectory,
+				children: [magicProjectFile],
+			},
+		]
+
+		render(
+			<Attachment
+				attachments={[
+					{
+						...magicProjectFile,
+						filename: "magic.project.js",
+						contentLength: 0,
+						url: "",
+					},
+				]}
+				onSelectDetail={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("项目演示")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("handle-open-file"))
+		expect(openMessageFileMock).toHaveBeenCalledWith(projectDirectory)
+	})
+
+	it("falls back to opening the original magic.project.js when its parent is unavailable", () => {
+		const magicProjectFile = {
+			file_id: "magic-project-file",
+			file_name: "magic.project.js",
+			file_extension: "js",
+			parent_id: "missing-project-directory",
+			filename: "magic.project.js",
+			contentLength: 0,
+			url: "",
+		}
+		projectFilesStoreMock.workspaceFilesList = [magicProjectFile]
+
+		render(<Attachment attachments={[magicProjectFile]} onSelectDetail={vi.fn()} />)
+
+		fireEvent.click(screen.getByTestId("handle-open-file"))
+		expect(openMessageFileMock).toHaveBeenCalledWith(magicProjectFile)
+	})
+
+	it("uses the resolved project directory when mobile preview falls back to onSelectDetail", () => {
+		const projectDirectory = {
+			file_id: "project-directory",
+			file_name: "generated-project",
+			file_extension: "",
+			is_directory: true,
+			display_config: { type: "slide", name: "项目演示" },
+		}
+		const magicProjectFile = {
+			file_id: "magic-project-file",
+			file_name: "magic.project.js",
+			file_extension: "js",
+			parent_id: "project-directory",
+			filename: "magic.project.js",
+			contentLength: 0,
+			url: "",
+		}
+		const onSelectDetail = vi.fn()
+		projectFilesStoreMock.workspaceFilesList = [magicProjectFile, projectDirectory]
+		useIsMobileMock.mockReturnValue(true)
+
+		render(<Attachment attachments={[magicProjectFile]} onSelectDetail={onSelectDetail} />)
+
+		fireEvent.click(screen.getByTestId("handle-open-file"))
+		expect(onSelectDetail).toHaveBeenCalledWith(
+			expect.objectContaining({
+				currentFileId: "project-directory",
+				data: expect.objectContaining({
+					file_id: "project-directory",
+					display_config: { type: "slide", name: "项目演示" },
+				}),
+			}),
+		)
 	})
 
 	it("requests download mode when the download button is clicked", async () => {

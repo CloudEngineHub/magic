@@ -150,9 +150,11 @@ use App\Domain\KnowledgeBase\Port\KnowledgeBaseGateway;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseDocumentRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseFragmentRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseRepositoryInterface;
+use App\Domain\KnowledgeBase\Repository\Facade\ThirdFileRevectorizeStateRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseBaseRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseDocumentRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseFragmentRepository;
+use App\Domain\KnowledgeBase\Repository\Persistence\ThirdFileRevectorizeStateRepository;
 use App\Domain\LongTermMemory\Repository\LongTermMemoryRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMetadataCleanupRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
@@ -278,6 +280,8 @@ use App\Infrastructure\Core\Embeddings\DocumentSplitter\DocumentSplitterInterfac
 use App\Infrastructure\Core\Embeddings\DocumentSplitter\OdinRecursiveCharacterTextSplitter;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\OdinEmbeddingGenerator;
+use App\Infrastructure\Core\Embeddings\VectorStores\OdinQdrantVectorStore;
+use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\File\Parser\Driver\ExcelFileParserDriver;
 use App\Infrastructure\Core\File\Parser\Driver\Interfaces\ExcelFileParserDriverInterface;
 use App\Infrastructure\Core\File\Parser\Driver\Interfaces\OcrFileParserDriverInterface;
@@ -425,6 +429,7 @@ $dependencies = [
     ThirdPlatformDocumentProviderPort::class => UnsupportedThirdPlatformDocumentProvider::class,
     KnowledgeBaseDocumentRepositoryInterface::class => KnowledgeBaseDocumentRepository::class,
     KnowledgeBaseFragmentRepositoryInterface::class => KnowledgeBaseFragmentRepository::class,
+    ThirdFileRevectorizeStateRepositoryInterface::class => ThirdFileRevectorizeStateRepository::class,
 
     // vector
     SemanticSimilaritySearchInterface::class => BaseSemanticSimilaritySearch::class,
@@ -481,6 +486,7 @@ $dependencies = [
 
     // embeddings
     EmbeddingGeneratorInterface::class => OdinEmbeddingGenerator::class,
+    VectorStoreInterface::class => OdinQdrantVectorStore::class,
 
     // rerank
 

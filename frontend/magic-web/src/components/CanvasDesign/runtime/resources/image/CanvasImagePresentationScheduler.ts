@@ -1,5 +1,8 @@
 import type { Canvas } from "../../core/Canvas"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import {
+	getCanvasHostResourceReferenceIdentity,
+	type CanvasResourceReferenceResolverChangeOptions,
+} from "../../shared/path/canvasResourcePath"
 import { getImageResourceMaxEdge } from "../visibility/CanvasMediaViewingPolicy"
 import type {
 	ImageResourceLoadPriority,
@@ -227,6 +230,34 @@ export class CanvasImagePresentationScheduler {
 		this.updateCurrentCounts()
 	}
 
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
+		if (this.destroyed) return
+
+		const changedResourceIdentities = options?.changedResourceIdentities
+		if (!changedResourceIdentities) this.targetElementIdsByPath.clear()
+		this.targets.forEach((target, elementId) => {
+			const canonicalPath = this.canonicalPath(target.path)
+			if (
+				changedResourceIdentities &&
+				!changedResourceIdentities.has(target.canonicalPath) &&
+				!changedResourceIdentities.has(canonicalPath)
+			) {
+				return
+			}
+			if (target.canonicalPath !== canonicalPath) {
+				this.removeTargetFromPathIndex(target)
+				target.canonicalPath = canonicalPath
+				target.generation = ++this.generation
+				this.dropPendingTask(elementId)
+			}
+			this.addTargetToPathIndex(target)
+			this.enqueueBestCachedResource(target)
+		})
+		this.updateCurrentCounts()
+	}
+
 	public getSnapshot(): ImagePresentationSnapshot {
 		this.updateCurrentCounts()
 		return { ...this.stats }
@@ -248,10 +279,7 @@ export class CanvasImagePresentationScheduler {
 	}
 
 	private canonicalPath(path: string): string {
-		return toCanonicalCanvasResourcePath(
-			path,
-			this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath,
-		)
+		return getCanvasHostResourceReferenceIdentity(this.canvas, path)
 	}
 
 	private addTargetToPathIndex(target: InternalPresentationTarget): void {
@@ -374,7 +402,8 @@ export class CanvasImagePresentationScheduler {
 
 	private getConsumer(elementId: string): ImagePresentationConsumer | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId) as
-			Partial<ImagePresentationConsumer> | undefined
+			| Partial<ImagePresentationConsumer>
+			| undefined
 		if (
 			!element ||
 			typeof element.getDisplayResourceVariant !== "function" ||

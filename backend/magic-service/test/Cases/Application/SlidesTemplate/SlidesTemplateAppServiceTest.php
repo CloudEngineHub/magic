@@ -26,8 +26,10 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateCategoryQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
@@ -35,7 +37,9 @@ use App\Domain\SlidesTemplate\Service\SlidesTemplateColorExtractor;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateFavoriteDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateVectorIndexDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
+use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
@@ -58,6 +62,8 @@ use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Qbhy\HyperfAuth\Authenticatable;
 use ReflectionClass;
 use RuntimeException;
 
@@ -113,6 +119,12 @@ class SlidesTemplateAppServiceTest extends TestCase
                     SubscriptionManagerInterface::class => new BaseSubscriptionManager(),
                     OrganizationInfoManagerInterface::class => new BaseOrganizationInfoManager(),
                     HandleDataIsolationInterface::class => new BaseHandleDataIsolation(),
+                    EventDispatcherInterface::class => new class implements EventDispatcherInterface {
+                        public function dispatch(object $event): object
+                        {
+                            return $event;
+                        }
+                    },
                     MagicOrganizationEnvDomainService::class => new class extends MagicOrganizationEnvDomainService {
                         public function __construct()
                         {
@@ -162,6 +174,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                     SubscriptionManagerInterface::class,
                     OrganizationInfoManagerInterface::class,
                     HandleDataIsolationInterface::class,
+                    EventDispatcherInterface::class,
                     MagicOrganizationEnvDomainService::class,
                 ], true);
             }
@@ -1048,12 +1061,15 @@ class SlidesTemplateAppServiceTest extends TestCase
         $colorExtractor->method('extractColors')->willReturn([]);
         /** @var SlidesTemplateFavoriteDomainService $favoriteDomainService */
         $favoriteDomainService = (new ReflectionClass(SlidesTemplateFavoriteDomainService::class))->newInstanceWithoutConstructor();
+        /** @var SlidesTemplateVectorIndexDomainService $vectorIndexDomainService */
+        $vectorIndexDomainService = (new ReflectionClass(SlidesTemplateVectorIndexDomainService::class))->newInstanceWithoutConstructor();
         $service = new TestableAdminSlidesTemplateAppService(
             $domainService,
             $categoryDomainService,
             $tagDomainService,
             $colorExtractor,
             $favoriteDomainService,
+            $vectorIndexDomainService,
         );
         $service->missingPublicFileKeys = $missingPublicFileKeys;
         $service->missingPrivateFileKeys = $missingPrivateFileKeys;
@@ -1068,6 +1084,8 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
 
     public array $publicFileLinkCalls = [];
 
+    private SlidesTemplateDomainService $queryDomainService;
+
     public function __construct(
         SlidesTemplateDomainService $slidesTemplateDomainService,
         ?SlidesTemplateTagDomainService $slidesTemplateTagDomainService = null,
@@ -1080,6 +1098,9 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
         $resourceAccessLogDomainService = (new ReflectionClass(ResourceAccessLogDomainService::class))->newInstanceWithoutConstructor();
         /** @var SlidesTemplateProjectExportService $projectPublishService */
         $projectPublishService = (new ReflectionClass(SlidesTemplateProjectExportService::class))->newInstanceWithoutConstructor();
+        /** @var SlidesTemplateVectorIndexDomainService $vectorIndexDomainService */
+        $vectorIndexDomainService = (new ReflectionClass(SlidesTemplateVectorIndexDomainService::class))->newInstanceWithoutConstructor();
+        $this->queryDomainService = $slidesTemplateDomainService;
         parent::__construct(
             $slidesTemplateDomainService,
             $slidesTemplateTagDomainService ?? new class extends SlidesTemplateTagDomainService {
@@ -1095,7 +1116,25 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
             $favoriteDomainService,
             $resourceAccessLogDomainService,
             $projectPublishService,
+            $vectorIndexDomainService,
         );
+    }
+
+    public function queries(Authenticatable|BaseDataIsolation $authorization, PublicQuerySlidesTemplateRequest $request): array
+    {
+        $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+        $query = $this->createPublicQueryForTest($request);
+        $page = $this->createListPage($request->getPage(), $request->getPageSize());
+        $page->setTotal(false);
+        $result = $this->queryDomainService->queries($dataIsolation, $query, $page);
+        $this->resolveListImageUrls($result['list']);
+
+        return [
+            'page' => $page,
+            'list' => $result['list'],
+            'favorite_codes' => [],
+        ];
     }
 
     public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
@@ -1126,6 +1165,22 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
             );
         }
         return $result;
+    }
+
+    private function createPublicQueryForTest(PublicQuerySlidesTemplateRequest $request): SlidesTemplateQuery
+    {
+        $query = new SlidesTemplateQuery();
+        $query->setScope($request->getScope());
+        $query->setKeyword($request->getKeyword());
+        $query->setSearchType($request->getSearchType());
+        $query->setCode($request->getCode());
+        $query->setCategoryCode($request->getCategoryCode());
+        $query->setTagCodes($request->getTagCodes());
+        $query->setTagMatch(SlidesTemplateTagMatch::tryFrom($request->getTagMatch()) ?? SlidesTemplateTagMatch::Any);
+        if ($query->getScope() === SlidesTemplateQueryScope::Official) {
+            $query->setStatus(SlidesTemplateStatus::Enabled->value);
+        }
+        return $query;
     }
 }
 
@@ -1376,5 +1431,10 @@ class TestableAdminSlidesTemplateAppService extends AdminSlidesTemplateAppServic
         }
 
         return $result;
+    }
+
+    protected function transaction(callable $callback): mixed
+    {
+        return $callback();
     }
 }

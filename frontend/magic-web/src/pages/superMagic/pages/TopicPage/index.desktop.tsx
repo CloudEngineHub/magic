@@ -33,11 +33,7 @@ import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermission
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import { SuperMagicApi } from "@/apis"
-import {
-	workspaceStore,
-	projectStore,
-	topicStore,
-} from "../../stores/core"
+import { workspaceStore, projectStore, topicStore } from "../../stores/core"
 import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"
@@ -521,6 +517,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						hasStatusChanged,
 						activeFileId,
 						getActiveFileId: () => activeFileIdRef.current,
+						workspaceFileTree: attachments,
+						workspaceFilesList: attachmentList,
 					})
 				})
 			}
@@ -588,9 +586,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			checkAndOpenFileByTopicChanged({
 				activeFileId,
 				getActiveFileId: () => activeFileIdRef.current,
+				workspaceFileTree: attachments,
+				workspaceFilesList: attachmentList,
 			})
 		})
-	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
+	}, [selectedTopic?.id, isSelectedTopicMessagesReady, attachments, attachmentList])
 
 	const updateAttachments = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {

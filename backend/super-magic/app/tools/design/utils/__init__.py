@@ -1,5 +1,6 @@
-"""
-Utility functions for design mode tools.
+"""旧 Design Canvas 解析和辅助工具。
+
+本模块计划在下一版本随 ``app.tools.design`` 一并删除。
 """
 
 from .magic_project_design_parser import (

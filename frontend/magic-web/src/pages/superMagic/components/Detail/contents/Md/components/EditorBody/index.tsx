@@ -257,6 +257,7 @@ function EditorBody({
 					<SimpleEditor
 						ref={actualEditorRef}
 						content={isEditMode ? editContent || content : processedContent || content}
+						enableCodeBlockWrap
 						onUpdate={({ editor: _editor }) => {
 							const content =
 								(

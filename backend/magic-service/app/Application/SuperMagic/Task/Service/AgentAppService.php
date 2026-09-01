@@ -13,8 +13,10 @@ use App\Application\SuperMagic\Task\DTO\SandboxInfoDTO;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Event\CheckpointRollbackMessagesChangedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\SandboxVersionDomainService;
@@ -47,6 +49,7 @@ readonly class AgentAppService
         private readonly AgentDomainService $agentDomainService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly TopicDomainService $topicDomainService,
+        private readonly TaskFileDomainService $taskFileDomainService,
         private readonly TaskDomainService $taskDomainService,
         private readonly SandboxVersionDomainService $sandboxVersionDomainService,
         private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
@@ -104,6 +107,7 @@ readonly class AgentAppService
      * 启动沙箱：直接走创建+初始化流程，不删除已有沙箱，不检查镜像版本.
      *
      * 正确流程：createSandbox → initAgent → waitForWorkspaceReady。
+     * 启动时不发送初始化消息（skipInitMessages），与 restart/upgrade 行为一致。
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param int $topicId 话题ID
@@ -115,7 +119,7 @@ readonly class AgentAppService
             'topic_id' => $topicId,
         ]);
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId);
+        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
     }
 
     /**
@@ -349,7 +353,12 @@ readonly class AgentAppService
         // Delegate to domain service
         $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
             $dataIsolation,
-            $agentContext
+            $agentContext,
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode()),
+                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(), $projectEntity->getUserOrganizationCode())
+            )
         );
 
         // 初始化可能切换到 Warm Pool 或重新创建沙箱，必须同步刷新 topic 与 task 的最终绑定。

@@ -54,6 +54,13 @@ class AdminSkillApi extends AbstractApi
         return $this->adminSkillAppService->queryMarkets($requestContext, $requestDTO)->toArray();
     }
 
+    #[CheckPermission(MagicResourceEnum::PLATFORM_SKILL_MARKET, MagicOperationEnum::EDIT)]
+    public function reindexMarketVectors(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->adminSkillAppService->reindexMarketVectors($requestContext);
+    }
+
     /**
      * 审核技能版本.
      */

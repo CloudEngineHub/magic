@@ -45,26 +45,28 @@ export function updatePersonalPreferences(patch: Partial<PersonalPreferencesValu
 	if (!userKey) return Promise.reject(new Error("当前用户未登录，无法保存个人偏好"))
 
 	const previous = preferenceUpdateQueueByUserKey.get(userKey) ?? Promise.resolve({})
-	const operation = previous.catch(() => ({})).then(async () => {
-		if (getPersonalPreferencesUserKey() !== userKey) {
-			throw new Error("用户身份已变化，请重新操作")
-		}
+	const operation = previous
+		.catch(() => ({}))
+		.then(async () => {
+			if (getPersonalPreferencesUserKey() !== userKey) {
+				throw new Error("用户身份已变化，请重新操作")
+			}
 
-		const currentPreference = await loadPersonalPreferences(true)
-		const nextPreference = {
-			...currentPreference,
-			...patch,
-		}
-		const response = await ContactApi.savePersonalPreferences(nextPreference)
-		const latestPreference = response?.data?.value || nextPreference
+			const currentPreference = await loadPersonalPreferences(true)
+			const nextPreference = {
+				...currentPreference,
+				...patch,
+			}
+			const response = await ContactApi.savePersonalPreferences(nextPreference)
+			const latestPreference = response?.data?.value || nextPreference
 
-		setCachedPersonalPreferences(latestPreference, userKey)
-		pubsub.publish(PubSubEvents.Personal_Preferences_Updated, {
-			userKey,
-			value: latestPreference,
+			setCachedPersonalPreferences(latestPreference, userKey)
+			pubsub.publish(PubSubEvents.Personal_Preferences_Updated, {
+				userKey,
+				value: latestPreference,
+			})
+			return latestPreference
 		})
-		return latestPreference
-	})
 
 	preferenceUpdateQueueByUserKey.set(userKey, operation)
 	const cleanup = () => {

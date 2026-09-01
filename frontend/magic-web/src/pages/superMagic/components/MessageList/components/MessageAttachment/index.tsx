@@ -6,7 +6,12 @@ import MagicIcon from "@/components/base/MagicIcon"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
 import FolderIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import { useTranslation } from "react-i18next"
-import { getAttachmentType } from "./utils"
+import {
+	getAttachmentType,
+	isMagicProjectConfigFile,
+	resolveMagicProjectAttachment,
+	type MagicProjectAttachmentFile,
+} from "./utils"
 import { isEmpty } from "lodash-es"
 import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -14,8 +19,12 @@ import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
 import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
 import { resolveProjectInstructionsFileKind } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import projectFilesStore from "@/stores/projectFiles"
+import { observer } from "mobx-react-lite"
+import { useMessageListContext } from "../../context"
+import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 
-export const Attachment = ({
+export const Attachment = observer(function Attachment({
 	attachments,
 	onSelectDetail,
 	onFileClick,
@@ -25,11 +34,14 @@ export const Attachment = ({
 	onSelectDetail: any
 	onFileClick?: (fileItem: any) => void
 	className?: string
-}) => {
+}) {
 	const { t } = useTranslation("super")
+	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
+	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
 	const isMobile = useIsMobile()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
+
 	const toggleExpanded = (e: any) => {
 		e.stopPropagation()
 		setExpanded(!expanded)
@@ -39,32 +51,47 @@ export const Attachment = ({
 		expanded || !attachments || attachments.length < 4 ? attachments : attachments.slice(0, 4)
 
 	const show = Array.isArray(attachments) && attachments.length > 0
+	const resolveMagicProject = (item: MagicProjectAttachmentFile) =>
+		resolveMagicProjectAttachment(
+			item,
+			resolvedProjectFilesStore.workspaceFilesList,
+			resolvedProjectFilesStore.workspaceFileTree,
+		)
 
 	const handleOpenFile = (item: any) => {
-		if (!isMobile && item.file_id) {
-			openMessageFile(item)
-			return
-		}
-
-		if (onFileClick && item.file_id) {
-			onFileClick(item)
-			return
-		}
-
 		const fileName = item.display_filename || item.file_name || item.filename
-		const type = getFileType(item.file_extension)
+		const magicProjectResolution = isMagicProjectConfigFile(fileName)
+			? resolveMagicProject(item)
+			: undefined
+		const openTarget = magicProjectResolution?.projectDirectory || item
+
+		if (!isMobile && openTarget.file_id) {
+			openMessageFile(openTarget)
+			return
+		}
+
+		if (onFileClick && openTarget.file_id) {
+			onFileClick(openTarget)
+			return
+		}
+
+		const contentTypeConfig = detectContentTypeRender(openTarget)
+		const type = contentTypeConfig?.detailType || getFileType(openTarget.file_extension)
 		if (type) {
 			onSelectDetail?.({
-				type, // 根据文件扩展名确定类型
+				type,
 				data: {
-					// content: data,
-					file_name: fileName,
-					// file_url: res[0]?.url,
-					file_extension: item.file_extension,
-					file_id: item.file_id,
-					display_config: item.display_config,
+					...openTarget,
+					file_name: magicProjectResolution?.projectName || fileName,
+					file_extension: openTarget.file_extension,
+					file_id: openTarget.file_id,
+					display_config:
+						magicProjectResolution?.displayConfig || openTarget.display_config,
+					...(contentTypeConfig?.dataTransformer
+						? contentTypeConfig.dataTransformer(openTarget)
+						: {}),
 				},
-				currentFileId: item.file_id,
+				currentFileId: openTarget.file_id,
 			})
 		} else {
 			onSelectDetail?.({
@@ -108,13 +135,23 @@ export const Attachment = ({
 					{displayedAttachments?.map((item: AttachmentProps) => {
 						const { display_config } = item
 						const isFolder = item.file_extension === ""
+						const fileName = item.display_filename || item.file_name || item.filename
+						const magicProjectResolution = isMagicProjectConfigFile(fileName)
+							? resolveMagicProject(item)
+							: undefined
+						const attachmentDisplayConfig =
+							magicProjectResolution?.displayConfig || display_config
+						const attachmentName =
+							magicProjectResolution?.projectName ||
+							getMetaDataName(display_config) ||
+							fileName
 						const projectInstructionsFileKind = resolveProjectInstructionsFileKind(item)
 						return (
 							<div
 								key={item.file_id}
 								className="w-full cursor-pointer"
 								onClick={(e) => {
-									if (isFolder && !display_config) {
+									if (isFolder && !attachmentDisplayConfig) {
 										return
 									}
 									e.stopPropagation()
@@ -129,7 +166,7 @@ export const Attachment = ({
 										"hover:bg-fill-secondary",
 									)}
 								>
-									{isFolder && !display_config ? (
+									{isFolder && !attachmentDisplayConfig ? (
 										<img
 											src={FolderIcon}
 											alt="folder"
@@ -141,7 +178,11 @@ export const Attachment = ({
 										<TopicFileIcon magicVariant="magic-file-agent" size={24} />
 									) : (
 										<MagicFileIcon
-											type={getAttachmentType(item) || item.file_extension}
+											type={
+												magicProjectResolution?.iconType ||
+												getAttachmentType(item) ||
+												item.file_extension
+											}
 											size={24}
 											className="shrink-0"
 										/>
@@ -153,10 +194,7 @@ export const Attachment = ({
 											"min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
 										)}
 									>
-										{getMetaDataName(display_config) ||
-											item.display_filename ||
-											item.file_name ||
-											item.filename}
+										{attachmentName}
 									</span>
 									<MagicIcon
 										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
@@ -168,7 +206,7 @@ export const Attachment = ({
 										stroke={2}
 										size={18}
 									/>
-									{isEmpty(item.display_config) && (
+									{isEmpty(attachmentDisplayConfig) && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 											onClick={(e: any) => {
@@ -201,4 +239,4 @@ export const Attachment = ({
 			)}
 		</div>
 	)
-}
+})

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { RefObject } from "react"
 import { useDebounce, useThrottle } from "ahooks"
-import { Check, ChevronDown, Loader2, Plus, RefreshCw } from "lucide-react"
+import { Check, ChevronDown, Loader2, Plus } from "lucide-react"
 import { reaction } from "mobx"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -62,7 +62,9 @@ function SkillsLibrary({
 	const throttledSearchQuery = useThrottle(debouncedSearchQuery, {
 		wait: SKILLS_SEARCH_THROTTLE_MS,
 	})
-	const gridClass = skillGridClassName ?? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+	const gridClass =
+		skillGridClassName ??
+		"grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
 	const hasActiveFilters =
 		Boolean(searchQuery.trim()) ||
 		Boolean(skillsStore.keyword) ||
@@ -75,7 +77,6 @@ function SkillsLibrary({
 
 		if (!lifecycle.initialized) {
 			lifecycle.initialized = true
-			void skillsStore.fetchFeaturedSkills()
 			void skillsStore.fetchCategories()
 		}
 
@@ -131,17 +132,15 @@ function SkillsLibrary({
 		[skillsStore, t],
 	)
 
-	const handleRefreshFeatured = useCallback(() => {
-		void skillsStore.fetchNextFeaturedSkills()
-	}, [skillsStore])
-
 	const handleRetrySkills = useCallback(() => {
 		void skillsStore.retrySkills().catch(() => undefined)
 	}, [skillsStore])
 
 	const handleCategoryChange = useCallback(
-		(categoryIds: string[]) => {
-			void skillsStore.setCategoryIds(categoryIds).catch(() => undefined)
+		(categoryIds: string[], isFeatured?: 0 | 1) => {
+			void skillsStore
+				.fetchSkills({ page: 1, category_ids: categoryIds, is_featured: isFeatured })
+				.catch(() => undefined)
 		},
 		[skillsStore],
 	)
@@ -216,7 +215,7 @@ function SkillsLibrary({
 	)
 
 	return (
-		<div className="flex min-w-0 flex-col gap-5 sm:gap-6" data-testid="skills-library">
+		<div className="flex min-w-0 flex-col pt-5 sm:pt-6" data-testid="skills-library">
 			<SkillDetailDialog
 				open={selectedSkill != null}
 				onOpenChange={(nextOpen) => {
@@ -228,10 +227,10 @@ function SkillsLibrary({
 				skillSummary={selectedSkill}
 				primaryAction={detailPrimaryAction}
 			/>
-			<header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+			<header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 				{hideMarketingHeadline ? null : (
 					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
-						<h1 className="break-words text-2xl font-semibold leading-tight tracking-[-0.035em] text-foreground sm:text-3xl">
+						<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight tracking-[-0.035em] text-transparent sm:text-3xl lg:text-4xl">
 							{t("skillsLibrary.title")}
 						</h1>
 						<p className="max-w-2xl break-words text-sm text-muted-foreground">
@@ -284,7 +283,7 @@ function SkillsLibrary({
 			</header>
 
 			<MarketStickyHeader
-				className="py-1.5 sm:py-2"
+				className="gap-5 pb-5 pt-5 sm:gap-6 sm:pb-6 sm:pt-6"
 				scrollViewportRef={scrollViewportRef}
 				data-testid="skills-library-sticky-header"
 			>
@@ -298,85 +297,17 @@ function SkillsLibrary({
 					enableSearchSubmit
 					data-testid="skills-library-search-bar"
 				/>
-			</MarketStickyHeader>
-
-			{skillsStore.featuredLoading ||
-			skillsStore.featuredError ||
-			skillsStore.featuredList.length > 0 ? (
-				<section className="flex min-w-0 flex-col" data-testid="featured-skills-section">
-					<div className="flex items-end justify-between border-b border-border">
-						<h2 className="border-b-2 border-foreground pb-3 text-xl font-semibold tracking-[-0.025em] text-foreground">
-							{t("skillsLibrary.featuredSkills")}
-						</h2>
-						<Button
-							variant="ghost"
-							size="sm"
-							className="mb-1 h-8 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
-							disabled={
-								skillsStore.featuredLoading || !skillsStore.canRefreshFeatured
-							}
-							onClick={handleRefreshFeatured}
-							data-testid="featured-skills-refresh"
-						>
-							<RefreshCw
-								className={cn(
-									"size-3.5",
-									skillsStore.featuredLoading && "animate-spin",
-								)}
-								aria-hidden
-							/>
-							{skillsStore.featuredError
-								? t("skillsLibrary.retryFeatured")
-								: t("skillsLibrary.refreshFeatured")}
-						</Button>
-					</div>
-
-					{skillsStore.featuredError ? (
-						<div
-							className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-							role="status"
-							data-testid="featured-skills-error"
-						>
-							{t("skillsLibrary.featuredLoadFailed")}
-						</div>
-					) : null}
-
-					{skillsStore.featuredLoading && skillsStore.featuredList.length === 0 ? (
-						<div
-							className="flex items-center justify-center py-10"
-							data-testid="featured-skills-loading"
-						>
-							<Loader2 className="size-5 animate-spin text-muted-foreground" />
-						</div>
-					) : skillsStore.featuredList.length > 0 ? (
-						<div
-							className={cn(gridClass, "mt-4")}
-							data-testid="featured-skill-card-grid"
-						>
-							{skillsStore.featuredList.map((skill) => (
-								<SkillCard
-									key={`featured-${skill.id}`}
-									skill={skill}
-									showFeaturedTag
-									isAdding={skillsStore.isAddingSkill(skill.id)}
-									onAdd={handleAdd}
-									onOpenDetail={() => handleOpenDetail(skill)}
-								/>
-							))}
-						</div>
-					) : null}
-				</section>
-			) : null}
-
-			<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
 				<SkillCategoryFilter
 					categories={skillsStore.categories}
 					selectedCategoryIds={skillsStore.categoryIds}
+					selectedIsFeatured={skillsStore.isFeatured}
 					loading={skillsStore.categoriesLoading}
 					error={skillsStore.categoriesError}
 					onChange={handleCategoryChange}
 				/>
+			</MarketStickyHeader>
 
+			<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
 				{skillsStore.listError ? (
 					<div
 						className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"

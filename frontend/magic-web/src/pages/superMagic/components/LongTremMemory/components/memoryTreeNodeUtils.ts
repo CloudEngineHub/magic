@@ -64,7 +64,9 @@ export function resolveMemoryTreeNodeTagKey(
 		projectDirectoryName.length > PROJECT_DIRECTORY_PREFIX.length
 	if (!isProjectPath) return
 	if (pathSegments.length === 3) {
-		return isCurrentProjectMemoryDirectory(pathSegments, projectId) ? "currentProject" : "project"
+		return isCurrentProjectMemoryDirectory(pathSegments, projectId)
+			? "currentProject"
+			: "project"
 	}
 	if (pathSegments.length !== 4) return
 	if (pathSegments[3] === MEMORY_FILE_NAME) return "projectMemory"
@@ -100,7 +102,9 @@ export function prioritizeCurrentProjectMemoryDirectory(
 			if (!item.children?.length) return item
 
 			const children = reorderChildren(item.children, currentPath)
-			const childrenChanged = children.some((child, index) => child !== item.children?.[index])
+			const childrenChanged = children.some(
+				(child, index) => child !== item.children?.[index],
+			)
 			if (isSamePath(currentPath, PROJECTS_PATH)) {
 				const currentIndex = children.findIndex((child) =>
 					isCurrentProjectMemoryDirectory(

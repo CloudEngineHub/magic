@@ -60,6 +60,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillMentionSource;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -1163,7 +1164,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $featuredOrderGroups = $this->resolveFeaturedOrderGroups($orderConfig);
         $frequentCodes = $featuredOrderGroups['frequent'];
         $allCodes = $featuredOrderGroups['all'];
-        $configuredCodes = $featuredOrderGroups['query'];
+        $queryAgentCodes = $configuredCodes = $featuredOrderGroups['query'];
 
         if ($configuredCodes !== []) {
             // featured 同时返回显示中和隐藏员工，显示状态由排序分组决定。
@@ -1175,7 +1176,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(),
                 $builtinAgents
             );
-            $queryAgentCodes = array_values(array_diff($configuredCodes, $builtinAgentCodes));
         } else {
             // 保留兜底逻辑，避免后续排序规则变更时首页数据直接为空。
             $queryAgentCodes = array_values(array_unique(array_diff(
@@ -2329,7 +2329,15 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             sandboxId: $sandboxId,
             skipInitMessage: true
         );
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized($contactDataIsolation, $agentContext);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            $contactDataIsolation,
+            $agentContext,
+            // Agent 发布属于工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($contactDataIsolation->getCurrentUserId(), $contactDataIsolation->getCurrentOrganizationCode())
+            )
+        );
 
         $this->topicDomainService->updateTopicStatusAndSandboxId(
             $topicEntity->getId(),

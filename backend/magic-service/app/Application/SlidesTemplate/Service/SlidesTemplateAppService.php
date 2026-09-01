@@ -13,12 +13,17 @@ use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateCodeAvailability;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSearchType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
+use App\Domain\SlidesTemplate\Event\SlidesTemplateCreatedEvent;
+use App\Domain\SlidesTemplate\Event\SlidesTemplateUpdatedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateFavoriteDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateVectorIndexDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -29,14 +34,22 @@ use App\Interfaces\SlidesTemplate\DTO\Request\PublishSlidesTemplateFromProjectRe
 use App\Interfaces\SlidesTemplate\DTO\Request\QueryFavoriteSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\QueryUsedSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveUserSlidesTemplateRequest;
+use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Hyperf\DbConnection\Db;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
 class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
 {
     private const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'];
+
+    private const FEATURED_TAG_CODE = 'featured';
+
+    private LoggerInterface $logger;
 
     public function __construct(
         SlidesTemplateDomainService $slidesTemplateDomainService,
@@ -45,8 +58,11 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         private readonly SlidesTemplateFavoriteDomainService $slidesTemplateFavoriteDomainService,
         private readonly ResourceAccessLogDomainService $resourceAccessLogDomainService,
         private readonly SlidesTemplateProjectExportService $slidesTemplateProjectExportService,
+        private readonly SlidesTemplateVectorIndexDomainService $slidesTemplateVectorIndexDomainService,
+        ?LoggerFactory $loggerFactory = null,
     ) {
         parent::__construct($slidesTemplateDomainService);
+        $this->logger = $loggerFactory?->get('slides-template-search') ?? new NullLogger();
     }
 
     /** @return array{page: Page, list: SlidesTemplateEntity[], favorite_codes: array<string, bool>} */
@@ -57,7 +73,13 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $query = $this->createPublicQuery($request);
         $page = $this->createListPage($request->getPage(), $request->getPageSize());
         $page->setTotal(false);
-        $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
+        $result = $this->queryByConfiguredSearch($dataIsolation, $query, $page);
+        $this->slidesTemplateTagDomainService->fillTemplateTags(
+            $dataIsolation,
+            $result['list'],
+            SlidesTemplateTagStatus::Enabled,
+            [self::FEATURED_TAG_CODE],
+        );
         $this->resolveListImageUrls($result['list']);
 
         return [
@@ -94,6 +116,10 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation->setContainOfficialOrganization(true);
         $this->assertOfficialCategory($dataIsolation, $request->getCategoryCode());
         $this->assertOfficialTags($dataIsolation, $request->getTagCodes());
+        $category = $request->getCategoryCode() === null
+            ? null
+            : $this->slidesTemplateCategoryDomainService->findByCodeOrFail($dataIsolation, $request->getCategoryCode());
+        $tags = $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $request->getTagCodes());
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         $this->assertPrivateFileExists($dataIsolation->getCurrentOrganizationCode(), $request->getTemplateFileKey());
         $this->assertPublicFilesExist($dataIsolation->getCurrentOrganizationCode(), [
@@ -102,6 +128,9 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
             ...$request->getPreviewImageFileKeys(),
         ]);
 
+        $existingTemplate = $request->getCode() === null
+            ? null
+            : $this->slidesTemplateDomainService->findGloballyByCode($request->getCode());
         $entity = new SlidesTemplateEntity();
         $entity->setCode($request->getCode() ?? '')
             ->setCategoryCode($request->getCategoryCode())
@@ -117,7 +146,23 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $entity,
             $request->hasStatus() ? SlidesTemplateStatus::from($request->getStatus()) : null,
             $request->hasTagCodes() ? $request->getTagCodes() : null,
+            $category,
+            $tags,
         );
+        // Publish the business event only after the database write succeeds.
+        if ($existingTemplate === null) {
+            AsyncEventUtil::dispatch(new SlidesTemplateCreatedEvent(
+                (string) $saved->getId(),
+                $saved->getOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            ));
+        } else {
+            AsyncEventUtil::dispatch(new SlidesTemplateUpdatedEvent(
+                (string) $saved->getId(),
+                $saved->getOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            ));
+        }
         $this->resolveAssetUrls([$saved], false);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$saved]);
         return $saved;
@@ -150,13 +195,37 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
             }
             $this->assertOfficialCategory($dataIsolation, $payload['category_code']);
             $this->assertOfficialTags($dataIsolation, $payload['tag_codes']);
+            $category = $payload['category_code'] === null
+                ? null
+                : $this->slidesTemplateCategoryDomainService->findByCodeOrFail($dataIsolation, $payload['category_code']);
+            $tags = $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $payload['tag_codes']);
             $this->assertTemplateFileIsArchive($payload['template_file_key']);
             $this->assertPrivateFileExists($dataIsolation->getCurrentOrganizationCode(), $payload['template_file_key']);
             $this->assertPublicFilesExist($dataIsolation->getCurrentOrganizationCode(), [$payload['thumbnail_file_key'], $payload['collage_file_key'], ...$payload['preview_image_file_keys']]);
 
             $entity = new SlidesTemplateEntity();
             $entity->setCode($payload['code'])->setCategoryCode($payload['category_code'])->setLabel($payload['label'])->setDescription($payload['description'])->setThumbnailFileKey($payload['thumbnail_file_key'])->setCollageFileKey($payload['collage_file_key'])->setPreviewImageFileKeys($payload['preview_image_file_keys'])->setTemplateFileKey($payload['template_file_key'])->setProjectId($payload['project_id'])->setProjectDirectoryId($payload['project_directory_id']);
-            $saved = $this->slidesTemplateDomainService->saveUserTemplate($dataIsolation, $entity, null, $payload['tag_codes']);
+            $saved = $this->slidesTemplateDomainService->saveUserTemplate(
+                $dataIsolation,
+                $entity,
+                null,
+                $payload['tag_codes'],
+                $category,
+                $tags,
+            );
+            if ($previousTemplate === null) {
+                AsyncEventUtil::dispatch(new SlidesTemplateCreatedEvent(
+                    (string) $saved->getId(),
+                    $saved->getOrganizationCode(),
+                    $dataIsolation->getCurrentUserId(),
+                ));
+            } else {
+                AsyncEventUtil::dispatch(new SlidesTemplateUpdatedEvent(
+                    (string) $saved->getId(),
+                    $saved->getOrganizationCode(),
+                    $dataIsolation->getCurrentUserId(),
+                ));
+            }
         } catch (Throwable $throwable) {
             $this->slidesTemplateProjectExportService->cleanupExportedFiles($dataIsolation, $payload, $exportId);
             throw $throwable;
@@ -266,6 +335,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $query = new SlidesTemplateQuery();
         $query->setScope($request->getScope());
         $query->setKeyword($request->getKeyword());
+        $query->setSearchType($request->getSearchType());
         $query->setCode($request->getCode());
         $query->setCategoryCode($request->getCategoryCode());
         $query->setTagCodes($request->getTagCodes());
@@ -281,6 +351,37 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $page = Page::createNoPage();
         $result = $this->slidesTemplateDomainService->queriesFavorites($dataIsolation, clone $query, $page);
         return $this->codes($result['list']);
+    }
+
+    /** Select vector or database search without introducing an AppService-to-AppService call. */
+    private function queryByConfiguredSearch(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateQuery $query,
+        Page $page,
+    ): array {
+        $keyword = $query->getKeyword();
+        if ($query->getSearchType() !== SlidesTemplateSearchType::Vector
+            || $keyword === null
+            || trim($keyword) === ''
+            || ! $this->slidesTemplateVectorIndexDomainService->isVectorSearchReady()) {
+            return $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
+        }
+
+        if (! $this->slidesTemplateVectorIndexDomainService->isAvailable()) {
+            $this->logger->info('Slides template vector search fallback', ['reason' => 'qdrant_unavailable']);
+            return $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
+        }
+
+        try {
+            return ['total' => 0, 'list' => $this->slidesTemplateVectorIndexDomainService->search($dataIsolation, $query, $page)];
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Slides template vector search fallback', [
+                'reason' => 'exception',
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+            return $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
+        }
     }
 
     private function codes(array $templates): array

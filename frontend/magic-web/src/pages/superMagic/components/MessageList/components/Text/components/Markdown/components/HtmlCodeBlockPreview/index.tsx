@@ -34,6 +34,8 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 		previewCode,
 		fullCode,
 		streamingScrollStateRef,
+		isCodeWrapped,
+		onToggleCodeWrap,
 		...restPreProps
 	} = props
 	const { t } = useTranslation("super")
@@ -128,6 +130,8 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 	const phoneModeLabel = t("fileViewer.phoneMode")
 	const fullscreenLabel = t("fileViewer.fullscreen", "全屏")
 	const htmlSnippetLabel = tInterface("chat.markdown.htmlSnippet", "HTML 片段")
+	const wrapLabel = tInterface("chat.markdown.wrapCode", "换行")
+	const unwrapLabel = tInterface("chat.markdown.unwrapCode", "取消换行")
 	const shouldRenderCopyButton = !isStreaming && hasResolvedCode
 	// 全屏按钮
 	const shouldRenderFullscreenButton = !isStreaming && hasResolvedCode && hasVisiblePreviewContent
@@ -246,6 +250,9 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 						phoneModeLabel={phoneModeLabel}
 						copyLabel={copyLabel}
 						copySuccessLabel={copySuccessLabel}
+						wrapLabel={wrapLabel}
+						unwrapLabel={unwrapLabel}
+						isCodeWrapped={isCodeWrapped}
 						fullscreenLabel={fullscreenLabel}
 						viewMode={viewMode}
 						isExpanded={effectiveIsExpanded}
@@ -256,6 +263,7 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 						// 移动端消息预览只保留手机视图入口，不再展示 PC 预览按钮。
 						shouldRenderDesktopModeButton={!isStreaming && !isMobile}
 						onCopy={handleCopy}
+						onToggleCodeWrap={onToggleCodeWrap}
 						onOpenFullscreen={handleOpenInFilesViewer}
 						onToggleExpanded={handleToggleExpanded}
 						onViewModeChange={handleViewModeChange}
@@ -283,6 +291,7 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 								codeClassName={codeBlockInfo.className}
 								codeDisplayContent={committedCodeDisplayContent}
 								scrollAreaRef={setScrollAreaElement}
+								isCodeWrapped={isCodeWrapped}
 							/>
 						)}
 						{effectiveIsExpanded &&

@@ -9,6 +9,11 @@ import { buildFilePathAttachments } from "../components/MessageList/utils/attach
 import type { FilePathAttachment } from "../components/MessageList/utils/attachmentByFilePath"
 import type { AttachmentItem } from "../components/TopicFilesButton/hooks/types"
 import { isSlidesTemplateFolder } from "../components/TopicFilesButton/utils/slides-template-folder"
+import {
+	isMagicProjectConfigFile,
+	resolveMagicProjectAttachment,
+	type MagicProjectAttachmentFile,
+} from "../components/MessageList/components/MessageAttachment/utils"
 
 interface AutoOpenFileCommonParams {
 	/** 最后一条消息节点（助手侧） */
@@ -21,6 +26,9 @@ interface AutoOpenFileCommonParams {
 	activeFileId?: string | null
 	/** 读取最新活跃文件，避免闭包滞后于缓存恢复的 Update_Active_File_Id */
 	getActiveFileId?: () => string | null | undefined
+	/** 当前项目工作区文件树，用于将 magic.project.js 解析为项目目录 */
+	workspaceFileTree?: MagicProjectAttachmentFile[]
+	workspaceFilesList?: MagicProjectAttachmentFile[]
 }
 
 export interface CheckAndOpenFileByMessagesParams extends AutoOpenFileCommonParams {
@@ -31,6 +39,8 @@ export interface CheckAndOpenFileByMessagesParams extends AutoOpenFileCommonPara
 export interface CheckAndOpenFileByTopicChangedParams {
 	activeFileId?: string | null
 	getActiveFileId?: () => string | null | undefined
+	workspaceFileTree?: MagicProjectAttachmentFile[]
+	workspaceFilesList?: MagicProjectAttachmentFile[]
 }
 
 type AutoOpenAttachmentCandidate = {
@@ -63,7 +73,8 @@ function getPrevMessageFilePathAttachments(
 
 	const prevMessage = topicMessages[detailIndex - 1]
 	const prevNode = superMagicStore.getMessageNode(prevMessage.super_message_id) as
-		Record<string, unknown> | undefined
+		| Record<string, unknown>
+		| undefined
 	const prevContent = prevNode && typeof prevNode?.content === "string" ? prevNode.content : ""
 
 	return buildFilePathAttachments(prevContent)
@@ -145,6 +156,8 @@ export function useAutoOpenFile() {
 				hasStatusChanged,
 				activeFileId,
 				getActiveFileId,
+				workspaceFileTree = [],
+				workspaceFilesList = [],
 				requireNewMessage = true,
 			} = params
 
@@ -196,7 +209,22 @@ export function useAutoOpenFile() {
 			// Prefer template root / template.json, then the first openable attachment.
 			const attachments = lastDetailMessageNode?.attachments || []
 			const firstFileAttachment = pickPreferredAutoOpenAttachment(attachments)
-			const firstFileId = firstFileAttachment?.file_id
+			if (!firstFileAttachment) return
+
+			const firstFileName =
+				firstFileAttachment.display_filename ||
+				firstFileAttachment.file_name ||
+				firstFileAttachment.filename
+			const magicProjectResolution = isMagicProjectConfigFile(firstFileName)
+				? resolveMagicProjectAttachment(
+						firstFileAttachment,
+						workspaceFilesList,
+						workspaceFileTree,
+					)
+				: undefined
+			const firstFileToOpen = magicProjectResolution?.projectDirectory || firstFileAttachment
+
+			const firstFileId = firstFileToOpen?.file_id
 
 			if (!firstFileId) return
 
@@ -211,7 +239,7 @@ export function useAutoOpenFile() {
 				if (id != null) return
 				pubsub.publish(PubSubEvents.Open_File_Tab, {
 					fileId: firstFileId,
-					fileData: firstFileAttachment,
+					fileData: firstFileToOpen,
 				})
 			}, 100)
 
@@ -228,7 +256,7 @@ export function useAutoOpenFile() {
 
 	const checkAndOpenFileByTopicChanged = useMemoizedFn(
 		(params: CheckAndOpenFileByTopicChangedParams) => {
-			const { activeFileId, getActiveFileId } = params
+			const { activeFileId, getActiveFileId, workspaceFileTree, workspaceFilesList } = params
 
 			const topicMessages =
 				superMagicStore.messages?.get(selectedTopic?.chat_topic_id || "") || []
@@ -260,6 +288,8 @@ export function useAutoOpenFile() {
 				requireNewMessage: false,
 				activeFileId,
 				getActiveFileId,
+				workspaceFileTree,
+				workspaceFilesList,
 			})
 		},
 	)

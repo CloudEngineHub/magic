@@ -7,6 +7,7 @@ import {
 import type { FileItem } from "../types"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { normalizeAttachmentPath } from "../hooks/previewPolicy"
+import { shouldPreserveLegacyToolContentDetail } from "./legacyToolDetailCompatibility"
 
 /** 易被误标为文本、进而拉取/序列化大资源导致卡顿的 detail 类型 */
 const TEXT_LIKE_DETAIL_TYPES: string[] = [DetailType.Text, DetailType.Md, DetailType.Code]
@@ -56,6 +57,8 @@ function resolveHistoricalFileDetail(
 	if (detail.type === DetailType.Browser) return detail
 	// 工具消息正文和临时截图不属于项目附件树。
 	if (isNonWorkspaceFile(detail.data)) return detail
+	// 仅保留旧版工具内容详情；这是历史协议兼容，不参与正常文件判断。
+	if (shouldPreserveLegacyToolContentDetail(detail)) return detail
 
 	const fileName = resolveDetailFileName(detail.data)
 	if (!fileName) return detail

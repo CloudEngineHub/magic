@@ -315,51 +315,66 @@ class AgentDispatcher(Base):
         # ========== 资源初始化阶段 - 仅首次执行 ==========
         if self.is_workspace_initialized:
             logger.info("工作区已经初始化过，跳过资源创建和工作区初始化")
+        else:
+            logger.info("首次初始化工作区，开始创建资源...")
+
+            # HTTP订阅流 - 通过环境变量控制是否启用
+            enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
+            configs = init_message.message_subscription_config or []
+            if configs and not self.http_streams:
+                if enable_http_stream:
+                    for subscription_config in configs:
+                        stream = HTTPSubscriptionStream(subscription_config)
+                        self.http_streams.append(stream)
+                        self.agent_context.add_stream(stream)
+                    logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
+                else:
+                    logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
+
+            # 设置聊天历史目录
+            # if init_message.chat_history_dir:
+            #     self.agent_context.set_chat_history_dir(init_message.chat_history_dir)
+            #     logger.info(f"从 init_message 设置聊天历史目录: {init_message.chat_history_dir}")
+
+            fetch_history = getattr(init_message, "fetch_history", True)
+            if fetch_history:
+                await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=True)
+            else:
+                logger.info("客户端请求跳过远端聊天历史下载")
+                await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=False)
+
+            # 改为按需加载agent，不再预先创建
+            self.is_workspace_initialized = True
+
+            # 标记 init 事件已发送（非预启动场景）
+            # 只有在 skip_init_messages 不为 True 时才标记已发送
+            # 因为如果 skip_init_messages=True，init 事件实际上没有发送
+            metadata = self.agent_context.get_init_client_message_metadata()
+            if metadata and metadata.skip_init_messages is True:
+                logger.info("工作区初始化完成（预启动场景，init 事件未发送）")
+            else:
+                # 非预启动场景，init_workspace 方法已发送 init 事件
+                if not self.init_event_dispatched:
+                    self.set_init_event_dispatched(True)
+                    logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
+                else:
+                    logger.info("工作区初始化完成")
+
+        await self.on_runtime_ready()
+
+    async def on_runtime_ready(self) -> None:
+        """
+        系统完成工作区、ChatHistory 和 Horizon 恢复后，触发 runtime-ready 事项。
+
+        MOCK DEMO：此时系统已经具备接收消息的条件，但没有伪造真实用户消息；
+        如果 Horizon 存在 pending resumption，只提交一条内部 `/resume`。
+        """
+        if not self.is_workspace_initialized:
             return
-
-        logger.info("首次初始化工作区，开始创建资源...")
-
-        # HTTP订阅流 - 通过环境变量控制是否启用
-        enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
-        configs = init_message.message_subscription_config or []
-        if configs and not self.http_streams:
-            if enable_http_stream:
-                for subscription_config in configs:
-                    stream = HTTPSubscriptionStream(subscription_config)
-                    self.http_streams.append(stream)
-                    self.agent_context.add_stream(stream)
-                logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
-            else:
-                logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
-
-        # 设置聊天历史目录
-        # if init_message.chat_history_dir:
-        #     self.agent_context.set_chat_history_dir(init_message.chat_history_dir)
-        #     logger.info(f"从 init_message 设置聊天历史目录: {init_message.chat_history_dir}")
-
-        fetch_history = getattr(init_message, "fetch_history", True)
-        if fetch_history:
-            await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=True)
-        else:
-            logger.info("客户端请求跳过远端聊天历史下载")
-            await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=False)
-
-        # 改为按需加载agent，不再预先创建
-        self.is_workspace_initialized = True
-
-        # 标记 init 事件已发送（非预启动场景）
-        # 只有在 skip_init_messages 不为 True 时才标记已发送
-        # 因为如果 skip_init_messages=True，init 事件实际上没有发送
-        metadata = self.agent_context.get_init_client_message_metadata()
-        if metadata and metadata.skip_init_messages is True:
-            logger.info("工作区初始化完成（预启动场景，init 事件未发送）")
-        else:
-            # 非预启动场景，init_workspace 方法已发送 init 事件
-            if not self.init_event_dispatched:
-                self.set_init_event_dispatched(True)
-                logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
-            else:
-                logger.info("工作区初始化完成")
+        # TODO：runtime-ready 处理项增多后，改为可注册的生命周期监听机制，
+        # 避免不同业务继续直接堆叠在本方法中；当前只承载 resumption，不提前引入抽象。
+        from app.service.agent_resumption_service import AgentResumptionService
+        await AgentResumptionService.resume_pending(self)
 
     @staticmethod
     def _agent_mode_value(agent_mode: Union[AgentMode, str]) -> str:
@@ -500,7 +515,7 @@ class AgentDispatcher(Base):
                 logger.debug(f"从上次 dispatch 快照恢复 agent 配置失败: {e}")
 
     async def _save_last_dispatch_message(self, message: ChatClientMessage) -> None:
-        """保存本次 dispatch 的完整消息快照到文件（.chat_history/last_dispatch_message.json）。"""
+        """保存本次 dispatch 的完整消息快照到本地 .chat_history。"""
         from app.utils.async_file_utils import async_write_json
         new_data = self._remove_model_selection_fields(message.model_dump(mode="json"))
         # 合并策略：以上次快照为基础，新值非 None 才覆盖，防止空值抹掉已存的有效配置
@@ -553,7 +568,13 @@ class AgentDispatcher(Base):
 
         return cleaned
 
-    async def submit_message(self, message: ChatClientMessage) -> None:
+    async def submit_message(
+        self,
+        message: ChatClientMessage,
+        *,
+        resumption_id: Optional[str] = None,
+        resumption_run_id: Optional[str] = None,
+    ) -> None:
         """
         Standard entry point for channel adapters to submit an inbound message.
 
@@ -569,6 +590,7 @@ class AgentDispatcher(Base):
         """
         await self.agent_context.stop_run(reason="new message")
         self.agent_context.reset_run_state()
+        self.agent_context.set_resumption_context(resumption_id, resumption_run_id)
 
         task = asyncio.create_task(self._run_dispatch_task(message))
 

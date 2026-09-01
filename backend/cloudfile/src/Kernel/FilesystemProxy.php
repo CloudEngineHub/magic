@@ -165,7 +165,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('list_objects');
+        $credentialPolicy->addStsType('list_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->listObjectsByCredential($credential, $prefix, $options);
     }
@@ -181,7 +181,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('del_objects');
+        $credentialPolicy->addStsType('del_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         $object = $this->getSimpleUploadInstance($this->adapterName);
         $object->deleteObjectByCredential($credential, $objectKey, $options);
@@ -465,7 +465,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('del_objects');
+        $credentialPolicy->addStsType('del_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->deleteObjectsByCredential($credential, $objectKeys, $options);
     }
@@ -482,7 +482,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('set_object_meta');
+        $credentialPolicy->addStsType('set_object_meta');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         $this->getSimpleUploadInstance($this->adapterName)->setHeadObjectByCredential($credential, $objectKey, $metadata, $options);
     }

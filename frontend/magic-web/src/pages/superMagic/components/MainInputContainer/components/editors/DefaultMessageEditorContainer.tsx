@@ -17,11 +17,7 @@ import {
 	preparePanelSend,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { roleStore } from "@/pages/superMagic/stores"
-import {
-	projectStore,
-	topicStore,
-	workspaceStore,
-} from "@/pages/superMagic/stores/core"
+import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import useSharedProjectMode from "@/pages/superMagic/hooks/useSharedProjectMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm"
@@ -227,7 +223,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					? extra
 					: undefined,
 		}
-
 		if (queueContext?.editingQueueItem) {
 			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
 				queueContext.finishEditQueueItem(nextValue, params.mentionItems)
@@ -253,9 +248,10 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		const customParamsPatch = editorContext?.mergeSendParams?.({
 			defaultParams,
 		})
-		const finalParams = customParamsPatch
+		const mergedParams = customParamsPatch
 			? { ...defaultParams, ...customParamsPatch }
 			: defaultParams
+		const finalParams: HandleSendParams = mergedParams
 
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
@@ -273,6 +269,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)
 				return false
 			}
+			sceneStateStore?.incrementSendCount()
 			setFocused(false)
 			return true
 		}

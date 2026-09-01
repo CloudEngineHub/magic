@@ -19,6 +19,13 @@
 	"editAndAccept": "Edit and Adopt",
 	"editMemory": "Edit memory",
 	"enabledSuccess": "Memory enabled",
+	"featureSwitch": {
+		"description": "When off, automatic reading and organization of general long-term memory stops. Existing memory remains available for manual editing.",
+		"disableSuccess": "Long-term memory turned off",
+		"enableSuccess": "Long-term memory turned on",
+		"saveFailed": "Failed to save the long-term memory setting. Please try again.",
+		"title": "Use long-term memory automatically"
+	},
 	"fileTree": {
 		"createFile": "New file",
 		"createFolder": "New folder",
@@ -36,23 +43,16 @@
 		"searchEmpty": "No matching memory files",
 		"searchPlaceholder": "Search memory files",
 		"tags": {
+			"currentProject": "Current Project Records",
 			"global": "Global",
 			"globalMemory": "Global Memory",
 			"globalNotes": "Global Notes",
 			"memoryRoot": "Memory Space",
 			"project": "Project Directory",
-			"currentProject": "Current Project Records",
 			"projectMemory": "Project Memory",
 			"projectNotes": "Project Notes",
 			"projects": "Projects"
 		}
-	},
-	"featureSwitch": {
-		"description": "When off, automatic reading and organization of general long-term memory stops. Existing memory remains available for manual editing.",
-		"disableSuccess": "Long-term memory turned off",
-		"enableSuccess": "Long-term memory turned on",
-		"saveFailed": "Failed to save the long-term memory setting. Please try again.",
-		"title": "Use long-term memory automatically"
 	},
 	"globalEditor": {
 		"conflict": {

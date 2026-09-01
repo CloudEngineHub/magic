@@ -335,4 +335,53 @@ class DesignVideoCreateDTOTest extends TestCase
 
         $dto->validForEstimate();
     }
+
+    public function testCanvasCompositionAcceptsWorkspaceFileListsWithoutTopicId(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'composition-1',
+            'generation_type' => 'canvas_composition',
+            'file_dir' => '/canvas/videos/',
+            'generation' => [
+                'aspect_ratio' => '9:16',
+                'resolution' => '480p',
+            ],
+            'composition' => [
+                'videos' => [
+                    ['path' => '/canvas/videos/a.mp4'],
+                    ['path' => '/canvas/videos/b.mp4'],
+                ],
+                'audios' => [
+                    ['path' => '/canvas/audios/b.mp3'],
+                ],
+            ],
+        ]);
+
+        $dto->validForCanvasComposition();
+
+        $this->assertCount(2, $dto->getComposition()['videos']);
+        $this->assertSame('/canvas/audios/b.mp3', $dto->getComposition()['audios'][0]['path']);
+    }
+
+    public function testCanvasCompositionRejectsMultipleAudioFiles(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'composition-2',
+            'generation_type' => 'canvas_composition',
+            'file_dir' => '/canvas/videos/',
+            'composition' => [
+                'videos' => [['path' => '/canvas/videos/a.mp4']],
+                'audios' => [
+                    ['path' => '/canvas/audios/a.mp3'],
+                    ['path' => '/canvas/audios/b.mp3'],
+                ],
+            ],
+        ]);
+
+        $this->expectException(Throwable::class);
+
+        $dto->validForCanvasComposition();
+    }
 }

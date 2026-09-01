@@ -52,3 +52,29 @@ async def test_restore_from_latest_chat_history_skips_llm_request(tmp_path: Path
 
     assert (chat_history_dir / "history.json").exists()
     assert not (chat_history_dir / "llm_request").exists()
+
+
+@pytest.mark.asyncio
+async def test_create_snapshot_full_refresh_replaces_previous_snapshot(tmp_path: Path):
+    """同源二次快照应整目录刷新，不残留上一次快照的旧文件。"""
+    chat_history_dir = tmp_path / ".chat_history"
+    chat_history_dir.mkdir()
+    (chat_history_dir / "history.json").write_text("v1", encoding="utf-8")
+    (chat_history_dir / "stale.json").write_text("old", encoding="utf-8")
+
+    snapshot_dir = tmp_path / "checkpoint" / "latest_chat_history_snapshots"
+    manager = ChatHistorySnapshotManager()
+
+    assert await manager.create_latest_chat_history_snapshot(
+        snapshot_dir, agent_name="a", agent_id="1", chat_history_dir=chat_history_dir,
+    ) is True
+
+    (chat_history_dir / "stale.json").unlink()
+    (chat_history_dir / "history.json").write_text("v2", encoding="utf-8")
+
+    assert await manager.create_latest_chat_history_snapshot(
+        snapshot_dir, agent_name="a", agent_id="1", chat_history_dir=chat_history_dir,
+    ) is True
+
+    assert (snapshot_dir / "history.json").read_text(encoding="utf-8") == "v2"
+    assert not (snapshot_dir / "stale.json").exists()

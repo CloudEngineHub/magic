@@ -26,5 +26,12 @@ export function createReferenceResourcePanelItemFromPath(
 export function createReferenceResourcePanelItemFromDropFile(
 	file: ReferenceDropProjectFile,
 ): ReferenceResourcePanelItem {
-	return createReferenceResourcePanelItemFromPath(file.path, file.fileName)
+	const item = createReferenceResourcePanelItemFromPath(file.path, file.fileName)
+	return {
+		...item,
+		data: {
+			...item.data,
+			file_id: file.fileId || file.path,
+		},
+	}
 }

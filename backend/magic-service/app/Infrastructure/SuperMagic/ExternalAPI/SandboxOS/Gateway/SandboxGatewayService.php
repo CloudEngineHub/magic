@@ -55,6 +55,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         string $workDir,
         string $projectSpaceRootFileId = '',
         string $userSpaceRootFileId = '',
+        string $topicSpaceRootFileId = '',
         array $labels = []
     ): GatewayResult {
         // In local debugging mode, return mock success result
@@ -65,6 +66,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                 'work_dir' => $workDir,
                 'project_space_root_file_id' => $projectSpaceRootFileId,
                 'user_space_root_file_id' => $userSpaceRootFileId,
+                'topic_space_root_file_id' => $topicSpaceRootFileId,
                 'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
             ]);
             return GatewayResult::success([
@@ -78,6 +80,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
             'project_oss_path' => $workDir,
             'project_space_root_file_id' => $projectSpaceRootFileId,
             'user_space_root_file_id' => $userSpaceRootFileId,
+            'topic_space_root_file_id' => $topicSpaceRootFileId,
             'authorization' => $dataIsolation->getUserAuthorizationToken() ?? '',
         ];
         if (! empty($labels)) {
@@ -965,6 +968,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         string $projectId,
         string $projectSpaceRootFileID,
         string $userSpaceRootFileID,
+        string $topicSpaceRootFileID = '',
         array $labels = []
     ): GatewayResult {
         if (! $this->isEnabledSandbox()) {
@@ -987,6 +991,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
             'project_id' => $projectId,
             'project_space_root_file_id' => $projectSpaceRootFileID,
             'user_space_root_file_id' => $userSpaceRootFileID,
+            'topic_space_root_file_id' => $topicSpaceRootFileID,
             'authorization' => $authorization,
         ];
         if (! empty($labels)) {

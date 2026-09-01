@@ -203,6 +203,31 @@ class SkillMarketDomainService
         return $this->skillMarketRepository->findByIds($ids);
     }
 
+    /** @param array<int, int|string> $ids @return array<int, SkillMarketEntity> */
+    public function findVisibleByIds(array $ids): array
+    {
+        return $this->skillMarketRepository->findVisibleByIds($ids);
+    }
+
+    /**
+     * @param array<int, int|string> $categoryIds
+     * @param array<int, string> $codes
+     * @return array<int, int>
+     */
+    public function findVectorIndexIds(
+        array $categoryIds = [],
+        array $codes = [],
+        ?string $publisherType = null,
+        string $afterId = '0',
+        int $limit = 100,
+    ): array {
+        if ($categoryIds !== []) {
+            $categoryIds = $this->skillCategoryRepository->findSelfAndDescendantIds($categoryIds);
+        }
+
+        return $this->skillMarketRepository->findVectorIndexIds($categoryIds, $codes, $publisherType, $afterId, $limit);
+    }
+
     /**
      * 增加商店技能的安装次数.
      *

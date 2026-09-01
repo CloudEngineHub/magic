@@ -33,6 +33,24 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         return new TaskMessageEntity($record->toArray());
     }
 
+    /**
+     * @param int[] $ids
+     * @return TaskMessageEntity[]
+     */
+    public function getByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        if ($ids === []) {
+            return [];
+        }
+
+        return $this->model::query()
+            ->whereIn('id', $ids)
+            ->get()
+            ->map(static fn ($record): TaskMessageEntity => new TaskMessageEntity($record->toArray()))
+            ->all();
+    }
+
     public function save(TaskMessageEntity $message): void
     {
         $this->model::query()->create($message->toArray());

@@ -1,7 +1,7 @@
 """AgentHorizon 的 JSON 持久化。
 
 文件命名规则与 ChatHistory 一致：
-  .chat_history/{agent_name}<{agent_id}>.horizon.json
+  .topic/chat_history/{agent_name}<{agent_id}>.horizon.json
 
 正常保存和 fork 写入共用同一套 codec：
 
@@ -15,7 +15,6 @@ Skill、通知、模型配置、workspace 快照和 context usage baseline。这
 from __future__ import annotations
 
 import asyncio
-import copy
 from dataclasses import fields
 from pathlib import Path
 from typing import Optional
@@ -29,14 +28,15 @@ from app.core.horizon.models import (
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
+    PendingResumption,
+    ResumptionStatus,
+    ResumptionTrigger,
     SuperMagicProductContextState,
     VideoModelState,
 )
 from app.utils.async_file_utils import (
     async_exists,
     async_read_json,
-    async_rename,
-    async_unlink,
     async_write_json,
 )
 
@@ -82,6 +82,44 @@ def _notif_from_dict(d: dict) -> PendingNotification:
         pushed_at=d["pushed_at"],
         source=d["source"],
         content=d["content"],
+    )
+
+
+def _resumption_to_dict(resumption: PendingResumption) -> dict[str, str]:
+    # 持久化字段必须与 PendingResumption 保持一一对应；状态命名变更不能只改内存模型。
+    return {
+        "id": resumption.id,
+        "source": resumption.source,
+        "content": resumption.content,
+        "created_at": resumption.created_at,
+        "trigger": resumption.trigger.value,
+        "status": resumption.status.value,
+        "assigned_at": resumption.assigned_at,
+        "assigned_to_run_id": resumption.assigned_to_run_id,
+        "last_error": resumption.last_error,
+    }
+
+
+def _resumption_from_dict(data: dict) -> PendingResumption:
+    # 从 JSON 恢复时保留 assigned 的时间和 run 归属，供重启后的过期分配清理使用。
+    try:
+        trigger = ResumptionTrigger(str(data.get("trigger") or ResumptionTrigger.RUNTIME_READY))
+    except ValueError:
+        trigger = ResumptionTrigger.RUNTIME_READY
+    try:
+        status = ResumptionStatus(str(data.get("status") or ResumptionStatus.PENDING))
+    except ValueError:
+        status = ResumptionStatus.PENDING
+    return PendingResumption(
+        id=str(data.get("id") or ""),
+        source=str(data.get("source") or ""),
+        content=str(data.get("content") or ""),
+        created_at=str(data.get("created_at") or ""),
+        trigger=trigger,
+        status=status,
+        assigned_at=str(data.get("assigned_at") or ""),
+        assigned_to_run_id=str(data.get("assigned_to_run_id") or ""),
+        last_error=str(data.get("last_error") or ""),
     )
 
 
@@ -168,6 +206,7 @@ def _encode_state(state: HorizonState) -> dict:
         "agent_id": state.agent_id,
         "loaded_skills": state.loaded_skills,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
+        "pending_resumptions": [_resumption_to_dict(r) for r in state.pending_resumptions],
         "browser_pages": {
             page_id: _browser_page_to_dict(page)
             for page_id, page in state.browser_pages.items()
@@ -210,6 +249,7 @@ def _decode_state(data: dict) -> HorizonState:
         "agent_id",
         "file_records",
         "pending_notifications",
+        "pending_resumptions",
         "browser_pages",
         "loaded_skills",
         "image_model",
@@ -237,6 +277,11 @@ def _decode_state(data: dict) -> HorizonState:
     state.pending_notifications = [
         _notif_from_dict(notification)
         for notification in data.get("pending_notifications", [])
+    ]
+    state.pending_resumptions = [
+        _resumption_from_dict(resumption)
+        for resumption in data.get("pending_resumptions", [])
+        if isinstance(resumption, dict)
     ]
     state.browser_pages = {
         page_id: _browser_page_from_dict(page)
@@ -280,7 +325,7 @@ def _decode_state(data: dict) -> HorizonState:
 
 
 class HorizonStore:
-    """原子写入的 JSON 持久化，与 ChatHistory 同目录。
+    """Horizon JSON 持久化，与 ChatHistory 同目录。
 
     Horizon 与 ChatHistory 是同一个 Agent 会话的两个持久化组件，不能单独把某一份当成
     完整上下文。`AgentContextSnapshotService` 会同时准备并提交它们；本类只负责 Horizon
@@ -291,6 +336,7 @@ class HorizonStore:
         self.agent_name = agent_name
         self.agent_id = agent_id
         self._path = self.path_for_session(agent_name, agent_id, Path(chat_history_dir))
+        self._save_lock = asyncio.Lock()
 
     @staticmethod
     def path_for_session(agent_name: str, agent_id: str, chat_history_dir: Path) -> Path:
@@ -310,18 +356,11 @@ class HorizonStore:
             return None
 
     async def save(self, state: HorizonState) -> None:
-        tmp = self._path.with_suffix(".tmp")
         try:
-            await self._write_path(tmp, state)
-            await async_rename(tmp, self._path)
+            async with self._save_lock:
+                await self._write_path(self._path, state)
         except Exception as e:
             logger.warning(f"[HorizonStore] 保存失败: {e}")
-            try:
-                await async_unlink(tmp)
-            except asyncio.CancelledError:
-                raise
-            except Exception as cleanup_error:
-                logger.warning(f"[HorizonStore] 清理临时文件失败: {cleanup_error}")
 
     @classmethod
     async def load_for_session(
@@ -345,15 +384,13 @@ class HorizonStore:
         target_agent_id: str,
         horizon_path: Path,
     ) -> None:
-        """把 Horizon baseline 改为目标身份后写入指定临时路径。
+        """按 Horizon 自己的 fork 语义生成目标状态并写入指定临时路径。
 
-        fork 后状态内容仍然来自来源，但文件里的 `agent_id` 必须改成目标 ID：否则子
-        Agent 启动时会看到“文件名是 research-2，状态内部却属于 research-1”的身份冲突。
-        深拷贝保证这个改名不会反向修改来源 Agent 的内存状态。
+        哪些状态可以继承、哪些外部动作必须清理由 `HorizonState.copy_for_fork()` 统一
+        决定；Store 只负责把已经准备好的目标状态写入文件。
         """
         normalized_horizon_path = Path(horizon_path).expanduser().resolve(strict=False)
-        target_state = copy.deepcopy(state)
-        target_state.agent_id = target_agent_id
+        target_state = state.copy_for_fork(target_agent_id)
         await cls._write_path(normalized_horizon_path, target_state)
 
     @staticmethod

@@ -171,7 +171,7 @@ class SkillApi extends AbstractApi
     /**
      * 查询我创建的技能列表.
      *
-     * @deprecated 使用 POST /api/v1/skills/queries 并传入 scope=created。
+     * @deprecated 使用 POST /api/v1/skills/queries 并传入 scope=created
      */
     public function queriesCreated(RequestContext $requestContext, SkillQueryFormRequest $request)
     {
@@ -196,7 +196,7 @@ class SkillApi extends AbstractApi
     /**
      * 查询团队共享的技能列表.
      *
-     * @deprecated 使用 POST /api/v1/skills/queries 并传入 scope=team_shared。
+     * @deprecated 使用 POST /api/v1/skills/queries 并传入 scope=team_shared
      */
     public function queriesTeamShared(RequestContext $requestContext, SkillQueryFormRequest $request)
     {
@@ -222,7 +222,7 @@ class SkillApi extends AbstractApi
     /**
      * 查询从市场安装的技能列表.
      *
-     * @deprecated 使用 POST /api/v1/skills/queries 并传入 scope=market_installed。
+     * @deprecated 使用 POST /api/v1/skills/queries 并传入 scope=market_installed
      */
     public function queriesMarketInstalled(RequestContext $requestContext, SkillQueryFormRequest $request)
     {
@@ -233,26 +233,6 @@ class SkillApi extends AbstractApi
         $page = $this->createPage();
 
         return $this->createMarketInstalledListResponse($requestContext, $query, $page);
-    }
-
-    private function createMarketInstalledListResponse(
-        RequestContext $requestContext,
-        SkillQuery $query,
-        Page $page
-    ): SkillListResponseDTO {
-        $result = $this->userSkillAppService->queriesMarketInstalled($requestContext, $query, $page);
-
-        return SkillAssembler::createListResponseDTOFromVersions(
-            skillVersionEntities: $result['list'],
-            page: $page->getPage(),
-            pageSize: $page->getPageNum(),
-            total: $result['total'],
-            sourceType: SkillSourceType::MARKET->value,
-            creatorUserMap: $result['creator_user_map'] ?? [],
-            latestVersionMap: $result['latest_version_map'] ?? [],
-            marketEntityMap: $result['market_entity_map'] ?? [],
-            publisherUserMap: $result['publisher_user_map'] ?? []
-        );
     }
 
     /**
@@ -427,6 +407,26 @@ class SkillApi extends AbstractApi
             $result['page'],
             $result['page_size'],
             $result['total'],
+        );
+    }
+
+    private function createMarketInstalledListResponse(
+        RequestContext $requestContext,
+        SkillQuery $query,
+        Page $page
+    ): SkillListResponseDTO {
+        $result = $this->userSkillAppService->queriesMarketInstalled($requestContext, $query, $page);
+
+        return SkillAssembler::createListResponseDTOFromVersions(
+            skillVersionEntities: $result['list'],
+            page: $page->getPage(),
+            pageSize: $page->getPageNum(),
+            total: $result['total'],
+            sourceType: SkillSourceType::MARKET->value,
+            creatorUserMap: $result['creator_user_map'] ?? [],
+            latestVersionMap: $result['latest_version_map'] ?? [],
+            marketEntityMap: $result['market_entity_map'] ?? [],
+            publisherUserMap: $result['publisher_user_map'] ?? []
         );
     }
 

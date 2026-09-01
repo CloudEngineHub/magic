@@ -173,7 +173,7 @@ function MentionNodeViewFallback({
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention inline-flex px-0.5 align-middle"
+			className={`magic-mention inline-flex px-0.5 align-middle${attrs?.pending ? " opacity-50" : ""}`}
 			contentEditable={false}
 		>
 			{displayName}
@@ -202,7 +202,7 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention inline-flex px-0.5 align-middle"
+			className={`magic-mention inline-flex px-0.5 align-middle${attrs.pending ? " opacity-50" : ""}`}
 			data-mention-suggestion-char={attrs.mentionSuggestionChar || "@"}
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}

@@ -1,10 +1,10 @@
-import type { ImageElement } from "../../document/types"
+import type { CropConfig } from "../../document/types"
 import type { EraserStroke } from "../../interaction/eraser/EraserRenderer"
 import { generateUUID } from "../../shared/ids"
 import { getNormalizedImageProcessCrop } from "./imageCropUtils"
 
 interface CreateEraserMaskFileParams {
-	element: Pick<ImageElement, "width" | "height" | "crop">
+	element: { width?: number; height?: number; crop?: CropConfig }
 	strokes: EraserStroke[]
 	naturalWidth: number
 	naturalHeight: number

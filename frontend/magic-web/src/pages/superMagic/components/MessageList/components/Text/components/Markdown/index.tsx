@@ -24,6 +24,8 @@ import {
 } from "./streamingMarkdown"
 import styles from "./index.module.css"
 import { CitationBadge } from "../../../Citations"
+import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
+import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
 	/^(?:(?:https?|ftps?|mailto|tel|callto|sms|cid|xmpp|matrix|oa|oa-view|open-action|openaction):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i
@@ -61,6 +63,16 @@ function isCodeLanguage(className: string | undefined, language: string): boolea
 		(token) =>
 			token === language || token === `lang-${language}` || token === `language-${language}`,
 	)
+}
+
+function resolveCodeLanguage(className: string | undefined): string | undefined {
+	if (!className) return undefined
+
+	const languageToken = className
+		.split(/\s+/)
+		.find((token) => token.startsWith("language-") || token.startsWith("lang-"))
+
+	return languageToken?.replace(/^(?:language-|lang-)/, "") || undefined
 }
 
 function resolveQRCodeValue(props: {
@@ -183,6 +195,8 @@ export function useMarkdownComponent({
 	citations,
 	highlightedCitation,
 	onCitationClick,
+	isCodeWrapped,
+	onToggleCodeWrap,
 }: {
 	streamingScrollStateRef: MutableRefObject<HtmlCodeBlockPreviewStreamingScrollState>
 	isStreaming: boolean
@@ -190,6 +204,8 @@ export function useMarkdownComponent({
 	citations?: CitationSource[]
 	highlightedCitation?: number | null
 	onCitationClick?: (index: number | null) => void
+	isCodeWrapped: boolean
+	onToggleCodeWrap: () => void
 }): UseMarkdownComponentResult {
 	// 用 ref 持有随每个 chunk 变化的 citation 相关值，避免 components 对象随
 	// 每个 chunk 重建——否则 components.pre 引用变化会导致 XMarkdown 重新挂载
@@ -231,7 +247,7 @@ export function useMarkdownComponent({
 					)
 				}
 
-				if (!codeBlockInfo || !previewCode) {
+				if (!codeBlockInfo) {
 					return (
 						<pre
 							className={typeof preClassName === "string" ? preClassName : undefined}
@@ -240,6 +256,34 @@ export function useMarkdownComponent({
 						>
 							{children}
 						</pre>
+					)
+				}
+
+				if (!previewCode) {
+					const codeBlockClassName = cn(
+						styles.codeBlockPre,
+						isCodeWrapped ? styles.codeBlockPreWrapped : styles.codeBlockPreUnwrapped,
+					)
+
+					return (
+						<div className={styles.codeBlock}>
+							<MarkdownCodeBlockToolbar
+								language={resolveCodeLanguage(codeBlockInfo.className)}
+								isWrapped={isCodeWrapped}
+								onToggleWrap={onToggleCodeWrap}
+								code={codeBlockInfo.code}
+							/>
+							<pre
+								className={cn(
+									typeof preClassName === "string" ? preClassName : undefined,
+									codeBlockClassName,
+								)}
+								style={normalizedStyle}
+								title={typeof title === "string" ? title : undefined}
+							>
+								{children}
+							</pre>
+						</div>
 					)
 				}
 
@@ -257,6 +301,8 @@ export function useMarkdownComponent({
 						previewCode={previewCode}
 						fullCode={isCodeBlockStreaming ? undefined : previewCode}
 						streamingScrollStateRef={streamingScrollStateRef}
+						isCodeWrapped={isCodeWrapped}
+						onToggleCodeWrap={onToggleCodeWrap}
 					/>
 				)
 			},
@@ -292,8 +338,13 @@ export function useMarkdownComponent({
 		}),
 		// citation 相关值通过 ref 读取，不加入 deps，保证 streaming 期间 components
 		// 对象引用稳定，防止 HtmlCodeBlockPreview 因 pre 函数引用变化而重新挂载。
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[enableHtmlCodeBlockPreview, isStreaming, streamingScrollStateRef],
+		[
+			enableHtmlCodeBlockPreview,
+			isCodeWrapped,
+			isStreaming,
+			onToggleCodeWrap,
+			streamingScrollStateRef,
+		],
 	)
 }
 
@@ -340,6 +391,7 @@ function MarkdownComponent({
 	const streamingScrollStateRef = useRef<HtmlCodeBlockPreviewStreamingScrollState>({
 		hasUserInteracted: false,
 	})
+	const { isWrapped: isCodeWrapped, toggle: onToggleCodeWrap } = useCodeBlockWrapPreference()
 
 	const components = useMarkdownComponent({
 		enableHtmlCodeBlockPreview,
@@ -348,6 +400,8 @@ function MarkdownComponent({
 		citations,
 		highlightedCitation,
 		onCitationClick,
+		isCodeWrapped,
+		onToggleCodeWrap,
 	})
 
 	return (

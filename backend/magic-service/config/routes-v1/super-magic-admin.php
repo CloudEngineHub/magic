@@ -51,6 +51,7 @@ Router::addGroup('/api/v1/admin', static function () {
 
         Router::post('/versions/queries', [AdminSkillApi::class, 'queryVersions']);
         Router::post('/markets/queries', [AdminSkillApi::class, 'queryMarkets']);
+        Router::post('/markets/vector-index/reindex', [AdminSkillApi::class, 'reindexMarketVectors']);
         Router::put('/markets/{id}', [AdminSkillApi::class, 'updateMarket']);
         Router::put('/markets/{id}/category', [AdminSkillApi::class, 'updateMarketCategory']);
         Router::put('/markets/{id}/sort-order', [AdminSkillApi::class, 'updateMarketSortOrder']);

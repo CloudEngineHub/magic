@@ -104,6 +104,7 @@ export default function Render(props: any) {
 		projectId,
 		browserAttachments,
 		allowDownload,
+		audioPlayerMode,
 		mdToolbarContainer,
 	} = props
 	const { t } = useTranslation("super")
@@ -827,6 +828,7 @@ export default function Render(props: any) {
 		mdToolbarContainer,
 		isTabActive: props.isTabActive,
 		allowDownload,
+		audioPlayerMode,
 		projectId,
 		browserAttachments,
 	}

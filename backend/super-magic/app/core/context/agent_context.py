@@ -164,6 +164,11 @@ class AgentContext(BaseAgentContext):
             chat_history_dir = os.path.join(os.getcwd(), ".chat_history")
             self.set_chat_history_dir(chat_history_dir)
 
+        # 迁移兼容状态：由启动阶段的 topic 持久化状态机设置，默认保守地关闭。
+        # 待旧归档迁移和持久卷灰度验证完成后，可移除该状态及其上传门控兼容逻辑。
+        self._chat_history_persisted = False
+        self._topic_persistence_healthy = False
+
         # 设置默认代理名称
         self.set_agent_name("magic")
 
@@ -175,6 +180,8 @@ class AgentContext(BaseAgentContext):
         self._run_cleanup_registry: RunCleanupRegistry = RunCleanupRegistry()
         self._run_cancellation_handle: RunCancellationHandle = RunCancellationHandle()
         self._stop_run_task: Optional[asyncio.Task] = None
+        self._resumption_id: Optional[str] = None
+        self._resumption_run_id: Optional[str] = None
 
         # AgentHorizon 懒初始化，per-agent 上下文工程基础设施
         self._horizon: Optional["AgentHorizon"] = None
@@ -215,6 +222,18 @@ class AgentContext(BaseAgentContext):
     def get_subagent_parent_agent_id(self) -> Optional[str]:
         """获取父 Agent ID；主 Agent 返回 None。"""
         return self._subagent_parent_agent_id
+
+    def mark_chat_history_persisted(self) -> None:
+        self._chat_history_persisted = True
+
+    def is_chat_history_persisted(self) -> bool:
+        return self._chat_history_persisted
+
+    def set_topic_persistence_healthy(self, healthy: bool) -> None:
+        self._topic_persistence_healthy = bool(healthy)
+
+    def is_topic_persistence_healthy(self) -> bool:
+        return self._topic_persistence_healthy
 
     def set_agent_id(self, agent_id: str) -> None:
         """设置运行时 agent_id，并同步更新依赖该 ID 的上下文设施。"""
@@ -453,6 +472,23 @@ class AgentContext(BaseAgentContext):
         if isinstance(source, SuperMagicExecutionSource):
             return source
         return SuperMagicExecutionSource.from_raw(source)
+
+    def set_resumption_context(
+        self,
+        resumption_id: Optional[str],
+        run_id: Optional[str],
+    ) -> None:
+        """绑定当前主 Agent run 正在处理的 resumption。"""
+        self._resumption_id = resumption_id
+        self._resumption_run_id = run_id
+
+    def get_resumption_id(self) -> Optional[str]:
+        """返回当前主 Agent run 的 resumption ID。"""
+        return self._resumption_id
+
+    def get_resumption_run_id(self) -> Optional[str]:
+        """返回当前主 Agent run 的内部 run ID。"""
+        return self._resumption_run_id
 
     def is_magiclaw(self) -> bool:
         """当前会话是否为 magiclaw 模式（龙虾 claw agent）。"""
@@ -1362,6 +1398,7 @@ class AgentContext(BaseAgentContext):
         self.shared_context.update_field("interruption_requested", False)
         self.shared_context.update_field("interruption_reason", None)
         self._interruption_event.clear()
+        self.set_resumption_context(None, None)
 
     # ====== 思考状态管理方法 ======
 

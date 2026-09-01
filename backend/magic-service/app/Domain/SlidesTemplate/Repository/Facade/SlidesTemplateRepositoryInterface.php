@@ -27,6 +27,27 @@ interface SlidesTemplateRepositoryInterface
     /** @return SlidesTemplateEntity[] */
     public function findByCodes(SlidesTemplateDataIsolation $dataIsolation, array $codes): array;
 
+    /** @return SlidesTemplateEntity[] */
+    public function findByIds(SlidesTemplateDataIsolation $dataIsolation, array $ids): array;
+
+    /** @return SlidesTemplateEntity[] */
+    public function findVisibleByIds(
+        SlidesTemplateDataIsolation $dataIsolation,
+        array $ids,
+    ): array;
+
+    /** @return string[] */
+    public function findIdsForSync(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $organizationCode,
+        array $templateIds,
+        ?string $categoryCode,
+        array $tagCodes,
+        string $tagMatch,
+        string $afterId,
+        int $limit
+    ): array;
+
     /**
      * @return array{total: int, list: SlidesTemplateEntity[]}
      */

@@ -1,4 +1,4 @@
-import { createElement, useMemo, useRef } from "react"
+import { createElement, useMemo } from "react"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type {
@@ -23,7 +23,11 @@ import {
 import { useCanvasReferenceMentionRuntime } from "./reference-assets/useCanvasReferenceMentionRuntime"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./reference-assets/canvasReferenceMention.constants"
 import { MentionPanelViewMode } from "@/components/business/MentionPanel/types"
-import { getCanvasResourceReferenceIdentity } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceAvailability,
+	getCanvasResourceReferenceIdentity,
+} from "../../../runtime/shared/path/canvasResourcePath"
+import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
@@ -42,6 +46,57 @@ interface UseCanvasReferenceMentionOptions {
 	assetLimits?: ReferenceAssetPerTypeLimits
 	/** 当前已选各类型资源数量（与 assetLimits 配套使用） */
 	currentAssetCounts?: ReferenceAssetTypeCounts
+}
+
+const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) => {
+	const { methods } = useMagic()
+	const { t } = useCanvasDesignI18n()
+	const attrs = props.node.attrs as CanvasMentionAttributes & {
+		data?: ReferenceResourcePanelFileData
+	}
+	const fileData = attrs.data
+	const options = props.extension.options as CanvasMentionExtensionRuntimeOptions
+	const availability = getCanvasResourceAvailability(
+		fileData?.file_path,
+		methods?.resolveResourceReference,
+	)
+	const isDeleted = availability === "deleted"
+	const displayText = `${getProjectFileMentionDisplayText(attrs, options)}${
+		isDeleted ? t("messageHistory.deletedSuffix", "（已删除）") : ""
+	}`
+
+	return createElement(
+		NodeViewWrapper,
+		{
+			as: "span",
+			className: "magic-mention canvas-project-file-mention",
+			"data-mention-suggestion-char": attrs.mentionSuggestionChar || "@",
+			"data-type": attrs.type,
+			"data-data": JSON.stringify(attrs.data || {}),
+			"data-file-path": fileData?.file_path,
+			"data-deleted": isDeleted ? "true" : undefined,
+			"data-testid": "canvas-project-file-mention",
+			"aria-disabled": isDeleted || undefined,
+			contentEditable: false,
+			onMouseDown: (event: MouseEvent) => {
+				event.preventDefault()
+			},
+			onClick: (event: MouseEvent) => {
+				event.preventDefault()
+				event.stopPropagation()
+				if (isDeleted) return
+				const locateProjectFile = methods?.locateProjectFile
+				if (!locateProjectFile) return
+				void locateProjectFile({
+					fileId: fileData?.file_id,
+					filePath: fileData?.file_path,
+					fileName: fileData?.file_name,
+					locateInTree: true,
+				})
+			},
+		},
+		displayText,
+	)
 }
 
 /**
@@ -69,11 +124,6 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		assetLimits,
 		currentAssetCounts,
 	} = options || {}
-	const resolveResourceReference = methods?.resolveResourceReference
-
-	// nodeView 点击时读取最新宿主方法，避免因宿主回传新引用而重建 nodeView renderer。
-	const locateProjectFileRef = useRef(methods?.locateProjectFile)
-	locateProjectFileRef.current = methods?.locateProjectFile
 
 	const referenceFileInfos = useMemo(
 		() =>
@@ -81,7 +131,6 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 				src: item.path || "",
 				fileName: item.name,
 				path: item.path || "",
-				...(item.assetType ? { assetType: item.assetType } : {}),
 			})),
 		[externalMatchableItems],
 	)
@@ -112,7 +161,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 			if (item.path) {
 				const identity = getCanvasResourceReferenceIdentity(
 					item.path,
-					resolveResourceReference,
+					methods?.resolveResourceReference,
 				)
 				if (seenPathIdentities.has(identity)) return
 				seenPathIdentities.add(identity)
@@ -151,13 +200,13 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 							currentAssetCounts,
 							candidatePaths: [item.path, item.name],
 							currentReferenceFiles,
-							resolveResourceReference,
+							resolveResourceReference: methods?.resolveResourceReference,
 						})
 					: isReferenceSelectionLimitBlocked({
 							candidatePaths: [item.path, item.name],
 							currentReferenceFiles,
 							isReferenceFileLimitReached,
-							resolveResourceReference,
+							resolveResourceReference: methods?.resolveResourceReference,
 						})),
 		}))
 	}, [
@@ -168,52 +217,12 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		referenceResourceType,
 		assetLimits,
 		currentAssetCounts,
-		resolveResourceReference,
+		methods?.resolveResourceReference,
 	])
 
 	const mentionNodeViewRenderers = useMemo(() => {
-		const projectFileRenderer: CanvasMentionNodeViewRenderer = (props) => {
-			const attrs = props.node.attrs as CanvasMentionAttributes & {
-				data?: ReferenceResourcePanelFileData
-			}
-			const fileData = attrs.data
-			const options = props.extension.options as CanvasMentionExtensionRuntimeOptions
-			const displayText = getProjectFileMentionDisplayText(attrs, options)
-
-			return createElement(
-				NodeViewWrapper,
-				{
-					as: "span",
-					className: "magic-mention canvas-project-file-mention",
-					"data-mention-suggestion-char": attrs.mentionSuggestionChar || "@",
-					"data-type": attrs.type,
-					"data-data": JSON.stringify(attrs.data || {}),
-					"data-file-path": fileData?.file_path,
-					"data-testid": "canvas-project-file-mention",
-					contentEditable: false,
-					style: { cursor: "pointer" },
-					onMouseDown: (event: MouseEvent) => {
-						event.preventDefault()
-					},
-					onClick: (event: MouseEvent) => {
-						event.preventDefault()
-						event.stopPropagation()
-						const locateProjectFile = locateProjectFileRef.current
-						if (!locateProjectFile) return
-						void locateProjectFile({
-							fileId: fileData?.file_id,
-							filePath: fileData?.file_path,
-							fileName: fileData?.file_name,
-							locateInTree: true,
-						})
-					},
-				},
-				displayText,
-			)
-		}
-
 		return {
-			[CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile]: projectFileRenderer,
+			[CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile]: CanvasProjectFileMentionNodeView,
 		}
 	}, [])
 

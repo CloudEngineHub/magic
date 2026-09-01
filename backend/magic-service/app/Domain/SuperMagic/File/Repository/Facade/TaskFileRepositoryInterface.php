@@ -9,6 +9,7 @@ namespace App\Domain\SuperMagic\File\Repository\Facade;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 
 interface TaskFileRepositoryInterface
 {
@@ -33,7 +34,7 @@ interface TaskFileRepositoryInterface
      * 根据ID批量获取文件.
      * @return TaskFileEntity[]
      */
-    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array;
+    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array;
 
     /**
      * 根据ID批量获取文件.
@@ -49,6 +50,13 @@ interface TaskFileRepositoryInterface
      * @param bool $withTrash 是否包含已删除的文件，默认为false
      */
     public function getByFileKey(string $fileKey, ?int $topicId = 0, bool $withTrash = false): ?TaskFileEntity;
+
+    /**
+     * 获取由指定文件直接复制产生的目标文件。
+     *
+     * @return TaskFileEntity[]
+     */
+    public function getCopiesBySourceFileId(int $sourceFileId): array;
 
     /**
      * 根据fileKey数组批量获取文件.
@@ -72,6 +80,14 @@ interface TaskFileRepositoryInterface
      * 根据项目ID、父目录ID和文件名获取文件（用于同目录重名冲突判断）.
      */
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity;
+
+    /**
+     * 根据项目、父目录和文件名批量查询直接子节点。
+     *
+     * @param string[] $fileNames
+     * @return array<string, TaskFileEntity> 以文件名为键的文件实体
+     */
+    public function getByProjectParentAndNames(int $projectId, int $parentId, array $fileNames): array;
 
     /**
      * Get files by project ID and file keys.
@@ -238,13 +254,21 @@ interface TaskFileRepositoryInterface
 
     /**
      * 获取指定父目录下的最小排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getMinSortByParentId(?int $parentId, int $projectId): ?int;
+    public function getMinSortByParentId(?int $parentId, int $projectId, ?string $spaceType = null): ?int;
 
     /**
      * 获取指定父目录下的最大排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getMaxSortByParentId(?int $parentId, int $projectId): ?int;
+    public function getMaxSortByParentId(?int $parentId, int $projectId, ?string $spaceType = null): ?int;
 
     /**
      * 获取指定文件的排序值.
@@ -253,13 +277,24 @@ interface TaskFileRepositoryInterface
 
     /**
      * 获取指定排序值之后的下一个排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $currentSort 当前排序值
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getNextSortAfter(?int $parentId, int $currentSort, int $projectId): ?int;
+    public function getNextSortAfter(?int $parentId, int $currentSort, int $projectId, ?string $spaceType = null): ?int;
 
     /**
      * 获取同一父目录下的所有兄弟节点.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param string $orderBy 排序字段
+     * @param string $direction 排序方向
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getSiblingsByParentId(?int $parentId, int $projectId, string $orderBy = 'sort', string $direction = 'ASC'): array;
+    public function getSiblingsByParentId(?int $parentId, int $projectId, string $orderBy = 'sort', string $direction = 'ASC', ?string $spaceType = null): array;
 
     public function getSiblingCountByParentId(int $parentId, int $projectId): int;
 
@@ -289,10 +324,10 @@ interface TaskFileRepositoryInterface
      * @param int $projectId Project ID
      * @param int $parentId Parent directory ID
      * @param int $limit Maximum number of files to return
-     * @param null|string $storageType Optional storage type filter
+     * @param null|string $spaceType Optional space type filter
      * @return TaskFileEntity[] File entity list
      */
-    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $storageType = null): array;
+    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $spaceType = null): array;
 
     /**
      * Get children files by multiple parent_ids and project_id (batch query).
@@ -505,12 +540,13 @@ interface TaskFileRepositoryInterface
     public function transferOwnership(int $projectId, string $fromUserId, string $toUserId): int;
 
     /**
-     * 根据项目ID获取根节点文件.
+     * 根据项目ID和空间类型获取根节点文件.
      *
      * @param int $projectId 项目ID
+     * @param string $spaceType 空间类型，默认 project 空间
      * @return null|TaskFileEntity 根节点文件实体
      */
-    public function getRootFileByProjectId(int $projectId): ?TaskFileEntity;
+    public function getRootFileByProjectId(int $projectId, string $spaceType = FileSpaceType::PROJECT->value): ?TaskFileEntity;
 
     /**
      * Check if a file with the given name exists in a project.
@@ -536,6 +572,17 @@ interface TaskFileRepositoryInterface
      * AND space_type = 'user' AND user_id = ? AND organization_code = ?.
      */
     public function findUserSpaceRootDirectory(string $userId, string $organizationCode): ?TaskFileEntity;
+
+    public function findTopicSpaceRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity;
+
+    /**
+     * Get topic files using a file_id cursor, excluding the topic root itself.
+     *
+     * @return TaskFileEntity[]
+     */
+    public function getTopicFilesByCursor(int $topicId, int $rootFileId, ?int $afterFileId, int $limit): array;
+
+    public function countTopicFilesForCopy(int $topicId, int $rootFileId): int;
 
     /**
      * Batch update is_hidden field for given file IDs.

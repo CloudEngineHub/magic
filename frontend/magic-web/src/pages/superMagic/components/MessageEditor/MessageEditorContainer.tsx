@@ -56,6 +56,7 @@ import useSharedDataFromApp from "./hooks/useSharedDataFromApp"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
 import useMessageEditorPubSub from "./hooks/useMessageEditorPubSub"
 import { useMessageEditorMarker } from "./hooks/useMessageEditorMarker"
+import { useCanvasPendingMentionBridge } from "./hooks/useCanvasPendingMentionBridge"
 import { resolveMessageEditorModules } from "./utils/moduleConfig"
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "../../hooks/useTaskInterrupt"
@@ -102,6 +103,7 @@ export const MessageEditorContainer = observer(
 				stopEventLoading,
 				selectedTopic,
 				selectedProject,
+				selectedWorkspace,
 				draftKey,
 				size = "default",
 				modules,
@@ -193,8 +195,12 @@ export const MessageEditorContainer = observer(
 			const fileUploadStore = store.fileUploadStore
 			const tiptapEditorRef = useRef<Editor | null>(null)
 			const shouldSkipMentionRemoveSyncRef = useRef(false)
+			const promoteCanvasPendingMentionsRef = useRef<(() => void) | null>(null)
 
 			const getEditor = useMemoizedFn(() => tiptapEditorRef.current)
+			const promoteCanvasPendingMentions = useMemoizedFn(() => {
+				promoteCanvasPendingMentionsRef.current?.()
+			})
 			const runWithoutMentionRemoveSync = useMemoizedFn((callback: () => void) => {
 				shouldSkipMentionRemoveSyncRef.current = true
 				try {
@@ -346,6 +352,7 @@ export const MessageEditorContainer = observer(
 				if (isMobile) resetDocumentScrollPosition()
 			})
 			const handleFocus = useMemoizedFn(() => {
+				promoteCanvasPendingMentions()
 				setIsEditorFocused(true)
 				onFocus?.()
 			})
@@ -367,6 +374,7 @@ export const MessageEditorContainer = observer(
 				onSend,
 				topicMode,
 				collectMentionItemsFromEditor,
+				promoteCanvasPendingMentions,
 				isMountedRef,
 			})
 
@@ -402,6 +410,37 @@ export const MessageEditorContainer = observer(
 				shouldRestoreRemovedMention,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
+			const canvasSelectionMentionScope = useMemo(
+				() => ({
+					workspaceId: selectedWorkspace?.id ?? draftKey?.workspaceId,
+					projectId:
+						selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
+					topicId: selectedTopic?.id ?? draftKey?.topicId,
+				}),
+				[
+					draftKey?.projectId,
+					draftKey?.topicId,
+					draftKey?.workspaceId,
+					selectedProject?.id,
+					selectedTopic?.id,
+					selectedTopic?.project_id,
+					selectedWorkspace?.id,
+				],
+			)
+			const { promotePending: promoteCanvasPending } = useCanvasPendingMentionBridge({
+				editor: tiptapEditor,
+				enabled: shouldEnableMention,
+				scope: canvasSelectionMentionScope,
+			})
+
+			useEffect(() => {
+				promoteCanvasPendingMentionsRef.current = promoteCanvasPending
+				return () => {
+					if (promoteCanvasPendingMentionsRef.current === promoteCanvasPending) {
+						promoteCanvasPendingMentionsRef.current = null
+					}
+				}
+			}, [promoteCanvasPending])
 
 			useEffect(() => {
 				tiptapEditorRef.current = tiptapEditor

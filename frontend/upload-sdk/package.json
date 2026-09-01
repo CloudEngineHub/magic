@@ -1,6 +1,6 @@
 {
 	"name": "@dtyq/upload-sdk",
-	"version": "0.0.11",
+	"version": "0.0.12",
 	"description": "Browser upload SDK for multipart file uploads across cloud object storage providers.",
 	"keywords": [
 		"upload",

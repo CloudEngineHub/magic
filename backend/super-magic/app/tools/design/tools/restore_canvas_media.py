@@ -1,7 +1,7 @@
 """恢复画布媒体图层工具。
 
-该工具扫描设计项目本地的 images/videos 目录，将仍在磁盘但已从
-magic.project.js 中丢失的媒体文件重新注册为画布元素。
+该工具扫描设计项目本地的 images/videos 目录，将仍在磁盘但未登记在
+项目数据中的媒体文件重新注册为画布元素。
 """
 
 from __future__ import annotations
@@ -51,13 +51,13 @@ class RestoreCanvasMediaParams(BaseToolParams):
 
     project_path: str = Field(
         ...,
-        description="""<!--zh: 设计项目的相对路径（包含 magic.project.js 的文件夹）。-->
-Relative path to the design project folder containing magic.project.js."""
+        description="""<!--zh: 设计项目的相对路径。-->
+Relative path to the design project."""
     )
     dry_run: bool = Field(
         True,
-        description="""<!--zh: 默认为 true，只扫描并返回将恢复的媒体，不写入 magic.project.js。用户确认后传 false 才会真正恢复。-->
-Defaults to true. Only scan and report recoverable media without writing magic.project.js. Pass false only after user confirmation."""
+        description="""<!--zh: 默认为 true，只扫描并返回将恢复的媒体，不写入项目数据。用户确认后传 false 才会真正恢复。-->
+Defaults to true. Only scan and report recoverable media without writing project data. Pass false only after user confirmation."""
     )
 
 
@@ -307,7 +307,7 @@ class RestoreCanvasMedia(BaseDesignTool[RestoreCanvasMediaParams]):
     """从本地媒体目录恢复画布图层。
 
     工具只扫描 super-magic 画布项目自身的 images/videos 目录，并将当前
-    magic.project.js 中缺失的媒体资源恢复为 image/video 元素。
+项目数据中缺失的媒体资源恢复为 image/video 元素。
     """
 
     async def execute(self, tool_context: ToolContext, params: RestoreCanvasMediaParams) -> ToolResult:
@@ -315,6 +315,7 @@ class RestoreCanvasMedia(BaseDesignTool[RestoreCanvasMediaParams]):
         project_path, error_result = await self._ensure_project_ready(
             params.project_path,
             require_magic_project_js=True,
+            tool_context=tool_context,
         )
         if error_result:
             return error_result
@@ -626,7 +627,7 @@ class RestoreCanvasMedia(BaseDesignTool[RestoreCanvasMediaParams]):
 
         if dry_run:
             lines.extend([
-                "- 状态: 等待用户确认，确认前不会写入 magic.project.js",
+                "- 状态: 等待用户确认，确认前不会写入项目数据",
                 "- 提醒: 恢复完成前请不要操作画布，避免前端编辑覆盖恢复结果",
                 "",
             ])
@@ -634,7 +635,7 @@ class RestoreCanvasMedia(BaseDesignTool[RestoreCanvasMediaParams]):
             self._append_missing_media_markdown(lines, missing_media)
         else:
             lines.extend([
-                "- 状态: 已写入 magic.project.js",
+                "- 状态: 已写入项目数据",
                 "",
             ])
             restored_elements = data.get("restored_elements") or extra_info.get("elements") or []

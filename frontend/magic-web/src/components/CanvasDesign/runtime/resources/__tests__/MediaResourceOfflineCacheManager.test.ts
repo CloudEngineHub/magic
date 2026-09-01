@@ -1,5 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { MediaResourceOfflineCacheManager } from "../offline-cache/MediaResourceOfflineCacheManager"
+import {
+	MediaResourceOfflineCacheManager,
+	type MediaResourceOfflineCacheManagerOptions,
+} from "../offline-cache/MediaResourceOfflineCacheManager"
+import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
+
+const resolveResourceReference = createTestResourceReferenceResolver()
+
+function createOfflineCacheManager(options?: MediaResourceOfflineCacheManagerOptions) {
+	return new MediaResourceOfflineCacheManager({
+		getResolveResourceReference: () => resolveResourceReference,
+		...options,
+	})
+}
 
 describe("MediaResourceOfflineCacheManager", () => {
 	beforeEach(() => {
@@ -23,6 +36,46 @@ describe("MediaResourceOfflineCacheManager", () => {
 	afterEach(() => {
 		vi.useRealTimers()
 		vi.unstubAllEnvs()
+	})
+
+	it("uses canonical workspace paths as cache locators without crossing canvas boundaries", () => {
+		const manager = createOfflineCacheManager()
+		const resolveStoredResourcePath = (
+			manager as unknown as {
+				resolveStoredResourcePath: (path: string) => string | undefined
+			}
+		).resolveStoredResourcePath.bind(manager)
+
+		expect(resolveStoredResourcePath("./images/x.png")).toBe("/画布A/images/x.png")
+		expect(resolveStoredResourcePath("/画布A/images/x.png")).toBe("/画布A/images/x.png")
+		expect(resolveStoredResourcePath("/images/x.png")).toBe("/images/x.png")
+		expect(resolveStoredResourcePath("/画布B/images/x.png")).toBe("/画布B/images/x.png")
+	})
+
+	it("fails closed before cache lookup when a resource reference is unresolved", () => {
+		const ambiguousResolver = createTestResourceReferenceResolver({
+			attachmentPathsByFileId: {
+				"file-current": "/画布A/images/x.png",
+				"file-root": "/images/x.png",
+			},
+		})
+		const manager = createOfflineCacheManager({
+			getResolveResourceReference: () => ambiguousResolver,
+		})
+		const resolveStoredResourcePath = (
+			manager as unknown as {
+				resolveStoredResourcePath: (path: string) => string | undefined
+			}
+		).resolveStoredResourcePath.bind(manager)
+
+		expect(resolveStoredResourcePath("images/x.png")).toBeUndefined()
+		expect(
+			(
+				new MediaResourceOfflineCacheManager() as unknown as {
+					resolveStoredResourcePath: (path: string) => string | undefined
+				}
+			).resolveStoredResourcePath("./images/x.png"),
+		).toBeUndefined()
 	})
 
 	it("reuses the current app service worker registration without registering canvas sw", async () => {
@@ -49,7 +102,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
 
@@ -63,7 +116,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 		).getEntry = vi.fn().mockResolvedValue(null)
 
 		const result = await manager.rememberResolvedResource({
-			path: "images/example.png",
+			path: "./images/example.png",
 			url: "https://oss.example.com/images/example.png",
 			mediaType: "image",
 		})
@@ -102,13 +155,13 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
 
 		const sourceUrl = "https://oss.example.com/images/example.png"
 		const result = await manager.resolveResourceUrl({
-			path: "images/example.png",
+			path: "./images/example.png",
 			url: sourceUrl,
 			mediaType: "image",
 		})
@@ -150,10 +203,10 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
-		const result = await manager.getCachedResource("images/example.png", "image")
+		const result = await manager.getCachedResource("./images/example.png", "image")
 
 		expect(result).toBeNull()
 		expect(openCache).not.toHaveBeenCalled()
@@ -183,7 +236,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
 		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
@@ -206,7 +259,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 
 		const sourceUrl = "https://oss.example.com/images/example.png"
 		const result = await manager.resolveResourceUrl({
-			path: "images/example.png",
+			path: "./images/example.png",
 			url: sourceUrl,
 			mediaType: "image",
 		})
@@ -254,7 +307,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
 		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
@@ -275,7 +328,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 		).refreshCachedResource = vi.fn().mockResolvedValue(true)
 
 		manager.warmResolvedResourceBodyExplicitly({
-			path: "images/example.png",
+			path: "./images/example.png",
 			url: "https://oss.example.com/images/example.png",
 			mediaType: "image",
 		})
@@ -318,7 +371,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
 		const saveEntry = vi.fn().mockResolvedValue(undefined)
@@ -327,7 +380,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 
 		const sourceUrl = "https://oss.example.com/images/example.png"
 		const resultPromise = manager.resolveResourceUrl({
-			path: "images/example.png",
+			path: "./images/example.png",
 			url: sourceUrl,
 			mediaType: "image",
 		})
@@ -361,7 +414,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 			},
 		})
 
-		const manager = new MediaResourceOfflineCacheManager({
+		const manager = createOfflineCacheManager({
 			getVirtualResourceScope: () => "workspace/project/design/demo",
 		})
 		const saveEntry = vi.fn().mockResolvedValue(undefined)
@@ -370,7 +423,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 
 		const sourceUrl = "https://oss.example.com/images/example.png"
 		const result = await manager.resolveResourceUrl({
-			path: "images/example.png",
+			path: "./images/example.png",
 			url: sourceUrl,
 			mediaType: "image",
 		})

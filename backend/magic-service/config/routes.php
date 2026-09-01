@@ -18,7 +18,9 @@ Router::get('/favicon.ico', function () {
 Router::addRoute(
     ['GET', 'POST', 'HEAD', 'OPTIONS'],
     '/heartbeat',
-    [HeartbeatApi::class, 'heartbeat']
+    function () {
+        return ['status' => 'UP'];
+    }
 );
 
 // 加载 Mock 路由（用于测试）

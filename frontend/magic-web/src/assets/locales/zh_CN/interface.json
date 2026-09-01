@@ -542,12 +542,12 @@
 		"rechargePointsTip1": "免费用户暂时无法购买积分叠加包，请先",
 		"rechargePointsTip2": "后再充值",
 		"recordId": "记录 ID",
-		"remark": "备注",
 		"redirecting": "正在跳转...",
 		"refundTime": "退款时间",
 		"refundedTag": "已退款",
 		"registerToEarnPointsLabel": "注册即赠送",
 		"remainingPoints": "积分余量",
+		"remark": "备注",
 		"renew": "续费",
 		"renewalDuration": "续费时长",
 		"renewalDurationOptions": {
@@ -1117,7 +1117,9 @@
 			"htmlSnippet": "HTML 片段",
 			"raw": "原始",
 			"totalLength": "总长度",
-			"viewFullText": "查看全文"
+			"unwrapCode": "取消换行",
+			"viewFullText": "查看全文",
+			"wrapCode": "换行"
 		},
 		"markmap": {
 			"downloadPicture": "下载图片",

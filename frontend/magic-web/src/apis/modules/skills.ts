@@ -8,7 +8,11 @@ import { SupportLocales } from "@/constants/locale"
 
 /** Publisher type for store skills */
 export type SkillPublisherType =
-	"USER" | "OFFICIAL" | "OFFICIAL_BUILTIN" | "VERIFIED_CREATOR" | "PARTNER"
+	| "USER"
+	| "OFFICIAL"
+	| "OFFICIAL_BUILTIN"
+	| "VERIFIED_CREATOR"
+	| "PARTNER"
 
 /** Source type for user skills */
 export type SkillSourceType =
@@ -28,7 +32,11 @@ export type SkillPublishStatus = "PUBLISHED" | "UNPUBLISHED"
 
 /** Review status for published skill versions */
 export type SkillVersionReviewStatus =
-	"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INVALIDATED"
+	| "PENDING"
+	| "UNDER_REVIEW"
+	| "APPROVED"
+	| "REJECTED"
+	| "INVALIDATED"
 
 /**
  * i18n text object for skills.

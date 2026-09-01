@@ -35,6 +35,11 @@ export interface SimpleEditorProps {
 	 */
 	enableSearchReplace?: boolean
 	/**
+	 * Enable the persisted wrap toggle for read-only code blocks.
+	 * @default false
+	 */
+	enableCodeBlockWrap?: boolean
+	/**
 	 * Enable or disable editor editability
 	 * @default true
 	 */

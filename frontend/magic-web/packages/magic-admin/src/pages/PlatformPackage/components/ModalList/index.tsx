@@ -317,14 +317,18 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 												<>
 													<MagicButton
 														size={isMobile ? "small" : "middle"}
-														icon={<IconCopy size={isMobile ? 16 : 20} />}
+														icon={
+															<IconCopy size={isMobile ? 16 : 20} />
+														}
 														className={styles.button}
 														onClick={() => copyModel(item)}
 													/>
 													<MagicButton
 														danger
 														size={isMobile ? "small" : "middle"}
-														icon={<IconTrash size={isMobile ? 16 : 20} />}
+														icon={
+															<IconTrash size={isMobile ? 16 : 20} />
+														}
 														className={styles.button}
 														onClick={() => onDeleteModel(item)}
 													/>

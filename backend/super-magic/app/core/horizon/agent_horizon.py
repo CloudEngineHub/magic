@@ -12,6 +12,7 @@ import hashlib
 import html
 import re
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
@@ -32,6 +33,9 @@ from app.core.horizon.models import (
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
+    PendingResumption,
+    ResumptionStatus,
+    ResumptionTrigger,
     SuperMagicProductContextState,
     SuperMagicProjectContextState,
     SuperMagicSandboxContextState,
@@ -96,6 +100,7 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "user_preferred_language_changed",
     "file_changes",
     "notifications",
+    "resumptions",
     "magiclaw_startup",
 )
 
@@ -411,6 +416,8 @@ class AgentHorizon:
             return
         loaded = await self._store.load()
         self._apply_loaded_state(loaded)
+        if self._reset_stale_resumptions():
+            await self._save()
 
     async def reload_from_store(self) -> None:
         """持久目录准备或被外部替换后，重新建立内存中的 Horizon baseline。
@@ -421,6 +428,8 @@ class AgentHorizon:
         """
         loaded = await self._store.load()
         self._apply_loaded_state(loaded)
+        if self._reset_stale_resumptions():
+            await self._save()
         logger.info(
             "[AgentHorizon] 已从持久存储重新加载: "
             f"agent_id={self._state.agent_id} "
@@ -453,6 +462,24 @@ class AgentHorizon:
 
     async def _save(self) -> None:
         await self._store.save(self._state)
+
+    def _reset_stale_resumptions(self) -> bool:
+        # MOCK DEMO：如果持久文件里留下 assigned，但对应 run 已不在当前进程，
+        # 说明上一次恢复在提交或注入前中断，应恢复为 pending 供下一次 runtime-ready 重试。
+        changed = False
+        active_run_id = None
+        if self._agent_context is not None:
+            active_run_id = self._agent_context.get_resumption_run_id()
+        for resumption in self._state.pending_resumptions:
+            if resumption.status != ResumptionStatus.ASSIGNED:
+                continue
+            if active_run_id and resumption.assigned_to_run_id == active_run_id:
+                continue
+            resumption.status = ResumptionStatus.PENDING
+            resumption.assigned_at = ""
+            resumption.assigned_to_run_id = ""
+            changed = True
+        return changed
 
     async def export_fork_state(self) -> HorizonState:
         """导出模型已见 baseline 的值快照，不包含本轮 current staging。
@@ -940,6 +967,118 @@ class AgentHorizon:
         )
         self._state.pending_notifications.append(notif)
 
+    async def schedule_resumption(
+        self,
+        *,
+        source: str,
+        content: str,
+        trigger: ResumptionTrigger,
+        resumption_id: str | None = None,
+    ) -> PendingResumption:
+        """持久化一项等待运行时恢复后主动处理的事项。"""
+        await self._ensure_loaded()
+        normalized_id = (resumption_id or uuid.uuid4().hex).strip()
+        if not normalized_id:
+            raise ValueError("resumption_id cannot be empty")
+        existing = next(
+            (item for item in self._state.pending_resumptions if item.id == normalized_id),
+            None,
+        )
+        if existing is not None:
+            return copy.deepcopy(existing)
+
+        resumption = PendingResumption(
+            id=normalized_id,
+            source=source,
+            content=content,
+            created_at=_iso_now(),
+            trigger=trigger,
+        )
+        self._state.pending_resumptions.append(resumption)
+        await self._save()
+        return copy.deepcopy(resumption)
+
+    async def cancel_resumption(self, resumption_id: str) -> bool:
+        """删除尚未执行的主动续办事项。"""
+        await self._ensure_loaded()
+        before = len(self._state.pending_resumptions)
+        self._state.pending_resumptions = [
+            item for item in self._state.pending_resumptions if item.id != resumption_id
+        ]
+        if len(self._state.pending_resumptions) == before:
+            return False
+        await self._save()
+        return True
+
+    async def assign_resumption(
+        self,
+        *,
+        trigger: ResumptionTrigger,
+        run_id: str,
+    ) -> PendingResumption | None:
+        """
+        从 pending 队列中分配一项主动续办事项给指定 Agent run。
+
+        MOCK DEMO：
+
+        分配前：
+        {"id": "r-001", "status": "pending"}
+
+        分配后：
+        {
+          "id": "r-001",
+          "status": "assigned",
+          "assigned_to_run_id": "resumption-run-003"
+        }
+
+        先持久化 assigned 状态再返回，避免同一事项被多个启动路径重复提交。
+        """
+        await self._ensure_loaded()
+        for resumption in self._state.pending_resumptions:
+            if resumption.status != ResumptionStatus.PENDING or resumption.trigger != trigger:
+                continue
+            resumption.status = ResumptionStatus.ASSIGNED
+            resumption.assigned_at = _iso_now()
+            resumption.assigned_to_run_id = run_id
+            resumption.last_error = ""
+            await self._save()
+            return copy.deepcopy(resumption)
+        return None
+
+    async def release_resumption(self, resumption_id: str, error: str) -> None:
+        """
+        释放未能提交 Agent run 的事项，保留脱敏错误摘要。
+
+        MOCK DEMO：Agent run 在 Horizon 注入前被取消时，assigned 会恢复为 pending，
+        让下一次 runtime-ready 流程仍可继续处理。
+        """
+        await self._ensure_loaded()
+        for resumption in self._state.pending_resumptions:
+            if resumption.id != resumption_id:
+                continue
+            resumption.status = ResumptionStatus.PENDING
+            resumption.assigned_at = ""
+            resumption.assigned_to_run_id = ""
+            resumption.last_error = error[:500]
+            await self._save()
+            return
+
+    async def complete_resumption(self, resumption_id: str) -> None:
+        """
+        完成并移除已经注入当前 Agent run 的事项。
+
+        MOCK DEMO：上下文成功注入后，`pending_resumptions` 从包含 r-001 变为空列表。
+        不等待最终回答，避免工具失败导致同一事项无限重复运行。
+        """
+        await self._ensure_loaded()
+        remaining = [
+            item for item in self._state.pending_resumptions if item.id != resumption_id
+        ]
+        if len(remaining) == len(self._state.pending_resumptions):
+            return
+        self._state.pending_resumptions = remaining
+        await self._save()
+
     # ─────────────────────────────────────────────────────────────────────────
     # 运行时状态更新
     # ─────────────────────────────────────────────────────────────────────────
@@ -1310,6 +1449,25 @@ class AgentHorizon:
             f'<notification source="{n.source}" time="{n.pushed_at}">{n.content}</notification>'
             for n in self._state.pending_notifications
         ]
+        current_resumption_run_id = (
+            self._agent_context.get_resumption_run_id()
+            if self._agent_context is not None
+            else None
+        )
+        resumption_blocks = [
+            # 只把当前 run 分配到的事项注入模型，避免不同恢复 run 互相读取状态。
+            "<resumption "
+            f'id="{html.escape(resumption.id, quote=True)}" '
+            f'source="{html.escape(resumption.source, quote=True)}" '
+            f'trigger="{html.escape(resumption.trigger.value, quote=True)}">'
+            f"{html.escape(resumption.content)}"
+            "</resumption>"
+            for resumption in self._state.pending_resumptions
+            if (
+                resumption.status == ResumptionStatus.ASSIGNED
+                and resumption.assigned_to_run_id == current_resumption_run_id
+            )
+        ]
 
         # ── 时间 ────────────────────────────────────────────────────────────
         from agentlang.utils.datetime_formatter import get_current_datetime_str
@@ -1528,6 +1686,11 @@ class AgentHorizon:
             parts.append("<notifications>")
             parts.extend(notif_blocks)
             parts.append("</notifications>")
+
+        if resumption_blocks:
+            parts.append("<resumptions>")
+            parts.extend(resumption_blocks)
+            parts.append("</resumptions>")
 
         # magiclaw 启动提醒：每轮都注入，直到所有必读文件完成
         magiclaw_ctx = self._build_magiclaw_startup_context()

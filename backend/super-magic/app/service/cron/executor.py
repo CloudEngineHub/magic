@@ -21,8 +21,10 @@ from app.service.agent_runner import (
     run_isolated_agent,
 )
 from app.service.agent_session_id_service import AgentSessionIdService
+from app.service.cron.migration import apply_migrations, resolve_legacy_agent_mode
 from app.service.cron.models import CronJob, CronRunResult
-from app.service.cron.store import write_result_file
+from app.service.cron.schema import CURRENT_PAYLOAD_VERSION
+from app.service.cron.store import persist_payload_fields, write_result_file
 
 logger = get_logger(__name__)
 
@@ -69,21 +71,92 @@ async def _resolve_cron_agent_target(
 ) -> AgentTarget:
     """将 cron 持久化身份转换为规范化 AgentTarget。
 
-    无 agent_mode 的历史任务继续按普通 agent_name 运行；只有明确写入
-    magiclaw/custom_agent 时，agent_name 才作为 agent_code 使用。
+    显式 agent_mode 优先；版本过旧或缺少 agent_mode 的任务在本次执行时懒迁移。
     """
     raw_mode = job.payload.agent_mode
-    if raw_mode is None:
-        return AgentTarget.from_name(await _resolve_agent_name(job))
-    if not isinstance(raw_mode, str):
+    if raw_mode is not None and not isinstance(raw_mode, str):
         raise ValueError(
             f"Invalid agent_mode for cron job [{job.id}]: expected string, "
             f"got {type(raw_mode).__name__}"
         )
 
-    mode_value = raw_mode.strip()
+    mode_value = (raw_mode or "").strip()
+    explicit_mode: AgentMode | None = None
+    if mode_value:
+        try:
+            explicit_mode = AgentMode(mode_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"Unknown agent_mode '{mode_value}' for cron job [{job.id}]"
+            ) from exc
+
+    needs_migration = (
+        job.payload.version < CURRENT_PAYLOAD_VERSION
+        or explicit_mode is None
+    )
+    if job.payload.version > CURRENT_PAYLOAD_VERSION:
+        logger.warning(
+            f"cron job [{job.id}] payload version v{job.payload.version} is newer "
+            f"than the supported v{CURRENT_PAYLOAD_VERSION}; keeping it unchanged"
+        )
+    agent_name: str | None = (
+        job.payload.agent_name.strip()
+        if isinstance(job.payload.agent_name, str) and job.payload.agent_name.strip()
+        else None
+    )
+    inferred_mode: str | None = None
+    resolved_payload = job.payload.to_payload()
+    if explicit_mode is None:
+        agent_name = await _resolve_agent_name(job)
+        try:
+            inferred_mode = await resolve_legacy_agent_mode(agent_name)
+        except Exception as exc:
+            logger.warning(
+                f"cron job [{job.id}] legacy Agent mode migration lookup failed "
+                f"for agent={agent_name}: {exc}"
+            )
+
+    if needs_migration:
+        try:
+            migration = apply_migrations(
+                resolved_payload,
+                inferred_agent_mode=inferred_mode,
+            )
+        except Exception as exc:
+            logger.warning(f"cron job [{job.id}] payload migration failed: {exc}")
+            migration = None
+
+        if migration is not None:
+            if migration.complete:
+                resolved_payload = migration.payload
+            if migration.changed:
+                latest_payload = None
+                try:
+                    latest_payload = await persist_payload_fields(job, migration.field_patch)
+                except Exception as exc:
+                    logger.warning(
+                        f"cron job [{job.id}] payload field write-back failed "
+                        f"(agent={agent_name}, "
+                        f"agent_mode={migration.payload.get('agent_mode')!r}); "
+                        f"continuing this run: {exc}"
+                    )
+                if latest_payload is not None:
+                    job.payload = latest_payload
+                    resolved_payload = latest_payload.to_payload()
+                    if latest_payload.agent_name:
+                        agent_name = latest_payload.agent_name
+            if not migration.complete:
+                logger.warning(
+                    f"cron job [{job.id}] legacy Agent mode remains unresolved "
+                    f"for agent={agent_name}: "
+                    f"{migration.reason or 'unknown reason'}"
+                )
+
+    mode_value = str(resolved_payload.get("agent_mode") or "").strip()
     if not mode_value:
-        return AgentTarget.from_name(await _resolve_agent_name(job))
+        if agent_name is None:
+            agent_name = await _resolve_agent_name(job)
+        return AgentTarget.from_name(agent_name)
 
     try:
         agent_mode = AgentMode(mode_value)
@@ -93,13 +166,14 @@ async def _resolve_cron_agent_target(
         ) from exc
 
     if agent_mode in (AgentMode.MAGICLAW, AgentMode.CUSTOM_AGENT):
-        raw_agent_name = job.payload.agent_name
-        if not isinstance(raw_agent_name, str) or not raw_agent_name.strip():
+        if agent_name is None:
+            agent_name = await _resolve_agent_name(job)
+        if not agent_name.strip():
             raise ValueError(
                 f"agent_name is required for cron job [{job.id}] "
                 f"when agent_mode={agent_mode.value}"
             )
-        return AgentTarget.from_mode(agent_mode, raw_agent_name)
+        return AgentTarget.from_mode(agent_mode, agent_name)
 
     return AgentTarget.from_mode(agent_mode)
 

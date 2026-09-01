@@ -1,7 +1,8 @@
 import {
-	toCanonicalCanvasResourcePath,
-	toWeakCanvasResourcePath,
+	normalizePathSeparators,
+	resolveCanvasStorageResourceReference,
 } from "../../shared/path/canvasResourcePath"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import {
 	CANVAS_MEDIA_CACHE_NAME,
 	CANVAS_MEDIA_DB_NAME,
@@ -22,7 +23,7 @@ import { isAppServiceWorkerFeatureEnabled } from "@/workers/service-worker/regis
  *   勿仅用 `isEnabled()`（后者含 `isActiveConsumer`），否则 Canvas 销毁后仍在飞行的换链会退回 OSS 直链。
  */
 
-export type MediaResourceOfflineCacheMediaType = "image" | "video"
+export type MediaResourceOfflineCacheMediaType = "image" | "video" | "audio"
 
 export interface MediaResourceOfflineCacheOptions {
 	/** 离线缓存总容量上限，默认 1GB */
@@ -33,8 +34,8 @@ export type MediaResourceOfflineCacheConfig = boolean | MediaResourceOfflineCach
 
 /** 与 {@link Canvas} 构造时注入的宿主能力对齐，用于离线缓存条目的 path 与换链层一致 */
 export interface MediaResourceOfflineCacheManagerOptions {
-	/** 将画布 path 解析为宿主工作区绝对路径，再与换链/资源管理器使用同一规范键 */
-	getResolveAbsolutePath?: () => ((path: string) => string) | undefined
+	/** 将 Canvas storage path 解析为宿主工作区路径，作为跨刷新稳定的离线缓存键。 */
+	getResolveResourceReference?: () => ResolveCanvasResourceReference | undefined
 	/** 获取宿主注入的虚拟媒体资源 scope，用于隔离工作区/项目上下文 */
 	getVirtualResourceScope?: () => string | undefined
 }
@@ -262,28 +263,24 @@ export class MediaResourceOfflineCacheManager {
 	}
 	private registerPromises = new Map<string, Promise<void>>()
 
-	private readonly getResolveAbsolutePath?: () => ((path: string) => string) | undefined
+	private readonly getResolveResourceReference?: () => ResolveCanvasResourceReference | undefined
 	private readonly getVirtualResourceScope?: () => string | undefined
 
 	constructor(options?: MediaResourceOfflineCacheManagerOptions) {
 		this.options = normalizeConfig(MEDIA_RESOURCE_OFFLINE_CACHE_CONFIG)
-		this.getResolveAbsolutePath = options?.getResolveAbsolutePath
+		this.getResolveResourceReference = options?.getResolveResourceReference
 		this.getVirtualResourceScope = options?.getVirtualResourceScope
 		this.syncActiveConsumer()
 	}
 
-	private resolveStoredCanonicalPath(path: string): string {
-		return toCanonicalCanvasResourcePath(
-			coerceToPathString(path),
-			this.getResolveAbsolutePath?.(),
-		)
-	}
+	private resolveStoredResourcePath(path: string): string | undefined {
+		const rawPath = normalizePathSeparators(coerceToPathString(path).trim())
+		const resolveResourceReference = this.getResolveResourceReference?.()
+		if (!resolveResourceReference) return undefined
 
-	private resolveStoredResourcePath(path: string): string {
-		const canonicalPath = this.resolveStoredCanonicalPath(path)
-		const resolveAbsolutePath = this.getResolveAbsolutePath?.()
-		if (!resolveAbsolutePath) return canonicalPath
-		return toWeakCanvasResourcePath(coerceToPathString(resolveAbsolutePath(canonicalPath)))
+		const resolution = resolveCanvasStorageResourceReference(rawPath, resolveResourceReference)
+		if (resolution.status !== "resolved") return undefined
+		return resolution.workspacePath ?? resolution.storagePath
 	}
 
 	private getResourceNamespace(): string {
@@ -367,6 +364,7 @@ export class MediaResourceOfflineCacheManager {
 			const now = Date.now()
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
+			if (!resourcePath) return null
 			const existing = await this.getEntry(params.path, params.mediaType)
 			const resourceUrl = this.getVirtualResourceUrl(resourcePath, params.mediaType)
 			const entry: CachedMediaResource = {
@@ -536,6 +534,7 @@ export class MediaResourceOfflineCacheManager {
 		void (async () => {
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
+			if (!resourcePath) return
 			const key = buildResourceId(namespace, params.mediaType, resourcePath)
 			if (!params.force && this.cachePromises.has(key)) return
 
@@ -575,6 +574,7 @@ export class MediaResourceOfflineCacheManager {
 		void (async () => {
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
+			if (!resourcePath) return
 			const key = buildResourceId(namespace, params.mediaType, resourcePath)
 			if (this.registerPromises.has(key)) return
 
@@ -801,6 +801,7 @@ export class MediaResourceOfflineCacheManager {
 	): Promise<CachedMediaResource | null> {
 		const namespace = this.getResourceNamespace()
 		const resourcePath = this.resolveStoredResourcePath(path)
+		if (!resourcePath) return null
 		const db = await this.openDb()
 		const transaction = db.transaction(STORE_NAME, "readonly")
 		const store = transaction.objectStore(STORE_NAME)
@@ -848,6 +849,7 @@ export class MediaResourceOfflineCacheManager {
 		const namespace = this.getResourceNamespace()
 		const entry = await this.getEntry(params.path, params.mediaType)
 		const resourcePathForDelete = entry?.path ?? this.resolveStoredResourcePath(params.path)
+		if (!resourcePathForDelete) return
 		const cacheKey = entry
 			? this.getCacheKey(entry)
 			: this.getVirtualResourceUrl(resourcePathForDelete, params.mediaType)

@@ -236,7 +236,6 @@ class ChatHistory:
         # 事件分发器（必需）
         self.event_dispatcher = event_dispatcher
 
-        os.makedirs(self.chat_history_dir, exist_ok=True) # 确保目录存在
         self._history_file_path = self._build_chat_history_filename()
         # load() 改为 async，不在 __init__ 中调用，由外部显式 await chat_history.load()
 
@@ -511,6 +510,7 @@ class ChatHistory:
     def _save_session_document(self, document: Dict[str, Any]) -> None:
         """保存完整会话状态文档。"""
         config_file = self._build_model_config_filename()
+        os.makedirs(self.chat_history_dir, exist_ok=True)
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(document, f, ensure_ascii=False, indent=2)
 
@@ -1016,6 +1016,7 @@ class ChatHistory:
         """
         try:
             tools_file_path = self._build_tools_list_filename()
+            os.makedirs(self.chat_history_dir, exist_ok=True)
             # 使用indent美化JSON输出
             tools_json = json.dumps(tools_list, indent=4, ensure_ascii=False)
             with open(tools_file_path, "w", encoding="utf-8") as f:

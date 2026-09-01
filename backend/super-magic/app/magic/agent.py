@@ -83,7 +83,7 @@ from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
-from app.tools.core.app_tool_validator import AppToolValidator, app_tool_validator
+from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
 from app.utils.file_utils import (
@@ -283,13 +283,9 @@ class Agent(BaseAgent):
         )
 
         # 设置工具验证器，用于过滤无效工具
-        self._tool_validator = (
-            AppToolValidator(
-                ignore_invalid_declarations=True,
-                agent_name=self.agent_name,
-            )
-            if is_user_agent
-            else app_tool_validator
+        self._tool_validator = AppToolValidator(
+            ignore_invalid_declarations=True,
+            agent_name=self.agent_name,
         )
 
         # 存储加载的 skills 列表（必须在 _initialize_agent 之前初始化）
@@ -917,6 +913,22 @@ class Agent(BaseAgent):
             self._set_run_terminal_state(run_task, AgentState.FINISHED)
             return result
         finally:
+            resumption_id = self.agent_context.get_resumption_id()
+            if resumption_id:
+                try:
+                    # MOCK DEMO：如果 run 在 Horizon 注入前被取消，
+                    # 这条 assigned 事项仍未被消费，必须释放回 pending。
+                    await self.agent_context.horizon.release_resumption(
+                        resumption_id,
+                        "Agent run ended before the resumption was injected",
+                    )
+                except Exception as release_error:
+                    logger.warning(
+                        "释放未完成 Agent resumption 失败: resumption_id=%s error=%s",
+                        resumption_id,
+                        release_error,
+                    )
+            self.agent_context.set_resumption_context(None, None)
             self._release_run(run_task)
 
     async def _run_once(self, query: str):
@@ -942,6 +954,10 @@ class Agent(BaseAgent):
 
         # 注入点1：用户消息入库后、第一次 LLM 调用前，注入 system_injected_context
         # 若历史末尾存在未完成的 tool call 序列，跳过注入避免破坏序列完整性
+        # MOCK DEMO：/resume 不会追加可见用户消息；这里只把 Horizon 的恢复事项
+        # 作为隐藏上下文写入 ChatHistory，供 LLM 继续调用 get_sandbox_info。
+        resumption_id = self.agent_context.get_resumption_id()
+        resumption_injected = False
         try:
             if self.chat_history._is_tool_call_sequence_complete():
                 ctx_update = await self._build_horizon_context_update_safely(
@@ -950,10 +966,20 @@ class Agent(BaseAgent):
                 )
                 if ctx_update:
                     await self.chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
+                    resumption_injected = bool(resumption_id)
+                    if resumption_id:
+                        # 上下文已经送进 Agent 后立即消费事项，不等待最终回答，
+                        # 避免工具失败或模型中断造成重复自动恢复。
+                        await self.agent_context.horizon.complete_resumption(resumption_id)
                     logger.debug("[AgentHorizon] 已注入 user query 后 system_injected_context")
             else:
                 logger.warning("[AgentHorizon] 注入点1 跳过：历史末尾存在未完成的 tool call 序列，避免消息序列错误")
         except Exception as _horizon_err:
+            if resumption_id and not resumption_injected:
+                await self.agent_context.horizon.release_resumption(
+                    resumption_id,
+                    f"Horizon resumption injection failed: {_horizon_err}",
+                )
             logger.warning(f"[AgentHorizon] 注入点1 注入失败: {_horizon_err}")
 
         self.set_agent_state(AgentState.RUNNING)

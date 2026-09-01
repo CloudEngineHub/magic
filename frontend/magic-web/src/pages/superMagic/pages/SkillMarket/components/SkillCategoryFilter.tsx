@@ -1,97 +1,112 @@
-import { LayoutGroup, motion, useReducedMotion } from "framer-motion"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import type { SkillMarketCategoryView } from "@/services/skills/SkillsService"
+import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 
 interface SkillCategoryFilterProps {
 	categories: SkillMarketCategoryView[]
 	selectedCategoryIds: string[]
+	selectedIsFeatured?: boolean | 0 | 1 | null
 	loading?: boolean
 	error?: boolean
-	onChange: (categoryIds: string[]) => void
+	onChange: (categoryIds: string[], isFeatured?: 0 | 1) => void
 }
 
 function SkillCategoryFilter({
 	categories,
 	selectedCategoryIds,
+	selectedIsFeatured,
 	loading = false,
 	error = false,
 	onChange,
 }: SkillCategoryFilterProps) {
 	const { t } = useTranslation("crew/market")
 	const selectedCategoryId = selectedCategoryIds[0]
-	const shouldReduceMotion = useReducedMotion()
-	const indicatorTransition = {
-		duration: shouldReduceMotion ? 0 : 0.2,
-		ease: [0.25, 1, 0.5, 1] as const,
-	}
-
-	const activeIndicator = (
-		<motion.span
-			layoutId="skill-market-category-indicator"
-			className="pointer-events-none absolute inset-x-0 bottom-[-2px] h-0.5 bg-foreground"
-			transition={indicatorTransition}
-			aria-hidden="true"
-		/>
-	)
-
+	const isFeaturedSelected = selectedIsFeatured === 1
 	return (
-		<div
-			className="no-scrollbar flex min-w-0 items-end overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-border"
+		<HeadlessHorizontalScroll
+			className="relative w-full"
+			scrollContainerClassName="flex gap-2 overflow-x-auto py-1 pr-16 scrollbar-none"
+			scrollContainerProps={{ "aria-busy": loading }}
+			scrollStep={280}
 			data-testid="skill-category-filter"
-			aria-busy={loading}
 		>
-			<LayoutGroup id="skill-market-category-tabs">
-				<div
-					className="flex min-w-max items-end gap-6 pr-8 sm:gap-8"
-					role="tablist"
-					aria-label={t("skillsLibrary.category")}
-				>
-					<button
-						type="button"
+			<div
+				className="flex min-w-max gap-2"
+				role="tablist"
+				aria-label={t("skillsLibrary.category")}
+			>
+				{[
+					{
+						id: "all",
+						label: t("skillsLibrary.allSkills"),
+						active: !selectedCategoryId && !isFeaturedSelected,
+						onClick: () => onChange([]),
+					},
+					{
+						id: "featured",
+						label: t("skillsLibrary.featured"),
+						active: isFeaturedSelected,
+						onClick: () => onChange([], 1),
+					},
+				].map((filter) => (
+					<Button
+						key={filter.id}
+						variant={filter.active ? "outline" : "secondary"}
+						size="sm"
 						role="tab"
-						aria-selected={!selectedCategoryId}
+						aria-selected={filter.active}
 						className={cn(
-							"relative shrink-0 whitespace-nowrap border-b-2 border-transparent pb-3 text-xl font-semibold tracking-[-0.025em] transition-colors",
-							!selectedCategoryId
-								? "text-foreground"
-								: "text-muted-foreground hover:text-foreground",
+							"h-9 shrink-0 gap-2 rounded-full border-[2px] shadow-xs transition-colors",
+							filter.active
+								? "border-foreground bg-background text-foreground"
+								: "border-transparent text-muted-foreground hover:text-foreground",
 						)}
-						data-testid="skill-category-all"
-						onClick={() => onChange([])}
+						data-testid={`skill-category-${filter.id}`}
+						onClick={filter.onClick}
 					>
-						{t("skillsLibrary.allSkills")}
-						{!selectedCategoryId ? activeIndicator : null}
-					</button>
+						{filter.label}
+					</Button>
+				))}
 
-					{categories.map((category) => (
-						<button
+				{categories.map((category) => {
+					const isActive = selectedCategoryId === category.id && !isFeaturedSelected
+					return (
+						<Button
 							key={category.id}
-							type="button"
+							variant={isActive ? "outline" : "secondary"}
+							size="sm"
 							role="tab"
-							aria-selected={selectedCategoryId === category.id}
+							aria-selected={isActive}
 							className={cn(
-								"relative shrink-0 whitespace-nowrap border-b-2 border-transparent pb-3 text-xl font-semibold tracking-[-0.025em] transition-colors",
-								selectedCategoryId === category.id
-									? "text-foreground"
-									: "text-muted-foreground hover:text-foreground",
+								"h-9 shrink-0 gap-2 rounded-full border-[2px] shadow-xs transition-colors",
+								isActive
+									? "border-foreground bg-background text-foreground"
+									: "border-transparent text-muted-foreground hover:text-foreground",
 							)}
 							data-testid={`skill-category-${category.id}`}
 							onClick={() => onChange([category.id])}
 						>
+							{category.logo ? (
+								<img
+									src={category.logo}
+									alt=""
+									className="size-4 shrink-0 rounded-sm object-cover"
+								/>
+							) : null}
 							{category.name}
-							{selectedCategoryId === category.id ? activeIndicator : null}
-						</button>
-					))}
-				</div>
-			</LayoutGroup>
+						</Button>
+					)
+				})}
+			</div>
 
 			{error ? (
 				<span className="shrink-0 text-xs text-destructive" role="status">
 					{t("skillsLibrary.categoriesLoadFailed")}
 				</span>
 			) : null}
-		</div>
+		</HeadlessHorizontalScroll>
 	)
 }
 

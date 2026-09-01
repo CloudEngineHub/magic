@@ -113,22 +113,20 @@ describe("SkillsLibraryMobile pagination", () => {
 				pageSize: 20,
 			})
 			.mockResolvedValueOnce({
-				list: [
-					{
-						id: "featured-skill-1",
-						storeSkillId: "featured-store-skill-1",
-						skillCode: "featured.skill.code.1",
-						name: "Featured Skill 1",
-						description: "Featured skill",
-						isFeatured: true,
-						status: "not-added",
-						publisherType: "OFFICIAL",
-						needUpgrade: false,
-						updatedAt: "2026-03-23 10:00:00",
-					},
-				],
+				list: Array.from({ length: 20 }, (_, index) => ({
+					id: `featured-skill-${index + 1}`,
+					storeSkillId: `featured-store-skill-${index + 1}`,
+					skillCode: `featured.skill.code.${index + 1}`,
+					name: `Featured Skill ${index + 1}`,
+					description: "Featured skill",
+					isFeatured: true,
+					status: "not-added",
+					publisherType: "OFFICIAL",
+					needUpgrade: false,
+					updatedAt: "2026-03-23 10:00:00",
+				})),
 				page: 1,
-				pageSize: 3,
+				pageSize: 20,
 			})
 			.mockResolvedValueOnce({
 				list: [
@@ -181,18 +179,23 @@ describe("SkillsLibraryMobile pagination", () => {
 		)
 
 		await waitFor(() => {
-			expect(getStoreSkillsMock).toHaveBeenCalledTimes(2)
-			expect(intersectionObserver).toHaveBeenCalledTimes(2)
+			expect(getStoreSkillsMock).toHaveBeenCalled()
+			expect(intersectionObserver).toHaveBeenCalled()
 		})
-		expect(getStoreSkillsMock.mock.calls[1]?.[0]).toEqual({
-			page: 1,
-			page_size: 6,
-			is_featured: 1,
-		})
-		expect(getStoreSkillsMock.mock.calls[1]?.[0]).not.toHaveProperty("category_ids")
 
-		expect(screen.getByTestId("featured-skills-mobile-section")).toBeInTheDocument()
-		expect(screen.getByTestId("featured-skills-mobile-list")).toBeInTheDocument()
+		await act(async () => {
+			screen.getByTestId("skill-category-featured").click()
+		})
+		await waitFor(() => {
+			expect(getStoreSkillsMock).toHaveBeenLastCalledWith({
+				page: 1,
+				page_size: 20,
+				keyword: undefined,
+				publisher_type: undefined,
+				category_ids: undefined,
+				is_featured: 1,
+			})
+		})
 
 		expect(screen.getByTestId("skills-library-mobile-scroll-sentinel")).toBeInTheDocument()
 
@@ -218,6 +221,7 @@ describe("SkillsLibraryMobile pagination", () => {
 			page: 2,
 			page_size: 20,
 			keyword: undefined,
+			is_featured: 1,
 		})
 		expect(observe).toHaveBeenCalled()
 		expect(disconnect).toHaveBeenCalled()

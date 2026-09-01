@@ -71,7 +71,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
 
     private function handleFileDeleted(FileDeletedEvent $event): void
     {
-        if (! $this->shouldRecordSource($event->getSource())) {
+        if (! $this->taskFileDomainService->shouldEnterRecycleBin($event->getFileEntity(), $event->getSource())) {
             return;
         }
 
@@ -84,7 +84,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
 
     private function handleDirectoryDeleted(DirectoryDeletedEvent $event): void
     {
-        if (! $this->shouldRecordSource($event->getSource())) {
+        if (! $this->taskFileDomainService->shouldEnterRecycleBin($event->getDirectoryEntity(), $event->getSource())) {
             return;
         }
 
@@ -97,11 +97,14 @@ class FileRecycleBinSubscriber implements ListenerInterface
 
     private function handleFilesBatchDeleted(FilesBatchDeletedEvent $event): void
     {
-        if (! $this->shouldRecordSource($event->getSource())) {
+        $fileEntities = array_values(array_filter(
+            $this->taskFileDomainService->filterProjectSpaceFiles($event->getAllEntities()),
+            fn (TaskFileEntity $fileEntity): bool => $this->taskFileDomainService->shouldEnterRecycleBin($fileEntity, $event->getSource())
+        ));
+        if (empty($fileEntities)) {
             return;
         }
 
-        $fileEntities = $event->getAllEntities();
         $relativePathMap = $this->buildRelativePathMap($fileEntities, $event->getProjectId());
 
         foreach ($fileEntities as $fileEntity) {
@@ -112,11 +115,6 @@ class FileRecycleBinSubscriber implements ListenerInterface
                 $relativePathMap[$fileEntity->getFileId()] ?? null
             );
         }
-    }
-
-    private function shouldRecordSource(DeleteEventSource $source): bool
-    {
-        return in_array($source, [DeleteEventSource::User, DeleteEventSource::Agent], true);
     }
 
     private function recordFileDeletion(
