@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime
 
 
-def build_image_filename(name: str, generated_at: datetime | None = None) -> str:
-    """按 Design 兼容规则生成安全且可追踪的图片文件名。"""
+def build_image_filename(
+    name: str,
+    generated_at: datetime | None = None,
+    unique_key: str | None = None,
+) -> str:
+    """按 Design 兼容规则生成安全、可追踪且支持并发的图片文件名。"""
     clean_name = sanitize_image_filename(name)
     timestamp = (generated_at or datetime.now()).strftime("%Y%m%d%H%M%S")
+    if unique_key:
+        unique_suffix = hashlib.sha256(unique_key.encode("utf-8")).hexdigest()[:12]
+        return f"{clean_name}_{timestamp}_{unique_suffix}"
     return f"{clean_name}_{timestamp}"
 
 
