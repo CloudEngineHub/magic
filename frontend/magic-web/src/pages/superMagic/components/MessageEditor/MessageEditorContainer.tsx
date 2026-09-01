@@ -510,6 +510,7 @@ export const MessageEditorContainer = observer(
 						topicMode: data.topicMode ?? topicMode,
 						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
 						extra: data.extra,
+						targetTopic: data.targetTopic,
 					})
 				},
 			)

@@ -368,7 +368,10 @@ function MicroAppPageInner({
 												entryFile={previewEntryFile}
 												attachments={attachments}
 												attachmentList={attachmentList}
+												projectId={projectId}
+												topicStore={conversation.topicStore}
 												selectedProject={selectedProject}
+												selectedTopic={selectedTopic}
 												allowEdit={!isReadOnly}
 												onOpenFile={handlePreviewOpenFile}
 												viewMode={previewMode}

@@ -2,6 +2,7 @@ import { renderHook, act } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { useMagicFiles } from "../useMagicFiles"
 import magicToast from "@/components/base/MagicToaster/utils"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 const defaultAgentSelectionMock = vi.hoisted(() => ({
 	modeIdentifier: "general",
@@ -203,6 +204,48 @@ describe("useMagicFiles", () => {
 					requestId: "req-1",
 					success: false,
 					error: "No project selected",
+				}),
+				targetOrigin,
+			)
+		})
+
+		it("分享场景在授权前返回项目上下文提示", async () => {
+			const authorizePermission = vi.fn()
+			const projectContextError = "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。"
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: null,
+					projectContextUnavailableError: projectContextError,
+					uploadImageFileToProject,
+					authorizePermission,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicUploadFiles({
+					type: "MAGIC_UPLOAD_FILES_REQUEST",
+					requestId: "req-share-context",
+					files: [
+						{
+							base64: "data",
+							filename: "a.txt",
+							path: "./a.txt",
+							fileSize: 4,
+							fileType: "text/plain",
+						},
+					],
+				})
+			})
+
+			expect(authorizePermission).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_UPLOAD_FILES_RESPONSE",
+					requestId: "req-share-context",
+					success: false,
+					error: projectContextError,
 				}),
 				targetOrigin,
 			)
@@ -611,6 +654,56 @@ describe("useMagicFiles", () => {
 				}),
 				targetOrigin,
 			)
+		})
+
+		it("uses the explicit project and scoped topic store", async () => {
+			const { SuperMagicApi } = await import("@/apis")
+			const { default: SuperMagicService } = await import("@/pages/superMagic/services")
+			const scopedSelectedTopic = vi.fn()
+			const scopedSetTopics = vi.fn()
+			const scopedTopicStore = {
+				topics: [{ id: "old-topic" }],
+				setTopics: scopedSetTopics,
+				setSelectedTopic: scopedSelectedTopic,
+			} as unknown as TopicStore
+
+			vi.mocked(SuperMagicApi.createTopic).mockResolvedValueOnce({
+				id: "topic-scoped",
+			} as any)
+			vi.useFakeTimers()
+
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					projectId: "explicit-project",
+					topicStore: scopedTopicStore,
+					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
+					uploadImageFileToProject,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicAddFilesToMessage({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
+					requestId: "req-scoped",
+					filePaths: ["a.csv"],
+				})
+			})
+
+			expect(SuperMagicApi.createTopic).toHaveBeenCalledWith(
+				expect.objectContaining({ project_id: "explicit-project" }),
+			)
+			expect(scopedSelectedTopic).toHaveBeenCalledWith(
+				expect.objectContaining({ id: "topic-scoped" }),
+			)
+			expect(scopedSetTopics).toHaveBeenCalledWith([
+				expect.objectContaining({ id: "topic-scoped" }),
+				{ id: "old-topic" },
+			])
+			expect(SuperMagicService.route.navigateToState).not.toHaveBeenCalled()
+
+			vi.useRealTimers()
 		})
 	})
 

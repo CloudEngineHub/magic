@@ -210,7 +210,10 @@ function MicroAppPageMobileInner({
 								entryFile={defaultEntryFile}
 								attachments={attachments}
 								attachmentList={attachmentList}
+								projectId={projectId}
+								topicStore={conversation.topicStore}
 								selectedProject={selectedProject}
+								selectedTopic={selectedTopic}
 								allowEdit={!isReadOnly}
 								onOpenFile={handlePreviewFile}
 								isBuilding={hasRunningTopic}

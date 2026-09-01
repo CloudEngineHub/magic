@@ -167,6 +167,43 @@ describe("messageSendPreparation", () => {
 		expect(result?.params.extra).toEqual({ source: "retry" })
 	})
 
+	it("uses the explicit target topic instead of the shared selected topic", async () => {
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-shared",
+			project_id: "project-1",
+			chat_topic_id: "chat-shared",
+			chat_conversation_id: "conversation-shared",
+		} as Topic
+		const targetTopic = {
+			id: "topic-target",
+			project_id: "project-1",
+			chat_topic_id: "chat-target",
+			chat_conversation_id: "conversation-target",
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.Chat,
+				targetTopic,
+			},
+			context: { selectedProject, selectedTopic },
+			tabPattern: TopicMode.Chat,
+			messagesLength: 1,
+		})
+
+		expect(result?.currentTopic?.id).toBe("topic-target")
+		expect(result?.context.selectedTopic?.id).toBe("topic-target")
+	})
+
 	it("sends a configured built-in default as topic_pattern without agent_code", async () => {
 		modeServiceMock.defaultAgentCode = TopicMode.PPT
 		isModeValidMock.mockImplementation((mode) => mode === TopicMode.PPT)

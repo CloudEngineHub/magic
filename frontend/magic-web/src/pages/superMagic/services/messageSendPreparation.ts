@@ -162,7 +162,7 @@ export async function preparePanelSend({
 }: PreparePanelSendParams): Promise<PreparedPanelSendResult | null> {
 	const resolvedContext = resolveMessageSendContext(context)
 	let currentProject = resolvedContext.selectedProject
-	let currentTopic = resolvedContext.selectedTopic
+	let currentTopic = params.targetTopic ?? resolvedContext.selectedTopic
 	let nextMentionItems = [...params.mentionItems]
 	let nextContent = params.value
 	const selection = resolveAgentSelection(

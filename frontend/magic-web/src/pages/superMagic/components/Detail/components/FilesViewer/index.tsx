@@ -44,6 +44,7 @@ import CommonWebsitePresetDialog, {
 	type CommonWebsitePresetFormValues,
 } from "./components/CommonWebsitePresetDialog"
 import StablePPTPortalSurface from "./components/StablePPTPortalSurface"
+import StablePreviewPortalSurface from "./components/StablePreviewPortalSurface"
 import {
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getWebsiteTabData,
@@ -552,6 +553,8 @@ const FilesViewer = memo(
 					return {
 						isActive,
 						usesStablePptPortal,
+						usesStablePreviewPortal:
+							!usesStablePptPortal && !props.documentFlowFullscreen,
 						node: (
 							<TabCache
 								key={tab.id}
@@ -565,7 +568,9 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
-								fillPortalSurface={usesStablePptPortal}
+								fillPortalSurface={
+									usesStablePptPortal || !props.documentFlowFullscreen
+								}
 							/>
 						),
 					}
@@ -587,18 +592,29 @@ const FilesViewer = memo(
 				props.userSelectDetail,
 				openFileTab,
 			])
-			const inlineCachedTabs = cachedTabRenders
-				.filter((entry) => !entry.usesStablePptPortal)
-				.map((entry) => entry.node)
 			const stablePptCachedTabs = cachedTabRenders
 				.filter((entry) => entry.usesStablePptPortal)
+				.map((entry) => entry.node)
+			const inlineCachedTabs = cachedTabRenders
+				.filter((entry) => !entry.usesStablePptPortal && !entry.usesStablePreviewPortal)
+				.map((entry) => entry.node)
+			const stablePreviewCachedTabs = cachedTabRenders
+				.filter((entry) => entry.usesStablePreviewPortal)
 				.map((entry) => entry.node)
 			const hasActiveStablePptTab = cachedTabRenders.some(
 				(entry) => entry.usesStablePptPortal && entry.isActive,
 			)
+			const hasActiveStablePreviewTab = cachedTabRenders.some(
+				(entry) => entry.usesStablePreviewPortal && entry.isActive,
+			)
 			const hasStablePptTabs = stablePptCachedTabs.length > 0
+			const hasStablePreviewTabs = stablePreviewCachedTabs.length > 0
 			const shouldShowStablePptSurface =
 				hasActiveStablePptTab && Boolean(currentTab) && !isRestoringFileTabs
+			const shouldShowStablePreviewSurface =
+				hasActiveStablePreviewTab && Boolean(currentTab) && !isRestoringFileTabs
+			const [stablePreviewSurfaceAnchor, setStablePreviewSurfaceAnchor] =
+				useState<HTMLDivElement | null>(null)
 			const [stablePptSurfaceAnchor, setStablePptSurfaceAnchor] =
 				useState<HTMLDivElement | null>(null)
 
@@ -707,13 +723,22 @@ const FilesViewer = memo(
 									</div>
 								) : (
 									<>
-										{/* Non-PPT tabs keep the existing FilesViewer rendering path. */}
+										{/* All cached preview tabs render through stable body portals. */}
 										{inlineCachedTabs}
-										{hasActiveStablePptTab ? (
+										{hasActiveStablePreviewTab || hasActiveStablePptTab ? (
 											<div
-												ref={setStablePptSurfaceAnchor}
+												ref={
+													hasActiveStablePreviewTab
+														? setStablePreviewSurfaceAnchor
+														: setStablePptSurfaceAnchor
+												}
 												className="relative min-h-0 flex-1"
-												data-files-viewer-ppt-anchor="true"
+												data-files-viewer-preview-anchor={
+													hasActiveStablePreviewTab ? "true" : undefined
+												}
+												data-files-viewer-ppt-anchor={
+													hasActiveStablePptTab ? "true" : undefined
+												}
 											/>
 										) : null}
 									</>
@@ -738,6 +763,16 @@ const FilesViewer = memo(
 
 			return (
 				<>
+					<StablePreviewPortalSurface
+						anchor={stablePreviewSurfaceAnchor}
+						enabled={
+							Boolean(currentTab) && !isRestoringFileTabs && hasStablePreviewTabs
+						}
+						isFullscreen={effectiveIsFullscreen}
+						visible={shouldShowStablePreviewSurface}
+					>
+						{stablePreviewCachedTabs}
+					</StablePreviewPortalSurface>
 					<StablePPTPortalSurface
 						anchor={stablePptSurfaceAnchor}
 						borderRadius={
