@@ -88,13 +88,8 @@ class GenerationSubmissionService:
         if not generated:
             return result
 
-        work_items = [
-            self._build_work_item(item, project_path)
-            for item in generated
-        ]
-        work_results = await self._execute_work_items(work_items, project_path, tool_context)
-        for work_result in work_results:
-            await self._commit_generation_result(project_path, by_content, work_result)
+        work_items = [self._build_work_item(item, project_path) for item in generated]
+        await self._execute_work_items(work_items, project_path, tool_context, by_content)
         return result
 
     def _build_work_item(
@@ -125,28 +120,20 @@ class GenerationSubmissionService:
         work_items: list[_GenerationWorkItem],
         project_path: str,
         tool_context: ToolContext | None,
-    ) -> list[_GenerationWorkResult]:
-        """并发执行独立生成项，并按输入顺序返回执行快照。"""
-        tasks = [
-            asyncio.create_task(self._execute_work_item(item, project_path, tool_context))
-            for item in work_items
-        ]
+        by_content: dict[str, GeneratedResultItem],
+    ) -> None:
+        """按完成事件消费生成结果，并立即提交已完成项。"""
+        tasks = [asyncio.create_task(self._execute_work_item(item, project_path, tool_context)) for item in work_items]
         try:
-            raw_results = await asyncio.gather(*tasks, return_exceptions=True)
-        except asyncio.CancelledError:
+            for completed_task in asyncio.as_completed(tasks):
+                work_result = await completed_task
+                await self._commit_generation_result(project_path, by_content, work_result)
+        except BaseException:
             for task in tasks:
-                task.cancel()
+                if not task.done():
+                    task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
-
-        results: list[_GenerationWorkResult] = []
-        for item, raw_result in zip(work_items, raw_results, strict=True):
-            if isinstance(raw_result, asyncio.CancelledError):
-                raise raw_result
-            if isinstance(raw_result, Exception):
-                raise raw_result
-            results.append(raw_result)
-        return results
 
     async def _execute_work_item(
         self,
@@ -293,11 +280,7 @@ class GenerationSubmissionService:
     ) -> str | None:
         """保存异步任务绑定，并把仓储异常收敛为恢复告警。"""
         submission_item = work_item.submission_item
-        if not (
-            submission.execution_mode == "async"
-            and submission.generation_task_id
-            and submission.provider_task_id
-        ):
+        if not (submission.execution_mode == "async" and submission.generation_task_id and submission.provider_task_id):
             return None
         try:
             await self.generation_tasks.put(

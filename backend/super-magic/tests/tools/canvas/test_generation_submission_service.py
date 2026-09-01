@@ -102,20 +102,30 @@ def _make_result(content_ids: list[str]) -> AddElementsResult:
 
 
 @pytest.mark.asyncio
-async def test_submit_generated_overlaps_provider_calls_and_commits_in_input_order() -> None:
-    """provider 请求应重叠执行，但结果提交必须保持输入顺序。"""
+async def test_submit_generated_commits_each_completed_item_immediately() -> None:
+    """快 provider 完成时应立即提交，不能等待慢 provider。"""
     strategy = _TrackingStrategy(delays={"content-1": 0.04, "content-2": 0.01})
     service = _make_service(strategy, max_concurrency=2)
-    commit = AsyncMock()
-    service._commit_generation_result = commit
     content_ids = ["content-1", "content-2"]
+    commit_order: list[str] = []
 
-    await service.submit_generated("mock-project", _make_result(content_ids), _make_commands(content_ids), None)
+    async def commit_result(project_path, by_content, work_result) -> None:
+        """记录提交时序，并确认快项提交时慢项尚未完成。"""
+        content_id = work_result.work_item.submission_item.content_id
+        commit_order.append(content_id)
+        if content_id == "content-2":
+            assert "content-1" not in strategy.finished
+
+    service._commit_generation_result = AsyncMock(side_effect=commit_result)
+
+    result = await service.submit_generated(
+        "mock-project", _make_result(content_ids), _make_commands(content_ids), None
+    )
 
     assert strategy.max_active == 2
     assert strategy.started == content_ids
-    committed_ids = [call.args[2].work_item.submission_item.content_id for call in commit.await_args_list]
-    assert committed_ids == content_ids
+    assert commit_order == ["content-2", "content-1"]
+    assert [item.content_id for item in result.items] == content_ids
     assert strategy.finished == ["content-2", "content-1"]
 
 
@@ -126,7 +136,9 @@ async def test_submit_generated_respects_configured_concurrency_limit() -> None:
     service = _make_service(strategy, max_concurrency=1)
     service._commit_generation_result = AsyncMock()
 
-    await service.submit_generated("mock-project", _make_result(["c1", "c2", "c3"]), _make_commands(["c1", "c2", "c3"]), None)
+    await service.submit_generated(
+        "mock-project", _make_result(["c1", "c2", "c3"]), _make_commands(["c1", "c2", "c3"]), None
+    )
 
     assert service.max_concurrency == 1
     assert strategy.max_active == 1
@@ -150,3 +162,25 @@ async def test_submit_generated_isolates_provider_failure_per_item() -> None:
         "completed",
         "failed",
     ]
+
+
+@pytest.mark.asyncio
+async def test_submit_generated_cancels_unfinished_provider_tasks() -> None:
+    """外层取消时应回收尚未完成的 provider 任务。"""
+    strategy = _TrackingStrategy(delays={"first": 60, "second": 60})
+    service = _make_service(strategy, max_concurrency=1)
+    service._commit_generation_result = AsyncMock()
+    submission_task = asyncio.create_task(
+        service.submit_generated(
+            "mock-project", _make_result(["first", "second"]), _make_commands(["first", "second"]), None
+        )
+    )
+
+    while not strategy.started:
+        await asyncio.sleep(0)
+    submission_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await submission_task
+    assert strategy.active == 0
+    assert strategy.finished == ["first"]
