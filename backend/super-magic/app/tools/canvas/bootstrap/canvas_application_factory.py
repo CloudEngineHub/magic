@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from agentlang.config.config import config
+from agentlang.logger import get_logger
 from app.core.config.debug_config import (
     get_canvas_fake_video_estimate_points,
     is_canvas_fake_video_estimate_enabled,
@@ -74,6 +75,7 @@ from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrat
 
 _default_generation_tasks = InMemoryGenerationTaskRepository()
 _default_cost_estimate_records = InMemoryCostEstimateRepository()
+logger = get_logger(__name__)
 
 
 class CanvasApplicationFactory:
@@ -269,5 +271,15 @@ class CanvasApplicationFactory:
         try:
             normalized = int(value)
         except (TypeError, ValueError):
+            logger.warning(
+                "Canvas generation concurrency config is invalid; fallback to serial execution: value={}",
+                value,
+            )
             return 1
-        return normalized if normalized > 0 else 1
+        if normalized <= 0:
+            logger.warning(
+                "Canvas generation concurrency config must be greater than zero; fallback to serial execution: value={}",
+                value,
+            )
+            return 1
+        return normalized
