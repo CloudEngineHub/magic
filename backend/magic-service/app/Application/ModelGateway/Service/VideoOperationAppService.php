@@ -525,9 +525,12 @@ readonly class VideoOperationAppService
                 'error' => $throwable->getMessage(),
             ]);
             $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
-            $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams);
-            $this->videoQueueDomainService->saveOperation($operation);
-            $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
+            try {
+                $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams, $throwable);
+            } finally {
+                $this->videoQueueDomainService->saveOperation($operation);
+                $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
+            }
         }
     }
 
