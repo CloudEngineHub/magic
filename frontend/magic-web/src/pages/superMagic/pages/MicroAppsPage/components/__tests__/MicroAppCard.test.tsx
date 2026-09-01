@@ -87,7 +87,9 @@ describe("MicroAppCard actions", () => {
 		render(<MicroAppCard {...defaultProps} onManageCollaborators={onManageCollaborators} />)
 
 		fireEvent.contextMenu(screen.getByTestId("micro-app-card"))
-		expect(screen.queryByText("microAppsPage.actions.manageCollaborators")).not.toBeInTheDocument()
+		expect(
+			screen.queryByText("microAppsPage.actions.manageCollaborators"),
+		).not.toBeInTheDocument()
 	})
 
 	it.each(["desktop", "mobile"] as const)(
@@ -102,6 +104,21 @@ describe("MicroAppCard actions", () => {
 			}
 
 			expect(screen.queryByText("microAppsPage.actions.deleteApp")).not.toBeInTheDocument()
+		},
+	)
+
+	it.each(["desktop", "mobile"] as const)(
+		"hides the rename action on %s when renaming is not allowed",
+		async (variant) => {
+			render(<MicroAppCard {...defaultProps} variant={variant} canRename={false} />)
+
+			if (variant === "desktop") {
+				fireEvent.contextMenu(screen.getByTestId("micro-app-card"))
+			} else {
+				fireEvent.click(screen.getByTestId("micro-app-card-more"))
+			}
+
+			expect(screen.queryByText("microAppsPage.actions.rename")).not.toBeInTheDocument()
 		},
 	)
 })

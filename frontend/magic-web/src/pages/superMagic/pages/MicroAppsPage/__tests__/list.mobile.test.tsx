@@ -48,6 +48,7 @@ vi.mock("../components/MicroAppCard", () => ({
 		coverUrl,
 		statusLabel,
 		canDelete,
+		canRename,
 		canManageCollaborators,
 		onClick,
 		testId,
@@ -57,6 +58,7 @@ vi.mock("../components/MicroAppCard", () => ({
 			data-testid={testId}
 			data-cover-url={coverUrl}
 			data-can-delete={canDelete}
+			data-can-rename={canRename}
 			data-can-manage-collaborators={canManageCollaborators}
 			onClick={onClick}
 		>

@@ -428,26 +428,28 @@ function MicroAppPageInner({
 						/>
 					</main>
 
-					<MicroAppDesktopConversationPanels
-						selectedProject={selectedProject}
-						topicStore={conversation.topicStore}
-						mentionPanelStore={store.mentionPanelStore}
-						projectFilesStore={store.projectFilesStore}
-						topicActions={topicActions}
-						isMessagePanelCollapsed={isMessagePanelCollapsed}
-						isMessagePanelDragging={isDraggingMessagePanel}
-						messagePanelWidthPx={messagePanelWidthPx}
-						isTopicHistoryPanelOpen={isTopicHistoryPanelOpen}
-						onMessagePanelResizeStart={onMessagePanelResizeStart}
-						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
-						onToggleConversationPanel={handleToggleMessagePanelCollapse}
-						onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
-						onToggleHistoryPanel={toggleTopicHistoryPanel}
-						onCloseHistoryPanel={closeTopicHistoryPanel}
-						onSelectDetail={handleConversationSelectDetail}
-						onExpandCollapsedPanel={toggleMessagePanelCollapse}
-						showConversationLabel={t("microAppPage.header.showConversation")}
-					/>
+					{!isReadOnly ? (
+						<MicroAppDesktopConversationPanels
+							selectedProject={selectedProject}
+							topicStore={conversation.topicStore}
+							mentionPanelStore={store.mentionPanelStore}
+							projectFilesStore={store.projectFilesStore}
+							topicActions={topicActions}
+							isMessagePanelCollapsed={isMessagePanelCollapsed}
+							isMessagePanelDragging={isDraggingMessagePanel}
+							messagePanelWidthPx={messagePanelWidthPx}
+							isTopicHistoryPanelOpen={isTopicHistoryPanelOpen}
+							onMessagePanelResizeStart={onMessagePanelResizeStart}
+							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+							onToggleConversationPanel={handleToggleMessagePanelCollapse}
+							onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
+							onToggleHistoryPanel={toggleTopicHistoryPanel}
+							onCloseHistoryPanel={closeTopicHistoryPanel}
+							onSelectDetail={handleConversationSelectDetail}
+							onExpandCollapsedPanel={toggleMessagePanelCollapse}
+							showConversationLabel={t("microAppPage.header.showConversation")}
+						/>
+					) : null}
 				</div>
 			</div>
 
