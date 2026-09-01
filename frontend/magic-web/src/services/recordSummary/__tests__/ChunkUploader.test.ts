@@ -82,7 +82,7 @@ vi.mock("../MediaRecorderService/AudioChunkDB", () => ({
 				completed: uploaded === chunks.length,
 			})
 		}),
-		deletePendingSessionChunks: vi.fn(),
+		deletePendingSessionChunks: vi.fn().mockResolvedValue(undefined),
 	})),
 }))
 
@@ -198,6 +198,83 @@ describe("ChunkUploader", () => {
 		await vi.waitFor(() => expect(testState.uploadCalls.length).toBeGreaterThan(0))
 
 		expect(testState.uploadCalls).toHaveLength(1)
+	})
+
+	it("ignores an in-flight upload after session cleanup instead of retrying it", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("hang")
+		const batchSaveReporter = createBatchSaveReporter()
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 1,
+			},
+			batchSaveReporter,
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+
+		await uploader.clearSessionChunks("session-1", "cancel:user_cancel")
+		await vi.advanceTimersByTimeAsync(60_000)
+		await vi.runAllTicks()
+		await Promise.resolve()
+
+		expect(batchSaveReporter.reportUploadedFileStrict).not.toHaveBeenCalled()
+		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
+	})
+
+	it("does not restart uploads after a session cleanup request", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.clearSessionChunks("session-1", "cancel:user_cancel")
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+
+		expect(testState.uploadCalls).toHaveLength(0)
+	})
+
+	it("uses the persisted MIME type when the Blob type is unavailable", async () => {
+		const chunk = {
+			...createChunk(0),
+			chunk: new Blob([new Uint8Array([0])]),
+		}
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("success")
+		const batchSaveReporter = createBatchSaveReporter()
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			batchSaveReporter,
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() =>
+			expect(batchSaveReporter.reportUploadedFileStrict).toHaveBeenCalled(),
+		)
+
+		expect(testState.uploadCalls[0]).toMatchObject({ name: "0.wav", type: "audio/wav" })
+		expect(batchSaveReporter.reportUploadedFileStrict).toHaveBeenCalledWith(
+			expect.objectContaining({ fileName: "0.wav" }),
+		)
 	})
 
 	it("uploads empty placeholders for failed chunks before marking them uploaded", async () => {

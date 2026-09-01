@@ -1638,6 +1638,17 @@ class RecordSummaryService {
 					})
 					// 即使上传失败也继续取消流程
 				} finally {
+					try {
+						await this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+					} catch (error) {
+						logger.error({
+							eventKey: "cancel_chunk_cleanup_failed",
+							errorKind: "storage",
+							error,
+							message: "取消录音时清理待上传分片失败",
+							context: { sessionId: session.id, source },
+						})
+					}
 					// 隐藏上传等待状态
 					recordSummaryStore.hideWaitingUpload()
 				}
@@ -1647,7 +1658,17 @@ class RecordSummaryService {
 					sessionId: session.id,
 					source,
 				})
-				void this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+				try {
+					await this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+				} catch (error) {
+					logger.error({
+						eventKey: "cancel_chunk_cleanup_failed",
+						errorKind: "storage",
+						error,
+						message: "取消录音时清理待上传分片失败",
+						context: { sessionId: session.id, source },
+					})
+				}
 			}
 
 			if (notifyServer) {
@@ -3481,7 +3502,11 @@ class RecordSummaryService {
 	 * 处理上传成功事件
 	 */
 	private handleUploadSuccess = (taskId: string, url: string) => {
-		logger.log("Upload successful", { taskId, url })
+		logger.log("Upload successful", {
+			taskId,
+			hasUploadPath: Boolean(url),
+			isAbsoluteUrl: /^https?:\/\//i.test(url),
+		})
 
 		// Update session activity
 		this.sessionManager.updateSessionStatus("recording")
@@ -3494,12 +3519,13 @@ class RecordSummaryService {
 	 * 处理上传错误事件
 	 */
 	private handleUploadError = (taskId: string, error: Error) => {
-		logger.error({
-			eventKey: "recording_chunk_upload_failed",
-			errorKind: "unknown",
-			error: error,
-			message: "Upload failed",
-			context: { taskId },
+		logger.report({
+			namespace: "recordingUpload",
+			data: {
+				event: "callback_failed",
+				taskId,
+				errorName: error.name,
+			},
 		})
 
 		// TODO: Update UI with error status
