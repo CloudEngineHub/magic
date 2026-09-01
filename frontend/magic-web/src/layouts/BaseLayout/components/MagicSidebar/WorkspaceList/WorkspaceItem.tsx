@@ -98,8 +98,8 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 
 	function handleClick(event: MouseEvent<HTMLAnchorElement>) {
 		if (suppressItemClickRef.current) {
-			e.preventDefault()
-			e.stopPropagation()
+			event.preventDefault()
+			event.stopPropagation()
 			return
 		}
 		if (!shouldHandleAnchorClick(event)) return
