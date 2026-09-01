@@ -59,6 +59,11 @@ class WorkspaceListRequestDTO extends AbstractDTO
     public string $sort = 'desc';
 
     /**
+     * Whether pinned workspaces should be listed first.
+     */
+    public bool $pinPriority = false;
+
+    /**
      * 从请求中创建DTO.
      */
     public static function fromRequest(RequestInterface $request): self
@@ -77,6 +82,7 @@ class WorkspaceListRequestDTO extends AbstractDTO
             || $request->input('auto_create', true) === '1';
         $dto->orderBy = self::normalizeOrderBy((string) $request->input('order_by', 'created_at'));
         $dto->sort = self::normalizeSort((string) $request->input('sort', 'desc'));
+        $dto->pinPriority = filter_var($request->input('pin_priority', false), FILTER_VALIDATE_BOOL);
 
         return $dto;
     }
@@ -87,6 +93,11 @@ class WorkspaceListRequestDTO extends AbstractDTO
     public function getAutoCreate(): bool
     {
         return $this->autoCreate;
+    }
+
+    public function getPinPriority(): bool
+    {
+        return $this->pinPriority;
     }
 
     /**

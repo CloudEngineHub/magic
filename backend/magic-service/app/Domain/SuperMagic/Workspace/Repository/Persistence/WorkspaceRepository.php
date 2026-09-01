@@ -203,7 +203,8 @@ class WorkspaceRepository extends AbstractRepository implements WorkspaceReposit
         int $pageSize = 10,
         string $orderBy = 'id',
         string $orderDirection = 'desc',
-        bool $enableManualOrdering = true
+        bool $enableManualOrdering = true,
+        bool $pinPriority = false
     ): array {
         $query = $this->model::query();
 
@@ -227,7 +228,7 @@ class WorkspaceRepository extends AbstractRepository implements WorkspaceReposit
         $total = $query->count();
 
         // 排序和分页：侧边栏使用动态段 + 手工段后再分页。
-        $this->applyWorkspaceSorting($query, $orderBy, $orderDirection, $enableManualOrdering);
+        $this->applyWorkspaceSorting($query, $orderBy, $orderDirection, $enableManualOrdering, $pinPriority);
         $list = $query
             ->offset(($page - 1) * $pageSize)
             ->limit($pageSize)
@@ -413,7 +414,8 @@ class WorkspaceRepository extends AbstractRepository implements WorkspaceReposit
         ModelBuilder $query,
         string $orderBy,
         string $orderDirection,
-        bool $enableManualOrdering = true
+        bool $enableManualOrdering = true,
+        bool $pinPriority = false
     ): void {
         $allowedOrderBy = ['id', 'created_at', 'updated_at'];
         $allowedOrderDirection = ['asc', 'desc'];
@@ -428,14 +430,18 @@ class WorkspaceRepository extends AbstractRepository implements WorkspaceReposit
             $orderDirection = 'desc';
         }
 
+        if ($pinPriority) {
+            $query->orderBy('is_pinned', 'desc');
+        }
+
         if (! $enableManualOrdering) {
             // Compatibility path for non-sidebar consumers such as the knowledge-base RPC.
             $query->orderBy($orderBy, $orderDirection);
             return;
         }
 
-        // Workspaces are not pinnable. Keep legacy order parameters for compatibility,
-        // but use manual ordering first and creation time as the default dynamic order.
+        // Keep legacy order parameters for compatibility, but use manual ordering first
+        // and creation time as the default dynamic order.
         $query->orderByRaw('CASE WHEN sort_order IS NULL THEN 0 ELSE 1 END ASC');
         $dynamicOrderBy = $orderBy === 'created_at' ? 'id' : $orderBy;
         $query->orderByRaw("CASE WHEN sort_order IS NULL THEN {$dynamicOrderBy} END {$orderDirection}");

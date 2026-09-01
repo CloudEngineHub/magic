@@ -365,6 +365,7 @@ class WorkspaceDomainService
      * 根据条件获取工作区列表.
      *
      * @param bool $enableManualOrdering 是否启用侧边栏手工排序
+     * @param bool $pinPriority 是否将置顶工作区排在前面
      */
     public function getWorkspacesByConditions(
         array $conditions,
@@ -373,7 +374,8 @@ class WorkspaceDomainService
         string $orderBy,
         string $orderDirection,
         DataIsolation $dataIsolation,
-        bool $enableManualOrdering = true
+        bool $enableManualOrdering = true,
+        bool $pinPriority = false
     ): array {
         // 应用数据隔离
         $conditions = $this->applyDataIsolation($conditions, $dataIsolation);
@@ -385,7 +387,9 @@ class WorkspaceDomainService
                 $page,
                 $pageSize,
                 $orderBy,
-                $orderDirection
+                $orderDirection,
+                true,
+                $pinPriority
             );
         }
 
@@ -395,7 +399,8 @@ class WorkspaceDomainService
             $pageSize,
             $orderBy,
             $orderDirection,
-            false
+            false,
+            $pinPriority
         );
     }
 

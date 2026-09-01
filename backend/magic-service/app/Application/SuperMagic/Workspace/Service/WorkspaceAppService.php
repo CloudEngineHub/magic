@@ -109,7 +109,9 @@ class WorkspaceAppService extends AbstractAppService
             $requestDTO->pageSize,
             $requestDTO->orderBy,
             $requestDTO->sort,
-            $dataIsolation
+            $dataIsolation,
+            true,
+            $requestDTO->getPinPriority()
         );
 
         // 设置默认值
