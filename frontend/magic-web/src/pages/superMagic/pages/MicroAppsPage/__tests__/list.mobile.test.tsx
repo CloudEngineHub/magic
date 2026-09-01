@@ -151,6 +151,32 @@ describe("MicroAppsListPageMobile", () => {
 		)
 	})
 
+	it("hides rename when the app role is missing", () => {
+		mocks.useMicroAppsPage.mockReturnValueOnce({
+			...mocks.useMicroAppsPage(),
+			apps: [
+				{
+					app_id: "app-unknown-role",
+					app_name: "未知权限应用",
+					app_description: "",
+					creator_id: "user-1",
+					cover_url: "",
+					publish_status: "unpublished",
+					updated_at: null,
+					can_delete: false,
+					project_id: "project-unknown-role",
+				},
+			],
+		})
+
+		render(<MicroAppsListPageMobile />)
+
+		expect(screen.getByTestId("micro-apps-mobile-app-app-unknown-role")).toHaveAttribute(
+			"data-can-rename",
+			"false",
+		)
+	})
+
 	it("opens an app directly by app_id", async () => {
 		render(<MicroAppsListPageMobile />)
 

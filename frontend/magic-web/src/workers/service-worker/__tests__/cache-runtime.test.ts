@@ -35,16 +35,28 @@ describe("slides template image cache route", () => {
 
 	it("accepts only explicitly marked image requests", () => {
 		const ordinaryContext = createContext(
-			"https://storage.example.com/template.webp?swCache=slides-template-image",
+			"https://storage.example.com/template.webp?swCache=slides-template-image-v2",
 		)
 		const featuredContext = createContext(
-			"https://storage.example.com/template.webp?swCache=featured-slides-template-image",
+			"https://storage.example.com/template.webp?swCache=featured-slides-template-image-v2",
 		)
 
 		expect(isCacheableSlidesTemplateImage(ordinaryContext)).toBe(true)
 		expect(isCacheableFeaturedSlidesTemplateImage(ordinaryContext)).toBe(false)
 		expect(isCacheableFeaturedSlidesTemplateImage(featuredContext)).toBe(true)
 		expect(isCacheableSlidesTemplateImage(featuredContext)).toBe(false)
+	})
+
+	it("does not route legacy markers into the v2 cache buckets", () => {
+		const ordinaryLegacyContext = createContext(
+			"https://storage.example.com/template.webp?swCache=slides-template-image",
+		)
+		const featuredLegacyContext = createContext(
+			"https://storage.example.com/template.webp?swCache=featured-slides-template-image",
+		)
+
+		expect(isCacheableSlidesTemplateImage(ordinaryLegacyContext)).toBe(false)
+		expect(isCacheableFeaturedSlidesTemplateImage(featuredLegacyContext)).toBe(false)
 	})
 
 	it("rejects unmarked images and non-image requests", () => {
@@ -56,7 +68,7 @@ describe("slides template image cache route", () => {
 		expect(
 			isCacheableSlidesTemplateImage(
 				createContext(
-					"https://storage.example.com/template.webp?swCache=slides-template-image",
+					"https://storage.example.com/template.webp?swCache=slides-template-image-v2",
 					{
 						destination: "script",
 					},
@@ -66,7 +78,7 @@ describe("slides template image cache route", () => {
 		expect(
 			isCacheableSlidesTemplateImage(
 				createContext(
-					"https://storage.example.com/template.webp?swCache=slides-template-image",
+					"https://storage.example.com/template.webp?swCache=slides-template-image-v2",
 					{
 						method: "POST",
 					},
@@ -152,7 +164,7 @@ describe("slides template image cache route", () => {
 			maxAgeSeconds: CACHE_TTL_7_DAYS,
 			purgeOnQuotaError: true,
 		})
-		expect(SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(100)
-		expect(FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(60)
+		expect(SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(60)
+		expect(FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES).toBe(40)
 	})
 })

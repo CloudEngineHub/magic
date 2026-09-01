@@ -63,7 +63,7 @@ interface MicroAppCardProps {
 	onManageCollaborators?: () => void
 	managingCollaborators?: boolean
 	canDelete?: boolean
-	canRename?: boolean
+	canRename: boolean
 	canManageCollaborators?: boolean
 }
 
@@ -84,7 +84,7 @@ export default function MicroAppCard({
 	onManageCollaborators,
 	managingCollaborators = false,
 	canDelete = true,
-	canRename = true,
+	canRename,
 	canManageCollaborators = false,
 }: MicroAppCardProps) {
 	const { t } = useTranslation("super")

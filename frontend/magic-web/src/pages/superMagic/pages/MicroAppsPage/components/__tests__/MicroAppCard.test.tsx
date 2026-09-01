@@ -34,6 +34,7 @@ const defaultProps = {
 	onOpenInNewWindow: vi.fn(),
 	onRename: vi.fn(),
 	onDelete: vi.fn(),
+	canRename: true,
 }
 
 describe("MicroAppCard actions", () => {
