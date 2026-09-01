@@ -3,8 +3,10 @@ import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/
 import {
 	ensureProjectForMessageContext,
 	preparePanelSend,
+	processMessageMentions,
 	resolveMessageSendContext,
 } from "@/pages/superMagic/services/messageSendPreparation"
+import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
@@ -129,6 +131,38 @@ describe("messageSendPreparation", () => {
 				topicMode: "agent-default",
 				extra: undefined,
 			}),
+		)
+	})
+
+	it("processes inline mentions before direct micro-app sends", async () => {
+		const content = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "mention", attrs: { type: "project_file", data: {} } }],
+				},
+			],
+		}
+		const processedContent = { type: "doc", content: [{ type: "paragraph" }] }
+		const processMentionItems = vi.mocked(mentionItemsProcessor.processMentionItems)
+		processMentionItems.mockResolvedValueOnce({
+			content: processedContent,
+			mentionItems: [],
+		})
+
+		await expect(processMessageMentions(content, "project-1", "topic-1")).resolves.toEqual(
+			processedContent,
+		)
+		expect(processMentionItems).toHaveBeenCalledWith(
+			content,
+			expect.arrayContaining([
+				expect.objectContaining({
+					attrs: expect.objectContaining({ type: "project_file" }),
+				}),
+			]),
+			"project-1",
+			"topic-1",
 		)
 	})
 

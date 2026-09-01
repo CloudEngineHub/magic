@@ -20,7 +20,11 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
 import type { AgentInfo, TiptapJSONContent } from "../iframe-api/types"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
-import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
+import {
+	processMessageMentions,
+	resolveMessageSendContext,
+} from "@/pages/superMagic/services/messageSendPreparation"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 
 export function useIframeAgentActions(
 	projectId?: string,
@@ -71,6 +75,11 @@ export function useIframeAgentActions(
 			const runtimeProjectId = getRuntimeProjectId()
 			if (!scopedTopicStore || !runtimeProjectId) return false
 
+			const processedJsonContent = (await processMessageMentions(
+				jsonContent as JSONContent,
+				runtimeProjectId,
+				targetTopic?.id ?? activeTopicStore.selectedTopic?.id,
+			)) as TiptapJSONContent
 			const superAgentExtra = {
 				mentions: [],
 				chat_mode: "normal",
@@ -83,7 +92,7 @@ export function useIframeAgentActions(
 			}
 
 			const success = await messageSendService.dispatchMessage({
-				jsonContent,
+				jsonContent: processedJsonContent,
 				showLoading: false,
 				options: { extra: { super_agent: superAgentExtra } } as any,
 				context: resolveMessageSendContext({
@@ -136,11 +145,19 @@ export function useIframeAgentActions(
 				}
 			}
 
-			const newTopic = await SuperMagicApi.createTopic({
+			const createdTopic = await SuperMagicApi.createTopic({
 				project_id: runtimeProjectId,
 				topic_name: "",
 			})
-			if (!newTopic?.id) throw new Error("Failed to create topic")
+			if (!createdTopic?.id) throw new Error("Failed to create topic")
+
+			const newTopic = scopedTopicStore
+				? await SuperMagicApi.getTopicDetail({ id: createdTopic.id })
+				: createdTopic
+			if (!newTopic?.id) throw new Error("Failed to load created topic")
+			if (scopedTopicStore && (!newTopic.chat_topic_id || !newTopic.chat_conversation_id)) {
+				throw new Error("Created topic is missing conversation context")
+			}
 
 			// Set topic with agent_code for custom agents
 			const topicWithAgent =
@@ -192,7 +209,7 @@ export function useIframeAgentActions(
 							}
 						: {}),
 					...(Object.keys(extra).length > 0 ? { extra } : {}),
-					targetTopic: topicWithAgent,
+					...(scopedTopicStore ? { targetTopic: topicWithAgent } : {}),
 				})
 			}
 
