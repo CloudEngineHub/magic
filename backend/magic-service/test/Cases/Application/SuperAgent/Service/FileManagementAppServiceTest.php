@@ -32,6 +32,7 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\CreateShareRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\BatchCopyFileRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\BatchDeleteFilesRequestDTO;
+use App\Interfaces\SuperMagic\File\DTO\Request\CreateFileRequestDTO;
 use Hyperf\Amqp\Message\ProducerMessage;
 use Hyperf\Amqp\Producer;
 use Hyperf\Context\ApplicationContext;
@@ -75,6 +76,33 @@ class FileManagementAppServiceTest extends TestCase
         }
 
         parent::tearDown();
+    }
+
+    public function testCreateFileRejectsParentDirectoryOutsideAuthorizedProject(): void
+    {
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getDirectoryByIdAndProject')
+            ->with(901, 900)
+            ->willReturn(null);
+
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->never())->method('createFile');
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new CreateFileRequestDTO();
+        $requestDTO->projectId = '900';
+        $requestDTO->parentId = '901';
+        $requestDTO->fileName = 'forbidden.txt';
+        $requestDTO->isDirectory = false;
+
+        $this->expectException(BusinessException::class);
+        $service->createFile($requestContext, $requestDTO);
     }
 
     public function testDispatchFileUploadedEventUsesPersistedFileEntity(): void

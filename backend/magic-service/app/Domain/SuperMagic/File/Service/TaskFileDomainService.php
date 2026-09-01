@@ -161,6 +161,14 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据项目ID获取项目目录，避免跨项目使用 parent_id。
+     */
+    public function getDirectoryByIdAndProject(int $parentId, int $projectId): ?TaskFileEntity
+    {
+        return $this->taskFileRepository->getDirectoryByIdAndProject($parentId, $projectId);
+    }
+
+    /**
      * 根据文件编号获取文件实体，不限制文件所属空间。
      */
     public function getFileEntityById(int $fileId): TaskFileEntity
@@ -210,9 +218,9 @@ class TaskFileDomainService
     /**
      * Get file by project ID and file key.
      */
-    public function getByProjectIdAndFileKey(int $projectId, string $fileKey): ?TaskFileEntity
+    public function getByProjectIdAndFileKey(int $projectId, string $fileKey, bool $withTrash = false): ?TaskFileEntity
     {
-        return $this->taskFileRepository->getByProjectIdAndFileKey($projectId, $fileKey);
+        return $this->taskFileRepository->getByProjectIdAndFileKey($projectId, $fileKey, $withTrash);
     }
 
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity
@@ -3676,7 +3684,11 @@ class TaskFileDomainService
                 $fileName,
                 $dto->isWithTrash()
             );
-            $existingByFileKey = $this->taskFileRepository->getByFileKey($fileKey, withTrash: $dto->isWithTrash());
+            $existingByFileKey = $this->taskFileRepository->getByProjectIdAndFileKey(
+                $dto->getProjectId(),
+                $fileKey,
+                $dto->isWithTrash()
+            );
 
             if ($existingByName !== null
                 && $existingByFileKey !== null

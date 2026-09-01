@@ -31,6 +31,20 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return new TaskFileEntity($model->toArray());
     }
 
+    public function getDirectoryByIdAndProject(int $parentId, int $projectId): ?TaskFileEntity
+    {
+        $model = $this->model::query()
+            ->where('file_id', $parentId)
+            ->where('project_id', $projectId)
+            ->where('is_directory', true)
+            ->first();
+        if (! $model) {
+            return null;
+        }
+
+        return new TaskFileEntity($model->toArray());
+    }
+
     public function getByIdWithTrash(int $id): ?TaskFileEntity
     {
         /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
@@ -193,9 +207,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     /**
      * 根据项目ID和fileKey获取文件.
      */
-    public function getByProjectIdAndFileKey(int $projectId, string $fileKey): ?TaskFileEntity
+    public function getByProjectIdAndFileKey(int $projectId, string $fileKey, bool $withTrash = false): ?TaskFileEntity
     {
-        $model = $this->model::query()
+        $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
+        $model = $query
             ->where('project_id', $projectId)
             ->where('file_key', $fileKey)
             ->first();

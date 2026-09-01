@@ -19,6 +19,11 @@ interface TaskFileRepositoryInterface
     public function getById(int $id): ?TaskFileEntity;
 
     /**
+     * 根据项目ID获取项目目录。
+     */
+    public function getDirectoryByIdAndProject(int $parentId, int $projectId): ?TaskFileEntity;
+
+    /**
      * 根据ID获取文件，包含已软删除记录.
      */
     public function getByIdWithTrash(int $id): ?TaskFileEntity;
@@ -69,7 +74,7 @@ interface TaskFileRepositoryInterface
     /**
      * 根据项目ID和fileKey获取文件.
      */
-    public function getByProjectIdAndFileKey(int $projectId, string $fileKey): ?TaskFileEntity;
+    public function getByProjectIdAndFileKey(int $projectId, string $fileKey, bool $withTrash = false): ?TaskFileEntity;
 
     /**
      * Get file by project ID and file name (searches across all directories).
