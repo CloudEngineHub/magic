@@ -150,7 +150,7 @@ describe("uploadMentionService inspector-detail mentions", () => {
 					attrs: {
 						title: "Selected element",
 						selector: "body > section.hero",
-						targetId: "element:#hero:1",
+						captureId: "element:#hero:1",
 					},
 				},
 			],

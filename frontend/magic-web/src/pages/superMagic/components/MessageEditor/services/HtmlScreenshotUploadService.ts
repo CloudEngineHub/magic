@@ -12,6 +12,7 @@ import type { SaveUploadFileToProjectResponse } from "@/pages/superMagic/utils/a
 export interface StoreHtmlScreenshotParams {
 	dataUrl: string
 	fileName: string
+	captureId?: string
 }
 
 const logger = Logger.createLogger("HtmlScreenshotUpload")
@@ -67,9 +68,10 @@ class HtmlScreenshotUploadService {
 	async storeScreenshot({
 		dataUrl,
 		fileName,
+		captureId,
 	}: StoreHtmlScreenshotParams): Promise<StoredHtmlScreenshot> {
 		try {
-			return await htmlScreenshotStorage.store(dataUrl, fileName)
+			return await htmlScreenshotStorage.store(dataUrl, fileName, captureId)
 		} catch (error) {
 			logger.error({
 				eventKey: "html_screenshot_store_failed",

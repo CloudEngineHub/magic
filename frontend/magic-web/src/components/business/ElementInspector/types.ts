@@ -138,7 +138,7 @@ export interface HtmlMultiSelectionRequest {
 
 /** Request the message editor to upload a screenshot before final submission. */
 export interface HtmlScreenshotUploadRequest {
-	targetId: string
+	captureId: string
 	dataUrl: string
 	fileName?: string
 	/** Drop the in-memory prepared mention after the success callback consumes it. */
@@ -149,7 +149,7 @@ export interface HtmlScreenshotUploadRequest {
 
 /** Updates the screenshot mention on an already inserted inspector-detail node. */
 export interface HtmlInspectorScreenshotUpdate {
-	targetId: string
+	captureId: string
 	screenshotMention: TiptapMentionAttributes
 }
 

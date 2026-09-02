@@ -81,9 +81,14 @@ describe("HtmlScreenshotUploadService", () => {
 		const result = await htmlScreenshotUploadService.storeScreenshot({
 			dataUrl: "data:image/png;base64,AA==",
 			fileName: "screenshot.png",
+			captureId: "element:#hero:1",
 		})
 
-		expect(mocks.store).toHaveBeenCalledWith("data:image/png;base64,AA==", "screenshot.png")
+		expect(mocks.store).toHaveBeenCalledWith(
+			"data:image/png;base64,AA==",
+			"screenshot.png",
+			"element:#hero:1",
+		)
 		expect(result).toMatchObject({
 			storageId: "screenshot-storage-id",
 			fileName: "screenshot.png",

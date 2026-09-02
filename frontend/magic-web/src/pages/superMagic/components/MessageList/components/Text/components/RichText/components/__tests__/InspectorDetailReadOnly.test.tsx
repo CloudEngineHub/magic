@@ -117,7 +117,7 @@ describe("InspectorDetailReadOnly", () => {
 		expect(screen.getByTestId("inspector-screenshot-preview")).toBeInTheDocument()
 	})
 
-	it("loads a local screenshot hover preview from targetId after send", async () => {
+	it("loads a local screenshot hover preview from captureId after send", async () => {
 		getStoredScreenshotBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
 		const createObjectURL = vi
 			.spyOn(URL, "createObjectURL")
@@ -145,7 +145,7 @@ describe("InspectorDetailReadOnly", () => {
 						computedStyles: "{}",
 						styleCount: 0,
 						textContent: "全球新能源汽车市场运营指标洞察",
-						targetId: "element:#hero:1",
+						captureId: "element:#hero:1",
 					}}
 				/>
 			</TooltipProvider>,
@@ -157,7 +157,7 @@ describe("InspectorDetailReadOnly", () => {
 		revokeObjectURL.mockRestore()
 	})
 
-	it("omits the live screenshot targetId from the drag payload", () => {
+	it("omits the live screenshot captureId from the drag payload", () => {
 		const { container } = render(
 			<InspectorDetailReadOnly
 				attrs={{
@@ -167,7 +167,7 @@ describe("InspectorDetailReadOnly", () => {
 					computedStyles: "{}",
 					styleCount: 0,
 					textContent: "Hero",
-					targetId: "element:#hero:1",
+					captureId: "element:#hero:1",
 				}}
 			/>,
 		)
@@ -176,9 +176,9 @@ describe("InspectorDetailReadOnly", () => {
 		expect(node).toBeTruthy()
 		const attrs = JSON.parse(node?.getAttribute("data-magic-node-attrs") ?? "{}") as {
 			selector?: string
-			targetId?: string | null
+			captureId?: string | null
 		}
 		expect(attrs.selector).toBe("#hero")
-		expect(attrs.targetId).toBeNull()
+		expect(attrs.captureId).toBeNull()
 	})
 })

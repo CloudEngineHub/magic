@@ -113,10 +113,12 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 						? { "data-screenshot-mention": JSON.stringify(attrs.screenshotMention) }
 						: {},
 			},
-			targetId: {
+			captureId: {
 				default: null,
-				parseHTML: (el) => el.getAttribute("data-target-id"),
-				renderHTML: (attrs) => (attrs.targetId ? { "data-target-id": attrs.targetId } : {}),
+				parseHTML: (el) =>
+					el.getAttribute("data-capture-id") ?? el.getAttribute("data-target-id"),
+				renderHTML: (attrs) =>
+					attrs.captureId ? { "data-capture-id": attrs.captureId } : {},
 			},
 		}
 	},

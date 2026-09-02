@@ -23,7 +23,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 	const attrs = node.attrs as InspectorDetailAttrs
 	const [expanded, setExpanded] = useState(false)
 	const { t } = useTranslation("super")
-	const screenshotMention = useHtmlScreenshotMention(attrs.targetId, attrs.screenshotMention)
+	const screenshotMention = useHtmlScreenshotMention(attrs.captureId, attrs.screenshotMention)
 
 	const parsedStyles: Record<string, string> = (() => {
 		try {

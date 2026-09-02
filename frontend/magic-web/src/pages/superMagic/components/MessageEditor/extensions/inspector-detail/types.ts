@@ -29,8 +29,8 @@ export interface InspectorDetailAttrs {
 	fileMention?: TiptapMentionAttributes | null
 	/** Optional screenshot mention rendered inside the inspector detail card. */
 	screenshotMention?: TiptapMentionAttributes | null
-	/** Stable id used to load a screenshot from IndexedDB, not the editor doc. */
-	targetId?: string | null
+	/** Unique capture id; also the IndexedDB key for the local screenshot. */
+	captureId?: string | null
 }
 
 export interface InspectorDetailOptions {}

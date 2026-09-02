@@ -39,17 +39,11 @@ describe("HtmlScreenshotTargetStore", () => {
 		unsubscribe()
 	})
 
-	it("hydrates a mention from persisted target metadata", () => {
+	it("does not restore a mention after the in-memory store is cleared", () => {
 		setHtmlScreenshotMention("element:#hero:1", mention)
 		clearHtmlScreenshotMentionMemory()
 
-		const restored = getHtmlScreenshotMention("element:#hero:1")
-		expect(restored).not.toBe(mention)
-		expect(restored?.data).toMatchObject({
-			storage_id: "storage-1",
-			file_name: "hero.png",
-			is_html_screenshot: true,
-		})
+		expect(getHtmlScreenshotMention("element:#hero:1")).toBeUndefined()
 	})
 
 	it("forgets a target by storage id after upload cleanup", () => {

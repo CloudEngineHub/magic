@@ -79,30 +79,30 @@ describe("magic node drag preview", () => {
 })
 
 describe("resolveDroppedNodeAttrs", () => {
-	it("clears the inspector screenshot targetId when copying from outside the editor", () => {
+	it("clears the inspector screenshot captureId when copying from outside the editor", () => {
 		const attrs = resolveDroppedNodeAttrs(
 			"inspector-detail",
 			{
 				selector: "#hero",
-				targetId: "element:#hero:1",
+				captureId: "element:#hero:1",
 			},
 			true,
 		)
 
 		expect(attrs.selector).toBe("#hero")
-		expect(attrs.targetId).toBeNull()
+		expect(attrs.captureId).toBeNull()
 	})
 
-	it("keeps the inspector screenshot targetId when moving inside the editor", () => {
+	it("keeps the inspector screenshot captureId when moving inside the editor", () => {
 		const attrs = resolveDroppedNodeAttrs(
 			"inspector-detail",
 			{
 				selector: "#hero",
-				targetId: "element:#hero:1",
+				captureId: "element:#hero:1",
 			},
 			false,
 		)
 
-		expect(attrs.targetId).toBe("element:#hero:1")
+		expect(attrs.captureId).toBe("element:#hero:1")
 	})
 })

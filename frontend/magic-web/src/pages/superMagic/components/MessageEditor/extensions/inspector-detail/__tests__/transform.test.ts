@@ -211,7 +211,7 @@ describe("inspector-detail transform", () => {
 									styleCount: 0,
 									textContent: "Hero",
 									screenshotMention,
-									targetId: "element:#hero:1",
+									captureId: "element:#hero:1",
 								},
 							},
 						],
@@ -228,7 +228,7 @@ describe("inspector-detail transform", () => {
 		expect(JSON.stringify(serialized)).not.toContain(INSPECTOR_DETAIL_MARKER.repeat(9))
 	})
 
-	it("round-trips targetId so the message list can load the local screenshot", () => {
+	it("round-trips captureId so the message list can load the local screenshot", () => {
 		const serialized = serializeInspectorContent(
 			{
 				type: "doc",
@@ -246,7 +246,7 @@ describe("inspector-detail transform", () => {
 									computedStyles: "{}",
 									styleCount: 0,
 									textContent: "Hero",
-									targetId: "element:#hero:1",
+									captureId: "element:#hero:1",
 								},
 							},
 						],
@@ -262,18 +262,18 @@ describe("inspector-detail transform", () => {
 		const inspectorNode = transformed.content?.[0]?.content?.[0]
 
 		expect(inspectorNode?.type).toBe(INSPECTOR_DETAIL_TYPE)
-		expect(inspectorNode?.attrs?.targetId).toBe("element:#hero:1")
+		expect(inspectorNode?.attrs?.captureId).toBe("element:#hero:1")
 		expect(inspectorNode?.attrs?.screenshotMention).toBeFalsy()
 
 		const schema = new Schema(schemaConfig as SchemaSpec)
 		const doc = schema.nodeFromJSON(transformed)
-		let preservedTargetId: string | null = null
+		let preservedCaptureId: string | null = null
 		doc.descendants((node) => {
 			if (node.type.name === INSPECTOR_DETAIL_TYPE) {
-				preservedTargetId = node.attrs.targetId
+				preservedCaptureId = node.attrs.captureId
 			}
 			return true
 		})
-		expect(preservedTargetId).toBe("element:#hero:1")
+		expect(preservedCaptureId).toBe("element:#hero:1")
 	})
 })

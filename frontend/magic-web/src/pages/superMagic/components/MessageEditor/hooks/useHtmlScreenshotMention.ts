@@ -1,30 +1,33 @@
 import { useEffect, useState } from "react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
+	createLocalScreenshotMention,
 	getHtmlScreenshotMention,
 	subscribeHtmlScreenshotTarget,
 } from "../services/HtmlScreenshotTargetStore"
 
-/** Resolve a screenshot mention from node attrs or the target store. */
+/** Resolve a screenshot mention from node attrs or the in-memory capture store. */
 export function useHtmlScreenshotMention(
-	targetId?: string | null,
+	captureId?: string | null,
 	fallback?: TiptapMentionAttributes | null,
 ): TiptapMentionAttributes | null {
 	const [storeMention, setStoreMention] = useState<TiptapMentionAttributes | null>(() =>
-		targetId ? (getHtmlScreenshotMention(targetId) ?? null) : null,
+		captureId ? (getHtmlScreenshotMention(captureId) ?? null) : null,
 	)
 
 	useEffect(() => {
-		if (!targetId) {
+		if (!captureId) {
 			setStoreMention(null)
 			return
 		}
 
-		setStoreMention(getHtmlScreenshotMention(targetId) ?? null)
-		return subscribeHtmlScreenshotTarget(targetId, () => {
-			setStoreMention(getHtmlScreenshotMention(targetId) ?? null)
+		setStoreMention(getHtmlScreenshotMention(captureId) ?? null)
+		return subscribeHtmlScreenshotTarget(captureId, () => {
+			setStoreMention(getHtmlScreenshotMention(captureId) ?? null)
 		})
-	}, [targetId])
+	}, [captureId])
 
-	return fallback ?? storeMention
+	if (fallback) return fallback
+	if (storeMention) return storeMention
+	return captureId ? createLocalScreenshotMention(captureId) : null
 }

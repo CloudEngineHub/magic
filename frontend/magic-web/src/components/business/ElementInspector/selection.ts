@@ -10,8 +10,8 @@ const SCREENSHOT_FILE_NAME_PREFIX = "html-screenshot"
  * Build a short, deterministic screenshot filename from the target identity.
  * Selectors can be arbitrarily long, while workspace filenames are bounded.
  */
-export function getHtmlScreenshotFileName(targetId: string, index = 0): string {
-	const value = targetId.trim() || String(index + 1)
+export function getHtmlScreenshotFileName(captureId: string, index = 0): string {
+	const value = captureId.trim() || String(index + 1)
 	let hash = 2166136261
 
 	for (let charIndex = 0; charIndex < value.length; charIndex += 1) {

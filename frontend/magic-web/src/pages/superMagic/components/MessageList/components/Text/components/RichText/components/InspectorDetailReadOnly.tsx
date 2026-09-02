@@ -23,14 +23,14 @@ interface InspectorDetailReadOnlyProps {
 		textContent: string
 		fileMention?: TiptapMentionAttributes | null
 		screenshotMention?: TiptapMentionAttributes | null
-		targetId?: string | null
+		captureId?: string | null
 	}
 }
 
 export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps) {
 	const [expanded, setExpanded] = useState(false)
 	const { t } = useTranslation("super")
-	const screenshotMention = useHtmlScreenshotMention(attrs.targetId, attrs.screenshotMention)
+	const screenshotMention = useHtmlScreenshotMention(attrs.captureId, attrs.screenshotMention)
 
 	const parsedStyles: Record<string, string> = (() => {
 		try {

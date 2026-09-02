@@ -11,16 +11,16 @@ function isLocalHtmlScreenshotMention(mention?: TiptapMentionAttributes | null):
 	return Boolean(data.is_html_screenshot || data.storage_id)
 }
 
-type CopiedInspectorDetailAttrs<T> = Omit<T, "targetId" | "screenshotMention"> &
-	Pick<InspectorDetailAttrs, "targetId" | "screenshotMention">
+type CopiedInspectorDetailAttrs<T> = Omit<T, "captureId" | "screenshotMention"> &
+	Pick<InspectorDetailAttrs, "captureId" | "screenshotMention">
 
 /** Drop live screenshot bindings when copying history into the editor. */
 export function sanitizeCopiedInspectorDetailAttrs<
-	T extends Pick<InspectorDetailAttrs, "targetId" | "screenshotMention">,
+	T extends Pick<InspectorDetailAttrs, "captureId" | "screenshotMention">,
 >(attrs: T): CopiedInspectorDetailAttrs<T> {
 	return {
 		...attrs,
-		targetId: null,
+		captureId: null,
 		screenshotMention: isLocalHtmlScreenshotMention(attrs.screenshotMention)
 			? null
 			: attrs.screenshotMention,

@@ -215,13 +215,13 @@ describe("useInspectorToolbarMode", () => {
 			expect(appendContent).toHaveBeenCalledOnce()
 			const content = appendContent.mock.calls[0]?.[0]
 			expect(content.content[0].content[0].attrs.selector).toBe("#hero")
-			expect(content.content[0].content[0].attrs.targetId).toEqual(
+			expect(content.content[0].content[0].attrs.captureId).toEqual(
 				expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
 			)
 			expect(content.content[0].content[0].attrs.screenshotMention).toBeUndefined()
 			expect(prepareScreenshot).toHaveBeenCalledWith(
 				expect.objectContaining({
-					targetId: expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
+					captureId: expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
 					dataUrl: screenshot.dataUrl,
 					releaseAfterSuccess: true,
 				}),
@@ -234,7 +234,7 @@ describe("useInspectorToolbarMode", () => {
 			await act(async () => request.onSuccess(screenshotMention))
 
 			expect(updateScreenshot).toHaveBeenCalledWith({
-				targetId: expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
+				captureId: expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
 				screenshotMention,
 			})
 			expect(appendContent).toHaveBeenCalledOnce()
@@ -723,7 +723,7 @@ describe("useInspectorToolbarMode", () => {
 			expect(result.current.pendingTargets[0]?.id).not.toBe(selectedElement.selector)
 			expect(prepareScreenshot).toHaveBeenCalledWith(
 				expect.objectContaining({
-					targetId: result.current.pendingTargets[0]?.id,
+					captureId: result.current.pendingTargets[0]?.id,
 					dataUrl: "data:image/png;base64,new-shot",
 				}),
 			)
@@ -765,13 +765,13 @@ describe("useInspectorToolbarMode", () => {
 				append.result.current.attachElementScreenshot(selectedElement.selector, screenshot),
 			)
 
-			const quickTargetId =
-				appendContent.mock.calls[0]?.[0].content[0].content[0].attrs.targetId
-			const appendTargetId = append.result.current.activeTarget?.id
+			const quickCaptureId =
+				appendContent.mock.calls[0]?.[0].content[0].content[0].attrs.captureId
+			const appendCaptureId = append.result.current.activeTarget?.id
 
-			expect(quickTargetId).toMatch(/^element:#hero:/)
-			expect(appendTargetId).toMatch(/^element:#hero:/)
-			expect(quickTargetId).not.toBe(appendTargetId)
+			expect(quickCaptureId).toMatch(/^element:#hero:/)
+			expect(appendCaptureId).toMatch(/^element:#hero:/)
+			expect(quickCaptureId).not.toBe(appendCaptureId)
 		} finally {
 			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
 		}

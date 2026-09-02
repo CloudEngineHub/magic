@@ -163,11 +163,11 @@ function useMessageEditorPubSub({
 	)
 
 	const prepareScreenshot = useMemoizedFn(
-		(targetId: string, dataUrl: string, fileName: string) => {
-			const prepared = preparedScreenshotMentionsRef.current.get(targetId)
+		(captureId: string, dataUrl: string, fileName: string) => {
+			const prepared = preparedScreenshotMentionsRef.current.get(captureId)
 			if (prepared?.dataUrl === dataUrl) return Promise.resolve(prepared.mention)
 
-			const preparing = preparingScreenshotPromisesRef.current.get(targetId)
+			const preparing = preparingScreenshotPromisesRef.current.get(captureId)
 			if (preparing?.dataUrl === dataUrl) return preparing.promise
 
 			const promise = (async () => {
@@ -175,6 +175,7 @@ function useMessageEditorPubSub({
 					const storedScreenshot = await htmlScreenshotUploadService.storeScreenshot({
 						dataUrl,
 						fileName,
+						captureId,
 					})
 					try {
 						const mention: TiptapMentionAttributes = {
@@ -191,8 +192,8 @@ function useMessageEditorPubSub({
 								upload_status: "done",
 							},
 						}
-						preparedScreenshotMentionsRef.current.set(targetId, { dataUrl, mention })
-						setHtmlScreenshotMention(targetId, mention)
+						preparedScreenshotMentionsRef.current.set(captureId, { dataUrl, mention })
+						setHtmlScreenshotMention(captureId, mention)
 						return mention
 					} catch (error) {
 						await htmlScreenshotUploadService.discardStoredScreenshot(
@@ -201,14 +202,14 @@ function useMessageEditorPubSub({
 						throw error
 					}
 				} finally {
-					const current = preparingScreenshotPromisesRef.current.get(targetId)
+					const current = preparingScreenshotPromisesRef.current.get(captureId)
 					if (current?.dataUrl === dataUrl) {
-						preparingScreenshotPromisesRef.current.delete(targetId)
+						preparingScreenshotPromisesRef.current.delete(captureId)
 					}
 				}
 			})()
 
-			preparingScreenshotPromisesRef.current.set(targetId, { dataUrl, promise })
+			preparingScreenshotPromisesRef.current.set(captureId, { dataUrl, promise })
 			return promise
 		},
 	)
@@ -217,7 +218,7 @@ function useMessageEditorPubSub({
 		const handlePrepareHtmlScreenshot = async (request: HtmlScreenshotUploadRequest) => {
 			try {
 				const mention = await prepareScreenshot(
-					request.targetId,
+					request.captureId,
 					request.dataUrl,
 					request.fileName ?? `html-screenshot-${Date.now()}.png`,
 				)
@@ -226,7 +227,7 @@ function useMessageEditorPubSub({
 				request.onError?.(error)
 			} finally {
 				if (request.releaseAfterSuccess) {
-					preparedScreenshotMentionsRef.current.delete(request.targetId)
+					preparedScreenshotMentionsRef.current.delete(request.captureId)
 				}
 			}
 		}
@@ -238,9 +239,8 @@ function useMessageEditorPubSub({
 
 	useEffect(() => {
 		const handleUpdateHtmlInspectorScreenshot = (update: HtmlInspectorScreenshotUpdate) => {
-			if (!update.targetId || !update.screenshotMention) return
-			// Nodes and send-time collectors read this store by targetId.
-			setHtmlScreenshotMention(update.targetId, update.screenshotMention)
+			if (!update.captureId || !update.screenshotMention) return
+			setHtmlScreenshotMention(update.captureId, update.screenshotMention)
 		}
 
 		pubsub.subscribe(

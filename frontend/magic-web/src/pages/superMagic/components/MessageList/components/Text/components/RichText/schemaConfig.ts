@@ -41,7 +41,7 @@ interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
 	textContent?: string
 	fileMention?: TiptapMentionAttributes | null
 	screenshotMention?: TiptapMentionAttributes | null
-	targetId?: string | null
+	captureId?: string | null
 }
 
 export default {
@@ -223,7 +223,7 @@ export default {
 				textContent: { default: "" },
 				fileMention: { default: null },
 				screenshotMention: { default: null },
-				targetId: { default: null },
+				captureId: { default: null },
 			},
 			parseDOM: [
 				{
@@ -239,7 +239,10 @@ export default {
 						screenshotMention: safeParseJsonAttr(
 							dom.getAttribute("data-screenshot-mention"),
 						),
-						targetId: dom.getAttribute("data-target-id") || null,
+						captureId:
+							dom.getAttribute("data-capture-id") ||
+							dom.getAttribute("data-target-id") ||
+							null,
 					}),
 				},
 			],
@@ -260,7 +263,7 @@ export default {
 						"data-screenshot-mention": node.attrs.screenshotMention
 							? JSON.stringify(node.attrs.screenshotMention)
 							: undefined,
-						"data-target-id": node.attrs.targetId || undefined,
+						"data-capture-id": node.attrs.captureId || undefined,
 						class: "inspector-detail-node",
 					},
 					"[Element Inspector Detail]",

@@ -62,7 +62,7 @@ export function useInspectorToolbarMode(
 	const previousFileIdRef = useRef(fileInfo?.fileId)
 	const quickSelectionRef = useRef<{
 		selector: string
-		targetId: string
+		captureId: string
 		screenshotRequested: boolean
 	} | null>(null)
 	const fileId = fileInfo?.fileId
@@ -114,12 +114,11 @@ export function useInspectorToolbarMode(
 
 		const info = selectedElement
 		if (modeRef.current === "quickSelection") {
-			// Insert the inspector node immediately. The screenshot is stored by
-			// targetId; the editor node is not rewritten.
+			// Insert the inspector node immediately with captureId.
 			if (!quickSelectionRef.current) {
 				quickSelectionRef.current = {
 					selector: info.selector,
-					targetId: createHtmlElementCaptureId(info.selector),
+					captureId: createHtmlElementCaptureId(info.selector),
 					screenshotRequested: false,
 				}
 				pubsub.publish(
@@ -129,7 +128,7 @@ export function useInspectorToolbarMode(
 						t("stylePanel.inspector.agentPromptTitle"),
 						stableFileInfo,
 						undefined,
-						quickSelectionRef.current.targetId,
+						quickSelectionRef.current.captureId,
 					),
 				)
 			}
@@ -296,7 +295,7 @@ export function useInspectorToolbarMode(
 				if (quickSelectionRef.current !== quickSelection) return
 				if (screenshotMention) {
 					pubsub.publish(PubSubEvents.Update_Html_Inspector_Screenshot, {
-						targetId: quickSelection.targetId,
+						captureId: quickSelection.captureId,
 						screenshotMention,
 					})
 				}
@@ -312,9 +311,9 @@ export function useInspectorToolbarMode(
 			}
 
 			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-				targetId: quickSelection.targetId,
+				captureId: quickSelection.captureId,
 				dataUrl: screenshot.dataUrl,
-				fileName: getHtmlScreenshotFileName(quickSelection.targetId),
+				fileName: getHtmlScreenshotFileName(quickSelection.captureId),
 				releaseAfterSuccess: true,
 				onSuccess: finishScreenshot,
 				onError: () => finishScreenshot(),
@@ -344,7 +343,7 @@ export function useInspectorToolbarMode(
 			// Region screenshots must be uploaded later. Element shots stay in
 			// IndexedDB and are only loaded again when a preview needs them.
 			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-				targetId: confirmedTarget.id,
+				captureId: confirmedTarget.id,
 				dataUrl: confirmedTarget.screenshot.dataUrl,
 				fileName: getHtmlScreenshotFileName(confirmedTarget.id ?? ""),
 				onSuccess: (mention) => {

@@ -16,7 +16,7 @@ export function buildAgentPromptContent(
 	title: string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
 	screenshotMention?: TiptapMentionAttributes | null,
-	targetId?: string,
+	captureId?: string,
 ): JSONContent {
 	const paragraphs: JSONContent[] = []
 	const fileMention = fileInfo
@@ -100,7 +100,7 @@ export function buildAgentPromptContent(
 					selectorMatchCount: info.selectorMatchCount ?? -1,
 					fileMention,
 					screenshotMention,
-					...(targetId ? { targetId } : {}),
+					...(captureId ? { captureId } : {}),
 				},
 			},
 		],
@@ -131,9 +131,9 @@ function buildInspectorDetailNode(
 	info: InspectedElementInfo,
 	title: string,
 	screenshotMention?: TiptapMentionAttributes | null,
-	targetId?: string,
+	captureId?: string,
 ): JSONContent {
-	const content = buildAgentPromptContent(info, title, undefined, screenshotMention, targetId)
+	const content = buildAgentPromptContent(info, title, undefined, screenshotMention, captureId)
 	return content.content?.[0]?.content?.[0] ?? { type: "text", text: info.tagName }
 }
 
@@ -167,7 +167,7 @@ function buildInspectorDetailNodeFromTarget(
 			elementHtml: target.elementHtml ?? "",
 			selectorMatchCount: -1,
 			screenshotMention,
-			...(target.id ? { targetId: target.id } : {}),
+			...(target.id ? { captureId: target.id } : {}),
 		},
 	}
 }

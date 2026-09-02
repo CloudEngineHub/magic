@@ -1,7 +1,6 @@
-import { ImageStorageDatabase } from "@/services/tiptap-image-storage"
+import { nanoid } from "nanoid"
 import { base64ToFile } from "../utils/fileConverter"
-
-const SCREENSHOT_RETENTION_DAYS = 1
+import { htmlScreenshotDatabase } from "./HtmlScreenshotDatabase"
 
 export interface StoredHtmlScreenshot {
 	storageId: string
@@ -10,22 +9,25 @@ export interface StoredHtmlScreenshot {
 	file: File
 }
 
-/** Local screenshot storage; ImageStorageDatabase runs expiry cleanup every 24 hours. */
+/** Persist inspector screenshots by capture id. */
 class HtmlScreenshotStorage {
-	private readonly imageStorage = ImageStorageDatabase.getInstance()
-
-	async store(dataUrl: string, fileName: string): Promise<StoredHtmlScreenshot> {
+	async store(
+		dataUrl: string,
+		fileName: string,
+		captureId?: string,
+	): Promise<StoredHtmlScreenshot> {
 		const file = await base64ToFile(dataUrl, fileName)
-		const storageId = await this.imageStorage.saveImage(file, SCREENSHOT_RETENTION_DAYS)
+		const storageId = captureId || nanoid()
+		await htmlScreenshotDatabase.put(storageId, file)
 		return { storageId, fileName: file.name, fileSize: file.size, file }
 	}
 
 	getBlob(storageId: string): Promise<Blob | null> {
-		return this.imageStorage.getImage(storageId)
+		return htmlScreenshotDatabase.get(storageId)
 	}
 
 	delete(storageId: string): Promise<void> {
-		return this.imageStorage.deleteImage(storageId)
+		return htmlScreenshotDatabase.delete(storageId)
 	}
 }
 

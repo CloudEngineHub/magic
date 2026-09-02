@@ -108,7 +108,7 @@ describe("InspectorDetailComponent", () => {
 			node: {
 				attrs: {
 					textContent: "全球新能源汽车市场运营指标洞察",
-					targetId: "element:#hero:1",
+					captureId: "element:#hero:1",
 					screenshotMention: {
 						type: MentionItemType.UPLOAD_FILE,
 						data: {
@@ -256,7 +256,7 @@ describe("InspectorDetailComponent", () => {
 			node: {
 				attrs: {
 					textContent: "Hero title",
-					targetId: "element:#hero:1",
+					captureId: "element:#hero:1",
 					screenshotMention: {
 						type: MentionItemType.UPLOAD_FILE,
 						data: {
@@ -310,7 +310,7 @@ describe("InspectorDetailComponent", () => {
 		const props = {
 			node: {
 				attrs: {
-					targetId: "element:#hero:1",
+					captureId: "element:#hero:1",
 					textContent: "Hero",
 				},
 			},

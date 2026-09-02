@@ -142,7 +142,7 @@ describe("useMessageEditorPubSub", () => {
 			file: new File(["old"], "old.png", { type: "image/png" }),
 		})
 		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-			targetId: "div.cover-surface",
+			captureId: "div.cover-surface",
 			dataUrl: "data:image/png;base64,OLD",
 			fileName: "html-screenshot-a2296b4a.png",
 		})
@@ -158,7 +158,7 @@ describe("useMessageEditorPubSub", () => {
 			file: new File(["new"], "new.png", { type: "image/png" }),
 		})
 		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-			targetId: "div.cover-surface",
+			captureId: "div.cover-surface",
 			dataUrl: "data:image/png;base64,NEW",
 			fileName: "html-screenshot-a2296b4a.png",
 		})
@@ -188,9 +188,9 @@ describe("useMessageEditorPubSub", () => {
 			}),
 		)
 
-		const targetId = "screenshot:1"
+		const captureId = "screenshot:1"
 		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-			targetId,
+			captureId,
 			dataUrl: "data:image/png;base64,AA==",
 		})
 		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
@@ -202,7 +202,7 @@ describe("useMessageEditorPubSub", () => {
 			instruction: "",
 			targets: [
 				{
-					id: targetId,
+					id: captureId,
 					kind: "screenshot",
 					selector: "",
 					elementLabel: "Screenshot",
@@ -305,7 +305,7 @@ describe("useMessageEditorPubSub", () => {
 		}
 
 		pubsub.publish(PubSubEvents.Update_Html_Inspector_Screenshot, {
-			targetId: "element:#hero:1:1",
+			captureId: "element:#hero:1:1",
 			screenshotMention,
 		})
 
@@ -334,7 +334,7 @@ describe("useMessageEditorPubSub", () => {
 		)
 
 		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
-			targetId: "element:#hero:1:1",
+			captureId: "element:#hero:1:1",
 			dataUrl: "data:image/png;base64,AA==",
 		})
 		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))

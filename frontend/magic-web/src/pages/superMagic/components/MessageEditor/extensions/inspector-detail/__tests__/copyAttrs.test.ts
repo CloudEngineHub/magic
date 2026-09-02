@@ -25,14 +25,14 @@ const projectScreenshotMention = {
 }
 
 describe("sanitizeCopiedInspectorDetailAttrs", () => {
-	it("clears the live screenshot targetId when copying into the editor", () => {
+	it("clears the live screenshot captureId when copying into the editor", () => {
 		const copied = sanitizeCopiedInspectorDetailAttrs({
 			selector: "#hero",
 			textContent: "Hero",
-			targetId: "element:#hero:1",
+			captureId: "element:#hero:1",
 		})
 
-		expect(copied.targetId).toBeNull()
+		expect(copied.captureId).toBeNull()
 		expect(copied.selector).toBe("#hero")
 		expect(copied.textContent).toBe("Hero")
 	})
@@ -41,10 +41,10 @@ describe("sanitizeCopiedInspectorDetailAttrs", () => {
 		const copied = sanitizeCopiedInspectorDetailAttrs({
 			selector: "#hero",
 			screenshotMention: localScreenshotMention,
-			targetId: "element:#hero:1",
+			captureId: "element:#hero:1",
 		})
 
-		expect(copied.targetId).toBeNull()
+		expect(copied.captureId).toBeNull()
 		expect(copied.screenshotMention).toBeNull()
 	})
 
@@ -52,22 +52,22 @@ describe("sanitizeCopiedInspectorDetailAttrs", () => {
 		const copied = sanitizeCopiedInspectorDetailAttrs({
 			selector: "#hero",
 			screenshotMention: projectScreenshotMention,
-			targetId: "element:#hero:1",
+			captureId: "element:#hero:1",
 		})
 
-		expect(copied.targetId).toBeNull()
+		expect(copied.captureId).toBeNull()
 		expect(copied.screenshotMention).toEqual(projectScreenshotMention)
 	})
 
-	it("accepts a required string targetId and returns a nullable one", () => {
-		const attrs: { selector: string; targetId: string } = {
+	it("accepts a required string captureId and returns a nullable one", () => {
+		const attrs: { selector: string; captureId: string } = {
 			selector: "#hero",
-			targetId: "element:#hero:1",
+			captureId: "element:#hero:1",
 		}
 
 		const copied = sanitizeCopiedInspectorDetailAttrs(attrs)
 
-		expect(copied.targetId).toBeNull()
-		expectTypeOf(copied.targetId).toEqualTypeOf<string | null | undefined>()
+		expect(copied.captureId).toBeNull()
+		expectTypeOf(copied.captureId).toEqualTypeOf<string | null | undefined>()
 	})
 })

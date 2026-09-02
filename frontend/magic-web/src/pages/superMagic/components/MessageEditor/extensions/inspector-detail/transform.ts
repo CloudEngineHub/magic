@@ -1,6 +1,10 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
-import { INSPECTOR_DETAIL_MARKER, INSPECTOR_DETAIL_TYPE, INSPECTOR_TARGET_ID_MARKER } from "./const"
+import {
+	INSPECTOR_DETAIL_MARKER,
+	INSPECTOR_DETAIL_TYPE,
+	INSPECTOR_CAPTURE_ID_MARKER,
+} from "./const"
 
 /**
  * Known label prefixes that identify inspector detail lines.
@@ -32,7 +36,7 @@ const KNOWN_LABELS = [
 function isInspectorDetailLine(text: string): boolean {
 	return (
 		KNOWN_LABELS.some((label) => text.startsWith(label)) ||
-		text.startsWith(INSPECTOR_TARGET_ID_MARKER)
+		text.startsWith(INSPECTOR_CAPTURE_ID_MARKER)
 	)
 }
 
@@ -108,7 +112,7 @@ function extractInspectorAttrs(
 	selectorMatchCount: number
 	fileMention?: TiptapMentionAttributes | null
 	screenshotMention?: TiptapMentionAttributes | null
-	targetId?: string | null
+	captureId?: string | null
 } {
 	let selector = ""
 	let size = ""
@@ -120,7 +124,7 @@ function extractInspectorAttrs(
 	let domContext = "{}"
 	let elementHtml = ""
 	let selectorMatchCount = -1
-	let targetId = ""
+	let captureId = ""
 
 	for (const p of paragraphs) {
 		const text = getFirstText(p)
@@ -181,8 +185,8 @@ function extractInspectorAttrs(
 			selectorMatchCount = Number(
 				text.replace(/^(选择器匹配数|Selector Match Count):\s*/, ""),
 			)
-		} else if (text.startsWith(INSPECTOR_TARGET_ID_MARKER)) {
-			targetId = text.slice(INSPECTOR_TARGET_ID_MARKER.length)
+		} else if (text.startsWith(INSPECTOR_CAPTURE_ID_MARKER)) {
+			captureId = text.slice(INSPECTOR_CAPTURE_ID_MARKER.length)
 		}
 	}
 
@@ -203,7 +207,7 @@ function extractInspectorAttrs(
 		domContext,
 		elementHtml,
 		selectorMatchCount,
-		targetId: targetId || undefined,
+		captureId: captureId || undefined,
 	}
 }
 
@@ -363,7 +367,7 @@ export function serializeInspectorContent(
 			elementHtml?: string
 			selectorMatchCount?: number
 			fileMention?: TiptapMentionAttributes | null
-			targetId?: string | null
+			captureId?: string | null
 		}
 
 		const content: JSONContent[] = []
@@ -426,8 +430,8 @@ export function serializeInspectorContent(
 		if (attrs.textContent) {
 			content.push(para(text(`${labels.textContent}: "${attrs.textContent}"`)))
 		}
-		if (attrs.targetId) {
-			content.push(para(text(`${INSPECTOR_TARGET_ID_MARKER}${attrs.targetId}`)))
+		if (attrs.captureId) {
+			content.push(para(text(`${INSPECTOR_CAPTURE_ID_MARKER}${attrs.captureId}`)))
 		}
 		return content
 	}
