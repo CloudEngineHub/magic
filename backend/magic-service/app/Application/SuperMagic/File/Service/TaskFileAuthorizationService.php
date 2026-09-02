@@ -67,8 +67,8 @@ class TaskFileAuthorizationService extends AbstractAppService
 
         if ($requestedIds !== $resolvedIds) {
             ExceptionBuilder::throw(
-                SuperAgentErrorCode::FILE_PERMISSION_DENIED,
-                trans('file.file_permission_denied')
+                SuperAgentErrorCode::FILE_NOT_FOUND,
+                trans('file.file_not_found')
             );
         }
 
