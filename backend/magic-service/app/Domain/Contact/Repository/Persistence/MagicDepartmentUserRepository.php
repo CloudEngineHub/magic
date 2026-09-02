@@ -196,8 +196,10 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
     public function searchDepartmentUsersByEmployeeNo(string $employeeNo, string $organizationCode): array
     {
         $departmentUsers = $this->departmentUserModel::query()
+            ->select(['user_id'])
             ->where('employee_no', '=', $employeeNo)
             ->where('organization_code', $organizationCode)
+            ->distinct()
             ->get()
             ->toArray();
 

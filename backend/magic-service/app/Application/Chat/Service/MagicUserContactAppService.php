@@ -253,15 +253,20 @@ class MagicUserContactAppService extends AbstractAppService
 
         $usersForQueryDepartmentPath = [];
         $usersForQueryJobTitle = [];
-        $usersForQueryEmployeeNo = [];
-        $dataIsolation = $this->createDataIsolation($authorization);
 
         // 工号是组织用户关系字段，按完整工号精确匹配。
         $departmentUsers = $this->departmentUserDomainService->searchDepartmentUsersByEmployeeNo(
             $queryDTO->getQuery(),
             $dataIsolation
         );
-        $usersForQueryEmployeeNo = array_map(static fn ($entity) => $entity->toArray(), $departmentUsers);
+        // 部门用户实体不包含 user_type；这里只构造后续候选用户所需的最小字段集。
+        $usersForQueryEmployeeNo = array_map(
+            static fn ($entity): array => [
+                'user_id' => $entity->getUserId(),
+                'user_type' => UserType::Human->value,
+            ],
+            $departmentUsers
+        );
 
         // 搜索职位包含搜索词的人
         if ($queryDTO->isQueryByJobTitle()) {
