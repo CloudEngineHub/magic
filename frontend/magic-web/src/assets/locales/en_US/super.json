@@ -596,6 +596,11 @@
 		"usernamePlaceholder": "Enter a username",
 		"usernameRequired": "Enter a username"
 	},
+	"debug": {
+		"downloadFailed": "Failed to download project state",
+		"downloadProjectState": "Download Current Project State",
+		"title": "Super Magic Debug"
+	},
 	"deletedFile": {
 		"message": "The file has been deleted and cannot be previewed",
 		"status": "Deleted"

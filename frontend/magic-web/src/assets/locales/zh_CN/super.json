@@ -597,6 +597,11 @@
 		"usernamePlaceholder": "请输入数据库账号",
 		"usernameRequired": "请输入数据库账号"
 	},
+	"debug": {
+		"downloadFailed": "下载项目状态失败",
+		"downloadProjectState": "下载当前项目状态",
+		"title": "Super Magic 调试"
+	},
 	"deletedFile": {
 		"message": "文件已被删除，无法预览",
 		"status": "已删除"
