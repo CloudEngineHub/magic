@@ -118,8 +118,8 @@ def test_generation_parameters_use_reference_images_as_canonical_field():
     assert parameters.reference_image_paths == ("./images/legacy.webp",)
 
 
-def test_new_video_detail_persists_public_request_before_submission():
-    """新建视频 Content 时应在提交 provider 前写入公共生成请求。"""
+def test_new_generated_video_detail_persists_public_request_before_submission():
+    """新建视频生成 Content 时应在提交 provider 前写入公共生成请求。"""
     detail = ContentMetadataService.new_detail(
         "element-1",
         {
@@ -176,3 +176,30 @@ def test_start_retry_replaces_public_video_request_with_new_parameters():
         {"uri": "./images/new.webp"}
     ]
     assert "generationTaskId" not in detail
+
+
+def test_new_image_detail_persists_public_request_before_submission():
+    """新建生图 Content 时应写入 generateImageRequest，并隔离运行态参数。"""
+    detail = ContentMetadataService.new_detail(
+        "element-image",
+        {
+            "source": "generated",
+            "contentType": "image",
+            "generationParameters": {
+                "prompt": "生成一张产品图",
+                "reference_images": ["images/source.png"],
+            },
+        },
+    )
+
+    metadata = {}
+    ContentMetadataService.set(metadata, "element-image", "content-image", detail)
+
+    public_detail = metadata["elements"]["element-image"]["contentDetails"]["content-image"]
+    runtime_detail = metadata["__canvas_runtime__"]["elements"]["element-image"]["contentDetails"]["content-image"]
+    assert public_detail["generateImageRequest"] == {
+        "prompt": "生成一张产品图",
+        "reference_images": ["./images/source.png"],
+    }
+    assert "generationParameters" not in public_detail
+    assert runtime_detail["generationParameters"]["reference_images"] == ["images/source.png"]
