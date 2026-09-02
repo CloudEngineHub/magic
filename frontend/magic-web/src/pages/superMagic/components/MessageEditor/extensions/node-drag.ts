@@ -1,6 +1,8 @@
 import { Plugin, PluginKey, TextSelection } from "@/infrastructure/editors/tiptap/pm-state"
 import type { Node as ProseMirrorNode } from "prosemirror-model"
 import type { EditorView } from "prosemirror-view"
+import { sanitizeCopiedInspectorDetailAttrs } from "./inspector-detail/copyAttrs"
+import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
 
 export const MAGIC_NODE_DRAG_MIME = "application/x-magic-editor-node+json"
 const MAGIC_NODE_DRAG_VERSION = 1
@@ -82,6 +84,16 @@ export function setMagicNodeDragData(
 		updateDragPreviewPosition(event)
 	}
 	return true
+}
+
+/** History copies drop live screenshot bindings; editor moves keep them. */
+export function resolveDroppedNodeAttrs(
+	type: string,
+	attrs: Record<string, unknown>,
+	isCopy: boolean,
+): Record<string, unknown> {
+	if (type !== INSPECTOR_DETAIL_TYPE || !isCopy) return attrs
+	return sanitizeCopiedInspectorDetailAttrs(attrs)
 }
 
 const editorViews = new Map<string, EditorView>()
@@ -331,7 +343,13 @@ function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayloa
 
 	const node = (() => {
 		try {
-			return nodeType.create(payload.node.attrs)
+			return nodeType.create(
+				resolveDroppedNodeAttrs(
+					payload.node.type,
+					payload.node.attrs,
+					!payload.sourceEditorId,
+				),
+			)
 		} catch {
 			return null
 		}

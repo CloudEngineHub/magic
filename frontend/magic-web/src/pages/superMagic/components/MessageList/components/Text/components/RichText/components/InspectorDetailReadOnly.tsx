@@ -7,8 +7,11 @@ import {
 	type ProjectFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import { INSPECTOR_DETAIL_COLLAPSED_MAX_WIDTH_CLASS } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
+import { sanitizeCopiedInspectorDetailAttrs } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/copyAttrs"
 import { getInspectorDetailHeaderLabel } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/display"
 import { InspectorScreenshotPreview } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/InspectorScreenshotPreview"
+import { useHtmlScreenshotMention } from "@/pages/superMagic/components/MessageEditor/hooks/useHtmlScreenshotMention"
 
 interface InspectorDetailReadOnlyProps {
 	attrs: {
@@ -20,12 +23,14 @@ interface InspectorDetailReadOnlyProps {
 		textContent: string
 		fileMention?: TiptapMentionAttributes | null
 		screenshotMention?: TiptapMentionAttributes | null
+		targetId?: string | null
 	}
 }
 
 export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps) {
 	const [expanded, setExpanded] = useState(false)
 	const { t } = useTranslation("super")
+	const screenshotMention = useHtmlScreenshotMention(attrs.targetId, attrs.screenshotMention)
 
 	const parsedStyles: Record<string, string> = (() => {
 		try {
@@ -42,12 +47,23 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			? (attrs.fileMention.data as ProjectFileMentionData)
 			: null
 
+	const headerLabelContent = (
+		<>
+			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-icon />
+			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
+		</>
+	)
+	const expandIcon = expanded ? (
+		<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
+	) : (
+		<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
+	)
 	const headerButton = (
 		<button
 			type="button"
 			className={cn(
 				"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
-				expanded ? "w-full" : "w-auto",
+				expanded ? "w-full" : "w-auto min-w-0",
 				!expanded &&
 					"h-5 rounded-md border border-border/60 bg-muted/30 px-1.5 text-xs leading-5",
 				expanded &&
@@ -57,13 +73,19 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			data-testid="set-expanded"
 			draggable={false}
 		>
-			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-icon />
-			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
-			{expanded ? (
-				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
+			{!expanded && screenshotMention ? (
+				<InspectorScreenshotPreview
+					mention={screenshotMention}
+					trigger={
+						<span className="inline-flex min-w-0 flex-1 items-center gap-1">
+							{headerLabelContent}
+						</span>
+					}
+				/>
 			) : (
-				<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
+				headerLabelContent
 			)}
+			{expandIcon}
 		</button>
 	)
 
@@ -74,26 +96,22 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 				"inspector-detail-read-only cursor-grab select-none transition-colors active:cursor-grabbing",
 				expanded
 					? "my-1 block w-full rounded-md border border-primary/50 bg-primary/5"
-					: "magic-mention relative top-[1px] !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-baseline",
+					: cn(
+							"magic-mention relative top-[1px] !inline-flex !overflow-visible !bg-transparent !p-0 !align-baseline",
+							INSPECTOR_DETAIL_COLLAPSED_MAX_WIDTH_CLASS,
+						),
 			)}
 			draggable={false}
 			data-magic-node-type="inspector-detail"
-			data-magic-node-attrs={JSON.stringify(attrs)}
+			data-magic-node-attrs={JSON.stringify(sanitizeCopiedInspectorDetailAttrs(attrs))}
 			data-magic-editor-node
 		>
-			{!expanded && attrs.screenshotMention ? (
-				<InspectorScreenshotPreview
-					mention={attrs.screenshotMention}
-					trigger={headerButton}
-				/>
-			) : (
-				headerButton
-			)}
+			{headerButton}
 
 			{expanded && (
 				<span className="block space-y-1 px-2 py-1.5 text-[11px] text-foreground/70">
-					{attrs.screenshotMention && (
-						<InspectorScreenshotPreview mention={attrs.screenshotMention} />
+					{screenshotMention && (
+						<InspectorScreenshotPreview mention={screenshotMention} />
 					)}
 					{fileData && (
 						<span className="flex gap-1.5">

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { MAGIC_NODE_DRAG_MIME, setMagicNodeDragData } from "../node-drag"
+import { MAGIC_NODE_DRAG_MIME, resolveDroppedNodeAttrs, setMagicNodeDragData } from "../node-drag"
 
 function createDragEvent(clientX = 120, clientY = 140) {
 	return {
@@ -75,5 +75,34 @@ describe("magic node drag preview", () => {
 
 		document.dispatchEvent(new Event("dragend", { bubbles: true }))
 		expect(document.documentElement).not.toHaveClass("magic-node-dragging")
+	})
+})
+
+describe("resolveDroppedNodeAttrs", () => {
+	it("clears the inspector screenshot targetId when copying from outside the editor", () => {
+		const attrs = resolveDroppedNodeAttrs(
+			"inspector-detail",
+			{
+				selector: "#hero",
+				targetId: "element:#hero:1",
+			},
+			true,
+		)
+
+		expect(attrs.selector).toBe("#hero")
+		expect(attrs.targetId).toBeNull()
+	})
+
+	it("keeps the inspector screenshot targetId when moving inside the editor", () => {
+		const attrs = resolveDroppedNodeAttrs(
+			"inspector-detail",
+			{
+				selector: "#hero",
+				targetId: "element:#hero:1",
+			},
+			false,
+		)
+
+		expect(attrs.targetId).toBe("element:#hero:1")
 	})
 })
