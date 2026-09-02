@@ -196,6 +196,12 @@ class WaitGenerationService:
                 "outputUri": query_result.output_uri,
                 "errorMessage": query_result.error_message,
             }
+            if record.element_type == "video":
+                detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                    detail.get("videoGenerationResultMeta") or {},
+                    query_result.result_metadata,
+                    final_status,
+                )
             if find_generation_request(detail) is None:
                 parameters = detail.get("generationParameters") or {}
                 if isinstance(parameters, dict):

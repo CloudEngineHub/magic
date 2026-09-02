@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from typing import Any
 
 from app.tools.canvas.domain.content_fields.generated_media_protocol import (
@@ -16,7 +17,7 @@ from app.tools.video_generation_utils.provider_asset_uri import normalize_provid
 
 RUNTIME_METADATA_KEY = "__canvas_runtime__"
 RUNTIME_SIDECAR_FILENAME = "element-details-runtime.json"
-PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"visualUnderstanding"}
+PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"videoGenerationResultMeta", "visualUnderstanding"}
 
 
 class ContentMetadataService:
@@ -88,6 +89,7 @@ class ContentMetadataService:
         }
         if data.get("source") == "generated":
             parameters = _clean_generation_parameters(data)
+            parameters = _with_generation_start_metadata(parameters, str(data.get("contentType") or ""))
             detail.update({
                 "retryCount": 0,
                 "generationStatus": "pending",
@@ -98,6 +100,12 @@ class ContentMetadataService:
                 detail[request_field] = ContentMetadataService.build_public_generation_request(
                     parameters,
                     str(data.get("contentType") or ""),
+                )
+            if data.get("contentType") == "video":
+                detail["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                    {},
+                    ContentMetadataService.build_video_result_metadata(parameters),
+                    "pending",
                 )
         elif data.get("source") == "imported":
             detail["assetPath"] = data.get("assetPath")
@@ -175,6 +183,9 @@ class ContentMetadataService:
         for key in ("providerTaskId", "generationTaskId", "outputUri", "outputFilename", "errorMessage"):
             updated.pop(key, None)
         cleaned_parameters = _clean_generation_parameters(parameters)
+        for key in ("start_time", "end_time", "duration_ms"):
+            cleaned_parameters.pop(key, None)
+        cleaned_parameters = _with_generation_start_metadata(cleaned_parameters, element_type or "")
         updated.update({
             "elementId": element_id,
             "source": "generated",
@@ -190,7 +201,67 @@ class ContentMetadataService:
                 cleaned_parameters,
                 element_type or "",
             )
+        if element_type == "video":
+            updated["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                {},
+                ContentMetadataService.build_video_result_metadata(cleaned_parameters),
+                "pending",
+            )
         return updated
+
+    @staticmethod
+    def build_video_result_metadata(parameters: dict[str, Any]) -> dict[str, Any]:
+        """根据生成参数构造视频详情面板可读的初始元数据。"""
+        generation_info = {
+            key: parameters[key]
+            for key in ("task", "input_mode", "aspect_ratio", "resolution", "duration_seconds")
+            if parameters.get(key) not in (None, "")
+        }
+        runtime = {"started_at": parameters.get("start_time")} if parameters.get("start_time") else {}
+        return {
+            key: value
+            for key, value in (("generation_info", generation_info), ("runtime", runtime))
+            if value
+        }
+
+    @staticmethod
+    def merge_video_result_metadata(
+        existing: dict[str, Any],
+        incoming: dict[str, Any] | None,
+        status: str,
+        finished_at: str | None = None,
+    ) -> dict[str, Any]:
+        """合并视频生成元数据，并在终态补齐完成时间和耗时。"""
+        current = dict(existing) if isinstance(existing, dict) else {}
+        incoming = incoming if isinstance(incoming, dict) else {}
+        for key in ("billing", "generation_info", "runtime"):
+            value = incoming.get(key)
+            if isinstance(value, dict):
+                current[key] = {**(current.get(key) if isinstance(current.get(key), dict) else {}), **value}
+        runtime = dict(current.get("runtime") or {})
+        if status in {"completed", "failed"}:
+            runtime.setdefault("finished_at", finished_at or _now_text())
+            started_at = runtime.get("started_at")
+            if runtime.get("elapsed_seconds") is None:
+                elapsed = _diff_seconds(started_at, runtime.get("finished_at"))
+                if elapsed is not None:
+                    runtime["elapsed_seconds"] = elapsed
+        if runtime:
+            current["runtime"] = runtime
+        return current
+
+    @staticmethod
+    def complete_image_generation_request(request: dict[str, Any], status: str) -> dict[str, Any]:
+        """在图片生成终态补齐完成时间和毫秒耗时。"""
+        completed = dict(request)
+        if status not in {"completed", "failed"}:
+            return completed
+        completed.setdefault("end_time", _now_text())
+        if completed.get("duration_ms") is None:
+            elapsed = _diff_seconds(completed.get("start_time"), completed.get("end_time"))
+            if elapsed is not None:
+                completed["duration_ms"] = elapsed * 1000
+        return completed
 
     @staticmethod
     def retry_idempotency_key(
@@ -204,11 +275,14 @@ class ContentMetadataService:
         item_ref 参与幂等键只用于识别同一次请求的重放；它不会影响 retryCount，
         因此更换 item_ref 仍然必须经过统一的重试上限校验。
         """
+        stable_parameters = dict(parameters or {})
+        for key in ("start_time", "end_time", "duration_ms", "mode"):
+            stable_parameters.pop(key, None)
         payload = {
             "item_ref": item_ref,
             "element_id": element_id,
             "content_id": content_id,
-            "parameters": parameters,
+            "parameters": stable_parameters,
         }
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
@@ -266,7 +340,12 @@ class ContentMetadataService:
         request: dict[str, Any] = {
             "prompt": str(parameters.get("prompt") or ""),
         }
-        for key in ("size", "image_id", "mode", "start_time", "end_time", "duration_ms", "model_id"):
+        generic_keys = (
+            ("size", "image_id", "mode", "start_time", "end_time", "duration_ms", "model_id")
+            if element_type == "image"
+            else ("model_id",)
+        )
+        for key in generic_keys:
             value = parameters.get(key)
             if value is not None:
                 request[key] = value
@@ -288,6 +367,60 @@ def _build_public_image_request(parameters: dict[str, Any]) -> dict[str, Any]:
             if isinstance(path, str) and path
         ]
     }
+
+
+def _with_generation_start_metadata(parameters: dict[str, Any], element_type: str) -> dict[str, Any]:
+    """为新一轮生成建立可直接展示的初始时间、模式和模型快照。"""
+    values = dict(parameters)
+    values.setdefault("start_time", _now_text())
+    if element_type == "image":
+        values.setdefault(
+            "mode",
+            "edit" if values.get("reference_images") or values.get("reference_image_paths") else "generate",
+        )
+    elif element_type == "video":
+        values.setdefault("input_mode", _resolve_video_input_mode(values))
+    return values
+
+
+def _now_text() -> str:
+    """返回前端详情面板兼容的本地时间文本。"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _diff_seconds(started_at: Any, finished_at: Any) -> int | None:
+    """计算前端时间文本之间的整秒耗时。"""
+    if not isinstance(started_at, str) or not isinstance(finished_at, str):
+        return None
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        finished = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if started.tzinfo is None and finished.tzinfo is not None:
+        started = started.replace(tzinfo=finished.tzinfo)
+    if finished.tzinfo is None and started.tzinfo is not None:
+        finished = finished.replace(tzinfo=started.tzinfo)
+    return max(0, int((finished - started).total_seconds()))
+
+
+def _resolve_video_input_mode(parameters: dict[str, Any]) -> str:
+    """按视频任务参数推导与 Design API 一致的输入模式。"""
+    explicit = parameters.get("input_mode")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    if parameters.get("task") == "edit":
+        return "video_edit"
+    if parameters.get("frame_start_path") or parameters.get("frame_end_path"):
+        return "keyframe_guided"
+    if (
+        parameters.get("reference_images")
+        or parameters.get("reference_image_paths")
+        or parameters.get("reference_video_paths")
+        or parameters.get("reference_audio_paths")
+    ):
+        return "omni_reference"
+    return "standard"
 
 
 def _find_detail(elements: Any, element_id: str, content_id: str) -> dict[str, Any]:

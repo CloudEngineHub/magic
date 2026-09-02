@@ -200,6 +200,7 @@ class GenerationSubmissionService:
             detail = ContentMetadataService.get(metadata, submission_item.element_id, submission_item.content_id)
             public_request = ContentMetadataService.build_public_generation_request(
                 {
+                    **dict(detail.get("generationParameters") or {}),
                     **work_item.parameter_payload,
                     **dict(submission.request_metadata or {}),
                 },
@@ -219,7 +220,18 @@ class GenerationSubmissionService:
             }
             request_field = generation_request_field(submission_item.element_type)
             if request_field:
+                if submission_item.element_type == "image":
+                    public_request = ContentMetadataService.complete_image_generation_request(
+                        public_request,
+                        submission.status,
+                    )
                 detail_update[request_field] = public_request
+            if submission_item.element_type == "video":
+                detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                    detail.get("videoGenerationResultMeta") or {},
+                    submission.result_metadata,
+                    submission.status,
+                )
             if submission_item.retry_idempotency_key:
                 detail_update["retryIdempotencyKey"] = submission_item.retry_idempotency_key
                 detail_update["retryResult"] = {

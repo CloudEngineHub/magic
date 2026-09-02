@@ -214,12 +214,31 @@ class MockAsynchronousGenerationPort:
             "processing",
             generation_task_id="canvas-task-1",
             provider_task_id="provider-task-1",
+            request_metadata={"model_id": "mock-video-model", "input_mode": "standard"},
+            result_metadata={
+                "generation_info": {
+                    "input_mode": "standard",
+                    "resolution": "720p",
+                    "duration_seconds": 4,
+                },
+                "runtime": {"started_at": "2026-09-02 10:00:00"},
+            },
         )
 
     async def query(self, request, tool_context):
         """返回固定完成状态和视频路径。"""
         self.query_count += 1
-        return GenerationQueryResult("completed", output_uri="./videos/result.mp4")
+        return GenerationQueryResult(
+            "completed",
+            output_uri="./videos/result.mp4",
+            result_metadata={
+                "runtime": {
+                    "finished_at": "2026-09-02 10:00:04",
+                    "elapsed_seconds": 4,
+                },
+                "billing": {"points": 8},
+            },
+        )
 
 
 class MockVideoMediaProbePort(FakeMediaProbePort):
@@ -328,6 +347,23 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     assert video_port.query_count == 1
     assert video.get_content(video.active_content_id).fields.src == "./videos/result.mp4"
     assert (video.properties.width, video.properties.height) == (1080, 1920)
+    sidecar = await repository.read_sidecar("mock-project")
+    video_detail = sidecar["elements"][video.element_id]["contentDetails"][video.active_content_id]
+    assert video_detail["generateVideoRequest"]["model_id"] == "mock-video-model"
+    assert video_detail["generateVideoRequest"]["input_mode"] == "standard"
+    assert video_detail["videoGenerationResultMeta"] == {
+        "generation_info": {
+            "input_mode": "standard",
+            "resolution": "720p",
+            "duration_seconds": 4,
+        },
+        "runtime": {
+            "started_at": "2026-09-02 10:00:00",
+            "finished_at": "2026-09-02 10:00:04",
+            "elapsed_seconds": 4,
+        },
+        "billing": {"points": 8},
+    }
 
 
 @pytest.mark.asyncio

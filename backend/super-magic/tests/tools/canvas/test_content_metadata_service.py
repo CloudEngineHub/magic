@@ -197,9 +197,59 @@ def test_new_image_detail_persists_public_request_before_submission():
 
     public_detail = metadata["elements"]["element-image"]["contentDetails"]["content-image"]
     runtime_detail = metadata["__canvas_runtime__"]["elements"]["element-image"]["contentDetails"]["content-image"]
-    assert public_detail["generateImageRequest"] == {
-        "prompt": "生成一张产品图",
-        "reference_images": ["./images/source.png"],
-    }
+    assert public_detail["generateImageRequest"]["prompt"] == "生成一张产品图"
+    assert public_detail["generateImageRequest"]["reference_images"] == ["./images/source.png"]
+    assert public_detail["generateImageRequest"]["mode"] == "edit"
+    assert public_detail["generateImageRequest"]["start_time"]
     assert "generationParameters" not in public_detail
     assert runtime_detail["generationParameters"]["reference_images"] == ["images/source.png"]
+
+
+def test_new_video_detail_persists_initial_runtime_display_metadata():
+    """新建视频 Content 时应立即保存模式、规格和开始时间。"""
+    detail = ContentMetadataService.new_detail(
+        "element-video",
+        {
+            "source": "generated",
+            "contentType": "video",
+            "generationParameters": {
+                "prompt": "让产品动起来",
+                "model_id": "video-model",
+                "reference_images": ["images/source.png"],
+                "duration_seconds": 5,
+                "resolution": "720p",
+            },
+        },
+    )
+
+    meta = detail["videoGenerationResultMeta"]
+    assert meta["generation_info"] == {
+        "input_mode": "omni_reference",
+        "resolution": "720p",
+        "duration_seconds": 5,
+    }
+    assert meta["runtime"]["started_at"]
+    assert detail["generateVideoRequest"]["model_id"] == "video-model"
+
+
+def test_video_result_metadata_adds_terminal_runtime_fields():
+    """视频终态元数据应补齐完成时间和整秒耗时。"""
+    result = ContentMetadataService.merge_video_result_metadata(
+        {
+            "runtime": {"started_at": "2026-09-02 10:00:00"},
+        },
+        {
+            "generation_info": {"input_mode": "standard"},
+            "billing": {"points": 3},
+        },
+        "completed",
+        finished_at="2026-09-02 10:00:07",
+    )
+
+    assert result["generation_info"]["input_mode"] == "standard"
+    assert result["billing"]["points"] == 3
+    assert result["runtime"] == {
+        "started_at": "2026-09-02 10:00:00",
+        "finished_at": "2026-09-02 10:00:07",
+        "elapsed_seconds": 7,
+    }
