@@ -50,7 +50,9 @@ function MarkerMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewR
 	)
 
 	const handleMouseDown = useCallback((event: MouseEvent) => {
-		// Keep the node draggable while preventing the editor from placing a text caret inside it.
+		// Mentions are atomic nodes; prevent the browser and ProseMirror from
+		// turning a pointer drag into a text selection.
+		event.preventDefault()
 		event.stopPropagation()
 	}, [])
 
@@ -70,11 +72,11 @@ function MarkerMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewR
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention-node magic-mention-node--marker inline-flex cursor-grab align-top active:cursor-grabbing"
+			className="magic-mention-node magic-mention-node--marker inline-flex cursor-grab select-none align-top active:cursor-grabbing"
 			contentEditable={false}
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}
-			draggable
+			draggable={false}
 			data-magic-editor-node
 			onMouseDown={handleMouseDown}
 		>

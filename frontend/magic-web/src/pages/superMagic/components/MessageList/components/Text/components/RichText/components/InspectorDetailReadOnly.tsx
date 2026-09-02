@@ -9,7 +9,6 @@ import {
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { getInspectorDetailHeaderLabel } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/display"
 import { InspectorScreenshotPreview } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/InspectorScreenshotPreview"
-import { setMagicNodeDragData } from "@/pages/superMagic/components/MessageEditor/extensions/node-drag"
 
 interface InspectorDetailReadOnlyProps {
 	attrs: {
@@ -56,18 +55,9 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			)}
 			onClick={() => setExpanded((v) => !v)}
 			data-testid="set-expanded"
-			draggable
-			onDragStart={(event) =>
-				setMagicNodeDragData(
-					event.nativeEvent,
-					"inspector-detail",
-					attrs as unknown as Record<string, unknown>,
-					undefined,
-					event.currentTarget,
-				)
-			}
+			draggable={false}
 		>
-			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-hidden />
+			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-icon />
 			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
 			{expanded ? (
 				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
@@ -86,17 +76,10 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 					? "my-1 block w-full rounded-md border border-primary/50 bg-primary/5"
 					: "magic-mention relative top-[1px] !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-baseline",
 			)}
-			draggable
+			draggable={false}
+			data-magic-node-type="inspector-detail"
+			data-magic-node-attrs={JSON.stringify(attrs)}
 			data-magic-editor-node
-			onDragStart={(event) =>
-				setMagicNodeDragData(
-					event.nativeEvent,
-					"inspector-detail",
-					attrs as unknown as Record<string, unknown>,
-					undefined,
-					event.currentTarget,
-				)
-			}
 		>
 			{!expanded && attrs.screenshotMention ? (
 				<InspectorScreenshotPreview

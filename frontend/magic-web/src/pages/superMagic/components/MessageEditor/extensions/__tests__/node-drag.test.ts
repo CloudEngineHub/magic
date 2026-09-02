@@ -28,6 +28,10 @@ describe("magic node drag preview", () => {
 		const decorativeIcon = document.createElement("span")
 		decorativeIcon.setAttribute("data-drag-preview-hidden", "true")
 		source.appendChild(decorativeIcon)
+		const previewIcon = document.createElement("span")
+		previewIcon.setAttribute("data-drag-preview-icon", "true")
+		previewIcon.textContent = "◉"
+		source.appendChild(previewIcon)
 		vi.spyOn(source, "getBoundingClientRect").mockReturnValue({
 			x: 80,
 			y: 100,
@@ -56,14 +60,20 @@ describe("magic node drag preview", () => {
 		expect(preview).not.toHaveAttribute("draggable")
 		expect(preview).not.toHaveAttribute("data-magic-editor-node")
 		expect(preview.querySelector("[data-drag-preview-hidden]")).toBeNull()
+		expect(preview).toHaveTextContent("◉")
+		expect(preview.querySelector("[data-drag-preview-icon]")).toBeNull()
 		expect(preview.style.position).toBe("fixed")
 		expect(preview.style.backgroundColor).toBe("rgb(255, 255, 255)")
 		expect(preview.style.left).toBe("132px")
 		expect(preview.style.top).toBe("152px")
+		expect(document.documentElement).toHaveClass("magic-node-dragging")
 		expect(event.dataTransfer?.setData).toHaveBeenCalledTimes(1)
 		expect(event.dataTransfer?.setData).toHaveBeenCalledWith(
 			MAGIC_NODE_DRAG_MIME,
 			expect.any(String),
 		)
+
+		document.dispatchEvent(new Event("dragend", { bubbles: true }))
+		expect(document.documentElement).not.toHaveClass("magic-node-dragging")
 	})
 })

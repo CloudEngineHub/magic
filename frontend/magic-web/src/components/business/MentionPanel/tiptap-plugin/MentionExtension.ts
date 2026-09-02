@@ -154,7 +154,8 @@ export function deleteNextTextCharAfterMention(
  */
 export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 	name: "mention",
-	draggable: true,
+	// Custom Pointer Events dragging avoids the browser's system drag layer.
+	draggable: false,
 
 	priority: 1000, // Higher priority to override default mention
 

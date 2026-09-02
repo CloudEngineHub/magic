@@ -7,7 +7,6 @@ export const MOBILE_LAYOUT_CONFIG: MessageEditorLayoutConfig = {
 	// bottom-left toolbar buttons: model switch + tools
 	bottomLeft: [
 		ToolbarButton.MODEL_SWITCH,
-		ToolbarButton.INTERNET_SEARCH,
 		ToolbarButton.AT,
 		ToolbarButton.MCP,
 		ToolbarButton.UPLOAD,

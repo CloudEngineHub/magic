@@ -31,7 +31,6 @@ export const DEFAULT_LAYOUT_CONFIG: Required<MessageEditorLayoutConfig> = {
 	bottomLeft: [ToolbarButton.MODEL_SWITCH],
 	outsideTop: [],
 	bottomRight: [
-		ToolbarButton.INTERNET_SEARCH,
 		ToolbarButton.MCP,
 		ToolbarButton.UPLOAD,
 		ToolbarButton.DIVIDER,
@@ -45,7 +44,7 @@ export const DEFAULT_LAYOUT_CONFIG: Required<MessageEditorLayoutConfig> = {
 // Default mobile layout configuration
 export const DEFAULT_MOBILE_LAYOUT_CONFIG = {
 	topBarLeft: [ToolbarButton.DRAFT_BOX, ToolbarButton.AT],
-	bottomLeft: [ToolbarButton.INTERNET_SEARCH, ToolbarButton.MCP, ToolbarButton.UPLOAD],
+	bottomLeft: [ToolbarButton.MCP, ToolbarButton.UPLOAD],
 	outsideBottom: [ToolbarButton.MODEL_SWITCH],
 	bottomRight: [
 		ToolbarButton.VOICE_INPUT,

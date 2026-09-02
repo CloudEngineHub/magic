@@ -79,7 +79,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 			contentEditable={false}
 			data-testid="set-expanded"
 		>
-			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-hidden />
+			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-icon />
 			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
 			{expanded ? (
 				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
@@ -94,7 +94,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 		<NodeViewWrapper
 			as="span"
 			data-type="inspector-detail"
-			draggable
+			draggable={false}
 			data-magic-editor-node
 			className={cn(
 				"cursor-grab select-none transition-colors active:cursor-grabbing",

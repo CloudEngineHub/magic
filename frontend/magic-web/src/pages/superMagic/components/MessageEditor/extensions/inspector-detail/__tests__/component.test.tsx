@@ -47,7 +47,7 @@ describe("InspectorDetailComponent", () => {
 			"top-[1px]",
 			"!align-baseline",
 		)
-		expect(wrapper).toHaveAttribute("draggable", "true")
+		expect(wrapper).toHaveAttribute("draggable", "false")
 		expect(wrapper).toHaveAttribute("data-magic-editor-node")
 		expect(wrapper).toHaveClass("!p-0")
 		expect(wrapper).not.toHaveClass("border", "border-border/60")
