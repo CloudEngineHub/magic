@@ -25,6 +25,9 @@ describe("magic node drag preview", () => {
 		source.textContent = "@metric-map.html"
 		source.setAttribute("draggable", "true")
 		source.setAttribute("data-magic-editor-node", "true")
+		const decorativeIcon = document.createElement("span")
+		decorativeIcon.setAttribute("data-drag-preview-hidden", "true")
+		source.appendChild(decorativeIcon)
 		vi.spyOn(source, "getBoundingClientRect").mockReturnValue({
 			x: 80,
 			y: 100,
@@ -52,8 +55,15 @@ describe("magic node drag preview", () => {
 		expect(preview).toHaveTextContent("@metric-map.html")
 		expect(preview).not.toHaveAttribute("draggable")
 		expect(preview).not.toHaveAttribute("data-magic-editor-node")
+		expect(preview.querySelector("[data-drag-preview-hidden]")).toBeNull()
 		expect(preview.style.position).toBe("fixed")
+		expect(preview.style.backgroundColor).toBe("rgb(255, 255, 255)")
 		expect(preview.style.left).toBe("132px")
 		expect(preview.style.top).toBe("152px")
+		expect(event.dataTransfer?.setData).toHaveBeenCalledTimes(1)
+		expect(event.dataTransfer?.setData).toHaveBeenCalledWith(
+			MAGIC_NODE_DRAG_MIME,
+			expect.any(String),
+		)
 	})
 })

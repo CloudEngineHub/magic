@@ -36,11 +36,17 @@ export function setMagicNodeDragData(
 
 	event.dataTransfer.effectAllowed = source ? "move" : "copy"
 	event.dataTransfer.setData(MAGIC_NODE_DRAG_MIME, JSON.stringify(payload))
-	event.dataTransfer.setData("text/plain", payload.text)
 	if (typeof document !== "undefined") {
 		const transparentImage = document.createElement("canvas")
 		transparentImage.width = 1
 		transparentImage.height = 1
+		transparentImage.style.position = "fixed"
+		transparentImage.style.left = "-9999px"
+		transparentImage.style.top = "-9999px"
+		transparentImage.style.pointerEvents = "none"
+		transparentImage.setAttribute("aria-hidden", "true")
+		document.body.appendChild(transparentImage)
+		activeNativeDragImage = transparentImage
 		if (typeof event.dataTransfer.setDragImage === "function") {
 			event.dataTransfer.setDragImage(transparentImage, 0, 0)
 		}
@@ -52,6 +58,7 @@ export function setMagicNodeDragData(
 
 const editorViews = new Map<string, EditorView>()
 let activeDragPreview: HTMLElement | null = null
+let activeNativeDragImage: HTMLCanvasElement | null = null
 let dragPreviewListenersInstalled = false
 
 function createEditorId() {
@@ -78,6 +85,8 @@ function getDragText(type: string, attrs: Record<string, unknown>) {
 function clearDragPreview() {
 	activeDragPreview?.remove()
 	activeDragPreview = null
+	activeNativeDragImage?.remove()
+	activeNativeDragImage = null
 }
 
 function updateDragPreviewPosition(event: DragEvent) {
@@ -146,22 +155,27 @@ function copyComputedStyles(source: Element, target: Element) {
 
 function prepareDragPreview(source: HTMLElement) {
 	const preview = source.cloneNode(true) as HTMLElement
+	copyComputedStyles(source, preview)
 	preview
-		.querySelectorAll<HTMLElement>(
-			"[draggable], [contenteditable], [data-magic-editor-node], [data-testid]",
+		.querySelectorAll<Element>(
+			"[draggable], [contenteditable], [data-magic-editor-node], [data-testid], [data-drag-preview-hidden]",
 		)
 		.forEach((element) => {
+			if (element.hasAttribute("data-drag-preview-hidden")) {
+				element.remove()
+				return
+			}
 			element.removeAttribute("draggable")
 			element.removeAttribute("contenteditable")
 			element.removeAttribute("data-magic-editor-node")
 			element.removeAttribute("data-testid")
+			element.removeAttribute("data-drag-preview-hidden")
 		})
 	preview.removeAttribute("draggable")
 	preview.removeAttribute("contenteditable")
 	preview.removeAttribute("data-magic-editor-node")
 	preview.removeAttribute("data-testid")
 
-	copyComputedStyles(source, preview)
 	const sourceRect = source.getBoundingClientRect()
 	const width = Math.min(sourceRect.width, DRAG_PREVIEW_MAX_WIDTH)
 	if (width > 0) preview.style.width = `${width}px`
@@ -169,6 +183,9 @@ function prepareDragPreview(source: HTMLElement) {
 	preview.style.setProperty("position", "fixed", "important")
 	preview.style.setProperty("left", "12px", "important")
 	preview.style.setProperty("top", "12px", "important")
+	// The source node can be transparent. The detached preview needs its own
+	// opaque surface so editor text never shows through while dragging.
+	preview.style.setProperty("background-color", "#fff", "important")
 	preview.style.maxWidth = `min(${DRAG_PREVIEW_MAX_WIDTH}px, calc(100vw - 24px))`
 	preview.style.maxHeight = `min(${DRAG_PREVIEW_MAX_HEIGHT}px, calc(100vh - 24px))`
 	preview.style.margin = "0"
@@ -249,7 +266,7 @@ function writeDragData(view: EditorView, editorId: string, event: DragEvent) {
 }
 
 function findDraggedNode(view: EditorView, target: EventTarget | null) {
-	if (!(target instanceof HTMLElement)) return null
+	if (!(target instanceof Element)) return null
 	const element = target.closest<HTMLElement>("[data-magic-editor-node]")
 	if (!element) return null
 

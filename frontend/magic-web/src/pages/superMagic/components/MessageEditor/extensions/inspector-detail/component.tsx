@@ -79,7 +79,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 			contentEditable={false}
 			data-testid="set-expanded"
 		>
-			<Crosshair size={12} className="flex-shrink-0 text-primary" />
+			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-hidden />
 			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
 			{expanded ? (
 				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
