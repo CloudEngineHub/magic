@@ -374,18 +374,22 @@ function AskUserFormImpl({
 								showDefaultHint={!displayAnswers && !disabled && !isTimeout}
 							/>
 						))}
+						{showRemarkField ? (
+							<AskUserRemarkField
+								locale={locale}
+								value={displayRemark}
+								onChange={setRemark}
+								disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
+								readOnly={Boolean(submittedAnswers) || isTerminal}
+								variant="v2"
+								contentIndentClass={
+									questions.length > 1 ? "pl-4" : undefined
+								}
+								testIdPrefix="ask-user-v2-card"
+							/>
+						) : null}
 					</div>
 				</div>
-				{showRemarkField ? (
-					<AskUserRemarkField
-						locale={locale}
-						value={displayRemark}
-						onChange={setRemark}
-						disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
-						readOnly={Boolean(submittedAnswers) || isTerminal}
-						testIdPrefix="ask-user-v2-card"
-					/>
-				) : null}
 				{shouldShowActions && (
 					<div className="shrink-0 pt-0.5" data-testid="ask-user-v2-card-footer">
 						<div className="flex flex-wrap items-center justify-between gap-1.5">
