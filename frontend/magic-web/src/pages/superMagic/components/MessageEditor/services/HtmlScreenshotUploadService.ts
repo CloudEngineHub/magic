@@ -102,22 +102,24 @@ class HtmlScreenshotUploadService {
 		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
 		if (items.length === 0) return []
 
-		const resolved: Array<StagedHtmlScreenshot | undefined> = Array.from({
-			length: items.length,
-		})
+		const resolved: Array<Promise<StagedHtmlScreenshot> | StagedHtmlScreenshot | undefined> =
+			Array.from({
+				length: items.length,
+			})
 		const missing: UploadStoredScreenshotItem[] = []
 		const missingIndexes: number[] = []
 
 		for (let index = 0; index < items.length; index += 1) {
 			const item = items[index]
-			const cached = this.stagedByStorageId.get(item.storageId)
+			const cacheKey = this.stagingKey(projectId, item.storageId)
+			const cached = this.stagedByStorageId.get(cacheKey)
 			if (cached) {
 				resolved[index] = cached
 				continue
 			}
-			const inflight = this.stagingPromises.get(item.storageId)
+			const inflight = this.stagingPromises.get(cacheKey)
 			if (inflight) {
-				resolved[index] = await inflight
+				resolved[index] = inflight
 				continue
 			}
 			missing.push(item)
@@ -125,13 +127,17 @@ class HtmlScreenshotUploadService {
 		}
 
 		if (missing.length > 0) {
-			const staged = await this.stageUncachedScreenshots(missing, projectId)
+			const stagedPromise = this.stageUncachedScreenshots(missing, projectId)
 			missingIndexes.forEach((itemIndex, stagedIndex) => {
-				resolved[itemIndex] = staged[stagedIndex]
+				resolved[itemIndex] = stagedPromise.then((staged) => {
+					const match = staged[stagedIndex]
+					if (!match) throw new Error("截图上传失败")
+					return match
+				})
 			})
 		}
 
-		return resolved as StagedHtmlScreenshot[]
+		return Promise.all(resolved as Array<Promise<StagedHtmlScreenshot> | StagedHtmlScreenshot>)
 	}
 
 	async stageStoredScreenshot(
@@ -255,35 +261,55 @@ class HtmlScreenshotUploadService {
 		this.stagingPromises.clear()
 	}
 
+	private stagingKey(projectId: string, storageId: string): string {
+		return `${projectId}:${storageId}`
+	}
+
 	private forgetStaged(storageId: string): void {
-		this.stagedByStorageId.delete(storageId)
-		this.stagingPromises.delete(storageId)
+		const suffix = `:${storageId}`
+		for (const key of [...this.stagedByStorageId.keys()]) {
+			if (key.endsWith(suffix)) this.stagedByStorageId.delete(key)
+		}
+		for (const key of [...this.stagingPromises.keys()]) {
+			if (key.endsWith(suffix)) this.stagingPromises.delete(key)
+		}
 	}
 
 	private async stageUncachedScreenshots(
 		items: UploadStoredScreenshotItem[],
 		projectId: string,
 	): Promise<StagedHtmlScreenshot[]> {
-		const batchPromise = this.stageBatch(items, projectId)
+		let resolveBatch!: (value: StagedHtmlScreenshot[]) => void
+		let rejectBatch!: (reason: unknown) => void
+		const batchPromise = new Promise<StagedHtmlScreenshot[]>((resolve, reject) => {
+			resolveBatch = resolve
+			rejectBatch = reject
+		})
 		const itemPromises = items.map((item) => {
 			const itemPromise = batchPromise.then((staged) => {
 				const match = staged.find((entry) => entry.storageId === item.storageId)
 				if (!match) throw new Error("截图上传失败")
 				return match
 			})
-			this.stagingPromises.set(item.storageId, itemPromise)
+			this.stagingPromises.set(this.stagingKey(projectId, item.storageId), itemPromise)
 			return itemPromise
 		})
 
 		try {
-			const staged = await Promise.all(itemPromises)
+			const staged = await this.stageBatch(items, projectId)
+			resolveBatch(staged)
+			await Promise.all(itemPromises)
 			for (const item of staged) {
-				this.stagedByStorageId.set(item.storageId, item)
+				this.stagedByStorageId.set(this.stagingKey(projectId, item.storageId), item)
 			}
 			return staged
+		} catch (error) {
+			rejectBatch(error)
+			await Promise.all(itemPromises).catch(() => undefined)
+			throw error
 		} finally {
 			for (const item of items) {
-				this.stagingPromises.delete(item.storageId)
+				this.stagingPromises.delete(this.stagingKey(projectId, item.storageId))
 			}
 		}
 	}

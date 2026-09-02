@@ -102,9 +102,11 @@ export async function processMessageMentions(
 export function releaseHtmlScreenshotsAfterSend(
 	mentionItems: HandleSendParams["mentionItems"],
 ): void {
-	void htmlScreenshotUploadService.releaseStoredScreenshots(
-		htmlScreenshotUploadService.collectStorageIds(mentionItems),
-	)
+	void Promise.resolve(
+		htmlScreenshotUploadService.releaseStoredScreenshots(
+			htmlScreenshotUploadService.collectStorageIds(mentionItems),
+		),
+	).catch(() => undefined)
 }
 
 export function resolveMessageSendContext(

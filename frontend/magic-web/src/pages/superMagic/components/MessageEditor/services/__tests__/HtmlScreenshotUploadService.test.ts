@@ -329,6 +329,62 @@ describe("HtmlScreenshotUploadService", () => {
 		])
 	})
 
+	it("waits for an in-flight stage instead of uploading twice", async () => {
+		const tokenResolvers: Array<(value: { temporary_credential: { dir: string } }) => void> = []
+		mocks.getUploadToken.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					tokenResolvers.push(resolve)
+				}),
+		)
+
+		const first = htmlScreenshotUploadService.stageStoredScreenshot(
+			{ storageId: "region-1", fileName: "a.png" },
+			"project-1",
+		)
+		const second = htmlScreenshotUploadService.stageStoredScreenshot(
+			{ storageId: "region-1", fileName: "a.png" },
+			"project-1",
+		)
+		await vi.waitFor(() => expect(tokenResolvers.length).toBeGreaterThan(0))
+		expect(tokenResolvers).toHaveLength(1)
+		tokenResolvers[0]({ temporary_credential: { dir: "/root/" } })
+
+		await expect(Promise.all([first, second])).resolves.toEqual([
+			expect.objectContaining({ storageId: "region-1" }),
+			expect.objectContaining({ storageId: "region-1" }),
+		])
+		expect(mocks.getUploadToken).toHaveBeenCalledTimes(1)
+		expect(mocks.getSnowflakeIds).toHaveBeenCalledTimes(1)
+		expect(mocks.upload).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not reuse a staged object from another project", async () => {
+		mocks.getSnowflakeIds
+			.mockResolvedValueOnce({ ids: ["snowflake-1"] })
+			.mockResolvedValueOnce({ ids: ["snowflake-2"] })
+		mocks.upload.mockImplementation(({ fileName }: { fileName: string }) => ({
+			success: (callback: (response: { data: { path: string } }) => void) =>
+				queueMicrotask(() => callback({ data: { path: `temporary/${fileName}` } })),
+			fail: vi.fn(),
+			progress: vi.fn(),
+		}))
+
+		await htmlScreenshotUploadService.stageStoredScreenshot(
+			{ storageId: "region-1", fileName: "a.png" },
+			"project-1",
+		)
+		await htmlScreenshotUploadService.stageStoredScreenshot(
+			{ storageId: "region-1", fileName: "a.png" },
+			"project-2",
+		)
+
+		expect(mocks.getUploadToken).toHaveBeenCalledTimes(2)
+		expect(mocks.getUploadToken).toHaveBeenNthCalledWith(1, "project-1")
+		expect(mocks.getUploadToken).toHaveBeenNthCalledWith(2, "project-2")
+		expect(mocks.getSnowflakeIds).toHaveBeenCalledTimes(2)
+	})
+
 	it("collects region screenshot storage ids for later release", () => {
 		expect(
 			htmlScreenshotUploadService.collectStorageIds([

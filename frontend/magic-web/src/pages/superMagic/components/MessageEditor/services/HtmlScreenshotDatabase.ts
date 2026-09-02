@@ -38,7 +38,7 @@ class HtmlScreenshotDatabase {
 	private lastSweepAt = 0
 
 	constructor() {
-		void this.deleteExpired()
+		void this.deleteExpired().catch(() => undefined)
 	}
 
 	async put(id: string, blob: Blob, retentionMs = DEFAULT_RETENTION_MS): Promise<void> {
