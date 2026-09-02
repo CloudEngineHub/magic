@@ -187,7 +187,11 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             })
             ->where('magic_super_agent_project.user_id', '!=', $userId)
             ->where('magic_super_agent_project.is_collaboration_enabled', 1)
-            ->whereNull('magic_super_agent_project.deleted_at');
+            ->whereNull('magic_super_agent_project.deleted_at')
+            ->whereNotIn(
+                'magic_super_agent_project.project_mode',
+                ProjectMode::getQueryFilterModes()
+            );
 
         if (! empty($name)) {
             // 如果有项目名称搜索条件，则需要连接项目表
