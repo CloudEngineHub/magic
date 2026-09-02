@@ -22,6 +22,7 @@ use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
 use Dtyq\CloudFile\Kernel\Utils\ContentDispositionBuilder;
 use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
 use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
+use Dtyq\CloudFile\Kernel\Utils\StsPolicyBuilder;
 use Exception;
 use GuzzleHttp\Psr7\Utils;
 use League\Flysystem\FileAttributes;
@@ -502,67 +503,9 @@ class TOSExpand implements ExpandInterface
 
         // 目录限制
         $dir = $credentialPolicy->getDir();
-        $resource = "{$this->getBucket()}/";
-        if (! empty($credentialPolicy->getDir())) {
-            $resource = $resource . $credentialPolicy->getDir();
-        }
 
         // https://www.volcengine.com/docs/6349/102131
-        $stsPolicy = match ($credentialPolicy->getStsType()) {
-            'list_objects' => [
-                'Statement' => [
-                    [
-                        'Action' => [
-                            'tos:ListBucket',
-                            'tos:ListBucketVersions',
-                        ],
-                        'Resource' => [
-                            "trn:tos:::{$this->getBucket()}",
-                        ],
-                        'Condition' => [
-                            'StringLike' => [
-                                'tos:prefix' => [
-                                    "{$dir}",
-                                    "{$dir}*",
-                                ],
-                            ],
-                        ],
-                        'Effect' => 'Allow',
-                    ],
-                ],
-            ],
-            'del_objects' => [
-                'Statement' => [
-                    [
-                        'Action' => [
-                            'tos:DeleteObject',
-                            'tos:DeleteObjectTagging',
-                        ],
-                        'Resource' => [
-                            "trn:tos:::{$resource}*",
-                        ],
-                        'Effect' => 'Allow',
-                    ],
-                ],
-            ],
-            default => [
-                'Statement' => [
-                    [
-                        'Action' => [
-                            'tos:PutObject',
-                            'tos:GetObject',
-                            'tos:AbortMultipartUpload',
-                            'tos:ListMultipartUploadParts',
-                            'tos:GetObjectVersion',
-                        ],
-                        'Resource' => [
-                            "trn:tos:::{$resource}*",
-                        ],
-                        'Effect' => 'Allow',
-                    ],
-                ],
-            ],
-        };
+        $stsPolicy = (new StsPolicyBuilder())->buildTos($this->getBucket(), $dir, $credentialPolicy->getStsTypes());
 
         $query = [
             'query' => [

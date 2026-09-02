@@ -533,21 +533,20 @@ class FileProcessAppService extends AbstractAppService
      */
     public function refreshStsToken(RefreshStsTokenRequestDTO $requestDTO): array
     {
+        $projectId = (int) $requestDTO->getProjectId();
+        if (empty($projectId)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_id_required');
+        }
+
+        // STS credentials grant access to the project's work directory. Resolve the
+        // project through the authenticated user's access scope before issuing them.
+        $projectEntity = $this->getAccessibleProject(
+            $projectId,
+            $requestDTO->getUserId(),
+            $requestDTO->getOrganizationCode(),
+        );
+
         try {
-            // Get organization code from request
-            $organizationCode = $requestDTO->getOrganizationCode();
-
-            // Get project entity by project_id from metadata
-            $projectId = (int) $requestDTO->getProjectId();
-            if (empty($projectId)) {
-                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_id_required');
-            }
-
-            $projectEntity = $this->projectDomainService->getProjectNotUserId($projectId);
-            if (empty($projectEntity)) {
-                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.not_found');
-            }
-
             // Use project's workdir as working directory
             $projectDir = WorkDirectoryUtil::getRootDir($projectEntity->getUserId(), $projectEntity->getId());
 
@@ -557,7 +556,7 @@ class FileProcessAppService extends AbstractAppService
 
             // Create user authorization object
             $userAuthorization = new MagicUserAuthorization();
-            $userAuthorization->setOrganizationCode($organizationCode);
+            $userAuthorization->setOrganizationCode($requestDTO->getOrganizationCode());
 
             // Use unified FileAppService to get STS Token (with dual endpoint)
             return $this->fileAppService->getDualEndpointStsCredentialV2(

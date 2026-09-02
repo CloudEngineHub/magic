@@ -34,6 +34,8 @@ import {
 	SidebarGroupLabel,
 	SidebarMenu,
 } from "@/components/shadcn-ui/sidebar"
+import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
+import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -113,6 +115,21 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 				).values(),
 			)
 		: workspaces
+	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
+	const {
+		rootRef: dndRootRef,
+		dropIndicatorRef,
+		handleDragStart,
+		handleDragMove,
+		handleDragOver,
+		handleDragLeave,
+		handleDrop,
+		handleDragEnd,
+	} = useWorkspaceListDnd({
+		workspaces,
+		disabled: isSearchMode,
+		requestPinBoundaryConfirmation: requestConfirmation,
+	})
 
 	function handleStartCreateWorkspace() {
 		setIsCreatingWorkspace(true)
@@ -356,151 +373,180 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	}, [selectedWorkspaceId])
 
 	return (
-		<SidebarGroup
-			className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
-			data-testid="sidebar-workspace-list"
-			style={
-				{
-					"--workspace-list-sticky-top": isSearchMode ? "2.25rem" : "2rem",
-				} as CSSProperties
-			}
+		<div
+			ref={dndRootRef}
+			onDragStart={handleDragStart}
+			onDrag={handleDragMove}
+			onDragEnter={(event) => {
+				if (event.currentTarget.contains(event.target as Node)) event.preventDefault()
+			}}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
+			onDragEnd={handleDragEnd}
+			className="relative"
 		>
-			<div
-				className="sticky top-0 z-20 -ml-2 bg-sidebar pl-2"
-				data-testid="sidebar-workspace-list-sticky-header"
+			{confirmationDialog}
+			<SidebarGroup
+				className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
+				data-testid="sidebar-workspace-list"
+				style={
+					{
+						"--workspace-list-sticky-top": isSearchMode ? "2.25rem" : "2rem",
+					} as CSSProperties
+				}
 			>
-				{isSearchMode ? (
-					<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
-						<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
-							<InputGroupAddon align="inline-start">
-								<Search size={16} />
-							</InputGroupAddon>
-							<InputGroupInput
-								className="h-6"
-								placeholder={t("super:workspace.searchWorkspace")}
-								value={searchState.value}
-								onChange={(event) => {
-									const value = event.target.value
-									updateSearchState((draft) => {
-										draft.value = value
-									})
-								}}
-								onValueChangeAfterComposition={searchWorkspaces}
-								autoFocus
-								data-testid="sidebar-workspace-list-search-input"
-							/>
-						</InputGroup>
-						<Button
-							type="button"
-							size="icon-sm"
-							className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
-							onClick={handleSearchClose}
-							aria-label={t("common.cancel")}
-							data-testid="sidebar-workspace-list-search-close"
-						>
-							<X className="size-4" />
-						</Button>
-					</div>
-				) : (
-					<SidebarGroupLabel className="h-8 px-2 text-xs font-medium leading-4 text-[#737373] opacity-70 dark:text-[#a3a3a3] dark:opacity-100">
-						{t("sidebar:workspace.title")}
-					</SidebarGroupLabel>
-				)}
 				<div
-					className={cn(
-						"absolute right-3.5 top-1.5 z-10 flex items-center gap-0.5 opacity-70",
-						"group-data-[collapsible=icon]:hidden",
-						isSearchMode && "hidden",
-					)}
-					data-testid="sidebar-workspace-list-actions"
+					className="sticky top-0 z-20 -ml-2 bg-sidebar pl-2"
+					data-testid="sidebar-workspace-list-sticky-header"
 				>
-					<button
-						type="button"
-						aria-label={t("super:workspace.searchWorkspace")}
-						data-testid="sidebar-workspace-list-search"
-						className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
-						onClick={handleSearchOpen}
-					>
-						<Search className="h-4 w-4" />
-					</button>
-					{isInitialWorkspaceListLoading && (
-						<Loader2
-							className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
-							aria-hidden
-							data-testid="sidebar-workspace-list-loading"
-						/>
-					)}
-					<button
-						type="button"
-						aria-label={t("sidebar:workspace.refresh")}
-						data-testid="sidebar-workspace-list-refresh"
-						disabled={isRefreshing}
-						className={cn(
-							"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-							"after:absolute after:-inset-2 md:after:hidden",
-						)}
-						onClick={() => void handleRefresh()}
-					>
-						<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-					</button>
-					<button
-						type="button"
-						aria-label={t("sidebar:workspace.add")}
-						data-testid="sidebar-workspace-list-add"
-						className={cn(
-							"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-							"after:absolute after:-inset-2 md:after:hidden",
-						)}
-						onClick={handleStartCreateWorkspace}
-					>
-						<Plus className="h-4 w-4" />
-					</button>
-				</div>
-			</div>
-			<SidebarGroupContent>
-				<SidebarMenu>
-					<div className="w-full pr-3">
-						{beforeItems}
-						<div ref={workspaceListRef}>
-							{isCreatingWorkspace && (
-								<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
-									<CreateWorkspaceInput
-										onCancel={handleCancelCreateWorkspace}
-										onCreated={handleWorkspaceCreated}
-									/>
-								</div>
-							)}
-							{displayedWorkspaces.map((workspace, index) => (
-								<WorkspaceItem
-									key={workspace.id}
-									workspace={workspace}
-									searchProjects={
-										isSearchMode && projectsByWorkspaceId.has(workspace.id)
-											? projectsByWorkspaceId.get(workspace.id)
-											: undefined
-									}
-									className={cn(
-										"mb-[2px]",
-										index === displayedWorkspaces.length - 1 && "mb-0",
-									)}
+					{isSearchMode ? (
+						<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
+							<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
+								<InputGroupAddon align="inline-start">
+									<Search size={16} />
+								</InputGroupAddon>
+								<InputGroupInput
+									className="h-6"
+									placeholder={t("super:workspace.searchWorkspace")}
+									value={searchState.value}
+									onChange={(event) => {
+										const value = event.target.value
+										updateSearchState((draft) => {
+											draft.value = value
+										})
+									}}
+									onValueChangeAfterComposition={searchWorkspaces}
+									autoFocus
+									data-testid="sidebar-workspace-list-search-input"
 								/>
-							))}
-							{isSearchLoading && (
-								<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
-									<Loader2 className="size-4 animate-spin" />
-								</div>
-							)}
-							{!isSearchMode && isLoadingMoreWorkspaces && (
-								<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
-									<Loader2 className="size-4 animate-spin" />
-								</div>
-							)}
-							<div ref={loadMoreSentinelRef} className="h-px" aria-hidden="true" />
+							</InputGroup>
+							<Button
+								type="button"
+								size="icon-sm"
+								className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
+								onClick={handleSearchClose}
+								aria-label={t("common.cancel")}
+								data-testid="sidebar-workspace-list-search-close"
+							>
+								<X className="size-4" />
+							</Button>
 						</div>
+					) : (
+						<SidebarGroupLabel className="h-8 px-2 text-xs font-medium leading-4 text-[#737373] opacity-70 dark:text-[#a3a3a3] dark:opacity-100">
+							{t("sidebar:workspace.title")}
+						</SidebarGroupLabel>
+					)}
+					<div
+						className={cn(
+							"absolute right-3.5 top-1.5 z-10 flex items-center gap-0.5 opacity-70",
+							"group-data-[collapsible=icon]:hidden",
+							isSearchMode && "hidden",
+						)}
+						data-testid="sidebar-workspace-list-actions"
+					>
+						<button
+							type="button"
+							aria-label={t("super:workspace.searchWorkspace")}
+							data-testid="sidebar-workspace-list-search"
+							className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
+							onClick={handleSearchOpen}
+						>
+							<Search className="h-4 w-4" />
+						</button>
+						{isInitialWorkspaceListLoading && (
+							<Loader2
+								className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
+								aria-hidden
+								data-testid="sidebar-workspace-list-loading"
+							/>
+						)}
+						<button
+							type="button"
+							aria-label={t("sidebar:workspace.refresh")}
+							data-testid="sidebar-workspace-list-refresh"
+							disabled={isRefreshing}
+							className={cn(
+								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+								"after:absolute after:-inset-2 md:after:hidden",
+							)}
+							onClick={() => void handleRefresh()}
+						>
+							<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+						</button>
+						<button
+							type="button"
+							aria-label={t("sidebar:workspace.add")}
+							data-testid="sidebar-workspace-list-add"
+							className={cn(
+								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+								"after:absolute after:-inset-2 md:after:hidden",
+							)}
+							onClick={handleStartCreateWorkspace}
+						>
+							<Plus className="h-4 w-4" />
+						</button>
 					</div>
-				</SidebarMenu>
-			</SidebarGroupContent>
-		</SidebarGroup>
+				</div>
+				<SidebarGroupContent>
+					<SidebarMenu>
+						<div className="w-full pr-3">
+							{beforeItems}
+							<div ref={workspaceListRef}>
+								{isCreatingWorkspace && (
+									<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
+										<CreateWorkspaceInput
+											onCancel={handleCancelCreateWorkspace}
+											onCreated={handleWorkspaceCreated}
+										/>
+									</div>
+								)}
+								{displayedWorkspaces.map((workspace, index) => (
+									<WorkspaceItem
+										key={workspace.id}
+										workspace={workspace}
+										dndDisabled={isSearchMode}
+										searchProjects={
+											isSearchMode && projectsByWorkspaceId.has(workspace.id)
+												? projectsByWorkspaceId.get(workspace.id)
+												: undefined
+										}
+										className={cn(
+											"mb-[2px]",
+											index === displayedWorkspaces.length - 1 && "mb-0",
+										)}
+									/>
+								))}
+								{isSearchLoading && (
+									<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
+										<Loader2 className="size-4 animate-spin" />
+									</div>
+								)}
+								{!isSearchMode && isLoadingMoreWorkspaces && (
+									<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
+										<Loader2 className="size-4 animate-spin" />
+									</div>
+								)}
+								<div
+									ref={loadMoreSentinelRef}
+									className="h-px"
+									aria-hidden="true"
+								/>
+							</div>
+						</div>
+					</SidebarMenu>
+				</SidebarGroupContent>
+			</SidebarGroup>
+			<svg
+				ref={dropIndicatorRef}
+				aria-hidden="true"
+				className="pointer-events-none absolute left-0 top-0 z-50 hidden overflow-visible text-[#b9dcff]"
+				style={{ height: 8 }}
+			>
+				<line x1="4" y1="4" x2="100%" y2="4" stroke="currentColor" strokeWidth="2" />
+				<circle cx="4" cy="4" r="4" fill="currentColor" />
+			</svg>
+		</div>
 	)
 }
 

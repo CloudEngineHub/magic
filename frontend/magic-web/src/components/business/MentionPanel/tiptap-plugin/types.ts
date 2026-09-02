@@ -24,6 +24,7 @@ import type {
 	MemoryDirectoryMentionData,
 	MemoryFileMentionData,
 	CanvasMarkerMentionData,
+	TextMentionData,
 	DataService,
 	MentionSelectContext,
 } from "../types"
@@ -132,6 +133,10 @@ export interface MentionPanelPluginOptions {
 	nodeViewRenderers?: Partial<Record<MentionItemType, MentionNodeViewRenderer>>
 	/** 恢复内容期间跳过 doc→mentionItems 同步，避免与 restoreMentionItems 冲突 */
 	shouldSkipInsertSync?: () => boolean
+	/** Allows trusted programmatic content restoration to keep existing Mention nodes intact. */
+	shouldSkipMentionValidation?: () => boolean
+	/** Allows trusted restored nodes to survive follow-up ReactNodeView transactions. */
+	isTrustedMention?: (attrs: TiptapMentionAttributes) => boolean
 	/** 程序化清空期间跳过 mention 删除同步，避免误判为用户删除 */
 	shouldSkipRemoveSync?: () => boolean
 	/** 删除后需要先恢复的 mention，用于等待外部确认后再真正删除 */
@@ -213,6 +218,8 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			const markLabel = markerData?.label || ""
 			const result = [markId, markNumber, markLabel].filter(Boolean).join(":")
 			return `marker:${result}`
+		case MentionItemType.TEXT:
+			return `text:${(data as TextMentionData)?.id || ""}`
 		default:
 			return `unknown:${JSON.stringify(attrs.data)}`
 	}
@@ -278,6 +285,8 @@ export function getMentionDisplayName(
 			const markerData = normalizeCanvasMarkerMentionData(data)
 			if (markerData?.loading === true) return t ? t("common.loading", "加载中...") : ""
 			return markerData?.label || "Marker"
+		case MentionItemType.TEXT:
+			return (data?.label as string) || "Text"
 		default:
 			return "Unknown"
 	}
@@ -312,6 +321,8 @@ export function getMentionDescription(attrs: TiptapMentionAttributes | null | un
 			return markerData
 				? getSelectedCanvasMarkerMentionSuggestion(markerData)?.label || ""
 				: ""
+		case MentionItemType.TEXT:
+			return (data?.text as string) || ""
 		default:
 			return ""
 	}

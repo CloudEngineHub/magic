@@ -348,6 +348,10 @@ agent:
   # Whether the agent loop should auto-retry after non-terminal exceptions
   enable_agent_loop_retry: ${AGENT_ENABLE_AGENT_LOOP_RETRY:-false}
 
+# Canvas 生成请求的 provider 并发上限
+canvas:
+  generation_max_concurrency: ${CANVAS_GENERATION_MAX_CONCURRENCY:-4}
+
 # 图片生成服务配置
 image_generator:
   text_to_image_platform: ${TEXT_TO_IMAGE_PLATFORM}

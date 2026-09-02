@@ -10,6 +10,7 @@ import {
 } from "react"
 import type {
 	CanvasDesignMethods,
+	AiAbilityAvailability,
 	EstimateVideoPointsResponse,
 	ImageModelItem,
 	MagicPermissions,
@@ -58,6 +59,8 @@ interface MagicContextValue {
 	 * 转高清配置
 	 */
 	convertHightConfig: GetConvertHightConfigResponse | null
+	/** 画布 AI 能力可用性 */
+	aiAbilityAvailability: AiAbilityAvailability | null
 	/**
 	 * 是否正在加载转高清配置
 	 */
@@ -134,12 +137,15 @@ export function MagicProvider({
 	const [isLoadingVideoModelList, setIsLoadingVideoModelList] = useState(false)
 	const [convertHightConfig, setConvertHightConfig] =
 		useState<GetConvertHightConfigResponse | null>(null)
+	const [aiAbilityAvailability, setAiAbilityAvailability] =
+		useState<AiAbilityAvailability | null>(null)
 	const [isLoadingConvertHightConfig, setIsLoadingConvertHightConfig] = useState(false)
 	const videoPointsEstimateCacheRef = useRef(new VideoPointsEstimateCache())
 
 	const getImageModelList = methods?.getImageModelList
 	const getVideoModelList = methods?.getVideoModelList
 	const getConvertHightConfig = methods?.getConvertHightConfig
+	const getAiAbilityAvailability = methods?.getAiAbilityAvailability
 	const estimateVideoPoints = methods?.estimateVideoPoints
 
 	// 挂载及宿主语言切换时重新拉取模型列表（只读模式跳过）
@@ -188,19 +194,30 @@ export function MagicProvider({
 		}
 	}, [readonly, getImageModelList, getVideoModelList, hostUiLocale])
 
-	// 转高清配置只在能力变更时拉取，避免宿主页面普通重渲染导致重复请求
+	// AI 能力可用性只在能力变更时拉取，避免宿主页面普通重渲染导致重复请求
 	useEffect(() => {
 		if (readonly) return
 
 		let cancelled = false
 
 		const fetchConvertHightConfig = async () => {
-			if (!getConvertHightConfig) return
+			if (!getAiAbilityAvailability && !getConvertHightConfig) return
 
 			setIsLoadingConvertHightConfig(true)
+			setAiAbilityAvailability(null)
+			setConvertHightConfig(null)
 			try {
-				const config = await getConvertHightConfig()
-				if (!cancelled) setConvertHightConfig(config)
+				if (getAiAbilityAvailability) {
+					const availability = await getAiAbilityAvailability()
+					if (!cancelled) {
+						setAiAbilityAvailability(availability)
+						setConvertHightConfig(availability.abilities.image_convert_high)
+					}
+					return
+				}
+
+				const config = await getConvertHightConfig?.()
+				if (!cancelled && config) setConvertHightConfig(config)
 			} catch (error) {
 				console.error("Failed to fetch convert hight config:", error)
 				if (!cancelled) setConvertHightConfig(null)
@@ -214,7 +231,7 @@ export function MagicProvider({
 		return () => {
 			cancelled = true
 		}
-	}, [readonly, getConvertHightConfig])
+	}, [readonly, getAiAbilityAvailability, getConvertHightConfig])
 
 	useEffect(() => {
 		videoPointsEstimateCacheRef.current.clear()
@@ -246,6 +263,7 @@ export function MagicProvider({
 			isLoadingImageModelList,
 			isLoadingVideoModelList,
 			convertHightConfig,
+			aiAbilityAvailability,
 			isLoadingConvertHightConfig,
 			projectAttachmentMentionTree,
 			defaultProjectAttachmentFolderId,
@@ -264,6 +282,7 @@ export function MagicProvider({
 			isLoadingImageModelList,
 			isLoadingVideoModelList,
 			convertHightConfig,
+			aiAbilityAvailability,
 			isLoadingConvertHightConfig,
 			projectAttachmentMentionTree,
 			defaultProjectAttachmentFolderId,

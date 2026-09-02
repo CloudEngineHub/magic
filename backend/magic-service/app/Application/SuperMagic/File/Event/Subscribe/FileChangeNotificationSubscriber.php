@@ -264,10 +264,7 @@ class FileChangeNotificationSubscriber implements ListenerInterface
     private function handleBatchDeleted(FilesBatchDeletedEvent $event): void
     {
         $projectId = $event->getProjectId();
-        $fileEntities = array_values(array_filter(
-            $event->getAllEntities(),
-            fn (TaskFileEntity $fileEntity): bool => $this->isProjectSpaceFile($fileEntity)
-        ));
+        $fileEntities = $this->taskFileDomainService->filterProjectSpaceFiles($event->getAllEntities());
         if (empty($fileEntities) || $this->shouldSkipRecycleBinDeleteForBatch($fileEntities, $event->getSource())) {
             return;
         }
@@ -570,7 +567,10 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             return;
         }
 
-        $fileEntities = $this->taskFileDomainService->getFilesByIds(
+        // Rollback delete may target a file that has already been soft-deleted
+        // in task_file metadata. Keep the entity available for parent/project
+        // context, while still emitting a delete payload without a file DTO.
+        $fileEntities = $this->taskFileDomainService->getFilesByIdsWithTrash(
             array_values($fileIds),
             $projectId,
             FileSpaceType::PROJECT->value

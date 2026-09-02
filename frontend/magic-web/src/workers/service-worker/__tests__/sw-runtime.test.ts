@@ -19,7 +19,7 @@ vi.mock("../cache-runtime", () => ({
 
 vi.mock("../sw-constants", () => ({
 	CANVAS_MEDIA_SCOPE_PREFIX: "/sw/canvas-design-media/",
-	getManagedCacheNamePrefix: () => "managed-app-cache-",
+	getManagedCacheNamePrefix: () => "magic-web-",
 	MANAGED_APP_CACHE_NAMES: [],
 }))
 
@@ -37,6 +37,29 @@ describe("service worker canvas media activation", () => {
 				delete: vi.fn().mockResolvedValue(true),
 			},
 		})
+	})
+
+	it("removes legacy template image buckets during activation", async () => {
+		const listeners = new Map<string, (event: ExtendableEvent) => void>()
+		const sw = {
+			clients: { claim: vi.fn().mockResolvedValue(undefined) },
+			addEventListener: vi.fn((type: string, handler: (event: ExtendableEvent) => void) => {
+				listeners.set(type, handler)
+			}),
+		} as unknown as ServiceWorkerGlobalScope
+		const cacheKeys = [
+			"magic-web-slides-template-image-assets-v1",
+			"magic-web-featured-slides-template-image-assets-v1",
+		]
+		vi.mocked(caches.keys).mockResolvedValue(cacheKeys)
+
+		bindServiceWorkerEvents(sw, { cacheRegistration: null })
+		const waitUntil = vi.fn()
+		listeners.get("activate")?.({ waitUntil } as unknown as ExtendableEvent)
+		await (waitUntil.mock.calls[0]?.[0] as Promise<void>)
+
+		expect(caches.delete).toHaveBeenCalledWith(cacheKeys[0])
+		expect(caches.delete).toHaveBeenCalledWith(cacheKeys[1])
 	})
 
 	it("runs legacy Canvas media cleanup during activate", async () => {

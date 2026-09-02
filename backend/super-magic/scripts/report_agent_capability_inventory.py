@@ -131,17 +131,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--chat-history",
         type=Path,
-        help="包含真实 system message 的聊天记录；未传时使用 .topic/chat_history/<agent><main>.json",
+        help="包含真实 system message 的聊天记录；未传时使用 .chat_history/<agent><main>.json",
     )
     parser.add_argument(
         "--tools",
         type=Path,
-        help="真实工具 schema；未传时使用 .topic/chat_history/<agent><main>.tools.json",
+        help="真实工具 schema；未传时使用 .chat_history/<agent><main>.tools.json",
     )
     parser.add_argument(
         "--session",
         type=Path,
-        help="可选的 session 配置；未传时尝试 .topic/chat_history/<agent><main>.session.json",
+        help="可选的 session 配置；未传时尝试 .chat_history/<agent><main>.session.json",
     )
     parser.add_argument(
         "--dispatch-message",
@@ -849,10 +849,10 @@ async def async_main() -> int:
         raise ValueError("--agent 不能为空")
 
     chat_history_path = resolve_project_path(
-        args.chat_history or Path(f".topic/chat_history/{agent_name}<main>.json")
+        args.chat_history or Path(f".chat_history/{agent_name}<main>.json")
     )
     tools_path = resolve_project_path(
-        args.tools or Path(f".topic/chat_history/{agent_name}<main>.tools.json")
+        args.tools or Path(f".chat_history/{agent_name}<main>.tools.json")
     )
     output_path = resolve_project_path(
         args.output or Path(f"docs/plans/{agent_name}-agent-capability-inventory.md")
@@ -876,7 +876,7 @@ async def async_main() -> int:
         session_path: Path | None = derived_session_path
     else:
         derived_session_path = resolve_project_path(
-            Path(f".topic/chat_history/{agent_name}<main>.session.json")
+            Path(f".chat_history/{agent_name}<main>.session.json")
         )
         session_path = (
             derived_session_path if await async_exists(derived_session_path) else None

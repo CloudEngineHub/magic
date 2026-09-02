@@ -53,7 +53,7 @@ class PathManager(BasePathManager):
     - `get_*` 方法只返回路径，不隐式创建目录（`get_checkpoints_dir` / `get_checkpoint_dir` 除外，历史遗留）
 
     持久化边界：
-    - `.topic/chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
+    - `.topic/chat_history/` 是启动恢复源；聊天活动数据运行期位于本地 `.chat_history/`。
     - `.topic/tool_detail/content/` 保存已持久化的工具详情长文本；按需创建，不参与 checkpoint 回滚。
     - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
     - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
@@ -434,7 +434,7 @@ class PathManager(BasePathManager):
 
     @classmethod
     def get_todos_file(cls) -> Path:
-        """获取全局 todo 文件路径（.topic/chat_history/todos.json）。"""
+        """获取全局 todo 文件路径（本地 .chat_history/todos.json）。"""
         cls._ensure_app_initialization()
         return cls.get_chat_history_dir() / "todos.json"
 
@@ -446,7 +446,7 @@ class PathManager(BasePathManager):
 
     @classmethod
     def get_subagents_chat_history_dir(cls) -> Path:
-        """获取子 Agent 聊天记录目录路径（.topic/chat_history/subagents）。"""
+        """获取子 Agent 聊天记录目录路径（本地 .chat_history/subagents）。"""
         cls._ensure_app_initialization()
         return cls.get_chat_history_dir() / "subagents"
 

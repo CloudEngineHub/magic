@@ -15,7 +15,7 @@ class MaterializedCanvasAsset:
 
 
 class AssetGateway(ABC):
-    """定义工作区素材进入 Canvas 项目的物化边界。"""
+    """定义本机素材进入 Canvas 项目的物化边界。"""
 
     @abstractmethod
     async def materialize_existing_file(
@@ -24,7 +24,7 @@ class AssetGateway(ABC):
         asset_path: str,
         media_type: str,
     ) -> MaterializedCanvasAsset:
-        """校验素材，必要时复制到项目媒体目录并返回项目内 URI。"""
+        """校验本机素材，必要时复制到项目媒体目录并返回项目内 URI。"""
 
     @abstractmethod
     async def discard(self, asset: MaterializedCanvasAsset) -> None:

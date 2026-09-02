@@ -121,6 +121,31 @@ describe("IframeFSService", () => {
 		)
 	})
 
+	it("returns a context error before authorization when project APIs are unavailable", async () => {
+		const projectContextError = "Share mode does not support project APIs"
+		const authorizePermission = vi.fn()
+		const { service, postToIframe } = createService({
+			fileList: [file("root-id", "shared.txt", "shared.txt")],
+			projectId: undefined,
+			projectContextUnavailableError: projectContextError,
+			authorizePermission,
+		})
+
+		await service.handleMessage(FS_MESSAGE_TYPES.READ_REQUEST, {
+			type: FS_MESSAGE_TYPES.READ_REQUEST,
+			requestId: "req-share-context",
+			path: "/shared.txt",
+		})
+
+		expect(authorizePermission).not.toHaveBeenCalled()
+		expect(postToIframe).toHaveBeenCalledWith({
+			type: FS_MESSAGE_TYPES.READ_RESPONSE,
+			requestId: "req-share-context",
+			success: false,
+			error: projectContextError,
+		})
+	})
+
 	it("requires fs.project.write before checking whether a project-root delete target exists", async () => {
 		const deleteFn = vi.fn().mockResolvedValue(undefined)
 		const authorizePermission = vi.fn().mockResolvedValue(false)

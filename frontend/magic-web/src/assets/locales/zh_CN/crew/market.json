@@ -85,6 +85,7 @@
 		"publisherVerified": "认证创作者"
 	},
 	"hire": "雇用",
+	"hireMoreCrew": "雇佣更多员工",
 	"importSkill": {
 		"buttons": {
 			"back": "上一步",
@@ -150,6 +151,7 @@
 		"runSearch": "搜索",
 		"searchSheetTitle": "搜索员工"
 	},
+	"moreCrewTooltip": "更多员工",
 	"myCrew": "我的员工",
 	"myCrewPage": {
 		"addSheet": {

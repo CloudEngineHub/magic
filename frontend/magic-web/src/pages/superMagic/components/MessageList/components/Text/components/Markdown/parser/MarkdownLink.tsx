@@ -1,9 +1,14 @@
 import { observer } from "mobx-react-lite"
 import type { ReactNode } from "react"
 import projectFilesStore from "@/stores/projectFiles"
+import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
+
+// 授权链接这类超长 URL 没有空格，nowrap + ellipsis 会把消息气泡撑出去。
+const markdownLinkClassName =
+	"min-w-0 max-w-full cursor-pointer overflow-hidden whitespace-normal break-all rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] [overflow-wrap:anywhere] hover:bg-[#e0ecff]"
 
 interface ParsedDomElement {
 	attribs?: Record<string, string>
@@ -51,7 +56,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	if (fileInfo) {
 		return (
 			<span
-				className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] hover:bg-[#e0ecff]"
+				className={markdownLinkClassName}
 				onClick={onClick}
 				title={typeof children === "string" ? children : normalizedHref}
 			>
@@ -65,7 +70,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			href={normalizedHref}
 			rel={normalizedRel}
 			target={normalizedTarget}
-			className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 !text-[#315cec] hover:bg-[#e0ecff]"
+			className={cn(markdownLinkClassName, "!text-[#315cec]")}
 			title={normalizedTitle ?? `File does not exist @${normalizedHref}`}
 			data-testid="markdown-link-anchor"
 			{...safeAttributes}

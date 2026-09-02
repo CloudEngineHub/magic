@@ -58,12 +58,24 @@ vi.mock("../components/MicroAppFloatingBackdrop", () => ({
 }))
 
 vi.mock("../components/MicroAppCard", () => ({
-	default: ({ title, description, coverUrl, statusLabel, canDelete, onClick, testId }: any) => (
+	default: ({
+		title,
+		description,
+		coverUrl,
+		statusLabel,
+		canDelete,
+		canRename,
+		canManageCollaborators,
+		onClick,
+		testId,
+	}: any) => (
 		<button
 			type="button"
 			data-testid={testId}
 			data-cover-url={coverUrl}
 			data-can-delete={canDelete}
+			data-can-rename={canRename}
+			data-can-manage-collaborators={canManageCollaborators}
 			onClick={onClick}
 		>
 			{title}
@@ -114,6 +126,8 @@ describe("MicroAppsPage", () => {
 					publish_status: "published",
 					updated_at: "2026-07-24 10:30:00",
 					can_delete: false,
+					project_id: "project-1",
+					user_role: "manage",
 				},
 			],
 			scope: "all",
@@ -129,6 +143,68 @@ describe("MicroAppsPage", () => {
 			renameApp: mocks.renameApp,
 			deleteApp: mocks.deleteApp,
 		})
+	})
+
+	it("hides collaborator management when the public hook is disabled", () => {
+		render(<MicroAppsPage />)
+
+		expect(screen.getByTestId("micro-apps-app-app-1")).toHaveAttribute(
+			"data-can-manage-collaborators",
+			"false",
+		)
+	})
+
+	it("hides rename for read-only micro apps", () => {
+		mocks.useMicroAppsPage.mockReturnValueOnce({
+			...mocks.useMicroAppsPage(),
+			apps: [
+				{
+					app_id: "app-viewer",
+					app_name: "只读应用",
+					app_description: "",
+					creator_id: "user-1",
+					cover_url: "",
+					publish_status: "published",
+					updated_at: null,
+					can_delete: false,
+					project_id: "project-viewer",
+					user_role: "viewer",
+				},
+			],
+		})
+
+		render(<MicroAppsPage />)
+
+		expect(screen.getByTestId("micro-apps-app-app-viewer")).toHaveAttribute(
+			"data-can-rename",
+			"false",
+		)
+	})
+
+	it("hides rename when the app role is missing", () => {
+		mocks.useMicroAppsPage.mockReturnValueOnce({
+			...mocks.useMicroAppsPage(),
+			apps: [
+				{
+					app_id: "app-unknown-role",
+					app_name: "未知权限应用",
+					app_description: "",
+					creator_id: "user-1",
+					cover_url: "",
+					publish_status: "published",
+					updated_at: null,
+					can_delete: false,
+					project_id: "project-unknown-role",
+				},
+			],
+		})
+
+		render(<MicroAppsPage />)
+
+		expect(screen.getByTestId("micro-apps-app-app-unknown-role")).toHaveAttribute(
+			"data-can-rename",
+			"false",
+		)
 	})
 
 	it("opens an app directly by app_id", async () => {

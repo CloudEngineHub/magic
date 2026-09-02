@@ -263,10 +263,11 @@ function PublishToCard({
 
 function PublishingProcess() {
 	const { t } = useTranslation("crew/market")
+	const store = usePublishPanelStore()
 	const steps = [
 		t("skillEditPage.publishPanel.create.fields.target.skillsLibrary.steps.submit"),
 		t("skillEditPage.publishPanel.create.fields.target.skillsLibrary.steps.review"),
-		t("skillEditPage.publishPanel.create.fields.target.skillsLibrary.steps.published"),
+		t(store.marketCopy.publishToLabelKey),
 	]
 
 	return (

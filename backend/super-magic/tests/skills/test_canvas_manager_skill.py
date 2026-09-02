@@ -46,12 +46,14 @@ def test_skill_describes_frame_boundaries_and_follow_up_ids() -> None:
     assert "unframing" in content
 
 
-def test_skill_does_not_expose_protocol_version_or_storage_driver() -> None:
-    """Skill 不应把协议版本和底层驱动暴露给模型。"""
+def test_skill_exposes_only_the_controlled_project_file_recovery_boundary() -> None:
+    """Skill 只允许受控的项目文件恢复兜底，不暴露底层服务实现。"""
     content = SKILL_PATH.read_text(encoding="utf-8")
 
     assert "Canvas version" not in content
-    assert "magic.project.js" not in content
+    assert "magic.project.js" in content
+    assert "MAGICPROJECTDESIGNDATA://" in content
+    assert "gzip + Base64" in content
     assert "magic-service" not in content
 
 
@@ -59,7 +61,7 @@ def test_canvas_agent_and_references_do_not_expose_storage_protocol_details() ->
     """Agent、Skill 和 reference 的模型可见文案不能泄露协议或驱动实现。"""
     root = SKILL_PATH.parent
     paths = [root.parent.parent / "canvas.agent", SKILL_PATH, *sorted((root / "references").glob("*.md"))]
-    forbidden = ("Canvas version", "magic.project.js", "magic-service", "3.0.0")
+    forbidden = ("Canvas version", "magic-service", "3.0.0")
     for path in paths:
         content = path.read_text(encoding="utf-8")
         assert all(value not in content for value in forbidden), path

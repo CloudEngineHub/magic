@@ -16,6 +16,7 @@ use App\Application\SuperMagic\Message\DTO\TaskInitializationMessageDTO;
 use App\Application\SuperMagic\Message\Event\Publish\TopicMessageProcessPublisher;
 use App\Application\SuperMagic\Message\Service\ClientMessageAppService;
 use App\Application\SuperMagic\Task\Event\Publish\TaskInitializationPublisher;
+use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\MessageExtra;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
 use App\Domain\Chat\DTO\Message\MagicMessageStruct;
@@ -111,6 +112,7 @@ class TopicTaskAppService extends AbstractAppService
         protected Redis $redis,
         protected Producer $producer,
         private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
+        private readonly TopicAgentConfigResolver $topicAgentConfigResolver,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
     }
@@ -965,8 +967,12 @@ class TopicTaskAppService extends AbstractAppService
             // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
             $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
             // 请求参数优先，未传时回退 Topic，得到本次真正执行的模式与 code。
-            $topicPattern = trim((string) ($superAgentExtra?->getTopicPattern() ?? $topicEntity->getTopicMode()));
-            $agentCode = $this->resolveEffectiveAgentCode($topicEntity, $superAgentExtra);
+            $topicAgentConfig = $this->topicAgentConfigResolver->resolve(
+                topicEntity: $topicEntity,
+                extra: $superAgentExtra,
+            );
+            $topicPattern = $topicAgentConfig->topicMode;
+            $agentCode = $topicAgentConfig->agentCode;
             [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
                 SuperMagicAgentDataIsolation::create(
                     $dataIsolation->getCurrentOrganizationCode(),
@@ -1418,21 +1424,6 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         return $messageStruct;
-    }
-
-    /**
-     * 解析本次执行使用的 code：请求优先，未传时回退 Topic 持久值。
-     * SMA-* 本身就是员工 code，因此优先级最高。
-     */
-    private function resolveEffectiveAgentCode(TopicEntity $topicEntity, ?SuperAgentExtra $extra): string
-    {
-        $topicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
-        if (str_starts_with($topicPattern, 'SMA-')) {
-            return $topicPattern;
-        }
-
-        $agentCode = trim((string) ($extra?->getAgentCode() ?? ''));
-        return $agentCode !== '' ? $agentCode : trim($topicEntity->getAgentCode());
     }
 
     /**

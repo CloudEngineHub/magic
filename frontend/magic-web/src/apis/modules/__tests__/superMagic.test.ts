@@ -99,4 +99,35 @@ describe("generateSuperMagicApi", () => {
 			template_file_key: "template.zip",
 		})
 	})
+
+	it("uses the generic AI ability availability endpoint for convert high configuration", async () => {
+		const get = vi.fn().mockResolvedValue({
+			abilities: {
+				image_convert_high: {
+					enabled: true,
+					image_size_config: { sizes: [] },
+				},
+				image_remove_background: { enabled: true },
+				image_eraser: { enabled: false },
+				image_expand: { enabled: true },
+			},
+		})
+		const api = generateSuperMagicApi({ get } as unknown as HttpClient)
+
+		await expect(api.getConvertHightConfig()).resolves.toEqual({
+			enabled: true,
+			image_size_config: { sizes: [] },
+		})
+		await expect(api.getAiAbilityAvailability()).resolves.toEqual({
+			abilities: {
+				image_convert_high: { enabled: true },
+				image_remove_background: { enabled: true },
+				image_eraser: { enabled: false },
+				image_expand: { enabled: true },
+			},
+		})
+
+		expect(get).toHaveBeenNthCalledWith(1, "/api/v1/ai-abilities/availability")
+		expect(get).toHaveBeenNthCalledWith(2, "/api/v1/ai-abilities/availability")
+	})
 })

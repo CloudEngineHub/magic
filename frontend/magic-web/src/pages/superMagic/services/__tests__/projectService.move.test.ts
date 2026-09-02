@@ -7,6 +7,9 @@ const { mockWorkspaces, mockProjectStore } = vi.hoisted(() => ({
 	mockProjectStore: {
 		projects: [] as ProjectListItem[],
 		removeProject: vi.fn(),
+		removeProjectFromCollections: vi.fn(),
+		selectedProject: null as ProjectListItem | null,
+		setSelectedProject: vi.fn(),
 		setProjects: vi.fn(),
 	},
 }))
@@ -26,6 +29,7 @@ vi.mock("@/pages/superMagic/stores/core/project", () => ({
 vi.mock("@/pages/superMagic/stores/core", () => ({
 	workspaceStore: {
 		workspaces: mockWorkspaces,
+		setSelectedWorkspace: vi.fn(),
 	},
 	topicStore: {},
 }))
@@ -93,6 +97,8 @@ describe("ProjectService.moveProject", () => {
 			target_workspace_id: "workspace-target",
 			target_workspace_name: "Target Workspace",
 			target_project_name: "新项目名称",
+			pre_project_id: undefined,
+			next_project_id: undefined,
 		})
 	})
 
@@ -122,17 +128,19 @@ describe("ProjectService.moveProject", () => {
 			target_workspace_id: "workspace-target",
 			target_workspace_name: "Target Workspace",
 			target_project_name: undefined,
+			pre_project_id: undefined,
+			next_project_id: undefined,
 		})
 	})
 
 	it("optimistically removes project from store before API resolves", async () => {
-		mockProjectStore.removeProject.mockClear()
+		mockProjectStore.removeProjectFromCollections.mockClear()
 		await projectService.moveProject({
 			projectId: "project-1",
 			targetWorkspaceId: "workspace-target",
 			sourceWorkspaceId: "workspace-source",
 		})
 
-		expect(mockProjectStore.removeProject).toHaveBeenCalledWith("project-1")
+		expect(mockProjectStore.removeProjectFromCollections).toHaveBeenCalledWith("project-1")
 	})
 })

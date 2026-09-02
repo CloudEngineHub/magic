@@ -25,6 +25,7 @@ import {
 	type HtmlPermissionConfirmRequest,
 	type HtmlPermissionMissingDeclarationRequest,
 } from "../iframe-api/services/IframePermissionService"
+import { HtmlPermissionAuthorizationQueue } from "../iframe-api/services/HtmlPermissionAuthorizationQueue"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
 import { hasManageableHtmlPermissionDeclarations } from "../iframe-api/services/htmlPermissionDeclarations"
 import {
@@ -145,6 +146,20 @@ export function useHtmlAppPermissions({
 	}, [appRootDir, cleanedEntryPath, content, fileList, projectId, rawSourceCode, userId])
 
 	const htmlPermissionGrantStore = useMemo(() => getHtmlPermissionGrantStore(), [])
+	// Queue lifetime follows the app identity and executable runtime so stale
+	// requests cannot authorize a different HTML app after a renderer switch.
+	const htmlPermissionAuthorizationQueue = useMemo(
+		() => new HtmlPermissionAuthorizationQueue(),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[
+			htmlAppInstanceKey,
+			userId,
+			htmlAppInstance.content,
+			htmlAppInstance.runtimeFingerprint,
+			htmlAppConfigState,
+			enabled,
+		],
+	)
 
 	const confirmHtmlPermission = useMemoizedFn(
 		({
@@ -156,8 +171,20 @@ export function useHtmlAppPermissions({
 			presentation,
 			ttlOptions,
 			defaultTtlMs,
+			signal,
 		}: HtmlPermissionConfirmRequest) =>
 			new Promise<{ allowed: boolean; ttlMs: HtmlPermissionTtl }>((resolve) => {
+				let settled = false
+				const modalRef: { destroy?: () => void } = {}
+				const settle = (result: { allowed: boolean; ttlMs: HtmlPermissionTtl }) => {
+					if (settled) return
+					settled = true
+					signal?.removeEventListener("abort", handleAbort)
+					modalRef.destroy?.()
+					resolve(result)
+				}
+				const handleAbort = () => settle({ allowed: false, ttlMs: 0 })
+
 				let selectedTtlMs = defaultTtlMs
 				const displayAppName = appName || t("htmlEditor.permissionManager.defaultAppName")
 				const scopeLabel = scopes
@@ -259,15 +286,12 @@ export function useHtmlAppPermissions({
 					closable: false,
 					maskClosable: false,
 					centered: true,
-					onOk: () => {
-						modal.destroy()
-						resolve({ allowed: true, ttlMs: selectedTtlMs })
-					},
-					onCancel: () => {
-						modal.destroy()
-						resolve({ allowed: false, ttlMs: 0 })
-					},
+					onOk: () => settle({ allowed: true, ttlMs: selectedTtlMs }),
+					onCancel: () => settle({ allowed: false, ttlMs: 0 }),
 				})
+				modalRef.destroy = () => modal.destroy()
+				if (signal?.aborted) handleAbort()
+				else signal?.addEventListener("abort", handleAbort, { once: true })
 			}),
 	)
 
@@ -322,16 +346,22 @@ export function useHtmlAppPermissions({
 				onGrantsChanged: notifyGrantsChanged,
 				appConfigState: htmlAppConfigState,
 				appInstance: htmlAppInstance,
+				authorizationQueue: htmlPermissionAuthorizationQueue,
 			}),
 		[
 			confirmHtmlPermission,
 			htmlAppConfigState,
 			htmlAppInstance,
+			htmlPermissionAuthorizationQueue,
 			htmlPermissionGrantStore,
 			notifyGrantsChanged,
 			notifyMissingPermissionDeclaration,
 		],
 	)
+
+	useEffect(() => {
+		return () => htmlPermissionAuthorizationQueue.dispose()
+	}, [htmlPermissionAuthorizationQueue])
 
 	const authorizeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
 		return htmlPermissionService.authorize(scope)

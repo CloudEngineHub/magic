@@ -12,6 +12,7 @@ use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\AiAbilityDomainService;
+use App\Domain\Provider\Service\ProviderModelDomainService;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\Query\SlidesTemplateQuery;
@@ -590,7 +591,10 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $ability->setConfig(['model_id' => 'test-model']);
             $abilityDomainService = $this->createMock(AiAbilityDomainService::class);
             $abilityDomainService->method('getByCode')->willReturn($ability);
-            $services[AiAbilityConfigAppService::class] = new AiAbilityConfigAppService($abilityDomainService);
+            $services[AiAbilityConfigAppService::class] = new AiAbilityConfigAppService(
+                $abilityDomainService,
+                $this->createMock(ProviderModelDomainService::class)
+            );
         }
         ApplicationContext::setContainer(new class($services, $config) implements ContainerInterface {
             public function __construct(

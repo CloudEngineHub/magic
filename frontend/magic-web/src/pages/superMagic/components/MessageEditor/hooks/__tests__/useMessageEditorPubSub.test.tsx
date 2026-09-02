@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react"
+import { renderHook, waitFor } from "@testing-library/react"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -44,7 +44,7 @@ function createMockEditor(initialContent: JSONContent) {
 }
 
 describe("useMessageEditorPubSub", () => {
-	it("maintains plain-text input through Widget commands", () => {
+	it("maintains plain-text input through Widget commands", async () => {
 		const mockEditor = createMockEditor({
 			type: "doc",
 			content: [{ type: "paragraph", content: [{ type: "text", text: "mock" }] }],
@@ -55,6 +55,7 @@ describe("useMessageEditorPubSub", () => {
 		const updateContent = vi.fn((content: JSONContent | undefined) => {
 			mockEditor.setContent(content)
 		})
+		const onSendCurrentContent = vi.fn()
 		const { unmount } = renderHook(() =>
 			useMessageEditorPubSub({
 				editor: mockEditor.editor,
@@ -63,6 +64,7 @@ describe("useMessageEditorPubSub", () => {
 				updateContent,
 				enableMessageSendByContent: true,
 				onSendMessageByContent: vi.fn(),
+				onSendCurrentContent,
 			}),
 		)
 
@@ -81,6 +83,13 @@ describe("useMessageEditorPubSub", () => {
 				},
 			],
 		})
+		const sendRespond = vi.fn()
+		pubsub.publish(PubSubEvents.Magic_Widget_Editor_Command, {
+			command: "sendMessage",
+			respond: sendRespond,
+		})
+		expect(onSendCurrentContent).toHaveBeenCalledTimes(1)
+		await waitFor(() => expect(sendRespond).toHaveBeenCalledTimes(1))
 		expect(setRespond).toHaveBeenCalledTimes(1)
 		expect(updateContent.mock.invocationCallOrder.at(-1)).toBeLessThan(
 			setRespond.mock.invocationCallOrder[0],
@@ -127,6 +136,71 @@ describe("useMessageEditorPubSub", () => {
 		unmount()
 	})
 
+	it("sets and appends structured Widget mention content", () => {
+		const mockEditor = createMockEditor({ type: "doc", content: [{ type: "paragraph" }] })
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		const updateContent = vi.fn((content: JSONContent | undefined) => {
+			mockEditor.setContent(content)
+		})
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: mockEditor.editor,
+				isMobile: false,
+				draftStore,
+				updateContent,
+				enableMessageSendByContent: true,
+				onSendMessageByContent: vi.fn(),
+				onSendCurrentContent: vi.fn(),
+			}),
+		)
+		const agentMention = {
+			type: "mention",
+			attrs: {
+				type: "agent",
+				data: { agent_id: "agent-mock-001", agent_name: "Agent Mock" },
+			},
+		}
+
+		pubsub.publish(PubSubEvents.Magic_Widget_Editor_Command, {
+			command: "setInput",
+			content: {
+				type: "doc",
+				content: [
+					{ type: "paragraph", content: [{ type: "text", text: "Ask " }, agentMention] },
+				],
+			},
+			respond: vi.fn(),
+		})
+		pubsub.publish(PubSubEvents.Magic_Widget_Editor_Command, {
+			command: "appendInput",
+			content: {
+				type: "doc",
+				content: [{ type: "paragraph", content: [{ type: "text", text: " now" }] }],
+			},
+			respond: vi.fn(),
+		})
+
+		expect(mockEditor.getContent()).toEqual({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{ type: "text", text: "Ask " },
+						agentMention,
+						{ type: "text", text: " now" },
+					],
+				},
+			],
+		})
+		expect(updateContent.mock.calls[0]?.[1]).toEqual({ preserveMentionValidation: true })
+		expect(updateContent.mock.calls[1]?.[1]).toEqual({ preserveMentionValidation: true })
+
+		unmount()
+	})
+
 	it("waits for draft load before applying Add_Content_To_Chat", async () => {
 		let resolveDraftLoad: (() => void) | undefined
 		const draftLoadPromise = new Promise<void>((resolve) => {
@@ -144,6 +218,7 @@ describe("useMessageEditorPubSub", () => {
 				updateContent,
 				enableMessageSendByContent: true,
 				onSendMessageByContent: vi.fn(),
+				onSendCurrentContent: vi.fn(),
 			}),
 		)
 

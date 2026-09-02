@@ -6,7 +6,9 @@ import { collectSelectionContentSnapshot } from "../selectionContentCollector"
 function mediaElement(
 	id: string,
 	type:
-		typeof ElementTypeEnum.Image | typeof ElementTypeEnum.Video | typeof ElementTypeEnum.Audio,
+		| typeof ElementTypeEnum.Image
+		| typeof ElementTypeEnum.Video
+		| typeof ElementTypeEnum.Audio,
 	src = `/${id}.media`,
 ): LayerElement {
 	return {
@@ -35,6 +37,15 @@ function createCanvas(elements: LayerElement[], roots: LayerElement[]): Canvas {
 				getElementsBounds: vi.fn(() => ({ x: 10, y: 20, width: 400, height: 200 })),
 			})),
 		},
+		getEffectiveContent: vi.fn((id: string) => {
+			const element = elementMap.get(id)
+			if (!element || !("contents" in element) || !Array.isArray(element.contents))
+				return undefined
+			return (
+				element.contents.find((content) => content.contentId === element.activeContentId) ??
+				element.contents[0]
+			)
+		}),
 		permissionManager: {
 			canConnect: vi.fn(() => true),
 		},
@@ -186,7 +197,7 @@ describe("collectSelectionContentSnapshot", () => {
 			mainContentId: "main-content",
 			contents: [
 				{ contentId: "active-content", src: "" },
-				{ contentId: "main-content", src: "/main-image.png" },
+				{ contentId: "main-content", src: "/main-image.png", status: "processing" },
 			],
 		} as LayerElement
 		const canvas = createCanvas([image], [image])

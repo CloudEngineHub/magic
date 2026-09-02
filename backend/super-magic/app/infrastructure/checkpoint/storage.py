@@ -16,6 +16,15 @@ Checkpoint底层存储操作
 
 `checkpoint_info.json` 与 `operations.json` 是两个所有物：前者只由
 Python 写（创建时一次、之后只读），后者只由 magicfs 写。
+
+聊天历史（运行期在本地 `.chat_history/`，不在 magicfs 挂载内，无帧
+可记）由 Python 侧整目录快照补充：
+
+    <checkpoints_dir>/<id>/initial_chat_history_snapshots/   checkpoint 创建时整目录快照
+    <checkpoints_dir>/<id>/latest_chat_history_snapshots/    每次聊天记录保存时整目录快照
+
+这两个目录同样只由 Python 写、随 checkpoint 目录懒创建（目录存在即
+有快照），远端归档与按需拉取把它们当作 checkpoint 目录的普通内容。
 """
 
 from pathlib import Path
@@ -99,6 +108,14 @@ class CheckpointStorage:
     def get_checkpoint_manifest_file_path(self) -> Path:
         """获取checkpoint清单文件路径"""
         return self.checkpoint_root / "checkpoint_manifest.json"
+
+    def get_initial_chat_history_snapshots_dir(self, checkpoint_id: str) -> Path:
+        """获取 checkpoint 创建时保存的聊天历史整目录快照（undo 恢复源）"""
+        return PathManager.get_checkpoint_dir(checkpoint_id) / "initial_chat_history_snapshots"
+
+    def get_latest_chat_history_snapshots_dir(self, checkpoint_id: str) -> Path:
+        """获取 checkpoint 内最后一次保存的聊天历史整目录快照（redo 恢复源）"""
+        return PathManager.get_checkpoint_dir(checkpoint_id) / "latest_chat_history_snapshots"
 
     def get_space_initial_content_file_path(self, checkpoint_id: str, file_id: str, space: str) -> Path:
         """获取某空间内文件快照的初始内容帧路径"""

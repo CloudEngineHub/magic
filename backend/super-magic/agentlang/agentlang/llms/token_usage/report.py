@@ -65,7 +65,7 @@ class TokenUsageReport:
             except (ImportError, RuntimeError):
                 # 导入失败时使用备用目录
                 logger.warning("无法导入 PathManager 或获取聊天历史目录，使用备用目录")
-                self.report_dir = os.path.join(os.getcwd(), ".topic", "chat_history")
+                self.report_dir = os.path.join(os.getcwd(), ".chat_history")
         else:
             self.report_dir = report_dir
 

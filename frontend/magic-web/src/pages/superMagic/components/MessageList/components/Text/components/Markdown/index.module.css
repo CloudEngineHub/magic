@@ -30,6 +30,14 @@
 	overflow-wrap: break-word;
 }
 
+/* 超长 URL 没有空格可断，单独覆盖 a，避免撑破消息气泡 */
+.plainMarkdown:global(.x-markdown) a {
+	max-width: 100%;
+	word-break: break-all;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+
 .plainMarkdown:global(.x-markdown) p {
 	margin-block: 0.75em;
 	white-space: pre-wrap;

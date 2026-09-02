@@ -130,6 +130,52 @@ describe("MediaResourceOfflineCacheManager", () => {
 		expect(result?.url).toContain("/sw/canvas-design-media/")
 	})
 
+	it("encodes URL delimiters in virtual resource paths", async () => {
+		const postMessage = vi.fn()
+		const controller = {
+			scriptURL: `${window.location.origin}/sw.js`,
+			postMessage,
+		} as unknown as ServiceWorker
+		const registration = {
+			active: controller,
+			scope: "/",
+		} as unknown as ServiceWorkerRegistration
+
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve(registration),
+				register: vi.fn(),
+				getRegistrations: vi.fn().mockResolvedValue([registration]),
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+			},
+		})
+
+		const manager = createOfflineCacheManager({
+			getVirtualResourceScope: () => "workspace/project/design/demo#1",
+		})
+		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
+			.fn()
+			.mockResolvedValue(undefined)
+		;(manager as unknown as { getEntry: () => Promise<null> }).getEntry = vi
+			.fn()
+			.mockResolvedValue(null)
+
+		const result = await manager.rememberResolvedResource({
+			path: "./images/真丝系列#13 娃娃领?x%25.png",
+			url: "https://oss.example.com/images/source.png",
+			mediaType: "image",
+		})
+
+		expect(result?.url).toContain("%2313%20")
+		expect(result?.url).toContain("%3Fx%2525.png")
+		expect(result?.url).toContain("demo%231/image/")
+		expect(new URL(result?.url ?? "").hash).toBe("")
+		expect(new URL(result?.url ?? "").search).toBe("")
+	})
+
 	it("falls back to the source url when app service worker mode is disabled", async () => {
 		vi.stubEnv("MAGIC_SW_MODE", "off")
 		const register = vi.fn()
@@ -282,6 +328,60 @@ describe("MediaResourceOfflineCacheManager", () => {
 			}),
 		)
 		expect(refreshCachedResource).not.toHaveBeenCalled()
+	})
+
+	it("batches cache-hit access touch after the writeback interval", async () => {
+		vi.useFakeTimers()
+		try {
+			const manager = createOfflineCacheManager({
+				getVirtualResourceScope: () => "workspace/project/design/demo",
+			})
+			const entry = {
+				namespace: "workspace/project/design/demo",
+				path: "/画布A/images/example.png",
+				url: "https://canvas.test/sw/canvas-design-media/workspace/project/design/demo/image/design-resource/画布A/images/example.png",
+				cacheKey: "cache-key",
+				mediaType: "image" as const,
+				lastAccessedAt: 0,
+				updatedAt: 0,
+			}
+			;(
+				manager as unknown as { canUseServiceWorkerCache: () => boolean }
+			).canUseServiceWorkerCache = () => true
+			;(manager as unknown as { getEntry: () => Promise<typeof entry> }).getEntry = vi
+				.fn()
+				.mockResolvedValue(entry)
+			const postMessage = vi.fn().mockResolvedValue(undefined)
+			;(
+				manager as unknown as {
+					postMessageToServiceWorker: (message: unknown) => Promise<void>
+				}
+			).postMessageToServiceWorker = postMessage
+			Object.defineProperty(globalThis, "caches", {
+				configurable: true,
+				value: {
+					open: vi.fn().mockResolvedValue({
+						match: vi.fn().mockResolvedValue(new Response("cached")),
+					}),
+				},
+			})
+
+			await Promise.all([
+				manager.getCachedResource("./images/example.png", "image"),
+				manager.getCachedResource("./images/example.png", "image"),
+			])
+			expect(postMessage).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1000)
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+			expect(postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "CANVAS_MEDIA_CACHE_TOUCH_BATCH",
+				}),
+			)
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("keeps explicit cache warm as an opt-in path", async () => {

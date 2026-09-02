@@ -155,6 +155,8 @@ export enum ProjectStatus {
 export interface Workspace {
 	id: string
 	name: string
+	/** 用户自定义侧栏排序，数值越小越靠前。 */
+	sort_order?: number
 	is_archived: 0 | 1 // 0: 未归档，1: 已归档
 	is_pinned?: boolean
 	pinned_at?: string | null
@@ -280,6 +282,8 @@ export interface TaskData {
 // 项目列表Item
 export interface ProjectListItem {
 	id: string
+	/** 工作区内用户自定义侧栏排序，数值越小越靠前。 */
+	sort_order?: number
 	project_status: ProjectStatus
 	project_mode: TopicMode | ""
 	project_description?: string // 协作项目才有
