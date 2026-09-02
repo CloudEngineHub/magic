@@ -46,7 +46,7 @@ export default function SlidesTemplateReplacementDialog({
 				onOpenChange(nextOpen)
 			}}
 		>
-			<DialogContent className="flex max-h-[90vh] w-[min(1200px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0">
+			<DialogContent className="flex max-h-[90vh] w-[min(90vw,760px)] !max-w-[760px] flex-col gap-0 overflow-hidden p-0">
 				<DialogHeader className="shrink-0 border-b px-6 py-4">
 					<DialogTitle>{t("ppt.templateReplacement.title")}</DialogTitle>
 					<p className="text-sm text-muted-foreground">{scopeText}</p>
