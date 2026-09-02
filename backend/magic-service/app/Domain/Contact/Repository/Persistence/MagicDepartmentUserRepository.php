@@ -193,6 +193,20 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
     /**
      * @return MagicDepartmentUserEntity[]
      */
+    public function searchDepartmentUsersByEmployeeNo(string $employeeNo, string $organizationCode): array
+    {
+        $departmentUsers = $this->departmentUserModel::query()
+            ->where('employee_no', '=', $employeeNo)
+            ->where('organization_code', $organizationCode)
+            ->get()
+            ->toArray();
+
+        return $this->getDepartmentUserEntities($departmentUsers);
+    }
+
+    /**
+     * @return MagicDepartmentUserEntity[]
+     */
     public function searchDepartmentUsersByJobTitle(string $keyword, string $magicOrganizationCode): array
     {
         $res = $this->departmentUserModel::query()
