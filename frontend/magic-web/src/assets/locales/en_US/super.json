@@ -194,7 +194,7 @@
 		"otherPlaceholder": "other",
 		"placeholder": "Enter your answer",
 		"questionCount": "{{count}} question(s)",
-		"remarkLabel": "Remark (optional)",
+		"remarkLabel": "Remark",
 		"remarkPlaceholder": "Add context, constraints, or anything else you want the agent to know",
 		"status": {
 			"alreadyProcessed": "This question has already been processed",

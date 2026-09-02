@@ -87,6 +87,8 @@ const askUserInputClass = `min-h-16 w-full max-h-[200px] min-w-0 resize-none ove
 const askUserOptionControlBase =
 	"mt-0.5 size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
 const askUserOptionRowClass = "flex min-h-6 cursor-pointer items-start gap-2 py-0.5"
+/** 与单选/多选选项文字起始位置对齐（size-4 控件 + gap-2） */
+const askUserChoiceAlignedIndentClass = "pl-6"
 
 function formatAnswerForDisplay(value?: AnswerValue | null) {
 	if (typeof value === "string") return value
@@ -383,9 +385,7 @@ function AskUserFormImpl({
 								onChange={setRemark}
 								disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
 								readOnly={Boolean(submittedAnswers) || isTerminal}
-								contentIndentClass={
-									questions.length > 1 ? "pl-4" : undefined
-								}
+								contentIndentClass={askUserChoiceAlignedIndentClass}
 							/>
 						) : null}
 					</div>
@@ -468,9 +468,8 @@ const QuestionItem = memo(function QuestionItem({
 	showDefaultHint,
 	draftAnswer,
 }: QuestionItemProps) {
-	const hasMultipleQuestions = total > 1
 	const questionContentIndentClass =
-		hasMultipleQuestions && question.type === "input" ? "pl-4" : undefined
+		question.type === "input" ? askUserChoiceAlignedIndentClass : undefined
 
 	return (
 		<div
