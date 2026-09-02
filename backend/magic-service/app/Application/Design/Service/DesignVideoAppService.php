@@ -169,14 +169,9 @@ class DesignVideoAppService extends DesignAppService
         // 检查项目权限
         $this->assertProjectAccess($designDataIsolation, $projectId, MemberRole::EDITOR);
 
-        $modelEntry = $this->findModelOrFail($designDataIsolation, $dto->getModelId());
+        $this->findModelOrFail($designDataIsolation, $dto->getModelId());
         $payload = $dto->toModelGatewayPayload();
-        $payload['inputs'] = $this->prepareEstimateInputs(
-            $designDataIsolation->getCurrentOrganizationCode(),
-            $projectId,
-            $dto,
-            $this->supportsProviderAssetUri($modelEntry),
-        );
+        $payload['inputs'] = DesignVideoInputPayloadPreparer::prepareInputs($dto);
 
         $payload = $this->prepareGatewayPayloadWithBusinessParams(
             $designDataIsolation,
@@ -257,23 +252,6 @@ class DesignVideoAppService extends DesignAppService
                 ProviderCode::DashScope->value,
             ]
         );
-    }
-
-    /**
-     * 规范化并校验预估请求引用的工作区素材路径，返回可传给模型网关的 inputs。
-     *
-     * @return array<string, mixed>
-     */
-    private function prepareEstimateInputs(
-        string $organizationCode,
-        int $projectId,
-        DesignVideoCreateDTO $dto,
-        bool $supportsProviderAssetUri,
-    ): array {
-        $inputs = DesignVideoInputPayloadPreparer::prepareInputs($dto);
-        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputs, $supportsProviderAssetUri);
-
-        return $inputs;
     }
 
     /**
