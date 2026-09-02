@@ -541,14 +541,14 @@ readonly class VideoQueueDomainService
             $referenceAudioInputs,
         );
         if ($validateRequest) {
-            $this->assertSupportedRequestMode($task, $compositionMode, $frames, $videoGenerationConfig);
-            $this->assertCompositionModeRequirements(
+            $this->assertRequestCompatibility(
                 $task,
                 $compositionMode,
                 $frames,
                 $referenceImages,
                 $referenceVideoInputs,
                 $referenceAudioInputs,
+                $videoGenerationConfig,
             );
         }
         $extensions = is_array($requestData['extensions'] ?? null) ? $requestData['extensions'] : [];
@@ -736,10 +736,21 @@ readonly class VideoQueueDomainService
         return self::KELING_DIMENSIONS_TO_RESOLUTION[$dimensions] ?? null;
     }
 
-    private function assertSupportedRequestMode(
+    /**
+     * 统一校验任务类型、输入模式、模型能力及素材要求。
+     *
+     * @param list<array{role?: string, uri?: string}> $frames
+     * @param list<array{uri: string, type?: string}> $referenceImages
+     * @param list<array{uri: string}> $referenceVideoInputs
+     * @param list<array{uri: string}> $referenceAudioInputs
+     */
+    private function assertRequestCompatibility(
         string $task,
         string $compositionMode,
         array $frames,
+        array $referenceImages,
+        array $referenceVideoInputs,
+        array $referenceAudioInputs,
         VideoGenerationConfig $videoGenerationConfig
     ): void {
         $taskType = VideoTaskType::from($task);
@@ -774,6 +785,37 @@ readonly class VideoQueueDomainService
                 MagicApiErrorCode::ValidateFailed,
                 sprintf('task %s is not supported by the current video model', $task),
             );
+        }
+
+        if ($taskType->requiresReferenceVideo() && $referenceVideoInputs === []) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_videos is required');
+        }
+
+        switch ($compositionMode) {
+            case VideoInputMode::Standard->value:
+            case VideoInputMode::VideoEdit->value:
+                return;
+            case VideoInputMode::ImageReference->value:
+                if ($referenceImages === []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_images is required');
+                }
+                if ($referenceVideoInputs !== [] || $referenceAudioInputs !== [] || $frames !== []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+                }
+                return;
+            case VideoInputMode::OmniReference->value:
+                if ($frames !== []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+                }
+                return;
+            case VideoInputMode::KeyframeGuided->value:
+                if ($frames === []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.frames is required');
+                }
+                if ($referenceImages !== [] || $referenceVideoInputs !== [] || $referenceAudioInputs !== []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+                }
+                return;
         }
     }
 
@@ -813,56 +855,6 @@ readonly class VideoQueueDomainService
         }
 
         return VideoInputMode::Standard->value;
-    }
-
-    /**
-     * @param list<array{uri: string, type?: string}> $referenceImages
-     */
-    private function assertCompositionModeRequirements(
-        string $task,
-        string $compositionMode,
-        array $frames,
-        array $referenceImages,
-        array $referenceVideoInputs,
-        array $referenceAudioInputs
-    ): void {
-        if (VideoTaskType::from($task)->requiresReferenceVideo() && $referenceVideoInputs === []) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_videos is required');
-        }
-
-        if ($compositionMode === VideoInputMode::Standard->value) {
-            return;
-        }
-
-        if ($compositionMode === VideoInputMode::VideoEdit->value) {
-            return;
-        }
-
-        if ($compositionMode === VideoInputMode::ImageReference->value) {
-            if ($referenceImages === []) {
-                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.reference_images is required');
-            }
-            if ($referenceVideoInputs !== [] || $referenceAudioInputs !== [] || $frames !== []) {
-                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-            }
-
-            return;
-        }
-
-        if ($compositionMode === VideoInputMode::OmniReference->value) {
-            if ($frames !== []) {
-                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-            }
-
-            return;
-        }
-
-        if ($frames === []) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.frames is required');
-        }
-        if ($referenceImages !== [] || $referenceVideoInputs !== [] || $referenceAudioInputs !== []) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
-        }
     }
 
     private function finishSucceeded(VideoQueueOperationEntity $operation, array $result): void
