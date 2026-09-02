@@ -12,15 +12,15 @@ return [
     'resources' => [
         'slides_template' => [
             'collection' => (string) env('SLIDES_TEMPLATE_VECTOR_COLLECTION', 'slides_templates'),
-            'score_threshold' => (float) env('SLIDES_TEMPLATE_VECTOR_SCORE_THRESHOLD', 0.4),
+            'score_threshold' => (float) env('SLIDES_TEMPLATE_VECTOR_SCORE_THRESHOLD', 0.45),
         ],
         'skill_market' => [
             'collection' => (string) env('SKILL_MARKET_VECTOR_COLLECTION', 'skill_markets'),
-            'score_threshold' => (float) env('SKILL_MARKET_VECTOR_SCORE_THRESHOLD', 0.4),
+            'score_threshold' => (float) env('SKILL_MARKET_VECTOR_SCORE_THRESHOLD', 0.45),
         ],
         'agent_market' => [
             'collection' => (string) env('AGENT_MARKET_VECTOR_COLLECTION', 'agent_markets'),
-            'score_threshold' => (float) env('AGENT_MARKET_VECTOR_SCORE_THRESHOLD', 0.4),
+            'score_threshold' => (float) env('AGENT_MARKET_VECTOR_SCORE_THRESHOLD', 0.5),
         ],
     ],
 ];
