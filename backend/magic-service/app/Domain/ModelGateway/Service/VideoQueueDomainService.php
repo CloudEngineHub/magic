@@ -22,9 +22,7 @@ use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\ModelGateway\Repository\VideoQueueOperationRepositoryInterface;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\ErrorCode\MagicApiErrorCode;
-use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -235,29 +233,14 @@ readonly class VideoQueueDomainService
         );
     }
 
-    public function finishExecutionFailure(VideoQueueOperationEntity $operation, string $message, ?string $errorCode = null): void
+    public function finishExecutionFailure(VideoQueueOperationEntity $operation, string $message): void
     {
-        $code = $errorCode ?? 'EXECUTION_FAILED';
-        $videoErrorCode = $this->resolveVideoErrorCode($errorCode);
-        if ($videoErrorCode instanceof VideoGenerateErrorCode) {
-            $code = (string) $videoErrorCode->value;
-            $message = $this->resolveVideoErrorMessage($videoErrorCode);
-        } elseif ($errorCode === 'PROVIDER_FAILED') {
-            $message = $this->resolvePublicErrorMessage($message);
-        } elseif ($errorCode !== null && $errorCode !== 'EXECUTION_FAILED') {
-            $code = 'PROVIDER_FAILED';
-            $message = $this->resolveVideoErrorMessage(VideoGenerateErrorCode::GENERAL_ERROR);
-        } else {
-            $code = 'EXECUTION_FAILED';
-            $message = $this->resolveVideoErrorMessage(VideoGenerateErrorCode::GENERAL_ERROR);
-        }
-
         $this->finish(
             $operation,
             VideoOperationStatus::FAILED,
             [],
-            $code,
-            $message,
+            'EXECUTION_FAILED',
+            $this->resolvePublicErrorMessage($message),
         );
     }
 
@@ -935,23 +918,14 @@ readonly class VideoQueueDomainService
     private function finishFailed(VideoQueueOperationEntity $operation, array $result): void
     {
         $error = $result['error'] ?? [];
-        $providerErrorCode = is_array($error) && (is_string($error['code'] ?? null) || is_int($error['code'] ?? null))
-            ? $error['code']
-            : null;
-        $videoErrorCode = $this->resolveVideoErrorCode($providerErrorCode);
-        $errorCode = $videoErrorCode instanceof VideoGenerateErrorCode
-            ? (string) $videoErrorCode->value
-            : 'PROVIDER_FAILED';
-        $errorMessage = $videoErrorCode instanceof VideoGenerateErrorCode
-            ? $this->resolveVideoErrorMessage($videoErrorCode)
-            : $this->resolveVideoErrorMessage(VideoGenerateErrorCode::GENERAL_ERROR);
-
         $this->finish(
             $operation,
             VideoOperationStatus::FAILED,
             [],
-            $errorCode,
-            $errorMessage,
+            is_array($error) && is_string($error['code'] ?? null) ? $error['code'] : 'PROVIDER_FAILED',
+            $this->resolvePublicErrorMessage(
+                is_array($error) && is_string($error['message'] ?? null) ? $error['message'] : null
+            ),
         );
     }
 
@@ -1024,25 +998,11 @@ readonly class VideoQueueDomainService
     private function resolvePublicErrorMessage(?string $message): string
     {
         $normalized = trim((string) $message);
-        if ($normalized !== '') {
-            return $normalized;
+        if ($normalized === '') {
+            return self::ERROR_MESSAGE_FAILED;
         }
 
-        return self::ERROR_MESSAGE_FAILED;
-    }
-
-    private function resolveVideoErrorCode(null|int|string $errorCode): ?VideoGenerateErrorCode
-    {
-        if ($errorCode === null || (! is_int($errorCode) && ! ctype_digit($errorCode))) {
-            return null;
-        }
-
-        return VideoGenerateErrorCode::tryFrom((int) $errorCode);
-    }
-
-    private function resolveVideoErrorMessage(VideoGenerateErrorCode $errorCode): string
-    {
-        return ProviderVideoErrorMapper::message($errorCode);
+        return $normalized;
     }
 
     private function normalizeAspectRatio(mixed $value): ?string
