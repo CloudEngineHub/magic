@@ -1560,6 +1560,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					void pullMessage(pollingParams)
 					return
 				}
+				// A newly sent execution may still inherit the previous Topic `finished` value
+				// until its first chunk/Final arrives. Never let terminal polling seize the render
+				// barrier while that local execution or an active StreamState is present.
+				if (
+					superMagicStore.hasPendingTopicExecution?.(topicId) ||
+					superMagicStore.isTopicStreaming(topicId)
+				)
+					return
 				if (typeof superMagicStore.beginTopicSync !== "function") {
 					void pullMessage(pollingParams)
 					return

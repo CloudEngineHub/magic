@@ -232,4 +232,108 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 			)
 		},
 	)
+
+	it("marks a previously finished topic as running before dispatching the Agent request", async () => {
+		const chat = vi.fn().mockResolvedValue({
+			data: {
+				seq: {
+					message: { app_message_id: "server-user-message" },
+				},
+			},
+		})
+		const beginTopicExecution = vi.fn()
+		const mergeTopic = vi.fn()
+		const service = createMessageSendService({
+			chatApi: { chat } as unknown as MessageSendServiceDeps["chatApi"],
+			superMagicApi: {} as MessageSendServiceDeps["superMagicApi"],
+			pubsub: { publish: vi.fn() } as unknown as MessageSendServiceDeps["pubsub"],
+			mentionPanelStore: {
+				addMentionListItemsToHistory: vi.fn(),
+			} as unknown as MessageSendServiceDeps["mentionPanelStore"],
+			userStore: {
+				user: { userInfo: { user_id: "mock-user" } },
+			} as unknown as MessageSendServiceDeps["userStore"],
+			superMagicStore: {
+				messages: new Map([["mock-chat-topic", []]]),
+				getLatestMessageAnchor: vi.fn(() => ({})),
+				addUserMessage: vi.fn(),
+				replaceUserMessage: vi.fn(),
+				beginTopicExecution,
+			} as unknown as MessageSendServiceDeps["superMagicStore"],
+			logger: { error: vi.fn() } as unknown as MessageSendServiceDeps["logger"],
+		})
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedProject: null,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "mock-chat-topic",
+				chat_conversation_id: "mock-conversation",
+				task_status: "finished",
+			} as Topic,
+			context: {
+				topicStore: { mergeTopic } as never,
+			},
+		})
+
+		expect(beginTopicExecution).toHaveBeenCalledWith("mock-chat-topic")
+		expect(mergeTopic).toHaveBeenCalledWith("topic-1", {
+			task_status: "running",
+			status: "running",
+		})
+		expect(chat).toHaveBeenCalledTimes(1)
+	})
+
+	it("restores the previous Topic status when the Agent request fails", async () => {
+		const chat = vi.fn().mockRejectedValue(new Error("request failed"))
+		const beginTopicExecution = vi.fn()
+		const failPendingTopicExecution = vi.fn()
+		const mergeTopic = vi.fn()
+		const service = createMessageSendService({
+			chatApi: { chat } as unknown as MessageSendServiceDeps["chatApi"],
+			superMagicApi: {} as unknown as MessageSendServiceDeps["superMagicApi"],
+			pubsub: { publish: vi.fn() } as unknown as MessageSendServiceDeps["pubsub"],
+			mentionPanelStore: {
+				addMentionListItemsToHistory: vi.fn(),
+			} as unknown as MessageSendServiceDeps["mentionPanelStore"],
+			userStore: {
+				user: { userInfo: { user_id: "mock-user" } },
+			} as unknown as MessageSendServiceDeps["userStore"],
+			superMagicStore: {
+				messages: new Map([["mock-chat-topic", []]]),
+				getLatestMessageAnchor: vi.fn(() => ({})),
+				addUserMessage: vi.fn(),
+				replaceUserMessage: vi.fn(),
+				beginTopicExecution,
+				failPendingTopicExecution,
+			} as unknown as MessageSendServiceDeps["superMagicStore"],
+			logger: { error: vi.fn() } as unknown as MessageSendServiceDeps["logger"],
+		})
+
+		const sent = await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedProject: null,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "mock-chat-topic",
+				chat_conversation_id: "mock-conversation",
+				task_status: "finished",
+			} as Topic,
+			context: {
+				topicStore: { mergeTopic } as never,
+			},
+		})
+
+		await vi.waitFor(() =>
+			expect(failPendingTopicExecution).toHaveBeenCalledWith("mock-chat-topic"),
+		)
+		expect(sent).toBe(true)
+		expect(mergeTopic).toHaveBeenLastCalledWith("topic-1", {
+			task_status: "finished",
+			status: "finished",
+		})
+	})
 })

@@ -65,6 +65,7 @@ import { VirtualMessageList } from "./components/VirtualMessageList"
 import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
+import { useWhyDidYouUpdate } from "ahooks"
 
 export { MessageListProvider }
 
@@ -287,6 +288,11 @@ const MessageList = observer(
 			() => [...mainDisplayData, ...revokedBranchData],
 			[mainDisplayData, revokedBranchData],
 		)
+
+		useWhyDidYouUpdate("MessageList", {
+			revokedBranchData,
+			mainDisplayData
+		})
 
 		const { messages, messageKeys, messageTurnGroups, normalVirtualMessageItems } =
 			useMemo(() => {

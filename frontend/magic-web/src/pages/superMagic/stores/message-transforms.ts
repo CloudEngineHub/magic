@@ -268,6 +268,8 @@ export function getDefaultTopicMeta(): TopicMeta {
 		lastSyncedSeqId: "",
 		syncGeneration: 0,
 		syncState: "idle",
+		pendingExecutionCount: 0,
+		pendingExecutionStartedAt: null,
 		renderPolicy: "live",
 	}
 }

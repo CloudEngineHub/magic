@@ -33,6 +33,7 @@ import {
 } from "../virtual-message-items"
 import type { MessageListScrollAdapter } from "../message-list-scroll-adapter"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
+import { useWhyDidYouUpdate } from "ahooks"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
 const FOOTER_ROW_KEY = "__message-list-footer__"
@@ -592,6 +593,20 @@ function VirtualMessageListInner({
 		topicId,
 		useMobileStickyOverlay,
 	])
+
+	// useWhyDidYouUpdate("VirtualMessageListInner", {
+	// 	exportMode,
+	// 	footer,
+	// 	isMobile,
+	// 	items,
+	// 	limitReached,
+	// 	onToggleSelect,
+	// 	renderNode,
+	// 	selectedKeys,
+	// 	stickyMessageClassName,
+	// 	topicId,
+	// 	useMobileStickyOverlay,
+	// })
 
 	return (
 		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full">

@@ -81,6 +81,7 @@ const mockState = vi.hoisted(() => ({
 		),
 		setActiveTopicId: vi.fn(),
 		isTopicStreaming: vi.fn(() => false),
+		hasPendingTopicExecution: vi.fn(() => false),
 	},
 	activeRevokedAnchor: undefined as { seq_id: string } | undefined,
 	optimisticStatuses: new Map<string, string>(),
@@ -156,6 +157,7 @@ describe("useTopicMessages", () => {
 		mockState.superMagicStoreMock.buffer = new Map()
 		mockState.superMagicStoreMock.topicMeta = new Map()
 		mockState.superMagicStoreMock.isTopicStreaming.mockReturnValue(false)
+		mockState.superMagicStoreMock.hasPendingTopicExecution.mockReturnValue(false)
 		mockState.superMagicStoreMock.authorizeImStatusRestore.mockReset()
 		mockState.activeRevokedAnchor = undefined
 		mockState.optimisticStatuses.clear()
@@ -474,6 +476,44 @@ describe("useTopicMessages", () => {
 		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(2)
 		expect(consoleErrorSpy).toHaveBeenCalled()
 		consoleErrorSpy.mockRestore()
+	})
+
+	it("does not start finished polling while a new local execution is pending", async () => {
+		vi.useFakeTimers()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+
+		const { rerender } = renderHook(
+			({ selectedTopic }: { selectedTopic: Topic }) => useTopicMessages({ selectedTopic }),
+			{
+				initialProps: {
+					selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+				},
+			},
+		)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		mockState.getMessagesByConversationIdMock.mockClear()
+		mockState.superMagicStoreMock.beginTopicSync.mockClear()
+		mockState.superMagicStoreMock.completeTopicSync.mockClear()
+		mockState.superMagicStoreMock.hasPendingTopicExecution.mockReturnValue(true)
+
+		rerender({ selectedTopic: createTopic({ task_status: TaskStatus.FINISHED }) })
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(20_000)
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.beginTopicSync).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.completeTopicSync).not.toHaveBeenCalled()
 	})
 
 	it("P1 contract: continues bounded polling pages until the local anchor is reached", async () => {
