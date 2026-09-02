@@ -108,7 +108,7 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 
 ### After Initialization
 
-1. Before writing, read `references/crew-file-format.md` (AGENTS.md section) and `references/agents-file-example.md`, then validate the drafted workflow against that structure: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, and completion checks must be present. Add security constraints or other special rules only when the user explicitly requests them.
+1. Before writing, read the `AGENTS.md` section of `references/crew-file-format.md`, then validate the drafted workflow against its specification: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, and completion checks must be present. Add security constraints or other special rules only when the user explicitly requests them.
 2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or add special rules that the user did not specify.
 3. Show the generated files to the user via `read_files`.
 4. If the user chose skill decomposition, confirm that every skill has an invocation workflow or rule declared in `AGENTS.md`, then call `skill-creator` for each independent skill and validate the results before reporting completion.
@@ -226,4 +226,3 @@ Reference documents with detailed guides:
 - **crew-file-format** — Complete format specs and examples for each definition file
 - **prompt-engineering-guide** — Prompt engineering best practices (structure templates, quality checklists, anti-pattern detection)
 - **available-tools** — Tool combination recommendations by function (fallback reference; prefer `scripts/tools.py` for dynamic queries)
-- **agents-file-example** — Complete example of an `AGENTS.md` multi-skill collaboration workflow

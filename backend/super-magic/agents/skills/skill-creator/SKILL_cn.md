@@ -81,6 +81,8 @@ read_files(files=[{"file_path": "path/to/file.md"}])
 
 在继续规划前，必须读取当前员工的 `AGENTS.md`。如果文件不存在，或没有明确说明此技能的调用流程、触发条件或适用场景，先暂停技能创建，补充这部分工作流并让用户确认；不能先创建 `SKILL.md` 再补写调用规则。
 
+如果用户要创建的是知识库型 skill，或需求包含参考图、参考文件、模板资源、资料目录或知识索引，必须先读取 `references/knowledge-base-skill-guide_cn.md`，并将其中的目录、索引、资源加载和验证要求纳入后续流程。
+
 ### 输出形式决策（捕获意图阶段必需）
 
 这是保证技能质量的关键。确定输出形式，并将其明确写入生成的 SKILL.md。
@@ -108,6 +110,7 @@ read_files(files=[{"file_path": "path/to/file.md"}])
 ### 阶段 2：访谈与研究
 
 主动询问边界情况、输入输出格式、示例文件、成功标准和依赖项。
+对于知识库型 skill，还必须确认资源来源、文件类型、目录层级、索引字段、引用方式、更新方式，以及索引或资源缺失时的处理方式；未经用户确认，不得擅自复制或扩充知识库内容。
 使用 `web_search` 和 `read_webpages_as_markdown` 研究最佳实践、API 文档和类似技能。
 访谈完成后再编写测试用例。
 
@@ -128,6 +131,8 @@ read_files(files=[{"file_path": "path/to/file.md"}])
 - 最终输出形式（来自阶段 1 的决策）
 - 评估计划（测试提示词、预期输出）
 
+如果是知识库型 skill，规划还必须说明资源目录、根索引、参考图和参考文件的组织方式，以及 SKILL.md 如何按需加载资源。
+
 **等待用户确认后，才能进入阶段 4。**
 
 ---
@@ -137,6 +142,8 @@ read_files(files=[{"file_path": "path/to/file.md"}])
 用户确认规划后，**先检查名称冲突**，再创建文件。
 
 写入前再次确认员工的 `AGENTS.md` 已明确指定该技能在哪个流程中调用，或明确指定触发条件、适用场景和调用时机。该调用关系缺失或仍未获用户确认时，禁止写入任何技能文件。
+
+如果是知识库型 skill，写入前必须按照 `references/knowledge-base-skill-guide_cn.md` 检查资源目录和索引设计。参考图、参考文件和索引必须位于该 Skill 的专用目录内，不能散落到目录之外，也不能把大段知识库内容直接内嵌到 `SKILL.md`。
 
 **冲突检查**：查看系统提示词中已有的 `<available_skills>` 区块，确认是否存在同名技能。不需要调用工具或执行 Shell 命令。
 
@@ -366,3 +373,4 @@ shell_exec(
 
 - `references/system-tools.md` — 所有可用项目工具的详细描述和 Python 调用示例
 - `references/schemas.md` — evals.json、grading.json 等文件的 JSON Schema
+- `references/knowledge-base-skill-guide_cn.md` — 知识库型 Skill 的参考图、参考文件、目录和索引规范

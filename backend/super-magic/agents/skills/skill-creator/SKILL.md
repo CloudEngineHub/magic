@@ -81,6 +81,8 @@ Then confirm:
 
 Before continuing to planning, read the current employee's `AGENTS.md`. If the file is missing, or it does not explicitly define the skill's workflow, trigger conditions, applicable scenarios, or invocation timing, pause skill creation, add this workflow information, and get user confirmation. Do not create `SKILL.md` first and add the invocation rule afterward.
 
+If the user is creating a knowledge-base skill, or the request includes reference images, reference files, reusable templates, a materials directory, or a knowledge index, first read `references/knowledge-base-skill-guide.md` and apply its directory, index, resource-loading, and validation requirements to the remaining workflow.
+
 ### Output Form Decision (Required in Capture Intent Phase)
 
 This is critical for high-quality skills. Determine the output form and write it explicitly into the generated SKILL.md.
@@ -108,6 +110,7 @@ Do not output content directly into the conversation, even if it is short.
 ### Phase 2: Interview & Research
 
 Proactively ask about edge cases, input/output formats, example files, success criteria, dependencies.
+For a knowledge-base skill, also confirm resource sources, file types, directory levels, index fields, citation rules, update strategy, and behavior when the index or resources are missing. Do not copy or expand knowledge-base content without user confirmation.
 Use `web_search` and `read_webpages_as_markdown` to research best practices and API docs.
 Wait until the interview is done before writing test cases.
 
@@ -129,6 +132,8 @@ Plan document contents:
 - Final output form (from Phase 1 decision)
 - Evaluation plan (test prompts, expected outputs)
 
+For a knowledge-base skill, the plan must also specify the resource directories, root index, organization of reference images and files, and how SKILL.md loads resources on demand.
+
 **Wait for user confirmation before proceeding to Phase 4.**
 
 ---
@@ -138,6 +143,8 @@ Plan document contents:
 After user confirms the plan, **check for name conflicts first**, then create files.
 
 Before writing, confirm that the employee's `AGENTS.md` explicitly specifies which workflow calls this skill, or specifies its trigger conditions, applicable scenarios, and invocation timing. If this invocation mapping is missing or has not been confirmed by the user, do not write any skill files.
+
+For a knowledge-base skill, before writing, validate the resource directories and index design against `references/knowledge-base-skill-guide.md`. Reference images, reference files, and index files must stay inside the Skill's dedicated directory; do not scatter them outside the directory or embed large knowledge-base content directly in `SKILL.md`.
 
 **Conflict check** — look at the `<available_skills>` block already in the system prompt to see if a skill with the same name already exists. No tool call or shell command is needed for this step.
 
@@ -366,3 +373,4 @@ Optional: `python scripts/upload_skill.py <path> --name-zh "..." --name-en "..."
 
 - `references/system-tools.md` — Detailed descriptions and Python call examples for all available project tools
 - `references/schemas.md` — JSON schemas for evals.json, grading.json, etc.
+- `references/knowledge-base-skill-guide.md` — Reference-image, reference-file, directory, and index conventions for knowledge-base Skills

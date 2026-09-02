@@ -46,10 +46,6 @@ You have a rigorous academic attitude and critical thinking ability.
 
 定义该员工专属的标准操作流程（SOP）和规则。**不包含 YAML 头部**，内容为纯 Markdown。工作流必须明确每个步骤要做什么、输入是什么、输出是什么，以及需要调用哪个工具或 skill。
 
-### 示例
-
-示例见 [agents-file-example_cn.md](agents-file-example_cn.md)。
-
 ### 编写指南
 
 - 先用简短段落说明工作流简介、目标、适用场景和整体流程。

@@ -46,10 +46,6 @@ Body content is injected into the `<identity>` section of the compiled `.agent` 
 
 Defines this employee's standard operating procedures (SOPs) and rules. **No YAML header**, pure Markdown content. The workflow must clearly state what to do, what the input is, what the output is, and which tool or skill to call for every step.
 
-### Example
-
-See [agents-file-example.md](agents-file-example.md) for a complete example.
-
 ### Writing Guidelines
 
 - Start with a concise overview of the workflow's purpose, applicable scenarios, and overall sequence.
