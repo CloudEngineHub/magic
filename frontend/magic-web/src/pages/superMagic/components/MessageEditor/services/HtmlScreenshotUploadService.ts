@@ -15,16 +15,28 @@ export interface StoreHtmlScreenshotParams {
 	captureId?: string
 }
 
+export interface StagedHtmlScreenshot {
+	storageId: string
+	fileName: string
+	fileSize: number
+	fileKey: string
+}
+
+export interface UploadStoredScreenshotItem {
+	storageId: string
+	fileName: string
+}
+
 const logger = Logger.createLogger("HtmlScreenshotUpload")
 
 /**
- * Screenshots are transient inspector context, not workspace files. Keep the bitmap in the
- * existing IndexedDB image store until the message is sent, then save it as a topic attachment.
- * This avoids creating a project folder during selection while retaining a server-side file
- * reference for the agent request.
+ * Region shots stage to OSS after confirm and batch-save on send.
+ * Element shots stay local for preview and are never uploaded.
  */
 class HtmlScreenshotUploadService {
 	private readonly uploader = new Upload()
+	private readonly stagedByStorageId = new Map<string, StagedHtmlScreenshot>()
+	private readonly stagingPromises = new Map<string, Promise<StagedHtmlScreenshot>>()
 
 	private async uploadToOss(
 		file: File,
@@ -83,82 +95,96 @@ class HtmlScreenshotUploadService {
 		}
 	}
 
-	async uploadStoredScreenshot({
-		storageId,
-		fileName,
-		projectId,
-		topicId,
-		onProgress,
-	}: {
-		storageId: string
-		fileName: string
-		projectId: string
-		topicId?: string
-		onProgress?: (progress: number) => void
-	}): Promise<SaveUploadFileToProjectResponse> {
+	async stageStoredScreenshots(
+		items: UploadStoredScreenshotItem[],
+		projectId: string,
+	): Promise<StagedHtmlScreenshot[]> {
+		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
+		if (items.length === 0) return []
+
+		const resolved: Array<StagedHtmlScreenshot | undefined> = Array.from({
+			length: items.length,
+		})
+		const missing: UploadStoredScreenshotItem[] = []
+		const missingIndexes: number[] = []
+
+		for (let index = 0; index < items.length; index += 1) {
+			const item = items[index]
+			const cached = this.stagedByStorageId.get(item.storageId)
+			if (cached) {
+				resolved[index] = cached
+				continue
+			}
+			const inflight = this.stagingPromises.get(item.storageId)
+			if (inflight) {
+				resolved[index] = await inflight
+				continue
+			}
+			missing.push(item)
+			missingIndexes.push(index)
+		}
+
+		if (missing.length > 0) {
+			const staged = await this.stageUncachedScreenshots(missing, projectId)
+			missingIndexes.forEach((itemIndex, stagedIndex) => {
+				resolved[itemIndex] = staged[stagedIndex]
+			})
+		}
+
+		return resolved as StagedHtmlScreenshot[]
+	}
+
+	async stageStoredScreenshot(
+		item: UploadStoredScreenshotItem,
+		projectId: string,
+	): Promise<StagedHtmlScreenshot> {
+		const [staged] = await this.stageStoredScreenshots([item], projectId)
+		if (!staged) throw new Error("截图上传失败")
+		return staged
+	}
+
+	async saveStagedScreenshots(
+		items: StagedHtmlScreenshot[],
+		{ projectId, topicId }: { projectId: string; topicId?: string },
+	): Promise<Array<{ storageId: string; result: SaveUploadFileToProjectResponse }>> {
+		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
+		if (items.length === 0) return []
+
+		const saveResults = (await SuperMagicApi.batchSaveFiles({
+			project_id: projectId,
+			files: items.map((item) => ({
+				project_id: projectId,
+				topic_id: topicId ?? "",
+				task_id: "",
+				file_key: item.fileKey,
+				file_name: item.fileName,
+				file_size: item.fileSize,
+				file_type: "user_upload",
+				storage_type: "topic",
+				source: UploadSource.Home,
+				relative_file_path: item.fileName,
+				is_hidden: true,
+			})),
+		})) as SaveUploadFileToProjectResponse[]
+		if (!saveResults?.every((item) => item?.file_id) || saveResults.length !== items.length) {
+			throw new Error("截图保存到话题失败")
+		}
+
+		return items.map((item, index) => ({
+			storageId: item.storageId,
+			result: { ...saveResults[index], is_hidden: true },
+		}))
+	}
+
+	async uploadStoredScreenshots(
+		items: UploadStoredScreenshotItem[],
+		{ projectId, topicId }: { projectId: string; topicId?: string },
+	): Promise<Array<{ storageId: string; result: SaveUploadFileToProjectResponse }>> {
 		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
 
 		try {
-			const blob = await htmlScreenshotStorage.getBlob(storageId)
-			if (!blob) throw new Error("截图缓存已过期，请重新选择")
-			const file = new File([blob], fileName, {
-				type: blob.type || "image/png",
-			})
-			const customCredentials = await superMagicUploadTokenService.getUploadToken(projectId)
-			// OSS object name uses a snowflake ID to avoid collisions.
-			const { ids } = await SuperMagicApi.getSnowflakeIds({ count: 1 })
-			const snowflakeId = ids[0]
-			if (!snowflakeId) throw new Error("截图上传未获取到文件ID")
-			const uploadResult = await this.uploadToOss(
-				file,
-				snowflakeId,
-				projectId,
-				customCredentials,
-				onProgress,
-			)
-			const [reportResult] = await FileApi.reportFileUploads([
-				{
-					file_extension: fileName.split(".").pop() ?? "",
-					file_key: uploadResult.key,
-					file_size: uploadResult.size,
-					file_name: fileName,
-				},
-			])
-			if (!reportResult?.file_id) throw new Error("截图上报失败")
-
-			const [saveResult] = (await SuperMagicApi.batchSaveFiles({
-				project_id: projectId,
-				files: [
-					{
-						project_id: projectId,
-						topic_id: topicId ?? "",
-						task_id: "",
-						file_key: uploadResult.key,
-						file_name: fileName,
-						file_size: uploadResult.size,
-						file_type: "user_upload",
-						storage_type: "topic",
-						source: UploadSource.Home,
-						relative_file_path: fileName,
-						is_hidden: true,
-					},
-				],
-			})) as SaveUploadFileToProjectResponse[]
-			if (!saveResult?.file_id) throw new Error("截图保存到话题失败")
-
-			try {
-				await htmlScreenshotStorage.delete(storageId)
-				forgetHtmlScreenshotByStorageId(storageId)
-			} catch (cleanupError) {
-				logger.error({
-					eventKey: "html_screenshot_cleanup_failed",
-					errorKind: "storage_cleanup",
-					error: cleanupError,
-					message: "html screenshot cleanup failed after successful upload",
-				})
-			}
-
-			return { ...saveResult, is_hidden: true }
+			const staged = await this.stageStoredScreenshots(items, projectId)
+			return await this.saveStagedScreenshots(staged, { projectId, topicId })
 		} catch (error) {
 			logger.error({
 				eventKey: "html_screenshot_upload_failed",
@@ -170,16 +196,147 @@ class HtmlScreenshotUploadService {
 		}
 	}
 
+	async uploadStoredScreenshot({
+		storageId,
+		fileName,
+		projectId,
+		topicId,
+	}: {
+		storageId: string
+		fileName: string
+		projectId: string
+		topicId?: string
+		onProgress?: (progress: number) => void
+	}): Promise<SaveUploadFileToProjectResponse> {
+		const [entry] = await this.uploadStoredScreenshots([{ storageId, fileName }], {
+			projectId,
+			topicId,
+		})
+		if (!entry) throw new Error("截图上传失败")
+		return entry.result
+	}
+
 	async getStoredScreenshotBlob(storageId: string): Promise<Blob | null> {
 		return htmlScreenshotStorage.getBlob(storageId)
 	}
 
 	async discardStoredScreenshot(storageId: string): Promise<void> {
+		this.forgetStaged(storageId)
 		try {
 			await htmlScreenshotStorage.delete(storageId)
 		} finally {
 			forgetHtmlScreenshotByStorageId(storageId)
 		}
+	}
+
+	collectStorageIds(mentionItems: Array<{ attrs?: { data?: unknown } }>): string[] {
+		const storageIds: string[] = []
+		for (const item of mentionItems) {
+			const data = item.attrs?.data
+			if (!data || typeof data !== "object") continue
+			const screenshot = data as { is_html_screenshot?: boolean; storage_id?: unknown }
+			if (
+				screenshot.is_html_screenshot &&
+				typeof screenshot.storage_id === "string" &&
+				screenshot.storage_id
+			) {
+				storageIds.push(screenshot.storage_id)
+			}
+		}
+		return storageIds
+	}
+
+	async releaseStoredScreenshots(storageIds: string[]): Promise<void> {
+		await Promise.all(storageIds.map((storageId) => this.discardStoredScreenshot(storageId)))
+	}
+
+	resetStaging(): void {
+		this.stagedByStorageId.clear()
+		this.stagingPromises.clear()
+	}
+
+	private forgetStaged(storageId: string): void {
+		this.stagedByStorageId.delete(storageId)
+		this.stagingPromises.delete(storageId)
+	}
+
+	private async stageUncachedScreenshots(
+		items: UploadStoredScreenshotItem[],
+		projectId: string,
+	): Promise<StagedHtmlScreenshot[]> {
+		const batchPromise = this.stageBatch(items, projectId)
+		const itemPromises = items.map((item) => {
+			const itemPromise = batchPromise.then((staged) => {
+				const match = staged.find((entry) => entry.storageId === item.storageId)
+				if (!match) throw new Error("截图上传失败")
+				return match
+			})
+			this.stagingPromises.set(item.storageId, itemPromise)
+			return itemPromise
+		})
+
+		try {
+			const staged = await Promise.all(itemPromises)
+			for (const item of staged) {
+				this.stagedByStorageId.set(item.storageId, item)
+			}
+			return staged
+		} finally {
+			for (const item of items) {
+				this.stagingPromises.delete(item.storageId)
+			}
+		}
+	}
+
+	private async stageBatch(
+		items: UploadStoredScreenshotItem[],
+		projectId: string,
+	): Promise<StagedHtmlScreenshot[]> {
+		const files = await Promise.all(
+			items.map(async (item) => {
+				const blob = await htmlScreenshotStorage.getBlob(item.storageId)
+				if (!blob) throw new Error("截图缓存已过期，请重新选择")
+				return {
+					...item,
+					file: new File([blob], item.fileName, {
+						type: blob.type || "image/png",
+					}),
+				}
+			}),
+		)
+
+		const customCredentials = await superMagicUploadTokenService.getUploadToken(projectId)
+		const { ids } = await SuperMagicApi.getSnowflakeIds({ count: files.length })
+		if (!ids?.length || ids.length < files.length) {
+			throw new Error("截图上传未获取到文件ID")
+		}
+
+		const uploadResults = await Promise.all(
+			files.map((fileItem, index) =>
+				this.uploadToOss(fileItem.file, ids[index], projectId, customCredentials).then(
+					(upload) => ({
+						storageId: fileItem.storageId,
+						fileName: fileItem.fileName,
+						fileSize: upload.size,
+						fileKey: upload.key,
+					}),
+				),
+			),
+		)
+
+		const reportResults = await FileApi.reportFileUploads(
+			uploadResults.map((item) => ({
+				file_extension: item.fileName.split(".").pop() ?? "",
+				file_key: item.fileKey,
+				file_size: item.fileSize,
+				file_name: item.fileName,
+			})),
+		)
+		if (!reportResults?.every((item) => item?.file_id)) {
+			throw new Error("截图上报失败")
+		}
+
+		return uploadResults
 	}
 }
 

@@ -58,4 +58,15 @@ describe("HtmlScreenshotDatabase", () => {
 
 		expect(await htmlScreenshotDatabase.get("element:#hero:1")).toBeNull()
 	})
+
+	it("sweeps expired records without reading them", async () => {
+		await htmlScreenshotDatabase.put("keep", new Blob(["keep"], { type: "image/png" }))
+		await htmlScreenshotDatabase.put("gone", new Blob(["gone"], { type: "image/png" }), -1)
+
+		const removed = await htmlScreenshotDatabase.deleteExpired()
+
+		expect(removed).toBe(1)
+		expect(await htmlScreenshotDatabase.get("keep")).toBeTruthy()
+		expect(await htmlScreenshotDatabase.get("gone")).toBeNull()
+	})
 })

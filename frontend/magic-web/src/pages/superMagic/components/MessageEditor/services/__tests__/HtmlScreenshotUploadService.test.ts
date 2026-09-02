@@ -49,6 +49,7 @@ import { htmlScreenshotUploadService } from "../HtmlScreenshotUploadService"
 describe("HtmlScreenshotUploadService", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		htmlScreenshotUploadService.resetStaging()
 		const file = new File(["png"], "screenshot.png", { type: "image/png" })
 		mocks.store.mockResolvedValue({
 			storageId: "screenshot-storage-id",
@@ -127,7 +128,7 @@ describe("HtmlScreenshotUploadService", () => {
 				}),
 			],
 		})
-		expect(mocks.delete).toHaveBeenCalledWith("screenshot-storage-id")
+		expect(mocks.delete).not.toHaveBeenCalled()
 		expect(result).toMatchObject({ file_id: "saved-id", is_hidden: true })
 	})
 
@@ -167,16 +168,188 @@ describe("HtmlScreenshotUploadService", () => {
 		expect(result).toMatchObject({ file_id: "saved-id", is_hidden: true })
 	})
 
-	it("keeps a successful upload when local cleanup fails", async () => {
-		mocks.delete.mockRejectedValueOnce(new Error("IndexedDB unavailable"))
+	it("deletes IndexedDB blobs only after the caller releases them", async () => {
+		const { forgetHtmlScreenshotByStorageId } = await import("../HtmlScreenshotTargetStore")
 
-		await expect(
-			htmlScreenshotUploadService.uploadStoredScreenshot({
-				storageId: "screenshot-storage-id",
-				fileName: "screenshot.png",
-				projectId: "project-1",
-				topicId: "topic-1",
+		await htmlScreenshotUploadService.releaseStoredScreenshots([
+			"screenshot-storage-id",
+			"screenshot-storage-id-2",
+		])
+
+		expect(mocks.delete).toHaveBeenCalledWith("screenshot-storage-id")
+		expect(mocks.delete).toHaveBeenCalledWith("screenshot-storage-id-2")
+		expect(forgetHtmlScreenshotByStorageId).toHaveBeenCalledWith("screenshot-storage-id")
+		expect(forgetHtmlScreenshotByStorageId).toHaveBeenCalledWith("screenshot-storage-id-2")
+	})
+
+	it("uploads multiple screenshots with one token, id batch, report, and save", async () => {
+		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["snowflake-1", "snowflake-2"] })
+		mocks.upload.mockImplementation(({ fileName }: { fileName: string }) => ({
+			success: (callback: (response: { data: { path: string } }) => void) =>
+				queueMicrotask(() => callback({ data: { path: `temporary/${fileName}` } })),
+			fail: vi.fn(),
+			progress: vi.fn(),
+		}))
+		mocks.reportFileUploads.mockResolvedValue([
+			{ file_id: "reported-1" },
+			{ file_id: "reported-2" },
+		])
+		mocks.batchSaveFiles.mockResolvedValue([
+			{
+				file_id: "saved-1",
+				file_key: "temporary/snowflake-1",
+				file_name: "a.png",
+				file_size: 3,
+				relative_file_path: "a.png",
+			},
+			{
+				file_id: "saved-2",
+				file_key: "temporary/snowflake-2",
+				file_name: "b.png",
+				file_size: 3,
+				relative_file_path: "b.png",
+			},
+		])
+
+		const results = await htmlScreenshotUploadService.uploadStoredScreenshots(
+			[
+				{ storageId: "region-1", fileName: "a.png" },
+				{ storageId: "region-2", fileName: "b.png" },
+			],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
+
+		expect(mocks.getUploadToken).toHaveBeenCalledTimes(1)
+		expect(mocks.getSnowflakeIds).toHaveBeenCalledTimes(1)
+		expect(mocks.getSnowflakeIds).toHaveBeenCalledWith({ count: 2 })
+		expect(mocks.reportFileUploads).toHaveBeenCalledTimes(1)
+		expect(mocks.reportFileUploads).toHaveBeenCalledWith([
+			expect.objectContaining({
+				file_name: "a.png",
+				file_key: "temporary/snowflake-1",
 			}),
-		).resolves.toMatchObject({ file_id: "saved-id", is_hidden: true })
+			expect.objectContaining({
+				file_name: "b.png",
+				file_key: "temporary/snowflake-2",
+			}),
+		])
+		expect(mocks.batchSaveFiles).toHaveBeenCalledTimes(1)
+		expect(mocks.batchSaveFiles).toHaveBeenCalledWith({
+			project_id: "project-1",
+			files: [
+				expect.objectContaining({
+					file_name: "a.png",
+					file_key: "temporary/snowflake-1",
+					topic_id: "topic-1",
+					is_hidden: true,
+				}),
+				expect.objectContaining({
+					file_name: "b.png",
+					file_key: "temporary/snowflake-2",
+					topic_id: "topic-1",
+					is_hidden: true,
+				}),
+			],
+		})
+		expect(results).toEqual([
+			{
+				storageId: "region-1",
+				result: expect.objectContaining({ file_id: "saved-1", is_hidden: true }),
+			},
+			{
+				storageId: "region-2",
+				result: expect.objectContaining({ file_id: "saved-2", is_hidden: true }),
+			},
+		])
+	})
+
+	it("stages region screenshots to OSS without saving them to the topic", async () => {
+		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["snowflake-1", "snowflake-2"] })
+		mocks.upload.mockImplementation(({ fileName }: { fileName: string }) => ({
+			success: (callback: (response: { data: { path: string } }) => void) =>
+				queueMicrotask(() => callback({ data: { path: `temporary/${fileName}` } })),
+			fail: vi.fn(),
+			progress: vi.fn(),
+		}))
+		mocks.reportFileUploads.mockResolvedValue([
+			{ file_id: "reported-1" },
+			{ file_id: "reported-2" },
+		])
+
+		const staged = await htmlScreenshotUploadService.stageStoredScreenshots(
+			[
+				{ storageId: "region-1", fileName: "a.png" },
+				{ storageId: "region-2", fileName: "b.png" },
+			],
+			"project-1",
+		)
+
+		expect(mocks.getUploadToken).toHaveBeenCalledTimes(1)
+		expect(mocks.getSnowflakeIds).toHaveBeenCalledWith({ count: 2 })
+		expect(mocks.reportFileUploads).toHaveBeenCalledTimes(1)
+		expect(mocks.batchSaveFiles).not.toHaveBeenCalled()
+		expect(staged).toEqual([
+			expect.objectContaining({ storageId: "region-1", fileKey: "temporary/snowflake-1" }),
+			expect.objectContaining({ storageId: "region-2", fileKey: "temporary/snowflake-2" }),
+		])
+	})
+
+	it("reuses staged OSS objects and only batch-saves on send", async () => {
+		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["snowflake-1"] })
+		await htmlScreenshotUploadService.stageStoredScreenshot(
+			{ storageId: "region-1", fileName: "a.png" },
+			"project-1",
+		)
+		vi.clearAllMocks()
+		mocks.batchSaveFiles.mockResolvedValue([
+			{
+				file_id: "saved-1",
+				file_key: "temporary/snowflake-1",
+				file_name: "a.png",
+				file_size: 3,
+				relative_file_path: "a.png",
+			},
+		])
+
+		const results = await htmlScreenshotUploadService.uploadStoredScreenshots(
+			[{ storageId: "region-1", fileName: "a.png" }],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
+
+		expect(mocks.getUploadToken).not.toHaveBeenCalled()
+		expect(mocks.getSnowflakeIds).not.toHaveBeenCalled()
+		expect(mocks.upload).not.toHaveBeenCalled()
+		expect(mocks.reportFileUploads).not.toHaveBeenCalled()
+		expect(mocks.batchSaveFiles).toHaveBeenCalledTimes(1)
+		expect(results).toEqual([
+			{
+				storageId: "region-1",
+				result: expect.objectContaining({ file_id: "saved-1", is_hidden: true }),
+			},
+		])
+	})
+
+	it("collects region screenshot storage ids for later release", () => {
+		expect(
+			htmlScreenshotUploadService.collectStorageIds([
+				{
+					type: "mention",
+					attrs: {
+						data: {
+							is_html_screenshot: true,
+							storage_id: "region-1",
+						},
+					},
+				},
+				{
+					type: "mention",
+					attrs: {
+						data: {
+							file_name: "note.txt",
+						},
+					},
+				},
+			]),
+		).toEqual(["region-1"])
 	})
 })

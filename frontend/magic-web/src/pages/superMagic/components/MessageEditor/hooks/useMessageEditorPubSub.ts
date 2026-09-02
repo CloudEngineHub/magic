@@ -153,6 +153,7 @@ function useMessageEditorPubSub({
 	enableMessageSendByContent,
 	onSendMessageByContent,
 	onSendCurrentContent,
+	projectId,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
 	const preparedScreenshotMentionsRef = useRef(
@@ -163,7 +164,12 @@ function useMessageEditorPubSub({
 	)
 
 	const prepareScreenshot = useMemoizedFn(
-		(captureId: string, dataUrl: string, fileName: string) => {
+		(
+			captureId: string,
+			dataUrl: string,
+			fileName: string,
+			options?: { stageUpload?: boolean },
+		) => {
 			const prepared = preparedScreenshotMentionsRef.current.get(captureId)
 			if (prepared?.dataUrl === dataUrl) return Promise.resolve(prepared.mention)
 
@@ -194,6 +200,19 @@ function useMessageEditorPubSub({
 						}
 						preparedScreenshotMentionsRef.current.set(captureId, { dataUrl, mention })
 						setHtmlScreenshotMention(captureId, mention)
+						if (options?.stageUpload && projectId) {
+							void htmlScreenshotUploadService
+								.stageStoredScreenshot(
+									{
+										storageId: storedScreenshot.storageId,
+										fileName: storedScreenshot.fileName,
+									},
+									projectId,
+								)
+								.catch((error) => {
+									console.warn("html screenshot oss staging failed", error)
+								})
+						}
 						return mention
 					} catch (error) {
 						await htmlScreenshotUploadService.discardStoredScreenshot(
@@ -221,6 +240,7 @@ function useMessageEditorPubSub({
 					request.captureId,
 					request.dataUrl,
 					request.fileName ?? `html-screenshot-${Date.now()}.png`,
+					{ stageUpload: request.stageUpload },
 				)
 				request.onSuccess?.(mention)
 			} catch (error) {
@@ -275,6 +295,7 @@ function useMessageEditorPubSub({
 												target.id ?? `screenshot:${index}`,
 												index,
 											),
+											{ stageUpload: true },
 										)),
 								] as const,
 						),

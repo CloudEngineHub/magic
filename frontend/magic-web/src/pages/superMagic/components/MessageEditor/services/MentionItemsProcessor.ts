@@ -142,18 +142,18 @@ export class MentionItemsProcessor {
 			regularItems.length > 0
 				? this.saveTempFilesToProject(regularItems, projectId, topicId)
 				: Promise.resolve([]),
-			Promise.all(
-				screenshotItems.map(async (item) => {
-					const data = item.attrs.data as UploadFileMentionData
-					const result = await htmlScreenshotUploadService.uploadStoredScreenshot({
-						storageId: data.storage_id as string,
-						fileName: data.file_name,
-						projectId,
-						topicId,
-					})
-					return { storageId: data.storage_id as string, result }
-				}),
-			),
+			screenshotItems.length > 0
+				? htmlScreenshotUploadService.uploadStoredScreenshots(
+						screenshotItems.map((item) => {
+							const data = item.attrs.data as UploadFileMentionData
+							return {
+								storageId: data.storage_id as string,
+								fileName: data.file_name,
+							}
+						}),
+						{ projectId, topicId },
+					)
+				: Promise.resolve([]),
 		])
 		const screenshotSaveResults = screenshotSaveEntries.map(({ result }) => result)
 		const screenshotSaveByStorageId = Object.fromEntries(

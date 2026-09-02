@@ -136,11 +136,13 @@ export interface HtmlMultiSelectionRequest {
 	onError?: (error: unknown) => void
 }
 
-/** Request the message editor to upload a screenshot before final submission. */
+/** Store a screenshot locally; region shots may also start OSS staging. */
 export interface HtmlScreenshotUploadRequest {
 	captureId: string
 	dataUrl: string
 	fileName?: string
+	/** Stage the region screenshot to OSS after IndexedDB persist. */
+	stageUpload?: boolean
 	/** Drop the in-memory prepared mention after the success callback consumes it. */
 	releaseAfterSuccess?: boolean
 	onSuccess?: (mention: TiptapMentionAttributes) => void

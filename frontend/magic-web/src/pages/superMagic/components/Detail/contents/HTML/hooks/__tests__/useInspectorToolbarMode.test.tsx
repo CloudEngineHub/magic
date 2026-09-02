@@ -725,6 +725,7 @@ describe("useInspectorToolbarMode", () => {
 				expect.objectContaining({
 					captureId: result.current.pendingTargets[0]?.id,
 					dataUrl: "data:image/png;base64,new-shot",
+					stageUpload: false,
 				}),
 			)
 		} finally {

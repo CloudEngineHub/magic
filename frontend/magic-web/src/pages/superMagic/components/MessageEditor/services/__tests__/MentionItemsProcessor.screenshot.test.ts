@@ -4,7 +4,7 @@ import { MentionItemsProcessor } from "../MentionItemsProcessor"
 
 const mocks = vi.hoisted(() => ({
 	saveTempFilesToProject: vi.fn(),
-	uploadStoredScreenshot: vi.fn(),
+	uploadStoredScreenshots: vi.fn(),
 }))
 
 vi.mock("../UploadTokenService", () => ({
@@ -14,7 +14,7 @@ vi.mock("../UploadTokenService", () => ({
 }))
 vi.mock("../HtmlScreenshotUploadService", () => ({
 	htmlScreenshotUploadService: {
-		uploadStoredScreenshot: mocks.uploadStoredScreenshot,
+		uploadStoredScreenshots: mocks.uploadStoredScreenshots,
 	},
 }))
 vi.mock("@/apis", () => ({ SuperMagicApi: {} }))
@@ -29,14 +29,19 @@ describe("MentionItemsProcessor screenshot handling", () => {
 
 	it("keeps screenshots out of the regular workspace temp-file flow", async () => {
 		mocks.saveTempFilesToProject.mockResolvedValue([])
-		mocks.uploadStoredScreenshot.mockResolvedValue({
-			file_id: "saved-screenshot",
-			file_key: "oss/screenshot.png",
-			file_name: "screenshot.png",
-			file_size: 3,
-			relative_file_path: "screenshot.png",
-			project_id: "project-1",
-		})
+		mocks.uploadStoredScreenshots.mockResolvedValue([
+			{
+				storageId: "storage-1",
+				result: {
+					file_id: "saved-screenshot",
+					file_key: "oss/screenshot.png",
+					file_name: "screenshot.png",
+					file_size: 3,
+					relative_file_path: "screenshot.png",
+					project_id: "project-1",
+				},
+			},
+		])
 
 		const screenshot = {
 			type: "mention",
@@ -62,12 +67,10 @@ describe("MentionItemsProcessor screenshot handling", () => {
 		)
 
 		expect(mocks.saveTempFilesToProject).not.toHaveBeenCalled()
-		expect(mocks.uploadStoredScreenshot).toHaveBeenCalledWith({
-			storageId: "storage-1",
-			fileName: "screenshot.png",
-			projectId: "project-1",
-			topicId: "topic-1",
-		})
+		expect(mocks.uploadStoredScreenshots).toHaveBeenCalledWith(
+			[{ storageId: "storage-1", fileName: "screenshot.png" }],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
 		expect(result.mentionItems[0].attrs.type).toBe(MentionItemType.PROJECT_FILE)
 		expect(result.content.content?.[0].attrs?.type).toBe(MentionItemType.PROJECT_FILE)
 		expect(result.mentionItems[0].attrs.data).toMatchObject({
@@ -84,14 +87,19 @@ describe("MentionItemsProcessor screenshot handling", () => {
 
 	it("still uploads a screenshot when the send path has no topic id", async () => {
 		mocks.saveTempFilesToProject.mockResolvedValue([])
-		mocks.uploadStoredScreenshot.mockResolvedValue({
-			file_id: "saved-screenshot",
-			file_key: "oss/screenshot.png",
-			file_name: "screenshot.png",
-			file_size: 3,
-			relative_file_path: "screenshot.png",
-			project_id: "project-1",
-		})
+		mocks.uploadStoredScreenshots.mockResolvedValue([
+			{
+				storageId: "storage-1",
+				result: {
+					file_id: "saved-screenshot",
+					file_key: "oss/screenshot.png",
+					file_name: "screenshot.png",
+					file_size: 3,
+					relative_file_path: "screenshot.png",
+					project_id: "project-1",
+				},
+			},
+		])
 
 		const screenshot = {
 			type: "mention",
@@ -115,15 +123,72 @@ describe("MentionItemsProcessor screenshot handling", () => {
 			"project-1",
 		)
 
-		expect(mocks.uploadStoredScreenshot).toHaveBeenCalledWith({
-			storageId: "storage-1",
-			fileName: "screenshot.png",
-			projectId: "project-1",
-			topicId: undefined,
-		})
+		expect(mocks.uploadStoredScreenshots).toHaveBeenCalledWith(
+			[{ storageId: "storage-1", fileName: "screenshot.png" }],
+			{ projectId: "project-1", topicId: undefined },
+		)
 		expect(result.mentionItems[0].attrs.type).toBe(MentionItemType.PROJECT_FILE)
 		expect(result.mentionItems[0].attrs.data).toMatchObject({
 			file_id: "saved-screenshot",
 		})
+	})
+
+	it("saves multiple region screenshots in one batch call", async () => {
+		mocks.uploadStoredScreenshots.mockResolvedValue([
+			{
+				storageId: "storage-1",
+				result: {
+					file_id: "saved-1",
+					file_key: "oss/a.png",
+					file_name: "a.png",
+					file_size: 3,
+					relative_file_path: "a.png",
+					project_id: "project-1",
+				},
+			},
+			{
+				storageId: "storage-2",
+				result: {
+					file_id: "saved-2",
+					file_key: "oss/b.png",
+					file_name: "b.png",
+					file_size: 3,
+					relative_file_path: "b.png",
+					project_id: "project-1",
+				},
+			},
+		])
+
+		const screenshots = ["storage-1", "storage-2"].map((storageId) => ({
+			type: "mention" as const,
+			attrs: {
+				type: MentionItemType.UPLOAD_FILE,
+				data: {
+					file_id: storageId,
+					file_name: `${storageId}.png`,
+					file_extension: "png",
+					file_path: storageId,
+					file_size: 3,
+					is_html_screenshot: true,
+					storage_id: storageId,
+				},
+			},
+		}))
+
+		await new MentionItemsProcessor().processMentionItems(
+			{ type: "doc", content: screenshots },
+			screenshots,
+			"project-1",
+			"topic-1",
+		)
+
+		expect(mocks.uploadStoredScreenshots).toHaveBeenCalledTimes(1)
+		expect(mocks.uploadStoredScreenshots).toHaveBeenCalledWith(
+			[
+				{ storageId: "storage-1", fileName: "storage-1.png" },
+				{ storageId: "storage-2", fileName: "storage-2.png" },
+			],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
 	})
 })

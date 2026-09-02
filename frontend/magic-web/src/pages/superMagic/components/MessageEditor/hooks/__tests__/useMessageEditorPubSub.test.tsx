@@ -26,9 +26,10 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils/drag", () => ({
 }))
 
 const storeScreenshot = vi.hoisted(() => vi.fn())
+const stageStoredScreenshot = vi.hoisted(() => vi.fn())
 
 vi.mock("../../services/HtmlScreenshotUploadService", () => ({
-	htmlScreenshotUploadService: { storeScreenshot },
+	htmlScreenshotUploadService: { storeScreenshot, stageStoredScreenshot },
 }))
 
 /** Creates the minimum active editor surface required by the PubSub adapter. */
@@ -65,11 +66,18 @@ describe("useMessageEditorPubSub", () => {
 	beforeEach(() => {
 		resetHtmlScreenshotTargetStore()
 		storeScreenshot.mockReset()
+		stageStoredScreenshot.mockReset()
 		storeScreenshot.mockResolvedValue({
 			storageId: "screenshot-storage-id",
 			fileName: "screenshot.png",
 			fileSize: 3,
 			file: new File(["png"], "screenshot.png", { type: "image/png" }),
+		})
+		stageStoredScreenshot.mockResolvedValue({
+			storageId: "screenshot-storage-id",
+			fileName: "screenshot.png",
+			fileSize: 3,
+			fileKey: "temporary/snowflake-1",
 		})
 	})
 
@@ -147,6 +155,7 @@ describe("useMessageEditorPubSub", () => {
 			fileName: "html-screenshot-a2296b4a.png",
 		})
 		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
+		expect(stageStoredScreenshot).not.toHaveBeenCalled()
 		expect(getHtmlScreenshotMention("div.cover-surface")?.data).toMatchObject({
 			storage_id: "old-storage-id",
 		})
@@ -192,8 +201,17 @@ describe("useMessageEditorPubSub", () => {
 		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
 			captureId,
 			dataUrl: "data:image/png;base64,AA==",
+			stageUpload: true,
 		})
 		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
+		await vi.waitFor(() => expect(stageStoredScreenshot).toHaveBeenCalledTimes(1))
+		expect(stageStoredScreenshot).toHaveBeenCalledWith(
+			{
+				storageId: "screenshot-storage-id",
+				fileName: "screenshot.png",
+			},
+			"project-1",
+		)
 
 		pubsub.publish(PubSubEvents.Submit_Html_Multi_Selection, {
 			fileId: "file-1",

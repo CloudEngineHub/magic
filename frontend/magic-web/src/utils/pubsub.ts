@@ -216,7 +216,7 @@ export const PubSubEvents = {
 	Append_Suggestion_To_Editor: "PubSub_Append_Suggestion_To_Editor",
 	/** HTML 元素多选目标提交；由现有 Agent 话题链路消费。 */
 	Submit_Html_Multi_Selection: "PubSub_Submit_Html_Multi_Selection",
-	/** HTML 截图在确认目标后写入 IndexedDB 暂存，发送时再保存到话题附件。 */
+	/** HTML 区域截图确认后写入 IndexedDB 并预上传 OSS；发送时再 batch-save。 */
 	Prepare_Html_Screenshot: "PubSub_Prepare_Html_Screenshot",
 	/** 更新已插入的 HTML inspector-detail 节点的截图 mention。 */
 	Update_Html_Inspector_Screenshot: "PubSub_Update_Html_Inspector_Screenshot",

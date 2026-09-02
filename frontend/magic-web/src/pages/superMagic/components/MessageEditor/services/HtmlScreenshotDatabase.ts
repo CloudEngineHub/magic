@@ -30,11 +30,19 @@ class HtmlScreenshotDexie extends Dexie {
 	}
 }
 
+const SWEEP_INTERVAL_MS = 60 * 1000
+
 /** Small IndexedDB store keyed by capture id. */
 class HtmlScreenshotDatabase {
 	private db = new HtmlScreenshotDexie()
+	private lastSweepAt = 0
+
+	constructor() {
+		void this.deleteExpired()
+	}
 
 	async put(id: string, blob: Blob, retentionMs = DEFAULT_RETENTION_MS): Promise<void> {
+		await this.sweepExpiredIfDue()
 		const now = Date.now()
 		await this.db.images.put({
 			id,
@@ -59,10 +67,21 @@ class HtmlScreenshotDatabase {
 		await this.db.images.delete(id)
 	}
 
+	async deleteExpired(now = Date.now()): Promise<number> {
+		this.lastSweepAt = now
+		return this.db.images.where("expiresAt").below(now).delete()
+	}
+
+	private async sweepExpiredIfDue(now = Date.now()): Promise<void> {
+		if (now - this.lastSweepAt < SWEEP_INTERVAL_MS) return
+		await this.deleteExpired(now)
+	}
+
 	async reset(): Promise<void> {
 		this.db.close()
 		await Dexie.delete(DB_NAME)
 		this.db = new HtmlScreenshotDexie()
+		this.lastSweepAt = 0
 	}
 }
 
