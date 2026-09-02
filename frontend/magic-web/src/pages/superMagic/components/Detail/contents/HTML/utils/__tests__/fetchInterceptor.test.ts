@@ -97,6 +97,75 @@ describe("generateFetchInterceptorScript", () => {
 
 		expect(fetchSpy).toHaveBeenCalledWith("https://download.example.test/items/1", init)
 	})
+
+	it("requests a fresh URL after a cached signed URL expires", async () => {
+		const fetchSpy = vi.fn(async () => new Response(null, { status: 204 }))
+		window.fetch = fetchSpy as typeof window.fetch
+		let requestCount = 0
+		vi.spyOn(window, "postMessage").mockImplementation((message) => {
+			if (message.type !== "MAGIC_FETCH_URL_REQUEST") return
+			requestCount += 1
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					data: {
+						type: "MAGIC_FETCH_URL_RESPONSE",
+						requestId: message.requestId,
+						success: true,
+						url: `https://download.example.test/items/${requestCount}`,
+						expires_at:
+							requestCount === 1 ? "2000-01-01 00:00:00" : "2099-01-01 00:00:00",
+					},
+				}),
+			)
+		})
+
+		window.eval(generateFetchInterceptorScript())
+		await window.fetch("./items/1")
+		await window.fetch("./items/1")
+
+		expect(requestCount).toBe(2)
+		expect(fetchSpy).toHaveBeenNthCalledWith(
+			1,
+			"https://download.example.test/items/1",
+			undefined,
+		)
+		expect(fetchSpy).toHaveBeenNthCalledWith(
+			2,
+			"https://download.example.test/items/2",
+			undefined,
+		)
+	})
+
+	it("does not reuse a cached URL when expires_at is missing", async () => {
+		const fetchSpy = vi.fn(async () => new Response(null, { status: 204 }))
+		window.fetch = fetchSpy as typeof window.fetch
+		let requestCount = 0
+		vi.spyOn(window, "postMessage").mockImplementation((message) => {
+			if (message.type !== "MAGIC_FETCH_URL_REQUEST") return
+			requestCount += 1
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					data: {
+						type: "MAGIC_FETCH_URL_RESPONSE",
+						requestId: message.requestId,
+						success: true,
+						url: `https://download.example.test/items/${requestCount}`,
+					},
+				}),
+			)
+		})
+
+		window.eval(generateFetchInterceptorScript())
+		await window.fetch("./items/1")
+		await window.fetch("./items/1")
+
+		expect(requestCount).toBe(2)
+		expect(fetchSpy).toHaveBeenNthCalledWith(
+			2,
+			"https://download.example.test/items/2",
+			undefined,
+		)
+	})
 })
 
 describe("createKeyboardMessageHandler", () => {
