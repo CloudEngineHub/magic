@@ -6,6 +6,7 @@ import {
 	findActiveStickyIndex,
 	findNextStickyIndex,
 	getPrependedVirtualItemCount,
+	stabilizeVirtualMessageItems,
 } from "../virtual-message-items"
 
 function message(
@@ -319,5 +320,77 @@ describe("virtual message projection", () => {
 			collapsedPreviewLimit: 1,
 		})
 		expect(expanded.items.map((item) => item.key)).toContain("revoked-assistant-2")
+	})
+
+	it("reuses normal item objects when composing repeatedly", () => {
+		const normal = buildVirtualMessageProjection([
+			message("normal-user", "user"),
+			message("normal-assistant", "assistant"),
+		])
+
+		const first = composeVirtualMessageItems({
+			normalItems: normal.items,
+			revokedItems: [],
+			includeRevoked: false,
+			revokedPreviewExpanded: false,
+			collapsedPreviewLimit: 1,
+		})
+		const second = composeVirtualMessageItems({
+			normalItems: normal.items,
+			revokedItems: [],
+			includeRevoked: false,
+			revokedPreviewExpanded: false,
+			collapsedPreviewLimit: 1,
+		})
+
+		expect(second.items[0]).toBe(first.items[0])
+		expect(second.items[1]).toBe(first.items[1])
+	})
+
+	it("keeps unaffected normal items stable when revoked preview visibility changes", () => {
+		const normal = buildVirtualMessageProjection([
+			message("normal-user", "user"),
+			message("normal-assistant", "assistant"),
+		])
+		const revoked = buildVirtualMessageProjection([
+			message("revoked-user", "user"),
+			message("revoked-assistant-1", "assistant"),
+			message("revoked-assistant-2", "assistant"),
+		])
+
+		const collapsed = composeVirtualMessageItems({
+			normalItems: normal.items,
+			revokedItems: revoked.items,
+			firstRevokedUserKey: "revoked-user",
+			includeRevoked: true,
+			revokedPreviewExpanded: false,
+			collapsedPreviewLimit: 1,
+		})
+		const expanded = composeVirtualMessageItems({
+			normalItems: normal.items,
+			revokedItems: revoked.items,
+			firstRevokedUserKey: "revoked-user",
+			includeRevoked: true,
+			revokedPreviewExpanded: true,
+			collapsedPreviewLimit: 1,
+		})
+
+		expect(expanded.items[0]).toBe(collapsed.items[0])
+		expect(expanded.items[1]).toBe(collapsed.items[1])
+	})
+
+	it("reuses unchanged rows after a single message projection update", () => {
+		const firstNode = message("first", "assistant")
+		const secondNode = message("second", "assistant")
+		const initial = buildVirtualMessageProjection([firstNode, secondNode])
+		const updated = buildVirtualMessageProjection([
+			firstNode,
+			{ ...secondNode, content: "updated" },
+		])
+
+		const stable = stabilizeVirtualMessageItems(initial.items, updated.items)
+
+		expect(stable[0]).toBe(initial.items[0])
+		expect(stable[1]).toBe(updated.items[1])
 	})
 })

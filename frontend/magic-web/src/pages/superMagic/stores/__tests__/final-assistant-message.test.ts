@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { autorun } from "mobx"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
 import {
 	getMessageNodeKey,
@@ -423,9 +424,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		const store = createStore()
 
 		store.beginTopicExecution(TOPIC_ID)
-		store.initializeMessages(TOPIC_ID, [
-			createFinalEnvelope({ content: "historical final" }),
-		])
+		store.initializeMessages(TOPIC_ID, [createFinalEnvelope({ content: "historical final" })])
 
 		expect(store.hasPendingTopicExecution(TOPIC_ID)).toBe(true)
 		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("historical final")
@@ -526,6 +525,49 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expect(
 			(store.getRenderedMessageNode(SUPER_MESSAGE_ID, TOPIC_ID) as ProjectedNode).content,
 		).toBe("draft plus the complete canonical answer")
+	})
+
+	it("Final 视觉追平只唤醒同一 Topic + SuperMessage 的 observer", () => {
+		const store = createStore()
+		const otherSuperMessageId = "super-message-final-b"
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({ content: "draft canonical answer", seqId: "100" }),
+		)
+		// The second message has no render-only sidecar; it still subscribes to its own keyed Map entry.
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				superMessageId: otherSuperMessageId,
+				correlationId: "correlation-final-b",
+				appMessageId: "final-app-b",
+				content: "other canonical",
+				seqId: "101",
+			}),
+		)
+
+		let firstRuns = 0
+		let secondRuns = 0
+		const disposeFirst = autorun(() => {
+			firstRuns += 1
+			store.getRenderedMessageNode(SUPER_MESSAGE_ID, TOPIC_ID)
+		})
+		const disposeSecond = autorun(() => {
+			secondRuns += 1
+			store.getRenderedMessageNode(otherSuperMessageId, TOPIC_ID)
+		})
+		const initialFirstRuns = firstRuns
+		const initialSecondRuns = secondRuns
+
+		vi.advanceTimersByTime(16)
+
+		expect(firstRuns).toBeGreaterThan(initialFirstRuns)
+		expect(secondRuns).toBe(initialSecondRuns)
+		disposeFirst()
+		disposeSecond()
 	})
 
 	it("相同 seq 的重复 Final 不会打断正在进行的视觉追平", () => {

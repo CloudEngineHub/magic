@@ -100,6 +100,7 @@ function MessageList({
 						getScrollElement={getScrollElement}
 						virtualizerRef={virtualizerRef}
 						onVirtualizerChange={handleVirtualizerChange}
+						allowResizeStickySync={false}
 						stickyMessageClassName={stickyMessageClassName}
 						renderNode={({ item }) => {
 							const index = item.sourceIndex

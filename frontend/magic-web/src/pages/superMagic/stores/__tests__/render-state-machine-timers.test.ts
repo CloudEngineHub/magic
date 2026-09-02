@@ -210,7 +210,9 @@ function getProjectedNode(
 	store: SuperMagicStore,
 	superMessageId = SUPER_MESSAGE_A,
 ): ProjectedNode | undefined {
-	const node = store.getRenderedMessageNode(superMessageId)
+	// Render-state lookup is Topic-scoped; these helpers exercise the active Topic A unless a
+	// test explicitly uses the store API with another Topic.
+	const node = store.getRenderedMessageNode(superMessageId, TOPIC_A)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 

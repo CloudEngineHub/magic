@@ -5664,10 +5664,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| RawSuperMagicMessageNode
 			| undefined
 		if (!superMessageId) return canonical
-		const renderState = Array.from(this.finalRenderStates.values()).find(
-			(state) =>
-				state.superMessageId === superMessageId && (!topicId || state.topicId === topicId),
-		)
+		// MessageNode always supplies the Topic. Keyed lookup keeps each observer subscribed to
+		// its own Final visual sidecar instead of iterating the entire observable Map.
+		const renderState = topicId
+			? this.finalRenderStates.get(`${topicId}\u0000${superMessageId}`)
+			: undefined
 		return renderState?.visibleNode || canonical
 	}
 

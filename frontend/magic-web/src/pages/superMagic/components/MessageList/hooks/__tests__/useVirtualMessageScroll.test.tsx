@@ -562,6 +562,56 @@ describe("useVirtualMessageScroll", () => {
 		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, { align: "end" })
 	})
 
+	it("does not follow repeated static measurement growth when follow output is disabled", () => {
+		const viewport = createViewport({ scrollTop: 700, clientHeight: 300, scrollHeight: 1000 })
+		const virtualizer = createVirtualizer(viewport, 12)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(12),
+				topicKey: "topic-1",
+				allowFollowOutput: false,
+			}),
+		)
+
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+		act(() => result.current.onVirtualizerChange(virtualizer, false))
+		vi.mocked(virtualizer.scrollToIndex).mockClear()
+
+		for (const scrollHeight of [1100, 1200, 1300]) {
+			setScrollHeight(viewport, scrollHeight)
+			act(() => result.current.onVirtualizerChange(virtualizer, false))
+		}
+
+		expect(virtualizer.scrollToIndex).not.toHaveBeenCalled()
+	})
+
+	it("keeps explicit scroll-to-bottom available when follow output is disabled", () => {
+		const viewport = createViewport({ scrollTop: 0, clientHeight: 300, scrollHeight: 1000 })
+		const virtualizer = createVirtualizer(viewport, 12)
+
+		const { result } = renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: items(12),
+				topicKey: "topic-1",
+				allowFollowOutput: false,
+			}),
+		)
+
+		act(() => result.current.scrollToBottom("auto"))
+
+		expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, {
+			align: "end",
+			smooth: false,
+		})
+	})
+
 	it("stops following as soon as an upward wheel starts near the bottom", () => {
 		const viewport = createViewport({ scrollTop: 699, clientHeight: 300, scrollHeight: 1000 })
 		const virtualizer = createVirtualizer(viewport, 12)

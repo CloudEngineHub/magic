@@ -33,12 +33,14 @@ import {
 } from "../virtual-message-items"
 import type { MessageListScrollAdapter } from "../message-list-scroll-adapter"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
-import { useWhyDidYouUpdate } from "ahooks"
+import { useMemoizedFn, useWhyDidYouUpdate } from "ahooks"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
 const FOOTER_ROW_KEY = "__message-list-footer__"
 const STICKY_TOP_CSS_VARIABLE = "--message-group-sticky-top"
 const NO_STICKY_INDEX = -1
+/** Let Virtua finish a burst of initial measurements before recomputing sticky ownership. */
+const STICKY_MEASUREMENT_SETTLE_MS = 100
 
 function hasTerminalToolStatus(node: Record<string, unknown> | undefined) {
 	if (!node) return false
@@ -79,6 +81,8 @@ export interface VirtualMessageListProps {
 	limitReached?: boolean
 	virtualizerRef?: MutableRefObject<MessageListScrollAdapter | null>
 	onVirtualizerChange?: (instance: MessageListScrollAdapter, sync: boolean) => void
+	/** Allow canvas measurement changes to trigger sticky recomputation for streaming content. */
+	allowResizeStickySync?: boolean
 }
 
 const StickyIndexContext = createContext(NO_STICKY_INDEX)
@@ -331,6 +335,7 @@ function VirtualMessageListInner({
 	limitReached,
 	virtualizerRef,
 	onVirtualizerChange,
+	allowResizeStickySync = true,
 }: VirtualMessageListProps) {
 	const handleRef = useRef<VirtualizerHandle | null>(null)
 	const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -340,6 +345,14 @@ function VirtualMessageListInner({
 	const processedSequenceRef = useRef("")
 	const shiftRef = useRef(false)
 	const stickyTopValueRef = useRef<number | null>(null)
+	const stickySyncFrameRef = useRef<number | null>(null)
+	const stickySyncPendingRef = useRef(false)
+	const stickySyncDebounceRef = useRef<number | null>(null)
+	const stickySyncGenerationRef = useRef(0)
+	const stickyMeasurementSettlingRef = useRef(false)
+	const stickyInitialMeasurementSettledRef = useRef(false)
+	const stickyLastScrollOffsetRef = useRef<number | null>(null)
+	const lastStickySequenceSignatureRef = useRef<string | null>(null)
 	const [activeStickyIndex, setActiveStickyIndex] = useState(NO_STICKY_INDEX)
 
 	const stickyTopOffset = stickyTopOffsetProp ?? getStickyMessageTopOffset(isMobile)
@@ -372,6 +385,10 @@ function VirtualMessageListInner({
 		processedSequenceRef.current = ""
 		shiftRef.current = false
 		stickyTopValueRef.current = null
+		stickyMeasurementSettlingRef.current = false
+		stickyInitialMeasurementSettledRef.current = false
+		stickyLastScrollOffsetRef.current = null
+		lastStickySequenceSignatureRef.current = null
 	}
 
 	const sequenceSignature = items.map((item) => item.key).join("\u0000")
@@ -458,12 +475,13 @@ function VirtualMessageListInner({
 	 * so the boundary between pinned and released has to stay where the two positions coincide:
 	 * the row's own natural slot on the park line.
 	 */
-	const syncSticky = useCallback(() => {
+	const runStickySync = useMemoizedFn(() => {
 		const handle = handleRef.current
 		const canvas = canvasRef.current
 		if (!handle || !canvas) return
 
 		const scrollOffset = handle.scrollOffset
+		stickyLastScrollOffsetRef.current = scrollOffset
 		// Probing at the park line (not the viewport top) makes a row take over exactly when it
 		// would otherwise scroll above that line, which is where native sticky would clamp it.
 		const startIndex = handle.findItemIndex(scrollOffset + stickyTopOffset)
@@ -512,11 +530,131 @@ function VirtualMessageListInner({
 			canvas.style.setProperty(STICKY_TOP_CSS_VARIABLE, `${top}px`)
 		}
 		setActiveStickyIndex((previous) => (previous === activeIndex ? previous : activeIndex))
-	}, [stickyTopOffset])
+	})
 
-	const handleScroll = useCallback(() => {
-		syncSticky()
-	}, [syncSticky])
+	const scheduleStickySettle = useMemoizedFn(() => {
+		if (stickySyncDebounceRef.current !== null) {
+			window.clearTimeout(stickySyncDebounceRef.current)
+		}
+		const generation = ++stickySyncGenerationRef.current
+		stickySyncDebounceRef.current = window.setTimeout(() => {
+			stickySyncDebounceRef.current = null
+			if (generation !== stickySyncGenerationRef.current) return
+
+			// Virtua may emit scroll and resize callbacks on successive measurement frames while the
+			// initial canvas is settling. End that quiet window first; only one pending calculation is
+			// allowed to run after the burst, so initialization cannot become a frame-by-frame loop.
+			if (stickyMeasurementSettlingRef.current) {
+				stickyInitialMeasurementSettledRef.current = true
+			}
+			stickyMeasurementSettlingRef.current = false
+			if (stickySyncFrameRef.current !== null || !stickySyncPendingRef.current) return
+			stickySyncPendingRef.current = false
+			runStickySync()
+		}, STICKY_MEASUREMENT_SETTLE_MS)
+	})
+
+	/**
+	 * Keep the first request synchronous so scroll/layout callers see the existing sticky
+	 * response immediately. Once that leading pass has scheduled a frame, all other callers share
+	 * one pending follow-up; this prevents ResizeObserver and Virtua callbacks from creating a
+	 * trailing throttle loop while measurements settle. The latest geometry is read at frame time.
+	 */
+	const syncSticky = useMemoizedFn(() => {
+		if (stickyMeasurementSettlingRef.current) {
+			// Once a ResizeObserver burst starts, Virtua may emit scroll callbacks for every
+			// measurement frame. Keep those callbacks pending until the burst is quiet instead of
+			// turning each frame into another synchronous geometry read.
+			stickySyncPendingRef.current = true
+			scheduleStickySettle()
+			return
+		}
+
+		// An explicit scroll supersedes a delayed measurement request; keeping both would make the
+		// same geometry run once immediately and once again after the settle window.
+		if (stickySyncDebounceRef.current !== null) {
+			window.clearTimeout(stickySyncDebounceRef.current)
+			stickySyncDebounceRef.current = null
+			stickySyncGenerationRef.current += 1
+		}
+		stickySyncPendingRef.current = false
+		if (stickySyncFrameRef.current !== null) {
+			stickySyncPendingRef.current = true
+			return
+		}
+
+		runStickySync()
+		if (typeof requestAnimationFrame !== "function") return
+		stickySyncFrameRef.current = requestAnimationFrame(() => {
+			stickySyncFrameRef.current = null
+			// A measurement request can arm the settle timer while this frame is pending. Once the
+			// frame consumes that request, cancel the timer so it cannot replay the same geometry.
+			if (!stickyMeasurementSettlingRef.current && stickySyncDebounceRef.current !== null) {
+				window.clearTimeout(stickySyncDebounceRef.current)
+				stickySyncDebounceRef.current = null
+				stickySyncGenerationRef.current += 1
+			}
+			if (!stickySyncPendingRef.current) return
+			stickySyncPendingRef.current = false
+			runStickySync()
+		})
+	})
+
+	/**
+	 * ResizeObserver callbacks describe a measurement burst, not a user gesture. Debouncing this
+	 * path keeps Virtua's projected height from feeding one sticky calculation per settling frame;
+	 * the final request is still handed through the pending-frame gate when a scroll frame exists.
+	 */
+	const scheduleStickySync = useMemoizedFn(() => {
+		// Only the first canvas measurement burst gates same-offset scroll callbacks. Later
+		// resizes still debounce their own geometry work but must not delay user scrolling.
+		if (!stickyInitialMeasurementSettledRef.current) {
+			stickyMeasurementSettlingRef.current = true
+		}
+		stickySyncPendingRef.current = true
+		scheduleStickySettle()
+	})
+
+	useEffect(() => {
+		return () => {
+			if (stickySyncFrameRef.current !== null) {
+				cancelAnimationFrame(stickySyncFrameRef.current)
+				stickySyncFrameRef.current = null
+			}
+			if (stickySyncDebounceRef.current !== null) {
+				window.clearTimeout(stickySyncDebounceRef.current)
+				stickySyncDebounceRef.current = null
+			}
+			stickySyncGenerationRef.current += 1
+			stickySyncPendingRef.current = false
+		}
+	}, [syncSticky, scheduleStickySettle])
+
+	const handleScroll = useCallback(
+		(nextOffset?: number) => {
+			if (stickyMeasurementSettlingRef.current) {
+				const scrollOffset = nextOffset ?? handleRef.current?.scrollOffset ?? 0
+				if (scrollOffset === stickyLastScrollOffsetRef.current) {
+					// A repeated offset during a measurement burst is Virtua initialization noise. Keep
+					// it inside the settle window; a real user scroll to a new offset still gets the
+					// normal leading sync below.
+					stickySyncPendingRef.current = true
+					scheduleStickySettle()
+					return
+				}
+				stickyMeasurementSettlingRef.current = false
+				stickyInitialMeasurementSettledRef.current = true
+				if (stickySyncDebounceRef.current !== null) {
+					window.clearTimeout(stickySyncDebounceRef.current)
+					stickySyncDebounceRef.current = null
+					stickySyncGenerationRef.current += 1
+				}
+				stickySyncPendingRef.current = false
+			}
+			syncSticky()
+		},
+		[scheduleStickySettle, syncSticky],
+	)
 
 	const notifyVirtualizerChange = useCallback(() => {
 		onVirtualizerChange?.(adapter, false)
@@ -528,14 +666,16 @@ function VirtualMessageListInner({
 		const canvas = canvasRef.current
 		if (!canvas || typeof ResizeObserver === "undefined") return undefined
 		const observer = new ResizeObserver(() => {
-			syncSticky()
+			if (allowResizeStickySync) scheduleStickySync()
 			notifyVirtualizerChange()
 		})
 		observer.observe(canvas)
 		return () => observer.disconnect()
-	}, [notifyVirtualizerChange, syncSticky])
+	}, [allowResizeStickySync, notifyVirtualizerChange, scheduleStickySync])
 
 	useLayoutEffect(() => {
+		if (lastStickySequenceSignatureRef.current === sequenceSignature) return
+		lastStickySequenceSignatureRef.current = sequenceSignature
 		syncSticky()
 	}, [sequenceSignature, syncSticky])
 
@@ -594,22 +734,22 @@ function VirtualMessageListInner({
 		useMobileStickyOverlay,
 	])
 
-	// useWhyDidYouUpdate("VirtualMessageListInner", {
-	// 	exportMode,
-	// 	footer,
-	// 	isMobile,
-	// 	items,
-	// 	limitReached,
-	// 	onToggleSelect,
-	// 	renderNode,
-	// 	selectedKeys,
-	// 	stickyMessageClassName,
-	// 	topicId,
-	// 	useMobileStickyOverlay,
-	// })
+	useWhyDidYouUpdate("VirtualMessageListInner", {
+		exportMode,
+		footer,
+		isMobile,
+		items,
+		limitReached,
+		onToggleSelect,
+		renderNode,
+		selectedKeys,
+		stickyMessageClassName,
+		topicId,
+		useMobileStickyOverlay,
+	})
 
 	return (
-		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full">
+		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full" style={{height: "100px"}}>
 			{viewport ? (
 				<StickyIndexContext.Provider value={activeStickyIndex}>
 					<Virtualizer

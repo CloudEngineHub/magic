@@ -59,13 +59,14 @@ import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
 import {
 	buildVirtualMessageProjection,
 	composeVirtualMessageItems,
+	stabilizeVirtualMessageItems,
 	type VirtualMessageItem,
 } from "./virtual-message-items"
 import { VirtualMessageList } from "./components/VirtualMessageList"
 import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
-import { useWhyDidYouUpdate } from "ahooks"
+import { useStableArrayReference } from "./hooks/useStableArrayReference"
 
 export { MessageListProvider }
 
@@ -207,6 +208,7 @@ const MessageList = observer(
 			main: new MessageProjectionCache(),
 			revoked: new MessageProjectionCache(),
 		})
+		const normalVirtualMessageItemsRef = useRef<Array<VirtualMessageItem>>([])
 		const canAnimateNewMessagesRef = useRef(false)
 		const currentTopicKeyRef = useRef<string>("")
 
@@ -254,19 +256,23 @@ const MessageList = observer(
 			selectedTopic?.chat_topic_id,
 		])
 
-		const mainDisplayData = useMemo(() => {
+		const filteredMainDisplayData = useMemo(() => {
 			return revokedProjection.mainMessages.filter(
 				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
 			)
 		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.mainMessages])
+		// Filtering creates a fresh array even when every projected message is unchanged. Keep the
+		// previous reference so downstream conversion and virtualization remain quiet on parent renders.
+		const mainDisplayData = useStableArrayReference(filteredMainDisplayData)
 
-		const revokedBranchData = useMemo(() => {
+		const filteredRevokedBranchData = useMemo(() => {
 			// Failed optimistic messages stay hidden while the selected revoked branch is edited;
 			// Assistant and Tool descendants remain together regardless of their own status.
 			return revokedProjection.revokedBranchMessages.filter(
 				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
 			)
 		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.revokedBranchMessages])
+		const revokedBranchData = useStableArrayReference(filteredRevokedBranchData)
 
 		const currentTopicKey = selectedTopic?.chat_topic_id || ""
 		if (currentTopicKeyRef.current !== currentTopicKey) {
@@ -276,6 +282,7 @@ const MessageList = observer(
 			projectionCachesRef.current.revoked.clear()
 			currentTopicKeyRef.current = currentTopicKey
 			renderedMessageKeysRef.current = new Set()
+			normalVirtualMessageItemsRef.current = []
 			canAnimateNewMessagesRef.current = false
 		}
 		const topicMembershipRevision =
@@ -289,10 +296,10 @@ const MessageList = observer(
 			[mainDisplayData, revokedBranchData],
 		)
 
-		useWhyDidYouUpdate("MessageList", {
-			revokedBranchData,
-			mainDisplayData
-		})
+		// useWhyDidYouUpdate("MessageList", {
+		// 	revokedBranchData,
+		// 	mainDisplayData
+		// })
 
 		const { messages, messageKeys, messageTurnGroups, normalVirtualMessageItems } =
 			useMemo(() => {
@@ -305,11 +312,16 @@ const MessageList = observer(
 					projectionVersion,
 				)
 				const projection = buildVirtualMessageProjection(messages)
+				const stableItems = stabilizeVirtualMessageItems(
+					normalVirtualMessageItemsRef.current,
+					projection.items,
+				)
+				normalVirtualMessageItemsRef.current = stableItems
 				return {
 					messages,
 					messageKeys: projection.messageKeys,
 					messageTurnGroups: projection.messageTurnGroups,
-					normalVirtualMessageItems: projection.items,
+					normalVirtualMessageItems: stableItems,
 				}
 			}, [mainDisplayData, projectionVersion])
 
@@ -503,6 +515,11 @@ const MessageList = observer(
 					return handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
 				},
 				minTopDistance: historyLoadThresholdPx,
+				allowFollowOutput:
+					isStreamLoading ||
+					Boolean(showLoading) ||
+					currentTopicStatus === TaskStatus.RUNNING ||
+					shouldShowBottomLoading,
 			})
 
 		const checkIsLastMessage = useMemoizedFn(createCheckIsLastMessage(messages))
@@ -907,6 +924,12 @@ const MessageList = observer(
 										limitReached={exportLimitReached}
 										virtualizerRef={virtualizerRef}
 										onVirtualizerChange={onVirtualizerChange}
+										allowResizeStickySync={
+											isStreamLoading ||
+											Boolean(showLoading) ||
+											currentTopicStatus === TaskStatus.RUNNING ||
+											shouldShowBottomLoading
+										}
 									/>
 								) : (
 									<Empty />
