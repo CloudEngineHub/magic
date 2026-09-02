@@ -715,9 +715,9 @@
         "zh_CN": "调用工具",
         "en_US": "Use Tool"
     },
-    "call_simple_agent": {
+    "call_assistant": {
         "zh_CN": "调用助理",
-        "en_US": "Consult Agent"
+        "en_US": "Consult Assistant"
     },
     "create_file_share": {
         "zh_CN": "创建文件分享",

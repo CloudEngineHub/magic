@@ -248,8 +248,9 @@ from app.tools.scheduled_task import (
     ScheduledTaskUpdate,
 )
 
-# Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
+# Remote 工具集（将 magic-service mention 中的 tool / assistant 以本地工具形态转发）
 from app.tools.remote import (
+    CallAssistant,
     CallSimpleAgent,
     CallSimpleTool,
 )
@@ -494,6 +495,7 @@ __all__ = [
     "ScheduledTaskUpdate",
 
     # Remote 工具集
+    "CallAssistant",
     "CallSimpleAgent",
     "CallSimpleTool",
 ]
