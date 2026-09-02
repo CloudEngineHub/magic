@@ -16,6 +16,7 @@ import {
 	createFrameGridLines,
 	isManagedOverlayNode,
 	localBoxToAbsoluteBox,
+	updateFrameGridLineStrokeWidth,
 	updateFrameGridLines,
 } from "../frame/FrameEditorShared"
 import { syncNodeTransformRelativeTo } from "../../shared/geometry/nodeTransform"
@@ -274,6 +275,7 @@ export class CropRenderer {
 			...gridLines,
 			cropAreaHitProxy,
 		)
+		this.updateGridLineStrokeWidth()
 		this.canvas.controlsLayer.add(this.overlayGroup)
 
 		// 4. Transformer（只显示4个角点anchor，但上下左右边缘也支持编辑）
@@ -519,6 +521,18 @@ export class CropRenderer {
 			CROP_GRID_LINE_NAME,
 			DRAW_CONFIG.GRID_DIVISIONS,
 		)
+	}
+
+	private updateGridLineStrokeWidth(): void {
+		updateFrameGridLineStrokeWidth(
+			this.overlayGroup,
+			CROP_GRID_LINE_NAME,
+			this.canvas.stage.scaleX(),
+		)
+	}
+
+	public syncViewportScale(): void {
+		this.updateGridLineStrokeWidth()
 	}
 
 	/**

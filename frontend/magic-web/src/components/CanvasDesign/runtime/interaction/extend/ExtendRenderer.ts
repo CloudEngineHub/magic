@@ -18,6 +18,7 @@ import {
 	createFrameGridLines,
 	isManagedOverlayNode,
 	localBoxToAbsoluteBox,
+	updateFrameGridLineStrokeWidth,
 	updateFrameGridLines,
 } from "../frame/FrameEditorShared"
 import { applyExtendAnchorCursor, applyExtendTransformerActiveCursor } from "./extendAnchorCursor"
@@ -212,6 +213,7 @@ export class ExtendRenderer {
 			this.frameBox,
 			...gridLines,
 		)
+		this.updateGridLineStrokeWidth()
 		this.canvas.controlsLayer.add(this.overlayGroup)
 		this.createFrameLabels()
 		this.updateFrameLabels()
@@ -394,10 +396,19 @@ export class ExtendRenderer {
 			this.canvas.controlsLayer,
 		)
 		this.ensureImageProxyWithinFrame()
+		this.updateGridLineStrokeWidth()
 		this.frameTransformer?.forceUpdate()
 		this.imageTransformer?.forceUpdate()
 		this.updateFrameLabels()
 		this.canvas.controlsLayer.batchDraw()
+	}
+
+	private updateGridLineStrokeWidth(): void {
+		updateFrameGridLineStrokeWidth(
+			this.overlayGroup,
+			EXTEND_GRID_LINE_NAME,
+			this.canvas.stage.scaleX(),
+		)
 	}
 
 	public getBoundingRect(): { x: number; y: number; width: number; height: number } | null {
