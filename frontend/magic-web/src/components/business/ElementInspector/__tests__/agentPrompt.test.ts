@@ -96,6 +96,7 @@ describe("HTML inspector agent prompt", () => {
 		const inspectorDetail = content.content?.[3]?.content?.[0]
 		expect(inspectorDetail?.type).toBe("inspector-detail")
 		expect(inspectorDetail?.attrs?.screenshotMention).toBeUndefined()
+		expect(inspectorDetail?.attrs?.targetId).toBe("#hero")
 		expect(inspectorDetail?.attrs?.textContent).toBe("Hero")
 	})
 
@@ -126,6 +127,7 @@ describe("HTML inspector agent prompt", () => {
 		expect(detail?.attrs).toMatchObject({
 			selector: "section.hero > h1",
 			textContent: "Welcome",
+			targetId: "target-1",
 		})
 		expect(JSON.parse(detail?.attrs?.domContext ?? "{}")).toEqual({
 			parentSelector: "section.hero",
@@ -170,5 +172,6 @@ describe("HTML inspector agent prompt", () => {
 
 		const detail = content.content?.[3]?.content?.[0]
 		expect(detail?.attrs?.screenshotMention).toBeUndefined()
+		expect(detail?.attrs?.targetId).toBe("target-1")
 	})
 })

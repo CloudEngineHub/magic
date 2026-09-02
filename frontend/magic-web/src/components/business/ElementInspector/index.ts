@@ -23,6 +23,7 @@ export type {
 export { INSPECTOR_MSG } from "./types"
 export {
 	buildHtmlMultiSelectionRequest,
+	createHtmlElementCaptureId,
 	createHtmlSelectionTarget,
 	getHtmlElementLabel,
 	getHtmlScreenshotFileName,

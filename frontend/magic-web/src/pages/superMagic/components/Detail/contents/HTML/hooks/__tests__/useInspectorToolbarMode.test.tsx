@@ -650,4 +650,58 @@ describe("useInspectorToolbarMode", () => {
 			pubsub.unsubscribe(PubSubEvents.Submit_Html_Multi_Selection, submitListener)
 		}
 	})
+
+	it("confirms an element screenshot under a unique capture id", () => {
+		const selectedElement = createInfo()
+		const fileInfo = {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+		}
+		const inspector = {
+			active: false,
+			toggle: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			hoveredElement: null,
+			selectedElement: null,
+			clearSelection: vi.fn(),
+			setTrackedSelectors: vi.fn(),
+			trackedRects: {},
+		} as unknown as ReturnType<typeof useElementInspector>
+		vi.mocked(inspector.start).mockImplementation(() => {
+			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement = null
+		})
+		const prepareScreenshot = vi.fn()
+		pubsub.subscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
+		const { result, rerender } = renderHook(() =>
+			useInspectorToolbarMode(inspector, (key) => key, fileInfo),
+		)
+
+		try {
+			act(() => result.current.startInAppendMode())
+			;(inspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
+				selectedElement
+			rerender()
+			act(() =>
+				result.current.attachElementScreenshot(selectedElement.selector, {
+					dataUrl: "data:image/png;base64,new-shot",
+					rect: selectedElement.rect,
+				}),
+			)
+			act(() => result.current.setDraftInstruction("重新换个背景"))
+			act(() => result.current.confirmTarget())
+
+			expect(result.current.pendingTargets[0]?.id).toMatch(/^element:#hero:\d+:\d+$/)
+			expect(result.current.pendingTargets[0]?.id).not.toBe(selectedElement.selector)
+			expect(prepareScreenshot).toHaveBeenCalledWith(
+				expect.objectContaining({
+					targetId: result.current.pendingTargets[0]?.id,
+					dataUrl: "data:image/png;base64,new-shot",
+				}),
+			)
+		} finally {
+			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
+		}
+	})
 })

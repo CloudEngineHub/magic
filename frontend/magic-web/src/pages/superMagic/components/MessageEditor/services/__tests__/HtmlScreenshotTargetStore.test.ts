@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import {
+	clearHtmlScreenshotMentionMemory,
 	forgetHtmlScreenshotByStorageId,
 	getHtmlScreenshotMention,
 	resetHtmlScreenshotTargetStore,
@@ -40,8 +41,10 @@ describe("HtmlScreenshotTargetStore", () => {
 
 	it("hydrates a mention from persisted target metadata", () => {
 		setHtmlScreenshotMention("element:#hero:1", mention)
-		// Simulate a new session that only has persisted metadata.
+		clearHtmlScreenshotMentionMemory()
+
 		const restored = getHtmlScreenshotMention("element:#hero:1")
+		expect(restored).not.toBe(mention)
 		expect(restored?.data).toMatchObject({
 			storage_id: "storage-1",
 			file_name: "hero.png",

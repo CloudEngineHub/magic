@@ -4,6 +4,7 @@ import MagicModal from "@/components/base/MagicModal"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	buildHtmlMultiSelectionRequest,
+	createHtmlElementCaptureId,
 	createHtmlSelectionTarget,
 	getHtmlScreenshotFileName,
 	upsertHtmlSelectionTarget,
@@ -60,6 +61,7 @@ export function useInspectorToolbarMode(
 	const exitRequestRef = useRef<Promise<boolean> | null>(null)
 	const previousFileIdRef = useRef(fileInfo?.fileId)
 	const quickSelectionSequenceRef = useRef(0)
+	const elementCaptureSequenceRef = useRef(0)
 	const quickSelectionRef = useRef<{
 		selector: string
 		targetId: string
@@ -114,13 +116,16 @@ export function useInspectorToolbarMode(
 
 		const info = selectedElement
 		if (modeRef.current === "quickSelection") {
-			// Insert the inspector node immediately. The screenshot is prepared in the
-			// background and updates this node through a separate editor event.
+			// Insert the inspector node immediately. The screenshot is stored by
+			// targetId; the editor node is not rewritten.
 			if (!quickSelectionRef.current) {
 				quickSelectionSequenceRef.current += 1
 				quickSelectionRef.current = {
 					selector: info.selector,
-					targetId: `element:${info.selector}:${Date.now()}:${quickSelectionSequenceRef.current}`,
+					targetId: createHtmlElementCaptureId(
+						info.selector,
+						quickSelectionSequenceRef.current,
+					),
 					screenshotRequested: false,
 				}
 				pubsub.publish(
@@ -270,9 +275,14 @@ export function useInspectorToolbarMode(
 
 	const attachElementScreenshot = useCallback(
 		(selector: string, screenshot: HtmlSelectionScreenshot) => {
+			elementCaptureSequenceRef.current += 1
+			const captureId = createHtmlElementCaptureId(
+				selector,
+				elementCaptureSequenceRef.current,
+			)
 			setActiveTarget((target) =>
 				target?.kind === "element" && target.info.selector === selector
-					? { ...target, screenshot }
+					? { ...target, id: captureId, screenshot }
 					: target,
 			)
 			setPendingTargets((targets) => {
@@ -282,7 +292,7 @@ export function useInspectorToolbarMode(
 						return target
 					}
 					changed = true
-					return { ...target, screenshot }
+					return { ...target, id: captureId, screenshot }
 				})
 				return changed ? next : targets
 			})
@@ -328,6 +338,16 @@ export function useInspectorToolbarMode(
 		const confirmedTarget = {
 			...activeTarget,
 			instruction: draftInstruction.trim(),
+			...(activeTarget.kind === "element" &&
+			activeTarget.screenshot &&
+			!activeTarget.id.startsWith(`element:${activeTarget.info.selector}:`)
+				? {
+						id: createHtmlElementCaptureId(
+							activeTarget.info.selector,
+							(elementCaptureSequenceRef.current += 1),
+						),
+					}
+				: {}),
 		}
 		setPendingTargets((targets) => upsertHtmlSelectionTarget(targets, confirmedTarget))
 		if (
@@ -343,11 +363,15 @@ export function useInspectorToolbarMode(
 				onSuccess: (mention) => {
 					if (confirmedTarget.kind !== "screenshot") return
 					setPendingTargets((targets) =>
-						targets.map((target) =>
-							target.id === confirmedTarget.id
-								? { ...target, screenshot: { ...target.screenshot, mention } }
-								: target,
-						),
+						targets.map((target) => {
+							if (target.id !== confirmedTarget.id || target.kind !== "screenshot") {
+								return target
+							}
+							return {
+								...target,
+								screenshot: { ...target.screenshot, mention },
+							}
+						}),
 					)
 				},
 			})

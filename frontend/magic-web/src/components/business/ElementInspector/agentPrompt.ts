@@ -131,8 +131,9 @@ function buildInspectorDetailNode(
 	info: InspectedElementInfo,
 	title: string,
 	screenshotMention?: TiptapMentionAttributes | null,
+	targetId?: string,
 ): JSONContent {
-	const content = buildAgentPromptContent(info, title, undefined, screenshotMention)
+	const content = buildAgentPromptContent(info, title, undefined, screenshotMention, targetId)
 	return content.content?.[0]?.content?.[0] ?? { type: "text", text: info.tagName }
 }
 
@@ -166,6 +167,7 @@ function buildInspectorDetailNodeFromTarget(
 			elementHtml: target.elementHtml ?? "",
 			selectorMatchCount: -1,
 			screenshotMention,
+			...(target.id ? { targetId: target.id } : {}),
 		},
 	}
 }
@@ -224,7 +226,7 @@ export function buildHtmlMultiSelectionPromptContent(
 		if (info) {
 			content.push({
 				type: "paragraph",
-				content: [buildInspectorDetailNode(info, title)],
+				content: [buildInspectorDetailNode(info, title, undefined, target.id)],
 			})
 		} else {
 			content.push({

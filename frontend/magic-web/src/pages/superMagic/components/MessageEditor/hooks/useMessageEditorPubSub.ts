@@ -74,11 +74,11 @@ function safeEditorFocus(editor: Editor | null) {
 	})
 }
 
-/** Keep an inserted inspector target visibly selected instead of leaving the caret after it. */
-function insertInspectorNodeAndSelect(editor: Editor, node: JSONContent) {
+/** Insert an inspector chip and leave the caret after it for continued typing. */
+function insertInspectorNode(editor: Editor, node: JSONContent) {
 	const position = editor.state.selection.from
 	const inserted = editor.commands.insertContent(node)
-	if (inserted) editor.commands.setNodeSelection(position)
+	if (inserted) editor.commands.setTextSelection(position + 1)
 	return inserted
 }
 
@@ -155,55 +155,60 @@ function useMessageEditorPubSub({
 	onSendCurrentContent,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
-	const preparedScreenshotMentionsRef = useRef(new Map<string, TiptapMentionAttributes>())
+	const preparedScreenshotMentionsRef = useRef(
+		new Map<string, { dataUrl: string; mention: TiptapMentionAttributes }>(),
+	)
 	const preparingScreenshotPromisesRef = useRef(
-		new Map<string, Promise<TiptapMentionAttributes>>(),
+		new Map<string, { dataUrl: string; promise: Promise<TiptapMentionAttributes> }>(),
 	)
 
 	const prepareScreenshot = useMemoizedFn(
 		(targetId: string, dataUrl: string, fileName: string) => {
 			const prepared = preparedScreenshotMentionsRef.current.get(targetId)
-			if (prepared) return Promise.resolve(prepared)
+			if (prepared?.dataUrl === dataUrl) return Promise.resolve(prepared.mention)
 
 			const preparing = preparingScreenshotPromisesRef.current.get(targetId)
-			if (preparing) return preparing
+			if (preparing?.dataUrl === dataUrl) return preparing.promise
 
 			const promise = (async () => {
-				const storedScreenshot = await htmlScreenshotUploadService.storeScreenshot({
-					dataUrl,
-					fileName,
-				})
 				try {
-					const mention: TiptapMentionAttributes = {
-						type: MentionItemType.UPLOAD_FILE,
-						data: {
-							file_id: storedScreenshot.storageId,
-							file_name: storedScreenshot.fileName,
-							file_path: storedScreenshot.storageId,
-							file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
-							file_size: storedScreenshot.fileSize,
-							is_hidden: true,
-							is_html_screenshot: true,
-							storage_id: storedScreenshot.storageId,
-							upload_status: "done",
-						},
+					const storedScreenshot = await htmlScreenshotUploadService.storeScreenshot({
+						dataUrl,
+						fileName,
+					})
+					try {
+						const mention: TiptapMentionAttributes = {
+							type: MentionItemType.UPLOAD_FILE,
+							data: {
+								file_id: storedScreenshot.storageId,
+								file_name: storedScreenshot.fileName,
+								file_path: storedScreenshot.storageId,
+								file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
+								file_size: storedScreenshot.fileSize,
+								is_hidden: true,
+								is_html_screenshot: true,
+								storage_id: storedScreenshot.storageId,
+								upload_status: "done",
+							},
+						}
+						preparedScreenshotMentionsRef.current.set(targetId, { dataUrl, mention })
+						setHtmlScreenshotMention(targetId, mention)
+						return mention
+					} catch (error) {
+						await htmlScreenshotUploadService.discardStoredScreenshot(
+							storedScreenshot.storageId,
+						)
+						throw error
 					}
-					preparedScreenshotMentionsRef.current.set(targetId, mention)
-					setHtmlScreenshotMention(targetId, mention)
-					return mention
-				} catch (error) {
-					await htmlScreenshotUploadService.discardStoredScreenshot(
-						storedScreenshot.storageId,
-					)
-					throw error
+				} finally {
+					const current = preparingScreenshotPromisesRef.current.get(targetId)
+					if (current?.dataUrl === dataUrl) {
+						preparingScreenshotPromisesRef.current.delete(targetId)
+					}
 				}
 			})()
 
-			preparingScreenshotPromisesRef.current.set(targetId, promise)
-			void promise.then(
-				() => preparingScreenshotPromisesRef.current.delete(targetId),
-				() => preparingScreenshotPromisesRef.current.delete(targetId),
-			)
+			preparingScreenshotPromisesRef.current.set(targetId, { dataUrl, promise })
 			return promise
 		},
 	)
@@ -486,7 +491,7 @@ function useMessageEditorPubSub({
 					inspectorNode?.type === INSPECTOR_DETAIL_TYPE
 
 				if (isSingleInspectorNode && inspectorNode) {
-					insertInspectorNodeAndSelect(activeEditor, inspectorNode)
+					insertInspectorNode(activeEditor, inspectorNode)
 					activeEditor.commands.focus()
 					return
 				}
@@ -525,7 +530,7 @@ function useMessageEditorPubSub({
 
 			if (isSingleInspectorNode && inspectorNode) {
 				runActiveEditor(activeEditorRef.current, (activeEditor) => {
-					insertInspectorNodeAndSelect(activeEditor, inspectorNode)
+					insertInspectorNode(activeEditor, inspectorNode)
 				})
 				safeEditorFocus(activeEditorRef.current)
 				return

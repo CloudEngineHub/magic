@@ -22,6 +22,11 @@ export function getHtmlScreenshotFileName(targetId: string, index = 0): string {
 	return `${SCREENSHOT_FILE_NAME_PREFIX}-${suffix}.png`
 }
 
+/** Unique capture id so one selector can keep many screenshots. */
+export function createHtmlElementCaptureId(selector: string, sequence: number): string {
+	return `element:${selector}:${Date.now()}:${sequence}`
+}
+
 export function createHtmlSelectionTarget(
 	info: InspectedElementInfo,
 	instruction = "",

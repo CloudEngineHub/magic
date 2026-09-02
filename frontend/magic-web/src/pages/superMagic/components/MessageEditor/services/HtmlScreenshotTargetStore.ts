@@ -139,11 +139,9 @@ export function forgetHtmlScreenshotByStorageId(storageId: string) {
 	}
 }
 
-export function getHtmlScreenshotStorageId(
-	mention: TiptapMentionAttributes | undefined,
-): string | undefined {
-	if (!mention) return undefined
-	return getScreenshotStorageId(mention)
+/** Test-only: drop memory so the next get must hydrate from localStorage. */
+export function clearHtmlScreenshotMentionMemory() {
+	mentions.clear()
 }
 
 /** Test-only reset for in-memory and persisted target mentions. */

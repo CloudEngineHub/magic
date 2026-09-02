@@ -40,6 +40,7 @@ function createMockEditor(initialContent: JSONContent) {
 			focus: vi.fn(),
 			insertContent: vi.fn(),
 			setNodeSelection: vi.fn(),
+			setTextSelection: vi.fn(),
 		},
 		state: { selection: { from: 1 } },
 		getJSON: vi.fn(() => content),
@@ -115,6 +116,56 @@ describe("useMessageEditorPubSub", () => {
 			INSPECTOR_DETAIL_TYPE,
 		)
 		expect(onSuccess).toHaveBeenCalledTimes(1)
+
+		unmount()
+	})
+
+	it("stores a new screenshot when the same target is captured again", async () => {
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: null,
+				isMobile: false,
+				draftStore,
+				updateContent: vi.fn(),
+				enableMessageSendByContent: false,
+				onSendMessageByContent: vi.fn(),
+			}),
+		)
+
+		storeScreenshot.mockResolvedValueOnce({
+			storageId: "old-storage-id",
+			fileName: "old.png",
+			fileSize: 3,
+			file: new File(["old"], "old.png", { type: "image/png" }),
+		})
+		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
+			targetId: "div.cover-surface",
+			dataUrl: "data:image/png;base64,OLD",
+			fileName: "html-screenshot-a2296b4a.png",
+		})
+		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
+		expect(getHtmlScreenshotMention("div.cover-surface")?.data).toMatchObject({
+			storage_id: "old-storage-id",
+		})
+
+		storeScreenshot.mockResolvedValueOnce({
+			storageId: "new-storage-id",
+			fileName: "new.png",
+			fileSize: 3,
+			file: new File(["new"], "new.png", { type: "image/png" }),
+		})
+		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
+			targetId: "div.cover-surface",
+			dataUrl: "data:image/png;base64,NEW",
+			fileName: "html-screenshot-a2296b4a.png",
+		})
+		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(2))
+		expect(getHtmlScreenshotMention("div.cover-surface")?.data).toMatchObject({
+			storage_id: "new-storage-id",
+		})
 
 		unmount()
 	})
@@ -300,13 +351,16 @@ describe("useMessageEditorPubSub", () => {
 		unmount()
 	})
 
-	it("selects an inspector node after appending it to the editor", async () => {
+	it("places the caret after an inspector node after appending it", async () => {
 		const mockEditor = createMockEditor({
 			type: "doc",
 			content: [{ type: "paragraph" }],
 		})
 		const insertContent = mockEditor.editor.commands.insertContent as ReturnType<typeof vi.fn>
 		const setNodeSelection = mockEditor.editor.commands.setNodeSelection as ReturnType<
+			typeof vi.fn
+		>
+		const setTextSelection = mockEditor.editor.commands.setTextSelection as ReturnType<
 			typeof vi.fn
 		>
 		insertContent.mockReturnValue(true)
@@ -330,7 +384,8 @@ describe("useMessageEditorPubSub", () => {
 		})
 
 		await vi.waitFor(() => expect(insertContent).toHaveBeenCalledTimes(1))
-		expect(setNodeSelection).toHaveBeenCalledWith(1)
+		expect(setNodeSelection).not.toHaveBeenCalled()
+		expect(setTextSelection).toHaveBeenCalledWith(2)
 
 		unmount()
 	})

@@ -227,4 +227,53 @@ describe("inspector-detail transform", () => {
 		).toBe(true)
 		expect(JSON.stringify(serialized)).not.toContain(INSPECTOR_DETAIL_MARKER.repeat(9))
 	})
+
+	it("round-trips targetId so the message list can load the local screenshot", () => {
+		const serialized = serializeInspectorContent(
+			{
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [
+							{
+								type: INSPECTOR_DETAIL_TYPE,
+								attrs: {
+									title: labels.title,
+									selector: "#hero",
+									tagName: "section",
+									size: "300 × 120 px",
+									computedStyles: "{}",
+									styleCount: 0,
+									textContent: "Hero",
+									targetId: "element:#hero:1",
+								},
+							},
+						],
+					},
+				],
+			},
+			labels,
+		)
+
+		expect(JSON.stringify(serialized)).not.toContain("hero.png")
+
+		const transformed = transformInspectorContent(serialized)
+		const inspectorNode = transformed.content?.[0]?.content?.[0]
+
+		expect(inspectorNode?.type).toBe(INSPECTOR_DETAIL_TYPE)
+		expect(inspectorNode?.attrs?.targetId).toBe("element:#hero:1")
+		expect(inspectorNode?.attrs?.screenshotMention).toBeFalsy()
+
+		const schema = new Schema(schemaConfig as SchemaSpec)
+		const doc = schema.nodeFromJSON(transformed)
+		let preservedTargetId: string | null = null
+		doc.descendants((node) => {
+			if (node.type.name === INSPECTOR_DETAIL_TYPE) {
+				preservedTargetId = node.attrs.targetId
+			}
+			return true
+		})
+		expect(preservedTargetId).toBe("element:#hero:1")
+	})
 })
