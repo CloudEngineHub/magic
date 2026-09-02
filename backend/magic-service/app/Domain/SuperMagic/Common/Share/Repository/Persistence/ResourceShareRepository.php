@@ -73,10 +73,17 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
      * @param string $resourceId 资源ID
      * @return null|ResourceShareEntity 资源分享实体
      */
-    public function getShareByResourceIdWithTrashed(string $resourceId): ?ResourceShareEntity
+    public function getShareByResourceIdWithTrashed(string $resourceId, ?int $resourceType = null, ?string $organizationCode = null): ?ResourceShareEntity
     {
         /** @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
-        $model = $this->model->newQuery()->withTrashed()->where('resource_id', $resourceId)->first();
+        $query = $this->model->newQuery()->withTrashed()->where('resource_id', $resourceId);
+        if ($resourceType !== null) {
+            $query->where('resource_type', $resourceType);
+        }
+        if ($organizationCode !== null) {
+            $query->where('organization_code', $organizationCode);
+        }
+        $model = $query->first();
         return $model ? $this->modelToEntity($model) : null;
     }
 

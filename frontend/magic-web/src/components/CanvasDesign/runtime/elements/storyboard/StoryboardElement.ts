@@ -177,6 +177,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private readonly referencePreviewResources = new Map<string, LoadedResource>()
 	private readonly referencePreviewControllers = new Map<string, AbortController>()
 	private readonly referencePreviewTokens = new Map<string, number>()
+	private readonly referencePreviewResourceCloseCleanups = new Map<string, () => void>()
 	private consumerVisibility: CanvasConsumerVisibility = "far"
 	private consumerVisibilityUnsubscribe?: () => void
 	/** 防止 registerConsumerVisibility 同步回调里 rerender 时重复注册。 */
@@ -244,6 +245,9 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	public render(): Konva.Group {
 		const content = this.getActiveContent<StoryboardElementContent>()
 		const references = this.resolveReferenceImages()
+		this.syncReferencePreviewResourceCloseSubscriptions(
+			references.map((reference) => reference.path),
+		)
 		const width = Math.max(this.data.width ?? STORYBOARD_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? STORYBOARD_CONFIG.DEFAULT_HEIGHT, 1)
 		const layout = resolveStoryboardElementLayout(
@@ -369,6 +373,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		this.abortReferencePreviewRequests()
 		this.referencePreviewTokens.clear()
 		this.referencePreviewResources.clear()
+		this.clearReferencePreviewResourceCloseSubscriptions()
 		this.referenceSourceEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
 		this.referenceSourceEventUnsubscribers = []
 		super.destroy()
@@ -931,6 +936,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			return
 		const manager = this.canvas.imageResourceManager
 		if (!manager) return
+		this.ensureReferencePreviewResourceCloseSubscription(path)
 		const controller = new AbortController()
 		this.referencePreviewControllers.set(path, controller)
 		const token = (this.referencePreviewTokens.get(path) ?? 0) + 1
@@ -961,6 +967,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		const cached = this.referencePreviewResources.get(path)
 		const current = this.canvas.imageResourceManager?.peekResource(path, { variant: "low" })
 		if (current) {
+			this.ensureReferencePreviewResourceCloseSubscription(path)
 			if (!cached || cached.image !== current.image || cached.ossSrc !== current.ossSrc) {
 				this.referencePreviewResources.set(path, current)
 			}
@@ -968,6 +975,50 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		}
 		if (cached) this.referencePreviewResources.delete(path)
 		return null
+	}
+
+	private ensureReferencePreviewResourceCloseSubscription(path: string): void {
+		if (!path || this.referencePreviewResourceCloseCleanups.has(path)) return
+		const manager = this.canvas.imageResourceManager
+		if (typeof manager?.onImageResourceWillClose !== "function") return
+
+		const cleanup = manager.onImageResourceWillClose(path, ({ data }) => {
+			const cached = this.referencePreviewResources.get(path)
+			if (cached?.image === data.image) {
+				this.referencePreviewResources.delete(path)
+			}
+
+			let detachedNode = false
+			this.node?.find?.(".storyboard-reference-image").forEach((candidate) => {
+				if (!(candidate instanceof Konva.Image) || candidate.image() !== data.image) return
+				candidate.image(undefined)
+				detachedNode = true
+			})
+
+			if (!detachedNode) return
+			this.canvas.runtimeScheduler?.requestLayerDraw?.("content", {
+				source: "StoryboardElement",
+				reason: "resource-will-close",
+				priority: "normal",
+			})
+			if (this.node) this.rerenderWhenTransformIdle()
+		})
+		this.referencePreviewResourceCloseCleanups.set(path, cleanup)
+	}
+
+	private clearReferencePreviewResourceCloseSubscriptions(): void {
+		this.referencePreviewResourceCloseCleanups.forEach((cleanup) => cleanup())
+		this.referencePreviewResourceCloseCleanups.clear()
+	}
+
+	private syncReferencePreviewResourceCloseSubscriptions(paths: Iterable<string>): void {
+		const activePaths = new Set(paths)
+		this.referencePreviewResourceCloseCleanups.forEach((cleanup, path) => {
+			if (activePaths.has(path)) return
+			cleanup()
+			this.referencePreviewResourceCloseCleanups.delete(path)
+		})
+		activePaths.forEach((path) => this.ensureReferencePreviewResourceCloseSubscription(path))
 	}
 
 	private invalidateReferencePreviewResources(): void {

@@ -19,10 +19,10 @@ export const RESOURCE_CACHE_MARK_QUERY_PARAM = "swCache"
 export const MARKED_RUNTIME_RESOURCE_CACHE_VALUE = "runtime"
 
 /** Value of swCache reserved for images explicitly returned by the slides template catalog. */
-export const SLIDES_TEMPLATE_IMAGE_CACHE_VALUE = "slides-template-image"
+export const SLIDES_TEMPLATE_IMAGE_CACHE_VALUE = "slides-template-image-v2"
 
 /** Value of swCache reserved for featured slides template images. */
-export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE = "featured-slides-template-image"
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE = "featured-slides-template-image-v2"
 
 /** Optional version query on marked resources (`markServiceWorkerCacheableResourceUrl`). */
 export const RESOURCE_CACHE_VERSION_QUERY_PARAM = "swv"
@@ -116,8 +116,13 @@ export const CACHE_TTL_60_DAYS = SECONDS_PER_DAY * 60
 
 export const APP_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-app-static-assets-v1`
 export const APP_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-app-image-assets-v1`
-export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v1`
-export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v1`
+// Only cover images enter these buckets. Keep the total bounded below the previous
+// 300 + 500 setup so template browsing cannot occupy multiple gigabytes.
+export const SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 60
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_MAX_ENTRIES = 40
+// v2 removes legacy opaque buckets after TOS CORS is enabled.
+export const SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-slides-template-image-assets-v2`
+export const FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_NAME = `${CACHE_NAMESPACE}-featured-slides-template-image-assets-v2`
 export const APP_MARKED_RESOURCE_CACHE_NAME = `${CACHE_NAMESPACE}-app-marked-resource-assets-v1`
 export const PACKAGES_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-packages-static-assets-v1`
 export const EMOJIS_STATIC_CACHE_NAME = `${CACHE_NAMESPACE}-emojis-static-assets-v1`

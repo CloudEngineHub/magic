@@ -161,6 +161,19 @@ export interface GetTemporaryDownloadUrlItem {
 	updated_at?: string
 }
 
+export interface GetFileContentOptions {
+	responseType?: "text" | "arrayBuffer" | "blob"
+	file_versions?: Record<string, number>
+	download_mode?: DownloadImageMode
+	xMagicImageProcess?: ImageProcessOptions
+	forceRefresh?: boolean
+}
+
+export interface BatchFileContentResult {
+	successes: Map<string, string | ArrayBuffer | Blob>
+	failures: Map<string, Error>
+}
+
 /**
  * 	通过文件id获取临时下载url
  * @param params - 请求参数
@@ -254,24 +267,20 @@ export const getTemporaryDownloadUrl = async ({
  * @param options 下载选项
  * @returns 文件内容
  */
-export const getFileContentById = async (
-	fileId: string,
-	options: {
-		responseType?: "text" | "arrayBuffer" | "blob"
-		file_versions?: Record<string, number>
-		download_mode?: DownloadImageMode
-		xMagicImageProcess?: ImageProcessOptions
-		forceRefresh?: boolean
-	} = {},
-): Promise<string | ArrayBuffer | Blob> => {
-	if (!fileId) {
-		throw new Error("文件 ID 不能为空")
-	}
+export const getFileContentsByIds = async (
+	fileIds: string[],
+	options: GetFileContentOptions = {},
+): Promise<BatchFileContentResult> => {
+	const uniqueFileIds = [...new Set(fileIds.filter(Boolean).map(String))]
+	const successes = new Map<string, string | ArrayBuffer | Blob>()
+	const failures = new Map<string, Error>()
 
+	if (uniqueFileIds.length === 0) return { successes, failures }
+
+	let downloadUrls: GetTemporaryDownloadUrlItem[]
 	try {
-		// 获取临时下载 URL
-		const downloadUrls = await getTemporaryDownloadUrl({
-			file_ids: [fileId],
+		downloadUrls = await getTemporaryDownloadUrl({
+			file_ids: uniqueFileIds,
 			file_versions: options.file_versions,
 			download_mode: options.download_mode,
 			cache: options.forceRefresh ? false : undefined,
@@ -279,29 +288,66 @@ export const getFileContentById = async (
 				? { xMagicImageProcess: options.xMagicImageProcess }
 				: undefined,
 		})
-
-		if (!downloadUrls || !Array.isArray(downloadUrls) || downloadUrls.length === 0) {
-			throw new Error(`无法获取文件下载地址: ${fileId}`)
-		}
-
-		const firstUrlItem = downloadUrls[0]
-		if (!firstUrlItem || !firstUrlItem.url) {
-			throw new Error(`文件下载地址为空: ${fileId}`)
-		}
-
-		// 下载文件内容
-		return await downloadFileContent(firstUrlItem.url, {
-			responseType: options.responseType || "text",
-			cache: options.forceRefresh ? "no-store" : undefined,
-		})
 	} catch (error) {
+		const failure = error instanceof Error ? error : new Error(String(error))
+		for (const fileId of uniqueFileIds) failures.set(fileId, failure)
+		return { successes, failures }
+	}
+
+	const urlByFileId = new Map(
+		(Array.isArray(downloadUrls) ? downloadUrls : [])
+			.filter((item) => item?.file_id && item?.url)
+			.map((item) => [String(item.file_id), item.url]),
+	)
+	const results = await Promise.allSettled(
+		uniqueFileIds.map(async (fileId) => {
+			const url = urlByFileId.get(fileId)
+			if (!url) throw new Error(`无法获取文件下载地址: ${fileId}`)
+			const content = await downloadFileContent(url, {
+				responseType: options.responseType || "text",
+				cache: options.forceRefresh ? "no-store" : undefined,
+			})
+			return { fileId, content }
+		}),
+	)
+
+	results.forEach((result, index) => {
+		const fileId = uniqueFileIds[index]
+		if (result.status === "fulfilled") successes.set(fileId, result.value.content)
+		else
+			failures.set(
+				fileId,
+				result.reason instanceof Error ? result.reason : new Error(String(result.reason)),
+			)
+	})
+
+	return { successes, failures }
+}
+
+/**
+ * 通过文件 ID 直接获取文件内容。
+ * 单文件调用保留原有接口，内部复用批量 URL 获取能力。
+ */
+export const getFileContentById = async (
+	fileId: string,
+	options: GetFileContentOptions = {},
+): Promise<string | ArrayBuffer | Blob> => {
+	if (!fileId) throw new Error("文件 ID 不能为空")
+
+	const result = await getFileContentsByIds([fileId], options)
+	const failure = result.failures.get(String(fileId))
+	if (failure) {
 		console.error("获取文件内容失败:", {
 			fileId,
-			error,
-			errorMessage: error instanceof Error ? error.message : String(error),
+			error: failure,
+			errorMessage: failure.message,
 		})
-		throw error
+		throw failure
 	}
+
+	const content = result.successes.get(String(fileId))
+	if (content === undefined) throw new Error(`无法获取文件内容: ${fileId}`)
+	return content
 }
 
 interface DownloadFileContentOptions {

@@ -20,7 +20,7 @@ import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
 
-function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemProps) {
+function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
 	const workspaceNameTestId = `sidebar-workspace-item-name-${workspaceIdSegment}`
@@ -29,12 +29,12 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const suppressItemClickRef = useRef(false)
 	const isExpanded =
 		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
 	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
 	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
-
 	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
 		getFallbackWorkspaceName: () => t("workspace.unnamedWorkspace"),
@@ -97,6 +97,11 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 	}
 
 	function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+		if (suppressItemClickRef.current) {
+			event.preventDefault()
+			event.stopPropagation()
+			return
+		}
 		if (!shouldHandleAnchorClick(event)) return
 		if (isMenuOpen) {
 			event.preventDefault()
@@ -145,8 +150,11 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	return (
 		<SidebarMenuItem
+			data-sidebar-drop-type="workspace"
+			data-sidebar-drop-workspace-id={workspace.id}
+			data-sidebar-workspace-root="true"
 			className={cn(
-				"flex w-full max-w-full shrink-0 flex-col items-center",
+				"relative flex w-full max-w-full shrink-0 flex-col items-center",
 				// Selecting a workspace scrolls this item to the top. Reserve the sticky
 				// "工作区" header height so the workspace title does not stick downward
 				// over the first project.
@@ -161,7 +169,23 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 			<div className="flex w-full min-w-0 flex-col">
 				<div
 					ref={workspaceHeaderRef}
-					className="sticky top-[var(--workspace-list-sticky-top)] z-10 w-full bg-sidebar"
+					draggable={!dndDisabled}
+					data-sidebar-dnd-source="workspace"
+					data-sidebar-dnd-workspace-id={workspace.id}
+					data-sidebar-dnd-label={workspace.name || t("super:workspace.unnamedWorkspace")}
+					data-sidebar-workspace-header="true"
+					onDragStart={() => {
+						suppressItemClickRef.current = true
+					}}
+					onDragEnd={() => {
+						window.setTimeout(() => {
+							suppressItemClickRef.current = false
+						}, 0)
+					}}
+					className={cn(
+						"sticky top-[var(--workspace-list-sticky-top)] z-10 w-full",
+						"bg-sidebar",
+					)}
 				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
@@ -180,6 +204,8 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 							<a
 								href={getWorkspaceRouteUrl(workspace.id)}
 								onClick={handleClick}
+								draggable={false}
+								data-sidebar-workspace-link="true"
 								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 							>
 								<div
@@ -268,6 +294,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 						workspaceId={workspace.id}
 						isLoading={isLoading}
 						isCreatingProject={isCreatingProject}
+						dndDisabled={dndDisabled}
 						onCancelCreate={handleCancelCreate}
 						onProjectCreated={handleProjectCreated}
 					/>

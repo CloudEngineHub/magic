@@ -79,11 +79,96 @@ type MessageSendService = ReturnType<typeof createMessageSendService>
 type MessageSendServiceDeps = Parameters<MessageSendService["configure"]>[0]
 
 describe("MessageSendService / SuperMagic 单候选请求", () => {
+	it("adds the text Mention backend label while preserving structured content", async () => {
+		const chat = vi.fn().mockResolvedValue({})
+		const addUserMessage = vi.fn()
+		const service = createMessageSendService({
+			chatApi: { chat } as unknown as MessageSendServiceDeps["chatApi"],
+			superMagicApi: {} as MessageSendServiceDeps["superMagicApi"],
+			pubsub: { publish: vi.fn() } as unknown as MessageSendServiceDeps["pubsub"],
+			mentionPanelStore: {
+				addMentionListItemsToHistory: vi.fn(),
+			} as unknown as MessageSendServiceDeps["mentionPanelStore"],
+			userStore: {
+				user: { userInfo: { user_id: "mock-user" } },
+			} as unknown as MessageSendServiceDeps["userStore"],
+			superMagicStore: {
+				messages: new Map([["mock-chat-topic", []]]),
+				getLatestMessageAnchor: vi.fn(() => ({})),
+				addUserMessage,
+				replaceUserMessage: vi.fn(),
+			} as unknown as MessageSendServiceDeps["superMagicStore"],
+			logger: { error: vi.fn() } as unknown as MessageSendServiceDeps["logger"],
+		})
+		const selectedTopic = {
+			id: "mock-topic",
+			chat_topic_id: "mock-chat-topic",
+			chat_conversation_id: "mock-conversation",
+		} as Topic
+		const structuredContent = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{ type: "text", text: "请查看 " },
+						{
+							type: "mention",
+							attrs: {
+								id: null,
+								label: null,
+								mentionSuggestionChar: "@",
+								type: "text",
+								data: {
+									id: "mock-text-001",
+									label: "模拟图表",
+									text: "图表id: mock-chart-001;时间范围：模拟区间",
+								},
+							},
+						},
+					],
+				},
+			],
+		}
+
+		await service.dispatchMessage({
+			jsonContent: structuredContent,
+			showLoading: false,
+			selectedProject: null,
+			selectedTopic,
+			options: { extra: { super_agent: { mentions: [] } } },
+		})
+
+		const displayed = addUserMessage.mock.calls[0]?.[1]?.message?.rich_text?.content
+		const transported = chat.mock.calls[0]?.[1]?.message?.rich_text?.content
+		const expectedContent = {
+			...structuredContent,
+			content: [
+				{
+					...structuredContent.content[0],
+					content: [
+						structuredContent.content[0].content[0],
+						{
+							...structuredContent.content[0].content[1],
+							attrs: {
+								...structuredContent.content[0].content[1].attrs,
+								label: "图表id: mock-chart-001;时间范围：模拟区间",
+							},
+						},
+					],
+				},
+			],
+		}
+		expect(JSON.parse(displayed)).toEqual(expectedContent)
+		expect(JSON.parse(transported)).toEqual(expectedContent)
+		expect(structuredContent.content[0].content[1].attrs.label).toBeNull()
+	})
+
 	it.each([
 		["调用方传入 n=4", { n: 4, caller_flag: "preserved" }],
 		["调用方未传 n", { caller_flag: "preserved" }],
 	] as const)(
-		"发送 Agent 消息时强制 dynamic_params.n=1：%s。",
+		"发送 Agent 消息时保留调用方 dynamic_params：%s。",
 		async (_caseName, dynamicParams) => {
 			const chat = vi.fn().mockResolvedValue({})
 			const addUserMessage = vi.fn()
@@ -142,7 +227,6 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 			).toEqual(
 				expect.objectContaining({
 					message_version: "v2",
-					n: 1,
 					caller_flag: "preserved",
 				}),
 			)

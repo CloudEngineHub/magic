@@ -513,9 +513,6 @@ importers:
       dayjs:
         specifier: ^1.11.13
         version: 1.11.18
-      dompurify:
-        specifier: ^3.2.6
-        version: 3.2.6
       dexie:
         specifier: ^4.0.10
         version: 4.0.11
@@ -531,6 +528,9 @@ importers:
       docx-preview:
         specifier: ^0.3.5
         version: 0.3.5
+      dompurify:
+        specifier: ^3.2.6
+        version: 3.2.6
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@18.3.1)
@@ -849,6 +849,9 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      virtua:
+        specifier: ^0.50.6
+        version: 0.50.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vue@3.5.32(typescript@5.8.3))
       xgplayer:
         specifier: ^3.0.23
         version: 3.0.23(core-js@3.46.0)
@@ -2448,13 +2451,13 @@ packages:
       react: '>=16.0.0'
 
   '@dtyq/es6-template-strings@0.0.5':
-    resolution: {integrity: sha512-dAJ9+zV28evjzJCRaPVA2zqOGnWBlNT/+0M5oGeCXLM9ZKoATmOHwGkDVg0lAvZZjfHTD+odztbS0Pf2tpvGkw==}
+    resolution: {integrity: sha512-6PgrK4LvmD8bez3kW4RPjKM5lg7n8wR+GiAq/D0MZQstRnFEPdSYwzfl4l5z/lVgbXKDAs+9jSsEvWwl34txQw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
 
   '@dtyq/eslint-config@0.0.11':
-    resolution: {integrity: sha512-QFsMh5KAmLpfhL16i1ul9HyGPPW/eNEfzPRiPJK8WiLzX9uuScO6EadmRFH9wP8V3zOjuhWHJm7wq2JBS+b0PQ==}
+    resolution: {integrity: sha512-GK6Ky9ToFfsGaMvSe7TZNTlSd7cveb1Y4AeKFnVbh3lT3ur+3gXWKXm20cJine6hEQFW8rqxq5TAX8wBsYPTvw==}
     engines: {node: '>=14.0.0'}
     hasBin: true
     peerDependencies:
@@ -2465,7 +2468,7 @@ packages:
         optional: true
 
   '@dtyq/magic-flow@0.0.16':
-    resolution: {integrity: sha512-CdXswQFONTk+n3GbN77xTNMuay7HNzFZU9F53Ka/kOHd1xzYJCGuRyjkbhoPVci5i35chuCWbonNdwH46hrrDA==}
+    resolution: {integrity: sha512-TJuu4gL3zjybGmAcxFHZTJqZrNywMwFaVb7P19Q1zUGiYaKQGI4DdL11FZ5dFbXZCQjRQzkg69916te0m7oKDw==}
     peerDependencies:
       '@tabler/icons-react': 3.46.0
       lodash-es: ^4.17.21
@@ -2477,17 +2480,17 @@ packages:
       dayjs: ^1.11.12
 
   '@dtyq/upload-sdk@0.0.11':
-    resolution: {integrity: sha512-uVO+4euGoDBQn5YRQ+1m1CUH8g8AvOmMipf4RV+LefqQ4ySqnj/uYnviIK6oHHNN4Tcu3R5GCjox/cZTw3vTvw==}
+    resolution: {integrity: sha512-IvRnZj9ofVCmBu+Dq+SDnnyEgGfHgh0gdhqbJd8ZcIYeDNjVo2V03aJYCNW85pvr2Zkmorw5agrMzQKydnrpBw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
 
   '@dtyq/upload-sdk@0.0.9':
-    resolution: {integrity: sha512-g5VefkfwGi+C5lhAggDWiipARO0rAYi/UrJTks7zUz9B9qIe88ZKsEf2O2bayUMC6gwXHHrwpsFbo2ORPYBqEA==}
+    resolution: {integrity: sha512-gXw3+2xSxOp9QDlejND1EV1sjxmoSSWEexSwt8qQuX4pOFpFP8e5ABwb3oaCM9rHRGEHuZLK8Z3RAE+iPcIfdQ==}
     engines: {node: '>=18.0.0'}
 
   '@dtyq/user-selector@0.1.15':
-    resolution: {integrity: sha512-gmDSRNt5m4UN8cfXKukZNn5g+Sx/4tiAAsRsQhAhWkAVSJYJ4GgWj0LV3JH93xt0g1gvx5l1zYoGbhYggFZw+Q==}
+    resolution: {integrity: sha512-dDYmrFeQTHHJVfDNGgR749XRByokha3aqffeg3wyTw+fua1jffExgct0NxmBf6BFffxH1znvO+15whGuzvG0fw==}
     engines: {node: '>=18.18.0', pnpm: '>=9'}
     peerDependencies:
       '@radix-ui/react-avatar': '>=1 <2'
@@ -16251,6 +16254,32 @@ packages:
   victory-vendor@37.3.6:
     resolution: {integrity: sha512-SbPDPdDBYp+5MJHhBCAyI7wKM3d5ivekigc2Dk2s7pgbZ9wIgIBYGVw4zGHBml/qTFbexrofXW6Gu4noGxrOwQ==}
 
+  virtua@0.50.6:
+    resolution: {integrity: sha512-qUKjFytyy5hd5yxOuZFXYcBQX/UshlyWmf0KOZ3wTbEYQJfxiv7DOXBuSAYXlKRySdcdA3ScNbXjQXlStfdjOQ==}
+    peerDependencies:
+      '@angular/common': '>=20.0.0'
+      '@angular/core': '>=20.0.0'
+      react: '>=16.14.0'
+      react-dom: '>=16.14.0'
+      solid-js: '>=1.0'
+      svelte: '>=5.0'
+      vue: '>=3.2'
+    peerDependenciesMeta:
+      '@angular/common':
+        optional: true
+      '@angular/core':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      solid-js:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+
   vite-node@3.2.4:
     resolution: {integrity: sha512-EbKSKh+bh1E1IFxeO0pg1n4dvoOTt0UDiXMd/qn++r98+jPO1xtJilvXldeuQ8giIB5IkpjCgMleHMNEsGH6pg==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
@@ -24215,6 +24244,17 @@ snapshots:
       - typescript
       - ws
 
+  '@vitejs/devtools-kit@0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)':
+    dependencies:
+      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
+      birpc: 4.0.0
+      ohash: 2.0.11
+      vite: 8.0.3(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.18)(@vitejs/devtools@0.1.13)(esbuild@0.24.0)(jiti@2.6.1)(less@4.4.0)(sass-embedded@1.93.1)(sass@1.93.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2)
+    transitivePeerDependencies:
+      - typescript
+      - ws
+    optional: true
+
   '@vitejs/devtools-rolldown@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.7.3)(vite@8.0.3)(vue@3.5.32(typescript@5.8.3))':
     dependencies:
       '@floating-ui/dom': 1.7.6
@@ -24326,6 +24366,62 @@ snapshots:
       - vite
       - vue
 
+  '@vitejs/devtools-rolldown@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)(vue@3.5.32(typescript@5.8.3))':
+    dependencies:
+      '@floating-ui/dom': 1.7.6
+      '@pnpm/read-project-manifest': 1001.2.6(@pnpm/logger@1001.0.1)
+      '@rolldown/debug': 1.0.0-rc.15
+      '@vitejs/devtools-kit': 0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)
+      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
+      ansis: 4.2.0
+      birpc: 4.0.0
+      cac: 7.0.0
+      d3-shape: 3.2.0
+      diff: 8.0.4
+      get-port-please: 3.2.0
+      h3: 1.15.11
+      mlly: 1.8.2
+      mrmime: 2.0.1
+      ohash: 2.0.11
+      p-limit: 7.3.0
+      pathe: 2.0.3
+      publint: 0.3.18
+      sirv: 3.0.2
+      split2: 4.2.0
+      structured-clone-es: 2.0.0
+      tinyglobby: 0.2.16
+      unconfig: 7.5.0
+      unstorage: 1.17.5
+      vue-virtual-scroller: 2.0.1(vue@3.5.32(typescript@5.8.3))
+      ws: 8.20.0
+    transitivePeerDependencies:
+      - '@azure/app-configuration'
+      - '@azure/cosmos'
+      - '@azure/data-tables'
+      - '@azure/identity'
+      - '@azure/keyvault-secrets'
+      - '@azure/storage-blob'
+      - '@capacitor/preferences'
+      - '@deno/kv'
+      - '@netlify/blobs'
+      - '@planetscale/database'
+      - '@pnpm/logger'
+      - '@upstash/redis'
+      - '@vercel/blob'
+      - '@vercel/functions'
+      - '@vercel/kv'
+      - aws4fetch
+      - bufferutil
+      - db0
+      - idb-keyval
+      - ioredis
+      - typescript
+      - uploadthing
+      - utf-8-validate
+      - vite
+      - vue
+    optional: true
+
   '@vitejs/devtools-rpc@0.1.13(typescript@5.7.3)(ws@8.20.0)':
     dependencies:
       birpc: 4.0.0
@@ -24350,6 +24446,19 @@ snapshots:
       ws: 8.20.0
     transitivePeerDependencies:
       - typescript
+
+  '@vitejs/devtools-rpc@0.1.13(typescript@5.9.3)(ws@8.20.0)':
+    dependencies:
+      birpc: 4.0.0
+      ohash: 2.0.11
+      p-limit: 7.3.0
+      structured-clone-es: 2.0.0
+      valibot: 1.3.1(typescript@5.9.3)
+    optionalDependencies:
+      ws: 8.20.0
+    transitivePeerDependencies:
+      - typescript
+    optional: true
 
   '@vitejs/devtools@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.7.3)(vite@8.0.3)':
     dependencies:
@@ -24441,6 +24550,52 @@ snapshots:
       - typescript
       - uploadthing
       - utf-8-validate
+
+  '@vitejs/devtools@0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)':
+    dependencies:
+      '@vitejs/devtools-kit': 0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)
+      '@vitejs/devtools-rolldown': 0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)(vue@3.5.32(typescript@5.8.3))
+      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
+      birpc: 4.0.0
+      cac: 7.0.0
+      h3: 1.15.11
+      immer: 11.1.4
+      launch-editor: 2.13.2
+      mlly: 1.8.2
+      obug: 2.1.1
+      open: 11.0.0
+      pathe: 2.0.3
+      perfect-debounce: 2.1.0
+      sirv: 3.0.2
+      tinyexec: 1.1.1
+      vite: 8.0.3(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.18)(@vitejs/devtools@0.1.13)(esbuild@0.24.0)(jiti@2.6.1)(less@4.4.0)(sass-embedded@1.93.1)(sass@1.93.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2)
+      vue: 3.5.32(typescript@5.9.3)
+      ws: 8.20.0
+    transitivePeerDependencies:
+      - '@azure/app-configuration'
+      - '@azure/cosmos'
+      - '@azure/data-tables'
+      - '@azure/identity'
+      - '@azure/keyvault-secrets'
+      - '@azure/storage-blob'
+      - '@capacitor/preferences'
+      - '@deno/kv'
+      - '@netlify/blobs'
+      - '@planetscale/database'
+      - '@pnpm/logger'
+      - '@upstash/redis'
+      - '@vercel/blob'
+      - '@vercel/functions'
+      - '@vercel/kv'
+      - aws4fetch
+      - bufferutil
+      - db0
+      - idb-keyval
+      - ioredis
+      - typescript
+      - uploadthing
+      - utf-8-validate
+    optional: true
 
   '@vitejs/plugin-react@4.7.0(vite@6.3.5(@types/node@25.9.5)(jiti@2.6.1)(less@4.4.0)(lightningcss@1.32.0)(sass-embedded@1.93.1)(sass@1.93.1)(sugarss@2.0.0)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -36052,6 +36207,11 @@ snapshots:
     optionalDependencies:
       typescript: 5.8.3
 
+  valibot@1.3.1(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
+    optional: true
+
   validate-npm-package-license@3.0.4:
     dependencies:
       spdx-correct: 3.2.0
@@ -36118,6 +36278,12 @@ snapshots:
       d3-shape: 3.2.0
       d3-time: 3.1.0
       d3-timer: 3.0.1
+
+  virtua@0.50.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vue@3.5.32(typescript@5.8.3)):
+    optionalDependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      vue: 3.5.32(typescript@5.8.3)
 
   vite-node@3.2.4(@types/node@22.16.4)(jiti@1.21.7)(less@4.4.0)(lightningcss@1.32.0)(sass-embedded@1.93.1)(sass@1.93.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
@@ -36402,7 +36568,7 @@ snapshots:
       tinyglobby: 0.2.16
     optionalDependencies:
       '@types/node': 22.19.18
-      '@vitejs/devtools': 0.1.13(@pnpm/logger@1001.0.1)(typescript@5.8.3)(vite@8.0.3)
+      '@vitejs/devtools': 0.1.13(@pnpm/logger@1001.0.1)(typescript@5.9.3)(vite@8.0.3)
       esbuild: 0.24.0
       fsevents: 2.3.3
       jiti: 2.6.1
@@ -36647,6 +36813,17 @@ snapshots:
       '@vue/shared': 3.5.32
     optionalDependencies:
       typescript: 5.8.3
+
+  vue@3.5.32(typescript@5.9.3):
+    dependencies:
+      '@vue/compiler-dom': 3.5.32
+      '@vue/compiler-sfc': 3.5.32
+      '@vue/runtime-dom': 3.5.32
+      '@vue/server-renderer': 3.5.32(vue@3.5.32(typescript@5.8.3))
+      '@vue/shared': 3.5.32
+    optionalDependencies:
+      typescript: 5.9.3
+    optional: true
 
   w3c-keyname@2.2.8: {}
 

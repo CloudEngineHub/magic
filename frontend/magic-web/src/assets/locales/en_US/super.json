@@ -2920,6 +2920,7 @@
 			"updateDurationSuccess": "Authorization duration updated",
 			"version": "App version"
 		},
+		"projectContextUnavailable": "This feature is not supported in share mode. Try sharing through collaboration instead.",
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
 			"content": "The HTML micro-app wants to {{operation}} a {{targetType}} outside the app directory: {{path}}. App directory: {{appRootDir}}.",
@@ -3644,12 +3645,15 @@
 	},
 	"microAppsPage": {
 		"actions": {
+			"collaboratorsFailed": "Failed to load collaborator information. Please retry.",
+			"collaboratorsNoPermission": "You do not have permission to manage collaborators for this app.",
 			"deleteApp": "Delete app",
 			"deleteDescription": "“{{name}}” and its project will be moved to the recycle bin and can be restored within 30 days.",
 			"deleteFailed": "Failed to delete the app. Please retry.",
 			"deleteSuccess": "App moved to the recycle bin",
 			"deleteTitle": "Delete app",
 			"deleting": "Deleting...",
+			"manageCollaborators": "Manage collaborators",
 			"more": "More actions",
 			"openInNewWindow": "Open in new window",
 			"rename": "Rename",
@@ -4456,6 +4460,10 @@
 		"cancelWorkspaceShortcut": "Disassociate from Workspace",
 		"cancelWorkspaceShortcutSuccess": "Disassociated successfully",
 		"collaboration": "Team",
+		"confirmPinOnReorder": "This will pin the current project. Continue?",
+		"confirmPinOnReorderTitle": "Pin Project",
+		"confirmUnpinOnReorder": "This will unpin the current project. Continue?",
+		"confirmUnpinOnReorderTitle": "Unpin Project",
 		"copyCollaborationLink": "Copy Collaboration Link",
 		"copyLink": "Copy Link",
 		"createNewProject": "Create New Project",
@@ -5135,6 +5143,7 @@
 		"title": "Recycle Bin"
 	},
 	"scheduleTask": {
+		"agentScope": "Execution agent",
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
 		"contextLoading": "Loading the current micro app context…",
@@ -5150,6 +5159,7 @@
 		"enableTask": "Enable",
 		"enabled": "Active",
 		"manageTasks": "Manage tasks",
+		"microAppAgent": "Micro-app agent",
 		"monthlyAt": "Runs monthly on day {{day}} · {{time}}",
 		"moreActions": "More actions",
 		"noSchedule": "No schedule configured",
@@ -6485,9 +6495,11 @@
 			"moveContentLossContent": "This operation will move data or resources required by the canvas content. Some canvas content may disappear. Continue?",
 			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
 			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
+			"pathRepairFailureContent": "Some canvas resource paths could not be repaired before this operation:\n{{failures}}\nContinue anyway?",
 			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
 			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
 			"renameOpenFailureContent": "This operation will rename the canvas project entry file. The canvas may fail to open. Continue?",
+			"renameProjectNameSyncFailed": "Renamed successfully, but the canvas name could not be synchronized",
 			"title": "Canvas Project Risk"
 		},
 		"clawPlaygroundTags": {

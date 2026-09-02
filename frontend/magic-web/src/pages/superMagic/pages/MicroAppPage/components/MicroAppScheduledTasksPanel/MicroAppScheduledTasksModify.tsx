@@ -32,7 +32,10 @@ import mcpTempStorage from "@/components/business/AccountSetting/pages/Scheduled
 import type { FormValues } from "@/components/business/AccountSetting/pages/ScheduledTasks/types"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { ProjectFilesStore } from "@/stores/projectFiles"
-import { getNextRunTime } from "@/components/business/AccountSetting/pages/ScheduledTasks/utils"
+import {
+	getNextRunTime,
+	serializeScheduledTaskModel,
+} from "@/components/business/AccountSetting/pages/ScheduledTasks/utils"
 import type { MicroAppScheduledTasksModifyProps } from "./types"
 import { applyMicroAppScheduledTaskContext } from "./utils"
 
@@ -114,7 +117,9 @@ export function MicroAppScheduledTasksModify({
 	const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 	const [loading, setLoading] = useState(Boolean(initialValues))
 	const [promptRequired, setPromptRequired] = useState(false)
-	const [topicMode, setTopicMode] = useState<TopicMode>(TopicMode.General)
+	// 微应用员工可能不在员工列表中：编辑器使用 default 模型目录，运行协议仍固定为 micro-app。
+	const modelTopicMode = TopicMode.Default
+	const runtimeTopicMode = TopicMode.MicroApp
 	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
 	const [modalStores] = useState(() => {
 		const projectFilesStore = new ProjectFilesStore()
@@ -182,6 +187,12 @@ export function MicroAppScheduledTasksModify({
 
 			setPromptRequired(false)
 			const content = tiptapEditorRef.current?.editor?.getJSON() ?? {}
+			const imageModel = serializeScheduledTaskModel(
+				tiptapEditorRef.current?.selectedImageModel,
+			)
+			const videoModel = serializeScheduledTaskModel(
+				tiptapEditorRef.current?.selectedVideoModel,
+			)
 			onSubmit?.(
 				applyMicroAppScheduledTaskContext(
 					{
@@ -203,8 +214,11 @@ export function MicroAppScheduledTasksModify({
 									mentions: tiptapEditorRef.current?.mentionItems,
 									input_mode: "plan",
 									chat_mode: "normal",
-									topic_pattern: topicMode,
+									// Ignore legacy values so editing an old task repairs its mode on save.
+									topic_pattern: runtimeTopicMode,
 									model: tiptapEditorRef.current?.selectedModel,
+									...(imageModel && { image_model: imageModel }),
+									...(videoModel && { video_model: videoModel }),
 								},
 							},
 						},
@@ -252,9 +266,11 @@ export function MicroAppScheduledTasksModify({
 		tiptapEditorRef.current.setSelectedModel?.(
 			initialValues.message_content.extra?.super_agent?.model || null,
 		)
-		setTopicMode(
-			(initialValues.message_content.extra?.super_agent?.topic_pattern as TopicMode) ||
-				TopicMode.General,
+		tiptapEditorRef.current.setSelectedImageModel?.(
+			initialValues.message_content.extra?.super_agent?.image_model || null,
+		)
+		tiptapEditorRef.current.setSelectedVideoModel?.(
+			initialValues.message_content.extra?.super_agent?.video_model || null,
 		)
 	}, [initialValues, loading])
 
@@ -291,7 +307,7 @@ export function MicroAppScheduledTasksModify({
 			task_status: TaskStatus.WAITING,
 			task_mode: "",
 			project_id: context.projectId,
-			topic_mode: topicMode,
+			topic_mode: modelTopicMode,
 			updated_at: "",
 			workspace_id: context.workspaceId,
 			token_used: null,
@@ -344,13 +360,10 @@ export function MicroAppScheduledTasksModify({
 							selectedTopic={selectedTopic}
 							selectedProject={selectedProject}
 							selectedWorkspace={selectedWorkspace}
-							topicMode={topicMode}
-							setTopicMode={setTopicMode}
+							topicMode={modelTopicMode}
 							projectFilesStore={modalStores.projectFilesStore}
 							mentionPanelStore={modalStores.mentionPanelStore}
-							showModeToggle
 							enableAiCompletion
-							allowChangeMode
 							attachments={attachments}
 							size={isMobile ? "mobile" : "default"}
 							containerClassName="border-none"
@@ -360,6 +373,10 @@ export function MicroAppScheduledTasksModify({
 					<ReadonlyContextItem
 						label={tSuper("scheduleTask.projectScope")}
 						value={context.projectName || context.projectId}
+					/>
+					<ReadonlyContextItem
+						label={tSuper("scheduleTask.agentScope")}
+						value={tSuper("scheduleTask.microAppAgent")}
 					/>
 
 					<ProjectTopicItem

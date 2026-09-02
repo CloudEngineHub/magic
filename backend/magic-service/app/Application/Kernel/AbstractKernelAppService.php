@@ -15,6 +15,7 @@ use App\Domain\Authentication\Entity\ValueObject\AuthenticationDataIsolation;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\File\Entity\ValueObject\FileDataIsolation;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
 use App\Domain\KnowledgeBase\Entity\ValueObject\KnowledgeBaseDataIsolation;
@@ -157,6 +158,20 @@ abstract class AbstractKernelAppService
     protected function createAuthenticationDataIsolation(Authenticatable|BaseDataIsolation $authorization): AuthenticationDataIsolation
     {
         $dataIsolation = new AuthenticationDataIsolation();
+        if ($authorization instanceof BaseDataIsolation) {
+            $dataIsolation->extends($authorization);
+            return $dataIsolation;
+        }
+        $this->handleByAuthorization($authorization, $dataIsolation);
+        return $dataIsolation;
+    }
+
+    /**
+     * 根据认证信息创建文件领域数据隔离对象。
+     */
+    protected function createFileDataIsolation(Authenticatable|BaseDataIsolation $authorization): FileDataIsolation
+    {
+        $dataIsolation = new FileDataIsolation();
         if ($authorization instanceof BaseDataIsolation) {
             $dataIsolation->extends($authorization);
             return $dataIsolation;

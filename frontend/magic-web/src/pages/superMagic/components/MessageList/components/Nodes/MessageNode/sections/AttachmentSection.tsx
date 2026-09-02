@@ -19,6 +19,7 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import projectFilesStore from "@/stores/projectFiles"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
+import { resolveAttachmentList } from "@/pages/superMagic/components/MessageList/message-render-contract"
 
 interface AttachmentSectionProps {
 	node?: Record<string, unknown>
@@ -26,6 +27,8 @@ interface AttachmentSectionProps {
 	prevSuperMessageId?: string
 	onFileClick?: (fileItem: unknown) => void
 	onSelectDetail?: (detail: unknown) => void
+	/** Applied to whichever branch renders, so callers never wrap a section that returns null. */
+	className?: string
 }
 
 export const AttachmentSection = observer(function AttachmentSection({
@@ -34,12 +37,9 @@ export const AttachmentSection = observer(function AttachmentSection({
 	prevSuperMessageId,
 	onFileClick: handleFileClick,
 	onSelectDetail,
+	className,
 }: AttachmentSectionProps) {
-	const attachments = Array.isArray(node?.attachments)
-		? (node.attachments as AttachmentProps[])
-		: Array.isArray(fallbackNode?.attachments)
-			? (fallbackNode.attachments as AttachmentProps[])
-			: []
+	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
@@ -62,12 +62,13 @@ export const AttachmentSection = observer(function AttachmentSection({
 	})
 
 	if (filePathAttachments.length > 0) {
-		return <FilePathAttachmentList attachments={filePathAttachments} />
+		return <FilePathAttachmentList attachments={filePathAttachments} className={className} />
 	}
 	if (attachments.length === 0) return null
 
 	return (
 		<Attachment
+			className={className}
 			attachments={attachments}
 			onSelectDetail={onFileClick}
 			onFileClick={handleFileClick}

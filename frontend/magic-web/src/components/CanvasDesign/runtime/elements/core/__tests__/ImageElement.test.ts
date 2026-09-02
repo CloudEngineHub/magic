@@ -384,6 +384,45 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.getNameLabelText()).toBe("Pasted image(上传中)")
 	})
 
+	it("labels persisted pending image generations as generating", () => {
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: {
+				id: string
+				name: string
+				type: typeof ElementTypeEnum.Image
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
+			}
+			canvas: { t: undefined; elementManager: { isTemporary: ReturnType<typeof vi.fn> } }
+			isGenerating: boolean
+			isErrorState: boolean
+		}
+		element.data = {
+			id: "agent-image",
+			name: "Agent image",
+			type: ElementTypeEnum.Image,
+			activeContentId: "agent-image-content-1",
+			mainContentId: "agent-image-content-1",
+			contents: [
+				{
+					contentId: "agent-image-content-1",
+					status: GenerationStatus.Pending,
+				},
+			],
+		}
+		element.canvas = {
+			t: undefined,
+			elementManager: {
+				isTemporary: vi.fn(() => false),
+			},
+		}
+		element.isGenerating = false
+		element.isErrorState = false
+
+		expect(element.getNameLabelText()).toBe("Agent image(生成中)")
+	})
+
 	it("treats pasted video placeholders with existing info as uploading", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {

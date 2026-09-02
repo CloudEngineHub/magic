@@ -177,6 +177,7 @@ export default function SlidesTemplateCoverTile({
 			{coverUrl ? (
 				<img
 					key={coverUrl}
+					crossOrigin="anonymous"
 					src={coverUrl}
 					alt={label}
 					className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.015]"

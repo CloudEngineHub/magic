@@ -446,16 +446,19 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
 	)
 }
 
-function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
-	return (
-		<li
-			data-slot="sidebar-menu-item"
-			data-sidebar="menu-item"
-			className={cn("group/menu-item relative", className)}
-			{...props}
-		/>
-	)
-}
+const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentProps<"li">>(
+	function SidebarMenuItem({ className, ...props }, ref) {
+		return (
+			<li
+				ref={ref}
+				data-slot="sidebar-menu-item"
+				data-sidebar="menu-item"
+				className={cn("group/menu-item relative", className)}
+				{...props}
+			/>
+		)
+	},
+)
 
 const sidebarMenuButtonVariants = cva(
 	// Keep click feedback neutral; route selection still uses data-active styling below.
@@ -643,21 +646,22 @@ function SidebarMenuSubItem({ className, ...props }: React.ComponentProps<"li">)
 	)
 }
 
-function SidebarMenuSubButton({
-	asChild = false,
-	size = "md",
-	isActive = false,
-	className,
-	...props
-}: React.ComponentProps<"a"> & {
-	asChild?: boolean
-	size?: "sm" | "md"
-	isActive?: boolean
-}) {
+const SidebarMenuSubButton = React.forwardRef<
+	HTMLAnchorElement,
+	React.ComponentProps<"a"> & {
+		asChild?: boolean
+		size?: "sm" | "md"
+		isActive?: boolean
+	}
+>(function SidebarMenuSubButton(
+	{ asChild = false, size = "md", isActive = false, className, ...props },
+	ref,
+) {
 	const Comp = asChild ? Slot : "a"
 
 	return (
 		<Comp
+			ref={ref}
 			data-slot="sidebar-menu-sub-button"
 			data-sidebar="menu-sub-button"
 			data-size={size}
@@ -675,7 +679,7 @@ function SidebarMenuSubButton({
 			{...props}
 		/>
 	)
-}
+})
 
 export {
 	Sidebar,

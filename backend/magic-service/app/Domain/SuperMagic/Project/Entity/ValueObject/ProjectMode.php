@@ -61,6 +61,7 @@ enum ProjectMode: string
             self::SKILL_CREATOR->value,
             self::MAGICLAW->value,
             self::CHAT->value,
+            self::MICRO_APP->value,
         ];
     }
 

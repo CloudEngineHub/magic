@@ -4,6 +4,7 @@ import type {
 	CanvasFileElement,
 	MarkerTypeEnum,
 	CropConfig,
+	ElementType,
 } from "../runtime/document/types"
 import type {
 	CanvasResourceReferenceResolverSnapshot,
@@ -937,8 +938,8 @@ export interface DownloadImageOptions {
  * 获取高清图片生成配置响应数据
  */
 export interface GetConvertHightConfigResponse {
-	/** 是否支持转高清，如果没有配置则不支持转高清 */
-	supported: boolean
+	/** 后台是否开启转高清能力 */
+	enabled: boolean
 	/** 支持的尺寸配置列表 */
 	image_size_config?: {
 		sizes: {
@@ -947,8 +948,24 @@ export interface GetConvertHightConfigResponse {
 			/** 尺寸值，格式为 "宽度x高度"，如 "1024x1024" */
 			value: string
 			/** 分辨率等级，如 "1K", "2K", "4K" */
-			scale: string
+			scale: string | null
 		}[]
+	}
+}
+
+/** 获取 AI 能力可用性响应数据 */
+export interface AiAbilityAvailability {
+	abilities: {
+		image_convert_high: GetConvertHightConfigResponse
+		image_remove_background: {
+			enabled: boolean
+		}
+		image_eraser: {
+			enabled: boolean
+		}
+		image_expand: {
+			enabled: boolean
+		}
 	}
 }
 
@@ -1306,9 +1323,17 @@ export interface CanvasDesignStorageData {
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
+	layersFilter?: CanvasLayersFilterState
 	markers?: Marker[]
 	/** 关联文本的用户选择与顺序（不进入生成 API） */
 	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraftV1 | StoredLinkedEditorDraft>
+}
+
+/** 图层列表的持久化筛选条件。 */
+export interface CanvasLayersFilterState {
+	visibility: "all" | "visible" | "hidden"
+	locked: "all" | "locked" | "unlocked"
+	types: ElementType[]
 }
 
 /** v1 草稿兼容读取类型；媒体 selected ID 仅为历史字段，不再参与业务状态。 */
@@ -1491,6 +1516,11 @@ export interface CanvasDesignMethods {
 	 * @returns Promise<高清图片生成配置响应数据>
 	 */
 	getConvertHightConfig: () => Promise<GetConvertHightConfigResponse>
+	/**
+	 * 获取画布 AI 能力可用性
+	 * @returns Promise<AI 能力可用性响应数据>
+	 */
+	getAiAbilityAvailability?: () => Promise<AiAbilityAvailability>
 	/**
 	 * 查询图片生成结果
 	 * @param params 查询参数

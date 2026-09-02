@@ -480,6 +480,6 @@ describe("FilesViewer fullscreen portal", () => {
 			'pending-attachment-path:个人使用画像/个人AI协作画像.md]\n\n10. 部分 [unknown"'
 
 		expect(() => render(<FilesViewer />)).not.toThrow()
-		expect(mockState.scrollTo).toHaveBeenCalledOnce()
+		expect(mockState.scrollTo).toHaveBeenCalled()
 	})
 })

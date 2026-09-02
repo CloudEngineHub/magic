@@ -2921,6 +2921,7 @@
 			"updateDurationSuccess": "授权时长已更新",
 			"version": "应用版本"
 		},
+		"projectContextUnavailable": "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。",
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
 			"content": "HTML 微应用请求{{operation}}应用目录外的{{targetType}}：{{path}}。应用目录：{{appRootDir}}。",
@@ -3644,12 +3645,15 @@
 	},
 	"microAppsPage": {
 		"actions": {
+			"collaboratorsFailed": "加载协作者信息失败，请重试。",
+			"collaboratorsNoPermission": "你没有管理该应用协作者的权限。",
 			"deleteApp": "删除应用",
 			"deleteDescription": "「{{name}}」及对应项目将移入回收站，30 天内可以恢复。",
 			"deleteFailed": "删除应用失败，请重试。",
 			"deleteSuccess": "应用已移入回收站",
 			"deleteTitle": "删除应用",
 			"deleting": "删除中...",
+			"manageCollaborators": "管理协作者",
 			"more": "更多操作",
 			"openInNewWindow": "新窗口打开",
 			"rename": "重命名",
@@ -4457,6 +4461,10 @@
 		"cancelWorkspaceShortcut": "取消关联",
 		"cancelWorkspaceShortcutSuccess": "取消关联成功",
 		"collaboration": "团队",
+		"confirmPinOnReorder": "本次移动操作会将当前项目设置为置顶，是否确认执行？",
+		"confirmPinOnReorderTitle": "置顶项目",
+		"confirmUnpinOnReorder": "本次移动操作会取消当前项目的置顶状态，是否确认执行？",
+		"confirmUnpinOnReorderTitle": "取消置顶项目",
 		"copyCollaborationLink": "复制项目链接",
 		"copyLink": "复制链接",
 		"createNewProject": "创建新项目",
@@ -5137,6 +5145,7 @@
 		"title": "回收站"
 	},
 	"scheduleTask": {
+		"agentScope": "执行员工",
 		"clearSearch": "清空搜索",
 		"configTask": "任务配置",
 		"contextLoading": "正在加载当前微应用上下文…",
@@ -5152,6 +5161,7 @@
 		"enableTask": "启用",
 		"enabled": "运行中",
 		"manageTasks": "管理任务",
+		"microAppAgent": "微应用数字员工",
 		"monthlyAt": "每月 {{day}} 日 · {{time}} 执行",
 		"moreActions": "更多操作",
 		"noSchedule": "未设置执行时间",
@@ -6497,9 +6507,11 @@
 			"moveContentLossContent": "该操作会移动画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
 			"moveMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
 			"moveOpenFailureContent": "该操作会移动画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"pathRepairFailureContent": "部分画布资源路径未能在本次操作前修复：\n{{failures}}\n是否仍要继续？",
 			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
 			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
 			"renameOpenFailureContent": "该操作会重命名画布项目入口文件，可能导致画布无法打开。是否继续？",
+			"renameProjectNameSyncFailed": "重命名成功，但画布名称同步失败",
 			"title": "画布项目风险提示"
 		},
 		"clawPlaygroundTags": {

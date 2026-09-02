@@ -33,6 +33,35 @@ export const mentionDeletionInputKey = new PluginKey<MentionDeletionInput | unde
 
 const MENTION_CARET_GUARD_TEXT = "\u200b"
 
+/** Renders trusted SDK/draft mentions without React portals during restore transactions. */
+class TrustedMentionNodeView {
+	dom: HTMLSpanElement
+
+	constructor(private node: { attrs: TiptapMentionAttributes }) {
+		this.dom = document.createElement("span")
+		this.dom.contentEditable = "false"
+		this.dom.className = "magic-mention inline-flex px-0.5 align-middle"
+		this.render()
+	}
+
+	private render() {
+		const attrs = this.node.attrs
+		this.dom.dataset.type = attrs.type
+		this.dom.dataset.data = JSON.stringify(attrs.data || {})
+		this.dom.textContent = `@${getMentionDisplayName(attrs)}`
+	}
+
+	update(node: { attrs: TiptapMentionAttributes }) {
+		this.node = node
+		this.render()
+		return true
+	}
+
+	destroy() {
+		this.dom.remove()
+	}
+}
+
 function getDeletionInputFromTransactions(
 	transactions: readonly Transaction[],
 ): MentionDeletionInput {
@@ -178,12 +207,23 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 			dataService: undefined,
 			nodeViewRenderers: undefined,
 			shouldSkipInsertSync: undefined,
+			shouldSkipMentionValidation: undefined,
+			isTrustedMention: undefined,
 			shouldSkipRemoveSync: undefined,
 		}
 	},
 
 	addNodeView() {
-		return ReactNodeViewRenderer(MentionNodeView)
+		return (props) => {
+			const attrs = props.node.attrs as TiptapMentionAttributes
+			const hasCustomRenderer = Boolean(
+				this.options.nodeViewRenderers?.[attrs.type as MentionItemType],
+			)
+			if (this.options.isTrustedMention?.(attrs) && !hasCustomRenderer) {
+				return new TrustedMentionNodeView({ attrs })
+			}
+			return ReactNodeViewRenderer(MentionNodeView)(props)
+		}
 	},
 
 	addStorage() {
@@ -477,12 +517,16 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 							if (attrs.pending) return true
 							const uniqueId = getMentionUniqueId(attrs)
 
-							const isAllowed = this.options.dataService
-								? (this.options.isAllowedMention?.(
-										attrs,
-										this.options.dataService,
-									) ?? true)
-								: true
+							const shouldSkipValidation =
+								(this.options.shouldSkipMentionValidation?.() ?? false) ||
+								(this.options.isTrustedMention?.(attrs) ?? false)
+							const isAllowed =
+								shouldSkipValidation || !this.options.dataService
+									? true
+									: (this.options.isAllowedMention?.(
+											attrs,
+											this.options.dataService,
+										) ?? true)
 
 							if (!isAllowed) {
 								tr.delete(pos, pos + node.nodeSize)
@@ -518,21 +562,26 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 					}
 
 					if (uniqueInsertedMentions.length > 0) {
-						const mentionItems = uniqueInsertedMentions.map((mention) => ({
-							id: getMentionUniqueId(mention),
-							type: mention.type,
-							name: getMentionDisplayName(mention),
-							icon: getMentionIcon(mention),
-							description: getMentionDescription(mention),
-							data: mention.data,
-						}))
+						// Text mentions are editor-only SDK nodes and must not enter mention history metadata.
+						const mentionItems = uniqueInsertedMentions
+							.filter((mention) => mention.type !== MentionItemType.TEXT)
+							.map((mention) => ({
+								id: getMentionUniqueId(mention),
+								type: mention.type,
+								name: getMentionDisplayName(mention),
+								icon: getMentionIcon(mention),
+								description: getMentionDescription(mention),
+								data: mention.data,
+							}))
 
-						// 优先使用 onInsertItems 批量处理
-						if (onInsertItems) {
-							onInsertItems(mentionItems)
-						} else if (onInsert) {
-							// onInsert 现在只处理单个 mention
-							mentionItems.forEach((item) => onInsert(item))
+						if (mentionItems.length > 0) {
+							// 优先使用 onInsertItems 批量处理
+							if (onInsertItems) {
+								onInsertItems(mentionItems)
+							} else if (onInsert) {
+								// onInsert 现在只处理单个 mention
+								mentionItems.forEach((item) => onInsert(item))
+							}
 						}
 					}
 

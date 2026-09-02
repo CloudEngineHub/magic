@@ -215,6 +215,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 					<div className="flex size-full items-center justify-center">
 						{coverUrl ? (
 							<img
+								crossOrigin="anonymous"
 								src={coverUrl}
 								alt={templateName}
 								className="size-full object-cover"

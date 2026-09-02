@@ -407,6 +407,8 @@ export const MessageEditorContainer = observer(
 				mentionPanelStore,
 				isAllowedMention: isAllowedEditorMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
+				shouldSkipMentionValidation: () => store.editorStore.preserveMentionValidation,
+				isTrustedMention: (attrs) => store.editorStore.isTrustedMention(attrs),
 				shouldRestoreRemovedMention,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
@@ -464,9 +466,14 @@ export const MessageEditorContainer = observer(
 				}
 			}, [])
 
-			const updateContent = useMemoizedFn((content: JSONContent | undefined) => {
-				store.editorStore.updateContent(content)
-			})
+			const updateContent = useMemoizedFn(
+				(
+					content: JSONContent | undefined,
+					options?: { preserveMentionValidation?: boolean },
+				) => {
+					store.editorStore.updateContent(content, options)
+				},
+			)
 
 			const handleSendMessageByContent = useMemoizedFn(
 				async (data: SendMessageByContentPayload) => {
@@ -503,6 +510,7 @@ export const MessageEditorContainer = observer(
 						topicMode: data.topicMode ?? topicMode,
 						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
 						extra: data.extra,
+						targetTopic: data.targetTopic,
 					})
 				},
 			)
@@ -518,6 +526,7 @@ export const MessageEditorContainer = observer(
 				updateContent,
 				enableMessageSendByContent,
 				onSendMessageByContent: handleSendMessageByContent,
+				onSendCurrentContent: handleSend,
 				projectId: selectedProject?.id ?? draftKey?.projectId,
 				topicId: selectedTopic?.id ?? draftKey?.topicId,
 			})

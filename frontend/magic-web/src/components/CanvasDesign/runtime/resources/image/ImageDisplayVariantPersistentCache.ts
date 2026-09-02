@@ -56,13 +56,14 @@ export interface PersistentImageDisplayCacheGetOptions {
 }
 
 const DB_NAME = "canvas-design-image-display-variant-cache-v1"
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_NAME = "resources"
 const LOOKUP_INDEX = "lookupKey"
 const LAST_ACCESS_INDEX = "lastAccessAt"
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024
 const CODEC_VERSION = 3
 const PRUNE_IDLE_DELAY_MS = 1000
+const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 interface PendingGetRequest {
 	resolve: (record: PersistentImageDisplayCacheRecord | null) => void
@@ -114,6 +115,9 @@ export class ImageDisplayVariantPersistentCache {
 	private pendingGets = new Map<string, PendingGetRequest[]>()
 	private getFlushScheduled = false
 	private pruneTimerId: ReturnType<typeof setTimeout> | null = null
+	private touchTimerId: ReturnType<typeof setTimeout> | null = null
+	private pendingTouches = new Map<string, PersistentImageDisplayCacheTouch>()
+	private lastTouchWriteAt = new Map<string, number>()
 	private readonly maxBytes: number
 	private readonly now: () => number
 
@@ -127,6 +131,11 @@ export class ImageDisplayVariantPersistentCache {
 			clearTimeout(this.pruneTimerId)
 			this.pruneTimerId = null
 		}
+		if (this.touchTimerId !== null) {
+			clearTimeout(this.touchTimerId)
+			this.touchTimerId = null
+		}
+		this.pendingTouches.clear()
 		this.pendingGets.forEach((requests) => requests.forEach(({ resolve }) => resolve(null)))
 		this.pendingGets.clear()
 	}
@@ -283,7 +292,6 @@ export class ImageDisplayVariantPersistentCache {
 
 		const lookupKeys = Array.from(pendingGets.keys())
 		const recordsByLookupKey = await this.readRecordsByLookupKeys(db, lookupKeys)
-		const touchesByKey = new Map<string, PersistentImageDisplayCacheTouch>()
 		pendingGets.forEach((requests, lookupKey) => {
 			const records = (recordsByLookupKey.get(lookupKey) ?? []).filter(hasComparableVersion)
 			requests.forEach(({ resolve, resourceVersion }) => {
@@ -302,15 +310,35 @@ export class ImageDisplayVariantPersistentCache {
 				}
 
 				const lastAccessAt = this.now()
-				touchesByKey.set(record.key, { key: record.key, lastAccessAt })
+				this.queueTouch(record, lastAccessAt)
 				resolve({ ...record, lastAccessAt })
 			})
 		})
+	}
 
-		// 启动显示不应等待 lastAccessAt 写回；同批命中使用一个 readwrite transaction 更新。
-		if (touchesByKey.size > 0) {
-			void this.touchRecords(db, Array.from(touchesByKey.values()))
-		}
+	private queueTouch(record: PersistentImageDisplayCacheRecord, lastAccessAt: number): void {
+		const lastWrittenAt = this.lastTouchWriteAt.get(record.key) ?? record.lastAccessAt
+		if (lastAccessAt - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+		this.pendingTouches.set(record.key, { key: record.key, lastAccessAt })
+		this.scheduleTouchFlush()
+	}
+
+	private scheduleTouchFlush(): void {
+		if (this.touchTimerId !== null) return
+		this.touchTimerId = setTimeout(() => {
+			this.touchTimerId = null
+			void this.flushPendingTouches()
+		}, PRUNE_IDLE_DELAY_MS)
+	}
+
+	private async flushPendingTouches(): Promise<void> {
+		const touches = Array.from(this.pendingTouches.values())
+		this.pendingTouches.clear()
+		if (touches.length === 0) return
+		const db = await this.getDb()
+		if (!db) return
+		await this.touchRecords(db, touches)
+		touches.forEach(({ key, lastAccessAt }) => this.lastTouchWriteAt.set(key, lastAccessAt))
 	}
 
 	private async getDb(): Promise<IDBDatabase | null> {
@@ -325,14 +353,14 @@ export class ImageDisplayVariantPersistentCache {
 					? request.transaction?.objectStore(STORE_NAME)
 					: db.createObjectStore(STORE_NAME, { keyPath: "key" })
 				if (!store) return
-				if ((event as IDBVersionChangeEvent).oldVersion < DB_VERSION) {
-					store.clear()
-				}
 				if (!store.indexNames.contains(LOOKUP_INDEX)) {
 					store.createIndex(LOOKUP_INDEX, LOOKUP_INDEX, { unique: false })
 				}
-				if (!store.indexNames.contains(LAST_ACCESS_INDEX)) {
-					store.createIndex(LAST_ACCESS_INDEX, LAST_ACCESS_INDEX, { unique: false })
+				if (
+					(event as IDBVersionChangeEvent).oldVersion < DB_VERSION &&
+					store.indexNames.contains(LAST_ACCESS_INDEX)
+				) {
+					store.deleteIndex(LAST_ACCESS_INDEX)
 				}
 			}
 			request.onsuccess = () => resolve(request.result)

@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { ASK_USER_CONFIRM_VALUE } from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
+import { AskUserQuestionMarkdownTitle } from "@/pages/superMagic/components/MessageList/utils/AskUserMarkdownText"
 import type { AskUserLocale } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {
 	clearAskUserDraftAnswers,
@@ -96,12 +97,6 @@ function getSingleAnswerValue(value?: AnswerValue) {
 function shouldIgnoreOptionRowClick(event: MouseEvent<HTMLElement>) {
 	const target = event.target
 	return target instanceof HTMLElement && Boolean(target.closest("button,input,textarea"))
-}
-
-function formatQuestionTitle(question: ParsedQuestion, index: number, total: number) {
-	if (total <= 1) return question.label
-	if (/^\s*\d+[.\u3001)\uff09]\s*/.test(question.label)) return question.label
-	return `${index + 1}. ${question.label}`
 }
 
 function normalizeDefaultAnswer(question: ParsedQuestion): AnswerValue | null {
@@ -445,16 +440,13 @@ const QuestionItem = memo(function QuestionItem({
 			className={cn("space-y-1.5 transition-opacity", !question.isComplete && "opacity-70")}
 			data-testid={`ask-user-v2-card-question-item-${question.id}`}
 		>
-			<p
+			<AskUserQuestionMarkdownTitle
+				content={question.label}
+				index={index}
+				total={total}
 				className={cn(askUserQuestionTextClass, askUserBreakTextClass)}
-				data-testid={`ask-user-v2-card-question-text-${question.id}`}
-			>
-				{question.label ? (
-					formatQuestionTitle(question, index, total)
-				) : (
-					<span className="text-muted-foreground">...</span>
-				)}
-			</p>
+				testId={`ask-user-v2-card-question-text-${question.id}`}
+			/>
 
 			<div className={questionContentIndentClass}>
 				{question.type === "confirm" && (

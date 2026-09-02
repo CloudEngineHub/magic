@@ -40,7 +40,7 @@ function createSource(element: ImageElement): ConnectedInputSourceElement {
 }
 
 describe("connected image media inputs", () => {
-	it("uses only completed downstream content even when the active version differs", () => {
+	it("uses downstream content with src even when status is stale", () => {
 		const ready = createImage("ready", {
 			activeSrc: "/active.png",
 			mainSrc: "/main.png",
@@ -59,7 +59,7 @@ describe("connected image media inputs", () => {
 
 		expect(candidates).toEqual([
 			expect.objectContaining({ sourceElementId: ready.id, path: "/main.png" }),
-			expect.objectContaining({ sourceElementId: processing.id, path: undefined }),
+			expect.objectContaining({ sourceElementId: processing.id, path: "/processing.png" }),
 		])
 	})
 
@@ -77,6 +77,6 @@ describe("connected image media inputs", () => {
 			}),
 		})
 
-		expect(candidates[0]?.path).toBeUndefined()
+		expect(candidates[0]?.path).toBe("/runtime.png")
 	})
 })

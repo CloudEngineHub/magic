@@ -82,11 +82,11 @@ window.MagicWidget
 | `close`           | `() => void`                                                   | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                       |
 | `destroy`         | `() => void`                                                   | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                              |
 | `on`              | `on(event, listener)`                                          | Subscribes to Agent readiness, preview state, message stream start, tool settlement, or task completion events.   | Each event has a distinct listener signature; see Event API below.   |
-| `setInput`        | `(content: string) => Promise<void>`                           | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response. |
-| `appendInput`     | `(content: string) => Promise<void>`                           | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response. |
+| `setInput`        | `(content: string \| InputContent) => Promise<void>`           | Replaces the Agent editor content and focuses it without sending.                                                 | Accepts non-empty text or validated text/Mention blocks.             |
+| `appendInput`     | `(content: string \| InputContent) => Promise<void>`           | Appends text or Mention blocks to the current editor value without sending.                                       | Preserves the supplied block order.                                  |
 | `clearInput`      | `() => Promise<void>`                                          | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                              |
 | `getInput`        | `() => Promise<string>`                                        | Returns the current editor value as plain text.                                                                   | Completion follows the iframe response.                              |
-| `sendMessage`     | `(content: string) => Promise<void>`                           | Sends exactly one text message through the Agent conversation flow.                                               | Requires a non-empty string; rejects on timeout or iframe error.     |
+| `sendMessage`     | `(content?: string \| InputContent) => Promise<void>`          | Sends supplied content, or sends the current editor value when content is omitted.                                | Uses the existing editor send validation and conversation flow.      |
 | `newConversation` | `() => Promise<void>`                                          | Creates and selects a new conversation, resolving after its editor becomes ready.                                 | Rejects if creation fails or the new editor does not become ready.   |
 | `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>` | Incrementally updates the current embedded-page configuration.                                                    | Does not change the URL, replace `iframe.src`, or reload the iframe. |
 
@@ -256,7 +256,67 @@ const currentInput = await window.MagicWidget.getInput()
 await window.MagicWidget.clearInput()
 ```
 
-`getInput` returns plain text and does not expose TipTap or internal Mention JSON. `appendInput` only appends text and never sends a message. `setInput` replaces the current editor value without deleting persisted draft history; subsequent draft persistence continues through the existing topic-scoped draft flow.
+`getInput` returns plain text and does not expose TipTap or internal Mention JSON. `appendInput` never sends a message. `setInput` replaces the current editor value without deleting persisted draft history; subsequent draft persistence continues through the existing topic-scoped draft flow.
+
+Structured input uses SDK-owned blocks rather than raw TipTap JSON:
+
+```js
+const input = {
+	blocks: [
+		{ type: "text", text: "Ask " },
+		{
+			type: "mention",
+			mention: {
+				type: "agent",
+				data: {
+					agent_id: "agent-mock-001",
+					agent_name: "Agent Mock",
+				},
+			},
+		},
+		{ type: "text", text: " to review this fictional task." },
+	],
+}
+
+await window.MagicWidget.setInput(input)
+await window.MagicWidget.appendInput({
+	blocks: [
+		{
+			type: "mention",
+			mention: {
+				type: "tool",
+				data: { id: "tool-mock-001", name: "Tool Mock" },
+			},
+		},
+	],
+})
+await window.MagicWidget.sendMessage()
+```
+
+Mention input uses one generic `{ type, data }` contract. Registered Magic Web kinds keep their existing validation, rendering, draft, and send behavior. The protocol also preserves unknown non-empty type strings as generic nodes without promising backend semantics. Raw TipTap JSON and empty `blocks` reject with `INVALID_INPUT`; `data` only needs to be an object that can cross the window boundary, and its nested fields are not recursively restricted.
+
+The SDK-only `text` Mention requires non-empty `data.id`, `data.label`, and `data.text`. It renders as `@label` and remains structured in the editor and draft. The send snapshot uses reversible plain-text markers carrying `data.text` and the metadata needed for restoration, so refreshed messages can render the Mention again. It does not enter the Mention picker or structured Mention metadata:
+
+```ts
+await window.MagicWidget?.setInput({
+	blocks: [
+		{ type: "text", text: "Interpret " },
+		{
+			type: "mention",
+			mention: {
+				type: "text",
+				data: {
+					id: "chart-mock-001",
+					label: "Sales Chart",
+					text: "chart id: mock-chart; range: mock-range",
+				},
+			},
+		},
+	],
+})
+```
+
+Passing content to `sendMessage` sends that content without replacing the current editor value. Omitting content runs the editor's normal send action for the current draft. SDK and iframe deployments must use the same protocol version for structured input.
 
 ### New conversation
 
@@ -272,7 +332,7 @@ The host must give the container a non-zero width and height. Inline mode has no
 
 All input, send, conversation, and configuration methods return a Promise. They reject with an error containing `code` values such as `NOT_MOUNTED`, `INVALID_INPUT`, `INVALID_CONFIG`, `IFRAME_NOT_READY`, or `COMMAND_FAILED`. The SDK waits only for the iframe document to load during initial navigation or reload, not for `agent_ready`; command results follow the iframe response.
 
-The iframe uses a versioned `postMessage` protocol restricted to the SDK-derived Magic origin and the bound iframe window. Do not send secrets or unnecessary business data. Host `@` candidate injection and Agent-to-host action callbacks are not public in this phase.
+The iframe uses a versioned `postMessage` protocol restricted to the SDK-derived Magic origin and the bound iframe window. Do not send secrets or unnecessary business data. Host-controlled `@` candidate lists and Agent-to-host action callbacks are not public in this phase.
 
 ### `config`
 

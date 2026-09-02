@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from agentlang.config.config import config
+from agentlang.logger import get_logger
 from app.core.config.debug_config import (
     get_canvas_fake_video_estimate_points,
     is_canvas_fake_video_estimate_enabled,
@@ -73,6 +75,7 @@ from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrat
 
 _default_generation_tasks = InMemoryGenerationTaskRepository()
 _default_cost_estimate_records = InMemoryCostEstimateRepository()
+logger = get_logger(__name__)
 
 
 class CanvasApplicationFactory:
@@ -188,6 +191,7 @@ class CanvasApplicationFactory:
             generation_execution=dependencies.generation_execution,
             generation_result_applier=dependencies.generation_result_applier,
             element_sizing=element_sizing,
+            max_concurrency=CanvasApplicationFactory._generation_max_concurrency(),
         )
         video_composition_service = VideoCompositionService(
             unit_of_work=dependencies.unit_of_work,
@@ -259,3 +263,23 @@ class CanvasApplicationFactory:
             ),
             generation_submission_service=generation_submission,
         )
+
+    @staticmethod
+    def _generation_max_concurrency() -> int:
+        """读取并发生成上限，非法配置时安全降级为串行。"""
+        value = config.get("canvas.generation_max_concurrency", 4)
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Canvas generation concurrency config is invalid; fallback to serial execution: value={}",
+                value,
+            )
+            return 1
+        if normalized <= 0:
+            logger.warning(
+                "Canvas generation concurrency config must be greater than zero; fallback to serial execution: value={}",
+                value,
+            )
+            return 1
+        return normalized

@@ -85,6 +85,7 @@ import {
 	shouldShowHtmlPermissionManager,
 	useHtmlAppPermissions,
 } from "./hooks/useHtmlAppPermissions"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
 import {
 	type HtmlPermissionManagerHandle,
@@ -167,6 +168,8 @@ interface HTMLProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
+	/** 微应用编辑页传入的独立话题 store，供 iframe Agent 操作同步当前话题。 */
+	topicStore?: TopicStore
 	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
 	virtualStorageMarkerId?: string
 }
@@ -254,6 +257,7 @@ export default memo(function HTML(props: HTMLProps) {
 		exportImage,
 		isExporting,
 		selectedProject,
+		selectedTopic,
 		showFileHeader = true,
 		activeFileId,
 		isTabActive,
@@ -268,8 +272,11 @@ export default memo(function HTML(props: HTMLProps) {
 		onRegisterSaveHandler,
 		isInPPTMode = false,
 		allowDownload,
+		projectId,
+		topicStore,
 		virtualStorageMarkerId,
 	} = props
+	const runtimeProjectId = projectId ?? selectedProject?.id
 
 	const displayConfig = displayData?.display_config || externalDisplayConfig
 	const { styles, cx } = useStyles()
@@ -409,7 +416,7 @@ export default memo(function HTML(props: HTMLProps) {
 		content: processedContent,
 		rawSourceCode: data?.content,
 		relativeFilePath: currentHtmlFileInfo.relativeFilePath,
-		projectId: selectedProject?.id,
+		projectId: runtimeProjectId,
 		fileList: flattenedAttachmentList,
 		enabled: !isDataAnalysis && !htmlIsDeleted,
 	})
@@ -835,8 +842,8 @@ export default memo(function HTML(props: HTMLProps) {
 			attachmentList || [],
 			{
 				postMessageTargetStrategy,
-				projectId: selectedProject?.id,
-				topicId: selectedProject?.current_topic_id,
+				projectId: runtimeProjectId,
+				topicId: selectedTopic?.id ?? selectedProject?.current_topic_id,
 				parentTargetOrigin: window.location.origin,
 				onTelemetry: (data) => {
 					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
@@ -874,7 +881,7 @@ export default memo(function HTML(props: HTMLProps) {
 			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [attachmentList, displayData?.file_id])
+	}, [attachmentList, displayData?.file_id, runtimeProjectId, selectedTopic?.id])
 
 	const processContent = useMemoizedFn(async () => {
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
@@ -1603,7 +1610,7 @@ export default memo(function HTML(props: HTMLProps) {
 								attachmentList={attachmentList}
 								currentFileId={displayData?.file_id}
 								currentFileName={data?.file_name}
-								projectId={selectedProject?.id}
+								projectId={runtimeProjectId}
 								topicId={selectedProject?.current_topic_id}
 							/>
 						) : htmlIsDeleted ? (
@@ -1633,6 +1640,9 @@ export default memo(function HTML(props: HTMLProps) {
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
 									selectedProject={selectedProject}
+									projectId={runtimeProjectId}
+									topicStore={topicStore}
+									selectedTopic={selectedTopic}
 									devConsoleEnabled={devConsoleEnabled}
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}

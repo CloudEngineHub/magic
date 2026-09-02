@@ -6,6 +6,7 @@ import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "rea
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import MagicSpin from "@/components/base/MagicSpin"
 import MagicIcon from "@/components/base/MagicIcon"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import CustomTree from "./components/CustomTree/CustomTree"
@@ -42,6 +43,7 @@ import {
 	useStableTreeNodeDragHandlers,
 	useTopicFileRowRenderVersion,
 	useCrossProjectMoveCompensation,
+	useCopyFileSelector,
 } from "./hooks"
 import { useFileShortcuts } from "./hooks/useFileShortcuts"
 import {
@@ -745,6 +747,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		selectedItems,
 		allFiles: mergedFiles,
 		getItemId,
+		useDetailedDuplicateConflict: !capabilities.crossProject,
+	})
+	const copyFileHook = useCopyFileSelector({
+		projectId,
+		attachments,
+		onCopySuccess: () => onUpdateAttachments?.(),
 	})
 
 	// 解构移动进度状态
@@ -889,6 +897,18 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		},
 	)
 
+	const handleCopyConfirm = useMemoizedFn(async ({ path }: { path: AttachmentItem[] }) => {
+		if (!projectId) return
+		await crossProjectOperation.executeCopyOperation({
+			fileIds: copyFileHook.pendingCopyFileIds,
+			targetProjectId: projectId,
+			targetPath: path,
+			targetAttachments: attachments,
+			sourceAttachments: attachments,
+		})
+		copyFileHook.notifyCopySuccess()
+	})
+
 	// 跨项目文件操作 Hook
 	const crossProjectOperation = useCrossProjectFileOperation({
 		projectId,
@@ -990,6 +1010,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 创建复制文件处理函数的适配器
 	const handleCopyFileAdapter = useMemoizedFn((fileIds: string[]) => {
+		if (!capabilities.crossProject) {
+			const parentPath = fileIds[0] ? getParentPathByFileId(fileIds[0]) : []
+			copyFileHook.openBatchCopyByFileIds(fileIds, parentPath)
+			return
+		}
 		// 获取第一个文件的父目录路径作为默认路径
 		const firstFileId = fileIds[0]
 		if (firstFileId) {
@@ -1050,7 +1075,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleAddToNewChat: capabilities.addToChat ? handleAddToNewChat : undefined,
 		handleMoveFile: capabilities.move ? handleMoveFileAdapter : undefined,
 		handleReplaceFile: capabilities.replace ? handleReplaceFile : undefined,
-		onCopyFile: capabilities.crossProject ? handleCopyFileAdapter : undefined,
+		onCopyFile: capabilities.copy ? handleCopyFileAdapter : undefined,
 		createVirtualFile,
 		createVirtualFolder,
 		createVirtualDesignProject: capabilities.projectContentCreation
@@ -2218,7 +2243,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							data-testid="topic-files-list-loading"
 						>
 							<div className="flex flex-col items-center gap-3">
-								<Loader2 size={20} className="animate-spin text-muted-foreground" />
+								<MagicSpin spinning />
 								<p className="text-sm text-muted-foreground">
 									{t("topicFiles.loadingFiles")}
 								</p>
@@ -2422,6 +2447,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						{...{
 							...moveFileHook.selectorConfig,
 							visible: moveFileHook.selectorConfig.visible,
+							confirmLoading: capabilities.crossProject
+								? moveFileHook.selectorConfig.confirmLoading
+								: false,
 							mobileCrossProjectConfig:
 								isMobile && selectedProject
 									? {
@@ -2435,6 +2463,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						}}
 					/>
 				}
+				{!capabilities.crossProject && isInProject ? (
+					<SelectDirectoryModal
+						{...copyFileHook.selectorConfig}
+						onSubmit={handleCopyConfirm}
+					/>
+				) : null}
 				<CrossProjectFileOperationModal
 					visible={crossProjectOperation.visible}
 					title={

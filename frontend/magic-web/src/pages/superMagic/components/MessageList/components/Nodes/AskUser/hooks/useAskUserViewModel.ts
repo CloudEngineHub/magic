@@ -9,6 +9,7 @@ import {
 	type AskUserCardData,
 	type AskUserQuestionData,
 	getAskUserNode,
+	isAskUserTaskSuspended,
 	parseAskUserAnswerContent,
 	parseAskUserContent,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
@@ -188,8 +189,7 @@ export function useAskUserViewModel({
 	const askUserNode = getAskUserNode(node as typeof node)
 	const parsedContent = parseAskUserContent(askUserNode?.content)
 	const askUserTool = askUserNode?.tool as
-		| { status?: string; detail?: { data?: Record<string, unknown> } }
-		| undefined
+		{ status?: string; detail?: { data?: Record<string, unknown> } } | undefined
 	const detailData =
 		(askUserTool?.detail?.data as Record<string, unknown> | undefined) || askUserEmptyDetailData
 	const detailStatus = typeof detailData.status === "string" ? detailData.status : ""
@@ -248,7 +248,9 @@ export function useAskUserViewModel({
 		(hasNewerAskUserCard || hasNewerUserMessage)
 	const effectiveAskUser = isStalePendingCard
 		? { ...resolvedAskUser, status: ASK_USER_CARD_STATUS.cancelled }
-		: resolvedAskUser
+		: isPending && isAskUserTaskSuspended(selectedTopic)
+			? { ...resolvedAskUser, status: ASK_USER_CARD_STATUS.cancelled }
+			: resolvedAskUser
 	const resolvedErrorState = errorState
 	const hasMultipleQuestions = effectiveAskUser.questions.length > 1
 	const { isExpiredLocal, remainingText } = useAskUserCountdown({

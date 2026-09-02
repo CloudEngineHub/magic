@@ -132,6 +132,7 @@ export interface MessageEditorProps {
 		selectedVideoModel?: ModelItem | null
 		shouldClearEditorAfterSend?: boolean
 		extra?: Record<string, unknown>
+		targetTopic?: Topic | null
 	}) => void
 	/** Placeholder */
 	placeholder?: string
@@ -221,6 +222,7 @@ export interface SendMessageByContentPayload {
 	selectedVideoModel?: ModelItem | null
 	shouldClearEditorAfterSend?: boolean
 	extra?: Record<string, unknown>
+	targetTopic?: Topic | null
 }
 
 // Component Ref

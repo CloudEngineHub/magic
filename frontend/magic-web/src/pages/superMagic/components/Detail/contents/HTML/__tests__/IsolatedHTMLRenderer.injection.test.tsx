@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
@@ -35,6 +36,10 @@ const iframeMessageMocks = vi.hoisted(() => ({
 	handleMagicUploadFiles: vi.fn(),
 	handleMagicAddFilesToMessage: vi.fn(),
 	handleMagicDownloadFiles: vi.fn(),
+}))
+
+const agentActionMocks = vi.hoisted(() => ({
+	useIframeAgentActions: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -338,11 +343,14 @@ vi.mock("../iframe-api/hooks/useIframeUserInfo", () => ({
 }))
 
 vi.mock("../hooks/useIframeAgentActions", () => ({
-	useIframeAgentActions: () => ({
-		getAgentList: vi.fn(),
-		createTopicAndSend: vi.fn(),
-		sendMessage: vi.fn(),
-	}),
+	useIframeAgentActions: (...args: [string | undefined, unknown?]) => {
+		agentActionMocks.useIframeAgentActions(...args)
+		return {
+			getAgentList: vi.fn(),
+			createTopicAndSend: vi.fn(),
+			sendMessage: vi.fn(),
+		}
+	},
 }))
 
 vi.mock("../iframe-api/hooks/useMagicFiles", () => ({
@@ -420,6 +428,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		hookState.editorContentInjectedValues = []
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
+		agentActionMocks.useIframeAgentActions.mockClear()
 	})
 
 	afterEach(() => {
@@ -503,6 +512,55 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			defaultProps.content,
 			"index-file",
 			expect.any(Object),
+		)
+	})
+
+	it("uses the scoped selected topic for virtual storage", async () => {
+		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={{ id: "project-1", current_topic_id: "old-topic" }}
+				topicStore={scopedTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
+			projectId: "project-1",
+			topicId: "topic-from-micro-app",
+			fileId: "history-file",
+		})
+	})
+
+	it("passes the explicit projectId to Agent actions", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} projectId="project-from-preview" />)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			"project-from-preview",
+			undefined,
+			defaultProps.selectedProject,
+		)
+	})
+
+	it("passes the scoped topic store to Agent actions", async () => {
+		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				projectId="project-from-preview"
+				topicStore={scopedTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			"project-from-preview",
+			scopedTopicStore,
+			defaultProps.selectedProject,
 		)
 	})
 

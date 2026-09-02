@@ -45,6 +45,7 @@ export const MentionBusinessItemType = {
 	UPLOAD_FILE: "upload_file",
 	CLOUD_FILE: "cloud_file",
 	DESIGN_MARKER: "design_marker",
+	TEXT: "text",
 } as const
 
 export type MentionBusinessItemType =
@@ -187,6 +188,14 @@ export interface CloudFileMentionData {
 	[key: string]: unknown // 待定字段
 }
 
+/** Stores the SDK-provided display label, send text, and stable business identifier. */
+export interface TextMentionData {
+	label: string
+	text: string
+	id: string
+	[key: string]: unknown
+}
+
 export interface CanvasMarkerMentionSuggestion {
 	label: string
 	kind: "object" | "part" | "custom"
@@ -239,6 +248,7 @@ export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.UPLOAD_FILE]: UploadFileMentionData
 	[MentionBusinessItemType.CLOUD_FILE]: CloudFileMentionData
 	[MentionBusinessItemType.DESIGN_MARKER]: CanvasMarkerMentionData
+	[MentionBusinessItemType.TEXT]: TextMentionData
 }
 
 export interface MentionItemDataMap extends MentionCoreItemDataMap, MentionBusinessItemDataMap {}

@@ -22,7 +22,7 @@ _MEDIA_EXTENSIONS_BY_TYPE = {
     "audio": {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"},
 }
 class WorkspaceAssetGateway(AssetGateway):
-    """在 Canvas 工作区内解析、校验并物化素材文件。"""
+    """解析、校验并物化工作区或本机绝对路径下的素材文件。"""
 
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""
@@ -97,13 +97,13 @@ class WorkspaceAssetGateway(AssetGateway):
             await async_unlink(asset.absolute_path)
 
     async def _resolve_existing_source(self, project_path: str, asset_path: str) -> Path:
-        """按项目相对、工作区相对或工作区内绝对路径解析素材。"""
+        """按项目相对、工作区相对或本机绝对路径解析素材。"""
         raw = str(asset_path or "").strip().replace("\\", "/")
         if not raw:
             raise CanvasDomainError("ASSET_PATH_INVALID", "Asset path must not be empty.")
 
         project_root = self.path_resolver.resolve_project_root(project_path)
-        value = Path(raw)
+        value = Path(raw).expanduser()
         if value.is_absolute():
             candidates = [value]
         elif raw.startswith("./"):
@@ -120,13 +120,14 @@ class WorkspaceAssetGateway(AssetGateway):
 
         for candidate in candidates:
             resolved = candidate.resolve()
-            try:
-                resolved.relative_to(self.workspace.resolve())
-            except ValueError as error:
-                raise CanvasDomainError(
-                    "ASSET_PATH_INVALID",
-                    "Asset path must stay inside the Canvas workspace.",
-                ) from error
+            if not value.is_absolute():
+                try:
+                    resolved.relative_to(self.workspace.resolve())
+                except ValueError as error:
+                    raise CanvasDomainError(
+                        "ASSET_PATH_INVALID",
+                        "Relative asset paths must stay inside the Canvas workspace.",
+                    ) from error
             if await async_exists(resolved) and S_ISREG((await async_stat(resolved)).st_mode):
                 return resolved
         raise CanvasDomainError("ASSET_NOT_FOUND", f"Asset file does not exist: {asset_path}.")
