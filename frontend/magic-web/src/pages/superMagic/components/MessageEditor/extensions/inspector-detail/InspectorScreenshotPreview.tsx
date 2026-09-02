@@ -103,7 +103,7 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 
 	const previewTrigger = trigger ? (
 		<span
-			className="inline-flex max-w-full align-middle"
+			className="inline-flex min-w-0 max-w-full overflow-hidden align-middle"
 			data-testid="inspector-screenshot-preview-trigger"
 		>
 			{trigger}

@@ -61,7 +61,10 @@ describe("InspectorDetailComponent", () => {
 			"relative",
 			"top-[1px]",
 			"!align-baseline",
+			"max-w-[min(220px,100%)]",
 		)
+		expect(button).toHaveClass("min-w-0")
+		expect(button).not.toHaveClass("overflow-hidden")
 		expect(wrapper).toHaveAttribute("draggable", "false")
 		expect(wrapper).toHaveAttribute("data-magic-editor-node")
 		expect(wrapper).toHaveClass("!p-0")
@@ -130,7 +133,11 @@ describe("InspectorDetailComponent", () => {
 		)
 
 		const button = screen.getByTestId("set-expanded")
+		expect(button).not.toHaveClass("overflow-hidden")
 		expect(button.querySelector("svg.lucide-chevron-right")).toBeTruthy()
+		expect(await screen.findByTestId("inspector-screenshot-preview-trigger")).toHaveClass(
+			"min-w-0",
+		)
 
 		await act(async () => {
 			button.click()

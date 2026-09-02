@@ -77,7 +77,7 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 				<InspectorScreenshotPreview
 					mention={screenshotMention}
 					trigger={
-						<span className="inline-flex min-w-0 flex-1 items-center gap-1">
+						<span className="inline-flex min-w-0 items-center gap-1">
 							{headerLabelContent}
 						</span>
 					}
