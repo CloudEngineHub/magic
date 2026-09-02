@@ -64,7 +64,7 @@ export default function SlidesTemplateReplacementDialog({
 						enableMyTemplateRemoval
 					/>
 				</div>
-				<DialogFooter className="shrink-0 border-t px-6 py-4">
+				<DialogFooter className="shrink-0 border-t px-6 py-4 sm:items-center">
 					<div className="mr-auto min-w-0 text-sm text-muted-foreground">
 						{selectedTemplate
 							? t("ppt.templateReplacement.selected", {
