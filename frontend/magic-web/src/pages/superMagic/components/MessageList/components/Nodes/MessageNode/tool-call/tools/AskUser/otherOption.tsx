@@ -133,13 +133,13 @@ export function getAskUserSubmitActionText(locale: AskUserLocale) {
 }
 
 export function getAskUserRemarkLabel(locale: AskUserLocale) {
-	return locale === "zh_CN" ? zhCNSuper.askUser.remark.label : enUSSuper.askUser.remark.label
+	return locale === "zh_CN" ? zhCNSuper.askUser.remarkLabel : enUSSuper.askUser.remarkLabel
 }
 
 export function getAskUserRemarkPlaceholder(locale: AskUserLocale) {
 	return locale === "zh_CN"
-		? zhCNSuper.askUser.remark.placeholder
-		: enUSSuper.askUser.remark.placeholder
+		? zhCNSuper.askUser.remarkPlaceholder
+		: enUSSuper.askUser.remarkPlaceholder
 }
 
 export function getAskUserInputPlaceholder(locale: AskUserLocale) {

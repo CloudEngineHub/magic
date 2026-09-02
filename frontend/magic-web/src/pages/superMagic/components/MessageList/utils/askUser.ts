@@ -121,8 +121,6 @@ export interface AskUserCardData {
 	status: AskUserCardStatus
 	/** 已有答案（未回答时为 null） */
 	answer: AskUserAnswerContent | null
-	/** 整卡备注（可选） */
-	remark?: string
 }
 
 export interface AskUserActionDetail {
@@ -446,16 +444,6 @@ function resolveAskUserAnswer(item: SuperMagicMessageItem): AskUserAnswerContent
 	return parseAskUserAnswerContent((node as AskUserNode | undefined)?.content)
 }
 
-function resolveAskUserRemark(item: SuperMagicMessageItem): string {
-	const toolReplyDetail = parseAskUserToolReplyDetail(item as Record<string, unknown>)
-	const node = getAskUserNode(item) as Record<string, unknown> | undefined
-	const detailData = getAskUserToolDetailData(node)
-	return (
-		normalizeAskUserRemark(detailData?.remark) ||
-		normalizeAskUserRemark(toolReplyDetail?.remark)
-	)
-}
-
 export function aggregateAskUserMessages(messages: SuperMagicMessageItem[]): SuperMagicMessageItem {
 	const snapshots = messages.map(toAskUserSnapshot)
 	const pendingSnapshot = snapshots.find(
@@ -495,10 +483,6 @@ export function aggregateAskUserMessages(messages: SuperMagicMessageItem[]): Sup
 		status === ASK_USER_CARD_STATUS.answered || status === ASK_USER_CARD_STATUS.timeout
 			? resolveAskUserAnswer(finalSnapshot?.item)
 			: null
-	const remark =
-		status === ASK_USER_CARD_STATUS.answered || status === ASK_USER_CARD_STATUS.timeout
-			? resolveAskUserRemark(finalSnapshot?.item)
-			: ""
 	const correlationId = getAskUserCorrelationId(baseSnapshot?.item || finalSnapshot?.item || {})
 	const appMessageId =
 		baseSnapshot?.item?.app_message_id || finalSnapshot?.item?.app_message_id || correlationId
@@ -524,7 +508,6 @@ export function aggregateAskUserMessages(messages: SuperMagicMessageItem[]): Sup
 			expiresAt: content.expires_at,
 			status,
 			answer,
-			...(remark ? { remark } : {}),
 		} satisfies AskUserCardData,
 	} as SuperMagicMessageItem
 }

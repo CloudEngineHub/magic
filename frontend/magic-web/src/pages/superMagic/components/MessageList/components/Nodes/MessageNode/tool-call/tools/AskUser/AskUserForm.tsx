@@ -25,7 +25,6 @@ import {
 	writeAskUserDraftAnswers,
 	type AskUserDraftAnswers,
 } from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
-import { AskUserRemarkField } from "@/pages/superMagic/components/MessageList/components/Nodes/AskUser/components/AskUserRemarkField"
 import type { ParsedQuestion } from "./parse"
 import {
 	getAskUserAutoSubmitInText,
@@ -35,6 +34,8 @@ import {
 	ASK_USER_OTHER_SENTINEL,
 	AskUserOtherInput,
 	getAskUserOtherPlaceholder,
+	getAskUserRemarkLabel,
+	getAskUserRemarkPlaceholder,
 	getAskUserRenderableOptions,
 	getAskUserSkipActionText,
 	getAskUserSubmitActionText,
@@ -375,17 +376,16 @@ function AskUserFormImpl({
 							/>
 						))}
 						{showRemarkField ? (
-							<AskUserRemarkField
-								locale={locale}
+							<RemarkField
+								label={getAskUserRemarkLabel(locale)}
+								placeholder={getAskUserRemarkPlaceholder(locale)}
 								value={displayRemark}
 								onChange={setRemark}
 								disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
 								readOnly={Boolean(submittedAnswers) || isTerminal}
-								variant="v2"
 								contentIndentClass={
 									questions.length > 1 ? "pl-4" : undefined
 								}
-								testIdPrefix="ask-user-v2-card"
 							/>
 						) : null}
 					</div>
@@ -604,6 +604,64 @@ const InputField = memo(function InputField({
 			data-testid={`ask-user-v2-card-input-${questionId}`}
 			className={askUserInputClass}
 		/>
+	)
+})
+
+interface RemarkFieldProps {
+	label: string
+	placeholder: string
+	value: string
+	onChange: (value: string) => void
+	disabled: boolean
+	readOnly: boolean
+	contentIndentClass?: string
+}
+
+const RemarkField = memo(function RemarkField({
+	label,
+	placeholder,
+	value,
+	onChange,
+	disabled,
+	readOnly,
+	contentIndentClass,
+}: RemarkFieldProps) {
+	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const showReadOnly = readOnly || disabled
+
+	useLayoutEffect(() => {
+		const textarea = textareaRef.current
+		if (!textarea) return
+		textarea.style.height = "auto"
+		const nextHeight = Math.min(textarea.scrollHeight, ASK_USER_INPUT_MAX_HEIGHT)
+		textarea.style.height = `${nextHeight}px`
+		textarea.style.overflowY =
+			textarea.scrollHeight > ASK_USER_INPUT_MAX_HEIGHT ? "auto" : "hidden"
+	}, [value, placeholder])
+
+	if (showReadOnly && !value.trim()) return null
+
+	return (
+		<div className="space-y-1.5" data-testid="ask-user-v2-card-remark-field">
+			<AskUserQuestionMarkdownTitle
+				content={label}
+				className={cn(askUserQuestionTextClass, askUserBreakTextClass)}
+				testId="ask-user-v2-card-remark-label"
+			/>
+			<div className={contentIndentClass}>
+				<textarea
+					ref={textareaRef}
+					value={value}
+					disabled={showReadOnly}
+					readOnly={showReadOnly}
+					placeholder={placeholder}
+					onChange={(event) => onChange(event.target.value)}
+					rows={1}
+					data-testid="ask-user-v2-card-remark-input"
+					className={askUserInputClass}
+				/>
+			</div>
+		</div>
 	)
 })
 

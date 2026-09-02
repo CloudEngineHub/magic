@@ -23,7 +23,6 @@ import {
 	buildAskUserDraftCacheKey,
 	clearAskUserDraftAnswers,
 	readAskUserDraftAnswers,
-	readAskUserDraftRemark,
 	writeAskUserDraftAnswers,
 	type AskUserDraftAnswers,
 } from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
@@ -113,7 +112,6 @@ export function useAskUserActions({
 	const [selectedValues, setSelectedValues] = useState<Record<string, string>>({})
 	const [selectedOptionsMap, setSelectedOptionsMap] = useState<Record<string, string[]>>({})
 	const [otherTexts, setOtherTexts] = useState<Record<string, string>>({})
-	const [remark, setRemark] = useState("")
 	const [pendingAction, setPendingAction] = useState<AskUserPendingAction>(null)
 	const skipNextDraftWriteRef = useRef(true)
 	const draftCacheKey = useMemo(
@@ -135,7 +133,6 @@ export function useAskUserActions({
 		setSelectedValues(draftState.selectedValues)
 		setSelectedOptionsMap(draftState.selectedOptionsMap)
 		setOtherTexts(draftState.otherTexts)
-		setRemark(readAskUserDraftRemark(draftCacheKey))
 		setPendingAction(null)
 	}, [askUser.questionId, askUser.questions, draftCacheKey])
 
@@ -212,7 +209,6 @@ export function useAskUserActions({
 			questionId: askUser.questionId,
 			responseStatus,
 			answer: responseStatus === ASK_USER_RESPONSE_STATUS.answered ? answer : "",
-			remark: responseStatus === ASK_USER_RESPONSE_STATUS.answered ? remark : "",
 		})
 		if (!detail) throw new Error("missing_ask_user_task_id")
 		await sendAskUserToolReply({
@@ -239,15 +235,11 @@ export function useAskUserActions({
 		if (isDisabled) return
 
 		try {
-			writeAskUserDraftAnswers(
-				draftCacheKey,
-				JSON.parse(answer) as AskUserDraftAnswers,
-				remark,
-			)
+			writeAskUserDraftAnswers(draftCacheKey, JSON.parse(answer) as AskUserDraftAnswers)
 		} catch (error) {
 			console.error(error)
 		}
-	}, [answer, askUser.status, draftCacheKey, isDisabled, remark])
+	}, [answer, askUser.status, draftCacheKey, isDisabled])
 
 	const handleSubmit = useMemoizedFn(async () => {
 		if (isDisabled || pendingAction || !isValid) return
@@ -353,7 +345,6 @@ export function useAskUserActions({
 
 	return {
 		answer,
-		remark,
 		getInputValue,
 		getOtherText,
 		getSelectedOptions,
@@ -367,7 +358,6 @@ export function useAskUserActions({
 		handleToggleOption,
 		setInputValue,
 		setOtherText,
-		setRemark,
 		setSelectedValue,
 	}
 }
