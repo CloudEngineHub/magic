@@ -467,6 +467,7 @@ const MessageList = observer(
 		)
 		const shouldShowBottomLoading =
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
+			currentTopicStatus !== TaskStatus.FINISHED &&
 			(bottomLoadingVisibility.showImmediately || isStalledLoadingVisible)
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
