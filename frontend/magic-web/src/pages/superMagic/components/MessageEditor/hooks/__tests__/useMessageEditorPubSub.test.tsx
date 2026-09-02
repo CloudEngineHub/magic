@@ -164,6 +164,9 @@ describe("useMessageEditorPubSub", () => {
 		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).toContain(
 			"screenshot-storage-id",
 		)
+		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).not.toContain(
+			'"file":',
+		)
 
 		unmount()
 	})

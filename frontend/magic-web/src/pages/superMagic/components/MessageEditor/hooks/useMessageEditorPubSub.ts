@@ -180,7 +180,6 @@ function useMessageEditorPubSub({
 						file_path: storedScreenshot.storageId,
 						file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
 						file_size: storedScreenshot.fileSize,
-						file: storedScreenshot.file,
 						is_hidden: true,
 						is_html_screenshot: true,
 						storage_id: storedScreenshot.storageId,

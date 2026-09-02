@@ -8,6 +8,7 @@ import {
 } from "@/components/business/MentionPanel/types"
 import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
 import { useFileUrl } from "@/pages/superMagic/hooks/useFileUrl"
+import { htmlScreenshotUploadService } from "@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUploadService"
 
 interface InspectorScreenshotPreviewProps {
 	mention: TiptapMentionAttributes
@@ -35,27 +36,65 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 		enabled: !isLocalScreenshot,
 	})
 	const [localUrl, setLocalUrl] = useState<string | null>(null)
+	const [localLoading, setLocalLoading] = useState(false)
+	const [localError, setLocalError] = useState(false)
 
 	useEffect(() => {
 		if (!isLocalScreenshot || !data) {
 			setLocalUrl(null)
+			setLocalLoading(false)
+			setLocalError(false)
 			return
 		}
 
-		const file = (data as UploadFileMentionData).file
-		if (!file) return
-		const localObjectUrl = URL.createObjectURL(file)
-		setLocalUrl(localObjectUrl)
+		let disposed = false
+		let localObjectUrl: string | null = null
+		setLocalUrl(null)
+		setLocalLoading(true)
+		setLocalError(false)
+
+		const localData = data as UploadFileMentionData
+		void (async () => {
+			try {
+				let blob: Blob | File | undefined = localData.file
+				if (localData.storage_id) {
+					try {
+						blob =
+							(await htmlScreenshotUploadService.getStoredScreenshotBlob(localData.storage_id)) ??
+							blob
+					} catch {
+						// Keep the legacy in-memory fallback when IndexedDB is unavailable.
+					}
+				}
+				// Keep older in-memory mentions previewable while their IndexedDB record
+				// is unavailable or has already expired.
+				if (disposed) return
+				if (!blob) {
+					setLocalError(true)
+					setLocalLoading(false)
+					return
+				}
+				localObjectUrl = URL.createObjectURL(blob)
+				setLocalUrl(localObjectUrl)
+				setLocalLoading(false)
+			} catch {
+				if (disposed) return
+				setLocalError(true)
+				setLocalLoading(false)
+			}
+		})()
 
 		return () => {
-			URL.revokeObjectURL(localObjectUrl)
+			disposed = true
+			if (localObjectUrl) URL.revokeObjectURL(localObjectUrl)
 		}
 	}, [data, isLocalScreenshot])
 
 	const resolvedFileUrl = isLocalScreenshot ? localUrl : fileUrl
-	const localFile = isLocalScreenshot ? (data as UploadFileMentionData | undefined)?.file : null
-	const isLoading = isLocalScreenshot ? Boolean(localFile && !localUrl) : remoteLoading
-	const hasError = isLocalScreenshot ? !localFile : remoteError || (!fileUrl && !remoteLoading)
+	const isLoading = isLocalScreenshot ? localLoading : remoteLoading
+	const hasError = isLocalScreenshot
+		? localError || (!localLoading && !localUrl)
+		: remoteError || (!fileUrl && !remoteLoading)
 	const previewUrl = resolvedFileUrl && !isLoading && !hasError ? resolvedFileUrl : null
 	if (!data || !previewUrl) return trigger ? <>{trigger}</> : null
 

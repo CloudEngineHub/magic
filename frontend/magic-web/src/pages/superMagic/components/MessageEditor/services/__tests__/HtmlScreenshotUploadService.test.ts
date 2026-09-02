@@ -106,4 +106,17 @@ describe("HtmlScreenshotUploadService", () => {
 		expect(mocks.delete).toHaveBeenCalledWith("screenshot-storage-id")
 		expect(result).toMatchObject({ file_id: "saved-id", is_hidden: true })
 	})
+
+	it("keeps a successful upload when local cleanup fails", async () => {
+		mocks.delete.mockRejectedValueOnce(new Error("IndexedDB unavailable"))
+
+		await expect(
+			htmlScreenshotUploadService.uploadStoredScreenshot({
+				storageId: "screenshot-storage-id",
+				fileName: "screenshot.png",
+				projectId: "project-1",
+				topicId: "topic-1",
+			}),
+		).resolves.toMatchObject({ file_id: "saved-id", is_hidden: true })
+	})
 })

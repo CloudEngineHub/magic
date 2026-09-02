@@ -98,7 +98,9 @@ class HtmlScreenshotUploadService {
 		try {
 			const blob = await htmlScreenshotStorage.getBlob(storageId)
 			if (!blob) throw new Error("截图缓存已过期，请重新选择")
-			const file = new File([blob], fileName, { type: blob.type || "image/png" })
+			const file = new File([blob], fileName, {
+				type: blob.type || "image/png",
+			})
 			const customCredentials = await superMagicUploadTokenService.getUploadToken(projectId)
 			const uploadResult = await this.uploadToOss(
 				file,
@@ -137,7 +139,17 @@ class HtmlScreenshotUploadService {
 			})) as SaveUploadFileToProjectResponse[]
 			if (!saveResult?.file_id) throw new Error("截图保存到话题失败")
 
-			await htmlScreenshotStorage.delete(storageId)
+			try {
+				await htmlScreenshotStorage.delete(storageId)
+			} catch (cleanupError) {
+				logger.error({
+					eventKey: "html_screenshot_cleanup_failed",
+					errorKind: "storage_cleanup",
+					error: cleanupError,
+					message: "html screenshot cleanup failed after successful upload",
+				})
+			}
+
 			return { ...saveResult, is_hidden: true }
 		} catch (error) {
 			logger.error({

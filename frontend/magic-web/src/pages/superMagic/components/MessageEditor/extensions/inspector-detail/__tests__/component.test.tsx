@@ -1,10 +1,12 @@
 import type { ElementType, PropsWithChildren } from "react"
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
 import { InspectorDetailComponent } from "../component"
+
+const getStoredScreenshotBlob = vi.hoisted(() => vi.fn())
 
 vi.mock("@/infrastructure/editors/tiptap/react", () => ({
 	NodeViewWrapper: ({
@@ -27,7 +29,15 @@ vi.mock("@/pages/superMagic/hooks/useFileUrl", () => ({
 	useFileUrl: () => ({ fileUrl: "blob:inspector-screenshot" }),
 }))
 
+vi.mock("@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUploadService", () => ({
+	htmlScreenshotUploadService: { getStoredScreenshotBlob },
+}))
+
 describe("InspectorDetailComponent", () => {
+	beforeEach(() => {
+		getStoredScreenshotBlob.mockReset()
+	})
+
 	it("keeps the collapsed chip tall enough and separates its border from the caret", () => {
 		const props = {
 			node: {
@@ -133,5 +143,92 @@ describe("InspectorDetailComponent", () => {
 			"src",
 			"blob:inspector-screenshot",
 		)
+	})
+
+	it("loads a persisted local screenshot by storage id", async () => {
+		getStoredScreenshotBlob.mockResolvedValueOnce(new Blob(["png"], { type: "image/png" }))
+		const createObjectURL = vi.fn(() => "blob:local-inspector-screenshot")
+		const revokeObjectURL = vi.fn()
+		vi.stubGlobal("URL", { createObjectURL, revokeObjectURL })
+
+		const props = {
+			node: {
+				attrs: {
+					screenshotMention: {
+						type: MentionItemType.UPLOAD_FILE,
+						data: {
+							file_id: "storage-1",
+							file_name: "hero.png",
+							file_path: "storage-1",
+							file_extension: "png",
+							is_html_screenshot: true,
+							storage_id: "storage-1",
+						},
+					},
+				},
+			},
+			editor: { commands: { setNodeSelection: vi.fn() } },
+			getPos: () => 3,
+		} as unknown as NodeViewProps
+		render(
+			<TooltipProvider>
+				<InspectorDetailComponent {...props} />
+			</TooltipProvider>,
+		)
+
+		await act(async () => {
+			screen.getByTestId("set-expanded").click()
+		})
+		await waitFor(() => expect(getStoredScreenshotBlob).toHaveBeenCalledWith("storage-1"))
+		expect(await screen.findByRole("img", { name: "hero.png" })).toHaveAttribute(
+			"src",
+			"blob:local-inspector-screenshot",
+		)
+		vi.unstubAllGlobals()
+	})
+
+	it("falls back to the in-memory screenshot when local storage has expired", async () => {
+		getStoredScreenshotBlob.mockResolvedValueOnce(null)
+		const createObjectURL = vi.fn(() => "blob:legacy-inspector-screenshot")
+		const revokeObjectURL = vi.fn()
+		vi.stubGlobal("URL", { createObjectURL, revokeObjectURL })
+		const file = new File(["png"], "hero.png", { type: "image/png" })
+
+		const props = {
+			node: {
+				attrs: {
+					screenshotMention: {
+						type: MentionItemType.UPLOAD_FILE,
+						data: {
+							file_id: "storage-1",
+							file_name: "hero.png",
+							file_path: "storage-1",
+							file_extension: "png",
+							is_html_screenshot: true,
+							storage_id: "storage-1",
+							file,
+						},
+					},
+				},
+			},
+			editor: { commands: { setNodeSelection: vi.fn() } },
+			getPos: () => 3,
+		} as unknown as NodeViewProps
+
+		render(
+			<TooltipProvider>
+				<InspectorDetailComponent {...props} />
+			</TooltipProvider>,
+		)
+
+		await act(async () => {
+			screen.getByTestId("set-expanded").click()
+		})
+		await waitFor(() => expect(getStoredScreenshotBlob).toHaveBeenCalledWith("storage-1"))
+		expect(await screen.findByRole("img", { name: "hero.png" })).toHaveAttribute(
+			"src",
+			"blob:legacy-inspector-screenshot",
+		)
+		vi.unstubAllGlobals()
 	})
 })

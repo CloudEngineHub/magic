@@ -1,4 +1,5 @@
 import { Plugin, PluginKey, TextSelection } from "@/infrastructure/editors/tiptap/pm-state"
+import type { Node as ProseMirrorNode } from "prosemirror-model"
 import type { EditorView } from "prosemirror-view"
 
 export const MAGIC_NODE_DRAG_MIME = "application/x-magic-editor-node+json"
@@ -15,7 +16,13 @@ interface MagicNodeDragPayload {
 	}
 	sourceEditorId?: string
 	sourcePosition?: number
+	sourceDragId?: string
 	text: string
+}
+
+interface MagicNodeDragSource {
+	view: EditorView
+	element: HTMLElement
 }
 
 interface MagicNodePointerDragSession {
@@ -37,12 +44,12 @@ export function setMagicNodeDragData(
 	event: DragEvent,
 	type: string,
 	attrs: Record<string, unknown>,
-	source?: { editorId: string; position: number },
+	source?: { editorId: string; position: number; dragId?: string },
 	previewElement?: HTMLElement | null,
 ) {
 	if (!event.dataTransfer) return false
 
-	const payload = createDragPayload(type, attrs, source?.editorId, source?.position)
+	const payload = createDragPayload(type, attrs, source?.editorId, source?.position, source?.dragId)
 
 	event.dataTransfer.effectAllowed = source ? "move" : "copy"
 	event.dataTransfer.setData(MAGIC_NODE_DRAG_MIME, JSON.stringify(payload))
@@ -72,6 +79,7 @@ export function setMagicNodeDragData(
 }
 
 const editorViews = new Map<string, EditorView>()
+const activeDragSources = new Map<string, MagicNodeDragSource>()
 let activeDragPreview: HTMLElement | null = null
 let activeNativeDragImage: HTMLElement | null = null
 let dragPreviewListenersInstalled = false
@@ -112,7 +120,14 @@ function clearDragPreview() {
 	}
 }
 
+function clearDragSources() {
+	activeDragSources.clear()
+}
+
 function clearPointerDragSession() {
+	if (pointerDragSession?.payload.sourceDragId) {
+		activeDragSources.delete(pointerDragSession.payload.sourceDragId)
+	}
 	clearAllDropCursors()
 	clearDragPreview()
 	if (typeof document !== "undefined") {
@@ -212,12 +227,14 @@ function createDragPayload(
 	attrs: Record<string, unknown>,
 	sourceEditorId?: string,
 	sourcePosition?: number,
+	sourceDragId?: string,
 ): MagicNodeDragPayload {
 	return {
 		version: MAGIC_NODE_DRAG_VERSION,
 		node: { type, attrs },
 		sourceEditorId,
 		sourcePosition,
+		sourceDragId,
 		text: getDragText(type, attrs),
 	}
 }
@@ -239,6 +256,50 @@ function findDropTarget(clientX: number, clientY: number): MagicNodeDropTarget |
 	return null
 }
 
+function nodeMatchesDragSnapshot(node: ProseMirrorNode, payload: MagicNodeDragPayload) {
+	if (node.type.name !== payload.node.type) return false
+	try {
+		// The live DOM identity narrows where to look, but the complete attrs
+		// snapshot still has to match before a node can be deleted as the source.
+		return JSON.stringify(node.attrs) === JSON.stringify(payload.node.attrs)
+	} catch {
+		return false
+	}
+}
+
+function resolveSourceNode(
+	view: EditorView,
+	payload: MagicNodeDragPayload,
+	registeredSource?: MagicNodeDragSource,
+) {
+	const candidates: number[] = []
+	if (registeredSource?.view === view) {
+		try {
+			candidates.push(view.posAtDOM(registeredSource.element, 0))
+		} catch {
+			// The source NodeView may have been recreated during the drag.
+		}
+	}
+	// A position is only a compatibility fallback for old payloads. New drags
+	// carry a sourceDragId and must resolve through the live DOM identity or a
+	// unique snapshot match instead of trusting the stale captured position.
+	if (!payload.sourceDragId && payload.sourcePosition !== undefined) {
+		candidates.push(payload.sourcePosition)
+	}
+
+	for (const position of candidates) {
+		const node = view.state.doc.nodeAt(position)
+		if (node && nodeMatchesDragSnapshot(node, payload)) return { view, node, position }
+	}
+
+	const matches: Array<{ node: ProseMirrorNode; position: number }> = []
+	view.state.doc.descendants((node, position) => {
+		if (nodeMatchesDragSnapshot(node, payload)) matches.push({ node, position })
+		return matches.length < 2
+	})
+	return matches.length === 1 ? { view, ...matches[0] } : null
+}
+
 function updateDropCursorAtPosition(dropCursor: HTMLElement, view: EditorView, position: number) {
 	const caret = view.coordsAtPos(position)
 	dropCursor.style.left = `${Math.min(caret.left, caret.right)}px`
@@ -253,11 +314,14 @@ function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayloa
 	if (!nodeType) return false
 
 	const sourceView = payload.sourceEditorId ? editorViews.get(payload.sourceEditorId) : undefined
-	const isSameEditor = sourceView === view
-	const sourceNode =
-		sourceView && payload.sourcePosition !== undefined
-			? sourceView.state.doc.nodeAt(payload.sourcePosition)
-			: undefined
+	const sourceSource = payload.sourceDragId
+		? activeDragSources.get(payload.sourceDragId)
+		: undefined
+	const resolvedSource = sourceView ? resolveSourceNode(sourceView, payload, sourceSource) : null
+	if (payload.sourceEditorId && (!sourceView || !resolvedSource)) return false
+	const isSameEditor = resolvedSource?.view === view
+	const sourceNode = resolvedSource?.node
+	const sourcePosition = resolvedSource?.position
 
 	const node = (() => {
 		try {
@@ -270,17 +334,17 @@ function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayloa
 	if (
 		isSameEditor &&
 		sourceNode?.type.name === node.type.name &&
-		payload.sourcePosition !== undefined &&
-		payload.sourcePosition <= position &&
-		position <= payload.sourcePosition + sourceNode.nodeSize
+		sourcePosition !== undefined &&
+		sourcePosition <= position &&
+		position <= sourcePosition + sourceNode.nodeSize
 	) {
 		return true
 	}
 
 	let tr = view.state.tr
 	let insertPosition = position
-	if (isSameEditor && sourceNode && payload.sourcePosition !== undefined) {
-		tr = tr.delete(payload.sourcePosition, payload.sourcePosition + sourceNode.nodeSize)
+	if (isSameEditor && sourceNode && sourcePosition !== undefined) {
+		tr = tr.delete(sourcePosition, sourcePosition + sourceNode.nodeSize)
 		insertPosition = tr.mapping.map(insertPosition)
 	}
 
@@ -288,22 +352,33 @@ function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayloa
 		tr = tr.replaceRangeWith(insertPosition, insertPosition, node)
 		tr = tr.setSelection(TextSelection.near(tr.doc.resolve(insertPosition + node.nodeSize)))
 		view.dispatch(tr)
-		if (!isSameEditor && sourceView && sourceNode && payload.sourcePosition !== undefined) {
-			sourceView.dispatch(
-				sourceView.state.tr.delete(
-					payload.sourcePosition,
-					payload.sourcePosition + sourceNode.nodeSize,
-				),
-			)
-		}
-		// Dispatching a transaction updates the selection, but a cross-editor
-		// move can leave focus on the source editor. Focus the destination after
-		// source cleanup so the caret is immediately usable at the new position.
-		view.focus()
-		return true
 	} catch {
 		return false
 	}
+
+	if (!isSameEditor && sourceView) {
+		// The destination dispatch may synchronously trigger source-editor updates.
+		// Resolve the source again against its current document before deleting it.
+		// If identity is no longer provable, keep the source and degrade to a copy.
+		const currentSource = resolveSourceNode(sourceView, payload, sourceSource)
+		if (currentSource) {
+			try {
+				sourceView.dispatch(
+					sourceView.state.tr.delete(
+						currentSource.position,
+						currentSource.position + currentSource.node.nodeSize,
+					),
+				)
+			} catch {
+				// The target insert already succeeded; preserving the source avoids data loss.
+			}
+		}
+	}
+
+	// A cross-editor move can leave focus on the source editor. Focus the
+	// destination after best-effort source cleanup so the caret remains usable.
+	view.focus()
+	return true
 }
 
 function installPointerDragListeners() {
@@ -317,8 +392,13 @@ function installPointerDragListeners() {
 		const sourceEditorId = [...editorViews.entries()].find(
 			([, view]) => view === target.sourceView,
 		)?.[0]
-		if (sourceEditorId && target.payload.sourcePosition !== undefined) {
+		if (sourceEditorId && target.sourceView && target.payload.sourcePosition !== undefined) {
 			target.payload.sourceEditorId = sourceEditorId
+			target.payload.sourceDragId = createEditorId()
+			activeDragSources.set(target.payload.sourceDragId, {
+				view: target.sourceView,
+				element: target.sourceElement,
+			})
 		}
 		pointerDragSession = {
 			...target,
@@ -443,6 +523,9 @@ function ensureDragPreviewListeners() {
 		() => {
 			clearAllDropCursors()
 			clearDragPreview()
+			// The editor's drop handler runs later in this event dispatch. Keep the
+			// source identity available until it has finished resolving the live node.
+			queueMicrotask(clearDragSources)
 		},
 		true,
 	)
@@ -451,6 +534,7 @@ function ensureDragPreviewListeners() {
 		() => {
 			clearAllDropCursors()
 			clearDragPreview()
+			clearDragSources()
 		},
 		true,
 	)
@@ -586,16 +670,20 @@ function writeDragData(view: EditorView, editorId: string, event: DragEvent) {
 	const dragged = findDraggedNode(view, event.target)
 	if (!dragged) return false
 
-	return setMagicNodeDragData(
+	const dragId = createEditorId()
+	const written = setMagicNodeDragData(
 		event,
 		dragged.node.type.name,
 		dragged.node.attrs,
 		{
 			editorId,
 			position: dragged.position,
+			dragId,
 		},
 		dragged.element,
 	)
+	if (written) activeDragSources.set(dragId, { view, element: dragged.element })
+	return written
 }
 
 function findDraggedNode(view: EditorView, target: EventTarget | null) {
@@ -713,6 +801,9 @@ export function createMagicNodeDragPlugin() {
 					)
 					view.dom.removeEventListener("dragstart", handleDragStart, true)
 					editorViews.delete(editorId)
+					for (const [dragId, source] of activeDragSources) {
+						if (source.view === view) activeDragSources.delete(dragId)
+					}
 					if (editorViews.size === 0) removePointerDragListeners?.()
 				},
 			}
