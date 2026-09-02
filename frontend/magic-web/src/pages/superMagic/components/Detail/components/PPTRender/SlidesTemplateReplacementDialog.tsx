@@ -8,8 +8,8 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Button } from "@/components/shadcn-ui/button"
-import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import SlidesTemplatePanelContent from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/SlidesTemplatePanelContent"
 import { useSlidesTemplatePanelState } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplatePanelState"
 import type { SlidesTemplateReplacementTarget } from "@/pages/superMagic/utils/slidesTemplateReplacementActions"
@@ -28,6 +28,7 @@ export default function SlidesTemplateReplacementDialog({
 	onConfirm,
 }: SlidesTemplateReplacementDialogProps) {
 	const { t } = useTranslation("super")
+	const lt = useLocaleText()
 	const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
 	const slidesState = useSlidesTemplatePanelState()
 
@@ -46,16 +47,19 @@ export default function SlidesTemplateReplacementDialog({
 				onOpenChange(nextOpen)
 			}}
 		>
-			<DialogContent className="flex max-h-[90vh] w-[min(90vw,760px)] !max-w-[760px] flex-col gap-0 overflow-hidden p-0">
+			<DialogContent className="flex max-h-[90vh] w-[min(90vw,1200px)] !max-w-[1200px] flex-col gap-0 overflow-hidden p-0">
 				<DialogHeader className="shrink-0 border-b px-6 py-4">
 					<DialogTitle>{t("ppt.templateReplacement.title")}</DialogTitle>
 					<p className="text-sm text-muted-foreground">{scopeText}</p>
 				</DialogHeader>
-				<div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+				<div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
 					<SlidesTemplatePanelContent
 						slidesState={slidesState}
 						selectedTemplate={selectedTemplate}
 						onTemplateClick={setSelectedTemplate}
+						className="h-full"
+						toolbarClassName="sticky top-0 z-20 bg-background/95 pb-3 backdrop-blur"
+						gridClassName="min-h-0 flex-1"
 						showMyTemplates
 						enableMyTemplateRemoval
 					/>
@@ -65,8 +69,9 @@ export default function SlidesTemplateReplacementDialog({
 						{selectedTemplate
 							? t("ppt.templateReplacement.selected", {
 									name:
-										localeTextToDisplayString(selectedTemplate.label) ||
-										localeTextToDisplayString(selectedTemplate.value),
+										lt(selectedTemplate.label) ||
+										lt(selectedTemplate.value) ||
+										"",
 								})
 							: t("ppt.templateReplacement.selectHint")}
 					</div>
