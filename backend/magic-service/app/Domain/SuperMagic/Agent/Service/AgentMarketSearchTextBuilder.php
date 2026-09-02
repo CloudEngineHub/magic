@@ -20,9 +20,9 @@ final class AgentMarketSearchTextBuilder
     public static function buildSemanticText(AgentMarketEntity $market, array $categories = []): string
     {
         $sections = [];
-        self::appendI18nSection($sections, '数字员工名称', $market->getNameI18n() ?? []);
+        self::appendI18nSection($sections, '名称', $market->getNameI18n() ?? []);
         self::appendI18nSection($sections, '角色定位', $market->getRoleI18n() ?? []);
-        self::appendI18nSection($sections, '数字员工描述', $market->getDescriptionI18n() ?? []);
+        self::appendI18nSection($sections, '能力描述', $market->getDescriptionI18n() ?? []);
 
         $categoryTexts = [];
         foreach ($categories as $category) {
@@ -30,19 +30,9 @@ final class AgentMarketSearchTextBuilder
                 $categoryTexts[] = $category->getNameI18n();
             }
         }
-        self::appendI18nSection($sections, '数字员工分类', $categoryTexts);
-        self::appendTextSection($sections, '数字员工编码', $market->getAgentCode());
+        self::appendI18nSection($sections, '分类', $categoryTexts);
 
         return implode("\n", $sections);
-    }
-
-    /** @param array<int, string> $sections */
-    private static function appendTextSection(array &$sections, string $label, ?string $text): void
-    {
-        $text = self::normalizeText($text);
-        if ($text !== null) {
-            $sections[] = $label . '：' . $text;
-        }
     }
 
     /** @param array<int, string> $sections @param array<mixed> $texts */

@@ -38,6 +38,10 @@ final class AgentMarketSearchTextBuilderTest extends TestCase
         self::assertStringContainsString('market research', $semanticText);
         self::assertStringContainsString('分析市场趋势', $semanticText);
         self::assertStringContainsString('market analysis', $semanticText);
-        self::assertStringContainsString('market-analyst', $semanticText);
+        self::assertStringContainsString('名称：', $semanticText);
+        self::assertStringContainsString('角色定位：', $semanticText);
+        self::assertStringContainsString('能力描述：', $semanticText);
+        self::assertStringContainsString('分类：', $semanticText);
+        self::assertStringNotContainsString('market-analyst', $semanticText);
     }
 }
