@@ -181,4 +181,25 @@ describe("InspectorDetailReadOnly", () => {
 		expect(attrs.selector).toBe("#hero")
 		expect(attrs.captureId).toBeNull()
 	})
+
+	it("prevents native text selection when starting a node drag", () => {
+		const { container } = render(
+			<InspectorDetailReadOnly
+				attrs={{
+					selector: "#hero",
+					tagName: "section",
+					size: "",
+					computedStyles: "{}",
+					styleCount: 0,
+					textContent: "Hero",
+				}}
+			/>,
+		)
+
+		const node = container.querySelector(".inspector-detail-read-only")
+		expect(node).toBeTruthy()
+		const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+		node?.dispatchEvent(event)
+		expect(event.defaultPrevented).toBe(true)
+	})
 })

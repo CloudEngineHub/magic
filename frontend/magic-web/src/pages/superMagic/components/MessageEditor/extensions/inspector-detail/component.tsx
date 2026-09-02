@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, useCallback, useState, type MouseEvent } from "react"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { ChevronRight, ChevronDown, Crosshair } from "lucide-react"
@@ -56,6 +56,12 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 	})()
 	const attributeEntries = Object.entries(parsedAttributes)
 
+	const handleMouseDown = useCallback((event: MouseEvent) => {
+		// Keep pointer drag from becoming a native text/image drag.
+		event.preventDefault()
+		event.stopPropagation()
+	}, [])
+
 	const headerLabel = getInspectorDetailHeaderLabel(t, attrs.textContent)
 	const fileData =
 		attrs.fileMention?.type === MentionItemType.PROJECT_FILE
@@ -91,6 +97,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 				setExpanded((value) => !value)
 			}}
 			contentEditable={false}
+			draggable={false}
 			data-testid="set-expanded"
 		>
 			{/* Keep the preview on the label, not the expand button. */}
@@ -117,6 +124,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 			data-type="inspector-detail"
 			draggable={false}
 			data-magic-editor-node
+			onMouseDown={handleMouseDown}
 			className={cn(
 				"cursor-grab select-none transition-colors active:cursor-grabbing",
 				// Replace ProseMirror's generic node outline with the chip-level selected state below.

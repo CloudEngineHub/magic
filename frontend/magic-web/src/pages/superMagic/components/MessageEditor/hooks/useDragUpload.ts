@@ -7,7 +7,7 @@ import {
 	SelfMediaCardDragData,
 } from "../utils/drag"
 import { dragLogger } from "../utils/dragLogger"
-import { MAGIC_NODE_DRAG_MIME } from "../extensions/node-drag"
+import { isMagicNodeDragInProgress, MAGIC_NODE_DRAG_MIME } from "../extensions/node-drag"
 
 interface UseDragUploadProps {
 	enableFileDrop?: boolean
@@ -50,7 +50,8 @@ export function useDragUpload({
 	const dragCounterRef = useRef(0)
 
 	const isMagicNodeDrag = useCallback(
-		(e: React.DragEvent) => e.dataTransfer.types.includes(MAGIC_NODE_DRAG_MIME),
+		(e: React.DragEvent) =>
+			e.dataTransfer.types.includes(MAGIC_NODE_DRAG_MIME) || isMagicNodeDragInProgress(),
 		[],
 	)
 

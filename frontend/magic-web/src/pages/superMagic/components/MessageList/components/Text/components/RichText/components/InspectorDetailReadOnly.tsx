@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, useCallback, useState, type MouseEvent } from "react"
 import { ChevronRight, ChevronDown, Crosshair } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -40,6 +40,12 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 		}
 	})()
 	const styleEntries = Object.entries(parsedStyles)
+
+	const handleMouseDown = useCallback((event: MouseEvent) => {
+		// Keep pointer drag from becoming a native text/image drag.
+		event.preventDefault()
+		event.stopPropagation()
+	}, [])
 
 	const headerLabel = getInspectorDetailHeaderLabel(t, attrs.textContent)
 	const fileData =
@@ -105,6 +111,7 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			data-magic-node-type="inspector-detail"
 			data-magic-node-attrs={JSON.stringify(sanitizeCopiedInspectorDetailAttrs(attrs))}
 			data-magic-editor-node
+			onMouseDown={handleMouseDown}
 		>
 			{headerButton}
 

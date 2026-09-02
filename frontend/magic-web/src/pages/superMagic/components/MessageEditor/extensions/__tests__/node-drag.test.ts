@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { MAGIC_NODE_DRAG_MIME, resolveDroppedNodeAttrs, setMagicNodeDragData } from "../node-drag"
+import {
+	isMagicNodeDragInProgress,
+	MAGIC_NODE_DRAG_MIME,
+	resolveDroppedNodeAttrs,
+	setMagicNodeDragData,
+	shouldSuppressNativeDrag,
+} from "../node-drag"
 
 function createDragEvent(clientX = 120, clientY = 140) {
 	return {
@@ -104,5 +110,37 @@ describe("resolveDroppedNodeAttrs", () => {
 		)
 
 		expect(attrs.captureId).toBe("element:#hero:1")
+	})
+})
+
+describe("native drag suppression during pointer node drag", () => {
+	beforeEach(() => {
+		document.documentElement.classList.remove(
+			"magic-node-pointer-pending",
+			"magic-node-dragging",
+		)
+	})
+
+	it("treats a pending pointer node drag as in progress", () => {
+		expect(isMagicNodeDragInProgress()).toBe(false)
+		document.documentElement.classList.add("magic-node-pointer-pending")
+		expect(isMagicNodeDragInProgress()).toBe(true)
+	})
+
+	it("cancels native dragstart while a pointer node drag is pending", () => {
+		document.documentElement.classList.add("magic-node-pointer-pending")
+		expect(
+			shouldSuppressNativeDrag({
+				target: document.body,
+			} as unknown as DragEvent),
+		).toBe(true)
+	})
+
+	it("cancels native dragstart from a magic editor node", () => {
+		const node = document.createElement("span")
+		node.setAttribute("data-magic-editor-node", "true")
+		document.body.appendChild(node)
+
+		expect(shouldSuppressNativeDrag({ target: node } as unknown as DragEvent)).toBe(true)
 	})
 })

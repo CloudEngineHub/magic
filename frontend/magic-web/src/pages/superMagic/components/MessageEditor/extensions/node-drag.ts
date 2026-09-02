@@ -5,6 +5,8 @@ import { sanitizeCopiedInspectorDetailAttrs } from "./inspector-detail/copyAttrs
 import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
 
 export const MAGIC_NODE_DRAG_MIME = "application/x-magic-editor-node+json"
+export const MAGIC_NODE_POINTER_PENDING_CLASS = "magic-node-pointer-pending"
+export const MAGIC_NODE_DRAGGING_CLASS = "magic-node-dragging"
 const MAGIC_NODE_DRAG_VERSION = 1
 const nodeDragPluginKey = new PluginKey("magicNodeDrag")
 const DROP_CURSOR_CLASS = "magic-node-dropcursor"
@@ -106,6 +108,31 @@ let pointerDragListenersInstalled = false
 let removePointerDragListeners: (() => void) | null = null
 let pointerDragSession: MagicNodePointerDragSession | null = null
 let suppressClickTarget: HTMLElement | null = null
+let promoteWaitTimer: ReturnType<typeof setTimeout> | null = null
+
+function cancelPromoteWait() {
+	if (promoteWaitTimer === null) return
+	clearTimeout(promoteWaitTimer)
+	promoteWaitTimer = null
+}
+
+export function isMagicNodeDragInProgress() {
+	if (pointerDragSession) return true
+	if (typeof document === "undefined") return false
+	const root = document.documentElement
+	return (
+		root.classList.contains(MAGIC_NODE_POINTER_PENDING_CLASS) ||
+		root.classList.contains(MAGIC_NODE_DRAGGING_CLASS)
+	)
+}
+
+export function shouldSuppressNativeDrag(event: DragEvent) {
+	// Promote an active pointer drag instead of cancelling the stolen
+	// native dragstart, even when it originates on the node itself.
+	if (pointerDragSession?.active) return false
+	const target = (event.target as Element | null)?.closest?.("[data-magic-editor-node]")
+	return Boolean(target) || isMagicNodeDragInProgress()
+}
 
 function createEditorId() {
 	if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -134,7 +161,7 @@ function clearDragPreview() {
 	activeNativeDragImage?.remove()
 	activeNativeDragImage = null
 	if (typeof document !== "undefined") {
-		document.documentElement.classList.remove("magic-node-dragging")
+		document.documentElement.classList.remove(MAGIC_NODE_DRAGGING_CLASS)
 	}
 }
 
@@ -143,13 +170,14 @@ function clearDragSources() {
 }
 
 function clearPointerDragSession() {
+	cancelPromoteWait()
 	if (pointerDragSession?.payload.sourceDragId) {
 		activeDragSources.delete(pointerDragSession.payload.sourceDragId)
 	}
 	clearAllDropCursors()
 	clearDragPreview()
 	if (typeof document !== "undefined") {
-		document.documentElement.classList.remove("magic-node-pointer-pending")
+		document.documentElement.classList.remove(MAGIC_NODE_POINTER_PENDING_CLASS)
 	}
 	pointerDragSession = null
 }
@@ -169,15 +197,15 @@ function clearAllDropCursors() {
 function hideNativeDragCursor() {
 	if (typeof document === "undefined") return
 	ensurePointerDragStyle()
-	document.documentElement.classList.add("magic-node-dragging")
+	document.documentElement.classList.add(MAGIC_NODE_DRAGGING_CLASS)
 }
 
 function ensurePointerDragStyle() {
 	if (typeof document === "undefined" || nativeDragCursorStyle) return
 	nativeDragCursorStyle = document.createElement("style")
 	nativeDragCursorStyle.textContent =
-		"html.magic-node-dragging, html.magic-node-dragging * { cursor: none !important; }" +
-		"html.magic-node-pointer-pending, html.magic-node-pointer-pending * { user-select: none !important; }"
+		`html.${MAGIC_NODE_DRAGGING_CLASS}, html.${MAGIC_NODE_DRAGGING_CLASS} * { cursor: none !important; }` +
+		`html.${MAGIC_NODE_POINTER_PENDING_CLASS}, html.${MAGIC_NODE_POINTER_PENDING_CLASS} * { user-select: none !important; }`
 	document.head.appendChild(nativeDragCursorStyle)
 }
 
@@ -434,7 +462,46 @@ function installPointerDragListeners() {
 		// Do not capture yet. Capturing on pointerdown retargets click away from
 		// inner expand buttons and tooltip triggers.
 		ensurePointerDragStyle()
-		document.documentElement.classList.add("magic-node-pointer-pending")
+		document.documentElement.classList.add(MAGIC_NODE_POINTER_PENDING_CLASS)
+	}
+
+	const releaseSessionPointerCapture = (
+		session: MagicNodePointerDragSession,
+		pointerId: number,
+	) => {
+		if (
+			session.sourceElement.hasPointerCapture?.(pointerId) &&
+			session.sourceElement.releasePointerCapture
+		) {
+			session.sourceElement.releasePointerCapture(pointerId)
+		}
+	}
+
+	const promotePointerSessionToNativeDrag = (event: DragEvent) => {
+		const session = pointerDragSession
+		if (!session?.active) return false
+		const { payload, sourceElement } = session
+		const written = setMagicNodeDragData(
+			event,
+			payload.node.type,
+			payload.node.attrs,
+			payload.sourceEditorId && payload.sourcePosition !== undefined
+				? {
+						editorId: payload.sourceEditorId,
+						position: payload.sourcePosition,
+						dragId: payload.sourceDragId,
+					}
+				: undefined,
+			sourceElement,
+		)
+		if (!written) return false
+		// Keep the promoted native drag; only detach the pointer session.
+		cancelPromoteWait()
+		pointerDragSession = null
+		if (typeof document !== "undefined") {
+			document.documentElement.classList.remove(MAGIC_NODE_POINTER_PENDING_CLASS)
+		}
+		return true
 	}
 
 	const handlePointerMove = (event: Event) => {
@@ -455,6 +522,7 @@ function installPointerDragListeners() {
 				}
 			}
 			createDragPreview(session.payload.text, session.sourceElement)
+			hideNativeDragCursor()
 			window.getSelection()?.removeAllRanges()
 		}
 		// Only suppress browser text-selection after this is a real drag.
@@ -483,13 +551,25 @@ function installPointerDragListeners() {
 			// click, so unrelated controls remain interactive.
 			suppressClickTarget = session.sourceElement
 		}
-		if (
-			session.sourceElement.hasPointerCapture?.(pointerEvent.pointerId) &&
-			session.sourceElement.releasePointerCapture
-		) {
-			session.sourceElement.releasePointerCapture(pointerEvent.pointerId)
-		}
+		releaseSessionPointerCapture(session, pointerEvent.pointerId)
 		clearPointerDragSession()
+	}
+
+	const handlePointerCancel = (event: Event) => {
+		const pointerEvent = event as PointerEvent
+		const session = pointerDragSession
+		if (!session || session.pointerId !== pointerEvent.pointerId) return
+		releaseSessionPointerCapture(session, pointerEvent.pointerId)
+		if (!session.active) {
+			clearPointerDragSession()
+			return
+		}
+		// dragstart is the next event; a microtask would clear too early.
+		cancelPromoteWait()
+		promoteWaitTimer = setTimeout(() => {
+			promoteWaitTimer = null
+			if (pointerDragSession === session) clearPointerDragSession()
+		}, 0)
 	}
 
 	const handleWindowBlur = () => {
@@ -501,8 +581,12 @@ function installPointerDragListeners() {
 	}
 
 	const handleDragStart = (event: Event) => {
-		const target = (event.target as Element | null)?.closest?.("[data-magic-editor-node]")
-		if (target) event.preventDefault()
+		const dragEvent = event as DragEvent
+		if (shouldSuppressNativeDrag(dragEvent)) {
+			dragEvent.preventDefault()
+			return
+		}
+		if (pointerDragSession?.active) promotePointerSessionToNativeDrag(dragEvent)
 	}
 	const handleClick = (event: Event) => {
 		if (!suppressClickTarget) return
@@ -516,7 +600,7 @@ function installPointerDragListeners() {
 	document.addEventListener("pointerdown", handlePointerDown, true)
 	document.addEventListener("pointermove", handlePointerMove, true)
 	document.addEventListener("pointerup", finishPointerDrag, true)
-	document.addEventListener("pointercancel", finishPointerDrag, true)
+	document.addEventListener("pointercancel", handlePointerCancel, true)
 	window.addEventListener("blur", handleWindowBlur)
 	document.addEventListener("visibilitychange", handleVisibilityChange)
 	document.addEventListener("dragstart", handleDragStart, true)
@@ -526,7 +610,7 @@ function installPointerDragListeners() {
 		document.removeEventListener("pointerdown", handlePointerDown, true)
 		document.removeEventListener("pointermove", handlePointerMove, true)
 		document.removeEventListener("pointerup", finishPointerDrag, true)
-		document.removeEventListener("pointercancel", finishPointerDrag, true)
+		document.removeEventListener("pointercancel", handlePointerCancel, true)
 		window.removeEventListener("blur", handleWindowBlur)
 		document.removeEventListener("visibilitychange", handleVisibilityChange)
 		document.removeEventListener("dragstart", handleDragStart, true)

@@ -79,6 +79,9 @@ describe("InspectorDetailComponent", () => {
 			"leading-5",
 		)
 		expect(button).toHaveTextContent("hello")
+		const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+		wrapper?.dispatchEvent(event)
+		expect(event.defaultPrevented).toBe(true)
 	})
 
 	it("shows a layout-safe highlight when the inspector detail node is selected", () => {

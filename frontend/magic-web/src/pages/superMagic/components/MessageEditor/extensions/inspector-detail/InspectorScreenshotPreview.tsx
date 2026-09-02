@@ -97,6 +97,7 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 		<img
 			src={previewUrl}
 			alt={data.file_name}
+			draggable={false}
 			className="block h-16 w-full rounded-md object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
 		/>
 	)
