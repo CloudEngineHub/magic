@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
 	buildHtmlMultiSelectionRequest,
+	createHtmlElementCaptureId,
 	createHtmlSelectionTarget,
 	getHtmlScreenshotFileName,
 	getHtmlSelectionTargetRect,
@@ -24,6 +25,32 @@ function createInfo(overrides: Partial<InspectedElementInfo> = {}): InspectedEle
 		...overrides,
 	}
 }
+
+describe("createHtmlElementCaptureId", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	it("keeps the selector and a random uuid, not a timestamp or local sequence", () => {
+		vi.spyOn(Date, "now").mockReturnValue(1_725_000_000_000)
+
+		const captureId = createHtmlElementCaptureId("#hero")
+
+		expect(captureId).toMatch(
+			/^element:#hero:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+		)
+		expect(captureId).not.toContain("1725000000000")
+	})
+
+	it("does not collide for the same selector at the same millisecond", () => {
+		vi.spyOn(Date, "now").mockReturnValue(1_725_000_000_000)
+
+		const first = createHtmlElementCaptureId("#hero")
+		const second = createHtmlElementCaptureId("#hero")
+
+		expect(first).not.toBe(second)
+	})
+})
 
 describe("HTML multi-selection payload", () => {
 	it("keeps generated screenshot filenames short and deterministic", () => {

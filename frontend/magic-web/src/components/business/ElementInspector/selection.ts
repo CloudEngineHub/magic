@@ -1,3 +1,4 @@
+import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import type { HtmlMultiSelectionRequest, HtmlSelectionTarget, InspectedElementInfo } from "./types"
 
 const MAX_INSTRUCTION_LENGTH = 2000
@@ -23,8 +24,8 @@ export function getHtmlScreenshotFileName(targetId: string, index = 0): string {
 }
 
 /** Unique capture id so one selector can keep many screenshots. */
-export function createHtmlElementCaptureId(selector: string, sequence: number): string {
-	return `element:${selector}:${Date.now()}:${sequence}`
+export function createHtmlElementCaptureId(selector: string): string {
+	return `element:${selector}:${createRandomUuidV4()}`
 }
 
 export function createHtmlSelectionTarget(

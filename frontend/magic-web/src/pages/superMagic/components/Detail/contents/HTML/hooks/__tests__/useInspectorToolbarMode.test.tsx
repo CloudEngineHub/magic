@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type {
 	InspectedElementInfo,
 	useElementInspector,
@@ -29,7 +29,34 @@ function createInfo(): InspectedElementInfo {
 	}
 }
 
+function createInspector(): ReturnType<typeof useElementInspector> {
+	return {
+		active: false,
+		toggle: vi.fn(),
+		start: vi.fn(),
+		stop: vi.fn(),
+		hoveredElement: null,
+		selectedElement: null,
+		clearSelection: vi.fn(),
+		setTrackedSelectors: vi.fn(),
+		trackedRects: {},
+	} as unknown as ReturnType<typeof useElementInspector>
+}
+
+const defaultFileInfo = {
+	fileId: "file-1",
+	fileName: "index.html",
+	filePath: "index.html",
+}
+
+const ELEMENT_CAPTURE_ID_PATTERN =
+	/^element:#hero:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 describe("useInspectorToolbarMode", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	it("keeps typed instructions when the inspector object changes identity", () => {
 		const selectedElement = createInfo()
 		const fileInfo = {
@@ -189,12 +216,12 @@ describe("useInspectorToolbarMode", () => {
 			const content = appendContent.mock.calls[0]?.[0]
 			expect(content.content[0].content[0].attrs.selector).toBe("#hero")
 			expect(content.content[0].content[0].attrs.targetId).toEqual(
-				expect.stringMatching(/^element:#hero:\d+:1$/),
+				expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
 			)
 			expect(content.content[0].content[0].attrs.screenshotMention).toBeUndefined()
 			expect(prepareScreenshot).toHaveBeenCalledWith(
 				expect.objectContaining({
-					targetId: expect.stringMatching(/^element:#hero:\d+:1$/),
+					targetId: expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
 					dataUrl: screenshot.dataUrl,
 					releaseAfterSuccess: true,
 				}),
@@ -207,7 +234,7 @@ describe("useInspectorToolbarMode", () => {
 			await act(async () => request.onSuccess(screenshotMention))
 
 			expect(updateScreenshot).toHaveBeenCalledWith({
-				targetId: expect.stringMatching(/^element:#hero:\d+:1$/),
+				targetId: expect.stringMatching(ELEMENT_CAPTURE_ID_PATTERN),
 				screenshotMention,
 			})
 			expect(appendContent).toHaveBeenCalledOnce()
@@ -692,7 +719,7 @@ describe("useInspectorToolbarMode", () => {
 			act(() => result.current.setDraftInstruction("重新换个背景"))
 			act(() => result.current.confirmTarget())
 
-			expect(result.current.pendingTargets[0]?.id).toMatch(/^element:#hero:\d+:\d+$/)
+			expect(result.current.pendingTargets[0]?.id).toMatch(ELEMENT_CAPTURE_ID_PATTERN)
 			expect(result.current.pendingTargets[0]?.id).not.toBe(selectedElement.selector)
 			expect(prepareScreenshot).toHaveBeenCalledWith(
 				expect.objectContaining({
@@ -703,5 +730,89 @@ describe("useInspectorToolbarMode", () => {
 		} finally {
 			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, prepareScreenshot)
 		}
+	})
+
+	it("keeps unique capture ids for quick selection and append selection at the same time", () => {
+		vi.spyOn(Date, "now").mockReturnValue(1_725_000_000_000)
+		const selectedElement = createInfo()
+		const screenshot = {
+			dataUrl: "data:image/png;base64,shot",
+			rect: selectedElement.rect,
+		}
+		const quickInspector = createInspector()
+		const appendInspector = createInspector()
+		const appendContent = vi.fn()
+		pubsub.subscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
+
+		const quick = renderHook(() =>
+			useInspectorToolbarMode(quickInspector, (key) => key, defaultFileInfo),
+		)
+		const append = renderHook(() =>
+			useInspectorToolbarMode(appendInspector, (key) => key, defaultFileInfo),
+		)
+
+		try {
+			act(() => quick.result.current.startInQuickSelectionMode())
+			;(quickInspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
+				selectedElement
+			quick.rerender()
+
+			act(() => append.result.current.startInAppendMode())
+			;(appendInspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
+				selectedElement
+			append.rerender()
+			act(() =>
+				append.result.current.attachElementScreenshot(selectedElement.selector, screenshot),
+			)
+
+			const quickTargetId =
+				appendContent.mock.calls[0]?.[0].content[0].content[0].attrs.targetId
+			const appendTargetId = append.result.current.activeTarget?.id
+
+			expect(quickTargetId).toMatch(/^element:#hero:/)
+			expect(appendTargetId).toMatch(/^element:#hero:/)
+			expect(quickTargetId).not.toBe(appendTargetId)
+		} finally {
+			pubsub.unsubscribe(PubSubEvents.Append_Content_To_Editor, appendContent)
+		}
+	})
+
+	it("keeps unique capture ids across two hook instances", () => {
+		vi.spyOn(Date, "now").mockReturnValue(1_725_000_000_000)
+		const selectedElement = createInfo()
+		const screenshot = {
+			dataUrl: "data:image/png;base64,shot",
+			rect: selectedElement.rect,
+		}
+		const firstInspector = createInspector()
+		const secondInspector = createInspector()
+		const first = renderHook(() =>
+			useInspectorToolbarMode(firstInspector, (key) => key, defaultFileInfo),
+		)
+		const second = renderHook(() =>
+			useInspectorToolbarMode(secondInspector, (key) => key, defaultFileInfo),
+		)
+
+		act(() => first.result.current.startInAppendMode())
+		;(firstInspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
+			selectedElement
+		first.rerender()
+		act(() =>
+			first.result.current.attachElementScreenshot(selectedElement.selector, screenshot),
+		)
+
+		act(() => second.result.current.startInAppendMode())
+		;(secondInspector as { selectedElement: InspectedElementInfo | null }).selectedElement =
+			selectedElement
+		second.rerender()
+		act(() =>
+			second.result.current.attachElementScreenshot(selectedElement.selector, screenshot),
+		)
+
+		expect(first.result.current.activeTarget?.id).toMatch(/^element:#hero:/)
+		expect(second.result.current.activeTarget?.id).toMatch(/^element:#hero:/)
+		expect(first.result.current.activeTarget?.id).not.toBe(
+			second.result.current.activeTarget?.id,
+		)
 	})
 })

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, expectTypeOf, it } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { sanitizeCopiedInspectorDetailAttrs } from "../copyAttrs"
 
@@ -57,5 +57,17 @@ describe("sanitizeCopiedInspectorDetailAttrs", () => {
 
 		expect(copied.targetId).toBeNull()
 		expect(copied.screenshotMention).toEqual(projectScreenshotMention)
+	})
+
+	it("accepts a required string targetId and returns a nullable one", () => {
+		const attrs: { selector: string; targetId: string } = {
+			selector: "#hero",
+			targetId: "element:#hero:1",
+		}
+
+		const copied = sanitizeCopiedInspectorDetailAttrs(attrs)
+
+		expect(copied.targetId).toBeNull()
+		expectTypeOf(copied.targetId).toEqualTypeOf<string | null | undefined>()
 	})
 })

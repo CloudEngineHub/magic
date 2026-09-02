@@ -60,8 +60,6 @@ export function useInspectorToolbarMode(
 	const modeRef = useRef<InspectorMode>("devConsole")
 	const exitRequestRef = useRef<Promise<boolean> | null>(null)
 	const previousFileIdRef = useRef(fileInfo?.fileId)
-	const quickSelectionSequenceRef = useRef(0)
-	const elementCaptureSequenceRef = useRef(0)
 	const quickSelectionRef = useRef<{
 		selector: string
 		targetId: string
@@ -119,13 +117,9 @@ export function useInspectorToolbarMode(
 			// Insert the inspector node immediately. The screenshot is stored by
 			// targetId; the editor node is not rewritten.
 			if (!quickSelectionRef.current) {
-				quickSelectionSequenceRef.current += 1
 				quickSelectionRef.current = {
 					selector: info.selector,
-					targetId: createHtmlElementCaptureId(
-						info.selector,
-						quickSelectionSequenceRef.current,
-					),
+					targetId: createHtmlElementCaptureId(info.selector),
 					screenshotRequested: false,
 				}
 				pubsub.publish(
@@ -275,11 +269,7 @@ export function useInspectorToolbarMode(
 
 	const attachElementScreenshot = useCallback(
 		(selector: string, screenshot: HtmlSelectionScreenshot) => {
-			elementCaptureSequenceRef.current += 1
-			const captureId = createHtmlElementCaptureId(
-				selector,
-				elementCaptureSequenceRef.current,
-			)
+			const captureId = createHtmlElementCaptureId(selector)
 			setActiveTarget((target) =>
 				target?.kind === "element" && target.info.selector === selector
 					? { ...target, id: captureId, screenshot }
@@ -342,10 +332,7 @@ export function useInspectorToolbarMode(
 			activeTarget.screenshot &&
 			!activeTarget.id.startsWith(`element:${activeTarget.info.selector}:`)
 				? {
-						id: createHtmlElementCaptureId(
-							activeTarget.info.selector,
-							(elementCaptureSequenceRef.current += 1),
-						),
+						id: createHtmlElementCaptureId(activeTarget.info.selector),
 					}
 				: {}),
 		}
