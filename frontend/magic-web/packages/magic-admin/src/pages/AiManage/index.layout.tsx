@@ -16,8 +16,10 @@ import {
 import {
 	AI_APP_MENU,
 	AI_CUSTOM_MODEL,
+	AI_DATA_DASHBOARD,
+	AI_EMPLOYEE_REVIEW,
 	AI_INTERNAL_EMPLOYEE_SKILL,
-	AI_MANAGEMENT,
+	AI_SKILL_REVIEW,
 	PERMISSION_KEY_MAP,
 } from "@admin/const/common"
 import { useAdminStore } from "@admin/stores/admin"
@@ -71,10 +73,8 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								permissions.includes(
-									PERMISSION_KEY_MAP.INTELLIGENT_DRAWING_QUERY,
-								) ||
-								permissions.includes(PERMISSION_KEY_MAP.INTELLIGENT_DRAWING_EDIT)
+								permissions.includes(PERMISSION_KEY_MAP.VIDEO_MODEL_QUERY) ||
+								permissions.includes(PERMISSION_KEY_MAP.VIDEO_MODEL_EDIT)
 							)
 						},
 					},
@@ -100,7 +100,7 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								AI_INTERNAL_EMPLOYEE_SKILL.some((permission) =>
+								AI_EMPLOYEE_REVIEW.some((permission) =>
 									permissions.includes(permission),
 								)
 							)
@@ -113,7 +113,7 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								AI_INTERNAL_EMPLOYEE_SKILL.some((permission) =>
+								AI_SKILL_REVIEW.some((permission) =>
 									permissions.includes(permission),
 								)
 							)
@@ -128,7 +128,7 @@ function AIManagerLayout() {
 				validate: (permissions: string[], isSuperAdmin?: boolean) => {
 					return (
 						isSuperAdmin ||
-						AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+						AI_DATA_DASHBOARD.some((permission) => permissions.includes(permission))
 					)
 				},
 				children: [
@@ -139,7 +139,7 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+								permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_MEMBER_QUERY)
 							)
 						},
 					},
@@ -150,7 +150,9 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+								permissions.includes(
+									PERMISSION_KEY_MAP.DATA_DASHBOARD_ORGANIZATION_QUERY,
+								)
 							)
 						},
 					},
@@ -161,7 +163,7 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+								permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_AGENT_QUERY)
 							)
 						},
 					},
@@ -172,7 +174,9 @@ function AIManagerLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+								permissions.includes(
+									PERMISSION_KEY_MAP.DATA_DASHBOARD_CONSUMPTION_QUERY,
+								)
 							)
 						},
 					},

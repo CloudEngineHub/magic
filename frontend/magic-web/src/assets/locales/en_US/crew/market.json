@@ -85,6 +85,7 @@
 		"publisherVerified": "Verified creator"
 	},
 	"hire": "Hire",
+	"hireMoreCrew": "Hire more crew",
 	"importSkill": {
 		"buttons": {
 			"back": "Back",
@@ -151,6 +152,7 @@
 		"runSearch": "Search",
 		"searchSheetTitle": "Search crew"
 	},
+	"moreCrewTooltip": "More crew",
 	"myCrew": "My Crew",
 	"myCrewPage": {
 		"addSheet": {

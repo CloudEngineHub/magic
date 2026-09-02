@@ -98,7 +98,8 @@ describe("CanvasImagePresentationScheduler", () => {
 
 	function runNextFrame(): void {
 		const nextFrame = frameCallbacks.entries().next().value as
-			[number, FrameRequestCallback] | undefined
+			| [number, FrameRequestCallback]
+			| undefined
 		if (!nextFrame) return
 		const [frameId, callback] = nextFrame
 		frameCallbacks.delete(frameId)
@@ -176,6 +177,43 @@ describe("CanvasImagePresentationScheduler", () => {
 				pendingCount: 0,
 			}),
 		)
+	})
+
+	it("drops a pending presentation when its image source is about to close", () => {
+		const consumer = createConsumer()
+		const { eventEmitter, scheduler } = createScheduler({
+			consumers: new Map([["image-1", consumer]]),
+		})
+		const resource = createResource("preview")
+		scheduler.replaceTargets([createTarget("image-1")], "idle")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/image-1.png", resource },
+		})
+
+		eventEmitter.emit({
+			type: "resource:image:will-close",
+			data: {
+				path: "./images/image-1.png",
+				variant: "preview",
+				image: resource.image,
+				reason: "display-slot-replaced",
+			},
+		})
+		runNextFrame()
+
+		expect(consumer.applyPresentedResource).not.toHaveBeenCalled()
+		expect(scheduler.getSnapshot()).toEqual(
+			expect.objectContaining({ pendingCount: 0, staleDropCount: 1 }),
+		)
+
+		const replacement = createResource("preview")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/image-1.png", resource: replacement },
+		})
+		runNextFrame()
+		expect(consumer.applyPresentedResource).toHaveBeenCalledWith(replacement, "preview")
 	})
 
 	it("applies a loaded alias immediately with the host resolver", () => {

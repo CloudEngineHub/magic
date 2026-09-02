@@ -97,6 +97,15 @@ function createCanvasMock(options?: {
 				getElementsBounds: vi.fn(() => ({ x: 0, y: 0, width: 100, height: 100 })),
 			})),
 		},
+		getEffectiveContent: vi.fn((elementId: string) => {
+			const element = elements.get(elementId)
+			if (!element || !("contents" in element) || !Array.isArray(element.contents))
+				return undefined
+			return (
+				element.contents.find((content) => content.contentId === element.activeContentId) ??
+				element.contents[0]
+			)
+		}),
 		permissionManager: { canConnect: vi.fn(() => true) },
 		connectionManager: { connectElements },
 		selectionManager: { select },

@@ -15,9 +15,9 @@ function ProjectList({
 	isCreatingProject,
 	onCancelCreate,
 	onProjectCreated,
+	dndDisabled,
 }: ProjectListProps) {
 	const { t } = useTranslation(["super", "sidebar"])
-
 	const {
 		projectModals,
 		handleMoveProject,
@@ -36,6 +36,9 @@ function ProjectList({
 		<>
 			<div
 				className="relative flex w-full shrink-0 flex-col items-start gap-1 py-0.5 pl-6 pr-0"
+				data-sidebar-drop-type="project-list"
+				data-sidebar-drop-workspace-id={workspaceId}
+				data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}
 				data-testid={`sidebar-project-list-${workspaceId}`}
 			>
 				{isCreatingProject && onCancelCreate && onProjectCreated && (
@@ -59,31 +62,27 @@ function ProjectList({
 					</div>
 				) : (
 					<SidebarMenuSub className="mx-0 w-full translate-x-0 border-0 px-0 py-0">
-						{projects.map((project, index) => (
-							<SidebarMenuSubItem
-								key={project.id}
-								className="w-full duration-150 animate-in fade-in slide-in-from-top-2"
-								style={{
-									animationDelay: `${index * 30}ms`,
-									animationFillMode: "backwards",
-								}}
-							>
-								<ProjectItem
-									project={project}
-									onOpenInNewWindow={openProjectInNewTab}
-									onPinProject={handleTogglePinProject}
-									onCopyCollaborationLink={handleCopyCollaborationLink}
-									onTransferProject={handleTransferProject}
-									onMoveProject={handleMoveProject}
-									onAddCollaborators={onAddCollaborators}
-									onCancelWorkspaceShortcut={
-										handleCancelWorkspaceShortcutByProject
-									}
-									onDeleteProject={handleDeleteProjectConfirm}
-									onRenameProject={handleRenameProject}
-								/>
-							</SidebarMenuSubItem>
-						))}
+						{projects.map((project) => {
+							return (
+								<SidebarMenuSubItem key={project.id} className="relative w-full">
+									<ProjectItem
+										project={project}
+										dndDisabled={dndDisabled}
+										onOpenInNewWindow={openProjectInNewTab}
+										onPinProject={handleTogglePinProject}
+										onCopyCollaborationLink={handleCopyCollaborationLink}
+										onTransferProject={handleTransferProject}
+										onMoveProject={handleMoveProject}
+										onAddCollaborators={onAddCollaborators}
+										onCancelWorkspaceShortcut={
+											handleCancelWorkspaceShortcutByProject
+										}
+										onDeleteProject={handleDeleteProjectConfirm}
+										onRenameProject={handleRenameProject}
+									/>
+								</SidebarMenuSubItem>
+							)
+						})}
 					</SidebarMenuSub>
 				)}
 				{/* Border line with fade-in animation */}

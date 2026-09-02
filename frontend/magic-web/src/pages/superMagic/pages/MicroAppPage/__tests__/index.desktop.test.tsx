@@ -29,6 +29,7 @@ const resolverMocks = vi.hoisted(() => ({
 
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
+	isReadOnly: false,
 	checkAttachmentsNowDebounced: vi.fn(),
 	attachmentList: [
 		{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
@@ -214,7 +215,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		},
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
 		hasRunningTopic: true,
-		isReadOnly: false,
+		isReadOnly: controllerMocks.isReadOnly,
 		canEdit: false,
 		canPublish: true,
 		attachments: [],
@@ -380,6 +381,7 @@ describe("MicroAppPageDesktop", () => {
 			error: null,
 		}
 		controllerMocks.initLoading = false
+		controllerMocks.isReadOnly = false
 		controllerMocks.attachmentList = [
 			{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
 			{ file_id: "admin-1", file_name: "admin.html", relative_file_path: "admin.html" },
@@ -445,6 +447,17 @@ describe("MicroAppPageDesktop", () => {
 			expect.any(Array),
 			expect.any(Array),
 		)
+	})
+
+	it("hides the conversation panel for read-only projects", async () => {
+		controllerMocks.isReadOnly = true
+
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		expect(screen.queryByTestId("desktop-conversation-panel")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
+		expect(conversationPanelMocks.render).not.toHaveBeenCalled()
 	})
 
 	it("uses the same loading illustration while loading project context", () => {

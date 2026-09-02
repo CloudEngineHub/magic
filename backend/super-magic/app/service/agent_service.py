@@ -146,25 +146,25 @@ class AgentService(Base):
         """
         persistence = TopicPersistenceManager(PathManager.get_project_root())
         await asyncio.to_thread(persistence.ensure_directories)
-        await asyncio.to_thread(persistence.migrate_legacy_directories)
+        local_chat_history_dir = PathManager.get_chat_history_dir()
+        await asyncio.to_thread(local_chat_history_dir.mkdir, parents=True, exist_ok=True)
 
         metadata = agent_context.get_metadata()
         topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
         healthy = await asyncio.to_thread(persistence.is_healthy, topic_id)
         agent_context.set_topic_persistence_healthy(healthy)
 
-        # 沙箱负责挂载 .topic；聊天历史依据恢复状态决定是否兜底下载。
-        chat_ready = healthy and await asyncio.to_thread(
-            persistence.is_component_ready, "chat_history"
-        )
-
         if not self.is_support_fetch_workspace():
+            await self._replace_local_chat_history_with_empty(local_chat_history_dir)
             logger.info("不支持获取工作空间，跳过下载")
             return
 
-        if chat_ready:
-            agent_context.mark_chat_history_persisted()
-            logger.info("检测到已恢复的持久化聊天历史，跳过 zip 下载")
+        topic_chat_history_ready = await asyncio.to_thread(persistence.has_chat_history_data)
+        if topic_chat_history_ready:
+            await asyncio.to_thread(
+                persistence.restore_topic_chat_history, local_chat_history_dir
+            )
+            logger.info("已从 .topic/chat_history 恢复本地聊天历史")
         # checkpoint 不纳入 .topic 持久卷：重启后只拉小体积 manifest，
         # checkpoint 数据在需要回滚时按需从远端拉取对应归档。
         sts_token_refresh = agent_context.get_init_client_message_sts_token_refresh()
@@ -173,11 +173,13 @@ class AgentService(Base):
             sts_token_refresh=sts_token_refresh, metadata=metadata, platform=platform_type
         )
 
-        if topic_id and not chat_ready:
-            chat_ready = await self._download_and_extract_chat_history_archive(storage_service, agent_context)
-            if healthy and chat_ready:
-                await asyncio.to_thread(persistence.mark_component_ready, "chat_history", True)
-                agent_context.mark_chat_history_persisted()
+        if not topic_chat_history_ready:
+            await self._replace_local_chat_history_with_empty(local_chat_history_dir)
+            chat_ready = await self._download_and_extract_chat_history_archive(
+                storage_service, agent_context, target_dir=local_chat_history_dir
+            )
+            if not chat_ready:
+                logger.warning("聊天记录未能从远程归档恢复，将使用空的本地聊天记录")
 
         await self._download_and_extract_checkpoints_archive(storage_service, agent_context)
 
@@ -307,7 +309,13 @@ class AgentService(Base):
         logger.info(f"工作区是最新版本: {local_workspace.version}")
         return False
 
-    async def _download_and_extract_chat_history_archive(self, storage_service, agent_context: AgentContext) -> bool:
+    async def _download_and_extract_chat_history_archive(
+        self,
+        storage_service,
+        agent_context: AgentContext,
+        *,
+        target_dir: Optional[Path] = None,
+    ) -> bool:
         """
         Download and extract chat history archive
 
@@ -317,7 +325,8 @@ class AgentService(Base):
         """
         try:
             # Get topic_id from agent_context. If not present, skip download.
-            topic_id = agent_context.get_metadata().get("topic_id")
+            metadata = agent_context.get_metadata()
+            topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
             if not topic_id:
                 logger.warning("agent_context 中没有 topic_id，跳过下载聊天历史")
                 return False
@@ -377,11 +386,15 @@ class AgentService(Base):
                 f"流式写入 {written_bytes} 字节)"
             )
 
-            chat_history_dir = PathManager.get_chat_history_dir()
+            # .chat_history 是沙盒本地临时目录，不跨沙盒启动持久化。
+            # 调用方在远程恢复前已经通过 _replace_local_chat_history_with_empty()
+            # 清空该目录，因此远程归档可以直接解压到正式活动目录。
+            target_dir = target_dir or PathManager.get_chat_history_dir()
+            target_dir.mkdir(parents=True, exist_ok=True)
             extracted_count = await asyncio.to_thread(
                 safe_extract_archive,
                 temp_file_path,
-                chat_history_dir,
+                target_dir,
                 skip_top_level="llm_request",
                 strip_top_level=".chat_history",
             )
@@ -394,6 +407,20 @@ class AgentService(Base):
             # Clean up temporary file
             if "temp_file_path" in locals() and os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
+
+    async def _replace_local_chat_history_with_empty(self, target_dir: Path) -> None:
+        """Clear local history through the same replacement path used by restores."""
+        with tempfile.TemporaryDirectory(
+            prefix=".chat-history-empty-",
+            dir=PathManager.get_project_root(),
+        ) as staging_root:
+            staging_dir = Path(staging_root) / ".chat_history"
+            staging_dir.mkdir()
+            await asyncio.to_thread(
+                TopicPersistenceManager.replace_directory,
+                staging_dir,
+                target_dir,
+            )
 
     async def _download_and_extract_checkpoints_archive(self, storage_service, agent_context: AgentContext) -> None:
         """
@@ -443,7 +470,10 @@ class AgentService(Base):
         if fetch_history:
             await self.download_and_extract_chat_history_and_checkpoints(agent_context)
         else:
-            logger.info("fetch_history disabled, skip downloading remote chat history and checkpoints")
+            # 显式跳过历史恢复时也必须清空活动目录，避免复用进程/工作区中残留的上一轮历史。
+            local_chat_history_dir = PathManager.get_chat_history_dir()
+            await self._replace_local_chat_history_with_empty(local_chat_history_dir)
+            logger.info("fetch_history disabled, skip restoring remote/topic chat history and checkpoints")
 
         # Horizon 对象早于持久目录创建。必须在 ZIP 解压或挂载目录准备完成后重载，
         # 再启动会写入 Horizon 的 CLI 探测，避免把“文件暂时不存在”固定成空 baseline。

@@ -330,7 +330,8 @@ class FileBatchAppService extends AbstractAppService
      */
     public function checkBatchDownload(
         RequestContext $requestContext,
-        string $batchKey
+        string $batchKey,
+        ?string $authorizedProjectId = null
     ): CheckBatchDownloadResponseDTO {
         // Get user authorization info
         $userAuthorization = $requestContext->getUserAuthorization();
@@ -351,6 +352,18 @@ class FileBatchAppService extends AbstractAppService
                 0,
                 'Task not found or expired'
             );
+        }
+
+        // Batch keys are caller-controlled. Bind the task to the authenticated
+        // organization, and when a share token is used, to the project granted by
+        // that token rather than only trusting the token owner's user ID.
+        $taskOrganizationCode = (string) ($taskStatus['organization_code'] ?? '');
+        if ($taskOrganizationCode !== '' && $taskOrganizationCode !== $userAuthorization->getOrganizationCode()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::BATCH_ACCESS_DENIED);
+        }
+        if ($authorizedProjectId !== null
+            && ($authorizedProjectId === '' || (string) ($taskStatus['project_id'] ?? '') !== $authorizedProjectId)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::BATCH_ACCESS_DENIED);
         }
 
         $status = $taskStatus['status'] ?? 'processing';

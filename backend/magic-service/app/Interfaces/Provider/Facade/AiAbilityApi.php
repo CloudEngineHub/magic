@@ -11,7 +11,9 @@ use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\Application\ModelGateway\Service\AiAbilityConnectivityTestAppService;
 use App\Application\Provider\Service\AiAbilityAppService;
+use App\Application\Provider\Service\AiAbilityConfigAppService;
 use App\Domain\ModelGateway\Entity\Dto\AiAbilityConnectivityTestRequestDTO;
+use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Infrastructure\Util\RequestUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -29,6 +31,22 @@ class AiAbilityApi extends AbstractApi
 
     #[Inject]
     protected AiAbilityConnectivityTestAppService $aiAbilityConnectivityTestAppService;
+
+    #[Inject]
+    protected AiAbilityConfigAppService $aiAbilityConfigAppService;
+
+    /**
+     * 获取前端使用的 AI 能力可用性配置.
+     */
+    public function availability(): array
+    {
+        /** @var MagicUserAuthorization $authorization */
+        $authorization = $this->getAuthorization();
+
+        return $this->aiAbilityConfigAppService->getAvailability(
+            ProviderDataIsolation::create($authorization->getOrganizationCode())
+        );
+    }
 
     /**
      * 获取所有AI能力列表.

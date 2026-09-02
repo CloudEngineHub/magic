@@ -63,6 +63,20 @@ describe("MentionExtension Integration Tests", () => {
 	})
 
 	describe("getMentionUniqueId", () => {
+		it("should use the required business id for text mentions", () => {
+			const mention = {
+				type: MentionItemType.TEXT,
+				data: {
+					id: "text-mock-001",
+					label: "Chart Mock",
+					text: "chart id: mock-chart",
+				},
+			}
+
+			expect(getMentionUniqueId(mention)).toBe("text:text-mock-001")
+			expect(getMentionDisplayName(mention)).toBe("Chart Mock")
+		})
+
 		it("should generate unique id for agent mention", () => {
 			const mention = {
 				type: MentionItemType.AGENT,

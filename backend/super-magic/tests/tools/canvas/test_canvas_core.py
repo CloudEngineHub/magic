@@ -478,6 +478,34 @@ async def test_add_contents_materializes_imported_asset_into_project(tmp_path) -
 
 
 @pytest.mark.asyncio
+async def test_imported_asset_accepts_absolute_path_outside_workspace(tmp_path) -> None:
+    """导入媒体应允许用户明确提供工作区外的本机绝对路径。"""
+    workspace = tmp_path / "workspace"
+    external_asset = tmp_path / "external" / "mock.png"
+    external_asset.parent.mkdir(parents=True)
+    external_asset.write_bytes(b"mock-image")
+    repository = CanvasRepository(workspace)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+
+    result = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "external-image",
+            "element_type": "image",
+            "content": {
+                "source": "imported",
+                "content_type": "image",
+                "asset_path": str(external_asset),
+            },
+        }],
+    )
+
+    assert result["items"][0]["asset_path"].startswith("./images/")
+    assert (workspace / "mock-project" / "images" / "mock.png").is_file()
+
+
+@pytest.mark.asyncio
 async def test_imported_asset_is_materialized_idempotently_and_reusable(tmp_path) -> None:
     """重复导入同一 imported 素材时复用已有 Element 和项目文件。"""
     asset = tmp_path / "uploads" / "mock.png"

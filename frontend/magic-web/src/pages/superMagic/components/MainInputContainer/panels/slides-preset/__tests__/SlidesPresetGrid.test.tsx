@@ -344,6 +344,10 @@ describe("SlidesPresetGrid", () => {
 			"src",
 			"https://example.com/academic-page-1.png",
 		)
+		expect(screen.getByRole("img", { name: "Academic Preview 1" })).toHaveAttribute(
+			"crossorigin",
+			"anonymous",
+		)
 		const previewStage = screen.getByTestId("slides-preset-preview-dialog-pages")
 		const pageIndex = screen.getByTestId("slides-preset-preview-dialog-page-index")
 

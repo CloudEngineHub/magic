@@ -29,6 +29,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayIn
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Infrastructure\Util\Context\RequestContext;
 use Exception;
+use Hyperf\DbConnection\Db;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
@@ -149,10 +150,91 @@ class WorkspaceDomainService
     }
 
     /**
+     * Move a workspace before or after another workspace without touching
+     * updated_at. `pre` wins when both relative-position IDs are supplied.
+     */
+    public function moveWorkspace(
+        DataIsolation $dataIsolation,
+        int $workspaceId,
+        ?int $preWorkspaceId,
+        ?int $nextWorkspaceId = null
+    ): bool {
+        return Db::transaction(function () use ($dataIsolation, $workspaceId, $preWorkspaceId, $nextWorkspaceId): bool {
+            $workspace = $this->workspaceRepository->getWorkspaceById($workspaceId);
+            if (! $workspace
+                || $workspace->getUserId() !== $dataIsolation->getCurrentUserId()
+                || $workspace->getIsArchived() !== 0
+            ) {
+                throw new RuntimeException('Workspace not found or access denied');
+            }
+
+            $targetWorkspaceId = $preWorkspaceId ?? $nextWorkspaceId;
+            $insertAfter = $preWorkspaceId !== null;
+            if ($targetWorkspaceId === null) {
+                // Legacy explicit-null behavior: move to the first manual position.
+                $rows = $this->workspaceRepository->getUserWorkspaceSortOrders(
+                    $dataIsolation->getCurrentUserId(),
+                    $workspaceId
+                );
+                $orderedIds = array_map(static fn (array $row): int => $row['id'], $rows);
+                array_unshift($orderedIds, $workspaceId);
+            } else {
+                $targetWorkspace = $this->workspaceRepository->getWorkspaceById($targetWorkspaceId);
+                if (! $targetWorkspace
+                    || $targetWorkspace->getUserId() !== $dataIsolation->getCurrentUserId()
+                    || $targetWorkspace->getIsArchived() !== 0
+                    || $targetWorkspace->getId() === $workspaceId
+                ) {
+                    throw new RuntimeException('Invalid relative workspace');
+                }
+
+                $rows = $this->workspaceRepository->getUserWorkspaceSortOrders(
+                    $dataIsolation->getCurrentUserId(),
+                    $workspaceId
+                );
+                $orderedIds = array_map(static fn (array $row): int => $row['id'], $rows);
+                $index = array_search($targetWorkspaceId, $orderedIds, true);
+                if ($index === false) {
+                    throw new RuntimeException('Relative workspace is not in the current list');
+                }
+                array_splice($orderedIds, $insertAfter ? $index + 1 : $index, 0, [$workspaceId]);
+            }
+
+            $allHaveSortOrder = $rows !== [] && array_reduce(
+                $rows,
+                static fn (bool $carry, array $row): bool => $carry && $row['sort_order'] !== null,
+                true
+            );
+            if (! $allHaveSortOrder) {
+                $initialSortOrders = [];
+                $rank = 1_000_000;
+                foreach (array_values(array_diff($orderedIds, [$workspaceId])) as $id) {
+                    $initialSortOrders[$id] = $rank;
+                    $rank += 1_000_000;
+                }
+                $this->workspaceRepository->batchUpdateSortOrders($initialSortOrders);
+            }
+
+            $sortOrders = [];
+            $rank = 1_000_000;
+            foreach ($orderedIds as $id) {
+                $sortOrders[$id] = $rank;
+                $rank += 1_000_000;
+            }
+
+            return $this->workspaceRepository->batchUpdateSortOrders($sortOrders) > 0;
+        });
+    }
+
+    /**
      * 获取工作区详情.
      */
-    public function getWorkspaceDetail(int $workspaceId): ?WorkspaceEntity
+    public function getWorkspaceDetail(?int $workspaceId): ?WorkspaceEntity
     {
+        if ($workspaceId === null) {
+            return null;
+        }
+
         return $this->workspaceRepository->getWorkspaceById($workspaceId);
     }
 
@@ -208,6 +290,9 @@ class WorkspaceDomainService
 
     /**
      * 根据条件获取工作区列表.
+     *
+     * @param bool $enableManualOrdering 是否启用侧边栏手工排序
+     * @param bool $pinPriority 是否将置顶工作区排在前面
      */
     public function getWorkspacesByConditions(
         array $conditions,
@@ -215,18 +300,34 @@ class WorkspaceDomainService
         int $pageSize,
         string $orderBy,
         string $orderDirection,
-        DataIsolation $dataIsolation
+        DataIsolation $dataIsolation,
+        bool $enableManualOrdering = true,
+        bool $pinPriority = false
     ): array {
         // 应用数据隔离
         $conditions = $this->applyDataIsolation($conditions, $dataIsolation);
 
         // 调用仓储层获取数据
+        if ($enableManualOrdering) {
+            return $this->workspaceRepository->getWorkspacesByConditions(
+                $conditions,
+                $page,
+                $pageSize,
+                $orderBy,
+                $orderDirection,
+                true,
+                $pinPriority
+            );
+        }
+
         return $this->workspaceRepository->getWorkspacesByConditions(
             $conditions,
             $page,
             $pageSize,
             $orderBy,
-            $orderDirection
+            $orderDirection,
+            false,
+            $pinPriority
         );
     }
 

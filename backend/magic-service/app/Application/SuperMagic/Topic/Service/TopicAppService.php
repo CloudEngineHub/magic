@@ -54,7 +54,6 @@ use App\Infrastructure\SuperMagic\Utils\FileTreeUtil;
 use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
 use App\Infrastructure\SuperMagic\Utils\TaskStatusValidator;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
-use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -1056,7 +1055,6 @@ class TopicAppService extends AbstractAppService
 
                     // 提交事务
                     Db::commit();
-
                 } catch (Throwable $e) {
                     // 回滚事务
                     Db::rollBack();

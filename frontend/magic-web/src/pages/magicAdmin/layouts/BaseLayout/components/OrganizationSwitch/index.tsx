@@ -3,7 +3,7 @@ import { useCurrentMagicOrganization, useOrganization } from "@/models/user/hook
 import { Popover, Flex } from "antd"
 import { memo, useMemo } from "react"
 import MagicButton from "@/components/base/MagicButton"
-import { IconCaretDownFilled } from "@tabler/icons-react"
+import { IconChevronDown } from "@tabler/icons-react"
 import { useStyles } from "./styles"
 import PersonalOrganizationAvatar from "@/assets/resources/personal-organization-avatar.svg"
 import { userStore } from "@/models/user"
@@ -12,9 +12,11 @@ import OrganizationList from "@/layouts/BaseLayout/components/Sider/components/O
 
 interface OrganizationSwitchProps {
 	className?: string
+	/** Optional class applied to the trigger button rather than the avatar. */
+	triggerClassName?: string
 }
 
-const OrganizationSwitch = ({ className }: OrganizationSwitchProps) => {
+const OrganizationSwitch = ({ className, triggerClassName }: OrganizationSwitchProps) => {
 	const { styles, cx } = useStyles()
 
 	const { isPersonalOrganization } = userStore.user
@@ -49,7 +51,7 @@ const OrganizationSwitch = ({ className }: OrganizationSwitchProps) => {
 			getPopupContainer={(t) => t.parentNode as HTMLElement}
 			content={<OrganizationList />}
 		>
-			<MagicButton type="text" className={styles.button}>
+			<MagicButton type="text" className={cx(styles.button, triggerClassName)}>
 				<Flex gap={4} align="center">
 					<MagicAvatar src={OrgLogo} size={24} className={cx(className, styles.avatar)}>
 						{teamshareOrganization?.organization_name ??
@@ -57,7 +59,7 @@ const OrganizationSwitch = ({ className }: OrganizationSwitchProps) => {
 					</MagicAvatar>
 					{teamshareOrganization?.organization_name ??
 						currentAccount?.magic_organization_code}
-					<IconCaretDownFilled size={18} color="currentColor" />
+					<IconChevronDown size={15} stroke={1.8} color="currentColor" />
 				</Flex>
 			</MagicButton>
 		</Popover>

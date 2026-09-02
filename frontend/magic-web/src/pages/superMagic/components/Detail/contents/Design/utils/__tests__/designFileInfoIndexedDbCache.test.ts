@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
 	clearDesignFileInfoIndexedDbCache,
 	deleteDesignFileInfoCacheEntries,
 	flushDesignFileInfoIndexedDbCacheWrites,
+	flushDesignFileInfoIndexedDbCachePruneForTests,
 	getDesignFileInfoIndexedDbCacheDiagnosticsForTests,
 	readDesignFileInfoCacheEntry,
 	writeDesignFileInfoCacheEntries,
@@ -20,8 +21,7 @@ function createEntry(index: number): DesignFileInfoIndexedDbEntry {
 			fileName: `${index}.png`,
 		},
 		previewWatermarkSignature: "test",
-		updatedAt: index,
-		lastAccessedAt: index,
+		cachedAt: Date.now() + index,
 	}
 }
 
@@ -29,6 +29,10 @@ describe("designFileInfoIndexedDbCache mutation batching", () => {
 	beforeEach(async () => {
 		await clearDesignFileInfoIndexedDbCache()
 		await flushDesignFileInfoIndexedDbCacheWrites()
+	})
+
+	afterEach(async () => {
+		await flushDesignFileInfoIndexedDbCachePruneForTests()
 	})
 
 	it("coalesces same-tick writes and deletes into one transaction each", async () => {
@@ -79,5 +83,49 @@ describe("designFileInfoIndexedDbCache mutation batching", () => {
 		await Promise.all([writePromise, clearDesignFileInfoIndexedDbCache()])
 
 		await expect(readDesignFileInfoCacheEntry(entry.cacheKey)).resolves.toBeNull()
+	})
+
+	it("reads are read-only and do not create another mutation batch", async () => {
+		const entry = createEntry(3)
+		await writeDesignFileInfoCacheEntries([entry])
+		await flushDesignFileInfoIndexedDbCacheWrites()
+
+		const beforeRead = getDesignFileInfoIndexedDbCacheDiagnosticsForTests()
+		await expect(readDesignFileInfoCacheEntry(entry.cacheKey)).resolves.toMatchObject(entry)
+		const persisted = await readDesignFileInfoCacheEntry(entry.cacheKey)
+		expect(persisted).not.toHaveProperty("attachmentsSnapshotKey")
+		expect(persisted).not.toHaveProperty("lastAccessedAt")
+		expect(persisted).not.toHaveProperty("updatedAt")
+		await flushDesignFileInfoIndexedDbCacheWrites()
+		const afterRead = getDesignFileInfoIndexedDbCacheDiagnosticsForTests()
+
+		expect(afterRead.mutationBatchCount).toBe(beforeRead.mutationBatchCount)
+	})
+
+	it("uses only cacheKey and namespace as IndexedDB indexes", async () => {
+		await readDesignFileInfoCacheEntry("missing")
+		const request = indexedDB.open("MAGIC:supermagic-design:file-info-cache")
+		const database = await new Promise<IDBDatabase>((resolve, reject) => {
+			request.onsuccess = () => resolve(request.result)
+			request.onerror = () => reject(request.error)
+		})
+		const store = database.transaction("entries", "readonly").objectStore("entries")
+
+		expect([...store.indexNames]).toEqual(["namespace"])
+		expect(store.keyPath).toBe("cacheKey")
+		database.close()
+	})
+
+	it("prunes expired entries asynchronously without affecting writes", async () => {
+		const expired = createEntry(4)
+		expired.cachedAt = Date.now() - 2 * 24 * 60 * 60 * 1000
+		const fresh = createEntry(5)
+
+		await writeDesignFileInfoCacheEntries([expired, fresh])
+		await flushDesignFileInfoIndexedDbCacheWrites()
+		await flushDesignFileInfoIndexedDbCachePruneForTests()
+
+		await expect(readDesignFileInfoCacheEntry(expired.cacheKey)).resolves.toBeNull()
+		await expect(readDesignFileInfoCacheEntry(fresh.cacheKey)).resolves.toMatchObject(fresh)
 	})
 })

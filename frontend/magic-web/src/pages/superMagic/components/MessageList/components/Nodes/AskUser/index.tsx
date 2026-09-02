@@ -18,6 +18,7 @@ import {
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import { AnsweredQuestionContent } from "./components/AnsweredQuestionContent"
 import { renderAskUserPendingQuestion } from "./components/InteractionQuestionRenderers"
+import { AskUserQuestionMarkdownTitle } from "@/pages/superMagic/components/MessageList/utils/AskUserMarkdownText"
 import { useAskUserViewModel } from "./hooks/useAskUserViewModel"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useMessageViewState } from "../../../view-state/MessageViewStateContext"
@@ -119,10 +120,6 @@ function AskUser(props: NodeProps) {
 		})
 	}
 
-	function formatQuestionTitle(question: AskUserQuestionData, index: number) {
-		return hasMultipleQuestions ? `${index + 1}. ${question.question}` : question.question
-	}
-
 	function getQuestionContentIndentClass(question: AskUserQuestionData) {
 		return hasMultipleQuestions &&
 			question.interactionType !== ASK_USER_INTERACTION_TYPE.confirm
@@ -153,15 +150,16 @@ function AskUser(props: NodeProps) {
 								className="space-y-1"
 								data-testid={`ask-user-card-question-item-${question.subId}`}
 							>
-								<p
+								<AskUserQuestionMarkdownTitle
+									content={question.question}
+									index={index}
+									total={resolvedAskUser.questions.length}
 									className={cn(
 										"text-xs font-medium leading-4 text-foreground",
 										askUserBreakTextClass,
 									)}
-									data-testid={`ask-user-card-question-text-${question.subId}`}
-								>
-									{formatQuestionTitle(question, index)}
-								</p>
+									testId={`ask-user-card-question-text-${question.subId}`}
+								/>
 								<div className={getQuestionContentIndentClass(question)}>
 									{renderPendingQuestion(question)}
 								</div>
@@ -233,14 +231,15 @@ function AskUser(props: NodeProps) {
 							className="space-y-1"
 							data-testid={`ask-user-card-answer-item-${question.subId}`}
 						>
-							<p
+							<AskUserQuestionMarkdownTitle
+								content={question.question}
+								index={index}
+								total={resolvedAskUser.questions.length}
 								className={cn(
 									"text-xs font-medium leading-4 text-foreground",
 									askUserBreakTextClass,
 								)}
-							>
-								{formatQuestionTitle(question, index)}
-							</p>
+							/>
 							<div className={getQuestionContentIndentClass(question)}>
 								<AnsweredQuestionContent
 									question={question}
@@ -268,16 +267,17 @@ function AskUser(props: NodeProps) {
 		return (
 			<div className="space-y-2.5" data-testid="ask-user-card-readonly-question-list">
 				{questionItems.map(({ question, index }) => (
-					<p
+					<AskUserQuestionMarkdownTitle
 						key={question.subId}
+						content={question.question}
+						index={index}
+						total={questionItems.length}
 						className={cn(
 							"text-xs font-medium leading-4 text-foreground",
 							askUserBreakTextClass,
 						)}
-						data-testid={`ask-user-card-readonly-question-${question.subId}`}
-					>
-						{formatQuestionTitle(question, index)}
-					</p>
+						testId={`ask-user-card-readonly-question-${question.subId}`}
+					/>
 				))}
 			</div>
 		)

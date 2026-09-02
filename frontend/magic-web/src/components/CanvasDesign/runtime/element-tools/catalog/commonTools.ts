@@ -149,21 +149,27 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		"image-edit",
 		21,
 		(context) =>
-			context.element.type === ElementTypeEnum.Image && mediaContentToolAllowed(context),
+			context.element.type === ElementTypeEnum.Image &&
+			context.flags.expandSupported &&
+			mediaContentToolAllowed(context),
 	),
 	mediaTool(
 		ElementToolTypeEnum.ContentRemoveBackground,
 		"image-edit",
 		22,
 		(context) =>
-			context.element.type === ElementTypeEnum.Image && mediaContentToolAllowed(context),
+			context.element.type === ElementTypeEnum.Image &&
+			context.flags.removeBackgroundSupported &&
+			mediaContentToolAllowed(context),
 	),
 	mediaTool(
 		ElementToolTypeEnum.ContentEraser,
 		"image-edit",
 		23,
 		(context) =>
-			context.element.type === ElementTypeEnum.Image && mediaContentToolAllowed(context),
+			context.element.type === ElementTypeEnum.Image &&
+			context.flags.eraserSupported &&
+			mediaContentToolAllowed(context),
 	),
 	mediaTool(
 		ElementToolTypeEnum.ContentEnhance,

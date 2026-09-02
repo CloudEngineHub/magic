@@ -115,6 +115,8 @@ export interface IframeFSConfig {
 	appConfig: HTMLAppConfig | null
 	/** 项目 ID，用于删除等需要 project_id 的操作 */
 	projectId?: string
+	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
+	projectContextUnavailableError?: string
 	/** 创建新文件时使用的上传函数（文件不存在时走此路径） */
 	uploadFn: UploadFn
 	/** 更新已存在文件内容的函数（文件已存在时走此路径，不重新上传 OSS） */
@@ -1044,17 +1046,16 @@ export class IframeFSService {
 	}
 
 	private buildDirEntries(resolvedDir: string, originalDir: string): FSDirEntry[] {
-		return this.listDirectDirItems(resolvedDir)
-			.map(({ item, path }) => {
-				const name = item.file_name || path.split("/").pop() || path
-				const entry: FSDirEntry = {
-					name,
-					path: this.toIframeVisiblePath(path, originalDir),
-					isDirectory: item.is_directory ?? false,
-				}
-				if (item.updated_at) entry.updatedAt = item.updated_at
-				return entry
-			})
+		return this.listDirectDirItems(resolvedDir).map(({ item, path }) => {
+			const name = item.file_name || path.split("/").pop() || path
+			const entry: FSDirEntry = {
+				name,
+				path: this.toIframeVisiblePath(path, originalDir),
+				isDirectory: item.is_directory ?? false,
+			}
+			if (item.updated_at) entry.updatedAt = item.updated_at
+			return entry
+		})
 	}
 
 	private toIframeVisiblePath(resolvedPath: string, originalDir: string): string {
@@ -1283,6 +1284,9 @@ export class IframeFSService {
 	}
 
 	private async ensurePermission(scope: HtmlPermissionScope): Promise<boolean> {
+		if ((scope === "fs.project.read" || scope === "fs.project.write") && !this.cfg.projectId) {
+			throw new Error(this.cfg.projectContextUnavailableError || "No project selected")
+		}
 		if (!this.cfg.authorizePermission) return true
 		return this.cfg.authorizePermission(scope)
 	}

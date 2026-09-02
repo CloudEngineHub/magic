@@ -7,12 +7,9 @@ export interface DesignFileInfoIndexedDbEntry {
 	normalizedPath: string
 	fileInfo: GetFileInfoResponse
 	previewWatermarkSignature: string
-	attachmentsSnapshotKey?: string
-	cachedAt?: number
+	cachedAt: number
 	resolvedFileId?: string
 	resolvedResourceVersion?: string
-	updatedAt: number
-	lastAccessedAt: number
 }
 
 class DesignFileInfoCacheDatabase extends Dexie {
@@ -20,17 +17,17 @@ class DesignFileInfoCacheDatabase extends Dexie {
 
 	constructor() {
 		super("MAGIC:supermagic-design:file-info-cache")
-		const stores = {
+		this.version(1).stores({
 			entries:
 				"cacheKey, namespace, normalizedPath, attachmentsSnapshotKey, resolvedFileId, updatedAt, lastAccessedAt",
-		}
-		this.version(1).stores(stores)
-		this.version(2)
-			.stores(stores)
-			.upgrade((transaction) => {
-				// v1 的 path key 未记录 raw/image-process，无法安全判断旧 URL 属于哪种 rendition。
-				return transaction.table("entries").clear()
-			})
+		})
+		this.version(2).stores({
+			entries:
+				"cacheKey, namespace, normalizedPath, attachmentsSnapshotKey, resolvedFileId, updatedAt, lastAccessedAt",
+		})
+		this.version(3).stores({ entries: "cacheKey, namespace" })
+		// Keep old values in place during schema migration. New writes omit the
+		// legacy fields, while old entries are tolerated and can be removed by prune.
 	}
 }
 
@@ -43,6 +40,14 @@ interface PendingRead {
 const pendingReads = new Map<string, PendingRead[]>()
 let pendingReadFlushScheduled = false
 let pendingReadGeneration = 0
+const MAX_PERSISTENT_ENTRIES = 4096
+const PRUNE_TARGET_ENTRIES = 3072
+const MAX_PERSISTENT_ENTRY_AGE_MS = 24 * 60 * 60 * 1000
+const MAX_PERSISTENT_BYTES = 32 * 1024 * 1024
+const MAX_PERSISTENT_ENTRY_BYTES = 64 * 1024
+const PRUNE_IDLE_DELAY_MS = 1000
+let pruneTimer: ReturnType<typeof setTimeout> | null = null
+let pruneInFlight: Promise<void> | null = null
 type PendingMutation = { kind: "put"; entry: DesignFileInfoIndexedDbEntry } | { kind: "delete" }
 const pendingMutations = new Map<string, PendingMutation>()
 const pendingMutationWaiters: Array<{
@@ -122,22 +127,96 @@ async function flushPendingReads(): Promise<void> {
 		if (generation !== pendingReadGeneration) {
 			throw new Error("Design file info cache read cancelled")
 		}
-		const now = Date.now()
-		const updates = entries
-			.filter((entry): entry is DesignFileInfoIndexedDbEntry => Boolean(entry))
-			.map((entry) => ({ key: entry.cacheKey, changes: { lastAccessedAt: now } }))
-		if (updates.length > 0) {
-			void trackWrite(db.entries.bulkUpdate(updates).then(() => undefined)).catch(
-				() => undefined,
-			)
-		}
 		entries.forEach((entry, index) => {
-			const result = entry ? { ...entry, lastAccessedAt: now } : null
-			batches.get(keys[index])?.forEach(({ resolve }) => resolve(result))
+			batches.get(keys[index])?.forEach(({ resolve }) => resolve(entry ?? null))
 		})
 	} catch (error) {
 		batches.forEach((readers) => readers.forEach(({ reject }) => reject(error)))
 	}
+}
+
+function estimateEntryBytes(entry: DesignFileInfoIndexedDbEntry): number {
+	try {
+		return JSON.stringify(entry).length * 2
+	} catch {
+		return 0
+	}
+}
+
+function schedulePrune(): void {
+	if (pruneTimer !== null || pruneInFlight !== null) return
+	pruneTimer = setTimeout(() => {
+		pruneTimer = null
+		pruneInFlight = prunePersistentEntries().finally(() => {
+			pruneInFlight = null
+		})
+	}, PRUNE_IDLE_DELAY_MS)
+}
+
+function cancelScheduledPrune(): void {
+	if (pruneTimer === null) return
+	clearTimeout(pruneTimer)
+	pruneTimer = null
+}
+
+async function prunePersistentEntries(): Promise<void> {
+	try {
+		const db = await getDatabase()
+		const count = await db.entries.count()
+		if (count === 0) return
+		const entries = await db.entries.toArray()
+		const now = Date.now()
+		const deleteKeys = new Set<string>()
+		let totalBytes = 0
+
+		entries.forEach((entry) => {
+			const isTooOld =
+				typeof entry.cachedAt !== "number" ||
+				now - entry.cachedAt >= MAX_PERSISTENT_ENTRY_AGE_MS
+			if (isTooOld) deleteKeys.add(entry.cacheKey)
+			else {
+				const entryBytes = estimateEntryBytes(entry)
+				if (entryBytes > MAX_PERSISTENT_ENTRY_BYTES) deleteKeys.add(entry.cacheKey)
+				else totalBytes += entryBytes
+			}
+		})
+
+		const candidates = entries
+			.filter((entry) => !deleteKeys.has(entry.cacheKey))
+			.sort((left, right) => left.cachedAt - right.cachedAt)
+		const needsCountPrune = count > MAX_PERSISTENT_ENTRIES
+		let remainingCount = candidates.length
+		for (const entry of candidates) {
+			if (!needsCountPrune && totalBytes <= MAX_PERSISTENT_BYTES) break
+			if (
+				needsCountPrune &&
+				remainingCount <= PRUNE_TARGET_ENTRIES &&
+				totalBytes <= MAX_PERSISTENT_BYTES
+			)
+				break
+			if (
+				(needsCountPrune && remainingCount > PRUNE_TARGET_ENTRIES) ||
+				totalBytes > MAX_PERSISTENT_BYTES
+			) {
+				deleteKeys.add(entry.cacheKey)
+				remainingCount -= 1
+				totalBytes -= estimateEntryBytes(entry)
+			}
+		}
+
+		if (deleteKeys.size > 0) {
+			await db.entries.bulkDelete([...deleteKeys])
+		}
+	} catch {
+		// Cache pruning is best effort and must never affect Canvas resource loading.
+	}
+}
+
+/** Flushes the best-effort prune for deterministic regression tests. */
+export async function flushDesignFileInfoIndexedDbCachePruneForTests(): Promise<void> {
+	cancelScheduledPrune()
+	if (pruneInFlight) await pruneInFlight
+	await prunePersistentEntries()
 }
 
 function schedulePendingMutationFlush(): void {
@@ -181,6 +260,7 @@ async function flushPendingMutations(): Promise<void> {
 			if (keysToDelete.length > 0) await db.entries.bulkDelete(keysToDelete)
 			if (entriesToPut.length > 0) await db.entries.bulkPut(entriesToPut)
 		})
+		if (entriesToPut.length > 0) schedulePrune()
 	})()
 	activeMutationFlush = promise
 
@@ -242,6 +322,7 @@ export function deleteDesignFileInfoCacheNamespace(namespace: string): Promise<v
 }
 
 export function clearDesignFileInfoIndexedDbCache(): Promise<void> {
+	cancelScheduledPrune()
 	const writesToWaitFor = [...pendingWrites]
 	return trackWrite(
 		(async () => {

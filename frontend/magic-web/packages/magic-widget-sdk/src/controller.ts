@@ -4,6 +4,7 @@ import { getWidgetScriptOrigin } from "./scriptOrigin"
 import { buildWidgetIframeUrl, validateWidgetMountOptions } from "./url"
 import { WidgetBridge, createWidgetCommandError, createWidgetId } from "./bridge"
 import { mergeWidgetConfig, resolveInitialWidgetConfig } from "./config"
+import { isWidgetInputContent } from "./protocol"
 
 const ROOT_ATTRIBUTE = "data-magic-widget-root"
 const TRIGGER_ATTRIBUTE = "data-magic-widget-trigger"
@@ -620,19 +621,27 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		configUpdateQueue = Promise.resolve()
 	}
 
-	/** Validates public text commands before data crosses into the iframe. */
-	const normalizeCommandContent = (content: unknown): string => {
-		if (typeof content !== "string" || !content.trim()) {
+	/** Validates public command content before it crosses into the iframe. */
+	const normalizeCommandContent = (content: unknown): string | MagicWidget.InputContent => {
+		if (typeof content === "string") {
+			if (content.trim()) return content
 			throw createWidgetCommandError(
 				"INVALID_INPUT",
 				"Magic widget command content must be a non-empty string",
 			)
 		}
+		if (!isWidgetInputContent(content)) {
+			throw createWidgetCommandError(
+				"INVALID_INPUT",
+				"Magic widget command content must use valid text and mention blocks",
+			)
+		}
+
 		return content
 	}
 
-	/** Opens a floating widget when necessary and forwards one public text command. */
-	const sendTextCommand = async (
+	/** Opens a floating widget when necessary and forwards one public content command. */
+	const sendContentCommand = async (
 		command: "setInput" | "appendInput" | "sendMessage",
 		content: unknown,
 	): Promise<void> => {
@@ -646,7 +655,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 
 	/** Sends a command that does not carry text while preserving the shared readiness wait. */
 	const sendNoPayloadCommand = async (
-		command: "clearInput" | "getInput" | "newConversation",
+		command: "clearInput" | "getInput" | "sendMessage" | "newConversation",
 	): Promise<{ content?: string } | undefined> => {
 		if (!options || !bridge || !iframe) {
 			throw createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first")
@@ -897,8 +906,8 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		close,
 		destroy,
 		on,
-		setInput: (content) => sendTextCommand("setInput", content),
-		appendInput: (content) => sendTextCommand("appendInput", content),
+		setInput: (content) => sendContentCommand("setInput", content),
+		appendInput: (content) => sendContentCommand("appendInput", content),
 		clearInput: async () => {
 			await sendNoPayloadCommand("clearInput")
 		},
@@ -912,7 +921,13 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 			}
 			return result.content
 		},
-		sendMessage: (content) => sendTextCommand("sendMessage", content),
+		sendMessage: async (content) => {
+			if (content === undefined) {
+				await sendNoPayloadCommand("sendMessage")
+				return
+			}
+			await sendContentCommand("sendMessage", content)
+		},
 		newConversation: async () => {
 			await sendNoPayloadCommand("newConversation")
 		},

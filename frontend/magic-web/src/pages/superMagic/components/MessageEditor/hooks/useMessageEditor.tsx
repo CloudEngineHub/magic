@@ -71,6 +71,10 @@ interface UseMessageEditorProps {
 	mentionPanelStore?: MentionPanelStore
 	/** 恢复内容期间返回 true 时，appendTransaction 跳过 onInsertItems，避免与 restoreMentionItems 冲突 */
 	shouldSkipInsertSync?: () => boolean
+	/** Allows trusted programmatic content restoration to keep existing Mention nodes intact. */
+	shouldSkipMentionValidation?: () => boolean
+	/** Allows previously trusted Mention nodes to survive follow-up editor transactions. */
+	isTrustedMention?: (attrs: TiptapMentionAttributes) => boolean
 	/** 程序化清空期间跳过删除同步，避免误判为用户删除 */
 	shouldSkipRemoveSync?: () => boolean
 	/** 删除后需要先恢复的 mention，用于等待确认弹窗 */
@@ -149,6 +153,8 @@ export const useMessageEditor = ({
 	topicMode,
 	mentionPanelStore = GlobalMentionPanelStore,
 	shouldSkipInsertSync,
+	shouldSkipMentionValidation,
+	isTrustedMention,
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
 	getWorkspaceFilesList,
@@ -361,6 +367,8 @@ export const useMessageEditor = ({
 								),
 							},
 							shouldSkipInsertSync,
+							shouldSkipMentionValidation,
+							isTrustedMention,
 							shouldSkipRemoveSync,
 							shouldRestoreRemovedMention,
 						}),

@@ -8,7 +8,7 @@ description: "Manage a Canvas through its business tools only — initialize and
 
 ## Purpose
 
-You maintain a Canvas through its business tools only. Every read and write goes through these tools in Code mode; you never read or edit project files directly.
+You maintain a Canvas through its business tools first. Every normal read and write goes through these tools in Code mode. Only the controlled recovery fallback described below may read or edit the target project's `magic.project.js` after the Canvas tools cannot complete a user-requested repair.
 
 ## Ground rules
 
@@ -26,7 +26,7 @@ You maintain a Canvas through its business tools only. Every read and write goes
 - Keep exact tool names, parameter names, IDs, paths, code identifiers, and protocol values unchanged inside code or when identifying a returned field. In prose, use the product terminology that matches the user's language.
 - Keep each sentence and its product terms in one language. For example, in an English response write `Estimated cost: 151 Points. Confirm to submit the generation task.` For other languages, translate both the sentence and the product terms consistently.
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
-- Never use file, directory, or shell tools to inspect, modify, or infer Canvas state; never read or edit Canvas project files directly.
+- Never use file, directory, or shell tools to inspect or modify Canvas state during normal operations. The only exception is the controlled `magic.project.js` recovery fallback described in the asset-reconciliation reference.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
 - Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
@@ -67,9 +67,11 @@ Layout strategies, Connections, video point estimation, final video composition,
 
 ## Real-asset repair boundary
 
-When the user asks to restore real assets from `.tmp` or another Workspace location, use only source paths that actually exist and were supplied by the user or system. Never create, download, generate, copy, or rename substitute files. Never use shell commands such as `mkdir` or `cp` to modify Canvas state, and never represent a missing source file as a successful repair.
+When the user asks to restore real assets from `.tmp`, another Workspace location, or an explicitly supplied local absolute path, use only source paths that actually exist and were supplied by the user or system. Never create, download, generate, copy, or rename substitute files. Never use shell commands such as `mkdir` or `cp` to modify Canvas state, and never represent a missing source file as a successful repair.
 
-If the original asset is missing, inaccessible, or cannot be mapped reliably to a Workspace path, report that no real asset is available for repair and stop the import. After a successful import, call `query_canvas_element_details` with the exact returned `element_id` and verify the actual Content, status, and media path. Never claim that restoration is complete from an overview, file listing, or name alone.
+If the original asset is missing, inaccessible, or cannot be mapped reliably to a supplied local path, report that no real asset is available for repair and stop the import. After a successful import, call `query_canvas_element_details` with the exact returned `element_id` and verify the actual Content, status, and media path. Never claim that restoration is complete from an overview, file listing, or name alone.
+
+When the user has explicitly requested a Canvas repair and the available Canvas tools cannot complete it, use the controlled `magic.project.js` recovery fallback in `references/asset-reconciliation.md`. Modify only the exact target project's file, preserve its JSONP wrapper and unrelated fields, decode and re-encode only the `MAGICPROJECTDESIGNDATA://` canvas value with gzip + Base64, keep sidecars and version fields intact, write atomically, and re-read the file to verify the repaired pointers. Do not use this fallback for ordinary Canvas edits, unsupported project versions, or guessed project paths.
 
 ## Execution and test-reporting boundary
 
@@ -78,7 +80,7 @@ When reporting a Canvas workflow, distinguish `passed`, `initial call failed but
 You cannot:
 
 - Delete Elements or Content.
-- Edit program-managed fields: status, result paths, task binding, retry counts, active/main pointers, or Frame structural Content.
+- Edit program-managed fields: status, result paths, task binding, retry counts, active/main pointers, or Frame structural Content, except when the controlled `magic.project.js` recovery fallback is repairing persisted state after Canvas tools cannot complete the user-requested repair.
 - Skip point estimation (see the point-estimation rule in Ground rules).
 
 ## Core model
@@ -229,7 +231,7 @@ Read each item's real `element_id`, `content_id`, status, and task ID. If a task
 
 Before calling this tool, validate every nested item against the preflight checklist above. In particular, do not omit `content.name` for generated image/video Content, and do not omit `content.content_type` for imported media. A missing `name` or `content_type` is a request-construction error, not a generation failure.
 
-For imported media, set `content.source="imported"` and pass the exact importable media reference supplied by the user or by the runtime media-processing capability as `content.asset_path`. This input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
+For imported media, set `content.source="imported"` and pass the exact local file path supplied by the user or by the runtime media-processing capability as `content.asset_path`. Absolute paths may point to any local directory; relative paths must stay inside the workspace. The input is materialized into the project's canonical media directory and becomes the Content's project-local `src`; do not use `path`, `media_path`, `file_path`, or `src` as the import input field.
 
 Do not create a manual `imports/` staging directory or perform FFmpeg writes against the Canvas workspace. For media processed in a system temporary directory, pass the exact import reference returned by the runtime capability. Canvas materializes images into `./images/`, videos into `./videos/`, and audio into `./audios/`, then returns the canonical project-local path. Use only that returned path in later calls.
 
@@ -622,4 +624,4 @@ Load references only when the matching task appears:
 - `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.
 
-No reference may widen the deletion, retry, or direct file-operation boundaries.
+No reference may widen the deletion or retry boundaries. Direct file operations remain forbidden except for the controlled `magic.project.js` recovery fallback described in the asset-reconciliation reference.

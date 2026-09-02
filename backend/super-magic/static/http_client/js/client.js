@@ -2140,12 +2140,15 @@ function buildLocalDebugClientContextContent() {
 function formatClientContextTabName(tab) {
     if (!tab || typeof tab !== 'object') return '';
     if (isToolDetailPreviewPath(tab.path)) return tab.title || 'Tool detail';
+    if (tab.type === 'canvas-project' || tab.type === 'micro-app') {
+        return tab.title || getFilePreviewResourcePath(tab);
+    }
     return tab.path || tab.title || '';
 }
 
 function getClientContextFocusedFile() {
     if (!activeFilePreviewPath || isToolDetailPreviewPath(activeFilePreviewPath)) return '';
-    return activeFilePreviewPath;
+    return getFilePreviewResourcePath(filePreviewTabs.get(activeFilePreviewPath)) || activeFilePreviewPath;
 }
 
 function getManualClientContextContent() {
@@ -7006,6 +7009,15 @@ function isWorkspacePreviewPathAffected(targetPath, previewPath) {
     return preview === target || preview.startsWith(`${target}/`);
 }
 
+/** 返回预览标签关联的工作区真实路径，用于删除和自动刷新判断。 */
+function getFilePreviewResourcePath(tab) {
+    if (!tab) return '';
+    if (tab.type === 'canvas-project') return tab.directoryPath || tab.projectPath || '';
+    if (tab.type === 'micro-app') return tab.appRootPath || '';
+    if (tab.type === 'api-directory') return tab.entry?.path || tab.path || '';
+    return tab.path || '';
+}
+
 async function deleteWorkspacePath(path, isDir) {
     const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     if (!normalizedPath) return;
@@ -7019,12 +7031,13 @@ async function deleteWorkspacePath(path, isDir) {
             expandedDirs.delete(item);
         }
     }
-    for (const tabPath of [...filePreviewTabs.keys()]) {
-        if (isWorkspacePreviewPathAffected(normalizedPath, tabPath)) {
+    for (const [tabPath, tab] of [...filePreviewTabs.entries()]) {
+        if (isWorkspacePreviewPathAffected(normalizedPath, getFilePreviewResourcePath(tab))) {
             filePreviewTabs.delete(tabPath);
         }
     }
-    if (isWorkspacePreviewPathAffected(normalizedPath, activeFilePreviewPath) || isWorkspacePreviewPathAffected(normalizedPath, currentPreviewPath)) {
+    const activePreviewResourcePath = getFilePreviewResourcePath(filePreviewTabs.get(activeFilePreviewPath));
+    if (isWorkspacePreviewPathAffected(normalizedPath, activePreviewResourcePath || activeFilePreviewPath) || isWorkspacePreviewPathAffected(normalizedPath, currentPreviewPath)) {
         closeFilePreviewWorkbench();
     } else {
         renderFilePreviewTabs();
@@ -7509,7 +7522,7 @@ function renderFilePreviewTabs() {
         btn.className = `file-preview-tab${tab.path === activeFilePreviewPath ? ' active' : ''}`;
         btn.setAttribute('role', 'tab');
         btn.setAttribute('aria-selected', String(tab.path === activeFilePreviewPath));
-        btn.title = tab.path;
+        btn.title = getFilePreviewResourcePath(tab) || tab.path;
 
         const title = document.createElement('span');
         title.className = 'file-preview-tab-title';
@@ -7641,7 +7654,6 @@ function resetActivePreviewSurface(options = {}) {
     const canvasModal = document.getElementById('canvasMediaModal');
     if (canvasModal) canvasModal.remove();
     filePreviewMain?.classList.remove('has-canvas-panel');
-    filePreviewWorkbench?.classList.remove('file-preview-workbench-canvas-project');
     if (filePreviewBody) {
         filePreviewBody.innerHTML = '';
         filePreviewBody.classList.remove(
@@ -8303,6 +8315,37 @@ function hasApiCanvasProjectFile(entry) {
     return entry.children.some(child => child && child.type === 'file' && child.name === 'magic.project.js');
 }
 
+/** 为支持打开的特殊目录添加显式操作按钮。 */
+function appendFileTreeOpenHints(node, options = {}) {
+    if (!node) return;
+    const actions = [];
+    if (options.canvasProject && typeof options.openCanvas === 'function') {
+        actions.push({ type: 'canvas', label: '打开画布', onClick: options.openCanvas });
+    }
+    if (options.microApp && typeof options.openMicroApp === 'function') {
+        actions.push({ type: 'micro-app', label: '打开微应用', onClick: options.openMicroApp });
+    }
+    if (!actions.length) return;
+
+    const hints = document.createElement('span');
+    hints.className = 'ft-open-hints';
+    for (const action of actions) {
+        const hint = document.createElement('button');
+        hint.type = 'button';
+        hint.className = `ft-open-hint ft-open-hint-${action.type}`;
+        hint.textContent = action.label;
+        hint.title = `单击${action.label}`;
+        hint.setAttribute('aria-label', hint.title);
+        hint.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await action.onClick();
+        });
+        hints.appendChild(hint);
+    }
+    node.appendChild(hints);
+}
+
 /** 只读取顶层信封，避免文件树渲染时提前解压整个画布。 */
 async function isApiCanvasDesignProject(entry, dirPath) {
     if (!hasApiCanvasProjectFile(entry)) return false;
@@ -8412,11 +8455,13 @@ function hydrateApiCanvasElementDetails(config, agentDoc, userDoc) {
 async function openApiCanvasProjectPreviewTab(dirPath, entry = null) {
     try {
         const { config, projectPath, data } = await readApiCanvasProjectConfig(dirPath);
-        const tabPath = `${String(dirPath || '').replace(/\/+$/, '')}/`;
+        const normalizedDirPath = String(dirPath || '').replace(/\/+$/, '');
+        const tabPath = `@canvas:${normalizedDirPath || '/'}`;
         filePreviewTabs.set(tabPath, {
             type: 'canvas-project',
             path: tabPath,
-            title: config.name || getWorkspaceFileBaseName(dirPath) || '画布项目',
+            directoryPath: normalizedDirPath,
+            title: `画布：${config.name || getWorkspaceFileBaseName(dirPath) || '画布项目'}`,
             projectPath,
             projectConfig: config,
             projectEntry: entry,
@@ -8498,20 +8543,19 @@ async function renderApiCanvasProjectPreviewTab(tab) {
     if (!filePreviewBody || !filePreviewWorkbench) return;
     resetActivePreviewSurface();
     currentPreviewFile = null;
-    currentPreviewPath = tab.projectPath || tab.path;
+    currentPreviewPath = tab.projectPath || tab.directoryPath || tab.path;
     currentPreviewCopyText = '';
     currentPreviewEditable = false;
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
     renderFilePreviewMetaRows(filePreviewMeta, [
         { label: '文件名', value: tab.title || '画布项目' },
-        { label: '路径', value: tab.path },
+        { label: '路径', value: tab.directoryPath || tab.projectPath || '—' },
         { label: '预览类型', value: '只读画布' },
         { label: '版本', value: tab.projectConfig?.version || '—' },
         { label: '元素数', value: String(tab.projectConfig?.canvas?.elements?.length || 0) },
         { label: '连接数', value: String(tab.projectConfig?.canvas?.connections?.length || 0) },
     ]);
 
-    filePreviewWorkbench.classList.add('file-preview-workbench-canvas-project');
     filePreviewBody.classList.add('file-preview-body-canvas-project');
     const shell = document.createElement('div');
     shell.className = 'canvas-project-shell';
@@ -8520,7 +8564,7 @@ async function renderApiCanvasProjectPreviewTab(tab) {
     const zoomToolbar = createCanvasPreviewZoomToolbar();
     shell.append(viewport, zoomToolbar.element);
     filePreviewBody.appendChild(shell);
-    const projectDirPath = String(tab.projectPath || '').split('/').filter(Boolean).slice(0, -1).join('/');
+    const projectDirPath = tab.directoryPath || String(tab.projectPath || '').split('/').filter(Boolean).slice(0, -1).join('/');
     const resolveMediaUrl = async relPath => appendPreviewRefreshToken(
         debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath)),
     );
@@ -8548,11 +8592,11 @@ async function openApiMicroAppPreviewTab(dirPath, appConfig) {
         showSystemMessage(`微应用入口不存在: ${workspaceEntryPath}`);
         return;
     }
-    const tabPath = dirPath ? `${dirPath}/` : '/';
+    const tabPath = `@micro-app:${dirPath || '/'}`;
     filePreviewTabs.set(tabPath, {
         type: 'micro-app',
         path: tabPath,
-        title: appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用',
+        title: `微应用：${appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用'}`,
         appRootHandle: null,
         appRootPath: dirPath,
         appConfig,
@@ -8585,11 +8629,11 @@ async function openMicroAppPreviewTab(dirHandle, dirPath, appConfig) {
         showSystemMessage(`微应用入口不存在: ${dirPath}/${entryPath}`);
         return;
     }
-    const tabPath = dirPath ? `${dirPath}/` : '/';
+    const tabPath = `@micro-app:${dirPath || '/'}`;
     filePreviewTabs.set(tabPath, {
         type: 'micro-app',
         path: tabPath,
-        title: appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用',
+        title: `微应用：${appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用'}`,
         appRootHandle: dirHandle,
         appRootPath: dirPath,
         appConfig,
@@ -8603,7 +8647,7 @@ async function renderMicroAppPreviewTab(tab) {
     if (!filePreviewBody || !window.MicroAppRuntimeHost) return;
     resetActivePreviewSurface();
     currentPreviewFile = null;
-    currentPreviewPath = tab.path;
+    currentPreviewPath = tab.appRootPath || tab.path;
     currentPreviewCopyText = '';
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
     if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
@@ -9194,13 +9238,13 @@ function findFileTreeEntryByPath(entries, targetPath) {
 function renderMissingActiveFilePreview(tab) {
     resetActivePreviewSurface();
     currentPreviewFile = null;
-    currentPreviewPath = tab?.path || '';
+    currentPreviewPath = getFilePreviewResourcePath(tab);
     currentPreviewCopyText = '';
     currentPreviewEditable = false;
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
     renderFilePreviewMetaRows(filePreviewMeta, [
-        { label: '文件名', value: tab?.title || getWorkspaceFileBaseName(tab?.path) || '未知文件' },
-        { label: '路径', value: tab?.path || '—' },
+        { label: '文件名', value: tab?.title || getWorkspaceFileBaseName(currentPreviewPath) || '未知文件' },
+        { label: '路径', value: currentPreviewPath || '—' },
         { label: '状态', value: '文件已删除或移动' },
     ]);
     appendPreviewMessage(filePreviewBody, '当前预览目标已被删除或移动。');
@@ -9222,12 +9266,12 @@ async function refreshActiveFilePreview() {
     persistActiveFilePreviewScroll();
     try {
         if (tab.type === 'canvas-project') {
-            const latestProjectEntry = findFileTreeEntryByPath(currentFileTreeEntries, tab.projectPath);
+            const latestProjectEntry = findFileTreeEntryByPath(currentFileTreeEntries, tab.directoryPath);
             if (!latestProjectEntry) {
                 renderMissingActiveFilePreview(tab);
                 return;
             }
-            const dirPath = String(tab.path || '').replace(/\/+$/, '');
+            const dirPath = tab.directoryPath || getWorkspaceParentPath(tab.projectPath);
             const latest = await readApiCanvasProjectConfig(dirPath);
             if (activeFilePreviewPath !== previewPath) return;
             Object.assign(tab, {
@@ -9297,7 +9341,7 @@ async function openApiFilePreviewTab(entry) {
     filePreviewTabs.set(entry.path, {
         type: 'api-file',
         path: entry.path,
-        title: entry.name || getWorkspaceFileBaseName(entry.path),
+        title: `目录：${entry.name || getWorkspaceFileBaseName(entry.path)}`,
         entry,
     });
     await activateFilePreviewTab(entry.path, { resetScroll: true });
@@ -9668,13 +9712,19 @@ async function buildApiTreeNodes(entries, container, depth) {
         name.className = 'ft-name';
         name.textContent = entry.name;
         name.title = microAppConfig
-            ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开`
+            ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，使用“打开微应用”按钮打开`
             : canvasProject
-                ? '画布项目：单击展开/收起，双击打开只读预览'
+                ? '画布项目：单击展开/收起，使用“打开画布”按钮打开只读预览'
                 : fullPath;
 
         node.appendChild(icon);
         node.appendChild(name);
+        appendFileTreeOpenHints(node, {
+            microApp: !!microAppConfig,
+            canvasProject,
+            openMicroApp: () => openApiMicroAppPreviewTab(fullPath, microAppConfig),
+            openCanvas: () => openApiCanvasProjectPreviewTab(fullPath, entry),
+        });
         node.appendChild(createWorkspaceDeleteButton(fullPath, isDir));
         container.appendChild(node);
 
@@ -9706,20 +9756,6 @@ async function buildApiTreeNodes(entries, container, depth) {
                 }
                 await openApiDirectoryPreviewTab(entry);
             });
-            if (microAppConfig) {
-                node.addEventListener('dblclick', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await openApiMicroAppPreviewTab(fullPath, microAppConfig);
-                });
-            }
-            if (canvasProject) {
-                node.addEventListener('dblclick', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await openApiCanvasProjectPreviewTab(fullPath, entry);
-                });
-            }
             node.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -9838,11 +9874,15 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
         name.className = 'ft-name';
         name.textContent = entry.name;
         if (microAppConfig) {
-            name.title = `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开`;
+            name.title = `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，使用“打开微应用”按钮打开`;
         }
 
         node.appendChild(icon);
         node.appendChild(name);
+        appendFileTreeOpenHints(node, {
+            microApp: !!microAppConfig,
+            openMicroApp: () => openMicroAppPreviewTab(entry, fullPath, microAppConfig),
+        });
         node.appendChild(createWorkspaceDeleteButton(fullPath, isDir));
         container.appendChild(node);
 
@@ -9875,13 +9915,6 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                     updateFileTreeIcon(icon, entry.name, true, true, { microApp: !!microAppConfig });
                 }
             });
-            if (microAppConfig) {
-                node.addEventListener('dblclick', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await openMicroAppPreviewTab(entry, fullPath, microAppConfig);
-                });
-            }
             node.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();

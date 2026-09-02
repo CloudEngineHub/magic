@@ -1070,6 +1070,7 @@ class SuperMagicService {
 				return
 			}
 			projectStore.setSelectedProject(null)
+			this.topicStore.setSelectedTopic(null)
 			if (!workspaceId) {
 				return
 			}
@@ -1169,6 +1170,9 @@ class SuperMagicService {
 			if (!isEqual(current, selectedTopic)) {
 				topicStore.setSelectedTopic(selectedTopic)
 			}
+		} else if (!topicId && !this.route.isCurrentChatProjectRoute()) {
+			// A project/workspace home route must not inherit the previous conversation.
+			this.topicStore.setSelectedTopic(null)
 		}
 
 		if (!interfaceStore.isMobile) {

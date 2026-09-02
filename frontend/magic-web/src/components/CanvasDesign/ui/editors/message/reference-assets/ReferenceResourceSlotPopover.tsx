@@ -5,6 +5,7 @@ import type {
 } from "../../../../public/props"
 import ReferenceResourcePopover from "./ReferenceResourcePopover"
 import type {
+	ReferenceAssetFileClass,
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
 	ReferenceResourceFileInfo,
@@ -32,6 +33,10 @@ interface ReferenceResourceSlotPopoverProps {
 	referenceFileInfos: ReferenceResourceFileInfo[]
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	canAcceptNextAsset?: (
+		fileClass: ReferenceAssetFileClass,
+		currentAssetCounts: ReferenceAssetTypeCounts,
+	) => boolean
 	onProjectSelect?: (
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
@@ -63,6 +68,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
+		canAcceptNextAsset,
 		onProjectSelect,
 		beforeSourceActions,
 		onProjectSelectPanelOpenChange,
@@ -89,6 +95,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 			referenceFileInfos={referenceFileInfos}
 			assetLimits={assetLimits}
 			currentAssetCounts={currentAssetCounts}
+			canAcceptNextAsset={canAcceptNextAsset}
 			onProjectSelect={onProjectSelect}
 			beforeSourceActions={beforeSourceActions}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
