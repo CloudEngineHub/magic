@@ -47,9 +47,9 @@ const CreatorFilterComponent = forwardRef<CreatorFilterComponentRef, CreatorFilt
 		return (
 			<MagicDropdown
 				contentRole="panel"
-				overlayClassName="p-0"
+				overlayClassName="w-[180px] p-0"
 				popupRender={() => (
-					<div className="w-[280px]" onClick={(event) => event.stopPropagation()}>
+					<div className="w-full" onClick={(event) => event.stopPropagation()}>
 						<Input
 							value={keyword}
 							onChange={(event) => setKeyword(event.target.value)}
@@ -67,7 +67,7 @@ const CreatorFilterComponent = forwardRef<CreatorFilterComponentRef, CreatorFilt
 									<button
 										key={item.user_id}
 										type="button"
-										className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent"
+										className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-1 text-left truncate text-sm hover:bg-accent"
 										onClick={() => onChange(item)}
 									>
 										<MagicAvatar src={item.avatar_url} size={20} shape="circle">
