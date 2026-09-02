@@ -82,7 +82,46 @@ interface ScreenRect {
 }
 
 const IFRAME_SCREENSHOT_ACK_TIMEOUT_MS = 500
-const IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS = 15_000
+// A healthy iframe runtime completes well below one second. Keep the fallback
+// budget bounded so a renderer that acknowledged but never responds cannot
+// leave the inspector blocked for the browser's full media-capture timeout.
+const IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS = 2_000
+const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
+const STABLE_RECT_WAIT_TIMEOUT_MS = 240
+const VIDEO_DATA_WAIT_TIMEOUT_MS = 1_000
+const VIDEO_PLAY_TIMEOUT_MS = 1_000
+const DISPLAY_MEDIA_REQUEST_TIMEOUT_MS = 2_000
+
+function getTimingNow(): number {
+	return typeof performance !== "undefined" && typeof performance.now === "function"
+		? performance.now()
+		: Date.now()
+}
+
+function elapsedMs(startedAt: number): number {
+	return getTimingNow() - startedAt
+}
+
+function waitForAnimationFrameWithTimeout(
+	requestFrame: (callback: FrameRequestCallback) => number,
+	timeoutMs: number,
+): Promise<boolean> {
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = (presented: boolean) => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			resolve(presented)
+		}
+		const timeoutId = window.setTimeout(() => finish(false), Math.max(timeoutMs, 0))
+		try {
+			requestFrame(() => finish(true))
+		} catch {
+			finish(false)
+		}
+	})
+}
 
 /** Yield until the browser can process a visual state update. */
 export function waitForNextAnimationFrame(): Promise<void> {
@@ -92,6 +131,31 @@ export function waitForNextAnimationFrame(): Promise<void> {
 			return
 		}
 		setTimeout(resolve, 0)
+	})
+}
+
+/** Bound media startup so a stream that never becomes playable cannot block the inspector. */
+export function waitForCaptureVideoPlayback(video: HTMLVideoElement): Promise<void> {
+	return new Promise((resolve, reject) => {
+		let settled = false
+		const finish = (callback: () => void) => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			callback()
+		}
+		const timeoutId = window.setTimeout(
+			() => finish(() => reject(new Error("Timed out while starting tab capture video"))),
+			VIDEO_PLAY_TIMEOUT_MS,
+		)
+		try {
+			void video.play().then(
+				() => finish(resolve),
+				(error) => finish(() => reject(error)),
+			)
+		} catch (error) {
+			finish(() => reject(error))
+		}
 	})
 }
 
@@ -123,7 +187,7 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 
 	const requestId = `inspector-screenshot-${Date.now()}-${Math.random().toString(36).slice(2)}`
 	const targetOrigin = getIframeTargetOrigin(options.iframe, options.iframeTargetOrigin)
-
+	const outputSize = getCaptureOutputSize(options.selection, options.viewportSelection)
 	return new Promise((resolve) => {
 		let settled = false
 		let timeoutId: number
@@ -143,10 +207,9 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 			if (!data || data.requestId !== requestId) return
 			if (data.type === INSPECTOR_MSG.SCREENSHOT_ACK) {
 				window.clearTimeout(timeoutId)
-				timeoutId = window.setTimeout(
-					() => finish(null),
-					IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS,
-				)
+				timeoutId = window.setTimeout(() => {
+					finish(null)
+				}, IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS)
 				return
 			}
 			if (data.type !== INSPECTOR_MSG.SCREENSHOT_RESPONSE) return
@@ -167,7 +230,7 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 					type: INSPECTOR_MSG.SCREENSHOT_REQUEST,
 					requestId,
 					selection: options.selection,
-					outputSize: getCaptureOutputSize(options.selection, options.viewportSelection),
+					outputSize,
 				},
 				targetOrigin,
 			)
@@ -262,17 +325,54 @@ async function requestCurrentTabStream(): Promise<MediaStream> {
 		)
 	}
 
-	return navigator.mediaDevices.getDisplayMedia({
-		video: {
-			displaySurface: "browser",
-			cursor: "never",
-		},
-		audio: false,
-		preferCurrentTab: true,
-		selfBrowserSurface: "include",
-		surfaceSwitching: "exclude",
-		monitorTypeSurfaces: "exclude",
-	} as CurrentTabDisplayMediaOptions)
+	return new Promise((resolve, reject) => {
+		let settled = false
+		const timeoutId = window.setTimeout(() => {
+			settled = true
+			reject(
+				new CurrentTabCaptureError(
+					"cancelled",
+					"Timed out while requesting tab capture permission",
+				),
+			)
+		}, DISPLAY_MEDIA_REQUEST_TIMEOUT_MS)
+		const settle = (callback: () => void) => {
+			if (settled) return false
+			settled = true
+			window.clearTimeout(timeoutId)
+			callback()
+			return true
+		}
+
+		let request: Promise<MediaStream>
+		try {
+			request = navigator.mediaDevices.getDisplayMedia({
+				video: {
+					displaySurface: "browser",
+					cursor: "never",
+				},
+				audio: false,
+				preferCurrentTab: true,
+				selfBrowserSurface: "include",
+				surfaceSwitching: "exclude",
+				monitorTypeSurfaces: "exclude",
+			} as CurrentTabDisplayMediaOptions)
+		} catch (error) {
+			settle(() => reject(error))
+			return
+		}
+
+		void request.then(
+			(stream) => {
+				if (!settle(() => resolve(stream))) {
+					stopMediaStream(stream)
+				}
+			},
+			(error) => {
+				settle(() => reject(error))
+			},
+		)
+	})
 }
 
 /** Reuse one display-media permission grant for the lifetime of an inspector session. */
@@ -716,12 +816,19 @@ export function freezeDocumentForCapture(document: Document): () => void {
 	}
 }
 
-async function waitForStableCaptureFrame(document: Document): Promise<void> {
+async function waitForStableCaptureFrame(document: Document): Promise<boolean> {
 	const view = document.defaultView
-	if (!view?.requestAnimationFrame) return
+	if (!view?.requestAnimationFrame) return true
 
-	await new Promise<void>((resolve) => view.requestAnimationFrame(() => resolve()))
-	await new Promise<void>((resolve) => view.requestAnimationFrame(() => resolve()))
+	const firstPresented = await waitForAnimationFrameWithTimeout(
+		view.requestAnimationFrame.bind(view),
+		CAPTURE_FRAME_WAIT_TIMEOUT_MS,
+	)
+	if (!firstPresented) return false
+	return waitForAnimationFrameWithTimeout(
+		view.requestAnimationFrame.bind(view),
+		CAPTURE_FRAME_WAIT_TIMEOUT_MS,
+	)
 }
 
 interface CaptureRectSnapshot {
@@ -749,13 +856,21 @@ function areCaptureRectsEqual(first: CaptureRectSnapshot, second: CaptureRectSna
 export async function waitForStableCaptureRect(
 	element: Element,
 	maxFrames = 6,
+	maxWaitMs = STABLE_RECT_WAIT_TIMEOUT_MS,
 ): Promise<CaptureRectSnapshot> {
 	let previous = readCaptureRect(element)
+	const startedAt = getTimingNow()
 	for (let frame = 0; frame < maxFrames; frame += 1) {
-		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+		const remainingMs = maxWaitMs - elapsedMs(startedAt)
+		if (remainingMs <= 0) break
+		const framePresented = await waitForAnimationFrameWithTimeout(
+			requestAnimationFrame,
+			remainingMs,
+		)
 		const current = readCaptureRect(element)
 		if (areCaptureRectsEqual(previous, current)) return current
 		previous = current
+		if (!framePresented) break
 	}
 	return previous
 }
@@ -766,7 +881,19 @@ export async function waitForFreshCaptureVideoFrame(video: HTMLVideoElement): Pr
 		.requestVideoFrameCallback
 	if (typeof requestVideoFrameCallback === "function") {
 		await new Promise<void>((resolve) => {
-			requestVideoFrameCallback.call(video, () => resolve())
+			let settled = false
+			const finish = () => {
+				if (settled) return
+				settled = true
+				window.clearTimeout(timeoutId)
+				resolve()
+			}
+			const timeoutId = window.setTimeout(finish, CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+			try {
+				requestVideoFrameCallback.call(video, finish)
+			} catch {
+				finish()
+			}
 		})
 		return
 	}
@@ -806,18 +933,19 @@ function cropCanvas(
 	return canvas.toDataURL("image/png")
 }
 
-async function captureSameOriginIframe({
-	iframe,
-	selection,
-	viewportSelection,
-}: CaptureOptions): Promise<string> {
+async function captureSameOriginIframe(
+	{ iframe, selection, viewportSelection }: CaptureOptions,
+	skipStableRectWait = false,
+): Promise<string> {
 	const documentBody = iframe.contentDocument?.body
 	if (!documentBody) throw new Error("The HTML iframe document is unavailable")
 	// PPT previews can contain several stacked sections in the body while only
 	// one slide is visible. Select the root containing the drag center so the
 	// crop cannot accidentally use the first slide in the document.
 	const captureRoot = resolveCaptureRoot(documentBody, selection)
-	const rootRect = await waitForStableCaptureRect(captureRoot)
+	const rootRect = skipStableRectWait
+		? readCaptureRect(captureRoot)
+		: await waitForStableCaptureRect(captureRoot)
 	const { width: renderWidth, height: renderHeight } = getCaptureRootRenderSize(
 		captureRoot,
 		rootRect,
@@ -831,21 +959,15 @@ async function captureSameOriginIframe({
 		backgroundColor: "#ffffff",
 		plugins: [createPseudoElementsCapturePlugin()],
 	})
-	// snapdom.toBlob() defaults to SVG. createImageBitmap cannot decode the
-	// foreignObject SVG generated for this page, so request a raster PNG here.
-	const blob = await result.toBlob({ type: "image/png" })
-	const bitmap = await createImageBitmap(blob)
-	try {
-		const rootSelection = getRootCaptureSelection(selection, rootRect)
-		const bitmapSelection = toBitmapCropSelection(rootSelection, bitmap, {
-			width: renderWidth,
-			height: renderHeight,
-		})
-		const outputSize = getCaptureOutputSize(selection, viewportSelection)
-		return cropCanvas(bitmap, bitmap.width, bitmap.height, bitmapSelection, outputSize)
-	} finally {
-		bitmap.close()
-	}
+	const canvas = await result.toCanvas()
+	const rootSelection = getRootCaptureSelection(selection, rootRect)
+	const bitmapSelection = toBitmapCropSelection(rootSelection, canvas, {
+		width: renderWidth,
+		height: renderHeight,
+	})
+	const outputSize = getCaptureOutputSize(selection, viewportSelection)
+	const dataUrl = cropCanvas(canvas, canvas.width, canvas.height, bitmapSelection, outputSize)
+	return dataUrl
 }
 
 async function captureCurrentTab({
@@ -860,7 +982,9 @@ async function captureCurrentTab({
 			? await currentTabSession.acquire()
 			: await requestCurrentTabStream()
 	} catch (error) {
-		if (error instanceof CurrentTabCaptureError) throw error
+		if (error instanceof CurrentTabCaptureError) {
+			throw error
+		}
 		if (error instanceof DOMException && error.name === "AbortError") {
 			throw new CurrentTabCaptureError("cancelled", "Tab capture permission was cancelled")
 		}
@@ -894,13 +1018,22 @@ async function captureCurrentTab({
 			)
 		}
 
-		await video.play()
+		await waitForCaptureVideoPlayback(video)
 		await new Promise<void>((resolve) => {
-			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+			let settled = false
+			const finish = () => {
+				if (settled) return
+				settled = true
+				window.clearTimeout(timeoutId)
+				video.removeEventListener("loadeddata", finish)
 				resolve()
+			}
+			const timeoutId = window.setTimeout(finish, VIDEO_DATA_WAIT_TIMEOUT_MS)
+			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+				finish()
 				return
 			}
-			video.addEventListener("loadeddata", () => resolve(), { once: true })
+			video.addEventListener("loadeddata", finish, { once: true })
 		})
 		await waitForFreshCaptureVideoFrame(video)
 
@@ -926,7 +1059,7 @@ async function captureCurrentTab({
 		})
 		const scaleX = video.videoWidth / surface.width
 		const scaleY = video.videoHeight / surface.height
-		return cropCanvas(
+		const dataUrl = cropCanvas(
 			video,
 			video.videoWidth,
 			video.videoHeight,
@@ -938,6 +1071,7 @@ async function captureCurrentTab({
 			},
 			getCaptureOutputSize(selection, viewportSelection),
 		)
+		return dataUrl
 	} finally {
 		if (!currentTabSession) stopMediaStream(stream)
 		video.srcObject = null
@@ -964,8 +1098,8 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 		: () => undefined
 
 	try {
-		await waitForStableCaptureFrame(iframeDocument)
-		return await captureSameOriginIframe(options)
+		const framePresented = await waitForStableCaptureFrame(iframeDocument)
+		return captureSameOriginIframe(options, !framePresented)
 	} finally {
 		restoreDocument()
 	}

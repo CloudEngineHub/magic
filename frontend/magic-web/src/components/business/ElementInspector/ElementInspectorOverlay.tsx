@@ -46,7 +46,6 @@ import {
 	supportsCurrentTabCapture,
 	suppressCaptureCursor,
 	toRenderedSelection,
-	waitForStableCaptureRect,
 	waitForNextAnimationFrame,
 } from "./screenshot"
 import { getHtmlSelectionTargetRect } from "./selection"
@@ -431,7 +430,6 @@ export function ElementInspectorOverlay({
 				// automatic element preview starts while the pointer is still over the
 				// selected element, so delaying this until after the first animation frame
 				// can leave the pointer in the captured frame.
-				await waitForStableCaptureRect(overlay)
 				const geometry = getOverlayGeometry()
 				if (!geometry) throw new Error("HTML screenshot geometry is unavailable")
 				const overlayBounds = overlay.getBoundingClientRect()

@@ -18,7 +18,9 @@ import {
 	supportsCurrentTabCapture,
 	toBitmapCropSelection,
 	toRenderedSelection,
+	waitForCaptureVideoPlayback,
 	waitForFreshCaptureVideoFrame,
+	waitForStableCaptureRect,
 } from "../screenshot"
 
 describe("HTML screenshot geometry", () => {
@@ -118,6 +120,41 @@ describe("HTML screenshot geometry", () => {
 
 		await expect(capture).resolves.toMatch(/^data:image\/png;base64,/)
 	})
+
+	it("falls back when the iframe ACKs but never returns a screenshot", async () => {
+		vi.useFakeTimers()
+		try {
+			const iframe = document.createElement("iframe")
+			const targetWindow = { postMessage: vi.fn() }
+			Object.defineProperty(iframe, "contentWindow", {
+				configurable: true,
+				value: targetWindow,
+			})
+
+			const capture = captureWithIframeRuntime({
+				iframe,
+				selection: { left: 12, top: 18, width: 80, height: 60 },
+				iframeTargetOrigin: "https://husky.example.test",
+			})
+			const request = targetWindow.postMessage.mock.calls[0]?.[0]
+			const ack = new MessageEvent("message", {
+				origin: "https://husky.example.test",
+				data: {
+					type: "MAGIC_INSPECTOR_SCREENSHOT_ACK",
+					requestId: request.requestId,
+				},
+			})
+			Object.defineProperty(ack, "source", { configurable: true, value: targetWindow })
+			window.dispatchEvent(ack)
+
+			await vi.advanceTimersByTimeAsync(2_000)
+
+			await expect(capture).resolves.toBeNull()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("materializes pseudo-elements in the detached clone without changing the page", async () => {
 		document.body.innerHTML = '<div id="capture-root"><div id="card"></div></div>'
 		const root = document.querySelector<HTMLElement>("#capture-root")
@@ -369,6 +406,36 @@ describe("HTML screenshot geometry", () => {
 		}
 	})
 
+	it("does not block when tab capture permission never settles", async () => {
+		vi.useFakeTimers()
+		const previousMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
+		const getDisplayMedia = vi.fn(() => new Promise<MediaStream>(() => undefined))
+		Object.defineProperty(navigator, "mediaDevices", {
+			configurable: true,
+			value: { getDisplayMedia },
+		})
+
+		try {
+			const session = createCurrentTabCaptureSession()
+			const pending = session.acquire()
+
+			await vi.advanceTimersByTimeAsync(2_000)
+
+			await expect(pending).rejects.toMatchObject({
+				name: "CurrentTabCaptureError",
+				code: "cancelled",
+			})
+			expect(getDisplayMedia).toHaveBeenCalledOnce()
+		} finally {
+			if (previousMediaDevices) {
+				Object.defineProperty(navigator, "mediaDevices", previousMediaDevices)
+			} else {
+				Reflect.deleteProperty(navigator, "mediaDevices")
+			}
+			vi.useRealTimers()
+		}
+	})
+
 	it("waits for a fresh display-stream frame before cropping", async () => {
 		let presentFrame: (() => void) | undefined
 		const requestVideoFrameCallback = vi.fn((callback: () => void) => {
@@ -387,6 +454,69 @@ describe("HTML screenshot geometry", () => {
 		presentFrame?.()
 		await pending
 		expect(completed).toBe(true)
+	})
+
+	it("does not block when the display-stream frame callback never fires", async () => {
+		vi.useFakeTimers()
+		try {
+			const requestVideoFrameCallback = vi.fn(() => 1)
+			const video = { requestVideoFrameCallback } as unknown as HTMLVideoElement
+			const pending = waitForFreshCaptureVideoFrame(video)
+
+			await vi.advanceTimersByTimeAsync(120)
+			await expect(pending).resolves.toBeUndefined()
+			expect(requestVideoFrameCallback).toHaveBeenCalledOnce()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not block when capture video playback never settles", async () => {
+		vi.useFakeTimers()
+		try {
+			const video = {
+				play: vi.fn(() => new Promise<void>(() => undefined)),
+			} as unknown as HTMLVideoElement
+			const pending = waitForCaptureVideoPlayback(video)
+			const rejection = expect(pending).rejects.toThrow(
+				"Timed out while starting tab capture video",
+			)
+
+			await vi.advanceTimersByTimeAsync(1_000)
+			await rejection
+			expect(video.play).toHaveBeenCalledOnce()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("bounds stable-rect waits when animation frames are delayed", async () => {
+		const element = document.createElement("div")
+		document.body.appendChild(element)
+		vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
+			left: 0,
+			top: 0,
+			width: 320,
+			height: 240,
+			right: 320,
+			bottom: 240,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect)
+		const requestAnimationFrame = vi
+			.spyOn(window, "requestAnimationFrame")
+			.mockImplementation(() => 1)
+
+		try {
+			await expect(waitForStableCaptureRect(element, 6, 20)).resolves.toMatchObject({
+				width: 320,
+				height: 240,
+			})
+		} finally {
+			requestAnimationFrame.mockRestore()
+			element.remove()
+		}
 	})
 
 	it("prewarms current-tab capture for ordinary HTML but not PPT roots", () => {

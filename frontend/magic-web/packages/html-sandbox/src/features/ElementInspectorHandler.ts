@@ -31,6 +31,42 @@ const INSPECTOR_MSG = {
 	SCREENSHOT_RESPONSE: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
 } as const
 
+const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
+const FONT_READY_WAIT_TIMEOUT_MS = 1_000
+
+function encodeCanvasToPngBlob(canvas: HTMLCanvasElement): Blob {
+	// The final canvas is already limited to the requested output size. Using
+	// synchronous encoding here avoids Chromium delaying toBlob callbacks after
+	// an iframe misses a compositor frame.
+	const dataUrl = canvas.toDataURL("image/png")
+	const separatorIndex = dataUrl.indexOf(",")
+	if (separatorIndex < 0) throw new Error("Failed to encode iframe screenshot")
+	const binary = atob(dataUrl.slice(separatorIndex + 1))
+	const bytes = new Uint8Array(binary.length)
+	for (let index = 0; index < binary.length; index += 1) {
+		bytes[index] = binary.charCodeAt(index)
+	}
+	return new Blob([bytes], { type: "image/png" })
+}
+
+function waitForAnimationFrameWithTimeout(timeoutMs: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = (presented: boolean) => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			resolve(presented)
+		}
+		const timeoutId = window.setTimeout(() => finish(false), Math.max(timeoutMs, 0))
+		try {
+			requestAnimationFrame(() => finish(true))
+		} catch {
+			finish(false)
+		}
+	})
+}
+
 interface ScreenshotRequest {
 	requestId: string
 	selection: { top: number; left: number; width: number; height: number }
@@ -68,9 +104,40 @@ function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): HTMLElem
 	return containingRoot?.root ?? document.body
 }
 
-async function waitForCaptureFrame(): Promise<void> {
-	if (document.fonts?.ready) await document.fonts.ready.catch(() => undefined)
-	await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+async function waitForCaptureFrame(): Promise<{
+	fontsReadyTimedOut: boolean
+	animationFramePresented: boolean
+}> {
+	const fontsReady = document.fonts?.ready
+	let fontsReadyTimedOut = false
+	if (fontsReady) {
+		await new Promise<void>((resolve) => {
+			let settled = false
+			const finish = () => {
+				if (settled) return
+				settled = true
+				window.clearTimeout(timeoutId)
+				resolve()
+			}
+			const timeoutId = window.setTimeout(() => {
+				fontsReadyTimedOut = true
+				finish()
+			}, FONT_READY_WAIT_TIMEOUT_MS)
+			fontsReady.then(finish, finish)
+		})
+	}
+	let animationFramePresented = await waitForAnimationFrameWithTimeout(
+		CAPTURE_FRAME_WAIT_TIMEOUT_MS,
+	)
+	if (!animationFramePresented) {
+		// A freshly injected document can miss the first compositor tick. Give it
+		// one more bounded opportunity before rasterizing, otherwise canvas PNG
+		// encoding may wait for the compositor and block the inspector.
+		animationFramePresented = await waitForAnimationFrameWithTimeout(
+			CAPTURE_FRAME_WAIT_TIMEOUT_MS,
+		)
+	}
+	return { fontsReadyTimedOut, animationFramePresented }
 }
 
 async function captureScreenshotBlob(request: ScreenshotRequest): Promise<Blob> {
@@ -85,8 +152,25 @@ async function captureScreenshotBlob(request: ScreenshotRequest): Promise<Blob> 
 	const outputHeight = Math.min(Math.max(Math.round(request.outputSize.height), 1), 4096)
 	const root = resolveCaptureRoot(request.selection)
 	const rootRect = root.getBoundingClientRect()
-	if (rootRect.width <= 0 || rootRect.height <= 0) throw new Error("Capture root has no size")
-
+	if (rootRect.width <= 0 || rootRect.height <= 0) {
+		throw new Error("Capture root has no size")
+	}
+	const selectionLeft = Math.max(0, request.selection.left - rootRect.left)
+	const selectionTop = Math.max(0, request.selection.top - rootRect.top)
+	const selectionRight = Math.min(
+		rootRect.width,
+		request.selection.left - rootRect.left + request.selection.width,
+	)
+	const selectionBottom = Math.min(
+		rootRect.height,
+		request.selection.top - rootRect.top + request.selection.height,
+	)
+	const clip = {
+		x: selectionLeft,
+		y: selectionTop,
+		width: Math.max(1, selectionRight - selectionLeft),
+		height: Math.max(1, selectionBottom - selectionTop),
+	}
 	const style = document.createElement("style")
 	style.setAttribute("data-magic-inspector-screenshot", "true")
 	style.textContent = `
@@ -101,41 +185,30 @@ async function captureScreenshotBlob(request: ScreenshotRequest): Promise<Blob> 
 	try {
 		await waitForCaptureFrame()
 		const result = await snapdom(root, {
-			width: rootRect.width,
-			height: rootRect.height,
+			width: clip.width,
+			height: clip.height,
 			dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 3),
 			backgroundColor: "#ffffff",
+			clip,
 		})
-		const sourceBlob = await result.toBlob({ type: "png" })
-		const bitmap = await createImageBitmap(sourceBlob)
-		try {
-			const canvas = document.createElement("canvas")
-			canvas.width = outputWidth
-			canvas.height = outputHeight
-			const context = canvas.getContext("2d")
-			if (!context) throw new Error("Canvas 2D context is unavailable")
-			const scaleX = bitmap.width / Math.max(rootRect.width, 1)
-			const scaleY = bitmap.height / Math.max(rootRect.height, 1)
-			const left = Math.max(0, (request.selection.left - rootRect.left) * scaleX)
-			const top = Math.max(0, (request.selection.top - rootRect.top) * scaleY)
-			const width = Math.max(
-				1,
-				Math.min(request.selection.width * scaleX, bitmap.width - left),
-			)
-			const height = Math.max(
-				1,
-				Math.min(request.selection.height * scaleY, bitmap.height - top),
-			)
-			context.drawImage(bitmap, left, top, width, height, 0, 0, outputWidth, outputHeight)
-			return await new Promise<Blob>((resolve, reject) => {
-				canvas.toBlob((blob) => {
-					if (blob) resolve(blob)
-					else reject(new Error("Failed to encode iframe screenshot"))
-				}, "image/png")
-			})
-		} finally {
-			bitmap.close()
-		}
+		const canvas = await result.toCanvas()
+		const outputCanvas = document.createElement("canvas")
+		outputCanvas.width = outputWidth
+		outputCanvas.height = outputHeight
+		const context = outputCanvas.getContext("2d")
+		if (!context) throw new Error("Canvas 2D context is unavailable")
+		context.drawImage(
+			canvas,
+			0,
+			0,
+			canvas.width,
+			canvas.height,
+			0,
+			0,
+			outputWidth,
+			outputHeight,
+		)
+		return encodeCanvasToPngBlob(outputCanvas)
 	} finally {
 		style.remove()
 	}

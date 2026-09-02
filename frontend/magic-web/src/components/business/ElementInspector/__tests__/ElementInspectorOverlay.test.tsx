@@ -338,15 +338,8 @@ describe("ElementInspectorOverlay", () => {
 		}
 	})
 
-	it("hides the cursor before automatic preview waits for capture frames", async () => {
+	it("hides the cursor before automatic preview capture starts", async () => {
 		suppressCaptureCursor.mockClear()
-		const scheduledFrames: FrameRequestCallback[] = []
-		const requestAnimationFrame = vi
-			.spyOn(window, "requestAnimationFrame")
-			.mockImplementation((callback) => {
-				scheduledFrames.push(callback)
-				return scheduledFrames.length
-			})
 		const rect = {
 			top: 0,
 			left: 0,
@@ -378,18 +371,9 @@ describe("ElementInspectorOverlay", () => {
 				</div>,
 			)
 
-			await waitFor(() => expect(scheduledFrames.length).toBeGreaterThanOrEqual(1))
-			await act(async () => {
-				scheduledFrames.shift()?.(0)
-			})
-			await waitFor(() => expect(scheduledFrames.length).toBeGreaterThanOrEqual(1))
-			await act(async () => {
-				scheduledFrames.shift()?.(0)
-			})
 			await waitFor(() => expect(suppressCaptureCursor).toHaveBeenCalledOnce())
 			expect(suppressCaptureCursor).toHaveBeenCalled()
 		} finally {
-			requestAnimationFrame.mockRestore()
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
 		}
 	})

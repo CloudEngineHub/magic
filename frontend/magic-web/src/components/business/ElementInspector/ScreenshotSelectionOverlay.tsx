@@ -119,7 +119,6 @@ export function ScreenshotSelectionOverlay({
 			setSelection(null)
 			return
 		}
-
 		setSelection(rect)
 		setCaptureError(null)
 		setIsCapturing(true)
@@ -127,11 +126,9 @@ export function ScreenshotSelectionOverlay({
 		onCaptureStateChange?.(true)
 		onCapturePhaseChange?.("loading")
 		try {
-			// Two frames give the browser a paint opportunity before screenshot
-			// work starts. The fallback callback hides inspector chrome only when
-			// the rendered browser tab, rather than the iframe itself, is captured.
-			await waitForNextAnimationFrame()
-			await waitForNextAnimationFrame()
+			// The iframe screenshot path does not include host inspector chrome, so
+			// waiting for two host animation frames only delays the capture. The
+			// rendered-tab fallback hides the chrome and waits for its own frame below.
 			await onCapture(rect, async () => {
 				setCapturePhase("capturing")
 				onCapturePhaseChange?.("capturing")
