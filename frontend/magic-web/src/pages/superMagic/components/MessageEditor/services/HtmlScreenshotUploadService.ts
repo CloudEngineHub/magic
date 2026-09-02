@@ -6,6 +6,7 @@ import { logger as Logger } from "@/utils/log"
 import { UploadSource } from "../types"
 import { superMagicUploadTokenService } from "./UploadTokenService"
 import { htmlScreenshotStorage, type StoredHtmlScreenshot } from "./HtmlScreenshotStorage"
+import { forgetHtmlScreenshotByStorageId } from "./HtmlScreenshotTargetStore"
 import type { SaveUploadFileToProjectResponse } from "@/pages/superMagic/utils/api"
 
 export interface StoreHtmlScreenshotParams {
@@ -102,9 +103,13 @@ class HtmlScreenshotUploadService {
 				type: blob.type || "image/png",
 			})
 			const customCredentials = await superMagicUploadTokenService.getUploadToken(projectId)
+			// OSS object name uses a snowflake ID to avoid collisions.
+			const { ids } = await SuperMagicApi.getSnowflakeIds({ count: 1 })
+			const snowflakeId = ids[0]
+			if (!snowflakeId) throw new Error("截图上传未获取到文件ID")
 			const uploadResult = await this.uploadToOss(
 				file,
-				fileName,
+				snowflakeId,
 				projectId,
 				customCredentials,
 				onProgress,
@@ -141,6 +146,7 @@ class HtmlScreenshotUploadService {
 
 			try {
 				await htmlScreenshotStorage.delete(storageId)
+				forgetHtmlScreenshotByStorageId(storageId)
 			} catch (cleanupError) {
 				logger.error({
 					eventKey: "html_screenshot_cleanup_failed",
@@ -164,6 +170,14 @@ class HtmlScreenshotUploadService {
 
 	async getStoredScreenshotBlob(storageId: string): Promise<Blob | null> {
 		return htmlScreenshotStorage.getBlob(storageId)
+	}
+
+	async discardStoredScreenshot(storageId: string): Promise<void> {
+		try {
+			await htmlScreenshotStorage.delete(storageId)
+		} finally {
+			forgetHtmlScreenshotByStorageId(storageId)
+		}
 	}
 }
 

@@ -11,6 +11,7 @@ import {
 import type { InspectorDetailAttrs } from "./types"
 import { getInspectorDetailHeaderLabel } from "./display"
 import { InspectorScreenshotPreview } from "./InspectorScreenshotPreview"
+import { useHtmlScreenshotMention } from "../../hooks/useHtmlScreenshotMention"
 
 export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 	node,
@@ -21,6 +22,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 	const attrs = node.attrs as InspectorDetailAttrs
 	const [expanded, setExpanded] = useState(false)
 	const { t } = useTranslation("super")
+	const screenshotMention = useHtmlScreenshotMention(attrs.targetId, attrs.screenshotMention)
 
 	const parsedStyles: Record<string, string> = (() => {
 		try {
@@ -59,6 +61,17 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 			? (attrs.fileMention.data as ProjectFileMentionData)
 			: null
 
+	const headerLabelContent = (
+		<>
+			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-icon />
+			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
+		</>
+	)
+	const expandIcon = expanded ? (
+		<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
+	) : (
+		<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
+	)
 	const headerButton = (
 		<button
 			type="button"
@@ -79,13 +92,20 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 			contentEditable={false}
 			data-testid="set-expanded"
 		>
-			<Crosshair size={12} className="flex-shrink-0 text-primary" data-drag-preview-icon />
-			<span className="min-w-0 flex-1 truncate text-[inherit]">{headerLabel}</span>
-			{expanded ? (
-				<ChevronDown size={12} className="flex-shrink-0 text-primary/70" />
+			{/* Keep the preview on the label, not the expand button. */}
+			{!expanded && screenshotMention ? (
+				<InspectorScreenshotPreview
+					mention={screenshotMention}
+					trigger={
+						<span className="inline-flex min-w-0 flex-1 items-center gap-1">
+							{headerLabelContent}
+						</span>
+					}
+				/>
 			) : (
-				<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
+				headerLabelContent
 			)}
+			{expandIcon}
 		</button>
 	)
 
@@ -108,15 +128,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 					: "magic-mention relative top-[1px] !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-baseline",
 			)}
 		>
-			{/* The collapsed chip is also the screenshot preview trigger. */}
-			{!expanded && attrs.screenshotMention ? (
-				<InspectorScreenshotPreview
-					mention={attrs.screenshotMention}
-					trigger={headerButton}
-				/>
-			) : (
-				headerButton
-			)}
+			{headerButton}
 
 			{/* Expanded detail panel */}
 			{expanded && (
@@ -124,8 +136,8 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 					className="block space-y-1 px-2 py-1.5 text-[11px] text-foreground/70"
 					contentEditable={false}
 				>
-					{attrs.screenshotMention && (
-						<InspectorScreenshotPreview mention={attrs.screenshotMention} />
+					{screenshotMention && (
+						<InspectorScreenshotPreview mention={screenshotMention} />
 					)}
 					{fileData && (
 						<span className="flex gap-1.5">

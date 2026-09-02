@@ -66,5 +66,15 @@ describe("MentionItemsProcessor screenshot handling", () => {
 		})
 		expect(result.mentionItems[0].attrs.type).toBe(MentionItemType.PROJECT_FILE)
 		expect(result.content.content?.[0].attrs?.type).toBe(MentionItemType.PROJECT_FILE)
+		expect(result.mentionItems[0].attrs.data).toMatchObject({
+			file_id: "saved-screenshot",
+			file_path: "screenshot.png",
+		})
+		expect(result.mentionItems[0].attrs.data).not.toMatchObject({
+			storage_id: "storage-1",
+		})
+		expect(result.mentionItems[0].attrs.data).not.toMatchObject({
+			file_id: "storage-1",
+		})
 	})
 })

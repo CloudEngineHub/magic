@@ -49,12 +49,6 @@ export function collectMentionItemsFromContent(content?: JSONContent): MentionLi
 					attrs: node.attrs.fileMention as TiptapMentionAttributes,
 				})
 			}
-			if (node.attrs?.screenshotMention) {
-				items.push({
-					type: "mention",
-					attrs: node.attrs.screenshotMention as TiptapMentionAttributes,
-				})
-			}
 		}
 		if (Array.isArray(node.content)) {
 			node.content.forEach((child) => walk(child as JSONContent))
@@ -80,12 +74,6 @@ export function collectMentionItemsFromEditor(editor: Editor | null): MentionLis
 				items.push({
 					type: "mention",
 					attrs: node.attrs.fileMention as TiptapMentionAttributes,
-				})
-			}
-			if (node.attrs.screenshotMention) {
-				items.push({
-					type: "mention",
-					attrs: node.attrs.screenshotMention as TiptapMentionAttributes,
 				})
 			}
 		}

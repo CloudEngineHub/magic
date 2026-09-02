@@ -334,11 +334,14 @@ export function useInspectorToolbarMode(
 			confirmedTarget.screenshot &&
 			pubsub.hasListeners(PubSubEvents.Prepare_Html_Screenshot)
 		) {
+			// Region screenshots must be uploaded later. Element shots stay in
+			// IndexedDB and are only loaded again when a preview needs them.
 			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
 				targetId: confirmedTarget.id,
 				dataUrl: confirmedTarget.screenshot.dataUrl,
 				fileName: getHtmlScreenshotFileName(confirmedTarget.id ?? ""),
 				onSuccess: (mention) => {
+					if (confirmedTarget.kind !== "screenshot") return
 					setPendingTargets((targets) =>
 						targets.map((target) =>
 							target.id === confirmedTarget.id

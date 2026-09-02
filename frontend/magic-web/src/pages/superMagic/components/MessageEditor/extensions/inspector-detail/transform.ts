@@ -355,16 +355,13 @@ export function serializeInspectorContent(
 			elementHtml?: string
 			selectorMatchCount?: number
 			fileMention?: TiptapMentionAttributes | null
-			screenshotMention?: TiptapMentionAttributes | null
+			targetId?: string | null
 		}
 
 		const content: JSONContent[] = []
 
 		if (attrs.fileMention) {
 			content.push(para({ type: "mention", attrs: attrs.fileMention }))
-		}
-		if (attrs.screenshotMention) {
-			content.push(para({ type: "mention", attrs: attrs.screenshotMention }))
 		}
 
 		// Title with marker
@@ -374,8 +371,7 @@ export function serializeInspectorContent(
 			// The file marker is only needed when inline content precedes the
 			// inspector node; standalone file mentions are inferred from the
 			// paragraph immediately before the title for backward compatibility.
-			(attrs.fileMention && inlinePosition.before ? 4 : 0) +
-			(attrs.screenshotMention ? 8 : 0)
+			(attrs.fileMention && inlinePosition.before ? 4 : 0)
 		content.push(
 			para(text(`${INSPECTOR_DETAIL_MARKER.repeat(1 + metadataMarkerCount)}${labels.title}`)),
 		)

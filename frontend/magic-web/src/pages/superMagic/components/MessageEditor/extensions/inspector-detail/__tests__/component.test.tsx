@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
 import { InspectorDetailComponent } from "../component"
+import {
+	resetHtmlScreenshotTargetStore,
+	setHtmlScreenshotMention,
+} from "../../../services/HtmlScreenshotTargetStore"
 
 const getStoredScreenshotBlob = vi.hoisted(() => vi.fn())
 
@@ -36,6 +40,7 @@ vi.mock("@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUplo
 describe("InspectorDetailComponent", () => {
 	beforeEach(() => {
 		getStoredScreenshotBlob.mockReset()
+		resetHtmlScreenshotTargetStore()
 	})
 
 	it("keeps the collapsed chip tall enough and separates its border from the caret", () => {
@@ -87,6 +92,54 @@ describe("InspectorDetailComponent", () => {
 			"!outline-none",
 		)
 		expect(screen.getByTestId("set-expanded")).toHaveClass("border-primary/70", "bg-primary/10")
+	})
+
+	it("expands on click even when a local screenshot preview is attached", async () => {
+		getStoredScreenshotBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
+		const createObjectURL = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:expand-inspector-screenshot")
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {})
+		const setNodeSelection = vi.fn()
+		const props = {
+			node: {
+				attrs: {
+					textContent: "全球新能源汽车市场运营指标洞察",
+					targetId: "element:#hero:1",
+					screenshotMention: {
+						type: MentionItemType.UPLOAD_FILE,
+						data: {
+							file_id: "storage-1",
+							file_name: "hero.png",
+							file_path: "storage-1",
+							file_extension: "png",
+							is_html_screenshot: true,
+							storage_id: "storage-1",
+						},
+					},
+				},
+			},
+			editor: { commands: { setNodeSelection } },
+			getPos: () => 3,
+		} as unknown as NodeViewProps
+
+		render(
+			<TooltipProvider>
+				<InspectorDetailComponent {...props} />
+			</TooltipProvider>,
+		)
+
+		const button = screen.getByTestId("set-expanded")
+		expect(button.querySelector("svg.lucide-chevron-right")).toBeTruthy()
+
+		await act(async () => {
+			button.click()
+		})
+
+		expect(setNodeSelection).toHaveBeenCalledWith(3)
+		expect(button.querySelector("svg.lucide-chevron-down")).toBeTruthy()
+		createObjectURL.mockRestore()
+		revokeObjectURL.mockRestore()
 	})
 
 	it("waits for a click before selecting so mouse drag can start", () => {
@@ -146,10 +199,11 @@ describe("InspectorDetailComponent", () => {
 	})
 
 	it("loads a persisted local screenshot by storage id", async () => {
-		getStoredScreenshotBlob.mockResolvedValueOnce(new Blob(["png"], { type: "image/png" }))
-		const createObjectURL = vi.fn(() => "blob:local-inspector-screenshot")
-		const revokeObjectURL = vi.fn()
-		vi.stubGlobal("URL", { createObjectURL, revokeObjectURL })
+		getStoredScreenshotBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
+		const createObjectURL = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:local-inspector-screenshot")
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {})
 
 		const props = {
 			node: {
@@ -184,19 +238,18 @@ describe("InspectorDetailComponent", () => {
 			"src",
 			"blob:local-inspector-screenshot",
 		)
-		vi.unstubAllGlobals()
+		createObjectURL.mockRestore()
+		revokeObjectURL.mockRestore()
 	})
 
-	it("falls back to the in-memory screenshot when local storage has expired", async () => {
+	it("shows the element text when the stored screenshot is missing", async () => {
 		getStoredScreenshotBlob.mockResolvedValueOnce(null)
-		const createObjectURL = vi.fn(() => "blob:legacy-inspector-screenshot")
-		const revokeObjectURL = vi.fn()
-		vi.stubGlobal("URL", { createObjectURL, revokeObjectURL })
-		const file = new File(["png"], "hero.png", { type: "image/png" })
 
 		const props = {
 			node: {
 				attrs: {
+					textContent: "Hero title",
+					targetId: "element:#hero:1",
 					screenshotMention: {
 						type: MentionItemType.UPLOAD_FILE,
 						data: {
@@ -206,7 +259,6 @@ describe("InspectorDetailComponent", () => {
 							file_extension: "png",
 							is_html_screenshot: true,
 							storage_id: "storage-1",
-							file,
 						},
 					},
 				},
@@ -221,14 +273,58 @@ describe("InspectorDetailComponent", () => {
 			</TooltipProvider>,
 		)
 
+		expect(screen.getByTestId("set-expanded")).toHaveTextContent("Hero title")
+		await act(async () => {
+			screen.getByTestId("set-expanded").click()
+		})
+		await waitFor(() => expect(getStoredScreenshotBlob).toHaveBeenCalledWith("storage-1"))
+		expect(screen.queryByRole("img", { name: "hero.png" })).not.toBeInTheDocument()
+		expect(screen.getAllByText("Hero title").length).toBeGreaterThan(0)
+	})
+
+	it("renders a local screenshot resolved from the target store", async () => {
+		getStoredScreenshotBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
+		const createObjectURL = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:target-inspector-screenshot")
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {})
+		setHtmlScreenshotMention("element:#hero:1", {
+			type: MentionItemType.UPLOAD_FILE,
+			data: {
+				file_id: "storage-1",
+				file_name: "hero.png",
+				file_path: "storage-1",
+				file_extension: "png",
+				is_html_screenshot: true,
+				storage_id: "storage-1",
+			},
+		})
+
+		const props = {
+			node: {
+				attrs: {
+					targetId: "element:#hero:1",
+					textContent: "Hero",
+				},
+			},
+			editor: { commands: { setNodeSelection: vi.fn() } },
+			getPos: () => 3,
+		} as unknown as NodeViewProps
+		render(
+			<TooltipProvider>
+				<InspectorDetailComponent {...props} />
+			</TooltipProvider>,
+		)
+
 		await act(async () => {
 			screen.getByTestId("set-expanded").click()
 		})
 		await waitFor(() => expect(getStoredScreenshotBlob).toHaveBeenCalledWith("storage-1"))
 		expect(await screen.findByRole("img", { name: "hero.png" })).toHaveAttribute(
 			"src",
-			"blob:legacy-inspector-screenshot",
+			"blob:target-inspector-screenshot",
 		)
-		vi.unstubAllGlobals()
+		createObjectURL.mockRestore()
+		revokeObjectURL.mockRestore()
 	})
 })

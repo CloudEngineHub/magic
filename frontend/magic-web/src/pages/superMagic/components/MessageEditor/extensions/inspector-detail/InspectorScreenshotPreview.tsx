@@ -35,12 +35,15 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 		type: "preview",
 		enabled: !isLocalScreenshot,
 	})
+	const storageId = isLocalScreenshot
+		? (data as UploadFileMentionData | undefined)?.storage_id
+		: undefined
 	const [localUrl, setLocalUrl] = useState<string | null>(null)
-	const [localLoading, setLocalLoading] = useState(false)
+	const [localLoading, setLocalLoading] = useState(Boolean(storageId))
 	const [localError, setLocalError] = useState(false)
 
 	useEffect(() => {
-		if (!isLocalScreenshot || !data) {
+		if (!storageId) {
 			setLocalUrl(null)
 			setLocalLoading(false)
 			setLocalError(false)
@@ -53,21 +56,9 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 		setLocalLoading(true)
 		setLocalError(false)
 
-		const localData = data as UploadFileMentionData
 		void (async () => {
 			try {
-				let blob: Blob | File | undefined = localData.file
-				if (localData.storage_id) {
-					try {
-						blob =
-							(await htmlScreenshotUploadService.getStoredScreenshotBlob(localData.storage_id)) ??
-							blob
-					} catch {
-						// Keep the legacy in-memory fallback when IndexedDB is unavailable.
-					}
-				}
-				// Keep older in-memory mentions previewable while their IndexedDB record
-				// is unavailable or has already expired.
+				const blob = await htmlScreenshotUploadService.getStoredScreenshotBlob(storageId)
 				if (disposed) return
 				if (!blob) {
 					setLocalError(true)
@@ -75,6 +66,10 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 					return
 				}
 				localObjectUrl = URL.createObjectURL(blob)
+				if (disposed) {
+					URL.revokeObjectURL(localObjectUrl)
+					return
+				}
 				setLocalUrl(localObjectUrl)
 				setLocalLoading(false)
 			} catch {
@@ -88,7 +83,7 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 			disposed = true
 			if (localObjectUrl) URL.revokeObjectURL(localObjectUrl)
 		}
-	}, [data, isLocalScreenshot])
+	}, [storageId])
 
 	const resolvedFileUrl = isLocalScreenshot ? localUrl : fileUrl
 	const isLoading = isLocalScreenshot ? localLoading : remoteLoading

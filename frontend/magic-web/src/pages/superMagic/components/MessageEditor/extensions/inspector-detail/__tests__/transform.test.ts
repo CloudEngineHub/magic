@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest"
 import { Schema, type SchemaSpec } from "prosemirror-model"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { buildAgentPromptContent } from "@/components/business/ElementInspector/ElementInspectorOverlay"
 import { INSPECTOR_DETAIL_MARKER, INSPECTOR_DETAIL_TYPE } from "../const"
 import { serializeInspectorContent, transformInspectorContent } from "../transform"
+import {
+	resetHtmlScreenshotTargetStore,
+	setHtmlScreenshotMention,
+} from "../../../services/HtmlScreenshotTargetStore"
 import type { InspectedElementInfo } from "@/components/business/ElementInspector/types"
 import schemaConfig from "@/pages/superMagic/components/MessageList/components/Text/components/RichText/schemaConfig"
 
@@ -78,6 +82,10 @@ function createInspectedElement(): InspectedElementInfo {
 }
 
 describe("inspector-detail transform", () => {
+	beforeEach(() => {
+		resetHtmlScreenshotTargetStore()
+	})
+
 	it("stores the inspected file mention on the inspector node instead of a standalone paragraph", () => {
 		const content = buildAgentPromptContent(createInspectedElement(), labels.title, {
 			fileId: "file-1",
@@ -183,7 +191,8 @@ describe("inspector-detail transform", () => {
 		expect(() => schema.nodeFromJSON(transformed)).not.toThrow()
 	})
 
-	it("round-trips a screenshot mention inside the inspector detail", () => {
+	it("keeps element screenshots local and does not serialize them", () => {
+		setHtmlScreenshotMention("element:#hero:1", screenshotMention)
 		const serialized = serializeInspectorContent(
 			{
 				type: "doc",
@@ -202,6 +211,7 @@ describe("inspector-detail transform", () => {
 									styleCount: 0,
 									textContent: "Hero",
 									screenshotMention,
+									targetId: "element:#hero:1",
 								},
 							},
 						],
@@ -211,12 +221,10 @@ describe("inspector-detail transform", () => {
 			labels,
 		)
 
-		const transformed = transformInspectorContent(serialized)
-		const attrs = transformed.content?.[0]?.content?.[0]?.attrs
-		expect(attrs?.screenshotMention).toEqual(screenshotMention)
-
-		const schema = new Schema(schemaConfig as SchemaSpec)
-		const parsed = schema.nodeFromJSON(transformed)
-		expect(parsed.firstChild?.firstChild?.attrs.screenshotMention).toEqual(screenshotMention)
+		expect(JSON.stringify(serialized)).not.toContain("hero.png")
+		expect(
+			serialized.content?.some((node) => node.content?.[0]?.text === 'Text Content: "Hero"'),
+		).toBe(true)
+		expect(JSON.stringify(serialized)).not.toContain(INSPECTOR_DETAIL_MARKER.repeat(9))
 	})
 })

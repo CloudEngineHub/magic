@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
 	upload: vi.fn(),
 	reportFileUploads: vi.fn(),
 	batchSaveFiles: vi.fn(),
+	getSnowflakeIds: vi.fn(),
 	getUploadToken: vi.fn(),
 	store: vi.fn(),
 	getBlob: vi.fn(),
@@ -15,7 +16,10 @@ vi.mock("@dtyq/upload-sdk", () => ({
 }))
 vi.mock("@/apis", () => ({
 	FileApi: { reportFileUploads: mocks.reportFileUploads },
-	SuperMagicApi: { batchSaveFiles: mocks.batchSaveFiles },
+	SuperMagicApi: {
+		batchSaveFiles: mocks.batchSaveFiles,
+		getSnowflakeIds: mocks.getSnowflakeIds,
+	},
 }))
 vi.mock("@/models/user", () => ({
 	userStore: { user: { organizationCode: "org-1", authorization: "Bearer token" } },
@@ -29,6 +33,9 @@ vi.mock("../HtmlScreenshotStorage", () => ({
 		getBlob: mocks.getBlob,
 		delete: mocks.delete,
 	},
+}))
+vi.mock("../HtmlScreenshotTargetStore", () => ({
+	forgetHtmlScreenshotByStorageId: vi.fn(),
 }))
 vi.mock("../UploadTokenService", () => ({
 	superMagicUploadTokenService: {
@@ -51,6 +58,7 @@ describe("HtmlScreenshotUploadService", () => {
 		})
 		mocks.getBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
 		mocks.getUploadToken.mockResolvedValue({ temporary_credential: { dir: "/root/" } })
+		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["snowflake-1"] })
 		mocks.reportFileUploads.mockResolvedValue([{ file_id: "reported-id" }])
 		mocks.batchSaveFiles.mockResolvedValue([
 			{
@@ -92,12 +100,23 @@ describe("HtmlScreenshotUploadService", () => {
 			topicId: "topic-1",
 		})
 
+		expect(mocks.getSnowflakeIds).toHaveBeenCalledWith({ count: 1 })
+		expect(mocks.upload).toHaveBeenCalledWith(
+			expect.objectContaining({ fileName: "snowflake-1" }),
+		)
+		expect(mocks.reportFileUploads).toHaveBeenCalledWith([
+			expect.objectContaining({
+				file_name: "screenshot.png",
+				file_key: "temporary/screenshot.png",
+			}),
+		])
 		expect(mocks.batchSaveFiles).toHaveBeenCalledWith({
 			project_id: "project-1",
 			files: [
 				expect.objectContaining({
 					topic_id: "topic-1",
 					storage_type: "topic",
+					file_name: "screenshot.png",
 					relative_file_path: "screenshot.png",
 					is_hidden: true,
 				}),
@@ -105,6 +124,22 @@ describe("HtmlScreenshotUploadService", () => {
 		})
 		expect(mocks.delete).toHaveBeenCalledWith("screenshot-storage-id")
 		expect(result).toMatchObject({ file_id: "saved-id", is_hidden: true })
+	})
+
+	it("does not upload when snowflake id generation fails", async () => {
+		mocks.getSnowflakeIds.mockResolvedValueOnce({ ids: [] })
+
+		await expect(
+			htmlScreenshotUploadService.uploadStoredScreenshot({
+				storageId: "screenshot-storage-id",
+				fileName: "screenshot.png",
+				projectId: "project-1",
+				topicId: "topic-1",
+			}),
+		).rejects.toThrow("截图上传未获取到文件ID")
+
+		expect(mocks.upload).not.toHaveBeenCalled()
+		expect(mocks.batchSaveFiles).not.toHaveBeenCalled()
 	})
 
 	it("keeps a successful upload when local cleanup fails", async () => {

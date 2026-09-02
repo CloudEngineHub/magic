@@ -49,7 +49,13 @@ export function setMagicNodeDragData(
 ) {
 	if (!event.dataTransfer) return false
 
-	const payload = createDragPayload(type, attrs, source?.editorId, source?.position, source?.dragId)
+	const payload = createDragPayload(
+		type,
+		attrs,
+		source?.editorId,
+		source?.position,
+		source?.dragId,
+	)
 
 	event.dataTransfer.effectAllowed = source ? "move" : "copy"
 	event.dataTransfer.setData(MAGIC_NODE_DRAG_MIME, JSON.stringify(payload))
@@ -407,9 +413,8 @@ function installPointerDragListeners() {
 			startY: pointerEvent.clientY,
 			active: false,
 		}
-		if (typeof target.sourceElement.setPointerCapture === "function") {
-			target.sourceElement.setPointerCapture(pointerEvent.pointerId)
-		}
+		// Do not capture yet. Capturing on pointerdown retargets click away from
+		// inner expand buttons and tooltip triggers.
 		ensurePointerDragStyle()
 		document.documentElement.classList.add("magic-node-pointer-pending")
 	}
@@ -420,16 +425,22 @@ function installPointerDragListeners() {
 		if (!session || session.pointerId !== pointerEvent.pointerId) return
 		const movedX = pointerEvent.clientX - session.startX
 		const movedY = pointerEvent.clientY - session.startY
-		// Prevent the browser from selecting text while the pointer crosses the
-		// drag threshold. A normal click still works because no click is canceled.
-		pointerEvent.preventDefault()
 		if (!session.active && Math.hypot(movedX, movedY) < POINTER_DRAG_THRESHOLD) return
 
 		if (!session.active) {
 			session.active = true
+			if (typeof session.sourceElement.setPointerCapture === "function") {
+				try {
+					session.sourceElement.setPointerCapture(pointerEvent.pointerId)
+				} catch {
+					// The pointer may already have been released.
+				}
+			}
 			createDragPreview(session.payload.text, session.sourceElement)
 			window.getSelection()?.removeAllRanges()
 		}
+		// Only suppress browser text-selection after this is a real drag.
+		pointerEvent.preventDefault()
 		updateDragPreviewPosition(pointerEvent)
 		const target = findDropTarget(pointerEvent.clientX, pointerEvent.clientY)
 		for (const view of editorViews.values()) {

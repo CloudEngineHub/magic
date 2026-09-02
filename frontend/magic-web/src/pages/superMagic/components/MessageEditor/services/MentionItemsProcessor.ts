@@ -138,7 +138,7 @@ export class MentionItemsProcessor {
 			return data.is_html_screenshot && Boolean(data.storage_id)
 		})
 		const regularItems = validItems.filter((item) => !screenshotItems.includes(item))
-		const [regularSaveResults, screenshotSaveResults] = await Promise.all([
+		const [regularSaveResults, screenshotSaveEntries] = await Promise.all([
 			regularItems.length > 0
 				? this.saveTempFilesToProject(regularItems, projectId, topicId)
 				: Promise.resolve([]),
@@ -151,17 +151,20 @@ export class MentionItemsProcessor {
 						projectId,
 						topicId: topicId ?? "",
 					})
-					// The local storage ID is the upload mention's identity until the
-					// server returns a project file. Keep it as the transform key.
-					return { ...result, file_key: data.file_path ?? result.file_key }
+					return { storageId: data.storage_id as string, result }
 				}),
 			),
 		])
+		const screenshotSaveResults = screenshotSaveEntries.map(({ result }) => result)
+		const screenshotSaveByStorageId = Object.fromEntries(
+			screenshotSaveEntries.map(({ storageId, result }) => [storageId, result]),
+		)
 		const saveResults = [...regularSaveResults, ...screenshotSaveResults]
 		const transformedResult = transformMentionItemsToProjectFiles(
 			content,
 			processedItems,
 			saveResults,
+			screenshotSaveByStorageId,
 		)
 
 		return transformedResult

@@ -44,7 +44,7 @@ describe("HTML inspector agent prompt", () => {
 		expect(JSON.stringify(content)).toContain("Align this card")
 	})
 
-	it("renders an element screenshot as an image mention", () => {
+	it("keeps element screenshots off the sent inspector node", () => {
 		const target: HtmlSelectionTarget = {
 			id: "#hero",
 			kind: "element",
@@ -95,7 +95,8 @@ describe("HTML inspector agent prompt", () => {
 		expect(mentions[0]?.attrs?.type).toBe(MentionItemType.PROJECT_FILE)
 		const inspectorDetail = content.content?.[3]?.content?.[0]
 		expect(inspectorDetail?.type).toBe("inspector-detail")
-		expect(inspectorDetail?.attrs?.screenshotMention?.type).toBe(MentionItemType.UPLOAD_FILE)
+		expect(inspectorDetail?.attrs?.screenshotMention).toBeUndefined()
+		expect(inspectorDetail?.attrs?.textContent).toBe("Hero")
 	})
 
 	it("reuses the inspector-detail node for normalized element targets", () => {
@@ -134,7 +135,7 @@ describe("HTML inspector agent prompt", () => {
 		})
 	})
 
-	it("keeps a normalized element screenshot on the inspector-detail node", () => {
+	it("does not attach a local element screenshot to a normalized inspector node", () => {
 		const content = buildHtmlMultiSelectionPromptContent(
 			{ fileId: "html-1", fileName: "index.html", filePath: "index.html" },
 			[
@@ -168,6 +169,6 @@ describe("HTML inspector agent prompt", () => {
 		)
 
 		const detail = content.content?.[3]?.content?.[0]
-		expect(detail?.attrs?.screenshotMention?.data?.file_id).toBe("image-1")
+		expect(detail?.attrs?.screenshotMention).toBeUndefined()
 	})
 })

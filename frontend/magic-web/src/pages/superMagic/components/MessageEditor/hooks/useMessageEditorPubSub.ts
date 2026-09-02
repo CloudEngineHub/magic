@@ -28,6 +28,7 @@ import {
 } from "../utils/drag"
 import { runActiveEditor, useLatestActiveEditor } from "../utils/editorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
+import { setHtmlScreenshotMention } from "../services/HtmlScreenshotTargetStore"
 
 interface UseMessageEditorPubSubParams {
 	editor: Editor | null
@@ -172,22 +173,30 @@ function useMessageEditorPubSub({
 					dataUrl,
 					fileName,
 				})
-				const mention: TiptapMentionAttributes = {
-					type: MentionItemType.UPLOAD_FILE,
-					data: {
-						file_id: storedScreenshot.storageId,
-						file_name: storedScreenshot.fileName,
-						file_path: storedScreenshot.storageId,
-						file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
-						file_size: storedScreenshot.fileSize,
-						is_hidden: true,
-						is_html_screenshot: true,
-						storage_id: storedScreenshot.storageId,
-						upload_status: "done",
-					},
+				try {
+					const mention: TiptapMentionAttributes = {
+						type: MentionItemType.UPLOAD_FILE,
+						data: {
+							file_id: storedScreenshot.storageId,
+							file_name: storedScreenshot.fileName,
+							file_path: storedScreenshot.storageId,
+							file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
+							file_size: storedScreenshot.fileSize,
+							is_hidden: true,
+							is_html_screenshot: true,
+							storage_id: storedScreenshot.storageId,
+							upload_status: "done",
+						},
+					}
+					preparedScreenshotMentionsRef.current.set(targetId, mention)
+					setHtmlScreenshotMention(targetId, mention)
+					return mention
+				} catch (error) {
+					await htmlScreenshotUploadService.discardStoredScreenshot(
+						storedScreenshot.storageId,
+					)
+					throw error
 				}
-				preparedScreenshotMentionsRef.current.set(targetId, mention)
-				return mention
 			})()
 
 			preparingScreenshotPromisesRef.current.set(targetId, promise)
@@ -225,30 +234,8 @@ function useMessageEditorPubSub({
 	useEffect(() => {
 		const handleUpdateHtmlInspectorScreenshot = (update: HtmlInspectorScreenshotUpdate) => {
 			if (!update.targetId || !update.screenshotMention) return
-
-			runActiveEditor(activeEditorRef.current, (activeEditor) => {
-				const { state } = activeEditor.view
-				const transaction = state.tr
-				let updated = false
-
-				state.doc.descendants((node, pos) => {
-					if (updated) return false
-					if (
-						node.type.name !== INSPECTOR_DETAIL_TYPE ||
-						node.attrs.targetId !== update.targetId
-					)
-						return true
-
-					transaction.setNodeMarkup(pos, undefined, {
-						...node.attrs,
-						screenshotMention: update.screenshotMention,
-					})
-					updated = true
-					return false
-				})
-
-				if (updated) activeEditor.view.dispatch(transaction)
-			})
+			// Nodes and send-time collectors read this store by targetId.
+			setHtmlScreenshotMention(update.targetId, update.screenshotMention)
 		}
 
 		pubsub.subscribe(
@@ -261,13 +248,13 @@ function useMessageEditorPubSub({
 				handleUpdateHtmlInspectorScreenshot,
 			)
 		}
-	}, [activeEditorRef])
+	}, [])
 
 	useEffect(() => {
 		const handleSubmitHtmlMultiSelection = async (request: HtmlMultiSelectionRequest) => {
 			try {
-				const screenshotTargets = request.targets.filter((target) =>
-					Boolean(target.screenshot?.dataUrl),
+				const screenshotTargets = request.targets.filter(
+					(target) => target.kind === "screenshot" && Boolean(target.screenshot?.dataUrl),
 				)
 				const screenshotMentions = new Map(
 					await Promise.all(

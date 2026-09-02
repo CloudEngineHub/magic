@@ -29,7 +29,7 @@ export interface InspectorDetailAttrs {
 	fileMention?: TiptapMentionAttributes | null
 	/** Optional screenshot mention rendered inside the inspector detail card. */
 	screenshotMention?: TiptapMentionAttributes | null
-	/** Transient identity used to enrich a quick-selected node after screenshot upload. */
+	/** Stable id used to load a screenshot from IndexedDB, not the editor doc. */
 	targetId?: string | null
 }
 

@@ -212,10 +212,6 @@ export function buildHtmlMultiSelectionPromptContent(
 
 		const info = "info" in target ? target.info : undefined
 		const label = info ? getHtmlElementLabel(info) : target.elementLabel
-		const screenshotMention = target.screenshot
-			? (screenshotMentions.get(target.id ?? `screenshot:${index}`) ??
-				target.screenshot.mention)
-			: undefined
 		content.push({
 			type: "paragraph",
 			content: [
@@ -228,12 +224,12 @@ export function buildHtmlMultiSelectionPromptContent(
 		if (info) {
 			content.push({
 				type: "paragraph",
-				content: [buildInspectorDetailNode(info, title, screenshotMention)],
+				content: [buildInspectorDetailNode(info, title)],
 			})
 		} else {
 			content.push({
 				type: "paragraph",
-				content: [buildInspectorDetailNodeFromTarget(target, title, screenshotMention)],
+				content: [buildInspectorDetailNodeFromTarget(target, title)],
 			})
 		}
 	})

@@ -9,6 +9,10 @@ import {
 	INSPECTOR_DETAIL_TYPE,
 } from "../../extensions/inspector-detail/const"
 import { transformInspectorContent } from "../../extensions/inspector-detail/transform"
+import {
+	getHtmlScreenshotMention,
+	resetHtmlScreenshotTargetStore,
+} from "../../services/HtmlScreenshotTargetStore"
 
 vi.mock("@/pages/superMagic/components/MessageEditor/utils/drag", () => ({
 	DRAG_TYPE: {
@@ -58,6 +62,7 @@ function createMockEditor(initialContent: JSONContent) {
 
 describe("useMessageEditorPubSub", () => {
 	beforeEach(() => {
+		resetHtmlScreenshotTargetStore()
 		storeScreenshot.mockReset()
 		storeScreenshot.mockResolvedValue({
 			storageId: "screenshot-storage-id",
@@ -171,7 +176,7 @@ describe("useMessageEditorPubSub", () => {
 		unmount()
 	})
 
-	it("stores an automatically captured element screenshot before sending", async () => {
+	it("sends element selections without uploading their local screenshots", async () => {
 		const draftStore = {
 			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
 		} as unknown as DraftStore
@@ -200,6 +205,7 @@ describe("useMessageEditorPubSub", () => {
 					kind: "element",
 					selector: "#hero",
 					elementLabel: "section#hero",
+					textContent: "Hero",
 					screenshot: {
 						dataUrl: "data:image/png;base64,AA==",
 						rect: { left: 0, top: 0, width: 100, height: 80 },
@@ -210,45 +216,27 @@ describe("useMessageEditorPubSub", () => {
 		})
 
 		await vi.waitFor(() => expect(onSendMessageByContent).toHaveBeenCalledTimes(1))
-		expect(storeScreenshot).toHaveBeenCalledTimes(1)
-		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).toContain(
+		expect(storeScreenshot).not.toHaveBeenCalled()
+		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).not.toContain(
 			"screenshot.png",
+		)
+		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).toContain(
+			"Keep this visual style",
 		)
 
 		unmount()
 	})
 
-	it("updates an inserted inspector node when its screenshot is ready", () => {
+	it("stores a screenshot mention by target id without rewriting the editor", () => {
 		const draftStore = {
 			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
 		} as unknown as DraftStore
-		const inspectorNode = {
-			type: { name: INSPECTOR_DETAIL_TYPE },
-			attrs: {
-				selector: "#hero",
-				targetId: "element:#hero:1:1",
-				screenshotMention: null,
-			},
-		}
-		const transaction = {
-			steps: [] as unknown[],
-			setNodeMarkup: vi.fn((_pos: number, _type: unknown, attrs: Record<string, unknown>) => {
-				inspectorNode.attrs = attrs
-				transaction.steps.push({})
-				return transaction
-			}),
-		}
-		const documentNode = {
-			descendants: (callback: (node: typeof inspectorNode, pos: number) => boolean) => {
-				callback(inspectorNode, 3)
-			},
-		}
 		const dispatch = vi.fn()
 		const editor = {
 			isDestroyed: false,
 			commands: { focus: vi.fn(), insertContent: vi.fn() },
-			state: { doc: documentNode, tr: transaction },
-			view: { state: { doc: documentNode, tr: transaction }, dispatch },
+			state: { selection: { from: 1 } },
+			view: { dispatch },
 		} as unknown as Editor
 		const { unmount } = renderHook(() =>
 			useMessageEditorPubSub({
@@ -262,7 +250,7 @@ describe("useMessageEditorPubSub", () => {
 		)
 		const screenshotMention = {
 			type: "upload_file",
-			data: { file_id: "screenshot-1" },
+			data: { file_id: "screenshot-1", storage_id: "screenshot-1" },
 		}
 
 		pubsub.publish(PubSubEvents.Update_Html_Inspector_Screenshot, {
@@ -270,13 +258,44 @@ describe("useMessageEditorPubSub", () => {
 			screenshotMention,
 		})
 
-		expect(transaction.setNodeMarkup).toHaveBeenCalledWith(3, undefined, {
-			selector: "#hero",
+		expect(getHtmlScreenshotMention("element:#hero:1:1")).toEqual(screenshotMention)
+		expect(dispatch).not.toHaveBeenCalled()
+
+		unmount()
+	})
+
+	it("keeps a prepared screenshot after the active editor changes", async () => {
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		const firstEditor = createMockEditor({ type: "doc", content: [{ type: "paragraph" }] })
+		const { rerender, unmount } = renderHook(
+			({ editor }) =>
+				useMessageEditorPubSub({
+					editor,
+					isMobile: false,
+					draftStore,
+					updateContent: vi.fn(),
+					enableMessageSendByContent: false,
+					onSendMessageByContent: vi.fn(),
+				}),
+			{ initialProps: { editor: firstEditor.editor } },
+		)
+
+		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
 			targetId: "element:#hero:1:1",
-			screenshotMention,
+			dataUrl: "data:image/png;base64,AA==",
 		})
-		expect(dispatch).toHaveBeenCalledWith(transaction)
-		expect(inspectorNode.attrs.screenshotMention).toEqual(screenshotMention)
+		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
+
+		const secondEditor = createMockEditor({ type: "doc", content: [{ type: "paragraph" }] })
+		rerender({ editor: secondEditor.editor })
+
+		await vi.waitFor(() =>
+			expect(getHtmlScreenshotMention("element:#hero:1:1")?.data).toMatchObject({
+				storage_id: "screenshot-storage-id",
+			}),
+		)
 
 		unmount()
 	})

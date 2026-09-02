@@ -1,9 +1,17 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { INSPECTOR_DETAIL_TYPE } from "../../extensions/inspector-detail/const"
 import { collectMentionItemsFromContent } from "../uploadMentionService"
+import {
+	resetHtmlScreenshotTargetStore,
+	setHtmlScreenshotMention,
+} from "../HtmlScreenshotTargetStore"
 
 describe("uploadMentionService inspector-detail mentions", () => {
+	beforeEach(() => {
+		resetHtmlScreenshotTargetStore()
+	})
+
 	it("collects project file mentions stored inside inspector-detail attrs", () => {
 		const fileMention = {
 			type: MentionItemType.PROJECT_FILE,
@@ -37,15 +45,16 @@ describe("uploadMentionService inspector-detail mentions", () => {
 		expect(items).toEqual([{ type: "mention", attrs: fileMention }])
 	})
 
-	it("collects screenshot mentions stored inside inspector-detail attrs", () => {
+	it("does not collect inspector-detail screenshots for upload", () => {
 		const screenshotMention = {
-			type: MentionItemType.PROJECT_FILE,
+			type: MentionItemType.UPLOAD_FILE,
 			data: {
-				file_id: "screenshot-1",
+				file_id: "storage-1",
 				file_name: "hero.png",
-				file_path: ".tmp/hero.png",
+				file_path: "storage-1",
 				file_extension: "png",
-				is_hidden: true,
+				is_html_screenshot: true,
+				storage_id: "storage-1",
 			},
 		}
 
@@ -68,7 +77,7 @@ describe("uploadMentionService inspector-detail mentions", () => {
 			],
 		})
 
-		expect(items).toEqual([{ type: "mention", attrs: screenshotMention }])
+		expect(items).toEqual([])
 	})
 
 	it("does not collect pending canvas mentions as formal mention items", () => {
@@ -86,6 +95,62 @@ describe("uploadMentionService inspector-detail mentions", () => {
 						},
 						pending: true,
 						pendingId: "canvas-selection:1",
+					},
+				},
+			],
+		})
+
+		expect(items).toEqual([])
+	})
+
+	it("still collects a standalone screenshot mention for upload", () => {
+		const screenshotMention = {
+			type: MentionItemType.UPLOAD_FILE,
+			data: {
+				file_id: "storage-1",
+				file_name: "region.png",
+				file_path: "storage-1",
+				file_extension: "png",
+				is_html_screenshot: true,
+				storage_id: "storage-1",
+			},
+		}
+
+		const items = collectMentionItemsFromContent({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "mention", attrs: screenshotMention }],
+				},
+			],
+		})
+
+		expect(items).toEqual([{ type: "mention", attrs: screenshotMention }])
+	})
+
+	it("does not collect a stored element screenshot for upload", () => {
+		setHtmlScreenshotMention("element:#hero:1", {
+			type: MentionItemType.UPLOAD_FILE,
+			data: {
+				file_id: "storage-1",
+				file_name: "hero.png",
+				file_path: "storage-1",
+				file_extension: "png",
+				is_html_screenshot: true,
+				storage_id: "storage-1",
+			},
+		})
+
+		const items = collectMentionItemsFromContent({
+			type: "doc",
+			content: [
+				{
+					type: INSPECTOR_DETAIL_TYPE,
+					attrs: {
+						title: "Selected element",
+						selector: "body > section.hero",
+						targetId: "element:#hero:1",
 					},
 				},
 			],
