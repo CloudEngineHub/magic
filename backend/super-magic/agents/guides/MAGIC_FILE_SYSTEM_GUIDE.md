@@ -90,7 +90,7 @@ checkpoint 由主 Agent 创建：每个用户回合开始前登记新 checkpoint
 - 后台压缩 Agent 的临时 history 放 `.runtime/background_compact/`，不放 `.topic/chat_history/subagents/`。
 - 压缩前的主 Agent 完整历史是用户话题的可检索证据，放 `.topic/chat_history/compacted/`，并随 checkpoint 恢复。
 - LLM 请求调试日志放 `.runtime/llm_requests/`，不进入聊天历史归档或 checkpoint。
-- 旧版本聊天历史中的 `.chat_history/llm_request/` 与当前的 `llm_requests/` 都由迁移和归档逻辑排除。
+- 旧版本聊天历史中的 `.chat_history/llm_request/` 与当前的 `llm_requests/` 都由迁移和归档逻辑排除；已挂载的 `.topic/chat_history/llm_request/` 会在启动后异步删除，不阻塞启动主链路。
 
 ## subagent 目录和父 Agent
 

@@ -92,7 +92,8 @@ owner：     SnippetEnvironment、run_python_snippet、run_sdk_snippet
 -------------------------------------------------------------------------------
 路径：      .runtime/llm_requests/<model>_<time>_<status>.log
 兼容边界：  `.runtime` 只使用 `llm_requests`；`.topic` 迁移和归档同时排除旧的
-            `llm_request` 和当前的 `llm_requests`。
+            `llm_request` 和当前的 `llm_requests`，启动时删除旧的
+            `.topic/chat_history/llm_request/`；该删除在后台异步执行，不阻塞启动主链路。
 内容：      LLM 调试请求日志；失败请求总是记录，成功请求由
             ENABLE_LLM_SUCCESS_REQUEST_LOG 控制。
 owner：     agentlang/agentlang/llms/utils/debug_logger.py、ChatHistoryCleanupService

@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import uuid
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -52,6 +53,23 @@ class AgentService(Base):
         super().__init__()
         # 初始化mention上下文构建器（复用实例，避免每次调用都创建）
         self._mention_builder = MentionContextBuilder()
+        self._background_tasks: set[asyncio.Task[None]] = set()
+
+    def _schedule_background_task(self, coroutine: Coroutine[Any, Any, None], *, name: str) -> None:
+        """Schedule a maintenance coroutine without delaying the startup path."""
+        task = asyncio.create_task(coroutine, name=name)
+        self._background_tasks.add(task)
+
+        def _finish(completed_task: asyncio.Task[None]) -> None:
+            self._background_tasks.discard(completed_task)
+            try:
+                completed_task.result()
+            except asyncio.CancelledError:
+                return
+            except Exception as error:
+                logger.warning("后台维护任务失败: %s", error)
+
+        task.add_done_callback(_finish)
 
 
     def is_support_fetch_workspace(self) -> bool:
@@ -151,6 +169,10 @@ class AgentService(Base):
         persistence = TopicPersistenceManager(PathManager.get_project_root())
         await asyncio.to_thread(persistence.ensure_directories)
         await asyncio.to_thread(persistence.migrate_legacy_directories)
+        self._schedule_background_task(
+            persistence.cleanup_legacy_llm_requests_dir(),
+            name="topic-legacy-llm-requests-cleanup",
+        )
 
         metadata = agent_context.get_metadata()
         topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")

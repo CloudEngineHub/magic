@@ -14,6 +14,13 @@ from typing import Dict, Optional
 
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
+from app.utils.async_file_utils import (
+    async_exists,
+    async_is_dir,
+    async_is_symlink,
+    async_rmtree,
+    async_unlink,
+)
 
 logger = get_logger(__name__)
 
@@ -152,6 +159,24 @@ class TopicPersistenceManager:
         empty[component] = bool(ready and not self.component_has_data(component))
         state["empty"] = empty
         self._save_state(self.persistence_state_path, state)
+
+    async def cleanup_legacy_llm_requests_dir(self) -> None:
+        """Asynchronously remove the obsolete LLM log directory from chat history."""
+        legacy_dir = self.chat_history_dir / LEGACY_LLM_REQUESTS_DIR_NAME
+        try:
+            if await async_is_symlink(legacy_dir):
+                await async_unlink(legacy_dir)
+            elif await async_exists(legacy_dir):
+                if await async_is_dir(legacy_dir):
+                    await async_rmtree(legacy_dir)
+                else:
+                    logger.warning("旧 LLM 请求路径不是目录，跳过删除: %s", legacy_dir)
+                    return
+            else:
+                return
+            logger.info("已删除持久化聊天历史中的旧 LLM 请求日志目录: %s", legacy_dir)
+        except OSError as error:
+            logger.warning("删除旧 LLM 请求日志目录失败 %s: %s", legacy_dir, error)
 
     def migrate_legacy_directories(self) -> Dict[str, bool]:
         """Migrate legacy directories once, with retryable per-component state."""
