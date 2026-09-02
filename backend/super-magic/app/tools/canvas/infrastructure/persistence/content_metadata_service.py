@@ -9,6 +9,7 @@ from typing import Any
 from app.tools.canvas.domain.content_fields.generated_media_protocol import (
     find_generation_request,
     generated_request_fields,
+    generation_request_field,
 )
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.video_generation_utils.provider_asset_uri import normalize_provider_asset_uri
@@ -80,17 +81,24 @@ class ContentMetadataService:
 
     @staticmethod
     def new_detail(element_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """创建不进入主协议的来源和生成尝试详情。"""
+        """创建来源、公共生成请求和运行态生成尝试详情。"""
         detail: dict[str, Any] = {
             "elementId": element_id,
             "source": data.get("source", "user"),
         }
         if data.get("source") == "generated":
+            parameters = _clean_generation_parameters(data)
             detail.update({
                 "retryCount": 0,
                 "generationStatus": "pending",
-                "generationParameters": _clean_generation_parameters(data),
+                "generationParameters": parameters,
             })
+            request_field = generation_request_field(str(data.get("contentType") or ""))
+            if request_field:
+                detail[request_field] = ContentMetadataService.build_public_generation_request(
+                    parameters,
+                    str(data.get("contentType") or ""),
+                )
         elif data.get("source") == "imported":
             detail["assetPath"] = data.get("assetPath")
         return detail
@@ -152,8 +160,9 @@ class ContentMetadataService:
         retry_count: int,
         parameters: dict[str, Any],
         idempotency_key: str,
+        element_type: str | None = None,
     ) -> dict[str, Any]:
-        """归档上一终态并创建不复用旧任务绑定的新尝试。"""
+        """归档上一终态并创建携带新公共请求的新尝试。"""
         updated = dict(detail)
         history = list(updated.get("attemptHistory") or [])
         if updated.get("generationStatus") in {"completed", "failed"}:
@@ -165,15 +174,22 @@ class ContentMetadataService:
             })
         for key in ("providerTaskId", "generationTaskId", "outputUri", "outputFilename", "errorMessage"):
             updated.pop(key, None)
+        cleaned_parameters = _clean_generation_parameters(parameters)
         updated.update({
             "elementId": element_id,
             "source": "generated",
             "retryCount": retry_count,
             "generationStatus": "pending",
-            "generationParameters": _clean_generation_parameters(parameters),
+            "generationParameters": cleaned_parameters,
             "attemptHistory": history,
             "retryIdempotencyKey": idempotency_key,
         })
+        request_field = generation_request_field(element_type or "")
+        if request_field:
+            updated[request_field] = ContentMetadataService.build_public_generation_request(
+                cleaned_parameters,
+                element_type or "",
+            )
         return updated
 
     @staticmethod

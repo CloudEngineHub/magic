@@ -116,3 +116,63 @@ def test_generation_parameters_use_reference_images_as_canonical_field():
     assert parameters.effective_reference_images() == ("./images/legacy.webp",)
     assert parameters.reference_images == ("./images/legacy.webp",)
     assert parameters.reference_image_paths == ("./images/legacy.webp",)
+
+
+def test_new_video_detail_persists_public_request_before_submission():
+    """新建视频 Content 时应在提交 provider 前写入公共生成请求。"""
+    detail = ContentMetadataService.new_detail(
+        "element-1",
+        {
+            "source": "generated",
+            "contentType": "video",
+            "generationParameters": {
+                "prompt": "让产品动起来 [image1]",
+                "reference_images": ["images/product.webp"],
+                "duration_seconds": 5,
+            },
+        },
+    )
+
+    assert detail["generationStatus"] == "pending"
+    assert detail["generateVideoRequest"]["prompt"] == "让产品动起来 [image1]"
+    assert detail["generateVideoRequest"]["inputs"]["reference_images"] == [
+        {"uri": "./images/product.webp"}
+    ]
+    assert detail["generationParameters"]["reference_images"] == ["images/product.webp"]
+
+    metadata = {}
+    ContentMetadataService.set(metadata, "element-1", "content-1", detail)
+
+    public_detail = metadata["elements"]["element-1"]["contentDetails"]["content-1"]
+    runtime_detail = metadata["__canvas_runtime__"]["elements"]["element-1"]["contentDetails"]["content-1"]
+    assert public_detail["generateVideoRequest"]["prompt"] == "让产品动起来 [image1]"
+    assert "generationParameters" not in public_detail
+    assert runtime_detail["generationParameters"]["reference_images"] == ["images/product.webp"]
+
+
+def test_start_retry_replaces_public_video_request_with_new_parameters():
+    """重试详情应携带新参数构造的公共视频请求。"""
+    detail = ContentMetadataService.start_retry(
+        "element-1",
+        {
+            "source": "generated",
+            "generationStatus": "failed",
+            "retryCount": 0,
+            "generationTaskId": "task-old",
+            "generateVideoRequest": {"prompt": "旧提示词"},
+        },
+        1,
+        {
+            "prompt": "新提示词 [image1]",
+            "reference_image_paths": ["images/new.webp"],
+        },
+        "retry-key",
+        element_type="video",
+    )
+
+    assert detail["generationStatus"] == "pending"
+    assert detail["generateVideoRequest"]["prompt"] == "新提示词 [image1]"
+    assert detail["generateVideoRequest"]["inputs"]["reference_images"] == [
+        {"uri": "./images/new.webp"}
+    ]
+    assert "generationTaskId" not in detail

@@ -217,16 +217,9 @@ class GenerationSubmissionService:
                 "outputFilename": self._output_filename(submission),
                 "errorMessage": submission.error_message,
             }
-            if submission.status == "completed":
-                request_field = generation_request_field(submission_item.element_type)
-                if request_field:
-                    detail_update[request_field] = public_request
-            else:
-                ContentMetadataService.clear_public_request(
-                    metadata,
-                    submission_item.element_id,
-                    submission_item.content_id,
-                )
+            request_field = generation_request_field(submission_item.element_type)
+            if request_field:
+                detail_update[request_field] = public_request
             if submission_item.retry_idempotency_key:
                 detail_update["retryIdempotencyKey"] = submission_item.retry_idempotency_key
                 detail_update["retryResult"] = {
