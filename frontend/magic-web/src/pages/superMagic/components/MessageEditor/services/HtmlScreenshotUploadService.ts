@@ -91,10 +91,10 @@ class HtmlScreenshotUploadService {
 		storageId: string
 		fileName: string
 		projectId: string
-		topicId: string
+		topicId?: string
 		onProgress?: (progress: number) => void
 	}): Promise<SaveUploadFileToProjectResponse> {
-		if (!projectId || !topicId) throw new Error("当前话题不可用，无法保存截图")
+		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
 
 		try {
 			const blob = await htmlScreenshotStorage.getBlob(storageId)
@@ -129,7 +129,7 @@ class HtmlScreenshotUploadService {
 				files: [
 					{
 						project_id: projectId,
-						topic_id: topicId,
+						topic_id: topicId ?? "",
 						task_id: "",
 						file_key: uploadResult.key,
 						file_name: fileName,

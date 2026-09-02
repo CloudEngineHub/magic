@@ -149,7 +149,7 @@ export class MentionItemsProcessor {
 						storageId: data.storage_id as string,
 						fileName: data.file_name,
 						projectId,
-						topicId: topicId ?? "",
+						topicId,
 					})
 					return { storageId: data.storage_id as string, result }
 				}),
