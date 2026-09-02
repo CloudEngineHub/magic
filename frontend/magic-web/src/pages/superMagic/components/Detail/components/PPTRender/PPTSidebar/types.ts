@@ -13,10 +13,12 @@ export interface PPTSidebarProps {
 	onRegenerateScreenshot?: (index: number) => void // Regenerate screenshot only without reloading content
 	onAddToCurrentChat?: (index: number) => void
 	onAddToNewChat?: (index: number) => void
+	onReplaceSlideTemplate?: (index: number) => void
 	mainFileId?: string
 	isMobile?: boolean
 	sidebarWidth?: number
 	allowEdit?: boolean
+	canReplaceTemplate?: boolean
 	isCollapsed?: boolean // External control of collapsed state
 	isPreviewLoadingEnabled?: boolean // Whether the sidebar may request HTML and thumbnails
 	onCollapsedChange?: (collapsed: boolean) => void // Callback when collapsed state changes
@@ -59,6 +61,7 @@ export interface SortableSlideItemProps {
 	onRename?: (newFileName: string) => void
 	onAddToCurrentChat?: () => void
 	onAddToNewChat?: () => void
+	onReplaceTemplate?: () => void
 	onLocateFile?: () => void // Callback to locate file in file tree
 	onRefresh?: () => void // Callback to refresh slide content
 	onRegenerateScreenshot?: () => void // Callback to regenerate screenshot only

@@ -11,6 +11,7 @@ import {
 	MessageSquare,
 	FileSearch,
 	RefreshCw,
+	LayoutTemplate,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -54,6 +55,7 @@ function SortableSlideItem({
 	onRename,
 	onAddToCurrentChat,
 	onAddToNewChat,
+	onReplaceTemplate,
 	onLocateFile,
 	onRefresh,
 	onRegenerateScreenshot,
@@ -368,6 +370,16 @@ function SortableSlideItem({
 					>
 						<RefreshCw className="mr-2 size-4" />
 						{t("fileViewer.refreshSlide")}
+					</ContextMenuItem>
+					<ContextMenuItem
+						data-testid="ppt-template-replacement-slide-menu-item"
+						onClick={(e) => {
+							e.stopPropagation()
+							onReplaceTemplate?.()
+						}}
+					>
+						<LayoutTemplate className="mr-2 size-4" />
+						{t("ppt.templateReplacement.replaceSlide")}
 					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem

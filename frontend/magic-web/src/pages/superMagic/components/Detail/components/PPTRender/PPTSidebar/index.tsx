@@ -47,8 +47,10 @@ function PPTSidebar({
 	onRegenerateScreenshot,
 	onAddToCurrentChat,
 	onAddToNewChat,
+	onReplaceSlideTemplate,
 	mainFileId,
 	allowEdit = false,
+	canReplaceTemplate = false,
 	isMobile = false,
 	sidebarWidth = 200,
 	isCollapsed: externalIsCollapsed,
@@ -563,6 +565,11 @@ function PPTSidebar({
 											onAddToNewChat={
 												onAddToNewChat
 													? () => onAddToNewChat(item.index)
+													: undefined
+											}
+											onReplaceTemplate={
+												canReplaceTemplate && onReplaceSlideTemplate
+													? () => onReplaceSlideTemplate(item.index)
 													: undefined
 											}
 											onLocateFile={() => handleLocateFile(item.index)}

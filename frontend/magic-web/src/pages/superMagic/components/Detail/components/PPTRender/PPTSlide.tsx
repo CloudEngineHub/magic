@@ -114,6 +114,8 @@ interface PPTSlideProps {
 	onRenderReadyChange?: (ready: boolean) => void
 	/** Scoped live-render key used to associate this slide with the shared toolbar host. */
 	toolbarOwnerKey?: string
+	/** Opens the shared whole-deck template replacement flow. */
+	onReplaceTemplate?: () => void
 	/** Registers this slide's toolbar model without mounting another EditToolbar instance. */
 	onToolbarModelChange?: (
 		ownerKey: string,
@@ -168,6 +170,7 @@ const PPTSlide = observer(function PPTSlide({
 	onRenderReadyChange,
 	toolbarOwnerKey,
 	onToolbarModelChange,
+	onReplaceTemplate,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -843,6 +846,7 @@ const PPTSlide = observer(function PPTSlide({
 		return {
 			token: toolbarRegistrationToken,
 			props: {
+				onReplaceTemplate,
 				onStartInspector: handleStartInspector,
 				onStartInspectorAppend: handleStartInspectorAppend,
 				isAppendPicking,
@@ -911,6 +915,7 @@ const PPTSlide = observer(function PPTSlide({
 		isSaving,
 		isShareRoute,
 		mainFileId,
+		onReplaceTemplate,
 		projectId,
 		selectedProject?.id,
 		showButtonText,
