@@ -132,6 +132,16 @@ export function getAskUserSubmitActionText(locale: AskUserLocale) {
 	return locale === "zh_CN" ? zhCNSuper.askUser.actions.submit : enUSSuper.askUser.actions.submit
 }
 
+export function getAskUserRemarkLabel(locale: AskUserLocale) {
+	return locale === "zh_CN" ? zhCNSuper.askUser.remark.label : enUSSuper.askUser.remark.label
+}
+
+export function getAskUserRemarkPlaceholder(locale: AskUserLocale) {
+	return locale === "zh_CN"
+		? zhCNSuper.askUser.remark.placeholder
+		: enUSSuper.askUser.remark.placeholder
+}
+
 export function getAskUserInputPlaceholder(locale: AskUserLocale) {
 	return locale === "zh_CN" ? zhCNSuper.askUser.placeholder : enUSSuper.askUser.placeholder
 }

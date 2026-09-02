@@ -193,6 +193,10 @@
 		"otherPlaceholder": "其它",
 		"placeholder": "请输入你的回答",
 		"questionCount": "共 {{count}} 题",
+		"remark": {
+			"label": "备注（可选）",
+			"placeholder": "补充说明、限制条件或其他想告诉 Agent 的信息"
+		},
 		"status": {
 			"alreadyProcessed": "该问题已取消",
 			"answered": "已回答",

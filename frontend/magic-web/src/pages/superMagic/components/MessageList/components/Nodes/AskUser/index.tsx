@@ -17,6 +17,7 @@ import {
 	resolveAskUserLocaleFromAction,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import { AnsweredQuestionContent } from "./components/AnsweredQuestionContent"
+import { AskUserRemarkField } from "./components/AskUserRemarkField"
 import { renderAskUserPendingQuestion } from "./components/InteractionQuestionRenderers"
 import { AskUserQuestionMarkdownTitle } from "@/pages/superMagic/components/MessageList/utils/AskUserMarkdownText"
 import { useAskUserViewModel } from "./hooks/useAskUserViewModel"
@@ -57,10 +58,12 @@ function AskUser(props: NodeProps) {
 		isValid,
 		isQuestionValid,
 		pendingAction,
+		remark,
 		remainingText,
 		resolvedAskUser,
 		setInputValue,
 		setOtherText,
+		setRemark,
 		setSelectedValue,
 		shouldDisableInteraction,
 		shouldRender,
@@ -175,6 +178,12 @@ function AskUser(props: NodeProps) {
 						))}
 					</div>
 				</div>
+				<AskUserRemarkField
+					locale={askUserLocale}
+					value={remark}
+					onChange={setRemark}
+					disabled={shouldDisableInteraction || pendingAction !== null}
+				/>
 				<div className="shrink-0 pt-0.5" data-testid="ask-user-card-footer">
 					<div className="flex flex-wrap items-center justify-between gap-1.5">
 						<div className="flex shrink-0 items-center gap-1">
@@ -250,6 +259,13 @@ function AskUser(props: NodeProps) {
 						</div>
 					))}
 				</div>
+				<AskUserRemarkField
+					locale={askUserLocale}
+					value={resolvedAskUser.remark || ""}
+					readOnly
+					disabled
+					className="mt-3 border-t border-border/60 pt-3"
+				/>
 			</div>
 		)
 	}

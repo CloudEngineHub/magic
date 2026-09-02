@@ -121,6 +121,8 @@ export interface AskUserCardData {
 	status: AskUserCardStatus
 	/** 已有答案（未回答时为 null） */
 	answer: AskUserAnswerContent | null
+	/** 整卡备注（可选） */
+	remark?: string
 }
 
 export interface AskUserActionDetail {
@@ -128,6 +130,7 @@ export interface AskUserActionDetail {
 	question_id: string
 	response_status: AskUserResponseStatus
 	answer: string
+	remark?: string
 }
 
 export interface AskUserAutoAction {
@@ -141,6 +144,7 @@ interface AskUserToolDetailData {
 	status?: string
 	questions?: AskUserQuestionItem[]
 	answers?: AskUserAnswerContent
+	remark?: string
 }
 
 function getSuperAgentDynamicParams(extra: unknown) {
@@ -235,22 +239,31 @@ export function buildAskUserToolReplyDetail({
 	questionId,
 	responseStatus,
 	answer = "",
+	remark = "",
 }: {
 	taskId?: string
 	questionId: string
 	responseStatus: AskUserResponseStatus
 	answer?: string
+	remark?: string
 }): AskUserActionDetail | null {
 	const resolvedTaskId = typeof taskId === "string" ? taskId.trim() : ""
 	const resolvedQuestionId = typeof questionId === "string" ? questionId : ""
 	if (!resolvedTaskId) return null
+
+	const resolvedRemark = typeof remark === "string" ? remark.trim() : ""
 
 	return {
 		task_id: resolvedTaskId,
 		question_id: resolvedQuestionId,
 		response_status: responseStatus,
 		answer,
+		...(resolvedRemark ? { remark: resolvedRemark } : {}),
 	}
+}
+
+export function normalizeAskUserRemark(value: unknown) {
+	return typeof value === "string" ? value.trim() : ""
 }
 
 interface AskUserMessageSnapshot {
@@ -433,6 +446,16 @@ function resolveAskUserAnswer(item: SuperMagicMessageItem): AskUserAnswerContent
 	return parseAskUserAnswerContent((node as AskUserNode | undefined)?.content)
 }
 
+function resolveAskUserRemark(item: SuperMagicMessageItem): string {
+	const toolReplyDetail = parseAskUserToolReplyDetail(item as Record<string, unknown>)
+	const node = getAskUserNode(item) as Record<string, unknown> | undefined
+	const detailData = getAskUserToolDetailData(node)
+	return (
+		normalizeAskUserRemark(detailData?.remark) ||
+		normalizeAskUserRemark(toolReplyDetail?.remark)
+	)
+}
+
 export function aggregateAskUserMessages(messages: SuperMagicMessageItem[]): SuperMagicMessageItem {
 	const snapshots = messages.map(toAskUserSnapshot)
 	const pendingSnapshot = snapshots.find(
@@ -472,6 +495,10 @@ export function aggregateAskUserMessages(messages: SuperMagicMessageItem[]): Sup
 		status === ASK_USER_CARD_STATUS.answered || status === ASK_USER_CARD_STATUS.timeout
 			? resolveAskUserAnswer(finalSnapshot?.item)
 			: null
+	const remark =
+		status === ASK_USER_CARD_STATUS.answered || status === ASK_USER_CARD_STATUS.timeout
+			? resolveAskUserRemark(finalSnapshot?.item)
+			: ""
 	const correlationId = getAskUserCorrelationId(baseSnapshot?.item || finalSnapshot?.item || {})
 	const appMessageId =
 		baseSnapshot?.item?.app_message_id || finalSnapshot?.item?.app_message_id || correlationId
@@ -497,6 +524,7 @@ export function aggregateAskUserMessages(messages: SuperMagicMessageItem[]): Sup
 			expiresAt: content.expires_at,
 			status,
 			answer,
+			...(remark ? { remark } : {}),
 		} satisfies AskUserCardData,
 	} as SuperMagicMessageItem
 }

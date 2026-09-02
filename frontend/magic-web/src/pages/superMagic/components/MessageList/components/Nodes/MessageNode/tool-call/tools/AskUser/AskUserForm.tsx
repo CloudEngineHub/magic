@@ -21,9 +21,11 @@ import type { AskUserLocale } from "@/pages/superMagic/components/MessageList/ut
 import {
 	clearAskUserDraftAnswers,
 	readAskUserDraftAnswers,
+	readAskUserDraftRemark,
 	writeAskUserDraftAnswers,
 	type AskUserDraftAnswers,
 } from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
+import { AskUserRemarkField } from "@/pages/superMagic/components/MessageList/components/Nodes/AskUser/components/AskUserRemarkField"
 import type { ParsedQuestion } from "./parse"
 import {
 	getAskUserAutoSubmitInText,
@@ -57,9 +59,11 @@ interface AskUserFormProps {
 	expiresAt?: number
 	/** 已提交的答案（来自 toolResponseMap，用于回显） */
 	submittedAnswers?: Readonly<Record<string, AnswerValue>>
+	/** 已提交的整卡备注 */
+	submittedRemark?: string
 	status?: AskUserFormStatus
 	draftCacheKey?: string
-	onSubmit?: (answers: AskUserAnswers) => void
+	onSubmit?: (answers: AskUserAnswers, remark: string) => void
 	onSkip?: (answers: AskUserAnswers) => void
 	onProgressChange?: (count: number) => void
 	className?: string
@@ -220,6 +224,7 @@ function AskUserFormImpl({
 	disabled,
 	expiresAt,
 	submittedAnswers,
+	submittedRemark = "",
 	status = "pending",
 	draftCacheKey,
 	onSubmit,
@@ -230,6 +235,7 @@ function AskUserFormImpl({
 	// answersRef 是 submit 时的唯一真源；按键路径只写不读，避免触发父 render
 	const answersRef = useRef<Record<string, AnswerValue>>({})
 	const [draftAnswers, setDraftAnswers] = useState<Readonly<Record<string, AnswerValue>>>()
+	const [remark, setRemark] = useState("")
 
 	const hasPending = useMemo(() => questions.some((q) => !q.isComplete), [questions])
 	const isTimeout = status === "timeout"
@@ -239,11 +245,15 @@ function AskUserFormImpl({
 		(id: string, value: AnswerValue) => {
 			answersRef.current[id] = value
 			if (draftCacheKey && !submittedAnswers && !isTerminal) {
-				writeAskUserDraftAnswers(draftCacheKey, answersRef.current as AskUserDraftAnswers)
+				writeAskUserDraftAnswers(
+					draftCacheKey,
+					answersRef.current as AskUserDraftAnswers,
+					remark,
+				)
 			}
 			onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
 		},
-		[draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers],
+		[draftCacheKey, isTerminal, onProgressChange, questions, remark, submittedAnswers],
 	)
 
 	const ctxValue = useMemo<AnswersContextValue>(() => ({ writeAnswer }), [writeAnswer])
@@ -267,9 +277,9 @@ function AskUserFormImpl({
 					sourceAnswers[question.id] ?? getEmptyAnswerValue(question),
 				]),
 			) as Record<string, AnswerValue>
-			onSubmit?.(nextAnswers as AskUserAnswers)
+			onSubmit?.(nextAnswers as AskUserAnswers, remark.trim())
 		},
-		[onSubmit, questions],
+		[onSubmit, questions, remark],
 	)
 
 	const handleSkip = useCallback(() => {
@@ -316,8 +326,21 @@ function AskUserFormImpl({
 		> | null
 		answersRef.current = nextDraftAnswers ? { ...nextDraftAnswers } : {}
 		setDraftAnswers(nextDraftAnswers || undefined)
+		setRemark(readAskUserDraftRemark(draftCacheKey))
 		onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
 	}, [draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers])
+
+	useEffect(() => {
+		if (!draftCacheKey || submittedAnswers || isTerminal) return
+		writeAskUserDraftAnswers(
+			draftCacheKey,
+			answersRef.current as AskUserDraftAnswers,
+			remark,
+		)
+	}, [draftCacheKey, isTerminal, remark, submittedAnswers])
+
+	const displayRemark = submittedRemark || (isTerminal ? "" : remark)
+	const showRemarkField = Boolean(displayRemark.trim()) || shouldShowActions
 
 	return (
 		<AnswersContext.Provider value={ctxValue}>
@@ -353,6 +376,16 @@ function AskUserFormImpl({
 						))}
 					</div>
 				</div>
+				{showRemarkField ? (
+					<AskUserRemarkField
+						locale={locale}
+						value={displayRemark}
+						onChange={setRemark}
+						disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
+						readOnly={Boolean(submittedAnswers) || isTerminal}
+						testIdPrefix="ask-user-v2-card"
+					/>
+				) : null}
 				{shouldShowActions && (
 					<div className="shrink-0 pt-0.5" data-testid="ask-user-v2-card-footer">
 						<div className="flex flex-wrap items-center justify-between gap-1.5">

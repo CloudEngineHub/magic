@@ -10,6 +10,7 @@ import {
 	type AskUserQuestionData,
 	getAskUserNode,
 	isAskUserTaskSuspended,
+	normalizeAskUserRemark,
 	parseAskUserAnswerContent,
 	parseAskUserContent,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
@@ -81,6 +82,7 @@ function buildAskUserFromParsedContent({
 			expiresAt: 0,
 			status: resolveAskUserCardStatus({ resolvedNodeStatus }),
 			answer: null,
+			remark: "",
 		} satisfies AskUserCardData
 	}
 
@@ -162,6 +164,12 @@ function applyDetailFallback({
 		nextAskUser.answer = resolvedAnswerFromDetail
 	if (resolvedNodeStatus === ASK_USER_CARD_STATUS.timeout)
 		nextAskUser.answer = resolvedAnswerFromDetail
+	if (
+		resolvedNodeStatus === ASK_USER_CARD_STATUS.answered ||
+		resolvedNodeStatus === ASK_USER_CARD_STATUS.timeout
+	) {
+		nextAskUser.remark = normalizeAskUserRemark(detailData.remark)
+	}
 	return nextAskUser
 }
 
