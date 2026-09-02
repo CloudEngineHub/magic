@@ -58,6 +58,9 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
     tool_call_id = payload.tool_call_id
     response_status: str = payload.detail.get("response_status", "answered")
     answer: str = payload.detail.get("answer", "")
+    raw_remark = payload.detail.get("remark", "")
+    # 备注仅作为本次提交的附加上下文，异常类型或纯空白内容按无备注处理。
+    remark = raw_remark.strip() if isinstance(raw_remark, str) else ""
 
     logger.info(
         f"收到 user_tool_call: name={payload.name!r}, tool_call_id={tool_call_id}, "
@@ -84,6 +87,7 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
                 pending=pending,
                 response_status=response_status,
                 answer=answer,
+                remark=remark,
             ),
             name=f"user_tool_call_resume_{tool_call_id}",
         )

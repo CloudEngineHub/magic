@@ -268,12 +268,15 @@ class AskUserResultContent(BaseModel):
         questions: 原始问题列表（含 sub_id、question、interaction_type 等）；
                    timeout 消息由 Python 直接发送时提供，PHP 发送时可省略
         answers:   用户答案字典，key 为 sub_id，value 为对应答案；skipped/timeout 时为 {}
+        remark:    用户提交答案时填写的追加备注，没有备注时省略
     """
 
     question_id: Optional[str] = None
     status: str
     questions: Optional[List[Dict[str, Any]]] = None
     answers: Dict[str, Any]
+    # 用户提交答案时填写的追加备注，可选且不影响旧版消息结构。
+    remark: Optional[str] = None
 
 
 class PlanFileContent(BaseModel):

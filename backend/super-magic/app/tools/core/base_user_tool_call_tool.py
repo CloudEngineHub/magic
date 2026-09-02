@@ -28,7 +28,7 @@ T = TypeVar("T", bound=BaseToolParams)
 # agent 主循环检测此标记后退出，等待前端回传结果
 USER_TOOL_CALL_SYSTEM_MARKER = "USER_TOOL_CALL"
 
-ResultBuilder = Callable[[str, str], Tuple[str, Dict[str, Any]]]
+ResultBuilder = Callable[[str, str, str], Tuple[str, Dict[str, Any]]]
 TimeoutAnswerBuilder = Callable[[], str]
 
 
@@ -116,9 +116,10 @@ class BaseUserToolCallTool(BaseTool[T]):
 
     @abstractmethod
     def build_result_builder(self, tool_data: dict) -> ResultBuilder:
-        """返回结果构建闭包：(response_status, answer_json) -> (content, extra_info)。
+        """返回结果构建闭包：(response_status, answer_json, remark) -> (content, extra_info)。
 
         content 会写入对话历史供模型推理；extra_info 会通过 AFTER_TOOL_CALL 事件推给前端。
+        remark 仅表示本次用户提交的附加备注，没有备注时为空字符串。
         """
 
     @abstractmethod
