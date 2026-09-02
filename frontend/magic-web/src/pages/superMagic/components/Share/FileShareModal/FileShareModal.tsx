@@ -316,6 +316,31 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const isFetchingResourceId = useRef(false)
 	// Track if resource data has been fetched for current resourceId
 	const fetchedResourceIds = useRef<Set<string>>(new Set())
+	const latestExternalResourceIdRef = useRef(externalResourceId)
+	const previousExternalResourceIdRef = useRef(externalResourceId)
+
+	useEffect(() => {
+		latestExternalResourceIdRef.current = externalResourceId
+	}, [externalResourceId])
+
+	useEffect(() => {
+		if (previousExternalResourceIdRef.current === externalResourceId) return
+
+		previousExternalResourceIdRef.current = externalResourceId
+		// Clear resource-scoped state before loading the next share to prevent A's selections leaking into B.
+		setResourceId(externalResourceId)
+		setSelectedFileIds([])
+		setSelectedFiles([])
+		setAttachments([])
+		setAttachmentList([])
+		setShareName("")
+		setShareExpiry(null)
+		setShareRange("all")
+		setShareTargets([])
+		setDefaultOpenFileId(externalDefaultOpenFileId || null)
+		setShareProject(initialLockShareProject ? false : shareMode === ShareMode.Project)
+		if (externalResourceId) fetchedResourceIds.current.delete(externalResourceId)
+	}, [externalDefaultOpenFileId, externalResourceId, initialLockShareProject, shareMode])
 
 	// Statistics - 计算实际文件数量（递归统计并去重）
 	const actualFileCount = useMemo(() => {
@@ -547,6 +572,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	// If resourceId is provided, fetch share settings and files
 	const fetchResourceData = useCallback(async () => {
 		if (!externalResourceId) return
+		const requestResourceId = externalResourceId
 
 		// Prevent duplicate fetches for the same resourceId
 		if (fetchedResourceIds.current.has(externalResourceId)) {
@@ -559,8 +585,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		try {
 			// Step 1: Get share settings (contains project_id, share_type, extra, etc.)
 			const settingsData = await SuperMagicApi.getShareInfoByCode({
-				code: externalResourceId,
+				code: requestResourceId,
 			})
+			if (latestExternalResourceIdRef.current !== requestResourceId) return
 			const projectIdFromApi = settingsData?.project_id
 			const defaultOpenFileIdFromApi = settingsData?.default_open_file_id
 			const fileIds = settingsData?.file_ids
@@ -628,9 +655,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			}
 
 			// Set selectedFileIds directly from settingsData if available
-			if (fileIds && Array.isArray(fileIds) && fileIds.length > 0) {
-				setSelectedFileIds(fileIds)
-			}
+			setSelectedFileIds(Array.isArray(fileIds) ? fileIds : [])
 
 			const resolvedProjectId = projectIdFromApi || projectId
 
@@ -641,6 +666,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					// @ts-ignore 使用window添加临时的token
 					temporaryToken: window?.temporary_token || "",
 				})
+				if (latestExternalResourceIdRef.current !== requestResourceId) return
 				const fileTree = fileTreeRes.tree || []
 				const fileList = fileTreeRes.list || []
 

@@ -64,10 +64,10 @@
 			"summaryFailed": "Summary failed",
 			"summaryFailedHint": "Please try again later or resubmit the summary."
 		},
-		"emptyNotes": "No notes yet",
+		"emptyNotes": "Summarizing now. It will appear automatically when ready.",
 		"emptySummary": "No summary content",
-		"emptySummaryFile": "This content has not been generated yet",
-		"emptyTranscript": "No transcript yet",
+		"emptySummaryFile": "No summary content",
+		"emptyTranscript": "Summarizing now. It will appear automatically when ready.",
 		"emptyTranscriptFiltered": "No transcript matches this filter",
 		"emptyTranscriptSearch": "No matching transcript",
 		"entryNotFound": "Recording entry file not found",
@@ -131,7 +131,7 @@
 		"speakerSettingsSave": "Save",
 		"speakerSettingsTitle": "Speaker names",
 		"summarizing": "Summarizing",
-		"summarizingHint": "All summary views will appear when it is ready.",
+		"summarizingHint": "Summarizing now. It will appear automatically when ready.",
 		"tabs": {
 			"ai": "Ask AI",
 			"followup": "Follow-up",

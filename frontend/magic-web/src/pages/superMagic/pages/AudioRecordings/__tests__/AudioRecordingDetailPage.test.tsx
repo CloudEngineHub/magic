@@ -159,8 +159,10 @@ vi.mock("react-i18next", async (importOriginal) => {
 					"detail.exportSection": "Export",
 					"detail.share": "Share",
 					"detail.tabs.notes": "Notes",
-					"detail.emptyTranscript": "No transcript",
-					"detail.emptyNotes": "No notes",
+					"detail.emptyTranscript":
+						"Summarizing now. It will appear automatically when ready.",
+					"detail.emptyNotes":
+						"Summarizing now. It will appear automatically when ready.",
 					"detail.openSpeakerSettings": "Speaker settings",
 					"card.summarized": "Summarized",
 					"card.notSummarized": "Not summarized",
@@ -349,7 +351,9 @@ vi.mock("../components/recording-detail/RecordingDetailLeftColumn", () => ({
 				className="flex h-full min-h-full w-full flex-1 items-center justify-center"
 				data-testid="recording-detail-region-empty-slot"
 			>
-				<div data-testid="recording-detail-empty-noTranscript">No transcript</div>
+				<div data-testid="recording-detail-empty-noTranscript">
+					Summarizing now. It will appear automatically when ready.
+				</div>
 			</div>
 			<button
 				type="button"
@@ -376,7 +380,9 @@ vi.mock("../components/recording-detail/RecordingDetailRightPanel", () => ({
 				className="flex h-full min-h-full w-full flex-1 items-center justify-center"
 				data-testid="recording-detail-region-empty-slot"
 			>
-				<div data-testid="recording-detail-empty-noNotes">No notes</div>
+				<div data-testid="recording-detail-empty-noNotes">
+					Summarizing now. It will appear automatically when ready.
+				</div>
 			</div>
 		</div>
 	),

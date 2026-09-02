@@ -28,6 +28,7 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions"
 import {
 	isAudioProjectSummaryReady,
+	isAudioProjectSummarizing,
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
@@ -431,6 +432,7 @@ export default function MobileAudioRecordingDetailPage() {
 		if (item) return isAudioProjectSummaryReady(item)
 		return locationState?.cardStatus === "summarized"
 	}, [detailItem, locationState?.cardStatus, projectItem])
+	// Completed recordings keep the historical summary path; only in-progress previews require parsed config.
 
 	const displayTitle = titleOverride || title || t("detail.untitled")
 	const resolvedActionItem = useMemo(
@@ -452,6 +454,10 @@ export default function MobileAudioRecordingDetailPage() {
 			projectItem,
 		],
 	)
+	const summaryPreviewAvailable =
+		summaryReady ||
+		(Boolean(resolvedActionItem && isAudioProjectSummarizing(resolvedActionItem)) &&
+			Boolean(fileMap?.magicProject && fileMap.magicProjectConfig))
 	const summaryVisualState = useMemo(
 		() =>
 			resolveDetailSummaryVisualState({
@@ -534,7 +540,10 @@ export default function MobileAudioRecordingDetailPage() {
 				20,
 			)
 
-	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+	const colorSegments = useRecordingColorSegments(
+		summaryPreviewAvailable,
+		texts.summary.topics?.content,
+	)
 
 	/** Closes the floating player rate menu when source/summary panels scroll. */
 	function handlePlayerContentScroll() {
@@ -968,11 +977,12 @@ export default function MobileAudioRecordingDetailPage() {
 						onActiveTabChange={setSourceSubtab}
 						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
 						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
+						isGenerating={summaryVisualState.status === "generating"}
 					/>
 				) : null}
 
 				{!loading && !error && !detailUnavailable && activeTab === "summary" ? (
-					summaryReady ? (
+					summaryPreviewAvailable ? (
 						<MobileRecordingSummaryPanel
 							summaryFiles={fileMap?.summaryFiles ?? []}
 							summaryContent={Object.fromEntries(
@@ -990,6 +1000,7 @@ export default function MobileAudioRecordingDetailPage() {
 							searchScopeRef={searchScopeRef}
 							searchActive={contentSearchOpen}
 							onActiveTypeChange={setSummaryType}
+							isGenerating={summaryVisualState.status === "generating"}
 						/>
 					) : (
 						<MobileRecordingSummaryPlaceholder

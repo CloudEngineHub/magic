@@ -234,7 +234,7 @@ export function MobileAudioFolderContent({
 				) : (
 					<RecordingDetailRegionEmptySlot>
 						<p className="text-center text-sm text-muted-foreground">
-							{t("detail.emptySummaryFile")}
+							{t("detail.emptySummary")}
 						</p>
 					</RecordingDetailRegionEmptySlot>
 				)}

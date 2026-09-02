@@ -35,8 +35,11 @@ interface MobileRecordingSourcePanelProps {
 	notesFilePath?: string
 	searchScopeRef?: RefObject<HTMLDivElement | null>
 	onActiveTabChange?: (tab: MobileRecordingSourceTab) => void
+	isGenerating?: boolean
 	/** Allows embedded previews to provide one outer tab row instead of this source switcher. */
 	showTabBar?: boolean
+	/** Hides notes in readonly shares when the notes file was not included in the share. */
+	showNotesTab?: boolean
 	activeTab?: MobileRecordingSourceTab
 }
 
@@ -58,12 +61,16 @@ export function MobileRecordingSourcePanel({
 	notesFilePath,
 	searchScopeRef,
 	onActiveTabChange,
+	isGenerating = false,
 	showTabBar = true,
+	showNotesTab = true,
 	activeTab: controlledActiveTab,
 }: MobileRecordingSourcePanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTab, setActiveTab] = useState<MobileRecordingSourceTab>("transcript")
-	const resolvedActiveTab = controlledActiveTab ?? activeTab
+	const requestedActiveTab = controlledActiveTab ?? activeTab
+	const resolvedActiveTab =
+		showNotesTab || requestedActiveTab !== "notes" ? requestedActiveTab : "transcript"
 	const segments = useMemo(
 		() => parseTranscriptMarkdown(transcriptContent ?? ""),
 		[transcriptContent],
@@ -97,21 +104,23 @@ export function MobileRecordingSourcePanel({
 				<div className="sticky top-0 z-10 flex min-h-[68px] items-center gap-2 bg-[#f7f7f8] px-4 py-3">
 					<div className="flex min-w-0 flex-1">
 						<SourceTabButton
-							active={activeTab === "transcript"}
+							active={resolvedActiveTab === "transcript"}
 							label={t("detail.tabs.transcript")}
 							onClick={() => {
 								setActiveTab("transcript")
 								onActiveTabChange?.("transcript")
 							}}
 						/>
-						<SourceTabButton
-							active={activeTab === "notes"}
-							label={t("detail.tabs.notes")}
-							onClick={() => {
-								setActiveTab("notes")
-								onActiveTabChange?.("notes")
-							}}
-						/>
+						{showNotesTab ? (
+							<SourceTabButton
+								active={resolvedActiveTab === "notes"}
+								label={t("detail.tabs.notes")}
+								onClick={() => {
+									setActiveTab("notes")
+									onActiveTabChange?.("notes")
+								}}
+							/>
+						) : null}
 					</div>
 					{resolvedActiveTab === "transcript" &&
 					availableSpeakerIds &&
@@ -157,7 +166,9 @@ export function MobileRecordingSourcePanel({
 							emptyText={
 								hasTranscriptContent
 									? t("detail.emptyTranscriptFiltered")
-									: t("detail.emptyTranscript")
+									: isGenerating
+										? t("detail.summarizingHint")
+										: t("detail.emptySummary")
 							}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onSeek={onSeek}
@@ -180,7 +191,9 @@ export function MobileRecordingSourcePanel({
 						// stays centered within the same source viewport as the transcript tab.
 						<RecordingDetailRegionEmptySlot>
 							<p className="text-center text-sm text-muted-foreground">
-								{t("detail.emptyNotes")}
+								{isGenerating
+									? t("detail.summarizingHint")
+									: t("detail.emptySummary")}
 							</p>
 						</RecordingDetailRegionEmptySlot>
 					)}

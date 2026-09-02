@@ -1217,6 +1217,11 @@ export function useProjectShareSheet({
 		setEditingShareMode(shareModeForEdit)
 		setEditLoading(true)
 		setFileSelectorOpen(false)
+		// Clear the previous share draft before loading the selected share's authoritative settings.
+		setSelectedFileIds([])
+		setUserDefaultOpenFileId(undefined)
+		setSelectedMemberNodes([])
+		setDetailMemberNodes([])
 		setViewStack(["linkDetail"])
 		setView("edit")
 

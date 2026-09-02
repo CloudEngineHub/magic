@@ -90,9 +90,12 @@ export function buildRecordingDetailFileMap(input: {
 		findByConfiguredName("audio") ??
 		findFileByExtension(scopedFiles, [...RECORDING_AUDIO_EXTENSIONS])
 	const transcript =
-		findByConfiguredName("transcript") ?? findByNameHint(scopedFiles, ["transcript", "文字稿"])
+		findByConfiguredName("transcript") ??
+		findByNameHint(scopedFiles, ["transcript", "文字稿", "流式识别"])
 	const notes =
-		findByConfiguredName("notes") ?? findByNameHint(scopedFiles, ["notes", "笔记", "流式识别"])
+		findByConfiguredName("notes") ??
+		findByFileType(scopedFiles, "note") ??
+		findByNameHint(scopedFiles, ["notes", "笔记"])
 
 	return {
 		bundleRootPath,
@@ -118,8 +121,7 @@ function resolveSummaryFiles(
 		if (added.has(type)) return
 		const configuredName = configFiles[type]
 		if (!configuredName) return
-		const file = findFileByName(files, configuredName)
-		if (!file) return
+		const file = findFileByName(files, configuredName) ?? buildPendingFile(configuredName)
 		result.push({ type, fileName: configuredName, file })
 		added.add(type)
 	}
@@ -128,10 +130,27 @@ function resolveSummaryFiles(
 
 	Object.keys(configFiles).forEach((type) => {
 		if (EXCLUDED_DYNAMIC_TYPES.has(type) || added.has(type)) return
-		return
+		addType(type)
 	})
 
 	return result
+}
+
+/** Creates a file-shaped placeholder so configured tabs exist before their files arrive. */
+function buildPendingFile(fileName: string): AttachmentItem {
+	const normalizedName = fileName.replace(/\\/g, "/")
+	const lastSlashIndex = normalizedName.lastIndexOf("/")
+	const baseName = lastSlashIndex >= 0 ? normalizedName.slice(lastSlashIndex + 1) : normalizedName
+	const extension = baseName.includes(".") ? baseName.split(".").pop() : undefined
+
+	return {
+		file_name: baseName,
+		filename: baseName,
+		file_extension: extension,
+		path: normalizedName,
+		relative_file_path: normalizedName,
+		is_directory: false,
+	}
 }
 
 /** Finds a file by exact filename or relative path suffix from magic.project.js. */
@@ -156,6 +175,17 @@ function findByNameHint(files: AttachmentItem[], hints: string[]): AttachmentIte
 		const name = normalizeFileLookupText(getAttachmentFileName(file))
 		return hints.some((hint) => name.includes(normalizeFileLookupText(hint)))
 	})
+}
+
+/** Finds backend-managed recording source files by their semantic type before using filename hints. */
+function findByFileType(files: AttachmentItem[], expectedType: string): AttachmentItem | undefined {
+	const normalizedExpectedType = expectedType.toLowerCase()
+	return files.find((file) =>
+		[file.file_type, file.type, file.data_type, file.dataType].some(
+			(type) =>
+				type !== undefined && String(type).trim().toLowerCase() === normalizedExpectedType,
+		),
+	)
 }
 
 /** Finds a likely audio file by extension for non-summarized preview fallback. */

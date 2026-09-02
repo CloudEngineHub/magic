@@ -29,7 +29,8 @@ export interface MagicProjectConfig {
 export interface RecordingDetailFileRef {
 	type: string
 	fileName: string
-	file: AttachmentItem
+	/** Config can describe a file before the backend attachment exists. */
+	file?: AttachmentItem
 }
 
 export interface RecordingDetailFileMap {

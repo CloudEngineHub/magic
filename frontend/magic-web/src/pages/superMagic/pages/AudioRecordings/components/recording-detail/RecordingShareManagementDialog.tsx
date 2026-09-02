@@ -12,10 +12,15 @@ import FileShareManagementListCore from "@/pages/superMagic/components/ShareMana
 import ShareListFooter from "@/pages/superMagic/components/ShareManagement/components/ShareListFooter"
 import { SharedTopicFilterStatus } from "@/pages/superMagic/components/ShareManagement/types"
 import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 export interface RecordingShareManagementDialogProps {
 	open: boolean
 	projectId: string
+	/** Full recording attachment snapshot used to resolve static document dependencies. */
+	dependencyAttachments?: AttachmentItem[]
+	/** Recording bundle root used to keep dependency analysis scoped to this recording. */
+	dependencyBundleRootPath?: string
 	displayNameByFileId?: Record<string, string>
 	displayNameByFileName?: Record<string, string>
 	onClose: () => void
@@ -33,6 +38,8 @@ const STATUS_OPTIONS = [
 function RecordingShareManagementDialog({
 	open,
 	projectId,
+	dependencyAttachments,
+	dependencyBundleRootPath,
 	displayNameByFileId,
 	displayNameByFileName,
 	onClose,
@@ -45,7 +52,7 @@ function RecordingShareManagementDialog({
 	const [currentPage, setCurrentPage] = useState(1)
 	const [totalPages, setTotalPages] = useState(0)
 	const recordingShareUiConfig = {
-		...createRecordingShareUiConfig(),
+		...createRecordingShareUiConfig({ dependencyAttachments, dependencyBundleRootPath }),
 		displayNameByFileId,
 		displayNameByFileName,
 	}

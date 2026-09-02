@@ -97,6 +97,10 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 				magicProjectConfig,
 				bundleRootPath,
 			})
+			// Share pages may only render files that are present in the authorized snapshot.
+			nextFileMap.summaryFiles = nextFileMap.summaryFiles.filter((entry) =>
+				Boolean(entry.file?.file_id),
+			)
 			const [nextTexts, nextAudioUrl] = await Promise.all([
 				loadTextFiles(nextFileMap, magicProjectContent),
 				loadAudioUrl(nextFileMap.audio),
@@ -184,6 +188,7 @@ async function loadTextFiles(
 ): Promise<ShareRecordingDetailTextState> {
 	const summaryEntries = await Promise.all(
 		fileMap.summaryFiles.map(async (entry) => {
+			if (!entry.file?.file_id) return [entry.type, undefined] as const
 			try {
 				return [entry.type, await readTextFile(entry.file.file_id)] as const
 			} catch (error) {

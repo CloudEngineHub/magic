@@ -70,7 +70,9 @@ export function RecordingDetailEmptyState({
 				</div>
 			) : null}
 			<div className="space-y-1">
-				<p className="text-sm font-medium text-foreground">{copy.title}</p>
+				{copy.title ? (
+					<p className="text-sm font-medium text-foreground">{copy.title}</p>
+				) : null}
 				{copy.description ? (
 					<p className="text-sm text-muted-foreground">{copy.description}</p>
 				) : null}
@@ -104,13 +106,13 @@ function resolveEmptyCopy(
 	}
 	if (variant === "noTranscript") {
 		return {
-			title: t("detail.emptyTranscript"),
+			title: t("detail.emptySummary"),
 			// Keep transcript-empty copy minimal so the empty state matches the latest product wording.
 			description: "",
 		}
 	}
 	if (variant === "noNotes") {
-		return { title: t("detail.emptyNotes"), description: "" }
+		return { title: t("detail.emptySummary"), description: "" }
 	}
 	if (variant === "noSummary") {
 		return { title: t("detail.emptySummary"), description: "" }
@@ -122,7 +124,7 @@ function resolveEmptyCopy(
 		return { title: t("detail.notSummarized"), description: t("detail.notSummarizedHint") }
 	}
 	if (variant === "summaryGenerating") {
-		return { title: t("detail.summarizing"), description: t("detail.summarizingHint") }
+		return { title: t("detail.summarizingHint"), description: "" }
 	}
 	if (variant === "summaryFailed") {
 		return {
