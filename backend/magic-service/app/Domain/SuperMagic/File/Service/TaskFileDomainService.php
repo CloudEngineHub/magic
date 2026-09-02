@@ -641,6 +641,17 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据文件ID批量获取文件实体，包含已软删除记录.
+     *
+     * @param array<int|string> $fileIds
+     * @return TaskFileEntity[]
+     */
+    public function getFilesByIdsWithTrash(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
+    {
+        return $this->taskFileRepository->getFilesByIdsWithTrash($fileIds, $projectId, $spaceType);
+    }
+
+    /**
      * Get the latest updated file by project ID.
      */
     public function getLatestUpdatedByProjectId(int $projectId): string
@@ -1059,6 +1070,13 @@ class TaskFileDomainService
             // Save to database
             $taskFileEntity = $this->insertOrUpdate($taskFileEntity);
 
+            // A new child changes the contents of its parent directory and all
+            // ancestor directory listings. Keep the MagicFS metadata cache
+            // invalidation generic; .magic is not a special case here.
+            if ($parentId > 0) {
+                $this->incrementVersionChain((string) $parentId);
+            }
+
             Db::commit();
             return $taskFileEntity;
         } catch (Throwable $e) {
@@ -1154,7 +1172,16 @@ class TaskFileDomainService
         $taskFileEntity->setCreatedAt($now);
         $taskFileEntity->setUpdatedAt($now);
 
-        return $this->insertOrUpdate($taskFileEntity);
+        $taskFileEntity = $this->insertOrUpdate($taskFileEntity);
+
+        // Keep project-file creation consistent with createFile(): creating a
+        // child invalidates the parent-to-root metadata version chain.
+        // Idempotent existing files return above, so this runs only for new rows.
+        if ($parentId > 0) {
+            $this->incrementVersionChain((string) $parentId);
+        }
+
+        return $taskFileEntity;
     }
 
     public function deleteProjectFiles(string $projectOrganizationCode, TaskFileEntity $fileEntity, string $workDir): bool

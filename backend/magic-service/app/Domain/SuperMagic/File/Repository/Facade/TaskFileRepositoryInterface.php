@@ -42,6 +42,14 @@ interface TaskFileRepositoryInterface
     public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array;
 
     /**
+     * 根据文件ID批量获取文件，包含已软删除记录，并支持项目/空间过滤.
+     *
+     * @param array<int|string> $fileIds
+     * @return TaskFileEntity[]
+     */
+    public function getFilesByIdsWithTrash(array $fileIds, int $projectId = 0, ?string $spaceType = null): array;
+
+    /**
      * 根据ID批量获取文件.
      * @return TaskFileEntity[]
      */
