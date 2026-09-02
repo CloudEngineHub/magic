@@ -26,10 +26,17 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils/drag", () => ({
 }))
 
 const storeScreenshot = vi.hoisted(() => vi.fn())
-const stageStoredScreenshot = vi.hoisted(() => vi.fn())
+const uploadStoredScreenshot = vi.hoisted(() => vi.fn())
+const uploadStoredScreenshots = vi.hoisted(() => vi.fn())
+const collectUploadItems = vi.hoisted(() => vi.fn())
 
 vi.mock("../../services/HtmlScreenshotUploadService", () => ({
-	htmlScreenshotUploadService: { storeScreenshot, stageStoredScreenshot },
+	htmlScreenshotUploadService: {
+		storeScreenshot,
+		uploadStoredScreenshot,
+		uploadStoredScreenshots,
+		collectUploadItems,
+	},
 }))
 
 /** Creates the minimum active editor surface required by the PubSub adapter. */
@@ -66,19 +73,41 @@ describe("useMessageEditorPubSub", () => {
 	beforeEach(() => {
 		resetHtmlScreenshotTargetStore()
 		storeScreenshot.mockReset()
-		stageStoredScreenshot.mockReset()
+		uploadStoredScreenshot.mockReset()
+		uploadStoredScreenshots.mockReset()
+		collectUploadItems.mockReset()
 		storeScreenshot.mockResolvedValue({
 			storageId: "screenshot-storage-id",
 			fileName: "screenshot.png",
 			fileSize: 3,
 			file: new File(["png"], "screenshot.png", { type: "image/png" }),
 		})
-		stageStoredScreenshot.mockResolvedValue({
-			storageId: "screenshot-storage-id",
-			fileName: "screenshot.png",
-			fileSize: 3,
-			fileKey: "temporary/snowflake-1",
+		uploadStoredScreenshot.mockResolvedValue({
+			file_id: "saved-id",
+			file_key: "temporary/snowflake-1",
+			file_name: "screenshot.png",
+			is_hidden: true,
 		})
+		uploadStoredScreenshots.mockResolvedValue([
+			{
+				storageId: "screenshot-storage-id",
+				result: {
+					file_id: "saved-id",
+					file_key: "temporary/snowflake-1",
+					file_name: "screenshot.png",
+					is_hidden: true,
+				},
+			},
+		])
+		collectUploadItems.mockImplementation(
+			(mentions: Array<{ data?: { storage_id?: string; file_name?: string } }>) =>
+				mentions
+					.filter((mention) => mention.data?.storage_id)
+					.map((mention) => ({
+						storageId: mention.data?.storage_id,
+						fileName: mention.data?.file_name ?? "screenshot.png",
+					})),
+		)
 	})
 
 	it("submits HTML selections through the current conversation", async () => {
@@ -155,7 +184,7 @@ describe("useMessageEditorPubSub", () => {
 			fileName: "html-screenshot-a2296b4a.png",
 		})
 		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
-		expect(stageStoredScreenshot).not.toHaveBeenCalled()
+		expect(uploadStoredScreenshot).not.toHaveBeenCalled()
 		expect(getHtmlScreenshotMention("div.cover-surface")?.data).toMatchObject({
 			storage_id: "old-storage-id",
 		})
@@ -204,14 +233,13 @@ describe("useMessageEditorPubSub", () => {
 			stageUpload: true,
 		})
 		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
-		await vi.waitFor(() => expect(stageStoredScreenshot).toHaveBeenCalledTimes(1))
-		expect(stageStoredScreenshot).toHaveBeenCalledWith(
-			{
-				storageId: "screenshot-storage-id",
-				fileName: "screenshot.png",
-			},
-			"project-1",
-		)
+		await vi.waitFor(() => expect(uploadStoredScreenshot).toHaveBeenCalledTimes(1))
+		expect(uploadStoredScreenshot).toHaveBeenCalledWith({
+			storageId: "screenshot-storage-id",
+			fileName: "screenshot.png",
+			projectId: "project-1",
+			topicId: "topic-1",
+		})
 
 		pubsub.publish(PubSubEvents.Submit_Html_Multi_Selection, {
 			fileId: "file-1",
@@ -241,6 +269,72 @@ describe("useMessageEditorPubSub", () => {
 		expect(JSON.stringify(onSendMessageByContent.mock.calls[0][0].jsonContent)).not.toContain(
 			'"file":',
 		)
+
+		unmount()
+	})
+
+	it("waits for an in-flight region upload before submitting AI edits", async () => {
+		const draftStore = {
+			waitForLoadDraft: vi.fn().mockResolvedValue(undefined),
+		} as unknown as DraftStore
+		const onSendMessageByContent = vi.fn().mockResolvedValue(undefined)
+		let resolveUpload: ((value: unknown) => void) | undefined
+		uploadStoredScreenshots.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					resolveUpload = resolve
+				}),
+		)
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: null,
+				isMobile: false,
+				draftStore,
+				updateContent: vi.fn(),
+				enableMessageSendByContent: false,
+				onSendMessageByContent,
+				projectId: "project-1",
+				topicId: "topic-1",
+			}),
+		)
+
+		const captureId = "screenshot:1"
+		pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
+			captureId,
+			dataUrl: "data:image/png;base64,AA==",
+			stageUpload: true,
+		})
+		await vi.waitFor(() => expect(storeScreenshot).toHaveBeenCalledTimes(1))
+
+		pubsub.publish(PubSubEvents.Submit_Html_Multi_Selection, {
+			fileId: "file-1",
+			fileName: "index.html",
+			filePath: "index.html",
+			instruction: "",
+			targets: [
+				{
+					id: captureId,
+					kind: "screenshot",
+					selector: "",
+					elementLabel: "Screenshot",
+					screenshot: {
+						dataUrl: "data:image/png;base64,AA==",
+						rect: { left: 0, top: 0, width: 100, height: 80 },
+					},
+					instruction: "Move this area",
+				},
+			],
+		})
+
+		await vi.waitFor(() => expect(uploadStoredScreenshots).toHaveBeenCalledTimes(1))
+		expect(onSendMessageByContent).not.toHaveBeenCalled()
+		resolveUpload?.([
+			{
+				storageId: "screenshot-storage-id",
+				result: { file_id: "saved-id", is_hidden: true },
+			},
+		])
+		await vi.waitFor(() => expect(onSendMessageByContent).toHaveBeenCalledTimes(1))
 
 		unmount()
 	})

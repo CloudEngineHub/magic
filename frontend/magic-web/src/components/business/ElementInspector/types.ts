@@ -136,12 +136,12 @@ export interface HtmlMultiSelectionRequest {
 	onError?: (error: unknown) => void
 }
 
-/** Store a screenshot locally; region shots may also start OSS staging. */
+/** Store a screenshot locally; region shots may also start remote upload. */
 export interface HtmlScreenshotUploadRequest {
 	captureId: string
 	dataUrl: string
 	fileName?: string
-	/** Stage the region screenshot to OSS after IndexedDB persist. */
+	/** Upload the region screenshot after IndexedDB persist. */
 	stageUpload?: boolean
 	/** Drop the in-memory prepared mention after the success callback consumes it. */
 	releaseAfterSuccess?: boolean

@@ -294,6 +294,38 @@ describe("HtmlScreenshotUploadService", () => {
 		])
 	})
 
+	it("reuses a saved screenshot and does not batch-save again", async () => {
+		await htmlScreenshotUploadService.uploadStoredScreenshots(
+			[{ storageId: "region-1", fileName: "a.png" }],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
+		vi.clearAllMocks()
+		mocks.batchSaveFiles.mockResolvedValue([
+			{
+				file_id: "saved-again",
+				file_key: "temporary/screenshot.png",
+				file_name: "a.png",
+				file_size: 3,
+				relative_file_path: "a.png",
+			},
+		])
+
+		const results = await htmlScreenshotUploadService.uploadStoredScreenshots(
+			[{ storageId: "region-1", fileName: "a.png" }],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
+
+		expect(mocks.getUploadToken).not.toHaveBeenCalled()
+		expect(mocks.upload).not.toHaveBeenCalled()
+		expect(mocks.batchSaveFiles).not.toHaveBeenCalled()
+		expect(results).toEqual([
+			{
+				storageId: "region-1",
+				result: expect.objectContaining({ file_id: "saved-id", is_hidden: true }),
+			},
+		])
+	})
+
 	it("reuses staged OSS objects and only batch-saves on send", async () => {
 		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["snowflake-1"] })
 		await htmlScreenshotUploadService.stageStoredScreenshot(
@@ -327,6 +359,48 @@ describe("HtmlScreenshotUploadService", () => {
 				result: expect.objectContaining({ file_id: "saved-1", is_hidden: true }),
 			},
 		])
+	})
+
+	it("waits for an in-flight save instead of batch-saving twice", async () => {
+		const saveResolvers: Array<(value: Array<{ file_id: string }>) => void> = []
+		mocks.batchSaveFiles.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					saveResolvers.push(resolve)
+				}),
+		)
+
+		const first = htmlScreenshotUploadService.uploadStoredScreenshots(
+			[{ storageId: "region-1", fileName: "a.png" }],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
+		const second = htmlScreenshotUploadService.uploadStoredScreenshots(
+			[{ storageId: "region-1", fileName: "a.png" }],
+			{ projectId: "project-1", topicId: "topic-1" },
+		)
+		await vi.waitFor(() => expect(saveResolvers.length).toBeGreaterThan(0))
+		expect(saveResolvers).toHaveLength(1)
+		saveResolvers[0]([
+			{
+				file_id: "saved-1",
+			},
+		])
+
+		await expect(Promise.all([first, second])).resolves.toEqual([
+			[
+				{
+					storageId: "region-1",
+					result: expect.objectContaining({ file_id: "saved-1", is_hidden: true }),
+				},
+			],
+			[
+				{
+					storageId: "region-1",
+					result: expect.objectContaining({ file_id: "saved-1", is_hidden: true }),
+				},
+			],
+		])
+		expect(mocks.batchSaveFiles).toHaveBeenCalledTimes(1)
 	})
 
 	it("waits for an in-flight stage instead of uploading twice", async () => {

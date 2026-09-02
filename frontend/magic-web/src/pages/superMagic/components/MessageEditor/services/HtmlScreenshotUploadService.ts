@@ -27,16 +27,23 @@ export interface UploadStoredScreenshotItem {
 	fileName: string
 }
 
+export interface SavedHtmlScreenshot {
+	storageId: string
+	result: SaveUploadFileToProjectResponse
+}
+
 const logger = Logger.createLogger("HtmlScreenshotUpload")
 
 /**
- * Region shots stage to OSS after confirm and batch-save on send.
- * Element shots stay local for preview and are never uploaded.
+ * Region shots upload and batch-save after confirm.
+ * AI submit waits for in-flight saves. Element shots stay local.
  */
 class HtmlScreenshotUploadService {
 	private readonly uploader = new Upload()
 	private readonly stagedByStorageId = new Map<string, StagedHtmlScreenshot>()
 	private readonly stagingPromises = new Map<string, Promise<StagedHtmlScreenshot>>()
+	private readonly savedByStorageId = new Map<string, SavedHtmlScreenshot>()
+	private readonly savingPromises = new Map<string, Promise<SavedHtmlScreenshot>>()
 
 	private async uploadToOss(
 		file: File,
@@ -152,7 +159,7 @@ class HtmlScreenshotUploadService {
 	async saveStagedScreenshots(
 		items: StagedHtmlScreenshot[],
 		{ projectId, topicId }: { projectId: string; topicId?: string },
-	): Promise<Array<{ storageId: string; result: SaveUploadFileToProjectResponse }>> {
+	): Promise<SavedHtmlScreenshot[]> {
 		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
 		if (items.length === 0) return []
 
@@ -185,12 +192,12 @@ class HtmlScreenshotUploadService {
 	async uploadStoredScreenshots(
 		items: UploadStoredScreenshotItem[],
 		{ projectId, topicId }: { projectId: string; topicId?: string },
-	): Promise<Array<{ storageId: string; result: SaveUploadFileToProjectResponse }>> {
+	): Promise<SavedHtmlScreenshot[]> {
 		if (!projectId) throw new Error("当前项目不可用，无法保存截图")
+		if (items.length === 0) return []
 
 		try {
-			const staged = await this.stageStoredScreenshots(items, projectId)
-			return await this.saveStagedScreenshots(staged, { projectId, topicId })
+			return await this.resolveSavedScreenshots(items, { projectId, topicId })
 		} catch (error) {
 			logger.error({
 				eventKey: "html_screenshot_upload_failed",
@@ -235,21 +242,38 @@ class HtmlScreenshotUploadService {
 		}
 	}
 
-	collectStorageIds(mentionItems: Array<{ attrs?: { data?: unknown } }>): string[] {
-		const storageIds: string[] = []
+	collectUploadItems(
+		mentionItems: Array<{ attrs?: { data?: unknown }; data?: unknown }>,
+	): UploadStoredScreenshotItem[] {
+		const items: UploadStoredScreenshotItem[] = []
 		for (const item of mentionItems) {
-			const data = item.attrs?.data
+			const data = item.attrs?.data ?? item.data
 			if (!data || typeof data !== "object") continue
-			const screenshot = data as { is_html_screenshot?: boolean; storage_id?: unknown }
-			if (
-				screenshot.is_html_screenshot &&
-				typeof screenshot.storage_id === "string" &&
-				screenshot.storage_id
-			) {
-				storageIds.push(screenshot.storage_id)
+			const screenshot = data as {
+				is_html_screenshot?: boolean
+				storage_id?: unknown
+				file_name?: unknown
 			}
+			if (
+				!screenshot.is_html_screenshot ||
+				typeof screenshot.storage_id !== "string" ||
+				!screenshot.storage_id
+			) {
+				continue
+			}
+			items.push({
+				storageId: screenshot.storage_id,
+				fileName:
+					typeof screenshot.file_name === "string" && screenshot.file_name
+						? screenshot.file_name
+						: `${screenshot.storage_id}.png`,
+			})
 		}
-		return storageIds
+		return items
+	}
+
+	collectStorageIds(mentionItems: Array<{ attrs?: { data?: unknown } }>): string[] {
+		return this.collectUploadItems(mentionItems).map((item) => item.storageId)
 	}
 
 	async releaseStoredScreenshots(storageIds: string[]): Promise<void> {
@@ -259,6 +283,8 @@ class HtmlScreenshotUploadService {
 	resetStaging(): void {
 		this.stagedByStorageId.clear()
 		this.stagingPromises.clear()
+		this.savedByStorageId.clear()
+		this.savingPromises.clear()
 	}
 
 	private stagingKey(projectId: string, storageId: string): string {
@@ -272,6 +298,94 @@ class HtmlScreenshotUploadService {
 		}
 		for (const key of [...this.stagingPromises.keys()]) {
 			if (key.endsWith(suffix)) this.stagingPromises.delete(key)
+		}
+		for (const key of [...this.savedByStorageId.keys()]) {
+			if (key.endsWith(suffix)) this.savedByStorageId.delete(key)
+		}
+		for (const key of [...this.savingPromises.keys()]) {
+			if (key.endsWith(suffix)) this.savingPromises.delete(key)
+		}
+	}
+
+	private async resolveSavedScreenshots(
+		items: UploadStoredScreenshotItem[],
+		{ projectId, topicId }: { projectId: string; topicId?: string },
+	): Promise<SavedHtmlScreenshot[]> {
+		const resolved: Array<Promise<SavedHtmlScreenshot> | SavedHtmlScreenshot | undefined> =
+			Array.from({
+				length: items.length,
+			})
+		const missing: UploadStoredScreenshotItem[] = []
+		const missingIndexes: number[] = []
+
+		for (let index = 0; index < items.length; index += 1) {
+			const item = items[index]
+			const cacheKey = this.stagingKey(projectId, item.storageId)
+			const cached = this.savedByStorageId.get(cacheKey)
+			if (cached) {
+				resolved[index] = cached
+				continue
+			}
+			const inflight = this.savingPromises.get(cacheKey)
+			if (inflight) {
+				resolved[index] = inflight
+				continue
+			}
+			missing.push(item)
+			missingIndexes.push(index)
+		}
+
+		if (missing.length > 0) {
+			const savedPromise = this.saveUncachedScreenshots(missing, { projectId, topicId })
+			missingIndexes.forEach((itemIndex, savedIndex) => {
+				resolved[itemIndex] = savedPromise.then((saved) => {
+					const match = saved[savedIndex]
+					if (!match) throw new Error("截图上传失败")
+					return match
+				})
+			})
+		}
+
+		return Promise.all(resolved as Array<Promise<SavedHtmlScreenshot> | SavedHtmlScreenshot>)
+	}
+
+	private async saveUncachedScreenshots(
+		items: UploadStoredScreenshotItem[],
+		{ projectId, topicId }: { projectId: string; topicId?: string },
+	): Promise<SavedHtmlScreenshot[]> {
+		let resolveBatch!: (value: SavedHtmlScreenshot[]) => void
+		let rejectBatch!: (reason: unknown) => void
+		const batchPromise = new Promise<SavedHtmlScreenshot[]>((resolve, reject) => {
+			resolveBatch = resolve
+			rejectBatch = reject
+		})
+		const itemPromises = items.map((item) => {
+			const itemPromise = batchPromise.then((saved) => {
+				const match = saved.find((entry) => entry.storageId === item.storageId)
+				if (!match) throw new Error("截图上传失败")
+				return match
+			})
+			this.savingPromises.set(this.stagingKey(projectId, item.storageId), itemPromise)
+			return itemPromise
+		})
+
+		try {
+			const staged = await this.stageStoredScreenshots(items, projectId)
+			const saved = await this.saveStagedScreenshots(staged, { projectId, topicId })
+			resolveBatch(saved)
+			await Promise.all(itemPromises)
+			for (const item of saved) {
+				this.savedByStorageId.set(this.stagingKey(projectId, item.storageId), item)
+			}
+			return saved
+		} catch (error) {
+			rejectBatch(error)
+			await Promise.all(itemPromises).catch(() => undefined)
+			throw error
+		} finally {
+			for (const item of items) {
+				this.savingPromises.delete(this.stagingKey(projectId, item.storageId))
+			}
 		}
 	}
 

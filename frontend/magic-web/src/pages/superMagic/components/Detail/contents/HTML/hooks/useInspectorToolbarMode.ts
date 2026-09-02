@@ -340,7 +340,7 @@ export function useInspectorToolbarMode(
 			confirmedTarget.screenshot &&
 			pubsub.hasListeners(PubSubEvents.Prepare_Html_Screenshot)
 		) {
-			// Region shots start OSS staging now. Element shots stay local.
+			// Region shots start upload now. Element shots stay local.
 			pubsub.publish(PubSubEvents.Prepare_Html_Screenshot, {
 				captureId: confirmedTarget.id,
 				dataUrl: confirmedTarget.screenshot.dataUrl,

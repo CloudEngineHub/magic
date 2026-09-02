@@ -154,6 +154,7 @@ function useMessageEditorPubSub({
 	onSendMessageByContent,
 	onSendCurrentContent,
 	projectId,
+	topicId,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
 	const preparedScreenshotMentionsRef = useRef(
@@ -202,15 +203,14 @@ function useMessageEditorPubSub({
 						setHtmlScreenshotMention(captureId, mention)
 						if (options?.stageUpload && projectId) {
 							void htmlScreenshotUploadService
-								.stageStoredScreenshot(
-									{
-										storageId: storedScreenshot.storageId,
-										fileName: storedScreenshot.fileName,
-									},
+								.uploadStoredScreenshot({
+									storageId: storedScreenshot.storageId,
+									fileName: storedScreenshot.fileName,
 									projectId,
-								)
+									topicId,
+								})
 								.catch((error) => {
-									console.warn("html screenshot oss staging failed", error)
+									console.warn("html screenshot upload failed", error)
 								})
 						}
 						return mention
@@ -323,6 +323,17 @@ function useMessageEditorPubSub({
 					elementHtml: "元素片段",
 					selectorMatchCount: "选择器匹配数",
 				})
+				if (projectId) {
+					const uploadItems = htmlScreenshotUploadService.collectUploadItems([
+						...screenshotMentions.values(),
+					])
+					if (uploadItems.length > 0) {
+						await htmlScreenshotUploadService.uploadStoredScreenshots(uploadItems, {
+							projectId,
+							topicId,
+						})
+					}
+				}
 				await onSendMessageByContent({
 					jsonContent: serializedContent,
 					shouldClearEditorAfterSend: true,
@@ -342,7 +353,7 @@ function useMessageEditorPubSub({
 				handleSubmitHtmlMultiSelection,
 			)
 		}
-	}, [onSendMessageByContent, prepareScreenshot])
+	}, [onSendMessageByContent, prepareScreenshot, projectId, topicId])
 
 	useEffect(() => {
 		const handleAddFileToChat = (data: {
