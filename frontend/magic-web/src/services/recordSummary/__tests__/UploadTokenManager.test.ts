@@ -27,7 +27,7 @@ vi.mock("@/apis", () => ({
 
 const SECRET_ERRORS = {
 	authorization: new Error("authorization: Bearer secret-authorization-value"),
-	bearer: new Error("Unauthorized Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret"),
+	bearer: new Error("Unauthorized Bearer test-upload-bearer-credential"),
 	urlQueryToken: new Error(
 		"Failed to fetch https://oss.example.com/upload?token=secret-query-token&authorization=Bearer%20abc",
 	),
@@ -55,7 +55,7 @@ describe("UploadTokenManager", () => {
 			const message = (error as Error).message
 			expect(message).toMatch(/Failed to fetch token after 0 retries/)
 			expect(message).not.toContain("secret-authorization-value")
-			expect(message).not.toContain("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret")
+			expect(message).not.toContain("test-upload-bearer-credential")
 			expect(message).not.toContain("secret-query-token")
 			expect(message).not.toContain("secret-json-token")
 			expect(message).not.toContain("secret-access")

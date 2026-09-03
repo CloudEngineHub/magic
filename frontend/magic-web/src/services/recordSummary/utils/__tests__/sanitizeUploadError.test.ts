@@ -3,9 +3,9 @@ import { redactUploadErrorMessage } from "../sanitizeUploadError"
 
 describe("redactUploadErrorMessage", () => {
 	it("redacts standalone bearer credentials", () => {
-		const secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret"
+		const fakeCredential = "test-upload-bearer-credential"
 
-		expect(redactUploadErrorMessage(`Unauthorized Bearer ${secret}`)).toBe(
+		expect(redactUploadErrorMessage(`Unauthorized Bearer ${fakeCredential}`)).toBe(
 			"Unauthorized Bearer [REDACTED]",
 		)
 	})

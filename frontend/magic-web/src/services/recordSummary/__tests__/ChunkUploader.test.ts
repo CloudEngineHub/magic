@@ -302,11 +302,11 @@ describe("ChunkUploader", () => {
 	})
 
 	it("redacts standalone bearer credentials from upload logs and errors", async () => {
-		const secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret"
+		const fakeCredential = "test-upload-bearer-credential"
 		const chunk = createChunk(0)
 		testState.chunks.set(chunk.id, chunk)
 		testState.uploadBehaviors.push("fail")
-		testState.uploadFailureError = new Error(`Unauthorized Bearer ${secret}`)
+		testState.uploadFailureError = new Error(`Unauthorized Bearer ${fakeCredential}`)
 		const onError = vi.fn()
 
 		const uploader = new ChunkUploader(
@@ -340,9 +340,9 @@ describe("ChunkUploader", () => {
 				}),
 			}),
 		)
-		expect(JSON.stringify(failedRequestLog)).not.toContain(secret)
+		expect(JSON.stringify(failedRequestLog)).not.toContain(fakeCredential)
 		expect(onError.mock.calls[0]?.[1]).toBeInstanceOf(Error)
-		expect((onError.mock.calls[0]?.[1] as Error).message).not.toContain(secret)
+		expect((onError.mock.calls[0]?.[1] as Error).message).not.toContain(fakeCredential)
 	})
 
 	it("clears stopped upload runtime state before late SDK callbacks arrive", async () => {
