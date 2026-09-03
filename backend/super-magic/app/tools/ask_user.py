@@ -272,9 +272,10 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         """Build the AFTER_TOOL_CALL detail card from result.extra_info."""
         if not result or not result.extra_info:
             return None
-        status = result.extra_info.get("status")
-        answers = result.extra_info.get("answers", {})
-        questions = result.extra_info.get("questions", [])
+        extra_info = result.extra_info
+        status = extra_info.get("status")
+        answers = extra_info.get("answers", {})
+        questions = extra_info.get("questions", [])
         if not status:
             return None
         question_id = tool_context.tool_call_id if tool_context else ""
@@ -285,6 +286,7 @@ Use the `default` attribute to set a fallback when the user times out or skips.
                 status=status,
                 questions=questions,
                 answers=answers,
+                remark=extra_info.get("remark") or None,
             ),
         )
 
@@ -311,9 +313,11 @@ def build_ask_user_result_builder(
 ):
     """返回 ask_user 专属的 result_builder 闭包。
 
-    result_builder(response_status, answer_json) -> (content, extra_info)
+    result_builder(response_status, answer_json, remark) -> (content, extra_info)
     """
-    def result_builder(response_status: str, answer_json: str) -> Tuple[str, Dict[str, Any]]:
+    def result_builder(response_status: str, answer_json: str, remark: str = "") -> Tuple[str, Dict[str, Any]]:
+        # 兼容直接调用 builder 的旧代码，并避免异常类型影响答案解析。
+        normalized_remark = remark.strip() if isinstance(remark, str) else ""
         try:
             answers: dict = json.loads(answer_json) if answer_json else {}
         except (json.JSONDecodeError, TypeError):
@@ -326,7 +330,10 @@ def build_ask_user_result_builder(
                 questions=parsed_questions,
                 response_status=response_status,
                 answers=answers,
+                remark=normalized_remark,
             )
+        if policy_blocked and normalized_remark:
+            content = f"{content}\n<remark>{_xml_escape(normalized_remark)}</remark>"
         extra_info = {
             "status": response_status,
             "answers": answers,
@@ -334,6 +341,8 @@ def build_ask_user_result_builder(
             "policy_blocked": policy_blocked,
             "policy_source": policy_source,
         }
+        if normalized_remark:
+            extra_info["remark"] = normalized_remark
         return content, extra_info
 
     return result_builder
@@ -398,6 +407,7 @@ def _humanize_batch(
     questions: List[dict],
     response_status: str,
     answers: dict,
+    remark: str = "",
 ) -> str:
     """将用户回答转换为 XML 结构化文本，供模型推理。
 
@@ -416,6 +426,8 @@ def _humanize_batch(
             else:
                 has_no_default = True
                 lines.append('<answer missing="true"/>')
+        if remark:
+            lines.append(f"<remark>{_xml_escape(remark)}</remark>")
         lines.append("</ask_user_result>")
         if has_no_default:
             lines.append("Some answers are missing with no default value. Decide whether to abort the related operation.")
@@ -437,5 +449,7 @@ def _humanize_batch(
             lines.append(f"<answer>{items}</answer>")
         else:
             lines.append(f"<answer>{_xml_escape(str(ans))}</answer>")
+    if remark:
+        lines.append(f"<remark>{_xml_escape(remark)}</remark>")
     lines.append("</ask_user_result>")
     return "\n".join(lines)
