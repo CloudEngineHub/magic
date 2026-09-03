@@ -668,7 +668,7 @@ class FileManagementAppService extends AbstractAppService
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
 
             if ($fileEntity->isProjectFile()) {
-                // 4. Dispatch the matching event so notification / asset subscribers can react.
+                // 项目空间文件才进入回收站/物理删除策略链路。
                 if ($fileEntity->getIsDirectory()) {
                     $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $userAuthorization));
                 } else {
@@ -722,7 +722,6 @@ class FileManagementAppService extends AbstractAppService
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
 
             if ($fileEntity->isProjectFile()) {
-                // Dispatch directory deleted event
                 $dirUserAuth = new MagicUserAuthorization();
                 $dirUserAuth->setId($userAuthorization->getId());
                 $dirUserAuth->setOrganizationCode($userAuthorization->getOrganizationCode());

@@ -154,6 +154,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
                 'a.auto_summary',
                 'a.source',
                 'a.audio_source',
+                'a.audio_format',
                 'a.audio_file_id',
                 'a.device_id',
                 'a.duration',
@@ -253,6 +254,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
             'auto_summary' => $entity->isAutoSummary(),
             'source' => $entity->getSource(),
             'audio_source' => $entity->getAudioSource(),
+            'audio_format' => $entity->getAudioFormat(),
             'audio_file_id' => $entity->getAudioFileId(),
             'device_id' => $entity->getDeviceId(),
             'duration' => $entity->getDuration(),
@@ -308,6 +310,23 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
 
         // Execute update query (cast doesn't apply here)
         return AudioProjectModel::where('project_id', $projectId)->update($data);
+    }
+
+    /**
+     * Set the audio format once, while allowing idempotent writes of the same value.
+     *
+     * @return int number of affected rows (may be zero for an idempotent DB update)
+     */
+    public function setAudioFormatIfUnset(int $projectId, string $audioFormat): int
+    {
+        return AudioProjectModel::where('project_id', $projectId)
+            ->where(function ($query) use ($audioFormat) {
+                $query->whereNull('audio_format')->orWhere('audio_format', $audioFormat);
+            })
+            ->update([
+                'audio_format' => $audioFormat,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
     }
 
     /**
@@ -395,6 +414,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
                 'auto_summary' => $model->auto_summary,
                 'source' => $model->source,
                 'audio_source' => $model->audio_source,
+                'audio_format' => $model->audio_format,
                 'audio_file_id' => $model->audio_file_id,
                 'device_id' => $model->device_id,
                 'duration' => $model->duration,
@@ -425,6 +445,7 @@ class AudioProjectRepository implements AudioProjectRepositoryInterface
         $entity->setAutoSummary($model->auto_summary ?? true);
         $entity->setSource($model->source);
         $entity->setAudioSource($model->audio_source ?? 'recorded');
+        $entity->setAudioFormat($model->audio_format);
         $entity->setAudioFileId($model->audio_file_id);
         $entity->setDeviceId($model->device_id);
         $entity->setDuration($model->duration);
