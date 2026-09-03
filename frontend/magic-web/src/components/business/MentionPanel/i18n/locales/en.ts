@@ -47,6 +47,8 @@ export const en: I18nTexts = {
 		projectFiles: "Current Project Files",
 		otherProjectFiles: "Other Projects/Files",
 		mcpExtensions: "Plugins",
+		digitalEmployees: "Digital Employees",
+		flows: "Flows",
 		agents: "Agents",
 		skills: "Skills",
 		tools: "Tools",

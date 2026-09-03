@@ -82,6 +82,7 @@ export interface AgentMentionData {
 	agent_name: string
 	agent_avatar: string
 	agent_description: string
+	agent_source?: "digital_employee"
 }
 
 export interface ToolMentionData {

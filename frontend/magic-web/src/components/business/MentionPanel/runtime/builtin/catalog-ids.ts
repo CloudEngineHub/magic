@@ -5,6 +5,8 @@ export const MentionPanelBuiltinItemId = {
 	PROJECT_FILES: "project-files",
 	OTHER_PROJECT_FILES: "other-project-files",
 	MCP_EXTENSIONS: "mcp-extensions",
+	DIGITAL_EMPLOYEES: "digital-employees",
+	FLOWS: "flows",
 	AGENTS: "agents",
 	SKILLS: "skills",
 	TOOLS: "tools",
@@ -19,6 +21,8 @@ export type MentionPanelBuiltinItemId =
 
 export const MentionPanelCatalogId = {
 	MCP_EXTENSIONS: MentionPanelBuiltinItemId.MCP_EXTENSIONS,
+	DIGITAL_EMPLOYEES: MentionPanelBuiltinItemId.DIGITAL_EMPLOYEES,
+	FLOWS: MentionPanelBuiltinItemId.FLOWS,
 	AGENTS: MentionPanelBuiltinItemId.AGENTS,
 	SKILLS: MentionPanelBuiltinItemId.SKILLS,
 	TOOLS: MentionPanelBuiltinItemId.TOOLS,

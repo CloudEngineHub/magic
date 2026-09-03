@@ -47,6 +47,8 @@ export const zhCN: I18nTexts = {
 		projectFiles: "当前项目文件",
 		otherProjectFiles: "其它项目/文件",
 		mcpExtensions: "插件",
+		digitalEmployees: "数字员工",
+		flows: "流程",
 		agents: "智能体",
 		skills: "技能",
 		tools: "工具",

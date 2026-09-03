@@ -1,5 +1,10 @@
 import { MentionItemType } from "../../types"
 import { agentsCatalogPlugin, agentsSearchPlugin, agentsValidationPlugin } from "./domains/agents"
+import {
+	digitalEmployeesCatalogPlugin,
+	digitalEmployeesSearchPlugin,
+} from "./domains/digital-employees"
+import { flowsCatalogPlugin } from "./domains/flows"
 import { historyCatalogPlugin } from "./domains/history"
 import { mcpCatalogPlugin, mcpSearchPlugin, mcpValidationPlugin } from "./domains/mcp"
 import { skillsCatalogPlugin, skillsSearchPlugin, skillsValidationPlugin } from "./domains/skills"
@@ -18,6 +23,8 @@ import {
 const catalogPlugins = [
 	uploadFilesCatalogPlugin,
 	mcpCatalogPlugin,
+	digitalEmployeesCatalogPlugin,
+	flowsCatalogPlugin,
 	agentsCatalogPlugin,
 	skillsCatalogPlugin,
 	toolsCatalogPlugin,
@@ -29,6 +36,7 @@ const searchPlugins = [
 	workspaceFilesSearchPlugin,
 	uploadFilesSearchPlugin,
 	mcpSearchPlugin,
+	digitalEmployeesSearchPlugin,
 	agentsSearchPlugin,
 	skillsSearchPlugin,
 	toolsSearchPlugin,
