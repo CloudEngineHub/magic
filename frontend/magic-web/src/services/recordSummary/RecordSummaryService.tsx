@@ -62,6 +62,7 @@ import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
+import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
 
 const logger = createRecordingLogger("Main")
 
@@ -121,6 +122,26 @@ class RecordSummaryService {
 	// 静音提示的 message key
 	private silenceMessageKey = "recording-silence-detected"
 
+	/** Seed the recorder with a persisted compressed/WAV format during session recovery. */
+	private restoreEncodingSnapshot(session: RecordingSession): void {
+		const persistedSnapshot = session.metadata.recordingEncoding
+		if (persistedSnapshot) {
+			this.mediaRecorderService.setEncodingSnapshot(session.id, { ...persistedSnapshot })
+			return
+		}
+
+		// Older sessions recorded by recorder-core were labeled webm even though
+		// their persisted chunks are WAV; keep those sessions on the legacy path.
+		const format =
+			session.metadata.audioFormat === "webm" ? "wav" : session.metadata.audioFormat
+		const supportedFormats: RecordingEncodingSnapshot["format"][] = ["wav", "pcm", "ogg-opus"]
+		if (supportedFormats.includes(format as RecordingEncodingSnapshot["format"])) {
+			this.mediaRecorderService.setEncodingSnapshot(session.id, {
+				format: format as RecordingEncodingSnapshot["format"],
+			})
+		}
+	}
+
 	/**
 	 * Build the server-side finish-recording title without depending on list-only display helpers.
 	 * Prefer persisted project/topic names first, then fall back to a stable localized placeholder.
@@ -146,16 +167,19 @@ class RecordSummaryService {
 		project,
 		topic,
 		asrStreamContent,
+		fileShardCount,
 	}: {
 		taskKey: string
 		project: ProjectListItem
 		topic: Topic
 		asrStreamContent: string
+		fileShardCount?: number
 	}): Promise<FinishRecordingTaskResponse> {
 		const response = await SuperMagicApi.finishRecordingTask({
 			task_key: taskKey,
 			generated_title: this.resolveFinishRecordingTitle(project, topic),
 			asr_stream_content: asrStreamContent,
+			file_shard_count: fileShardCount,
 		})
 
 		if (response.phase !== "merging") {
@@ -351,6 +375,7 @@ class RecordSummaryService {
 		})
 		this.statusReporter = new RecordingStatusReporter({
 			onReportError: this.handleStatusReportError,
+			getFileShardCount: () => this.sessionManager.getCurrentSession()?.currentChunkIndex,
 		})
 		this.contentFileManager = new RecordingContentFileManager(
 			this.chunkUploader.getTokenManager(),
@@ -457,6 +482,7 @@ class RecordSummaryService {
 					task_key: currentSession.id,
 					status: RecordingSummaryStatus.Paused,
 					model_id: currentSession.model?.model_id || "",
+					file_shard_count: currentSession.currentChunkIndex,
 					note: recordSummaryStore.note,
 					asr_stream_content: this.getLatestAsrContent(),
 				})
@@ -612,6 +638,10 @@ class RecordSummaryService {
 			try {
 				// 开始录制音频
 				await this.mediaRecorderService.startRecording(session.id)
+				const initialEncoding = this.mediaRecorderService.getEncodingSnapshot()
+				if (initialEncoding) {
+					this.sessionManager.updateSessionEncodingSnapshot(initialEncoding)
+				}
 
 				// 更新音频源配置(如果音频源发生变化)
 				const currentAudioSource = this.mediaRecorderService.getAudioSource()
@@ -678,6 +708,7 @@ class RecordSummaryService {
 				task_key: session.id,
 				status: RecordingSummaryStatus.Start,
 				model_id: model.model_id,
+				file_shard_count: session.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -1044,6 +1075,7 @@ class RecordSummaryService {
 				task_key: currentSession.id,
 				status: RecordingSummaryStatus.Paused,
 				model_id: currentSession.model?.model_id || "",
+				file_shard_count: currentSession.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -1129,6 +1161,7 @@ class RecordSummaryService {
 				// Store it temporarily for the recorder to use
 				this.mediaRecorderService.setPreauthorizedDisplayMedia(preauthorizedDisplayMedia)
 			}
+			this.restoreEncodingSnapshot(currentSession)
 
 			// 重新开始录音（需要重新授权音频源）
 			// Restart recording (requires re-authorization of audio source)
@@ -1136,6 +1169,10 @@ class RecordSummaryService {
 				currentSession.id,
 				currentSession.currentChunkIndex,
 			)
+			const resumedEncoding = this.mediaRecorderService.getEncodingSnapshot()
+			if (resumedEncoding) {
+				this.sessionManager.updateSessionEncodingSnapshot(resumedEncoding)
+			}
 
 			// Clean up preauthorized stream reference after use
 			// 使用后清理预授权流引用
@@ -1170,6 +1207,7 @@ class RecordSummaryService {
 				task_key: currentSession.id,
 				status: RecordingSummaryStatus.Recording,
 				model_id: currentSession.model?.model_id || "",
+				file_shard_count: currentSession.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -1383,12 +1421,17 @@ class RecordSummaryService {
 
 			// Update media recorder config with saved audio source
 			this.mediaRecorderService.updateConfig({ audioSource })
+			this.restoreEncodingSnapshot(session)
 
 			// 恢复音频录制，传递会话ID和当前分片索引
 			await this.mediaRecorderService.startRecording(
 				session.id,
 				session.currentChunkIndex || 0,
 			)
+			const restoredEncoding = this.mediaRecorderService.getEncodingSnapshot()
+			if (restoredEncoding) {
+				this.sessionManager.updateSessionEncodingSnapshot(restoredEncoding)
+			}
 
 			// 更新音频源配置(如果音频源发生变化)
 			const currentAudioSource = this.mediaRecorderService.getAudioSource()
@@ -1424,6 +1467,7 @@ class RecordSummaryService {
 				task_key: session.id,
 				status: RecordingSummaryStatus.Recording,
 				model_id: session.model?.model_id || "",
+				file_shard_count: session.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -1661,6 +1705,7 @@ class RecordSummaryService {
 					task_key: session.id,
 					status: RecordingSummaryStatus.Canceled,
 					model_id: session.model?.model_id || "",
+					file_shard_count: session.currentChunkIndex,
 					note: recordSummaryStore.note,
 					asr_stream_content: this.getLatestAsrContent(),
 				})
@@ -1946,6 +1991,7 @@ class RecordSummaryService {
 					project: finalProject,
 					topic: finalTopic,
 					asrStreamContent: asr_stream_content || "",
+					fileShardCount: this.sessionManager.getCurrentSession()?.currentChunkIndex,
 				})
 			} catch (err) {
 				logger.error({
@@ -2000,10 +2046,12 @@ class RecordSummaryService {
 			// Get model from store or find by model_id
 			const model = recordSummaryStore.businessData.model || this.findModelById(model_id)
 
+			const currentChunkIndex = this.sessionManager.getCurrentSession()?.currentChunkIndex
 			const sessionForSummary = {
 				id: taskKey,
 				model: model,
 				textContent: recordSummaryStore.message,
+				...(currentChunkIndex !== undefined ? { currentChunkIndex } : {}),
 			} as RecordingSession
 
 			// Migrate storage images to project images if asr_stream_content exists
@@ -4359,6 +4407,9 @@ class RecordSummaryService {
 			topic_id: topicId,
 			model_id: session.model?.model_id || "",
 			asr_stream_content: asrStreamContent,
+			...(typeof session.currentChunkIndex === "number" && {
+				file_shard_count: session.currentChunkIndex,
+			}),
 			...(options?.note && { note: options.note }),
 			...(options?.file_id && { file_id: options.file_id }),
 		})

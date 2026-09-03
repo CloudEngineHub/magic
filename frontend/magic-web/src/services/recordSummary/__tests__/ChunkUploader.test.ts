@@ -94,6 +94,8 @@ vi.mock("../UploadTokenManager", () => ({
 			expire: Date.now() + 60_000,
 		}),
 		getDirectories: vi.fn(() => ({ asr_hidden_dir: { directory_id: "hidden-dir" } })),
+		getSandboxTaskId: vi.fn(() => "sandbox-task-1"),
+		getSandboxTopicId: vi.fn(() => "sandbox-topic-1"),
 		getHiddenDirectoryPath: vi.fn(() => "/hidden-dir"),
 		forceRefreshToken: vi.fn().mockResolvedValue(undefined),
 		getTokenInfo: vi.fn(),
@@ -235,12 +237,106 @@ describe("ChunkUploader", () => {
 			expect.objectContaining({
 				sessionId: "session-1",
 				projectId: "project-1",
-				topicId: "topic-1",
+				topicId: "sandbox-topic-1",
+				taskId: "sandbox-task-1",
 				fileName: "3.wav",
 				fileSize: 44,
 			}),
 		)
 		expect(testState.chunks.get(failedChunk.id)?.uploadStatus).toBe("uploaded")
+	})
+
+	it("uploads a valid Ogg/Opus placeholder for failed compressed chunks", async () => {
+		const failedChunk: StoredAudioChunk = {
+			...createChunk(9),
+			chunk: new Blob([new Uint8Array([0x4f, 0x67, 0x67, 0x53])], {
+				type: "audio/ogg; codecs=opus",
+			}),
+			mimeType: "audio/ogg; codecs=opus",
+			uploadStatus: "failed",
+		}
+		testState.chunks.set(failedChunk.id, failedChunk)
+		testState.uploadBehaviors.push("success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 0,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await expect(
+			uploader.uploadEmptyPlaceholdersForFailedChunks("session-1", "topic-1", "project-1"),
+		).resolves.toBe(1)
+
+		expect(testState.uploadCalls[0]).toMatchObject({
+			name: "9.opus",
+			type: "audio/ogg",
+		})
+		expect(testState.uploadCalls[0].size).toBeGreaterThan(44)
+		expect(testState.chunks.get(failedChunk.id)?.uploadStatus).toBe("uploaded")
+	})
+
+	it("maps Ogg/Opus MIME content to the backend .opus extension", async () => {
+		const chunk: StoredAudioChunk = {
+			...createChunk(7),
+			chunk: new Blob([new Uint8Array([0x4f, 0x67, 0x67, 0x53])], {
+				type: "audio/ogg; codecs=opus",
+			}),
+			mimeType: "audio/ogg; codecs=opus",
+		}
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 0,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+		expect(testState.uploadCalls[0]).toMatchObject({
+			name: "7.opus",
+			type: "audio/ogg",
+		})
+	})
+
+	it("uses the stored MIME type when IndexedDB clears Blob.type", async () => {
+		const chunk: StoredAudioChunk = {
+			...createChunk(8),
+			chunk: new Blob([new Uint8Array([1, 2, 3])]),
+			mimeType: "audio/wav",
+		}
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 0,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+		expect(testState.uploadCalls[0]).toMatchObject({
+			name: "8.wav",
+			type: "audio/wav",
+		})
 	})
 
 	it("does not mark a chunk uploaded when backend batch save fails", async () => {

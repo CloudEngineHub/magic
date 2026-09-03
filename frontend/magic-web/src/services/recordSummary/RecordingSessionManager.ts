@@ -5,6 +5,7 @@ import { ModelItem } from "@/pages/superMagic/components/MessageEditor/component
 import { userStore } from "@/models/user"
 import { recordingLogger } from "./utils/RecordingLogger"
 import { RecordingSessionHistoryDB } from "./RecordingSessionHistoryDB"
+import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
 
 const logger = recordingLogger.namespace("Session")
 
@@ -113,7 +114,7 @@ export class RecordingSessionManager {
 			currentChunkIndex: 0,
 			metadata: {
 				userAgent: navigator.userAgent,
-				audioFormat: "webm",
+				audioFormat: "ogg-opus",
 				deviceInfo: this.getDeviceInfo(),
 			},
 			userId: userId,
@@ -282,6 +283,16 @@ export class RecordingSessionManager {
 		this.currentSession.currentChunkIndex = chunkIndex
 		this.currentSession.lastActivityTime = Date.now()
 		this.persistHistoryDebounced()
+	}
+
+	/** Persist the complete encoder snapshot once for the whole recording session. */
+	updateSessionEncodingSnapshot(snapshot: RecordingEncodingSnapshot): void {
+		if (!this.currentSession) return
+
+		this.currentSession.metadata.audioFormat = snapshot.format
+		this.currentSession.metadata.recordingEncoding = { ...snapshot }
+		this.currentSession.lastActivityTime = Date.now()
+		this.persistHistoryImmediate()
 	}
 
 	/**

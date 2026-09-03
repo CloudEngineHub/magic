@@ -23,6 +23,8 @@ interface TokenCacheEntry {
 	isRefreshing: boolean // 是否正在刷新
 	directories?: RecordingDirectories // 录音目录信息
 	presetFiles?: PresetFiles // 预设文件信息
+	sandboxTaskId?: string // Sandbox task ID used to associate uploaded recording artifacts
+	sandboxTopicId?: string // Sandbox topic ID used by batch-save file records
 }
 
 /**
@@ -237,6 +239,8 @@ export class UploadTokenManager {
 				isRefreshing: false,
 				directories: response.directories,
 				presetFiles: response.preset_files,
+				sandboxTaskId: response.sandbox_task_id,
+				sandboxTopicId: response.sandbox_topic_id,
 			}
 
 			this.tokenCache.set(cacheKey, cacheEntry)
@@ -658,6 +662,20 @@ export class UploadTokenManager {
 	getDirectories(sessionId: string): RecordingDirectories | undefined {
 		const cachedEntry = this.tokenCache.get(sessionId)
 		return cachedEntry?.directories
+	}
+
+	/**
+	 * Get the sandbox task ID returned with the upload token.
+	 */
+	getSandboxTaskId(sessionId: string): string | undefined {
+		const cachedEntry = this.tokenCache.get(sessionId)
+		return cachedEntry?.sandboxTaskId
+	}
+
+	/** Get the sandbox topic ID returned by the upload-token endpoint. */
+	getSandboxTopicId(sessionId: string): string | undefined {
+		const cachedEntry = this.tokenCache.get(sessionId)
+		return cachedEntry?.sandboxTopicId
 	}
 
 	/**
