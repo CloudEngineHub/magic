@@ -20,11 +20,7 @@ export interface SessionUploadProgress {
 }
 
 export type UploadQueueStallReason =
-	| "healthy"
-	| "pending_not_queued"
-	| "idle_with_pending"
-	| "stale_active_upload"
-	| "has_failed"
+	"healthy" | "pending_not_queued" | "idle_with_pending" | "stale_active_upload" | "has_failed"
 
 export interface UploadQueueHealth {
 	pending: number
@@ -913,7 +909,37 @@ export class ChunkUploader {
 
 		// Get chunk from IndexedDB first to have context
 		const chunk = await this.audioChunkDB.get(chunkId)
-		if (chunk && this.sessionCleanupRequested.has(chunk.sessionId)) {
+		if (!chunk) {
+			logger.error({
+				eventKey: "process_chunk_failed",
+				errorKind: "storage",
+				error: new Error(getUploadErrorDetails(error).message),
+				message: "错误处理过程中找不到分片",
+				context: {
+					chunkId,
+					sessionId: activeSessionId,
+					...getUploadErrorDetails(error),
+				},
+			})
+			this.clearRetryCount(chunkId)
+			if (activeSessionId) {
+				this.releaseActiveUpload(chunkId, activeSessionId)
+				return
+			}
+			this.activeUploads.delete(chunkId)
+			this.activeUploadIds.delete(chunkId)
+			const activeEntries = Array.from(this.sessionActiveUploads.entries())
+			for (let i = 0; i < activeEntries.length; i++) {
+				const [sessionId, activeChunkId] = activeEntries[i]
+				if (activeChunkId === chunkId) {
+					this.sessionActiveUploads.delete(sessionId)
+					break
+				}
+			}
+			return
+		}
+
+		if (this.sessionCleanupRequested.has(chunk.sessionId)) {
 			this.releaseActiveUpload(chunkId, chunk.sessionId)
 			return
 		}
@@ -927,8 +953,8 @@ export class ChunkUploader {
 			message: "分片上传失败",
 			context: {
 				chunkId,
-				sessionId: chunk?.sessionId,
-				chunkIndex: chunk?.index,
+				sessionId: chunk.sessionId,
+				chunkIndex: chunk.index,
 				retryCount,
 				...getUploadErrorDetails(error),
 			},
@@ -945,36 +971,9 @@ export class ChunkUploader {
 			this.activeUploadIds.delete(chunkId)
 			// Clear retry info
 			this.clearRetryCount(chunkId)
-			// Clear session active status
-			if (chunk) {
-				this.sessionActiveUploads.delete(chunk.sessionId)
-				// Clear session queue
-				this.sessionQueues.delete(chunk.sessionId)
-				// Emit task end event
-				this.events.onTaskEnd?.(chunk.sessionId)
-			}
-			return
-		}
-
-		if (!chunk) {
-			logger.error({
-				eventKey: "process_chunk_failed",
-				errorKind: "unknown",
-				message: "错误处理过程中找不到分片",
-				context: { chunkId },
-			})
-			this.activeUploads.delete(chunkId)
-			this.activeUploadIds.delete(chunkId)
-			this.clearRetryCount(chunkId)
-			// Clear session active status
-			const activeEntries = Array.from(this.sessionActiveUploads.entries())
-			for (let i = 0; i < activeEntries.length; i++) {
-				const [sessionId, activeChunkId] = activeEntries[i]
-				if (activeChunkId === chunkId) {
-					this.sessionActiveUploads.delete(sessionId)
-					break
-				}
-			}
+			this.sessionActiveUploads.delete(chunk.sessionId)
+			this.sessionQueues.delete(chunk.sessionId)
+			this.events.onTaskEnd?.(chunk.sessionId)
 			return
 		}
 

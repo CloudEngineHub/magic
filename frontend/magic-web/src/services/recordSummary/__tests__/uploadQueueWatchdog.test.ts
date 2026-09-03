@@ -118,6 +118,97 @@ describe("UploadQueueWatchdog", () => {
 		expect(resume).not.toHaveBeenCalled()
 	})
 
+	it("does not resume a stale in-flight tick after stop and start", async () => {
+		vi.useFakeTimers()
+		let finishInspect: ((health: UploadQueueHealth) => void) | undefined
+		const inspect = vi.fn(
+			() =>
+				new Promise<UploadQueueHealth>((resolve) => {
+					finishInspect = resolve
+				}),
+		)
+		const resume = vi.fn()
+		const onRecovered = vi.fn()
+		const watchdog = new UploadQueueWatchdog({
+			intervalMs: 15_000,
+			inspect,
+			resume,
+			onRecovered,
+		})
+
+		watchdog.start()
+		await vi.advanceTimersByTimeAsync(15_000)
+		expect(inspect).toHaveBeenCalledTimes(1)
+
+		watchdog.stop()
+		watchdog.start()
+		finishInspect?.(
+			createHealth({
+				pending: 2,
+				stalled: true,
+				reason: "pending_not_queued",
+			}),
+		)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(resume).not.toHaveBeenCalled()
+		expect(onRecovered).not.toHaveBeenCalled()
+		watchdog.stop()
+	})
+
+	it("does not let a stale tick clear a newer tick inFlight lock", async () => {
+		vi.useFakeTimers()
+		const inspectResolvers: Array<(health: UploadQueueHealth) => void> = []
+		const inspect = vi.fn(
+			() =>
+				new Promise<UploadQueueHealth>((resolve) => {
+					inspectResolvers.push(resolve)
+				}),
+		)
+		const resume = vi.fn().mockResolvedValue(undefined)
+		const watchdog = new UploadQueueWatchdog({
+			intervalMs: 15_000,
+			inspect,
+			resume,
+		})
+
+		watchdog.start()
+		await vi.advanceTimersByTimeAsync(15_000)
+		expect(inspect).toHaveBeenCalledTimes(1)
+
+		watchdog.stop()
+		watchdog.start()
+		await vi.advanceTimersByTimeAsync(15_000)
+		expect(inspect).toHaveBeenCalledTimes(2)
+
+		inspectResolvers[0]?.(
+			createHealth({
+				pending: 2,
+				stalled: true,
+				reason: "pending_not_queued",
+			}),
+		)
+		await Promise.resolve()
+		await Promise.resolve()
+		expect(resume).not.toHaveBeenCalled()
+
+		await vi.advanceTimersByTimeAsync(15_000)
+		expect(inspect).toHaveBeenCalledTimes(2)
+
+		inspectResolvers[1]?.(
+			createHealth({
+				pending: 2,
+				stalled: true,
+				reason: "pending_not_queued",
+			}),
+		)
+		await Promise.resolve()
+		await Promise.resolve()
+		expect(resume).toHaveBeenCalledTimes(1)
+		watchdog.stop()
+	})
+
 	it("does not resume after stop even if a tick is in flight", async () => {
 		vi.useFakeTimers()
 		let finishInspect: ((health: UploadQueueHealth) => void) | undefined

@@ -304,6 +304,50 @@ describe("ChunkUploader", () => {
 		expect(testState.uploadCalls).toHaveLength(0)
 	})
 
+	it("does not throw when upload failure races with IndexedDB chunk deletion", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("fail")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 1,
+			},
+			createBatchSaveReporter(),
+		)
+		const internalUploader = uploader as unknown as {
+			audioChunkDB: { get: (id: string) => Promise<StoredAudioChunk | undefined> }
+			activeUploads: Map<string, StoredAudioChunk>
+			sessionActiveUploads: Map<string, string>
+		}
+		const originalGet = internalUploader.audioChunkDB.get.bind(internalUploader.audioChunkDB)
+		let reads = 0
+		internalUploader.audioChunkDB.get = vi.fn(async (id: string) => {
+			reads += 1
+			const stored = await originalGet(id)
+			if (reads >= 2) {
+				testState.chunks.delete(id)
+				return undefined
+			}
+			return stored
+		})
+
+		await expect(
+			uploader.uploadSession("session-1", "topic-1", "project-1"),
+		).resolves.toBeUndefined()
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+		await vi.runAllTicks()
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(internalUploader.activeUploads.has(chunk.id)).toBe(false)
+		expect(internalUploader.sessionActiveUploads.has("session-1")).toBe(false)
+	})
+
 	it("preserves SDK status and request identifiers on upload failures", async () => {
 		const chunk = createChunk(0)
 		testState.uploadBehaviors.push("fail")

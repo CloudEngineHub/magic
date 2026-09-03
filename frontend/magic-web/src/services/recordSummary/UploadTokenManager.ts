@@ -16,6 +16,7 @@ const toSafeTokenError = (error: unknown): Error => {
 	const message = error instanceof Error ? error.message : String(error)
 	const safeMessage = message
 		.replace(/https?:\/\/[^\s]+/gi, "[url]")
+		.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
 		.replace(
 			/("|')?(authorization|access[_-]?token|refresh[_-]?token|token)\1\s*[:=]\s*(?:Bearer\s+)?("[^"]*"|'[^']*'|[^,\s}]+)/gi,
 			(_, quote: string | undefined, key: string) =>
@@ -329,14 +330,14 @@ export class UploadTokenManager {
 			}
 
 			// Max retries exceeded
-			const errorMessage = error instanceof Error ? error.message : String(error)
+			const safeError = toSafeTokenError(error)
 			logger.report("Token获取重试次数已耗尽", {
 				sessionId,
 				maxRetries: this.refreshConfig.maxRetries,
-				lastError: toSafeTokenError(error),
+				lastError: safeError,
 			})
 			throw new Error(
-				`Failed to fetch token after ${this.refreshConfig.maxRetries} retries: ${errorMessage}`,
+				`Failed to fetch token after ${this.refreshConfig.maxRetries} retries: ${safeError.message}`,
 			)
 		}
 	}

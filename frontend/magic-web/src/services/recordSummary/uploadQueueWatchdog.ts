@@ -20,6 +20,7 @@ export class UploadQueueWatchdog {
 	private timer: ReturnType<typeof setInterval> | null = null
 	private inFlight = false
 	private stopped = true
+	private generation = 0
 	private consecutiveStalls = 0
 	private lastProgressSignature = ""
 	private unchangedTicks = 0
@@ -39,13 +40,16 @@ export class UploadQueueWatchdog {
 
 	start() {
 		this.stop()
+		const runId = ++this.generation
 		this.stopped = false
 		this.timer = setInterval(() => {
-			void this.tick()
+			void this.tick(runId)
 		}, this.intervalMs)
 	}
 
 	stop() {
+		// Invalidate in-flight ticks so a later start() cannot resume them.
+		this.generation += 1
 		this.stopped = true
 		if (this.timer) {
 			clearInterval(this.timer)
@@ -57,13 +61,17 @@ export class UploadQueueWatchdog {
 		this.unchangedTicks = 0
 	}
 
-	private async tick() {
-		if (this.stopped || this.inFlight) return
+	private isCurrentRun(runId: number) {
+		return !this.stopped && this.generation === runId
+	}
+
+	private async tick(runId: number) {
+		if (!this.isCurrentRun(runId) || this.inFlight) return
 		this.inFlight = true
 
 		try {
 			const health = await this.inspect()
-			if (this.stopped) return
+			if (!this.isCurrentRun(runId)) return
 
 			const signature = `${health.completed}:${health.pending}:${health.failed}:${health.uploading}`
 			this.unchangedTicks =
@@ -74,7 +82,7 @@ export class UploadQueueWatchdog {
 				this.consecutiveStalls = 0
 				if (health.uploading > 0 && this.unchangedTicks >= UPLOAD_QUEUE_FROZEN_TICKS) {
 					await this.resume()
-					if (this.stopped) return
+					if (!this.isCurrentRun(runId)) return
 					this.unchangedTicks = 0
 					this.onRecovered?.(health)
 				}
@@ -85,14 +93,14 @@ export class UploadQueueWatchdog {
 			if (!this.shouldResume(health)) return
 
 			await this.resume()
-			if (this.stopped) return
+			if (!this.isCurrentRun(runId)) return
 			this.consecutiveStalls = 0
 			this.unchangedTicks = 0
 			this.onRecovered?.(health)
 		} catch (error) {
-			this.onError?.(error)
+			if (this.isCurrentRun(runId)) this.onError?.(error)
 		} finally {
-			this.inFlight = false
+			if (this.generation === runId) this.inFlight = false
 		}
 	}
 
