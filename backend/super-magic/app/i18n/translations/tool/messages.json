@@ -4539,17 +4539,17 @@
         "zh_CN": "工具流调用失败",
         "en_US": "Tool flow call failed"
     },
-    "call_simple_agent.calling": {
+    "call_assistant.calling": {
         "zh_CN": "正在调用助理",
-        "en_US": "Consulting agent"
+        "en_US": "Consulting assistant"
     },
-    "call_simple_agent.called": {
+    "call_assistant.called": {
         "zh_CN": "已收到助理回复",
-        "en_US": "Agent reply received"
+        "en_US": "Assistant reply received"
     },
-    "call_simple_agent.failed": {
+    "call_assistant.failed": {
         "zh_CN": "助理调用失败",
-        "en_US": "Agent consultation failed"
+        "en_US": "Assistant consultation failed"
     },
     "share.create.before": {
         "zh_CN": "正在为{{target}}创建或更新分享：{{subject}}",

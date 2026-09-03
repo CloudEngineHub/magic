@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\Agent\Assembler;
 
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Agent\AgentMention;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Assistant\AssistantMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\DesignMarker\DesignMarkerMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory\DirectoryMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\ProjectFileMention;
@@ -39,6 +40,7 @@ final class MentionAssembler
             MentionType::PROJECT => new ProjectMention($mention),
             MentionType::UPLOAD_FILE => new UploadFileMention($mention),
             MentionType::AGENT => new AgentMention($mention),
+            MentionType::ASSISTANT => new AssistantMention($mention),
             MentionType::MCP => new McpMention($mention),
             MentionType::TOOL => new ToolMention($mention),
             MentionType::DESIGN_MARKER => new DesignMarkerMention($mention),

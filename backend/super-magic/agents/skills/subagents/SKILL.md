@@ -59,7 +59,7 @@ print(result.content)
 - `query`: the user's complete requirement in the user's language, used to select more relevant candidates.
 - `limit`: choose based on the task. The default is `5`; valid values are `1` through `20`.
 
-Read `result.content`, choose by `code`, `name`, and `description`, then pass the selected `SMA-...` code directly as `call_subagent.agent_name`.
+Read `result.content`, choose by `code`, `name`, and `description`, then pass the selected `SMA-...` code as `call_subagent.agent_code` (or `agent_name` when using the direct runtime interface).
 Do not automatically split or retry the same search intent when no candidates are returned.
 
 ### Browsing The Full Agent List
@@ -89,8 +89,9 @@ Paging is not available for keyword search, because ranked order is not stable a
 from sdk.tool import tool
 
 result = tool.call("call_subagent", {
-    "agent_name": str,       # required; use "" when fork=True to inherit the current Agent
-    "agent_id": str,         # required; base ID for new sessions, exact final ID when resuming
+    "agent_name": str,       # optional runtime Agent name; use "" when agent_code identifies the target or fork=True
+    "agent_code": str,       # optional normalized target code from an Agent mention
+    "session_id": str,       # optional session base for new runs, exact final session ID when resuming
     "task_label": str,       # required; user-facing label in the user's language
     "prompt": str,           # required
     "model_id": str,         # optional, defaults to inheriting the caller's model
@@ -119,14 +120,15 @@ Built-in types:
 
 Other `.agent` files (e.g. `data-analyst`) can also be used by name.
 
-### agent_id
+### session_id
 
-For a new session, provide a human-readable base ID such as `market-research`.
+For a new session, `session_id` is optional. Omit it to let the runtime generate a unique session address. You may provide a human-readable base such as `market-research` when a stable base is useful.
 
-- With `resume=False`, the tool always creates a new session, appends a sequence number, and returns the final ID, such as `market-research-2`.
-- The requested base ID is not the session address. Read the exact final ID from `result.data["agent_id"]` or `result.content`.
-- With `resume=True`, pass the exact final ID returned by the earlier call. The session must already exist.
-- Never infer that a repeated base ID should resume an old session.
+- With `resume=False`, the tool always creates a new session and returns the final session ID, such as `market-research-2`.
+- The requested base is not the session address. Read the exact final ID from `result.data["session_id"]`; `result.data["agent_id"]` is retained only for backward compatibility.
+- With `resume=True`, pass the exact final session ID returned by the earlier call. The session must already exist.
+- Never infer that a repeated base should resume an old session.
+- The `session_id` is unrelated to the `agent_id` inside an `agent://` mention.
 - Name by responsibility, not by sequence: `ppt-outline`, `shell-install-ffmpeg` — not `task1`, `worker-a`
 
 ### Session lifecycle
@@ -146,7 +148,7 @@ User-facing label shown directly in the UI for this delegated task. It is not th
 
 - Must use the same language as the user's request so the label is understandable. Do not default to English.
 - Make it concise and distinct in multi-agent runs.
-- It may change between calls even when `agent_id` stays the same.
+- It may change between calls even when `session_id` stays the same.
 
 ### prompt
 
@@ -193,10 +195,10 @@ Fork mode is useful when the sub-agent needs to reason over the same conversatio
 
 ### resume
 
-- `False` (default): create a new session. `agent_id` is a base name; use the final ID returned by the tool for all later references.
-- `True`: continue the exact existing session named by the final `agent_id`. Keep `fork=False`.
+- `False` (default): create a new session. Omit `session_id` or provide a base; use the final session ID returned by the tool for all later references.
+- `True`: continue the exact existing session named by the final `session_id`. Keep `fork=False`.
 
-After every `call_subagent`, treat the returned final `agent_id` as authoritative. Use it for `wait_for_subagents` and any later resume call.
+After every `call_subagent`, treat the returned final `session_id` as authoritative. Use it for `wait_for_subagents` and any later resume call. `wait_for_subagents.agent_ids` currently names these final session IDs for API compatibility.
 
 ## Tool: wait_for_subagents
 
@@ -204,7 +206,7 @@ After every `call_subagent`, treat the returned final `agent_id` as authoritativ
 from sdk.tool import tool
 
 result = tool.call("wait_for_subagents", {
-    "agent_ids": ["id-a", "id-b"],  # required, list of agent_ids from background calls
+    "agent_ids": ["id-a", "id-b"],  # required, final session_ids from background calls
     "timeout":   30,                # optional, seconds (POSIX: -1 = infinite wait), default 30
     "kill":      False,             # optional, if True: kill all listed agents immediately
     "pattern":   None,              # optional, Python regex to match against new assistant messages
@@ -238,8 +240,8 @@ Awaits all listed agents together. `result.content` uses this format per agent:
 
 ```
 [i/total] task_label: status
-Sub-agent: agent_name/agent_id
-To continue this exact session, call call_subagent with agent_id `agent_id`, resume=true, and fork=false.
+Sub-agent: agent_name/session_id
+To continue this exact session, call call_subagent with session_id `session_id`, resume=true, and fork=false.
 Result:
 ```final output```
 ```
@@ -248,7 +250,7 @@ Result:
 - `Result:` appears only when status is `done` — contains the sub-agent's final output
 - When status is `running` (timed out), `Result:` is replaced by `Last message:` — this is the last assistant message the sub-agent produced before the timeout, useful for gauging progress
 - `wait_for_subagents` is idempotent — if status is still `running`, call it again or kill it. Do not ignore running agents — they consume resources indefinitely until explicitly waited on or killed.
-- `result.data["results"]`: structured list for programmatic access, fields: `agent_id`, `agent_name`, `task_label`, `status`, `result`, `error`, `last_activity`, `matched_content`
+- `result.data["results"]`: structured list for programmatic access, fields: `agent_id` (legacy session ID), `agent_name`, `task_label`, `status`, `result`, `error`, `last_activity`, `matched_content`
 
 ## Output Target
 
@@ -266,9 +268,9 @@ Never let multiple sub-agents write to the same file concurrently.
 
 ## Reporting Results to the User
 
-Sub-agents may include output file paths in their results. When reporting to the user, convert those paths to `[@file_path:path]` format — the frontend renders them as clickable links.
+Sub-agents may include output file paths in their results. When reporting to the user, convert workspace paths to Markdown links using `./workspace-relative-path` destinations.
 
-Example: Research report is ready: `[@file_path:reports/market-research.md]`
+Example: Research report is ready: `[market-research.md](./reports/market-research.md)`
 
 ## Sync Example
 
@@ -277,7 +279,7 @@ from sdk.tool import tool
 
 result = tool.call("call_subagent", {
     "agent_name": "explore",
-    "agent_id": "find-product-positioning-doc",
+    "session_id": "find-product-positioning-doc",
     "task_label": "positioning source lookup",
     "prompt": """Find the single workspace document that is most useful for answering: "What is this project, who is it for, and what does it provide?"
 Check workspace folders that are likely to contain project briefs, product analysis, requirements, launch materials, or internal planning before searching elsewhere.
@@ -291,7 +293,7 @@ Do not modify files.""",
 })
 
 print(result.content)
-final_agent_id = result.data["agent_id"]
+final_session_id = result.data["session_id"]
 ```
 
 ## Parallel Example
@@ -301,17 +303,17 @@ Dispatch first (sequential calls, concurrent execution):
 ```python
 from sdk.tool import tool
 
-def dispatch(agent_id_base, task_label, prompt):
+def dispatch(session_id_base, task_label, prompt):
     result = tool.call("call_subagent", {
         "agent_name": "search",
-        "agent_id": agent_id_base,
+        "session_id": session_id_base,
         "task_label": task_label,
         "prompt": prompt,
         "background": True,
         "resume": False,
     })
     print(result.content)
-    return result.data["agent_id"]
+    return result.data["session_id"]
 
 competitors_id = dispatch("research-competitors", "competitor research", """Search the web for the top 3-5 competitors in this product space.
 For each, return: product name, target users, main differentiator, and source URL.
@@ -349,7 +351,7 @@ from sdk.tool import tool
 # Dispatch a sub-agent that outputs checkpoints and keep its final ID
 dispatch_result = tool.call("call_subagent", {
     "agent_name": "explore",
-    "agent_id": "long-research",
+    "session_id": "long-research",
     "task_label": "long research",
     "prompt": """Research X thoroughly. After each major section, output exactly:
 [CHECKPOINT: section_name]
@@ -357,7 +359,7 @@ followed by your findings so far. Continue until all sections are done.""",
     "background": True,
     "resume": False,
 })
-long_research_id = dispatch_result.data["agent_id"]
+long_research_id = dispatch_result.data["session_id"]
 
 # Wait for the first checkpoint
 result = tool.call("wait_for_subagents", {
@@ -385,8 +387,8 @@ Before dispatching:
 
 - Is delegation actually necessary?
 - Does the prompt contain all required context (no reference to parent conversation)?
-- For a new session, is `agent_id` a human-readable base name and `resume=False`?
-- For waiting or resuming, are you using the exact final `agent_id` returned by `call_subagent`?
+- For a new session, is `session_id` omitted or a human-readable base name and `resume=False`?
+- For waiting or resuming, are you using the exact final `session_id` returned by `call_subagent`?
 - For an existing session, is `resume=True` and `fork=False`?
 - Is `task_label` concise, distinct, and written in the same language as the user's request?
 - Is the output target explicit and conflict-free?

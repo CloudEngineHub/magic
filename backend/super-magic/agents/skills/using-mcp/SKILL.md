@@ -1,6 +1,6 @@
 ---
 name: using-mcp
-description: Discover, connect to, and invoke tools on MCP (Model Context Protocol) servers. CRITICAL - When the user message contains [@mcp:...] mention, you MUST load this skill first to use MCP tools correctly.
+description: Discover, connect to, and invoke tools on referenced MCP servers. Load this skill when an MCP server is referenced through an mcp:// typed link or MCP mention.
 ---
 
 # MCP Tools Calling Skill

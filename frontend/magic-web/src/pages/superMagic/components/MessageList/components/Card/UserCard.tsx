@@ -34,6 +34,10 @@ import AttachmentHoverButton from "./components/AttachmentHoverButton"
 import OptimisticStatusIndicator from "./OptimisticStatusIndicator"
 import { getCurrentConversationRound } from "./round-log"
 import { logger as Logger } from "@/utils/log"
+import {
+	getClipboardHtml,
+	getClipboardPlainText,
+} from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 const logger = Logger.createLogger("UserCard")
 
@@ -181,7 +185,6 @@ export function withUserNode<
 			switch (key) {
 				case MenuKey.CopyMessage:
 					try {
-						let contentText = ""
 						const richTextContent =
 							messageNode?.content || messageNode?.rich_text?.content
 						const editor = new Editor({
@@ -194,7 +197,8 @@ export function withUserNode<
 								MentionExtension,
 							],
 						})
-						contentText = editor.getText()
+						const contentText = getClipboardPlainText(editor.getJSON())
+						const htmlContent = getClipboardHtml(editor.getHTML())
 
 						// Extract complete marker data from the content.
 						const fullMarkers = extractAllMarkersFromContent(richTextContent)
@@ -219,14 +223,18 @@ export function withUserNode<
 						const allMentions = [...markerMentionItems, ...otherMentionItems]
 
 						// Use a mobile-compatible copy method.
-						copyWithMetadata(contentText, {
-							richText: richTextContent,
-							mentions: allMentions,
-							type: messageNode?.type,
-							messageId: messageNode?.id,
-							sourceProjectId:
-								superIdState?.projectId ?? projectStore.selectedProject?.id,
-						})
+						copyWithMetadata(
+							contentText,
+							{
+								richText: richTextContent,
+								mentions: allMentions,
+								type: messageNode?.type,
+								messageId: messageNode?.id,
+								sourceProjectId:
+									superIdState?.projectId ?? projectStore.selectedProject?.id,
+							},
+							htmlContent,
+						)
 
 						magicToast.success(t("common.copySuccess"))
 					} catch (error) {

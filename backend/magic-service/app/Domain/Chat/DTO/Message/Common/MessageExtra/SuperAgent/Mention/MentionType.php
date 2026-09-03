@@ -25,6 +25,7 @@ enum MentionType: string
     case UPLOAD_FILE = 'upload_file';
 
     case AGENT = 'agent';
+    case ASSISTANT = 'assistant';
     case MCP = 'mcp';
     case TOOL = 'tool';
     case SKILL = 'skill';

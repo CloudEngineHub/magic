@@ -467,6 +467,7 @@
 			"reload": "重新加载",
 			"title": "页面加载失败"
 		},
+		"fileNotFoundOrLoadFailed": "文件不存在或加载错误",
 		"fileUrlFetchFailed": "文件链接获取失败",
 		"generalMode": "通用模式",
 		"history": "历史",

@@ -1,5 +1,6 @@
 import { createElement, useMemo } from "react"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
+import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type {
 	CanvasMentionAttributes,
@@ -64,6 +65,7 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 	const displayText = `${getProjectFileMentionDisplayText(attrs, options)}${
 		isDeleted ? t("messageHistory.deletedSuffix", "（已删除）") : ""
 	}`
+	const fileType = fileData?.file_extension || fileData?.file_name?.split(".").pop() || ""
 
 	return createElement(
 		NodeViewWrapper,
@@ -95,7 +97,22 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 				})
 			},
 		},
-		displayText,
+		createElement(
+			"span",
+			{
+				className: "inline-flex min-w-0 max-w-[220px] items-center gap-1",
+			},
+			createElement(MagicFileIcon, {
+				type: fileType,
+				size: 16,
+				className: "shrink-0",
+			}),
+			createElement(
+				"span",
+				{ className: "min-w-0 truncate", title: displayText },
+				displayText,
+			),
+		),
 	)
 }
 
@@ -290,5 +307,5 @@ function getProjectFileMentionDisplayText(
 ) {
 	const customText = options?.renderText?.({ options, node: { attrs } })
 	const fileName = (attrs.data as ReferenceResourcePanelFileData | undefined)?.file_name
-	return `@${customText ?? fileName ?? "File"}`.replace(/^@@/, "@")
+	return (customText ?? fileName ?? "File").replace(/^@+/, "") || "File"
 }

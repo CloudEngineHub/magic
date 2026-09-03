@@ -466,6 +466,7 @@
 			"reload": "Reload Page",
 			"title": "Page Load Failed"
 		},
+		"fileNotFoundOrLoadFailed": "File not found or failed to load",
 		"fileUrlFetchFailed": "Failed to fetch file URL",
 		"generalMode": "General",
 		"history": "History",

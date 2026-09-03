@@ -1044,6 +1044,6 @@ Users have terminology to describe actions for specified pages:
 - **Refactor**: Think and review content in design principles, redesign and recombine page with completely different layout design
 - **Fix**: Think and review height control techniques, image usage techniques, etc., and fix issues in page
 
-Example: Refactor[@file_path:filename]
+Example: Refactor [slide.html](./project-name/slide.html)
 
 If user doesn't specify page, ask for clarification, proceed after user confirmation.

@@ -1,42 +1,9 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import {
+	normalizeWorkspacePathForComparison,
+	parseCanonicalWorkspaceHref,
+} from "@/pages/superMagic/utils/filePathMention"
 import { safeDecodeURIComponent } from "@/utils/encoding"
-
-/**
- * 标准化路径用于对比
- * 处理各种路径格式和编码
- */
-function normalizePathForComparison(path: string): string {
-	try {
-		if (!path) return ""
-
-		let normalized = path.trim()
-
-		// 尝试解码 URI，如果失败则使用原始值
-		try {
-			const decoded = decodeURI(normalized)
-			normalized = decoded
-		} catch {
-			// 解码失败时保持原样
-		}
-
-		// 移除开头的 ./
-		normalized = normalized.replace(/^\.\//, "/")
-
-		// 确保开头有 /
-		if (!normalized.startsWith("/")) {
-			normalized = `/${normalized}`
-		}
-
-		// 移除结尾的 / (除了根路径)
-		if (normalized.length > 1 && normalized.endsWith("/")) {
-			normalized = normalized.slice(0, -1)
-		}
-
-		return normalized
-	} catch {
-		return ""
-	}
-}
 
 /**
  * XMarkdown 会把中文 URL 转义，这里还原成中文路径。
@@ -61,18 +28,28 @@ export function findAttachmentByPath(
 		return undefined
 	}
 
-	const normalizedSearchPath = normalizePathForComparison(relativePath)
+	const normalizedSearchPath =
+		parseCanonicalWorkspaceHref(relativePath) ??
+		normalizeWorkspacePathForComparison(relativePath)
+	if (!normalizedSearchPath) return undefined
 
+	return findAttachmentByNormalizedPath(attachments, normalizedSearchPath)
+}
+
+function findAttachmentByNormalizedPath(
+	attachments: AttachmentItem[],
+	normalizedSearchPath: string,
+): AttachmentItem | undefined {
 	for (const item of attachments) {
 		// 递归搜索子节点
 		if (item.children) {
-			const found = findAttachmentByPath(item.children, relativePath)
+			const found = findAttachmentByNormalizedPath(item.children, normalizedSearchPath)
 			if (found) return found
 		}
 
 		// 检查 relative_file_path 是否匹配
 		if (item.relative_file_path) {
-			const normalizedItemPath = normalizePathForComparison(item.relative_file_path)
+			const normalizedItemPath = normalizeWorkspacePathForComparison(item.relative_file_path)
 			if (normalizedItemPath === normalizedSearchPath) {
 				return item
 			}
@@ -80,7 +57,7 @@ export function findAttachmentByPath(
 
 		// 也检查 path 字段作为备选
 		if (item.path) {
-			const normalizedItemPath = normalizePathForComparison(item.path)
+			const normalizedItemPath = normalizeWorkspacePathForComparison(item.path)
 			if (normalizedItemPath === normalizedSearchPath) {
 				return item
 			}

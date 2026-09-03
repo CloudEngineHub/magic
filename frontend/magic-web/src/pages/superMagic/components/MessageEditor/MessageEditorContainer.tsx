@@ -62,6 +62,7 @@ import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "../../hooks/useTaskInterrupt"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import {
+	containsCanonicalWorkspaceLink,
 	createPastedTextFile,
 	shouldConvertPastedTextToAttachment,
 } from "./utils/pastedTextAttachment"
@@ -326,6 +327,10 @@ export const MessageEditorContainer = observer(
 				}
 			})
 
+			const getWorkspaceFilesList = useMemoizedFn(
+				() => projectFilesStore?.workspaceFilesList ?? [],
+			)
+
 			const { isDragOver, dragEvents } = useDragUpload({
 				enableFileDrop: uploadEnabled,
 				onFilesDropped: uploadEnabled
@@ -410,6 +415,7 @@ export const MessageEditorContainer = observer(
 				shouldSkipMentionValidation: () => store.editorStore.preserveMentionValidation,
 				isTrustedMention: (attrs) => store.editorStore.isTrustedMention(attrs),
 				shouldRestoreRemovedMention,
+				getWorkspaceFilesList,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 			const canvasSelectionMentionScope = useMemo(
@@ -733,6 +739,7 @@ export const MessageEditorContainer = observer(
 					}
 
 					if (!uploadEnabled || !shouldEnableMention) return
+					if (containsCanonicalWorkspaceLink(clipboardData)) return
 					if (!shouldConvertPastedTextToAttachment(clipboardData)) return
 
 					const text = clipboardData.getData("text/plain")
