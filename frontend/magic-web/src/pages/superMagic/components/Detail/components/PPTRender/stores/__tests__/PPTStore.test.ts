@@ -328,7 +328,13 @@ describe("PPTStore", () => {
 		})
 
 		it("should update single slide content", async () => {
+			store.pathMappingService.setPathFileIdMapping("slide-0.html", "file1")
+
 			await store.updateSlideContent(0, "new content")
+
+			expect(mockState.processHtmlContent).toHaveBeenCalledWith(
+				expect.objectContaining({ html_relative_path: "deck/" }),
+			)
 			expect(store.slides[0]?.content).toBe("new content")
 			expect(store.slides[0]?.loadingState).toBe("loaded")
 		})

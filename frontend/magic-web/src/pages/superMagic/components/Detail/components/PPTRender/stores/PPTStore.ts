@@ -1979,7 +1979,13 @@ export class PPTStore {
 	}
 
 	async updateSlideContent(index: number, content: string): Promise<string> {
-		const processedContent = await this.processorService.processSlide(content, index)
+		const slide = this.slides[index]
+		const relativeFilePath = this.getRelativeFilePathByFileId(this.getSlideFileId(slide))
+		const processedContent = await this.processorService.processSlide(
+			content,
+			index,
+			relativeFilePath,
+		)
 		// Save both raw and processed content
 		this.slideManager.updateSlideItem(index, {
 			rawContent: content,
