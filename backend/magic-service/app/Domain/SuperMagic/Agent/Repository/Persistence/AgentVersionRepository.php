@@ -156,6 +156,38 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         return $result;
     }
 
+    public function findLatestPublishedByCodesWithoutOrganizationFilter(array $codes): array
+    {
+        $codes = array_values(array_unique(array_filter($codes)));
+        if ($codes === []) {
+            return [];
+        }
+
+        $models = $this->agentVersionModel::query()
+            ->whereIn('code', $codes)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_current_version', 1)
+            ->whereIn('publish_target_type', [
+                PublishTargetType::ORGANIZATION->value,
+                PublishTargetType::MARKET->value,
+            ])
+            ->whereNull('deleted_at')
+            ->orderBy('code')
+            ->get();
+
+        $result = [];
+        /** @var AgentVersionModel $model */
+        foreach ($models as $model) {
+            $code = (string) $model->code;
+            if (isset($result[$code])) {
+                continue;
+            }
+            $result[$code] = $this->toEntity($model->toArray());
+        }
+
+        return $result;
+    }
+
     public function queries(
         SuperMagicAgentDataIsolation $dataIsolation,
         AgentVersionQuery $query,
