@@ -92,6 +92,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		) : (
 			fileIcon
 		)
+	const shouldRenderMediaPreview = isLoading || Boolean(mediaUrl) || hasError
 
 	const visual = (
 		<span
@@ -156,7 +157,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 	)
 
 	const content =
-		showMediaTooltip && mediaType ? (
+		showMediaTooltip && mediaType && shouldRenderMediaPreview ? (
 			<MediaPreviewTooltip
 				mediaType={mediaType}
 				fileName={fileName}
@@ -164,7 +165,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 				audioUrl={mediaSource.audioUrl}
 				isLoading={isLoading}
 				hasError={hasError || Boolean(mediaType && !mediaUrl && !isLoading)}
-				errorMessage={t("filePreview.loadFailed", "预览加载失败")}
+				errorMessage={t("common.fileNotFoundOrLoadFailed", "文件不存在或加载错误")}
 				closeLabel={t("filePreview.close", "关闭预览")}
 				audioLabels={{
 					play: t("filePreview.play", "播放"),
