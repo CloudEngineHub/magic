@@ -33,6 +33,10 @@ interface MobileRecordingSummaryPanelProps {
 	searchScopeRef?: RefObject<HTMLDivElement | null>
 	searchActive?: boolean
 	onActiveTypeChange?: (type: string) => void
+	/** Hides the nested summary switcher when an embedding preview owns the tab row. */
+	showTypeTabs?: boolean
+	activeType?: string
+	isGenerating?: boolean
 }
 
 /** Renders dynamic completed-summary tabs from the project file map. */
@@ -48,10 +52,15 @@ export function MobileRecordingSummaryPanel({
 	searchScopeRef,
 	searchActive = false,
 	onActiveTypeChange,
+	showTypeTabs = true,
+	activeType: controlledActiveType,
+	isGenerating = false,
 }: MobileRecordingSummaryPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeType, setActiveType] = useState<string>(summaryFiles[0]?.type ?? "")
-	const activeFile = summaryFiles.find((file) => file.type === activeType) ?? summaryFiles[0]
+	const resolvedActiveType = controlledActiveType ?? activeType
+	const activeFile =
+		summaryFiles.find((file) => file.type === resolvedActiveType) ?? summaryFiles[0]
 	const content = activeFile ? summaryContent[activeFile.type] : undefined
 
 	useEffect(() => {
@@ -69,22 +78,24 @@ export function MobileRecordingSummaryPanel({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-summary-panel">
 			{/* Match the source tab header height so switching between Source and Summary never shifts content vertically. */}
-			<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
-				<div className="flex w-max">
-					{summaryFiles.map((file) => (
-						<SummaryTabButton
-							key={file.type}
-							active={file.type === activeFile?.type}
-							label={resolveSummaryTypeLabel(file.type, t)}
-							type={file.type}
-							onClick={() => {
-								setActiveType(file.type)
-								onActiveTypeChange?.(file.type)
-							}}
-						/>
-					))}
+			{showTypeTabs ? (
+				<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
+					<div className="flex w-max">
+						{summaryFiles.map((file) => (
+							<SummaryTabButton
+								key={file.type}
+								active={file.type === activeFile?.type}
+								label={resolveSummaryTypeLabel(file.type, t)}
+								type={file.type}
+								onClick={() => {
+									setActiveType(file.type)
+									onActiveTypeChange?.(file.type)
+								}}
+							/>
+						))}
+					</div>
 				</div>
-			</div>
+			) : null}
 
 			{/*
 			 * metrics tab: render directly in the panel's flex column so that flex-1
@@ -105,7 +116,9 @@ export function MobileRecordingSummaryPanel({
 							attachmentList={attachmentList}
 						/>
 					) : (
-						<PanelMessage>{t("detail.emptySummaryFile")}</PanelMessage>
+						<PanelMessage>
+							{isGenerating ? t("detail.summarizingHint") : t("detail.emptySummary")}
+						</PanelMessage>
 					)}
 				</div>
 			) : (
@@ -120,7 +133,7 @@ export function MobileRecordingSummaryPanel({
 					<div
 						ref={searchScopeRef}
 						data-search-scope="mobile-recording-summary"
-						className="min-h-full"
+						className="flex min-h-full flex-col"
 						style={{ paddingBottom: scrollPaddingBottom }}
 					>
 						{activeFile ? (
@@ -128,7 +141,11 @@ export function MobileRecordingSummaryPanel({
 								file={activeFile}
 								content={content}
 								attachmentList={attachmentList}
-								emptyText={t("detail.emptySummaryFile")}
+								emptyText={
+									isGenerating
+										? t("detail.summarizingHint")
+										: t("detail.emptySummary")
+								}
 								scrollPaddingBottom={scrollPaddingBottom}
 								searchActive={searchActive}
 								speakerNameMap={speakerNameMap}
@@ -194,7 +211,7 @@ function SummaryContent({
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 }) {
-	if (!content?.trim()) {
+	if (!file.file || !content?.trim()) {
 		return <PanelMessage>{emptyText}</PanelMessage>
 	}
 
@@ -425,7 +442,7 @@ function TopicsContent({
 	)
 
 	if (topics.length === 0 || !activeTopic) {
-		return <PanelMessage>{t("detail.emptySummaryFile")}</PanelMessage>
+		return <PanelMessage>{t("detail.emptySummary")}</PanelMessage>
 	}
 
 	return (
@@ -538,7 +555,7 @@ function TopicsContent({
 /** Lightweight empty/error message panel for individual summary tabs. */
 function PanelMessage({ children }: { children: ReactNode }) {
 	return (
-		<div className="rounded-2xl bg-card px-6 py-16 text-center text-sm text-muted-foreground">
+		<div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
 			{children}
 		</div>
 	)

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
-import { isFileInPPTMode, isFileInSlideCanvasMode, isFileInSlidesTemplateMode } from "../file"
+import {
+	isFileInPPTMode,
+	isFileInSlideCanvasMode,
+	isFileInSlidesTemplateMode,
+	shouldUseAudioRootRender,
+} from "../file"
+import { DetailType } from "../../types"
 
 function createSlidesTemplateAttachments(): AttachmentItem[] {
 	const slide: AttachmentItem = {
@@ -79,5 +85,18 @@ describe("slide canvas mode", () => {
 
 		expect(isFileInPPTMode("ppt-slide", attachments)).toBe(true)
 		expect(isFileInSlideCanvasMode("ppt-slide", attachments)).toBe(true)
+	})
+
+	it("routes audio HTML entries to the recording root renderer", () => {
+		expect(
+			shouldUseAudioRootRender(DetailType.Html, {
+				display_config: { type: "audio" },
+			}),
+		).toBe(true)
+		expect(
+			shouldUseAudioRootRender(DetailType.Html, {
+				display_config: { type: "slide" },
+			}),
+		).toBe(false)
 	})
 })

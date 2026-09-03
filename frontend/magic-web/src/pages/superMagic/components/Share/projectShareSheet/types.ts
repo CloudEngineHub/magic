@@ -14,12 +14,7 @@ import type { RecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecor
 import type { RecordingShareGroupedItem } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 
 export type ProjectShareSheetView =
-	| "create"
-	| "manage"
-	| "linkDetail"
-	| "edit"
-	| "expiry"
-	| "deleteConfirm"
+	"create" | "manage" | "linkDetail" | "edit" | "expiry" | "deleteConfirm"
 export type MobileShareSheetMode = "project" | "file"
 export type MobileShareItem = ProjectShareItem | FileShareItem
 
@@ -39,6 +34,10 @@ export interface ProjectShareSheetProps {
 	projectName?: string
 	attachments: AttachmentItem[]
 	attachmentList?: AttachmentItem[]
+	/** Full attachment snapshot used for hidden recording document dependency lookup. */
+	dependencyAttachments?: AttachmentItem[]
+	/** Recording bundle root used to prevent cross-bundle dependency matching. */
+	dependencyBundleRootPath?: string
 	fileMap?: RecordingDetailFileMap
 	defaultSelectedFileIds?: string[]
 	defaultOpenFileId?: string

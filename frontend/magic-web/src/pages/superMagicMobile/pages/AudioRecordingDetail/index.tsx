@@ -28,6 +28,7 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recording-actions"
 import {
 	isAudioProjectSummaryReady,
+	isAudioProjectSummarizing,
 	resolveRecordingDisplayName,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
@@ -41,6 +42,7 @@ import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPla
 import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePanel"
 import { MobileRecordingSummaryPanel } from "./components/MobileRecordingSummaryPanel"
 import { MobileRecordingSummaryPlaceholder } from "./components/MobileRecordingSummaryPlaceholder"
+import { MobileRecordingSpeakerSheet } from "./components/MobileRecordingSpeakerSheet"
 import { MobileRecordingShareExportSheet } from "./components/MobileRecordingShareExportSheet"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
@@ -430,6 +432,7 @@ export default function MobileAudioRecordingDetailPage() {
 		if (item) return isAudioProjectSummaryReady(item)
 		return locationState?.cardStatus === "summarized"
 	}, [detailItem, locationState?.cardStatus, projectItem])
+	// Completed recordings keep the historical summary path; only in-progress previews require parsed config.
 
 	const displayTitle = titleOverride || title || t("detail.untitled")
 	const resolvedActionItem = useMemo(
@@ -451,6 +454,10 @@ export default function MobileAudioRecordingDetailPage() {
 			projectItem,
 		],
 	)
+	const summaryPreviewAvailable =
+		summaryReady ||
+		(Boolean(resolvedActionItem && isAudioProjectSummarizing(resolvedActionItem)) &&
+			Boolean(fileMap?.magicProject && fileMap.magicProjectConfig))
 	const summaryVisualState = useMemo(
 		() =>
 			resolveDetailSummaryVisualState({
@@ -533,7 +540,10 @@ export default function MobileAudioRecordingDetailPage() {
 				20,
 			)
 
-	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+	const colorSegments = useRecordingColorSegments(
+		summaryPreviewAvailable,
+		texts.summary.topics?.content,
+	)
 
 	/** Closes the floating player rate menu when source/summary panels scroll. */
 	function handlePlayerContentScroll() {
@@ -967,11 +977,12 @@ export default function MobileAudioRecordingDetailPage() {
 						onActiveTabChange={setSourceSubtab}
 						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
 						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
+						isGenerating={summaryVisualState.status === "generating"}
 					/>
 				) : null}
 
 				{!loading && !error && !detailUnavailable && activeTab === "summary" ? (
-					summaryReady ? (
+					summaryPreviewAvailable ? (
 						<MobileRecordingSummaryPanel
 							summaryFiles={fileMap?.summaryFiles ?? []}
 							summaryContent={Object.fromEntries(
@@ -989,6 +1000,7 @@ export default function MobileAudioRecordingDetailPage() {
 							searchScopeRef={searchScopeRef}
 							searchActive={contentSearchOpen}
 							onActiveTypeChange={setSummaryType}
+							isGenerating={summaryVisualState.status === "generating"}
 						/>
 					) : (
 						<MobileRecordingSummaryPlaceholder
@@ -1262,6 +1274,8 @@ export default function MobileAudioRecordingDetailPage() {
 				projectName={displayTitle}
 				attachments={recordingShareSelection.shareableFiles}
 				attachmentList={recordingShareSelection.shareableFiles}
+				dependencyAttachments={attachmentList}
+				dependencyBundleRootPath={fileMap?.bundleRootPath}
 				fileMap={fileMap ?? undefined}
 				defaultSelectedFileIds={recordingShareSelection.defaultSelectedFileIds}
 			/>
@@ -1435,92 +1449,6 @@ function MobileRecordingRenameSheet({
 			</form>
 		</MagicPopup>
 	)
-}
-
-/** Bottom sheet for editing all active speaker names in one commit. */
-function MobileRecordingSpeakerSheet({
-	isOpen,
-	speakerIds,
-	value,
-	onValueChange,
-	onCancel,
-	onConfirm,
-}: {
-	isOpen: boolean
-	speakerIds: string[]
-	value: Record<string, string>
-	onValueChange: (next: Record<string, string>) => void
-	onCancel: () => void
-	onConfirm: () => void
-}) {
-	const { t } = useTranslation("audioRecordings")
-
-	return (
-		<MagicPopup
-			visible={isOpen}
-			onClose={onCancel}
-			position="bottom"
-			title={t("detail.speakerSettingsTitle")}
-			headerVariant="actionHeader"
-			headerTitle={t("detail.speakerSettingsTitle")}
-			headerLeadingAction={{
-				icon: <X />,
-				ariaLabel: t("detail.speakerSettingsCancel"),
-				onClick: onCancel,
-				testId: "mobile-recording-speaker-cancel",
-			}}
-			headerTrailingAction={{
-				icon: <Check />,
-				ariaLabel: t("detail.speakerSettingsSave"),
-				onClick: onConfirm,
-				tone: "primary",
-				testId: "mobile-recording-speaker-confirm",
-			}}
-			className="flex flex-col overflow-hidden rounded-t-2xl border-0 bg-muted p-0"
-			bodyClassName="no-scrollbar flex flex-col overflow-y-auto px-[14px] pb-6 pt-[10px]"
-			style={{ boxShadow: "0 -14px 44px rgba(0,0,0,0.18)" }}
-			data-testid="mobile-recording-speaker-sheet"
-		>
-			<div className="flex max-h-[min(52dvh,calc(85dvh-11rem))] flex-col overflow-y-auto overflow-x-hidden">
-				<p className="shrink-0 px-[14px] pb-2 text-[14px] leading-5 text-muted-foreground">
-					{t("detail.speakerSettingsHint")}
-				</p>
-				<div className="flex flex-col gap-3 pb-2">
-					{speakerIds.map((speakerId, index) => (
-						<div key={speakerId} className="flex flex-col gap-2">
-							<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
-								{t("detail.speakerLabel", {
-									label: buildSpeakerAlphaLabel(index),
-								})}
-							</p>
-							<div className="overflow-hidden rounded-lg bg-card">
-								<input
-									type="text"
-									value={value[speakerId] ?? speakerId}
-									onChange={(event) =>
-										onValueChange({
-											...value,
-											[speakerId]: event.target.value,
-										})
-									}
-									placeholder={speakerId}
-									autoComplete="off"
-									autoCorrect="off"
-									spellCheck={false}
-									className="h-12 w-full border-0 bg-transparent px-[14px] py-0 text-[16px] leading-6 text-foreground outline-none"
-								/>
-							</div>
-						</div>
-					))}
-				</div>
-			</div>
-		</MagicPopup>
-	)
-}
-
-/** Builds simple A/B/C labels matching the prototype speaker sheet. */
-function buildSpeakerAlphaLabel(index: number) {
-	return String.fromCharCode("A".charCodeAt(0) + index)
 }
 
 /** Collects every speaker id from loaded detail text files for the shared editor. */

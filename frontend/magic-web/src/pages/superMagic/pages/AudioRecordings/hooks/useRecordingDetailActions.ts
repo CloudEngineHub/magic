@@ -100,7 +100,7 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 			setMoving(true)
 			try {
 				await moveAudioRecordingProjects([projectId], targetWorkspaceId)
-				toast.success(t("card.moveToGroup"))
+				toast.success(t("card.moveToGroupSuccess"))
 				await onRefresh()
 				return true
 			} catch {
