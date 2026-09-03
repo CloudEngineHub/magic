@@ -13,7 +13,6 @@ import type {
 	UploadFileResponse,
 	VideoInputMode,
 	VideoInputModeConfig,
-	VideoInputModeVariant,
 	VideoModelItem,
 } from "../../../../../public/magic-types"
 import {
@@ -26,6 +25,43 @@ import {
 	resolveReferenceResourceAssetType,
 	type ReferenceResourceMetadataCandidate,
 } from "../../../../editors/message/reference-assets/referenceResourceDescriptor"
+import {
+	canAddReferenceAsset,
+	canAddReferenceAssetByCounts,
+	canReplaceReferenceAssetByCounts,
+	clampReferenceAssetsToLimits,
+	countReferenceAssets,
+	countVideoReferenceAssetInfosByKind,
+	resolveReferenceAssetLimits,
+	validateReferenceAssetsByLimits,
+} from "../../../../../runtime/media-editors/video/reference-asset-limits"
+import type {
+	ReferenceAssetCounts,
+	ReferenceAssetKind,
+	ReferenceAssetLimits,
+	ReferenceAssetValidationIssue,
+	VideoReferenceAssetLimits,
+	VideoReferenceAssetValidationIssue,
+} from "../../../../../runtime/media-editors/video/reference-asset-limits"
+
+export {
+	canAddReferenceAsset,
+	canAddReferenceAssetByCounts,
+	canReplaceReferenceAssetByCounts,
+	clampReferenceAssetsToLimits,
+	countReferenceAssets,
+	countVideoReferenceAssetInfosByKind,
+	resolveReferenceAssetLimits,
+	validateReferenceAssetsByLimits,
+}
+export type {
+	ReferenceAssetCounts,
+	ReferenceAssetKind,
+	ReferenceAssetLimits,
+	ReferenceAssetValidationIssue,
+	VideoReferenceAssetLimits,
+	VideoReferenceAssetValidationIssue,
+}
 
 /** 仅按 video_generation_config.input_modes 推导；无下发时退化为仅 standard */
 export function getAvailableInputModes(model: VideoModelItem | undefined): VideoInputMode[] {
@@ -224,361 +260,11 @@ export function getMaxReferenceImageCount(
 		!modeConfig.supported_fields?.includes("reference_audios")
 	)
 		return 0
-	const limits = resolveReferenceAssetLimits(modeConfig, assets)
+	const limits = resolveReferenceAssetLimits(modeConfig, assets, {
+		ignoreModeMaxCountForTotal: inputMode === "omni_reference",
+	})
 	const maxCount = limits.total.max
 	return maxCount && maxCount > 0 ? maxCount : Infinity
-}
-
-interface VideoModeFieldRange {
-	min: number
-	max: number
-}
-
-export interface VideoReferenceAssetLimits {
-	reference_images: VideoModeFieldRange
-	reference_videos: VideoModeFieldRange
-	reference_audios: VideoModeFieldRange
-	total: VideoModeFieldRange
-	variantCode?: string
-}
-
-export interface VideoReferenceAssetValidationIssue {
-	field: "total" | "reference_images" | "reference_videos" | "reference_audios"
-	rule: "min" | "max"
-	expected: number
-	actual: number
-}
-
-function normalizeFieldRange(raw?: { min?: number; max?: number }): VideoModeFieldRange {
-	return {
-		min: Number.isFinite(raw?.min) ? Math.max(0, Number(raw?.min)) : 0,
-		max: Number.isFinite(raw?.max) ? Math.max(0, Number(raw?.max)) : Infinity,
-	}
-}
-
-export function countVideoReferenceAssetInfosByKind(assets: VideoReferenceAssetInfo[]): {
-	images: number
-	videos: number
-	audios: number
-} {
-	return assets.reduce(
-		(acc, item) => {
-			if (item.assetType === "image") acc.images += 1
-			if (item.assetType === "video") acc.videos += 1
-			if (item.assetType === "audio") acc.audios += 1
-			return acc
-		},
-		{ images: 0, videos: 0, audios: 0 },
-	)
-}
-
-function resolveVariantPenalty(
-	variant: VideoInputModeVariant,
-	counts: { images: number; videos: number; audios: number },
-): { penalty: number; supportedPresentKinds: number } {
-	const limits = variant.limits || {}
-	const fields = [
-		{ key: "reference_images" as const, count: counts.images },
-		{ key: "reference_videos" as const, count: counts.videos },
-		{ key: "reference_audios" as const, count: counts.audios },
-	]
-
-	let penalty = 0
-	let supportedPresentKinds = 0
-	for (const field of fields) {
-		const range = normalizeFieldRange(limits[field.key])
-		if (field.count > 0 && range.max > 0) {
-			supportedPresentKinds += 1
-		}
-		if (field.count > range.max) {
-			penalty += field.count - range.max
-		}
-		if (field.count < range.min) {
-			penalty += range.min - field.count
-		}
-	}
-
-	return { penalty, supportedPresentKinds }
-}
-
-function resolveBestVariant(
-	variants: VideoInputModeVariant[] | undefined,
-	counts: { images: number; videos: number; audios: number },
-): VideoInputModeVariant | undefined {
-	if (!variants?.length) return undefined
-	// 选择“最接近当前上传状态”的变体：先比较越界惩罚，再比较对当前已上传素材类型的支持度。
-	let bestVariant: VideoInputModeVariant | undefined
-	let bestPenalty = Number.POSITIVE_INFINITY
-	let bestSupportedKinds = -1
-	for (const variant of variants) {
-		const { penalty, supportedPresentKinds } = resolveVariantPenalty(variant, counts)
-		if (
-			penalty < bestPenalty ||
-			(penalty === bestPenalty && supportedPresentKinds > bestSupportedKinds)
-		) {
-			bestVariant = variant
-			bestPenalty = penalty
-			bestSupportedKinds = supportedPresentKinds
-		}
-	}
-	return bestVariant
-}
-
-function resolveVariantFieldRange(
-	variant: VideoInputModeVariant | undefined,
-	field: "reference_images" | "reference_videos" | "reference_audios",
-	fallback: VideoModeFieldRange,
-): VideoModeFieldRange {
-	if (!variant?.limits?.[field]) return fallback
-	return normalizeFieldRange(variant.limits[field])
-}
-
-function isVariantCompatibleForCounts(
-	variant: VideoInputModeVariant,
-	counts: { images: number; videos: number; audios: number },
-): boolean {
-	const imageRange = normalizeFieldRange(variant.limits?.reference_images)
-	const videoRange = normalizeFieldRange(variant.limits?.reference_videos)
-	const audioRange = normalizeFieldRange(variant.limits?.reference_audios)
-
-	return (
-		counts.images <= imageRange.max &&
-		counts.videos <= videoRange.max &&
-		counts.audios <= audioRange.max
-	)
-}
-
-export function resolveReferenceAssetLimits(
-	modeConfig: VideoInputModeConfig | undefined,
-	assets: VideoReferenceAssetInfo[] = [],
-): VideoReferenceAssetLimits {
-	const counts = countVideoReferenceAssetInfosByKind(assets)
-	const hasAnyReferenceAsset = assets.length > 0
-
-	const defaultImages = modeConfig?.supported_fields?.includes("reference_images")
-		? normalizeFieldRange({ max: modeConfig.reference_images?.max_count })
-		: normalizeFieldRange({ max: 0 })
-	const defaultVideos = modeConfig?.supported_fields?.includes("reference_videos")
-		? normalizeFieldRange({ max: modeConfig.max_count })
-		: normalizeFieldRange({ max: 0 })
-	const defaultAudios = modeConfig?.supported_fields?.includes("reference_audios")
-		? normalizeFieldRange({ max: modeConfig.max_count })
-		: normalizeFieldRange({ max: 0 })
-
-	const activeVariants = hasAnyReferenceAsset ? modeConfig?.variants : undefined
-	const selectedVariant = resolveBestVariant(activeVariants, counts)
-	const selectedVariantReferenceImages = resolveVariantFieldRange(
-		selectedVariant,
-		"reference_images",
-		defaultImages,
-	)
-	const selectedVariantReferenceVideos = resolveVariantFieldRange(
-		selectedVariant,
-		"reference_videos",
-		defaultVideos,
-	)
-	const selectedVariantReferenceAudios = resolveVariantFieldRange(
-		selectedVariant,
-		"reference_audios",
-		defaultAudios,
-	)
-	const compatibleVariants =
-		activeVariants?.filter((variant) => isVariantCompatibleForCounts(variant, counts)) || []
-
-	const referenceImages = {
-		min: selectedVariantReferenceImages.min,
-		max:
-			compatibleVariants.length > 0
-				? Math.max(
-						...compatibleVariants.map(
-							(variant) =>
-								resolveVariantFieldRange(variant, "reference_images", defaultImages)
-									.max,
-						),
-					)
-				: selectedVariantReferenceImages.max,
-	}
-	const referenceVideos = {
-		min: selectedVariantReferenceVideos.min,
-		max:
-			compatibleVariants.length > 0
-				? Math.max(
-						...compatibleVariants.map(
-							(variant) =>
-								resolveVariantFieldRange(variant, "reference_videos", defaultVideos)
-									.max,
-						),
-					)
-				: selectedVariantReferenceVideos.max,
-	}
-	const referenceAudios = {
-		min: selectedVariantReferenceAudios.min,
-		max:
-			compatibleVariants.length > 0
-				? Math.max(
-						...compatibleVariants.map(
-							(variant) =>
-								resolveVariantFieldRange(variant, "reference_audios", defaultAudios)
-									.max,
-						),
-					)
-				: selectedVariantReferenceAudios.max,
-	}
-
-	const finiteTypeMax = [referenceImages.max, referenceVideos.max, referenceAudios.max].filter(
-		(value) => Number.isFinite(value),
-	) as number[]
-	const hasUnboundedTypeMax = [
-		referenceImages.max,
-		referenceVideos.max,
-		referenceAudios.max,
-	].some((value) => !Number.isFinite(value))
-	const fallbackTotalMax = hasUnboundedTypeMax
-		? Infinity
-		: finiteTypeMax.reduce((a, b) => a + b, 0)
-	const hasVariants = Boolean(modeConfig?.variants?.length)
-	// total.max 采用“当前可兼容变体中的最大值”，保证用户在不违反规则前提下仍可继续补充素材。
-	const compatibleVariantTotalMax =
-		compatibleVariants.length > 0
-			? Math.max(
-					...compatibleVariants.map((variant) => {
-						const imageMax = resolveVariantFieldRange(
-							variant,
-							"reference_images",
-							defaultImages,
-						).max
-						const videoMax = resolveVariantFieldRange(
-							variant,
-							"reference_videos",
-							defaultVideos,
-						).max
-						const audioMax = resolveVariantFieldRange(
-							variant,
-							"reference_audios",
-							defaultAudios,
-						).max
-						const totals = [imageMax, videoMax, audioMax].filter((value) =>
-							Number.isFinite(value),
-						) as number[]
-						return totals.length > 0 ? totals.reduce((a, b) => a + b, 0) : Infinity
-					}),
-				)
-			: fallbackTotalMax
-	const total = normalizeFieldRange(
-		hasVariants
-			? {
-					max: hasAnyReferenceAsset
-						? compatibleVariantTotalMax
-						: (modeConfig?.max_count ?? fallbackTotalMax),
-				}
-			: {
-					max: modeConfig?.max_count ?? fallbackTotalMax,
-				},
-	)
-
-	return {
-		reference_images: referenceImages,
-		reference_videos: referenceVideos,
-		reference_audios: referenceAudios,
-		total,
-		variantCode: hasAnyReferenceAsset ? selectedVariant?.code : undefined,
-	}
-}
-
-export function validateReferenceAssetsByLimits(
-	modeConfig: VideoInputModeConfig | undefined,
-	assets: VideoReferenceAssetInfo[] = [],
-): VideoReferenceAssetValidationIssue[] {
-	const limits = resolveReferenceAssetLimits(modeConfig, assets)
-	const counts = countVideoReferenceAssetInfosByKind(assets)
-	const totalCount = assets.length
-	const issues: VideoReferenceAssetValidationIssue[] = []
-
-	if (Number.isFinite(limits.total.max) && totalCount > limits.total.max) {
-		issues.push({
-			field: "total",
-			rule: "max",
-			expected: limits.total.max,
-			actual: totalCount,
-		})
-	}
-	if (limits.total.min > 0 && totalCount < limits.total.min) {
-		issues.push({
-			field: "total",
-			rule: "min",
-			expected: limits.total.min,
-			actual: totalCount,
-		})
-	}
-
-	const checks = [
-		{
-			field: "reference_images" as const,
-			actual: counts.images,
-			limit: limits.reference_images,
-		},
-		{
-			field: "reference_videos" as const,
-			actual: counts.videos,
-			limit: limits.reference_videos,
-		},
-		{
-			field: "reference_audios" as const,
-			actual: counts.audios,
-			limit: limits.reference_audios,
-		},
-	]
-
-	for (const check of checks) {
-		if (Number.isFinite(check.limit.max) && check.actual > check.limit.max) {
-			issues.push({
-				field: check.field,
-				rule: "max",
-				expected: check.limit.max,
-				actual: check.actual,
-			})
-		}
-		if (check.limit.min > 0 && check.actual < check.limit.min) {
-			issues.push({
-				field: check.field,
-				rule: "min",
-				expected: check.limit.min,
-				actual: check.actual,
-			})
-		}
-	}
-
-	return issues
-}
-
-export function clampReferenceAssetsToLimits(
-	assets: VideoReferenceAssetInfo[],
-	modeConfig: VideoInputModeConfig | undefined,
-): VideoReferenceAssetInfo[] {
-	const limits = resolveReferenceAssetLimits(modeConfig, assets)
-	const next: VideoReferenceAssetInfo[] = []
-	const typeCount = {
-		image: 0,
-		video: 0,
-		audio: 0,
-	}
-
-	for (const item of assets) {
-		if (next.length >= limits.total.max) break
-		if (
-			(item.assetType === "image" && typeCount.image >= limits.reference_images.max) ||
-			(item.assetType === "video" && typeCount.video >= limits.reference_videos.max) ||
-			(item.assetType === "audio" && typeCount.audio >= limits.reference_audios.max)
-		) {
-			continue
-		}
-		next.push(item)
-		if (item.assetType === "image") typeCount.image += 1
-		if (item.assetType === "video") typeCount.video += 1
-		if (item.assetType === "audio") typeCount.audio += 1
-	}
-
-	return next
 }
 
 /** 将本地路径按首帧、尾帧顺序映射为 API 的 frames 输入 */

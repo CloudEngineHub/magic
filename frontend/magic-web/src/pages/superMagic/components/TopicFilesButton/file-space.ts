@@ -11,6 +11,7 @@ export interface TopicFilesCapabilities {
 	share: boolean
 	addToChat: boolean
 	crossProject: boolean
+	copy: boolean
 	importFromOtherProject: boolean
 	projectContentCreation: boolean
 	multiSelect: boolean
@@ -38,6 +39,7 @@ export const DEFAULT_TOPIC_FILES_CAPABILITIES: TopicFilesCapabilities = {
 	share: true,
 	addToChat: true,
 	crossProject: true,
+	copy: true,
 	importFromOtherProject: true,
 	projectContentCreation: true,
 	multiSelect: true,

@@ -2846,6 +2846,31 @@ describe("ImageResourceManager image resources", () => {
 		})
 	})
 
+	it("does not expose a decoded image after it has been closed", () => {
+		const { manager } = createManager()
+		const resource = createImageResource("preview")
+		const entry = createEntry({
+			displaySlots: {
+				low: { resource: null, loadingPromise: null, version: null, lastAccessAt: 1 },
+				preview: {
+					resource,
+					loadingPromise: null,
+					version: null,
+					lastAccessAt: 1,
+				},
+			},
+		})
+		const buildLoadedResource = (
+			manager as unknown as {
+				buildLoadedResource: (target: typeof entry, variant: "preview") => unknown
+			}
+		).buildLoadedResource.bind(manager)
+
+		expect(buildLoadedResource(entry, "preview")).not.toBeNull()
+		resource.closed = true
+		expect(buildLoadedResource(entry, "preview")).toBeNull()
+	})
+
 	it("re-enters the image pipeline after a signed URL expires", async () => {
 		const { manager } = createManager()
 		const entry = createEntry({

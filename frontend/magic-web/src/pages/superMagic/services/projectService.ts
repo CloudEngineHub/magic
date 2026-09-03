@@ -17,6 +17,8 @@ import {
 	getCachedChatWorkspaceId,
 } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { topicStore, workspaceStore } from "../stores/core"
+import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
+import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -54,6 +56,8 @@ export interface MoveProjectParams {
 	projectId: string
 	targetWorkspaceId: string
 	sourceWorkspaceId: string
+	preProjectId?: string | null
+	nextProjectId?: string | null
 	/** Optional; resolved from workspace list when omitted. */
 	targetWorkspaceName?: string
 	/** Optional; used by save-as-project flow as API `target_project_name`. */
@@ -221,6 +225,91 @@ class ProjectService {
 		} catch (error) {
 			console.log("加载项目失败，失败原因：", error)
 			return []
+		}
+	}
+
+	moveProjectInWorkspace = async (
+		workspaceId: string,
+		projectId: string,
+		preProjectId: string | null,
+		nextProjectId: string | null,
+		isPinned?: boolean,
+	): Promise<void> => {
+		const projects = projectStore.getProjectsByWorkspace(workspaceId)
+		const previousIds = projects.map((project) => project.id)
+		const previousProject = projects.find((project) => project.id === projectId)
+		const sourceIndex = previousIds.indexOf(projectId)
+		if (sourceIndex === -1) return
+		const nextIds = previousIds.filter((id) => id !== projectId)
+		const insertIndex = getInsertIndexByAnchors(nextIds, preProjectId, nextProjectId)
+		if (insertIndex === null) return
+		nextIds.splice(Math.max(0, insertIndex), 0, projectId)
+		const optimisticProjectIds = [...nextIds]
+		runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, nextIds))
+		if (isPinned !== undefined) {
+			const movedProject = projectStore
+				.getProjectsByWorkspace(workspaceId)
+				.find((project) => project.id === projectId)
+			if (movedProject) {
+				projectStore.updateProject({ ...movedProject, is_pinned: isPinned })
+			}
+		}
+
+		const { requestId, options } = createOrderRequestOptions()
+		let orderingRequestCompleted = false
+		const usesPinEndpoint = isPinned !== undefined && previousProject != null
+		try {
+			if (usesPinEndpoint) {
+				// Pin-boundary moves use the pin endpoint because it owns both pin state and ordering.
+				await this.pinProject(
+					previousProject,
+					isPinned,
+					workspaceId,
+					preProjectId,
+					nextProjectId,
+				)
+			} else {
+				await SuperMagicApi.moveProject(
+					{
+						source_project_id: projectId,
+						target_workspace_id: workspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+					},
+					options,
+				)
+			}
+			orderingRequestCompleted = true
+			await projectStore.loadProjectsForWorkspace(workspaceId, true, true)
+			this.syncSelectedProjectAfterMove(
+				projectId,
+				workspaceId,
+				projectStore.getProjectsByWorkspace(workspaceId),
+			)
+		} catch (error) {
+			if (!orderingRequestCompleted && !usesPinEndpoint)
+				reportOrderApiError({
+					endpoint: "/api/v1/super-agent/projects/move",
+					params: {
+						source_project_id: projectId,
+						target_workspace_id: workspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+						...(isPinned === undefined ? {} : { is_pin: isPinned }),
+					},
+					requestId,
+					error,
+				})
+			const currentProjectIds = projectStore
+				.getProjectsByWorkspace(workspaceId)
+				.map((project) => project.id)
+			if (isSameOrder(currentProjectIds, optimisticProjectIds)) {
+				runInAction(() => projectStore.reorderProjectsInWorkspace(workspaceId, previousIds))
+			}
+			if (previousProject && isPinned !== undefined) {
+				projectStore.updateProject(previousProject)
+			}
+			throw error
 		}
 	}
 
@@ -406,6 +495,8 @@ class ProjectService {
 		sourceWorkspaceId,
 		targetWorkspaceName,
 		targetProjectName,
+		preProjectId,
+		nextProjectId,
 	}: MoveProjectParams): Promise<boolean> => {
 		const operationId = `move_${projectId}_${Date.now()}`
 		const resolvedTargetWorkspaceName =
@@ -419,12 +510,37 @@ class ProjectService {
 			targetWorkspaceId,
 			resolvedTargetWorkspaceName,
 			targetProjectName,
+			preProjectId,
+			nextProjectId,
 		})
 
-		// Optimistic update: remove project from list immediately
+		const activeProject =
+			projectStore.selectedProject?.id === projectId ? projectStore.selectedProject : null
+		const targetWorkspace = workspaceStore.workspaces.find(
+			(workspace) => workspace.id === targetWorkspaceId,
+		)
+		const sourceWorkspace = workspaceStore.workspaces.find(
+			(workspace) => workspace.id === sourceWorkspaceId,
+		)
+		const movedActiveProject = activeProject
+			? {
+					...activeProject,
+					project_name: targetProjectName?.trim() || activeProject.project_name,
+					workspace_id: targetWorkspaceId,
+					workspace_name:
+						targetWorkspaceName?.trim() ||
+						targetWorkspace?.name ||
+						activeProject.workspace_name ||
+						"",
+				}
+			: null
+
+		// Optimistic update: remove only list entries so the active project and its file state survive.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
-			projectStore.removeProject(projectId)
+			projectStore.removeProjectFromCollections(projectId)
+			if (movedActiveProject) projectStore.setSelectedProject(movedActiveProject)
+			if (targetWorkspace) workspaceStore.setSelectedWorkspace?.(targetWorkspace)
 		})
 
 		// Await move API so callers (e.g. save-as-project + list reload) do not race ahead of server state
@@ -435,6 +551,8 @@ class ProjectService {
 					target_workspace_id: targetWorkspaceId,
 					target_workspace_name: resolvedTargetWorkspaceName,
 					target_project_name: targetProjectName?.trim() || undefined,
+					pre_project_id: preProjectId,
+					next_project_id: nextProjectId,
 				})
 
 				if (res) {
@@ -449,6 +567,12 @@ class ProjectService {
 				throw new Error("Move project failed")
 			} catch (error) {
 				console.error("移动项目失败，失败原因：", error)
+				if (activeProject) {
+					runInAction(() => {
+						projectStore.setSelectedProject(activeProject)
+						if (sourceWorkspace) workspaceStore.setSelectedWorkspace(sourceWorkspace)
+					})
+				}
 				this.rollbackSnapshot(operationId)
 				throw error
 			}
@@ -462,7 +586,7 @@ class ProjectService {
 		const { sourceWorkspaceId, targetWorkspaceId } = params
 		await this.moveProject(params)
 
-		await Promise.all([
+		const [, targetProjects] = await Promise.all([
 			this.fetchProjects({
 				workspaceId: sourceWorkspaceId,
 				clearWhenNoProjects: false,
@@ -472,6 +596,132 @@ class ProjectService {
 				clearWhenNoProjects: false,
 			}),
 		])
+
+		this.syncSelectedProjectAfterMove(params.projectId, targetWorkspaceId, targetProjects)
+	}
+
+	/** Synchronizes the active project with the freshly loaded target workspace entry. */
+	private syncSelectedProjectAfterMove(
+		projectId: string,
+		targetWorkspaceId: string,
+		refreshedProjects: ProjectListItem[],
+	) {
+		if (projectStore.selectedProject?.id !== projectId) return
+		const refreshedProject = refreshedProjects.find((project) => project.id === projectId)
+		if (refreshedProject) {
+			projectStore.setSelectedProject({
+				...projectStore.selectedProject,
+				...refreshedProject,
+			})
+		}
+		const targetWorkspace = workspaceStore.workspaces.find(
+			(workspace) => workspace.id === targetWorkspaceId,
+		)
+		if (targetWorkspace) workspaceStore.setSelectedWorkspace(targetWorkspace)
+	}
+
+	/**
+	 * Sidebar move: update both workspace caches optimistically, then persist and
+	 * refresh the two affected lazy-loaded lists.
+	 */
+	moveProjectFromSidebar = async ({
+		project,
+		targetWorkspaceId,
+		targetWorkspaceName,
+		preProjectId,
+		nextProjectId,
+		isPinned,
+		usePinApi = false,
+	}: {
+		project: ProjectListItem
+		targetWorkspaceId: string
+		targetWorkspaceName?: string
+		preProjectId?: string | null
+		nextProjectId?: string | null
+		isPinned?: boolean
+		usePinApi?: boolean
+	}): Promise<void> => {
+		const sourceWorkspaceId = project.workspace_id
+		if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
+		const targetProjects = projectStore.getProjectsByWorkspace(targetWorkspaceId)
+		const targetIndex =
+			preProjectId !== undefined || nextProjectId !== undefined
+				? getInsertIndexByAnchors(
+						targetProjects.map((item) => item.id),
+						preProjectId,
+						nextProjectId,
+					)
+				: undefined
+		if (targetIndex === null) return
+
+		runInAction(() => {
+			projectStore.moveProjectBetweenWorkspaces(
+				project,
+				sourceWorkspaceId,
+				targetWorkspaceId,
+				targetWorkspaceName,
+				targetIndex,
+				isPinned,
+			)
+		})
+
+		const moveRequest = createOrderRequestOptions()
+		let orderingRequestCompleted = false
+		try {
+			if (usePinApi) {
+				await this.pinProject(project, true, targetWorkspaceId, preProjectId, nextProjectId)
+			} else {
+				await SuperMagicApi.moveProjectToNewWorkspace(
+					{
+						source_project_id: project.id,
+						target_workspace_id: targetWorkspaceId,
+						target_workspace_name: targetWorkspaceName,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+					},
+					moveRequest.options,
+				)
+				if (isPinned !== undefined) {
+					await this.pinProject(
+						project,
+						isPinned,
+						targetWorkspaceId,
+						preProjectId,
+						nextProjectId,
+					)
+				}
+			}
+			orderingRequestCompleted = true
+			await Promise.all([
+				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
+				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
+			])
+			this.syncSelectedProjectAfterMove(
+				project.id,
+				targetWorkspaceId,
+				projectStore.getProjectsByWorkspace(targetWorkspaceId),
+			)
+		} catch (error) {
+			if (!orderingRequestCompleted && !usePinApi)
+				reportOrderApiError({
+					endpoint: "/api/v1/super-agent/projects/move",
+					params: {
+						source_project_id: project.id,
+						target_workspace_id: targetWorkspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: nextProjectId,
+					},
+					requestId: moveRequest.requestId,
+					error,
+				})
+			// A forced refresh is the safest rollback because either side may have
+			// been changed by another tab while the move was in flight.
+			await Promise.all([
+				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
+				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
+			])
+			throw error
+		}
 	}
 
 	/**
@@ -521,21 +771,90 @@ class ProjectService {
 	 * @param isPin Whether to pin the project
 	 * @param workspaceId Workspace ID (for refreshing project list)
 	 */
-	pinProject = async (project: ProjectListItem, isPin: boolean): Promise<void> => {
-		const requestKey = this.getRequestKey("pinProject", { projectId: project.id, isPin })
+	pinProject = async (
+		project: ProjectListItem,
+		isPin: boolean,
+		targetWorkspaceId?: string,
+		preProjectId?: string | null,
+		nextProjectId?: string | null,
+	): Promise<void> => {
+		const requestKey = this.getRequestKey("pinProject", {
+			projectId: project.id,
+			isPin,
+			targetWorkspaceId,
+			preProjectId,
+			nextProjectId,
+		})
 
-		// Call API and refresh list (no optimistic update to preserve sorting)
 		return this.getOrCreateRequest(requestKey, async () => {
+			const { requestId, options } = createOrderRequestOptions()
+			const workspaceId = targetWorkspaceId || project.workspace_id
+			const hasOrdering = preProjectId !== undefined || nextProjectId !== undefined
+			const previousProjects = workspaceId
+				? projectStore.getProjectsByWorkspace(workspaceId)
+				: []
+			// The pin endpoint only orders within the pinned section.
+			const shouldIncludePinNextProject =
+				preProjectId !== null &&
+				nextProjectId != null &&
+				previousProjects.some((item) => item.id === nextProjectId && item.is_pinned)
+			const pinNextProjectId = shouldIncludePinNextProject ? nextProjectId : undefined
+			let optimisticProjectIds: string[] | null = null
+
+			if (workspaceId && hasOrdering) {
+				const nextProjects = previousProjects.filter((item) => item.id !== project.id)
+				const insertIndex =
+					preProjectId === null
+						? 0
+						: getInsertIndexByAnchors(
+								nextProjects.map((item) => item.id),
+								preProjectId,
+								nextProjectId,
+							)
+				if (insertIndex === null) return
+				nextProjects.splice(Math.min(insertIndex, nextProjects.length), 0, {
+					...project,
+					workspace_id: workspaceId,
+					is_pinned: isPin,
+				})
+				optimisticProjectIds = nextProjects.map((item) => item.id)
+				runInAction(() => {
+					projectStore.reorderProjectsInWorkspace(
+						workspaceId,
+						nextProjects.map((item) => item.id),
+					)
+					projectStore.updateProject({
+						...project,
+						workspace_id: workspaceId,
+						is_pinned: isPin,
+					})
+				})
+			}
+
 			try {
 				// Use appropriate API based on project type
 				if (isOtherCollaborationProject(project)) {
-					await SuperMagicApi.updateCollaborationProjectPinStatus(project.id, {
-						is_pin: isPin,
-					})
+					await SuperMagicApi.updateCollaborationProjectPinStatus(
+						project.id,
+						{
+							is_pin: isPin,
+							target_workspace_id: targetWorkspaceId,
+							pre_project_id: preProjectId,
+							next_project_id: pinNextProjectId,
+						},
+						options,
+					)
 				} else {
-					await SuperMagicApi.updateProjectPinStatus(project.id, {
-						is_pin: isPin,
-					})
+					await SuperMagicApi.updateProjectPinStatus(
+						project.id,
+						{
+							is_pin: isPin,
+							target_workspace_id: targetWorkspaceId,
+							pre_project_id: preProjectId,
+							next_project_id: pinNextProjectId,
+						},
+						options,
+					)
 				}
 
 				if (projectStore.selectedProject?.id === project.id) {
@@ -547,6 +866,33 @@ class ProjectService {
 					})
 				}
 			} catch (error) {
+				reportOrderApiError({
+					endpoint: isOtherCollaborationProject(project)
+						? `/api/v1/super-agent/collaboration-projects/${project.id}/pin`
+						: `/api/v1/super-agent/projects/${project.id}/pin`,
+					params: {
+						is_pin: isPin,
+						target_workspace_id: targetWorkspaceId,
+						pre_project_id: preProjectId,
+						next_project_id: pinNextProjectId,
+					},
+					requestId,
+					error,
+				})
+				if (
+					workspaceId &&
+					hasOrdering &&
+					optimisticProjectIds &&
+					projectStore
+						.getProjectsByWorkspace(workspaceId)
+						.every((item, index) => item.id === optimisticProjectIds?.[index]) &&
+					projectStore.getProjectsByWorkspace(workspaceId).length ===
+						optimisticProjectIds.length
+				) {
+					runInAction(() => {
+						projectStore.setProjectsForWorkspace(workspaceId, previousProjects)
+					})
+				}
 				console.error("固定项目失败，失败原因：", error)
 				throw error
 			}

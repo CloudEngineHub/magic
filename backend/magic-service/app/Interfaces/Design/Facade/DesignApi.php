@@ -327,7 +327,8 @@ class DesignApi extends AbstractApi
      *
      * GET /api/v1/design/convert-high/config
      *
-     * @return array Response with convert high config (supported status and sizes)
+     * @deprecated use GET /api/v1/ai-abilities/availability instead
+     * @return array response with supported status and convert high image size configuration
      */
     public function imageConvertHighConfig(): array
     {

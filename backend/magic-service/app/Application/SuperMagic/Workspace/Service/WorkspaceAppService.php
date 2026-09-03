@@ -112,7 +112,9 @@ class WorkspaceAppService extends AbstractAppService
             $requestDTO->pageSize,
             $requestDTO->orderBy,
             $requestDTO->sort,
-            $dataIsolation
+            $dataIsolation,
+            true,
+            $requestDTO->getPinPriority()
         );
 
         // 设置默认值
@@ -259,12 +261,32 @@ class WorkspaceAppService extends AbstractAppService
         }
 
         $workspaceId = (int) $requestDTO->getWorkspaceId();
-        $this->workspaceDomainService->updateWorkspace(
-            $dataIsolation,
-            $workspaceId,
-            $requestDTO->getWorkspaceName(),
-            $requestDTO->getIsPinned()
-        );
+        if ($requestDTO->getWorkspaceName() !== '' || $requestDTO->getIsPinned() !== null) {
+            $this->workspaceDomainService->updateWorkspace(
+                $dataIsolation,
+                $workspaceId,
+                $requestDTO->getWorkspaceName(),
+                $requestDTO->getIsPinned()
+            );
+        }
+
+        // Keep the legacy `pre_workspace_id: null` first-position behavior,
+        // while treating an explicitly null `next_workspace_id` as a no-op.
+        if ($requestDTO->preWorkspaceIdProvided && $requestDTO->nextWorkspaceIdProvided) {
+            $this->logger->warning('Both pre_workspace_id and next_workspace_id were provided; pre_workspace_id wins', [
+                'workspace_id' => $workspaceId,
+            ]);
+        }
+        if ($requestDTO->preWorkspaceIdProvided
+            || ($requestDTO->nextWorkspaceIdProvided && $requestDTO->getNextWorkspaceId() !== null)
+        ) {
+            $this->workspaceDomainService->moveWorkspace(
+                $dataIsolation,
+                $workspaceId,
+                $requestDTO->getPreWorkspaceId(),
+                $requestDTO->preWorkspaceIdProvided ? null : $requestDTO->getNextWorkspaceId()
+            );
+        }
 
         // Get updated workspace entity
         $workspaceEntity = $this->workspaceDomainService->getWorkspaceDetail($workspaceId);

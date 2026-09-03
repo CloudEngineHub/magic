@@ -525,9 +525,12 @@ readonly class VideoOperationAppService
                 'error' => $throwable->getMessage(),
             ]);
             $this->videoQueueDomainService->finishExecutionFailure($operation, $throwable->getMessage());
-            $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams);
-            $this->videoQueueDomainService->saveOperation($operation);
-            $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
+            try {
+                $this->dispatchVideoGenerateFailedEvent($dataIsolation, $operation, $businessParams, $throwable);
+            } finally {
+                $this->videoQueueDomainService->saveOperation($operation);
+                $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
+            }
         }
     }
 
@@ -843,9 +846,11 @@ readonly class VideoOperationAppService
             self::AUDIT_STATUS_FAIL,
         );
 
-        $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
-        if ($previousExceptions !== []) {
-            $businessParams['previous_exceptions'] = $previousExceptions;
+        if ($throwable instanceof Throwable) {
+            $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
+            if ($previousExceptions !== []) {
+                $businessParams['previous_exceptions'] = $previousExceptions;
+            }
         }
 
         $event->setOrganizationCode($operation->getOrganizationCode());

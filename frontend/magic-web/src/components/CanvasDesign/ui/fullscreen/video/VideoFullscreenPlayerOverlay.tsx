@@ -1,11 +1,4 @@
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useRef,
-	useState,
-	type CSSProperties,
-} from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
@@ -20,10 +13,12 @@ const VIDEO_FULLSCREEN_LAYOUT = {
 	panelMaxWidthPx: 1200,
 } as const satisfies { insetPx: number; panelMaxWidthPx: number }
 
+const MOBILE_BREAKPOINT_PX = 768
+
 const CHROME_IDLE_HIDE_MS = 3000
 
-const overlayInsetStyle: CSSProperties = {
-	padding: VIDEO_FULLSCREEN_LAYOUT.insetPx,
+function getVideoFullscreenInset(): number {
+	return window.innerWidth < MOBILE_BREAKPOINT_PX ? 0 : VIDEO_FULLSCREEN_LAYOUT.insetPx
 }
 
 function formatTime(seconds: number): string {
@@ -42,7 +37,7 @@ function computeVideoPanelPixelSize(
 } {
 	const aw = Math.max(1, aspectWidth)
 	const ah = Math.max(1, aspectHeight)
-	const viewportGutter = VIDEO_FULLSCREEN_LAYOUT.insetPx * 2
+	const viewportGutter = getVideoFullscreenInset() * 2
 	const maxW = Math.min(
 		VIDEO_FULLSCREEN_LAYOUT.panelMaxWidthPx,
 		Math.max(200, window.innerWidth - viewportGutter),
@@ -416,6 +411,10 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 		return () => window.removeEventListener("resize", updatePanelSize)
 	}, [isOpen, videoIntrinsicSize])
 
+	const videoFullscreenInset = isClient
+		? getVideoFullscreenInset()
+		: VIDEO_FULLSCREEN_LAYOUT.insetPx
+
 	const handleProgressInput = useCallback((value: number) => {
 		const video = videoRef.current
 		const input = progressRangeRef.current
@@ -486,7 +485,11 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 	}
 
 	return createPortal(
-		<div className={styles.overlayRoot} style={overlayInsetStyle} data-canvas-ui-component>
+		<div
+			className={styles.overlayRoot}
+			style={{ padding: videoFullscreenInset }}
+			data-canvas-ui-component
+		>
 			<div
 				className={styles.overlayBackdrop}
 				role="presentation"

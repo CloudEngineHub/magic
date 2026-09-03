@@ -2530,3 +2530,18 @@ describe("MessageList Markdown HTML preview", () => {
 		).toBe(1920)
 	})
 })
+
+describe("MessageList Markdown links", () => {
+	it("wraps long authorization urls instead of keeping them on one line", () => {
+		const longUrl =
+			"https://login.dingtalk.com/oauth2/auth?client_id=dingmbw5n9ktkkbbjv3g&prompt=consent&redirect_uri=http%3A%2F%2F127.0.0.1%3A43631%2Fcallback&response_type=code&scope=openid"
+
+		render(<MarkdownComponent content={`授权链接：\n[${longUrl}](${longUrl})`} />)
+
+		const anchor = screen.getByTestId("markdown-link-anchor")
+		expect(anchor).toHaveAttribute("href", longUrl)
+		expect(anchor.className).toContain("break-all")
+		expect(anchor.className).toContain("whitespace-normal")
+		expect(anchor.className).not.toContain("whitespace-nowrap")
+	})
+})

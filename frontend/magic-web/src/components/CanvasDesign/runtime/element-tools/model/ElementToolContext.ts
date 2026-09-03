@@ -32,6 +32,9 @@ export interface CreateElementToolContextOptions {
 	isErasing?: boolean
 	isFullscreenPreviewOpen?: boolean
 	convertHightSupported?: boolean
+	removeBackgroundSupported?: boolean
+	eraserSupported?: boolean
+	expandSupported?: boolean
 	showMediaOriginalSize?: boolean
 	isStoryboardOutputFrame?: boolean
 	canConcurrentGenerate?: boolean
@@ -150,6 +153,9 @@ export function createElementToolContext(
 		},
 		flags: {
 			convertHightSupported: Boolean(options.convertHightSupported),
+			removeBackgroundSupported: options.removeBackgroundSupported ?? true,
+			eraserSupported: options.eraserSupported ?? true,
+			expandSupported: options.expandSupported ?? true,
 			showMediaOriginalSize: Boolean(options.showMediaOriginalSize),
 			isStoryboardOutputFrame: Boolean(options.isStoryboardOutputFrame),
 		},

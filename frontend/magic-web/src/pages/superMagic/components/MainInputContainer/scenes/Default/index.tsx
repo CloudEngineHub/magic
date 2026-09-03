@@ -101,7 +101,6 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 
 	const handleFilterChange = (filters: FieldItem[]) => {
 		if (isSlidesMode) setSelectedSlidesFilters(filters)
-		console.log("Filters changed:", filters)
 	}
 
 	const handleSlidesFilterChange = (filterId: string, value: string) => {

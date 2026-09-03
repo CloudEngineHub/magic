@@ -82,11 +82,11 @@ window.MagicWidget
 | `close`           | `() => void`                                                   | 主动关闭面板。关闭动画结束后，悬浮按钮会重新显示。                                      | 面板已关闭时调用不会产生额外影响。                            |
 | `destroy`         | `() => void`                                                   | 移除 widget DOM、事件监听、定时器与当前配置。                                           | 调用后如需再次打开，需要先重新 `mount`。                      |
 | `on`              | `on(event, listener)`                                          | 订阅 Agent 就绪、预览状态、消息流开始、工具结算或任务完成事件，并返回取消订阅函数。     | 每种事件对应不同的 listener 签名，详见下方“事件 API”。        |
-| `setInput`        | `(content: string) => Promise<void>`                           | 将文本写入 Agent 输入框并聚焦，但不发送。                                               | 仅接受非空字符串；以 iframe response 为准。                   |
-| `appendInput`     | `(content: string) => Promise<void>`                           | 将文本追加到当前输入末尾并聚焦，但不发送。                                              | 仅接受非空字符串；以 iframe response 为准。                   |
+| `setInput`        | `(content: string \| InputContent) => Promise<void>`           | 替换 Agent 输入框内容并聚焦，但不发送。                                                 | 接受非空文本或通过校验的文本/Mention blocks。                 |
+| `appendInput`     | `(content: string \| InputContent) => Promise<void>`           | 将文本或 Mention blocks 追加到当前输入末尾，但不发送。                                  | 保留传入 blocks 的顺序。                                      |
 | `clearInput`      | `() => Promise<void>`                                          | 清空当前输入框并聚焦，不发送消息。                                                      | 以 iframe response 为准。                                     |
 | `getInput`        | `() => Promise<string>`                                        | 返回当前输入框的纯文本内容。                                                            | 以 iframe response 为准。                                     |
-| `sendMessage`     | `(content: string) => Promise<void>`                           | 通过现有会话链路立即发送一条文本消息。                                                  | 仅接受非空字符串；超时或 iframe 错误时 Promise 会拒绝。       |
+| `sendMessage`     | `(content?: string \| InputContent) => Promise<void>`          | 发送传入内容；省略 content 时发送当前编辑器内容。                                       | 复用编辑器现有发送校验和会话链路。                            |
 | `newConversation` | `() => Promise<void>`                                          | 创建并选中新对话，Promise 在新编辑器再次 `agent_ready` 后完成。                         | 创建失败或新编辑器超时就绪时 Promise 会拒绝。                 |
 | `updateConfig`    | `(config: Partial<MagicWidget.WidgetConfig>) => Promise<void>` | 增量更新当前嵌入页面的展示配置。                                                        | 不更新 URL、不替换 `iframe.src`，也不刷新 iframe。            |
 
@@ -256,7 +256,67 @@ const currentInput = await window.MagicWidget.getInput()
 await window.MagicWidget.clearInput()
 ```
 
-`getInput` 返回纯文本，不暴露 TipTap 或内部 Mention JSON。`appendInput` 只追加文本，不会触发发送。`setInput` 会替换当前编辑器内容，但不会删除持久化的草稿历史；后续仍沿用当前话题原有的草稿保存流程。
+`getInput` 返回纯文本，不暴露 TipTap 或内部 Mention JSON。`appendInput` 不会触发发送。`setInput` 会替换当前编辑器内容，但不会删除持久化的草稿历史；后续仍沿用当前话题原有的草稿保存流程。
+
+结构化输入使用 SDK 自有 blocks，不直接暴露 TipTap JSON：
+
+```js
+const input = {
+	blocks: [
+		{ type: "text", text: "请让 " },
+		{
+			type: "mention",
+			mention: {
+				type: "agent",
+				data: {
+					agent_id: "agent-mock-001",
+					agent_name: "Agent Mock",
+				},
+			},
+		},
+		{ type: "text", text: " 检查这个虚构任务。" },
+	],
+}
+
+await window.MagicWidget.setInput(input)
+await window.MagicWidget.appendInput({
+	blocks: [
+		{
+			type: "mention",
+			mention: {
+				type: "tool",
+				data: { id: "tool-mock-001", name: "Tool Mock" },
+			},
+		},
+	],
+})
+await window.MagicWidget.sendMessage()
+```
+
+Mention 输入统一使用 `{ type, data }`。Magic Web 已注册类型继续沿用原有校验、展示、草稿和发送行为；协议也会保留非空的未知类型作为通用节点，但不承诺其后端语义。原始 TipTap JSON 和空 `blocks` 会以 `INVALID_INPUT` 拒绝；`data` 只要求是可跨窗口传输的对象，不再递归限制其内部字段。
+
+SDK 专用的 `text` Mention 要求 `data.id`、`data.label`、`data.text` 都是非空字符串。编辑器显示 `@label`，编辑器和草稿中继续保留结构化节点；发送快照使用可逆的普通文本标记携带 `data.text` 和恢复所需元数据，消息刷新后前端会重新恢复为 Mention。它不会进入 Mention 候选面板或结构化 Mention 元数据：
+
+```ts
+await window.MagicWidget?.setInput({
+	blocks: [
+		{ type: "text", text: "请解读 " },
+		{
+			type: "mention",
+			mention: {
+				type: "text",
+				data: {
+					id: "chart-mock-001",
+					label: "销售趋势图",
+					text: "图表 id: mock-chart; 时间范围: mock-range",
+				},
+			},
+		},
+	],
+})
+```
+
+`sendMessage` 传入 content 时发送该内容且不替换当前编辑器值；省略 content 时执行编辑器对当前草稿的正常发送动作。结构化输入要求 SDK 与 iframe 使用相同协议版本部署。
 
 ### 新建对话
 
@@ -272,7 +332,7 @@ await window.MagicWidget.sendMessage("发送新对话中的虚构内容")
 
 所有输入、发送、新建对话和配置更新方法均返回 Promise。失败时错误对象包含稳定的 `code`，例如 `NOT_MOUNTED`、`INVALID_INPUT`、`INVALID_CONFIG`、`IFRAME_NOT_READY` 或 `COMMAND_FAILED`。SDK 只在首次加载或重新加载期间等待 iframe 文档完成加载，不等待 `agent_ready`；命令结果以 iframe response 为准。
 
-跨域通信使用版本化 `postMessage` 协议，并同时限制为 SDK 推导出的 Magic Origin 和当前 iframe 窗口。调用方不应传递密钥或完成任务不需要的业务数据。本阶段不开放宿主 `@` 候选项注入和 Agent→宿主动作回调。
+跨域通信使用版本化 `postMessage` 协议，并同时限制为 SDK 推导出的 Magic Origin 和当前 iframe 窗口。调用方不应传递密钥或完成任务不需要的业务数据。本阶段不开放宿主自定义 `@` 候选列表和 Agent→宿主动作回调。
 
 ### `config`
 

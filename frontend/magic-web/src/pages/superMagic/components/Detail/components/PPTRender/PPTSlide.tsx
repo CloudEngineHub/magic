@@ -940,7 +940,7 @@ const PPTSlide = observer(function PPTSlide({
 					style={slideWrapperStyle}
 				>
 					<div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background text-muted-foreground">
-						<Loader2 size={64} className="animate-spin text-primary" />
+						<MagicSpin spinning wrapperClassName="w-auto" />
 						<div className="text-center">
 							<p className="text-lg font-medium">{t("ppt.loading")}</p>
 							<p className="mt-2 text-sm text-muted-foreground">
@@ -1012,7 +1012,7 @@ const PPTSlide = observer(function PPTSlide({
 					style={slideWrapperStyle}
 				>
 					<div className="flex h-full w-full items-center justify-center bg-background">
-						<MagicSpin spinning />
+						<MagicSpin spinning wrapperClassName="w-auto" />
 					</div>
 				</div>
 			)

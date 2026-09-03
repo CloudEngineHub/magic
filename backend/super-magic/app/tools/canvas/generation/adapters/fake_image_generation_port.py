@@ -31,7 +31,12 @@ class FakeImageGenerationPort(GenerationSubmissionPort):
         """写入最小合法 PNG 并同步返回。"""
         if not request.parameters.name or not request.parameters.name.strip():
             raise ValueError("Generated Canvas images require a model-provided name.")
-        output = self.workspace / request.project_path / "images" / f"{build_image_filename(request.parameters.name)}.png"
+        output = (
+            self.workspace
+            / request.project_path
+            / "images"
+            / f"{build_image_filename(request.parameters.name, unique_key=request.content_id)}.png"
+        )
         await async_mkdir(output.parent, parents=True, exist_ok=True)
         await async_write_bytes(output, _FAKE_PNG)
         return GenerationSubmission(

@@ -12,6 +12,11 @@ import {
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 } from "../utils/canvasProjectOperationRisk"
+import {
+	formatCanvasPathRepairFailures,
+	repairCanvasProjectsBeforeFileOperation,
+	syncCanvasProjectNameAfterFileOperation,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 export interface UseRenameOptions {
 	projectId?: string
@@ -337,23 +342,41 @@ export function useRename(options: UseRenameOptions = {}) {
 				return
 			}
 
-			const canvasRisk = await detectCanvasProjectOperationRisk({
-				attachments: attachments || [],
-				items: [currentItem],
-				operation: "rename",
-			})
-			if (canvasRisk.shouldWarn) {
+			const canvasRisk = currentItem.is_directory
+				? await detectCanvasProjectOperationRisk({
+						attachments: attachments || [],
+						items: [currentItem],
+						operation: "rename",
+					})
+				: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+			const repairResult = currentItem.is_directory
+				? await repairCanvasProjectsBeforeFileOperation({
+						attachments: attachments || [],
+						items: [currentItem],
+						operation: "rename",
+						projectId: options.projectId,
+					})
+				: null
+			if (canvasRisk.shouldWarn || repairResult?.hasFailures) {
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
-				const shouldContinue = await new Promise<boolean>((resolve) => {
-					MagicModal.confirm({
-						title: t("topicFiles.canvasOperationRisk.title"),
-						content: t(
+				const riskContent = canvasRisk.shouldWarn
+					? t(
 							impact === "open-failure"
 								? "topicFiles.canvasOperationRisk.renameOpenFailureContent"
 								: impact === "content-loss"
 									? "topicFiles.canvasOperationRisk.renameContentLossContent"
 									: "topicFiles.canvasOperationRisk.renameMixedContent",
-						),
+						)
+					: ""
+				const repairContent = repairResult?.hasFailures
+					? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+							failures: formatCanvasPathRepairFailures(repairResult.failures),
+						})
+					: ""
+				const shouldContinue = await new Promise<boolean>((resolve) => {
+					MagicModal.confirm({
+						title: t("topicFiles.canvasOperationRisk.title"),
+						content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 						okButtonProps: {
 							color: "danger",
 							variant: "solid",
@@ -382,6 +405,34 @@ export function useRename(options: UseRenameOptions = {}) {
 				file_id: fileId,
 				target_name: trimmedName,
 			})
+
+			if (currentItem.is_directory) {
+				try {
+					const nameSyncResult = await syncCanvasProjectNameAfterFileOperation({
+						attachments: attachments || [],
+						items: [currentItem],
+						projectId: options.projectId,
+						newName: trimmedName,
+					})
+					if (nameSyncResult.hasFailures) {
+						console.error("画布名称同步失败:", nameSyncResult.failures)
+						magicToast.warning(
+							t(
+								"topicFiles.canvasOperationRisk.renameProjectNameSyncFailed",
+								"重命名成功，但画布名称同步失败",
+							),
+						)
+					}
+				} catch (error) {
+					console.error("画布名称同步失败:", error)
+					magicToast.warning(
+						t(
+							"topicFiles.canvasOperationRisk.renameProjectNameSyncFailed",
+							"重命名成功，但画布名称同步失败",
+						),
+					)
+				}
+			}
 
 			// 如果有onAttachmentsChange回调，使用本地更新
 			if (onAttachmentsChange && attachments) {

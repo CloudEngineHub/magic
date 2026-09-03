@@ -25,6 +25,7 @@ use Dtyq\CloudFile\Kernel\Utils\ContentDispositionBuilder;
 use Dtyq\CloudFile\Kernel\Utils\EasyFileTools;
 use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
 use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
+use Dtyq\CloudFile\Kernel\Utils\StsPolicyBuilder;
 use Exception;
 use InvalidArgumentException;
 use League\Flysystem\FileAttributes;
@@ -527,69 +528,9 @@ class OSSExpand implements ExpandInterface
 
         // 目录限制
         $dir = $credentialPolicy->getDir();
-        $resource = "{$config['bucket']}/";
-        if (! empty($credentialPolicy->getDir())) {
-            $resource = $resource . $credentialPolicy->getDir();
-        }
 
         // https://help.aliyun.com/zh/oss/user-guide/ram-policy-overview/?spm=a2c4g.11186623.0.0.746d67e8gIGwZH#concept-y5r-5rm-2gb
-        $stsPolicy = match ($credentialPolicy->getStsType()) {
-            'list_objects' => [
-                'Statement' => [
-                    [
-                        'Action' => [
-                            'oss:ListObjects',
-                            'oss:ListObjectVersions',
-                        ],
-                        'Resource' => [
-                            "acs:oss:*:*:{$this->bucket}",
-                        ],
-                        'Condition' => [
-                            'StringLike' => [
-                                'oss:Prefix' => [
-                                    "{$dir}",
-                                    "{$dir}*",
-                                ],
-                            ],
-                        ],
-                        'Effect' => 'Allow',
-                    ],
-                ],
-            ],
-            'del_objects' => [
-                'Statement' => [
-                    [
-                        'Action' => [
-                            'oss:DeleteObject',
-                            'oss:DeleteObjectVersion',
-                            'oss:DeleteObjectTagging',
-                            'oss:DeleteObjectVersionTagging',
-                        ],
-                        'Resource' => [
-                            "acs:oss:*:*:{$resource}*",
-                        ],
-                        'Effect' => 'Allow',
-                    ],
-                ],
-            ],
-            default => [
-                'Statement' => [
-                    [
-                        'Action' => [
-                            'oss:PutObject',
-                            'oss:AbortMultipartUpload',
-                            'oss:GetObject',
-                            'oss:ListParts',
-                            'oss:GetObjectMeta',
-                        ],
-                        'Resource' => [
-                            "acs:oss:*:*:{$resource}*",
-                        ],
-                        'Effect' => 'Allow',
-                    ],
-                ],
-            ],
-        };
+        $stsPolicy = (new StsPolicyBuilder())->buildOss($config['bucket'], $dir, $credentialPolicy->getStsTypes());
 
         $sts = RetryExecutor::execute(static function () use ($config, $expires, $roleSessionName, $stsPolicy, $stsRegion): array {
             $result = Sts::v20150401()->assumeRole([

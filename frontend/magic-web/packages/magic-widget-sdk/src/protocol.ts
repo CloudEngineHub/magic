@@ -27,7 +27,7 @@ export interface WidgetCommandMessage {
 	requestId: string
 	type: "command"
 	command: WidgetCommandName
-	payload?: { content?: string }
+	payload?: { content?: MagicWidget.InputContent | string }
 }
 
 export interface WidgetResponseMessage {
@@ -94,6 +94,47 @@ export type WidgetProtocolMessage =
 	| WidgetRuntimeEventMessage
 	| WidgetResponseMessage
 
+/** Checks that mention data has the object-shaped container required by the bridge. */
+function isObjectRecord(value: unknown): value is MagicWidget.JsonObject {
+	return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+/** Checks required text mention fields without restricting other JSON payload fields. */
+function isTextMentionData(value: MagicWidget.JsonObject): boolean {
+	return (
+		typeof value.label === "string" &&
+		value.label.trim().length > 0 &&
+		typeof value.text === "string" &&
+		value.text.trim().length > 0 &&
+		typeof value.id === "string" &&
+		value.id.trim().length > 0
+	)
+}
+
+/** Validates the generic public mention shape while keeping business rules in Magic Web. */
+function isInputMention(value: unknown): value is MagicWidget.InputMention {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+	const mention = value as Record<string, unknown>
+	if (typeof mention.type !== "string" || mention.type.trim().length === 0) return false
+	if (!isObjectRecord(mention.data)) return false
+	return mention.type === "text" ? isTextMentionData(mention.data) : true
+}
+
+/** Validates structured Widget blocks before they are converted into editor nodes. */
+export function isWidgetInputContent(value: unknown): value is MagicWidget.InputContent {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+	const content = value as Record<string, unknown>
+	if (!Array.isArray(content.blocks) || content.blocks.length === 0) return false
+	return content.blocks.every((block) => {
+		if (!block || typeof block !== "object" || Array.isArray(block)) return false
+		const blockRecord = block as Record<string, unknown>
+		if (blockRecord.type === "text") {
+			return typeof blockRecord.text === "string"
+		}
+		return blockRecord.type === "mention" && isInputMention(blockRecord.mention)
+	})
+}
+
 /** Checks the minimal discriminated shape before the bridge exposes a runtime event. */
 function isRuntimeEvent(value: unknown): value is MagicWidget.RuntimeEvent {
 	if (!value || typeof value !== "object") return false
@@ -118,7 +159,6 @@ export function isWidgetProtocolMessage(value: unknown): value is WidgetProtocol
 		message.type === "ui_command" ||
 		message.type === "response" ||
 		(message.type === "event" && isRuntimeEvent(message.event))
-
 	return (
 		message.protocol === WIDGET_PROTOCOL &&
 		message.version === WIDGET_PROTOCOL_VERSION &&

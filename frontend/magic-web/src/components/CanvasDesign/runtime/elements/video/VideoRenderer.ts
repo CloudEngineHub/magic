@@ -671,7 +671,8 @@ export class VideoRenderer {
 		}
 
 		const { playButtonGroup, controlsGroup, bufferingOverlay, isHovering } = this.playerRefs
-		const shouldShowControls = isHovering
+		// 暂停/结束态保留播放按钮和时长；播放中仍由 hover 控制暂停按钮和进度。
+		const shouldShowControls = isHovering || snapshot.paused || snapshot.ended
 		const showBuffering = snapshot.isBuffering || this.forceLoadingOverlay
 		bufferingOverlay.visible(showBuffering)
 		playButtonGroup.visible(shouldShowControls && !showBuffering)

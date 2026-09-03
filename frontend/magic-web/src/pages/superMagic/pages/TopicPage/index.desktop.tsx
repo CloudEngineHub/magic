@@ -752,6 +752,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					selectedProject,
 					selectedTopic,
 					selectedWorkspace,
+					topicStore,
 					setSelectedTopic: topicStore.setSelectedTopic,
 				}),
 			})

@@ -134,12 +134,8 @@ export default {
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
 						return (
 							isSuperAdmin ||
-							permissions.includes(
-								PERMISSION_KEY_MAP.PLATFORM_INTELLIGENT_DRAWING_QUERY,
-							) ||
-							permissions.includes(
-								PERMISSION_KEY_MAP.PLATFORM_INTELLIGENT_DRAWING_EDIT,
-							)
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_VIDEO_MODEL_QUERY) ||
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_VIDEO_MODEL_EDIT)
 						)
 					},
 				},
@@ -150,12 +146,8 @@ export default {
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
 						return (
 							isSuperAdmin ||
-							permissions.includes(
-								PERMISSION_KEY_MAP.PLATFORM_INTELLIGENT_DRAWING_QUERY,
-							) ||
-							permissions.includes(
-								PERMISSION_KEY_MAP.PLATFORM_INTELLIGENT_DRAWING_EDIT,
-							)
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_VIDEO_MODEL_QUERY) ||
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_VIDEO_MODEL_EDIT)
 						)
 					},
 				},
@@ -250,8 +242,8 @@ export default {
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
 						return (
 							isSuperAdmin ||
-							permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_QUERY) ||
-							permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_QUERY) ||
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_EDIT)
 						)
 					},
 				},
@@ -263,8 +255,10 @@ export default {
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
 						return (
 							isSuperAdmin ||
-							permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_QUERY) ||
-							permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
+							permissions.includes(
+								PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_QUERY,
+							) ||
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_EDIT)
 						)
 					},
 				},
@@ -276,8 +270,10 @@ export default {
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
 						return (
 							isSuperAdmin ||
-							permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_QUERY) ||
-							permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
+							permissions.includes(
+								PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_MARKET_QUERY,
+							) ||
+							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_MARKET_EDIT)
 						)
 					},
 				},

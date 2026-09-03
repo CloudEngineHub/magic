@@ -19,6 +19,9 @@ interface UseElementToolsOptions {
 	isErasing?: boolean
 	isFullscreenPreviewOpen?: boolean
 	convertHightSupported?: boolean
+	removeBackgroundSupported?: boolean
+	eraserSupported?: boolean
+	expandSupported?: boolean
 	showMediaOriginalSize?: boolean
 	isStoryboardOutputFrame?: boolean
 	canConcurrentGenerate?: boolean
@@ -79,6 +82,9 @@ export function useElementTools(
 				isErasing: options.isErasing,
 				isFullscreenPreviewOpen: options.isFullscreenPreviewOpen,
 				convertHightSupported: options.convertHightSupported,
+				removeBackgroundSupported: options.removeBackgroundSupported,
+				eraserSupported: options.eraserSupported,
+				expandSupported: options.expandSupported,
 				showMediaOriginalSize: options.showMediaOriginalSize ?? showMediaOriginalSize,
 				isStoryboardOutputFrame: options.isStoryboardOutputFrame,
 				canConcurrentGenerate: options.canConcurrentGenerate,
@@ -98,6 +104,9 @@ export function useElementTools(
 			options.isSelecting,
 			options.canConcurrentGenerate,
 			options.convertHightSupported,
+			options.removeBackgroundSupported,
+			options.eraserSupported,
+			options.expandSupported,
 			options.showMediaOriginalSize,
 			showMediaOriginalSize,
 			options.activeToolSession,

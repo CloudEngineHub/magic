@@ -626,6 +626,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 									{...topicFilesPropsWithPanel}
 									className="h-full"
 									title={tSuper("topicFiles.fileTitle")}
+									spaceConfig={{ capabilities: { crossProject: false } }}
 								/>
 							}
 						/>

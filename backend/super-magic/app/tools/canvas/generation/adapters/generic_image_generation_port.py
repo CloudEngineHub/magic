@@ -32,7 +32,7 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
         project = self.project_identity_resolver.resolve(request.project_path)
         if not parameters.name or not parameters.name.strip():
             raise ValueError("Generated Canvas images require a model-provided name.")
-        name = build_image_filename(parameters.name)
+        name = build_image_filename(parameters.name, unique_key=request.content_id)
         output_path = str(parameters.output_path or f"{project.project_path}/images")
         reference_images = [
             self.asset_path_resolver.to_workspace_reference_path(request.project_path, path)

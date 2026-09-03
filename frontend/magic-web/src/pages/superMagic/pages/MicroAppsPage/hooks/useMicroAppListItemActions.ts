@@ -2,6 +2,7 @@ import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { canEditProject } from "@/pages/superMagic/utils/permission"
 import { RoutePath } from "@/constants/routes"
 
 interface UseMicroAppListItemActionsProps {
@@ -26,6 +27,11 @@ export function useMicroAppListItemActions({
 			superPathIndex >= 0 ? window.location.pathname.slice(0, superPathIndex) : ""
 		const appPath = RoutePath.MicroApp.replace(":appId", encodeURIComponent(app.app_id))
 		window.open(`${clusterPath}${appPath}`, "_blank", "noopener,noreferrer")
+	}, [])
+
+	const openRename = useCallback((app: MicroAppListItem) => {
+		if (!canEditProject(app.user_role)) return
+		setRenameTarget(app)
 	}, [])
 
 	const confirmRename = useCallback(
@@ -67,7 +73,7 @@ export function useMicroAppListItemActions({
 		renaming,
 		deleting,
 		openInNewWindow,
-		openRename: setRenameTarget,
+		openRename,
 		openDelete: setDeleteTarget,
 		closeRename: () => setRenameTarget(null),
 		closeDelete: () => setDeleteTarget(null),

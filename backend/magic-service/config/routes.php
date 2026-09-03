@@ -5,7 +5,6 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 use App\Infrastructure\Core\Router\RouteLoader;
-use App\Interfaces\Kernel\Facade\HeartbeatApi;
 use Hyperf\HttpServer\Router\Router;
 
 // 基础路由

@@ -6,6 +6,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { SuperMagicWidgetEditorCommandName } from "@/pages/superMagic/events/message"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	MessageStreamStartedEvent,
 	TaskCompletedEvent,
@@ -54,6 +55,73 @@ function createTextContent(content: string): JSONContent {
 		type: "doc",
 		content: [{ type: "paragraph", content: [{ type: "text", text: content }] }],
 	}
+}
+
+/** Converts validated SDK blocks into the internal TipTap mention node contract. */
+function createWidgetContent(content: string | MagicWidget.InputContent): JSONContent {
+	if (typeof content === "string") return createTextContent(content)
+
+	return {
+		type: "doc",
+		content: [
+			{
+				type: "paragraph",
+				content: content.blocks.map((block) =>
+					block.type === "text"
+						? { type: "text", text: block.text }
+						: {
+								type: "mention",
+								attrs: {
+									type: block.mention.type,
+									data: block.mention.data,
+								},
+							},
+				),
+			},
+		],
+	}
+}
+
+/** Validates SDK mention data while leaving business rules to Magic Web. */
+function isWidgetMention(value: unknown): value is MagicWidget.InputMention {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+	const mention = value as Record<string, unknown>
+	if (typeof mention.type !== "string" || mention.type.trim().length === 0) return false
+	if (!mention.data || typeof mention.data !== "object" || Array.isArray(mention.data)) {
+		return false
+	}
+	if (mention.type !== "text") return true
+	const data = mention.data as Record<string, unknown>
+	return (
+		typeof data.label === "string" &&
+		data.label.trim().length > 0 &&
+		typeof data.text === "string" &&
+		data.text.trim().length > 0 &&
+		typeof data.id === "string" &&
+		data.id.trim().length > 0
+	)
+}
+
+/** Validates the SDK-only block contract without accepting raw TipTap JSON. */
+function isWidgetInputContent(value: unknown): value is MagicWidget.InputContent {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+	const content = value as Record<string, unknown>
+	if (!Array.isArray(content.blocks) || content.blocks.length === 0) return false
+	return content.blocks.every((block) => {
+		if (!block || typeof block !== "object" || Array.isArray(block)) return false
+		const blockRecord = block as Record<string, unknown>
+		if (blockRecord.type === "text") {
+			return typeof blockRecord.text === "string"
+		}
+		return blockRecord.type === "mention" && isWidgetMention(blockRecord.mention)
+	})
+}
+
+/** Revalidates cross-window input before any content reaches the editor or send flow. */
+function parseWidgetContent(value: unknown): string | MagicWidget.InputContent {
+	if (typeof value === "string" && value.trim()) return value
+	if (isWidgetInputContent(value)) return value
+	throw new Error("Widget command content must use valid text and mention blocks")
 }
 
 /** Converts observable event branches into plain values accepted by structured cloning. */
@@ -152,7 +220,7 @@ export function useMagicWidgetBridge({
 	const executeEditorCommand = useMemoizedFn(
 		(
 			command: SuperMagicWidgetEditorCommandName,
-			content?: string,
+			content?: string | JSONContent,
 		): Promise<string | undefined> => {
 			return new Promise((resolve, reject) => {
 				const timer = window.setTimeout(() => {
@@ -162,8 +230,12 @@ export function useMagicWidgetBridge({
 				pubsub.publish(PubSubEvents.Magic_Widget_Editor_Command, {
 					command,
 					content,
-					respond: (result) => {
+					respond: (result, error) => {
 						window.clearTimeout(timer)
+						if (error) {
+							reject(new Error(error))
+							return
+						}
 						resolve(result)
 					},
 				})
@@ -234,24 +306,29 @@ export function useMagicWidgetBridge({
 			const command = event.data.command as WidgetCommandName
 
 			try {
-				if (["setInput", "appendInput", "sendMessage"].includes(command)) {
-					const content = event.data.payload?.content
-					if (typeof content !== "string" || !content.trim()) {
-						throw new Error("Widget command content must be a non-empty string")
-					}
-					if (
-						command === "sendMessage" &&
-						!pubsub.hasListeners(PubSubEvents.Send_Message_by_Content)
-					) {
-						throw new Error("Magic widget message sending is not available")
-					}
-					if (command === "setInput") {
-						await executeEditorCommand("setInput", content)
-					} else if (command === "appendInput") {
-						await executeEditorCommand("appendInput", content)
+				if (command === "setInput" || command === "appendInput") {
+					const content = parseWidgetContent(event.data.payload?.content)
+					await executeEditorCommand(command, createWidgetContent(content))
+					respond(requestId, true)
+					return
+				}
+
+				if (command === "sendMessage") {
+					const rawContent = event.data.payload?.content
+					if (rawContent === undefined) {
+						if (!pubsub.hasListeners(PubSubEvents.Magic_Widget_Editor_Command)) {
+							throw new Error("Magic widget editor sending is not available")
+						}
+						await executeEditorCommand("sendMessage")
 					} else {
+						if (!pubsub.hasListeners(PubSubEvents.Send_Message_by_Content)) {
+							throw new Error("Magic widget message sending is not available")
+						}
+						const content = parseWidgetContent(rawContent)
 						pubsub.publish(PubSubEvents.Send_Message_by_Content, {
-							jsonContent: createTextContent(content),
+							jsonContent: createWidgetContent(content),
+							// Parameterized SDK sends must not replace or clear the current editor draft.
+							shouldClearEditorAfterSend: false,
 						})
 					}
 					respond(requestId, true)

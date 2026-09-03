@@ -19,9 +19,14 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	const correlationId = props.node?.correlation_id || ""
 	const messageId = props.node?.app_message_id || ""
 	const ownerSuperMessageId = String(node?.super_message_id || props.node?.super_message_id || "")
-	const streamState =
-		superMagicStore.getStreamState(topicId, correlationId)?.stage ||
-		superMagicStore.getStreamState(topicId, messageId)?.stage
+	// Final transport removes StreamState immediately; the Store render phase keeps the row's
+	// reasoning/content animation observable until the canonical snapshot is visibly consumed.
+	const streamState = superMagicStore.getAssistantRenderPhase(
+		topicId,
+		ownerSuperMessageId,
+		correlationId,
+		messageId,
+	)
 	const rawContent = typeof node?.content === "string" ? node.content : ""
 	const hasAssistantContent = node?.role === "assistant" && !/^\s*$/.test(rawContent)
 	const renderableToolCalls = (Array.isArray(node?.tool_calls) ? node.tool_calls : []).filter(
@@ -29,16 +34,17 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 	)
 
 	if (node?.role === "tool") {
+		// AttachmentSection is this role's only visible output, so the spacing has to travel with
+		// it. A wrapper here would keep emitting a 12px gap for every result that renders nothing.
 		return (
-			<div className="mb-3">
-				<AttachmentSection
-					node={node}
-					fallbackNode={props.node}
-					prevSuperMessageId={props.prevNode?.super_message_id}
-					onFileClick={props.onFileClick}
-					onSelectDetail={props.onSelectDetail}
-				/>
-			</div>
+			<AttachmentSection
+				className="mb-3"
+				node={node}
+				fallbackNode={props.node}
+				prevSuperMessageId={props.prevNode?.super_message_id}
+				onFileClick={props.onFileClick}
+				onSelectDetail={props.onSelectDetail}
+			/>
 		)
 	}
 

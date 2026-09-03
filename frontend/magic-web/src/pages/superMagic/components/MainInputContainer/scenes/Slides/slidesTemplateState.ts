@@ -488,9 +488,9 @@ export function toTemplateOption(template: SlidesTemplateItem, options?: { isFea
 			en_US: `${resolveSlidesTemplateText(template.label, "en_US")} (${template.code})`,
 		},
 		thumbnail_url: markTemplateImageUrl(template.thumbnail_url) ?? undefined,
-		collage_url: markTemplateImageUrl(template.collage_url) ?? undefined,
-		// 预览页优先使用逐页图片；缺少逐页图片时不把拼接图当作 PPT 页面。
-		preview_image_urls: (template.preview_image_urls ?? []).map(markTemplateImageUrl),
+		// 拼接图和逐页预览只在详情页按需加载，避免一次打开模板目录缓存整套 PPT 页面。
+		collage_url: template.collage_url ?? undefined,
+		preview_image_urls: template.preview_image_urls ?? [],
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,
 		usage_count: template.usage_count ?? 0,

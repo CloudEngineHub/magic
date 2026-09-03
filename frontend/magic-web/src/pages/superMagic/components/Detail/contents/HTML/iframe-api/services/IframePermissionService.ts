@@ -20,6 +20,7 @@ import {
 	type HtmlPermissionTtl,
 	type HtmlPermissionTtlOption,
 } from "./htmlPermissionPolicy"
+import { HtmlPermissionAuthorizationQueue } from "./HtmlPermissionAuthorizationQueue"
 
 export type { HtmlPermissionDiagnostic, HtmlPermissionTtlOption }
 
@@ -39,6 +40,7 @@ export interface HtmlPermissionConfirmRequest {
 	presentation: "capability" | "userInfo"
 	ttlOptions: HtmlPermissionTtlOption[]
 	defaultTtlMs: HtmlPermissionTtl
+	signal?: AbortSignal
 }
 
 export interface HtmlPermissionConfirmResult {
@@ -100,14 +102,17 @@ export interface IframePermissionServiceConfig {
 	onGrantsChanged?: () => void
 	appConfigState: HtmlAppConfigState
 	appInstance: IframePermissionAppInstance
+	authorizationQueue?: HtmlPermissionAuthorizationQueue
 	getNow?: () => number
 }
 
 export class IframePermissionService {
 	private readonly cfg: IframePermissionServiceConfig
+	private readonly authorizationQueue: HtmlPermissionAuthorizationQueue
 
 	constructor(cfg: IframePermissionServiceConfig) {
 		this.cfg = cfg
+		this.authorizationQueue = cfg.authorizationQueue ?? new HtmlPermissionAuthorizationQueue()
 	}
 
 	async authorize(
@@ -124,10 +129,27 @@ export class IframePermissionService {
 		const requestedScopes = Array.from(new Set(scopes))
 		if (requestedScopes.length === 0) return true
 
+		return this.authorizationQueue.enqueue(
+			this.createAuthorizationQueueKey(requestedScopes, options),
+			(signal) => this.authorizeManyNow(requestedScopes, options, signal),
+		)
+	}
+
+	dispose() {
+		this.authorizationQueue.dispose()
+	}
+
+	private async authorizeManyNow(
+		requestedScopes: HtmlPermissionScope[],
+		options: HtmlPermissionAuthorizeOptions,
+		signal: AbortSignal,
+	): Promise<boolean> {
+		if (this.authorizationQueue.isDisposed || signal.aborted) return false
+
 		const now = this.getNow()
 
 		const context = await this.resolveContext()
-		if (!context) return false
+		if (!context || this.authorizationQueue.isDisposed || signal.aborted) return false
 
 		const { appConfig, appConfigLoadError, mode, appFingerprint, declaration } = context
 		if (appConfigLoadError) {
@@ -152,10 +174,12 @@ export class IframePermissionService {
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
 		const persistenceAvailable =
 			this.canPersistGrant(identity) && (await this.cfg.grantStore.isPersistentAvailable())
+		if (this.authorizationQueue.isDisposed || signal.aborted) return false
 		if (options.allowOnce === false && !persistenceAvailable) return false
 		const existingScopes = new Set(
 			(await this.cfg.grantStore.getAppGrants(identity)).map((grant) => grant.scope),
 		)
+		if (this.authorizationQueue.isDisposed || signal.aborted) return false
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
 		if (missingScopes.length === 0) return true
 
@@ -180,8 +204,10 @@ export class IframePermissionService {
 			presentation: options.presentation || "capability",
 			ttlOptions,
 			defaultTtlMs: getDefaultHtmlPermissionTtl(missingScopes, mode, ttlOptions),
+			signal,
 		})
 
+		if (this.authorizationQueue.isDisposed || signal.aborted) return false
 		if (!result.allowed) return false
 		if (!ttlOptions.some((option) => option.ttlMs === result.ttlMs)) {
 			htmlMicroAppPreviewLogger.warn("Permission denied: selected duration is not allowed", {
@@ -193,6 +219,7 @@ export class IframePermissionService {
 		if (result.ttlMs !== 0 && persistenceAvailable) {
 			let persisted = true
 			for (const scope of missingScopes) {
+				if (this.authorizationQueue.isDisposed || signal.aborted) return false
 				const saved = await this.cfg.grantStore.save({
 					...identity,
 					scope,
@@ -200,11 +227,23 @@ export class IframePermissionService {
 					expiresAt: result.ttlMs === null ? null : now + result.ttlMs,
 				})
 				persisted = saved && persisted
+				if (this.authorizationQueue.isDisposed || signal.aborted) return false
 			}
 			if (persisted) this.cfg.onGrantsChanged?.()
 			else if (options.allowOnce === false) return false
 		}
 		return true
+	}
+
+	private createAuthorizationQueueKey(
+		scopes: HtmlPermissionScope[],
+		options: HtmlPermissionAuthorizeOptions,
+	): string {
+		return JSON.stringify({
+			scopes: [...scopes].sort(),
+			presentation: options.presentation || "capability",
+			allowOnce: options.allowOnce === false ? false : true,
+		})
 	}
 
 	async getPermissionSnapshot(): Promise<HtmlPermissionSnapshot> {

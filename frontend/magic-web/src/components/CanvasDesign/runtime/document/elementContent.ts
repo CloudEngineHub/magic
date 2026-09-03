@@ -86,8 +86,9 @@ export function supportsVisualUnderstanding(type: string): boolean {
 	return type === ElementTypeEnum.Image || type === ElementTypeEnum.Video
 }
 
-export function createContentId(prefix = "content"): string {
-	return `${prefix}-${generateContentUuid()}`
+/** 所有新建 Content 使用统一的 content-<uuid> 命名，类型语义由元素和字段结构表达。 */
+export function createContentId(): string {
+	return `content-${generateContentUuid()}`
 }
 
 function generateContentUuid(): string {
@@ -139,7 +140,9 @@ export function getDownstreamContent<TContent extends ElementContentBase>(
 export function isImageContentUsableDownstream(
 	content: ImageElementContent | undefined,
 ): content is ImageElementContent {
-	return Boolean(content?.src && (content.status === undefined || content.status === "completed"))
+	// src is the durable resource signal used by downstream consumers. status can
+	// be missing or stale after persistence/recovery and must not hide a usable image.
+	return Boolean(content?.src)
 }
 
 export function getUsableDownstreamImageContent(
@@ -451,10 +454,6 @@ export function getPendingVideoGenerationContent(
 
 export function hasPendingVideoGenerationContent(element: VideoElement): boolean {
 	return Boolean(getPendingVideoGenerationContent(element))
-}
-
-export function createImageContentId(): string {
-	return createContentId("content")
 }
 
 export function appendImageContent(

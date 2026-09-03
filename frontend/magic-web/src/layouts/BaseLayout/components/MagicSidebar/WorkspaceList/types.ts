@@ -6,6 +6,7 @@ type ProjectItemActionHandler = (project: ProjectListItem) => void | Promise<voi
 export interface WorkspaceItemProps {
 	workspace: Workspace
 	className?: string
+	dndDisabled?: boolean
 	/** Search mode renders only the matching projects without updating the normal sidebar cache. */
 	searchProjects?: ProjectListItem[]
 }
@@ -18,10 +19,12 @@ export interface ProjectListProps {
 	isCreatingProject?: boolean
 	onCancelCreate?: () => void
 	onProjectCreated?: () => void
+	dndDisabled?: boolean
 }
 
 export interface ProjectItemProps {
 	project: ProjectListItem
+	dndDisabled?: boolean
 	onOpenInNewWindow?: ProjectItemActionHandler
 	onPinProject?: ProjectItemActionHandler
 	onCopyCollaborationLink?: ProjectItemActionHandler
@@ -32,3 +35,14 @@ export interface ProjectItemProps {
 	onDeleteProject: ProjectItemActionHandler
 	onRenameProject?: (params: HandleRenameProjectParams) => Promise<void>
 }
+
+export type SidebarDragData =
+	| { type: "workspace"; workspaceId: string }
+	| { type: "project"; projectId: string; workspaceId: string }
+	| { type: "project-list"; workspaceId: string }
+
+export type SidebarDropPosition = "before" | "after"
+
+export const getWorkspaceDragId = (workspaceId: string) => `workspace:${workspaceId}`
+export const getProjectDragId = (projectId: string) => `project:${projectId}`
+export const getProjectListDropId = (workspaceId: string) => `project-list:${workspaceId}`

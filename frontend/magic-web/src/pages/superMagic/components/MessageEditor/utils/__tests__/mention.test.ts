@@ -11,6 +11,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import {
 	createUploadFileMentionData,
 	filterPendingCanvasMentionsFromContent,
+	filterUploadFileMentionsFromContent,
 	isAllowedMention,
 	stripProjectResourceMentionDisplayMetadata,
 	transformMarkerImagePathsToWorkspaceAbsolute,
@@ -72,6 +73,50 @@ function getFirstMentionData(content: ReturnType<typeof markerMentionContent>) {
 }
 
 describe("mention utils", () => {
+	it("allows text mentions but keeps unknown types behind trusted restore", () => {
+		expect(
+			isAllowedMention({
+				type: MentionItemType.TEXT,
+				data: { id: "text-mock-001", label: "Chart Mock", text: "chart id: mock-chart" },
+			}),
+		).toBe(true)
+		expect(
+			isAllowedMention({
+				type: "custom_mock" as typeof MentionItemType.TEXT,
+				data: { id: "custom-mock-001", label: "Custom Mock" },
+			}),
+		).toBe(false)
+	})
+
+	it("preserves trusted structured mentions when the panel data is not loaded", () => {
+		const content: JSONContent = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{
+							type: "mention",
+							attrs: {
+								type: MentionItemType.SKILL,
+								data: { id: "skill-mock-001", name: "Mock Skill" },
+							},
+						},
+					],
+				},
+			],
+		}
+		const dataService: DataService = {
+			dispatch: () => ({ isValid: false }),
+		}
+
+		expect(
+			filterUploadFileMentionsFromContent(content, dataService, {
+				preserveMentionValidation: true,
+			}),
+		).toEqual(content)
+	})
+
 	it("preserves deferred temp destination metadata on upload mentions", () => {
 		const file = new File(["image"], "photo.png", { type: "image/png" })
 		const mentionData = createUploadFileMentionData({

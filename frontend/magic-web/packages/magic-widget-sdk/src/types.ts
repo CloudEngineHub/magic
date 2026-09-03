@@ -116,6 +116,31 @@ export declare namespace MagicWidget {
 		code: CommandErrorCode
 	}
 
+	/** Represents opaque mention data supplied by the host application. */
+	export type JsonObject = Record<string, unknown>
+
+	/** Describes the data contract for the SDK-only text mention. */
+	export interface TextMentionData extends JsonObject {
+		label: string
+		text: string
+		id: string
+	}
+
+	/** Keeps any Magic Web mention discriminator beside its opaque object payload. */
+	export interface InputMention {
+		type: string
+		data: JsonObject
+	}
+
+	/** Represents one text or mention segment accepted by the Widget public API. */
+	export type InputBlock =
+		{ type: "text"; text: string } | { type: "mention"; mention: InputMention }
+
+	/** Provides structured editor input without exposing the host's TipTap implementation. */
+	export interface InputContent {
+		blocks: InputBlock[]
+	}
+
 	/** Lists runtime event names whose routing contract is stable. */
 	export type RuntimeEventName = "message.stream.started" | "toolCall.settled" | "task.completed"
 
@@ -181,11 +206,11 @@ export declare namespace MagicWidget {
 		): () => void
 		/** Subscribes to future task completion events without replaying earlier results. */
 		on(event: "task.completed", listener: RuntimeEventListener<"task.completed">): () => void
-		setInput(content: string): Promise<void>
-		appendInput(content: string): Promise<void>
+		setInput(content: string | InputContent): Promise<void>
+		appendInput(content: string | InputContent): Promise<void>
 		clearInput(): Promise<void>
 		getInput(): Promise<string>
-		sendMessage(content: string): Promise<void>
+		sendMessage(content?: string | InputContent): Promise<void>
 		newConversation(): Promise<void>
 		updateConfig(config: Partial<WidgetConfig>): Promise<void>
 	}
