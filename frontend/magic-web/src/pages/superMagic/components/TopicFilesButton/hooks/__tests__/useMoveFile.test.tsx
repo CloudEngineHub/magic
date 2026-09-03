@@ -5,7 +5,10 @@ import type { AttachmentItem } from "../types"
 import { SuperMagicApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
 import { resolveSingleDocumentStaticDependencies } from "@/pages/superMagic/utils/staticDependencies"
-import { repairCanvasProjectsBeforeFileOperation } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import {
+	commitCanvasProjectPathRepair,
+	planCanvasProjectsBeforeFileOperation,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -59,7 +62,8 @@ vi.mock("@/pages/superMagic/utils/staticDependencies", () => ({
 vi.mock(
 	"@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair",
 	() => ({
-		repairCanvasProjectsBeforeFileOperation: vi.fn(),
+		planCanvasProjectsBeforeFileOperation: vi.fn(),
+		commitCanvasProjectPathRepair: vi.fn(),
 	}),
 )
 
@@ -72,12 +76,24 @@ describe("useMoveFile", () => {
 			dependencyTransferFileIds: [],
 			missingResourcePaths: [],
 		})
-		vi.mocked(repairCanvasProjectsBeforeFileOperation).mockResolvedValue({
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
 			repairedFiles: [],
 			failures: [],
+			saveFailures: [],
 			hasFailures: false,
+			hasSaveFailures: false,
+			requiresConfirmation: false,
+		})
+		vi.mocked(commitCanvasProjectPathRepair).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [],
+			saveFailures: [],
+			hasFailures: false,
+			hasSaveFailures: false,
 			requiresConfirmation: false,
 		})
 	})
@@ -192,7 +208,7 @@ describe("useMoveFile", () => {
 			}),
 		)
 		expect(
-			vi.mocked(repairCanvasProjectsBeforeFileOperation).mock.invocationCallOrder[0],
+			vi.mocked(planCanvasProjectsBeforeFileOperation).mock.invocationCallOrder[0],
 		).toBeLessThan(vi.mocked(SuperMagicApi.moveFile).mock.invocationCallOrder[0])
 	})
 
@@ -209,7 +225,7 @@ describe("useMoveFile", () => {
 			})
 		})
 
-		expect(repairCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
+		expect(planCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
 		expect(SuperMagicApi.moveFile).toHaveBeenCalledWith(
 			expect.objectContaining({ target_project_id: "project-2" }),
 		)
@@ -266,7 +282,7 @@ describe("useMoveFile", () => {
 		})
 
 		expect(MagicModal.confirm).toHaveBeenCalledTimes(1)
-		expect(repairCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
+		expect(planCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
 		expect(SuperMagicApi.moveFile).toHaveBeenCalledWith(
 			expect.objectContaining({ file_id: "image", target_parent_id: "target" }),
 		)
@@ -274,14 +290,28 @@ describe("useMoveFile", () => {
 
 	it("路径修复失败时继续仍会调用移动接口", async () => {
 		vi.mocked(SuperMagicApi.moveFile).mockResolvedValue({ status: "success" })
-		vi.mocked(repairCanvasProjectsBeforeFileOperation).mockResolvedValue({
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
 			repairedFiles: [],
 			failures: [
 				{ projectName: "Canvas", fileName: "magic.project.js", message: "read failed" },
 			],
+			saveFailures: [],
 			hasFailures: true,
+			hasSaveFailures: false,
+			requiresConfirmation: true,
+		})
+		vi.mocked(commitCanvasProjectPathRepair).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [
+				{ projectName: "Canvas", fileName: "magic.project.js", message: "read failed" },
+			],
+			saveFailures: [],
+			hasFailures: true,
+			hasSaveFailures: false,
 			requiresConfirmation: true,
 		})
 		let confirmConfig: Parameters<typeof MagicModal.confirm>[0] | undefined
@@ -306,14 +336,16 @@ describe("useMoveFile", () => {
 	})
 
 	it("路径修复失败时取消不会调用移动接口", async () => {
-		vi.mocked(repairCanvasProjectsBeforeFileOperation).mockResolvedValue({
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
 			repairedFiles: [],
 			failures: [
 				{ projectName: "Canvas", fileName: "magic.project.js", message: "read failed" },
 			],
+			saveFailures: [],
 			hasFailures: true,
+			hasSaveFailures: false,
 			requiresConfirmation: true,
 		})
 		let confirmConfig: Parameters<typeof MagicModal.confirm>[0] | undefined
@@ -335,5 +367,6 @@ describe("useMoveFile", () => {
 		})
 
 		expect(SuperMagicApi.moveFile).not.toHaveBeenCalled()
+		expect(commitCanvasProjectPathRepair).not.toHaveBeenCalled()
 	})
 })

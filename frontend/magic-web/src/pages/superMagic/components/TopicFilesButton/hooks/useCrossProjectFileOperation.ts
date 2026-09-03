@@ -22,6 +22,7 @@ import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
+import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 
 export interface CrossProjectOperationSuccessResult {
 	operationType: "move" | "copy"
@@ -93,6 +94,7 @@ async function resolveEffectiveOperationFileIds({
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
 	const { projectId, shareCode, sharePassword, onSuccess } = options
 	const { t } = useTranslation("super")
+	const runCanvasFileOperationPreflight = useCanvasFileOperationGuard()
 
 	const [visible, setVisible] = useState(false)
 	const [operationType, setOperationType] = useState<"move" | "copy">("move")
@@ -191,18 +193,27 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
-		(canvasRisk: CanvasProjectOperationRisk) =>
+		(canvasRisk: CanvasProjectOperationRisk, repairFailures: string[] = []) =>
 			new Promise<boolean>((resolve) => {
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				const riskContent =
+					canvasRisk.shouldWarn && impact
+						? t(
+								impact === "open-failure"
+									? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
+									: impact === "content-loss"
+										? "topicFiles.canvasOperationRisk.moveContentLossContent"
+										: "topicFiles.canvasOperationRisk.moveMixedContent",
+							)
+						: ""
+				const repairContent = repairFailures.length
+					? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+							failures: repairFailures.join("\n"),
+						})
+					: ""
 				MagicModal.confirm({
 					title: t("topicFiles.canvasOperationRisk.title"),
-					content: t(
-						impact === "open-failure"
-							? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
-							: impact === "content-loss"
-								? "topicFiles.canvasOperationRisk.moveContentLossContent"
-								: "topicFiles.canvasOperationRisk.moveMixedContent",
-					),
+					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: createElement(IconAlertTriangleFilled, {
 						size: 20,
 						color: "rgba(255,125,0, 1)",
@@ -263,55 +274,74 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						)
 					: []
 			const conflictDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
-
+			let canvasRisk: CanvasProjectOperationRisk = {
+				shouldWarn: false,
+				riskTypes: [],
+				affectedProjectNames: [],
+			}
 			if (conflictDetectionIds.length > 0) {
-				const canvasRisk = await detectCanvasProjectOperationRisk({
+				canvasRisk = await detectCanvasProjectOperationRisk({
 					attachments: data.sourceAttachments,
 					fileIds: conflictDetectionIds,
 					operation: "move",
 				})
-				if (canvasRisk.shouldWarn) {
-					const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-					if (!shouldContinue) return
-				}
 			}
+			const preflightResult = await runCanvasFileOperationPreflight({
+				repairOptions: {
+					attachments: data.sourceAttachments,
+					fileIds: effectiveFileIds,
+					operation: "move",
+					projectId,
+				},
+				requiresConfirmation: canvasRisk.shouldWarn,
+				confirm: (repairPlan) =>
+					confirmCanvasProjectRisk(
+						canvasRisk,
+						repairPlan?.failures.map(
+							(failure) =>
+								`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
+						) ?? [],
+					),
+				beforeCommit: async () => {
+					const folderConflicts =
+						conflictDetectionIds.length > 0
+							? detectFolderConflictsForMove(
+									conflictDetectionIds,
+									data.sourceAttachments,
+									data.targetAttachments,
+									data.targetPath,
+								)
+							: new Map()
+					if (folderConflicts.size > 0) {
+						const folderChoice =
+							await folderConflictHandler.checkConflicts(folderConflicts)
+						if (!folderChoice.shouldProceed) return false
+						keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
+					}
 
-			// 1. 检测同名文件（递归检测文件夹内所有子文件）
-			const folderConflicts =
-				conflictDetectionIds.length > 0
-					? detectFolderConflictsForMove(
-							conflictDetectionIds,
-							data.sourceAttachments,
-							data.targetAttachments,
-							data.targetPath,
-						)
-					: new Map()
-			if (folderConflicts.size > 0) {
-				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
-				if (!folderChoice.shouldProceed) return
-				keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
-			}
+					const duplicateDetectionIds = effectiveFileIds.filter(
+						(id) => !keepBothIds.includes(id),
+					)
+					const duplicates =
+						duplicateDetectionIds.length > 0
+							? detectDuplicateFilesForMove(
+									duplicateDetectionIds,
+									data.sourceAttachments,
+									data.targetAttachments,
+									data.targetPath,
+								)
+							: new Map()
 
-			// 1. 检测同名文件（递归检测文件夹内所有子文件）
-			const duplicateDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
-			const duplicates =
-				duplicateDetectionIds.length > 0
-					? detectDuplicateFilesForMove(
-							duplicateDetectionIds,
-							data.sourceAttachments,
-							data.targetAttachments,
-							data.targetPath,
-						)
-					: new Map()
+					if (duplicates.size > 0) {
+						const userChoice = await duplicateHandler.checkDuplicates(duplicates)
+						if (!userChoice.shouldProceed) return false
+						keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
+					}
 
-			// 2. 如果有同名，显示 Modal 并等待用户选择
-			if (duplicates.size > 0) {
-				const userChoice = await duplicateHandler.checkDuplicates(duplicates)
-				if (!userChoice.shouldProceed) {
-					return // 用户取消
-				}
-				keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
-			}
+					return true
+				},
+			})
+			if (!preflightResult.ok) return
 
 			// 3. 执行移动操作
 			setIsOperating(true)
@@ -392,6 +422,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			confirmCanvasProjectRisk,
 			duplicateHandler,
 			folderConflictHandler,
+			runCanvasFileOperationPreflight,
 		],
 	)
 

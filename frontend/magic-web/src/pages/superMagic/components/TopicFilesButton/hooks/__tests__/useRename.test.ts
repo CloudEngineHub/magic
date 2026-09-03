@@ -6,7 +6,8 @@ import { useRename } from "../useRename"
 import type { AttachmentItem } from "../types"
 import { detectCanvasProjectOperationRisk } from "../../utils/canvasProjectOperationRisk"
 import {
-	repairCanvasProjectsBeforeFileOperation,
+	commitCanvasProjectPathRepair,
+	planCanvasProjectsBeforeFileOperation,
 	syncCanvasProjectNameAfterFileOperation,
 } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
@@ -45,7 +46,8 @@ vi.mock("../../utils/canvasProjectOperationRisk", () => ({
 vi.mock(
 	"@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair",
 	() => ({
-		repairCanvasProjectsBeforeFileOperation: vi.fn(),
+		planCanvasProjectsBeforeFileOperation: vi.fn(),
+		commitCanvasProjectPathRepair: vi.fn(),
 		syncCanvasProjectNameAfterFileOperation: vi.fn(),
 		formatCanvasPathRepairFailures: vi.fn(() => "repair failed"),
 	}),
@@ -67,12 +69,24 @@ describe("useRename", () => {
 			riskTypes: ["canvas-resource"],
 			affectedProjectNames: ["Canvas"],
 		})
-		vi.mocked(repairCanvasProjectsBeforeFileOperation).mockResolvedValue({
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
 			repairedFiles: [],
 			failures: [],
+			saveFailures: [],
 			hasFailures: false,
+			hasSaveFailures: false,
+			requiresConfirmation: false,
+		})
+		vi.mocked(commitCanvasProjectPathRepair).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [],
+			saveFailures: [],
+			hasFailures: false,
+			hasSaveFailures: false,
 			requiresConfirmation: false,
 		})
 		vi.mocked(syncCanvasProjectNameAfterFileOperation).mockResolvedValue({
@@ -144,11 +158,12 @@ describe("useRename", () => {
 			await result.current.handleRenameConfirm()
 		})
 
-		expect(repairCanvasProjectsBeforeFileOperation).toHaveBeenCalledTimes(1)
+		expect(planCanvasProjectsBeforeFileOperation).toHaveBeenCalledTimes(1)
+		expect(commitCanvasProjectPathRepair).toHaveBeenCalledTimes(1)
 		expect(syncCanvasProjectNameAfterFileOperation).toHaveBeenCalledTimes(1)
 		expect(SuperMagicApi.renameFile).toHaveBeenCalledTimes(1)
 		expect(
-			vi.mocked(repairCanvasProjectsBeforeFileOperation).mock.invocationCallOrder[0],
+			vi.mocked(planCanvasProjectsBeforeFileOperation).mock.invocationCallOrder[0],
 		).toBeLessThan(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0])
 		expect(
 			vi.mocked(syncCanvasProjectNameAfterFileOperation).mock.invocationCallOrder[0],
@@ -177,7 +192,7 @@ describe("useRename", () => {
 			await result.current.handleRenameConfirm()
 		})
 
-		expect(repairCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
+		expect(planCanvasProjectsBeforeFileOperation).not.toHaveBeenCalled()
 		expect(SuperMagicApi.renameFile).toHaveBeenCalledTimes(1)
 		expect(syncCanvasProjectNameAfterFileOperation).not.toHaveBeenCalled()
 	})
@@ -188,14 +203,16 @@ describe("useRename", () => {
 			riskTypes: [],
 			affectedProjectNames: [],
 		})
-		vi.mocked(repairCanvasProjectsBeforeFileOperation).mockResolvedValue({
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
 			repairedFiles: [],
 			failures: [
 				{ projectName: "Canvas", fileName: "magic.project.js", message: "read failed" },
 			],
+			saveFailures: [],
 			hasFailures: true,
+			hasSaveFailures: false,
 			requiresConfirmation: true,
 		})
 		let confirmConfig: Parameters<typeof MagicModal.confirm>[0] | undefined
@@ -217,7 +234,58 @@ describe("useRename", () => {
 		})
 
 		expect(SuperMagicApi.renameFile).not.toHaveBeenCalled()
+		expect(commitCanvasProjectPathRepair).not.toHaveBeenCalled()
 		expect(syncCanvasProjectNameAfterFileOperation).not.toHaveBeenCalled()
+	})
+
+	it("用户确认忽略路径读取失败后仍继续重命名", async () => {
+		vi.mocked(detectCanvasProjectOperationRisk).mockResolvedValue({
+			shouldWarn: false,
+			riskTypes: [],
+			affectedProjectNames: [],
+		})
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [
+				{ projectName: "Canvas", fileName: "magic.project.js", message: "read failed" },
+			],
+			saveFailures: [],
+			hasFailures: true,
+			hasSaveFailures: false,
+			requiresConfirmation: true,
+		})
+		vi.mocked(commitCanvasProjectPathRepair).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [
+				{ projectName: "Canvas", fileName: "magic.project.js", message: "read failed" },
+			],
+			saveFailures: [],
+			hasFailures: true,
+			hasSaveFailures: false,
+			requiresConfirmation: true,
+		})
+		vi.mocked(SuperMagicApi.renameFile).mockResolvedValue({} as never)
+		vi.mocked(MagicModal.confirm).mockImplementation((config) => {
+			config.onOk?.()
+			return undefined as never
+		})
+
+		const { result } = renderHook(() => useRename({ attachments: [imagesDir] }))
+		act(() => {
+			result.current.handleStartRename(imagesDir)
+			result.current.setRenameValue("media")
+		})
+
+		await act(async () => {
+			await result.current.handleRenameConfirm()
+		})
+
+		expect(commitCanvasProjectPathRepair).toHaveBeenCalledTimes(1)
+		expect(SuperMagicApi.renameFile).toHaveBeenCalledTimes(1)
 	})
 
 	it("重命名接口失败时不提前同步画布名称", async () => {

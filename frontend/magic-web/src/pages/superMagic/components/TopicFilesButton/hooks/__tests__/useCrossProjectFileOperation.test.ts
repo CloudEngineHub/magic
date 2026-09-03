@@ -7,6 +7,10 @@ import { useCrossProjectFileOperation } from "../useCrossProjectFileOperation"
 import type { AttachmentItem } from "../types"
 import { detectCanvasProjectOperationRisk } from "../../utils/canvasProjectOperationRisk"
 import { resolveSingleDocumentStaticDependencies } from "@/pages/superMagic/utils/staticDependencies"
+import {
+	commitCanvasProjectPathRepair,
+	planCanvasProjectsBeforeFileOperation,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -59,6 +63,15 @@ vi.mock("@/pages/superMagic/utils/staticDependencies", () => ({
 			: [...new Set(fileIds)],
 }))
 
+vi.mock(
+	"@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair",
+	() => ({
+		planCanvasProjectsBeforeFileOperation: vi.fn(),
+		commitCanvasProjectPathRepair: vi.fn(),
+		formatCanvasPathRepairFailures: vi.fn(),
+	}),
+)
+
 const sourceAttachments: AttachmentItem[] = [
 	{
 		file_id: "file-1",
@@ -84,6 +97,26 @@ describe("useCrossProjectFileOperation", () => {
 			dependencyFileIds: [],
 			dependencyTransferFileIds: [],
 			missingResourcePaths: [],
+		})
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [],
+			saveFailures: [],
+			hasFailures: false,
+			hasSaveFailures: false,
+			requiresConfirmation: false,
+		})
+		vi.mocked(commitCanvasProjectPathRepair).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [],
+			saveFailures: [],
+			hasFailures: false,
+			hasSaveFailures: false,
+			requiresConfirmation: false,
 		})
 	})
 
@@ -127,6 +160,112 @@ describe("useCrossProjectFileOperation", () => {
 				title: "topicFiles.canvasOperationRisk.title",
 				content: "topicFiles.canvasOperationRisk.moveOpenFailureContent",
 			}),
+		)
+		expect(SuperMagicApi.moveFile).not.toHaveBeenCalled()
+	})
+
+	it("跨项目移动画布根目录时先计划并在确认后提交路径修复", async () => {
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [
+				{ projectName: "Design", fileName: "magic.project.js", message: "read failed" },
+			],
+			saveFailures: [],
+			hasFailures: true,
+			hasSaveFailures: false,
+			requiresConfirmation: true,
+		})
+		vi.mocked(MagicModal.confirm).mockImplementation((config) => {
+			config.onOk?.()
+			return undefined as never
+		})
+
+		const { result } = renderHook(() =>
+			useCrossProjectFileOperation({
+				projectId: "project-1",
+				selectedWorkspace: null,
+				selectedProject: null,
+				projects: [],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.executeMoveOperation({
+				fileIds: ["folder-1"],
+				targetProjectId: "project-2",
+				targetPath: [],
+				targetAttachments: [],
+				sourceAttachments: [
+					{
+						file_id: "folder-1",
+						file_name: "Design",
+						is_directory: true,
+						relative_file_path: "Design",
+					},
+				],
+			})
+		})
+
+		expect(planCanvasProjectsBeforeFileOperation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				fileIds: ["folder-1"],
+				operation: "move",
+				projectId: "project-1",
+			}),
+		)
+		expect(commitCanvasProjectPathRepair).toHaveBeenCalledTimes(1)
+		expect(SuperMagicApi.moveFile).toHaveBeenCalledTimes(1)
+	})
+
+	it("跨项目移动路径修复保存失败时不执行移动", async () => {
+		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [],
+			saveFailures: [],
+			hasFailures: false,
+			hasSaveFailures: false,
+			requiresConfirmation: false,
+		})
+		vi.mocked(commitCanvasProjectPathRepair).mockResolvedValue({
+			affectedProjects: [],
+			repairedFileIds: [],
+			repairedFiles: [],
+			failures: [
+				{ projectName: "Design", fileName: "magic.project.js", message: "save failed" },
+			],
+			hasFailures: true,
+			hasSaveFailures: true,
+			saveFailures: [
+				{ projectName: "Design", fileName: "magic.project.js", message: "save failed" },
+			],
+			requiresConfirmation: true,
+		})
+
+		const { result } = renderHook(() =>
+			useCrossProjectFileOperation({
+				projectId: "project-1",
+				selectedWorkspace: null,
+				selectedProject: null,
+				projects: [],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.executeMoveOperation({
+				fileIds: ["folder-1"],
+				targetProjectId: "project-2",
+				targetPath: [],
+				targetAttachments: [],
+				sourceAttachments: [],
+			})
+		})
+
+		expect(magicToast.error).toHaveBeenCalledWith(
+			"topicFiles.canvasOperationRisk.pathRepairSaveFailed",
 		)
 		expect(SuperMagicApi.moveFile).not.toHaveBeenCalled()
 	})
