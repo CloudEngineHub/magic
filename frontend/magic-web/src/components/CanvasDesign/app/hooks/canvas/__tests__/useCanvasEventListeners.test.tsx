@@ -7,6 +7,7 @@ import { EventEmitter } from "../../../../runtime/core/EventEmitter"
 import type { Canvas } from "../../../../runtime/core/Canvas"
 import type { CanvasConnection, CanvasDocument } from "../../../../runtime/document/types"
 import type { CanvasDesignDataPatch } from "../../../../public/props"
+import type { TemporaryElementMetadata } from "../../../../runtime/elements/core/ElementManager"
 
 const connection: CanvasConnection = {
 	id: "connection-1",
@@ -33,12 +34,13 @@ function createCanvasStub() {
 	}
 	const elementManager = {
 		exportDocumentPatch: vi.fn(),
-		getTemporaryElementMetadata: vi.fn((elementId: string) => {
+		getTemporaryElementMetadata: vi.fn((elementId: string): TemporaryElementMetadata | null => {
 			void elementId
 			return null
 		}),
 	}
 	const canvas = {
+		permissionManager: { can: vi.fn(() => true) },
 		eventEmitter,
 		connectionManager,
 		elementManager,

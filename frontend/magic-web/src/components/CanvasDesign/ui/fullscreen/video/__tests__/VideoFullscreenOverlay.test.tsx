@@ -30,14 +30,20 @@ vi.mock("../VideoFullscreenPlayerOverlay", () => ({
 	default: ({
 		videoElement,
 		hasError,
+		playbackEnabled,
+		src,
 	}: {
 		videoElement?: HTMLVideoElement | null
 		hasError?: boolean
+		playbackEnabled?: boolean
+		src?: string
 	}) => (
 		<div
 			data-testid="fullscreen-player"
 			data-has-video={String(Boolean(videoElement))}
 			data-has-error={String(Boolean(hasError))}
+			data-playback-enabled={String(playbackEnabled)}
+			data-src={src}
 		/>
 	),
 }))
@@ -124,5 +130,37 @@ describe("VideoFullscreenOverlay", () => {
 			)
 		})
 		expect(releaseFullscreenPlayback).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps a static source without acquiring playback when the capability is absent", async () => {
+		const acquireFullscreenPlayback = vi.fn()
+		const elementInstance = Object.assign(new mocks.MockVideoElement(), {
+			handoffPlaybackToFullscreen: vi.fn(() => null),
+			acquireFullscreenPlayback,
+			releaseFullscreenPlayback: vi.fn(),
+		})
+		mocks.canvas = {
+			elementManager: {
+				getElementInstance: vi.fn(() => elementInstance),
+			},
+			permissionManager: { can: vi.fn(() => false) },
+			videoResourceManager: {
+				getCachedMetadata: vi.fn(() => null),
+			},
+		}
+
+		render(<VideoFullscreenOverlay elementId="video-1" onClose={vi.fn()} />)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("fullscreen-player")).toHaveAttribute(
+				"data-playback-enabled",
+				"false",
+			)
+		})
+		expect(screen.getByTestId("fullscreen-player")).toHaveAttribute(
+			"data-src",
+			"./videos/a.mp4",
+		)
+		expect(acquireFullscreenPlayback).not.toHaveBeenCalled()
 	})
 })

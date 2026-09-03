@@ -47,7 +47,13 @@ export default function ImageReplaceButton() {
 	)
 
 	const handleReplace = (event: MouseEvent<HTMLDivElement>) => {
-		if (!canvas || canvas.readonly || !selectedImage || activeIsProcessing || isReplacementBusy)
+		if (
+			!canvas ||
+			!canvas.permissionManager.can("document.write") ||
+			!selectedImage ||
+			activeIsProcessing ||
+			isReplacementBusy
+		)
 			return
 		canvas.eventEmitter.emit({
 			type: "element:image:replaceClick",
@@ -67,7 +73,7 @@ export default function ImageReplaceButton() {
 			onClick={handleReplace}
 			disabled={
 				!canvas ||
-				canvas.readonly ||
+				!canvas.permissionManager.can("document.write") ||
 				!selectedImage ||
 				activeIsProcessing ||
 				isReplacementBusy

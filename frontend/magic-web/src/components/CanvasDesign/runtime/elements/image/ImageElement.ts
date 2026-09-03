@@ -86,6 +86,7 @@ import {
 	buildMediaEditSourceFingerprint,
 	type MediaEditIntent,
 } from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
+import { resolveImageDisplayState, type ImageDisplayState } from "./imageDisplayState"
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
@@ -129,10 +130,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	// 渲染相关
-	private isLoadingState: boolean = false // 加载中状态（图片已生成，等待 ossSrc）
 	private isErrorState: boolean = false
 	private contentGroup?: Konva.Group
 	private contentUpdateHandler?: () => void
+	private contentPreviewUnsubscribe?: () => void
+	private effectiveContentId?: string
+	private effectiveContentSrc?: string
 
 	// 缓存已加载的图片对象（ImageBitmap | HTMLImageElement，由 ImageResourceManager 统一管理）
 	private loadedImage?: ImageSource
@@ -180,6 +183,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	constructor(data: ImageElementData, canvas: Canvas) {
 		super(data, canvas)
 
+		this.setupContentPreviewListener()
 		// 设置裁剪事件监听
 		this.setupCropEventListeners()
 		this.setupRetryEditingListeners()
@@ -203,7 +207,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			canvas: this.canvas,
 			getElementData: () => this.data,
 			onStatusUpdate: (contentId) => {
-				if (contentId && getActiveImageContentId(this.data) !== contentId) return
+				if (contentId && this.getActiveContentData().contentId !== contentId) return
 				this.isErrorState = true
 				// reject ossSrc Promise（生成失败）
 				if (this.ossSrcReject) {
@@ -265,7 +269,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private resolveActiveContentData(): ImageElementContent {
-		return resolveActiveImageContent(this.data)
+		return this.getActiveContent<ImageElementContent>() ?? resolveActiveImageContent(this.data)
 	}
 
 	public getActiveContentData(): ImageElementContent {
@@ -291,6 +295,27 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const data = this.getData()
 		if (isImageElementContent(data)) return data.contents.at(-1) ?? this.getActiveContentData()
 		return this.getActiveContentData()
+	}
+
+	/** 返回图片当前唯一的展示状态，供名称、占位图和图层入口复用。 */
+	public getDisplayState(): ImageDisplayState {
+		const activeContent = this.getActiveContentData()
+		const generationRequest = this.getActiveGenerateImageRequest()
+		const taskMeta = this.getActiveImageGenerationTaskMeta()
+
+		return resolveImageDisplayState({
+			content: activeContent,
+			isTemporary: this.canvas?.elementManager?.isTemporary?.(this.data.id) ?? false,
+			hasActiveGeneration: this.hasActiveGeneration(activeContent.contentId),
+			hasActiveGenerationTask: Boolean(generationRequest?.image_id || taskMeta?.image_id),
+			hasGenerationRequest: Boolean(generationRequest || taskMeta),
+			taskType: taskMeta?.type,
+			isReplacementUploading: this.isReplacementUploadingActiveContent(),
+			// Keep resource refresh failures distinguishable even when the old decoded
+			// image is intentionally preserved and isErrorState is cleared.
+			isResourceError: this.imageLoadFailureReason !== null,
+			hasLoadedImage: Boolean(this.loadedImage),
+		})
 	}
 
 	public getContentData(contentId: string): ImageElementContent | undefined {
@@ -381,6 +406,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	public switchActiveContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!isImageElementContent(this.data)) return false
 		if (!this.data.contents.some((content) => content.contentId === contentId)) return false
 		if (this.data.activeContentId === contentId) return true
@@ -394,6 +420,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	public setMainContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!isImageElementContent(this.data)) return false
 		const target = this.data.contents.find((content) => content.contentId === contentId)
 		if (!target?.src || target.status !== GenerationStatus.Completed) return false
@@ -407,6 +434,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	public deleteActiveContent(): boolean {
+		if (!this.canvas.permissionManager.can("document.delete")) return false
 		if (!isImageElementContent(this.data)) return false
 		const result = deleteActiveImageContent(this.data)
 		if (!result) return false
@@ -449,6 +477,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	override destroy(): void {
 		this.canvas.visibilityManager.unregisterImageElement(this.data.id)
 		this.removeResourceLoadedListener()
+		this.contentPreviewUnsubscribe?.()
+		this.contentPreviewUnsubscribe = undefined
 		this.removeCropEventListeners()
 		this.removeRetryEditingListeners()
 		this.generationRuntimeUnsubscribe?.()
@@ -474,6 +504,76 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.loadedImageVariant = undefined
 		this.loadedImageSourceWidth = undefined
 		this.loadedImageSourceHeight = undefined
+	}
+
+	/**
+	 * 只读 Content 预览只改变 Canvas 的 effective Content，不会经过 update()。
+	 * 图片的 decoded surface、失败原因和资源监听必须在这里按版本切换，避免
+	 * previous/next 预览互相继承运行态。
+	 */
+	private setupContentPreviewListener(): void {
+		const activeContent = this.getActiveContentData()
+		this.effectiveContentId = activeContent.contentId
+		this.effectiveContentSrc = activeContent.src
+		const eventEmitter = this.canvas?.eventEmitter
+		if (typeof eventEmitter?.on !== "function") return
+
+		this.contentPreviewUnsubscribe = eventEmitter.on(
+			"content:previewChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId && eventData.elementId !== this.data.id) return
+
+				const changed = this.syncEffectiveContentRuntimeState()
+				if (!changed) return
+
+				// setPreviewContent() 已经会自行 rerender；clearPreviewContent() 的
+				// 事件在旧节点 rerender 后才发出，因此只在清理事件中补一次重绘。
+				if (eventData.contentId === undefined && this.canvas?.transformManager) {
+					this.rerenderWhenTransformIdle()
+				}
+			},
+		)
+	}
+
+	private syncEffectiveContentRuntimeState(): boolean {
+		const nextContent = this.getActiveContentData()
+		if (this.effectiveContentId === undefined) {
+			this.effectiveContentId = nextContent.contentId
+			this.effectiveContentSrc = nextContent.src
+			return false
+		}
+		if (nextContent.contentId === this.effectiveContentId) return false
+
+		const sourceChanged = this.effectiveContentSrc !== nextContent.src
+		this.resetRuntimeStateForContentChange(nextContent, sourceChanged)
+		this.effectiveContentId = nextContent.contentId
+		this.effectiveContentSrc = nextContent.src
+		return true
+	}
+
+	private resetRuntimeStateForContentChange(
+		nextContent: ImageElementContent,
+		sourceChanged: boolean,
+	): void {
+		this.isErrorState = false
+		this.imageLoadFailureReason = null
+		this.lastAppliedLoadFailureSignature = null
+
+		if (!sourceChanged) return
+
+		this.clearLoadedImageReference()
+		this.targetDisplayResourceVariant = undefined
+		this.storedOssSrc = null
+		this.storedImageInfo = undefined
+		this.isResourceLoading = false
+		this.removeResourceLoadedListener()
+
+		if (nextContent.src && this.canvas?.imageResourceManager) {
+			this.setupResourceLoadedListener()
+			this.canvas.visibilityManager?.updateImageElement?.(this.data.id, nextContent.src)
+		} else {
+			this.canvas?.visibilityManager?.unregisterImageElement?.(this.data.id)
+		}
 	}
 
 	private applyResourceMetadata(resource: LoadedResource): void {
@@ -622,6 +722,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 		this.isGenerating = true
 		this.isErrorState = false
+		this.imageLoadFailureReason = null
 		this.isRetryEditing = false
 		const recoveryContent = this.getActiveContentData()
 		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
@@ -714,6 +815,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 		this.isGenerating = true
 		this.isErrorState = false
+		this.imageLoadFailureReason = null
 		this.isRetryEditing = false
 		const recoveryContent = this.getActiveContentData()
 
@@ -730,6 +832,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			this.isGenerating = false
 			this.isErrorState = true
+			this.imageLoadFailureReason = null
 			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, recoveryIntent)
 			this.rerenderWhenTransformIdle()
 			return false
@@ -783,6 +886,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			if (!committed) return rejectSubmission()
 			this.isGenerating = false
 			this.isErrorState = true
+			this.imageLoadFailureReason = null
 			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, recoveryIntent)
 			this.rerenderWhenTransformIdle()
 			return false
@@ -863,6 +967,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		this.isGenerating = true
+		this.imageLoadFailureReason = null
 		const attemptId = this.beginOrReuseGenerationAttempt("image-high", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -954,6 +1059,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
+		this.imageLoadFailureReason = null
 		const attemptId = this.beginOrReuseGenerationAttempt("image-remove-background", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -1030,6 +1136,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
+		this.imageLoadFailureReason = null
 		const attemptId = this.beginOrReuseGenerationAttempt("image-eraser", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -1109,6 +1216,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
+		this.imageLoadFailureReason = null
 		const attemptId = this.beginOrReuseGenerationAttempt("image-extend", {
 			elementId: this.data.id,
 			...(contentId ? { contentId } : {}),
@@ -1160,7 +1268,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private getActiveImageGenerationTaskMeta(): ImageGenerationTaskMeta | undefined {
-		const activeContentId = getActiveImageContentId(this.data)
+		const activeContentId = this.getActiveContentData().contentId
 		const runtimeTarget = activeContentId
 			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
 			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
@@ -1214,14 +1322,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	private hasActiveGeneration(contentId?: string): boolean {
 		return (
-			this.canvas.generationRuntimeManager?.hasActiveGeneration?.(this.data.id, contentId) ??
+			this.canvas?.generationRuntimeManager?.hasActiveGeneration?.(this.data.id, contentId) ??
 			this.isGenerating
 		)
 	}
 
 	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
 	public getActiveGenerateImageRequest(): GenerateImageRequest | undefined {
-		const activeContentId = getActiveImageContentId(this.data)
+		const activeContentId = this.getActiveContentData().contentId
 		const runtimeTarget = activeContentId
 			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
 			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
@@ -1349,6 +1457,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.clearLoadedImageReference()
 		this.isResourceLoading = false
+		this.imageLoadFailureReason = this.imageLoadFailureReason ?? "load-error"
 		this.isErrorState = true
 		this.lastAppliedLoadFailureSignature = currentFailureSignature
 		this.patchMountedImageContentNodeWithLoadedResource()
@@ -1409,6 +1518,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isResourceLoading = false
 		this.isErrorState = false
+		this.imageLoadFailureReason = null
 		const patchResult = this.patchMountedImageContentNodeWithLoadedResource()
 		this.commitImageResourceReconcile(
 			!replacementResource || wasErrorState
@@ -1429,7 +1539,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const src = this.getActiveContentData().src
 		const failureReason =
 			this.imageLoadFailureReason ??
-			(src ? this.canvas.imageResourceManager.getFailureReason(src) : null)
+			(src ? this.canvas?.imageResourceManager?.getFailureReason?.(src) : null)
 
 		if (failureReason === "not-found") {
 			return this.getText("image.fileMissing", "图片文件不存在")
@@ -1492,7 +1602,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 移除资源失败与 decoded surface 释放监听
 	 */
 	private removeResourceLoadedListener(): void {
-		this.resourceSubscriptionCleanups.forEach((cleanup) => cleanup())
+		;(this.resourceSubscriptionCleanups ?? []).forEach((cleanup) => cleanup())
 		this.resourceSubscriptionCleanups = []
 		this.resourceLoadFailedHandler = undefined
 		this.resourceRecoveryStartedHandler = undefined
@@ -1612,13 +1722,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 检查图片是否满足生成条件（正在生成中或等待生成结果）
 	 */
 	private isImageGenerationPending(): boolean {
-		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
+		const activeContent = this.getActiveContentData()
+		if (this.hasActiveGeneration(activeContent.contentId)) {
 			return true
 		}
 
 		// 只有仍带任务 id 的请求才代表当前有生成轮询；无 id 的请求仅用于信息展示。
 		const hasActiveGenerationTask = this.hasActiveImageGenerationTask()
-		const activeContent = this.getActiveContentData()
 		const hasSrc = !!activeContent.src
 		const status = activeContent.status
 
@@ -1932,65 +2042,22 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 */
 	public override getNameLabelText(): string {
 		const baseName = this.data.name || this.getRenderName()
+		const displayState = this.getDisplayState()
 
-		// 如果是错误状态（图片加载失败），直接返回原始名称
-		if (this.isErrorState) {
-			return baseName
+		switch (displayState.status) {
+			case "generating":
+				return `${baseName}${this.getGeneratingNameSuffix(displayState)}`
+			case "uploading":
+				return `${baseName}${this.getText("image.nameSuffix.uploading", "(上传中)")}`
+			case "loading":
+				return `${baseName}${this.getText("image.nameSuffix.loading", "(加载中)")}`
+			case "failed":
+				return displayState.failureSource === "resource"
+					? baseName
+					: `${baseName}${this.getText("image.nameSuffix.failed", "(失败)")}`
+			default:
+				return baseName
 		}
-
-		const hasRequest =
-			!!this.getActiveGenerateImageRequest() || !!this.getActiveImageGenerationTaskMeta()
-		const activeContent = this.getActiveContentData()
-		const status = activeContent.status
-
-		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
-			const suffix = this.getGeneratingNameSuffix()
-			return `${baseName}${suffix}`
-		}
-
-		// 有结果且失败，添加"(失败)"后缀
-		if (status === GenerationStatus.Failed) {
-			const suffix = this.getText("image.nameSuffix.failed", "(失败)")
-			return `${baseName}${suffix}`
-		}
-
-		// 有结果且状态是 pending 或 processing
-		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing) {
-			// 区分上传中和生成中：历史请求信息不等同于当前任务。
-			if (this.isActiveGenerationPlaceholder()) {
-				const suffix = this.getGeneratingNameSuffix()
-				return `${baseName}${suffix}`
-			}
-
-			const suffix = this.getText("image.nameSuffix.uploading", "(上传中)")
-			return `${baseName}${suffix}`
-		}
-
-		// 检查是否正在加载图片（ossSrc 存在但图片还在异步加载）
-		if (this.isLoadingState) {
-			const suffix = this.getText("image.nameSuffix.loading", "(加载中)")
-			return `${baseName}${suffix}`
-		}
-
-		// 优先检查：有 src 说明已经生成成功，检查 ossSrc 是否为空
-		if (activeContent.src) {
-			// 有 src 但 ossSrc 为空，添加"(加载中)"后缀
-			if (!this.storedOssSrc) {
-				const suffix = this.getText("image.nameSuffix.loading", "(加载中)")
-				return `${baseName}${suffix}`
-			}
-			// 有 src 且 ossSrc 不为空，返回原始名称（已加载完成）
-			return baseName
-		}
-
-		// 没有 src，但有请求且没有状态，添加"(生成中)"后缀
-		if (hasRequest && !status) {
-			const suffix = this.getGeneratingNameSuffix()
-			return `${baseName}${suffix}`
-		}
-
-		// 其他情况返回原始名称
-		return baseName
 	}
 
 	/**
@@ -2092,29 +2159,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 	}
 
-	/**
-	 * 获取图片加载状态（基于事件更新的本地状态）
-	 */
-	private getImageLoadState(): {
-		ossSrc: string | null
-		imageLoaded: boolean
-		isLoading: boolean
-	} {
-		if (!this.getActiveContentData().src) {
-			return {
-				ossSrc: null,
-				imageLoaded: false,
-				isLoading: false,
-			}
-		}
-
-		return {
-			ossSrc: this.storedOssSrc,
-			imageLoaded: !!this.loadedImage,
-			isLoading: this.isResourceLoading,
-		}
-	}
-
 	private isReplacementUploadingActiveContent(): boolean {
 		const replacementState = this.canvas?.mediaReplaceController?.getReplacementState?.(
 			this.data.id,
@@ -2122,72 +2166,48 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return (
 			replacementState?.source === "local-upload" &&
 			replacementState.phase === "uploading" &&
-			replacementState.contentId === getActiveImageContentId(this.data)
+			replacementState.contentId === this.getActiveContentData().contentId
 		)
 	}
 
 	render(): Konva.Group | null {
-		if (this.isReplacementUploadingActiveContent()) {
-			return this.renderGeneratingPlaceholder()
+		this.syncEffectiveContentRuntimeState()
+		const displayState = this.getDisplayState()
+
+		if (displayState.surface === "image") {
+			return this.renderImage()
 		}
 
-		// 检查是否有生成请求（生图或高清图）
-		const hasRequest =
-			!!this.getActiveGenerateImageRequest() || !!this.getActiveImageGenerationTaskMeta()
-		const activeContent = this.getActiveContentData()
-		const status = activeContent.status
-
-		// 有 src：视为 completed 状态，直接渲染图片或加载状态
-		if (!!activeContent.src || status === GenerationStatus.Completed) {
-			// 如果图片加载失败，渲染错误状态
-			if (this.isErrorState) {
-				return this.renderError(this.getImageLoadErrorText())
-			}
-
-			// 从 ImageResourceManager 实时查询状态
-			const loadState = this.getImageLoadState()
-
-			// 主图已加载，直接渲染主图。缩放切档期间会继续显示已有图，
-			// 此时即使 oss 元数据暂时不在当前 slot 上，也不能回退到 loading 占位。
-			if (loadState.imageLoaded && activeContent.src) {
-				return this.renderImage()
-			}
-			return this.renderLoadingPlaceholder()
+		if (displayState.surface === "loading") {
+			return this.renderLoadingPlaceholder(displayState)
 		}
 
-		// 失败重试期间保留已落库的失败状态，但运行时应优先展示本次提交态。
-		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
-			return this.renderGeneratingPlaceholder()
-		}
-
-		// 有结果且失败，渲染错误信息
-		if (status === GenerationStatus.Failed) {
-			const errorMessage = resolveGenerationErrorMessage(
-				activeContent.errorMessage,
-				this.getText("image.generateFailed", "图片生成失败"),
-			)
+		if (displayState.surface === "error") {
+			const errorMessage =
+				displayState.failureSource === "resource"
+					? this.getImageLoadErrorText()
+					: resolveGenerationErrorMessage(
+							displayState.errorMessage,
+							this.getText("image.generateFailed", "图片生成失败"),
+						)
 			return this.renderError(errorMessage)
 		}
 
-		// 有结果且状态是 pending 或 processing，渲染生成中状态
-		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing) {
-			return this.renderGeneratingPlaceholder()
+		if (displayState.surface === "placeholder") {
+			return displayState.status === "generating" || displayState.status === "uploading"
+				? this.renderGeneratingPlaceholder(displayState)
+				: this.renderEmptyPlaceholder()
 		}
 
-		// 有请求但没有结果，渲染生成中状态
-		if (hasRequest && !status) {
-			return this.renderGeneratingPlaceholder()
-		}
-
-		// 没有请求，渲染无状态占位符
 		return this.renderEmptyPlaceholder()
 	}
 
 	update(newData: ImageElementData): boolean {
-		const currentActiveContentId = getActiveImageContentId(this.data)
-		const nextActiveContentId = getActiveImageContentId(newData)
+		const currentDocumentActiveContentId = getActiveImageContentId(this.data)
+		const nextDocumentActiveContentId = getActiveImageContentId(newData)
 		const currentContent = this.getActiveContentData()
-		const nextContent = resolveActiveImageContent(newData)
+		const nextViewData = this.canvas?.getElementForContentView?.(newData) ?? newData
+		const nextContent = resolveActiveImageContent(nextViewData)
 		const currentTaskMeta = currentContent.imageGenerationTaskMeta
 		const nextTaskMeta = nextContent.imageGenerationTaskMeta
 		const contentControlsChanged =
@@ -2198,7 +2218,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.data.mainContentId !== newData.mainContentId))
 		const needsRerender =
 			contentControlsChanged ||
-			getActiveImageContentId(this.data) !== getActiveImageContentId(newData) ||
+			currentContent.contentId !== nextContent.contentId ||
 			currentContent.generateImageRequest?.image_id !==
 				nextContent.generateImageRequest?.image_id ||
 			currentTaskMeta?.image_id !== nextTaskMeta?.image_id ||
@@ -2207,7 +2227,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			currentContent.status !== nextContent.status ||
 			!this.isPersistedCropConfigEqual(currentContent.crop, nextContent.crop)
 
-		// 检查 src 是否变化
+		// Effective Content 切换时，元素级 decoded image / failure reason 不能跨版本复用。
+		// 只读预览切换不会改文档 activeContentId，但会改 effective Content。
+		const contentChanged = currentContent.contentId !== nextContent.contentId
 		const srcChanged = currentContent.src !== nextContent.src
 
 		// 检查状态是否变为 failed
@@ -2222,15 +2244,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.data = newData
 		if (
-			currentActiveContentId &&
-			nextActiveContentId &&
-			currentActiveContentId !== nextActiveContentId
+			currentDocumentActiveContentId &&
+			nextDocumentActiveContentId &&
+			currentDocumentActiveContentId !== nextDocumentActiveContentId
 		) {
 			// 所有 active Content 变更（含撤销/重做、远端合并与轮询完成）统一清理旧 Content Marker。
 			this.canvas.markerManager.handleImageContentChanged(
 				this.data.id,
-				currentActiveContentId,
-				nextActiveContentId,
+				currentDocumentActiveContentId,
+				nextDocumentActiveContentId,
 			)
 		}
 
@@ -2238,21 +2260,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.isGenerating = false
 		}
 
-		// 如果 src 变化，重新加载图片并设置/移除监听
-		if (srcChanged) {
-			this.clearLoadedImageReference()
-			this.storedOssSrc = null
-			this.storedImageInfo = undefined
-			this.isResourceLoading = false
-			this.lastAppliedLoadFailureSignature = null
-			if (nextContent.src) {
-				this.setupResourceLoadedListener()
-				this.canvas.visibilityManager.updateImageElement(this.data.id, nextContent.src)
-			} else {
-				this.removeResourceLoadedListener()
-				this.canvas.visibilityManager.unregisterImageElement(this.data.id)
-			}
+		// 如果 effective Content 或 src 变化，清理旧版本运行态并重新设置监听。
+		if (contentChanged || srcChanged) {
+			this.resetRuntimeStateForContentChange(nextContent, srcChanged)
 		}
+		this.effectiveContentId = nextContent.contentId
+		this.effectiveContentSrc = nextContent.src
 
 		// 如果状态变为 failed，reject ossSrcPromise
 		if (statusChangedToFailed && this.ossSrcReject) {
@@ -2291,7 +2304,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const height = this.data.height
 
 		// 重置状态标记
-		this.isLoadingState = false
 		this.isErrorState = false
 
 		// 创建 Group 容器
@@ -2339,9 +2351,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/**
-	 * 渲染生成中状态占位符
+	 * 渲染生成中或上传中状态占位符
 	 */
-	private renderGeneratingPlaceholder(): Konva.Group {
+	private renderGeneratingPlaceholder(displayState = this.getDisplayState()): Konva.Group {
 		if (!this.data.width || !this.data.height) {
 			throw new Error("Image element must have width and height")
 		}
@@ -2350,7 +2362,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const height = this.data.height
 
 		// 标记为生成中状态
-		this.isLoadingState = false
 		this.isErrorState = false
 
 		// 创建 Group 容器
@@ -2365,11 +2376,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 创建事件代理 hit 节点
 		RenderUtils.createHitNode(group, width, height)
 
-		// 区分上传中和不同任务类型的生成中：历史请求信息不等同于当前任务。
-		const isGenerating = this.isActiveGenerationPlaceholder()
-		const displayText = isGenerating
-			? this.getGeneratingPlaceholderText()
-			: this.getText("image.uploading", "正在上传中...")
+		const displayText =
+			displayState.status === "generating"
+				? this.getGeneratingPlaceholderText(displayState)
+				: this.getText("image.uploading", "正在上传中...")
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
@@ -2407,7 +2417,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private isActiveGenerationPlaceholder(): boolean {
 		if (
 			this.hasActiveImageGenerationTask() ||
-			this.hasActiveGeneration(getActiveImageContentId(this.data))
+			this.hasActiveGeneration(this.getActiveContentData().contentId)
 		) {
 			return true
 		}
@@ -2422,29 +2432,27 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		)
 	}
 
-	private getGeneratingPlaceholderText(): string {
-		const taskMeta = this.getActiveImageGenerationTaskMeta()
-		if (taskMeta?.type === ImageGenerationTaskTypeMap.Expand) {
+	private getGeneratingPlaceholderText(state = this.getDisplayState()): string {
+		if (state.taskType === ImageGenerationTaskTypeMap.Expand) {
 			return this.getText("image.expanding", "正在扩展中...")
 		}
-		if (taskMeta?.type === ImageGenerationTaskTypeMap.Eraser) {
+		if (state.taskType === ImageGenerationTaskTypeMap.Eraser) {
 			return this.getText("image.erasing", "正在擦除中...")
 		}
-		if (taskMeta?.type === ImageGenerationTaskTypeMap.RemoveBackground) {
+		if (state.taskType === ImageGenerationTaskTypeMap.RemoveBackground) {
 			return this.getText("image.removingBackground", "正在去除背景...")
 		}
 		return this.getText("image.generating", "正在生成中...")
 	}
 
-	private getGeneratingNameSuffix(): string {
-		const taskMeta = this.getActiveImageGenerationTaskMeta()
-		if (taskMeta?.type === ImageGenerationTaskTypeMap.Expand) {
+	private getGeneratingNameSuffix(state = this.getDisplayState()): string {
+		if (state.taskType === ImageGenerationTaskTypeMap.Expand) {
 			return this.getText("image.nameSuffix.expanding", "(扩展中)")
 		}
-		if (taskMeta?.type === ImageGenerationTaskTypeMap.Eraser) {
+		if (state.taskType === ImageGenerationTaskTypeMap.Eraser) {
 			return this.getText("image.nameSuffix.erasing", "(擦除中)")
 		}
-		if (taskMeta?.type === ImageGenerationTaskTypeMap.RemoveBackground) {
+		if (state.taskType === ImageGenerationTaskTypeMap.RemoveBackground) {
 			return this.getText("image.nameSuffix.removingBackground", "(去背景中)")
 		}
 		return this.getText("image.nameSuffix.generating", "(生成中)")
@@ -2467,7 +2475,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	/**
 	 * 渲染加载中状态占位符
 	 */
-	private renderLoadingPlaceholder(): Konva.Group {
+	private renderLoadingPlaceholder(displayState = this.getDisplayState()): Konva.Group {
 		if (!this.data.width || !this.data.height) {
 			throw new Error("Image element must have width and height")
 		}
@@ -2476,7 +2484,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const height = this.data.height
 
 		// 标记为加载中状态
-		this.isLoadingState = true
 		this.isErrorState = false
 
 		// 创建 Group 容器
@@ -2491,6 +2498,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 创建事件代理 hit 节点
 		RenderUtils.createHitNode(group, width, height)
 
+		let displayText = this.getText("image.loading", "正在加载中...")
+		if (displayState.status === "generating") {
+			displayText = this.getGeneratingPlaceholderText(displayState)
+		} else if (displayState.status === "uploading") {
+			displayText = this.getText("image.uploading", "正在上传中...")
+		}
+
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
 			// 创建背景图片节点
@@ -2498,7 +2512,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
-				text: this.getText("image.loading", "正在加载中..."),
+				text: displayText,
 				textColor: COLORS.LOADING_TEXT,
 				iconSrc: imageIcon,
 				withBackground: true,
@@ -2529,7 +2543,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const height = this.data.height
 
 		// 重置状态标记
-		this.isLoadingState = false
 		this.isErrorState = false
 
 		// 创建 Group 容器
@@ -2590,7 +2603,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const height = this.data.height
 
 		// 标记为错误状态
-		this.isLoadingState = false
 		this.isErrorState = true
 
 		// 创建 Group 容器

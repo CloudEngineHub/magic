@@ -4,6 +4,7 @@ import type {
 	LayerElement,
 	RectangleElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import { DesignProjectManager } from "../DesignProjectManager"
 import type {
 	DesignConflict,
@@ -97,7 +98,7 @@ function createManager(
 	let magicProjectJsFileId: string | null = "file-1"
 	let magicProjectJsVersion: number | null = 2
 	let prevDesignDataFingerprint = "initial-fingerprint"
-	let isReadOnly = false
+	let accessMode: CanvasAccessMode = "edit"
 	let pendingDesignUpgrade: PendingDesignUpgrade | null = null
 
 	const stateBag: DesignProjectStateBag = {
@@ -113,7 +114,7 @@ function createManager(
 		setPrevDesignDataFingerprint: (v) => {
 			prevDesignDataFingerprint = v
 		},
-		getIsReadOnly: () => isReadOnly,
+		getAccessMode: () => accessMode,
 		setters: {
 			setMagicProjectJsFileId: vi.fn((v: string | null) => {
 				magicProjectJsFileId = v
@@ -126,8 +127,8 @@ function createManager(
 			}),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
-			setIsReadOnly: vi.fn((v: boolean) => {
-				isReadOnly = v
+			setAccessMode: vi.fn((v: CanvasAccessMode) => {
+				accessMode = v
 			}),
 			setFileVersionsList: vi.fn(),
 			setFileVersion: vi.fn(),
@@ -292,7 +293,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			sourceVersion: "2.0.0",
 			targetVersion: "3.0.0",
 		})
-		stateBag.setters.setIsReadOnly(true)
+		stateBag.setters.setAccessMode("readonly")
 		const managerInternals = manager as unknown as {
 			saveManager: { commitSave: (options?: unknown) => Promise<unknown> }
 		}

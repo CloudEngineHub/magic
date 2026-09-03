@@ -34,6 +34,7 @@ import {
 } from "../../../runtime/document/types"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasData, useCanvasEvent } from "../../../app/hooks/canvas"
+import type { CanvasEvent } from "../../../runtime/core/EventEmitter"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useLayersUI } from "../../../app/providers/LayersUIProvider"
 import { useElementMenu } from "../../panels/menu/ElementMenuContext"
@@ -55,6 +56,7 @@ import {
 	normalizeLayersFilter,
 } from "../layerFilters"
 import LayersFilterPopover, { LayersFilterForm } from "./LayersFilterPopover"
+import { createLayerRefreshScheduler } from "./layerRefreshScheduler"
 
 const LAYER_TREE_VIRTUAL_THRESHOLD = 80
 const LAYER_TREE_ROW_HEIGHT = 34
@@ -107,11 +109,39 @@ export default function LayersDrawer() {
 		}
 		return { ...DEFAULT_LAYERS_FILTER }
 	})
+	const layerRefreshScheduler = useMemo(() => createLayerRefreshScheduler(), [])
+
+	useEffect(() => {
+		return () => layerRefreshScheduler.dispose()
+	}, [layerRefreshScheduler])
 
 	// 订阅并获取画布数据
-	const elements = useCanvasData((manager) => manager.getAllElements(), ["element:change"], {
-		shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
-	})
+	const elements = useCanvasData(
+		(manager) => manager.getAllElements(),
+		[
+			"element:change",
+			"element:rerendered",
+			"element:image:generate-submit-started",
+			"element:image:generate-submit-failed",
+			"element:image:resultUpdated",
+			"element:video:generate-submit-started",
+			"element:video:generate-submit-failed",
+			"element:media:replaceStateChanged",
+			"element:image:ossSrcReady",
+		],
+		{
+			shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
+			scheduleUpdate: layerRefreshScheduler.schedule,
+			shouldUpdateOnEvent: (event) => {
+				if (event.type !== "element:rerendered") return true
+				const rerenderedEvent = event as CanvasEvent<"element:rerendered">
+				return (
+					rerenderedEvent.data.data.type === ElementTypeEnum.Image ||
+					rerenderedEvent.data.data.type === ElementTypeEnum.Video
+				)
+			},
+		},
+	)
 
 	// 获取操作方法
 	const { canvas } = useCanvas()
@@ -120,8 +150,8 @@ export default function LayersDrawer() {
 	const { openMenu } = useElementMenu()
 
 	// 从 Context 获取画布 UI 状态
-	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds, readonly } =
-		useCanvasUI()
+	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds } = useCanvasUI()
+	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
 
 	// 将画布数据转换为树形结构，先按 zIndex 降序排序（zIndex 大的在上面）
 	const treeData = useMemo(() => {
@@ -340,18 +370,18 @@ export default function LayersDrawer() {
 								className={cn(
 									// 锁定按钮：当被锁定时一直显示，否则只在 hover 时显示
 									!isLocked && context.showOnHoverClassName,
-									readonly && !isLocked && styles.hidden,
+									!canWrite && !isLocked && styles.hidden,
 								)}
 							>
 								<IconButton
 									className={cn(
 										styles.layerNodeActionButton,
-										readonly && styles.noHover,
+										!canWrite && styles.noHover,
 										context.noHoverClassName,
 										context.noActiveClassName,
 									)}
 									onClick={(e) => {
-										if (readonly) return
+										if (!canWrite) return
 										stopPropagation(e)
 										toggleLocked(node.id, isLocked)
 									}}
@@ -362,6 +392,7 @@ export default function LayersDrawer() {
 							<div
 								className={cn(
 									// 可见性按钮：当不可见时一直显示，否则只在 hover 时显示
+									!canWrite && styles.hidden,
 									isVisible && context.showOnHoverClassName,
 								)}
 							>
@@ -372,6 +403,7 @@ export default function LayersDrawer() {
 										context.noActiveClassName,
 									)}
 									onClick={(e) => {
+										if (!canWrite) return
 										stopPropagation(e)
 										toggleVisible(node.id, isVisible)
 									}}
@@ -389,7 +421,7 @@ export default function LayersDrawer() {
 			stopPropagation,
 			toggleLocked,
 			toggleVisible,
-			readonly,
+			canWrite,
 			canvas,
 			setLayerRenamingElementId,
 		],
@@ -410,14 +442,14 @@ export default function LayersDrawer() {
 
 	const handleDoubleClick = useCallback(
 		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
-			// readonly 状态下不允许编辑名称
-			if (readonly) {
+			// 没有文档写能力时不允许编辑名称
+			if (!canWrite) {
 				return
 			}
 			// 双击进入编辑模式
 			setLayerRenamingElementId(node.id)
 		},
-		[readonly, setLayerRenamingElementId],
+		[canWrite, setLayerRenamingElementId],
 	)
 
 	const handleMouseEnter = useCallback(
@@ -477,11 +509,7 @@ export default function LayersDrawer() {
 
 	return (
 		<div
-			className={cn(
-				styles.layersDrawer,
-				collapsed && styles.collapsed,
-				readonly && styles.readonly,
-			)}
+			className={cn(styles.layersDrawer, collapsed && styles.collapsed)}
 			style={{
 				width: width,
 				transition: transitionAnimation,
@@ -557,7 +585,7 @@ export default function LayersDrawer() {
 								selectedIds={selectedIds}
 								hoveredIds={hoveredIds}
 								treeNodeContentClassName={
-									readonly ? styles.treeNodeContentReadonly : undefined
+									!canWrite ? styles.treeNodeContentViewOnly : undefined
 								}
 								virtualize
 								virtualThreshold={LAYER_TREE_VIRTUAL_THRESHOLD}

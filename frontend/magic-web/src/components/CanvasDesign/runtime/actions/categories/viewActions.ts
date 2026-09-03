@@ -37,9 +37,11 @@ function resolveMediaElementFile(
 	)
 		return null
 	const src =
-		element.type === ElementTypeEnum.Image
-			? getActiveImageContent(element).src
-			: getActiveContent(element)?.src
+		typeof canvas.getEffectiveContent === "function"
+			? (canvas.getEffectiveContent(element.id) as { src?: string } | undefined)?.src
+			: element.type === ElementTypeEnum.Image
+				? getActiveImageContent(element).src
+				: getActiveContent(element)?.src
 	if (!src) return null
 	if (!isLocatableProjectFilePath(src)) return null
 

@@ -1,9 +1,5 @@
 import type { Canvas } from "../../core/Canvas"
-import {
-	getActiveContent,
-	getMainContent,
-	getUsableDownstreamImageContent,
-} from "../../document/elementContent"
+import { getMainContent, getUsableDownstreamImageContent } from "../../document/elementContent"
 import {
 	ElementTypeEnum,
 	type ElementContentBase,
@@ -52,15 +48,22 @@ function isContainer(element: LayerElement): boolean {
 	return element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group
 }
 
-function isReadyMedia(element: LayerElement): boolean {
+function getEffectiveContent(
+	canvas: Canvas,
+	element: LayerElement,
+): ElementContentBase | undefined {
+	return canvas.getEffectiveContent(element.id)
+}
+
+function isReadyMedia(canvas: Canvas, element: LayerElement): boolean {
 	if (element.type === ElementTypeEnum.Audio) {
-		const content = getActiveContent(element)
+		const content = getEffectiveContent(canvas, element)
 		return Boolean(
 			content && "src" in content && typeof content.src === "string" && content.src,
 		)
 	}
 	if (element.type === ElementTypeEnum.Image) {
-		const content = getActiveContent(element)
+		const content = getEffectiveContent(canvas, element)
 		return Boolean(
 			content &&
 			"src" in content &&
@@ -71,7 +74,7 @@ function isReadyMedia(element: LayerElement): boolean {
 	}
 
 	if (element.type !== ElementTypeEnum.Video) return true
-	const content = getActiveContent(element)
+	const content = getEffectiveContent(canvas, element)
 	if (!content || !("src" in content) || typeof content.src !== "string" || !content.src) {
 		return false
 	}
@@ -144,14 +147,14 @@ export function collectSelectionContentSnapshot(
 			return
 		}
 
-		const content = getActiveContent(latest)
+		const content = getEffectiveContent(canvas, latest)
 		const mainContent = getMainContent(latest)
 		items.push({
 			elementId: latest.id,
 			type: latest.type,
 			rootElementId,
 			activeContent: content,
-			ready: isReadyMedia(latest),
+			ready: isReadyMedia(canvas, latest),
 			mainContent,
 			mainReady: isReadyVideoMainContent(latest),
 		})

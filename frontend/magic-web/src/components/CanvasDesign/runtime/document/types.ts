@@ -10,6 +10,7 @@ import type {
 	StoredVideoEditorDraft,
 } from "../../public/magic-types"
 import type { TFunction } from "../../public/i18n-types"
+import type { CanvasAccessMode, CanvasCapability } from "../../public/props"
 
 /** 裁剪矩形配置 */
 export interface CropConfig {
@@ -73,8 +74,8 @@ export interface CanvasConfig {
 	scopeElement?: HTMLElement
 	/** 设计项目 ID，用于隔离画布级缓存、SW 离线资源与跨画布粘贴校验 */
 	id: string
-	/** 默认只读模式 */
-	defaultReadyonly?: boolean
+	accessMode?: CanvasAccessMode
+	capabilities?: Partial<Record<CanvasCapability, boolean>>
 	/** Magic 配置 */
 	magic?: {
 		methods?: CanvasDesignMethods
@@ -146,7 +147,9 @@ export type ElementType = (typeof ElementTypeEnum)[keyof typeof ElementTypeEnum]
 
 /** 可直接替换资源的画布媒体元素类型。 */
 export type MediaElementType =
-	typeof ElementTypeEnum.Image | typeof ElementTypeEnum.Video | typeof ElementTypeEnum.Audio
+	| typeof ElementTypeEnum.Image
+	| typeof ElementTypeEnum.Video
+	| typeof ElementTypeEnum.Audio
 
 /** 边框位置类型 */
 export type StrokePosition = "inside" | "center" | "outside"

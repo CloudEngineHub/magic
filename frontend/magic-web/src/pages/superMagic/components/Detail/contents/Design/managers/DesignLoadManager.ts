@@ -6,10 +6,11 @@ import {
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { SuperMagicApi } from "@/apis"
-import type {
-	DesignProjectStateBag,
-	DesignProjectManagerOptions,
-	PendingDesignUpgrade,
+import {
+	resolveDesignAccessMode,
+	type DesignProjectStateBag,
+	type DesignProjectManagerOptions,
+	type PendingDesignUpgrade,
 } from "./types"
 import {
 	DesignLoadError,
@@ -141,17 +142,7 @@ export class DesignLoadManager {
 
 	private async loadFromRemoteInternal(request: DesignLoadRequest): Promise<DesignLoadResult> {
 		const {
-			options: {
-				attachments,
-				flatAttachments,
-				projectPath,
-				projectId,
-				allowEdit,
-				isPlaybackMode,
-				isShareRoute,
-				isMobile,
-				attachmentIndex,
-			},
+			options: { attachments, flatAttachments, projectPath, projectId, attachmentIndex },
 			currentFile: { id: currentFileId, name: currentFileName },
 		} = request
 		if (!attachments) {
@@ -159,12 +150,11 @@ export class DesignLoadManager {
 		}
 
 		const currentProjectId = projectId ?? null
+		const accessMode = resolveDesignAccessMode(request.options)
 		const hasProjectChanged =
 			this.currentProjectId !== null && this.currentProjectId !== currentProjectId
 		if (hasProjectChanged) {
-			this.stateBag.setters.setIsReadOnly(
-				!allowEdit || isPlaybackMode || isShareRoute || isMobile,
-			)
+			this.stateBag.setters.setAccessMode(accessMode)
 		}
 		this.currentProjectId = currentProjectId
 
@@ -241,15 +231,11 @@ export class DesignLoadManager {
 			this.stateBag.setters.setDesignData(parsedData)
 			this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedData))
 			this.lastLoadedIdentityKey = request.identityKey
-			this.stateBag.setters.setIsReadOnly(
-				sidecarStatus === "unsupported" ||
-					!allowEdit ||
-					isPlaybackMode ||
-					isShareRoute ||
-					isMobile,
+			this.stateBag.setters.setAccessMode(
+				sidecarStatus === "unsupported" ? "readonly" : accessMode,
 			)
 
-			if (!isShareRoute) {
+			if (accessMode !== "share") {
 				try {
 					const fileInfo = await SuperMagicApi.getFileInfo({ file_id: result.fileId })
 					if (this.isCurrentLoadRequest(request) && fileInfo?.version !== undefined) {

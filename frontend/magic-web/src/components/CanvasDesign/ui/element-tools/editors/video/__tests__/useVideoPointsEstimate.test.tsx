@@ -56,15 +56,14 @@ function Providers(props: {
 	estimateVideoPoints: EstimateVideoPoints
 }) {
 	return (
-		<MagicProvider
-			readonly
-			methods={{ estimateVideoPoints: props.estimateVideoPoints } as CanvasDesignMethods}
-		>
-			<CanvasProvider>
+		<CanvasProvider>
+			<MagicProvider
+				methods={{ estimateVideoPoints: props.estimateVideoPoints } as CanvasDesignMethods}
+			>
 				<CanvasSetter canvas={props.canvas} />
 				{props.children}
-			</CanvasProvider>
-		</MagicProvider>
+			</MagicProvider>
+		</CanvasProvider>
 	)
 }
 

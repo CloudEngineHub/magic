@@ -1,9 +1,24 @@
 import { describe, expect, it, vi } from "vitest"
+import type { CanvasAccessContext, CanvasCapability, CanvasAccessMode } from "../../../public/props"
 import { ElementToolTypeEnum } from "../../../public/props"
+import { authorizeCanvasTool, type CanvasAuthorizationResult } from "../../core/CanvasAccessPolicy"
 import { CanvasElementToolCommandBus } from "../commands/ElementToolCommandBus"
 
+type TestAccessContext = CanvasAccessContext
+
 function createCanvas() {
-	const image = {
+	const accessContext: TestAccessContext = {
+		mode: "edit",
+		capabilities: new Set(),
+		can: () => true,
+	}
+	const image: {
+		id: string
+		type: string
+		activeContentId: string
+		mainContentId: string
+		contents: Array<{ contentId: string; src?: string; revision?: number }>
+	} = {
 		id: "image-1",
 		type: "image",
 		activeContentId: "content-a",
@@ -37,22 +52,29 @@ function createCanvas() {
 		setLetterSpacing: vi.fn(),
 		setListType: vi.fn(),
 	}
-	return {
+	const canvas = {
 		image,
 		textElement,
 		elementManager: {
-			getElementData: vi.fn(() => image),
+			getElementData: vi.fn<() => unknown>(() => image),
 			getElementInstance: vi.fn(() => operations),
 			update: vi.fn(),
 		},
 		generationRuntimeManager: { isCurrent: vi.fn(() => true) },
 		userActionRegistry: { canExecute: vi.fn(() => true), execute: vi.fn() },
 		textFormattingManager,
+		permissionManager: {
+			can: (capability: CanvasCapability) => accessContext.can(capability),
+			getContext: () => accessContext,
+			authorizeTool: (definition: Parameters<typeof authorizeCanvasTool>[1]) =>
+				authorizeCanvasTool(accessContext, definition),
+		},
 		eventEmitter: { emit: vi.fn() },
 		cropManager: { enterCropMode: vi.fn() },
 		extendManager: { enterExtendMode: vi.fn() },
 		eraserManager: { enterEraserMode: vi.fn() },
 	}
+	return canvas
 }
 
 describe("CanvasElementToolCommandBus", () => {
@@ -73,6 +95,50 @@ describe("CanvasElementToolCommandBus", () => {
 			toolId: ElementToolTypeEnum.ContentCrop,
 			elementId: "image-1",
 			contentId: "content-a",
+		})
+	})
+
+	it("returns a structured result when a command target is unavailable", () => {
+		const canvas = createCanvas()
+		canvas.elementManager.getElementData = vi.fn(() => undefined)
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.ContentDownload,
+				elementId: "deleted-image",
+				contentId: "content-a",
+			}),
+		).toEqual({ executed: false, reason: "ELEMENT_NOT_FOUND" })
+	})
+
+	it("rejects commands when the declared capability is unavailable", () => {
+		const canvas = createCanvas()
+		canvas.permissionManager.getContext = vi.fn<() => TestAccessContext>(() => ({
+			mode: "readonly" as CanvasAccessMode,
+			capabilities: new Set<CanvasCapability>(),
+			can: () => false,
+		}))
+		canvas.permissionManager.can = vi.fn(() => false)
+		canvas.permissionManager.authorizeTool = vi.fn<
+			(definition: Parameters<typeof authorizeCanvasTool>[1]) => CanvasAuthorizationResult
+		>(() => ({
+			allowed: false,
+			reason: "CAPABILITY_REQUIRED",
+			requiredCapability: "document.write",
+		}))
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.ContentCrop,
+				elementId: "image-1",
+				contentId: "content-a",
+			}),
+		).toEqual({
+			executed: false,
+			reason: "CAPABILITY_REQUIRED",
+			requiredCapability: "document.write",
 		})
 	})
 
@@ -120,6 +186,97 @@ describe("CanvasElementToolCommandBus", () => {
 		expect(operations.deleteActiveContent).not.toHaveBeenCalled()
 	})
 
+	it("returns a structured result for a stale version target", () => {
+		const canvas = createCanvas()
+		canvas.image.contents = [
+			{ contentId: "content-a", src: "a.png" },
+			{ contentId: "content-b", src: "b.png" },
+		]
+		canvas.image.activeContentId = "content-b"
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.VersionDelete,
+				elementId: "image-1",
+				contentId: "content-a",
+			}),
+		).toEqual({ executed: false, reason: "ACTIVE_CONTENT_MISMATCH" })
+	})
+
+	it("uses session preview for version navigation outside edit mode", () => {
+		const canvas = createCanvas()
+		canvas.image.contents = [
+			{ contentId: "content-a", src: "a.png" },
+			{ contentId: "content-b", src: "b.png" },
+		]
+		const previewCanvas = canvas as typeof canvas & {
+			setPreviewContent: ReturnType<typeof vi.fn>
+		}
+		const setPreviewContent = vi.fn()
+		previewCanvas.setPreviewContent = setPreviewContent
+		previewCanvas.permissionManager.getContext = vi.fn<() => TestAccessContext>(() => ({
+			mode: "share",
+			capabilities: new Set<CanvasCapability>(["interaction.switchContent"]),
+			can: (capability: CanvasCapability) => capability === "interaction.switchContent",
+		}))
+		previewCanvas.permissionManager.can = vi.fn(
+			(capability: CanvasCapability) => capability === "interaction.switchContent",
+		)
+		previewCanvas.permissionManager.authorizeTool = vi.fn(
+			(definition: Parameters<typeof authorizeCanvasTool>[1]) => ({
+				allowed:
+					definition.requiredCapability === "interaction.switchContent" ||
+					definition.requiredCapability === "document.read",
+			}),
+		)
+		const bus = new CanvasElementToolCommandBus(previewCanvas as never)
+
+		bus.execute({
+			toolId: ElementToolTypeEnum.VersionNext,
+			elementId: "image-1",
+			contentId: "content-a",
+		})
+
+		expect(setPreviewContent).toHaveBeenCalledWith("image-1", "content-b")
+		expect(canvas.image.activeContentId).toBe("content-a")
+	})
+
+	it("reports an unavailable target when version navigation is already at the boundary", () => {
+		const canvas = createCanvas()
+		canvas.image.contents = [
+			{ contentId: "content-a", src: "a.png" },
+			{ contentId: "content-b", src: "b.png" },
+		]
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.VersionPrevious,
+				elementId: "image-1",
+				contentId: "content-a",
+			}),
+		).toEqual({ executed: false, reason: "TARGET_UNAVAILABLE" })
+		expect(
+			canvas.elementManager.getElementInstance().switchActiveContent,
+		).not.toHaveBeenCalled()
+	})
+
+	it("reports an unavailable target when a generation fallback has no media route", () => {
+		const canvas = createCanvas()
+		canvas.elementManager.getElementData = vi.fn(() => canvas.textElement)
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.GenerationGenerateAgain,
+				elementId: "text-1",
+				contentId: "text-content",
+			}),
+		).toEqual({ executed: false, reason: "TARGET_UNAVAILABLE" })
+		expect(canvas.eventEmitter.emit).not.toHaveBeenCalled()
+	})
+
 	it("routes an unmounted generation editor through a target-safe fallback event", () => {
 		const canvas = createCanvas()
 		const bus = new CanvasElementToolCommandBus(canvas as never)
@@ -154,6 +311,33 @@ describe("CanvasElementToolCommandBus", () => {
 
 		expect(canvas.userActionRegistry.canExecute).toHaveBeenCalledWith(actionId)
 		expect(canvas.userActionRegistry.execute).toHaveBeenCalledWith(actionId, {})
+	})
+
+	it("returns a structured result when an action fallback is unavailable", () => {
+		const canvas = createCanvas()
+		canvas.userActionRegistry.canExecute = vi.fn(() => false)
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.FrameCreate,
+				elementId: "image-1",
+			}),
+		).toEqual({ executed: false, reason: "ACTION_UNAVAILABLE" })
+		expect(canvas.userActionRegistry.execute).not.toHaveBeenCalled()
+	})
+
+	it("returns a structured result for an invalid element fallback payload", () => {
+		const canvas = createCanvas()
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.ElementResize,
+				elementId: "image-1",
+			}),
+		).toEqual({ executed: false, reason: "INVALID_PAYLOAD" })
+		expect(canvas.elementManager.update).not.toHaveBeenCalled()
 	})
 
 	it("does not query UserActionRegistry with an undefined action id", () => {

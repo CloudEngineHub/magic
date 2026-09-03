@@ -14,8 +14,6 @@ import type { CanvasElementNameChange } from "../../../runtime/core/EventEmitter
 const CANVAS_DATA_CHANGE_DEBOUNCE_MS = 120
 
 interface UseCanvasEventListenersOptions {
-	/** 是否为只读模式 */
-	readonly?: boolean
 	/** Magic 方法 */
 	methods?: CanvasDesignMethods
 	/** 创建 marker 前的回调 */
@@ -48,7 +46,6 @@ type PendingCanvasDataChangeMeta = CanvasDesignDataChangeMeta & {
  */
 export function useCanvasEventListeners(options: UseCanvasEventListenersOptions): void {
 	const {
-		readonly,
 		methods,
 		beforeMarkerCreate,
 		onMarkerCreated,
@@ -69,7 +66,6 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	const onCanvasDesignDataChangeRef = useLatest(onCanvasDesignDataChange)
 	const onCanvasDesignDataPatchChangeRef = useLatest(onCanvasDesignDataPatchChange)
 	const onSelectionChangeRef = useLatest(onSelectionChange)
-	const readonlyRef = useLatest(readonly)
 	const pendingCanvasDataChangeMetaRef = useRef<PendingCanvasDataChangeMeta | null>(null)
 	const pendingDeletedElementIdsRef = useRef<Set<string>>(new Set())
 	const isElementWithinSelection = useCallback(
@@ -193,7 +189,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		const requiresFullExport = meta?.requiresFullExport === true
 		const deletedElementIds = Array.from(pendingDeletedElementIdsRef.current)
 		pendingDeletedElementIdsRef.current.clear()
-		if (!canvas || readonlyRef.current) return
+		if (!canvas || !canvas.permissionManager.can("document.write")) return
 		if (canvas.isDestroyed) return
 		const metaWithDeletedElementIds: CanvasDesignDataChangeMeta | undefined =
 			meta || deletedElementIds.length > 0
@@ -259,7 +255,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		// 导出时不包含临时元素，避免保存上传中的图片到外部
 		const canvasData = canvas.exportDocument({ includeTemporary: false })
 		onCanvasDesignDataChangeRef.current(canvasData, metaWithDeletedElementIds)
-	}, [canvas, onCanvasDesignDataChangeRef, onCanvasDesignDataPatchChangeRef, readonlyRef])
+	}, [canvas, onCanvasDesignDataChangeRef, onCanvasDesignDataPatchChangeRef])
 
 	const scheduleCanvasDesignDataChange = useCallback(
 		(

@@ -1,5 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react"
+import { useLayoutEffect, useMemo, useReducer, useRef, useSyncExternalStore } from "react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
+import { useCanvasEvent } from "../../../app/hooks/canvas/useCanvasEvent"
 import type {
 	ElementToolCommand,
 	ElementToolRuntimeState,
@@ -63,6 +64,16 @@ export function useElementToolCommand(registration: ElementToolCommandRegistrati
 export function useElementToolRuntimeStates(elementId: string | null) {
 	const { canvas } = useCanvas()
 	const bus = canvas?.elementToolCommandBus
+	const [, forcePreviewUpdate] = useReducer((value: number) => value + 1, 0)
+	useCanvasEvent(
+		"content:previewChanged",
+		({ data }) => {
+			if (!elementId || !data.elementId || data.elementId === elementId) {
+				forcePreviewUpdate()
+			}
+		},
+		[elementId],
+	)
 	const contentId = useCanvasElementContentId(elementId)
 	const subscribe = useMemo(
 		() => (listener: () => void) => {
@@ -84,7 +95,7 @@ const EMPTY_TOOL_STATES = new Map<ElementToolType, ElementToolRuntimeState>()
 function useCanvasElementContentId(elementId: string | null): string | undefined {
 	const { canvas } = useCanvas()
 	const element = elementId ? canvas?.elementManager?.getElementData(elementId) : undefined
-	return element && "activeContentId" in element
-		? (element.activeContentId ?? undefined)
+	return element && "contents" in element
+		? (canvas?.getEffectiveContentId(element.id) ?? undefined)
 		: undefined
 }

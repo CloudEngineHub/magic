@@ -177,8 +177,8 @@ export class ConnectionDragManager {
 		this.eventUnsubscribers = [
 			this.canvas.eventEmitter.on("keyboard:escape", () => this.cancelActiveDrag()),
 			this.canvas.eventEmitter.on("canvas:clear", () => this.cancelActiveDrag()),
-			this.canvas.eventEmitter.on("canvas:readonly", ({ data }) => {
-				if (data.readonly) this.cancelActiveDrag()
+			this.canvas.eventEmitter.on("permission:changed", () => {
+				if (!this.canvas.permissionManager.can("document.write")) this.cancelActiveDrag()
 			}),
 			this.canvas.eventEmitter.on("tool:change", () => this.cancelActiveDrag()),
 			this.canvas.eventEmitter.on("crop:enter", () => this.cancelActiveDrag()),
@@ -588,7 +588,7 @@ export class ConnectionDragManager {
 	}
 
 	private canUseConnectionDrag(): boolean {
-		if (this.canvas.readonly) return false
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) return false
 		if (this.canvas.transformManager.isTransformInteractionActive()) return false
 		if (this.canvas.transformManager.isDraggingElement()) return false

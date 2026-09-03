@@ -12,6 +12,10 @@ function createCanvas(selectedIds: string[]) {
 
 	return {
 		canvas: {
+			can: vi.fn((capability: string) => capability !== "document.write"),
+			permissionManager: {
+				can: vi.fn((capability: string) => capability !== "document.write"),
+			},
 			selectionManager: { getSelectedIds: () => selectedIds },
 			elementManager: { getElementData: (id: string) => elements.get(id) },
 			userActionRegistry: {
@@ -38,7 +42,6 @@ describe("getMenuItems", () => {
 			canvas,
 			selectedIds: ["image-1", "image-2"],
 			currentElementId: "image-1",
-			readonly: true,
 			downloadMenuContext: {
 				useAiImageSubmenu: false,
 				selectionKind: "image-only",
@@ -57,7 +60,6 @@ describe("getMenuItems", () => {
 			canvas,
 			selectedIds: ["image-1"],
 			currentElementId: "image-1",
-			readonly: true,
 			permissions: { elementMenuConversationActions: false },
 		})
 

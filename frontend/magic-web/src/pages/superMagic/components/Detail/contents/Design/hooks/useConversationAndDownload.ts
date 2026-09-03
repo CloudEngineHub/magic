@@ -232,6 +232,8 @@ function buildImageProcessOptions(params: {
 }
 
 interface UseConversationAndDownloadOptions {
+	/** 将元素投影到当前 Canvas 会话的 effective Content（只读预览时不写回文档） */
+	getContentViewElement?: (element: CanvasFileElement) => CanvasFileElement
 	/** 已扁平化的附件列表 */
 	flatAttachments?: FileItem[]
 	attachmentsReady?: boolean
@@ -264,6 +266,7 @@ interface UseConversationAndDownloadOptions {
  */
 export function useConversationAndDownload(options: UseConversationAndDownloadOptions) {
 	const {
+		getContentViewElement = (element) => element,
 		flatAttachments,
 		attachmentsReady,
 		attachmentIndex,
@@ -298,12 +301,11 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 			// 处理每个图片元素
 			for (const item of data) {
+				const contentViewElement = getContentViewElement(item)
 				const source =
-					item.type === ElementTypeEnum.Image
-						? getActiveImageContent(item)
-						: item.type === ElementTypeEnum.Video
-							? getActiveContent(item)
-							: getActiveContent(item)
+					contentViewElement.type === ElementTypeEnum.Image
+						? getActiveImageContent(contentViewElement)
+						: getActiveContent(contentViewElement)
 				if (!source?.src) {
 					throw new Error(t("design.errors.imageSrcEmpty"))
 				}
@@ -358,6 +360,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			}
 		},
 		[
+			getContentViewElement,
 			flatAttachments,
 			attachmentsReady,
 			attachmentIndex,
@@ -396,16 +399,17 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 			// 先完整解析选区；任一元素无法映射到项目文件时，整批不启动。
 			for (const element of data) {
+				const contentViewElement = getContentViewElement(element)
 				const activeImageContent =
-					element.type === ElementTypeEnum.Image
-						? getActiveImageContent(element)
+					contentViewElement.type === ElementTypeEnum.Image
+						? getActiveImageContent(contentViewElement)
 						: undefined
 				const elementSrc =
 					activeImageContent?.src ??
-					(element.type === ElementTypeEnum.Video
-						? getActiveContent(element)?.src
-						: element.type === ElementTypeEnum.Audio
-							? getActiveContent(element)?.src
+					(contentViewElement.type === ElementTypeEnum.Video
+						? getActiveContent(contentViewElement)?.src
+						: contentViewElement.type === ElementTypeEnum.Audio
+							? getActiveContent(contentViewElement)?.src
 							: undefined)
 				if (!elementSrc) {
 					throw new CanvasMediaDownloadPreflightError(t("design.errors.imageSrcEmpty"))
@@ -425,12 +429,12 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				}
 
 				const imageProcess = buildImageProcessOptions({
-					fileElement: element,
+					fileElement: contentViewElement,
 					fileItem: resolvedFile,
 					sourceDimensionsByElementId: downloadOptions?.sourceDimensionsByElementId,
 				})
 				if (
-					element.type === ElementTypeEnum.Image &&
+					contentViewElement.type === ElementTypeEnum.Image &&
 					activeImageContent?.crop &&
 					!imageProcess
 				) {
@@ -438,7 +442,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				}
 
 				resolvedEntries.push({
-					element,
+					element: contentViewElement,
 					fileItem: resolvedFile,
 					imageProcess,
 				})
@@ -557,6 +561,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			designProjectBasePath,
 			downloadProgress,
 			flatAttachments,
+			getContentViewElement,
 			projectId,
 			t,
 		],

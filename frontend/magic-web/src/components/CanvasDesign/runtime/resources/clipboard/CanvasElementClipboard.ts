@@ -7,6 +7,7 @@ import {
 } from "./CanvasDesignClipboard"
 import { getFileExtensionFromMimeType, validateAndFilterCanvasFiles } from "../../shared/ids"
 import { isValidElementData } from "../../document/validateElement"
+import { isCanvasClipboardPayloadWithinLimits } from "./clipboardLimits"
 
 /**
  * CanvasDesign 元素剪贴板主元数据 MIME。
@@ -39,6 +40,12 @@ export interface CanvasElementClipboardFileMetadata {
 	id: string
 	/** 对应的原始元素 ID；画布导出文件没有源元素时使用导出 ID */
 	elementId: string
+	/** 源项目 ID；用于区分同项目跨画布与跨项目资源 */
+	sourceProjectId?: string
+	/** 源项目文件 ID；用于 Host 侧服务端复制 */
+	sourceFileId?: string
+	/** 项目绝对路径；MessageEditor 可直接作为项目文件引用 */
+	projectPath?: string
 	/** 写入剪贴板时保留的文件名，用于上传和元素命名 */
 	filename: string
 	/** 原始 Blob 的 MIME，用于从私有 Blob 还原 File */
@@ -75,6 +82,8 @@ export interface CanvasElementClipboardPayload {
 	operation: CanvasElementClipboardOperation
 	/** 来源画布 ID；新版富剪贴板允许跨画布上传 Blob 后重建元素 */
 	sourceCanvasId?: string
+	/** 来源项目 ID；缺失时目标侧必须保守降级 */
+	sourceProjectId?: string
 	elements: LayerElement[]
 	files: CanvasElementClipboardFileMetadata[]
 	/** 复制内容内部的持久化连接；旧 payload 缺少该字段时按空数组处理。 */
@@ -120,6 +129,10 @@ export interface CanvasElementClipboardParseOptions {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null
+}
+
+function normalizeClipboardMimeType(value: string): string {
+	return value.trim().toLowerCase()
 }
 
 function isCanvasFileElement(element: LayerElement): element is CanvasFileElement {
@@ -186,6 +199,18 @@ function normalizePayload(data: unknown): CanvasElementClipboardPayload | null {
 	) {
 		return null
 	}
+	if (
+		!isCanvasClipboardPayloadWithinLimits({
+			elements: data.elements,
+			files: data.files,
+			connections: data.connections,
+		})
+	) {
+		return null
+	}
+	if (data.sourceProjectId !== undefined && typeof data.sourceProjectId !== "string") {
+		return null
+	}
 
 	const elements = data.elements.filter(isValidElementData)
 	const operation = isCanvasElementClipboardOperation(data.operation)
@@ -194,8 +219,7 @@ function normalizePayload(data: unknown): CanvasElementClipboardPayload | null {
 	const files = data.files
 		.map(normalizeFileMetadata)
 		.filter((file): file is CanvasElementClipboardFileMetadata => Boolean(file))
-	const connections =
-		operation === "copy-elements" ? normalizeConnections(data.connections) : []
+	const connections = operation === "copy-elements" ? normalizeConnections(data.connections) : []
 
 	if (elements.length === 0 && !files.some((file) => file.role === "canvas-export")) {
 		return null
@@ -206,6 +230,8 @@ function normalizePayload(data: unknown): CanvasElementClipboardPayload | null {
 		version: CANVAS_ELEMENT_CLIPBOARD_VERSION,
 		operation,
 		sourceCanvasId: getPayloadSourceCanvasId(data),
+		sourceProjectId:
+			typeof data.sourceProjectId === "string" ? data.sourceProjectId : undefined,
 		elements,
 		files,
 		connections: connections.length > 0 ? connections : undefined,
@@ -294,6 +320,9 @@ function normalizeFileMetadata(file: unknown): CanvasElementClipboardFileMetadat
 	) {
 		return null
 	}
+	if (!Number.isFinite(file.fileSize) || file.fileSize < 0) {
+		return null
+	}
 
 	const role = file.role ?? file.fileRole
 	if (role !== "element-media" && role !== "canvas-export" && role !== "generation-resource") {
@@ -303,6 +332,10 @@ function normalizeFileMetadata(file: unknown): CanvasElementClipboardFileMetadat
 	return {
 		id: file.id,
 		elementId: file.elementId,
+		sourceProjectId:
+			typeof file.sourceProjectId === "string" ? file.sourceProjectId : undefined,
+		sourceFileId: typeof file.sourceFileId === "string" ? file.sourceFileId : undefined,
+		projectPath: typeof file.projectPath === "string" ? file.projectPath : undefined,
 		filename: file.filename,
 		mimeType: file.mimeType,
 		fileSize: file.fileSize,
@@ -354,6 +387,7 @@ export class CanvasElementClipboard {
 	public static createPayload(options: {
 		elements: LayerElement[]
 		canvasId?: string
+		projectId?: string
 		files: CanvasElementClipboardFileMetadata[]
 		operation: CanvasElementClipboardOperation
 		connections?: CanvasConnection[]
@@ -367,6 +401,7 @@ export class CanvasElementClipboard {
 			version: CANVAS_ELEMENT_CLIPBOARD_VERSION,
 			operation: options.operation,
 			sourceCanvasId: options.canvasId,
+			sourceProjectId: options.projectId,
 			elements: options.elements,
 			files: options.files,
 			connections,
@@ -387,12 +422,18 @@ export class CanvasElementClipboard {
 		mimeType: string
 		fileSize: number
 		resourceIdentity?: string
+		sourceProjectId?: string
+		sourceFileId?: string
+		projectPath?: string
 		resourceAliases?: string[]
 		sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 	}): CanvasElementClipboardFileMetadata {
 		return {
 			id: options.fileId,
 			elementId: options.element.id,
+			sourceProjectId: options.sourceProjectId,
+			sourceFileId: options.sourceFileId,
+			projectPath: options.projectPath,
 			filename: sanitizeFilename(options.filename, options.mimeType),
 			mimeType: options.mimeType,
 			fileSize: options.fileSize,
@@ -415,15 +456,25 @@ export class CanvasElementClipboard {
 		mimeType: string
 		fileSize: number
 		sourceElements: LayerElement[]
+		resourceIdentity?: string
+		sourceProjectId?: string
+		sourceFileId?: string
+		projectPath?: string
+		resourceAliases?: string[]
 		sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 	}): CanvasElementClipboardFileMetadata {
 		return {
 			id: options.fileId,
 			elementId: options.fileId,
+			sourceProjectId: options.sourceProjectId,
+			sourceFileId: options.sourceFileId,
+			projectPath: options.projectPath,
 			filename: sanitizeFilename(options.filename, options.mimeType),
 			mimeType: options.mimeType,
 			fileSize: options.fileSize,
 			role: "canvas-export",
+			resourceIdentity: options.resourceIdentity,
+			resourceAliases: options.resourceAliases,
 			sourceRef: options.sourceRef,
 		}
 	}
@@ -438,6 +489,9 @@ export class CanvasElementClipboard {
 		resourcePath: string
 		resourceIdentity: string
 		resourceAliases: string[]
+		sourceProjectId?: string
+		sourceFileId?: string
+		projectPath?: string
 		filename: string
 		mimeType: string
 		fileSize: number
@@ -446,6 +500,9 @@ export class CanvasElementClipboard {
 		return {
 			id: options.fileId,
 			elementId: options.fileId,
+			sourceProjectId: options.sourceProjectId,
+			sourceFileId: options.sourceFileId,
+			projectPath: options.projectPath,
 			filename: sanitizeFilename(options.filename, options.mimeType),
 			mimeType: options.mimeType,
 			fileSize: options.fileSize,
@@ -666,19 +723,24 @@ export class CanvasElementClipboard {
 	 * 仅作为外部图片 / 视频 / 音频粘贴 fallback，不解析任何 CanvasDesign 元数据。
 	 */
 	public static async readExternalFileItem(item: ClipboardItem): Promise<File | null> {
-		const mediaType = item.types.find(
-			(type) =>
-				type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/"),
-		)
+		const mediaType = item.types.find((type) => {
+			const normalized = normalizeClipboardMimeType(type)
+			return (
+				normalized.startsWith("image/") ||
+				normalized.startsWith("video/") ||
+				normalized.startsWith("audio/")
+			)
+		})
 		if (!mediaType) {
 			return null
 		}
 
 		try {
 			const blob = await item.getType(mediaType)
+			const normalizedMediaType = normalizeClipboardMimeType(mediaType)
 			const file = markDefaultClipboardFilenameFile(
-				new File([blob], getExternalClipboardFallbackFilename(mediaType), {
-					type: mediaType,
+				new File([blob], getExternalClipboardFallbackFilename(normalizedMediaType), {
+					type: normalizedMediaType,
 				}),
 			)
 			const validFiles = validateAndFilterCanvasFiles([file])
@@ -769,12 +831,15 @@ export class CanvasElementClipboard {
 		items: ClipboardItem[],
 	): Promise<CanvasElementClipboardPayload | null> {
 		for (const item of items) {
-			if (!item.types.includes(CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE)) {
+			const payloadType = item.types.find(
+				(type) => normalizeClipboardMimeType(type) === CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE,
+			)
+			if (!payloadType) {
 				continue
 			}
 
 			try {
-				const blob = await item.getType(CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE)
+				const blob = await item.getType(payloadType)
 				const text = await blob.text()
 				const payload = normalizePayload(JSON.parse(text))
 				if (payload) {
@@ -805,13 +870,15 @@ export class CanvasElementClipboard {
 
 		const files: CanvasElementClipboardFile[] = []
 		const fileItems = items.filter((item) =>
-			item.types.some(
-				(type) =>
-					type === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE ||
-					type.startsWith("image/") ||
-					type.startsWith("video/") ||
-					type.startsWith("audio/"),
-			),
+			item.types.some((type) => {
+				const normalized = normalizeClipboardMimeType(type)
+				return (
+					normalized === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE ||
+					normalized.startsWith("image/") ||
+					normalized.startsWith("video/") ||
+					normalized.startsWith("audio/")
+				)
+			}),
 		)
 
 		for (let i = 0; i < blobBackedMetadata.length; i++) {
@@ -840,16 +907,23 @@ export class CanvasElementClipboard {
 		item: ClipboardItem,
 		metadata: CanvasElementClipboardFileMetadata,
 	): Promise<File | null> {
-		const preferredType = item.types.find((type) => type === metadata.mimeType)
+		const preferredType = item.types.find(
+			(type) =>
+				normalizeClipboardMimeType(type) === normalizeClipboardMimeType(metadata.mimeType),
+		)
 		const mediaType =
 			preferredType ??
-			item.types.find((type) => type === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE) ??
 			item.types.find(
-				(type) =>
-					type.startsWith("image/") ||
-					type.startsWith("video/") ||
-					type.startsWith("audio/"),
-			)
+				(type) => normalizeClipboardMimeType(type) === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE,
+			) ??
+			item.types.find((type) => {
+				const normalized = normalizeClipboardMimeType(type)
+				return (
+					normalized.startsWith("image/") ||
+					normalized.startsWith("video/") ||
+					normalized.startsWith("audio/")
+				)
+			})
 		if (!mediaType) {
 			return null
 		}
@@ -857,7 +931,7 @@ export class CanvasElementClipboard {
 		try {
 			const blob = await item.getType(mediaType)
 			const file =
-				mediaType === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE
+				normalizeClipboardMimeType(mediaType) === CANVAS_ELEMENT_FILE_BLOB_MIME_TYPE
 					? new File([blob], sanitizeFilename(metadata.filename, metadata.mimeType), {
 							type: metadata.mimeType,
 						})

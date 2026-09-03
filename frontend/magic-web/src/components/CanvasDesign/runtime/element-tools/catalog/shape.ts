@@ -18,9 +18,14 @@ const shapeTools = [
 export const SHAPE_TOOL_DEFINITIONS: ElementToolDefinition[] = shapeTools.map(([id, order]) =>
 	topTool(
 		id,
-		"active-content",
+		"element",
 		"shape",
 		order,
 		(context) => context.selection.isSingleElement && shapeTypes.has(context.element.type),
+		{
+			effect: "document",
+			requiredCapability: "document.write",
+			commandRoute: "shape",
+		},
 	),
 )
