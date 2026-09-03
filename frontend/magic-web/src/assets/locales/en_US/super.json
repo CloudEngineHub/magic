@@ -3803,11 +3803,11 @@
 					"title": "No projects yet"
 				},
 				"recording": {
-					"description": "Tap + to start a new recording or import a file.",
+					"description": "Tap the recording button at the bottom to start recording, or import an audio file.",
 					"title": "No recordings yet"
 				},
 				"recordingGroup": {
-					"description": "Move recordings here from the more menu.",
+					"description": "Move a recording here from its more-actions menu.",
 					"title": "Nothing in this group"
 				},
 				"search": {

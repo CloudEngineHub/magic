@@ -3803,11 +3803,11 @@
 					"title": "暂无项目"
 				},
 				"recording": {
-					"description": "点击右下角 + 开始新的录音，或导入音频文件。",
+					"description": "点击底部录音按钮开始录音，或导入音频文件。",
 					"title": "还没有录音"
 				},
 				"recordingGroup": {
-					"description": "在录音的更多菜单里把它移到这个分组吧。",
+					"description": "录音后可在更多菜单中移入此分组。",
 					"title": "该分组下还没有录音"
 				},
 				"search": {
