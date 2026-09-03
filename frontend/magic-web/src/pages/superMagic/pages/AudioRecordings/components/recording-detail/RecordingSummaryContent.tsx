@@ -34,6 +34,7 @@ export interface RecordingSummaryContentProps {
 	onTimeClick: (seconds: number, end?: number) => void
 	scrollPaddingBottom?: number
 	layout?: "desktop" | "mobile"
+	isGenerating?: boolean
 }
 
 /** Selects the renderer for each supported completed-summary file type. */
@@ -47,9 +48,10 @@ export function RecordingSummaryContent({
 	onTimeClick,
 	scrollPaddingBottom = 0,
 	layout = "desktop",
+	isGenerating = false,
 }: RecordingSummaryContentProps) {
-	if (!content?.trim()) {
-		return <SummaryTabEmptyState />
+	if (!file.file || !content?.trim()) {
+		return <SummaryTabEmptyState isGenerating={isGenerating} />
 	}
 
 	if (file.type === "metrics") {
@@ -480,10 +482,13 @@ function TopicsContent({
 }
 
 /** Centered empty placeholder for summary tabs whose file content is not yet available. */
-function SummaryTabEmptyState() {
+function SummaryTabEmptyState({ isGenerating }: { isGenerating: boolean }) {
 	return (
 		<RecordingDetailRegionEmptySlot>
-			<RecordingDetailEmptyState variant="noSummaryFile" compact />
+			<RecordingDetailEmptyState
+				variant={isGenerating ? "summaryGenerating" : "noSummaryFile"}
+				compact
+			/>
 		</RecordingDetailRegionEmptySlot>
 	)
 }

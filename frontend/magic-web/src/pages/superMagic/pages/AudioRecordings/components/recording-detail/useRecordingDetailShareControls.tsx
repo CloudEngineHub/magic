@@ -22,6 +22,29 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 	const attachments = shareSelection.shareableFiles
 	const attachmentList = shareSelection.shareableFiles
 	const defaultSelectedFileIds = shareSelection.defaultSelectedFileIds
+	const displayNameByFileId = useMemo(
+		() =>
+			Object.fromEntries(
+				shareSelection.shareableFiles.flatMap((file) =>
+					file.file_id && file.share_display_name
+						? [[file.file_id, file.share_display_name]]
+						: [],
+				),
+			),
+		[shareSelection.shareableFiles],
+	)
+	const displayNameByFileName = useMemo(
+		() =>
+			Object.fromEntries(
+				shareSelection.shareableFiles.flatMap((file) => {
+					const fileName = file.file_name || file.filename || file.name
+					return fileName && file.share_display_name
+						? [[fileName, file.share_display_name]]
+						: []
+				}),
+			),
+		[shareSelection.shareableFiles],
+	)
 	const hasShareableFiles = defaultSelectedFileIds.length > 0
 
 	/** Opens the existing recording file-share creation dialog. */
@@ -50,6 +73,8 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 		attachments,
 		attachmentList,
 		defaultSelectedFileIds,
+		displayNameByFileId,
+		displayNameByFileName,
 		requiredFileIds,
 		hasShareableFiles,
 		openCreateShare,

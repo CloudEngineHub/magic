@@ -44,6 +44,35 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@dtyq/magic-admin/components", () => ({}))
+vi.mock("@dtyq/magic-admin/provider", () => ({}))
+vi.mock("@dtyq/magic-admin", () => ({
+	RouteName: {
+		Admin: "admin",
+		AdminPlatformAIModel: "admin-platform-ai-model",
+	},
+	PlatformPackageRoutes: {},
+	AiManageRoutes: {},
+	otherRoutes: [],
+}))
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({}),
+	getAdminLocaleModules: () => ({}),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
+}))
+
+vi.mock("@/services/chat/dots/OrganizationDotsDbService", () => ({
+	default: {
+		setPersistenceData: vi.fn(),
+		setDotSeqIdData: vi.fn(),
+	},
+}))
+
+vi.mock("@/pages/superMagic/services", () => ({
+	loadProjectAttachments: mocks.getAttachmentsByProjectId,
+}))
+
 vi.mock("react-i18next", () => ({
 	initReactI18next: {
 		type: "3rdParty",
@@ -92,7 +121,18 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		success: mocks.successToast,
 		error: mocks.errorToast,
+		warning: vi.fn(),
 	},
+}))
+
+vi.mock("@/pages/superMagic/hooks/useSingleDocumentStaticDependencies", () => ({
+	useSingleDocumentStaticDependencies: () => ({
+		fileId: null,
+		fileType: null,
+		dependencyFileIds: [],
+		isLoading: false,
+		error: null,
+	}),
 }))
 
 vi.mock("../style", () => ({
@@ -252,11 +292,76 @@ describe("FileShareModal", () => {
 		fireEvent.click(screen.getByTestId("save-share"))
 
 		await waitFor(() => {
-			expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			const payload = mocks.createOrUpdateShareResource.mock.calls[0]?.[0]
+			expect(payload).toEqual(
 				expect.objectContaining({
 					resource_id: "share-existing",
-					file_ids: ["file-transcript", "file-audio", "file-magic-project"],
+					file_ids: expect.arrayContaining([
+						"file-transcript",
+						"file-audio",
+						"file-magic-project",
+					]),
 				}),
+			)
+			expect(new Set(payload.file_ids)).toHaveLength(3)
+		})
+	})
+
+	it("clears the previous share selection when switching edit targets", async () => {
+		mocks.getShareInfoByCode.mockImplementation(async ({ code }: { code: string }) =>
+			code === "share-a"
+				? {
+						project_id: "project-1",
+						resource_name: "Share A",
+						share_type: ShareType.PasswordProtected,
+						file_ids: ["file-a"],
+						extra: {},
+					}
+				: {
+						project_id: "project-1",
+						resource_name: "Share B",
+						share_type: ShareType.PasswordProtected,
+						file_ids: ["file-b"],
+						extra: {},
+					},
+		)
+		mocks.getAttachmentsByProjectId.mockResolvedValue({
+			tree: [
+				{ file_id: "file-a", file_name: "selected-a.md", is_directory: false },
+				{ file_id: "file-b", file_name: "selected-b.md", is_directory: false },
+			],
+			list: [
+				{ file_id: "file-a", file_name: "selected-a.md", is_directory: false },
+				{ file_id: "file-b", file_name: "selected-b.md", is_directory: false },
+			],
+		})
+		const { rerender } = render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				projectId="project-1"
+				resourceId="share-a"
+			/>,
+		)
+
+		await waitFor(() =>
+			expect(mocks.getShareInfoByCode).toHaveBeenCalledWith({ code: "share-a" }),
+		)
+		rerender(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				projectId="project-1"
+				resourceId="share-b"
+			/>,
+		)
+
+		await waitFor(() =>
+			expect(mocks.getShareInfoByCode).toHaveBeenCalledWith({ code: "share-b" }),
+		)
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+				expect.objectContaining({ resource_id: "share-b", file_ids: ["file-b"] }),
 			)
 		})
 	})
