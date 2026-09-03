@@ -161,6 +161,7 @@ function AddElementMenu({
 }: AddElementMenuProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
+	const menuTestId = testId.replace(/-button$/, "")
 	return (
 		<DropdownMenu open={open} onOpenChange={setOpen}>
 			<MagicTooltip title={label} contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}>
@@ -182,22 +183,35 @@ function AddElementMenu({
 					</DropdownMenuTrigger>
 				</span>
 			</MagicTooltip>
-			<EditorDropdownMenuContent align="start" className="w-48">
+			<EditorDropdownMenuContent
+				align="start"
+				className="w-48"
+				data-testid={`${menuTestId}-menu`}
+			>
 				<DropdownMenuLabel>{label}</DropdownMenuLabel>
 				{canInsertSibling ? (
-					<DropdownMenuItem onSelect={() => onInsert(type, "before")}>
+					<DropdownMenuItem
+						onSelect={() => onInsert(type, "before")}
+						data-testid={`${menuTestId}-before-item`}
+					>
 						<ArrowUp className="h-4 w-4" />
 						{t("stylePanel.domTree.insertBefore")}
 					</DropdownMenuItem>
 				) : null}
 				{canInsertInside ? (
-					<DropdownMenuItem onSelect={() => onInsert(type, "inside")}>
+					<DropdownMenuItem
+						onSelect={() => onInsert(type, "inside")}
+						data-testid={`${menuTestId}-inside-item`}
+					>
 						<CornerDownRight className="h-4 w-4" />
 						{t("stylePanel.domTree.insertInside")}
 					</DropdownMenuItem>
 				) : null}
 				{canInsertSibling ? (
-					<DropdownMenuItem onSelect={() => onInsert(type, "after")}>
+					<DropdownMenuItem
+						onSelect={() => onInsert(type, "after")}
+						data-testid={`${menuTestId}-after-item`}
+					>
 						<ArrowDown className="h-4 w-4" />
 						{t("stylePanel.domTree.insertAfter")}
 					</DropdownMenuItem>
@@ -634,6 +648,7 @@ export const ElementActions = observer(function ElementActions({
 				<DialogContent
 					className="!z-[10080] max-w-md gap-5 rounded-xl border-border/80 p-5 shadow-2xl"
 					overlayClassName="!z-[10075]"
+					data-testid="html-style-panel-add-text-dialog"
 				>
 					<DialogHeader className="gap-1.5 text-left">
 						<DialogTitle>{t("stylePanel.domTree.addTextDialog.title")}</DialogTitle>
@@ -651,6 +666,7 @@ export const ElementActions = observer(function ElementActions({
 						}}
 					>
 						<Input
+							data-testid="html-style-panel-add-text-input"
 							autoFocus
 							value={textInput}
 							onChange={(event) => setTextInput(event.target.value)}
@@ -660,6 +676,7 @@ export const ElementActions = observer(function ElementActions({
 						/>
 						<DialogFooter>
 							<Button
+								data-testid="html-style-panel-add-text-cancel-button"
 								type="button"
 								variant="outline"
 								disabled={isTextInsertSubmitting}
@@ -668,6 +685,7 @@ export const ElementActions = observer(function ElementActions({
 								{t("stylePanel.domTree.addTextDialog.cancel")}
 							</Button>
 							<Button
+								data-testid="html-style-panel-add-text-confirm-button"
 								type="submit"
 								disabled={!textInput.trim() || isTextInsertSubmitting}
 							>

@@ -436,6 +436,7 @@ export const StylePanel = observer(function StylePanel({
 			<label className="mb-2 block text-xs font-medium text-muted-foreground">
 				<span className="mb-1 block">{t("stylePanel.textContent")}</span>
 				<Textarea
+					data-testid="html-editor-text-content-input"
 					value={textContent}
 					onChange={(event) => setTextContent(event.target.value)}
 					onBlur={(event) => handleTextContentCommit(event.target.value)}
@@ -489,6 +490,11 @@ export const StylePanel = observer(function StylePanel({
 	return (
 		<TooltipProvider delayDuration={300}>
 			<div
+				data-testid={
+					variant === "context"
+						? "html-editor-context-style-toolbar"
+						: "html-editor-style-toolbar"
+				}
 				className={cn(
 					variant === "context"
 						? "px-0 py-0"
@@ -688,6 +694,8 @@ export const StylePanel = observer(function StylePanel({
 										title={t("stylePanel.layout")}
 										disabled={isDisabled}
 										showLabel={variant === "context" ? true : showButtonLabel}
+										triggerTestId="html-style-panel-layout-trigger"
+										contentTestId="html-style-panel-layout-content"
 									>
 										<LayoutSection
 											selectedElement={selectedElement}
@@ -704,6 +712,8 @@ export const StylePanel = observer(function StylePanel({
 											showLabel={
 												variant === "context" ? true : showButtonLabel
 											}
+											triggerTestId="html-style-panel-flex-grid-trigger"
+											contentTestId="html-style-panel-flex-grid-content"
 										>
 											<FlexGridSection
 												selectedElement={selectedElement}
@@ -721,6 +731,8 @@ export const StylePanel = observer(function StylePanel({
 											showLabel={
 												variant === "context" ? true : showButtonLabel
 											}
+											triggerTestId="html-style-panel-image-trigger"
+											contentTestId="html-style-panel-image-content"
 										>
 											<ImageSection
 												selectedElement={selectedElement}
@@ -738,6 +750,8 @@ export const StylePanel = observer(function StylePanel({
 											showLabel={
 												variant === "context" ? true : showButtonLabel
 											}
+											triggerTestId="html-style-panel-background-trigger"
+											contentTestId="html-style-panel-background-content"
 										>
 											<BackgroundSection
 												selectedElement={selectedElement}
@@ -752,6 +766,8 @@ export const StylePanel = observer(function StylePanel({
 										title={t("stylePanel.border")}
 										disabled={isDisabled}
 										showLabel={variant === "context" ? true : showButtonLabel}
+										triggerTestId="html-style-panel-border-trigger"
+										contentTestId="html-style-panel-border-content"
 									>
 										<BorderSection
 											selectedElement={selectedElement}
@@ -765,6 +781,8 @@ export const StylePanel = observer(function StylePanel({
 										title={t("stylePanel.shadow")}
 										disabled={isDisabled}
 										showLabel={variant === "context" ? true : showButtonLabel}
+										triggerTestId="html-style-panel-shadow-trigger"
+										contentTestId="html-style-panel-shadow-content"
 									>
 										<ShadowSection
 											selectedElement={selectedElement}
@@ -782,6 +800,7 @@ export const StylePanel = observer(function StylePanel({
 					<TooltipPrimitive.Root>
 						<TooltipTrigger asChild>
 							<Button
+								data-testid="html-editor-dom-tree-toggle-button"
 								variant={domTreeOpen ? "secondary" : "ghost"}
 								size="sm"
 								className={cn(

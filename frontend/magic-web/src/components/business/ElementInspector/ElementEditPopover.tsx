@@ -10,6 +10,7 @@ import { getShortSelector } from "./format"
 import { getElementEditPopoverPosition } from "./editPopoverPosition"
 
 interface ElementEditPopoverProps {
+	targetId?: string
 	info?: InspectedElementInfo
 	targetKind?: "element" | "screenshot"
 	screenshotDataUrl?: string
@@ -27,6 +28,7 @@ interface ElementEditPopoverProps {
 const CONFIRM_ANIMATION_DURATION = 520
 
 export function ElementEditPopover({
+	targetId,
 	info,
 	targetKind = "element",
 	screenshotDataUrl,
@@ -144,6 +146,7 @@ export function ElementEditPopover({
 				ref={popoverRef}
 				className={`inspector-theme-beam absolute z-50 box-border flex flex-col rounded-2xl border border-border/70 bg-background/95 shadow-[0_20px_55px_hsl(var(--foreground)/0.2),0_2px_8px_hsl(var(--foreground)/0.08)] ring-1 ring-white/70 backdrop-blur-xl dark:ring-white/10 ${isConfirming ? "inspector-confirm-popover" : "pointer-events-auto"}`}
 				data-confirming={isConfirming ? "true" : "false"}
+				data-target-id={targetId}
 				style={{
 					left: position.left,
 					top: position.top,
@@ -157,6 +160,7 @@ export function ElementEditPopover({
 				data-testid="element-inspector-edit-popover"
 			>
 				<Button
+					data-testid="element-inspector-edit-close-button"
 					variant="ghost"
 					size="icon-sm"
 					className="absolute right-2 top-2 z-10 h-7 w-7 rounded-md"
@@ -204,6 +208,7 @@ export function ElementEditPopover({
 						)}
 					</div>
 					<Textarea
+						data-testid="element-inspector-instruction-input"
 						value={instruction}
 						onChange={(event) => onInstructionChange(event.target.value)}
 						placeholder={t("stylePanel.inspector.multiSelectionPlaceholder")}
@@ -220,6 +225,7 @@ export function ElementEditPopover({
 				>
 					{onDelete && (
 						<Button
+							data-testid="element-inspector-remove-target-button"
 							variant="ghost"
 							size="sm"
 							className="mr-auto rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -233,6 +239,7 @@ export function ElementEditPopover({
 					)}
 					<div className="ml-auto flex items-center gap-2">
 						<Button
+							data-testid="element-inspector-edit-cancel-button"
 							variant="ghost"
 							size="sm"
 							className="rounded-lg"
@@ -242,6 +249,7 @@ export function ElementEditPopover({
 							{t("stylePanel.inspector.cancel")}
 						</Button>
 						<Button
+							data-testid="element-inspector-edit-confirm-button"
 							size="sm"
 							className="inspector-confirm-button rounded-lg bg-primary text-primary-foreground shadow-[0_4px_12px_rgb(var(--primary-rgb)/0.25)] hover:bg-primary/90 disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:shadow-none"
 							onClick={handleConfirm}

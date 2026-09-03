@@ -227,7 +227,10 @@ export function ScreenshotSelectionOverlay({
 				)}
 			</div>
 			{captureError && (
-				<div className="absolute left-1/2 top-14 max-w-[min(420px,calc(100%-24px))] -translate-x-1/2 rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground shadow-lg">
+				<div
+					className="absolute left-1/2 top-14 max-w-[min(420px,calc(100%-24px))] -translate-x-1/2 rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground shadow-lg"
+					data-testid="html-screenshot-selection-error"
+				>
 					{captureError}
 				</div>
 			)}

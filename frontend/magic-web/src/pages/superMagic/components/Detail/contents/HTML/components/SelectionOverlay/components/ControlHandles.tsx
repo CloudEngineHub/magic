@@ -109,6 +109,7 @@ export function ControlHandles({
 					}}
 					onPointerDown={(event) => onResizeHandleMouseDown(event, handle)}
 					data-testid="on-resize-handle-mouse-down"
+					data-handle-id={handle.id}
 				/>
 			))}
 

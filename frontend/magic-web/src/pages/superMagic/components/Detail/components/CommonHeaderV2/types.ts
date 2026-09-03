@@ -133,6 +133,8 @@ export type ComposedAction = BuiltinComposedAction | CustomComposedAction
 export interface CommonHeaderV2Props {
 	/** Optional guard run before toolbar actions. */
 	beforeAction?: BeforeAction
+	/** Whether this cached preview should expose test ids. */
+	testIdsEnabled?: boolean
 	renderMode?: "full" | "actions"
 	type?: string
 	onFullscreen?: () => void

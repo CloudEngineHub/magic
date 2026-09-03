@@ -234,9 +234,9 @@ describe("ScreenshotSelectionOverlay", () => {
 
 		await waitFor(() => {
 			expect(screen.getByTestId("html-screenshot-selection-box")).toBeInTheDocument()
-			expect(
-				screen.getByText("stylePanel.inspector.screenshotCaptureFailed"),
-			).toBeInTheDocument()
+			expect(screen.getByTestId("html-screenshot-selection-error")).toHaveTextContent(
+				"stylePanel.inspector.screenshotCaptureFailed",
+			)
 		})
 	})
 
@@ -262,9 +262,9 @@ describe("ScreenshotSelectionOverlay", () => {
 			expect(
 				screen.getByText("stylePanel.inspector.screenshotCurrentTabHint"),
 			).toBeInTheDocument()
-			expect(
-				screen.getByText("stylePanel.inspector.screenshotCurrentTabRequired"),
-			).toBeInTheDocument()
+			expect(screen.getByTestId("html-screenshot-selection-error")).toHaveTextContent(
+				"stylePanel.inspector.screenshotCurrentTabRequired",
+			)
 		})
 	})
 

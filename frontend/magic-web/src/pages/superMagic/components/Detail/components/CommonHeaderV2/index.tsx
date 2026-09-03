@@ -39,6 +39,7 @@ import { guardMenuClick, guardMenuItems, runGuardedAction } from "../../utils/ac
 export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	const {
 		beforeAction,
+		testIdsEnabled = true,
 		renderMode = "full",
 		type,
 		onFullscreen,
@@ -395,7 +396,10 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			if (action.key === "viewMode") {
 				return (
 					<ViewModeSwitcher
-						data-testid="detail-header-view-mode-switcher"
+						data-testid={
+							testIdsEnabled ? "detail-header-view-mode-switcher" : undefined
+						}
+						testIdsEnabled={testIdsEnabled}
 						viewMode={viewMode}
 						onViewModeChange={(mode) => {
 							void runGuardedAction(beforeAction, () => onViewModeChange?.(mode))
@@ -545,6 +549,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			beforeAction,
 			showButtonText,
 			t,
+			testIdsEnabled,
 			type,
 			viewMode,
 		],

@@ -16,6 +16,8 @@ import ConditionalTooltip from "./ConditionalTooltip"
 import { TOOLBAR_Z_INDEX } from "../../constants/z-index"
 
 interface AIEditButtonProps {
+	/** Stable test id scope for the split AI edit control and menu. */
+	testIdPrefix?: string
 	/** 是否显示按钮文字 */
 	showButtonText?: boolean
 	/** 限制下拉菜单展示的 AI 编辑项数量 */
@@ -33,6 +35,7 @@ interface AIEditButtonProps {
 }
 
 function AIEditButton({
+	testIdPrefix,
 	showButtonText = false,
 	maxItems,
 	onPrimaryAction,
@@ -87,7 +90,10 @@ function AIEditButton({
 
 	return (
 		<DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-			<div className="ai-edit-button-shell">
+			<div
+				className="ai-edit-button-shell"
+				data-testid={testIdPrefix ? `${testIdPrefix}-ai-edit` : undefined}
+			>
 				<BorderBeam
 					size="sm"
 					colorVariant="ocean"
@@ -106,6 +112,11 @@ function AIEditButton({
 							title={t("topicFiles.AIOptimization")}
 						>
 							<Button
+								data-testid={
+									testIdPrefix
+										? `${testIdPrefix}-ai-edit-primary-button`
+										: undefined
+								}
 								type="button"
 								size="sm"
 								onClick={handlePrimaryAction}
@@ -118,6 +129,9 @@ function AIEditButton({
 						</ConditionalTooltip>
 						<DropdownMenuTrigger asChild>
 							<Button
+								data-testid={
+									testIdPrefix ? `${testIdPrefix}-ai-edit-menu-button` : undefined
+								}
 								type="button"
 								size="sm"
 								aria-label={t("topicFiles.AIOptimization")}
@@ -130,6 +144,7 @@ function AIEditButton({
 				</BorderBeam>
 			</div>
 			<DropdownMenuContent
+				data-testid={testIdPrefix ? `${testIdPrefix}-ai-edit-menu` : undefined}
 				side="bottom"
 				align="end"
 				sideOffset={8}
@@ -137,7 +152,12 @@ function AIEditButton({
 				style={{ zIndex: TOOLBAR_Z_INDEX.AI_EDIT_DROPDOWN }}
 			>
 				{visibleAiEditItems.map((item) => (
-					<DropdownMenuItem key={item.key} onClick={item.onClick}>
+					<DropdownMenuItem
+						key={item.key}
+						onClick={item.onClick}
+						data-testid={testIdPrefix ? `${testIdPrefix}-ai-edit-item` : undefined}
+						data-item-key={item.key}
+					>
 						<div className="flex items-start gap-3">
 							<div className="mt-0.5 flex-shrink-0">{item.icon}</div>
 							<div className="flex flex-col gap-1">

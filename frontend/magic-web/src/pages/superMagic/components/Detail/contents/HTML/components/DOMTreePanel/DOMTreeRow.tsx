@@ -425,6 +425,8 @@ export function DOMTreeRow({
 														handlers.onMoveToAdjacent(node, -1)
 													}
 													aria-label={t("stylePanel.domTree.moveUp")}
+													data-testid="dom-tree-move-up-button"
+													data-node-id={node.nodeId}
 												>
 													<ArrowUp className="h-3 w-3" />
 												</Button>
@@ -443,6 +445,8 @@ export function DOMTreeRow({
 														handlers.onMoveToAdjacent(node, 1)
 													}
 													aria-label={t("stylePanel.domTree.moveDown")}
+													data-testid="dom-tree-move-down-button"
+													data-node-id={node.nodeId}
 												>
 													<ArrowDown className="h-3 w-3" />
 												</Button>
@@ -466,7 +470,8 @@ export function DOMTreeRow({
 												handlers.onAddImage(node, placement)
 											}
 											label={t("stylePanel.domTree.addInsideAction")}
-											testId={`dom-tree-add-${node.nodeId}`}
+											testIdPrefix="dom-tree-add"
+											nodeId={node.nodeId}
 											disabled={state.isBusy}
 										/>
 									) : null}
@@ -487,7 +492,8 @@ export function DOMTreeRow({
 												handlers.onAddImage(node, placement)
 											}
 											label={t("stylePanel.domTree.addSiblingAction")}
-											testId={`dom-tree-add-sibling-${node.nodeId}`}
+											testIdPrefix="dom-tree-add-sibling"
+											nodeId={node.nodeId}
 											disabled={state.isBusy}
 										/>
 									) : null}
@@ -500,6 +506,8 @@ export function DOMTreeRow({
 												disabled={state.isBusy}
 												onClick={() => handlers.onRemove(node)}
 												aria-label={t("stylePanel.domTree.delete")}
+												data-testid="dom-tree-delete-button"
+												data-node-id={node.nodeId}
 											>
 												<Trash2 className="h-3 w-3" />
 											</Button>

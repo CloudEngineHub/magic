@@ -212,6 +212,9 @@ export function PendingTargetsPanel({
 					<div
 						key={target.id}
 						className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/45 px-2.5 py-2"
+						data-testid="element-inspector-pending-target-item"
+						data-target-id={target.id}
+						data-target-kind={target.kind}
 					>
 						{target.screenshot?.dataUrl && (
 							<img
@@ -237,6 +240,8 @@ export function PendingTargetsPanel({
 								contentZIndex={10060}
 							>
 								<Button
+									data-testid="element-inspector-pending-target-edit-button"
+									data-target-id={target.id}
 									variant="ghost"
 									size="icon-sm"
 									className="h-7 w-7 text-muted-foreground hover:bg-background hover:text-foreground"
@@ -252,6 +257,8 @@ export function PendingTargetsPanel({
 								contentZIndex={10060}
 							>
 								<Button
+									data-testid="element-inspector-pending-target-remove-button"
+									data-target-id={target.id}
 									variant="ghost"
 									size="icon-sm"
 									className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -295,6 +302,7 @@ export function PendingTargetsPanel({
 					className="flex items-center gap-0.5 rounded-xl border border-border/60 bg-muted/65 p-0.5 shadow-inner"
 					role="group"
 					aria-label={t("stylePanel.inspector.selectionMode")}
+					data-testid="element-inspector-selection-mode"
 				>
 					<MagicTooltip
 						title={t("stylePanel.inspector.elementMode")}
@@ -303,6 +311,7 @@ export function PendingTargetsPanel({
 						contentZIndex={10060}
 					>
 						<Button
+							data-testid="element-inspector-selection-mode-element-button"
 							variant={selectionMode === "element" ? "default" : "ghost"}
 							size="icon-sm"
 							className={cn(
@@ -326,6 +335,7 @@ export function PendingTargetsPanel({
 							contentZIndex={10060}
 						>
 							<Button
+								data-testid="element-inspector-selection-mode-screenshot-button"
 								variant={selectionMode === "screenshot" ? "default" : "ghost"}
 								size="icon-sm"
 								className={cn(
@@ -395,6 +405,7 @@ export function PendingTargetsPanel({
 				<div className="ml-auto flex shrink-0 items-center gap-1.5">
 					{onExit && (
 						<Button
+							data-testid="element-inspector-exit-button"
 							variant="ghost"
 							size="sm"
 							className="h-8 rounded-lg px-2.5 text-xs transition-transform active:scale-[0.96]"
@@ -425,6 +436,10 @@ export function PendingTargetsPanel({
 
 			{(submitError || hasEmptyInstruction || submitState === "succeeded") && (
 				<div
+					data-testid="element-inspector-submit-status"
+					data-state={
+						submitError ? "error" : hasEmptyInstruction ? "invalid" : "succeeded"
+					}
 					className={`border-t bg-muted/20 px-3 py-2 text-xs ${
 						submitState === "succeeded" && !submitError && !hasEmptyInstruction
 							? "text-emerald-600"

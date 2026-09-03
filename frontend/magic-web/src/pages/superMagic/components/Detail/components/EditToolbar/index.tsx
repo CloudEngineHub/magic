@@ -38,6 +38,8 @@ import { runGuardedAction } from "../../utils/actionGuard"
 import type { BeforeAction } from "../../utils/actionGuard"
 
 export interface EditToolbarProps {
+	/** Only the active cached preview should expose fixed test ids. */
+	testIdsEnabled?: boolean
 	style?: React.CSSProperties
 	/** 禁用工具栏交互及其全局快捷键，但保持组件实例和内部状态常驻 */
 	interactionDisabled?: boolean
@@ -131,6 +133,7 @@ export interface EditToolbarProps {
 }
 
 function EditToolbar({
+	testIdsEnabled = true,
 	interactionDisabled = false,
 	showAIOptimization = false,
 	showFileEdit = false,
@@ -550,7 +553,11 @@ function EditToolbar({
 	)
 
 	return (
-		<div className={cn("h-12 w-full border-b border-border", className)} style={style}>
+		<div
+			className={cn("h-12 w-full border-b border-border", className)}
+			style={style}
+			data-testid={testIdsEnabled ? "ppt-edit-toolbar-actions" : undefined}
+		>
 			<div className="scrollbar-x-thin h-full w-full overflow-x-auto">
 				<div className="flex h-full w-max min-w-full flex-nowrap items-center justify-end gap-1 px-2">
 					{showVersionHistorySelector && (
@@ -583,6 +590,15 @@ function EditToolbar({
 					{showViewModeSwitcher && (
 						<>
 							<ViewModeSwitcher
+								data-testid={
+									testIdsEnabled
+										? "ppt-edit-toolbar-view-mode-switcher"
+										: undefined
+								}
+								testIdsEnabled={testIdsEnabled}
+								testIdPrefix={
+									testIdsEnabled ? "ppt-edit-toolbar-view-mode" : undefined
+								}
 								viewMode={viewMode}
 								onViewModeChange={(mode) =>
 									runToolbarAction(() => onViewModeChange?.(mode))
@@ -602,6 +618,9 @@ function EditToolbar({
 					{/* 服务端更新提示按钮 */}
 					{showServerUpdateButton && (
 						<Button
+							data-testid={
+								testIdsEnabled ? "ppt-edit-toolbar-server-update-button" : undefined
+							}
 							variant="secondary"
 							size="sm"
 							onClick={() => runToolbarAction(() => onViewServerUpdate?.())}
@@ -621,6 +640,11 @@ function EditToolbar({
 								title={quickSelectionLabel}
 							>
 								<Button
+									data-testid={
+										testIdsEnabled
+											? "ppt-edit-toolbar-quick-select-button"
+											: undefined
+									}
 									variant="outline"
 									size="sm"
 									onClick={onStartInspectorQuickSelect || onStartInspectorAppend}
@@ -642,6 +666,7 @@ function EditToolbar({
 					{/* 编辑按钮 */}
 					{showFileEditButtons && (
 						<FileEditButtons
+							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
 							interactionDisabled={interactionDisabled}
 							isEditMode={isEditMode}
 							isSaving={isSaving}
@@ -657,6 +682,7 @@ function EditToolbar({
 					{/* AI 编辑按钮 */}
 					{showAIOptimizationButton && fileId && (
 						<AIEditButton
+							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
 							showButtonText={shouldShowButtonText}
 							maxItems={3}
 							onPrimaryAction={onStartInspectorAppend}
@@ -671,6 +697,9 @@ function EditToolbar({
 					{/* 刷新按钮 */}
 					{showRefreshButton && (
 						<ActionButton
+							data-testid={
+								testIdsEnabled ? "ppt-edit-toolbar-refresh-button" : undefined
+							}
 							icon={
 								<RefreshCw
 									size={16}
@@ -689,6 +718,9 @@ function EditToolbar({
 
 					{!isFullscreenMode && (
 						<ActionButton
+							data-testid={
+								testIdsEnabled ? "ppt-edit-toolbar-fullscreen-button" : undefined
+							}
 							icon={isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
 							onClick={() => {
 								void runGuardedAction(beforeAction, () => {

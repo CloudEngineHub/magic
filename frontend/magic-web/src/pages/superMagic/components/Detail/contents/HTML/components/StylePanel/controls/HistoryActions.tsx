@@ -89,6 +89,7 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 				<TooltipTrigger asChild>
 					<span>
 						<Button
+							data-testid="html-editor-history-undo-button"
 							variant="ghost"
 							size="icon"
 							className={STYLE_PANEL_STYLES.iconButton}
@@ -107,6 +108,7 @@ export const HistoryActions = observer(function HistoryActions({ editorRef }: Hi
 				<TooltipTrigger asChild>
 					<span>
 						<Button
+							data-testid="html-editor-history-redo-button"
 							variant="ghost"
 							size="icon"
 							className={STYLE_PANEL_STYLES.iconButton}

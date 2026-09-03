@@ -10,6 +10,8 @@ import { runGuardedAction } from "../../utils/actionGuard"
 import type { BeforeAction } from "../../utils/actionGuard"
 
 interface FileEditButtonsProps {
+	/** Stable test id scope for the edit actions rendered by this component. */
+	testIdPrefix?: string
 	/** 是否禁用当前工具栏交互（例如 PPT 冷切页等待目标页 ready 时） */
 	interactionDisabled?: boolean
 	/** 是否处于编辑模式 */
@@ -33,6 +35,7 @@ interface FileEditButtonsProps {
 }
 
 function FileEditButtons({
+	testIdPrefix,
 	interactionDisabled = false,
 	isEditMode = false,
 	isSaving = false,
@@ -115,10 +118,15 @@ function FileEditButtons({
 	const resolvedEditLabel = editLabel ?? t("fileViewer.edit")
 
 	return (
-		<div className="flex items-center gap-1" id={HTMLGuideTourElementId.HTMLFileEditButton}>
+		<div
+			className="flex items-center gap-1"
+			id={HTMLGuideTourElementId.HTMLFileEditButton}
+			data-testid={testIdPrefix ? `${testIdPrefix}-file-actions` : undefined}
+		>
 			{!isEditMode ? (
 				<ConditionalTooltip showText={showButtonText} title={resolvedEditLabel}>
 					<Button
+						data-testid={testIdPrefix ? `${testIdPrefix}-edit-button` : undefined}
 						variant="outline"
 						size="sm"
 						onClick={handleEdit}
@@ -136,6 +144,7 @@ function FileEditButtons({
 						title={showSaving ? t("fileViewer.saving") : t("fileViewer.save")}
 					>
 						<Button
+							data-testid={testIdPrefix ? `${testIdPrefix}-save-button` : undefined}
 							variant="default"
 							size="sm"
 							onClick={handleSave}
@@ -168,6 +177,11 @@ function FileEditButtons({
 							title={t("fileViewer.saveAndExit")}
 						>
 							<Button
+								data-testid={
+									testIdPrefix
+										? `${testIdPrefix}-save-and-exit-button`
+										: undefined
+								}
 								variant="outline"
 								size="sm"
 								onClick={handleSaveAndExit}
@@ -191,6 +205,7 @@ function FileEditButtons({
 					)}
 					<ConditionalTooltip showText={showButtonText} title={t("fileViewer.cancel")}>
 						<Button
+							data-testid={testIdPrefix ? `${testIdPrefix}-cancel-button` : undefined}
 							variant="outline"
 							size="sm"
 							onClick={handleCancel}

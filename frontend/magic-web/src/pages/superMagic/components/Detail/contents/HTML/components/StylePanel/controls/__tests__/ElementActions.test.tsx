@@ -171,16 +171,14 @@ describe("ElementActions", () => {
 		render(<ElementActions editorRef={{ current: { getDomTree, insertTextNode } } as never} />)
 
 		fireEvent.click(await screen.findByTestId("html-style-panel-add-element-button"))
-		fireEvent.click(await screen.findByText("stylePanel.domTree.insertInside"))
+		expect(await screen.findByTestId("html-style-panel-add-element-menu")).toBeInTheDocument()
+		fireEvent.click(await screen.findByTestId("html-style-panel-add-element-inside-item"))
 
-		expect(await screen.findByRole("dialog")).toBeInTheDocument()
+		expect(await screen.findByTestId("html-style-panel-add-text-dialog")).toBeInTheDocument()
 		expect(promptSpy).not.toHaveBeenCalled()
-		const input = screen.getByRole("textbox", {
-			name: "stylePanel.domTree.addTextDialog.inputLabel",
-		})
-		const confirmButton = screen.getByRole("button", {
-			name: "stylePanel.domTree.addTextDialog.confirm",
-		})
+		const input = screen.getByTestId("html-style-panel-add-text-input")
+		const confirmButton = screen.getByTestId("html-style-panel-add-text-confirm-button")
+		expect(screen.getByTestId("html-style-panel-add-text-cancel-button")).toBeInTheDocument()
 		expect(confirmButton).toBeDisabled()
 
 		fireEvent.change(input, { target: { value: "New content" } })

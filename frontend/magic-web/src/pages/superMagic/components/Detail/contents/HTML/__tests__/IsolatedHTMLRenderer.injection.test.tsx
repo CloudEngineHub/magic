@@ -444,6 +444,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		await flushReactEffects()
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe")
+		expect(screen.getByTestId("html-editor-canvas")).toBeInTheDocument()
 		const sandboxTokens = iframe.getAttribute("sandbox")?.split(/\s+/) ?? []
 		const allowedFeatures = iframe
 			.getAttribute("allow")
@@ -464,6 +465,14 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 				"clipboard-write",
 			]),
 		)
+	})
+
+	it("does not expose fixed editor test ids from an inactive cached preview", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} isVisible={false} isEditMode />)
+		await flushReactEffects()
+
+		expect(screen.queryByTestId("html-editor-canvas")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("isolated-html-content-iframe")).not.toBeInTheDocument()
 	})
 
 	it("shows the scrollbar style only while a PPT is manually zoomed", async () => {

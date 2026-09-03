@@ -2480,7 +2480,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			>
 				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 					{/* 顶部工具栏与下方工作区共享同一个编辑器外框。 */}
-					{sandboxType === "iframe" && isEditMode && (
+					{sandboxType === "iframe" && isEditMode && isVisible !== false && (
 						<>
 							<StylePanel
 								variant="global"
@@ -2552,6 +2552,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									<div
 										ref={canvasViewportRef}
 										onPointerDown={handleCanvasPointerDown}
+										data-testid={
+											isVisible !== false ? "html-editor-canvas" : undefined
+										}
 										className={
 											documentFlowFullscreen
 												? "relative w-full min-w-0"
@@ -2604,10 +2607,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 																hasRenderedOnceRef.current,
 															)
 														}
-														data-testid="isolated-html-content-iframe"
+														data-testid={
+															isVisible !== false
+																? "isolated-html-content-iframe"
+																: undefined
+														}
 													/>
 													{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}
-													{isEditMode && (
+													{isEditMode && isVisible !== false && (
 														<SelectionOverlay
 															containerRef={contentWrapperRef}
 															scrollContainerRef={scrollContainerRef}
@@ -2631,99 +2638,109 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														/>
 													)}
 													{/* 拖拽放置覆盖层 - 拖拽图片时显示 */}
-													{isEditMode && isGlobalDragActive && (
-														<DropOverlay
-															visible={isDragOver}
-															onDragEnter={
-																dragOverHandlers.onDragEnter
+													{isEditMode &&
+														isVisible !== false &&
+														isGlobalDragActive && (
+															<DropOverlay
+																visible={isDragOver}
+																onDragEnter={
+																	dragOverHandlers.onDragEnter
+																}
+																onDragOver={
+																	dragOverHandlers.onDragOver
+																}
+																onDragLeave={
+																	dragOverHandlers.onDragLeave
+																}
+																onDrop={dragOverHandlers.onDrop}
+															/>
+														)}
+													{/* 元素检查覆盖层 - 独立于编辑模式 */}
+													{isVisible !== false && (
+														<ElementInspectorOverlay
+															active={elementInspector.active}
+															iframeRef={iframeRef}
+															hoveredElement={
+																elementInspector.hoveredElement
 															}
-															onDragOver={dragOverHandlers.onDragOver}
-															onDragLeave={
-																dragOverHandlers.onDragLeave
+															selectedElement={
+																elementInspector.selectedElement
 															}
-															onDrop={dragOverHandlers.onDrop}
+															trackedRects={
+																elementInspector.trackedRects
+															}
+															iframeScrollOffset={
+																elementInspector.iframeScrollOffset ??
+																undefined
+															}
+															onClearSelection={
+																elementInspector.clearSelection
+															}
+															onInsertToConsole={(code) => {
+																devConsole.executeCode(code)
+															}}
+															onSendToAgent={(content) => {
+																pubsub.publish(
+																	PubSubEvents.Set_Input_Message,
+																	content,
+																)
+															}}
+															hideInfoCard={inspectorHideInfoCard}
+															multiSelectionActive={isAppendPicking}
+															activeTarget={inspectorActiveTarget}
+															draftInstruction={
+																inspectorDraftInstruction
+															}
+															onDraftInstructionChange={
+																setInspectorDraftInstruction
+															}
+															onConfirmTarget={confirmInspectorTarget}
+															onCancelTarget={cancelInspectorTarget}
+															pendingTargets={inspectorPendingTargets}
+															submitState={inspectorSubmitState}
+															submitError={inspectorSubmitError}
+															onEditPendingTarget={
+																isAppendPicking
+																	? editInspectorPendingTarget
+																	: undefined
+															}
+															onRemovePendingTarget={
+																isAppendPicking
+																	? removeInspectorPendingTarget
+																	: undefined
+															}
+															onSubmitPendingTargets={
+																isAppendPicking
+																	? submitInspectorPendingTargets
+																	: undefined
+															}
+															selectionMode={inspectorSelectionMode}
+															onSelectionModeChange={
+																updateInspectorSelectionMode
+															}
+															pendingPanelTopOffset={16}
+															panelContainerRef={inspectorViewportRef}
+															iframeTargetOrigin={iframeTargetOrigin}
+															screenshotSupported
+															onCaptureScreenshot={
+																captureInspectorScreenshotTarget
+															}
+															onCaptureElementScreenshot={
+																isAppendPicking || isQuickSelecting
+																	? attachInspectorElementScreenshot
+																	: undefined
+															}
+															onCapturePrewarmReady={
+																registerInspectorCapturePrewarm
+															}
+															onExitMultiSelection={
+																isAppendPicking
+																	? resetInspectorSelection
+																	: undefined
+															}
+															scaleRatio={scaleRatio}
 														/>
 													)}
-													{/* 元素检查覆盖层 - 独立于编辑模式 */}
-													<ElementInspectorOverlay
-														active={elementInspector.active}
-														iframeRef={iframeRef}
-														hoveredElement={
-															elementInspector.hoveredElement
-														}
-														selectedElement={
-															elementInspector.selectedElement
-														}
-														trackedRects={elementInspector.trackedRects}
-														iframeScrollOffset={
-															elementInspector.iframeScrollOffset ??
-															undefined
-														}
-														onClearSelection={
-															elementInspector.clearSelection
-														}
-														onInsertToConsole={(code) => {
-															devConsole.executeCode(code)
-														}}
-														onSendToAgent={(content) => {
-															pubsub.publish(
-																PubSubEvents.Set_Input_Message,
-																content,
-															)
-														}}
-														hideInfoCard={inspectorHideInfoCard}
-														multiSelectionActive={isAppendPicking}
-														activeTarget={inspectorActiveTarget}
-														draftInstruction={inspectorDraftInstruction}
-														onDraftInstructionChange={
-															setInspectorDraftInstruction
-														}
-														onConfirmTarget={confirmInspectorTarget}
-														onCancelTarget={cancelInspectorTarget}
-														pendingTargets={inspectorPendingTargets}
-														submitState={inspectorSubmitState}
-														submitError={inspectorSubmitError}
-														onEditPendingTarget={
-															isAppendPicking
-																? editInspectorPendingTarget
-																: undefined
-														}
-														onRemovePendingTarget={
-															isAppendPicking
-																? removeInspectorPendingTarget
-																: undefined
-														}
-														onSubmitPendingTargets={
-															isAppendPicking
-																? submitInspectorPendingTargets
-																: undefined
-														}
-														selectionMode={inspectorSelectionMode}
-														onSelectionModeChange={
-															updateInspectorSelectionMode
-														}
-														pendingPanelTopOffset={16}
-														panelContainerRef={inspectorViewportRef}
-														iframeTargetOrigin={iframeTargetOrigin}
-														screenshotSupported
-														onCaptureScreenshot={
-															captureInspectorScreenshotTarget
-														}
-														onCaptureElementScreenshot={
-															isAppendPicking || isQuickSelecting
-																? attachInspectorElementScreenshot
-																: undefined
-														}
-														onCapturePrewarmReady={
-															registerInspectorCapturePrewarm
-														}
-														onExitMultiSelection={
-															isAppendPicking
-																? resetInspectorSelection
-																: undefined
-														}
-														scaleRatio={scaleRatio}
-													/>
 												</>
 											) : (
 												<div className={styles.shadowHost} translate="no" />
@@ -2770,7 +2787,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								)}
 							</div>
 						</div>
-						{sandboxType === "iframe" && isEditMode && domTreeOpen ? (
+						{sandboxType === "iframe" &&
+						isEditMode &&
+						isVisible !== false &&
+						domTreeOpen ? (
 							<DOMTreePanel
 								editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
 								visible

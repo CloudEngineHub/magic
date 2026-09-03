@@ -46,6 +46,10 @@ describe("ElementEditPopover", () => {
 		expect(popover).toHaveStyle({ overflow: "hidden" })
 		expect(content).toHaveClass("overflow-y-auto", "no-scrollbar")
 		expect(screen.getByTestId("element-inspector-edit-footer")).toHaveClass("shrink-0")
+		expect(screen.getByTestId("element-inspector-edit-close-button")).toBeInTheDocument()
+		expect(screen.getByTestId("element-inspector-instruction-input")).toBeInTheDocument()
+		expect(screen.getByTestId("element-inspector-edit-cancel-button")).toBeInTheDocument()
+		expect(screen.getByTestId("element-inspector-edit-confirm-button")).toBeDisabled()
 	})
 
 	it("only enables scrolling when content exceeds the available height", () => {
@@ -119,7 +123,8 @@ describe("ElementEditPopover", () => {
 		)
 
 		const popover = screen.getByTestId("element-inspector-edit-popover")
-		const button = screen.getByRole("button", { name: "stylePanel.inspector.confirm" })
+		const button = screen.getByTestId("element-inspector-edit-confirm-button")
+		expect(button).toBe(screen.getByRole("button", { name: "stylePanel.inspector.confirm" }))
 		fireEvent.click(button)
 
 		expect(popover).toHaveAttribute("data-confirming", "true")
@@ -152,9 +157,7 @@ describe("ElementEditPopover", () => {
 			/>,
 		)
 
-		const deleteButton = screen.getByRole("button", {
-			name: "stylePanel.inspector.removeTarget",
-		})
+		const deleteButton = screen.getByTestId("element-inspector-remove-target-button")
 		expect(deleteButton).toBeInTheDocument()
 		fireEvent.click(deleteButton)
 		expect(onDelete).toHaveBeenCalledOnce()

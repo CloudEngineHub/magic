@@ -496,7 +496,8 @@ describe("DOMTreePanel", () => {
 		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
 
 		await waitFor(() => {
-			expect(screen.getByText("stylePanel.domTree.loadFailed")).toBeInTheDocument()
+			expect(screen.getByTestId("html-dom-tree-load-error")).toBeInTheDocument()
+			expect(screen.getByTestId("html-dom-tree-retry-button")).toBeInTheDocument()
 		})
 		expect(screen.queryByText("stylePanel.domTree.loading")).not.toBeInTheDocument()
 	})
@@ -1034,7 +1035,12 @@ describe("DOMTreePanel", () => {
 
 		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
 
-		const addInsideButton = await screen.findByTestId("dom-tree-add-section")
+		await screen.findByTestId("dom-tree-node-section")
+		const addInsideButton = screen
+			.getAllByTestId("dom-tree-add-button")
+			.find((element) => element.dataset.nodeId === "section")
+		if (!addInsideButton) throw new Error("Missing section add button")
+		expect(addInsideButton).toHaveAttribute("data-node-id", "section")
 		fireEvent.pointerMove(addInsideButton.parentElement as HTMLElement)
 		await waitFor(() =>
 			expect(screen.getByRole("tooltip")).toHaveTextContent(
@@ -1106,13 +1112,30 @@ describe("DOMTreePanel", () => {
 		})
 
 		await waitFor(() => {
+			expect(screen.getByTestId("dom-tree-context-menu")).toHaveAttribute(
+				"data-node-id",
+				"section",
+			)
+			expect(screen.getByTestId("dom-tree-context-menu-select-item")).toHaveAttribute(
+				"data-node-id",
+				"section",
+			)
+			expect(screen.getByTestId("dom-tree-context-menu-copy-item")).toBeInTheDocument()
+			expect(screen.getByTestId("dom-tree-context-menu-delete-item")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.reorder")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.duplicateNode")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.insert")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.delete")).toBeInTheDocument()
 		})
-		fireEvent.click(screen.getByText("stylePanel.domTree.insert"))
+		fireEvent.click(screen.getByTestId("dom-tree-context-menu-insert-trigger"))
 		await waitFor(() => {
+			expect(screen.getByTestId("dom-tree-context-menu-insert-content")).toHaveAttribute(
+				"data-node-id",
+				"section",
+			)
+			expect(
+				screen.getByTestId("dom-tree-context-menu-add-text-inside-item"),
+			).toHaveAttribute("data-node-id", "section")
 			expect(screen.getByText("stylePanel.domTree.insertBefore")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.insertInside")).toBeInTheDocument()
 			expect(screen.getByText("stylePanel.domTree.insertAfter")).toBeInTheDocument()
@@ -1120,7 +1143,7 @@ describe("DOMTreePanel", () => {
 		expect(
 			screen.getAllByRole("menu").some((menu) => menu.classList.contains("!z-[10070]")),
 		).toBe(true)
-		fireEvent.click(screen.getByText("stylePanel.domTree.duplicateNode"))
+		fireEvent.click(screen.getByTestId("dom-tree-context-menu-duplicate-item"))
 		await waitFor(() => expect(duplicateDomNode).toHaveBeenCalledWith("section"))
 	})
 
@@ -1249,15 +1272,23 @@ describe("DOMTreePanel", () => {
 			/>,
 		)
 
-		const addButton = await screen.findByTestId("dom-tree-add-section")
-		fireEvent.mouseEnter(screen.getByTestId("dom-tree-node-section"))
+		const sectionRow = await screen.findByTestId("dom-tree-node-section")
+		const addButton = screen
+			.getAllByTestId("dom-tree-add-button")
+			.find((element) => element.dataset.nodeId === "section")
+		if (!addButton) throw new Error("Missing section add button")
+		fireEvent.mouseEnter(sectionRow)
 		fireEvent.click(addButton)
-		fireEvent.click(await screen.findByText("stylePanel.domTree.addText"))
+		expect(await screen.findByTestId("dom-tree-add-menu")).toHaveAttribute(
+			"data-node-id",
+			"section",
+		)
+		fireEvent.click(await screen.findByTestId("dom-tree-add-text-inside-item"))
 
-		const dialog = await screen.findByRole("dialog")
-		const input = screen.getByRole("textbox", {
-			name: "stylePanel.domTree.addTextDialog.inputLabel",
-		})
+		const dialog = await screen.findByTestId("html-dom-tree-add-text-dialog")
+		const input = screen.getByTestId("html-dom-tree-add-text-input")
+		expect(screen.getByTestId("html-dom-tree-add-text-cancel-button")).toBeInTheDocument()
+		expect(screen.getByTestId("html-dom-tree-add-text-confirm-button")).toBeInTheDocument()
 		fireEvent.change(input, { target: { value: "New content" } })
 		fireEvent.submit(input.closest("form") as HTMLFormElement)
 
@@ -1359,11 +1390,10 @@ describe("DOMTreePanel", () => {
 				name: "stylePanel.domTree.delete",
 			}),
 		)
-		const dialog = await screen.findByRole("dialog")
+		const dialog = await screen.findByTestId("html-dom-tree-delete-dialog")
 		expect(dialog).toHaveTextContent("stylePanel.domTree.deleteDialog.description")
-		fireEvent.click(
-			screen.getByRole("button", { name: "stylePanel.domTree.deleteDialog.confirm" }),
-		)
+		expect(screen.getByTestId("html-dom-tree-delete-cancel-button")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("html-dom-tree-delete-confirm-button"))
 
 		await waitFor(() => expect(deleteElement).toHaveBeenCalledWith("section.hero"))
 	})

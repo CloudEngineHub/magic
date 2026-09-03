@@ -182,6 +182,7 @@ export function FontFamilySelector({
 	return (
 		<Select value={value} onValueChange={onChange} disabled={disabled}>
 			<SelectTrigger
+				data-testid="html-editor-font-family-trigger"
 				size="sm"
 				className={cn(
 					"h-7 min-w-0 max-w-full gap-1.5 overflow-hidden rounded-md border-border/70 bg-background/70 px-2 text-xs shadow-none transition-[background-color,border-color,box-shadow] duration-150 hover:border-primary/45 hover:bg-primary/5 focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 [&>span]:min-w-0 [&>span]:truncate",
@@ -193,14 +194,22 @@ export function FontFamilySelector({
 				</span>
 				<SelectValue />
 			</SelectTrigger>
-			<EditorSelectContent className="max-h-[400px]">
+			<EditorSelectContent
+				className="max-h-[400px]"
+				data-testid="html-editor-font-family-menu"
+			>
 				{/* Custom font if not in the list */}
 				{hasCustomFont && (
 					<>
 						<div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground">
 							{t("stylePanel.fontCategories.custom")}
 						</div>
-						<SelectItem value={value} className="text-xs">
+						<SelectItem
+							value={value}
+							className="text-xs"
+							data-testid="html-editor-font-family-item"
+							data-font-family={value}
+						>
 							<span style={{ fontFamily: value }}>{value}</span>
 						</SelectItem>
 						<Separator className="my-1" />
@@ -215,7 +224,13 @@ export function FontFamilySelector({
 							{t(`stylePanel.fontCategories.${category.translationKey}`)}
 						</div>
 						{category.fonts.map((font) => (
-							<SelectItem key={font} value={font} className="text-xs">
+							<SelectItem
+								key={font}
+								value={font}
+								className="text-xs"
+								data-testid="html-editor-font-family-item"
+								data-font-family={font}
+							>
 								<span style={{ fontFamily: font }}>{font}</span>
 							</SelectItem>
 						))}

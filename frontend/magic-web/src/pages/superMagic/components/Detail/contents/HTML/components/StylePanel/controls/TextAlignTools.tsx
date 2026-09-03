@@ -94,6 +94,7 @@ export function TextAlignTools({
 									<TooltipTrigger asChild>
 										<span>
 											<Toggle
+												data-testid={`html-editor-flex-align-${flexValue}-button`}
 												size="sm"
 												pressed={value === flexValue}
 												onPressedChange={() => onAlign(flexValue)}
@@ -123,6 +124,7 @@ export function TextAlignTools({
 				<TooltipTrigger asChild>
 					<span>
 						<Toggle
+							data-testid={`html-editor-text-align-${alignment}-button`}
 							size="sm"
 							pressed={value === alignment}
 							onPressedChange={() => onAlign(alignment)}

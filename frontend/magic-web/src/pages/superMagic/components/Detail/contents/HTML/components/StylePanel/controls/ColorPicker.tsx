@@ -75,6 +75,7 @@ export function ColorPicker({ value, onChange, onChangeComplete, disabled }: Col
 			<TooltipTrigger asChild>
 				<span>
 					<Button
+						data-testid="html-editor-text-color-button"
 						variant="ghost"
 						size="icon"
 						className={`relative ${STYLE_PANEL_STYLES.iconButton}`}

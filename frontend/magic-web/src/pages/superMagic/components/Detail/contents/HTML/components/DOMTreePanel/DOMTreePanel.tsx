@@ -1015,7 +1015,7 @@ function DOMTreePanelInner({
 	return (
 		<TooltipProvider delayDuration={200}>
 			<aside
-				className="relative flex h-full border-l border-border/80 min-h-0 min-w-[260px] max-w-[520px] shrink-0 flex-col overflow-hidden bg-background/95 shadow-[-10px_0_24px_-18px_rgba(15,23,42,0.2)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
+				className="relative flex h-full min-h-0 min-w-[260px] max-w-[520px] shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background/95 shadow-[-10px_0_24px_-18px_rgba(15,23,42,0.2)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
 				style={{
 					width,
 					minWidth: "min(260px, 100%)",
@@ -1033,6 +1033,7 @@ function DOMTreePanelInner({
 							isResizing && "bg-primary",
 						)}
 						onPointerDown={startResize}
+						data-testid="html-dom-tree-resize-handle"
 						role="separator"
 						aria-label={t("stylePanel.domTree.resize")}
 						aria-valuemin={260}
@@ -1064,6 +1065,7 @@ function DOMTreePanelInner({
 						)}
 					>
 						<Button
+							data-testid="html-dom-tree-expand-toggle-button"
 							size="icon"
 							variant="ghost"
 							className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1084,6 +1086,7 @@ function DOMTreePanelInner({
 					</ActionTooltip>
 					<ActionTooltip label={t("stylePanel.domTree.refresh")}>
 						<Button
+							data-testid="html-dom-tree-refresh-button"
 							size="icon"
 							variant="ghost"
 							className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1098,6 +1101,7 @@ function DOMTreePanelInner({
 					</ActionTooltip>
 					<ActionTooltip label={t("stylePanel.domTree.close")}>
 						<button
+							data-testid="html-dom-tree-close-button"
 							type="button"
 							onClick={onClose}
 							aria-label={t("stylePanel.domTree.close")}
@@ -1247,6 +1251,7 @@ function DOMTreePanelInner({
 				>
 					{actionError ? (
 						<div
+							data-testid="html-dom-tree-action-error"
 							className="mx-2 mt-2 border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
 							role="alert"
 						>
@@ -1275,14 +1280,25 @@ function DOMTreePanelInner({
 							</div>
 						)
 					) : loadState === "error" ? (
-						<div className="flex flex-col gap-2 p-3 text-xs text-muted-foreground">
+						<div
+							className="flex flex-col gap-2 p-3 text-xs text-muted-foreground"
+							data-testid="html-dom-tree-load-error"
+						>
 							<span>{t("stylePanel.domTree.loadFailed")}</span>
-							<Button size="sm" variant="outline" onClick={() => void refresh()}>
+							<Button
+								data-testid="html-dom-tree-retry-button"
+								size="sm"
+								variant="outline"
+								onClick={() => void refresh()}
+							>
 								{t("stylePanel.domTree.retry")}
 							</Button>
 						</div>
 					) : (
-						<div className="p-3 text-xs text-muted-foreground">
+						<div
+							className="p-3 text-xs text-muted-foreground"
+							data-testid="html-dom-tree-loading"
+						>
 							{t("stylePanel.domTree.loading")}
 						</div>
 					)}
@@ -1296,6 +1312,7 @@ function DOMTreePanelInner({
 					<DialogContent
 						className="!z-[10080] max-w-md gap-5 rounded-xl border-border/80 p-5 shadow-2xl"
 						overlayClassName="!z-[10075]"
+						data-testid="html-dom-tree-add-text-dialog"
 					>
 						<DialogHeader className="gap-1.5 text-left">
 							<DialogTitle>{t("stylePanel.domTree.addTextDialog.title")}</DialogTitle>
@@ -1313,6 +1330,7 @@ function DOMTreePanelInner({
 							}}
 						>
 							<Input
+								data-testid="html-dom-tree-add-text-input"
 								autoFocus
 								value={textInput}
 								onChange={(event) => setTextInput(event.target.value)}
@@ -1322,13 +1340,18 @@ function DOMTreePanelInner({
 							/>
 							<DialogFooter>
 								<Button
+									data-testid="html-dom-tree-add-text-cancel-button"
 									type="button"
 									variant="outline"
 									onClick={() => setTextInsertRequest(null)}
 								>
 									{t("stylePanel.domTree.addTextDialog.cancel")}
 								</Button>
-								<Button type="submit" disabled={!textInput.trim() || isBusy}>
+								<Button
+									data-testid="html-dom-tree-add-text-confirm-button"
+									type="submit"
+									disabled={!textInput.trim() || isBusy}
+								>
 									{t("stylePanel.domTree.addTextDialog.confirm")}
 								</Button>
 							</DialogFooter>
@@ -1344,6 +1367,7 @@ function DOMTreePanelInner({
 					<DialogContent
 						className="!z-[10080] max-w-md gap-5 rounded-xl border-border/80 p-5 shadow-2xl"
 						overlayClassName="!z-[10075]"
+						data-testid="html-dom-tree-delete-dialog"
 					>
 						<DialogHeader className="gap-1.5 text-left">
 							<DialogTitle>{t("stylePanel.domTree.deleteDialog.title")}</DialogTitle>
@@ -1355,6 +1379,7 @@ function DOMTreePanelInner({
 						</DialogHeader>
 						<DialogFooter>
 							<Button
+								data-testid="html-dom-tree-delete-cancel-button"
 								type="button"
 								variant="outline"
 								onClick={() => setDeleteRequest(null)}
@@ -1362,6 +1387,7 @@ function DOMTreePanelInner({
 								{t("stylePanel.domTree.deleteDialog.cancel")}
 							</Button>
 							<Button
+								data-testid="html-dom-tree-delete-confirm-button"
 								type="button"
 								variant="destructive"
 								disabled={isBusy || !deleteRequest}

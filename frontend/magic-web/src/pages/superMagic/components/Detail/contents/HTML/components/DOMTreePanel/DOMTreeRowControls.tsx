@@ -90,7 +90,8 @@ interface AddNodeMenuProps {
 	onAddText: (placement: InsertPlacement) => void
 	onAddImage: (placement: InsertPlacement) => void
 	label: string
-	testId: string
+	testIdPrefix: string
+	nodeId: string
 }
 
 export function AddNodeMenu({
@@ -101,7 +102,8 @@ export function AddNodeMenu({
 	onAddText,
 	onAddImage,
 	label,
-	testId,
+	testIdPrefix,
+	nodeId,
 }: AddNodeMenuProps) {
 	const { t } = useTranslation("super")
 	const isInside = mode === "inside"
@@ -118,7 +120,8 @@ export function AddNodeMenu({
 							className="h-5 w-5 rounded-sm active:scale-[0.96]"
 							disabled={disabled}
 							aria-label={label}
-							data-testid={testId}
+							data-testid={`${testIdPrefix}-button`}
+							data-node-id={nodeId}
 							onPointerDown={(event) => event.stopPropagation()}
 							onClick={(event) => {
 								event.stopPropagation()
@@ -132,15 +135,28 @@ export function AddNodeMenu({
 					</DropdownMenuTrigger>
 				</span>
 			</ActionTooltip>
-			<EditorDropdownMenuContent align="end" className="w-56">
+			<EditorDropdownMenuContent
+				align="end"
+				className="w-56"
+				data-testid={`${testIdPrefix}-menu`}
+				data-node-id={nodeId}
+			>
 				<DropdownMenuLabel>{label}</DropdownMenuLabel>
 				{isInside ? (
 					<>
-						<DropdownMenuItem onSelect={() => onAddText("inside")}>
+						<DropdownMenuItem
+							onSelect={() => onAddText("inside")}
+							data-testid={`${testIdPrefix}-text-inside-item`}
+							data-node-id={nodeId}
+						>
 							<Plus className="h-4 w-4" />
 							{t("stylePanel.domTree.addText")}
 						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onAddImage("inside")}>
+						<DropdownMenuItem
+							onSelect={() => onAddImage("inside")}
+							data-testid={`${testIdPrefix}-image-inside-item`}
+							data-node-id={nodeId}
+						>
 							<ImagePlus className="h-4 w-4" />
 							{t("stylePanel.domTree.addImage")}
 						</DropdownMenuItem>
@@ -150,11 +166,19 @@ export function AddNodeMenu({
 						<DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
 							{t("stylePanel.domTree.insertBefore")}
 						</DropdownMenuLabel>
-						<DropdownMenuItem onSelect={() => onAddText("before")}>
+						<DropdownMenuItem
+							onSelect={() => onAddText("before")}
+							data-testid={`${testIdPrefix}-text-before-item`}
+							data-node-id={nodeId}
+						>
 							<Plus className="h-4 w-4" />
 							{t("stylePanel.domTree.addTextBefore")}
 						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onAddImage("before")}>
+						<DropdownMenuItem
+							onSelect={() => onAddImage("before")}
+							data-testid={`${testIdPrefix}-image-before-item`}
+							data-node-id={nodeId}
+						>
 							<ImagePlus className="h-4 w-4" />
 							{t("stylePanel.domTree.addImageBefore")}
 						</DropdownMenuItem>
@@ -162,11 +186,19 @@ export function AddNodeMenu({
 						<DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
 							{t("stylePanel.domTree.insertAfter")}
 						</DropdownMenuLabel>
-						<DropdownMenuItem onSelect={() => onAddText("after")}>
+						<DropdownMenuItem
+							onSelect={() => onAddText("after")}
+							data-testid={`${testIdPrefix}-text-after-item`}
+							data-node-id={nodeId}
+						>
 							<Plus className="h-4 w-4" />
 							{t("stylePanel.domTree.addTextAfter")}
 						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => onAddImage("after")}>
+						<DropdownMenuItem
+							onSelect={() => onAddImage("after")}
+							data-testid={`${testIdPrefix}-image-after-item`}
+							data-node-id={nodeId}
+						>
 							<ImagePlus className="h-4 w-4" />
 							{t("stylePanel.domTree.addImageAfter")}
 						</DropdownMenuItem>

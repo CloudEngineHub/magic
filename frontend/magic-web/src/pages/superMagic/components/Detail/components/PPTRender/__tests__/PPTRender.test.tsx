@@ -157,9 +157,11 @@ vi.mock("../../EditToolbar", async () => {
 	function MockEditToolbar({
 		fileId,
 		interactionDisabled,
+		testIdsEnabled,
 	}: {
 		fileId?: string
 		interactionDisabled?: boolean
+		testIdsEnabled?: boolean
 	}) {
 		React.useEffect(() => {
 			mockState.toolbarMounted()
@@ -171,6 +173,7 @@ vi.mock("../../EditToolbar", async () => {
 				data-testid="ppt-edit-toolbar"
 				data-file-id={fileId}
 				data-interaction-disabled={String(Boolean(interactionDisabled))}
+				data-test-ids-enabled={String(testIdsEnabled !== false)}
 			/>
 		)
 	}
@@ -409,6 +412,7 @@ vi.mock("@/components/shadcn-ui/alert-dialog", () => ({
 function renderPPTRender(input?: {
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
+	isTabActive?: boolean
 }) {
 	return render(
 		<PPTRender
@@ -417,6 +421,7 @@ function renderPPTRender(input?: {
 			mainFileId="ppt-root-file"
 			mainFileName="Deck.html"
 			allowEdit={true}
+			isTabActive={input?.isTabActive}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
 			onUnregisterCheckBeforeClose={input?.onUnregisterCheckBeforeClose}
 		/>,
@@ -698,6 +703,7 @@ describe("PPTRender", () => {
 
 		const toolbar = await screen.findByTestId("ppt-edit-toolbar")
 		expect(toolbar).toHaveAttribute("data-file-id", "slide-file-id")
+		expect(toolbar).toHaveAttribute("data-test-ids-enabled", "true")
 		expect(screen.getAllByTestId("ppt-edit-toolbar")).toHaveLength(1)
 		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
 		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
@@ -749,6 +755,16 @@ describe("PPTRender", () => {
 		expect(toolbar).toHaveAttribute("data-interaction-disabled", "false")
 		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
 		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
+	})
+
+	it("disables fixed toolbar test ids for an inactive cached preview", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender({ isTabActive: false })
+
+		expect(await screen.findByTestId("ppt-edit-toolbar")).toHaveAttribute(
+			"data-test-ids-enabled",
+			"false",
+		)
 	})
 
 	it("ignores a stale ready callback after rapid navigation chooses a newer target", async () => {

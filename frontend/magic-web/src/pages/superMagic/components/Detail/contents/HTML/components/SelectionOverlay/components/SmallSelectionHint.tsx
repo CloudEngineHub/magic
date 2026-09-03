@@ -70,6 +70,7 @@ export function SmallSelectionHint({ show, rect }: SmallSelectionHintProps) {
 
 	return createPortal(
 		<motion.div
+			data-testid="html-editor-small-selection-hint"
 			initial={{ opacity: 0, y: -4, scale: 0.95 }}
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			exit={{ opacity: 0, y: -4, scale: 0.95 }}
@@ -87,6 +88,7 @@ export function SmallSelectionHint({ show, rect }: SmallSelectionHintProps) {
 			<Info className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
 			<div className="leading-tight">{t("stylePanel.smallSelectionHint")}</div>
 			<button
+				data-testid="html-editor-small-selection-hint-close-button"
 				type="button"
 				onClick={handleDismiss}
 				className="-mr-1 -mt-1 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted"

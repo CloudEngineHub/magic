@@ -128,6 +128,7 @@ export function ContextMorePopover({
 									key={item.value}
 									value={item.value}
 									className="h-6 px-2 text-[11px]"
+									data-testid={`style-panel-more-${item.value}-tab`}
 								>
 									{item.label}
 								</TabsTrigger>

@@ -225,11 +225,16 @@ vi.mock("@/components/base/MagicSpin", () => ({
 }))
 
 vi.mock("../../../components/EditToolbar/AIEditButton", () => ({
-	default: (props: { maxItems?: number; onPrimaryAction?: () => void }) => (
+	default: (props: {
+		maxItems?: number
+		onPrimaryAction?: () => void
+		testIdPrefix?: string
+	}) => (
 		<div
 			data-testid="ai-edit-button"
 			data-max-items={props.maxItems}
 			data-has-primary-action={Boolean(props.onPrimaryAction)}
+			data-test-id-prefix={props.testIdPrefix}
 		/>
 	),
 }))
@@ -241,14 +246,16 @@ vi.mock("../../../components/EditToolbar/FileEditButtons", () => ({
 		onSaveAndExit,
 		onCancel,
 		editLabel,
+		testIdPrefix,
 	}: {
 		onEdit?: () => void
 		onSave?: () => void
 		onSaveAndExit?: () => void
 		onCancel?: () => void
 		editLabel?: string
+		testIdPrefix?: string
 	}) => (
-		<div data-testid="file-edit-buttons">
+		<div data-testid="file-edit-buttons" data-test-id-prefix={testIdPrefix}>
 			<button type="button" data-testid="html-edit-button" onClick={onEdit}>
 				{editLabel ?? "edit"}
 			</button>
@@ -563,7 +570,18 @@ describe("HTML", () => {
 		)
 
 		await waitFor(() => {
+			expect(screen.getByTestId("html-preview")).toHaveAttribute("data-edit-mode", "false")
+			expect(screen.getByTestId("html-preview-container")).toBeInTheDocument()
+			expect(screen.getByTestId("html-preview-content")).toBeInTheDocument()
+			expect(screen.getByTestId("file-edit-buttons")).toHaveAttribute(
+				"data-test-id-prefix",
+				"html-editor",
+			)
 			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute("data-max-items", "3")
+			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
+				"data-test-id-prefix",
+				"html-editor",
+			)
 			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
 				"data-has-primary-action",
 				"true",
@@ -585,6 +603,30 @@ describe("HTML", () => {
 
 		await waitFor(() => {
 			expect(screen.queryByTestId("ai-edit-button")).not.toBeInTheDocument()
+		})
+	})
+
+	it("should expose fixed HTML test ids only for the active cached preview", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				setIsEditMode={vi.fn()}
+				allowEdit
+				isTabActive={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("html-preview")).not.toBeInTheDocument()
+			expect(screen.queryByTestId("html-editor-toolbar-actions")).not.toBeInTheDocument()
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ isVisible: false }),
+			)
+			expect(screen.getByTestId("file-edit-buttons")).not.toHaveAttribute(
+				"data-test-id-prefix",
+			)
 		})
 	})
 
@@ -891,6 +933,8 @@ describe("HTML", () => {
 		await waitFor(() => {
 			expect(screen.getByTestId("html-save-with-update-dialog")).toBeInTheDocument()
 		})
+		expect(screen.getByTestId("html-save-with-update-cancel-button")).toBeInTheDocument()
+		expect(screen.getByTestId("html-save-with-update-confirm-button")).toBeInTheDocument()
 		expect(mockSaveEditContent).not.toHaveBeenCalled()
 	})
 
@@ -921,7 +965,7 @@ describe("HTML", () => {
 		})
 
 		await act(async () => {
-			fireEvent.click(screen.getByText("common.save"))
+			fireEvent.click(screen.getByTestId("html-save-with-update-confirm-button"))
 		})
 
 		await waitFor(() => {
@@ -962,7 +1006,7 @@ describe("HTML", () => {
 		})
 
 		await act(async () => {
-			fireEvent.click(screen.getByText("common.cancel"))
+			fireEvent.click(screen.getByTestId("html-save-with-update-cancel-button"))
 		})
 
 		expect(screen.queryByTestId("html-save-with-update-dialog")).not.toBeInTheDocument()

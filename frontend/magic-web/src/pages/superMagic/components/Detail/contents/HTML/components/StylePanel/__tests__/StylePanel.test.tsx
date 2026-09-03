@@ -155,10 +155,22 @@ vi.mock("../controls", () => ({
 			</div>
 		)
 	},
-	StylePopoverButton: ({ title, children }: { title: string; children: ReactNode }) => (
+	StylePopoverButton: ({
+		title,
+		children,
+		triggerTestId,
+		contentTestId,
+	}: {
+		title: string
+		children: ReactNode
+		triggerTestId?: string
+		contentTestId?: string
+	}) => (
 		<div data-testid={`style-popover-${title}`}>
-			<span>{title}</span>
-			<div>{children}</div>
+			<button type="button" data-testid={triggerTestId}>
+				{title}
+			</button>
+			<div data-testid={contentTestId}>{children}</div>
 		</div>
 	),
 }))
@@ -211,6 +223,10 @@ describe("StylePanel", () => {
 		expect(screen.queryByTestId("font-family-selector")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("font-size-selector")).not.toBeInTheDocument()
 		expect(screen.getByTestId("html-style-panel-image-section")).toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-layout-trigger")).toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-image-trigger")).toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-border-trigger")).toBeInTheDocument()
+		expect(screen.getByTestId("html-style-panel-shadow-trigger")).toBeInTheDocument()
 	})
 
 	it("should expose a DOM tree entry in the global toolbar", () => {

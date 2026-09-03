@@ -26,15 +26,22 @@ describe("PendingTargetsPanel", () => {
 		expect(screen.getByTestId("element-inspector-pending-panel")).toBeInTheDocument()
 		expect(screen.getByTestId("element-inspector-pending-panel")).toHaveClass("t-panel-slide")
 		expect(screen.getByTestId("element-inspector-submit-button")).toBeDisabled()
-		const elementModeButton = screen.getByRole("button", {
-			name: "stylePanel.inspector.elementMode",
-		})
-		const screenshotModeButton = screen.getByRole("button", {
-			name: "stylePanel.inspector.screenshotMode",
-		})
-		expect(
+		const elementModeButton = screen.getByTestId(
+			"element-inspector-selection-mode-element-button",
+		)
+		const screenshotModeButton = screen.getByTestId(
+			"element-inspector-selection-mode-screenshot-button",
+		)
+		expect(screen.getByTestId("element-inspector-selection-mode")).toBe(
 			screen.getByRole("group", { name: "stylePanel.inspector.selectionMode" }),
-		).toBeInTheDocument()
+		)
+		expect(elementModeButton).toBe(
+			screen.getByRole("button", { name: "stylePanel.inspector.elementMode" }),
+		)
+		expect(screenshotModeButton).toBe(
+			screen.getByRole("button", { name: "stylePanel.inspector.screenshotMode" }),
+		)
+		expect(screen.getByTestId("element-inspector-exit-button")).toBeInTheDocument()
 		expect(elementModeButton).toHaveAttribute("aria-pressed", "true")
 		expect(elementModeButton).toHaveClass("bg-primary", "text-primary-foreground")
 		expect(elementModeButton).not.toHaveClass("hover:bg-accent", "hover:text-accent-foreground")
@@ -136,6 +143,8 @@ describe("PendingTargetsPanel", () => {
 	})
 
 	it("keeps the target list collapsed until the compact panel is hovered", () => {
+		const onEdit = vi.fn()
+		const onRemove = vi.fn()
 		render(
 			<PendingTargetsPanel
 				targets={[
@@ -159,8 +168,8 @@ describe("PendingTargetsPanel", () => {
 					},
 				]}
 				submitState="idle"
-				onEdit={vi.fn()}
-				onRemove={vi.fn()}
+				onEdit={onEdit}
+				onRemove={onRemove}
 				onSubmit={vi.fn()}
 			/>,
 		)
@@ -175,10 +184,71 @@ describe("PendingTargetsPanel", () => {
 		fireEvent.mouseEnter(panel)
 		expect(toggle).toHaveAttribute("aria-expanded", "true")
 		expect(getTargetList()).toHaveAttribute("data-placement", "bottom")
+		const targetItem = screen.getByTestId("element-inspector-pending-target-item")
+		expect(targetItem).toHaveAttribute("data-target-id", "#hero")
+		expect(targetItem).toHaveAttribute("data-target-kind", "element")
+		const editButton = screen.getByTestId("element-inspector-pending-target-edit-button")
+		const removeButton = screen.getByTestId("element-inspector-pending-target-remove-button")
+		expect(editButton).toHaveAttribute("data-target-id", "#hero")
+		expect(removeButton).toHaveAttribute("data-target-id", "#hero")
+		fireEvent.click(editButton)
+		fireEvent.click(removeButton)
+		expect(onEdit).toHaveBeenCalledOnce()
+		expect(onRemove).toHaveBeenCalledWith("#hero")
 
 		fireEvent.mouseLeave(panel)
 		expect(toggle).toHaveAttribute("aria-expanded", "false")
 		expect(getTargetList()).not.toBeInTheDocument()
+	})
+
+	it("exposes submit validation and success states", () => {
+		const target = {
+			id: "#hero",
+			kind: "element" as const,
+			info: {
+				selector: "#hero",
+				tagName: "section",
+				id: "hero",
+				classList: [],
+				rect: { top: 0, left: 0, width: 100, height: 80 },
+				margin: { top: 0, right: 0, bottom: 0, left: 0 },
+				padding: { top: 0, right: 0, bottom: 0, left: 0 },
+				border: { top: 0, right: 0, bottom: 0, left: 0 },
+				computedStyles: {},
+				attributes: {},
+				textContent: "",
+			},
+			instruction: "",
+		}
+		const { rerender } = render(
+			<PendingTargetsPanel
+				targets={[target]}
+				submitState="idle"
+				onEdit={vi.fn()}
+				onRemove={vi.fn()}
+				onSubmit={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("element-inspector-submit-status")).toHaveAttribute(
+			"data-state",
+			"invalid",
+		)
+
+		rerender(
+			<PendingTargetsPanel
+				targets={[{ ...target, instruction: "Update hero" }]}
+				submitState="succeeded"
+				onEdit={vi.fn()}
+				onRemove={vi.fn()}
+				onSubmit={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("element-inspector-submit-status")).toHaveAttribute(
+			"data-state",
+			"succeeded",
+		)
 	})
 
 	it("opens the target list upward when the panel is near the bottom edge", () => {

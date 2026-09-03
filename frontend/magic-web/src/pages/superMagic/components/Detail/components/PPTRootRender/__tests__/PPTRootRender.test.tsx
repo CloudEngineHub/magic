@@ -163,8 +163,28 @@ describe("PPTRootRender", () => {
 	it("keeps FilesViewer fullscreen separate from PPT presentation fullscreen", async () => {
 		renderRoot("1", ["slides/slide-1.html"], { isFullscreen: true })
 
+		expect(screen.getByTestId("ppt-project-preview")).toBeInTheDocument()
 		await waitFor(() => {
 			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
+		})
+	})
+
+	it("does not expose the fixed project preview id from an inactive cached tab", async () => {
+		const attachmentList = createDeckFiles("1")
+		render(
+			<PPTRootRender
+				data={{ file_id: "index-file", file_name: "index.html" }}
+				attachmentList={attachmentList}
+				attachments={attachmentList}
+				displayConfig={{ type: "slide", slides: ["slides/slide-1.html"] }}
+				activeFileId="index-file"
+				isTabActive={false}
+			/>,
+		)
+
+		expect(screen.queryByTestId("ppt-project-preview")).not.toBeInTheDocument()
+		await waitFor(() => {
+			expect(mockState.processHtmlContent).toHaveBeenCalled()
 		})
 	})
 

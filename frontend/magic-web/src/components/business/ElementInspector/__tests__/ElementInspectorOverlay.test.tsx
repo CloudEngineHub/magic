@@ -86,7 +86,10 @@ describe("ElementInspectorOverlay", () => {
 
 			await waitFor(() => {
 				const panel = screen.getByTestId("element-inspector-pending-panel")
-				expect(panel.parentElement).toHaveAttribute("data-element-inspector-panel-portal")
+				expect(screen.getByTestId("element-inspector-overlay")).toBeInTheDocument()
+				expect(screen.getByTestId("element-inspector-panel-portal")).toBe(
+					panel.parentElement,
+				)
 				expect(panel.parentElement?.parentElement).toBe(
 					screen.getByTestId("canvas-viewport"),
 				)
@@ -132,6 +135,55 @@ describe("ElementInspectorOverlay", () => {
 		expect(screen.getByTestId("element-inspector-pending-panel")).toBe(panel)
 	})
 
+	it("exposes stable actions on the single-element info card", () => {
+		const iframeRect = {
+			top: 0,
+			left: 0,
+			width: 640,
+			height: 360,
+			bottom: 360,
+			right: 640,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect
+		const originalGetBoundingClientRect = HTMLIFrameElement.prototype.getBoundingClientRect
+		HTMLIFrameElement.prototype.getBoundingClientRect = () => iframeRect
+
+		try {
+			const iframeRef = { current: null as HTMLIFrameElement | null }
+			const onClearSelection = vi.fn()
+			const onInsertToConsole = vi.fn()
+			const onSendToAgent = vi.fn()
+			render(
+				<div>
+					<iframe ref={iframeRef} />
+					<ElementInspectorOverlay
+						active={false}
+						iframeRef={iframeRef}
+						hoveredElement={null}
+						selectedElement={createInfo()}
+						onClearSelection={onClearSelection}
+						onInsertToConsole={onInsertToConsole}
+						onSendToAgent={onSendToAgent}
+					/>
+				</div>,
+			)
+
+			expect(screen.getByTestId("element-inspector-info-card")).toBeInTheDocument()
+			expect(screen.getByTestId("element-inspector-copy-selector-button")).toBeInTheDocument()
+			fireEvent.click(screen.getByTestId("element-inspector-info-close-button"))
+			fireEvent.click(screen.getByTestId("element-inspector-insert-console-button"))
+			fireEvent.click(screen.getByTestId("inspector-send-to-agent-button"))
+
+			expect(onClearSelection).toHaveBeenCalledOnce()
+			expect(onInsertToConsole).toHaveBeenCalledWith("document.querySelector('.row-item.ai')")
+			expect(onSendToAgent).toHaveBeenCalledOnce()
+		} finally {
+			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
+		}
+	})
+
 	it("replaces the selected element label with a collapsible comment marker", () => {
 		const rect = {
 			top: 0,
@@ -168,7 +220,8 @@ describe("ElementInspectorOverlay", () => {
 				screen.queryByTestId("element-inspector-selection-label"),
 			).not.toBeInTheDocument()
 			const marker = screen.getByTestId("element-inspector-comment-marker")
-			expect(marker.querySelector("button")).toHaveClass("inspector-comment-marker-button")
+			const commentButton = screen.getByTestId("element-inspector-comment-button")
+			expect(commentButton).toHaveClass("inspector-comment-marker-button")
 			expect(marker).toHaveClass("overflow-visible")
 			expect(marker).not.toHaveClass("overflow-hidden")
 			const commentContent = screen.getByTestId("element-inspector-comment-content")
@@ -176,10 +229,10 @@ describe("ElementInspectorOverlay", () => {
 			fireEvent.mouseEnter(marker)
 			expect(commentContent).toHaveClass("max-w-[184px]")
 			expect(commentContent).toHaveTextContent("stylePanel.inspector.emptyDescription")
-			fireEvent.click(marker.querySelector("button"))
+			fireEvent.click(commentButton)
 			fireEvent.mouseLeave(marker)
 			expect(commentContent).toHaveClass("max-w-[184px]")
-			fireEvent.click(marker.querySelector("button"))
+			fireEvent.click(commentButton)
 			expect(commentContent).toHaveClass("max-w-0")
 			const highlight = document.querySelector(".border-primary")
 			expect(highlight).toBeInTheDocument()
@@ -539,7 +592,13 @@ describe("ElementInspectorOverlay", () => {
 			expect(
 				screen.queryByTestId("element-inspector-selection-label"),
 			).not.toBeInTheDocument()
-			fireEvent.mouseEnter(screen.getByTestId("element-inspector-comment-marker"))
+			const marker = screen.getByTestId("element-inspector-comment-marker")
+			expect(marker).toHaveAttribute("data-target-id", info.selector)
+			expect(screen.getByTestId("element-inspector-comment-button")).toHaveAttribute(
+				"data-target-id",
+				info.selector,
+			)
+			fireEvent.mouseEnter(marker)
 			expect(screen.getByTestId("element-inspector-comment-content")).toHaveTextContent(
 				"Move it",
 			)
@@ -604,9 +663,14 @@ describe("ElementInspectorOverlay", () => {
 			}
 			render(<Harness />)
 
-			fireEvent.click(screen.getByTestId("element-inspector-pending-target"))
-			expect(screen.getByTestId("element-inspector-edit-popover")).toBeInTheDocument()
-			expect(screen.getByRole("textbox")).toHaveValue("Move it")
+			const pendingTarget = screen.getByTestId("element-inspector-pending-target")
+			expect(pendingTarget).toHaveAttribute("data-target-id", info.selector)
+			fireEvent.click(pendingTarget)
+			expect(screen.getByTestId("element-inspector-edit-popover")).toHaveAttribute(
+				"data-target-id",
+				info.selector,
+			)
+			expect(screen.getByTestId("element-inspector-instruction-input")).toHaveValue("Move it")
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
 		}

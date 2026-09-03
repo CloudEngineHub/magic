@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ContextMorePopover } from "../ContextMorePopover"
@@ -43,8 +43,12 @@ vi.mock("@/components/shadcn-ui/tabs", () => ({
 		return <div>{children}</div>
 	},
 	TabsList: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-	TabsTrigger: ({ value, children }: { value: string; children: ReactNode }) => (
-		<button type="button" onClick={() => tabsContext.onValueChange(value)}>
+	TabsTrigger: ({
+		value,
+		children,
+		...props
+	}: { value: string; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+		<button type="button" onClick={() => tabsContext.onValueChange(value)} {...props}>
 			{children}
 		</button>
 	),
@@ -125,6 +129,12 @@ describe("ContextMorePopover", () => {
 			"stylePanel.customCSS.title",
 		])
 		expect(tabLabels.at(-2)).toBe("stylePanel.layout")
+		expect(screen.getByTestId("style-panel-more-background-tab")).toBeInTheDocument()
+		expect(screen.getByTestId("style-panel-more-border-tab")).toBeInTheDocument()
+		expect(screen.getByTestId("style-panel-more-shadow-tab")).toBeInTheDocument()
+		expect(screen.getByTestId("style-panel-more-image-tab")).toBeInTheDocument()
+		expect(screen.getByTestId("style-panel-more-layout-tab")).toBeInTheDocument()
+		expect(screen.getByTestId("style-panel-more-advanced-tab")).toBeInTheDocument()
 
 		fireEvent.click(screen.getByRole("button", { name: "stylePanel.border" }))
 		expect(screen.getByTestId("border-section")).toBeInTheDocument()

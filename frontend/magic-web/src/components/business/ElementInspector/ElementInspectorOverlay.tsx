@@ -671,6 +671,7 @@ export function ElementInspectorOverlay({
 		onConfirmTarget &&
 		onCancelTarget ? (
 			<ElementEditPopover
+				targetId={activeTarget.id}
 				info={activeTarget.kind === "element" ? activeTarget.info : undefined}
 				targetKind={activeTarget.kind}
 				screenshotDataUrl={activeTarget.screenshot?.dataUrl}
@@ -730,6 +731,7 @@ export function ElementInspectorOverlay({
 					<div
 						className="pointer-events-none absolute inset-0 z-40"
 						data-element-inspector-panel-portal="true"
+						data-testid="element-inspector-panel-portal"
 						style={{
 							zIndex: screenshotCapturePhase === "loading" ? 100 : 40,
 							visibility:
@@ -750,6 +752,7 @@ export function ElementInspectorOverlay({
 			ref={overlayRef}
 			className="pointer-events-none absolute inset-0 z-40"
 			data-element-inspector-overlay="true"
+			data-testid="element-inspector-overlay"
 			style={{
 				overflow: "hidden",
 				zIndex: screenshotCapturePhase === "loading" ? 100 : 40,
@@ -814,12 +817,14 @@ export function ElementInspectorOverlay({
 								showLabel={false}
 							/>
 							<CommentMarker
+								targetId={target.id}
 								box={box}
 								containerWidth={overlaySize.width}
 								containerHeight={overlaySize.height}
 								content={target.instruction}
 							/>
 							<PendingTargetHighlight
+								targetId={target.id}
 								box={box}
 								onClick={() => onEditPendingTarget?.(target)}
 							/>
@@ -844,12 +849,14 @@ export function ElementInspectorOverlay({
 							showLabel={false}
 						/>
 						<CommentMarker
+							targetId={target.id}
 							box={box}
 							containerWidth={overlaySize.width}
 							containerHeight={overlaySize.height}
 							content={target.instruction}
 						/>
 						<PendingTargetHighlight
+							targetId={target.id}
 							box={box}
 							onClick={() => onEditPendingTarget?.(target)}
 						/>
@@ -869,6 +876,11 @@ export function ElementInspectorOverlay({
 						showLabel={false}
 					/>
 					<CommentMarker
+						targetId={getSelectedElementTargetId(
+							selectedElement.selector,
+							activeTarget,
+							pendingTargets,
+						)}
 						box={selectBox}
 						containerWidth={overlaySize.width}
 						containerHeight={overlaySize.height}
@@ -916,6 +928,7 @@ export function ElementInspectorOverlay({
 							showLabel={false}
 						/>
 						<CommentMarker
+							targetId={activeTarget.id}
 							box={activeTargetBox}
 							containerWidth={overlaySize.width}
 							containerHeight={overlaySize.height}
@@ -939,6 +952,7 @@ export function ElementInspectorOverlay({
 						showLabel={false}
 					/>
 					<CommentMarker
+						targetId={activeTarget.id}
 						box={activeTargetBox}
 						containerWidth={overlaySize.width}
 						containerHeight={overlaySize.height}
@@ -1030,12 +1044,28 @@ function getSelectedElementComment(
 	)
 }
 
+function getSelectedElementTargetId(
+	selector: string,
+	activeTarget: HtmlSelectionTarget | null,
+	pendingTargets: HtmlSelectionTarget[],
+): string | undefined {
+	if (activeTarget?.kind === "element" && activeTarget.info.selector === selector) {
+		return activeTarget.id
+	}
+
+	return pendingTargets.find(
+		(target) => target.kind === "element" && target.info.selector === selector,
+	)?.id
+}
+
 function CommentMarker({
+	targetId,
 	box,
 	containerWidth,
 	containerHeight,
 	content,
 }: {
+	targetId?: string
 	box: { left: number; top: number; width: number; height: number }
 	containerWidth: number
 	containerHeight: number
@@ -1078,9 +1108,12 @@ function CommentMarker({
 				}
 			}}
 			data-testid="element-inspector-comment-marker"
+			data-target-id={targetId}
 		>
 			<div className={`flex min-w-0 items-start ${opensLeft ? "flex-row-reverse" : ""}`}>
 				<button
+					data-testid="element-inspector-comment-button"
+					data-target-id={targetId}
 					type="button"
 					className="inspector-comment-marker-button flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[background-color,transform,box-shadow] duration-150 ease-out hover:scale-[1.04] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:scale-[0.96]"
 					aria-label={t("stylePanel.inspector.comment")}
@@ -1117,9 +1150,11 @@ function CommentMarker({
 }
 
 function PendingTargetHighlight({
+	targetId,
 	box,
 	onClick,
 }: {
+	targetId: string
 	box: { left: number; top: number; width: number; height: number }
 	onClick: () => void
 }) {
@@ -1128,6 +1163,7 @@ function PendingTargetHighlight({
 			className="pointer-events-auto absolute cursor-pointer"
 			style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
 			data-testid="element-inspector-pending-target"
+			data-target-id={targetId}
 			onClick={(event) => {
 				event.preventDefault()
 				event.stopPropagation()
@@ -1307,6 +1343,7 @@ function ElementInfoCard({
 					<span className="truncate font-mono">{getShortSelector(info)}</span>
 				</div>
 				<Button
+					data-testid="element-inspector-info-close-button"
 					variant="ghost"
 					size="icon"
 					className="h-5 w-5 flex-shrink-0"
@@ -1387,6 +1424,7 @@ function ElementInfoCard({
 			{/* Actions */}
 			<div className="flex flex-wrap items-center gap-1 border-t px-2 py-1">
 				<Button
+					data-testid="element-inspector-copy-selector-button"
 					variant="ghost"
 					size="sm"
 					className="h-5 gap-1 px-1.5 text-[10px]"
@@ -1397,6 +1435,7 @@ function ElementInfoCard({
 				</Button>
 				{onInsertToConsole && (
 					<Button
+						data-testid="element-inspector-insert-console-button"
 						variant="ghost"
 						size="sm"
 						className="h-5 gap-1 px-1.5 text-[10px]"

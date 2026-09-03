@@ -95,6 +95,8 @@ export function DOMTreeContextMenu({
 
 	return (
 		<ContextMenuContent
+			data-testid="dom-tree-context-menu"
+			data-node-id={node.nodeId}
 			className={cn(
 				"w-72 rounded-lg border-border/80 p-1.5 shadow-xl",
 				TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_MENU,
@@ -122,6 +124,8 @@ export function DOMTreeContextMenu({
 			) : null}
 			<ContextMenuSeparator />
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-select-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!isSelectableNode(node) || isBusy}
 				onSelect={onSelect}
@@ -130,6 +134,8 @@ export function DOMTreeContextMenu({
 				{t("stylePanel.domTree.selectNode")}
 			</ContextMenuItem>
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-copy-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!node.canMove || isBusy}
 				onSelect={onCopy}
@@ -139,6 +145,8 @@ export function DOMTreeContextMenu({
 				<ContextMenuShortcut>{modifier}C</ContextMenuShortcut>
 			</ContextMenuItem>
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-cut-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!node.canMove || isBusy}
 				onSelect={onCut}
@@ -148,6 +156,8 @@ export function DOMTreeContextMenu({
 				<ContextMenuShortcut>{modifier}X</ContextMenuShortcut>
 			</ContextMenuItem>
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-paste-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!canPaste || isBusy || (!canInsertInside && !canInsertSibling)}
 				onSelect={onPaste}
@@ -157,6 +167,8 @@ export function DOMTreeContextMenu({
 				<ContextMenuShortcut>{modifier}V</ContextMenuShortcut>
 			</ContextMenuItem>
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-duplicate-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!node.editable || !node.selector || isBusy}
 				onSelect={onDuplicate}
@@ -167,6 +179,8 @@ export function DOMTreeContextMenu({
 			</ContextMenuItem>
 			{node.children.length > 0 ? (
 				<ContextMenuItem
+					data-testid="dom-tree-context-menu-toggle-item"
+					data-node-id={node.nodeId}
 					className={ITEM_CLASS}
 					disabled={isBusy}
 					onSelect={onToggleExpanded}
@@ -188,6 +202,8 @@ export function DOMTreeContextMenu({
 				{t("stylePanel.domTree.reorder")}
 			</ContextMenuLabel>
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-move-before-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!canMoveBefore || isBusy}
 				onSelect={onMoveBefore}
@@ -196,6 +212,8 @@ export function DOMTreeContextMenu({
 				{t("stylePanel.domTree.moveBeforePrevious")}
 			</ContextMenuItem>
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-move-after-item"
+				data-node-id={node.nodeId}
 				className={ITEM_CLASS}
 				disabled={!canMoveAfter || isBusy}
 				onSelect={onMoveAfter}
@@ -207,11 +225,18 @@ export function DOMTreeContextMenu({
 				<>
 					<ContextMenuSeparator />
 					<ContextMenuSub>
-						<ContextMenuSubTrigger className={ITEM_CLASS} disabled={isBusy}>
+						<ContextMenuSubTrigger
+							className={ITEM_CLASS}
+							disabled={isBusy}
+							data-testid="dom-tree-context-menu-insert-trigger"
+							data-node-id={node.nodeId}
+						>
 							<Plus className="h-4 w-4" />
 							{t("stylePanel.domTree.insert")}
 						</ContextMenuSubTrigger>
 						<ContextMenuSubContent
+							data-testid="dom-tree-context-menu-insert-content"
+							data-node-id={node.nodeId}
 							className={cn(
 								"w-64 rounded-lg border-border/80 p-1.5 shadow-xl",
 								TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_MENU,
@@ -223,6 +248,8 @@ export function DOMTreeContextMenu({
 										{t("stylePanel.domTree.insertBefore")}
 									</ContextMenuLabel>
 									<ContextMenuItem
+										data-testid="dom-tree-context-menu-add-text-before-item"
+										data-node-id={node.nodeId}
 										className={ITEM_CLASS}
 										disabled={isBusy}
 										onSelect={() => onAddText("before")}
@@ -231,6 +258,8 @@ export function DOMTreeContextMenu({
 										{t("stylePanel.domTree.addText")}
 									</ContextMenuItem>
 									<ContextMenuItem
+										data-testid="dom-tree-context-menu-add-image-before-item"
+										data-node-id={node.nodeId}
 										className={ITEM_CLASS}
 										disabled={isBusy}
 										onSelect={() => onAddImage("before")}
@@ -247,6 +276,8 @@ export function DOMTreeContextMenu({
 										{t("stylePanel.domTree.insertInside")}
 									</ContextMenuLabel>
 									<ContextMenuItem
+										data-testid="dom-tree-context-menu-add-text-inside-item"
+										data-node-id={node.nodeId}
 										className={ITEM_CLASS}
 										disabled={isBusy}
 										onSelect={() => onAddText("inside")}
@@ -255,6 +286,8 @@ export function DOMTreeContextMenu({
 										{t("stylePanel.domTree.addText")}
 									</ContextMenuItem>
 									<ContextMenuItem
+										data-testid="dom-tree-context-menu-add-image-inside-item"
+										data-node-id={node.nodeId}
 										className={ITEM_CLASS}
 										disabled={isBusy}
 										onSelect={() => onAddImage("inside")}
@@ -271,6 +304,8 @@ export function DOMTreeContextMenu({
 										{t("stylePanel.domTree.insertAfter")}
 									</ContextMenuLabel>
 									<ContextMenuItem
+										data-testid="dom-tree-context-menu-add-text-after-item"
+										data-node-id={node.nodeId}
 										className={ITEM_CLASS}
 										disabled={isBusy}
 										onSelect={() => onAddText("after")}
@@ -279,6 +314,8 @@ export function DOMTreeContextMenu({
 										{t("stylePanel.domTree.addText")}
 									</ContextMenuItem>
 									<ContextMenuItem
+										data-testid="dom-tree-context-menu-add-image-after-item"
+										data-node-id={node.nodeId}
 										className={ITEM_CLASS}
 										disabled={isBusy}
 										onSelect={() => onAddImage("after")}
@@ -294,6 +331,8 @@ export function DOMTreeContextMenu({
 			) : null}
 			<ContextMenuSeparator />
 			<ContextMenuItem
+				data-testid="dom-tree-context-menu-delete-item"
+				data-node-id={node.nodeId}
 				className={cn(ITEM_CLASS, "text-destructive")}
 				variant="destructive"
 				disabled={!node.canDelete || isBusy}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { PropsWithChildren } from "react"
 import AIEditButton from "../AIEditButton"
@@ -53,7 +53,18 @@ vi.mock("@/pages/superMagic/components/Detail/components/PPTRender/hooks/useAIEd
 describe("AIEditButton", () => {
 	it("runs the primary action from the main button and opens the menu from the arrow", async () => {
 		const onPrimaryAction = vi.fn()
-		render(<AIEditButton showButtonText maxItems={3} onPrimaryAction={onPrimaryAction} />)
+		render(
+			<AIEditButton
+				testIdPrefix="ppt-edit-toolbar"
+				showButtonText
+				maxItems={3}
+				onPrimaryAction={onPrimaryAction}
+			/>,
+		)
+
+		expect(screen.getByTestId("ppt-edit-toolbar-ai-edit")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-edit-toolbar-ai-edit-primary-button")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-edit-toolbar-ai-edit-menu-button")).toBeInTheDocument()
 
 		const [primaryButton, menuButton] = screen.getAllByRole("button", {
 			name: "topicFiles.AIOptimization",
@@ -66,6 +77,12 @@ describe("AIEditButton", () => {
 		fireEvent.keyDown(menuButton, { key: "Enter" })
 		const menuItem = await screen.findByText("factCheck")
 		expect(menuItem).toBeInTheDocument()
+		const menu = screen.getByTestId("ppt-edit-toolbar-ai-edit-menu")
+		expect(menu).toBeInTheDocument()
+		const factCheckItem = within(menu)
+			.getAllByTestId("ppt-edit-toolbar-ai-edit-item")
+			.find((item) => item.dataset.itemKey === "factCheck")
+		expect(factCheckItem).toBeInTheDocument()
 		expect(menuItem.closest('[data-slot="dropdown-menu-content"]')).toHaveAttribute(
 			"data-align",
 			"end",

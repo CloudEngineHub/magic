@@ -325,6 +325,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		<div
 			ref={overlayRef}
 			data-html-selection-overlay="true"
+			data-testid="html-editor-selection-overlay"
 			className={cn("pointer-events-none", className)}
 			style={{
 				position: "fixed",

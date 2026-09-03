@@ -49,6 +49,7 @@ export function TextEditToggle({
 			<TooltipTrigger asChild>
 				<span>
 					<Toggle
+						data-testid="html-editor-text-edit-toggle"
 						size="sm"
 						pressed={isEnabled}
 						onPressedChange={handleToggle}

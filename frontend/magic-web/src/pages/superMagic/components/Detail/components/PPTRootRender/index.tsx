@@ -439,9 +439,19 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		!isInitialEntryLoading && !isInitialMagicProjectLoading && canRenderFromExistingState
 
 	return (
-		<div className={cn("h-full w-full", className)}>
+		<div
+			className={cn("h-full w-full", className)}
+			data-testid={props.isTabActive === false ? undefined : "ppt-project-preview"}
+		>
 			{!isReadyToRender ? (
-				<Flex justify="center" align="center" className="h-full w-full bg-background">
+				<Flex
+					justify="center"
+					align="center"
+					className="h-full w-full bg-background"
+					data-testid={
+						props.isTabActive === false ? undefined : "ppt-project-preview-loading"
+					}
+				>
 					<MagicSpin spinning />
 				</Flex>
 			) : (

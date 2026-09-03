@@ -29,6 +29,7 @@ export function FontSizeAdjuster({ onAdjust, disabled, itemMotion }: FontSizeAdj
 					<TooltipTrigger asChild>
 						<span>
 							<Button
+								data-testid="html-editor-font-size-increase-button"
 								variant="ghost"
 								size="sm"
 								onClick={() => onAdjust("increase")}
@@ -50,6 +51,7 @@ export function FontSizeAdjuster({ onAdjust, disabled, itemMotion }: FontSizeAdj
 					<TooltipTrigger asChild>
 						<span>
 							<Button
+								data-testid="html-editor-font-size-decrease-button"
 								variant="ghost"
 								size="sm"
 								onClick={() => onAdjust("decrease")}

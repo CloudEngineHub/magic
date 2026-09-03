@@ -70,6 +70,7 @@ export function FontSizeSelector({
 
 	return (
 		<div
+			data-testid="html-editor-font-size-control"
 			className={cn(
 				"flex h-7 min-w-0 items-center gap-0.5 overflow-hidden rounded-md border border-border/70 bg-background/70 pl-2 shadow-none transition-[background-color,border-color,box-shadow] duration-150 focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-primary/20 hover:border-primary/45 hover:bg-primary/5",
 				className,
@@ -80,6 +81,7 @@ export function FontSizeSelector({
 			</span>
 			<div className="relative flex min-w-0 flex-1 items-center">
 				<NumericDragInput
+					data-testid="html-editor-font-size-input"
 					value={value}
 					onChange={handleInput}
 					onCommit={onApply}
@@ -93,12 +95,21 @@ export function FontSizeSelector({
 					step={1}
 				/>
 				<Select value={value} onValueChange={handleSelectChange} disabled={disabled}>
-					<SelectTrigger className="absolute right-0 h-full w-5 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3">
+					<SelectTrigger
+						data-testid="html-editor-font-size-menu-button"
+						className="absolute right-0 h-full w-5 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3"
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<EditorSelectContent>
+					<EditorSelectContent data-testid="html-editor-font-size-menu">
 						{fontSizeOptions.map((size) => (
-							<SelectItem key={size} value={size} className="text-xs">
+							<SelectItem
+								key={size}
+								value={size}
+								className="text-xs"
+								data-testid="html-editor-font-size-item"
+								data-font-size={size}
+							>
 								{size}
 							</SelectItem>
 						))}

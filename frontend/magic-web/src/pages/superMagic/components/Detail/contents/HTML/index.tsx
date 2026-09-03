@@ -511,6 +511,7 @@ export default memo(function HTML(props: HTMLProps) {
 	// IsolatedHTMLRenderer 的 ref，用于获取拦截回调函数
 	const htmlRendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const fileId = displayData?.file_id as string | undefined
+	const htmlTestIdsEnabled = isTabActive ?? (!activeFileId || activeFileId === fileId)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
 	const handleAIEdit = useMemoizedFn(() => {
@@ -1344,7 +1345,9 @@ export default memo(function HTML(props: HTMLProps) {
 								void runGuardedAction(context.beforeAction, handleViewServerUpdate)
 							}
 							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
-							data-testid="html-server-update-button"
+							data-testid={
+								htmlTestIdsEnabled ? "html-server-update-button" : undefined
+							}
 						>
 							<AlertTriangle size={16} className="text-amber-600" />
 							<span>{t("ppt.serverUpdateAvailable")}</span>
@@ -1356,7 +1359,12 @@ export default memo(function HTML(props: HTMLProps) {
 					zone: "primary",
 					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
 					render: () => (
-						<div className="flex items-center gap-1">
+						<div
+							className="flex items-center gap-1"
+							data-testid={
+								htmlTestIdsEnabled ? "html-editor-toolbar-actions" : undefined
+							}
+						>
 							{showAIOptimizationButton && !isEditMode && (
 								<Button
 									variant="outline"
@@ -1365,7 +1373,9 @@ export default memo(function HTML(props: HTMLProps) {
 									aria-pressed={isQuickSelecting}
 									title={quickSelectionTitle}
 									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
-									data-testid="html-ai-pick-button"
+									data-testid={
+										htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+									}
 								>
 									<Crosshair
 										size={16}
@@ -1378,6 +1388,7 @@ export default memo(function HTML(props: HTMLProps) {
 							)}
 							{showFileEditButton && (
 								<FileEditButtons
+									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									isEditMode={isEditMode}
 									isSaving={false}
 									showButtonText
@@ -1394,6 +1405,7 @@ export default memo(function HTML(props: HTMLProps) {
 							)}
 							{showAIOptimizationButton && !isEditMode && (
 								<AIEditButton
+									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									showButtonText
 									maxItems={3}
 									onPrimaryAction={handleAIEdit}
@@ -1422,7 +1434,9 @@ export default memo(function HTML(props: HTMLProps) {
 							title={t("htmlEditor.permissionManager.open")}
 							text={t("htmlEditor.permissionManager.open")}
 							showText={context.showButtonText}
-							data-testid="html-permission-manager-button"
+							data-testid={
+								htmlTestIdsEnabled ? "html-permission-manager-button" : undefined
+							}
 						/>
 					),
 				},
@@ -1468,6 +1482,7 @@ export default memo(function HTML(props: HTMLProps) {
 			handleSaveAndExit,
 			handleViewServerUpdate,
 			hasServerUpdate,
+			htmlTestIdsEnabled,
 			isExporting,
 			isEditMode,
 			isInPPTMode,
@@ -1489,6 +1504,7 @@ export default memo(function HTML(props: HTMLProps) {
 	)
 
 	const headerContext = {
+		testIdsEnabled: htmlTestIdsEnabled,
 		type,
 		onFullscreen,
 		onDownload: handleDownload,
@@ -1546,6 +1562,8 @@ export default memo(function HTML(props: HTMLProps) {
 				[styles.immersiveHtmlContainer]: isImmersiveLayout,
 				[styles.documentFlowHtmlContainer]: documentFlowFullscreen,
 			})}
+			data-testid={htmlTestIdsEnabled ? "html-preview" : undefined}
+			data-edit-mode={isEditMode ? "true" : "false"}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{activeHistory.loading ? (
@@ -1565,7 +1583,10 @@ export default memo(function HTML(props: HTMLProps) {
 					</Flex>
 				)
 			) : isCodeViewMode ? (
-				<div className={styles.htmlBody}>
+				<div
+					className={styles.htmlBody}
+					data-testid={htmlTestIdsEnabled ? "html-editor-code-view" : undefined}
+				>
 					<CodeEditor
 						content={data?.content || ""}
 						fileName={data?.file_name || data?.title || "file.html"}
@@ -1578,6 +1599,7 @@ export default memo(function HTML(props: HTMLProps) {
 				</div>
 			) : (
 				<div
+					data-testid={htmlTestIdsEnabled ? "html-preview-container" : undefined}
 					className={cx(styles.previewContainerBase, {
 						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
@@ -1585,6 +1607,7 @@ export default memo(function HTML(props: HTMLProps) {
 					})}
 				>
 					<div
+						data-testid={htmlTestIdsEnabled ? "html-preview-content" : undefined}
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
 							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
@@ -1647,6 +1670,7 @@ export default memo(function HTML(props: HTMLProps) {
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
+									isVisible={htmlTestIdsEnabled}
 									onRenderReady={handlePreviewRenderReady}
 									onContentMetrics={(
 										metrics: IsolatedHTMLRendererContentMetrics,
@@ -1668,6 +1692,9 @@ export default memo(function HTML(props: HTMLProps) {
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
 								{!isPreviewRenderReady && !documentFlowFullscreen && (
 									<Flex
+										data-testid={
+											htmlTestIdsEnabled ? "html-preview-loading" : undefined
+										}
 										justify="center"
 										align="center"
 										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
@@ -1727,10 +1754,16 @@ export default memo(function HTML(props: HTMLProps) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel onClick={handleDismissSaveWithUpdate}>
+						<AlertDialogCancel
+							data-testid="html-save-with-update-cancel-button"
+							onClick={handleDismissSaveWithUpdate}
+						>
 							{t("common.cancel")}
 						</AlertDialogCancel>
-						<AlertDialogAction onClick={handleConfirmSaveWithUpdate}>
+						<AlertDialogAction
+							data-testid="html-save-with-update-confirm-button"
+							onClick={handleConfirmSaveWithUpdate}
+						>
 							{t("common.save")}
 						</AlertDialogAction>
 					</AlertDialogFooter>

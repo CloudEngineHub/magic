@@ -1,6 +1,6 @@
-import { fireEvent, render, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import type { PropsWithChildren } from "react"
+import type { ButtonHTMLAttributes, PropsWithChildren } from "react"
 import FileEditButtons from "../FileEditButtons"
 
 vi.mock("@/hooks/useIsMobile", () => ({
@@ -16,8 +16,11 @@ vi.mock("@/pages/superMagic/hooks/useHTMLGuideTour", () => ({
 }))
 
 vi.mock("@/components/shadcn-ui/button", () => ({
-	Button: ({ children, disabled }: PropsWithChildren<{ disabled?: boolean }>) => (
-		<button disabled={disabled}>{children}</button>
+	Button: ({
+		children,
+		...props
+	}: PropsWithChildren<ButtonHTMLAttributes<HTMLButtonElement>>) => (
+		<button {...props}>{children}</button>
 	),
 }))
 
@@ -30,6 +33,27 @@ vi.mock("../ConditionalTooltip", () => ({
 }))
 
 describe("FileEditButtons", () => {
+	it("exposes stable scoped test ids for view and edit states", () => {
+		const { rerender } = render(<FileEditButtons testIdPrefix="html-editor" onEdit={vi.fn()} />)
+
+		expect(screen.getByTestId("html-editor-file-actions")).toBeInTheDocument()
+		expect(screen.getByTestId("html-editor-edit-button")).toBeInTheDocument()
+
+		rerender(
+			<FileEditButtons
+				testIdPrefix="html-editor"
+				isEditMode
+				onSave={vi.fn()}
+				onSaveAndExit={vi.fn()}
+				onCancel={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("html-editor-save-button")).toBeInTheDocument()
+		expect(screen.getByTestId("html-editor-save-and-exit-button")).toBeInTheDocument()
+		expect(screen.getByTestId("html-editor-cancel-button")).toBeInTheDocument()
+	})
+
 	it("ignores global edit shortcuts while interaction is disabled", async () => {
 		const onSave = vi.fn().mockResolvedValue(undefined)
 		const onCancel = vi.fn()

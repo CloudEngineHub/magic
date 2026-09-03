@@ -58,6 +58,7 @@ export function TextFormatTools({
 					<TooltipTrigger asChild>
 						<span>
 							<Toggle
+								data-testid="html-editor-text-format-bold-button"
 								size="sm"
 								pressed={isBold}
 								onPressedChange={(pressed) =>
@@ -80,6 +81,7 @@ export function TextFormatTools({
 					<TooltipTrigger asChild>
 						<span>
 							<Toggle
+								data-testid="html-editor-text-format-italic-button"
 								size="sm"
 								pressed={isItalic}
 								onPressedChange={(pressed) =>
@@ -102,6 +104,7 @@ export function TextFormatTools({
 					<TooltipTrigger asChild>
 						<span>
 							<Toggle
+								data-testid="html-editor-text-format-underline-button"
 								size="sm"
 								pressed={hasUnderline}
 								onPressedChange={(pressed) =>
@@ -124,6 +127,7 @@ export function TextFormatTools({
 					<TooltipTrigger asChild>
 						<span>
 							<Toggle
+								data-testid="html-editor-text-format-strikethrough-button"
 								size="sm"
 								pressed={hasLineThrough}
 								onPressedChange={(pressed) =>
