@@ -9,8 +9,28 @@ import {
 	type TaskEndError,
 } from "./RecordingErrorManager"
 import { recordingLogger } from "./utils/RecordingLogger"
+import { redactUploadErrorMessage } from "./utils/sanitizeUploadError"
 
 const logger = recordingLogger.namespace("Upload:Token")
+
+const toSafeTokenError = (error: unknown): Error => {
+	const source = error instanceof Error ? error : undefined
+	const candidate = error && typeof error === "object" ? error : undefined
+	const message = source?.message || (typeof error === "string" ? error : "Unknown token error")
+	const safeError = new Error(redactUploadErrorMessage(message) || "Unknown token error")
+
+	if (source?.name) safeError.name = source.name
+	if (candidate) {
+		for (const key of ["status", "code", "requestId", "request_id", "sessionId"]) {
+			const value = (candidate as Record<string, unknown>)[key]
+			if (typeof value === "string" || typeof value === "number") {
+				;(safeError as Error & Record<string, unknown>)[key] = value
+			}
+		}
+	}
+
+	return safeError
+}
 
 /**
  * Token cache entry interface
@@ -171,11 +191,12 @@ export class UploadTokenManager {
 			logger.error({
 				eventKey: "token_failed",
 				errorKind: "permission",
-				error: error,
+				error: toSafeTokenError(error),
 				message: "Token请求失败",
 				context: { sessionId },
 			})
-			throw error
+			// Always sanitize; task-end code/sessionId stay on the safe error
+			throw toSafeTokenError(error)
 		} finally {
 			this.refreshPromises.delete(cacheKey)
 		}
@@ -262,7 +283,7 @@ export class UploadTokenManager {
 			logger.error({
 				eventKey: "get_token_failed",
 				errorKind: "permission",
-				error: error,
+				error: toSafeTokenError(error),
 				message: "获取Token失败",
 				context: { topicId, retryCount },
 			})
@@ -288,7 +309,7 @@ export class UploadTokenManager {
 						logger.error({
 							eventKey: "task_failed",
 							errorKind: "permission",
-							error: callbackError,
+							error: toSafeTokenError(callbackError),
 							message: "任务结束回调执行失败",
 						})
 					}
@@ -299,7 +320,7 @@ export class UploadTokenManager {
 					logger.error({
 						eventKey: "manager_process_failed",
 						errorKind: "permission",
-						error: handlerError,
+						error: toSafeTokenError(handlerError),
 						message: "错误管理器处理失败",
 					})
 				})
@@ -321,14 +342,14 @@ export class UploadTokenManager {
 			}
 
 			// Max retries exceeded
-			const errorMessage = error instanceof Error ? error.message : String(error)
+			const safeError = toSafeTokenError(error)
 			logger.report("Token获取重试次数已耗尽", {
 				sessionId,
 				maxRetries: this.refreshConfig.maxRetries,
-				lastError: error,
+				lastError: safeError,
 			})
 			throw new Error(
-				`Failed to fetch token after ${this.refreshConfig.maxRetries} retries: ${errorMessage}`,
+				`Failed to fetch token after ${this.refreshConfig.maxRetries} retries: ${safeError.message}`,
 			)
 		}
 	}
@@ -379,7 +400,7 @@ export class UploadTokenManager {
 			logger.error({
 				eventKey: "refresh_token_failed",
 				errorKind: "permission",
-				error: error,
+				error: toSafeTokenError(error),
 				message: "后台刷新Token失败",
 				context: { sessionId },
 			})
@@ -434,11 +455,12 @@ export class UploadTokenManager {
 			logger.error({
 				eventKey: "refresh_token_failed",
 				errorKind: "permission",
-				error: error,
+				error: toSafeTokenError(error),
 				message: "强制刷新Token失败",
 				context: { sessionId },
 			})
-			throw error
+			// Always sanitize; task-end code/sessionId stay on the safe error
+			throw toSafeTokenError(error)
 		}
 	}
 

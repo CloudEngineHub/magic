@@ -51,7 +51,12 @@ import { createRecordingLogger } from "./utils/RecordingLogger"
 import { DEFAULT_RECORDING_CONFIG } from "./utils/config"
 import { RECORD_SUMMARY_EVENT_CALLBACK, RECORD_SUMMARY_EVENTS } from "./const/events"
 import { TypedEventEmitter } from "./utils/TypedEventEmitter"
-import { ERROR_CODE_TASK_ENDED, isTaskEndError, defaultErrorManager } from "./RecordingErrorManager"
+import {
+	ERROR_CODE_TASK_ENDED,
+	ERROR_CODES,
+	isTaskEndError,
+	defaultErrorManager,
+} from "./RecordingErrorManager"
 import { imageMigrationService } from "./ImageMigrationService"
 import { RecordingStatusReporter, RecordingSummaryStatus } from "./RecordingStatusReporter"
 import MagicModal from "@/components/base/MagicModal"
@@ -60,6 +65,7 @@ import VoiceTimeoutChecker from "./VoiceTimeoutChecker"
 import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
+import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
@@ -78,6 +84,8 @@ interface EnsureUploadOptions {
 	projectId?: string
 	allowUserDecision?: boolean
 }
+
+const MAX_UPLOAD_WAIT_TIMEOUTS = 3
 
 class RecordSummaryService {
 	// Duration tracking (using reliable AudioContext-based tracker)
@@ -275,6 +283,10 @@ class RecordSummaryService {
 	private summaryMessageService = getSummaryMessageService()
 	// 分片生产监控定时器，用于检测录音是否正常产出分片
 	private chunkProductionWatchdog: NodeJS.Timeout | null = null
+	private uploadQueueWatchdog: UploadQueueWatchdog | null = null
+	private uploadRetryContext: { sessionId: string; topicId: string; projectId: string } | null =
+		null
+	private uploadRetryInFlight = false
 	// 录音开始后是否已收到第一个分片
 	private hasReceivedFirstChunk = false
 	// 是否已尝试过自动恢复
@@ -400,7 +412,7 @@ class RecordSummaryService {
 
 		// Register error handler for task end events
 		defaultErrorManager.onTaskEnd((error) => {
-			this.handleTaskEnd(error.sessionId)
+			return this.handleTaskEnd(error.sessionId, error.code)
 		})
 
 		// 监听用户登出事件
@@ -408,6 +420,7 @@ class RecordSummaryService {
 	}
 
 	private eventEmitter = new TypedEventEmitter<RECORD_SUMMARY_EVENT_CALLBACK>()
+	private handlingTaskEndSessions = new Set<string>()
 
 	/**
 	 * 监听事件
@@ -678,6 +691,11 @@ class RecordSummaryService {
 
 			// 开始上传任何挂起的分片
 			this.chunkUploader.uploadSession(
+				session.id,
+				session.topic?.id || "",
+				session.project?.id || "",
+			)
+			this.startUploadQueueWatchdog(
 				session.id,
 				session.topic?.id || "",
 				session.project?.id || "",
@@ -1481,6 +1499,11 @@ class RecordSummaryService {
 				session.topic?.id || "",
 				session.project?.id || "",
 			)
+			this.startUploadQueueWatchdog(
+				session.id,
+				session.topic?.id || "",
+				session.project?.id || "",
+			)
 
 			// 恢复 presetFiles 并初始化内容文件管理器
 			await this.restoreContentFileManager(session)
@@ -1601,6 +1624,7 @@ class RecordSummaryService {
 			notifyServer,
 			source,
 		})
+		this.stopUploadQueueWatchdog()
 
 		// Stop duration tracking
 		this.durationTracker.stop()
@@ -1682,6 +1706,17 @@ class RecordSummaryService {
 					})
 					// 即使上传失败也继续取消流程
 				} finally {
+					try {
+						await this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+					} catch (error) {
+						logger.error({
+							eventKey: "cancel_chunk_cleanup_failed",
+							errorKind: "storage",
+							error,
+							message: "取消录音时清理待上传分片失败",
+							context: { sessionId: session.id, source },
+						})
+					}
 					// 隐藏上传等待状态
 					recordSummaryStore.hideWaitingUpload()
 				}
@@ -1691,7 +1726,17 @@ class RecordSummaryService {
 					sessionId: session.id,
 					source,
 				})
-				void this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+				try {
+					await this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+				} catch (error) {
+					logger.error({
+						eventKey: "cancel_chunk_cleanup_failed",
+						errorKind: "storage",
+						error,
+						message: "取消录音时清理待上传分片失败",
+						context: { sessionId: session.id, source },
+					})
+				}
 			}
 
 			if (notifyServer) {
@@ -1907,6 +1952,7 @@ class RecordSummaryService {
 		try {
 			if (sessionId) {
 				logger.log("等待所有分片上传完成")
+				this.startUploadQueueWatchdog(sessionId, finalTopic.id, finalProject.id)
 				this.summaryMessageService.showStageMessage(SummaryStage.UploadingChunks)
 
 				// 触发上传会话分片
@@ -2313,6 +2359,7 @@ class RecordSummaryService {
 				await this.ensureProjectAndTopic(session)
 
 			// 3. 等待分片上传完成和一致性检查
+			this.startUploadQueueWatchdog(session.id, finalTopic.id, finalProject.id)
 			await this.chunkUploader.uploadSession(session.id, finalTopic.id, finalProject.id)
 			await this.ensureSessionUploadComplete(session, {
 				topicId: finalTopic.id,
@@ -2380,6 +2427,7 @@ class RecordSummaryService {
 	 * Reset recording without clearing persisted data
 	 */
 	private resetRecordingWithoutPersistence = async () => {
+		this.stopUploadQueueWatchdog()
 		// 停止语音服务
 		if (this.voiceToTextService) {
 			await this.voiceToTextService.stopRecording()
@@ -2443,6 +2491,7 @@ class RecordSummaryService {
 
 		// 停止分片生产监控
 		this.stopChunkProductionWatchdog()
+		this.stopUploadQueueWatchdog()
 
 		// 停止语音服务
 		if (this.voiceToTextService) {
@@ -2708,6 +2757,80 @@ class RecordSummaryService {
 		if (this.chunkProductionWatchdog) {
 			clearTimeout(this.chunkProductionWatchdog)
 			this.chunkProductionWatchdog = null
+		}
+	}
+
+	private startUploadQueueWatchdog(sessionId: string, topicId: string, projectId: string) {
+		this.uploadRetryContext = { sessionId, topicId, projectId }
+		this.summaryMessageService.setUploadRetryHandler(this.retryStuckChunkUploads)
+		this.uploadQueueWatchdog?.stop()
+		this.uploadQueueWatchdog = new UploadQueueWatchdog({
+			inspect: () => this.chunkUploader.inspectQueueHealth(sessionId),
+			resume: () => {
+				const ctx = this.uploadRetryContext
+				if (!ctx) return Promise.resolve()
+				return this.chunkUploader.resumeStalledSessionUploads(
+					ctx.sessionId,
+					ctx.topicId,
+					ctx.projectId,
+					{ force: true },
+				)
+			},
+			onRecovered: (health) => {
+				logger.report("Upload queue watchdog recovered stalled uploads", {
+					sessionId,
+					...health,
+				})
+			},
+			onError: (error) => {
+				logger.error({
+					eventKey: "upload_queue_watchdog_failed",
+					errorKind: "unknown",
+					error,
+					message: "Upload queue watchdog check failed",
+					context: { sessionId },
+				})
+			},
+		})
+		this.uploadQueueWatchdog.start()
+	}
+
+	private stopUploadQueueWatchdog() {
+		this.uploadQueueWatchdog?.stop()
+		this.uploadQueueWatchdog = null
+		this.uploadRetryContext = null
+		this.summaryMessageService.setUploadRetryHandler(null)
+	}
+
+	private retryStuckChunkUploads = async () => {
+		const ctx = this.uploadRetryContext
+		if (!ctx || this.uploadRetryInFlight) return
+
+		this.uploadRetryInFlight = true
+		try {
+			const health = await this.chunkUploader.inspectQueueHealth(ctx.sessionId)
+			logger.report("User retried audio chunk uploads", {
+				sessionId: ctx.sessionId,
+				...health,
+			})
+			await this.chunkUploader.resumeStalledSessionUploads(
+				ctx.sessionId,
+				ctx.topicId,
+				ctx.projectId,
+				{ force: true },
+			)
+			const progress = await this.chunkUploader.getSessionUploadProgress(ctx.sessionId)
+			this.summaryMessageService.updateProgress(this.formatUploadProgress(progress))
+		} catch (error) {
+			logger.error({
+				eventKey: "resume_stalled_chunk_upload_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to resume stalled chunk uploads",
+				context: { sessionId: ctx.sessionId },
+			})
+		} finally {
+			this.uploadRetryInFlight = false
 		}
 	}
 
@@ -3148,6 +3271,7 @@ class RecordSummaryService {
 		this.mediaRecorderService.dispose()
 
 		this.sessionManager.clearSession()
+		this.stopUploadQueueWatchdog()
 		this.chunkUploader.pauseAll()
 
 		// Cleanup tab coordinator
@@ -3529,7 +3653,11 @@ class RecordSummaryService {
 	 * 处理上传成功事件
 	 */
 	private handleUploadSuccess = (taskId: string, url: string) => {
-		logger.log("Upload successful", { taskId, url })
+		logger.log("Upload successful", {
+			taskId,
+			hasUploadPath: Boolean(url),
+			isAbsoluteUrl: /^https?:\/\//i.test(url),
+		})
 
 		// Update session activity
 		this.sessionManager.updateSessionStatus("recording")
@@ -3542,12 +3670,13 @@ class RecordSummaryService {
 	 * 处理上传错误事件
 	 */
 	private handleUploadError = (taskId: string, error: Error) => {
-		logger.error({
-			eventKey: "recording_chunk_upload_failed",
-			errorKind: "unknown",
-			error: error,
-			message: "Upload failed",
-			context: { taskId },
+		logger.report({
+			namespace: "recordingUpload",
+			data: {
+				event: "callback_failed",
+				taskId,
+				errorName: error.name,
+			},
 		})
 
 		// TODO: Update UI with error status
@@ -3627,23 +3756,28 @@ class RecordSummaryService {
 	}
 
 	/**
-	 * Handle task end event (error code 43200)
-	 * 处理任务结束事件（错误码 43200）
+	 * Handle server-side task termination events.
+	 * 处理服务端结束任务事件。
 	 * 服务端状态已经结束，只需要强制停止本地的录制相关实例
 	 */
-	private handleTaskEnd = async (sessionId: string) => {
+	private handleTaskEnd = async (sessionId: string, errorCode?: number) => {
 		logger.warn(
-			`检测到任务结束（错误码 ${ERROR_CODE_TASK_ENDED}），强制停止本地录制会话 ${sessionId}`,
+			`检测到任务结束（错误码 ${errorCode ?? ERROR_CODE_TASK_ENDED}），停止本地录制会话 ${sessionId}`,
 		)
-
-		const currentSession = this.sessionManager.getCurrentSession()
-		// Only stop if this is the current active session
-		if (!currentSession || currentSession.id !== sessionId) {
-			logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+		if (this.handlingTaskEndSessions.has(sessionId)) {
+			logger.log("任务结束处理已在进行中，忽略重复事件", { sessionId })
 			return
 		}
+		this.handlingTaskEndSessions.add(sessionId)
 
 		try {
+			const currentSession = this.sessionManager.getCurrentSession()
+			// Only stop if this is the current active session
+			if (!currentSession || currentSession.id !== sessionId) {
+				logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+				return
+			}
+
 			// Stop recording services (voice and media recorder)
 			// This includes stopping duration timer
 			await this.stopRecordingServices("task_end")
@@ -3657,21 +3791,35 @@ class RecordSummaryService {
 
 			// Stop periodic reporting (server already knows task ended)
 			this.statusReporter.stopPeriodicReport()
-
-			// Clear chunk upload queue for this session
-			this.chunkUploader.clearSessionChunks(sessionId, "task_end")
+			this.chunkUploader.stopSessionUploads(sessionId, "task_end")
 			this.batchSaveReporter.clearSession(sessionId)
 
-			// Cancel session
-			this.sessionManager.cancelSession()
-
-			// Clear persistence data
-			this.recordingPersistence.clearAll()
+			// 保留本地分片和会话记录。服务端已结束任务，但这里删除数据会让
+			// 上传失败的分片无法导出，也会丢失后续排查所需的本地记录。
+			const terminationSource =
+				errorCode === ERROR_CODES.TASK_IS_SUMMARIZING
+					? "server_auto_summary"
+					: "server_task_ended"
+			const cancelledSession = this.sessionManager.markServerCancelledSession(
+				errorCode,
+				terminationSource,
+			)
+			if (cancelledSession) {
+				this.recordingPersistence.saveSession(cancelledSession)
+				const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
+				logger.report("服务端自动总结后保留本地录音数据", {
+					sessionId,
+					errorCode,
+					status: cancelledSession.status,
+					queueStatus,
+					chunkIndex: cancelledSession.currentChunkIndex,
+				})
+			}
 
 			// Reset store state
 			recordSummaryStore.reset()
 
-			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}`)
+			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}，已保留本地数据`)
 		} catch (error) {
 			logger.error({
 				eventKey: "task_end_event_failed",
@@ -3679,6 +3827,8 @@ class RecordSummaryService {
 				error: error,
 				message: `处理任务结束事件失败：`,
 			})
+		} finally {
+			this.handlingTaskEndSessions.delete(sessionId)
 		}
 	}
 
@@ -3840,6 +3990,12 @@ class RecordSummaryService {
 			const session = restorationData.currentSession
 			if (!session) {
 				logger.log("finishHistoricalSession: no session found")
+				return
+			}
+			if (session.status === "server_cancelled") {
+				logger.log("finishHistoricalSession: server-cancelled sessions are export-only", {
+					sessionId: session.id,
+				})
 				return
 			}
 
@@ -4014,7 +4170,11 @@ class RecordSummaryService {
 			if (session.id) {
 				const topicId = options.topicId ?? session.topic?.id ?? ""
 				const projectId = options.projectId ?? session.project?.id ?? ""
+				this.uploadRetryContext = { sessionId: session.id, topicId, projectId }
+				this.summaryMessageService.setUploadRetryHandler(this.retryStuckChunkUploads)
 				let shouldWaitForUploads = true
+				let stalledTimeouts = 0
+				let lastUploadedCount = -1
 
 				while (shouldWaitForUploads) {
 					logger.log(`${session.id} 等待分片上传结束...`)
@@ -4027,15 +4187,47 @@ class RecordSummaryService {
 						`${session.id} 剩余分片数: ${pendingCount}, 超时时间: ${dynamicTimeout}ms`,
 					)
 
-					const progress = await this.chunkUploader.waitForSessionUploadsSettled(
-						session.id,
-						dynamicTimeout,
-						(uploadProgress) => {
-							this.summaryMessageService.updateProgress(
-								this.formatUploadProgress(uploadProgress),
+					let progress: SessionUploadProgress
+					try {
+						progress = await this.chunkUploader.waitForSessionUploadsSettled(
+							session.id,
+							dynamicTimeout,
+							(uploadProgress) => {
+								this.summaryMessageService.updateProgress(
+									this.formatUploadProgress(uploadProgress),
+								)
+							},
+						)
+					} catch (error) {
+						const isTimeout = error instanceof Error && error.message.includes("超时")
+						if (!isTimeout) throw error
+
+						const health = await this.chunkUploader.inspectQueueHealth(session.id)
+						const timeoutProgress = await this.chunkUploader.getSessionUploadProgress(
+							session.id,
+						)
+						stalledTimeouts =
+							timeoutProgress.uploaded === lastUploadedCount ? stalledTimeouts + 1 : 1
+						lastUploadedCount = timeoutProgress.uploaded
+
+						logger.warn(`${session.id} 等待分片上传超时`, {
+							sessionId: session.id,
+							pendingCount,
+							stalledTimeouts,
+							uploaded: timeoutProgress.uploaded,
+							queueReason: health.reason,
+						})
+
+						if (stalledTimeouts >= MAX_UPLOAD_WAIT_TIMEOUTS) throw error
+						if (health.stalled) {
+							await this.chunkUploader.resumeStalledSessionUploads(
+								session.id,
+								topicId,
+								projectId,
 							)
-						},
-					)
+						}
+						continue
+					}
 
 					this.summaryMessageService.updateProgress(this.formatUploadProgress(progress))
 
@@ -4142,6 +4334,8 @@ class RecordSummaryService {
 			throw new Error(
 				`等待分片上传完成失败: ${error instanceof Error ? error.message : String(error)}`,
 			)
+		} finally {
+			this.stopUploadQueueWatchdog()
 		}
 	}
 
