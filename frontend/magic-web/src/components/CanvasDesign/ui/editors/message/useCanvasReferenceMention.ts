@@ -1,4 +1,4 @@
-import { createElement, useMemo } from "react"
+import { createElement, useEffect, useMemo, useState } from "react"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { useMagic } from "../../../app/providers/MagicProvider"
@@ -29,6 +29,7 @@ import {
 	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { useOptionalCanvas } from "../../../app/providers/CanvasProvider"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
@@ -51,7 +52,9 @@ interface UseCanvasReferenceMentionOptions {
 
 const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) => {
 	const { methods } = useMagic()
+	const canvas = useOptionalCanvas()
 	const { t } = useCanvasDesignI18n()
+	const [, forceResourceStateRefresh] = useState(0)
 	const attrs = props.node.attrs as CanvasMentionAttributes & {
 		data?: ReferenceResourcePanelFileData
 	}
@@ -61,7 +64,18 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 		fileData?.file_path,
 		methods?.resolveResourceReference,
 	)
-	const isDeleted = availability === "deleted"
+	const isPendingUpload = canvas?.canvasFileUploadManager.isPendingResourcePath(
+		fileData?.file_path,
+	)
+	const isDeleted = availability === "deleted" && !isPendingUpload
+
+	useEffect(() => {
+		if (!canvas) return
+		return canvas.eventEmitter.on("upload:resource-pending-change", ({ data }) => {
+			if (!fileData?.file_path || !data.paths.includes(fileData.file_path)) return
+			forceResourceStateRefresh((revision) => revision + 1)
+		})
+	}, [canvas, fileData?.file_path])
 	const displayText = `${getProjectFileMentionDisplayText(attrs, options)}${
 		isDeleted ? t("messageHistory.deletedSuffix", "（已删除）") : ""
 	}`

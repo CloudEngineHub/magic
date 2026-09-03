@@ -77,7 +77,7 @@ function createCanvasMock(
 		eventEmitter,
 		contentLayer: { batchDraw: vi.fn() },
 		stage: { container: () => container },
-		readonly: false,
+		can: vi.fn(() => true),
 		deviceInfo: {
 			formFactor: "desktop",
 			input: { touch: false, coarsePointer: false, hover: true },
@@ -94,6 +94,7 @@ function createCanvasMock(
 			}),
 		},
 		permissionManager: {
+			can: vi.fn(() => true),
 			canUseSelectionToolAffordance: vi.fn(() => true),
 		},
 		cursorManager: {
@@ -382,14 +383,16 @@ describe("StoryboardInteractionManager", () => {
 		manager.destroy()
 	})
 
-	it.each<[string, { readonly?: boolean; locked?: boolean }]>([
-		["readonly canvas", { readonly: true }],
+	it.each<[string, { accessMode?: "readonly"; locked?: boolean }]>([
+		["restricted canvas", { accessMode: "readonly" }],
 		["locked storyboard", { locked: true }],
 	])("allows reference preview from a %s", (_label, options) => {
 		const data = createStoryboardData()
 		if (options.locked) data.locked = true
 		const harness = createCanvasMock(data)
-		if (options.readonly) harness.canvas.readonly = true
+		if (options.accessMode === "readonly") {
+			harness.canvas.can = vi.fn((capability: string) => capability !== "document.write")
+		}
 		harness.selected.value = true
 		const emit = vi.spyOn(harness.eventEmitter, "emit")
 		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
@@ -401,6 +404,7 @@ describe("StoryboardInteractionManager", () => {
 				type: "preview-reference-image",
 				path: "asset://reference.png",
 				crop: { x: 10, y: 20, width: 80, height: 60 },
+				transform: { rotation: 90, flipX: true, flipY: false },
 			},
 			applyState: vi.fn(),
 		})
@@ -414,6 +418,7 @@ describe("StoryboardInteractionManager", () => {
 			data: {
 				path: "asset://reference.png",
 				crop: { x: 10, y: 20, width: 80, height: 60 },
+				transform: { rotation: 90, flipX: true, flipY: false },
 			},
 		})
 		manager.destroy()

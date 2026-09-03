@@ -758,14 +758,18 @@ export class SelectionTool extends BaseTool {
 		originElementId: string,
 		options?: { cancelBubble?: () => void },
 	): boolean {
-		if (!event.altKey || event.button !== 0 || this.canvas.readonly) {
+		if (
+			!event.altKey ||
+			event.button !== 0 ||
+			!this.canvas.permissionManager.can("sideEffect.copy")
+		) {
 			return false
 		}
 
 		const originElement = this.canvas.elementManager.getElementData(originElementId)
 		if (
 			originElement?.type !== ElementTypeEnum.Image ||
-			!getActiveImageContent(originElement).src
+			!this.getEffectiveImageContent(originElement).src
 		) {
 			return false
 		}
@@ -809,12 +813,25 @@ export class SelectionTool extends BaseTool {
 		for (const elementId of candidateIds) {
 			if (seen.has(elementId)) continue
 			const element = this.canvas.elementManager.getElementData(elementId)
-			if (element?.type !== ElementTypeEnum.Image || !getActiveImageContent(element).src)
+			if (
+				element?.type !== ElementTypeEnum.Image ||
+				!this.getEffectiveImageContent(element).src
+			)
 				continue
 			seen.add(elementId)
 			imageElementIds.push(elementId)
 		}
 		return imageElementIds
+	}
+
+	private getEffectiveImageContent(
+		element: LayerElement & { type: typeof ElementTypeEnum.Image },
+	) {
+		return (
+			(this.canvas.getEffectiveContent?.(element.id) as
+				| ReturnType<typeof getActiveImageContent>
+				| undefined) ?? getActiveImageContent(element)
+		)
 	}
 
 	/**

@@ -38,7 +38,7 @@ export function MediaReplaceMenuProvider({ children }: PropsWithChildren<unknown
 			clientX?: number
 			clientY?: number
 		}) => {
-			if (!canvas || canvas.readonly) return
+			if (!canvas || !canvas.permissionManager.can("document.write")) return
 			if (canvas.mediaReplaceController.getReplacementState()) return
 			const bounds = canvas.container.getBoundingClientRect()
 			const anchorRect = options.anchorElement?.getBoundingClientRect() ?? options.anchorRect
@@ -114,7 +114,9 @@ export function MediaReplaceMenuProvider({ children }: PropsWithChildren<unknown
 				const element = canvas?.elementManager.getElementData(data.elementId)
 				const contentId =
 					element?.type === ElementTypeEnum.Audio
-						? (getActiveContent(element)?.contentId ?? null)
+						? (canvas?.getEffectiveContentId?.(element.id) ??
+							getActiveContent(element)?.contentId ??
+							null)
 						: null
 				openMenu({ ...data, mediaType: ElementTypeEnum.Audio, contentId })
 			},

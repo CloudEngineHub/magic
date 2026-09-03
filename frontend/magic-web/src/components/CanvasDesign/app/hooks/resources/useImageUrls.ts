@@ -81,12 +81,26 @@ export function useImageLowUrl(options: UseImageLowUrlOptions): UseImageLowUrlRe
 		"element:updated",
 		useCallback(
 			({ data }) => {
-				if (!enabled || data.elementId !== elementId) return
+				if (!canvas || !enabled || data.elementId !== elementId) return
 				if (data.data?.type !== ElementTypeEnum.Image) return
-				if (getActiveImageContent(data.data).src !== src) return
+				const effectiveSrc =
+					(canvas.getEffectiveContent(data.elementId) as { src?: string } | undefined)
+						?.src ?? getActiveImageContent(data.data).src
+				if (effectiveSrc !== src) return
 				void syncLoadedLowUrl()
 			},
-			[elementId, enabled, src, syncLoadedLowUrl],
+			[elementId, enabled, src, syncLoadedLowUrl, canvas],
+		),
+	)
+
+	useCanvasEvent(
+		"content:previewChanged",
+		useCallback(
+			({ data }) => {
+				if (!enabled || (data.elementId && data.elementId !== elementId)) return
+				void syncLoadedLowUrl()
+			},
+			[elementId, enabled, syncLoadedLowUrl],
 		),
 	)
 

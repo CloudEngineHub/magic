@@ -2,7 +2,6 @@ import { useEffect } from "react"
 import { useCanvasElement } from "../../../app/hooks/canvas"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type AudioElement } from "../../../runtime/document/types"
-import { getActiveContent } from "../../../runtime/document/elementContent"
 import AudioFullscreenOverlay from "../audio/index"
 
 interface AudioElementFullscreenOverlayProps {
@@ -16,7 +15,15 @@ export default function AudioElementFullscreenOverlay(props: AudioElementFullscr
 	const { canvas } = useCanvas()
 	const element = useCanvasElement(elementId)
 	const audioElement = element?.type === ElementTypeEnum.Audio ? (element as AudioElement) : null
-	const audioPath = audioElement ? (getActiveContent(audioElement)?.src ?? "") : ""
+	const playbackEnabled = canvas?.permissionManager?.can("interaction.playback") ?? true
+	const audioPath = audioElement
+		? ((typeof canvas?.getEffectiveContent === "function"
+				? (canvas.getEffectiveContent(audioElement.id) as { src?: string } | undefined)
+				: (audioElement.contents?.find(
+						(content) => content.contentId === audioElement.activeContentId,
+					) ?? audioElement.contents?.[0])
+			)?.src ?? "")
+		: ""
 	const audioDisplayName = audioElement
 		? canvas?.elementManager.getElementInstance(elementId)?.getNameLabelText()
 		: undefined
@@ -38,6 +45,7 @@ export default function AudioElementFullscreenOverlay(props: AudioElementFullscr
 			fileName={audioDisplayName}
 			isOpen={Boolean(audioPath)}
 			autoPlay={false}
+			playbackEnabled={playbackEnabled}
 			onClose={onClose}
 		/>
 	)

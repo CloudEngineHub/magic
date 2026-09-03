@@ -257,7 +257,7 @@ export class DropOverlayManager {
 		e.stopPropagation()
 
 		// 检查只读模式
-		if (this.canvas.readonly) {
+		if (!this.canvas.permissionManager.can("document.write")) {
 			return
 		}
 
@@ -341,7 +341,7 @@ export class DropOverlayManager {
 		this.dragCounter = 0
 
 		// 检查只读模式
-		if (this.canvas.readonly) {
+		if (!this.canvas.permissionManager.can("document.write")) {
 			this.hideOverlay()
 			return
 		}

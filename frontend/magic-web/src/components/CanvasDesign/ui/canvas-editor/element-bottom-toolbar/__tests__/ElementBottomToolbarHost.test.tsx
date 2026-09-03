@@ -17,6 +17,13 @@ const mocks = vi.hoisted(() => {
 	return {
 		state,
 		canvas: {
+			eventEmitter: { on: vi.fn(() => vi.fn()), off: vi.fn() },
+			permissionManager: { can: vi.fn(() => true) },
+			getEffectiveContentId: vi.fn(
+				(elementId: string) =>
+					mocks.state.selectedElements.find((element) => element.id === elementId)
+						?.activeContentId,
+			),
 			elementManager: {
 				getElementData: vi.fn((elementId: string) =>
 					mocks.state.selectedElements.find((element) => element.id === elementId),

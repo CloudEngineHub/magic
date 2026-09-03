@@ -36,8 +36,8 @@ export class FrameManager {
 			this.canvas.eventEmitter.on("elements:transform:dragend", () => {
 				this.handleFrameDropDragEnd()
 			}),
-			this.canvas.eventEmitter.on("canvas:readonly", () => {
-				if (this.canvas.readonly) this.cancelFrameDropDrag()
+			this.canvas.eventEmitter.on("permission:changed", () => {
+				if (!this.canvas.permissionManager.can("document.write")) this.cancelFrameDropDrag()
 			}),
 		)
 	}

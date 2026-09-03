@@ -1,6 +1,6 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
-import { getActiveContent, getContents, getMainContent } from "../../document/elementContent"
+import { getContents, getMainContent } from "../../document/elementContent"
 import type { ImageElement, VideoElement } from "../../document/types"
 import {
 	COLORS,
@@ -23,7 +23,7 @@ export class MediaMainVersionTagDecorator {
 	private tag?: Konva.Group
 	private viewportHandler?: () => void
 	private transformHandler?: () => void
-	private readonlyHandler?: () => void
+	private permissionChangedHandler?: () => void
 
 	constructor(
 		private readonly elementGroup: Konva.Group,
@@ -99,15 +99,15 @@ export class MediaMainVersionTagDecorator {
 			this.elementGroup.off("transform", this.transformHandler)
 			this.transformHandler = undefined
 		}
-		if (this.readonlyHandler) {
-			this.config.canvas.eventEmitter.off("canvas:readonly", this.readonlyHandler)
-			this.readonlyHandler = undefined
+		if (this.permissionChangedHandler) {
+			this.config.canvas.eventEmitter.off("permission:changed", this.permissionChangedHandler)
+			this.permissionChangedHandler = undefined
 		}
 	}
 
 	private shouldDisplay(): boolean {
 		const contents = getContents(this.config.data)
-		const activeContent = getActiveContent(this.config.data)
+		const activeContent = this.config.canvas.getEffectiveContent(this.config.data.id)
 		const mainContent = getMainContent(this.config.data)
 		return (
 			contents.length > 1 &&
@@ -143,7 +143,7 @@ export class MediaMainVersionTagDecorator {
 			elementScreenWidth >= tagScreenWidth + offsetScreenX * 2 &&
 				elementScreenHeight >= tagScreenHeight + offsetScreenY * 2,
 		)
-		this.tag.opacity(this.config.canvas.readonly ? 0.55 : 1)
+		this.tag.opacity(this.config.canvas.permissionManager.can("document.write") ? 1 : 0.55)
 		this.tag.moveToTop()
 		this.tag.getLayer()?.batchDraw()
 	}
@@ -157,9 +157,9 @@ export class MediaMainVersionTagDecorator {
 			this.transformHandler = () => this.updateLayout()
 			this.elementGroup.on("transform", this.transformHandler)
 		}
-		if (!this.readonlyHandler) {
-			this.readonlyHandler = () => this.updateLayout()
-			this.config.canvas.eventEmitter.on("canvas:readonly", this.readonlyHandler)
+		if (!this.permissionChangedHandler) {
+			this.permissionChangedHandler = () => this.updateLayout()
+			this.config.canvas.eventEmitter.on("permission:changed", this.permissionChangedHandler)
 		}
 	}
 

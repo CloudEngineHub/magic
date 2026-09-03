@@ -125,7 +125,7 @@ export function replaceUploadMentionNode({
 		const uploadData = attrs.data as UploadFileMentionData
 		if (uploadData.file_id !== fileId) return true
 
-		if (isProjectContext && saveResult) {
+		if (isProjectContext && saveResult && !uploadData.is_canvas_clipboard) {
 			tr.setNodeMarkup(pos, undefined, {
 				type: MentionItemType.PROJECT_FILE,
 				data: transformUploadFileToProjectFile(uploadData, saveResult),
@@ -145,6 +145,7 @@ export function replaceUploadMentionNode({
 					file: uploadData.file,
 					relative_file_path: uploadData.relative_file_path,
 					is_hidden: uploadData.is_hidden,
+					is_canvas_clipboard: uploadData.is_canvas_clipboard,
 					upload_progress: 100,
 					upload_status: "done",
 					upload_error: undefined,

@@ -729,7 +729,7 @@ export class ElementManager {
 	}
 
 	private getElementSrc(data: LayerElement): string | undefined {
-		const content = getActiveContent(data)
+		const content = this.canvas.getEffectiveContent(data.id) ?? getActiveContent(data)
 		return content && "src" in content && typeof content.src === "string"
 			? content.src
 			: undefined
@@ -2254,7 +2254,9 @@ export class ElementManager {
 
 		// 销毁所有子节点，但保留背景
 		const background = this.canvas.contentLayer.findOne(".canvas-background") as
-			Konva.Shape | Konva.Group | null
+			| Konva.Shape
+			| Konva.Group
+			| null
 		this.canvas.contentLayer.destroyChildren()
 
 		// 如果背景存在，重新添加到 layer
@@ -2590,7 +2592,7 @@ export class ElementManager {
 	}
 
 	/**
-	 * 更新所有元素的拖拽状态（当 readonly 状态变化时调用）
+	 * 更新所有元素的拖拽状态（当画布访问能力变化时调用）
 	 */
 	public updateAllElementsDraggable(): void {
 		this.elements.forEach((element) => {

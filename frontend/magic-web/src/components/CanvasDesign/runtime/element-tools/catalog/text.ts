@@ -22,5 +22,17 @@ export const TEXT_TOOL_DEFINITIONS: ElementToolDefinition[] = textTools.map(([id
 		order,
 		(context) =>
 			context.selection.isSingleElement && context.element.type === ElementTypeEnum.Text,
+		id === ElementToolTypeEnum.TextDownload
+			? {
+					effect: "external",
+					requiredCapability: "sideEffect.download",
+					commandRoute: "action",
+					fallbackActionId: "download.image",
+				}
+			: {
+					effect: "document",
+					requiredCapability: "document.write",
+					commandRoute: "text",
+				},
 	),
 )

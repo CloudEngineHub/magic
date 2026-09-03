@@ -78,7 +78,7 @@ interface CanvasDesignHeaderProps {
 	onChangeFileVersion?: (version: number, isNewestVersion: boolean) => Promise<void>
 	onReturnLatest?: () => void
 	onVersionRollback?: (version?: number) => Promise<void>
-	isReadOnly?: boolean
+	canEdit?: boolean
 	isMobile?: boolean
 	allowEdit?: boolean
 	/** 文件列表更新 */
@@ -103,7 +103,7 @@ export default function CanvasDesignHeader(props: CanvasDesignHeaderProps) {
 		onChangeFileVersion,
 		onReturnLatest,
 		onVersionRollback,
-		isReadOnly = false,
+		canEdit = true,
 		isMobile = false,
 		allowEdit = true,
 		updateAttachments,
@@ -404,11 +404,16 @@ export default function CanvasDesignHeader(props: CanvasDesignHeaderProps) {
 				<div className={styles.left}>
 					{!isMobile && (
 						<>
-							<img className={styles.canvasIcon} src={canvasIcon} alt="canvas icon"  data-testid="canvas-design-header-image"/>
+							<img
+								className={styles.canvasIcon}
+								src={canvasIcon}
+								alt="canvas icon"
+								data-testid="canvas-design-header-image"
+							/>
 							<DesignNameEditor
 								name={displayName}
 								onNameChange={handleNameChange}
-								isReadOnly={isReadOnly}
+								canEdit={canEdit}
 							/>
 						</>
 					)}

@@ -75,7 +75,13 @@ export default function MediaReplaceButton() {
 	)
 
 	const handleReplace = (event: MouseEvent<HTMLDivElement>) => {
-		if (!canvas || canvas.readonly || !selectedMedia || activeIsProcessing || isReplacementBusy)
+		if (
+			!canvas ||
+			!canvas.permissionManager.can("document.write") ||
+			!selectedMedia ||
+			activeIsProcessing ||
+			isReplacementBusy
+		)
 			return
 		if (tool?.id === ElementToolTypeEnum.ContentReplace) {
 			void tool.execute({ anchorElement: event.currentTarget })
@@ -120,7 +126,7 @@ export default function MediaReplaceButton() {
 			title={label}
 			disabled={
 				!canvas ||
-				canvas.readonly ||
+				!canvas.permissionManager.can("document.write") ||
 				!selectedMedia ||
 				activeIsProcessing ||
 				isReplacementBusy

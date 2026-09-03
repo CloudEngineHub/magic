@@ -15,10 +15,15 @@ function createReplacingAudioCanvas() {
 	const addToConversation = vi.fn()
 	const locateProjectFile = vi.fn()
 	const copy = vi.fn()
+	const permissionManager = {
+		can: vi.fn((capability: string) => Boolean(capability)),
+		canAddSelectedMediaToConversation: vi.fn(),
+	}
 	const canvas = {
 		selectionManager: { getSelectedIds: vi.fn(() => ["audio-1"]) },
 		elementManager: { getElementData: vi.fn(() => audio) },
 		mediaReplaceController: { isReplacing: vi.fn(() => true) },
+		permissionManager,
 		magicConfigManager: {
 			config: {
 				permissions: { elementMenuConversationActions: true },
@@ -27,6 +32,11 @@ function createReplacingAudioCanvas() {
 		},
 		clipboardManager: { copy },
 	} as unknown as Canvas
+	permissionManager.canAddSelectedMediaToConversation = vi.fn(
+		() =>
+			permissionManager.can("sideEffect.copy") &&
+			canvas.magicConfigManager.config?.permissions?.elementMenuConversationActions !== false,
+	)
 	return { canvas, addToConversation, locateProjectFile, copy }
 }
 
@@ -62,5 +72,18 @@ describe("media replacement action guards", () => {
 		expect(action.canExecute(canvas)).toBe(true)
 		await action.execute(canvas)
 		expect(copy).toHaveBeenCalledTimes(1)
+	})
+
+	it("blocks adding media to conversation when copy side effects are denied", async () => {
+		const { canvas, addToConversation } = createReplacingAudioCanvas()
+		canvas.permissionManager.can = vi.fn(() => false)
+		const action = conversationActions.find(
+			(candidate) => candidate.id === "conversation.add-to-current",
+		)
+		if (!action) throw new Error("Expected conversation.add-to-current")
+
+		expect(action.canExecute(canvas)).toBe(false)
+		await action.execute(canvas)
+		expect(addToConversation).not.toHaveBeenCalled()
 	})
 })

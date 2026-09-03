@@ -8,67 +8,25 @@ import {
 import type { ElementContentBase, LayerElement } from "../../document/types"
 import { isContentVersionOperations } from "../../elements/core/ContentVersionOperations"
 import { createStoryboardVideosFromConnection } from "../../interaction/connection/imageVideoBatchCreation"
-import { ElementToolTypeEnum } from "../../../public/props"
+import { ElementToolTypeEnum, type CanvasCapability } from "../../../public/props"
 import type {
 	ElementToolCommand,
 	ElementToolCommandBus as ElementToolCommandBusContract,
+	ElementToolCommandRoute,
+	ElementToolCommandResult,
+	ElementToolDefinition,
 	ElementToolRuntimeState,
 	ElementToolType,
+	GenerationElementToolId,
 } from "../model/ElementToolTypes"
+import { getElementToolDefinition } from "../resolver/ElementToolResolver"
 
 type CommandHandler = (command: ElementToolCommand) => void | Promise<void>
 type FallbackCommandHandler = (
 	command: ElementToolCommand,
 	element: LayerElement | undefined,
-) => boolean
-
-const CONTENT_INVOCATION_TOOLS = new Set<ElementToolType>([
-	ElementToolTypeEnum.ContentDownload,
-	ElementToolTypeEnum.ContentCrop,
-	ElementToolTypeEnum.ContentExtend,
-	ElementToolTypeEnum.ContentEraser,
-	ElementToolTypeEnum.ContentReplace,
-	ElementToolTypeEnum.ContentRemoveBackground,
-	ElementToolTypeEnum.ContentEnhance,
-	ElementToolTypeEnum.ContentPromptExtraction,
-	ElementToolTypeEnum.ContentMediaOriginalSize,
-	ElementToolTypeEnum.TextFillColor,
-	ElementToolTypeEnum.TextFontFamily,
-	ElementToolTypeEnum.TextFontStyle,
-	ElementToolTypeEnum.TextFontSize,
-	ElementToolTypeEnum.TextAlign,
-	ElementToolTypeEnum.TextAdvanced,
-	ElementToolTypeEnum.TextContentOptimization,
-])
-const CONTENT_INTERACTION_TOOLS = new Set<ElementToolType>([
-	ElementToolTypeEnum.ContentCrop,
-	ElementToolTypeEnum.ContentExtend,
-	ElementToolTypeEnum.ContentEraser,
-])
-const GENERATION_TOOLS = new Set<ElementToolType>([
-	ElementToolTypeEnum.GenerationQuickEdit,
-	ElementToolTypeEnum.GenerationReEdit,
-	ElementToolTypeEnum.GenerationGenerateAgain,
-])
-const VERSION_MUTATION_TOOLS = new Set<ElementToolType>([
-	ElementToolTypeEnum.VersionPrevious,
-	ElementToolTypeEnum.VersionNext,
-	ElementToolTypeEnum.VersionSetMain,
-	ElementToolTypeEnum.VersionDelete,
-])
-const TEXT_FORMATTING_TOOLS = new Set<ElementToolType>([
-	ElementToolTypeEnum.TextFillColor,
-	ElementToolTypeEnum.TextFontFamily,
-	ElementToolTypeEnum.TextFontStyle,
-	ElementToolTypeEnum.TextFontSize,
-	ElementToolTypeEnum.TextAlign,
-	ElementToolTypeEnum.TextAdvanced,
-	ElementToolTypeEnum.TextContentOptimization,
-])
-const SHAPE_TOOLS = new Set<ElementToolType>([
-	ElementToolTypeEnum.ShapeStrokeColor,
-	ElementToolTypeEnum.ShapeStyle,
-])
+	definition: ElementToolDefinition,
+) => boolean | ElementToolCommandResult
 
 interface CommandRegistration {
 	handler: CommandHandler
@@ -104,48 +62,8 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	>()
 	private readonly pendingNotificationElementIds = new Set<string>()
 	private notificationScheduled = false
-	private readonly fallbackHandlers: ReadonlyMap<ElementToolType, FallbackCommandHandler>
 
-	public constructor(private readonly canvas: Canvas) {
-		this.fallbackHandlers = new Map([
-			[ElementToolTypeEnum.ElementResize, this.executeElementCommand.bind(this)],
-			[ElementToolTypeEnum.ElementAlign, this.executeActionCommand.bind(this)],
-			[ElementToolTypeEnum.ElementDistribute, this.executeActionCommand.bind(this)],
-			[ElementToolTypeEnum.FrameCreate, this.executeActionCommand.bind(this)],
-			[ElementToolTypeEnum.FrameRemove, this.executeActionCommand.bind(this)],
-			[ElementToolTypeEnum.FrameDownload, this.executeActionCommand.bind(this)],
-			[
-				ElementToolTypeEnum.FrameStoryboardVideoBatch,
-				this.executeStoryboardBatchCommand.bind(this),
-			],
-			[ElementToolTypeEnum.TextDownload, this.executeActionCommand.bind(this)],
-			[ElementToolTypeEnum.TextFillColor, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.TextFontFamily, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.TextFontStyle, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.TextFontSize, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.TextAlign, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.TextAdvanced, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.TextContentOptimization, this.executeTextCommand.bind(this)],
-			[ElementToolTypeEnum.ShapeStrokeColor, this.executeShapeCommand.bind(this)],
-			[ElementToolTypeEnum.ShapeStyle, this.executeShapeCommand.bind(this)],
-			[ElementToolTypeEnum.ContentDownload, this.executeActionCommand.bind(this)],
-			[ElementToolTypeEnum.ContentCrop, this.executeContentInteractionCommand.bind(this)],
-			[ElementToolTypeEnum.ContentExtend, this.executeContentInteractionCommand.bind(this)],
-			[ElementToolTypeEnum.ContentEraser, this.executeContentInteractionCommand.bind(this)],
-			[ElementToolTypeEnum.ContentReplace, this.executeMediaCommand.bind(this)],
-			[
-				ElementToolTypeEnum.ContentMediaOriginalSize,
-				this.executeMediaOriginalSizeCommand.bind(this),
-			],
-			[ElementToolTypeEnum.GenerationQuickEdit, this.executeGenerationCommand.bind(this)],
-			[ElementToolTypeEnum.GenerationReEdit, this.executeGenerationCommand.bind(this)],
-			[ElementToolTypeEnum.GenerationGenerateAgain, this.executeGenerationCommand.bind(this)],
-			[ElementToolTypeEnum.VersionPrevious, this.executeVersionCommand.bind(this)],
-			[ElementToolTypeEnum.VersionNext, this.executeVersionCommand.bind(this)],
-			[ElementToolTypeEnum.VersionSetMain, this.executeVersionCommand.bind(this)],
-			[ElementToolTypeEnum.VersionDelete, this.executeVersionCommand.bind(this)],
-		])
-	}
+	public constructor(private readonly canvas: Canvas) {}
 
 	public register(
 		key: {
@@ -231,10 +149,24 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 		}
 	}
 
-	public execute(command: ElementToolCommand): Promise<void> | void {
+	public execute(
+		command: ElementToolCommand,
+	): Promise<void | ElementToolCommandResult> | void | ElementToolCommandResult {
+		const definition = getElementToolDefinition(command.toolId)
+		if (!definition) return { executed: false, reason: "UNKNOWN_TOOL" }
+		const authorization = this.authorizeTool(definition)
+		if (!authorization.allowed) {
+			return {
+				executed: false,
+				reason: "CAPABILITY_REQUIRED",
+				requiredCapability: authorization.requiredCapability,
+			} satisfies ElementToolCommandResult
+		}
 		const element = this.canvas.elementManager.getElementData(command.elementId)
-		if (!element) return
-		if (command.contentId && !getContentById(element, command.contentId)) return
+		if (!element) return { executed: false, reason: "ELEMENT_NOT_FOUND" }
+		if (command.contentId && !getContentById(element, command.contentId)) {
+			return { executed: false, reason: "CONTENT_NOT_FOUND" }
+		}
 		if (command.contentId && command.contentRevision !== undefined) {
 			const content = getContentById(element, command.contentId) as
 				| (ElementContentBase & {
@@ -243,11 +175,20 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				  })
 				| undefined
 			const currentRevision = content?.contentRevision ?? content?.revision
-			if (currentRevision !== undefined && currentRevision !== command.contentRevision) return
+			if (currentRevision !== undefined && currentRevision !== command.contentRevision) {
+				return { executed: false, reason: "CONTENT_REVISION_MISMATCH" }
+			}
 		}
-		if (CONTENT_INVOCATION_TOOLS.has(command.toolId)) {
-			if (!command.contentId || getActiveContentId(element as never) !== command.contentId)
-				return
+		if (definition.scope === "active-content" || definition.scope === "generation") {
+			const effectiveContentId = this.getEffectiveContentId(command.elementId, element)
+			if (!command.contentId || effectiveContentId !== command.contentId) {
+				return { executed: false, reason: "ACTIVE_CONTENT_MISMATCH" }
+			}
+		}
+		if (definition.scope === "version-set" && command.contentId) {
+			if (this.getEffectiveContentId(command.elementId, element) !== command.contentId) {
+				return { executed: false, reason: "ACTIVE_CONTENT_MISMATCH" }
+			}
 		}
 		if (
 			command.generationId &&
@@ -257,14 +198,16 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				command.contentId,
 			)
 		) {
-			return
+			return { executed: false, reason: "GENERATION_STALE" }
 		}
 
 		const registration =
 			this.registrations.get(
 				this.getHandlerKey(command.elementId, command.toolId, command.contentId),
 			) ?? this.registrations.get(this.getHandlerKey(command.elementId, command.toolId))
-		if (registration?.operationId && registration.operationId !== command.operationId) return
+		if (registration?.operationId && registration.operationId !== command.operationId) {
+			return { executed: false, reason: "OPERATION_MISMATCH" }
+		}
 		if (
 			registration?.state.available &&
 			!registration.state.disabled &&
@@ -272,16 +215,61 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 		) {
 			return registration.handler(command)
 		}
+		if (registration) return { executed: false, reason: "TOOL_UNAVAILABLE" }
 		// 编辑器会话是短生命周期的：资源尚未准备好、版本切换或生成状态
 		// 变化时，具体编辑器可能暂时没有注册 handler。命令仍然要保留其
 		// 捕获的 Content 目标，并交给当前元素的编辑器宿主异步接管。
-		if (!registration) {
-			const fallbackHandler = this.fallbackHandlers.get(command.toolId)
-			if (fallbackHandler?.(command, element)) return
+		const fallbackHandler = this.getFallbackHandler(definition.commandRoute)
+		if (!fallbackHandler) {
+			return { executed: false, reason: "NO_HANDLER" }
 		}
+		const fallbackResult = fallbackHandler(command, element, definition)
+		if (typeof fallbackResult === "object") return fallbackResult
+		return fallbackResult ? { executed: true } : { executed: false, reason: "NO_HANDLER" }
+	}
 
-		const actionId = this.getUserActionId(command.toolId)
-		if (actionId) return this.canvas.userActionRegistry.execute(actionId, command.payload)
+	private getFallbackHandler(route: ElementToolCommandRoute): FallbackCommandHandler | undefined {
+		switch (route) {
+			case "action":
+				return this.executeActionCommand.bind(this)
+			case "element":
+				return this.executeElementCommand.bind(this)
+			case "storyboard-batch":
+				return this.executeStoryboardBatchCommand.bind(this)
+			case "text":
+				return this.executeTextCommand.bind(this)
+			case "shape":
+				return this.executeShapeCommand.bind(this)
+			case "content-interaction":
+				return this.executeContentInteractionCommand.bind(this)
+			case "media":
+				return this.executeMediaCommand.bind(this)
+			case "media-original-size":
+				return this.executeMediaOriginalSizeCommand.bind(this)
+			case "generation":
+				return this.executeGenerationCommand.bind(this)
+			case "version":
+				return this.executeVersionCommand.bind(this)
+			case "registered":
+				return undefined
+		}
+	}
+
+	private getEffectiveContentId(
+		elementId: string,
+		element: LayerElement | undefined,
+	): string | undefined {
+		return (
+			this.canvas.getEffectiveContentId?.(elementId) ?? getActiveContentId(element as never)
+		)
+	}
+
+	private hasCapability(capability: CanvasCapability): boolean {
+		return this.canvas.permissionManager.can(capability)
+	}
+
+	private authorizeTool(definition: ElementToolDefinition) {
+		return this.canvas.permissionManager.authorizeTool(definition)
 	}
 
 	private getHandlerKey(elementId: string, toolId: string, contentId?: string): string {
@@ -323,48 +311,57 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeGenerationCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
-	): boolean {
-		if (!GENERATION_TOOLS.has(command.toolId)) {
-			return false
-		}
+		definition: ElementToolDefinition,
+	): boolean | ElementToolCommandResult {
+		if (definition.commandRoute !== "generation") return false
+		if (!element) return { executed: false, reason: "TARGET_UNAVAILABLE" }
 
 		// 生成工具只允许作用于解析时捕获的 active Content。用户在点击前
 		// 切换版本时，迟到命令必须丢弃，不能把请求路由到新版本。
-		if (!command.contentId || getActiveContentId(element as never) !== command.contentId)
-			return true
+		if (
+			!command.contentId ||
+			this.getEffectiveContentId(command.elementId, element) !== command.contentId
+		)
+			return { executed: false, reason: "ACTIVE_CONTENT_MISMATCH" }
 
 		if (element?.type === "image") {
+			const toolId = command.toolId as GenerationElementToolId
 			this.canvas.eventEmitter.emit({
 				type: "element:image:toolCommand",
 				data: {
 					elementId: command.elementId,
 					contentId: command.contentId,
-					toolId: command.toolId,
+					toolId,
 				},
 			})
 			return true
 		}
 		if (element?.type === "video") {
+			const toolId = command.toolId as GenerationElementToolId
 			this.canvas.eventEmitter.emit({
 				type: "element:video:toolCommand",
 				data: {
 					elementId: command.elementId,
 					contentId: command.contentId,
-					toolId: command.toolId,
+					toolId,
 				},
 			})
 			return true
 		}
-		return true
+		return { executed: false, reason: "TARGET_UNAVAILABLE" }
 	}
 
 	private executeTextCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
+		definition: ElementToolDefinition,
 	): boolean {
-		if (!TEXT_FORMATTING_TOOLS.has(command.toolId)) return false
+		if (definition.commandRoute !== "text") return false
 		if (element?.type !== "text") return true
-		if (!command.contentId || getActiveContentId(element as never) !== command.contentId)
+		if (
+			!command.contentId ||
+			this.getEffectiveContentId(command.elementId, element) !== command.contentId
+		)
 			return true
 
 		const payload =
@@ -423,8 +420,9 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeShapeCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
+		definition: ElementToolDefinition,
 	): boolean {
-		if (!SHAPE_TOOLS.has(command.toolId)) return false
+		if (definition.commandRoute !== "shape") return false
 		if (!element || !["rectangle", "ellipse", "triangle", "star"].includes(element.type))
 			return true
 		const payload =
@@ -448,12 +446,14 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeContentInteractionCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
+		definition: ElementToolDefinition,
 	): boolean {
-		if (!CONTENT_INTERACTION_TOOLS.has(command.toolId)) {
-			return false
-		}
+		if (definition.commandRoute !== "content-interaction") return false
 		if (element?.type !== "image") return true
-		if (!command.contentId || getActiveContentId(element as never) !== command.contentId)
+		if (
+			!command.contentId ||
+			this.getEffectiveContentId(command.elementId, element) !== command.contentId
+		)
 			return true
 
 		switch (command.toolId) {
@@ -473,12 +473,16 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeMediaCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
+		definition: ElementToolDefinition,
 	): boolean {
-		if (command.toolId !== ElementToolTypeEnum.ContentReplace) return false
+		if (definition.commandRoute !== "media") return false
 		if (element?.type !== "image" && element?.type !== "video" && element?.type !== "audio") {
 			return true
 		}
-		if (!command.contentId || getActiveContentId(element as never) !== command.contentId)
+		if (
+			!command.contentId ||
+			this.getEffectiveContentId(command.elementId, element) !== command.contentId
+		)
 			return true
 
 		const payload =
@@ -510,14 +514,19 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeMediaOriginalSizeCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
-	): boolean {
-		if (command.toolId !== ElementToolTypeEnum.ContentMediaOriginalSize) return false
-		if (element?.type !== "image" && element?.type !== "video") return true
+		definition: ElementToolDefinition,
+	): boolean | ElementToolCommandResult {
+		if (definition.commandRoute !== "media-original-size") return false
+		if (element?.type !== "image" && element?.type !== "video") {
+			return { executed: false, reason: "TARGET_UNAVAILABLE" }
+		}
 		const payload =
 			command.payload && typeof command.payload === "object"
 				? (command.payload as { width?: number; height?: number })
 				: undefined
-		if (!payload || payload.width === undefined || payload.height === undefined) return true
+		if (!payload || payload.width === undefined || payload.height === undefined) {
+			return { executed: false, reason: "INVALID_PAYLOAD" }
+		}
 		this.canvas.elementManager.update(command.elementId, {
 			width: payload.width,
 			height: payload.height,
@@ -528,33 +537,49 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeVersionCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
-	): boolean {
-		if (!element) return false
-		if (!VERSION_MUTATION_TOOLS.has(command.toolId)) {
-			return false
-		}
+		definition: ElementToolDefinition,
+	): boolean | ElementToolCommandResult {
+		if (!element) return { executed: false, reason: "TARGET_UNAVAILABLE" }
+		if (definition.commandRoute !== "version") return false
 		const instance = this.canvas.elementManager.getElementInstance(command.elementId)
-		if (!isContentVersionOperations(instance)) return true
+		if (!isContentVersionOperations(instance)) {
+			return { executed: false, reason: "TARGET_UNAVAILABLE" }
+		}
 		const contents = getContents(element as never)
-		const activeContentId = getActiveContentId(element as never)
-		if (command.contentId && activeContentId !== command.contentId) return true
+		const activeContentId = this.getEffectiveContentId(command.elementId, element)
+		if (command.contentId && activeContentId !== command.contentId) {
+			return { executed: false, reason: "ACTIVE_CONTENT_MISMATCH" }
+		}
 		const activeIndex = Math.max(
 			0,
 			contents.findIndex((content) => content.contentId === activeContentId),
 		)
-		if (command.contentId && !getContentById(element as never, command.contentId)) return true
+		if (command.contentId && !getContentById(element as never, command.contentId)) {
+			return { executed: false, reason: "CONTENT_NOT_FOUND" }
+		}
 		const commandTargetIndex = command.contentId
 			? contents.findIndex((content) => content.contentId === command.contentId)
 			: activeIndex
+		if (commandTargetIndex < 0) return { executed: false, reason: "CONTENT_NOT_FOUND" }
 		switch (command.toolId) {
 			case ElementToolTypeEnum.VersionPrevious:
-				if (commandTargetIndex > 0)
-					instance.switchActiveContent(contents[commandTargetIndex - 1].contentId)
-				return true
+				if (commandTargetIndex > 0) {
+					const targetId = contents[commandTargetIndex - 1].contentId
+					if (this.hasCapability("document.write")) instance.switchActiveContent(targetId)
+					else if (!this.canvas.setPreviewContent?.(command.elementId, targetId))
+						return { executed: false, reason: "TARGET_UNAVAILABLE" }
+					return { executed: true }
+				}
+				return { executed: false, reason: "TARGET_UNAVAILABLE" }
 			case ElementToolTypeEnum.VersionNext:
-				if (commandTargetIndex < contents.length - 1)
-					instance.switchActiveContent(contents[commandTargetIndex + 1].contentId)
-				return true
+				if (commandTargetIndex < contents.length - 1) {
+					const targetId = contents[commandTargetIndex + 1].contentId
+					if (this.hasCapability("document.write")) instance.switchActiveContent(targetId)
+					else if (!this.canvas.setPreviewContent?.(command.elementId, targetId))
+						return { executed: false, reason: "TARGET_UNAVAILABLE" }
+					return { executed: true }
+				}
+				return { executed: false, reason: "TARGET_UNAVAILABLE" }
 			case ElementToolTypeEnum.VersionSetMain:
 				if (command.contentId) {
 					const target = getContentById(element as never, command.contentId) as
@@ -562,69 +587,50 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 						| undefined
 					if (target && !isContentGenerationPending(target) && target.src) {
 						instance.setMainContent(command.contentId)
+						return { executed: true }
 					}
 				}
-				return true
+				return { executed: false, reason: "TARGET_UNAVAILABLE" }
 			case ElementToolTypeEnum.VersionDelete:
 				if (
 					contents.length > 1 &&
-					getActiveContentId(element as never) === command.contentId &&
+					activeContentId === command.contentId &&
 					!contents.some(isContentGenerationPending)
 				) {
 					void Promise.resolve(instance.deleteActiveContent())
+					return { executed: true }
 				}
-				return true
+				return { executed: false, reason: "TARGET_UNAVAILABLE" }
 		}
-		return true
-	}
-
-	private getUserActionId(toolId: ElementToolType): string | undefined {
-		switch (toolId) {
-			case ElementToolTypeEnum.ElementAlign:
-				return "align.left"
-			case ElementToolTypeEnum.ElementDistribute:
-				return "distribute.horizontal"
-			case ElementToolTypeEnum.FrameCreate:
-				return "frame.create"
-			case ElementToolTypeEnum.FrameRemove:
-				return "frame.remove"
-			case ElementToolTypeEnum.ContentDownload:
-				return "download.image"
-			case ElementToolTypeEnum.FrameDownload:
-				return "download.frame"
-			case ElementToolTypeEnum.TextDownload:
-				return "download.image"
-			case ElementToolTypeEnum.ElementResize:
-				return ElementToolTypeEnum.ElementResize
-			default:
-				return undefined
-		}
+		return { executed: false, reason: "TARGET_UNAVAILABLE" }
 	}
 
 	private executeActionCommand(
 		command: ElementToolCommand,
 		_element: LayerElement | undefined,
-	): boolean {
+		definition: ElementToolDefinition,
+	): boolean | ElementToolCommandResult {
 		void _element
 		const payload =
 			command.payload && typeof command.payload === "object"
 				? (command.payload as { actionId?: string; [key: string]: unknown })
 				: undefined
-		const actionId = payload?.actionId ?? this.getUserActionId(command.toolId)
-		if (!actionId) return true
+		const actionId = payload?.actionId ?? definition.fallbackActionId
+		if (!actionId) return { executed: false, reason: "ACTION_UNAVAILABLE" }
 		const canExecute = this.canvas.userActionRegistry.canExecute?.(actionId) ?? true
-		if (!canExecute) return true
+		if (!canExecute) return { executed: false, reason: "ACTION_UNAVAILABLE" }
 		const actionPayload = { ...(payload ?? {}) }
 		delete actionPayload.actionId
 		void this.canvas.userActionRegistry.execute(actionId, actionPayload)
-		return true
+		return { executed: true }
 	}
 
 	private executeElementCommand(
 		command: ElementToolCommand,
 		element: LayerElement | undefined,
-	): boolean {
-		if (command.toolId !== ElementToolTypeEnum.ElementResize || !element) return false
+		definition: ElementToolDefinition,
+	): boolean | ElementToolCommandResult {
+		if (definition.commandRoute !== "element" || !element) return false
 		const payload =
 			command.payload && typeof command.payload === "object"
 				? (command.payload as {
@@ -633,7 +639,8 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 						aspectRatioLocked?: boolean
 					})
 				: undefined
-		if (!payload || payload.width === undefined || payload.height === undefined) return true
+		if (!payload || payload.width === undefined || payload.height === undefined)
+			return { executed: false, reason: "INVALID_PAYLOAD" }
 		this.canvas.elementManager.update(command.elementId, {
 			width: payload.width,
 			height: payload.height,
@@ -649,8 +656,10 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 	private executeStoryboardBatchCommand(
 		command: ElementToolCommand,
 		_element: LayerElement | undefined,
+		definition: ElementToolDefinition,
 	): boolean {
 		void _element
+		if (definition.commandRoute !== "storyboard-batch") return false
 		const payload = command.payload as
 			| {
 					origin?: { kind: "element"; elementId: string; side: "right" }

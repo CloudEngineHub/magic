@@ -20,6 +20,7 @@ function createCanvasMock(
 ): Canvas {
 	const outputImageIdSet = new Set(outputImageIds)
 	return {
+		getEffectiveContentId: vi.fn(() => undefined),
 		deviceInfo: {
 			formFactor: "desktop",
 			input: { touch: false, coarsePointer: false, hover: true },
@@ -53,6 +54,10 @@ function createCanvasMock(
 		transformManager: {
 			isTransformInteractionActive: vi.fn(() => false),
 			isTransforming: vi.fn(() => false),
+		},
+		permissionManager: {
+			can: vi.fn(() => true),
+			canUseSelectionToolAffordance: vi.fn(() => true),
 		},
 	} as unknown as Canvas
 }
@@ -301,7 +306,12 @@ describe("StoryboardElement", () => {
 				},
 			],
 		)
-		canvas.readonly = true
+		canvas.permissionManager.can = vi.fn(
+			(capability: string) =>
+				capability !== "document.write" &&
+				capability !== "document.delete" &&
+				capability !== "sideEffect.generate",
+		)
 		const element = new StoryboardElement(
 			StoryboardElement.createElementData({
 				id: "storyboard-1",
@@ -333,7 +343,7 @@ describe("StoryboardElement", () => {
 		})
 	})
 
-	it("rerenders storyboard controls when readonly changes at runtime", () => {
+	it("rerenders storyboard controls when access changes at runtime", () => {
 		const eventEmitter = new EventEmitter()
 		const canvas = createCanvasMock()
 		canvas.eventEmitter = eventEmitter
@@ -345,15 +355,24 @@ describe("StoryboardElement", () => {
 		element.onMounted()
 		expect(element.getNode()?.find(".storyboard-control-hit").length).toBeGreaterThan(0)
 
-		canvas.readonly = true
-		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		canvas.permissionManager.can = vi.fn(
+			(capability: string) =>
+				capability !== "document.write" && capability !== "sideEffect.generate",
+		)
+		eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "readonly", capabilities: new Set(), can: () => false },
+		})
 		expect(element.getNode()?.find(".storyboard-control-hit")).toHaveLength(0)
 
-		canvas.readonly = false
-		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: false } })
+		canvas.permissionManager.can = vi.fn(() => true)
+		eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "edit", capabilities: new Set(), can: () => true },
+		})
 		expect(element.getNode()?.find(".storyboard-control-hit").length).toBeGreaterThan(0)
 		element.destroy()
-		expect(eventEmitter.listenerCount("canvas:readonly")).toBe(0)
+		expect(eventEmitter.listenerCount("permission:changed")).toBe(0)
 	})
 
 	it("does not recurse when visibility registration synchronously rerenders", () => {

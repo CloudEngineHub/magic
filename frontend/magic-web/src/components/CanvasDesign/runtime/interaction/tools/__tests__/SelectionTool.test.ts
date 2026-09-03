@@ -154,6 +154,9 @@ function createTouchSelectionTool(options?: {
 			}),
 		},
 		permissionManager: {
+			can: vi.fn((capability: string, element?: LayerElement) =>
+				capability === "interaction.select" ? (options?.canSelect ?? true) : true,
+			),
 			canSelect: vi.fn(() => options?.canSelect ?? true),
 		},
 		selectionManager: {
@@ -394,7 +397,8 @@ describe("SelectionTool pending direct drag", () => {
 		const node = createNode()
 		const emit = vi.fn()
 		const canvas = {
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			contentLayer: {},
 			elementManager: {
 				getElementData: () => ({

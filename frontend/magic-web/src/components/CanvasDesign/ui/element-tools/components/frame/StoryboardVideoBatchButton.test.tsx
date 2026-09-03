@@ -4,7 +4,7 @@ import { ElementTypeEnum } from "../../../../runtime/document/types"
 import StoryboardVideoBatchButton from "./StoryboardVideoBatchButton"
 
 const mocks = vi.hoisted(() => ({
-	canvas: { readonly: false },
+	canvas: { can: vi.fn(() => true), permissionManager: { can: vi.fn(() => true) } },
 	selectedElements: [{ id: "output-frame", type: "frame" }] as Array<{
 		id: string
 		type: string
@@ -44,7 +44,7 @@ vi.mock("../../../../runtime/interaction/storyboard/storyboardOutputFrame", () =
 
 describe("StoryboardVideoBatchButton", () => {
 	beforeEach(() => {
-		mocks.canvas.readonly = false
+		mocks.canvas.can.mockReturnValue(true)
 		mocks.selectedElements = [{ id: "output-frame", type: ElementTypeEnum.Frame }]
 		mocks.isStoryboardOutputFrame.mockReturnValue(true)
 		mocks.canCreateStoryboardVideosFromConnection.mockReturnValue(true)
