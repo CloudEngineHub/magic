@@ -364,6 +364,7 @@ export class EraserManager {
 	}
 
 	public enterEraserMode(elementId: string, contentId?: string): void {
+		if (!this.canvas.permissionManager.can("document.write")) return
 		if (this.erasingElementId === elementId) return
 
 		const elementData = this.canvas.elementManager.getElementData(elementId)

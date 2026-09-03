@@ -5,7 +5,8 @@ import { frameActions } from "../frameActions"
 
 function getCreateFrameAction() {
 	const action = frameActions.find((item) => item.id === "frame.create") as
-		UserAction<"frame.create"> | undefined
+		| UserAction<"frame.create">
+		| undefined
 	if (!action) {
 		throw new Error("Expected frame.create action")
 	}
@@ -20,11 +21,12 @@ function createCanvas() {
 	])
 	return {
 		canvas: {
-			readonly: false,
+			can: vi.fn(() => true),
 			selectionManager: {
 				getSelectedIds: vi.fn(() => ["first", "second"]),
 			},
 			permissionManager: {
+				can: vi.fn(() => true),
 				isAnySelectedElementLocked: vi.fn(() => false),
 			},
 			elementManager: {

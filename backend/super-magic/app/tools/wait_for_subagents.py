@@ -39,7 +39,7 @@ _POLL_INTERVAL = 1.0
 class WaitForSubagentsParams(BaseToolParams):
     agent_ids: List[str] = Field(
         ...,
-        description="Exact final agent_ids returned by background call_subagent calls."
+        description="Exact final session IDs returned by background call_subagent calls. The parameter name is retained for compatibility."
     )
     timeout: float = Field(
         30.0,
@@ -85,6 +85,7 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
                 resolved.append((agent_id, None, None, SubagentQueryResult(
                     agent_id=agent_id,
                     status=SubagentQueryStatus.NOT_FOUND,
+                    session_id=agent_id,
                     error=f"No sub-agent session found with id: {agent_id}",
                 )))
                 continue
@@ -92,6 +93,7 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
                 resolved.append((agent_id, None, None, SubagentQueryResult(
                     agent_id=agent_id,
                     status=SubagentQueryStatus.AMBIGUOUS,
+                    session_id=agent_id,
                     error=f"Multiple sub-agent sessions found with id: {agent_id}. agent_id must be unique.",
                 )))
                 continue
@@ -166,6 +168,7 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
             results.append(SubagentQueryResult(
                 agent_id=agent_id,
                 agent_name=state.agent_name,
+                session_id=agent_id,
                 task_label=state.task_label,
                 display_name=state.display_name,
                 status=state.status,
@@ -200,7 +203,7 @@ class WaitForSubagents(BaseTool[WaitForSubagentsParams]):
         sections = []
         for item in items:
             agent_name = item.get("agent_name", "")
-            agent_id = item.get("agent_id", "")
+            agent_id = item.get("session_id") or item.get("agent_id", "")
             status = item.get("status", "")
             agent_result = item.get("result") or ""
             error = item.get("error") or ""
@@ -436,6 +439,7 @@ async def _interrupt_and_read_state(agent_name: str, agent_id: str, reason: str)
     state = await SubagentRuntimeStore.load_state(agent_name, agent_id)
     return SubagentQueryResult(
         agent_id=agent_id,
+        session_id=agent_id,
         agent_name=state.agent_name,
         task_label=state.task_label,
         display_name=state.display_name,
@@ -620,14 +624,15 @@ def _build_results_text(
     for i, result in enumerate(results, 1):
         label = _query_result_label(result)
         parts = [f"[{i}/{total}] {label}: {result.status}"]
-        if result.agent_name or result.agent_id:
-            parts.append(f"Sub-agent: {result.agent_name or ''}/{result.agent_id}")
-            if result.agent_name and result.agent_id:
+        session_id = result.session_id or result.agent_id
+        if result.agent_name or session_id:
+            parts.append(f"Sub-agent: {result.agent_name or ''}/{session_id}")
+            if result.agent_name and session_id:
                 # 等待结果可能在创建调用之后的另一轮才进入上下文，因此再次写出最终 ID，
                 # 防止模型只记住最初请求的基础名称而无法正确恢复该会话。
                 parts.append(
                     f"To continue this exact session, call call_subagent with "
-                    f"agent_id `{result.agent_id}`, resume=true, and fork=false."
+                    f"session_id `{session_id}`, resume=true, and fork=false."
                 )
 
         if result.error:

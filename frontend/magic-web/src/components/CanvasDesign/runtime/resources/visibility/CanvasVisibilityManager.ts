@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
-import { getActiveContent, getActiveImageContent } from "../../document/elementContent"
+import { getActiveImageContent } from "../../document/elementContent"
 import type { Rect } from "../../shared/ids"
 import type { ImageResourceLoadPriority, ImageResourceVariant } from "../image/ImageResourceManager"
 import {
@@ -448,6 +448,29 @@ export class CanvasVisibilityManager {
 		this.scheduleRefresh("document:loaded", true)
 	}
 
+	private readonly handleContentPreviewChanged = (event: {
+		data: { elementId?: string; contentId?: string }
+	}): void => {
+		const elementIds = event.data.elementId
+			? [event.data.elementId]
+			: [
+					...this.registeredImages.keys(),
+					...this.registeredVideos.keys(),
+					...this.registeredAudios.keys(),
+				]
+		for (const elementId of new Set(elementIds)) {
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (!element) continue
+			const path = (
+				this.canvas.getEffectiveContent?.(elementId) as { src?: string } | undefined
+			)?.src
+			if (element.type === ElementTypeEnum.Image) this.updateImageElement(elementId, path)
+			if (element.type === ElementTypeEnum.Video) this.updateVideoElement(elementId, path)
+			if (element.type === ElementTypeEnum.Audio) this.updateAudioElement(elementId, path)
+		}
+		this.scheduleRefresh("content:previewChanged", true)
+	}
+
 	public registerConsumerVisibility(
 		elementId: string,
 		listener: (state: CanvasConsumerVisibility) => void,
@@ -574,6 +597,7 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.on("viewport:changed", this.handleViewportChanged)
 		this.canvas.eventEmitter.on("element:change", this.handleElementChange)
 		this.canvas.eventEmitter.on("document:loaded", this.handleDocumentLoaded)
+		this.canvas.eventEmitter.on("content:previewChanged", this.handleContentPreviewChanged)
 		this.canvas.eventEmitter.on("resource:image:loaded", this.handleImageResourceLoaded)
 		this.canvas.eventEmitter.on(
 			"resource:video:load-failed",
@@ -999,6 +1023,7 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.off("viewport:changed", this.handleViewportChanged)
 		this.canvas.eventEmitter.off("element:change", this.handleElementChange)
 		this.canvas.eventEmitter.off("document:loaded", this.handleDocumentLoaded)
+		this.canvas.eventEmitter.off("content:previewChanged", this.handleContentPreviewChanged)
 		this.canvas.eventEmitter.off("resource:image:loaded", this.handleImageResourceLoaded)
 		this.canvas.eventEmitter.off(
 			"resource:video:load-failed",
@@ -1110,7 +1135,13 @@ export class CanvasVisibilityManager {
 		maxImageCount: number,
 	): void {
 		if (imageIds.length >= maxImageCount) return
-		if (element.type !== ElementTypeEnum.Image || !getActiveImageContent(element).src) {
+		const effectiveContent = this.canvas.getEffectiveContent?.(element.id) as
+			| { src?: string }
+			| undefined
+		if (
+			element.type !== ElementTypeEnum.Image ||
+			!(effectiveContent?.src ?? getActiveImageContent(element).src)
+		) {
 			return
 		}
 		if (!this.registeredImages.has(element.id)) {
@@ -2450,7 +2481,11 @@ export class CanvasVisibilityManager {
 					return
 				}
 				const registered = this.registeredImages.get(element.id)
-				const path = registered?.path ?? getActiveImageContent(element).src
+				const effectiveContent = this.canvas.getEffectiveContent?.(element.id) as
+					| { src?: string }
+					| undefined
+				const path =
+					registered?.path ?? effectiveContent?.src ?? getActiveImageContent(element).src
 				if (!path) {
 					return
 				}
@@ -2507,7 +2542,9 @@ export class CanvasVisibilityManager {
 					return
 				}
 				const registered = this.registeredVideos.get(element.id)
-				const path = registered?.path ?? getActiveContent(element)?.src
+				const path =
+					(this.canvas.getEffectiveContent?.(element.id) as { src?: string } | undefined)
+						?.src ?? registered?.path
 				if (!path) {
 					return
 				}
@@ -2553,7 +2590,9 @@ export class CanvasVisibilityManager {
 			if (element.type === ElementTypeEnum.Audio) {
 				if (queuedMediaIds.has(element.id)) return
 				const registered = this.registeredAudios.get(element.id)
-				const path = registered?.path ?? getActiveContent(element)?.src
+				const path =
+					(this.canvas.getEffectiveContent?.(element.id) as { src?: string } | undefined)
+						?.src ?? registered?.path
 				if (!path) return
 
 				const elementBounds = this.getElementDataBoundsInCanvas(element, parentTransform)

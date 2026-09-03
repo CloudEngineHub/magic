@@ -271,6 +271,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		navigate({
 			name: RouteName.SuperWorkspaceProjectState,
 			params: { projectId: item.id },
+			state: { isAudioProjectEntry: true },
 		})
 	}
 

@@ -8,7 +8,7 @@ const storeMocks = vi.hoisted(() => ({
 	getFileById: vi.fn(),
 }))
 
-vi.mock("@tiptap/react", () => ({
+vi.mock("@/infrastructure/editors/tiptap/react", () => ({
 	NodeViewWrapper: ({
 		as: Component = "div",
 		children,
@@ -87,7 +87,7 @@ describe("FileMentionNodeView", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@demo.mov")).toBeInTheDocument()
+		expect(screen.getByText("demo.mov")).toBeInTheDocument()
 		expect(screen.getByTestId("upload-file-mention-visual")).toHaveClass("h-[18px]")
 		expect(screen.getByTestId("upload-file-mention-progress")).toHaveTextContent("42%")
 		expect(screen.getByTestId("upload-file-mention-progress-background")).toHaveStyle({
@@ -107,7 +107,7 @@ describe("FileMentionNodeView", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@project.png")).toBeInTheDocument()
+		expect(screen.getByText("project.png")).toBeInTheDocument()
 		expect(screen.getByTestId("file-mention-visual")).toBeInTheDocument()
 	})
 
@@ -126,6 +126,6 @@ describe("FileMentionNodeView", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@project.png").closest(".magic-mention")).toHaveClass("opacity-50")
+		expect(screen.getByText("project.png").closest(".magic-mention")).toHaveClass("opacity-50")
 	})
 })

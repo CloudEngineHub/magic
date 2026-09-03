@@ -155,7 +155,12 @@ export function useFetchInterceptionCache(options: {
 			}
 		}
 	}, [
-		attachmentUpdatedAtIndex, sandboxType, isEditMode, content,  refreshIframeContent, setContentInjected,
+		attachmentUpdatedAtIndex,
+		sandboxType,
+		isEditMode,
+		content,
+		refreshIframeContent,
+		setContentInjected,
 	])
 
 	return {
@@ -174,7 +179,8 @@ function guessDependencyType(path: string): DependencyEntry["type"] {
 	if (["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "avif", "bmp"].includes(ext))
 		return "image"
 	if (["woff", "woff2", "ttf", "otf", "eot"].includes(ext)) return "font"
-	if (["mp4", "webm", "ogg", "mp3", "wav", "flac", "aac"].includes(ext)) return "media"
+	if (["mp4", "webm", "ogg", "opus", "mp3", "wav", "m4a", "flac", "aac"].includes(ext))
+		return "media"
 	if (["html", "htm"].includes(ext)) return "iframe"
 	return "other"
 }

@@ -424,6 +424,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
                                     raise StreamInterruptedError(
                                         chunk_count=state.received_chunk_count,
                                         total_elapsed_seconds=total_elapsed,
+                                        emitted_text_chars=len(state.reasoning_text) + len(state.content_text),
                                     ) from e
                                 else:
                                     StreamingLogger.log_stream_normal_end(
@@ -438,6 +439,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
                                     chunk_count=state.received_chunk_count,
                                     chunk_timeout_seconds=effective_chunk_timeout,
                                     total_elapsed_seconds=total_elapsed,
+                                    emitted_text_chars=len(state.reasoning_text) + len(state.content_text),
                                 )
                             except STREAMING_PASSTHROUGH_EXCEPTIONS:
                                 raise
@@ -496,6 +498,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
             raise StreamInterruptedError(
                 chunk_count=state.received_chunk_count,
                 total_elapsed_seconds=total_elapsed,
+                emitted_text_chars=len(state.reasoning_text) + len(state.content_text),
             )
 
         stream_end_time = time.time()

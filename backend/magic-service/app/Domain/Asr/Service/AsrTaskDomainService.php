@@ -18,8 +18,11 @@ use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Throwable;
+
+use function sprintf;
 
 /**
  * ASR 任务领域服务
@@ -133,6 +136,53 @@ readonly class AsrTaskDomainService
     public function saveTaskStatus(AsrTaskStatusDTO $taskStatus, int $ttl = 604800): void
     {
         $this->asrTaskRepository->save($taskStatus, $ttl);
+    }
+
+    /**
+     * Persist and cache the task audio format without allowing format changes.
+     */
+    public function setAudioFormat(AsrTaskStatusDTO $taskStatus, string $audioFormat): void
+    {
+        $format = strtolower(ltrim(trim($audioFormat), '.'));
+        if (! in_array($format, ['wav', 'opus'], true)) {
+            throw new InvalidArgumentException(sprintf('Unsupported ASR audio format: %s', $audioFormat));
+        }
+
+        if (! empty($taskStatus->audioFormat) && $taskStatus->audioFormat !== $format) {
+            throw new InvalidArgumentException(sprintf(
+                'ASR task audio format conflict: existing=%s, requested=%s',
+                $taskStatus->audioFormat,
+                $format
+            ));
+        }
+
+        if (! empty($taskStatus->projectId)) {
+            $audioProject = $this->audioProjectRepository->findByProjectId((int) $taskStatus->projectId);
+            if ($audioProject === null) {
+                $this->logger->debug('Skip audio project audio format persistence', [
+                    'project_id' => $taskStatus->projectId,
+                    'task_key' => $taskStatus->taskKey,
+                    'reason' => 'audio_project_not_exists',
+                ]);
+            } else {
+                $persisted = $audioProject->getAudioFormat();
+                if ($persisted !== null && $persisted !== $format) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Persisted ASR audio format conflict: existing=%s, requested=%s',
+                        $persisted,
+                        $format
+                    ));
+                }
+
+                $this->audioProjectRepository->setAudioFormatIfUnset(
+                    (int) $taskStatus->projectId,
+                    $format
+                );
+            }
+        }
+
+        $taskStatus->audioFormat = $format;
+        $this->saveTaskStatus($taskStatus);
     }
 
     /**
@@ -519,6 +569,7 @@ readonly class AsrTaskDomainService
             'phase_percent' => $audioProject->getPhasePercent(),
             'phase_error' => $audioProject->getPhaseError(),
             'audio_file_id' => $audioFileId === null ? null : (string) $audioFileId,
+            'audio_format' => $audioProject->getAudioFormat(),
             'sandbox_topic_id' => $sandbox['sandbox_topic_id'] ?? null,
             'sandbox_id' => $sandbox['sandbox_id'] ?? null,
             'sandbox_task_created' => $sandbox['sandbox_task_created'] ?? ! empty($sandbox['sandbox_id'] ?? null),
@@ -543,6 +594,7 @@ readonly class AsrTaskDomainService
             'marker_file_name' => $resultFiles['marker_file_name'] ?? null,
             'finish_output_filename' => $finish['output_filename'] ?? null,
             'expected_audio_file_name' => $finish['expected_audio_file_name'] ?? null,
+            'file_shard_count' => $finish['file_shard_count'] ?? null,
         ]);
     }
 

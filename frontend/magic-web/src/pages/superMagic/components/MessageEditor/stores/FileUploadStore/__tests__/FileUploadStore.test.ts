@@ -567,6 +567,30 @@ describe("FileUploadStore", () => {
 			expect(store.getUploadMentionItems()).toHaveLength(1)
 		})
 
+		it("preserves the canvas clipboard marker when restoring a pasted upload mention", () => {
+			store.restorePastedUploadFileReferences([
+				{
+					type: MentionItemType.UPLOAD_FILE,
+					data: {
+						file_id: "canvas-upload",
+						file_name: "canvas.png",
+						file_path: "uploads/canvas.png",
+						file_extension: "png",
+						file_size: 12,
+						upload_status: "done",
+						upload_progress: 100,
+						is_canvas_clipboard: true,
+					},
+				},
+			])
+
+			expect(store.files).toHaveLength(1)
+			expect(store.files[0]).toMatchObject({
+				id: "canvas-upload",
+				isCanvasClipboard: true,
+			})
+		})
+
 		it("should only track pasted upload references accepted by the file limit", () => {
 			store.updateOptions({ maxUploadCount: 1 })
 			store.restorePastedUploadFileReferences([

@@ -13,6 +13,7 @@ from agentlang.llms.utils.debug_logger import (
     _sanitize_request_params,
     save_llm_debug_log,
 )
+from app.path_manager import PathManager
 
 
 class _MockChatHistoryCleanupService:
@@ -67,7 +68,7 @@ def test_get_llm_request_log_max_files(env_value, expected, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_prune_llm_request_logs_keeps_latest_files(tmp_path: Path):
-    log_dir = tmp_path / "llm_request"
+    log_dir = tmp_path / PathManager.get_llm_requests_dir_name()
     log_dir.mkdir()
 
     paths = []
@@ -85,7 +86,7 @@ async def test_prune_llm_request_logs_keeps_latest_files(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_prune_llm_request_logs_noop_when_unlimited(tmp_path: Path):
-    log_dir = tmp_path / "llm_request"
+    log_dir = tmp_path / PathManager.get_llm_requests_dir_name()
     log_dir.mkdir()
 
     for index in range(3):
@@ -102,7 +103,7 @@ async def test_save_llm_debug_log_prunes_after_write(tmp_path: Path, monkeypatch
 
     runtime_dir = tmp_path / ".runtime"
     runtime_dir.mkdir()
-    log_dir = runtime_dir / "llm_request"
+    log_dir = runtime_dir / PathManager.get_llm_requests_dir_name()
     log_dir.mkdir()
 
     for index in range(2):
@@ -118,7 +119,7 @@ async def test_save_llm_debug_log_prunes_after_write(tmp_path: Path, monkeypatch
     )
 
     with (
-        patch("app.path_manager.PathManager.get_llm_request_dir", return_value=log_dir),
+        patch("app.path_manager.PathManager.get_llm_requests_dir", return_value=log_dir),
         patch("app.utils.runtime_storage.ensure_runtime_directory", new=AsyncMock(return_value=log_dir)),
         patch.dict(sys.modules, {"app.service.chat_history_cleanup_service": _mock_cleanup_module()}),
     ):
@@ -147,7 +148,7 @@ async def test_save_llm_debug_log_prunes_backlog_without_writing_success_log(
 
     runtime_dir = tmp_path / ".runtime"
     runtime_dir.mkdir()
-    log_dir = runtime_dir / "llm_request"
+    log_dir = runtime_dir / PathManager.get_llm_requests_dir_name()
     log_dir.mkdir()
 
     for index in range(5):
@@ -163,7 +164,7 @@ async def test_save_llm_debug_log_prunes_backlog_without_writing_success_log(
     )
 
     with (
-        patch("app.path_manager.PathManager.get_llm_request_dir", return_value=log_dir),
+        patch("app.path_manager.PathManager.get_llm_requests_dir", return_value=log_dir),
         patch("app.utils.runtime_storage.ensure_runtime_directory", new=AsyncMock(return_value=log_dir)),
         patch.dict(sys.modules, {"app.service.chat_history_cleanup_service": _mock_cleanup_module()}),
     ):

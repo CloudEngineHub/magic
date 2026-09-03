@@ -14,9 +14,9 @@ import {
 } from "../utils/canvasProjectOperationRisk"
 import {
 	formatCanvasPathRepairFailures,
-	repairCanvasProjectsBeforeFileOperation,
 	syncCanvasProjectNameAfterFileOperation,
 } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 
 export interface UseRenameOptions {
 	projectId?: string
@@ -164,6 +164,8 @@ export function useRename(options: UseRenameOptions = {}) {
 		onAttachmentsChange,
 	} = options
 	const { t } = useTranslation("super")
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 	// 重命名相关状态
 	const [renamingItemId, setRenamingItemId] = useState<string | null>(null)
 	const [renameValue, setRenameValue] = useState("")
@@ -349,52 +351,55 @@ export function useRename(options: UseRenameOptions = {}) {
 						operation: "rename",
 					})
 				: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
-			const repairResult = currentItem.is_directory
-				? await repairCanvasProjectsBeforeFileOperation({
-						attachments: attachments || [],
-						items: [currentItem],
-						operation: "rename",
-						projectId: options.projectId,
-					})
-				: null
-			if (canvasRisk.shouldWarn || repairResult?.hasFailures) {
-				const impact = getCanvasProjectOperationImpact(canvasRisk)
-				const riskContent = canvasRisk.shouldWarn
-					? t(
-							impact === "open-failure"
-								? "topicFiles.canvasOperationRisk.renameOpenFailureContent"
-								: impact === "content-loss"
-									? "topicFiles.canvasOperationRisk.renameContentLossContent"
-									: "topicFiles.canvasOperationRisk.renameMixedContent",
-						)
-					: ""
-				const repairContent = repairResult?.hasFailures
-					? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
-							failures: formatCanvasPathRepairFailures(repairResult.failures),
+			const preflightResult = await runCanvasFileOperationPreflight({
+				repairOptions: currentItem.is_directory
+					? {
+							attachments: attachments || [],
+							items: [currentItem],
+							operation: "rename",
+							projectId: options.projectId,
+						}
+					: undefined,
+				requiresConfirmation: canvasRisk.shouldWarn,
+				confirm: (repairPlan) => {
+					const impact = getCanvasProjectOperationImpact(canvasRisk)
+					const riskContent = canvasRisk.shouldWarn
+						? t(
+								impact === "open-failure"
+									? "topicFiles.canvasOperationRisk.renameOpenFailureContent"
+									: impact === "content-loss"
+										? "topicFiles.canvasOperationRisk.renameContentLossContent"
+										: "topicFiles.canvasOperationRisk.renameMixedContent",
+							)
+						: ""
+					const repairContent = repairPlan?.hasFailures
+						? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+								failures: formatCanvasPathRepairFailures(repairPlan.failures),
+							})
+						: ""
+					return new Promise<boolean>((resolve) => {
+						MagicModal.confirm({
+							title: t("topicFiles.canvasOperationRisk.title"),
+							content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
+							okButtonProps: {
+								color: "danger",
+								variant: "solid",
+							},
+							cancelButtonProps: {
+								color: "default",
+								variant: "filled",
+							},
+							okText: t("topicFiles.contextMenu.rename"),
+							cancelText: t("common.cancel"),
+							onOk: () => resolve(true),
+							onCancel: () => resolve(false),
 						})
-					: ""
-				const shouldContinue = await new Promise<boolean>((resolve) => {
-					MagicModal.confirm({
-						title: t("topicFiles.canvasOperationRisk.title"),
-						content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
-						okButtonProps: {
-							color: "danger",
-							variant: "solid",
-						},
-						cancelButtonProps: {
-							color: "default",
-							variant: "filled",
-						},
-						okText: t("topicFiles.contextMenu.rename"),
-						cancelText: t("common.cancel"),
-						onOk: () => resolve(true),
-						onCancel: () => resolve(false),
 					})
-				})
-				if (!shouldContinue) {
-					handleRenameCancel()
-					return
-				}
+				},
+			})
+			if (!preflightResult.ok) {
+				handleRenameCancel()
+				return
 			}
 
 			// 添加到重命名中状态
@@ -405,6 +410,8 @@ export function useRename(options: UseRenameOptions = {}) {
 				file_id: fileId,
 				target_name: trimmedName,
 			})
+
+			await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 
 			if (currentItem.is_directory) {
 				try {

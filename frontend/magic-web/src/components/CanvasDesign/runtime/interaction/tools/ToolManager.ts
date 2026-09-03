@@ -25,6 +25,7 @@ export class ToolManager {
 	private activeTool: BaseTool | null = null
 	private previousTool: BaseTool | null = null // 记录切换工具前的工具
 	private toolActivationSource: ToolActivationSource = null // 记录工具激活来源
+	private permissionChangedUnsubscribe?: () => void
 
 	// 工具实例
 	private selectionTool: SelectionTool
@@ -101,17 +102,20 @@ export class ToolManager {
 			canvas,
 		})
 
-		// 监听只读状态变化
-		this.canvas.eventEmitter.on("canvas:readonly", () => {
-			// 如果切换到只读模式，强制切换到选择工具
-			if (
-				this.canvas.readonly &&
-				this.activeTool !== this.selectionTool &&
-				this.activeTool !== this.panTool
-			) {
-				this.setActiveTool(this.selectionTool)
-			}
-		})
+		// 监听访问能力变化
+		this.permissionChangedUnsubscribe = this.canvas.eventEmitter.on(
+			"permission:changed",
+			() => {
+				// 如果失去文档写能力，强制切换到选择工具
+				if (
+					!this.canvas.permissionManager.can("document.write") &&
+					this.activeTool !== this.selectionTool &&
+					this.activeTool !== this.panTool
+				) {
+					this.setActiveTool(this.selectionTool)
+				}
+			},
+		)
 
 		// 激活默认工具
 		const defaultToolType = ToolTypeEnum.Select
@@ -166,7 +170,11 @@ export class ToolManager {
 		this.canvas.inputManager.cancelLongPress()
 
 		// 使用 PermissionManager 统一判断：只读模式下只允许选择工具和平移工具
-		if (this.canvas.readonly && tool !== this.selectionTool && tool !== this.panTool) {
+		if (
+			!this.canvas.permissionManager.can("document.write") &&
+			tool !== this.selectionTool &&
+			tool !== this.panTool
+		) {
 			return
 		}
 
@@ -403,8 +411,8 @@ export class ToolManager {
 	 * 销毁管理器
 	 */
 	public destroy(): void {
-		// 移除事件监听器
-		this.canvas.eventEmitter.off("canvas:readonly")
+		this.permissionChangedUnsubscribe?.()
+		this.permissionChangedUnsubscribe = undefined
 
 		if (this.activeTool) {
 			this.activeTool.deactivate()

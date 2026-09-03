@@ -133,7 +133,8 @@ export default function Tools() {
 
 	const handleUploadFiles = useCallback(
 		async (files: File[], type: "image" | "video" | "audio") => {
-			if (!canvas || canvas.readonly || files.length === 0) return
+			if (!canvas || !canvas.permissionManager.can("document.write") || files.length === 0)
+				return
 
 			const validFiles = files.filter((file) => {
 				const validation = validateFile(file)
@@ -181,7 +182,7 @@ export default function Tools() {
 
 	const openLocalUploadPicker = useCallback(
 		(type: "image" | "video" | "audio") => {
-			if (!canvas || canvas.readonly) return
+			if (!canvas || !canvas.permissionManager.can("document.write")) return
 
 			const input =
 				type === "image"

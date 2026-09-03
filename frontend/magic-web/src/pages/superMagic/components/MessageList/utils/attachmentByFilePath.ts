@@ -1,8 +1,8 @@
-import { extractFilePathMentions } from "@/pages/superMagic/utils/filePathMention"
+import { extractWorkspaceFileReferences } from "@/pages/superMagic/utils/filePathMention"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 /**
- * 从消息 content 中提取所有 [@file_path:...] 引用，按出现顺序返回路径数组。
+ * 从消息 content 中提取 Markdown 和 legacy 文件引用，按出现顺序返回路径数组。
  *
  * 支持格式：
  * - [@file_path:新闻报道/分类一/xxx.md]
@@ -11,7 +11,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
  */
 export function extractFilePathsFromContent(content: string): string[] {
 	if (!content) return []
-	return extractFilePathMentions(content).map((match) => match.path)
+	return extractWorkspaceFileReferences(content).map((match) => match.path)
 }
 
 /**

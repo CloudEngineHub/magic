@@ -9,6 +9,7 @@ namespace App\Application\SuperMagic\Skill\Event\Subscribe;
 
 use App\Domain\SuperMagic\Skill\Event\SkillMarketBatchReindexRequestedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketCreatedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketPublishedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUpdatedEvent;
@@ -40,6 +41,7 @@ final readonly class SkillMarketVectorIndexSyncSubscriber implements ListenerInt
         return [
             SkillMarketCreatedEvent::class,
             SkillMarketPublishedEvent::class,
+            SkillMarketInstalledEvent::class,
             SkillMarketUpdatedEvent::class,
             SkillMarketOfflineEvent::class,
             SkillMarketBatchReindexRequestedEvent::class,
@@ -56,6 +58,7 @@ final readonly class SkillMarketVectorIndexSyncSubscriber implements ListenerInt
 
         if (! $event instanceof SkillMarketCreatedEvent
             && ! $event instanceof SkillMarketPublishedEvent
+            && ! $event instanceof SkillMarketInstalledEvent
             && ! $event instanceof SkillMarketUpdatedEvent
             && ! $event instanceof SkillMarketOfflineEvent) {
             return;

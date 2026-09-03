@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from ..kernel.magic_service_api import MagicServiceAbstractApi
 from ..parameter.add_agent_skills_parameter import AddAgentSkillsParameter
-from ..parameter.agent_execute_parameter import AgentExecuteParameter
+from ..parameter.assistant_execute_parameter import AssistantExecuteParameter
 from ..parameter.delete_agent_skills_parameter import DeleteAgentSkillsParameter
 from ..parameter.get_agent_details_parameter import GetAgentDetailsParameter
 from ..parameter.get_agent_openapi_parameter import GetAgentOpenApiParameter
@@ -116,21 +116,27 @@ class AgentApi(MagicServiceAbstractApi):
         # Return structured result
         return ToolExecuteResult(data)
 
-    async def execute_agent_async(
+    async def execute_assistant_async(
         self,
-        parameter: AgentExecuteParameter
+        parameter: AssistantExecuteParameter
     ) -> AgentExecuteResult:
         """
-        Execute an agent (one chat round) via the agent-execute open-api (async).
+        Execute a legacy business assistant (one chat round) via the assistant execute API (async).
 
         Backed by magic-service apiChatByMCPTool. Pass `conversation_id` to keep context.
 
         Args:
-            parameter: AgentExecuteParameter instance
+            parameter: AssistantExecuteParameter instance
 
         Returns:
             AgentExecuteResult containing reply messages and conversation_id
         """
+        endpoint_path = "/api/v1/open-api/sandbox/assistants/assistant-execute"
+        data = await self.request_by_parameter_async(parameter, 'POST', endpoint_path)
+        return AgentExecuteResult(data)
+
+    async def execute_agent_async(self, parameter: AssistantExecuteParameter) -> AgentExecuteResult:
+        """Backward-compatible call to the original agent-execute endpoint."""
         endpoint_path = "/api/v1/open-api/sandbox/agents/agent-execute"
         data = await self.request_by_parameter_async(parameter, 'POST', endpoint_path)
         return AgentExecuteResult(data)

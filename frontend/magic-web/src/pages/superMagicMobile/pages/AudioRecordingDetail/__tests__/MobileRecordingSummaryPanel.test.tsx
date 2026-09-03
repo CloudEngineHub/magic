@@ -10,11 +10,15 @@ const isolatedHtmlRendererPropsMock = vi.fn()
 const processHtmlContentMock = vi.fn()
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string) => {
 			const labels: Record<string, string> = {
 				"detail.emptySummary": "No summary",
-				"detail.emptySummaryFile": "No summary file",
+				"detail.emptySummaryFile":
+					"Summarizing now. It will appear automatically when ready.",
+				"detail.summarizingHint":
+					"Summarizing now. It will appear automatically when ready.",
 				"detail.tabs.summary": "Minutes",
 				"detail.tabs.topics": "Topics",
 				"detail.tabs.highlights": "Highlights",
@@ -307,6 +311,46 @@ Important discussion.
 
 		expect(screen.getByText("No summary")).toBeInTheDocument()
 		expect(screen.queryByTestId("summary-scroll-edge-fade")).toBeNull()
+	})
+
+	it("centers the generating copy when a configured summary file is still empty", () => {
+		resetSharedMocks()
+
+		render(
+			<MobileRecordingSummaryPanel
+				summaryFiles={[createSummaryFileRef("summary", "summary.md")]}
+				summaryContent={{ summary: "" }}
+				isGenerating
+				attachmentList={[]}
+				scrollPaddingBottom={72}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onTimeClick={vi.fn()}
+			/>,
+		)
+
+		const message = screen.getByText(
+			"Summarizing now. It will appear automatically when ready.",
+		)
+		expect(message).toHaveClass("flex-1", "items-center", "justify-center")
+	})
+
+	it("falls back to the completed empty-summary copy when generation is inactive", () => {
+		resetSharedMocks()
+
+		render(
+			<MobileRecordingSummaryPanel
+				summaryFiles={[createSummaryFileRef("summary", "summary.md")]}
+				summaryContent={{ summary: "" }}
+				attachmentList={[]}
+				scrollPaddingBottom={72}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onTimeClick={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByText("No summary")).toBeInTheDocument()
 	})
 
 	it("overrides the mindmap canvas to use a solid mobile background", () => {

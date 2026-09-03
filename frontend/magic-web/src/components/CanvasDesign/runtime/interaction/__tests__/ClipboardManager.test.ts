@@ -7,6 +7,7 @@ import type {
 	LayerElement,
 	VideoElement,
 } from "../../document/types"
+import { ElementTypeEnum } from "../../document/types"
 import {
 	GenerationStatus,
 	ImageGenerationTaskTypeMap,
@@ -127,6 +128,14 @@ interface ClipboardManagerTestHarness {
 function createClipboardManager(): ClipboardManagerTestHarness {
 	const manager = Object.create(ClipboardManager.prototype) as ClipboardManagerTestHarness
 	manager.canvas = {
+		getEffectiveContent: vi.fn((elementId: string) => {
+			const element = (
+				manager.canvas as unknown as {
+					elementManager?: { getElementData?: (id: string) => LayerElement | undefined }
+				}
+			).elementManager?.getElementData?.(elementId)
+			return element ? activeContent(element) : undefined
+		}),
 		canvasFileUploadManager: {
 			getCompletedRemoteResourceTransfer: vi.fn(),
 			getReusableCompletedRemoteResourceTransfer: vi.fn(),
@@ -1403,7 +1412,6 @@ describe("ClipboardManager frame clipboard trees", () => {
 				update,
 			},
 		} as unknown as ClipboardManagerTestHarness["canvas"]
-
 		;(
 			manager as unknown as {
 				applyClipboardTreeUploadFailure: (upload: {
@@ -2124,7 +2132,10 @@ describe("ClipboardManager connection clipboard", () => {
 				}
 				connectionManager: {
 					hasConnection: (sourceElementId: string, targetElementId: string) => boolean
-					hasReverseConnection: (sourceElementId: string, targetElementId: string) => boolean
+					hasReverseConnection: (
+						sourceElementId: string,
+						targetElementId: string,
+					) => boolean
 					connectElementsBatch: (options: { edges: unknown[] }) => { status: "created" }
 				}
 			}
@@ -2150,7 +2161,7 @@ describe("ClipboardManager connection clipboard", () => {
 				hasElement: (elementId) => elementId !== "missing",
 				isTemporary: (elementId) => elementId === "target-pending",
 				getElementData: (elementId) =>
-					elementId === "target-video-edit" ? { type: "videoEdit" } : null,
+					elementId === "target-video-edit" ? { type: ElementTypeEnum.VideoEdit } : null,
 			},
 			connectionManager: {
 				hasConnection: () => false,
@@ -2189,9 +2200,8 @@ describe("ClipboardManager connection clipboard", () => {
 			{ sourceElementId: "source-ready", targetElementId: "target-video-edit" },
 			{ sourceElementId: "source-ready", targetElementId: "target-regular" },
 		]
-		const deferredTargets = manager.getClipboardDeferredVideoEditConnectionTargets(
-			videoEditConnections,
-		)
+		const deferredTargets =
+			manager.getClipboardDeferredVideoEditConnectionTargets(videoEditConnections)
 
 		expect(deferredTargets).toEqual(new Set(["target-video-edit"]))
 		expect(manager.createClipboardConnections(videoEditConnections, deferredTargets)).toBe(true)

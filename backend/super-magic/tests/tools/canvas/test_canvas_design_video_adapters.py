@@ -226,12 +226,28 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     async def generate(self, payload):
         """返回 mock Design 提交结果。"""
         calls["submit"] = payload
-        return {"status": "processing", "video_id": "remote-video-1"}
+        return {
+            "status": "processing",
+            "video_id": "remote-video-1",
+            "billing": {"points": 3},
+        }
 
     async def query(self, project_id, video_id):
         """返回 mock Design 完成结果。"""
         calls["query"] = (project_id, video_id)
-        return {"status": "completed", "file_url": "https://mock.invalid/video.mp4"}
+        return {
+            "status": "completed",
+            "file_url": "https://mock.invalid/video.mp4",
+            "generation_info": {
+                "input_mode": "standard",
+                "resolution": "720p",
+                "duration_seconds": 5,
+            },
+            "runtime": {
+                "finished_at": "2026-09-02 10:00:05",
+                "elapsed_seconds": 5,
+            },
+        }
 
     async def download(self, url, target):
         """将 mock 下载结果写入目标文件。"""
@@ -263,6 +279,10 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     )
 
     assert submission.provider_task_id == "remote-video-1"
+    assert submission.request_metadata["model_id"] == "model-1"
+    assert submission.request_metadata["input_mode"] == "standard"
+    assert submission.result_metadata["billing"]["points"] == 3
+    assert submission.result_metadata["runtime"]["started_at"]
     assert len(calls["submit"]["video_id"]) == 20
     assert output_filename.startswith("城市街景-vid_")
     assert calls["submit"]["project_id"] == "magic-project-1"
@@ -274,6 +294,8 @@ async def test_design_video_generation_uses_design_submit_and_query_endpoints(tm
     assert calls["query"] == ("magic-project-1", "remote-video-1")
     assert result.status == "completed"
     assert result.output_uri == f"./videos/{output_filename}"
+    assert result.result_metadata["generation_info"]["input_mode"] == "standard"
+    assert result.result_metadata["runtime"]["elapsed_seconds"] == 5
 
 
 @pytest.mark.asyncio

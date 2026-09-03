@@ -247,6 +247,7 @@ export function RecordingDetailShareDesktop({
 								summaryReady={summaryReady}
 								summarizing={false}
 								summaryFailed={false}
+								showNotesTab={Boolean(fileMap?.notes?.file_id)}
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={() => undefined}
 								onTimeClick={handleSummaryTimeClick}

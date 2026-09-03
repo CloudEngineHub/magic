@@ -52,7 +52,7 @@ describe("FrameManager frame creation", () => {
 		const frameLayer = { batchDraw: vi.fn() } as unknown as Konva.Layer
 		const canvas = {
 			contentLayer,
-			readonly: false,
+			can: vi.fn(() => true),
 			eventEmitter: {
 				on: vi.fn(() => vi.fn()),
 				emit,
@@ -166,7 +166,7 @@ describe("FrameManager frame removal", () => {
 		const deleteElement = vi.fn()
 		const emit = vi.fn()
 		const canvas = {
-			readonly: false,
+			can: vi.fn(() => true),
 			eventEmitter: {
 				on: vi.fn(() => vi.fn()),
 				emit,
@@ -247,7 +247,7 @@ describe("FrameManager frame creation", () => {
 		const frameLayer = { batchDraw: vi.fn() } as unknown as Konva.Layer
 		const canvas = {
 			contentLayer,
-			readonly: false,
+			can: vi.fn(() => true),
 			eventEmitter: {
 				on: vi.fn(() => vi.fn()),
 				emit,

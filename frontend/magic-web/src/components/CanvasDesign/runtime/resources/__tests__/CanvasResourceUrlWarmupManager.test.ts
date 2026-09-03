@@ -50,6 +50,12 @@ function createCanvasMock(
 	}
 	return {
 		id: "canvas-1",
+		getEffectiveContent: vi.fn((elementId: string) =>
+			elements[elementId]?.contents?.find(
+				(content) => content.contentId === elements[elementId]?.activeContentId,
+			),
+		),
+		getEffectiveContentId: vi.fn((elementId: string) => elements[elementId]?.activeContentId),
 		eventEmitter,
 		elementManager: {
 			getElementsDict: vi.fn(() => elements),

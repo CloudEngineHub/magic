@@ -101,6 +101,7 @@ class SkillMarketListItemDTO implements JsonSerializable
         string $packageName = '',
         string $latestVersion = '',
         int $installCount = 0,
+        ?int $totalInstallCount = null,
     ) {
         $this->id = $id;
         $this->code = $skillCode;
@@ -126,7 +127,7 @@ class SkillMarketListItemDTO implements JsonSerializable
         $this->fileUrl = $fileUrl;
         $this->packageName = $packageName;
         $this->latestVersion = $latestVersion;
-        $this->installCount = $installCount;
+        $this->installCount = $totalInstallCount ?? $installCount;
     }
 
     public function jsonSerialize(): array

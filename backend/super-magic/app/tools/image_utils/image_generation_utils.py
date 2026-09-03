@@ -159,6 +159,60 @@ async def resolve_reference_images_to_urls(
     return urls, all_temp_files
 
 
+def get_model_valid_sizes(tool_context: Optional[ToolContext]) -> List[Tuple[int, int]]:
+    """
+    读取当前生效图片模型的合法尺寸列表（宽, 高）。
+
+    数据来源于 agent_context.model_context.image.sizes，该字段由平台通过
+    dynamic_config.image_model.sizes 动态注入，因此不在代码中硬编码具体
+    模型的尺寸表；未配置或解析不出时返回空列表，调用方应将其视为
+    "无约束，透传原值"。
+    """
+    agent_context = tool_context.get_extension("agent_context") if tool_context else None
+    if not agent_context:
+        return []
+
+    valid: List[Tuple[int, int]] = []
+    for spec in agent_context.model_context.image.sizes:
+        value = spec.value
+        if not value or "x" not in value:
+            continue
+        parts = value.split("x")
+        if len(parts) != 2:
+            continue
+        try:
+            w, h = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        if w > 0 and h > 0:
+            valid.append((w, h))
+
+    return valid
+
+
+def snap_to_nearest_valid_size(size_str: str, valid_sizes: List[Tuple[int, int]]) -> str:
+    """
+    将任意 'WxH' 尺寸 snap 到 valid_sizes 中最接近的合法值。
+
+    优先匹配宽高比，其次匹配面积；valid_sizes 为空（当前模型未提供尺寸
+    能力）或 size_str 已在列表内时原样返回，避免对无约束场景做无意义改写。
+    """
+    if not valid_sizes:
+        return size_str
+
+    w, h = int(size_str.split("x")[0]), int(size_str.split("x")[1])
+    if (w, h) in valid_sizes:
+        return size_str
+
+    aspect = w / h
+    area = w * h
+    best = min(
+        valid_sizes,
+        key=lambda s: abs(s[0] / s[1] - aspect) * 10 + abs(s[0] * s[1] - area) / area,
+    )
+    return f"{best[0]}x{best[1]}"
+
+
 async def resolve_size_from_references(
     reference_images: List[str],
     base_dir: Path,

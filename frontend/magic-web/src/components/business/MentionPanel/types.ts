@@ -171,6 +171,8 @@ export interface UploadFileMentionData {
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"
 	upload_error?: string
+	/** Internal marker for canvas clipboard attachments; never promote to project mention. */
+	is_canvas_clipboard?: boolean
 }
 
 export interface CloudFileMentionData {

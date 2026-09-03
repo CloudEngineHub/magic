@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useReducer } from "react"
 import { useCanvas } from "../../providers/CanvasProvider"
 import type { ImageElement } from "../../../runtime/document/types"
 import { useCanvasEvent } from "../canvas"
@@ -12,9 +12,23 @@ import { getActiveImageContent } from "../../../runtime/document/elementContent"
  */
 export function useImageOssSrc(imageElement: ImageElement | null) {
 	const { canvas } = useCanvas()
+	const [, forceUpdate] = useReducer((value: number) => value + 1, 0)
 	const [ossSrc, setOssSrc] = useState<string | undefined>(undefined)
 
-	const path = imageElement ? getActiveImageContent(imageElement).src : undefined
+	useCanvasEvent(
+		"content:previewChanged",
+		({ data }) => {
+			if (imageElement && (!data.elementId || data.elementId === imageElement.id)) {
+				forceUpdate()
+			}
+		},
+		[imageElement?.id],
+	)
+
+	const path = imageElement
+		? ((canvas?.getEffectiveContent(imageElement.id) as { src?: string } | undefined)?.src ??
+			getActiveImageContent(imageElement).src)
+		: undefined
 
 	// 初始同步及 path 变化时只换取 OSS URL，不触发图片解码
 	const syncOssSrc = useCallback(async () => {

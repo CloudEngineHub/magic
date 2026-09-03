@@ -27,7 +27,10 @@ describe("media Content version operations", () => {
 		const update = vi.fn()
 		const context = {
 			data: createAudioData(),
-			canvas: { elementManager: { update } },
+			canvas: {
+				elementManager: { update },
+				permissionManager: { can: vi.fn(() => true) },
+			},
 		} as unknown as AudioElement
 
 		expect(AudioElement.prototype.switchActiveContent.call(context, "audio-1")).toBe(true)
@@ -77,7 +80,10 @@ describe("media Content version operations", () => {
 					{ contentId: "processing", status: GenerationStatus.Processing },
 				],
 			},
-			canvas: { elementManager: { update } },
+			canvas: {
+				elementManager: { update },
+				permissionManager: { can: vi.fn(() => true) },
+			},
 			isGenerating: false,
 		} as unknown as VideoElement
 
@@ -108,10 +114,33 @@ describe("media Content version operations", () => {
 			},
 			canvas: {
 				elementManager: { update },
+				permissionManager: { can: vi.fn(() => true) },
 			},
 		} as unknown as ImageElement
 
 		expect(ImageElement.prototype.deleteActiveContent.call(context)).toBe(false)
 		expect(update).not.toHaveBeenCalled()
 	})
+
+	it.each([
+		["image", ImageElement.prototype],
+		["video", VideoElement.prototype],
+		["audio", AudioElement.prototype],
+	] as const)(
+		"rejects document version mutations for readonly %s elements",
+		(_name, prototype) => {
+			const update = vi.fn()
+			const permissionManager = { can: vi.fn(() => false) }
+			const context = {
+				data: createAudioData(),
+				canvas: { elementManager: { update }, permissionManager },
+			} as unknown as AudioElement
+
+			expect(prototype.switchActiveContent.call(context, "audio-1")).toBe(false)
+			expect(prototype.setMainContent.call(context, "audio-1")).toBe(false)
+			expect(prototype.deleteActiveContent.call(context)).toBe(false)
+			expect(update).not.toHaveBeenCalled()
+			expect(permissionManager.can).toHaveBeenCalledWith("document.write")
+		},
+	)
 })

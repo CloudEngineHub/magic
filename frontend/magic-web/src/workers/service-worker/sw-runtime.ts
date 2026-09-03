@@ -54,7 +54,7 @@ function createAppCacheFeature(
 	return {
 		id: "app-cache",
 		async onInstall() {
-			await precacheStaticAssetsOnInstall()
+			await precacheStaticAssetsOnInstall(cacheRegistration?.appStaticExpirationManager)
 			await enforceAppStaticExpirationAfterPrecache(cacheRegistration)
 		},
 		async onActivate({ sw }) {
@@ -82,7 +82,13 @@ function createAppCacheFeature(
 					event.data?.intervalMs,
 					event.data?.batchSize,
 				)
-				event.waitUntil(warmUpStaticAssetsOnIdle(assets, options))
+				event.waitUntil(
+					warmUpStaticAssetsOnIdle(
+						assets,
+						options,
+						cacheRegistration?.appStaticExpirationManager,
+					),
+				)
 				return true
 			}
 			return false

@@ -19,6 +19,9 @@ const messageEditorProjectFileMentionAlignmentClasses =
 const messageEditorFileMentionAlignmentClasses =
 	"[&_.ProseMirror_.magic-mention[data-mention-node-view='file']]:!align-middle"
 
+const messageEditorFolderMentionAlignmentClasses =
+	"[&_.ProseMirror_.magic-mention[data-mention-node-view='folder']]:!align-middle"
+
 const messageEditorContentParagraphClasses =
 	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:whitespace-pre-wrap [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:leading-[1.5]"
 
@@ -87,18 +90,21 @@ export const messageEditorContentVariants = cva(
 				default: cn(
 					messageEditorProjectFileMentionAlignmentClasses,
 					messageEditorFileMentionAlignmentClasses,
+					messageEditorFolderMentionAlignmentClasses,
 					"[&_.ProseMirror_.magic-mention[data-type='project_file']]:!text-[14px]",
 				),
 				small: cn(
 					"min-h-[78px] text-[13px] leading-4 [&_.ProseMirror]:min-h-[34px]",
 					messageEditorProjectFileMentionAlignmentClasses,
 					messageEditorFileMentionAlignmentClasses,
+					messageEditorFolderMentionAlignmentClasses,
 					"[&_.ProseMirror_.magic-mention[data-type='project_file']]:!text-[13px]",
 				),
 				mobile: cn(
 					"min-h-[78px] text-[13px] leading-4 [&_.ProseMirror]:min-h-[34px]",
 					messageEditorProjectFileMentionAlignmentClasses,
 					messageEditorFileMentionAlignmentClasses,
+					messageEditorFolderMentionAlignmentClasses,
 					"[&_.ProseMirror_.magic-mention[data-type='project_file']]:!text-[13px]",
 				),
 			},

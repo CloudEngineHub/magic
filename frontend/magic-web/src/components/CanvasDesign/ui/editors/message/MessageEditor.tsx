@@ -68,6 +68,8 @@ interface MessageEditorProps {
 	/** 为 true 时外层与编辑区宽度 100% 铺满父级（用于视频生成等较宽面板） */
 	fullWidth?: boolean
 	onPaste?: (event: ClipboardEvent<HTMLDivElement>) => void
+	/** Capture phase is used by the shared Canvas clipboard protocol. */
+	onPasteCapture?: (event: ClipboardEvent<HTMLDivElement>) => void
 }
 
 export interface MessageEditorMentionChangeContext {
@@ -137,6 +139,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			mentionItemsReady = true,
 			fullWidth = false,
 			onPaste,
+			onPasteCapture,
 		} = props
 		const editorContainerRef = useRef<HTMLDivElement>(null)
 		const isInternalChangeRef = useRef(false)
@@ -532,6 +535,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			<div
 				className={rootClassName}
 				onPaste={onPaste}
+				onPasteCapture={onPasteCapture}
 				data-testid="canvas-reference-editor-container"
 			>
 				<div ref={editorContainerRef} className={styles.editorWrapper}>
@@ -642,28 +646,29 @@ function replaceMentionItemsInEditor(
 	matcher: MessageEditorMentionMatcher,
 	item: ReferenceResourcePanelItem,
 ): boolean {
-	const didReplace = runActiveEditor(
-		editor,
-		(activeEditor) => {
-			const targetPositions: number[] = []
-			activeEditor.state.doc.descendants((node, pos) => {
-				if (node.type.name !== "mention") return true
-				if (!matcher(node.attrs as ReferenceResourcePanelItem)) return true
-				targetPositions.push(pos)
+	const didReplace =
+		runActiveEditor(
+			editor,
+			(activeEditor) => {
+				const targetPositions: number[] = []
+				activeEditor.state.doc.descendants((node, pos) => {
+					if (node.type.name !== "mention") return true
+					if (!matcher(node.attrs as ReferenceResourcePanelItem)) return true
+					targetPositions.push(pos)
+					return true
+				})
+
+				if (targetPositions.length === 0) return false
+
+				const tr = activeEditor.state.tr
+				targetPositions.forEach((targetPos) => {
+					tr.setNodeMarkup(targetPos, undefined, item)
+				})
+				activeEditor.view.dispatch(tr)
 				return true
-			})
-
-			if (targetPositions.length === 0) return false
-
-			const tr = activeEditor.state.tr
-			targetPositions.forEach((targetPos) => {
-				tr.setNodeMarkup(targetPos, undefined, item)
-			})
-			activeEditor.view.dispatch(tr)
-			return true
-		},
-		false,
-	)
+			},
+			false,
+		) === true
 
 	if (didReplace) restoreEditorFocusAfterMentionMutation(editor)
 	return didReplace
@@ -674,40 +679,42 @@ function removeMentionItemsInEditor(
 	matcher: MessageEditorMentionMatcher,
 	onSelectionRangeChange?: (selectionRange: MessageEditorSelectionRange) => void,
 ): boolean {
-	const didRemove = runActiveEditor(
-		editor,
-		(activeEditor) => {
-			const targetRanges: Array<{ from: number; to: number }> = []
-			activeEditor.state.doc.descendants((node, pos) => {
-				if (node.type.name !== "mention") return true
-				if (!matcher(node.attrs as ReferenceResourcePanelItem)) return true
+	const didRemove =
+		runActiveEditor(
+			editor,
+			(activeEditor) => {
+				const targetRanges: Array<{ from: number; to: number }> = []
+				activeEditor.state.doc.descendants((node, pos) => {
+					if (node.type.name !== "mention") return true
+					if (!matcher(node.attrs as ReferenceResourcePanelItem)) return true
 
-				const mentionEnd = pos + node.nodeSize
-				const nextNode = activeEditor.state.doc.resolve(mentionEnd).nodeAfter
-				const hasCaretGuard =
-					nextNode?.isText === true && nextNode.text?.startsWith(MENTION_CARET_GUARD_TEXT)
-				targetRanges.push({
-					from: pos,
-					to: mentionEnd + (hasCaretGuard ? MENTION_CARET_GUARD_TEXT.length : 0),
+					const mentionEnd = pos + node.nodeSize
+					const nextNode = activeEditor.state.doc.resolve(mentionEnd).nodeAfter
+					const hasCaretGuard =
+						nextNode?.isText === true &&
+						nextNode.text?.startsWith(MENTION_CARET_GUARD_TEXT)
+					targetRanges.push({
+						from: pos,
+						to: mentionEnd + (hasCaretGuard ? MENTION_CARET_GUARD_TEXT.length : 0),
+					})
+					return true
+				})
+
+				if (targetRanges.length === 0) return false
+
+				const tr = activeEditor.state.tr
+				targetRanges
+					.sort((a, b) => b.from - a.from)
+					.forEach(({ from, to }) => tr.delete(from, to))
+				activeEditor.view.dispatch(tr)
+				onSelectionRangeChange?.({
+					from: activeEditor.state.selection.from,
+					to: activeEditor.state.selection.to,
 				})
 				return true
-			})
-
-			if (targetRanges.length === 0) return false
-
-			const tr = activeEditor.state.tr
-			targetRanges
-				.sort((a, b) => b.from - a.from)
-				.forEach(({ from, to }) => tr.delete(from, to))
-			activeEditor.view.dispatch(tr)
-			onSelectionRangeChange?.({
-				from: activeEditor.state.selection.from,
-				to: activeEditor.state.selection.to,
-			})
-			return true
-		},
-		false,
-	)
+			},
+			false,
+		) === true
 
 	if (didRemove) restoreEditorFocusAfterMentionMutation(editor)
 	return didRemove

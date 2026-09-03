@@ -9,6 +9,7 @@ import type {
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
 } from "@/components/CanvasDesign/public/magic-types"
+import type { CanvasFileElement } from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	CanvasResourceReferenceResolverSnapshot,
 	ResolveCanvasResourceReference,
@@ -47,6 +48,8 @@ import {
 } from "../utils/designResourceReferenceResolver"
 
 interface UseDesignMethodsOptions {
+	/** 将元素投影到当前 Canvas 会话的 effective Content（只读预览时不写回文档） */
+	getContentViewElement?: (element: CanvasFileElement) => CanvasFileElement
 	projectId?: string
 	designProjectId?: string
 	selectedTopic?: Topic | null
@@ -91,6 +94,7 @@ interface UseDesignMethodsOptions {
  */
 export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesignMethods {
 	const {
+		getContentViewElement,
 		projectId,
 		designProjectId,
 		selectedTopic,
@@ -185,6 +189,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	})
 
 	const { addToConversation, downloadFiles } = useConversationAndDownload({
+		getContentViewElement,
 		flatAttachments,
 		attachmentsReady,
 		attachmentIndex,
@@ -217,7 +222,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		[generateHightImage],
 	)
 
-	const { getDataTransferFileInfo } = useDesignFileDropPaths({
+	const { getDataTransferFileInfo, resolveCanvasClipboardReference } = useDesignFileDropPaths({
 		projectId,
 		currentFile,
 		flatAttachments,
@@ -609,6 +614,56 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 
 	// 组合所有方法到 CanvasDesignMethods 接口
 	const methods = useMemo<CanvasDesignMethods>(() => {
+		const materializeCanvasClipboardAsset: NonNullable<
+			CanvasDesignMethods["materializeCanvasClipboardAsset"]
+		> = async (input) => {
+			try {
+				const sourceCanvasId = input.sourceCanvasId?.trim()
+				const targetCanvasId = designProjectId?.trim()
+				const isSameCanvas = Boolean(
+					sourceCanvasId && targetCanvasId && sourceCanvasId === targetCanvasId,
+				)
+				// Legacy payloads did not always carry sourceCanvasId. In that case the
+				// path can still be resolved against the current canvas; an explicit
+				// different source canvas remains blocked to avoid path collisions.
+				const canResolveCurrentCanvasPath = !sourceCanvasId || isSameCanvas
+				let sourceUrl =
+					input.sourceRef?.ossUrl ||
+					(/^https?:\/\//i.test(input.sourceRef?.src ?? "")
+						? input.sourceRef?.src
+						: /^https?:\/\//i.test(input.sourcePath ?? "")
+							? input.sourcePath
+							: undefined)
+				const expires = input.sourceRef?.expiresAt
+				const expiresAt = expires ? Date.parse(expires) : Number.NaN
+				if (
+					(!sourceUrl || (Number.isFinite(expiresAt) && expiresAt <= Date.now())) &&
+					input.sourcePath &&
+					canResolveCurrentCanvasPath
+				) {
+					const refreshed = await getFileInfo(input.sourcePath, {
+						useImageProcess: false,
+						forceRefresh: Number.isFinite(expiresAt) && expiresAt <= Date.now(),
+					})
+					sourceUrl = refreshed?.src
+				}
+				// A path from another canvas must never be resolved through the current
+				// canvas attachment index: an identical relative path could refer to a
+				// different file. Cross-canvas transfers therefore require an inline
+				// Blob or a still-valid signed source URL until the host supplies a
+				// source-canvas resource resolver.
+				if (!sourceUrl) return null
+				const response = await fetch(sourceUrl, { cache: "default" })
+				if (!response.ok) return null
+				const blob = await response.blob()
+				if (blob.size > 200 * 1024 * 1024) return null
+				return new File([blob], input.fileName, {
+					type: blob.type || input.mimeType,
+				})
+			} catch {
+				return null
+			}
+		}
 		return {
 			getImageModelList,
 			completeImagePrompt,
@@ -648,13 +703,21 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			confirmModal,
 			clipboard: {
 				write: clipboard.write,
-				readText: navigator.clipboard?.readText
-					? navigator.clipboard.readText.bind(navigator.clipboard)
-					: undefined,
-				read: navigator.clipboard?.read
-					? navigator.clipboard.read.bind(navigator.clipboard)
-					: undefined,
+				readText:
+					typeof navigator !== "undefined" && navigator.clipboard?.readText
+						? navigator.clipboard.readText.bind(navigator.clipboard)
+						: undefined,
+				read:
+					typeof navigator !== "undefined" && navigator.clipboard?.read
+						? navigator.clipboard.read.bind(navigator.clipboard)
+						: undefined,
 			},
+			materializeCanvasClipboardAsset,
+			getCanvasClipboardContext: () => ({
+				projectId,
+				canvasId: designProjectId,
+			}),
+			resolveCanvasClipboardReference,
 		}
 	}, [
 		getImageModelList,
@@ -678,6 +741,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		uploadFiles,
 		getFileInfo,
 		getFileResourceMeta,
+		designProjectId,
 		resourceReferenceResolverSnapshot,
 		getVirtualResourceScope,
 		addToConversation,
@@ -687,6 +751,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getRootStorage,
 		saveRootStorage,
 		getDataTransferFileInfo,
+		resolveCanvasClipboardReference,
+		projectId,
 		identifyImageMark,
 		uploadPrivateFiles,
 		confirmModal,

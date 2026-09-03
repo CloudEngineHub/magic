@@ -478,11 +478,11 @@
 }
 
 .no-hover,
-.tree-node-content-readonly,
-.tree-node-content-readonly :global(.tree-node-toggle) {
+.tree-node-content-view-only,
+.tree-node-content-view-only :global(.tree-node-toggle) {
 	cursor: unset !important;
 }
 
-.tree-node-content-readonly:active {
+.tree-node-content-view-only:active {
 	background: var(--tailwind-colors-gray-100, #f3f4f6) !important;
 }

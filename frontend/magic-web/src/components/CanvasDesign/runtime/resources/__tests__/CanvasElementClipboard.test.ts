@@ -19,6 +19,19 @@ describe("CanvasElementClipboard", () => {
 		expect(file?.type).toBe("audio/mpeg")
 	})
 
+	it("preserves ordinary document files for message-editor fallback", () => {
+		const documentFile = new File(["document"], "notes.pdf", { type: "application/pdf" })
+		const event = {
+			clipboardData: {
+				types: ["Files"],
+				files: [documentFile],
+				items: [],
+			},
+		} as unknown as ClipboardEvent
+
+		expect(CanvasDesignClipboard.readAllEventFilesSnapshot(event)).toEqual([documentFile])
+	})
+
 	it("ignores generation resource metadata when restoring event files", () => {
 		const generationResourceMetadata: CanvasElementClipboardFileMetadata = {
 			id: "generation-resource:0",
@@ -209,5 +222,48 @@ describe("CanvasElementClipboard", () => {
 		).resolves.toEqual({ type: "empty" })
 
 		expect(read).toHaveBeenCalledTimes(1)
+	})
+
+	it("rejects clipboard payloads with oversized or deeply nested element trees", async () => {
+		const oversizedPayload = {
+			source: "canvas-design-element-clipboard",
+			version: 1,
+			operation: "copy-elements",
+			elements: Array.from({ length: 4097 }, (_, index) => ({
+				id: `element-${index}`,
+				type: "image",
+			})),
+			files: [],
+		}
+		const oversizedItem = {
+			types: [CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE],
+			getType: async () =>
+				({
+					text: async () => JSON.stringify(oversizedPayload),
+				}) as unknown as Blob,
+		} as ClipboardItem
+
+		await expect(CanvasElementClipboard.readPayload([oversizedItem])).resolves.toBeNull()
+
+		let deepElement: Record<string, unknown> = { id: "leaf", type: "image" }
+		for (let depth = 0; depth < 64; depth += 1) {
+			deepElement = { id: `node-${depth}`, type: "frame", children: [deepElement] }
+		}
+		const deepPayload = {
+			source: "canvas-design-element-clipboard",
+			version: 1,
+			operation: "copy-elements",
+			elements: [deepElement],
+			files: [],
+		}
+		const deepItem = {
+			types: [CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE],
+			getType: async () =>
+				({
+					text: async () => JSON.stringify(deepPayload),
+				}) as unknown as Blob,
+		} as ClipboardItem
+
+		await expect(CanvasElementClipboard.readPayload([deepItem])).resolves.toBeNull()
 	})
 })

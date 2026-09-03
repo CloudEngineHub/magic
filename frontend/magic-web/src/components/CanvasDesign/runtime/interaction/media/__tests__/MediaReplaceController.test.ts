@@ -20,7 +20,8 @@ describe("MediaReplaceController", () => {
 		const container = document.createElement("div")
 		const canvas = {
 			container,
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			t: vi.fn((_key: string, fallback: string) => fallback),
 			eventEmitter: {
 				on: vi.fn(() => vi.fn()),
@@ -99,7 +100,8 @@ describe("MediaReplaceController", () => {
 		const replaceMediaElementFromProject = vi.fn(() => true)
 		const canvas = {
 			container: document.createElement("div"),
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			t: vi.fn((_key: string, fallback: string) => fallback),
 			eventEmitter: { on: vi.fn(() => vi.fn()), emit: vi.fn() },
 			elementManager: {
@@ -148,7 +150,8 @@ describe("MediaReplaceController", () => {
 		const container = document.createElement("div")
 		const canvas = {
 			container,
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			t: vi.fn((_key: string, fallback: string) => fallback),
 			eventEmitter: { on: vi.fn(() => vi.fn()), emit: vi.fn() },
 			elementManager: { getElementData: vi.fn(() => elementData) },
@@ -185,7 +188,8 @@ describe("MediaReplaceController", () => {
 		const pause = vi.fn()
 		const canvas = {
 			container: document.createElement("div"),
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			t: vi.fn((_key: string, fallback: string) => fallback),
 			eventEmitter: {
 				on: vi.fn(() => vi.fn()),
@@ -239,7 +243,8 @@ describe("MediaReplaceController", () => {
 		const emit = vi.fn()
 		const canvas = {
 			container: document.createElement("div"),
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			t: vi.fn((_key: string, fallback: string) => fallback),
 			eventEmitter: {
 				on: vi.fn((event: string, handler: (event: { data: any }) => void) => {
@@ -309,7 +314,8 @@ describe("MediaReplaceController", () => {
 		const emit = vi.fn()
 		const canvas = {
 			container: document.createElement("div"),
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			t: vi.fn((_key: string, fallback: string) => fallback),
 			eventEmitter: {
 				on: vi.fn((event: string, handler: (event: { data: any }) => void) => {

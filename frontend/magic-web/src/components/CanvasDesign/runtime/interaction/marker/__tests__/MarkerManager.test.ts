@@ -48,6 +48,7 @@ function createManager(activeContentId = "v2") {
 			canAddImageMarker: vi.fn(() => true),
 			canDeleteMarker: vi.fn(() => false),
 		},
+		getEffectiveContentId: vi.fn(() => image.activeContentId),
 		runtimeScheduler: { requestLayerDraw: vi.fn() },
 	} as unknown as Canvas
 	const manager = new MarkerManager({ canvas })

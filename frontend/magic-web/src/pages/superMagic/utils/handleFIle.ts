@@ -23,7 +23,7 @@ export const getFileType = (file_extension: string) => {
 	}
 
 	// 音频文件
-	if (["mp3", "wav", "ogg", "m4a", "aac", "flac"].includes(ext)) {
+	if (["mp3", "wav", "ogg", "opus", "m4a", "aac", "flac"].includes(ext)) {
 		return "audio"
 	}
 

@@ -168,11 +168,52 @@ describe("recording detail files", () => {
 			"topics",
 			"metrics",
 			"intent",
+			"custom_outline",
 		])
 		expect(result.summaryFiles[2]).toMatchObject({
 			type: "metrics",
 			fileName: "summary/metrics.html",
 		})
+		expect(result.summaryFiles[4]).toMatchObject({
+			type: "custom_outline",
+			fileName: "summary/custom-view.md",
+		})
+	})
+
+	it("keeps configured summary tabs when their files have not arrived yet", () => {
+		const result = buildRecordingDetailFileMap({
+			tree: [],
+			list: [],
+			magicProjectConfig: createMagicProjectConfig({
+				summary: "summary/meeting-summary.md",
+				topics: "summary/topics.md",
+			}),
+		})
+
+		expect(result.summaryFiles.map((file) => file.type)).toEqual(["summary", "topics"])
+		expect(result.summaryFiles[0]?.file?.file_id).toBeUndefined()
+		expect(result.summaryFiles[0]?.fileName).toBe("summary/meeting-summary.md")
+	})
+
+	it("removes summary tabs when magic.project.js removes their configured type", () => {
+		const initial = buildRecordingDetailFileMap({
+			tree: [],
+			list: [],
+			magicProjectConfig: createMagicProjectConfig({
+				summary: "summary/meeting-summary.md",
+				topics: "summary/topics.md",
+			}),
+		})
+		const updated = buildRecordingDetailFileMap({
+			tree: [],
+			list: [],
+			magicProjectConfig: createMagicProjectConfig({
+				summary: "summary/meeting-summary.md",
+			}),
+		})
+
+		expect(initial.summaryFiles.map((file) => file.type)).toEqual(["summary", "topics"])
+		expect(updated.summaryFiles.map((file) => file.type)).toEqual(["summary"])
 	})
 
 	it("falls back to file hints when magic.project.js is absent or incomplete", () => {
@@ -208,6 +249,30 @@ describe("recording detail files", () => {
 		expect(result.transcript?.file_id).toBe("file-transcript-001")
 		expect(result.notes?.file_id).toBe("file-notes-001")
 		expect(result.summaryFiles).toEqual([])
+	})
+
+	it("identifies backend note files without confusing streaming transcripts", () => {
+		const result = buildRecordingDetailFileMap({
+			tree: [],
+			list: [
+				createAttachment({
+					file_id: "file-stream-transcript-001",
+					file_name: "流式识别.md",
+					path: "/流式识别.md",
+					type: "transcript",
+				}),
+				createAttachment({
+					file_id: "file-backend-note-001",
+					file_name: "recording-note.md",
+					path: "/recording-note.md",
+					file_type: "note",
+				}),
+			],
+			magicProjectConfig: createMagicProjectConfig({}),
+		})
+
+		expect(result.transcript?.file_id).toBe("file-stream-transcript-001")
+		expect(result.notes?.file_id).toBe("file-backend-note-001")
 	})
 
 	it("prefers the project audio file id and supports all imported audio extensions", () => {

@@ -104,7 +104,9 @@ interface ProjectMemberRepositoryInterface
         string $sortDirection = 'desc',
         array $creatorUserIds = [],
         ?string $joinMethod = null,
-        array $organizationCodes = []
+        array $organizationCodes = [],
+        int $page = 1,
+        int $pageSize = 10
     ): array;
 
     /**

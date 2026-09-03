@@ -418,7 +418,11 @@ export class MarkerTool extends BaseTool {
 						!this.canvas.permissionManager.isLocked(element)
 					) {
 						// 检查图片是否有 src 且已加载完成
-						if (getActiveImageContent(element).src) {
+						const effectiveContent =
+							(this.canvas.getEffectiveContent?.(element.id) as
+								| ReturnType<typeof getActiveImageContent>
+								| undefined) ?? getActiveImageContent(element)
+						if (effectiveContent.src) {
 							const elementInstance =
 								this.canvas.elementManager.getElementInstance(elementId)
 							if (

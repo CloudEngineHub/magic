@@ -85,6 +85,8 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		additionalExtensions,
 		enableDragHandle = true,
 		enableSearchReplace = true,
+		enableReadonlySearch = false,
+		isTabActive = true,
 		enableCodeBlockWrap = false,
 		isEditable = true,
 		isMobile = false,
@@ -95,6 +97,9 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 	const [mobileView, setMobileView] = React.useState<"main" | "highlighter" | "link">("main")
 	const [showSearchPanel, setShowSearchPanel] = React.useState(false)
 	const enableSearchReplaceRef = React.useRef(enableSearchReplace)
+	const enableReadonlySearchRef = React.useRef(enableReadonlySearch)
+	const isTabActiveRef = React.useRef(isTabActive)
+	const editorRootRef = React.useRef<HTMLDivElement>(null)
 
 	const toolbarRef = React.useRef<HTMLDivElement>(null)
 	const { t } = useTranslation("tiptap")
@@ -139,7 +144,10 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 				const key = event.key?.toLowerCase()
 				const isSearchKey = key === "f" && (event.metaKey || event.ctrlKey) && !event.altKey
 
-				if (!enableSearchReplaceRef.current || !isSearchKey) {
+				const canSearch = _view.editable
+					? enableSearchReplaceRef.current
+					: enableReadonlySearchRef.current && isTabActiveRef.current
+				if (!canSearch || !isSearchKey) {
 					return false
 				}
 
@@ -277,6 +285,42 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		enableSearchReplaceRef.current = enableSearchReplace
 	}, [enableSearchReplace])
 
+	React.useEffect(() => {
+		enableReadonlySearchRef.current = enableReadonlySearch
+	}, [enableReadonlySearch])
+
+	React.useEffect(() => {
+		isTabActiveRef.current = isTabActive
+	}, [isTabActive])
+
+	React.useEffect(() => {
+		if (isEditable || !enableReadonlySearch || !isTabActive) return
+
+		const handleReadonlySearchShortcut = (event: KeyboardEvent) => {
+			if (
+				event.key.toLowerCase() !== "f" ||
+				(!event.metaKey && !event.ctrlKey) ||
+				event.altKey
+			) {
+				return
+			}
+
+			const activeElement = document.activeElement
+			const isTextInput =
+				activeElement instanceof HTMLInputElement ||
+				activeElement instanceof HTMLTextAreaElement ||
+				(activeElement instanceof HTMLElement && activeElement.isContentEditable)
+			if (isTextInput && !editorRootRef.current?.contains(activeElement)) return
+
+			event.preventDefault()
+			event.stopPropagation()
+			setShowSearchPanel(true)
+		}
+
+		window.addEventListener("keydown", handleReadonlySearchShortcut)
+		return () => window.removeEventListener("keydown", handleReadonlySearchShortcut)
+	}, [enableReadonlySearch, isEditable, isTabActive])
+
 	React.useImperativeHandle(
 		ref,
 		() => ({
@@ -377,6 +421,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 
 	return (
 		<div
+			ref={editorRootRef}
 			className={cx(
 				"simple-editor-wrapper",
 				"tiptap-editor-root",
@@ -416,6 +461,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 					<SearchAndReplace
 						editor={editor}
 						visible={showSearchPanel}
+						documentFlow={documentFlow}
 						onClose={() => setShowSearchPanel(false)}
 					/>
 				)}

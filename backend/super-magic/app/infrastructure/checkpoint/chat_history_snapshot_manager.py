@@ -15,9 +15,9 @@
 """
 
 from pathlib import Path
-from agentlang.llms.utils.debug_logger import LLM_REQUEST_LOG_DIR_NAME
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
+from app.service.topic_persistence import get_chat_history_excluded_dir_names
 from app.utils.async_file_utils import (
     async_copy2,
     async_copytree,
@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 
 def _should_skip_chat_history_entry(entry_name: str) -> bool:
     """判断是否应跳过历史遗留的 LLM 调试日志目录。"""
-    return entry_name == LLM_REQUEST_LOG_DIR_NAME
+    return entry_name in get_chat_history_excluded_dir_names()
 
 
 class ChatHistorySnapshotManager:

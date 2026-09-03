@@ -163,7 +163,9 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         string $sortDirection = 'desc',
         array $creatorUserIds = [],
         ?string $joinMethod = null,
-        array $organizationCodes = []
+        array $organizationCodes = [],
+        int $page = 1,
+        int $pageSize = 10
     ): array {
         $query = $this->projectMemberModel::query()
             ->where(function ($query) use ($userId, $departmentIds) {
@@ -213,6 +215,10 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             $query->whereIn('magic_super_agent_project.user_organization_code', $organizationCodes);
         }
 
+        $total = (clone $query)
+            ->distinct()
+            ->count('magic_super_agent_project_members.project_id');
+
         $query->select(
             'magic_super_agent_project_members.project_id',
             'magic_super_agent_project.updated_at',
@@ -244,10 +250,14 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
                 break;
         }
 
-        $results = $query->get()->toArray();
+        $results = $query
+            ->offset(max(0, $page - 1) * $pageSize)
+            ->limit($pageSize)
+            ->get()
+            ->toArray();
 
         return [
-            'total' => count($results),
+            'total' => $total,
             'list' => $results,
         ];
     }
@@ -353,7 +363,11 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             ->where('magic_super_agent_project.user_id', '=', $userId)
             ->where('magic_super_agent_project.user_organization_code', '=', $organizationCode)
             ->where('magic_super_agent_project.is_collaboration_enabled', 1)
-            ->whereNull('magic_super_agent_project.deleted_at');
+            ->whereNull('magic_super_agent_project.deleted_at')
+            ->whereNotIn(
+                'magic_super_agent_project.project_mode',
+                ProjectMode::getQueryFilterModes()
+            );
 
         // 如果有项目名称搜索条件
         if (! empty($name)) {

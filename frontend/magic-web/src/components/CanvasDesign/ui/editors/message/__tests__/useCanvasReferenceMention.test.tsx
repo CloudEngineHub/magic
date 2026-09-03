@@ -133,7 +133,6 @@ type ProviderConfig = Omit<ProviderProps, "children">
 function Providers(props: ProviderProps) {
 	return (
 		<MagicProvider
-			readonly
 			methods={props.methods}
 			projectAttachmentMentionTree={props.tree}
 			defaultProjectAttachmentFolderId={props.folderId}

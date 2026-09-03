@@ -17,6 +17,10 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishTargetType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use App\Domain\SuperMagic\Agent\Event\AgentMarketBatchReindexRequestedEvent;
+use App\Domain\SuperMagic\Agent\Event\AgentMarketPublishedEvent;
+use App\Domain\SuperMagic\Agent\Event\AgentMarketUpdatedEvent;
+use App\Domain\SuperMagic\Agent\Service\AgentMarketVectorIndexDomainService;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentCategoryDomainService;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentMarketDomainService;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentVersionDomainService;
@@ -32,6 +36,7 @@ use App\Interfaces\SuperMagic\Agent\DTO\Request\UpdateAgentMarketRequestAdminDTO
 use App\Interfaces\SuperMagic\Agent\DTO\Response\GetEmployeeDetailResponseDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Response\QueryAgentMarketsResponseAdminDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Response\QueryAgentVersionsResponseAdminDTO;
+use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
 use Qbhy\HyperfAuth\Authenticatable;
@@ -42,6 +47,8 @@ use Throwable;
  */
 class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
 {
+    private const VECTOR_REINDEX_EVENT_BATCH_SIZE = 100;
+
     #[Inject]
     protected SuperMagicAgentCategoryDomainService $superMagicAgentCategoryDomainService;
 
@@ -53,6 +60,9 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
 
     #[Inject]
     protected AdminSuperMagicAgentAssembler $adminSuperMagicAgentAssembler;
+
+    #[Inject]
+    protected AgentMarketVectorIndexDomainService $agentMarketVectorIndexDomainService;
 
     /**
      * 管理后台：分页查询员工（Agent）版本列表.
@@ -120,6 +130,106 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         );
     }
 
+    /** Run the full Agent Market vector reconciliation for an administrator. */
+    public function reindexMarketVectors(Authenticatable $authorization): array
+    {
+        return $this->reconcileMarketVectorIndex($this->createSuperMagicDataIsolation($authorization));
+    }
+
+    /** Clean stale points and queue all eligible Agent Market records. */
+    public function reconcileMarketVectorIndex(SuperMagicAgentDataIsolation $dataIsolation): array
+    {
+        $indexedCount = $this->agentMarketVectorIndexDomainService->countIndexedPoints();
+        $databaseCount = $this->agentMarketVectorIndexDomainService->countVectorIndexRecords();
+        $reconcileSucceeded = true;
+        $removed = 0;
+        try {
+            $removed = $this->agentMarketVectorIndexDomainService->removeOrphanPoints();
+        } catch (Throwable $throwable) {
+            $reconcileSucceeded = false;
+            $this->logger->error('Agent market orphan vector cleanup failed', [
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+
+        $queued = 0;
+        try {
+            $result = $this->reindexAllMarketVectors($dataIsolation);
+            $queued = $result['queued'] ?? 0;
+        } catch (Throwable $throwable) {
+            $reconcileSucceeded = false;
+            $this->logger->error('Agent market vector reconciliation failed', [
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+
+        if ($reconcileSucceeded && $this->agentMarketVectorIndexDomainService->isVectorSearchEnabled()) {
+            $this->agentMarketVectorIndexDomainService->markVectorIndexInitialized();
+        }
+
+        $this->logger->info('Agent market vector reconciliation finished', [
+            'removed_orphans' => $removed,
+            'queued' => $queued,
+            'database_count' => $databaseCount,
+            'indexed_count' => $indexedCount,
+        ]);
+
+        return [
+            'removed_orphans' => $removed,
+            'queued' => $queued,
+            'database_count' => $databaseCount,
+            'indexed_count' => $indexedCount,
+            'skipped' => false,
+        ];
+    }
+
+    /** Queue all eligible market records in batches of 100. */
+    public function reindexAllMarketVectors(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        bool $forceReEmbedding = false,
+    ): array {
+        if (! $this->agentMarketVectorIndexDomainService->isVectorSearchEnabled()) {
+            $this->logger->info('Agent market vector reindex skipped because embedding ability is disabled', [
+                'force_re_embedding' => $forceReEmbedding,
+            ]);
+            return ['task_id' => bin2hex(random_bytes(12)), 'queued' => 0, 'after_id' => '0'];
+        }
+
+        $queued = 0;
+        $afterId = '0';
+        while (true) {
+            $ids = $this->superMagicAgentMarketDomainService->findVectorIndexIds(
+                $afterId,
+                self::VECTOR_REINDEX_EVENT_BATCH_SIZE,
+            );
+            if ($ids === []) {
+                break;
+            }
+
+            AsyncEventUtil::dispatch(new AgentMarketBatchReindexRequestedEvent(
+                array_values(array_map('strval', $ids)),
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+                $forceReEmbedding,
+            ));
+            $queued += count($ids);
+            $lastId = (string) $ids[array_key_last($ids)];
+            if ($lastId === $afterId || count($ids) < self::VECTOR_REINDEX_EVENT_BATCH_SIZE) {
+                $afterId = $lastId;
+                break;
+            }
+            $afterId = $lastId;
+        }
+
+        return [
+            'task_id' => bin2hex(random_bytes(12)),
+            'queued' => $queued,
+            'after_id' => $afterId,
+        ];
+    }
+
     /**
      * 查询当前组织内待审核/已审核的数字员工版本。
      * 仅包含发布到组织或指定成员范围的版本，不包含市场发布版本。
@@ -180,18 +290,9 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
     {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
         $modifier = $dataIsolation->getCurrentUserId();
-        $pendingVersion = $this->superMagicAgentVersionDomainService->findByIdWithoutOrganizationFilter($id);
 
         Db::beginTransaction();
         try {
-            $previousVersion = null;
-            if ($pendingVersion !== null) {
-                $previousVersion = $this->superMagicAgentVersionDomainService->getCurrentVersionByCodeForUpdate(
-                    $dataIsolation,
-                    $pendingVersion->getCode()
-                );
-            }
-
             $versionEntity = $this->superMagicAgentVersionDomainService->reviewOrganizationAgentVersion(
                 $dataIsolation,
                 $id,
@@ -199,23 +300,18 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $modifier,
                 $reviewRemark
             );
-            $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $versionEntity->getCode());
-            if (in_array($versionEntity->getPublishTargetType(), [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)) {
-                $this->publishOrganizationSharedMarketAndSyncShelf($dataIsolation, $versionEntity);
-            } else {
-                // 个人发布仍沿用原有发布范围收口逻辑。
-                $this->syncAgentPublishScopeTransition(
-                    $dataIsolation,
-                    $agentEntity,
-                    $previousVersion,
-                    $versionEntity
-                );
-            }
+            $publishedMarketId = $this->publishOrganizationSharedMarketAndSyncShelf($dataIsolation, $versionEntity);
             Db::commit();
         } catch (Throwable $throwable) {
             Db::rollBack();
             throw $throwable;
         }
+
+        AsyncEventUtil::dispatch(new AgentMarketPublishedEvent(
+            (string) $publishedMarketId,
+            $dataIsolation->getCurrentOrganizationCode(),
+            $modifier,
+        ));
     }
 
     /**
@@ -245,6 +341,15 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         if (! $this->superMagicAgentMarketDomainService->updateSortOrderById($id, $sortOrder)) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
         }
+
+        $market = $this->superMagicAgentMarketDomainService->getById($id);
+        if ($market !== null) {
+            AsyncEventUtil::dispatch(new AgentMarketUpdatedEvent(
+                (string) $id,
+                (string) $market->getOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            ));
+        }
     }
 
     /**
@@ -265,7 +370,8 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
         }
 
-        Db::transaction(function () use ($dataIsolation, $id, $payload): void {
+        Db::beginTransaction();
+        try {
             if (! $this->updateMarketInfo($dataIsolation, $id, $payload)) {
                 ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
             }
@@ -274,7 +380,24 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             if (($payload['is_hidden'] ?? null) === true) {
                 $this->revokeHiddenOrganizationSharedMarket($dataIsolation, $id);
             }
-        });
+
+            Db::commit();
+        } catch (Throwable $throwable) {
+            Db::rollBack();
+            throw $throwable;
+        }
+
+        $eventFields = array_diff(array_keys($payload), ['category_ids']);
+        if ($eventFields !== []) {
+            $market = $this->superMagicAgentMarketDomainService->getById($id);
+            if ($market !== null) {
+                AsyncEventUtil::dispatch(new AgentMarketUpdatedEvent(
+                    (string) $id,
+                    (string) $market->getOrganizationCode(),
+                    $dataIsolation->getCurrentUserId(),
+                ));
+            }
+        }
     }
 
     /**
@@ -301,15 +424,17 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         }
 
         $pendingVersion = $this->superMagicAgentVersionDomainService->findByIdWithoutOrganizationFilter($id);
+        if ($pendingVersion === null) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
+        }
+
+        $publishedMarketId = null;
         Db::beginTransaction();
         try {
-            $previousVersion = null;
-            if ($pendingVersion !== null) {
-                $previousVersion = $this->superMagicAgentVersionDomainService->getCurrentVersionByCodeForUpdate(
-                    $dataIsolation,
-                    $pendingVersion->getCode()
-                );
-            }
+            $previousVersion = $this->superMagicAgentVersionDomainService->getCurrentVersionByCodeForUpdate(
+                $dataIsolation,
+                $pendingVersion->getCode()
+            );
 
             $this->superMagicAgentVersionDomainService->reviewAgentVersion(
                 $dataIsolation,
@@ -319,22 +444,28 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $requestDTO->getPublisherType() ?: null,
                 reviewRemark: $requestDTO->getReviewRemark()
             );
-            $versionEntity = $this->superMagicAgentVersionDomainService->findByIdWithoutOrganizationFilter($id);
-            if ($versionEntity === null) {
-                ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
-            }
-            $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $versionEntity->getCode());
+            $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $pendingVersion->getCode());
             // 市场审核通过后，统一按前后发布目标切换权限。
             $this->syncAgentPublishScopeTransition(
                 $dataIsolation,
                 $agentEntity,
                 $previousVersion,
-                $versionEntity
+                $pendingVersion
             );
+            $market = $this->superMagicAgentMarketDomainService->getPublishedByAgentCode($pendingVersion->getCode());
+            $publishedMarketId = $market?->getId();
             Db::commit();
         } catch (Throwable $throwable) {
             Db::rollBack();
             throw $throwable;
+        }
+
+        if ($publishedMarketId !== null) {
+            AsyncEventUtil::dispatch(new AgentMarketPublishedEvent(
+                (string) $publishedMarketId,
+                (string) $dataIsolation->getCurrentOrganizationCode(),
+                $modifier,
+            ));
         }
     }
 
@@ -406,7 +537,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
     private function publishOrganizationSharedMarketAndSyncShelf(
         SuperMagicAgentDataIsolation $dataIsolation,
         AgentVersionEntity $versionEntity
-    ): void {
+    ): int {
         $marketEntity = $this->superMagicAgentVersionDomainService->publishOrganizationSharedMarket($dataIsolation, $versionEntity);
         $marketId = (int) $marketEntity->getId();
         if ($marketId <= 0) {
@@ -441,6 +572,8 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $permissionIsolation,
             $marketEntity
         );
+
+        return $marketId;
     }
 
     private function revokeHiddenOrganizationSharedMarket(

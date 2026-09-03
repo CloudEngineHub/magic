@@ -93,8 +93,14 @@ export function MentionTooltipWrapper(props: MentionTooltipWrapperProps) {
 	}
 
 	const renderType = getFileMentionRenderType(mediaType)
+	const shouldRenderMediaPreview =
+		mediaSource.isLoading || Boolean(mediaSource.previewUrl) || mediaSource.hasError
 
-	if (mediaType && isFileMentionFeatureEnabled("tooltip", renderType, fileMentionRenderConfig)) {
+	if (
+		mediaType &&
+		isFileMentionFeatureEnabled("tooltip", renderType, fileMentionRenderConfig) &&
+		shouldRenderMediaPreview
+	) {
 		return (
 			<MediaPreviewTooltip
 				mediaType={mediaType}
@@ -105,7 +111,7 @@ export function MentionTooltipWrapper(props: MentionTooltipWrapperProps) {
 				hasError={
 					mediaSource.hasError || (!mediaSource.previewUrl && !mediaSource.isLoading)
 				}
-				errorMessage={t("common.fileUrlFetchFailed", "预览加载失败")}
+				errorMessage={t("common.fileNotFoundOrLoadFailed", "文件不存在或加载错误")}
 				closeLabel={t("common.close", "关闭")}
 				audioLabels={{
 					play: t("common.play", "播放"),

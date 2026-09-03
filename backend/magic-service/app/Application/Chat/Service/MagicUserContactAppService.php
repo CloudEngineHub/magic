@@ -253,6 +253,21 @@ class MagicUserContactAppService extends AbstractAppService
 
         $usersForQueryDepartmentPath = [];
         $usersForQueryJobTitle = [];
+
+        // 工号是组织用户关系字段，按完整工号精确匹配。
+        $departmentUsers = $this->departmentUserDomainService->searchDepartmentUsersByEmployeeNo(
+            $queryDTO->getQuery(),
+            $dataIsolation
+        );
+        // 部门用户实体不包含 user_type；这里只构造后续候选用户所需的最小字段集。
+        $usersForQueryEmployeeNo = array_map(
+            static fn ($entity): array => [
+                'user_id' => $entity->getUserId(),
+                'user_type' => UserType::Human->value,
+            ],
+            $departmentUsers
+        );
+
         // 搜索职位包含搜索词的人
         if ($queryDTO->isQueryByJobTitle()) {
             $departmentUsers = $this->departmentUserDomainService->searchDepartmentUsersByJobTitle($queryDTO->getQuery(), $dataIsolation);
@@ -268,7 +283,7 @@ class MagicUserContactAppService extends AbstractAppService
         $usersByPhoneOrRealName = $this->accountDomainService->searchUserByPhoneOrRealName($queryDTO->getQuery(), $dataIsolation);
 
         // 合并结果
-        $usersForQueryDepartmentPath = array_merge($usersForQueryJobTitle, $usersForQueryDepartmentPath, $usersByNickname, $usersByPhoneOrRealName);
+        $usersForQueryDepartmentPath = array_merge($usersForQueryEmployeeNo, $usersForQueryJobTitle, $usersForQueryDepartmentPath, $usersByNickname, $usersByPhoneOrRealName);
         // 去重
         $usersForQueryDepartmentPath = array_values(array_column($usersForQueryDepartmentPath, null, 'user_id'));
 
@@ -283,6 +298,8 @@ class MagicUserContactAppService extends AbstractAppService
 
         $usersForQueryDepartmentPath = $this->getUserDetailByIds($queryDTO, $authorization);
         $usersForQueryDepartmentPath['items'] = $this->filterDepartmentOrUserHidden($usersForQueryDepartmentPath['items']);
+
+        $this->appendEmployeeNo($usersForQueryDepartmentPath['items']);
 
         return $usersForQueryDepartmentPath;
     }

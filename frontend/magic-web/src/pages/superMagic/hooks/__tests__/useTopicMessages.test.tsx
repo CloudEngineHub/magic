@@ -6,6 +6,7 @@ import { useTopicMessages } from "../useTopicMessages"
 const mockState = vi.hoisted(() => ({
 	nextSyncGeneration: 1,
 	getMessagesByConversationIdMock: vi.fn(),
+	getTopicsStatusMock: vi.fn(),
 	acknowledgeTopicSyncMock: vi.fn(),
 	registerStreamRecoveryOwnerMock: vi.fn(),
 	requestTopicRecoveryMock: vi.fn(),
@@ -93,12 +94,27 @@ const mockState = vi.hoisted(() => ({
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		getMessagesByConversationId: mockState.getMessagesByConversationIdMock,
+		getTopicsStatus: mockState.getTopicsStatusMock,
 	},
 }))
+
+vi.mock("@/pages/superMagic/stores/core/topic", async () => {
+	const actual = await vi.importActual<typeof import("@/pages/superMagic/stores/core/topic")>(
+		"@/pages/superMagic/stores/core/topic",
+	)
+	return {
+		...actual,
+		default: {
+			mergeTopic: vi.fn(),
+		},
+	}
+})
 
 vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: mockState.superMagicStoreMock,
 }))
+
+import defaultTopicStore from "@/pages/superMagic/stores/core/topic"
 
 vi.mock("@/pages/superMagic/stores/optimisticMessageStore", () => ({
 	optimisticMessageStore: {
@@ -140,6 +156,8 @@ describe("useTopicMessages", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getTopicsStatusMock.mockReset()
+		mockState.getTopicsStatusMock.mockResolvedValue({ list: [] })
 		mockState.acknowledgeTopicSyncMock.mockReset()
 		mockState.registerStreamRecoveryOwnerMock.mockReset()
 		mockState.requestTopicRecoveryMock.mockReset()
@@ -166,6 +184,7 @@ describe("useTopicMessages", () => {
 		mockState.optimisticStatuses.clear()
 		mockState.clearActiveRevokedAnchor.mockReset()
 		mockState.clearHiddenRevokedOptimisticMessageIds.mockReset()
+		vi.mocked(defaultTopicStore.mergeTopic).mockReset()
 		mockState.pubsubHandlers.clear()
 		mockState.recoveryOwner = undefined
 		mockState.recoveryTimers.forEach((timer) => clearTimeout(timer))
@@ -1628,6 +1647,65 @@ describe("useTopicMessages", () => {
 			}),
 		)
 		expect(mockState.superMagicStoreMock.beginTopicSync).not.toHaveBeenCalled()
+		expect(mockState.getTopicsStatusMock).not.toHaveBeenCalled()
+	})
+
+	it("syncs topic status after foreground reconciliation when local status is still running", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValue({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		mockState.getTopicsStatusMock.mockResolvedValue({
+			list: [
+				{
+					id: "topic-1",
+					status: "finished",
+					has_unread: false,
+				},
+			],
+		})
+		renderHook(() =>
+			useTopicMessages({ selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }) }),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+		mockState.getMessagesByConversationIdMock.mockClear()
+		mockState.getTopicsStatusMock.mockClear()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getTopicsStatusMock).toHaveBeenCalledWith({
+			topic_ids: ["topic-1"],
+		})
+		expect(defaultTopicStore.mergeTopic).toHaveBeenCalledWith(
+			"topic-1",
+			expect.objectContaining({
+				task_status: TaskStatus.FINISHED,
+				status: TaskStatus.FINISHED,
+			}),
+		)
 	})
 
 	it("resumes a scheduled checkpoint recovery instead of starting foreground pagination", async () => {

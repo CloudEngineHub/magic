@@ -10,7 +10,7 @@ export interface SizeInputProps {
 	height: number
 	isLocked?: boolean
 	isAutoFill?: boolean
-	readonly?: boolean
+	disabled?: boolean
 	maxWidth?: number
 	maxHeight?: number
 	onWidthChange?: (value: number) => void
@@ -27,7 +27,7 @@ export default function SizeInput({
 	height,
 	isLocked = false,
 	isAutoFill = false,
-	readonly = false,
+	disabled = false,
 	maxWidth,
 	maxHeight,
 	onWidthChange,
@@ -105,7 +105,7 @@ export default function SizeInput({
 	// 处理宽度变化
 	const handleWidthChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			if (readonly) return
+			if (disabled) return
 
 			const newValue = e.target.value
 			setWidthInput(newValue)
@@ -114,13 +114,13 @@ export default function SizeInput({
 				applyWidthCommit(Number.parseInt(newValue, 10))
 			}
 		},
-		[readonly, commitOnInput, applyWidthCommit],
+		[disabled, commitOnInput, applyWidthCommit],
 	)
 
 	// 处理高度变化
 	const handleHeightChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			if (readonly) return
+			if (disabled) return
 
 			const newValue = e.target.value
 			setHeightInput(newValue)
@@ -129,12 +129,12 @@ export default function SizeInput({
 				applyHeightCommit(Number.parseInt(newValue, 10))
 			}
 		},
-		[readonly, commitOnInput, applyHeightCommit],
+		[disabled, commitOnInput, applyHeightCommit],
 	)
 
 	// 处理宽度输入框失焦（未开启 commitOnInput 时在此提交）
 	const handleWidthBlur = useCallback(() => {
-		if (readonly) return
+		if (disabled) return
 
 		if (widthInput === "" || Number.isNaN(Number.parseInt(widthInput, 10))) {
 			setWidthInput(Math.round(width).toString())
@@ -142,11 +142,11 @@ export default function SizeInput({
 			applyWidthCommit(Number.parseInt(widthInput, 10))
 		}
 		onWidthBlur?.()
-	}, [readonly, widthInput, width, applyWidthCommit, onWidthBlur])
+	}, [disabled, widthInput, width, applyWidthCommit, onWidthBlur])
 
 	// 处理高度输入框失焦
 	const handleHeightBlur = useCallback(() => {
-		if (readonly) return
+		if (disabled) return
 
 		if (heightInput === "" || Number.isNaN(Number.parseInt(heightInput, 10))) {
 			setHeightInput(Math.round(height).toString())
@@ -154,11 +154,11 @@ export default function SizeInput({
 			applyHeightCommit(Number.parseInt(heightInput, 10))
 		}
 		onHeightBlur?.()
-	}, [readonly, heightInput, height, applyHeightCommit, onHeightBlur])
+	}, [disabled, heightInput, height, applyHeightCommit, onHeightBlur])
 
 	// 切换锁定状态
 	const handleToggleLock = useCallback(() => {
-		if (readonly) return
+		if (disabled) return
 
 		// 更新当前的宽高比
 		if (width > 0 && height > 0) {
@@ -166,51 +166,49 @@ export default function SizeInput({
 		}
 
 		onToggleLock?.()
-	}, [readonly, width, height, onToggleLock])
+	}, [disabled, width, height, onToggleLock])
 
 	return (
 		<div className={`${styles.size} ${isAutoFill ? styles.autoFill : ""}`}>
 			<div
-				className={`${styles.inputWrapper} ${readonly ? styles.readonly : ""} ${
+				className={`${styles.inputWrapper} ${disabled ? styles.disabled : ""} ${
 					isAutoFill ? styles.autoFillWrapper : ""
 				}`}
 			>
 				<span className={styles.label}>{t("elementTools.size.width", "宽")}</span>
 				<Input
-					className={`${styles.input} ${readonly ? styles.readonly : ""}`}
+					className={`${styles.input} ${disabled ? styles.disabled : ""}`}
 					type="number"
 					min={0}
 					max={maxWidth}
 					value={widthInput}
 					onChange={handleWidthChange}
 					onBlur={handleWidthBlur}
-					readOnly={readonly}
-					disabled={readonly}
+					disabled={disabled}
 				/>
 			</div>
-			{!readonly && (
+			{!disabled && (
 				<IconButton className={styles.link} onClick={handleToggleLock} selected={isLocked}>
 					{isLocked ? <Link2 size={16} /> : <Unlink2 size={16} />}
 				</IconButton>
 			)}
 			<div
-				className={`${styles.inputWrapper} ${readonly ? styles.readonly : ""} ${
+				className={`${styles.inputWrapper} ${disabled ? styles.disabled : ""} ${
 					isAutoFill ? styles.autoFillWrapper : ""
 				}`}
 			>
-				<span className={`${styles.label} ${readonly ? styles.disabled : ""}`}>
+				<span className={`${styles.label} ${disabled ? styles.disabled : ""}`}>
 					{t("elementTools.size.height", "高")}
 				</span>
 				<Input
-					className={`${styles.input} ${readonly ? styles.readonly : ""}`}
+					className={`${styles.input} ${disabled ? styles.disabled : ""}`}
 					type="number"
 					min={0}
 					max={maxHeight}
 					value={heightInput}
 					onChange={handleHeightChange}
 					onBlur={handleHeightBlur}
-					readOnly={readonly}
-					disabled={readonly}
+					disabled={disabled}
 				/>
 			</div>
 		</div>

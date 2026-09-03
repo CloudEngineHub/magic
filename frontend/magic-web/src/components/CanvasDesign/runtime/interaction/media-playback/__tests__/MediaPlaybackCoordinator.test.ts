@@ -34,6 +34,7 @@ describe("MediaPlaybackCoordinator", () => {
 			mainContentId: "video-1-content",
 		}
 		element.canvas = {
+			permissionManager: { can: vi.fn(() => true) },
 			mediaPlaybackCoordinator: { preparePlayback },
 			videoPlaybackManager: { handoff, acquire },
 		}
@@ -52,6 +53,7 @@ describe("MediaPlaybackCoordinator", () => {
 
 	it("pauses other audio and video sessions before playback", () => {
 		const pauseAllAudio = vi.fn()
+		const pauseAllVideo = vi.fn()
 		const firstPause = vi.fn()
 		const secondPause = vi.fn()
 		const firstVideo = Object.create(VideoElement.prototype) as VideoElement
@@ -64,6 +66,7 @@ describe("MediaPlaybackCoordinator", () => {
 				pauseAll: pauseAllAudio,
 				releaseAll: vi.fn(),
 			},
+			videoPlaybackManager: { pauseAll: pauseAllVideo },
 			elementManager: {
 				getAllElementIds: () => ["video-1", "video-2"],
 				getElementInstance: (elementId: string) =>
@@ -75,6 +78,7 @@ describe("MediaPlaybackCoordinator", () => {
 		coordinator.preparePlayback("video-1")
 
 		expect(pauseAllAudio).toHaveBeenCalledWith("video-1")
+		expect(pauseAllVideo).toHaveBeenCalledWith("video-1")
 		expect(firstPause).not.toHaveBeenCalled()
 		expect(secondPause).toHaveBeenCalledTimes(1)
 	})
@@ -83,6 +87,7 @@ describe("MediaPlaybackCoordinator", () => {
 		let handleDeselect!: () => void
 		const unsubscribe = vi.fn()
 		const pauseAllAudio = vi.fn()
+		const pauseAllVideo = vi.fn()
 		const releaseAllAudio = vi.fn()
 		const canvas = {
 			eventEmitter: {
@@ -95,6 +100,7 @@ describe("MediaPlaybackCoordinator", () => {
 				pauseAll: pauseAllAudio,
 				releaseAll: releaseAllAudio,
 			},
+			videoPlaybackManager: { pauseAll: pauseAllVideo },
 			elementManager: {
 				getAllElementIds: () => [],
 				getElementInstance: vi.fn(),
@@ -105,6 +111,7 @@ describe("MediaPlaybackCoordinator", () => {
 		handleDeselect()
 
 		expect(pauseAllAudio).toHaveBeenCalledWith(undefined)
+		expect(pauseAllVideo).toHaveBeenCalledWith(undefined)
 		expect(releaseAllAudio).toHaveBeenCalledWith(undefined, { preserveMetadata: true })
 		coordinator.destroy()
 		expect(unsubscribe).toHaveBeenCalledTimes(1)

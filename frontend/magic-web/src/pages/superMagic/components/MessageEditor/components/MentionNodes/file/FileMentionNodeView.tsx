@@ -1,4 +1,4 @@
-import { NodeViewWrapper } from "@tiptap/react"
+import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
 import { useCallback, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
@@ -61,9 +61,13 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		[deleteNode],
 	)
 
-	const fallbackIcon = mediaType ? (
-		<MagicFileIcon type={data.file_extension} size={16} className="shrink-0" />
-	) : null
+	const fileIcon = (
+		<MagicFileIcon
+			type={data.file_extension || fileName.split(".").pop() || ""}
+			size={16}
+			className="shrink-0"
+		/>
+	)
 	const showIcon = isFileMentionFeatureEnabled(
 		"icon",
 		getFileMentionRenderType(mediaType),
@@ -79,13 +83,16 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 	const thumbnail =
 		showIcon && mediaType ? (
 			<MediaPreviewThumbnail
-				mediaType={mediaType!}
+				mediaType={mediaType}
 				thumbnailUrl={mediaUrl}
 				alt={fileName}
-				fallback={fallbackIcon}
+				fallback={fileIcon}
 				className="size-4 shrink-0 rounded object-cover"
 			/>
-		) : null
+		) : (
+			fileIcon
+		)
+	const shouldRenderMediaPreview = isLoading || Boolean(mediaUrl) || hasError
 
 	const visual = (
 		<span
@@ -118,7 +125,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 				<span className="relative z-10 flex shrink-0 items-center">{thumbnail}</span>
 			)}
 			<span className="relative z-10 min-w-0 truncate" title={fileName}>
-				@{fileName}
+				{fileName}
 			</span>
 			{isUploading && (
 				<span
@@ -149,27 +156,28 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		</span>
 	)
 
-	const content = showMediaTooltip ? (
-		<MediaPreviewTooltip
-			mediaType={mediaType!}
-			fileName={fileName}
-			previewUrl={mediaUrl}
-			audioUrl={mediaSource.audioUrl}
-			isLoading={isLoading}
-			hasError={hasError || Boolean(mediaType && !mediaUrl && !isLoading)}
-			errorMessage={t("filePreview.loadFailed", "预览加载失败")}
-			closeLabel={t("filePreview.close", "关闭预览")}
-			audioLabels={{
-				play: t("filePreview.play", "播放"),
-				pause: t("filePreview.pause", "暂停"),
-				progress: t("filePreview.progress", "播放进度"),
-			}}
-		>
-			{visual}
-		</MediaPreviewTooltip>
-	) : (
-		visual
-	)
+	const content =
+		showMediaTooltip && mediaType && shouldRenderMediaPreview ? (
+			<MediaPreviewTooltip
+				mediaType={mediaType}
+				fileName={fileName}
+				previewUrl={mediaUrl}
+				audioUrl={mediaSource.audioUrl}
+				isLoading={isLoading}
+				hasError={hasError || Boolean(mediaType && !mediaUrl && !isLoading)}
+				errorMessage={t("common.fileNotFoundOrLoadFailed", "文件不存在或加载错误")}
+				closeLabel={t("filePreview.close", "关闭预览")}
+				audioLabels={{
+					play: t("filePreview.play", "播放"),
+					pause: t("filePreview.pause", "暂停"),
+					progress: t("filePreview.progress", "播放进度"),
+				}}
+			>
+				{visual}
+			</MediaPreviewTooltip>
+		) : (
+			visual
+		)
 
 	return (
 		<NodeViewWrapper

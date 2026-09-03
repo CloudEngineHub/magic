@@ -190,15 +190,19 @@ class WaitGenerationService:
             if element is not None:
                 CanvasElementSizingService.apply(element, output_dimensions)
             detail = CanvasApplicationOperations.get_content_detail(metadata, record.element_id, record.content_id)
-            if final_status == "failed":
-                ContentMetadataService.clear_public_request(metadata, record.element_id, record.content_id)
             detail_update = {
                 **detail,
                 "generationStatus": final_status,
                 "outputUri": query_result.output_uri,
                 "errorMessage": query_result.error_message,
             }
-            if final_status == "completed" and find_generation_request(detail) is None:
+            if record.element_type == "video":
+                detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                    detail.get("videoGenerationResultMeta") or {},
+                    query_result.result_metadata,
+                    final_status,
+                )
+            if find_generation_request(detail) is None:
                 parameters = detail.get("generationParameters") or {}
                 if isinstance(parameters, dict):
                     from pathlib import Path

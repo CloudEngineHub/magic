@@ -336,19 +336,29 @@ export class CanvasResourceUrlWarmupManager {
 
 	private collectResourceRefs(element: LayerElement): WarmupResourceRef[] {
 		const refs: WarmupResourceRef[] = []
-		if (element.type === ElementTypeEnum.Image && getActiveImageContent(element).src) {
+		const effectiveContent = this.canvas.getEffectiveContent(element.id) as
+			| { src?: string }
+			| undefined
+		// warmupDocument runs before ElementManager has loaded the document, so the
+		// input snapshot is the only available source during initial registration.
+		const imageSrc =
+			effectiveContent?.src ??
+			(element.type === ElementTypeEnum.Image
+				? getActiveImageContent(element).src
+				: undefined)
+		if (element.type === ElementTypeEnum.Image && imageSrc) {
 			refs.push({
 				elementId: element.id,
-				path: getActiveImageContent(element).src as string,
+				path: imageSrc,
 				mediaType: "image",
 			})
 		}
 		if (element.type === ElementTypeEnum.Video) {
-			const activeContent = getActiveContent(element)
-			if (!activeContent?.src) return refs
+			const videoSrc = effectiveContent?.src ?? getActiveContent(element)?.src
+			if (!videoSrc) return refs
 			refs.push({
 				elementId: element.id,
-				path: activeContent.src,
+				path: videoSrc,
 				mediaType: "video",
 			})
 		}
