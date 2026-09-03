@@ -45,9 +45,16 @@ class CanvasApplicationOperations:
         return ContentMetadataService.merge_generation_override(element_type, original, override)
 
     @staticmethod
-    def start_retry_detail(element_id: str, detail: dict[str, Any], retry_count: int, parameters: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
+    def start_retry_detail(element_id: str, detail: dict[str, Any], retry_count: int, parameters: dict[str, Any], idempotency_key: str, element_type: str | None = None) -> dict[str, Any]:
         """归档上一次终态并创建新的重试详情。"""
-        return ContentMetadataService.start_retry(element_id, detail, retry_count, parameters, idempotency_key)
+        return ContentMetadataService.start_retry(
+            element_id,
+            detail,
+            retry_count,
+            parameters,
+            idempotency_key,
+            element_type=element_type,
+        )
 
     @staticmethod
     def apply_generation_result(result_applier: CanvasGenerationResultApplier, project: CanvasProject, element_id: str, content_id: str, status: str, output_uri: str | None, error_message: str | None) -> None:
