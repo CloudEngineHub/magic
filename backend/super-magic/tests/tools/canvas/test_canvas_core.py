@@ -193,6 +193,10 @@ class MockSynchronousGenerationPort:
 
     execution_mode = "sync"
 
+    async def resolve_request_metadata(self, request, tool_context):
+        """返回提交前即可确定的图片模型和生成模式。"""
+        return {"model_id": "mock-image-model", "mode": "generate"}
+
     async def submit(self, request, tool_context):
         """返回固定的工作区相对图片路径。"""
         return GenerationSubmission("sync", "completed", output_uri="mock/images/result.png")
@@ -341,6 +345,9 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     image = project.canvas.get_element(image_result["items"][0]["element_id"])
     video = project.canvas.get_element(video_result["items"][0]["element_id"])
     assert image.get_content(image.active_content_id).fields.src == "mock/images/result.png"
+    sidecar = await repository.read_sidecar("mock-project")
+    image_detail = sidecar["elements"][image.element_id]["contentDetails"][image.active_content_id]
+    assert image_detail["generateImageRequest"]["model_id"] == "mock-image-model"
     assert video_result["items"][0]["generation_task_id"] == "canvas-task-1"
     assert waited["items"][0]["status"] == "completed"
     assert waited_again["items"][0]["already_finalized"] is True

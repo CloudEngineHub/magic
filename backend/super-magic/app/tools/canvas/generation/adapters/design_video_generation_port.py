@@ -46,6 +46,14 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         self._workspace_directories = CanvasWorkspaceDirectoryManager(workspace)
         self._file_readiness = CanvasFileReadinessChecker(workspace)
 
+    async def resolve_request_metadata(self, request: GenerationRequest, tool_context: ToolContext | None) -> dict[str, object]:
+        """在提交前解析视频最终模型、输入模式和任务类型。"""
+        return {
+            "model_id": self._payload_builder.resolve_model_id(request.parameters, tool_context),
+            "input_mode": self._payload_builder.resolve_input_mode(request.parameters),
+            "task": request.parameters.task or "generate",
+        }
+
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """提交 Design 视频任务并保存服务返回的视频 ID。"""
         provider_task_id = f"vid_{uuid.uuid4().hex[:16]}"
