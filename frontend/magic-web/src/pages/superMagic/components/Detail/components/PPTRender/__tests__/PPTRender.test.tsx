@@ -135,11 +135,13 @@ vi.mock("../PPTControlBar", () => ({
 	PPTControlBar: ({
 		scaleRatio,
 		onScaleChange,
+		onReplaceTemplate,
 	}: {
 		scaleRatio: number
 		onScaleChange: (scale: number) => void
+		onReplaceTemplate?: () => void
 	}) => {
-		mockState.pptControlBarProps({ scaleRatio, onScaleChange })
+		mockState.pptControlBarProps({ scaleRatio, onScaleChange, onReplaceTemplate })
 		return (
 			<div data-testid="ppt-control-bar">
 				<span data-testid="ppt-control-bar-scale">{scaleRatio}</span>
@@ -583,6 +585,17 @@ describe("PPTRender", () => {
 		await waitFor(() => {
 			expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 				expect.objectContaining({ manualScale: 0.44 }),
+			)
+		})
+	})
+
+	it("passes template replacement through the bottom control bar", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+
+		await waitFor(() => {
+			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
+				expect.objectContaining({ onReplaceTemplate: expect.any(Function) }),
 			)
 		})
 	})

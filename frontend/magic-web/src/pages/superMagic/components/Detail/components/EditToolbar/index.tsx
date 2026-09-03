@@ -1,14 +1,6 @@
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import {
-	AlertTriangle,
-	Crosshair,
-	LayoutTemplate,
-	Maximize,
-	Minimize,
-	RefreshCw,
-	Share2,
-} from "lucide-react"
+import { AlertTriangle, Crosshair, Maximize, Minimize, RefreshCw, Share2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
@@ -127,8 +119,6 @@ export interface EditToolbarProps {
 	onStartInspectorAppend?: () => void
 	/** AI 选取是否正在进行中 */
 	isAppendPicking?: boolean
-	/** 打开现有 PPT 模板选择器并替换整本 PPT */
-	onReplaceTemplate?: () => void
 }
 
 function EditToolbar({
@@ -171,7 +161,6 @@ function EditToolbar({
 	onStartInspector,
 	onStartInspectorAppend,
 	isAppendPicking = false,
-	onReplaceTemplate,
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
 	const { emitFullscreenToggle } = usePPTEventBus()
@@ -535,7 +524,6 @@ function EditToolbar({
 	const showServerUpdateButton = isEditMode && hasServerUpdate
 	const showAIOptimizationButton = showAIOptimization && !isEditMode
 	const showFileEditButtons = showFileEdit
-	const showReplaceTemplateButton = Boolean(onReplaceTemplate) && !isEditMode && isNewestVersion
 	const showVersionHistorySelector =
 		showVersionHistory && !isEditMode && fileId && onVersionChange && fetchFileVersions
 	const showRefreshButton = showRefresh && !isEditMode && onRefresh
@@ -586,10 +574,7 @@ function EditToolbar({
 						(showRefreshButton ||
 							showServerUpdateButton ||
 							showAIOptimizationButton ||
-							showFileEditButtons ||
-							showReplaceTemplateButton) && (
-							<div className="mx-1 h-4 w-px bg-border" />
-						)}
+							showFileEditButtons) && <div className="mx-1 h-4 w-px bg-border" />}
 
 					{/* 服务端更新提示按钮 */}
 					{showServerUpdateButton && (
@@ -611,17 +596,6 @@ function EditToolbar({
 							attachmentList={attachmentList}
 							fileId={fileId}
 							onStartInspector={onStartInspector}
-						/>
-					)}
-
-					{showReplaceTemplateButton && (
-						<ActionButton
-							data-testid="ppt-template-replacement-button"
-							icon={<LayoutTemplate size={16} />}
-							onClick={onReplaceTemplate}
-							title={t("ppt.templateReplacement.button")}
-							text={t("ppt.templateReplacement.button")}
-							showText={shouldShowButtonText}
 						/>
 					)}
 

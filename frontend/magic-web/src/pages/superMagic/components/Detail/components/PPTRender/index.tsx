@@ -930,11 +930,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												store.updateSlideContents(newContents)
 											}}
 											allowEdit={effectiveAllowEdit}
-											onReplaceTemplate={
-												effectiveAllowEdit
-													? handleOpenTemplateReplacement
-													: undefined
-											}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)
 											}
@@ -987,6 +982,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										onRefreshSlides={handleRefreshAllSlides}
 										onJumpToPage={handleJumpToPage}
 										onToggleFullscreen={togglePresentationFullscreen}
+										onReplaceTemplate={
+											canReplaceTemplate
+												? handleOpenTemplateReplacement
+												: undefined
+										}
 										scaleRatio={activeSlideScaleRatio}
 										onScaleChange={handleManualScaleChange}
 										onResetScale={() => handleManualScaleChange(null)}
