@@ -276,20 +276,25 @@ function TopicMessagePanel({
 		scopedProjectFilesStore,
 	])
 
-	const messagesWithOptimisticMeta = messages.map((message) => {
-		const optimisticStatus = optimisticMessageStore.getStatus(
-			selectedTopic?.chat_topic_id,
-			message?.app_message_id,
-		)
-		if (!optimisticStatus) return message
+	const currentTopicId = selectedTopic?.chat_topic_id
+	const topicOptimisticMessages = currentTopicId
+		? optimisticMessageStore.topicOptimisticMap[currentTopicId]
+		: undefined
+	const messagesWithOptimisticMeta = useMemo(() => {
+		return messages.map((message) => {
+			const optimisticStatus = currentTopicId
+				? topicOptimisticMessages?.[message?.app_message_id || ""]?.status
+				: undefined
+			if (!optimisticStatus) return message
 
-		return {
-			...message,
-			optimisticMeta: {
-				status: optimisticStatus,
-			},
-		}
-	})
+			return {
+				...message,
+				optimisticMeta: {
+					status: optimisticStatus,
+				},
+			}
+		})
+	}, [currentTopicId, messages, topicOptimisticMessages])
 
 	useLayoutEffect(() => {
 		if (!shouldScrollAfterRetryRef.current) return

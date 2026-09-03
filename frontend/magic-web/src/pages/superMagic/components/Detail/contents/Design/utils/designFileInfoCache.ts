@@ -55,14 +55,13 @@ const MAX_INVALIDATED_PATH_CACHE_KEYS = 4096
 const DEFAULT_TTL_MS = 15 * 60 * 1000
 // 上传已保存但附件树尚未刷回时的短期桥接窗口。
 const OPTIMISTIC_UPLOAD_CACHE_TTL_MS = 15 * 1000
-// 旧 localStorage 存储 key：仅用于一次性迁移到 IndexedDB，后续不再写入这个大 JSON。
+// 旧 file-info localStorage key：仅用于清理历史缓存，不再迁移这个大 JSON。
 const FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache:v3"
 const LEGACY_FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache"
-const FILE_INFO_CACHE_PAYLOAD_VERSION = 3 as const
 
 /** 是否启用换链结果缓存：为 false 时不读内存命中、不写内存/持久化，可用于强制每次拉新 URL */
 let cacheEnabled = true
-/** 旧 localStorage 冷启动数据是否已尝试迁移：只执行一次，避免每次 getFileInfo 都解析持久化 JSON */
+/** 旧 localStorage 冷启动数据是否已处理：只执行一次，避免每次 getFileInfo 都访问存储 */
 let storageCacheLoaded = false
 /** IndexedDB 持续异常时停止读持久化缓存，避免失效墓碑集合无限增长。 */
 let indexedDbCacheReadsDisabled = false
@@ -71,8 +70,6 @@ interface CacheEntry {
 	fileInfo: GetFileInfoResponse
 	/** 写入时 getTemporaryDownloadUrl 自动 download_mode 水印语义，与 getPreviewFileUrlWatermarkSignature() 一致 */
 	previewWatermarkSignature: string
-	/** 当前 designProject 附件列表快照；目录移动时即使 file_id 不变，也要让旧 URL 整批失效 */
-	attachmentsSnapshotKey?: string
 	// 当接口未返回 expires_at 时，使用写入时间 + DEFAULT_TTL_MS 兜底过期
 	cachedAt?: number
 	// 记录当前 path 在最近一次解析时对应的 file_id，用于识别“同路径文件被替换”
@@ -82,11 +79,6 @@ interface CacheEntry {
 	// 上传完成但附件快照尚未刷新时，允许短暂命中当前 path。
 	allowMissingAttachment?: boolean
 	optimisticMissingAttachmentAllowedUntil?: number
-}
-
-interface PersistedFileInfoCachePayload {
-	version: typeof FILE_INFO_CACHE_PAYLOAD_VERSION
-	entries: Record<string, CacheEntry>
 }
 
 type FileUrlRendition = "raw" | "image-process"
@@ -231,10 +223,6 @@ function buildScopedPathKey(
 	return `${namespace}\0${normalizedPath}\0${rendition}`
 }
 
-function hasScopedPathRendition(cacheKey: string): boolean {
-	return cacheKey.endsWith("\0raw") || cacheKey.endsWith("\0image-process")
-}
-
 function resolveFileUrlRendition(
 	useImageProcess: boolean | undefined,
 	fileSize: number | undefined,
@@ -330,7 +318,6 @@ function setMemoryCache(
 	fileInfo: GetFileInfoResponse,
 	resolvedFileId?: string,
 	previewWatermarkSignature: string = getPreviewFileUrlWatermarkSignature(),
-	attachmentsSnapshotKey?: string,
 	options?: { allowMissingAttachment?: boolean },
 ): void {
 	const now = Date.now()
@@ -339,7 +326,6 @@ function setMemoryCache(
 	fileInfoCache.set(cacheKey, {
 		fileInfo,
 		previewWatermarkSignature,
-		attachmentsSnapshotKey,
 		resolvedFileId,
 		...(fileInfo.resource_version
 			? { resolvedResourceVersion: fileInfo.resource_version }
@@ -350,7 +336,7 @@ function setMemoryCache(
 					optimisticMissingAttachmentAllowedUntil: now + OPTIMISTIC_UPLOAD_CACHE_TTL_MS,
 				}
 			: {}),
-		...(fileInfo.expires_at ? {} : { cachedAt: now }),
+		cachedAt: now,
 	})
 	invalidatedPathCacheKeys.delete(cacheKey)
 	trimFileInfoMemoryCache()
@@ -419,16 +405,11 @@ function buildIndexedDbEntry(cacheKey: string, entry: CacheEntry): DesignFileInf
 		normalizedPath,
 		fileInfo: entry.fileInfo,
 		previewWatermarkSignature: entry.previewWatermarkSignature,
-		...(entry.attachmentsSnapshotKey
-			? { attachmentsSnapshotKey: entry.attachmentsSnapshotKey }
-			: {}),
-		...(entry.cachedAt !== undefined ? { cachedAt: entry.cachedAt } : {}),
+		cachedAt: entry.cachedAt ?? now,
 		...(entry.resolvedFileId ? { resolvedFileId: entry.resolvedFileId } : {}),
 		...(entry.resolvedResourceVersion
 			? { resolvedResourceVersion: entry.resolvedResourceVersion }
 			: {}),
-		updatedAt: now,
-		lastAccessedAt: now,
 	}
 }
 
@@ -436,10 +417,7 @@ function toMemoryCacheEntry(entry: DesignFileInfoIndexedDbEntry): CacheEntry {
 	return {
 		fileInfo: entry.fileInfo,
 		previewWatermarkSignature: entry.previewWatermarkSignature,
-		...(entry.attachmentsSnapshotKey
-			? { attachmentsSnapshotKey: entry.attachmentsSnapshotKey }
-			: {}),
-		...(entry.cachedAt !== undefined ? { cachedAt: entry.cachedAt } : {}),
+		cachedAt: entry.cachedAt,
 		...(entry.resolvedFileId ? { resolvedFileId: entry.resolvedFileId } : {}),
 		...(entry.resolvedResourceVersion
 			? { resolvedResourceVersion: entry.resolvedResourceVersion }
@@ -493,82 +471,9 @@ function ensureStorageCacheLoaded(): void {
 	if (storageCacheLoaded) return
 
 	storageCacheLoaded = true
-	const storage = getCacheStorage()
-	if (!storage) {
-		return
-	}
-
-	try {
-		try {
-			storage.removeItem(LEGACY_FILE_INFO_STORAGE_KEY)
-		} catch {
-			//
-		}
-
-		const raw = storage.getItem(FILE_INFO_STORAGE_KEY)
-		if (!raw) {
-			return
-		}
-
-		const parsed = JSON.parse(raw) as Partial<PersistedFileInfoCachePayload> | null
-		if (!parsed || typeof parsed !== "object") {
-			clearPersistedCache()
-			return
-		}
-
-		if (parsed.version !== FILE_INFO_CACHE_PAYLOAD_VERSION) {
-			clearPersistedCache()
-			return
-		}
-
-		let shouldSyncStorage = false
-		const restoredCacheKeys: string[] = []
-		for (const [cacheKey, entry] of Object.entries(parsed.entries ?? {})) {
-			if (!entry?.fileInfo?.src) {
-				shouldSyncStorage = true
-				continue
-			}
-
-			if (!entry.previewWatermarkSignature) {
-				shouldSyncStorage = true
-				continue
-			}
-
-			if (!entry.attachmentsSnapshotKey) {
-				shouldSyncStorage = true
-				continue
-			}
-
-			if (!entry.fileInfo.expires_at && entry.cachedAt === undefined) {
-				shouldSyncStorage = true
-				continue
-			}
-
-			if (!hasScopedPathRendition(cacheKey)) {
-				// 旧 key 无法证明 URL 属于 raw 还是 image-process；丢弃后由统一批处理冷启动回填。
-				shouldSyncStorage = true
-				continue
-			}
-			fileInfoCache.set(cacheKey, entry as CacheEntry)
-			if (isCachedFileInfoExpired(entry as CacheEntry)) {
-				deleteMemoryCache(cacheKey)
-				shouldSyncStorage = true
-			} else {
-				restoredCacheKeys.push(cacheKey)
-			}
-		}
-
-		if (restoredCacheKeys.length > 0) {
-			persistCacheEntriesToStorage(restoredCacheKeys)
-		}
-		if (shouldSyncStorage || restoredCacheKeys.length > 0) {
-			clearLegacyPersistedCache()
-		}
-		trimFileInfoMemoryCache()
-		trimPathCacheGenerations()
-	} catch {
-		clearPersistedCache()
-	}
+	// The old localStorage payload duplicated the complete attachment snapshot.
+	// Do not migrate it back into IndexedDB; remove only these cache-specific keys.
+	clearLegacyPersistedCache()
 }
 
 function findFileItemByFileId(fileId: string, filesList?: FileItem[]): FileItem | null {
@@ -1361,7 +1266,6 @@ export async function getFileInfoByPath(
 					result,
 					fileItem.file_id,
 					getPreviewFileUrlWatermarkSignature(),
-					attachmentsSnapshotKey,
 				)
 				persistCacheEntriesToStorage([cacheKey])
 			}
@@ -1507,16 +1411,11 @@ export function setFileInfoCache(
 		)
 		deleteMemoryCache(renditionCacheKey)
 	})
-	const attachmentsSnapshotKey =
-		filesList && storeFiles.length > 0
-			? (attachmentIndex?.attachmentsSnapshotKey ?? buildAttachmentsSnapshotKey(filesList))
-			: undefined
 	setMemoryCache(
 		cacheKey,
 		mergeFileItemMetaIntoFileInfo(fileInfo, targetCandidate.fileItem),
 		resolvedFileId,
 		getPreviewFileUrlWatermarkSignature(),
-		attachmentsSnapshotKey,
 		{ allowMissingAttachment: options?.allowMissingAttachment },
 	)
 	if (!options?.allowMissingAttachment) {

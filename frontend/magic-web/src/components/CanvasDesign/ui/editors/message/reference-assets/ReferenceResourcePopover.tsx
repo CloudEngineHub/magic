@@ -14,6 +14,7 @@ import { useMagic } from "../../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import {
 	REFERENCE_RESOURCE_SOURCE_TYPES,
+	type ReferenceAssetFileClass,
 	type ReferenceResourceFileInfo,
 	type ReferenceAssetPerTypeLimits,
 	type ReferenceAssetTypeCounts,
@@ -66,6 +67,10 @@ interface ReferenceResourcePopoverProps {
 	referenceFileInfos: ReferenceResourceFileInfo[]
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	canAcceptNextAsset?: (
+		fileClass: ReferenceAssetFileClass,
+		currentAssetCounts: ReferenceAssetTypeCounts,
+	) => boolean
 	onProjectSelect?: (
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
@@ -103,6 +108,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
+		canAcceptNextAsset,
 		onProjectSelect,
 		beforeSourceActions,
 		hoverContent,
@@ -310,6 +316,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 				currentReferenceFiles,
 				assetLimits,
 				currentAssetCounts,
+				canAcceptNextAsset,
 				maxBatchItems: maxProjectSelectBatchCount,
 				resolveResourceReference: methods?.resolveResourceReference,
 			})
@@ -338,6 +345,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		[
 			assetLimits,
 			currentAssetCounts,
+			canAcceptNextAsset,
 			currentReferenceFiles,
 			handleProjectSelectClose,
 			maxProjectSelectBatchCount,

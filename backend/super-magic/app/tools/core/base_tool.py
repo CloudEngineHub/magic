@@ -33,7 +33,12 @@ try:
         LogLevel,
         OpenTelemetryAttributes,
     )
-    from app.infrastructure.observability.span_utils import set_observation_io, set_span_name
+    from app.infrastructure.observability.span_utils import (
+        set_observation_io,
+        set_span_name,
+        enrich_span_with_user_context,
+        enrich_span_with_trace_correlation,
+    )
 except ImportError:
     # If OpenTelemetry is not installed, set to None
     # is_telemetry_enabled() will handle the check
@@ -46,6 +51,8 @@ except ImportError:
     LogLevel = None
     OpenTelemetryAttributes = None
     set_observation_io = lambda *a, **k: None
+    enrich_span_with_user_context = lambda *a, **k: None
+    enrich_span_with_trace_correlation = lambda *a, **k: None
 
 # 定义参数类型变量
 T = TypeVar('T', bound=BaseToolParams)
@@ -334,6 +341,11 @@ class BaseTool(Generic[T], ABC):
             span_name = f"tool.{tool_name}"
             span = tracer.start_span(span_name)
             set_span_name(span, span_name)
+
+            # Enrich with user context and trace correlation, matching the FastAPI
+            # root span so this child span can be correlated across systems in Langfuse.
+            enrich_span_with_user_context(span)
+            enrich_span_with_trace_correlation(span)
 
             # Langfuse-specific: Mark as tool observation type
             span.set_attribute("observation.type", "tool")

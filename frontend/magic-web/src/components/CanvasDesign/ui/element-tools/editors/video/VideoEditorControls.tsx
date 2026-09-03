@@ -21,11 +21,15 @@ import SourceList, {
 } from "../../../panels/source-list/index"
 import { VideoGenerationSettingsPopover } from "./model-config/VideoGenerationSettingsPopover"
 import {
+	canAddReferenceAsset,
+	canAddReferenceAssetByCounts,
 	countVideoReferenceAssetInfosByKind,
 	resolveReferenceAssetLimits,
 } from "./model-config/video-editor-config.model"
 import ReferenceResourceSlotPopover from "../../../editors/message/reference-assets/ReferenceResourceSlotPopover"
 import type {
+	ReferenceAssetFileClass,
+	ReferenceAssetTypeCounts,
 	ReferenceResourceSourceType,
 	ReferenceResourceType,
 } from "../../../editors/message/reference-assets/reference-resource.types"
@@ -46,6 +50,23 @@ import {
 import { useLinkedMediaSourceListOption } from "../../../editors/connection/useLinkedMediaSourceListOption"
 import LinkedFrameMediaMenu from "./LinkedFrameMediaMenu"
 import type { LinkedFrameRole } from "./LinkedFrameMediaMenu"
+
+type ReferencePopoverState = {
+	slotKey: string
+	referenceAssetKind?: VideoReferenceAssetKind
+	currentFiles: string[]
+	maxReferenceFiles?: number
+	isLimitReached: boolean
+	referenceResourceType: ReferenceResourceType
+	referenceFileInfos: VideoEditorConfig["referenceImageInfos"]
+	referenceAssetKinds?: VideoReferenceAssetKind[]
+	assetLimits?: VideoEditorConfig["referenceAssetLimits"]
+	currentAssetCounts?: VideoEditorConfig["referenceAssetCounts"]
+	canAddReferenceAsset?: (
+		kind: ReferenceAssetFileClass,
+		counts: ReferenceAssetTypeCounts,
+	) => boolean
+}
 
 interface VideoEditorEmptyReferenceSlotPopoverProps {
 	inputTab: "frame" | "reference"
@@ -80,6 +101,10 @@ interface VideoEditorEmptyReferenceSlotPopoverProps {
 	referenceAssetKinds?: VideoReferenceAssetKind[]
 	assetLimits?: VideoEditorConfig["referenceAssetLimits"]
 	currentAssetCounts?: VideoEditorConfig["referenceAssetCounts"]
+	canAddReferenceAsset?: (
+		kind: ReferenceAssetFileClass,
+		counts: VideoEditorConfig["referenceAssetCounts"],
+	) => boolean
 	onProjectSelect?: (
 		item: ReferenceResourcePanelItem,
 		context?: ReferenceResourcePanelSelectContext,
@@ -117,6 +142,7 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 		referenceAssetKinds,
 		assetLimits,
 		currentAssetCounts,
+		canAddReferenceAsset,
 		onProjectSelect,
 		beforeSourceActions,
 		onProjectSelectPanelOpenChange,
@@ -161,6 +187,7 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 			referenceFileInfos={referenceFileInfos}
 			assetLimits={assetLimits}
 			currentAssetCounts={currentAssetCounts}
+			canAcceptNextAsset={canAddReferenceAsset}
 			onProjectSelect={onProjectSelect}
 			beforeSourceActions={beforeSourceActions}
 			onProjectSelectPanelOpenChange={onProjectSelectPanelOpenChange}
@@ -415,8 +442,11 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		[linkedActiveReferenceAssetInfos, referenceImageInfos, resolveResourceReference],
 	)
 	const effectiveReferenceAssetLimits = useMemo(
-		() => resolveReferenceAssetLimits(currentInputModeConfig, effectiveReferenceAssetInfos),
-		[currentInputModeConfig, effectiveReferenceAssetInfos],
+		() =>
+			resolveReferenceAssetLimits(currentInputModeConfig, effectiveReferenceAssetInfos, {
+				ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+			}),
+		[currentInputModeConfig, effectiveReferenceAssetInfos, selectedInputMode],
 	)
 	const effectiveMaxReferenceFiles = useMemo(() => {
 		if (!supportsReferenceAssets) return 0
@@ -591,7 +621,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						? effectiveReferenceAssetLimits.reference_videos
 						: effectiveReferenceAssetLimits.reference_audios
 			if (!Number.isFinite(range.max)) return undefined
-			return range.max > 0 ? range.max : undefined
+			return Math.max(range.max, 0)
 		}
 
 		const getTypeCount = (kind: VideoReferenceAssetKind): number => {
@@ -612,6 +642,65 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		}
 
 		const options: SourceListOption[] = []
+		const isOmniReferenceMode = selectedInputMode === "omni_reference"
+		if (isOmniReferenceMode) {
+			for (const kind of displayReferenceKinds) {
+				const items = existingItemsByType[kind]
+				const linkedItems = linkedItemsByType[kind]
+				const maxCount = getTypeMax(kind)
+				const typeCount = getTypeCount(kind)
+				const countLabel =
+					typeCount > 0 && maxCount !== undefined
+						? `(${typeCount}/${maxCount})`
+						: undefined
+				items.forEach(({ info, index }) => {
+					options.push({
+						kind: "slot",
+						label: referenceSlotLabelByType[kind],
+						secondaryLabel: countLabel,
+						value: `reference-${kind}-${index}-${info.path}`,
+						slotIndex: index,
+						groupId: kind,
+						resourcePath: info.path,
+						resourceFileName: info.fileName,
+						removeResourceAriaLabel: removeSlotAriaLabel,
+						onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
+					})
+				})
+				linkedItems.forEach((item, linkedIndex) => {
+					options.push(
+						createLinkedMediaSourceListOption({
+							item,
+							index: linkedIndex,
+							slotIndex: referenceImageInfos.length + linkedIndex,
+							label: referenceSlotLabelByType[kind],
+							onLinkedMediaSelectionChange,
+						}),
+					)
+				})
+			}
+			const canAddAnyReferenceKind = supportedReferenceKinds.some((kind) => {
+				const maxCount = getTypeMax(kind)
+				return (
+					(maxCount === undefined || getTypeCount(kind) < maxCount) &&
+					canAddReferenceAsset(
+						currentInputModeConfig,
+						effectiveReferenceAssetInfos,
+						kind,
+						{ ignoreModeMaxCountForTotal: true },
+					)
+				)
+			})
+			options.push({
+				kind: "slot",
+				label: t("videoEditor.slotLabelReferenceMedia", "媒体"),
+				value: `reference-media-empty-${referenceImageInfos.length}-${effectiveReferenceAssetTotalCount}`,
+				slotIndex: referenceImageInfos.length,
+				groupId: "media",
+				disabled: !canAddAnyReferenceKind,
+			})
+			return options
+		}
 		for (const kind of displayReferenceKinds) {
 			const items = existingItemsByType[kind]
 			const linkedItems = linkedItemsByType[kind]
@@ -665,8 +754,11 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		return options
 	}, [
 		supportsReferenceAssets,
+		selectedInputMode,
 		effectiveReferenceAssetTotalCount,
+		effectiveReferenceAssetInfos,
 		effectiveMaxReferenceFiles,
+		currentInputModeConfig,
 		visibleReferenceImageEntries,
 		visibleLinkedDisplayMediaItems,
 		referenceImageInfos,
@@ -679,6 +771,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		removeSlotAriaLabel,
 		onLinkedMediaSelectionChange,
 		handlers,
+		t,
 	])
 	const showTopImageInputs =
 		supportsStartFrame ||
@@ -692,10 +785,14 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		: null
 
 	const resolveReferencePopoverState = useCallback(
-		(option: SourceListSlotOption) => {
+		(option: SourceListSlotOption): ReferencePopoverState => {
+			const isAggregateMediaSlot = option.groupId === "media"
 			const referenceAssetKind = (option.groupId || "image") as VideoReferenceAssetKind
-			const allowedInfos = referenceImageInfos.filter(
-				(info) => info.assetType === referenceAssetKind,
+			const referenceAssetKinds = isAggregateMediaSlot
+				? supportedReferenceKinds
+				: [referenceAssetKind]
+			const allowedInfos = referenceImageInfos.filter((info) =>
+				referenceAssetKinds.includes(info.assetType),
 			)
 			const optionIdentity = getLinkedMediaReferenceIdentity(
 				option.resourcePath,
@@ -716,30 +813,58 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						? effectiveReferenceAssetLimits.reference_videos
 						: effectiveReferenceAssetLimits.reference_audios
 			const totalMax = effectiveReferenceAssetLimits.total.max
-			const effectiveMax = Number.isFinite(typeRange.max)
-				? Math.min(Math.max(typeRange.max, 0), totalMax)
-				: totalMax
+			const effectiveMax = isAggregateMediaSlot
+				? totalMax
+				: Number.isFinite(typeRange.max)
+					? Math.min(Math.max(typeRange.max, 0), totalMax)
+					: totalMax
 			const usedCount =
 				referenceAssetKind === "image"
 					? currentAssetCounts.images
 					: referenceAssetKind === "video"
 						? currentAssetCounts.videos
 						: currentAssetCounts.audios
-			const hasRemainingCapacity =
-				!Number.isFinite(typeRange.max) || usedCount < typeRange.max
+			const hasRemainingCapacity = isAggregateMediaSlot
+				? referenceAssetKinds.some((kind) => {
+						const range =
+							kind === "image"
+								? effectiveReferenceAssetLimits.reference_images
+								: kind === "video"
+									? effectiveReferenceAssetLimits.reference_videos
+									: effectiveReferenceAssetLimits.reference_audios
+						const count =
+							kind === "image"
+								? currentAssetCounts.images
+								: kind === "video"
+									? currentAssetCounts.videos
+									: currentAssetCounts.audios
+						return !Number.isFinite(range.max) || count < range.max
+					})
+				: !Number.isFinite(typeRange.max) || usedCount < typeRange.max
 			return {
 				slotKey: option.value,
-				referenceAssetKind,
+				referenceAssetKind: isAggregateMediaSlot ? undefined : referenceAssetKind,
+				referenceAssetKinds,
 				currentFiles: currentReferenceInfos.map((info) => info.path),
 				maxReferenceFiles:
 					Number.isFinite(effectiveMax) && effectiveMax > 0 ? effectiveMax : undefined,
 				isLimitReached:
 					(Number.isFinite(totalMax) && currentReferenceCount >= totalMax) ||
 					!hasRemainingCapacity,
-				referenceResourceType: referenceResourceTypeByKind[referenceAssetKind],
+				referenceResourceType: isAggregateMediaSlot
+					? "file"
+					: referenceResourceTypeByKind[referenceAssetKind],
 				referenceFileInfos: allowedInfos,
 				assetLimits: effectiveReferenceAssetLimits,
 				currentAssetCounts,
+				canAddReferenceAsset: (
+					kind: ReferenceAssetFileClass,
+					counts: ReferenceAssetTypeCounts,
+				) =>
+					kind !== "unknown" &&
+					canAddReferenceAssetByCounts(currentInputModeConfig, counts, kind, {
+						ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+					}),
 			}
 		},
 		[
@@ -747,28 +872,36 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 			effectiveReferenceAssetInfos,
 			referenceImageInfos,
 			referenceResourceTypeByKind,
+			supportedReferenceKinds,
 			resolveResourceReference,
+			currentInputModeConfig,
+			selectedInputMode,
 		],
 	)
 
 	const buildRenderSourceListSlotItem = useCallback(
 		(
 			inputTab: "frame" | "reference",
-			resolvePopoverState: (option: SourceListSlotOption) => {
-				slotKey: string
-				referenceAssetKind?: VideoReferenceAssetKind
-				currentFiles: string[]
-				maxReferenceFiles?: number
-				isLimitReached: boolean
-				referenceResourceType: ReferenceResourceType
-				referenceFileInfos: VideoEditorConfig["referenceImageInfos"]
-				referenceAssetKinds?: VideoReferenceAssetKind[]
-				assetLimits?: VideoEditorConfig["referenceAssetLimits"]
-				currentAssetCounts?: VideoEditorConfig["referenceAssetCounts"]
-			},
+			resolvePopoverState: (option: SourceListSlotOption) => ReferencePopoverState,
 		) => {
 			return function renderSourceListSlotItem(params: SourceListRenderItemParams) {
 				const { option, className, style, content, onClick, slotRootRef } = params
+				if (option.disabled) {
+					return (
+						<div
+							ref={slotRootRef}
+							className={cn(className, "pointer-events-none opacity-50")}
+							style={style}
+							aria-disabled="true"
+							title={t(
+								"videoEditor.referenceAssetAllTypesMaxReached",
+								"图片、视频和音频均已达到数量上限",
+							)}
+						>
+							{content}
+						</div>
+					)
+				}
 				const {
 					slotKey,
 					referenceAssetKind,
@@ -780,6 +913,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					referenceAssetKinds,
 					assetLimits,
 					currentAssetCounts,
+					canAddReferenceAsset,
 				} = resolvePopoverState(option)
 				const frameRole: LinkedFrameRole | undefined =
 					inputTab === "frame"
@@ -902,6 +1036,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						referenceAssetKinds={referenceAssetKinds}
 						assetLimits={assetLimits}
 						currentAssetCounts={currentAssetCounts}
+						canAddReferenceAsset={canAddReferenceAsset}
 						onProjectSelect={onProjectSelect}
 						beforeSourceActions={linkedFrameMenu}
 						onProjectSelectPanelOpenChange={handlers.setReferenceProjectPanelOpen}

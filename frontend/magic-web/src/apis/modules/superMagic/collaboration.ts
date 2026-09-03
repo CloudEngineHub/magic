@@ -245,8 +245,32 @@ export const generateCollaborationApi = (fetch: HttpClient) => ({
 	 * @param projectId 项目ID
 	 * @param data 数据
 	 */
-	updateCollaborationProjectPinStatus(projectId: string, data: { is_pin: boolean }) {
-		return fetch.put(`/api/v1/super-agent/collaboration-projects/${projectId}/pin`, data)
+	updateCollaborationProjectPinStatus(
+		projectId: string,
+		data: {
+			is_pin: boolean
+			target_workspace_id?: string
+			pre_project_id?: string | null
+			next_project_id?: string | null
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.put(
+			`/api/v1/super-agent/collaboration-projects/${projectId}/pin`,
+			{
+				is_pin: data.is_pin,
+				...(data.target_workspace_id === undefined
+					? {}
+					: { target_workspace_id: data.target_workspace_id }),
+				...(data.pre_project_id === undefined
+					? {}
+					: { pre_project_id: data.pre_project_id }),
+				...(data.next_project_id === undefined
+					? {}
+					: { next_project_id: data.next_project_id }),
+			},
+			options,
+		)
 	},
 
 	/**

@@ -8,7 +8,7 @@ import type {
 import { ElementTypeEnum } from "../../document/types"
 import {
 	appendImageContent,
-	createImageContentId,
+	createContentId,
 	deleteActiveImageContent,
 	getActiveImageContent as resolveActiveImageContent,
 	getActiveImageContentId,
@@ -90,7 +90,10 @@ import {
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
 type ImageResourceStructureReason =
-	"missing-image-node" | "cleared-image-node" | "error-to-image" | "resource-failed"
+	| "missing-image-node"
+	| "cleared-image-node"
+	| "error-to-image"
+	| "resource-failed"
 
 type ImageResourceMetadataReason = "non-fullsize-full" | "view-priority-blocked"
 
@@ -703,7 +706,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!generateImage) return false
 		if (!request.model_id || !request.prompt?.trim()) return false
 
-		const contentId = createImageContentId()
+		const contentId = createContentId()
 		const requestWithId: GenerateImageRequest = {
 			...request,
 			prompt: request.prompt.trim(),
@@ -2409,8 +2412,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		}
 
+		// Agent-generated Content is persisted as pending before a task id is
+		// available. Upload/paste placeholders remain temporary, so only a
+		// persisted pending/processing Content uses the generation copy.
+		const status = this.getActiveContentData().status
 		return (
-			this.getActiveContentData().status === GenerationStatus.Processing &&
+			(status === GenerationStatus.Pending || status === GenerationStatus.Processing) &&
 			!this.canvas.elementManager.isTemporary(this.data.id)
 		)
 	}

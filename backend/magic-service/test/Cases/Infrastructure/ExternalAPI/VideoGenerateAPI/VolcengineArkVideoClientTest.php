@@ -114,6 +114,50 @@ class VolcengineArkVideoClientTest extends TestCase
         }
     }
 
+    public function testGetMarksResourceNotFoundAsNonRetriable(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('get')
+            ->willThrowException(new RequestException(
+                'not found',
+                new Request('GET', 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/missing-task'),
+                new Response(404, [], json_encode([
+                    'error' => [
+                        'code' => 'ResourceNotFound',
+                        'message' => 'The specified resource `missing-task` is not found.',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())
+            ->method('create')
+            ->willReturn($httpClient);
+
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())
+            ->method('get')
+            ->with(VolcengineArkVideoClient::class)
+            ->willReturn(new VolcengineArkRecordingLogger());
+
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
+
+        try {
+            $client->get(
+                'https://ark.cn-beijing.volces.com/api/v3',
+                'secret-api-key',
+                '/contents/generations/tasks/missing-task',
+                ['operation_id' => 'op-resource-not-found'],
+            );
+            self::fail('Expected ProviderVideoException was not thrown.');
+        } catch (ProviderVideoException $exception) {
+            $this->assertFalse($exception->isRetriable());
+            $this->assertSame(404, $exception->getHttpStatus());
+            $this->assertNotSame('', $exception->getMessage());
+        }
+    }
+
     public function testPostReturnsFriendlyMessageForPrivacyRiskCode(): void
     {
         $httpClient = $this->createMock(Client::class);

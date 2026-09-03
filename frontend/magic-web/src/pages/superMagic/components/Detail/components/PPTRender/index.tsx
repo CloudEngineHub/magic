@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useMemo, useSta
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
-import { ChevronDown, Loader2, PanelLeftOpen, Presentation, Plus } from "lucide-react"
+import { ChevronDown, PanelLeftOpen, Presentation, Plus } from "lucide-react"
 import PPTSlide, { type PPTSlideToolbarModel } from "./PPTSlide"
 import PPTSidebar from "./PPTSidebar/index"
 import { PPTControlBar } from "./PPTControlBar"
@@ -19,6 +19,7 @@ import {
 	useSlideHandlers,
 } from "./hooks"
 import { getLiveRenderSlideKey, usePPTLiveRenderCache } from "./hooks/usePPTLiveRenderCache"
+import MagicSpin from "@/components/base/MagicSpin"
 import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
@@ -735,7 +736,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm"
 								>
 									<div className="flex items-center gap-2">
-										<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+										<MagicSpin spinning wrapperClassName="w-auto" />
 										<TextAnimation dotwaveAnimation>
 											{t("ppt.loading")}
 										</TextAnimation>

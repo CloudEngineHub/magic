@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Provider\Entity\ValueObject;
 
+use function Hyperf\Translation\__;
+
 /**
  * AI 能力代码枚举.
  */
@@ -40,6 +42,27 @@ enum AiAbilityCode: string
     case ImagePromptCompletion = 'image_prompt_completion'; // 生图提示词补全
     case TextContentCompletion = 'text_content_completion'; // 文本内容优化
     case AiSearchModel = 'ai_search_model';                 // AI 搜索模型
+
+    /**
+     * 获取当前语言的能力名称。
+     *
+     * 文案由语言文件维护，枚举只负责把能力代码映射到稳定的翻译键，
+     * 避免接口继续依赖数据库中初始化时写入的名称。
+     */
+    public function getName(?string $locale = null): string
+    {
+        return (string) __('ai_ability.name.' . $this->value, [], $locale);
+    }
+
+    /**
+     * 获取当前语言的能力描述。
+     *
+     * 描述与能力代码绑定，随语言文件更新即可即时影响管理后台接口返回。
+     */
+    public function getDescription(?string $locale = null): string
+    {
+        return (string) __('ai_ability.description.' . $this->value, [], $locale);
+    }
 
     /**
      * 获取能力名称.

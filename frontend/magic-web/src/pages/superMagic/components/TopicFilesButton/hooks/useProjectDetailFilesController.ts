@@ -177,6 +177,8 @@ export function useProjectDetailFilesController({
 				is_directory: true,
 			})
 
+			// Refresh the attachment tree so the newly created folder is visible immediately.
+			onUpdateAttachments?.()
 			magicToast.success(t("topicFiles.contextMenu.createFolderSuccess"))
 		} catch (error) {
 			console.error("创建移动端项目详情文件夹失败:", error)
@@ -232,8 +234,10 @@ export function useProjectDetailFilesController({
 					await SuperMagicApi.deleteFiles({
 						file_ids: fileIds,
 						project_id: projectId,
-					}).catch(() => null)
+					})
 
+					// Reload the server-backed attachment tree before leaving selection mode.
+					onUpdateAttachments?.()
 					magicToast.success(t("topicFiles.contextMenu.deleteFileSuccess"))
 					setIsSelectMode(false)
 					setSelectionResetKey((prev) => prev + 1)

@@ -198,14 +198,16 @@ export default function SecondEdit(props: SecondEditProps) {
 			const intent = options?.intent ?? "quick-edit"
 			const sessionIntentToClear: MediaEditIntent | null =
 				intent === "quick-edit" || intent === "re-edit" ? intent : null
-			if (intent !== "quick-edit") {
+			// “再次生成”在当前元素内追加 Content；“重新编辑”恢复旧链路，
+			// 以当前元素为来源在右侧创建新的图片元素。
+			if (intent === "generate-again") {
 				sendingRef.current = true
 				setIsSending(true)
 				try {
 					const submitted = await originalElementInstance.submitContentGeneration(
 						request,
 						{
-							recoveryIntent: intent === "re-edit" ? "re-edit" : "generate",
+							recoveryIntent: "generate",
 						},
 					)
 					if (!submitted) return false

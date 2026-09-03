@@ -71,12 +71,14 @@ class ProjectStore {
 	}
 
 	removeProject(id: string) {
-		this.projects = this.projects.filter((p) => p.id !== id)
-		if (this.selectedProject?.id === id) {
-			this.selectedProject = null
-		}
+		this.removeProjectFromCollections(id)
+		if (this.selectedProject?.id === id) this.selectedProject = null
+	}
 
-		// Remove from projectsByWorkspace
+	/** Removes a project from list caches without changing the active project or file state. */
+	removeProjectFromCollections(id: string) {
+		this.projects = this.projects.filter((p) => p.id !== id)
+
 		this.projectsByWorkspace.forEach((projects, workspaceId) => {
 			const filtered = projects.filter((p) => p.id !== id)
 			if (filtered.length !== projects.length) {
@@ -146,6 +148,68 @@ class ProjectStore {
 	setProjectsForWorkspace(workspaceId: string, projects: ProjectListItem[]) {
 		this.projectsByWorkspace.set(workspaceId, projects)
 		this.loadedWorkspaces.add(workspaceId)
+	}
+
+	reorderProjectsInWorkspace(workspaceId: string, projectIds: string[]) {
+		const projects = this.projectsByWorkspace.get(workspaceId) || []
+		const projectMap = new Map(projects.map((project) => [project.id, project]))
+		const ordered = projectIds.flatMap((id, index) => {
+			const project = projectMap.get(id)
+			return project ? [{ ...project, sort_order: index } as ProjectListItem] : []
+		})
+		const orderedIds = new Set(ordered.map((project) => project.id))
+		const nextProjects = [
+			...ordered,
+			...projects.filter((project) => !orderedIds.has(project.id)),
+		]
+		this.projectsByWorkspace.set(workspaceId, nextProjects)
+		if (this.selectedProject?.workspace_id === workspaceId) {
+			this.selectedProject =
+				nextProjects.find((project) => project.id === this.selectedProject?.id) ||
+				this.selectedProject
+		}
+		if (this.projects.some((project) => project.workspace_id === workspaceId)) {
+			this.projects.replace(
+				this.projects.map((project) =>
+					project.workspace_id === workspaceId
+						? nextProjects.find((item) => item.id === project.id) || project
+						: project,
+				),
+			)
+		}
+	}
+
+	moveProjectBetweenWorkspaces(
+		project: ProjectListItem,
+		sourceWorkspaceId: string,
+		targetWorkspaceId: string,
+		targetWorkspaceName?: string,
+		targetIndex?: number,
+		isPinned?: boolean,
+	) {
+		const sourceProjects = (this.projectsByWorkspace.get(sourceWorkspaceId) || []).filter(
+			(item) => item.id !== project.id,
+		)
+		const targetProjects = [...(this.projectsByWorkspace.get(targetWorkspaceId) || [])].filter(
+			(item) => item.id !== project.id,
+		)
+		const movedProject = {
+			...project,
+			workspace_id: targetWorkspaceId,
+			workspace_name: targetWorkspaceName || project.workspace_name || "",
+			...(isPinned === undefined ? {} : { is_pinned: isPinned }),
+		}
+		const insertAt = Math.max(
+			0,
+			Math.min(targetIndex ?? targetProjects.length, targetProjects.length),
+		)
+		targetProjects.splice(insertAt, 0, movedProject)
+		this.projectsByWorkspace.set(sourceWorkspaceId, sourceProjects)
+		this.projectsByWorkspace.set(targetWorkspaceId, targetProjects)
+		this.projects.replace(
+			this.projects.map((item) => (item.id === project.id ? movedProject : item)),
+		)
+		if (this.selectedProject?.id === project.id) this.selectedProject = movedProject
 	}
 
 	// Get projects for a specific workspace

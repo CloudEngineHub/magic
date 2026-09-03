@@ -301,6 +301,7 @@ function SlidesPresetCard({
 							</div>
 						)}
 						<img
+							crossOrigin="anonymous"
 							src={template.thumbnail_url}
 							alt={label}
 							className={cn(
@@ -454,6 +455,7 @@ function SlidesPresetCard({
 									</div>
 								)}
 								<img
+									crossOrigin="anonymous"
 									src={template.collage_url}
 									alt={`${label} collage preview`}
 									className={cn(

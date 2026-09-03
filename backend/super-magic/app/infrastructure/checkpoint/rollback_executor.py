@@ -251,7 +251,12 @@ class RollbackExecutor:
         file_snapshot: FileSnapshot,
         is_forward: bool
     ) -> Optional[Dict[str, str]]:
+        # 删除类回滚会先 unlink 文件，再收集 affected_files；此时目标路径上的
+        # xattr 已经不存在。checkpoint 中的 file_id 是稳定身份，作为兜底可以
+        # 保证 CREATED -> delete、DELETED -> add 等操作仍能生成通知。
         file_id = await get_file_id_from_xattr(self._resolve_restore_path(file_snapshot.file_path))
+        if not file_id:
+            file_id = file_snapshot.file_id
         if not file_id:
             return None
 

@@ -10,12 +10,17 @@ import {
 	MicroAppEmptyIllustration,
 	MicroAppSearchEmptyIllustration,
 } from "@/pages/superMagic/components/MicroAppStateIllustration"
+import {
+	canEditProject,
+	canManageCollaborators as canManageProjectCollaborators,
+} from "@/pages/superMagic/utils/permission"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import MicroAppCard from "./components/MicroAppCard"
 import MicroAppListActionDialogs from "./components/MicroAppListActionDialogs"
 import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
+import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 function formatAppTime(value: string | null | undefined): string {
@@ -59,6 +64,7 @@ export default function MicroAppsListPageMobile() {
 		deleteApp,
 	} = useMicroAppsPage()
 	const itemActions = useMicroAppListItemActions({ renameApp, deleteApp })
+	const collaboratorManagement = useMicroAppCollaboratorManagement()
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
@@ -201,7 +207,18 @@ export default function MicroAppsListPageMobile() {
 									onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 									onRename={() => itemActions.openRename(app)}
 									onDelete={() => itemActions.openDelete(app)}
+									onManageCollaborators={() =>
+										collaboratorManagement.openCollaboratorManager(app)
+									}
+									managingCollaborators={
+										collaboratorManagement.loadingAppId === app.app_id
+									}
 									canDelete={app.can_delete}
+									canRename={canEditProject(app.user_role)}
+									canManageCollaborators={
+										collaboratorManagement.canManageCollaborators &&
+										canManageProjectCollaborators(app.user_role)
+									}
 									testId={`micro-apps-mobile-app-${app.app_id}`}
 								/>
 							))}
@@ -236,6 +253,7 @@ export default function MicroAppsListPageMobile() {
 				onConfirmRename={itemActions.confirmRename}
 				onConfirmDelete={itemActions.confirmDelete}
 			/>
+			{collaboratorManagement.CollaboratorUpdatePanel}
 		</div>
 	)
 }

@@ -19,6 +19,7 @@ import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import type { HtmlPermissionScope } from "../types"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 interface MagicUploadFileData {
 	/** File 对象（优先使用，通过 postMessage 结构化克隆直接传输） */
@@ -54,6 +55,9 @@ interface UseMagicFilesOptions {
 	iframeRef: React.RefObject<HTMLIFrameElement>
 	targetOrigin: string
 	selectedProject?: any
+	projectId?: string
+	topicStore?: TopicStore
+	projectContextUnavailableError?: string
 	attachmentList?: any[]
 	htmlRelativeFolderPath?: string
 	uploadImageFileToProject: (params: {
@@ -100,6 +104,9 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		iframeRef,
 		targetOrigin,
 		selectedProject,
+		projectId,
+		topicStore: scopedTopicStore,
+		projectContextUnavailableError,
 		attachmentList,
 		htmlRelativeFolderPath,
 		uploadImageFileToProject,
@@ -126,8 +133,12 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 			return
 		}
 
-		if (!selectedProject?.id) {
-			replyToIframe(replyType, requestId, { success: false, error: "No project selected" })
+		const runtimeProjectId = projectId ?? selectedProject?.id
+		if (!runtimeProjectId) {
+			replyToIframe(replyType, requestId, {
+				success: false,
+				error: projectContextUnavailableError || "No project selected",
+			})
 			return
 		}
 
@@ -224,7 +235,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 			replyToIframe(replyType, requestId, { success: true, results })
 
-			void waitForProjectAttachmentChange(selectedProject?.id, {
+			void waitForProjectAttachmentChange(runtimeProjectId, {
 				operations: ["add"],
 				matchMode: "project-any-apply",
 				fallback: "full-refresh",
@@ -259,10 +270,11 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				return
 			}
 
-			if (!selectedProject?.id) {
+			const runtimeProjectId = projectId ?? selectedProject?.id
+			if (!runtimeProjectId) {
 				replyToIframe(replyType, requestId, {
 					success: false,
-					error: "No project selected",
+					error: projectContextUnavailableError || "No project selected",
 				})
 				return
 			}
@@ -313,7 +325,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				const finalAgentMode = selection.modeIdentifier as TopicMode
 
 				const workspaceId =
-					selectedProject.workspace_id || workspaceStore.selectedWorkspace?.id || ""
+					selectedProject?.workspace_id || workspaceStore.selectedWorkspace?.id || ""
 
 				if (!workspaceId) {
 					replyToIframe(replyType, requestId, {
@@ -324,7 +336,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				}
 
 				const newTopic = await SuperMagicApi.createTopic({
-					project_id: selectedProject.id,
+					project_id: runtimeProjectId,
 					topic_name: "",
 					project_mode: finalAgentMode as TopicMode,
 				})
@@ -339,17 +351,28 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 				const topicWithMode: any = { ...newTopic, topic_mode: finalAgentMode as TopicMode }
 
-				runInAction(() => {
-					topicStore.setSelectedTopic(topicWithMode)
-				})
+				if (scopedTopicStore) {
+					// 微应用编辑页不走全局路由，直接同步独立话题列表和当前话题。
+					scopedTopicStore.setTopics([
+						topicWithMode,
+						...scopedTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
+					])
+					scopedTopicStore.setSelectedTopic(topicWithMode)
+				} else {
+					runInAction(() => {
+						topicStore.setSelectedTopic(topicWithMode)
+					})
+				}
 
 				pubsub.publish(PubSubEvents.Super_Magic_Topic_Mode_Changed, {
 					mode: finalAgentMode as TopicMode,
 					workspaceId,
-					projectId: selectedProject.id,
+					projectId: runtimeProjectId,
 				})
 
-				SuperMagicService.route.navigateToState({ topicId: newTopic.id || null })
+				if (!scopedTopicStore) {
+					SuperMagicService.route.navigateToState({ topicId: newTopic.id || null })
+				}
 
 				// Wait for navigation before adding files to the message input
 				setTimeout(() => {
@@ -377,6 +400,15 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 		if (!requestId || !Array.isArray(filePaths) || filePaths.length === 0) {
 			replyToIframe(replyType, requestId, { success: false, error: "Invalid request data" })
+			return
+		}
+
+		const runtimeProjectId = projectId ?? selectedProject?.id
+		if (!runtimeProjectId) {
+			replyToIframe(replyType, requestId, {
+				success: false,
+				error: projectContextUnavailableError || "No project selected",
+			})
 			return
 		}
 

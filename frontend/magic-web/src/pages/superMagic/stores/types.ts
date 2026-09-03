@@ -31,6 +31,9 @@ export type HttpToolProjectionPolicy = "preserve_live" | "historical_terminal"
  */
 export type HttpAssistantSnapshotPolicy = "progress_snapshot" | "canonical_final"
 
+/** Final settlement can finish transport while the visible row still catches up. */
+export type AssistantRenderPhase = "reasoning_content" | "content" | "tool"
+
 export type LifecycleEventPolicy = "silent" | "live"
 
 export type CanonicalCommitTrigger = "websocket" | "recovery" | "polling" | "history"
@@ -365,6 +368,10 @@ export interface TopicMeta {
 	syncGeneration: number
 	/** 当前话题是否正在进行权威同步 */
 	syncState: TopicSyncState
+	/** 已发送但尚未观察到对应 Agent 流的本地执行次数；用于防止旧 finished 状态抢先开启终态同步。 */
+	pendingExecutionCount: number
+	/** 最近一次本地执行开始时间，用于让永久丢失首个 chunk 的发送最终回到恢复轮询。 */
+	pendingExecutionStartedAt: number | null
 	/** 当前话题恢复时采用的渲染策略 */
 	renderPolicy: TopicRenderPolicy
 }

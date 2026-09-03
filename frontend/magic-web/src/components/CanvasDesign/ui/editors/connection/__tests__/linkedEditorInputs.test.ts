@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Canvas } from "../../../../runtime/core/Canvas"
+import type { VideoInputModeConfig } from "../../../../public/magic-types"
 import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	type CanvasConnection,
@@ -31,6 +32,7 @@ import {
 	type LinkedEditorMediaCandidate,
 	type ResolveLinkedMediaAssociationOptions,
 } from "../linkedEditorInputs"
+import { validateReferenceAssetsByLimits } from "../../../../runtime/media-editors/video/reference-asset-limits"
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
@@ -553,6 +555,13 @@ describe("resolveLinkedMediaItems", () => {
 		path: "/images/source.png",
 		fileName: "source.png",
 	}
+	const videoCandidate: LinkedEditorMediaCandidate = {
+		connectionId: "connection-video",
+		sourceElementId: "video-source",
+		kind: "video",
+		path: "/videos/source.mp4",
+		fileName: "source.mp4",
+	}
 
 	it("marks supported linked media as active", () => {
 		expect(
@@ -564,6 +573,37 @@ describe("resolveLinkedMediaItems", () => {
 				},
 			}),
 		).toEqual([expect.objectContaining({ status: "active" })])
+	})
+
+	it("allows linked media to build a variant incrementally", () => {
+		const modeConfig: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos"],
+			variants: [
+				{
+					code: "image-and-video",
+					limits: {
+						reference_images: { min: 1, max: 1 },
+						reference_videos: { min: 1, max: 1 },
+					},
+				},
+			],
+		}
+
+		const result = resolveLinkedMediaItems([imageCandidate, videoCandidate], {
+			targetKind: "video",
+			mediaPolicy: {
+				supportedKinds: ["image", "video"],
+				validateActiveReferences: (references) => {
+					const hasMaxIssue = validateReferenceAssetsByLimits(
+						modeConfig,
+						references.map((reference) => ({ assetType: reference.kind })),
+					).some((issue) => issue.rule === "max" && issue.reason !== "variant")
+					return hasMaxIssue ? "over-limit" : null
+				},
+			},
+		})
+
+		expect(result.map((item) => item.status)).toEqual(["active", "active"])
 	})
 
 	it("keeps source crop on active linked media", () => {

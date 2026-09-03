@@ -100,9 +100,10 @@ class SkillCategoryRelationRepository implements SkillCategoryRelationRepository
         }
 
         $counts = [];
-        foreach ($builder->get() as $row) {
-            $categoryId = is_array($row) ? $row['category_id'] : $row->category_id;
-            $skillCount = is_array($row) ? $row['skill_count'] : $row->skill_count;
+        $skillResult = $builder->get()->toArray();
+        foreach ($skillResult as $row) {
+            $categoryId = $row['category_id'];
+            $skillCount = $row['skill_count'];
             $counts[(int) $categoryId] = (int) $skillCount;
         }
         return $counts;
@@ -131,9 +132,10 @@ class SkillCategoryRelationRepository implements SkillCategoryRelationRepository
         }
 
         $result = [];
-        foreach ($builder->get() as $row) {
-            $categoryId = is_array($row) ? $row['category_id'] : $row->category_id;
-            $relationId = is_array($row) ? $row['relation_id'] : $row->relation_id;
+        $skillResult = $builder->get()->toArray();
+        foreach ($skillResult as $row) {
+            $categoryId = $row['category_id'];
+            $relationId = $row['relation_id'];
             $result[(int) $categoryId][] = (int) $relationId;
         }
         foreach ($result as $categoryId => $marketIds) {

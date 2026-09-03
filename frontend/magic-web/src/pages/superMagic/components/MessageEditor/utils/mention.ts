@@ -526,6 +526,10 @@ export const isAllowedMention = (
 	attrs: TiptapMentionAttributes,
 	dataService?: DataService | null,
 ) => {
+	// SDK text mentions are self-contained and do not require a panel data-service lookup.
+	if (attrs.type === MentionItemType.TEXT) return true
+	// Unknown types are accepted only by the trusted SDK/draft restore path, not by normal panel input.
+	if (!Object.values(MentionItemType).includes(attrs.type as MentionItemType)) return false
 	if (
 		attrs.type === MentionItemType.MEMORY_FILE ||
 		attrs.type === MentionItemType.MEMORY_DIRECTORY
@@ -591,6 +595,7 @@ export function filterPendingCanvasMentionsFromContent(
 export function filterUploadFileMentionsFromContent(
 	content: JSONContent,
 	dataService: DataService,
+	options: { preserveMentionValidation?: boolean } = {},
 ): JSONContent {
 	if (!content) {
 		return content
@@ -608,12 +613,13 @@ export function filterUploadFileMentionsFromContent(
 					const mentionAttrs = child.attrs as TiptapMentionAttributes
 					return (
 						mentionAttrs.type !== MentionItemType.UPLOAD_FILE &&
-						isAllowedMention(mentionAttrs, dataService)
+						(options.preserveMentionValidation ||
+							isAllowedMention(mentionAttrs, dataService))
 					)
 				}
 				return true
 			})
-			.map((child) => filterUploadFileMentionsFromContent(child, dataService))
+			.map((child) => filterUploadFileMentionsFromContent(child, dataService, options))
 
 		filteredContent.content = filteredChildren
 	}

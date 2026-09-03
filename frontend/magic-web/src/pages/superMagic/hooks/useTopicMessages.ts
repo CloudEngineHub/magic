@@ -3,12 +3,14 @@ import { isEmpty } from "lodash-es"
 import { useEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import {
+	acknowledgeTopicSync,
 	getTopicRecoveryStatus,
 	registerStreamRecoveryOwner,
 	requestTopicRecovery,
 	resumeTopicRecovery,
 } from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore, type CanonicalCommitTrigger } from "@/pages/superMagic/stores"
+import { getRawMessageNode } from "@/pages/superMagic/stores/message-transforms"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import {
 	IntermediateMessageType,
@@ -31,15 +33,17 @@ const POLLING_SYNC_MESSAGE_COUNT = 20
 // 实时/轮询权威尾部同步最多向前寻找三页公共锚点；超过预算交给后续轮询或完整 recovery。
 const AUTHORITATIVE_TAIL_MAX_PAGE_COUNT = 3
 
-// 前台恢复固定按页向更早历史扩展；命中 durable anchor 后立即停止。
+// 带 durable anchor 的前台恢复只保留原先的两段有限窗口，避免切回前台扫描整段历史。
+const FOREGROUND_RECOVERY_PAGE_LIMITS = [200, 400] as const
+
+// 无 durable anchor 时只补最近有限窗口；此分支不能把一次前台恢复升级为全历史扫描。
 const FOREGROUND_RECOVERY_PAGE_SIZE = 100
 
 // 没有 durable anchor 时只补最近有限窗口；此分支不能把一次前台恢复升级为全历史扫描。
 const FOREGROUND_RECOVERY_ANCHORLESS_PAGE_COUNT = 3
 
 // 前台恢复必须有硬预算，防止服务端持续返回新 token 时无限请求和聚合。
-const FOREGROUND_RECOVERY_MAX_PAGE_COUNT = 50
-const FOREGROUND_RECOVERY_MAX_MESSAGE_COUNT = 5_000
+const FOREGROUND_RECOVERY_MAX_MESSAGE_COUNT = 600
 
 // 完整 recovery 同样需要预算；正常历史可以远大于前台恢复，但不能无限等待服务端。
 const FULL_RECOVERY_MAX_PAGE_COUNT = 500
@@ -197,7 +201,7 @@ function getFetchedMessageSuperMessageId(item: any) {
 	const message = item?.seq?.message
 	const appMessageId = String(message?.app_message_id || "")
 	if (!appMessageId) return ""
-	const node = message?.type ? message?.[message.type] || message?.general_agent_card : undefined
+	const node = getRawMessageNode(message)
 	return node?.role === "user" ? appMessageId : String(node?.super_message_id || appMessageId)
 }
 
@@ -241,7 +245,7 @@ function getFetchedRecoveryAnchor(item: any): ForegroundRecoveryAnchor | undefin
 	const message = item?.seq?.message
 	const appMessageId = String(message?.app_message_id || "")
 	if (!appMessageId) return undefined
-	const node = message?.type ? message?.[message.type] || message?.general_agent_card : undefined
+	const node = getRawMessageNode(message)
 	const role = getRecoveryAnchorRole(node?.role)
 	const superMessageId = role === "user" ? "" : String(node?.super_message_id || appMessageId)
 	const seqId = String(item?.seq?.seq_id || "")
@@ -474,9 +478,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				const renderableMessages = pulledItems
 					.filter(shouldIncludeFetchedMessage)
 					?.map((item: any) => {
-						const data = item?.seq?.message?.general_agent_card
-							? item?.seq?.message?.general_agent_card
-							: item?.seq?.message
+						const data = getRawMessageNode(item?.seq?.message)
 						return {
 							...data,
 							seq_id: item?.seq?.seq_id,
@@ -1072,7 +1074,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	/**
 	 * 当前处于前台时按 durable anchor 恢复当前 Topic。
-	 * 每页固定 100 条，逐页向更早历史扩展；命中公共 anchor 后只替换权威尾部，
+	 * 带 anchor 的恢复只允许两段有限窗口；命中公共 anchor 后只替换权威尾部，
 	 * 只有服务端明确给出完整快照证明时才允许 destructive full replace。
 	 */
 	const syncSelectedTopicOnForeground = useMemoizedFn(async () => {
@@ -1100,6 +1102,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				writeIntent: "authoritative_tail",
 				canonicalCommitTrigger: "recovery",
 			})
+			acknowledgeTopicSync(
+				currentSelectedTopic.chat_topic_id,
+				superMagicStore.getLatestMessageSeqId(currentSelectedTopic.chat_topic_id),
+			)
 			return
 		}
 		const topicId = currentSelectedTopic.chat_topic_id
@@ -1135,9 +1141,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			let anchorSuperMessageId = ""
 			let didResolveRecovery = false
 			const visitedPageTokens = new Set<string>()
-			const maxForegroundPageCount = recoveryAnchor
-				? FOREGROUND_RECOVERY_MAX_PAGE_COUNT
-				: FOREGROUND_RECOVERY_ANCHORLESS_PAGE_COUNT
+			const pageLimits = recoveryAnchor
+				? FOREGROUND_RECOVERY_PAGE_LIMITS
+				: Array.from(
+						{ length: FOREGROUND_RECOVERY_ANCHORLESS_PAGE_COUNT },
+						() => FOREGROUND_RECOVERY_PAGE_SIZE,
+					)
+			const maxForegroundPageCount = pageLimits.length
 
 			while (
 				pageCount < maxForegroundPageCount &&
@@ -1154,7 +1164,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					chat_topic_id: topicId,
 					page_token: pageToken,
 					order: "desc",
-					limit: FOREGROUND_RECOVERY_PAGE_SIZE,
+					limit: pageLimits[pageCount] || FOREGROUND_RECOVERY_PAGE_SIZE,
 					updatePageToken: false,
 				})
 				if (!pageResult.didPullSucceed) {
@@ -1216,8 +1226,15 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				pageToken = nextPageToken
 			}
 			if (!didResolveRecovery) {
-				completeFailedSync()
-				return
+				// A bounded tail without the local anchor is still safe to merge. Do not
+				// turn an incomplete foreground recovery into an unbounded history scan.
+				if (recoveryAnchor && aggregatedPulledItems.length > 0) {
+					writeMode = "merge"
+					didResolveRecovery = true
+				} else {
+					completeFailedSync()
+					return
+				}
 			}
 
 			const membershipItems =
@@ -1252,12 +1269,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (!isCurrentForegroundOwner()) return
 			if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
 			const latestSelectedTopic = selectedTopicRef.current
+			const latestSeqId = superMagicStore.getLatestMessageSeqId(topicId)
 			superMagicStore.completeTopicSync(topicId, syncGeneration, {
 				succeeded: true,
 				taskStatus: latestSelectedTopic?.task_status || latestSelectedTopic?.status,
-				latestSeqId: superMagicStore.getLatestMessageSeqId(topicId),
+				latestSeqId,
 				renderStrategy: "foreground-instant",
 			})
+			acknowledgeTopicSync(topicId, latestSeqId)
 
 			if (!initialLoadedTopicsRef.current.has(topicId)) {
 				initialLoadedTopicsRef.current.add(topicId)
@@ -1556,10 +1575,25 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				if (taskStatus !== TaskStatus.FINISHED) {
 					// Active chunks are the primary realtime source. The Store watchdog owns stalled
 					// stream recovery, so resident polling would only duplicate healthy traffic.
-					if (superMagicStore.isTopicStreaming(topicId)) return
+					if (
+						superMagicStore.isTopicStreaming(topicId) ||
+						foregroundTopicSyncRef.current ||
+						getTopicRecoveryStatus(topicId).hasInFlight
+					)
+						return
 					void pullMessage(pollingParams)
 					return
 				}
+				// A newly sent execution may still inherit the previous Topic `finished` value
+				// until its first chunk/Final arrives. Never let terminal polling seize the render
+				// barrier while that local execution or an active StreamState is present.
+				if (
+					superMagicStore.hasPendingTopicExecution?.(topicId) ||
+					superMagicStore.isTopicStreaming(topicId) ||
+					foregroundTopicSyncRef.current ||
+					getTopicRecoveryStatus(topicId).hasInFlight
+				)
+					return
 				if (typeof superMagicStore.beginTopicSync !== "function") {
 					void pullMessage(pollingParams)
 					return
