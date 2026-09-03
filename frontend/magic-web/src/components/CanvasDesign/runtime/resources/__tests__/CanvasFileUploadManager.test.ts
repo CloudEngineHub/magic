@@ -168,6 +168,48 @@ describe("CanvasFileUploadManager image replacement", () => {
 		})
 	})
 
+	it("does not apply an uploaded replacement after document write access is revoked", async () => {
+		const image = createImageInstance()
+		let canWrite = true
+		let resolveUpload!: (results: UploadFileResponse[]) => void
+		const uploadDirect = vi.fn(
+			() =>
+				new Promise<UploadFileResponse[]>((resolve) => {
+					resolveUpload = resolve
+				}),
+		)
+		const primeCache = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				permissionManager: {
+					can: vi.fn(() => canWrite),
+				},
+				elementManager: { getElementInstance: vi.fn(() => image) },
+				imageResourceManager: { primeCache },
+			},
+			uploadDirect,
+		})
+
+		const replacement = manager.replaceImageElement({
+			elementId: "image-1",
+			file: new File(["new"], "new.png", { type: "image/png" }),
+			contentId: "content-1",
+		})
+		canWrite = false
+		resolveUpload([
+			{
+				path: "./images/new.png",
+				src: "https://example.test/new.png",
+				fileName: "new.png",
+			},
+		])
+
+		await expect(replacement).resolves.toBe(false)
+		expect(image.updateContentData).not.toHaveBeenCalled()
+		expect(primeCache).not.toHaveBeenCalled()
+	})
+
 	it("replaces the active image Content with an existing project path", () => {
 		const image = createImageInstance()
 		const removeMarkersByImageContent = vi.fn()

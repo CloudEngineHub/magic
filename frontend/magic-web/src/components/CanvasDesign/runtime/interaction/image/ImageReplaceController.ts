@@ -21,7 +21,7 @@ export class ImageReplaceController {
 	}
 
 	public openLocalFilePicker(elementId: string, contentId: string | null): void {
-		if (this.destroyed || this.canvas.readonly) return
+		if (this.destroyed || !this.canvas.permissionManager.can("document.write")) return
 		this.canvas.mediaReplaceController?.openLocalFilePicker({
 			elementId,
 			mediaType: ElementTypeEnum.Image,
@@ -34,7 +34,8 @@ export class ImageReplaceController {
 		path: string,
 		contentId: string | null,
 	): Promise<boolean> {
-		if (this.destroyed || this.canvas.readonly) return Promise.resolve(false)
+		if (this.destroyed || !this.canvas.permissionManager.can("document.write"))
+			return Promise.resolve(false)
 		return (
 			this.canvas.mediaReplaceController?.replaceWithProjectFile({
 				elementId,

@@ -66,7 +66,7 @@ function createTouchDeviceInfo(): CanvasDeviceInfo {
 
 function createCanvasStub(
 	options: {
-		readonly?: boolean
+		accessMode?: "edit" | "readonly"
 		selectedIds?: string[]
 		hoveredElementId?: string | null
 		selectionToolActive?: boolean
@@ -81,7 +81,7 @@ function createCanvasStub(
 	} = {},
 ) {
 	const state = {
-		readonly: options.readonly ?? false,
+		accessMode: options.accessMode ?? "edit",
 		selectedIds: options.selectedIds ?? [],
 		hoveredElementId: options.hoveredElementId ?? null,
 		selectionToolActive: options.selectionToolActive ?? true,
@@ -145,9 +145,11 @@ function createCanvasStub(
 		return baseElement as LayerElement
 	})
 	const canvas = {
-		get readonly() {
-			return state.readonly
-		},
+		can: vi.fn(
+			(capability: string) =>
+				state.accessMode === "edit" || capability === "interaction.select",
+		),
+		getEffectiveContent: vi.fn(() => undefined),
 		get deviceInfo() {
 			return state.deviceInfo
 		},
@@ -183,6 +185,8 @@ function createCanvasStub(
 			}),
 		},
 		permissionManager: {
+			can: (capability: string) =>
+				state.accessMode === "edit" || capability === "interaction.select",
 			canUseSelectionToolAffordance: () => state.selectionToolActive,
 			canHover: (element: LayerElement | undefined) => !!element && state.visible,
 			canConnect: (element: LayerElement | undefined) =>
@@ -647,7 +651,7 @@ describe("ConnectionHandleOverlayManager", () => {
 		manager.destroy()
 	})
 
-	it("preserves the menu display source across temporary readonly blocking", () => {
+	it("preserves the menu display source across temporary access blocking", () => {
 		const { canvas, controlsLayer, manager, state } = createCanvasStub({
 			hoveredElementId: "element-1",
 		})
@@ -667,12 +671,18 @@ describe("ConnectionHandleOverlayManager", () => {
 		state.hoveredElementId = null
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: null } })
 
-		state.readonly = true
-		canvas.eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		state.accessMode = "readonly"
+		canvas.eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "readonly", capabilities: new Set(), can: () => false },
+		})
 		expect(getOverlay(controlsLayer)).toBeNull()
 
-		state.readonly = false
-		canvas.eventEmitter.emit({ type: "canvas:readonly", data: { readonly: false } })
+		state.accessMode = "edit"
+		canvas.eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "edit", capabilities: new Set(), can: () => true },
+		})
 		const overlay = getRequiredOverlay(controlsLayer)
 		expect(getHandle(overlay, "right").id()).toBe("element-1")
 
@@ -1056,7 +1066,7 @@ describe("ConnectionHandleOverlayManager", () => {
 		manager.destroy()
 	})
 
-	it("hides handles when readonly, off selection tool, or transform is active", () => {
+	it("hides handles when access is restricted, off selection tool, or transform is active", () => {
 		const { canvas, controlsLayer, manager, state } = createCanvasStub({
 			hoveredElementId: "element-1",
 		})
@@ -1064,11 +1074,14 @@ describe("ConnectionHandleOverlayManager", () => {
 		canvas.eventEmitter.emit({ type: "element:hover", data: { elementId: "element-1" } })
 		expect(getOverlay(controlsLayer)).toBeInstanceOf(Konva.Group)
 
-		state.readonly = true
-		canvas.eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		state.accessMode = "readonly"
+		canvas.eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "readonly", capabilities: new Set(), can: () => false },
+		})
 		expect(getOverlay(controlsLayer)).toBeNull()
 
-		state.readonly = false
+		state.accessMode = "edit"
 		state.selectionToolActive = false
 		canvas.eventEmitter.emit({ type: "tool:change", data: { tool: null } })
 		expect(getOverlay(controlsLayer)).toBeNull()

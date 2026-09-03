@@ -327,7 +327,7 @@ export class CropRenderer {
 					)
 				}
 
-				resultBox = this.applySnapForTransform(oldBox, resultBox, activeAnchor ?? null)
+				resultBox = this.applySnapForTransform(resultBox, activeAnchor ?? null)
 				return resultBox
 			},
 		})
@@ -653,7 +653,7 @@ export class CropRenderer {
 	/**
 	 * 计算变换时的吸附 Box
 	 */
-	private applySnapForTransform(oldBox: Box, newBox: Box, activeAnchor: string | null): Box {
+	private applySnapForTransform(newBox: Box, activeAnchor: string | null): Box {
 		if (!this.elementBounds) return newBox
 
 		// boundBoxFunc 的 box 为 stage 坐标，需转为元素本地空间再与 elementBounds 比较

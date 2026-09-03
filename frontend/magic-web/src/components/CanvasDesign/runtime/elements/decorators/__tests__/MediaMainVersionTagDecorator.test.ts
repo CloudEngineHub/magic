@@ -40,7 +40,9 @@ function createHarness() {
 	layer.add(group)
 	const { eventEmitter, handlers } = createEventEmitterMock()
 	const canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
+		permissionManager: { can: vi.fn(() => true) },
+		getEffectiveContent: vi.fn(() => ({ contentId: "main" })),
 		eventEmitter,
 		t: vi.fn((_key: string, options: { defaultValue: string }) => options.defaultValue),
 	}
@@ -114,7 +116,9 @@ describe("MediaMainVersionTagDecorator", () => {
 
 		decorator.create()
 		expect(group.findOne(".decorator-media-main-version-tag")).toBeTruthy()
-
+		;(canvas.getEffectiveContent as ReturnType<typeof vi.fn>).mockReturnValue({
+			contentId: "other",
+		})
 		decorator.updateConfig({ data: versionedMedia("image", "other") })
 		expect(group.findOne(".decorator-media-main-version-tag")).toBeUndefined()
 

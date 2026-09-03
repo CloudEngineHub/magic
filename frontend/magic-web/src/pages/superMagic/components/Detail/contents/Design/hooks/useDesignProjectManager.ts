@@ -18,6 +18,8 @@ import type { DesignDraftReason } from "../utils/designDraftStorage"
 import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
 import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
 import type { DesignVersionLoadResult } from "../managers/DesignVersionManager"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
+import { resolveDesignAccessMode } from "../managers/types"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -67,8 +69,8 @@ export interface UseDesignProjectManagerReturn {
 	}>
 	updateLocalVersion: (version: number) => void
 
-	isReadOnly: boolean
-	setIsReadOnly: (value: boolean) => void
+	accessMode: CanvasAccessMode
+	setAccessMode: (value: CanvasAccessMode) => void
 
 	isProcessingRevoke: boolean
 	revokeType: "revoke" | "restore" | null
@@ -116,8 +118,8 @@ export function useDesignProjectManager(
 	const [elementDetailsProvenance, setElementDetailsProvenanceState] =
 		useState<ElementDetailsProvenance>({})
 	const [isInitialLoading, setIsInitialLoading] = useState(true)
-	const [isReadOnly, setIsReadOnly] = useState(
-		!options.allowEdit || options.isPlaybackMode || options.isShareRoute || options.isMobile,
+	const [accessMode, setAccessMode] = useState<CanvasAccessMode>(() =>
+		resolveDesignAccessMode(options),
 	)
 	const [isSaving, setIsSaving] = useState(false)
 	const [pendingDesignUpgrade, setPendingDesignUpgrade] = useState<PendingDesignUpgrade | null>(
@@ -138,7 +140,7 @@ export function useDesignProjectManager(
 	const sidecarStatusRef = useRef<DesignSidecarStatus>(sidecarStatus)
 	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
-	const isReadOnlyRef = useRef(isReadOnly)
+	const accessModeRef = useRef(accessMode)
 	const magicProjectJsVersionRef = useRef<number | null>(null)
 	const prevDesignDataFingerprintRef = useRef<string>("")
 	const fileVersionsListRef = useRef<FileHistoryVersion[]>([])
@@ -151,7 +153,7 @@ export function useDesignProjectManager(
 	sidecarStatusRef.current = sidecarStatus
 	conflictStateRef.current = conflictState
 	magicProjectJsFileIdRef.current = magicProjectJsFileId
-	isReadOnlyRef.current = isReadOnly
+	accessModeRef.current = accessMode
 	fileVersionsListRef.current = fileVersionsList
 	fileVersionRef.current = fileVersion
 
@@ -181,7 +183,7 @@ export function useDesignProjectManager(
 			setPrevDesignDataFingerprint: (v) => {
 				prevDesignDataFingerprintRef.current = v
 			},
-			getIsReadOnly: () => isReadOnlyRef.current,
+			getAccessMode: () => accessModeRef.current,
 			setters: {
 				setMagicProjectJsFileId,
 				setDesignData: (data) => {
@@ -206,9 +208,9 @@ export function useDesignProjectManager(
 				},
 				setIsInitialLoading,
 				setIsSaving,
-				setIsReadOnly: (v) => {
-					isReadOnlyRef.current = v
-					setIsReadOnly(v)
+				setAccessMode: (v) => {
+					accessModeRef.current = v
+					setAccessMode(v)
 				},
 				setFileVersionsList,
 				setFileVersion,
@@ -227,7 +229,12 @@ export function useDesignProjectManager(
 	if (!managerRef.current) {
 		managerRef.current = new DesignProjectManager({
 			stateBag,
-			options: { ...options, getT: () => t },
+			options: {
+				...options,
+				accessMode: resolveDesignAccessMode(options),
+				isOffline: options.isOffline,
+				getT: () => t,
+			},
 			getFileVersionsList: () => fileVersionsListRef.current,
 			getFileVersion: () => fileVersionRef.current,
 		})
@@ -236,7 +243,12 @@ export function useDesignProjectManager(
 	const manager = managerRef.current
 
 	useLayoutEffect(() => {
-		manager.updateOptions({ ...options, getT: () => t })
+		manager.updateOptions({
+			...options,
+			accessMode: resolveDesignAccessMode(options),
+			isOffline: options.isOffline,
+			getT: () => t,
+		})
 	}, [manager, options, t])
 
 	useEffect(() => {
@@ -331,8 +343,8 @@ export function useDesignProjectManager(
 		checkRemoteUpdate: () => manager.checkRemoteUpdate(),
 		updateLocalVersion: (v) => manager.updateLocalVersion(v),
 
-		isReadOnly,
-		setIsReadOnly: (v) => manager.setIsReadOnly(v),
+		accessMode,
+		setAccessMode: (v) => manager.setAccessMode(v),
 
 		isProcessingRevoke,
 		revokeType,

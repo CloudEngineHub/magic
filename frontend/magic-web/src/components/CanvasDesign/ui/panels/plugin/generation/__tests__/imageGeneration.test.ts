@@ -103,7 +103,7 @@ function createCanvas({
 	const generationRuntimeManager = new GenerationRuntimeManager()
 	const beginAttempt = vi.spyOn(generationRuntimeManager, "beginAttempt")
 	const canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
 		historyManager: null,
 		magicConfigManager: {
 			config: {
@@ -156,6 +156,7 @@ function createCanvas({
 		},
 		generationRuntimeManager,
 		permissionManager: {
+			can: vi.fn(() => true),
 			isVisible: vi.fn((element) => element.visible !== false),
 		},
 		selectionManager: {
@@ -344,6 +345,10 @@ describe("imageGeneration", () => {
 		await vi.waitFor(() => {
 			expect(canvas.__spies.beginAttempt).toHaveBeenCalled()
 		})
+		// The runtime manager rejects concurrent attempts for the same Content;
+		// clear the older ownership before installing the newer attempt used by
+		// this cleanup-ownership scenario.
+		canvas.generationRuntimeManager.clearElement("element-1")
 		canvas.generationRuntimeManager.beginAttempt({
 			attemptId: "newer-attempt",
 			operation: "image-generate",

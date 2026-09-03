@@ -466,6 +466,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	public switchActiveContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!getContentById(this.data, contentId)) return false
 		if (this.data.activeContentId === contentId) return true
 		this.canvas.elementManager.update(
@@ -477,6 +478,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	public setMainContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		const target = getContentById(this.data, contentId)
 		if (!target?.src || target.status !== GenerationStatus.Completed) return false
 		if (this.data.mainContentId === contentId) return true
@@ -489,6 +491,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	public deleteActiveContent(): boolean {
+		if (!this.canvas.permissionManager.can("document.delete")) return false
 		const activeContent = getActiveContent<VideoElementContent>(this.data)
 		if (
 			!canDeleteActiveContentVersion(this.data) ||
@@ -823,6 +826,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 内联 consumer 将会话移交给全屏 consumer，用于进入全屏层 */
 	public handoffPlaybackToFullscreen(): HTMLVideoElement | null {
+		if (!this.canvas.permissionManager.can("interaction.playback")) return null
 		this.canvas.mediaPlaybackCoordinator.preparePlayback(this.data.id)
 		const session = this.canvas.videoPlaybackManager.handoff(
 			this.getInlinePlaybackConsumerId(),
@@ -844,6 +848,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 为全屏层申请独立 consumer 的 video（自动播放），不经过内联 handoff 时使用 */
 	public async acquireFullscreenPlayback(): Promise<HTMLVideoElement | null> {
+		if (!this.canvas.permissionManager.can("interaction.playback")) return null
 		const path = this.getVideoSrc()
 		if (!path) {
 			return null
@@ -943,9 +948,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	update(newData: VideoElementData): boolean {
-		const currentActiveContentId = this.data.activeContentId
 		const previousContent = this.getVideoContent()
-		const nextContent = getActiveContent<VideoElementContent>(newData)
+		const nextViewData = this.canvas?.getElementForContentView?.(newData) ?? newData
+		const nextContent = getActiveContent<VideoElementContent>(nextViewData)
 		const srcChanged = previousContent?.src !== nextContent?.src
 		const newStatus = nextContent?.status
 		const generationSettled =
@@ -957,7 +962,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.data.mainContentId !== newData.mainContentId
 		const needsRerender =
 			contentControlsChanged ||
-			currentActiveContentId !== newData.activeContentId ||
+			previousContent?.contentId !== nextContent?.contentId ||
 			previousContent?.generateVideoRequest?.video_id !==
 				nextContent?.generateVideoRequest?.video_id ||
 			previousContent?.src !== nextContent?.src ||
@@ -1478,6 +1483,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 内联预览播放（必要时先 acquire 会话） */
 	public playPreview(): void {
+		if (!this.canvas.permissionManager.can("interaction.playback")) return
 		if (this.isInlinePlaybackPending) {
 			return
 		}
@@ -1513,6 +1519,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 播放/暂停切换（受 canTogglePlayback 约束） */
 	public togglePreview(): void {
+		if (!this.canvas.permissionManager.can("interaction.playback")) return
 		if (!this.canTogglePlayback()) {
 			return
 		}
@@ -1530,7 +1537,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 已有成片且解码出预览后可交互播放 */
 	public canTogglePlayback(): boolean {
-		return !!this.getVideoSrc() && this.renderer.hasPreview() && !this.isInlinePlaybackPending
+		return (
+			this.canvas.permissionManager.can("interaction.playback") &&
+			!!this.getVideoSrc() &&
+			this.renderer.hasPreview() &&
+			!this.isInlinePlaybackPending
+		)
 	}
 
 	/** 追加一张参考图/帧（去重 path），并预热图片缓存 */

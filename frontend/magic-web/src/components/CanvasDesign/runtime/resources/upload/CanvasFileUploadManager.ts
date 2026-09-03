@@ -320,6 +320,11 @@ export class CanvasFileUploadManager {
 		this.canvas.eventEmitter.on("element:temporary:deleted", this.handleTemporaryDeleted)
 	}
 
+	/** Document replacement is a write boundary even when invoked outside ElementTool. */
+	private canWriteDocument(): boolean {
+		return this.canvas.permissionManager?.can?.("document.write") ?? true
+	}
+
 	/**
 	 * 添加上传请求
 	 * 如果已锁定，加入队列；否则立即上传
@@ -939,6 +944,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public async replaceImageElement(options: ReplaceImageElementOptions): Promise<boolean> {
+		if (!this.canWriteDocument()) return false
 		const validation = validateFile(options.file)
 		if (!validation.valid || !isImageFile(options.file)) {
 			throw new Error(
@@ -952,6 +958,7 @@ export class CanvasFileUploadManager {
 		if (!target) return false
 		const [uploadResult] = await this.uploadDirect([options.file])
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
+		if (!this.canWriteDocument()) return false
 
 		this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
 		options.onUploadComplete?.()
@@ -973,6 +980,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public replaceImageElementFromProject(options: ReplaceImageElementFromProjectOptions): boolean {
+		if (!this.canWriteDocument()) return false
 		const lowerPath = options.path.toLowerCase().split(/[?#]/, 1)[0] ?? ""
 		if (!SUPPORTED_IMAGE_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))) {
 			throw new Error(
@@ -1009,6 +1017,7 @@ export class CanvasFileUploadManager {
 		nextPath: string,
 		targetContentId: string | null,
 	): boolean {
+		if (!this.canWriteDocument()) return false
 		const target = this.getReplaceableImageTarget(elementId, targetContentId)
 		if (!target) return false
 
@@ -1074,6 +1083,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public async replaceAudioElement(options: ReplaceAudioElementOptions): Promise<boolean> {
+		if (!this.canWriteDocument()) return false
 		const validation = validateFile(options.file)
 		if (!validation.valid || !isAudioFile(options.file)) {
 			throw new Error(
@@ -1091,6 +1101,7 @@ export class CanvasFileUploadManager {
 		if (!target) return false
 		const [uploadResult] = await this.uploadDirect([options.file])
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
+		if (!this.canWriteDocument()) return false
 
 		this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
 		options.onUploadComplete?.()
@@ -1102,6 +1113,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public replaceAudioElementFromProject(options: ReplaceAudioElementFromProjectOptions): boolean {
+		if (!this.canWriteDocument()) return false
 		const lowerPath = options.path.toLowerCase().split(/[?#]/, 1)[0] ?? ""
 		if (!SUPPORTED_AUDIO_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))) {
 			throw new Error(
@@ -1117,6 +1129,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public async replaceVideoElement(options: ReplaceVideoElementOptions): Promise<boolean> {
+		if (!this.canWriteDocument()) return false
 		const validation = validateFile(options.file)
 		if (!validation.valid || !isVideoFile(options.file)) {
 			throw new Error(
@@ -1134,6 +1147,7 @@ export class CanvasFileUploadManager {
 		if (!target) return false
 		const [uploadResult] = await this.uploadDirect([options.file])
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
+		if (!this.canWriteDocument()) return false
 
 		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
 		options.onUploadComplete?.()
@@ -1145,6 +1159,7 @@ export class CanvasFileUploadManager {
 	}
 
 	public replaceVideoElementFromProject(options: ReplaceVideoElementFromProjectOptions): boolean {
+		if (!this.canWriteDocument()) return false
 		const lowerPath = options.path.toLowerCase().split(/[?#]/, 1)[0] ?? ""
 		if (!SUPPORTED_VIDEO_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))) {
 			throw new Error(
@@ -1164,6 +1179,7 @@ export class CanvasFileUploadManager {
 		nextPath: string,
 		targetContentId: string | null,
 	): boolean {
+		if (!this.canWriteDocument()) return false
 		const target = this.getReplaceableMediaTarget(
 			elementId,
 			ElementTypeEnum.Audio,
@@ -1214,6 +1230,7 @@ export class CanvasFileUploadManager {
 		nextPath: string,
 		targetContentId: string | null,
 	): boolean {
+		if (!this.canWriteDocument()) return false
 		const target = this.getReplaceableMediaTarget(
 			elementId,
 			ElementTypeEnum.Video,

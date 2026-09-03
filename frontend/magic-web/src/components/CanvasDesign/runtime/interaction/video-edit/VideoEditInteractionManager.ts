@@ -134,7 +134,7 @@ export class VideoEditInteractionManager {
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("element:select", refresh),
 			this.canvas.eventEmitter.on("element:deselect", refresh),
-			this.canvas.eventEmitter.on("canvas:readonly", refresh),
+			this.canvas.eventEmitter.on("permission:changed", refresh),
 			this.canvas.eventEmitter.on("canvas:clear", refresh),
 		)
 	}
@@ -166,7 +166,7 @@ export class VideoEditInteractionManager {
 		const element = this.canvas.elementManager.getElementData(binding.elementId)
 		if (!element) return false
 		if (binding.action.type === "toggle-audio-playback") return true
-		if (this.canvas.readonly || element.locked) return false
+		if (!this.canvas.permissionManager.can("document.write") || element.locked) return false
 		return this.canvas.permissionManager.canUseSelectionToolAffordance()
 	}
 
@@ -175,7 +175,11 @@ export class VideoEditInteractionManager {
 			binding.elementInteraction.prepare(binding.action)
 			return
 		}
-		if (binding.action.type === "toggle-audio-playback" && this.canvas.readonly) return
+		if (
+			binding.action.type === "toggle-audio-playback" &&
+			!this.canvas.permissionManager.can("interaction.playback")
+		)
+			return
 		if (this.isSelectedBinding(binding)) return
 		this.canvas.selectionManager.replaceSelection?.([binding.elementId])
 	}

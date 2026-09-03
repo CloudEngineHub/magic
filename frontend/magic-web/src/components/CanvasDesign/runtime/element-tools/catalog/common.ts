@@ -2,6 +2,7 @@ import { ElementTypeEnum } from "../../document/types"
 import { topAction } from "./surfaceOptions"
 import type {
 	ElementToolContext,
+	ElementToolCommandRoute,
 	ElementToolDefinition,
 	ElementToolResolution,
 	ElementToolSurface,
@@ -29,6 +30,13 @@ export function resolveTool(
 		options.bindContent === false
 			? undefined
 			: (options.contentId ?? context.content.activeContentId)
+	const sessionMatches =
+		context.selection.activeToolSession?.elementId === context.element.id &&
+		context.selection.activeToolSession?.toolId === id &&
+		context.selection.activeToolSession?.contentId === contentId
+	const invocationContentRevision = sessionMatches
+		? (context.selection.activeToolSession?.contentRevision ?? context.content.activeRevision)
+		: context.content.activeRevision
 	return {
 		id,
 		execution: options.execution ?? "command",
@@ -41,7 +49,7 @@ export function resolveTool(
 		target: {
 			elementId: context.element.id,
 			contentId,
-			contentRevision: context.content.activeRevision,
+			contentRevision: invocationContentRevision,
 			generationId: contentId
 				? context.generation.attemptsByContentId.get(contentId)?.attemptId
 				: undefined,
@@ -55,12 +63,12 @@ export function resolveTool(
 		execute:
 			options.execution === "display-only"
 				? undefined
-				: (payload?: unknown) =>
+				: (payload?: unknown) => {
 						context.commandBus?.execute({
 							toolId: id,
 							elementId: context.element.id,
 							contentId,
-							contentRevision: context.content.activeRevision,
+							contentRevision: invocationContentRevision,
 							generationId: contentId
 								? context.generation.attemptsByContentId.get(contentId)?.attemptId
 								: undefined,
@@ -72,7 +80,8 @@ export function resolveTool(
 									? context.selection.activeToolSession.operationId
 									: undefined,
 							payload,
-						}),
+						})
+					},
 	}
 }
 
@@ -120,11 +129,19 @@ export function mediaTool(
 	order: number,
 	applicable: (context: ElementToolContext) => boolean,
 	presentation = topAction(group, order),
+	options: Pick<ElementToolDefinition, "effect" | "requiredCapability"> & {
+		commandRoute?: ElementToolCommandRoute
+		fallbackActionId?: string
+	},
 ): ElementToolDefinition {
 	return {
 		id,
 		scope: "active-content",
 		execution: "command",
+		effect: options.effect,
+		requiredCapability: options.requiredCapability,
+		commandRoute: options.commandRoute ?? "registered",
+		fallbackActionId: options.fallbackActionId,
 		surfaces: { top: presentation },
 		isApplicable: (context) => context.selection.isSingleElement && applicable(context),
 		resolve: (context) => resolveTool(context, id, "top", presentation),
@@ -137,12 +154,20 @@ export function topTool(
 	group: string,
 	order: number,
 	isApplicable: (context: ElementToolContext) => boolean,
+	options: Pick<ElementToolDefinition, "effect" | "requiredCapability"> & {
+		commandRoute?: ElementToolCommandRoute
+		fallbackActionId?: string
+	},
 ): ElementToolDefinition {
 	const presentation = topAction(group, order)
 	return {
 		id,
 		scope,
 		execution: "command",
+		effect: options.effect,
+		requiredCapability: options.requiredCapability,
+		commandRoute: options.commandRoute ?? "registered",
+		fallbackActionId: options.fallbackActionId,
 		surfaces: { top: presentation },
 		isApplicable,
 		resolve: (context) =>

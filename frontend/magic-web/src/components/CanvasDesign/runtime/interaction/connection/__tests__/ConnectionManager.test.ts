@@ -71,6 +71,7 @@ function createCanvasStub(
 			update: updateElement,
 		},
 		connectionGroup,
+		controlsLayer: { add: vi.fn(), find: vi.fn(() => []) },
 		ensureConnectionGroup: vi.fn(() => connectionGroup),
 		geometryCacheManager: {
 			getElementBounds: vi.fn(
@@ -84,6 +85,7 @@ function createCanvasStub(
 		},
 		selectionManager,
 		permissionManager: {
+			can: vi.fn(() => true),
 			canUseSelectionToolAffordance: vi.fn(() => true),
 		},
 		cursorManager: {

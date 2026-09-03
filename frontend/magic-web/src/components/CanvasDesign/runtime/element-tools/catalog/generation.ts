@@ -16,6 +16,9 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.GenerationQuickEdit,
 		scope: "generation",
 		execution: "command",
+		effect: "external",
+		requiredCapability: "sideEffect.generate",
+		commandRoute: "generation",
 		surfaces: {
 			bottom: {
 				...bottomAction("pencil", "imageEditor.quickEdit", "快捷编辑", "generation", 10),
@@ -36,6 +39,9 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.GenerationReEdit,
 		scope: "generation",
 		execution: "command",
+		effect: "external",
+		requiredCapability: "sideEffect.generate",
+		commandRoute: "generation",
 		surfaces: {
 			bottom: bottomAction(
 				"square-pen",
@@ -67,6 +73,9 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.GenerationGenerateAgain,
 		scope: "generation",
 		execution: "command",
+		effect: "external",
+		requiredCapability: "sideEffect.generate",
+		commandRoute: "generation",
 		surfaces: {
 			bottom: bottomAction(
 				"rotate-ccw",

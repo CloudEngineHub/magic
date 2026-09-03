@@ -120,8 +120,8 @@ export default function LayersDrawer() {
 	const { openMenu } = useElementMenu()
 
 	// 从 Context 获取画布 UI 状态
-	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds, readonly } =
-		useCanvasUI()
+	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds } = useCanvasUI()
+	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
 
 	// 将画布数据转换为树形结构，先按 zIndex 降序排序（zIndex 大的在上面）
 	const treeData = useMemo(() => {
@@ -340,18 +340,18 @@ export default function LayersDrawer() {
 								className={cn(
 									// 锁定按钮：当被锁定时一直显示，否则只在 hover 时显示
 									!isLocked && context.showOnHoverClassName,
-									readonly && !isLocked && styles.hidden,
+									!canWrite && !isLocked && styles.hidden,
 								)}
 							>
 								<IconButton
 									className={cn(
 										styles.layerNodeActionButton,
-										readonly && styles.noHover,
+										!canWrite && styles.noHover,
 										context.noHoverClassName,
 										context.noActiveClassName,
 									)}
 									onClick={(e) => {
-										if (readonly) return
+										if (!canWrite) return
 										stopPropagation(e)
 										toggleLocked(node.id, isLocked)
 									}}
@@ -362,6 +362,7 @@ export default function LayersDrawer() {
 							<div
 								className={cn(
 									// 可见性按钮：当不可见时一直显示，否则只在 hover 时显示
+									!canWrite && styles.hidden,
 									isVisible && context.showOnHoverClassName,
 								)}
 							>
@@ -372,6 +373,7 @@ export default function LayersDrawer() {
 										context.noActiveClassName,
 									)}
 									onClick={(e) => {
+										if (!canWrite) return
 										stopPropagation(e)
 										toggleVisible(node.id, isVisible)
 									}}
@@ -389,7 +391,7 @@ export default function LayersDrawer() {
 			stopPropagation,
 			toggleLocked,
 			toggleVisible,
-			readonly,
+			canWrite,
 			canvas,
 			setLayerRenamingElementId,
 		],
@@ -410,14 +412,14 @@ export default function LayersDrawer() {
 
 	const handleDoubleClick = useCallback(
 		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
-			// readonly 状态下不允许编辑名称
-			if (readonly) {
+			// 没有文档写能力时不允许编辑名称
+			if (!canWrite) {
 				return
 			}
 			// 双击进入编辑模式
 			setLayerRenamingElementId(node.id)
 		},
-		[readonly, setLayerRenamingElementId],
+		[canWrite, setLayerRenamingElementId],
 	)
 
 	const handleMouseEnter = useCallback(
@@ -477,11 +479,7 @@ export default function LayersDrawer() {
 
 	return (
 		<div
-			className={cn(
-				styles.layersDrawer,
-				collapsed && styles.collapsed,
-				readonly && styles.readonly,
-			)}
+			className={cn(styles.layersDrawer, collapsed && styles.collapsed)}
 			style={{
 				width: width,
 				transition: transitionAnimation,
@@ -557,7 +555,7 @@ export default function LayersDrawer() {
 								selectedIds={selectedIds}
 								hoveredIds={hoveredIds}
 								treeNodeContentClassName={
-									readonly ? styles.treeNodeContentReadonly : undefined
+									!canWrite ? styles.treeNodeContentViewOnly : undefined
 								}
 								virtualize
 								virtualThreshold={LAYER_TREE_VIRTUAL_THRESHOLD}

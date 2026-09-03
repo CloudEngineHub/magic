@@ -111,6 +111,7 @@ export class AudioPlaybackManager {
 	}
 
 	public async toggle(elementId: string, path: string): Promise<boolean> {
+		if (!this.canPlayback()) return false
 		const session = await this.ensureSession(elementId, path, {
 			source: "interaction",
 			priority: "critical",
@@ -151,6 +152,7 @@ export class AudioPlaybackManager {
 	}
 
 	public seek(elementId: string, progress: number): void {
+		if (!this.canPlayback()) return
 		const session = this.sessions.get(elementId)
 		if (!session) {
 			const retained = this.retainedMetadata.get(elementId)
@@ -169,6 +171,7 @@ export class AudioPlaybackManager {
 	}
 
 	public async seekBy(elementId: string, path: string, deltaSeconds: number): Promise<boolean> {
+		if (!this.canPlayback()) return false
 		const session = await this.ensureSession(elementId, path, {
 			source: "interaction",
 			priority: "critical",
@@ -615,7 +618,7 @@ export class AudioPlaybackManager {
 			this.canvas.mediaResourceOfflineCacheManager.recordVirtualResourceLoadSuccess(
 				resource.ossSrc,
 			)
-			if (session.wantsPlayback) {
+			if (session.wantsPlayback && this.canPlayback()) {
 				this.canvas.mediaPlaybackCoordinator.preparePlayback(session.elementId)
 				await session.audio.play().catch(() => undefined)
 			}
@@ -630,6 +633,10 @@ export class AudioPlaybackManager {
 			session.refreshing = false
 			if (this.sessions.get(session.elementId) === session) this.emit(session)
 		}
+	}
+
+	private canPlayback(): boolean {
+		return this.canvas.permissionManager?.can?.("interaction.playback") ?? true
 	}
 
 	private cancelPendingSession(elementId: string, options?: { emit?: boolean }): void {

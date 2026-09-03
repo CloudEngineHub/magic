@@ -155,17 +155,19 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 				group: { id: string; name: string; icon: string; sort: number }
 				models: ImageModelItem[]
 			}) =>
-				(groupItem.models || []).map((model): ImageModelItem => ({
-					...model,
-					model_source: "official",
-					model_group: {
-						id: groupItem.group.id,
-						name: normalizeImageModelGroupLabel(groupItem.group.name),
-						icon: groupItem.group.icon,
-						sort: groupItem.group.sort,
-						source: "official",
-					},
-				})),
+				(groupItem.models || []).map(
+					(model): ImageModelItem => ({
+						...model,
+						model_source: "official",
+						model_group: {
+							id: groupItem.group.id,
+							name: normalizeImageModelGroupLabel(groupItem.group.name),
+							icon: groupItem.group.icon,
+							sort: groupItem.group.sort,
+							source: "official",
+						},
+					}),
+				),
 		)
 		const customModels = getRepresentativeModelsByModelId(
 			await superMagicCustomModelService.getMyModelsByType(MODEL_TYPE_IMAGE),

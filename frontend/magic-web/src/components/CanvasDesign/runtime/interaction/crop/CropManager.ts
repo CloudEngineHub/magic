@@ -250,6 +250,7 @@ export class CropManager {
 	 * 进入裁剪模式
 	 */
 	public enterCropMode(elementId: string, contentId?: string): void {
+		if (!this.canvas.permissionManager.can("document.write")) return
 		if (this.croppingElementId === elementId) return
 
 		// 获取元素数据

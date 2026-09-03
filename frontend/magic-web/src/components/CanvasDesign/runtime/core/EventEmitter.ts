@@ -18,9 +18,16 @@ import type { LoadedVideoResource } from "../resources/video/VideoResourceManage
 import type { ResourceLoadFailureReason } from "../resources/media-common/resourceLoadFailure"
 import type { ConnectionOrigin } from "../shared/connectionOrigin"
 import type { GenerationElementToolId } from "../element-tools/model/ElementToolTypes"
+import type { CanvasAccessContext } from "../../public/props"
 
 export type ViewportChangeSource =
-	"wheel" | "gesture" | "minimap" | "programmatic" | "resize" | "restore" | "unknown"
+	| "wheel"
+	| "gesture"
+	| "minimap"
+	| "programmatic"
+	| "resize"
+	| "restore"
+	| "unknown"
 
 export type ViewportChangePhase = "start" | "move" | "end"
 
@@ -299,7 +306,8 @@ export interface CanvasEventMap {
 	"canvas:ready": void
 	"canvas:resize": { width: number; height: number }
 	"canvas:clear": void
-	"canvas:readonly": { readonly: boolean } // 只读状态变化事件
+	"permission:changed": CanvasAccessContext
+	"content:previewChanged": { elementId?: string; contentId?: string }
 	"canvas:devicechange": {
 		previous: CanvasDeviceInfo
 		current: CanvasDeviceInfo

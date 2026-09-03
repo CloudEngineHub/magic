@@ -32,13 +32,13 @@ function stateBag(): DesignProjectStateBag {
 		setMagicProjectJsVersion: vi.fn(),
 		getPrevDesignDataFingerprint: () => "",
 		setPrevDesignDataFingerprint: vi.fn(),
-		getIsReadOnly: () => false,
+		getAccessMode: () => "edit",
 		setters: {
 			setMagicProjectJsFileId: vi.fn(),
 			setDesignData: vi.fn(),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
-			setIsReadOnly: vi.fn(),
+			setAccessMode: vi.fn(),
 			setFileVersionsList: vi.fn(),
 			setFileVersion: vi.fn(),
 			setIsProcessingRevoke: vi.fn(),
@@ -128,6 +128,6 @@ describe("DesignVersionManager", () => {
 		expect(bag.setters.setDesignData).toHaveBeenCalledWith(
 			expect.objectContaining({ name: "history" }),
 		)
-		expect(bag.setters.setIsReadOnly).toHaveBeenCalledWith(true)
+		expect(bag.setters.setAccessMode).toHaveBeenCalledWith("history")
 	})
 })

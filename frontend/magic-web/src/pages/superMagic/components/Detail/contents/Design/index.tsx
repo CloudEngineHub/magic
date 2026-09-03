@@ -31,6 +31,8 @@ import type {
 	CanvasDesignDataChangeMeta,
 	CanvasDesignDataPatch,
 	CanvasDesignRef,
+	CanvasAccessMode,
+	CanvasCapability,
 } from "@/components/CanvasDesign/public/props"
 import { useDesignFocusElement } from "./hooks/useDesignFocusElement"
 import { useAttachments } from "./hooks/useAttachments"
@@ -38,6 +40,7 @@ import { useCanvasImageFileRenameSync } from "./hooks/useCanvasImageFileRenameSy
 import type {
 	CanvasDeviceInfo,
 	CanvasDocument,
+	CanvasFileElement,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import { getDefaultCanvasDeviceInfo } from "@/components/CanvasDesign/runtime/shared/ids"
@@ -50,7 +53,7 @@ import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { setCanvasElementResourceGetter } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
 import { useDesignDownloadPolicy } from "./hooks/useDesignDownloadPolicy"
 import { HISTORY_VERSION_BANNER_LAYOUT_HEIGHT_PX } from "@/pages/superMagic/components/Detail/components/CommonHeader/components/HistoryVersionBanner"
-import type { DesignRemoteUpdateListenerMode } from "./managers/types"
+import { resolveDesignAccessMode, type DesignRemoteUpdateListenerMode } from "./managers/types"
 import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
@@ -266,8 +269,6 @@ interface DesignViewerProps {
 	}
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
-	/** 独立预览场景传入的项目 ID */
-	projectId?: string
 	/** 是否为话题回放模式 */
 	isPlaybackMode?: boolean
 	allowEdit: boolean
@@ -343,6 +344,13 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 检测是否是移动端
 	const isMobile = useIsMobile()
+	const initialAccessMode: CanvasAccessMode = resolveDesignAccessMode({
+		allowEdit,
+		isPlaybackMode,
+		isShareRoute,
+		isMobile,
+		isOffline,
+	})
 
 	// 用于强制重新挂载 CanvasDesign 的 key
 	const [canvasDesignKey, setCanvasDesignKey] = useState(0)
@@ -435,6 +443,8 @@ function DesignViewer(props: DesignViewerProps) {
 		isPlaybackMode,
 		isShareRoute,
 		isMobile,
+		isOffline,
+		accessMode: initialAccessMode,
 		projectPath: props.data?.project_path,
 		designProjectId: directoryInfo.id || currentFile?.id,
 		designProjectName: directoryInfo.name ?? "",
@@ -484,8 +494,7 @@ function DesignViewer(props: DesignViewerProps) {
 		reloadPreservingLocalDraft,
 		reloadCurrentVersion,
 		reloadDiscardingLocalDraft,
-		isReadOnly: isReadOnlyState,
-		setIsReadOnly: setIsReadOnlyState,
+		accessMode,
 		fileVersionsList,
 		fileVersion,
 		isNewestVersion,
@@ -532,12 +541,9 @@ function DesignViewer(props: DesignViewerProps) {
 	const shouldAutoUpgrade =
 		!isInitialLoading &&
 		!!pendingDesignUpgrade &&
-		allowEdit &&
-		!isPlaybackMode &&
-		!isShareRoute &&
-		!isMobile &&
+		(accessMode === "edit" ||
+			(accessMode === "readonly" && pendingDesignUpgrade.reason === "sidecar-retry")) &&
 		isNewestVersion &&
-		(!isReadOnlyState || pendingDesignUpgrade.reason === "sidecar-retry") &&
 		sidecarStatus !== "unsupported" &&
 		!conflictState
 
@@ -690,8 +696,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计项目 ID
 	const designProjectId = directoryInfo.id || currentFile?.id || ""
-	const isCanvasSelectionMentionsEnabled =
-		allowEdit && !isPlaybackMode && !isShareRoute && !isReadOnlyState && isTabActive !== false
+	const isCanvasSelectionMentionsEnabled = accessMode === "edit" && isTabActive !== false
 	const resolveCanvasResourceFile = useCallback(
 		(src: string) =>
 			resolveDesignCanvasResourceFileItem(src, {
@@ -763,6 +768,12 @@ function DesignViewer(props: DesignViewerProps) {
 	}, [designProjectId, displayName, isTabActive, resolveCanvasResourceFile])
 
 	const downloadPolicy = useDesignDownloadPolicy()
+	const getContentViewElement = useCallback(
+		(element: CanvasFileElement) =>
+			canvasDesignRef.current?.getCanvasInstance()?.getElementForContentView(element) ??
+			element,
+		[],
+	)
 
 	const designCanvasMagicPermissions = useMemo(
 		() => ({
@@ -790,6 +801,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 使用 hook 获取 methods 方法集合
 	const methods = useDesignMethods({
+		getContentViewElement,
 		projectId,
 		designProjectId,
 		selectedTopic,
@@ -1276,25 +1288,6 @@ function DesignViewer(props: DesignViewerProps) {
 		propsElements,
 	])
 
-	// 监听 allowEdit、isPlaybackMode、isShareRoute 和 isMobile 变化，更新只读状态
-	// 如果当前不在查看历史版本，则根据 allowEdit、isPlaybackMode、isShareRoute 或 isMobile 更新只读状态
-	// 如果正在查看历史版本，则保持只读状态不变（由 onVersionChange 处理）
-	useEffect(() => {
-		if (isNewestVersion) {
-			setIsReadOnlyState(
-				!allowEdit || isPlaybackMode || isShareRoute || isMobile || isOffline,
-			)
-		}
-	}, [
-		allowEdit,
-		isMobile,
-		isNewestVersion,
-		isOffline,
-		isPlaybackMode,
-		isShareRoute,
-		setIsReadOnlyState,
-	])
-
 	useEffect(() => {
 		const wasOffline = wasOfflineRef.current
 		wasOfflineRef.current = isOffline
@@ -1466,6 +1459,26 @@ function DesignViewer(props: DesignViewerProps) {
 	const shouldBlockCanvasForConflict =
 		!!conflictState && !hasUnresolvedElementConflicts && !hasUnresolvedConnectionConflicts
 	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
+	const canvasAccessMode: CanvasAccessMode = accessMode
+	const canvasCapabilities = useMemo<Partial<Record<CanvasCapability, boolean>>>(() => {
+		const runtimeWriteBlocked =
+			isUpgradeBlockingCanvas || isBlockingDesignLoadIssue || shouldBlockCanvasForConflict
+		return {
+			...(allowDownload === true ? { "sideEffect.download": true } : {}),
+			...(runtimeWriteBlocked
+				? {
+						"document.write": false,
+						"document.delete": false,
+						"sideEffect.generate": false,
+					}
+				: {}),
+		}
+	}, [
+		allowDownload,
+		isBlockingDesignLoadIssue,
+		isUpgradeBlockingCanvas,
+		shouldBlockCanvasForConflict,
+	])
 	const [blockingConflictResolveAction, setBlockingConflictResolveAction] = useState<
 		"remote" | "local" | null
 	>(null)
@@ -1628,7 +1641,6 @@ function DesignViewer(props: DesignViewerProps) {
 									onChangeFileVersion={handleChangeFileVersion}
 									onReturnLatest={handleReturnLatest}
 									onVersionRollback={handleVersionRollback}
-									isReadOnly={isReadOnlyState}
 									isMobile={isMobile}
 									allowEdit={allowEdit}
 									updateAttachments={updateAttachments}
@@ -1755,12 +1767,8 @@ function DesignViewer(props: DesignViewerProps) {
 									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
 									id={designProjectId}
 									ref={canvasDesignRef}
-									readonly={
-										isReadOnlyState ||
-										isUpgradeBlockingCanvas ||
-										isBlockingDesignLoadIssue ||
-										shouldBlockCanvasForConflict
-									}
+									accessMode={canvasAccessMode}
+									capabilities={canvasCapabilities}
 									magic={{
 										methods,
 										permissions: designCanvasMagicPermissions,

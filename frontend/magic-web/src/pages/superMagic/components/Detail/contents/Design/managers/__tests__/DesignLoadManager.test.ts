@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DesignLoadManager } from "../DesignLoadManager"
 import type { DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
 import type { DesignData } from "../../types"
+import type { RectangleElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	findMagicProjectJsFile,
 	normalizeDesignDataPathsAfterLoad,
@@ -52,7 +53,10 @@ function createDesignData(name: string): DesignData {
 					width: 100,
 					height: 100,
 					zIndex: 1,
-				},
+					activeContentId: `${name}-content`,
+					mainContentId: `${name}-content`,
+					contents: [{ contentId: `${name}-content` }],
+				} satisfies RectangleElement,
 			],
 		},
 	}
@@ -100,7 +104,7 @@ function createStateBag() {
 		setPrevDesignDataFingerprint: (fingerprint) => {
 			previousFingerprint = fingerprint
 		},
-		getIsReadOnly: () => false,
+		getAccessMode: () => "edit",
 		setters: {
 			setMagicProjectJsFileId: vi.fn((fileId: string | null) => {
 				magicProjectJsFileId = fileId
@@ -111,7 +115,7 @@ function createStateBag() {
 			setElementDetailsProvenance: vi.fn(),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
-			setIsReadOnly: vi.fn(),
+			setAccessMode: vi.fn(),
 			setFileVersionsList: vi.fn(),
 			setFileVersion: vi.fn(),
 			setIsProcessingRevoke: vi.fn(),
@@ -135,7 +139,10 @@ describe("DesignLoadManager request identity", () => {
 		vi.mocked(resolveDesignDirectoryNameFromAttachments).mockReturnValue(undefined)
 		vi.mocked(resolveDesignProjectBasePathFromAttachments).mockReturnValue(undefined)
 		vi.mocked(normalizeDesignDataPathsAfterLoad).mockImplementation(() => undefined)
-		vi.mocked(hydrateDesignDataDetails).mockResolvedValue({})
+		vi.mocked(hydrateDesignDataDetails).mockResolvedValue({
+			provenance: {},
+			status: "missing",
+		})
 		vi.mocked(parseMagicProjectJsContentWithDiagnostics).mockImplementation((content) => ({
 			data: createDesignData(content),
 			canvasStatus: "valid-non-empty",

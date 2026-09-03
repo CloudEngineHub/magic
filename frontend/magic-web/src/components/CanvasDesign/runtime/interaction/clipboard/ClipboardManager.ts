@@ -147,6 +147,40 @@ export class ClipboardManager {
 		this.canvas = canvas
 	}
 
+	private getEffectiveContent(element: CanvasFileElement) {
+		return (
+			(this.canvas.getEffectiveContent(element.id) as
+				| ReturnType<typeof getActiveContent>
+				| undefined) ?? getActiveContent(element)
+		)
+	}
+
+	private getEffectiveImageContent(element: ImageElement) {
+		return (
+			(this.canvas.getEffectiveContent(element.id) as
+				| ReturnType<typeof getActiveImageContent>
+				| undefined) ?? getActiveImageContent(element)
+		)
+	}
+
+	/**
+	 * Copy/export must reflect the current session preview without mutating the
+	 * document. Project every nested media element because a selected frame or
+	 * group can contain Content previews on its descendants.
+	 */
+	private projectElementTreeForContentView(element: LayerElement): LayerElement {
+		const projected = this.canvas.getElementForContentView?.(element) ?? element
+		if (!isCanvasContainerElement(projected) || !Array.isArray(projected.children)) {
+			return projected
+		}
+		return {
+			...projected,
+			children: projected.children.map((child) =>
+				this.projectElementTreeForContentView(child),
+			),
+		} as LayerElement
+	}
+
 	/**
 	 * 获取目标位置
 	 */
@@ -267,6 +301,7 @@ export class ClipboardManager {
 			const sourceElements = elementIds
 				.map((id) => this.canvas.elementManager.getElementData(id))
 				.filter((element): element is LayerElement => Boolean(element))
+				.map((element) => this.projectElementTreeForContentView(element))
 
 			success = await this.writePngToClipboard(
 				exportResult.blob,
@@ -819,7 +854,7 @@ export class ClipboardManager {
 			sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 		}
 	} | null> {
-		const src = getActiveImageContent(element).src
+		const src = this.getEffectiveImageContent(element).src
 		if (!src) {
 			return null
 		}
@@ -850,7 +885,7 @@ export class ClipboardManager {
 	}
 
 	private async getImageMetadata(element: ImageElement): Promise<CanvasFileMetadataData | null> {
-		const src = getActiveImageContent(element).src
+		const src = this.getEffectiveImageContent(element).src
 		if (!src) {
 			return null
 		}
@@ -865,7 +900,7 @@ export class ClipboardManager {
 	}
 
 	private async getVideoMetadata(element: VideoElement): Promise<CanvasFileMetadataData | null> {
-		const src = getActiveContent(element)?.src
+		const src = this.getEffectiveContent(element)?.src
 		if (!src) {
 			return null
 		}
@@ -880,7 +915,7 @@ export class ClipboardManager {
 	}
 
 	private async getAudioMetadata(element: AudioElement): Promise<CanvasFileMetadataData | null> {
-		const src = getActiveContent(element)?.src
+		const src = this.getEffectiveContent(element)?.src
 		if (!src) return null
 		const metadata = await this.fetchOriginalFileMetadata({
 			src,
@@ -1063,7 +1098,7 @@ export class ClipboardManager {
 
 		const collect = (element: LayerElement): void => {
 			if (CanvasElementClipboard.isCanvasFileElement(element)) {
-				const activeContentId = getActiveContent(element)?.contentId
+				const activeContentId = this.getEffectiveContent(element)?.contentId
 				for (const content of element.contents) {
 					if (content.contentId === activeContentId) continue
 					const identity = getClipboardResourcePathKey(
@@ -1089,8 +1124,8 @@ export class ClipboardManager {
 	): Pick<CanvasElementClipboardFileMetadata, "resourceIdentity" | "resourceAliases"> {
 		const elementSrc =
 			element.type === ElementTypeEnum.Image
-				? getActiveImageContent(element).src
-				: getActiveContent(element)?.src
+				? this.getEffectiveImageContent(element).src
+				: this.getEffectiveContent(element)?.src
 		const resourceIdentity = getClipboardResourcePathKey(
 			elementSrc,
 			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference,
@@ -1184,7 +1219,9 @@ export class ClipboardManager {
 			if (elements.length === 0) {
 				return
 			}
-			elements = elements.map((element) => this.sanitizeElementTreeForClipboard(element))
+			elements = elements
+				.map((element) => this.projectElementTreeForContentView(element))
+				.map((element) => this.sanitizeElementTreeForClipboard(element))
 			const connections = this.getClipboardConnections(elements)
 
 			// 复制元素时会异步获取媒体 sourceRef，先展示 loading 避免用户误以为未响应。
@@ -1694,9 +1731,9 @@ export class ClipboardManager {
 		const metadata = metadataByElementId.get(sourceElement.id)
 		const sourcePath =
 			sourceElement.type === ElementTypeEnum.Image
-				? getActiveImageContent(sourceElement).src
-				: getActiveContent(sourceElement)?.src
-		const targetContentId = getActiveContent(finalElement)?.contentId
+				? this.getEffectiveImageContent(sourceElement).src
+				: this.getEffectiveContent(sourceElement)?.src
+		const targetContentId = this.getEffectiveContent(finalElement)?.contentId
 		if (!sourcePath || !targetContentId) {
 			return {
 				element: finalElement,
@@ -2110,8 +2147,8 @@ export class ClipboardManager {
 		if (readyConnections.length === 0) return false
 
 		return (
-			this.canvas.connectionManager.connectElementsBatch({ edges: readyConnections }).status ===
-			"created"
+			this.canvas.connectionManager.connectElementsBatch({ edges: readyConnections })
+				.status === "created"
 		)
 	}
 
@@ -2276,10 +2313,7 @@ export class ClipboardManager {
 			)
 			const deferredVideoEditConnectionTargets =
 				this.getClipboardDeferredVideoEditConnectionTargets(remappedConnections)
-			this.createClipboardConnections(
-				remappedConnections,
-				deferredVideoEditConnectionTargets,
-			)
+			this.createClipboardConnections(remappedConnections, deferredVideoEditConnectionTargets)
 
 			this.canvas.historyManager.enable()
 			if (createdElementIds.length > 0) {
@@ -2462,7 +2496,7 @@ export class ClipboardManager {
 		position?: { x: number; y: number },
 		options?: { skipFocus?: boolean },
 	): Promise<string | null> {
-		if (this.canvas.readonly) {
+		if (!this.canvas.permissionManager.can("document.write")) {
 			return null
 		}
 

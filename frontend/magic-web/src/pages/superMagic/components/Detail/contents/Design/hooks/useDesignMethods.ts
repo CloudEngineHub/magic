@@ -9,6 +9,7 @@ import type {
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
 } from "@/components/CanvasDesign/public/magic-types"
+import type { CanvasFileElement } from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	CanvasResourceReferenceResolverSnapshot,
 	ResolveCanvasResourceReference,
@@ -47,6 +48,8 @@ import {
 } from "../utils/designResourceReferenceResolver"
 
 interface UseDesignMethodsOptions {
+	/** 将元素投影到当前 Canvas 会话的 effective Content（只读预览时不写回文档） */
+	getContentViewElement?: (element: CanvasFileElement) => CanvasFileElement
 	projectId?: string
 	designProjectId?: string
 	selectedTopic?: Topic | null
@@ -91,6 +94,7 @@ interface UseDesignMethodsOptions {
  */
 export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesignMethods {
 	const {
+		getContentViewElement,
 		projectId,
 		designProjectId,
 		selectedTopic,
@@ -185,6 +189,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	})
 
 	const { addToConversation, downloadFiles } = useConversationAndDownload({
+		getContentViewElement,
 		flatAttachments,
 		attachmentsReady,
 		attachmentIndex,

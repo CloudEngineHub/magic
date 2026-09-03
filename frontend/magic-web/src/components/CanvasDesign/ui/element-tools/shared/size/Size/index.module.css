@@ -16,7 +16,7 @@
 	width: 86px;
 }
 
-.input-wrapper.readonly {
+.input-wrapper.disabled {
 	width: 72px;
 }
 
@@ -85,8 +85,8 @@
 	color: var(--base-muted-foreground, #737373);
 }
 
-/* readonly 模式下输入框无 border */
-.input.readonly {
+/* disabled 状态下输入框无 border */
+.input.disabled {
 	padding-right: 4px !important;
 	background: transparent !important;
 	border: none !important;

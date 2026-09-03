@@ -203,7 +203,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			canvas: this.canvas,
 			getElementData: () => this.data,
 			onStatusUpdate: (contentId) => {
-				if (contentId && getActiveImageContentId(this.data) !== contentId) return
+				if (contentId && this.getActiveContentData().contentId !== contentId) return
 				this.isErrorState = true
 				// reject ossSrc Promise（生成失败）
 				if (this.ossSrcReject) {
@@ -265,7 +265,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private resolveActiveContentData(): ImageElementContent {
-		return resolveActiveImageContent(this.data)
+		return this.getActiveContent<ImageElementContent>() ?? resolveActiveImageContent(this.data)
 	}
 
 	public getActiveContentData(): ImageElementContent {
@@ -381,6 +381,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	public switchActiveContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!isImageElementContent(this.data)) return false
 		if (!this.data.contents.some((content) => content.contentId === contentId)) return false
 		if (this.data.activeContentId === contentId) return true
@@ -394,6 +395,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	public setMainContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!isImageElementContent(this.data)) return false
 		const target = this.data.contents.find((content) => content.contentId === contentId)
 		if (!target?.src || target.status !== GenerationStatus.Completed) return false
@@ -407,6 +409,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	public deleteActiveContent(): boolean {
+		if (!this.canvas.permissionManager.can("document.delete")) return false
 		if (!isImageElementContent(this.data)) return false
 		const result = deleteActiveImageContent(this.data)
 		if (!result) return false
@@ -1160,7 +1163,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private getActiveImageGenerationTaskMeta(): ImageGenerationTaskMeta | undefined {
-		const activeContentId = getActiveImageContentId(this.data)
+		const activeContentId = this.getActiveContentData().contentId
 		const runtimeTarget = activeContentId
 			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
 			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
@@ -1221,7 +1224,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
 	public getActiveGenerateImageRequest(): GenerateImageRequest | undefined {
-		const activeContentId = getActiveImageContentId(this.data)
+		const activeContentId = this.getActiveContentData().contentId
 		const runtimeTarget = activeContentId
 			? this.canvas?.generationRuntimeManager?.getTargetState(this.data.id, activeContentId)
 			: this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
@@ -1612,13 +1615,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 检查图片是否满足生成条件（正在生成中或等待生成结果）
 	 */
 	private isImageGenerationPending(): boolean {
-		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
+		const activeContent = this.getActiveContentData()
+		if (this.hasActiveGeneration(activeContent.contentId)) {
 			return true
 		}
 
 		// 只有仍带任务 id 的请求才代表当前有生成轮询；无 id 的请求仅用于信息展示。
 		const hasActiveGenerationTask = this.hasActiveImageGenerationTask()
-		const activeContent = this.getActiveContentData()
 		const hasSrc = !!activeContent.src
 		const status = activeContent.status
 
@@ -1943,7 +1946,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const activeContent = this.getActiveContentData()
 		const status = activeContent.status
 
-		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
+		if (this.hasActiveGeneration(activeContent.contentId)) {
 			const suffix = this.getGeneratingNameSuffix()
 			return `${baseName}${suffix}`
 		}
@@ -2122,7 +2125,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return (
 			replacementState?.source === "local-upload" &&
 			replacementState.phase === "uploading" &&
-			replacementState.contentId === getActiveImageContentId(this.data)
+			replacementState.contentId === this.getActiveContentData().contentId
 		)
 	}
 
@@ -2156,7 +2159,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		// 失败重试期间保留已落库的失败状态，但运行时应优先展示本次提交态。
-		if (this.hasActiveGeneration(getActiveImageContentId(this.data))) {
+		if (this.hasActiveGeneration(activeContent.contentId)) {
 			return this.renderGeneratingPlaceholder()
 		}
 
@@ -2184,10 +2187,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	update(newData: ImageElementData): boolean {
-		const currentActiveContentId = getActiveImageContentId(this.data)
-		const nextActiveContentId = getActiveImageContentId(newData)
+		const currentDocumentActiveContentId = getActiveImageContentId(this.data)
+		const nextDocumentActiveContentId = getActiveImageContentId(newData)
 		const currentContent = this.getActiveContentData()
-		const nextContent = resolveActiveImageContent(newData)
+		const nextViewData = this.canvas?.getElementForContentView?.(newData) ?? newData
+		const nextContent = resolveActiveImageContent(nextViewData)
 		const currentTaskMeta = currentContent.imageGenerationTaskMeta
 		const nextTaskMeta = nextContent.imageGenerationTaskMeta
 		const contentControlsChanged =
@@ -2198,7 +2202,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.data.mainContentId !== newData.mainContentId))
 		const needsRerender =
 			contentControlsChanged ||
-			getActiveImageContentId(this.data) !== getActiveImageContentId(newData) ||
+			currentContent.contentId !== nextContent.contentId ||
 			currentContent.generateImageRequest?.image_id !==
 				nextContent.generateImageRequest?.image_id ||
 			currentTaskMeta?.image_id !== nextTaskMeta?.image_id ||
@@ -2222,15 +2226,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.data = newData
 		if (
-			currentActiveContentId &&
-			nextActiveContentId &&
-			currentActiveContentId !== nextActiveContentId
+			currentDocumentActiveContentId &&
+			nextDocumentActiveContentId &&
+			currentDocumentActiveContentId !== nextDocumentActiveContentId
 		) {
 			// 所有 active Content 变更（含撤销/重做、远端合并与轮询完成）统一清理旧 Content Marker。
 			this.canvas.markerManager.handleImageContentChanged(
 				this.data.id,
-				currentActiveContentId,
-				nextActiveContentId,
+				currentDocumentActiveContentId,
+				nextDocumentActiveContentId,
 			)
 		}
 
@@ -2407,7 +2411,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private isActiveGenerationPlaceholder(): boolean {
 		if (
 			this.hasActiveImageGenerationTask() ||
-			this.hasActiveGeneration(getActiveImageContentId(this.data))
+			this.hasActiveGeneration(this.getActiveContentData().contentId)
 		) {
 			return true
 		}

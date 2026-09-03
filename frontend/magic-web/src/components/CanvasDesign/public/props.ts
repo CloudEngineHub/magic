@@ -418,11 +418,33 @@ export interface CanvasDesignConnectionActionHint {
 	remoteExists?: boolean
 }
 
+export type CanvasCapability =
+	| "document.read"
+	| "document.write"
+	| "document.delete"
+	| "interaction.select"
+	| "interaction.preview"
+	| "interaction.switchContent"
+	| "interaction.playback"
+	| "sideEffect.download"
+	| "sideEffect.copy"
+	| "sideEffect.generate"
+
+export type CanvasAccessMode = "edit" | "readonly" | "share" | "history"
+
+export interface CanvasAccessContext {
+	mode: CanvasAccessMode
+	capabilities: ReadonlySet<CanvasCapability>
+	can: (capability: CanvasCapability) => boolean
+}
+
 export interface CanvasDesignProps {
 	/** 设计项目 ID，用于隔离画布级缓存、SW 离线资源与跨画布粘贴校验 */
 	id: string
-	/** 是否为只读模式 */
-	readonly?: boolean
+	/** Optional semantic mode used to derive default capabilities. */
+	accessMode?: CanvasAccessMode
+	/** Fine-grained interaction capabilities. */
+	capabilities?: Partial<Record<CanvasCapability, boolean>>
 	/** Magic 配置 */
 	magic?: MagicConfig
 	/** 插件配置，由宿主注入系统内置插件，并可声明用户插件资源目录 */
