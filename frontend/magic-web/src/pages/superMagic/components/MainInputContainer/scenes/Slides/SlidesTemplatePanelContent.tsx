@@ -245,20 +245,6 @@ function SlidesTemplatePanelContent({
 									/>
 								) : null
 							}}
-							renderGroupOption={(group, optionProps) =>
-								group.group_key === MY_SLIDES_TEMPLATES_GROUP_KEY ? (
-									<MySlidesTemplatesGroupTabs
-										activeSection={slidesState.myTemplatesActiveSection}
-										isSelected={isMyTemplatesSelected}
-										onGroupClick={() =>
-											handlePrimaryGroupChange(group.group_key)
-										}
-										onSectionChange={slidesState.setMyTemplatesActiveSection}
-										optionProps={optionProps}
-										flat={isMobile}
-									/>
-								) : null
-							}
 							showEmptyGroups
 							optionClassName={
 								isMobile ? "h-8 px-2.5 py-1.5 text-xs [&>span]:text-xs" : undefined
@@ -287,6 +273,30 @@ function SlidesTemplatePanelContent({
 						{isSearchOpen ? <X className="size-4" /> : <Search className="size-4" />}
 					</Button>
 				</div>
+				{showMyTemplates && isMyTemplatesSelected ? (
+					<div
+						className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto py-0.5"
+						data-testid="my-slides-templates-secondary-tabs"
+					>
+						<MySlidesTemplatesGroupTabs
+							activeSection={slidesState.myTemplatesActiveSection}
+							isSelected={isMyTemplatesSelected}
+							onGroupClick={() =>
+								handlePrimaryGroupChange(MY_SLIDES_TEMPLATES_GROUP_KEY)
+							}
+							onSectionChange={slidesState.setMyTemplatesActiveSection}
+							optionProps={{
+								className:
+									"h-8 rounded-lg bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground shadow-none transition-none hover:bg-muted hover:text-foreground active:scale-100 data-[selected=true]:border-transparent data-[selected=true]:bg-background data-[selected=true]:font-medium data-[selected=true]:text-foreground data-[selected=true]:shadow-sm",
+								icon: undefined,
+								isSelected: true,
+								label: "",
+								"data-testid": "my-slides-templates-secondary-tab-created",
+							}}
+							flat
+						/>
+					</div>
+				) : null}
 				{shouldHideTagFilters ? null : slidesState.isTagFilterLoading ? (
 					<SlidesTemplateTagFiltersSkeleton isMobile={isMobile} />
 				) : slidesState.tagGroups.length > 0 ? (

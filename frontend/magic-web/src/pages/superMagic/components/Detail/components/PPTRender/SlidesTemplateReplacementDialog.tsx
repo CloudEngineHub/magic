@@ -1,18 +1,12 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-	Dialog,
-	DialogContent,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/shadcn-ui/dialog"
 import { Button } from "@/components/shadcn-ui/button"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import SlidesTemplatePanelContent from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/SlidesTemplatePanelContent"
 import { useSlidesTemplatePanelState } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplatePanelState"
 import type { SlidesTemplateReplacementTarget } from "@/pages/superMagic/utils/slidesTemplateReplacementActions"
+import SlidesTemplateSelectionDialog from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/SlidesTemplateSelectionDialog"
 
 interface SlidesTemplateReplacementDialogProps {
 	open: boolean
@@ -40,31 +34,16 @@ export default function SlidesTemplateReplacementDialog({
 			: t("ppt.templateReplacement.scopeSlide", { page: target.slideIndex + 1 })
 
 	return (
-		<Dialog
+		<SlidesTemplateSelectionDialog
 			open={open}
+			title={t("ppt.templateReplacement.title")}
+			description={scopeText}
 			onOpenChange={(nextOpen) => {
 				if (!nextOpen) setSelectedTemplate(null)
 				onOpenChange(nextOpen)
 			}}
-		>
-			<DialogContent className="flex h-[760px] max-h-[calc(100vh-32px)] w-[min(90vw,1200px)] !max-w-[1200px] flex-col gap-0 overflow-hidden p-0">
-				<DialogHeader className="shrink-0 border-b px-6 py-4">
-					<DialogTitle>{t("ppt.templateReplacement.title")}</DialogTitle>
-					<p className="text-sm text-muted-foreground">{scopeText}</p>
-				</DialogHeader>
-				<div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-					<SlidesTemplatePanelContent
-						slidesState={slidesState}
-						selectedTemplate={selectedTemplate}
-						onTemplateClick={setSelectedTemplate}
-						className="h-full"
-						toolbarClassName="sticky top-0 z-20 bg-background/95 pb-3 backdrop-blur"
-						gridClassName="min-h-0 flex-1"
-						showMyTemplates
-						enableMyTemplateRemoval
-					/>
-				</div>
-				<DialogFooter className="shrink-0 border-t px-6 py-4 sm:items-center">
+			footer={
+				<>
 					<div className="mr-auto min-w-0 text-sm text-muted-foreground">
 						{selectedTemplate
 							? t("ppt.templateReplacement.selected", {
@@ -88,8 +67,19 @@ export default function SlidesTemplateReplacementDialog({
 					>
 						{t("ppt.templateReplacement.confirm")}
 					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+				</>
+			}
+		>
+			<SlidesTemplatePanelContent
+				slidesState={slidesState}
+				selectedTemplate={selectedTemplate}
+				onTemplateClick={setSelectedTemplate}
+				className="h-full"
+				toolbarClassName="sticky top-0 z-20 bg-background/95 pb-3 backdrop-blur"
+				gridClassName="min-h-0 flex-1"
+				showMyTemplates
+				enableMyTemplateRemoval
+			/>
+		</SlidesTemplateSelectionDialog>
 	)
 }

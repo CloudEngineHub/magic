@@ -4439,7 +4439,7 @@
 			"scopeSlide": "Apply the template to slide {{page}}",
 			"selectHint": "Select a template",
 			"selected": "Selected: {{name}}",
-			"title": "Select a PPT Template"
+			"title": "Select a Slide Template"
 		},
 		"unsavedChangesDescription": "You have unsaved changes in the current slide. Do you want to save your changes?",
 		"unsavedChangesTitle": "Unsaved Changes",
