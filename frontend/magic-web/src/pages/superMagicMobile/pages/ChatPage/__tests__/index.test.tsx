@@ -83,10 +83,27 @@ vi.mock("@/routes/components/ViewportRouteGuard", () => ({
 
 vi.mock("../components/ChatPageHeader", () => ({
 	__esModule: true,
-	default: ({ onMenuClick }: { onMenuClick: () => void }) => (
-		<button type="button" data-testid="mobile-shell-menu-button" onClick={onMenuClick}>
-			menu
-		</button>
+	default: ({
+		onMenuClick,
+		onPrimaryAction,
+	}: {
+		onMenuClick: () => void
+		onPrimaryAction?: () => void
+	}) => (
+		<>
+			<button type="button" data-testid="mobile-shell-menu-button" onClick={onMenuClick}>
+				menu
+			</button>
+			{onPrimaryAction ? (
+				<button
+					type="button"
+					data-testid="mobile-header-primary-button"
+					onClick={onPrimaryAction}
+				>
+					new chat
+				</button>
+			) : null}
+		</>
 	),
 }))
 
@@ -309,6 +326,12 @@ describe("MobileHomePage", () => {
 
 		expect(screen.getByTestId("mobile-shell-menu-button")).toBeInTheDocument()
 		expect(screen.getByTestId("mobile-input-container")).toBeInTheDocument()
+	})
+
+	it("does not expose a separate homepage new-chat action", () => {
+		render(<MobileHomePage />)
+
+		expect(screen.queryByTestId("mobile-header-primary-button")).not.toBeInTheDocument()
 	})
 
 	it("uses the configured default when the saved employee is unavailable", async () => {
