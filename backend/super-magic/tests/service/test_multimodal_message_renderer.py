@@ -4,6 +4,7 @@ import base64
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from agentlang.chat_history.chat_history_models import UserMessage, UserMessageContentPart
 from app.service.multimodal_message_renderer import LLMMessageRenderer
@@ -199,6 +200,27 @@ async def test_renderer_prefers_workspace_url_before_base64(tmp_path, monkeypatc
         "image_url": {"url": "https://workspace.example/1.png"},
     }
     assert base64_calls == []
+
+
+@pytest.mark.asyncio
+async def test_renderer_adds_adaptive_resize_for_large_workspace_image(tmp_path, monkeypatch):
+    """工作区图片超过最大边长时，URL 请求应携带自适应缩放参数。"""
+    _URLFileService.calls = []
+    image_path = tmp_path / "large.png"
+    image = Image.new("RGB", (4000, 3000), color="white")
+    image.save(image_path, format="PNG")
+    image.close()
+
+    monkeypatch.setattr("app.service.file_service.FileService", _URLFileService)
+    renderer = LLMMessageRenderer(workspace_dir=tmp_path)
+
+    rendered = await renderer.render_messages(
+        [UserMessage(content="Read it", content_parts=[UserMessageContentPart.image_ref("large.png")])],
+        supports_multimodal=True,
+    )
+
+    assert rendered[0]["content"][0]["type"] == "image_url"
+    assert _URLFileService.calls[0][1]["options"] == {"resize": 48}
 
 
 @pytest.mark.asyncio

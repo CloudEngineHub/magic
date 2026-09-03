@@ -1,12 +1,15 @@
 """规范化聊天消息中的图片引用，并按模型能力渲染请求消息。"""
 
+import asyncio
+import math
 import mimetypes
 import os
-import asyncio
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
+
+from PIL import Image
 
 from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.logger import get_logger
@@ -24,6 +27,7 @@ class _WorkspaceURLCacheEntry:
 
     url: str
     file_signature: tuple[int, int]
+    resize_percent: int | None
     expires_at: float
 
 
@@ -33,6 +37,7 @@ class WorkspaceImageURLResolver:
     ENV_NAME = "VISUAL_URL_MODE_ENABLED"
     URL_EXPIRES_IN = 3600
     URL_REFRESH_MARGIN = 60
+    MAX_IMAGE_DIMENSION = 1920
     # URL 字符串本身占用较小；原生视觉不限制图片数量时适当扩大复用窗口。
     MAX_CACHE_ENTRIES = 256
 
@@ -75,16 +80,24 @@ class WorkspaceImageURLResolver:
 
         key = str(file_path.resolve())
         signature = file_signature or await self._read_file_signature(file_path)
+        resize_percent = await self._resolve_resize_percent(file_path)
         now = self._clock()
         cached = self._cache.get(key)
-        if cached and cached.file_signature == signature and now < cached.expires_at:
+        if (
+            cached
+            and cached.file_signature == signature
+            and cached.resize_percent == resize_percent
+            and now < cached.expires_at
+        ):
             return cached.url
 
         inflight = self._inflight.get(key)
         if inflight is not None:
             return await inflight
 
-        task = asyncio.create_task(self._generate_and_cache(key, file_path, signature))
+        task = asyncio.create_task(
+            self._generate_and_cache(key, file_path, signature, resize_percent)
+        )
         self._inflight[key] = task
         try:
             return await task
@@ -103,20 +116,24 @@ class WorkspaceImageURLResolver:
         key: str,
         file_path: Path,
         file_signature: tuple[int, int],
+        resize_percent: int | None,
     ) -> str | None:
         """生成预签名 URL，并以安全余量写入进程内缓存。"""
         try:
             from app.service.file_service import FileService
 
+            options = {"resize": resize_percent} if resize_percent is not None else None
             url = await FileService().get_workspace_file_url(
                 file_path,
                 expires_in=self.expires_in,
+                options=options,
             )
             if not url:
                 return None
             self._cache[key] = _WorkspaceURLCacheEntry(
                 url=url,
                 file_signature=file_signature,
+                resize_percent=resize_percent,
                 expires_at=self._clock() + max(1, self.expires_in - self.URL_REFRESH_MARGIN),
             )
             while len(self._cache) > self.MAX_CACHE_ENTRIES:
@@ -126,6 +143,27 @@ class WorkspaceImageURLResolver:
         except Exception as exc:
             logger.warning("工作区图片 URL 生成失败，回退 base64: path=%s error=%s", file_path, exc)
             return None
+
+    async def _resolve_resize_percent(self, file_path: Path) -> int | None:
+        """根据图片最大边长计算工作区 URL 所需的缩放百分比。"""
+        try:
+            width, height = await asyncio.to_thread(self._read_image_dimensions, file_path)
+        except Exception as exc:
+            logger.debug("读取图片尺寸失败，不附加 URL 缩放参数: path=%s error=%s", file_path, exc)
+            return None
+
+        max_dimension = max(width, height)
+        if max_dimension <= self.MAX_IMAGE_DIMENSION:
+            return None
+
+        resize_percent = math.floor(self.MAX_IMAGE_DIMENSION * 100 / max_dimension)
+        return max(1, min(100, resize_percent))
+
+    @staticmethod
+    def _read_image_dimensions(file_path: Path) -> tuple[int, int]:
+        """仅读取图片元数据中的宽高，不加载完整像素数据。"""
+        with Image.open(file_path) as image:
+            return image.size
 
 
 class LLMMessageRenderer:
