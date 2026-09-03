@@ -37,12 +37,6 @@ from agentlang.event.data import ChatHistoryChangedEventData
 
 logger = get_logger(__name__)
 
-_NATIVE_VISUAL_INSTRUCTION = (
-    "The image(s) in this user message are already available as native visual input. "
-    "When the user asks about them, answer directly from the images and do not call "
-    "the visual_understanding tool."
-)
-
 # ==============================================================================
 # ChatHistory 类
 # ==============================================================================
@@ -1629,20 +1623,11 @@ class ChatHistory:
     async def append_user_query(
         self,
         request: AgentRunRequest,
-        *,
-        include_native_visual_instruction: bool = False,
     ) -> None:
-        """将已规范化的 Agent 运行请求转换为用户消息并写入聊天历史。"""
+        """将已规范化的 Agent 运行请求转换为普通用户消息并写入聊天历史。"""
         content_parts: List[UserMessageContentPart] = [
             UserMessageContentPart.text_part(request.query)
         ]
-        if include_native_visual_instruction and request.image_refs:
-            content_parts.append(
-                UserMessageContentPart.text_part(
-                    _NATIVE_VISUAL_INSTRUCTION,
-                    include_in_fallback=False,
-                )
-            )
         content_parts.extend(UserMessageContentPart.image_ref(path) for path in request.image_refs)
         await self.append_user_message(request.query, content_parts=content_parts)
 

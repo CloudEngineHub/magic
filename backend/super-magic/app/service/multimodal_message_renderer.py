@@ -2,7 +2,6 @@
 
 import asyncio
 import math
-import mimetypes
 import os
 import time
 from dataclasses import dataclass
@@ -14,8 +13,12 @@ from PIL import Image
 from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
-from app.tools.visual_understanding_utils.image_conversion_utils import local_file_to_base64
-from app.tools.visual_understanding_utils.image_format_utils import get_content_type_for_local_file
+from app.tools.visual_understanding_utils.image_compression_service import (
+    WEBP_BASE64_MAX_DIMENSION,
+    WEBP_BASE64_MAX_SIZE_BYTES,
+    WEBP_BASE64_QUALITY,
+    ImageCompressionService,
+)
 from app.utils.async_file_utils import async_exists, async_stat
 
 logger = get_logger(__name__)
@@ -58,8 +61,8 @@ class WorkspaceImageURLResolver:
 
     @classmethod
     def _read_enabled_from_env(cls) -> bool:
-        """读取视觉 URL 模式开关，默认与视觉理解工具保持一致为开启。"""
-        return os.environ.get(cls.ENV_NAME, "true").strip().lower() == "true"
+        """读取视觉 URL 模式开关，当前默认关闭以避免远端下载不可靠。"""
+        return os.environ.get(cls.ENV_NAME, "false").strip().lower() == "true"
 
     def is_workspace_file(self, file_path: Path) -> bool:
         """判断解析后的文件路径是否严格位于当前工作区内。"""
@@ -172,7 +175,6 @@ class LLMMessageRenderer:
     # -1 表示本期不限制原生视觉图片数量和请求图片总大小；限制逻辑仍保留，后续可直接恢复正数配置。
     MAX_NATIVE_IMAGE_REFS = -1
     MAX_NATIVE_IMAGE_BYTES = -1
-    COMPRESS_THRESHOLD_MB = 3.0
     # base64 缓存位于 Python 堆内存，扩大后仍保持硬上限，避免长会话无限增长。
     MAX_CACHE_ENTRIES = 32
     MAX_CACHE_BYTES = 128 * 1024 * 1024
@@ -184,7 +186,7 @@ class LLMMessageRenderer:
         max_native_image_refs: int | None = None,
         max_native_image_bytes: int | None = None,
     ) -> None:
-        """初始化消息渲染器及工作区 URL、base64 两级图片传输策略。"""
+        """初始化消息渲染器及 WebP Base64 图片传输策略。"""
         self.workspace_dir = Path(workspace_dir or PathManager.get_workspace_dir()).resolve()
         self.max_native_image_refs = (
             self.MAX_NATIVE_IMAGE_REFS if max_native_image_refs is None else max_native_image_refs
@@ -192,13 +194,11 @@ class LLMMessageRenderer:
         self.max_native_image_bytes = (
             self.MAX_NATIVE_IMAGE_BYTES if max_native_image_bytes is None else max_native_image_bytes
         )
-        self._url_resolver = WorkspaceImageURLResolver(
-            workspace_dir=self.workspace_dir,
-            enabled=url_mode_enabled,
-        )
-        self._base64_cache: dict[tuple[str, int, int], str] = {}
+        self._image_compression_service = ImageCompressionService(workspace_dir=self.workspace_dir)
+        # URL 解析器暂时不接入原生视觉；保留参数和实现，便于后续恢复时保持调用兼容。
+        self._base64_cache: dict[tuple[str, int, int, int, int, int], str] = {}
 
-    def _cache_data_url(self, key: tuple[str, int, int], data_url: str) -> None:
+    def _cache_data_url(self, key: tuple[str, int, int, int, int, int], data_url: str) -> None:
         """写入有界图片缓存，避免长会话持续保留大体积 base64。"""
         self._base64_cache[key] = data_url
         total_bytes = sum(len(value.encode("utf-8")) for value in self._base64_cache.values())
@@ -301,7 +301,7 @@ class LLMMessageRenderer:
         return {id(part) for part in selected_parts}
 
     async def _render_image(self, image_path: str) -> tuple[str | None, str | None]:
-        """优先将工作区图片转换为 URL，其他本地图片使用 base64。"""
+        """将图片在系统临时目录压缩为 WebP，再转换为 Base64。"""
         target, path_error = self._resolve_image_target(image_path)
         if path_error:
             return None, path_error
@@ -314,21 +314,18 @@ class LLMMessageRenderer:
             if stat_result.st_size <= 0:
                 return None, "the image file is empty"
 
-            workspace_url = await self._url_resolver.resolve(
-                target,
-                file_signature=(stat_result.st_mtime_ns, stat_result.st_size),
+            cache_key = (
+                str(target),
+                stat_result.st_mtime_ns,
+                stat_result.st_size,
+                WEBP_BASE64_QUALITY,
+                WEBP_BASE64_MAX_DIMENSION,
+                WEBP_BASE64_MAX_SIZE_BYTES,
             )
-            if workspace_url:
-                return workspace_url, None
-
-            cache_key = (str(target), stat_result.st_mtime_ns, stat_result.st_size)
             if cache_key in self._base64_cache:
                 return self._base64_cache[cache_key], None
-            content_type = await get_content_type_for_local_file(str(target))
-            data_url = await local_file_to_base64(
+            data_url = await self._image_compression_service.get_base64(
                 str(target),
-                content_type or mimetypes.guess_type(target.name)[0] or "image/jpeg",
-                compress_threshold_mb=self.COMPRESS_THRESHOLD_MB,
             )
             self._cache_data_url(cache_key, data_url)
             return data_url, None
@@ -345,7 +342,9 @@ class LLMMessageRenderer:
             return raw_path.resolve(), None
 
         target = (self.workspace_dir / raw_path).resolve()
-        if not self._url_resolver.is_workspace_file(target):
+        try:
+            target.relative_to(self.workspace_dir)
+        except ValueError:
             return None, "the image path is outside the workspace"
         return target, None
 

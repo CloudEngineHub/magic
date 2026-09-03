@@ -1,34 +1,34 @@
-from app.i18n import i18n
-from typing import Any, Dict, List, Optional
 import asyncio
 import re
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from agentlang.chat_history.chat_history_models import UserMessage, UserMessageContentPart
 from agentlang.context.tool_context import ToolContext
-from app.core.entity.message.server_message import ToolDetail, DisplayType, FileContent
-from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
-from app.path_manager import PathManager
-from app.tools.core import BaseToolParams, tool
-from app.tools.workspace_tool import WorkspaceTool
+from agentlang.tools.tool_result import ToolResult
 from app.core.ai_abilities import get_visual_understanding_model_id
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
+from app.path_manager import PathManager
+from app.service.native_visual_message_builder import NativeVisualMessageBuilder
+from app.tools.core import BaseToolParams, tool
 
 # Import utilities from visual_understanding_utils
 from app.tools.visual_understanding_utils import (
-    ImageProcessResult,
+    BatchImageProcessingResults,
     ImageData,
     ImageDimensionInfo,
-    BatchImageProcessingResults,
     ImageProcessor,
+    ImageProcessResult,
     LLMRequestHandler,
-    extract_image_source_name,
-    format_image_dimensions_info,
-    format_download_info_for_content,
     cleanup_copied_files,
+    extract_image_source_name,
+    format_download_info_for_content,
+    format_image_dimensions_info,
 )
+from app.tools.workspace_tool import WorkspaceTool
 
 logger = get_logger(__name__)
 
@@ -292,7 +292,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                     _format_safe_error("missing analysis request", "provide a question or analysis requirement")
                 )
 
-            if self._inject_native_visual_user_message(
+            if await self._inject_native_visual_user_message(
                 tool_context,
                 images,
                 query,
@@ -404,7 +404,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             await cleanup_copied_files(self._image_processor.copied_files)
             self._image_processor.copied_files.clear()
 
-    def _inject_native_visual_user_message(
+    async def _inject_native_visual_user_message(
         self,
         tool_context: Optional[ToolContext],
         images: List[str],
@@ -412,7 +412,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
         *,
         provide_native_visual: bool,
     ) -> bool:
-        """在满足条件时构造并登记原生视觉 UserMessage，返回是否完成注入。"""
+        """在满足条件时构造并登记带图片元数据的原生视觉 UserMessage。"""
         if not provide_native_visual or tool_context is None:
             return False
         agent_context = tool_context.get_extension("agent_context")
@@ -423,29 +423,17 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             if not model_state.config.supports_multimodal:
                 return False
             workspace_dir = PathManager.get_workspace_dir().resolve()
-            relative_refs: List[str] = []
             for image in images:
                 if re.match(r"^https?://", image):
                     return False
-                raw_path = Path(image)
-                path = (workspace_dir / raw_path).resolve() if not raw_path.is_absolute() else raw_path.resolve()
-                try:
-                    relative_refs.append(path.relative_to(workspace_dir).as_posix())
-                except ValueError:
-                    # 工作区外的本地文件不能生成预签名 URL，但仍可由请求渲染器转为 base64。
-                    relative_refs.append(str(path))
-            content_parts = [UserMessageContentPart.text_part(query)]
-            content_parts.extend(
-                UserMessageContentPart.image_ref(path)
-                for path in dict.fromkeys(relative_refs)
+            message = await NativeVisualMessageBuilder(workspace_dir).build_user_message(
+                query,
+                images,
+                show_in_ui=False,
+                source="native_visual",
             )
             agent_context.horizon.push_user_message(
-                UserMessage(
-                    content=query,
-                    show_in_ui=False,
-                    source="native_visual",
-                    content_parts=content_parts,
-                )
+                message
             )
             return True
         except (AttributeError, ValueError, OSError):

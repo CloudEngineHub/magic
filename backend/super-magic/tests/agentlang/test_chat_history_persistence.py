@@ -132,30 +132,3 @@ async def test_chat_history_appends_normalized_agent_run_request(tmp_path):
         UserMessageContentPart.text_part("Inspect image"),
         UserMessageContentPart.image_ref("images/mock.png"),
     ]
-
-
-@pytest.mark.asyncio
-async def test_chat_history_can_add_native_visual_instruction_to_first_query(tmp_path):
-    """首轮图片请求可附加原生视觉提示，且该提示不参与非原生视觉回退。"""
-    history = ChatHistory(
-        "test-agent",
-        "agent-1",
-        str(tmp_path / "chat_history"),
-        _EventDispatcher(),
-    )
-
-    await history.append_user_query(
-        AgentRunRequest(query="Inspect image", image_refs=["images/mock.png"]),
-        include_native_visual_instruction=True,
-    )
-
-    assert history.messages[0].content_parts == [
-        UserMessageContentPart.text_part("Inspect image"),
-        UserMessageContentPart.text_part(
-            "The image(s) in this user message are already available as native visual input. "
-            "When the user asks about them, answer directly from the images and do not call "
-            "the visual_understanding tool.",
-            include_in_fallback=False,
-        ),
-        UserMessageContentPart.image_ref("images/mock.png"),
-    ]

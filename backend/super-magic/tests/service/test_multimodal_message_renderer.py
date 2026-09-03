@@ -25,11 +25,11 @@ async def test_renderer_keeps_only_recent_five_images_and_falls_back_for_older_r
     for index in range(6):
         (workspace / f"image-{index}.png").write_bytes(b"image")
 
-    async def fake_base64(*args, **kwargs):
+    async def fake_base64(self, *args, **kwargs):
         return "data:image/png;base64," + base64.b64encode(b"image").decode()
 
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     parts = [UserMessageContentPart.text_part("Inspect these images.")]
@@ -106,11 +106,11 @@ async def test_renderer_keeps_native_visual_instruction_when_an_image_is_rendere
     """至少一张图片成功使用原生视觉时应保留原生视觉专用提示。"""
     image_path = tmp_path / "image.png"
     image_path.write_bytes(b"image")
-    async def fake_base64(*args, **kwargs):
-        return "data:image/png;base64,aW1hZ2U="
+    async def fake_base64(self, *args, **kwargs):
+        return "data:image/webp;base64,aW1hZ2U="
 
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     parts = [
@@ -142,11 +142,11 @@ async def test_renderer_downgrades_when_budget_is_exceeded(tmp_path, monkeypatch
 
     budget = 10 * 1024 * 1024
 
-    async def fake_base64(path, *args, **kwargs):
-        return "data:image/png;base64," + ("x" * (budget - 100))
+    async def fake_base64(self, path, *args, **kwargs):
+        return "data:image/webp;base64," + ("x" * (budget - 100))
 
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     parts = [
@@ -169,19 +169,19 @@ async def test_renderer_downgrades_when_budget_is_exceeded(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_renderer_prefers_workspace_url_before_base64(tmp_path, monkeypatch):
-    """工作区图片应优先使用 FileService 生成的 URL。"""
+async def test_renderer_uses_webp_base64_for_workspace_image(tmp_path, monkeypatch):
+    """工作区图片应直接使用 WebP Base64，不调用工作区 URL。"""
     _URLFileService.calls = []
     image_path = tmp_path / "image.png"
     image_path.write_bytes(b"image")
     base64_calls = []
 
-    async def fake_base64(*args, **kwargs):
+    async def fake_base64(self, *args, **kwargs):
         base64_calls.append(args[0])
-        return "data:image/png;base64,aW1hZ2U="
+        return "data:image/webp;base64,aW1hZ2U="
 
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     monkeypatch.setattr(
@@ -195,23 +195,20 @@ async def test_renderer_prefers_workspace_url_before_base64(tmp_path, monkeypatc
         supports_multimodal=True,
     )
 
-    assert rendered[0]["content"][0] == {
-        "type": "image_url",
-        "image_url": {"url": "https://workspace.example/1.png"},
-    }
-    assert base64_calls == []
+    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/webp")
+    assert base64_calls == [str(image_path)]
+    assert _URLFileService.calls == []
 
 
 @pytest.mark.asyncio
-async def test_renderer_adds_adaptive_resize_for_large_workspace_image(tmp_path, monkeypatch):
-    """工作区图片超过最大边长时，URL 请求应携带自适应缩放参数。"""
+async def test_renderer_uses_webp_base64_for_large_workspace_image(tmp_path, monkeypatch):
+    """工作区大图应通过 WebP Base64 缩放后传输。"""
     _URLFileService.calls = []
     image_path = tmp_path / "large.png"
     image = Image.new("RGB", (4000, 3000), color="white")
     image.save(image_path, format="PNG")
     image.close()
 
-    monkeypatch.setattr("app.service.file_service.FileService", _URLFileService)
     renderer = LLMMessageRenderer(workspace_dir=tmp_path)
 
     rendered = await renderer.render_messages(
@@ -220,71 +217,25 @@ async def test_renderer_adds_adaptive_resize_for_large_workspace_image(tmp_path,
     )
 
     assert rendered[0]["content"][0]["type"] == "image_url"
-    assert _URLFileService.calls[0][1]["options"] == {"resize": 48}
+    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/webp")
+    assert _URLFileService.calls == []
 
 
 @pytest.mark.asyncio
-async def test_renderer_reuses_workspace_url_within_validity_period(tmp_path, monkeypatch):
-    """同一文件的预签名 URL 在有效期内应复用，避免重复签名请求。"""
-    _URLFileService.calls = []
-    image_path = tmp_path / "image.png"
-    image_path.write_bytes(b"image")
-    now = [100.0]
-
-    monkeypatch.setattr("app.service.file_service.FileService", _URLFileService)
-    renderer = LLMMessageRenderer(
-        workspace_dir=tmp_path,
-        url_mode_enabled=True,
-    )
-    renderer._url_resolver._clock = lambda: now[0]
-
-    message = [UserMessage(content="Read it", content_parts=[UserMessageContentPart.image_ref("image.png")])]
-    first = await renderer.render_messages(message, supports_multimodal=True)
-    now[0] += 100
-    second = await renderer.render_messages(message, supports_multimodal=True)
-
-    assert first[0]["content"][0]["image_url"]["url"] == "https://workspace.example/1.png"
-    assert second[0]["content"][0]["image_url"]["url"] == "https://workspace.example/1.png"
-    assert len(_URLFileService.calls) == 1
-    assert _URLFileService.calls[0][1]["expires_in"] == 3600
-
-
-@pytest.mark.asyncio
-async def test_renderer_refreshes_workspace_url_when_cache_expires(tmp_path, monkeypatch):
-    """预签名 URL 进入安全刷新窗口后应重新生成。"""
-    _URLFileService.calls = []
-    image_path = tmp_path / "image.png"
-    image_path.write_bytes(b"image")
-    now = [100.0]
-
-    monkeypatch.setattr("app.service.file_service.FileService", _URLFileService)
-    renderer = LLMMessageRenderer(workspace_dir=tmp_path, url_mode_enabled=True)
-    renderer._url_resolver._clock = lambda: now[0]
-    message = [UserMessage(content="Read it", content_parts=[UserMessageContentPart.image_ref("image.png")])]
-
-    await renderer.render_messages(message, supports_multimodal=True)
-    now[0] += 3600 - 60
-    refreshed = await renderer.render_messages(message, supports_multimodal=True)
-
-    assert refreshed[0]["content"][0]["image_url"]["url"] == "https://workspace.example/2.png"
-    assert len(_URLFileService.calls) == 2
-
-
-@pytest.mark.asyncio
-async def test_renderer_uses_base64_for_workspace_url_failure(tmp_path, monkeypatch):
-    """工作区 URL 生成失败时应回退 base64。"""
+async def test_renderer_uses_webp_base64_without_workspace_url(tmp_path, monkeypatch):
+    """工作区 URL 不可用时也不应影响 WebP Base64 传输。"""
     image_path = tmp_path / "image.png"
     image_path.write_bytes(b"image")
 
-    async def fake_base64(*args, **kwargs):
-        return "data:image/png;base64,aW1hZ2U="
+    async def fake_base64(self, *args, **kwargs):
+        return "data:image/webp;base64,aW1hZ2U="
 
     class _FailingURLFileService:
         async def get_workspace_file_url(self, file_path: Path) -> str:
             raise RuntimeError("mock url failure")
 
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     monkeypatch.setattr(
@@ -298,7 +249,7 @@ async def test_renderer_uses_base64_for_workspace_url_failure(tmp_path, monkeypa
         supports_multimodal=True,
     )
 
-    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/")
+    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/webp")
 
 
 @pytest.mark.asyncio
@@ -310,11 +261,11 @@ async def test_renderer_uses_base64_for_external_file_even_when_url_mode_enabled
     workspace.mkdir()
     external_image.write_bytes(b"image")
 
-    async def fake_base64(*args, **kwargs):
-        return "data:image/png;base64,aW1hZ2U="
+    async def fake_base64(self, *args, **kwargs):
+        return "data:image/webp;base64,aW1hZ2U="
 
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     monkeypatch.setattr(
@@ -328,7 +279,7 @@ async def test_renderer_uses_base64_for_external_file_even_when_url_mode_enabled
         supports_multimodal=True,
     )
 
-    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/")
+    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/webp")
     assert _URLFileService.calls == []
 
 
@@ -339,12 +290,12 @@ async def test_renderer_disables_url_mode_with_environment_variable(tmp_path, mo
     image_path = tmp_path / "image.png"
     image_path.write_bytes(b"image")
 
-    async def fake_base64(*args, **kwargs):
-        return "data:image/png;base64,aW1hZ2U="
+    async def fake_base64(self, *args, **kwargs):
+        return "data:image/webp;base64,aW1hZ2U="
 
     monkeypatch.setenv("VISUAL_URL_MODE_ENABLED", "false")
     monkeypatch.setattr(
-        "app.service.multimodal_message_renderer.local_file_to_base64",
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
         fake_base64,
     )
     monkeypatch.setattr(
@@ -358,7 +309,7 @@ async def test_renderer_disables_url_mode_with_environment_variable(tmp_path, mo
         supports_multimodal=True,
     )
 
-    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/")
+    assert rendered[0]["content"][0]["image_url"]["url"].startswith("data:image/webp")
     assert _URLFileService.calls == []
 
 

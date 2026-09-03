@@ -82,6 +82,7 @@ from app.core.entity.message.server_message import TaskStatus
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
+from app.service.native_visual_message_builder import NativeVisualMessageBuilder
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator
@@ -271,6 +272,9 @@ class Agent(BaseAgent):
         self.agent_context = self._setup_agent_context(agent_context)
         self._message_renderer = LLMMessageRenderer(
             workspace_dir=self.agent_context.get_workspace_dir()
+        )
+        self._native_visual_message_builder = NativeVisualMessageBuilder(
+            self.agent_context.get_workspace_dir()
         )
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
@@ -1071,10 +1075,7 @@ class Agent(BaseAgent):
 
         # 如果没有聊天历史，直接添加用户消息
         if not self.chat_history.messages:
-            await self.chat_history.append_user_query(
-                request,
-                include_native_visual_instruction=True,
-            )
+            await self._append_user_query(request)
             return SessionPrepResult(user_message_added=True)
 
         # 查找pending工具调用
@@ -1096,10 +1097,7 @@ class Agent(BaseAgent):
                     assistant_with_pending_tools,
                     reason=self._build_pending_tool_interruption_message(assistant_with_pending_tools),
                 )
-                await self.chat_history.append_user_query(
-                    request,
-                    include_native_visual_instruction=True,
-                )
+                await self._append_user_query(request)
                 return SessionPrepResult(user_message_added=True)
         else:
             # /resume 是系统内部信号（由 ask_user 等工具的 resume 流程发出）：
@@ -1109,11 +1107,20 @@ class Agent(BaseAgent):
                 return SessionPrepResult(user_message_added=False)
 
             # 没有pending工具调用，正常添加用户消息
-            await self.chat_history.append_user_query(
-                request,
-                include_native_visual_instruction=True,
-            )
+            await self._append_user_query(request)
             return SessionPrepResult(user_message_added=True)
+
+    async def _append_user_query(self, request: AgentRunRequest) -> None:
+        """在 app 层构造并写入用户消息，图片请求附加原生视觉元数据。"""
+        if not request.image_refs:
+            await self.chat_history.append_user_query(request)
+            return
+
+        message = await self._native_visual_message_builder.build_user_message(
+            request.query,
+            list(request.image_refs),
+        )
+        await self.chat_history.add_message(message)
 
     async def _handle_agent_loop(self, session_prep_result: SessionPrepResult) -> None:
         """处理 agent 循环 - 使用Context对象简化参数传递和状态管理"""

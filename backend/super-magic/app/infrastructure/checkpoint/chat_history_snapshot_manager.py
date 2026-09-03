@@ -81,7 +81,7 @@ class ChatHistorySnapshotManager:
     ) -> bool:
         try:
             if not await async_exists(chat_history_dir):
-                logger.info("聊天记录目录不存在，跳过%s快照", label)
+                logger.info(f"聊天记录目录不存在，跳过{label}快照")
                 return True
 
             if await async_exists(snapshot_dir):
@@ -90,7 +90,7 @@ class ChatHistorySnapshotManager:
 
             for entry in await async_scandir(chat_history_dir):
                 if _should_skip_chat_history_entry(entry.name):
-                    logger.debug("跳过历史 LLM 调试日志目录: %s", entry.name)
+                    logger.debug(f"跳过历史 LLM 调试日志目录: {entry.name}")
                     continue
                 source = Path(entry.path)
                 target = snapshot_dir / entry.name
@@ -99,16 +99,16 @@ class ChatHistorySnapshotManager:
                 elif entry.is_dir(follow_symlinks=False):
                     await async_copytree(source, target)
 
-            logger.info("聊天记录%s快照完成: %s", label, snapshot_dir)
+            logger.info(f"聊天记录{label}快照完成: {snapshot_dir}")
             return True
         except Exception as error:
-            logger.error("创建聊天记录%s快照失败: %s", label, error)
+            logger.error(f"创建聊天记录{label}快照失败: {error}")
             return False
 
     async def _restore_snapshot(self, snapshot_dir: Path, *, label: str) -> bool:
         try:
             if not await async_exists(snapshot_dir):
-                logger.warning("%s聊天记录快照目录不存在: %s", label, snapshot_dir)
+                logger.warning(f"{label}聊天记录快照目录不存在: {snapshot_dir}")
                 return True
 
             target_dir = PathManager.get_chat_history_dir()
@@ -118,7 +118,7 @@ class ChatHistorySnapshotManager:
 
             for entry in await async_scandir(snapshot_dir):
                 if _should_skip_chat_history_entry(entry.name):
-                    logger.debug("跳过历史 LLM 调试日志目录: %s", entry.name)
+                    logger.debug(f"跳过历史 LLM 调试日志目录: {entry.name}")
                     continue
                 source = Path(entry.path)
                 target = target_dir / entry.name
@@ -127,10 +127,10 @@ class ChatHistorySnapshotManager:
                 elif entry.is_dir(follow_symlinks=False):
                     await async_copytree(source, target)
 
-            logger.info("恢复%s聊天记录快照完成: %s", label, target_dir)
+            logger.info(f"恢复{label}聊天记录快照完成: {target_dir}")
             return True
         except Exception as error:
-            logger.error("恢复%s聊天记录快照失败: %s", label, error)
+            logger.error(f"恢复{label}聊天记录快照失败: {error}")
             return False
 
 
