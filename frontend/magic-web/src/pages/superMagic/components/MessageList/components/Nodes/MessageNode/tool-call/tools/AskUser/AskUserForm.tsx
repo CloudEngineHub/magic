@@ -87,8 +87,6 @@ const askUserInputClass = `min-h-16 w-full max-h-[200px] min-w-0 resize-none ove
 const askUserOptionControlBase =
 	"mt-0.5 size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
 const askUserOptionRowClass = "flex min-h-6 cursor-pointer items-start gap-2 py-0.5"
-/** 与单选/多选选项文字起始位置对齐（size-4 控件 + gap-2） */
-const askUserChoiceAlignedIndentClass = "pl-6"
 
 function formatAnswerForDisplay(value?: AnswerValue | null) {
 	if (typeof value === "string") return value
@@ -385,7 +383,6 @@ function AskUserFormImpl({
 								onChange={setRemark}
 								disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
 								readOnly={Boolean(submittedAnswers) || isTerminal}
-								contentIndentClass={askUserChoiceAlignedIndentClass}
 							/>
 						) : null}
 					</div>
@@ -468,9 +465,6 @@ const QuestionItem = memo(function QuestionItem({
 	showDefaultHint,
 	draftAnswer,
 }: QuestionItemProps) {
-	const questionContentIndentClass =
-		question.type === "input" ? askUserChoiceAlignedIndentClass : undefined
-
 	return (
 		<div
 			className={cn("space-y-1.5 transition-opacity", !question.isComplete && "opacity-70")}
@@ -484,7 +478,7 @@ const QuestionItem = memo(function QuestionItem({
 				testId={`ask-user-v2-card-question-text-${question.id}`}
 			/>
 
-			<div className={questionContentIndentClass}>
+			<div>
 				{question.type === "confirm" && (
 					<SelectField
 						questionId={question.id}
@@ -613,7 +607,6 @@ interface RemarkFieldProps {
 	onChange: (value: string) => void
 	disabled: boolean
 	readOnly: boolean
-	contentIndentClass?: string
 }
 
 const RemarkField = memo(function RemarkField({
@@ -623,7 +616,6 @@ const RemarkField = memo(function RemarkField({
 	onChange,
 	disabled,
 	readOnly,
-	contentIndentClass,
 }: RemarkFieldProps) {
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const showReadOnly = readOnly || disabled
@@ -647,19 +639,17 @@ const RemarkField = memo(function RemarkField({
 				className={cn(askUserQuestionTextClass, askUserBreakTextClass)}
 				testId="ask-user-v2-card-remark-label"
 			/>
-			<div className={contentIndentClass}>
-				<textarea
-					ref={textareaRef}
-					value={value}
-					disabled={showReadOnly}
-					readOnly={showReadOnly}
-					placeholder={placeholder}
-					onChange={(event) => onChange(event.target.value)}
-					rows={1}
-					data-testid="ask-user-v2-card-remark-input"
-					className={askUserInputClass}
-				/>
-			</div>
+			<textarea
+				ref={textareaRef}
+				value={value}
+				disabled={showReadOnly}
+				readOnly={showReadOnly}
+				placeholder={placeholder}
+				onChange={(event) => onChange(event.target.value)}
+				rows={1}
+				data-testid="ask-user-v2-card-remark-input"
+				className={askUserInputClass}
+			/>
 		</div>
 	)
 })
