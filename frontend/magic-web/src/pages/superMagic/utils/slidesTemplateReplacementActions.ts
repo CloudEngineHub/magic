@@ -100,16 +100,11 @@ export function buildSlidesTemplateReplacementPayload({
 	const templateCode = localeTextToDisplayString(template.value)
 	const templateName = localeTextToDisplayString(template.label) || templateCode
 	const content: JSONContent[] = [
-		textNode("请使用 slide-template-replacement Skill 更换现有 HTML PPT 的模板。\n"),
+		textNode("请更换现有 HTML PPT 的模板。\n"),
 		textNode(`模板名称：${templateName}\n`),
 		textNode(`template_code：${templateCode}\n`),
 	]
 	const mentionItems: SendMessageByContentPayload["mentionItems"] = []
-
-	const mainMention = appendMentionLine(content, "当前 PPT：", mainFile)
-	if (mainMention) mentionItems.push(mainMention)
-	const folderMention = appendMentionLine(content, "所属文件夹：", parentFolder)
-	if (folderMention) mentionItems.push(folderMention)
 
 	if (target.scope === "slide") {
 		const slideMention = appendMentionLine(content, "目标页：", targetSlide)
@@ -120,6 +115,10 @@ export function buildSlidesTemplateReplacementPayload({
 			),
 		)
 	} else {
+		const mainMention = appendMentionLine(content, "当前 PPT：", mainFile)
+		if (mainMention) mentionItems.push(mainMention)
+		const folderMention = appendMentionLine(content, "所属文件夹：", parentFolder)
+		if (folderMention) mentionItems.push(folderMention)
 		content.push(textNode("作用范围：整本 PPT。\n"))
 	}
 

@@ -46,16 +46,22 @@ describe("buildSlidesTemplateReplacementPayload", () => {
 			})
 
 			const text = JSON.stringify(payload.afterCreate?.content)
+			const mentionItems = payload.afterCreate?.mentionItems ?? []
 			expect(text).toContain("PPT-TPL-ABC123")
 			expect(text).toContain(target.scope === "deck" ? "整本 PPT" : "第 3 页")
+			expect(text).not.toContain("slide-template-replacement Skill")
 			expect(payload.topicMode).toBe("ppt")
 			expect(payload.afterCreate?.topicMode).toBe("ppt")
 			expect(payload.afterCreate?.send).toBe(true)
-			expect(payload.afterCreate?.mentionItems).toHaveLength(target.scope === "deck" ? 2 : 3)
-			expect(payload.afterCreate?.mentionItems?.[0]?.attrs.type).toBe(
-				MentionItemType.PROJECT_FILE,
-			)
-			expect(payload.afterCreate?.mentionItems?.[1]?.attrs.type).toBe(MentionItemType.FOLDER)
+			expect(mentionItems).toHaveLength(target.scope === "deck" ? 2 : 1)
+			expect(mentionItems[0]?.attrs.type).toBe(MentionItemType.PROJECT_FILE)
+			if (target.scope === "deck") {
+				expect(mentionItems[1]?.attrs.type).toBe(MentionItemType.FOLDER)
+			} else {
+				expect(text).toContain("目标页")
+				expect(text).not.toContain("所属文件夹")
+				expect(text).not.toContain("当前 PPT：")
+			}
 		},
 	)
 })

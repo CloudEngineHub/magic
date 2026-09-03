@@ -5,7 +5,7 @@ description: "Replace the visual template of an existing HTML slide project whil
 
 # Slide Template Replacement
 
-Use this skill when the input asks to apply an existing platform template to an existing HTML slide project. The frontend command includes the exact `template_code`, the current PPT file and folder mentions, and either an entire-deck scope or a target slide scope. The user may also name a page range such as pages 3-5.
+Use this skill when the input asks to apply an existing platform template to an existing HTML slide project. The command includes the exact `template_code` and an explicit scope. Whole-deck requests mention the current PPT project; single-slide requests mention only the target slide HTML file. The user may also name a page range such as pages 3-5.
 
 Do not load `slide-template-maker`. This skill only applies an existing platform template.
 
@@ -13,7 +13,9 @@ Do not load `slide-template-maker`. This skill only applies an existing platform
 
 - Only existing HTML slide projects are supported. If the source is a native `.pptx`, `.ppt`, `.potx`, `.pot`, or `.ppsx` file, refuse and explain that this skill cannot edit native PowerPoint files.
 - Require an exact `template_code` from the platform template picker or upstream context. Never infer a code from a display name, URL, or local directory.
-- Resolve the current PPT, its containing folder, and any target slide from the structured `@` mentions. If a mention is missing, ask only for that missing node. Do not ask the user to reselect nodes that are already present.
+- For a whole-deck request, resolve the current PPT and optional containing folder from the structured `@` mentions. If a required mention is missing, ask only for that missing node.
+- For a single-slide request, resolve only the target slide HTML file from the structured `@` mention. Do not require or ask for an additional whole-PPT or folder mention when the target file is present; use its `file_path` and project-local context to locate related resources.
+- Do not ask the user to reselect nodes that are already present.
 - Accept three scopes: the entire deck, one target slide, or an explicit page range such as pages 3-5. Apply the template only to the requested pages.
 - Default to visual replacement only: theme, typography, spacing, colors, backgrounds, decorations, and layout rules. Change text, images, chart data, or page count only when the user's natural-language note explicitly asks for that change.
 - If the current project already uses this exact `template_code`, say that no replacement is needed and stop. Do not install, copy, or rewrite files. Do not infer a match from visual similarity.
