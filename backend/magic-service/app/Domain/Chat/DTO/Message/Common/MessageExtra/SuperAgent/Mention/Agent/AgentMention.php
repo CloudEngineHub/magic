@@ -41,6 +41,7 @@ final class AgentMention extends AbstractMention
         return [
             'type' => MentionType::AGENT->value,
             'agent_id' => $data->getAgentId(),
+            'agent_code' => $data->getAgentCode(),
             'agent_name' => $data->getAgentName(),
             'agent_description' => $data->getAgentDescription(),
         ];
