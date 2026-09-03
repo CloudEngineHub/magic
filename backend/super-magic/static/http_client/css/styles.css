@@ -1603,6 +1603,21 @@ button.tool-call-attachment-content.is-clickable:hover {
     margin-bottom: 10px;
 }
 
+.ask-user-remark-label {
+    display: block;
+    margin-top: 12px;
+    color: #666;
+    font-size: 12px;
+}
+
+.ask-user-remark {
+    display: block;
+    min-height: 52px;
+    margin-top: 5px;
+    resize: vertical;
+    line-height: 1.45;
+}
+
 .ask-user-question-text {
     font-weight: 500;
     margin-bottom: 6px;
@@ -1726,6 +1741,13 @@ button.tool-call-attachment-content.is-clickable:hover {
 
 .ask-user-result.skipped {
     color: #888;
+}
+
+.ask-user-remark-result {
+    color: #666;
+    font-weight: 400;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 /* 原始事件聚合盒 */

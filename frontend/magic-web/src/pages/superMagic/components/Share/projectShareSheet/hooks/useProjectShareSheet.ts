@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { NodeType, type TreeNode } from "@dtyq/user-selector"
@@ -48,6 +48,7 @@ import {
 	mergeRecordingShareFileIds,
 } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
+import { resolveShareDocumentDependencies } from "@/pages/superMagic/components/Share/FileShareModal/hooks/resolveShareDocumentDependencies"
 
 /**
  * Constructs the base default values for the share form.
@@ -145,7 +146,14 @@ function createSelectedHierarchyNode(item: AttachmentItem): SelectedFileHierarch
 
 	return {
 		id: itemId,
-		name: item.name || item.file_name || item.display_filename || item.filename || "",
+		// Prefer the recording-only UI label while preserving original attachment identity.
+		name:
+			item.share_display_name ||
+			item.name ||
+			item.file_name ||
+			item.display_filename ||
+			item.filename ||
+			"",
 		isDirectory: Boolean(item.is_directory),
 		fileExtension: item.file_extension,
 		children: (item.children || [])
@@ -429,6 +437,8 @@ export function useProjectShareSheet({
 	projectName,
 	attachments,
 	attachmentList,
+	dependencyAttachments,
+	dependencyBundleRootPath,
 	fileMap,
 	defaultSelectedFileIds,
 	defaultOpenFileId,
@@ -478,9 +488,64 @@ export function useProjectShareSheet({
 		createInitialFormState(isAudioRecordingScene),
 	)
 	const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
+	const [recordingDependencyFileIds, setRecordingDependencyFileIds] = useState<string[]>([])
+	const [recordingDependencyAnalysisLoading, setRecordingDependencyAnalysisLoading] =
+		useState(false)
+	// Keep the latest analysis promise available so submission can await the exact current inputs.
+	const recordingDependencyAnalysisRef = useRef<{
+		selectedFileIds: string[]
+		attachments: NonNullable<ProjectShareSheetProps["dependencyAttachments"]>
+		bundleRootPath?: string
+		promise: ReturnType<typeof resolveShareDocumentDependencies>
+	} | null>(null)
 	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
 	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
 	const activeMode = editingShareMode || effectiveMode
+
+	useEffect(() => {
+		if (!isAudioRecordingScene || !dependencyAttachments) {
+			recordingDependencyAnalysisRef.current = null
+			setRecordingDependencyFileIds([])
+			setRecordingDependencyAnalysisLoading(false)
+			return
+		}
+
+		let cancelled = false
+		setRecordingDependencyAnalysisLoading(true)
+		const analysisPromise = resolveShareDocumentDependencies({
+			selectedFileIds,
+			attachments: dependencyAttachments,
+			bundleRootPath: dependencyBundleRootPath,
+			requireBundleRootPath: true,
+		})
+		recordingDependencyAnalysisRef.current = {
+			selectedFileIds: [...selectedFileIds],
+			attachments: dependencyAttachments,
+			bundleRootPath: dependencyBundleRootPath,
+			promise: analysisPromise,
+		}
+		void analysisPromise
+			.then((result) => {
+				if (cancelled) return
+				setRecordingDependencyFileIds(result.dependencyFileIds)
+				if (result.missingResourcePaths.length > 0) {
+					console.warn("Some recording share resources could not be resolved", result)
+				}
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					console.warn("Recording share dependency analysis failed", error)
+					setRecordingDependencyFileIds([])
+				}
+			})
+			.finally(() => {
+				if (!cancelled) setRecordingDependencyAnalysisLoading(false)
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [dependencyAttachments, dependencyBundleRootPath, isAudioRecordingScene, selectedFileIds])
 
 	const shareProject = useShareProject({
 		attachments: shareableAttachments,
@@ -949,14 +1014,34 @@ export function useProjectShareSheet({
 			return
 		}
 
-		// Recording shares keep the visible picker unchanged and only augment the payload
-		// so readonly/share pages always receive the bundle entry files they depend on.
-		const submittedFileIds = isAudioRecordingScene
-			? mergeRecordingShareFileIds(selectedIdsForSubmission, recordingRequiredFileIds)
-			: selectedIdsForSubmission
-
 		setSaving(true)
 		try {
+			// Await the current recording analysis so the payload cannot use stale dependency state.
+			let dependencyFileIds = recordingDependencyFileIds
+			if (isAudioRecordingScene && dependencyAttachments) {
+				const currentAnalysis = recordingDependencyAnalysisRef.current
+				if (
+					!currentAnalysis ||
+					currentAnalysis.attachments !== dependencyAttachments ||
+					currentAnalysis.bundleRootPath !== dependencyBundleRootPath ||
+					currentAnalysis.selectedFileIds.length !== selectedFileIds.length ||
+					!currentAnalysis.selectedFileIds.every(
+						(fileId, index) => fileId === selectedFileIds[index],
+					)
+				) {
+					throw new Error("Recording dependency analysis is not ready")
+				}
+				dependencyFileIds = (await currentAnalysis.promise).dependencyFileIds
+			}
+
+			// Recording shares keep the visible picker unchanged and augment only the submitted payload.
+			const submittedFileIds = isAudioRecordingScene
+				? mergeRecordingShareFileIds(
+						mergeRecordingShareFileIds(selectedIdsForSubmission, dependencyFileIds),
+						recordingRequiredFileIds,
+					)
+				: selectedIdsForSubmission
+
 			// Reuse the existing resource for edits and allocate a new ID only for creation.
 			let resourceId = editResourceId
 			if (!resourceId) {
@@ -1132,6 +1217,11 @@ export function useProjectShareSheet({
 		setEditingShareMode(shareModeForEdit)
 		setEditLoading(true)
 		setFileSelectorOpen(false)
+		// Clear the previous share draft before loading the selected share's authoritative settings.
+		setSelectedFileIds([])
+		setUserDefaultOpenFileId(undefined)
+		setSelectedMemberNodes([])
+		setDetailMemberNodes([])
 		setViewStack(["linkDetail"])
 		setView("edit")
 
@@ -1261,7 +1351,10 @@ export function useProjectShareSheet({
 		selectedShare,
 		loading: projectShareList.loading || fileShareList.loading,
 		saving,
-		isCheckingShare: activeMode === "project" ? shareProject.isCheckingShare : false,
+		isCheckingShare:
+			activeMode === "project"
+				? shareProject.isCheckingShare
+				: recordingDependencyAnalysisLoading,
 		advancedOpen,
 		defaultSelectedFileIds: effectiveSelectedFileIds,
 		selectedFileIds,

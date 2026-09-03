@@ -13,6 +13,7 @@ import {
 	type Transaction,
 } from "@/infrastructure/editors/tiptap/pm-state"
 import { Decoration, DecorationSet } from "@/infrastructure/editors/tiptap/pm-view"
+import { tryCreateRegex } from "@/utils/safeRegex"
 
 export interface SearchAndReplaceOptions {
 	searchResultClass: string
@@ -56,11 +57,9 @@ interface TextNodesWithPosition {
 	pos: number
 }
 
-const getRegex = (s: string, disableRegex: boolean, caseSensitive: boolean): RegExp => {
-	return RegExp(
-		disableRegex ? s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : s,
-		caseSensitive ? "gu" : "gui",
-	)
+const getRegex = (s: string, disableRegex: boolean, caseSensitive: boolean): RegExp | null => {
+	const pattern = disableRegex ? s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : s
+	return tryCreateRegex(pattern, caseSensitive ? "gu" : "gui", !disableRegex)
 }
 
 interface ProcessedSearches {
@@ -70,7 +69,7 @@ interface ProcessedSearches {
 
 function processSearches(
 	doc: PMNode,
-	searchTerm: RegExp,
+	searchTerm: RegExp | null,
 	searchResultClass: string,
 	resultIndex: number,
 ): ProcessedSearches {

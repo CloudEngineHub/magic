@@ -1,0 +1,72 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { RecordingSummaryStatus, RecordingStatusReporter } from "../RecordingStatusReporter"
+
+const { reportRecordingSummaryStatus } = vi.hoisted(() => ({
+	reportRecordingSummaryStatus: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		reportRecordingSummaryStatus,
+	},
+}))
+
+vi.mock("@/stores/recordingSummary", () => ({
+	default: {
+		isRecording: true,
+		businessData: { model: { model_id: "model-test" } },
+		note: undefined,
+		message: [],
+	},
+}))
+
+vi.mock("@/utils/log", () => {
+	const logger = {
+		log: vi.fn(),
+		error: vi.fn(),
+		createLogger: vi.fn(() => logger),
+	}
+	return { logger }
+})
+
+describe("RecordingStatusReporter", () => {
+	beforeEach(() => {
+		reportRecordingSummaryStatus.mockClear()
+	})
+
+	it("includes the current shard count in an immediate status report", async () => {
+		const reporter = new RecordingStatusReporter()
+
+		await reporter.reportStatus({
+			task_key: "task-test",
+			status: RecordingSummaryStatus.Stopped,
+			model_id: "model-test",
+			file_shard_count: 3,
+		})
+
+		expect(reportRecordingSummaryStatus).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_shard_count: 3,
+			}),
+		)
+	})
+
+	it("resolves the latest shard count for periodic status reports", async () => {
+		vi.useFakeTimers()
+		let shardCount = 1
+		const reporter = new RecordingStatusReporter({
+			getFileShardCount: () => shardCount,
+		})
+		shardCount = 4
+		reporter.startPeriodicReport("task-test", 100)
+		await vi.advanceTimersByTimeAsync(100)
+
+		expect(reportRecordingSummaryStatus).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_shard_count: 4,
+			}),
+		)
+		reporter.stopPeriodicReport()
+		vi.useRealTimers()
+	})
+})

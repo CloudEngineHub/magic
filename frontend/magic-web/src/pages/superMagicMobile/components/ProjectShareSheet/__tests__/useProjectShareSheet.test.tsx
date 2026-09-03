@@ -1255,4 +1255,53 @@ describe("useProjectShareSheet", () => {
 		expect(mocks.writeText).not.toHaveBeenCalled()
 		expect(result.current.view).toBe("linkDetail")
 	})
+
+	it("进入移动端分享编辑时先清空上一条分享的选中文件", async () => {
+		mocks.fileShareData = [
+			{
+				resource_id: "share-mobile-a",
+				title: "Share A",
+				project_id: "project-mobile",
+				resource_type: ResourceType.FileCollection,
+				share_type: ShareType.PasswordProtected,
+				file_ids: ["file-mobile-a"],
+			} as FileShareItem,
+		]
+		let resolveSettings!: (value: Record<string, unknown>) => void
+		mocks.getShareInfoByCode.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveSettings = resolve
+			}),
+		)
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-mobile",
+				projectName: "Mobile project",
+				mode: "file",
+				attachments: [{ file_id: "file-mobile-a", name: "File A", is_directory: false }],
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => result.current.goToLinkDetail("share-mobile-a"))
+		await waitFor(() => expect(result.current.view).toBe("linkDetail"))
+		act(() => result.current.setSelectedFileIds(["file-mobile-a"]))
+
+		act(() => result.current.openEditSelectedShare())
+		expect(result.current.selectedFileIds).toEqual([])
+
+		await act(async () => {
+			resolveSettings({
+				project_id: "project-mobile",
+				resource_name: "Share A",
+				share_type: ShareType.PasswordProtected,
+				file_ids: ["file-mobile-a"],
+				extra: {},
+			})
+		})
+		await waitFor(() => expect(result.current.editLoading).toBe(false))
+		expect(result.current.selectedFileIds).toEqual(["file-mobile-a"])
+	})
 })

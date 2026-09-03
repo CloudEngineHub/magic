@@ -211,7 +211,8 @@ vi.mock("react-i18next", () => ({
 				"detail.loadFailed": "Load failed",
 				"detail.untitled": "Untitled",
 				"detail.summarizing": "Generating summary...",
-				"detail.summarizingHint": "All summary views will appear when it is ready.",
+				"detail.summarizingHint":
+					"Summarizing now. It will appear automatically when ready.",
 				"detail.notSummarized": "No summary yet",
 				"detail.notSummarizedHint": "Generate a summary to preview it here",
 				"actions.renameTitle": "Rename title",
@@ -871,10 +872,10 @@ describe("MobileAudioRecordingDetailPage", () => {
 		fireEvent.click(screen.getByText("Summary"))
 
 		expect(screen.getByTestId("mobile-recording-summary-placeholder")).toBeInTheDocument()
-		expect(screen.getByText("Generating summary...")).toBeInTheDocument()
 		expect(
-			screen.getByText("All summary views will appear when it is ready."),
+			screen.getByText("Summarizing now. It will appear automatically when ready."),
 		).toBeInTheDocument()
+		expect(screen.queryByText("Generating summary...")).toBeNull()
 	})
 
 	it("navigates back to the recordings list", () => {

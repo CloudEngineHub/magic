@@ -9,6 +9,7 @@
  * 5. LockAcquireIntent getter
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import MagicModal from "@/components/base/MagicModal"
 import { TabCoordinator, LOCK_PRIORITY_BACKGROUND, LOCK_PRIORITY_USER } from "../TabCoordinator"
 
 // ---------------------------------------------------------------------------
@@ -187,6 +188,31 @@ describe("TabCoordinator — priority lock preemption", () => {
 
 		const result = await promise
 		expect(result).toBe(false)
+	})
+
+	it("does not show the restore modal for server-cancelled sessions", () => {
+		localStorage.setItem(
+			"recordSummary_currentSession",
+			JSON.stringify({
+				status: "server_cancelled",
+				startTime: Date.now(),
+				totalDuration: 1000,
+			}),
+		)
+		const coordinator = makeCoordinator()
+		// @ts-expect-error private method access
+		coordinator.setCurrentLockHolder("other-tab-id")
+		// @ts-expect-error private method access
+		coordinator.handleLockReleased({
+			tabId: "other-tab-id",
+			type: "RECORDING_LOCK_RELEASED",
+			timestamp: Date.now(),
+			data: { type: "closeTab", organizationCode: "test-org" },
+		})
+
+		expect(MagicModal.confirm).not.toHaveBeenCalled()
+		localStorage.removeItem("recordSummary_currentSession")
+		coordinator.cleanup()
 	})
 })
 

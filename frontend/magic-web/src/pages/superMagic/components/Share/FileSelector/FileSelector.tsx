@@ -62,7 +62,12 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 
 		const lowerSearch = searchValue.toLowerCase()
 		return attachments.filter((file) => {
-			const name = file.name || file.file_name || file.display_filename || ""
+			const name =
+				file.share_display_name ||
+				file.name ||
+				file.file_name ||
+				file.display_filename ||
+				""
 			return name.toLowerCase().includes(lowerSearch)
 		})
 	}, [attachments, searchValue])
@@ -664,7 +669,10 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 								!fileSupported && "text-muted-foreground/50",
 							)}
 						>
-							{item?.name || item?.file_name}
+							{item?.share_display_name ||
+								item?.name ||
+								item?.file_name ||
+								item?.display_filename}
 						</div>
 
 						{/* Default open file icon */}

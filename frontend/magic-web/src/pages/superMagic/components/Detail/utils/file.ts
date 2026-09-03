@@ -28,9 +28,25 @@ export const hasPPTMetadata = (attachmentItem: AttachmentItem) => {
 	return attachmentItem?.display_config?.type === "slide"
 }
 
+/** Reads the optional runtime rollout switch; an absent value keeps the new renderer enabled. */
+export const isAudioFolderRootRenderEnabled = (): boolean => {
+	if (typeof window === "undefined") return true
+	const configured = window.CONFIG?.MAGIC_AUDIO_FOLDER_ROOT_RENDER_ENABLED
+	return configured !== false && configured !== "false" && configured !== 0 && configured !== "0"
+}
+
 /** Keep PPTRootRender routing consistent across the renderer and FilesViewer portal boundary. */
 export const shouldUsePPTRootRender = (type: unknown, data: unknown): boolean => {
 	return type === DetailType.Html && hasPPTMetadata(data as AttachmentItem)
+}
+
+/** Detects audio bundle folders and legacy index.html entries that should use the recording workbench. */
+export const shouldUseAudioRootRender = (type: unknown, data: unknown): boolean => {
+	return (
+		isAudioFolderRootRenderEnabled() &&
+		type === DetailType.Html &&
+		(data as AttachmentItem)?.display_config?.type === "audio"
+	)
 }
 
 /** Detect if a folder/file carries self-media metadata */

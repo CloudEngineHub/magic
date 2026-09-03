@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Application\Provider\Event\Subscribe;
+namespace App\Application\SuperMagic\Agent\Event\Subscribe;
 
 use App\Application\SuperMagic\Agent\Service\AdminSuperMagicAgentAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;

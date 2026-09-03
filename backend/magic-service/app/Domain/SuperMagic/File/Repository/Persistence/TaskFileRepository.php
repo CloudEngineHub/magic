@@ -999,6 +999,61 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return $list;
     }
 
+    public function getChildrenByParentIdsAndProjectWithTrash(int $projectId, array $parentIds, int $limit = 1000, int $offset = 0): array
+    {
+        if (empty($parentIds)) {
+            return [];
+        }
+
+        /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
+        $models = $this->model::withTrashed()
+            ->where('project_id', $projectId)
+            ->whereIn('parent_id', $parentIds)
+            ->offset($offset)
+            ->limit($limit)
+            ->get();
+
+        $list = [];
+        foreach ($models as $model) {
+            $list[] = new TaskFileEntity($model->toArray());
+        }
+
+        return $list;
+    }
+
+    public function getAllDescendantEntitiesWithTrash(int $parentId, int $projectId = 0, int $maxDepth = 100): array
+    {
+        $result = [];
+        $parentIds = [$parentId];
+
+        for ($depth = 0; $depth < $maxDepth && $parentIds !== []; ++$depth) {
+            $nextParentIds = [];
+            $offset = 0;
+            do {
+                $children = $this->getChildrenByParentIdsAndProjectWithTrash(
+                    $projectId,
+                    $parentIds,
+                    1000,
+                    $offset
+                );
+                foreach ($children as $child) {
+                    if (isset($result[$child->getFileId()])) {
+                        continue;
+                    }
+                    $result[$child->getFileId()] = $child;
+                    if ($child->getIsDirectory()) {
+                        $nextParentIds[] = $child->getFileId();
+                    }
+                }
+                $offset += count($children);
+            } while (count($children) === 1000);
+
+            $parentIds = array_values(array_unique($nextParentIds));
+        }
+
+        return array_values($result);
+    }
+
     /**
      * 批量更新文件的 file_key.
      * 使用 CASE WHEN 语句实现一次性批量更新.

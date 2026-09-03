@@ -22,7 +22,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	convertFileToTabItem,
 	getFileTabTitle,
-	normalizeSlideProjectTabItem,
+	normalizeProjectTabItem,
 	dedupeTabsById,
 	mergeAttachmentFileForTab,
 } from "../utils/tabUtils"
@@ -101,8 +101,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 		relativeFilePath = sourceRecord.file_path
 	}
 
-	const recordDisplayConfig = sourceRecord.display_config as
-		FileItem["display_config"] | undefined
+	const recordDisplayConfig = sourceRecord.display_config as FileItem["display_config"]
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -1110,14 +1109,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 						})
 						.filter((tab): tab is TabItem => tab !== null)
 					const restoredTabs = dedupeTabsById(
-						processedTabs.map((tab) => normalizeSlideProjectTabItem(tab, attachments)),
+						processedTabs.map((tab) => normalizeProjectTabItem(tab, attachments)),
 					)
 					const cachedActiveTabId = cachedState.fileState?.activeTabId
 					const activeSourceTab = cachedActiveTabId
 						? processedTabs.find((tab) => tab.id === cachedActiveTabId)
 						: undefined
 					const restoredActiveTabId = activeSourceTab
-						? normalizeSlideProjectTabItem(activeSourceTab, attachments).id
+						? normalizeProjectTabItem(activeSourceTab, attachments).id
 						: cachedActiveTabId
 
 					// 如果没有任何可用的 tabs，才清理缓存
@@ -1406,6 +1405,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 				return tab
 			})
 			.filter((tab): tab is TabItem => tab != null)
+
+		const normalizedTabs = dedupeTabsById(
+			updatedTabs.map((tab) => normalizeProjectTabItem(tab, attachments)),
+		)
+		if (
+			normalizedTabs.length !== updatedTabs.length ||
+			normalizedTabs.some((tab, index) => tab.id !== updatedTabs[index]?.id)
+		) {
+			hasUpdates = true
+		}
+		updatedTabs = normalizedTabs
 
 		if (hasUpdates && updatedTabs.length > 0 && !updatedTabs.some((tab) => tab.active)) {
 			const mostRecentTab = updatedTabs.reduce((mostRecent, current) => {

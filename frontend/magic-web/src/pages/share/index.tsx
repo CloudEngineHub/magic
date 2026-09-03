@@ -584,8 +584,8 @@ function Share() {
 		return Boolean(projectId && currentUserId && creatorUserId === currentUserId)
 	}, [data, projectId, userInfo?.user_id])
 
-	/** Routes audio-mode share payloads into the readonly recording detail shell once share files are hydrated. */
-	const shouldRenderAudioShareShell = useMemo(
+	/** Mounts the dedicated recording share shell only for audio-mode projects. */
+	const isAudioProjectShare = useMemo(
 		() =>
 			Boolean(projectId) &&
 			shouldRenderAudioRecordingShareShell({
@@ -594,6 +594,8 @@ function Share() {
 			}),
 		[attachments, data?.data?.project_mode, projectId],
 	)
+	// Keep ordinary project shares inside Topic so their complete file tree remains navigable.
+	const shouldRenderAudioShareShell = isAudioProjectShare
 	// Keep the mobile audio share route on the flex height chain so its inner content viewport can scroll.
 	const isMobileAudioShareLayout = isMobile && shouldRenderAudioShareShell
 
@@ -1040,28 +1042,30 @@ function Share() {
 				)}
 				{(!isEmpty(data) || isFileShare || isProjectShare) && !error ? (
 					shouldRenderAudioShareShell ? (
-						isMobile ? (
-							<ShareMobileAudioRecordingDetailPage
-								projectId={projectId}
-								resourceName={data?.data?.project_name || data?.resource_name}
-								allowDownloadProjectFile={allowDownloadProjectFile}
-								showCopyProject={showCopyProjectButton}
-								copyProjectLabel={t("share.copyProject")}
-								showLogin={!isLogined}
-								loginLabel={t("share.login")}
-								onCopyProject={handleCopyProject}
-								onLogin={handleShareLogin}
-								attachments={attachments}
-								onPlayerExpandedChange={setMobileAudioSharePlayerExpanded}
-							/>
-						) : (
-							<RecordingDetailShareDesktop
-								projectId={projectId}
-								resourceName={data?.data?.project_name || data?.resource_name}
-								allowDownloadProjectFile={allowDownloadProjectFile}
-								attachments={attachments}
-							/>
-						)
+						isAudioProjectShare ? (
+							isMobile ? (
+								<ShareMobileAudioRecordingDetailPage
+									projectId={projectId}
+									resourceName={data?.data?.project_name || data?.resource_name}
+									allowDownloadProjectFile={allowDownloadProjectFile}
+									showCopyProject={showCopyProjectButton}
+									copyProjectLabel={t("share.copyProject")}
+									showLogin={!isLogined}
+									loginLabel={t("share.login")}
+									onCopyProject={handleCopyProject}
+									onLogin={handleShareLogin}
+									attachments={attachments}
+									onPlayerExpandedChange={setMobileAudioSharePlayerExpanded}
+								/>
+							) : (
+								<RecordingDetailShareDesktop
+									projectId={projectId}
+									resourceName={data?.data?.project_name || data?.resource_name}
+									allowDownloadProjectFile={allowDownloadProjectFile}
+									attachments={attachments}
+								/>
+							)
+						) : null
 					) : (
 						<ShareContent
 							isMobile={isMobile}

@@ -28,6 +28,8 @@ interface RecordingDetailRightPanelProps {
 	onTimeClick: (seconds: number, end?: number) => void
 	onGenerateSummary?: () => void
 	summarySubmitting?: boolean
+	/** Controls whether the notes source tab is available in readonly share views. */
+	showNotesTab?: boolean
 }
 
 /** Builds the dynamic right-panel tabs and renders summary/notes content or state placeholders. */
@@ -46,11 +48,12 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	onTimeClick,
 	onGenerateSummary,
 	summarySubmitting = false,
+	showNotesTab = true,
 }: RecordingDetailRightPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const tabs = useMemo(
-		() => buildRightPanelTabs(fileMap, summaryContent, t),
-		[fileMap, summaryContent, t],
+		() => buildRightPanelTabs(fileMap, summaryContent, t, showNotesTab),
+		[fileMap, showNotesTab, summaryContent, t],
 	)
 	const [activeKey, setActiveKey] = useState<string>(tabs[0]?.key ?? "notes")
 	const prevSummaryReadyRef = useRef(summaryReady)
@@ -118,6 +121,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={onOpenSpeakerSettings}
 						onTimeClick={onTimeClick}
+						isGenerating={summarizing}
 						layout="desktop"
 					/>
 				</div>
@@ -149,7 +153,10 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 							</div>
 						) : (
 							<RecordingDetailRegionEmptySlot>
-								<RecordingDetailEmptyState variant="noNotes" compact />
+								<RecordingDetailEmptyState
+									variant={summarizing ? "summaryGenerating" : "noNotes"}
+									compact
+								/>
 							</RecordingDetailRegionEmptySlot>
 						)
 					) : activeTab ? (
@@ -161,6 +168,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onTimeClick={onTimeClick}
+							isGenerating={summarizing}
 							layout="desktop"
 						/>
 					) : null}
@@ -184,6 +192,7 @@ function buildRightPanelTabs(
 	fileMap: RecordingDetailFileMap | null,
 	summaryContent: Record<string, string | undefined>,
 	t: ReturnType<typeof useTranslation>["t"],
+	showNotesTab = true,
 ): RightPanelTab[] {
 	const summaryTabs =
 		fileMap?.summaryFiles.map((file) => ({
@@ -193,6 +202,8 @@ function buildRightPanelTabs(
 			file,
 			content: summaryContent[file.type],
 		})) ?? []
+
+	if (!showNotesTab) return summaryTabs
 
 	const notesTab: RightPanelTab = {
 		key: "notes",

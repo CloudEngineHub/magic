@@ -32,6 +32,9 @@ import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
 import { ProjectResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/ProjectResourceIcon"
+import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
+import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
+import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 
 import type {
 	ProjectResourceSelection,
@@ -53,6 +56,8 @@ import {
 	MY_CLAW_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
 	isCollaborationWorkspace,
+	isCollaborationProject,
+	isWorkspaceShortcutProject,
 } from "../../../../constants"
 import { MagicClawApi, type MagicClawItem } from "@/apis"
 import { MagiClaw } from "@/enhance/lucide-react"
@@ -1533,6 +1538,11 @@ function ProjectResourceSelectorModal({
 										/>
 									</div>
 									<div className="flex min-w-0 flex-1 items-center gap-1">
+										<NavigationStatusIcon
+											itemType="project"
+											status={project.project_status}
+											showDefaultIcon={false}
+										/>
 										<div className={folderIconClass}>
 											<IconProject />
 										</div>
@@ -1544,6 +1554,15 @@ function ProjectResourceSelectorModal({
 										>
 											{getProjectDisplayName(project)}
 										</MagicEllipseWithTooltip>
+										{project.is_pinned && <PinnedTag />}
+										{(isWorkspaceShortcutProject(project) ||
+											isCollaborationProject(project)) && (
+											<CollaborationProjectTag
+												visible
+												project={project}
+												showText={false}
+											/>
+										)}
 									</div>
 									<button
 										type="button"

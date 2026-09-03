@@ -7,6 +7,8 @@ export interface ToastOptions {
 	key?: string | number
 	/** 持续时间，单位：毫秒 */
 	duration?: number
+	/** 是否允许滑动或点击关闭，默认 true */
+	dismissible?: boolean
 	/** 图标 */
 	icon?: React.ReactNode
 	/** 关闭回调 */

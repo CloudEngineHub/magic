@@ -331,7 +331,10 @@ export class TabCoordinator {
 			const raw = localStorage.getItem("recordSummary_currentSession")
 			if (!raw) return null
 			const session = JSON.parse(raw)
-			if (typeof session?.startTime === "number") {
+			if (
+				(session?.status === "recording" || session?.status === "paused") &&
+				typeof session.startTime === "number"
+			) {
 				return { startTime: session.startTime, totalDuration: session.totalDuration ?? 0 }
 			}
 		} catch {
@@ -373,6 +376,12 @@ export class TabCoordinator {
 					return
 				}
 
+				const sessionInfo = this.getStoredSessionInfo()
+				if (!sessionInfo) {
+					logger.log("Skip restore modal: no recoverable recording session")
+					return
+				}
+
 				// 预加载录音总结服务和浮动面板
 				import("@/services/recordSummary/utils/preloadService").then(
 					({ preloadRecordSummaryService, preloadRecordSummaryFloatPanel }) => {
@@ -380,8 +389,6 @@ export class TabCoordinator {
 						preloadRecordSummaryFloatPanel()
 					},
 				)
-
-				const sessionInfo = this.getStoredSessionInfo()
 
 				this.modal = MagicModal.confirm({
 					title: t("recordingSummary.restore.title", { ns: "super" }),

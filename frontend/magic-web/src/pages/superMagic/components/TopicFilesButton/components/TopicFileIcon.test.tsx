@@ -71,11 +71,19 @@ describe("TopicFileIcon", () => {
 		expect(screen.getByTestId("topic-files-file-icon")).toHaveAttribute("src", fileVideoIcon)
 	})
 
-	it("renders the audio icon for mp3 files", () => {
-		render(<TopicFileIcon fileExtension="mp3" dataTestId="topic-files-file-icon" />)
+	it.each(["mp3", "wav", "ogg", "opus", "m4a", "aac", "flac"])(
+		"renders the audio icon for %s files",
+		(fileExtension) => {
+			render(
+				<TopicFileIcon fileExtension={fileExtension} dataTestId="topic-files-file-icon" />,
+			)
 
-		expect(screen.getByTestId("topic-files-file-icon")).toHaveAttribute("src", fileAudioIcon)
-	})
+			expect(screen.getByTestId("topic-files-file-icon")).toHaveAttribute(
+				"src",
+				fileAudioIcon,
+			)
+		},
+	)
 
 	it("renders the zip icon for common archive files", () => {
 		render(<TopicFileIcon fileExtension="zip" dataTestId="topic-files-file-icon" />)

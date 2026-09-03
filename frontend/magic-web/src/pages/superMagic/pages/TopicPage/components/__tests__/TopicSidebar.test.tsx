@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { describe, it, expect, vi } from "vitest"
+import { beforeEach, describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import TopicSidebar from "../TopicSidebar"
 
@@ -14,11 +14,7 @@ vi.mock("@/pages/superMagic/components/ProjectCardContainer", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/ProjectSider", () => ({
-	default: ({
-		items,
-	}: {
-		items: Array<{ key: string; title: string; content?: ReactNode }>
-	}) => (
+	default: ({ items }: { items: Array<{ key: string; title: string; content?: ReactNode }> }) => (
 		<div data-testid="project-sider">
 			{items.map((item) => (
 				<div key={item.key}>
@@ -52,6 +48,71 @@ vi.mock("@/enhance/tabler/icons-react/icons/iconShareCog", () => ({
 	default: () => <span data-testid="icon-share-cog" />,
 }))
 
+const controllerState = vi.hoisted(() => ({ isAudioProject: false }))
+
+vi.mock("../hooks/useAudioProjectSidebarController", () => ({
+	useAudioProjectSidebarController: ({ isReadOnly }: { isReadOnly: boolean }) => ({
+		isAudioProject: controllerState.isAudioProject,
+		canManageAudioProject: controllerState.isAudioProject && !isReadOnly,
+		projectItem: controllerState.isAudioProject
+			? {
+					id: "mock-audio-project",
+					project_name: "Mock recording",
+					card_status: "summarized",
+					workspace_id: null,
+				}
+			: null,
+		title: "Mock recording",
+		groups: [],
+		ungroupedCount: 0,
+		moveGroupOpen: false,
+		setMoveGroupOpen: vi.fn(),
+		actions: {
+			summarySubmitting: false,
+			renaming: false,
+			deleting: false,
+			moving: false,
+			canGenerateSummary: true,
+		},
+		copyController: {},
+		shareController: {
+			openShareModal: vi.fn(),
+			shareModalOpen: false,
+			closeShareModal: vi.fn(),
+			defaultSelectedFileIds: [],
+			editingResourceId: undefined,
+		},
+		handleBack: vi.fn(),
+		handleDelete: vi.fn(),
+		renameProject: vi.fn(async () => true),
+		moveToGroup: vi.fn(async () => true),
+		copyToProject: vi.fn(),
+		generateSummary: vi.fn(),
+		summaryMode: "regenerate",
+		ungroupedGroupId: "ungrouped",
+	}),
+}))
+
+vi.mock("@/pages/superMagic/components/AudioProjectHeader", () => ({
+	default: () => <div data-testid="audio-project-header" />,
+}))
+
+vi.mock("../../AudioRecordings/components/AudioRecordingMoveGroupDialog", () => ({
+	AudioRecordingMoveGroupDialog: () => null,
+}))
+
+vi.mock("../../AudioRecordings/components/AudioRecordingCopyDialog", () => ({
+	AudioRecordingCopyDialog: () => null,
+}))
+
+vi.mock("../../../components/Share/Modal", () => ({
+	default: () => null,
+}))
+
+vi.mock("../components/AudioProjectShareDialogs", () => ({
+	default: () => null,
+}))
+
 const baseProps = {
 	selectedProject: { id: "project-alpha" },
 	selectedWorkspace: { id: "workspace-alpha" },
@@ -61,6 +122,10 @@ const baseProps = {
 }
 
 describe("TopicSidebar", () => {
+	beforeEach(() => {
+		controllerState.isAudioProject = false
+	})
+
 	it("renders all sider tabs in default variant", () => {
 		render(<TopicSidebar {...baseProps} />)
 
@@ -84,5 +149,35 @@ describe("TopicSidebar", () => {
 		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-longMemory")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-card-container")).not.toBeInTheDocument()
+	})
+
+	it("keeps only the file tree for recording projects", () => {
+		controllerState.isAudioProject = true
+		render(
+			<TopicSidebar
+				{...baseProps}
+				topicFilesProps={{ attachments: [{ file_id: "mock-file" }] }}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-project-header")).toBeInTheDocument()
+		expect(screen.getByTestId("project-sider-item-topicFiles")).toBeInTheDocument()
+		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-sider-item-longMemory")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-sider-item-share")).not.toBeInTheDocument()
+	})
+
+	it("hides recording management actions for read-only projects", () => {
+		controllerState.isAudioProject = true
+		render(
+			<TopicSidebar
+				{...baseProps}
+				isReadOnly
+				topicFilesProps={{ attachments: [{ file_id: "mock-file" }] }}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-project-header")).toBeInTheDocument()
+		expect(screen.queryByTestId("audio-project-header-share")).not.toBeInTheDocument()
 	})
 })

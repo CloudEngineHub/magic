@@ -75,6 +75,8 @@ interface ShareSheetState {
 	projectName: string
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
+	dependencyAttachments: AttachmentItem[]
+	dependencyBundleRootPath?: string
 	fileMap: RecordingDetailFileMap
 	defaultSelectedFileIds: string[]
 }
@@ -390,6 +392,8 @@ function AudioRecordingListPanel({
 				),
 				attachments: shareSelection.shareableFiles,
 				attachmentList: shareSelection.shareableFiles,
+				dependencyAttachments: processed.list,
+				dependencyBundleRootPath: fileMap.bundleRootPath,
 				fileMap,
 				defaultSelectedFileIds: shareSelection.defaultSelectedFileIds,
 			})
@@ -591,6 +595,8 @@ function AudioRecordingListPanel({
 				projectName={shareSheetState?.projectName}
 				attachments={shareSheetState?.attachments ?? []}
 				attachmentList={shareSheetState?.attachmentList ?? []}
+				dependencyAttachments={shareSheetState?.dependencyAttachments ?? []}
+				dependencyBundleRootPath={shareSheetState?.dependencyBundleRootPath}
 				fileMap={shareSheetState?.fileMap}
 				defaultSelectedFileIds={shareSheetState?.defaultSelectedFileIds}
 			/>

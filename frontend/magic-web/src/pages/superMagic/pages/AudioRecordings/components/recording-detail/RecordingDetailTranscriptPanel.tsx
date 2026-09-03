@@ -61,6 +61,7 @@ interface RecordingDetailTranscriptPanelProps {
 	onSegmentClick: (segment: RecordingTranscriptSegment) => void
 	onSelectedSpeakerIdsChange: (speakerIds: string[]) => void
 	onOpenSpeakerSettings: () => void
+	isSummarizing?: boolean
 }
 
 /** Renders seekable transcript segments with playback highlight and speaker pills. */
@@ -77,6 +78,7 @@ export function RecordingDetailTranscriptPanel({
 	onSegmentClick,
 	onSelectedSpeakerIdsChange,
 	onOpenSpeakerSettings,
+	isSummarizing = false,
 }: RecordingDetailTranscriptPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const capabilities = useRecordingDetailCapabilities()
@@ -230,7 +232,10 @@ export function RecordingDetailTranscriptPanel({
 								{t("detail.emptyTranscriptFiltered")}
 							</p>
 						) : (
-							<RecordingDetailEmptyState variant="noTranscript" compact />
+							<RecordingDetailEmptyState
+								variant={isSummarizing ? "summaryGenerating" : "noTranscript"}
+								compact
+							/>
 						)}
 					</RecordingDetailRegionEmptySlot>
 				) : (
