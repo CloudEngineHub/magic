@@ -27,11 +27,11 @@ final class Wan30VideoAdapterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        ApplicationContext::setContainer(new readonly class implements ContainerInterface {
+        ApplicationContext::setContainer(new readonly class () implements ContainerInterface {
             public function get(string $id): mixed
             {
                 if ($id === TranslatorInterface::class) {
-                    return new class implements TranslatorInterface {
+                    return new class () implements TranslatorInterface {
                         public function trans(string $key, array $replace = [], ?string $locale = null): string
                         {
                             return $key;
@@ -147,6 +147,28 @@ final class Wan30VideoAdapterTest extends TestCase
         ], $payload['input']['media']);
     }
 
+    public function testBuildsOmniReferencePayloadFromTextOnly(): void
+    {
+        $payload = $this->adapter()->buildProviderPayload($this->operation([
+            'input_mode' => 'omni_reference',
+            'prompt' => '只用文字生成',
+        ]));
+
+        self::assertSame(['prompt' => '只用文字生成'], $payload['input']);
+        self::assertArrayNotHasKey('media', $payload['input']);
+    }
+
+    public function testBuildsStandardPayloadFromTextOnly(): void
+    {
+        $payload = $this->adapter()->buildProviderPayload($this->operation([
+            'input_mode' => 'standard',
+            'prompt' => '只用文字生成视频',
+        ]));
+
+        self::assertSame(['prompt' => '只用文字生成视频'], $payload['input']);
+        self::assertArrayNotHasKey('media', $payload['input']);
+    }
+
     public function testBuildsVideoEditPayloadWithReferenceVideo(): void
     {
         $operation = $this->operation([
@@ -191,7 +213,7 @@ final class Wan30VideoAdapterTest extends TestCase
 
     public function testReadsOmniImageLimitFromCapabilityMetadata(): void
     {
-        $provider = new readonly class extends Wan30GenerationCapabilityProvider {
+        $provider = new readonly class () extends Wan30GenerationCapabilityProvider {
             public function resolveGenerationConfig(string $modelVersion, string $modelId): ?VideoGenerationConfig
             {
                 $config = parent::resolveGenerationConfig($modelVersion, $modelId);

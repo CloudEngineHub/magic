@@ -28,10 +28,10 @@ final class GeminiOmniVideoAdapterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        ApplicationContext::setContainer(new readonly class implements ContainerInterface {
+        ApplicationContext::setContainer(new readonly class () implements ContainerInterface {
             public function get(string $id): mixed
             {
-                return new class implements TranslatorInterface {
+                return new class () implements TranslatorInterface {
                     public function trans(string $key, array $replace = [], ?string $locale = null): string
                     {
                         return $key;
@@ -83,6 +83,18 @@ final class GeminiOmniVideoAdapterTest extends TestCase
         ], $payload['input']);
         self::assertTrue($payload['background']);
         self::assertSame(['type' => 'video', 'delivery' => 'uri', 'aspect_ratio' => '16:9', 'resolution' => '1080p', 'duration' => '8s'], $payload['response_format']);
+    }
+
+    public function testBuildsOmniInteractionPayloadFromTextOnly(): void
+    {
+        $payload = $this->adapter()->buildProviderPayload($this->operation([
+            'input_mode' => 'omni_reference',
+            'prompt' => 'generate a city sunset',
+        ]));
+
+        self::assertSame([
+            ['type' => 'text', 'text' => 'generate a city sunset'],
+        ], $payload['input']);
     }
 
     public function testBuildsInteractionPayloadWithBase64Frame(): void

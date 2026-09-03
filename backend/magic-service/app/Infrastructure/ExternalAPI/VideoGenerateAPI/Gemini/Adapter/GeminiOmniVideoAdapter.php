@@ -21,6 +21,14 @@ use InvalidArgumentException;
 
 final class GeminiOmniVideoAdapter implements VideoGenerationProviderAdapterInterface
 {
+    private const array MEDIA_TYPES = [
+        'frames' => 'image',
+        'reference_images' => 'image',
+        'reference_videos' => 'video',
+    ];
+
+    private const array INPUT_MODES = ['standard', 'image_reference', 'keyframe_guided', 'video_edit', 'omni_reference'];
+
     public function __construct(private GeminiOmniGenerationCapabilityProvider $capabilityProvider, private GeminiTransportInterface $transport)
     {
     }
@@ -40,6 +48,9 @@ final class GeminiOmniVideoAdapter implements VideoGenerationProviderAdapterInte
         return false;
     }
 
+    /**
+     * Builds a Gemini Interactions request from the shared video-generation request format.
+     */
     public function buildProviderPayload(VideoQueueOperationEntity $operation): array
     {
         $modelVersion = trim($operation->getModelVersion()) !== '' ? $operation->getModelVersion() : $operation->getModel();
@@ -52,27 +63,59 @@ final class GeminiOmniVideoAdapter implements VideoGenerationProviderAdapterInte
         }
         $generation = is_array($request['generation'] ?? null) ? $request['generation'] : [];
         $capability = $this->capabilityProvider->resolveGenerationConfig($modelVersion, $modelId);
-        $generationConfig = $capability?->toArray()['generation'] ?? [];
-        $resolution = strtolower(trim((string) ($generation['resolution'] ?? ($generationConfig['default_resolution'] ?? '720p'))));
-        if (! in_array($resolution, $generationConfig['resolutions'] ?? [], true)) {
-            throw new InvalidArgumentException('Gemini resolution is invalid.');
+        if ($capability === null) {
+            throw new InvalidArgumentException('Gemini capability is unavailable.');
         }
-        $aspectRatio = trim((string) ($generation['aspect_ratio'] ?? '16:9'));
-        if (! in_array($aspectRatio, $generationConfig['aspect_ratios'] ?? [], true)) {
-            throw new InvalidArgumentException('Gemini aspect ratio is invalid.');
-        }
-        $duration = (int) ($generation['duration_seconds'] ?? ($generationConfig['default_duration_seconds'] ?? 8));
-        $durations = $generationConfig['durations'] ?? [];
-        if (is_array($durations) && isset($durations['min'], $durations['max']) && ($duration < (int) $durations['min'] || $duration > (int) $durations['max'])) {
-            throw new InvalidArgumentException('Gemini duration is invalid.');
-        }
-        if (is_array($durations) && array_is_list($durations) && ! in_array($duration, array_map('intval', $durations), true)) {
-            throw new InvalidArgumentException('Gemini duration is invalid.');
-        }
-        $mode = strtolower(trim((string) ($request['input_mode'] ?? 'standard')));
-        if (! in_array($mode, ['standard', 'image_reference', 'keyframe_guided', 'video_edit', 'omni_reference'], true)) {
+        $generationConfig = $capability->toArray()['generation'];
+        $mode = $this->normalizeInputMode($request['input_mode'] ?? null);
+        $this->validateGeneration($generation, $generationConfig);
+        $this->validateModeInputs($mode, $inputs);
+        $normalizedInputs = $this->normalizeMediaInputs($inputs);
+        $parts = $this->buildInputParts($normalizedInputs, $request['prompt'] ?? null);
+        $responseFormat = $this->buildResponseFormat($generation, $generationConfig);
+        $ignored = $this->ignoredParams($request, $generation);
+        $operation->setAcceptedParams(['prompt', 'input_mode', 'inputs', 'generation.aspect_ratio', 'generation.resolution', 'generation.duration_seconds']);
+        $operation->setIgnoredParams($ignored);
+        return [
+            'model' => $model,
+            'input' => $parts,
+            'background' => array_key_exists('background', $request) ? (bool) $request['background'] : true,
+            'response_format' => $responseFormat,
+        ];
+    }
+
+    private function normalizeInputMode(mixed $mode): string
+    {
+        $mode = strtolower(trim((string) ($mode ?? 'standard')));
+        if (! in_array($mode, self::INPUT_MODES, true)) {
             throw new InvalidArgumentException('Gemini input mode is invalid.');
         }
+
+        return $mode;
+    }
+
+    /** @param array<string, mixed> $generationConfig */
+    private function validateGeneration(array $generation, array $generationConfig): void
+    {
+        $resolution = strtolower(trim((string) ($generation['resolution'] ?? $generationConfig['default_resolution'])));
+        if (! in_array($resolution, $generationConfig['resolutions'], true)) {
+            throw new InvalidArgumentException('Gemini resolution is invalid.');
+        }
+
+        $aspectRatio = trim((string) ($generation['aspect_ratio'] ?? '16:9'));
+        if (! in_array($aspectRatio, $generationConfig['aspect_ratios'], true)) {
+            throw new InvalidArgumentException('Gemini aspect ratio is invalid.');
+        }
+
+        $duration = (int) ($generation['duration_seconds'] ?? $generationConfig['default_duration_seconds']);
+        if (! in_array($duration, array_map('intval', $generationConfig['durations']), true)) {
+            throw new InvalidArgumentException('Gemini duration is invalid.');
+        }
+    }
+
+    /** @param array<string, mixed> $inputs */
+    private function validateModeInputs(string $mode, array $inputs): void
+    {
         if ($mode === 'standard' && $inputs !== []) {
             throw new InvalidArgumentException('Gemini standard mode does not accept media.');
         }
@@ -85,60 +128,103 @@ final class GeminiOmniVideoAdapter implements VideoGenerationProviderAdapterInte
         if ($mode === 'video_edit' && (($inputs['reference_videos'] ?? []) === [] || ($inputs['frames'] ?? []) !== [] || ($inputs['reference_images'] ?? []) !== [])) {
             throw new InvalidArgumentException('Gemini video edit mode requires a reference video.');
         }
-        if ($mode === 'omni_reference' && (($inputs['reference_images'] ?? []) === [] && ($inputs['reference_videos'] ?? []) === [])) {
-            throw new InvalidArgumentException('Gemini omni reference mode requires reference media.');
-        }
-        $parts = [];
-        foreach (['frames' => 'image', 'reference_images' => 'image', 'reference_videos' => 'video'] as $field => $type) {
-            if (array_key_exists($field, $inputs) && ! is_array($inputs[$field])) {
+        // Omni mode accepts zero or more reference media items, so prompt-only requests stay valid.
+    }
+
+    /**
+     * Normalizes supported media once; the provider request builder only consumes canonical URIs.
+     *
+     * @param array<string, mixed> $inputs
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function normalizeMediaInputs(array $inputs): array
+    {
+        $normalized = [];
+        foreach (self::MEDIA_TYPES as $field => $type) {
+            if (! array_key_exists($field, $inputs)) {
+                continue;
+            }
+            if (! is_array($inputs[$field])) {
                 throw new InvalidArgumentException('Gemini media input must be an array.');
             }
-            foreach ((array) ($inputs[$field] ?? []) as $item) {
-                if (! is_array($item)) {
-                    throw new InvalidArgumentException('Gemini media item is invalid.');
-                }
-                $part = ['type' => $type, 'uri' => ReferenceMediaPayload::normalize(
-                    $item,
-                    'Gemini ' . $field . ' entry',
-                    $type === 'video' ? 'video/mp4' : 'image/png',
-                )];
-                if ($type === 'image' && isset($item['role'])) {
-                    $role = strtolower(trim((string) $item['role']));
-                    if ($field === 'frames' && ! in_array($role, ['start', 'end', 'first', 'last'], true)) {
-                        throw new InvalidArgumentException('Gemini frame role is invalid.');
-                    }
-                    $part['role'] = $role === 'first' ? 'start' : ($role === 'last' ? 'end' : $role);
+            $normalized[$field] = array_map(
+                fn (mixed $item): array => $this->normalizeMediaItem($field, $type, $item),
+                $inputs[$field],
+            );
+        }
+
+        return $normalized;
+    }
+
+    /** @return array<string, mixed> */
+    private function normalizeMediaItem(string $field, string $type, mixed $item): array
+    {
+        if (! is_array($item)) {
+            throw new InvalidArgumentException('Gemini media item is invalid.');
+        }
+
+        $normalized = [
+            'uri' => ReferenceMediaPayload::normalize($item, 'Gemini ' . $field . ' entry', $type === 'video' ? 'video/mp4' : 'image/png'),
+        ];
+        if ($type === 'image' && isset($item['role'])) {
+            $role = strtolower(trim((string) $item['role']));
+            if ($field === 'frames' && ! in_array($role, ['start', 'end', 'first', 'last'], true)) {
+                throw new InvalidArgumentException('Gemini frame role is invalid.');
+            }
+            $normalized['role'] = $role === 'first' ? 'start' : ($role === 'last' ? 'end' : $role);
+        }
+
+        return $normalized;
+    }
+
+    /** @param array<string, list<array<string, mixed>>> $inputs */
+    private function buildInputParts(array $inputs, mixed $prompt): array
+    {
+        $parts = [];
+        foreach (self::MEDIA_TYPES as $field => $type) {
+            foreach ($inputs[$field] ?? [] as $item) {
+                $part = ['type' => $type, 'uri' => $item['uri']];
+                if (isset($item['role'])) {
+                    $part['role'] = $item['role'];
                 }
                 $parts[] = $part;
             }
         }
-        $prompt = trim((string) ($request['prompt'] ?? ''));
+        $prompt = trim((string) ($prompt ?? ''));
         if ($prompt !== '') {
             $parts[] = ['type' => 'text', 'text' => $prompt];
         }
-        $responseFormat = ['type' => 'video', 'delivery' => 'uri', 'aspect_ratio' => $aspectRatio, 'resolution' => $resolution, 'duration' => $duration . 's'];
-        foreach (['aspect_ratio' => 'aspect_ratio', 'resolution' => 'resolution'] as $from => $to) {
-            if (isset($generation[$from])) {
-                $responseFormat[$to] = (string) $generation[$from];
-            }
-        }
-        $ignored = [];
-        if (array_key_exists('generate_audio', $generation)) {
-            $ignored[] = 'generation.generate_audio';
-        }
+
+        return $parts;
+    }
+
+    /** @param array<string, mixed> $generationConfig */
+    private function buildResponseFormat(array $generation, array $generationConfig): array
+    {
+        $resolution = strtolower(trim((string) ($generation['resolution'] ?? $generationConfig['default_resolution'])));
+        $aspectRatio = trim((string) ($generation['aspect_ratio'] ?? '16:9'));
+        $duration = (int) ($generation['duration_seconds'] ?? $generationConfig['default_duration_seconds']);
+
+        return [
+            'type' => 'video',
+            'delivery' => 'uri',
+            'aspect_ratio' => $aspectRatio,
+            'resolution' => $resolution,
+            'duration' => $duration . 's',
+        ];
+    }
+
+    /** @param array<string, mixed> $request @param array<string, mixed> $generation */
+    private function ignoredParams(array $request, array $generation): array
+    {
+        $ignored = array_key_exists('generate_audio', $generation) ? ['generation.generate_audio'] : [];
         foreach (array_keys($request) as $field) {
             if (! in_array($field, ['prompt', 'input_mode', 'inputs', 'generation', 'background'], true)) {
                 $ignored[] = $field;
             }
         }
-        $operation->setAcceptedParams(['prompt', 'input_mode', 'inputs', 'generation.aspect_ratio', 'generation.resolution', 'generation.duration_seconds']);
-        $operation->setIgnoredParams($ignored);
-        return [
-            'model' => $model,
-            'input' => $parts,
-            'background' => array_key_exists('background', $request) ? (bool) $request['background'] : true,
-            'response_format' => $responseFormat,
-        ];
+
+        return $ignored;
     }
 
     public function submit(VideoQueueOperationEntity $operation, QueueExecutorConfig $config): string

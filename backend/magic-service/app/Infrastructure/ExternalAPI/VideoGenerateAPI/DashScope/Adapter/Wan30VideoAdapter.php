@@ -22,6 +22,10 @@ use InvalidArgumentException;
 
 final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
 {
+    private const array MEDIA_FIELDS = ['frames', 'reference_images', 'reference_videos', 'reference_audios'];
+
+    private const array GENERATION_FIELDS = ['resolution', 'duration_seconds', 'aspect_ratio', 'enhance_prompt', 'generate_audio', 'seed', 'watermark'];
+
     public function __construct(
         private Wan30GenerationCapabilityProvider $capabilityProvider,
         private DashScopeTransportInterface $transport,
@@ -47,8 +51,7 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
 
         [$resolvedVersion, $resolvedId] = $models;
         $capability = $this->capabilityProvider->resolveGenerationConfig($resolvedVersion, $resolvedId);
-        $capabilityData = $capability?->toArray() ?? [];
-        $generationConfig = is_array($capabilityData['generation'] ?? null) ? $capabilityData['generation'] : [];
+        $generationConfig = $capability?->toArray()['generation'] ?? [];
         if (! (bool) ($generationConfig['supports_generate_audio'] ?? false)) {
             return false;
         }
@@ -57,11 +60,14 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         return (bool) ($generation['generate_audio'] ?? true);
     }
 
+    /**
+     * Builds the DashScope request while keeping accepted and ignored request fields for operation auditing.
+     */
     public function buildProviderPayload(VideoQueueOperationEntity $operation): array
     {
         $request = $operation->getRawRequest();
         $generation = is_array($request['generation'] ?? null) ? $request['generation'] : [];
-        $inputs = is_array($request['inputs'] ?? null) ? $request['inputs'] : [];
+        $rawInputs = is_array($request['inputs'] ?? null) ? $request['inputs'] : [];
         [$modelVersion, $modelId] = $this->resolveOperationModels($operation);
         $model = $this->capabilityProvider->resolveProviderModelName($modelVersion, $modelId);
         $capability = $this->capabilityProvider->resolveGenerationConfig($modelVersion, $modelId);
@@ -70,50 +76,72 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         }
         $capabilityData = $capability->toArray();
         $inputMode = $this->normalizeInputMode($request['input_mode'] ?? null);
-        $generationConfig = is_array($capabilityData['generation'] ?? null) ? $capabilityData['generation'] : [];
-        $inputModes = is_array($capabilityData['input_modes'] ?? null) ? $capabilityData['input_modes'] : [];
-        $inputModeConfig = is_array($inputModes[$inputMode] ?? null) ? $inputModes[$inputMode] : [];
-        $constraints = is_array($capabilityData['constraints'] ?? null) ? $capabilityData['constraints'] : [];
+        $generationConfig = $capabilityData['generation'];
+        $inputModeConfig = $capabilityData['input_modes'][$inputMode];
+        $constraints = $capabilityData['constraints'];
         $this->validateGeneration($generation, $generationConfig);
+        $inputs = $this->normalizeMediaInputs($rawInputs);
 
         $input = ['prompt' => (string) ($request['prompt'] ?? '')];
         $acceptedParams = ['prompt', 'input_mode', 'generation.duration_seconds'];
         $ignoredParams = [];
+
+        // Each mode owns its media rules; an empty media list is valid for text-only modes.
         $media = match ($inputMode) {
             VideoInputMode::Standard->value => $this->buildStandardMedia($inputs),
-            VideoInputMode::ImageReference->value => $this->buildImageReferenceMedia($inputs, $acceptedParams, $inputModeConfig),
+            VideoInputMode::ImageReference->value => $this->buildImageReferenceMedia($inputs, $acceptedParams),
             VideoInputMode::KeyframeGuided->value => $this->buildKeyframeMedia($inputs, $acceptedParams, $inputModeConfig),
             VideoInputMode::OmniReference->value => $this->buildOmniMedia($inputs, $acceptedParams, $inputModeConfig, $constraints),
-            VideoInputMode::VideoEdit->value => $this->buildVideoEditMedia($inputs, $acceptedParams, $inputModeConfig),
+            VideoInputMode::VideoEdit->value => $this->buildVideoEditMedia($inputs, $acceptedParams),
             default => throw new InvalidArgumentException('Unsupported Wan 3.x input mode.'),
         };
         if ($media !== []) {
             $input['media'] = $media;
         }
 
+        $parameters = $this->buildGenerationParameters($generation, $generationConfig, $acceptedParams, $ignoredParams);
+        $this->markIgnoredParams($request, $rawInputs, $inputs, $acceptedParams, $ignoredParams);
+
+        $operation->setAcceptedParams(array_values(array_unique($acceptedParams)));
+        $operation->setIgnoredParams(array_values(array_unique($ignoredParams)));
+        return ['model' => $model, 'input' => $input, 'parameters' => $parameters];
+    }
+
+    /**
+     * Maps request generation options to DashScope parameters and records unsupported options.
+     *
+     * @param array<string, mixed> $generation
+     * @param array<string, mixed> $generationConfig
+     * @param list<string> $acceptedParams
+     * @param list<string> $ignoredParams
+     * @return array<string, mixed>
+     */
+    private function buildGenerationParameters(array $generation, array $generationConfig, array &$acceptedParams, array &$ignoredParams): array
+    {
         $parameters = [
             'resolution' => strtoupper($this->normalizeResolution($generation['resolution'] ?? ($generationConfig['default_resolution'] ?? '720p'))),
             'duration' => (int) ($generation['duration_seconds'] ?? ($generationConfig['default_duration_seconds'] ?? 5)),
         ];
-        foreach ([
+        $providerFields = [
             'aspect_ratio' => 'ratio',
             'enhance_prompt' => 'prompt_extend',
             'generate_audio' => 'audio',
             'seed' => 'seed',
             'watermark' => 'watermark',
-        ] as $requestField => $providerField) {
+        ];
+        $supportFlags = [
+            'enhance_prompt' => 'supports_enhance_prompt',
+            'generate_audio' => 'supports_generate_audio',
+            'seed' => 'supports_seed',
+            'watermark' => 'supports_watermark',
+        ];
+
+        foreach ($providerFields as $requestField => $providerField) {
             if (! array_key_exists($requestField, $generation)) {
                 continue;
             }
-
-            $supportsField = match ($requestField) {
-                'generate_audio' => (bool) ($generationConfig['supports_generate_audio'] ?? false),
-                'enhance_prompt' => (bool) ($generationConfig['supports_enhance_prompt'] ?? false),
-                'seed' => (bool) ($generationConfig['supports_seed'] ?? false),
-                'watermark' => (bool) ($generationConfig['supports_watermark'] ?? false),
-                default => true,
-            };
-            if (! $supportsField) {
+            $supportFlag = $supportFlags[$requestField] ?? null;
+            if ($supportFlag !== null && ! $generationConfig[$supportFlag]) {
                 $ignoredParams[] = 'generation.' . $requestField;
                 continue;
             }
@@ -125,14 +153,29 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
             };
             $acceptedParams[] = 'generation.' . $requestField;
         }
+
         $acceptedParams[] = 'generation.resolution';
         foreach (array_keys($generation) as $field) {
-            if (! in_array($field, ['resolution', 'duration_seconds', 'aspect_ratio', 'enhance_prompt', 'generate_audio', 'seed', 'watermark'], true)
-                || in_array('generation.' . $field, $ignoredParams, true)) {
+            if (! in_array($field, self::GENERATION_FIELDS, true)) {
                 $ignoredParams[] = 'generation.' . $field;
             }
         }
-        foreach (['frames', 'reference_images', 'reference_videos', 'reference_audios'] as $field) {
+
+        return $parameters;
+    }
+
+    /**
+     * Records request fields intentionally ignored by the provider adapter for auditability.
+     *
+     * @param array<string, mixed> $request
+     * @param array<string, mixed> $rawInputs
+     * @param array<string, list<array<string, mixed>>> $inputs
+     * @param list<string> $acceptedParams
+     * @param list<string> $ignoredParams
+     */
+    private function markIgnoredParams(array $request, array $rawInputs, array $inputs, array $acceptedParams, array &$ignoredParams): void
+    {
+        foreach (self::MEDIA_FIELDS as $field) {
             if ($this->hasItems($inputs, $field) && ! in_array('inputs.' . $field, $acceptedParams, true)) {
                 $ignoredParams[] = 'inputs.' . $field;
             }
@@ -145,15 +188,11 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
                 $ignoredParams[] = $field;
             }
         }
-        foreach (array_keys($inputs) as $field) {
-            if (! in_array($field, ['frames', 'reference_images', 'reference_videos', 'reference_audios'], true)) {
+        foreach (array_keys($rawInputs) as $field) {
+            if (! in_array($field, self::MEDIA_FIELDS, true)) {
                 $ignoredParams[] = 'inputs.' . $field;
             }
         }
-
-        $operation->setAcceptedParams(array_values(array_unique($acceptedParams)));
-        $operation->setIgnoredParams(array_values(array_unique($ignoredParams)));
-        return ['model' => $model, 'input' => $input, 'parameters' => $parameters];
     }
 
     public function submit(VideoQueueOperationEntity $operation, QueueExecutorConfig $config): string
@@ -252,32 +291,36 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
     {
         $modelVersion = trim($modelVersion);
         $modelId = trim($modelId);
+
+        // Persisted provider IDs can be numeric; keep the explicit Wan model version in that case.
         return $modelVersion !== '' && ctype_digit($modelId) ? '' : $modelId;
     }
 
+    /**
+     * Validates generation options against the capability schema published by Wan 3.x.
+     */
     private function validateGeneration(array $generation, array $capability): void
     {
-        $resolutions = is_array($capability['resolutions'] ?? null) ? $capability['resolutions'] : [];
-        $resolution = strtolower(trim((string) ($generation['resolution'] ?? ($capability['default_resolution'] ?? '720p'))));
-        if (! in_array($resolution, $resolutions, true)) {
+        $resolution = $this->normalizeResolution($generation['resolution'] ?? ($capability['default_resolution'] ?? '720p'));
+        if (! in_array($resolution, $capability['resolutions'], true)) {
             throw new InvalidArgumentException('Wan 3.x resolution is invalid.');
         }
+
         $duration = (int) ($generation['duration_seconds'] ?? ($capability['default_duration_seconds'] ?? 5));
-        $durations = $capability['durations'] ?? [];
-        $validDuration = is_array($durations) && array_key_exists('min', $durations)
-            ? $duration >= (int) $durations['min'] && $duration <= (int) $durations['max'] && (($duration - (int) $durations['min']) % max(1, (int) ($durations['step'] ?? 1)) === 0)
-            : in_array($duration, is_array($durations) ? $durations : [], true);
-        if (! $validDuration) {
+        $durationConfig = $capability['durations'];
+        if ($duration < $durationConfig['min'] || $duration > $durationConfig['max']
+            || ($duration - $durationConfig['min']) % $durationConfig['step'] !== 0) {
             throw new InvalidArgumentException('Wan 3.x duration is invalid.');
         }
-        if (array_key_exists('aspect_ratio', $generation) && ! in_array((string) $generation['aspect_ratio'], is_array($capability['aspect_ratios'] ?? null) ? $capability['aspect_ratios'] : [], true)) {
+
+        if (array_key_exists('aspect_ratio', $generation) && ! in_array((string) $generation['aspect_ratio'], $capability['aspect_ratios'], true)) {
             throw new InvalidArgumentException('Wan 3.x aspect ratio is invalid.');
         }
     }
 
     private function buildStandardMedia(array $inputs): array
     {
-        foreach (['frames', 'reference_images', 'reference_videos', 'reference_audios'] as $field) {
+        foreach (self::MEDIA_FIELDS as $field) {
             if ($this->hasItems($inputs, $field)) {
                 throw new InvalidArgumentException('Wan 3.x standard mode does not accept reference media.');
             }
@@ -285,11 +328,10 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         return [];
     }
 
-    private function buildImageReferenceMedia(array $inputs, array &$accepted, array $capability): array
+    private function buildImageReferenceMedia(array $inputs, array &$accepted): array
     {
-        $images = $this->mediaItems($inputs, 'reference_images');
-        $maxCount = $this->requiredLimit($capability, ['reference_images', 'max_count']);
-        if (count($images) !== 1 || count($images) > $maxCount || $this->hasItems($inputs, 'frames') || $this->hasItems($inputs, 'reference_videos') || $this->hasItems($inputs, 'reference_audios')) {
+        $images = $inputs['reference_images'] ?? [];
+        if (count($images) !== 1 || $this->hasItems($inputs, 'frames') || $this->hasItems($inputs, 'reference_videos') || $this->hasItems($inputs, 'reference_audios')) {
             throw new InvalidArgumentException('Wan 3.x image reference mode requires exactly one image.');
         }
         $accepted[] = 'inputs.reference_images';
@@ -301,12 +343,9 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         if ($this->hasItems($inputs, 'reference_images') || $this->hasItems($inputs, 'reference_videos') || $this->hasItems($inputs, 'reference_audios')) {
             throw new InvalidArgumentException('Wan 3.x keyframe mode does not accept reference media.');
         }
-        $frames = $this->mediaItems($inputs, 'frames');
-        $roles = is_array($capability['frame_roles'] ?? null) ? array_values(array_filter($capability['frame_roles'], 'is_string')) : [];
-        $aliases = is_array($capability['role_aliases'] ?? null) ? $capability['role_aliases'] : [];
-        if ($roles === []) {
-            throw new InvalidArgumentException('Wan 3.x keyframe capability roles are unavailable.');
-        }
+        $frames = $inputs['frames'] ?? [];
+        $roles = $capability['frame_roles'];
+        $aliases = $capability['role_aliases'];
         $byRole = [];
         foreach ($frames as $frame) {
             $rawRole = strtolower(trim((string) ($frame['role'] ?? '')));
@@ -320,8 +359,7 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
             $byRole[$role] = $frame['uri'];
         }
         foreach ($roles as $role) {
-            $minimum = (int) ($capability['limits'][$role]['min'] ?? 0);
-            if ($minimum > 0 && ! isset($byRole[$role])) {
+            if (($capability['limits'][$role]['min'] ?? 0) > 0 && ! isset($byRole[$role])) {
                 throw new InvalidArgumentException('Wan 3.x keyframe mode requires a ' . $role . ' frame.');
             }
         }
@@ -336,38 +374,35 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         return $media;
     }
 
+    /**
+     * Applies Omni media limits only when media is supplied; text-only Omni requests remain valid.
+     */
     private function buildOmniMedia(array $inputs, array &$accepted, array $capability, array $constraints): array
     {
         if ($this->hasItems($inputs, 'frames')) {
             throw new InvalidArgumentException('Wan 3.x omni reference mode does not accept keyframes.');
         }
-        $images = $this->mediaItems($inputs, 'reference_images');
-        $videos = $this->mediaItems($inputs, 'reference_videos');
-        $audios = $this->mediaItems($inputs, 'reference_audios');
+        $images = $inputs['reference_images'] ?? [];
+        $videos = $inputs['reference_videos'] ?? [];
+        $audios = $inputs['reference_audios'] ?? [];
         if ($images === [] && $videos === [] && $audios === []) {
-            throw new InvalidArgumentException('Wan 3.x omni reference mode requires media.');
+            // Omni mode also supports text-only generation; media is optional, not a fallback to standard mode.
+            return [];
         }
-        $variants = is_array($capability['variants'] ?? null) ? $capability['variants'] : [];
-        $variantLimits = [];
-        foreach ($variants as $variant) {
-            if (is_array($variant) && is_string($variant['code'] ?? null)) {
-                $variantLimits[$variant['code']] = is_array($variant['limits'] ?? null) ? $variant['limits'] : [];
-            }
-        }
-        $maxCount = (int) ($capability['max_count'] ?? 0);
-        if ($maxCount <= 0 || count($images) + count($videos) + count($audios) > $maxCount
-            || count($images) > $this->requiredVariantLimit($variantLimits, 'reference_image', 'count')
-            || count($videos) > $this->requiredVariantLimit($variantLimits, 'reference_video', 'count')
-            || count($audios) > $this->requiredVariantLimit($variantLimits, 'reference_audio', 'count')) {
+        $variantLimits = array_column($capability['variants'], 'limits', 'code');
+        if (count($images) + count($videos) + count($audios) > $capability['max_count']
+            || count($images) > $variantLimits['reference_image']['count']['max']
+            || count($videos) > $variantLimits['reference_video']['count']['max']
+            || count($audios) > $variantLimits['reference_audio']['count']['max']) {
             throw new InvalidArgumentException('Wan 3.x omni reference media limit exceeded.');
         }
-        $videoItemLimit = $this->requiredVariantLimit($variantLimits, 'reference_video', 'duration_seconds');
+        $videoItemLimit = $variantLimits['reference_video']['duration_seconds']['max'];
         foreach ($videos as $item) {
             if ((int) ($item['duration_seconds'] ?? 0) > $videoItemLimit) {
                 throw new InvalidArgumentException('Wan 3.x reference media duration limit exceeded.');
             }
         }
-        $audioItemLimit = $this->requiredVariantLimit($variantLimits, 'reference_audio', 'duration_seconds');
+        $audioItemLimit = $variantLimits['reference_audio']['duration_seconds']['max'];
         foreach ($audios as $item) {
             if ((int) ($item['duration_seconds'] ?? 0) > $audioItemLimit) {
                 throw new InvalidArgumentException('Wan 3.x reference media duration limit exceeded.');
@@ -375,9 +410,9 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         }
         $videoDuration = array_sum(array_map(static fn (array $item): int => (int) ($item['duration_seconds'] ?? 0), $videos));
         $audioDuration = array_sum(array_map(static fn (array $item): int => (int) ($item['duration_seconds'] ?? 0), $audios));
-        if ($videoDuration > $this->requiredVariantLimit($variantLimits, 'reference_video', 'total_duration_seconds')
-            || $audioDuration > $this->requiredVariantLimit($variantLimits, 'reference_audio', 'total_duration_seconds')
-            || $videoDuration + $audioDuration > $this->requiredLimit($constraints, ['reference_media', 'max_total_duration_seconds'])) {
+        if ($videoDuration > $variantLimits['reference_video']['total_duration_seconds']['max']
+            || $audioDuration > $variantLimits['reference_audio']['total_duration_seconds']['max']
+            || $videoDuration + $audioDuration > $constraints['reference_media']['max_total_duration_seconds']) {
             throw new InvalidArgumentException('Wan 3.x reference media total duration limit exceeded.');
         }
         $accepted = array_merge($accepted, ['inputs.reference_images', 'inputs.reference_videos', 'inputs.reference_audios']);
@@ -388,11 +423,10 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         );
     }
 
-    private function buildVideoEditMedia(array $inputs, array &$accepted, array $capability): array
+    private function buildVideoEditMedia(array $inputs, array &$accepted): array
     {
-        $videos = $this->mediaItems($inputs, 'reference_videos');
-        $maxCount = (int) ($capability['max_count'] ?? 0);
-        if ($maxCount <= 0 || count($videos) !== 1 || $this->hasItems($inputs, 'reference_images') || $this->hasItems($inputs, 'reference_audios') || $this->hasItems($inputs, 'frames')) {
+        $videos = $inputs['reference_videos'] ?? [];
+        if (count($videos) !== 1 || $this->hasItems($inputs, 'reference_images') || $this->hasItems($inputs, 'reference_audios') || $this->hasItems($inputs, 'frames')) {
             throw new InvalidArgumentException('Wan 3.x video edit mode requires exactly one reference video.');
         }
         $accepted[] = 'inputs.reference_videos';
@@ -415,15 +449,15 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         }
         $items = [];
         $uris = [];
+        $defaultMimeType = match ($field) {
+            'reference_videos' => 'video/mp4',
+            'reference_audios' => 'audio/mpeg',
+            default => 'image/png',
+        };
         foreach ($value as $item) {
             if (! is_array($item)) {
                 throw new InvalidArgumentException('Wan 3.x media entry is invalid.');
             }
-            $defaultMimeType = match ($field) {
-                'reference_videos' => 'video/mp4',
-                'reference_audios' => 'audio/mpeg',
-                default => 'image/png',
-            };
             $uri = ReferenceMediaPayload::normalize($item, 'Wan 3.x ' . $field . ' entry', $defaultMimeType);
             if (isset($uris[$uri])) {
                 throw new InvalidArgumentException('Wan 3.x media entries must be unique.');
@@ -435,31 +469,26 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         return $items;
     }
 
+    /**
+     * Normalizes each supported media field once so mode builders only consume canonical URIs.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function normalizeMediaInputs(array $inputs): array
+    {
+        $normalized = [];
+        foreach (self::MEDIA_FIELDS as $field) {
+            if (array_key_exists($field, $inputs)) {
+                $normalized[$field] = $this->mediaItems($inputs, $field);
+            }
+        }
+
+        return $normalized;
+    }
+
     private function hasItems(array $inputs, string $field): bool
     {
-        return $this->mediaItems($inputs, $field) !== [];
-    }
-
-    private function requiredLimit(array $config, array $path): int
-    {
-        $value = $config;
-        foreach ($path as $segment) {
-            if (! is_array($value) || ! array_key_exists($segment, $value)) {
-                throw new InvalidArgumentException('Wan 3.x capability media limit is unavailable.');
-            }
-            $value = $value[$segment];
-        }
-        $limit = (int) $value;
-        if ($limit <= 0) {
-            throw new InvalidArgumentException('Wan 3.x capability media limit is invalid.');
-        }
-        return $limit;
-    }
-
-    /** @param array<string, array<string, mixed>> $variants */
-    private function requiredVariantLimit(array $variants, string $variant, string $limit): int
-    {
-        return $this->requiredLimit($variants, [$variant, $limit, 'max']);
+        return ! empty($inputs[$field]);
     }
 
     private function normalizeInputMode(mixed $mode): string
