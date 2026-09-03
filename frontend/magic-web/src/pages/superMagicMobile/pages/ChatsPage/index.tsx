@@ -195,7 +195,7 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 
 	/** Navigate to the existing blank home composer; project/topic creation remains send-time. */
 	const handleCreateChat = useMemoizedFn(() => {
-		navigate({ name: RouteName.MobileHome, viewTransition: false })
+		navigate({ name: RouteName.MobileHome })
 	})
 
 	/**

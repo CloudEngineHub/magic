@@ -320,14 +320,13 @@ describe("ChatsPage", () => {
 		})
 	})
 
-	it("navigates to the existing mobile home without creating a project", () => {
+	it("navigates to the existing mobile home with the default mobile transition", () => {
 		render(<ChatsPage />)
 
 		fireEvent.click(screen.getByTestId("chat-list-create"))
 
 		expect(navigateMock).toHaveBeenCalledWith({
 			name: "MobileHome",
-			viewTransition: false,
 		})
 		expect(reloadMock).not.toHaveBeenCalled()
 	})
