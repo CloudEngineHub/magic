@@ -20,9 +20,7 @@ tools:
   - ask_user
 skills:
   preload:
-    - name: slide-template-replacement
-      files:
-        - SKILL.md
+    - slide-template-replacement
   system_skills:
     - name: skill-vetter
     - name: download
