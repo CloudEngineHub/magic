@@ -34,6 +34,21 @@ export interface SavedHtmlScreenshot {
 
 const logger = Logger.createLogger("HtmlScreenshotUpload")
 
+const SCREENSHOT_MIME_EXTENSIONS: Record<string, string> = {
+	"image/webp": "webp",
+	"image/png": "png",
+	"image/jpeg": "jpg",
+}
+
+function resolveScreenshotFileName(fileName: string, dataUrl: string): string {
+	const mimeType = dataUrl.match(/^data:(image\/(?:webp|png|jpeg));/i)?.[1]?.toLowerCase()
+	const extension = mimeType ? SCREENSHOT_MIME_EXTENSIONS[mimeType] : undefined
+	if (!extension) return fileName
+
+	const baseName = fileName.replace(/\.[^./\\]+$/, "") || "html-screenshot"
+	return `${baseName}.${extension}`
+}
+
 /**
  * Region shots upload and batch-save after confirm.
  * AI submit waits for in-flight saves. Element shots stay local.
@@ -90,7 +105,11 @@ class HtmlScreenshotUploadService {
 		captureId,
 	}: StoreHtmlScreenshotParams): Promise<StoredHtmlScreenshot> {
 		try {
-			return await htmlScreenshotStorage.store(dataUrl, fileName, captureId)
+			return await htmlScreenshotStorage.store(
+				dataUrl,
+				resolveScreenshotFileName(fileName, dataUrl),
+				captureId,
+			)
 		} catch (error) {
 			logger.error({
 				eventKey: "html_screenshot_store_failed",

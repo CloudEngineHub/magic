@@ -58,11 +58,7 @@ export function supportsCurrentTabCapture(): boolean {
 }
 
 export type CurrentTabCaptureErrorCode =
-	| "unsupported"
-	| "permission-denied"
-	| "cancelled"
-	| "wrong-surface"
-	| "no-video"
+	"unsupported" | "permission-denied" | "cancelled" | "wrong-surface" | "no-video"
 
 export class CurrentTabCaptureError extends Error {
 	readonly code: CurrentTabCaptureErrorCode
@@ -83,12 +79,15 @@ interface ScreenRect {
 
 const IFRAME_SCREENSHOT_ACK_TIMEOUT_MS = 500
 // Must cover iframe font wait (1s), two compositor frames (240ms), snapdom
-// clone/raster, and async PNG encode. Progress messages renew this budget.
+// clone/raster, and async image encode. Progress messages renew this budget.
 const IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS = 8_000
 const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
 const STABLE_RECT_WAIT_TIMEOUT_MS = 240
 const VIDEO_DATA_WAIT_TIMEOUT_MS = 1_000
 const VIDEO_PLAY_TIMEOUT_MS = 1_000
+const CANVAS_ENCODE_TIMEOUT_MS = 2_000
+const SCREENSHOT_WEBP_MIME_TYPE = "image/webp"
+const SCREENSHOT_WEBP_QUALITY = 0.95
 
 function getTimingNow(): number {
 	return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -887,13 +886,53 @@ export async function waitForFreshCaptureVideoFrame(video: HTMLVideoElement): Pr
 	await new Promise<void>((resolve) => setTimeout(resolve, 50))
 }
 
-function cropCanvas(
+function encodeCanvasBlob(
+	canvas: HTMLCanvasElement,
+	type: string,
+	quality?: number,
+): Promise<Blob | null> {
+	if (typeof canvas.toBlob !== "function") return Promise.resolve(null)
+
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = (blob: Blob | null) => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			resolve(blob)
+		}
+		const timeoutId = window.setTimeout(() => finish(null), CANVAS_ENCODE_TIMEOUT_MS)
+		try {
+			const callback = (blob: Blob | null) => finish(blob)
+			if (quality === undefined) canvas.toBlob(callback, type)
+			else canvas.toBlob(callback, type, quality)
+		} catch {
+			finish(null)
+		}
+	})
+}
+
+async function canvasToScreenshotDataUrl(canvas: HTMLCanvasElement): Promise<string> {
+	const webpBlob = await encodeCanvasBlob(
+		canvas,
+		SCREENSHOT_WEBP_MIME_TYPE,
+		SCREENSHOT_WEBP_QUALITY,
+	)
+	if (webpBlob?.type === SCREENSHOT_WEBP_MIME_TYPE) return blobToDataUrl(webpBlob)
+
+	const pngBlob = await encodeCanvasBlob(canvas, "image/png")
+	if (pngBlob) return blobToDataUrl(pngBlob)
+
+	return canvas.toDataURL("image/png")
+}
+
+async function cropCanvas(
 	source: CanvasImageSource,
 	sourceWidth: number,
 	sourceHeight: number,
 	selection: BitmapCropSelection | InspectedElementRect,
 	outputSize?: BitmapSize,
-): string {
+): Promise<string> {
 	const left = Math.max(0, Math.round(selection.left))
 	const top = Math.max(0, Math.round(selection.top))
 	const width = Math.max(1, Math.min(Math.round(selection.width), sourceWidth - left))
@@ -916,7 +955,7 @@ function cropCanvas(
 	const context = canvas.getContext("2d")
 	if (!context) throw new Error("Canvas 2D context is unavailable")
 	context.drawImage(source, left, top, width, height, 0, 0, outputWidth, outputHeight)
-	return canvas.toDataURL("image/png")
+	return canvasToScreenshotDataUrl(canvas)
 }
 
 async function captureSameOriginIframe(
@@ -952,7 +991,13 @@ async function captureSameOriginIframe(
 		height: renderHeight,
 	})
 	const outputSize = getCaptureOutputSize(selection, viewportSelection)
-	const dataUrl = cropCanvas(canvas, canvas.width, canvas.height, bitmapSelection, outputSize)
+	const dataUrl = await cropCanvas(
+		canvas,
+		canvas.width,
+		canvas.height,
+		bitmapSelection,
+		outputSize,
+	)
 	return dataUrl
 }
 
@@ -1045,7 +1090,7 @@ async function captureCurrentTab({
 		})
 		const scaleX = video.videoWidth / surface.width
 		const scaleY = video.videoHeight / surface.height
-		const dataUrl = cropCanvas(
+		const dataUrl = await cropCanvas(
 			video,
 			video.videoWidth,
 			video.videoHeight,

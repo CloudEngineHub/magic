@@ -121,6 +121,35 @@ describe("HTML screenshot geometry", () => {
 		await expect(capture).resolves.toMatch(/^data:image\/png;base64,/)
 	})
 
+	it("preserves the WebP format returned by the iframe runtime", async () => {
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+
+		const capture = captureWithIframeRuntime({
+			iframe,
+			selection: { left: 12, top: 18, width: 80, height: 60 },
+			iframeTargetOrigin: "https://husky.example.test",
+		})
+		const request = targetWindow.postMessage.mock.calls[0]?.[0]
+		const event = new MessageEvent("message", {
+			origin: "https://husky.example.test",
+			data: {
+				type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+				requestId: request.requestId,
+				success: true,
+				blob: new Blob(["webp"], { type: "image/webp" }),
+			},
+		})
+		Object.defineProperty(event, "source", { configurable: true, value: targetWindow })
+		window.dispatchEvent(event)
+
+		await expect(capture).resolves.toMatch(/^data:image\/webp;base64,/)
+	})
+
 	it("falls back when the iframe ACKs but never returns a screenshot", async () => {
 		vi.useFakeTimers()
 		try {

@@ -98,6 +98,20 @@ describe("HtmlScreenshotUploadService", () => {
 		expect(mocks.batchSaveFiles).not.toHaveBeenCalled()
 	})
 
+	it("aligns the stored filename with a WebP data URL", async () => {
+		await htmlScreenshotUploadService.storeScreenshot({
+			dataUrl: "data:image/webp;base64,AA==",
+			fileName: "screenshot.png",
+			captureId: "element:#hero:1",
+		})
+
+		expect(mocks.store).toHaveBeenCalledWith(
+			"data:image/webp;base64,AA==",
+			"screenshot.webp",
+			"element:#hero:1",
+		)
+	})
+
 	it("saves a stored screenshot as a topic attachment without creating a folder", async () => {
 		const result = await htmlScreenshotUploadService.uploadStoredScreenshot({
 			storageId: "screenshot-storage-id",

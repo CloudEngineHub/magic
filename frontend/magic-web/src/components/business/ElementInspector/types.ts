@@ -208,7 +208,7 @@ export interface InspectorScreenshotResponse {
 	type: typeof INSPECTOR_MSG.SCREENSHOT_RESPONSE
 	requestId: string
 	success: boolean
-	/** PNG returned through structured clone; the parent converts it to a data URL. */
+	/** WebP returned when supported, otherwise PNG; the parent converts it to a data URL. */
 	blob?: Blob
 	error?: string
 }

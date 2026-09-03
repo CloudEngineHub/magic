@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+	encodeCanvasToScreenshotBlob,
 	encodeCanvasToPngBlob,
-	PNG_ENCODE_TIMEOUT_MS,
+	IMAGE_ENCODE_TIMEOUT_MS,
+	SCREENSHOT_WEBP_MIME_TYPE,
+	SCREENSHOT_WEBP_QUALITY,
 	SYNC_PNG_ENCODE_MAX_PIXELS,
 	ScreenshotCancelledError,
 } from "../inspectorScreenshot"
@@ -63,7 +66,7 @@ describe("encodeCanvasToPngBlob", () => {
 		const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL")
 
 		const pending = encodeCanvasToPngBlob(canvas)
-		await vi.advanceTimersByTimeAsync(PNG_ENCODE_TIMEOUT_MS)
+		await vi.advanceTimersByTimeAsync(IMAGE_ENCODE_TIMEOUT_MS)
 		await expect(pending).resolves.toBe(retriedBlob)
 		expect(toBlob.mock.calls.length).toBeGreaterThan(1)
 		expect(toDataURL).not.toHaveBeenCalled()
@@ -105,7 +108,7 @@ describe("encodeCanvasToPngBlob", () => {
 		const pending = encodeCanvasToPngBlob(canvas, () => aborted)
 		const cancelled = expect(pending).rejects.toBeInstanceOf(ScreenshotCancelledError)
 		aborted = true
-		await vi.advanceTimersByTimeAsync(PNG_ENCODE_TIMEOUT_MS)
+		await vi.advanceTimersByTimeAsync(IMAGE_ENCODE_TIMEOUT_MS)
 		await cancelled
 		expect(toBlob).toHaveBeenCalledTimes(1)
 		expect(OffscreenCtor).not.toHaveBeenCalled()
@@ -148,11 +151,45 @@ describe("encodeCanvasToPngBlob", () => {
 		let aborted = false
 		const pending = encodeCanvasToPngBlob(canvas, () => aborted)
 		const cancelled = expect(pending).rejects.toBeInstanceOf(ScreenshotCancelledError)
-		await vi.advanceTimersByTimeAsync(PNG_ENCODE_TIMEOUT_MS)
+		await vi.advanceTimersByTimeAsync(IMAGE_ENCODE_TIMEOUT_MS)
 		aborted = true
-		await vi.advanceTimersByTimeAsync(PNG_ENCODE_TIMEOUT_MS)
+		await vi.advanceTimersByTimeAsync(IMAGE_ENCODE_TIMEOUT_MS)
 		await cancelled
 		expect(toBlob).toHaveBeenCalledTimes(1)
 		expect(toDataURL).not.toHaveBeenCalled()
+	})
+})
+
+describe("encodeCanvasToScreenshotBlob", () => {
+	afterEach(() => vi.restoreAllMocks())
+
+	it("prefers high-quality WebP when the browser supports it", async () => {
+		const canvas = document.createElement("canvas")
+		const webpBlob = new Blob(["webp"], { type: SCREENSHOT_WEBP_MIME_TYPE })
+		const toBlob = vi
+			.spyOn(HTMLCanvasElement.prototype, "toBlob")
+			.mockImplementation((callback, type, quality) => {
+				callback(webpBlob)
+				expect(type).toBe(SCREENSHOT_WEBP_MIME_TYPE)
+				expect(quality).toBe(SCREENSHOT_WEBP_QUALITY)
+			})
+
+		await expect(encodeCanvasToScreenshotBlob(canvas)).resolves.toBe(webpBlob)
+		expect(toBlob).toHaveBeenCalledOnce()
+	})
+
+	it("falls back to PNG when WebP encoding is unavailable", async () => {
+		const canvas = document.createElement("canvas")
+		const pngBlob = new Blob(["png"], { type: "image/png" })
+		const toBlob = vi
+			.spyOn(HTMLCanvasElement.prototype, "toBlob")
+			.mockImplementation((callback) => callback(pngBlob))
+
+		await expect(encodeCanvasToScreenshotBlob(canvas)).resolves.toBe(pngBlob)
+		expect(toBlob).toHaveBeenCalledTimes(2)
+		expect(toBlob.mock.calls.map(([, type]) => type)).toEqual([
+			SCREENSHOT_WEBP_MIME_TYPE,
+			"image/png",
+		])
 	})
 })

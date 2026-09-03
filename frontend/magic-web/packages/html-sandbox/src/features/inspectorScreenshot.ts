@@ -2,8 +2,10 @@ import { snapdom } from "@zumer/snapdom"
 
 export const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
 export const FONT_READY_WAIT_TIMEOUT_MS = 1_000
-export const PNG_ENCODE_TIMEOUT_MS = 2_000
+export const IMAGE_ENCODE_TIMEOUT_MS = 2_000
 export const MAX_SCREENSHOT_OUTPUT_EDGE = 4096
+export const SCREENSHOT_WEBP_MIME_TYPE = "image/webp"
+export const SCREENSHOT_WEBP_QUALITY = 0.95
 /** Sync-style fallback is only safe for tiny canvases, never 4096². */
 export const SYNC_PNG_ENCODE_MAX_PIXELS = 256 * 256
 const PNG_ENCODE_RETRY_SCALE = 0.5
@@ -83,16 +85,20 @@ function scaleCanvas(canvas: HTMLCanvasElement, scale: number): HTMLCanvasElemen
 function encodeCanvasWithToBlob(
 	canvas: HTMLCanvasElement,
 	timeoutMs: number,
+	type: string,
+	quality: number | undefined,
 	shouldAbort?: () => boolean,
 ): Promise<Blob> {
 	throwIfAborted(shouldAbort)
 	return raceWithTimeout(
 		new Promise<Blob>((resolve, reject) => {
 			try {
-				canvas.toBlob((blob) => {
+				const callback = (blob: Blob | null) => {
 					if (blob) resolve(blob)
 					else reject(new Error("canvas.toBlob returned null"))
-				}, "image/png")
+				}
+				if (quality === undefined) canvas.toBlob(callback, type)
+				else canvas.toBlob(callback, type, quality)
 			} catch (error) {
 				reject(error)
 			}
@@ -100,6 +106,27 @@ function encodeCanvasWithToBlob(
 		timeoutMs,
 		"Timed out while encoding iframe screenshot",
 	)
+}
+
+async function encodeCanvasWithWebp(
+	canvas: HTMLCanvasElement,
+	shouldAbort?: () => boolean,
+): Promise<Blob | null> {
+	throwIfAborted(shouldAbort)
+	try {
+		const blob = await encodeCanvasWithToBlob(
+			canvas,
+			IMAGE_ENCODE_TIMEOUT_MS,
+			SCREENSHOT_WEBP_MIME_TYPE,
+			SCREENSHOT_WEBP_QUALITY,
+			shouldAbort,
+		)
+		throwIfAborted(shouldAbort)
+		return blob.type === SCREENSHOT_WEBP_MIME_TYPE ? blob : null
+	} catch (error) {
+		rethrowIfCancelled(error)
+		return null
+	}
 }
 
 async function encodeCanvasWithOffscreen(
@@ -115,7 +142,7 @@ async function encodeCanvasWithOffscreen(
 		context.drawImage(canvas, 0, 0)
 		const blob = await raceWithTimeout(
 			offscreen.convertToBlob({ type: "image/png" }),
-			PNG_ENCODE_TIMEOUT_MS,
+			IMAGE_ENCODE_TIMEOUT_MS,
 			"Timed out while encoding iframe screenshot",
 		)
 		throwIfAborted(shouldAbort)
@@ -163,7 +190,13 @@ export async function encodeCanvasToPngBlob(
 ): Promise<Blob> {
 	throwIfAborted(shouldAbort)
 	try {
-		const blob = await encodeCanvasWithToBlob(canvas, PNG_ENCODE_TIMEOUT_MS, shouldAbort)
+		const blob = await encodeCanvasWithToBlob(
+			canvas,
+			IMAGE_ENCODE_TIMEOUT_MS,
+			"image/png",
+			undefined,
+			shouldAbort,
+		)
 		throwIfAborted(shouldAbort)
 		return blob
 	} catch (error) {
@@ -182,7 +215,13 @@ export async function encodeCanvasToPngBlob(
 		const reduced = scaleCanvas(canvas, PNG_ENCODE_RETRY_SCALE)
 		throwIfAborted(shouldAbort)
 		try {
-			const blob = await encodeCanvasWithToBlob(reduced, PNG_ENCODE_TIMEOUT_MS, shouldAbort)
+			const blob = await encodeCanvasWithToBlob(
+				reduced,
+				IMAGE_ENCODE_TIMEOUT_MS,
+				"image/png",
+				undefined,
+				shouldAbort,
+			)
 			throwIfAborted(shouldAbort)
 			return blob
 		} catch (error) {
@@ -192,6 +231,16 @@ export async function encodeCanvasToPngBlob(
 	}
 
 	return encodeSmallCanvasFallback(canvas, shouldAbort)
+}
+
+/** Prefer high-quality WebP to reduce screenshot storage and upload size. */
+export async function encodeCanvasToScreenshotBlob(
+	canvas: HTMLCanvasElement,
+	shouldAbort?: () => boolean,
+): Promise<Blob> {
+	const webpBlob = await encodeCanvasWithWebp(canvas, shouldAbort)
+	if (webpBlob) return webpBlob
+	return encodeCanvasToPngBlob(canvas, shouldAbort)
 }
 
 export function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): HTMLElement {
@@ -328,7 +377,7 @@ export async function captureScreenshotBlob(
 		)
 		hooks.onProgress?.()
 		throwIfAborted(hooks.shouldAbort)
-		return await encodeCanvasToPngBlob(outputCanvas, hooks.shouldAbort)
+		return await encodeCanvasToScreenshotBlob(outputCanvas, hooks.shouldAbort)
 	} finally {
 		style.remove()
 	}
