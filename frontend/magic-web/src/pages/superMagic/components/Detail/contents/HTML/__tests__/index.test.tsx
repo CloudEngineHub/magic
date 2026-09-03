@@ -9,6 +9,7 @@ import { HTML_PREVIEW_IMAGE_PROCESS } from "../previewImageProcess"
 import HTML from "../index"
 
 const mockIsolatedHTMLRendererProps = vi.hoisted(() => vi.fn())
+const mockResetContent = vi.hoisted(() => vi.fn())
 
 const mockGetFileContentById = vi.fn()
 const mockProcessHtmlContent = vi.fn(async ({ content }: { content?: string }) => ({
@@ -453,7 +454,7 @@ vi.mock("../IsolatedHTMLRenderer", async () => {
 			React.useImperativeHandle(ref, () => ({
 				getContent: async () => "<html><body>local-visual</body></html>",
 				updateContent: () => undefined,
-				resetContent: () => undefined,
+				resetContent: mockResetContent,
 				getFetchInterceptedCallback: () => () => undefined,
 			}))
 
@@ -556,6 +557,7 @@ describe("HTML", () => {
 		mockGetFileContentById.mockReset()
 		mockProcessHtmlContent.mockClear()
 		mockIsolatedHTMLRendererProps.mockClear()
+		mockResetContent.mockClear()
 	})
 
 	it("should use the HTML-specific edit label and show only three AI edit items", async () => {
@@ -1145,6 +1147,29 @@ describe("HTML", () => {
 			expect(mockSetIsEditMode).toHaveBeenCalledWith(false)
 			expect(mockOnRefreshFile).toHaveBeenCalledTimes(1)
 		})
+	})
+
+	it("should reset the iframe content when canceling visual edit", async () => {
+		const mockSetIsEditMode = vi.fn()
+		const mockOnRefreshFile = vi.fn()
+
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				allowEdit
+				setIsEditMode={mockSetIsEditMode}
+				onRefreshFile={mockOnRefreshFile}
+			/>,
+		)
+
+		await act(async () => {
+			fireEvent.click(screen.getByTestId("html-cancel-button"))
+		})
+
+		expect(mockResetContent).toHaveBeenCalledOnce()
+		expect(mockSetIsEditMode).toHaveBeenCalledWith(false)
+		expect(mockOnRefreshFile).toHaveBeenCalledOnce()
 	})
 
 	it("should not refresh file after regular save succeeds", async () => {

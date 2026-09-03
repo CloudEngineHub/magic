@@ -1,8 +1,8 @@
 import { act, render, screen } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { createRef, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
-import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
+import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const hookState = vi.hoisted(() => ({
@@ -626,6 +626,30 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		await flushReactEffects()
 
 		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+	})
+
+	it("reloads the original content when resetContent is called", async () => {
+		const rendererRef = createRef<IsolatedHTMLRendererRef>()
+		render(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		await act(async () => {
+			rendererRef.current?.resetContent()
+			await Promise.resolve()
+		})
+
+		const setContentCalls = getSetContentCalls(postMessage)
+		expect(setContentCalls).toHaveLength(2)
+		expect(setContentCalls[1][0]).toMatchObject({
+			content: setContentCalls[0][0].content,
+		})
 	})
 
 	it("updates location query when the same HTML navigation changes", async () => {

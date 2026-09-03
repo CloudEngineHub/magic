@@ -1614,8 +1614,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							console.error("清除编辑历史失败:", error)
 						})
 					}
-					// Refresh iframe content to original state
-					refreshIframeContent()
+					// Refresh iframe content to original state, even when the source content
+					// itself has not changed. The editor may have changed the live iframe DOM.
+					refreshIframeContent({ force: true })
 				},
 				updateContent: async (
 					newContent: string,
