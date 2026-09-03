@@ -19,7 +19,7 @@ class _URLFileService:
 
 
 @pytest.mark.asyncio
-async def test_renderer_keeps_only_recent_five_images_and_falls_back_for_older_refs(tmp_path, monkeypatch):
+async def test_renderer_keeps_only_first_five_images_and_falls_back_for_remaining_refs(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     for index in range(6):
@@ -43,7 +43,9 @@ async def test_renderer_keeps_only_recent_five_images_and_falls_back_for_older_r
 
     content = rendered[0]["content"]
     assert sum(item["type"] == "image_url" for item in content) == 5
-    assert "recent image window" in content[1]["text"]
+    assert content[1]["type"] == "image_url"
+    assert "only the first 5 images" in content[6]["text"]
+    assert "visual_understanding" in content[6]["text"]
 
 
 @pytest.mark.asyncio
@@ -336,9 +338,9 @@ def test_user_message_positional_arguments_remain_compatible():
     assert message.content_parts is None
 
 
-def test_unlimited_processing_keeps_bounded_expanded_caches():
-    """本期处理数量不设限时，内存缓存仍应保持扩大的硬上限。"""
-    assert LLMMessageRenderer.MAX_NATIVE_IMAGE_REFS == -1
+def test_default_processing_limit_keeps_bounded_expanded_caches():
+    """默认只处理前 10 张图片，内存缓存仍应保持扩大的硬上限。"""
+    assert LLMMessageRenderer.MAX_NATIVE_IMAGE_REFS == 10
     assert LLMMessageRenderer.MAX_NATIVE_IMAGE_BYTES == -1
     assert LLMMessageRenderer.MAX_CACHE_ENTRIES == 32
     assert LLMMessageRenderer.MAX_CACHE_BYTES == 128 * 1024 * 1024

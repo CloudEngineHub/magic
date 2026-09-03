@@ -172,8 +172,8 @@ class WorkspaceImageURLResolver:
 class LLMMessageRenderer:
     """将规范化图片引用转换为当前模型可接受的请求消息。"""
 
-    # -1 表示本期不限制原生视觉图片数量和请求图片总大小；限制逻辑仍保留，后续可直接恢复正数配置。
-    MAX_NATIVE_IMAGE_REFS = -1
+    # 默认只发送前 10 张原生视觉图片，避免一次请求触发大量图片转换。
+    MAX_NATIVE_IMAGE_REFS = 10
     MAX_NATIVE_IMAGE_BYTES = -1
     # base64 缓存位于 Python 堆内存，扩大后仍保持硬上限，避免长会话无限增长。
     MAX_CACHE_ENTRIES = 32
@@ -248,7 +248,12 @@ class LLMMessageRenderer:
 
                 path = part.path or ""
                 if id(part) not in selected:
-                    content.append({"type": "text", "text": self._fallback_text(path, "outside the recent image window")})
+                    content.append(
+                        {
+                            "type": "text",
+                            "text": self._fallback_text(path, self._unselected_image_reason(supports_multimodal)),
+                        }
+                    )
                     continue
 
                 image_url, error = await self._render_image(path)
@@ -291,14 +296,24 @@ class LLMMessageRenderer:
         image_parts: list[Any],
         supports_multimodal: bool,
     ) -> set[int]:
-        """根据图片数量配置选择本次允许发送的图片；负数表示不限制。"""
+        """根据图片数量配置选择本次允许发送的前 N 张图片；负数表示不限制。"""
         if not supports_multimodal or self.max_native_image_refs == 0:
             return set()
         if self.max_native_image_refs < 0:
             selected_parts = image_parts
         else:
-            selected_parts = image_parts[-self.max_native_image_refs:]
+            selected_parts = image_parts[:self.max_native_image_refs]
         return {id(part) for part in selected_parts}
+
+    def _unselected_image_reason(self, supports_multimodal: bool) -> str:
+        """说明图片未进入原生视觉请求的原因，并引导模型按需调用视觉工具。"""
+        if not supports_multimodal:
+            return "the current model does not support native visual input"
+        if self.max_native_image_refs == 0:
+            return "native visual input is disabled"
+        if self.max_native_image_refs > 0:
+            return f"only the first {self.max_native_image_refs} images were provided as native visual input"
+        return "native visual input was not selected"
 
     async def _render_image(self, image_path: str) -> tuple[str | None, str | None]:
         """将图片在系统临时目录压缩为 WebP，再转换为 Base64。"""
