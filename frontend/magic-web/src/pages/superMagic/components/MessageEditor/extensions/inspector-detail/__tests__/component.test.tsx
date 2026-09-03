@@ -252,6 +252,55 @@ describe("InspectorDetailComponent", () => {
 		revokeObjectURL.mockRestore()
 	})
 
+	it("reloads the collapsed preview after the local screenshot mention is prepared", async () => {
+		getStoredScreenshotBlob
+			.mockResolvedValueOnce(null)
+			.mockResolvedValue(new Blob(["png"], { type: "image/png" }))
+		const createObjectURL = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:prepared-inspector-screenshot")
+		const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {})
+
+		const props = {
+			node: {
+				attrs: {
+					textContent: "Hero title",
+					captureId: "element:#hero:1",
+				},
+			},
+			editor: { commands: { setNodeSelection: vi.fn() } },
+			getPos: () => 3,
+		} as unknown as NodeViewProps
+
+		render(
+			<TooltipProvider>
+				<InspectorDetailComponent {...props} />
+			</TooltipProvider>,
+		)
+
+		await waitFor(() => expect(getStoredScreenshotBlob).toHaveBeenCalledWith("element:#hero:1"))
+		expect(screen.queryByRole("img", { name: "html-screenshot.png" })).not.toBeInTheDocument()
+
+		act(() => {
+			setHtmlScreenshotMention("element:#hero:1", {
+				type: MentionItemType.UPLOAD_FILE,
+				data: {
+					file_id: "element:#hero:1",
+					file_name: "html-screenshot-hero.png",
+					file_path: "element:#hero:1",
+					file_extension: "png",
+					is_html_screenshot: true,
+					storage_id: "element:#hero:1",
+				},
+			})
+		})
+
+		await waitFor(() => expect(getStoredScreenshotBlob).toHaveBeenCalledTimes(2))
+		expect(screen.getByTestId("inspector-screenshot-preview-trigger")).toBeInTheDocument()
+		createObjectURL.mockRestore()
+		revokeObjectURL.mockRestore()
+	})
+
 	it("shows the element text when the stored screenshot is missing", async () => {
 		getStoredScreenshotBlob.mockResolvedValueOnce(null)
 

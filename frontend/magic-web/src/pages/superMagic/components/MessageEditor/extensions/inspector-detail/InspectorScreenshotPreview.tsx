@@ -83,7 +83,7 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 			disposed = true
 			if (localObjectUrl) URL.revokeObjectURL(localObjectUrl)
 		}
-	}, [storageId])
+	}, [data?.file_name, storageId])
 
 	const resolvedFileUrl = isLocalScreenshot ? localUrl : fileUrl
 	const isLoading = isLocalScreenshot ? localLoading : remoteLoading
