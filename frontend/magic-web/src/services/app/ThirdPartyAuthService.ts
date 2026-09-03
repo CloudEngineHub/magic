@@ -650,7 +650,7 @@ class ThirdPartyAuthService {
 			await this.generateAuthorizationToken(tempAuthorizationCode, options)
 		} else if (thirdPartyAuthDeployCode) {
 			// If and only if there is a private exclusive code can it trigger login exemption
-			await this.handleAutoLogin(thirdPartyAuthDeployCode, options)
+			await this.handleAutoLogin(thirdPartyAuthDeployCode === "global" ? "" : thirdPartyAuthDeployCode, options)
 		} else {
 			throw new Error("no third party auth params")
 		}
