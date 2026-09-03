@@ -237,16 +237,7 @@ final class SkillMarketVectorIndexDomainService
             return [];
         }
 
-        $markets = $this->skillMarketRepository->findVisibleByIds($ids);
-        $marketsById = [];
-        foreach ($markets as $market) {
-            $marketsById[(string) $market->getId()] = $market;
-        }
-
-        return array_values(array_filter(array_map(
-            static fn (string $id): ?SkillMarketEntity => $marketsById[$id] ?? null,
-            $ids,
-        )));
+        return array_values($this->skillMarketRepository->findVisibleByIds($ids));
     }
 
     public function isVectorSearchEnabled(): bool
@@ -309,6 +300,7 @@ final class SkillMarketVectorIndexDomainService
             'is_featured' => $market->isFeatured() ? 1 : 0,
             'sort_order' => $market->getSortOrder() ?? 0,
             'install_count' => $market->getTotalInstallCount(),
+            'total_install_count' => $market->getTotalInstallCount(),
             'updated_at' => $market->getUpdatedAt() ?? '',
         ];
     }

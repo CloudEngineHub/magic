@@ -400,7 +400,7 @@ class SkillApi extends AbstractApi
         $requestContext->setUserAuthorization($this->getAuthorization());
 
         $requestDTO = GetLatestPublishedSkillVersionsRequestDTO::fromRequest($this->request);
-        $result = $this->userSkillAppService->getLatestPublishedVersionsByCodes($requestContext, $requestDTO);
+        $result = $this->userSkillAppService->getLatestPublishedSkillVersions($requestContext, $requestDTO);
 
         return SkillAssembler::createLatestPublishedVersionsResponseDTO(
             $result['list'],

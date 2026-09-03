@@ -22,6 +22,7 @@ use App\Infrastructure\SuperMagic\Utils\DateFormatUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Hyperf\Codec\Json;
+use Hyperf\DbConnection\Db;
 use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 
@@ -260,9 +261,9 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             $total = $builder->count();
         }
 
-        // 排序：精选优先，其次 sort_order 非空优先且数值越大越靠前；为空时回落按 id
         $builder->orderBy('is_featured', 'DESC');
         $builder->orderBy('sort_order', 'DESC');
+        $builder->orderBy('total_install_count', 'DESC');
         $builder->orderBy('id', 'DESC');
 
         // 分页
@@ -349,6 +350,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
         $idOrder = strtolower($orderBy) === 'asc' ? 'asc' : 'desc';
         $builder->orderBy($marketTable . '.is_featured', $idOrder);
         $builder->orderBy($marketTable . '.sort_order', $idOrder);
+        $builder->orderBy($marketTable . '.total_install_count', $idOrder);
         $builder->orderBy($marketTable . '.id', $idOrder);
 
         $result = $this->getByPage($builder, $page);
@@ -442,6 +444,10 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             ->where('publish_status', PublishStatus::PUBLISHED->value)
             ->where('is_hidden', false)
             ->whereNull('deleted_at')
+            ->orderByDesc('is_featured')
+            ->orderByDesc('sort_order')
+            ->orderByDesc('total_install_count')
+            ->orderByDesc('id')
             ->get();
 
         $result = [];
@@ -490,25 +496,24 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
     {
         $affected = $this->skillMarketModel::query()
             ->where('id', $id)
-            ->increment('install_count');
+            ->update([
+                'install_count' => Db::raw('install_count + 1'),
+                'total_install_count' => Db::raw('total_install_count + 1'),
+            ]);
 
         return $affected > 0;
     }
 
     public function updateBaseInstallCountById(int $id, int $baseInstallCount): bool
     {
-        /** @var null|SkillMarketModel $model */
-        $model = $this->skillMarketModel::query()
+        $affected = $this->skillMarketModel::query()
             ->where('id', $id)
-            ->first();
+            ->update([
+                'base_install_count' => $baseInstallCount,
+                'total_install_count' => Db::raw('install_count + ' . (int) $baseInstallCount),
+            ]);
 
-        if (! $model) {
-            return false;
-        }
-
-        $model->base_install_count = $baseInstallCount;
-
-        return $model->save();
+        return $affected > 0 || $this->skillMarketModel::query()->where('id', $id)->exists();
     }
 
     /**
@@ -567,6 +572,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             'publish_status' => $entity->getPublishStatus()->value,
             'install_count' => $entity->getInstallCount(),
             'base_install_count' => $entity->getBaseInstallCount(),
+            'total_install_count' => $entity->getTotalInstallCount(),
             'sort_order' => $entity->getSortOrder(),
             'is_featured' => $entity->isFeatured(),
             'is_hidden' => $entity->isHidden(),
@@ -605,6 +611,8 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             'publish_status' => $data['publish_status'] ?? PublishStatus::UNPUBLISHED->value,
             'install_count' => $data['install_count'] ?? 0,
             'base_install_count' => $data['base_install_count'] ?? 0,
+            'total_install_count' => $data['total_install_count']
+                ?? (($data['install_count'] ?? 0) + ($data['base_install_count'] ?? 0)),
             'sort_order' => $data['sort_order'] ?? null,
             'is_featured' => $data['is_featured'] ?? false,
             'is_hidden' => $data['is_hidden'] ?? false,
