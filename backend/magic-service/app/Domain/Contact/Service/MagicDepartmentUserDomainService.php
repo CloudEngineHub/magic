@@ -81,6 +81,17 @@ readonly class MagicDepartmentUserDomainService
     /**
      * @return MagicDepartmentUserEntity[]
      */
+    public function searchDepartmentUsersByEmployeeNo(string $employeeNo, DataIsolation $dataIsolation): array
+    {
+        return $this->departmentUserRepository->searchDepartmentUsersByEmployeeNo(
+            $employeeNo,
+            $dataIsolation->getCurrentOrganizationCode()
+        );
+    }
+
+    /**
+     * @return MagicDepartmentUserEntity[]
+     */
     public function searchDepartmentUsersByJobTitle(string $keyword, DataIsolation $dataIsolation): array
     {
         return $this->departmentUserRepository->searchDepartmentUsersByJobTitle($keyword, $dataIsolation->getCurrentOrganizationCode());
