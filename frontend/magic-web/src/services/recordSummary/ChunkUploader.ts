@@ -22,7 +22,11 @@ export interface SessionUploadProgress {
 }
 
 export type UploadQueueStallReason =
-	"healthy" | "pending_not_queued" | "idle_with_pending" | "stale_active_upload" | "has_failed"
+	| "healthy"
+	| "pending_not_queued"
+	| "idle_with_pending"
+	| "stale_active_upload"
+	| "has_failed"
 
 export interface UploadQueueHealth {
 	pending: number
