@@ -107,6 +107,59 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         return ['model' => $model, 'input' => $input, 'parameters' => $parameters];
     }
 
+    public function submit(VideoQueueOperationEntity $operation, QueueExecutorConfig $config): string
+    {
+        $response = $this->transport->submitVideo($config, $operation->getProviderPayload(), $this->logContext($operation));
+        $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
+        if ($taskId === null) {
+            throw ProviderVideoException::nonRetriable('dashscope submit succeeded but task id missing');
+        }
+        return $taskId;
+    }
+
+    public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array
+    {
+        $detail = $this->transport->queryTask($config, $providerTaskId, $this->logContext($operation, $providerTaskId));
+        $output = is_array($detail['output'] ?? null) ? $detail['output'] : [];
+        $providerStatus = strtoupper(trim((string) ($output['task_status'] ?? 'PENDING')));
+        $status = match ($providerStatus) {
+            'SUCCEEDED' => 'succeeded',
+            'FAILED', 'CANCELED', 'UNKNOWN' => 'failed',
+            default => 'processing',
+        };
+        $videoUrl = $this->firstString($output['video_url'] ?? null);
+        $providerCode = $this->firstString(
+            $output['code'] ?? null,
+            $detail['code'] ?? null,
+            is_array($output['error'] ?? null) ? ($output['error']['code'] ?? null) : null,
+            is_array($detail['error'] ?? null) ? ($detail['error']['code'] ?? null) : null,
+        );
+        if ($status === 'succeeded' && $videoUrl === null) {
+            return $this->failedQueryResult($detail, VideoGenerateErrorCode::MISSING_VIDEO_DATA, $providerTaskId);
+        }
+        $errorCode = ProviderVideoErrorMapper::resolve($providerCode);
+        return [
+            'status' => $status,
+            'provider_result' => $detail,
+            'output' => $videoUrl === null ? [] : [
+                'video_url' => $videoUrl,
+                'provider_task_id' => $providerTaskId,
+                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
+            ],
+            'error' => $status !== 'failed' ? null : [
+                'code' => (string) $errorCode->value,
+                'message' => ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
+                'provider_code' => $providerCode,
+                'provider_message' => $this->firstString(
+                    $output['task_status_msg'] ?? null,
+                    $output['message'] ?? null,
+                    is_array($output['error'] ?? null) ? ($output['error']['message'] ?? null) : null,
+                    $detail['message'] ?? null,
+                ),
+            ],
+        ];
+    }
+
     /**
      * Maps request generation options to DashScope parameters and records unsupported options.
      *
@@ -193,59 +246,6 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
                 $ignoredParams[] = 'inputs.' . $field;
             }
         }
-    }
-
-    public function submit(VideoQueueOperationEntity $operation, QueueExecutorConfig $config): string
-    {
-        $response = $this->transport->submitVideo($config, $operation->getProviderPayload(), $this->logContext($operation));
-        $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
-        if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable('dashscope submit succeeded but task id missing');
-        }
-        return $taskId;
-    }
-
-    public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array
-    {
-        $detail = $this->transport->queryTask($config, $providerTaskId, $this->logContext($operation, $providerTaskId));
-        $output = is_array($detail['output'] ?? null) ? $detail['output'] : [];
-        $providerStatus = strtoupper(trim((string) ($output['task_status'] ?? 'PENDING')));
-        $status = match ($providerStatus) {
-            'SUCCEEDED' => 'succeeded',
-            'FAILED', 'CANCELED', 'UNKNOWN' => 'failed',
-            default => 'processing',
-        };
-        $videoUrl = $this->firstString($output['video_url'] ?? null);
-        $providerCode = $this->firstString(
-            $output['code'] ?? null,
-            $detail['code'] ?? null,
-            is_array($output['error'] ?? null) ? ($output['error']['code'] ?? null) : null,
-            is_array($detail['error'] ?? null) ? ($detail['error']['code'] ?? null) : null,
-        );
-        if ($status === 'succeeded' && $videoUrl === null) {
-            return $this->failedQueryResult($detail, VideoGenerateErrorCode::MISSING_VIDEO_DATA, $providerTaskId);
-        }
-        $errorCode = ProviderVideoErrorMapper::resolve($providerCode);
-        return [
-            'status' => $status,
-            'provider_result' => $detail,
-            'output' => $videoUrl === null ? [] : [
-                'video_url' => $videoUrl,
-                'provider_task_id' => $providerTaskId,
-                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
-            ],
-            'error' => $status !== 'failed' ? null : [
-                'code' => (string) $errorCode->value,
-                'message' => ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
-                'provider_code' => $providerCode,
-                'provider_message' => $this->firstString(
-                    $output['task_status_msg'] ?? null,
-                    $output['message'] ?? null,
-                    is_array($output['error'] ?? null) ? ($output['error']['message'] ?? null) : null,
-                    $detail['message'] ?? null,
-                ),
-            ],
-        ];
     }
 
     private function failedQueryResult(array $detail, VideoGenerateErrorCode $errorCode, string $providerTaskId): array

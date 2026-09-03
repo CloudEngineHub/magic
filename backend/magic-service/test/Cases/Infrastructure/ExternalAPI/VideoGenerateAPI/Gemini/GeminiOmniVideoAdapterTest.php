@@ -28,10 +28,10 @@ final class GeminiOmniVideoAdapterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        ApplicationContext::setContainer(new readonly class () implements ContainerInterface {
+        ApplicationContext::setContainer(new readonly class implements ContainerInterface {
             public function get(string $id): mixed
             {
-                return new class () implements TranslatorInterface {
+                return new class implements TranslatorInterface {
                     public function trans(string $key, array $replace = [], ?string $locale = null): string
                     {
                         return $key;
