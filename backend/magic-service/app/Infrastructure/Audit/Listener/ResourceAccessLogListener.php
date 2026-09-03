@@ -51,7 +51,7 @@ class ResourceAccessLogListener implements ListenerInterface
             SlidesTemplateUsedEvent::class,
             SkillMarketInstalledEvent::class,
             SkillMarketUninstalledEvent::class,
-            SkillUsedEvent::class,
+            //            SkillUsedEvent::class,
         ];
     }
 
