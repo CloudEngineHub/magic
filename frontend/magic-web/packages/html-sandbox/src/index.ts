@@ -362,6 +362,12 @@ function handleRuntimeMessage(event: MessageEvent): void {
 		void elementInspector.captureScreenshot(event.data)
 		return
 	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCREENSHOT_CANCEL") {
+		elementInspector.cancelScreenshot(
+			typeof event.data.requestId === "string" ? event.data.requestId : "",
+		)
+		return
+	}
 
 	// DevTools toggle (parent → iframe)
 	if (event.data.type === DEVTOOLS_MSG.TOGGLE) {

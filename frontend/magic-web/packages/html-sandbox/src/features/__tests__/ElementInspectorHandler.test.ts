@@ -204,6 +204,7 @@ describe("ElementInspectorHandler", () => {
 	})
 
 	it("captures a requested region and returns a PNG blob to the parent", async () => {
+		Reflect.deleteProperty(globalThis, "OffscreenCanvas")
 		const handler = new ElementInspectorHandler()
 		vi.spyOn(document.body, "getBoundingClientRect").mockReturnValue({
 			top: 0,
@@ -223,12 +224,12 @@ describe("ElementInspectorHandler", () => {
 		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
 			drawImage: vi.fn(),
 		} as never)
-		vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
-			callback(new Blob(["cropped"], { type: "image/png" }))
-		})
-		const toDataURL = vi
-			.spyOn(HTMLCanvasElement.prototype, "toDataURL")
-			.mockReturnValue("data:image/png;base64,Y3JvcHBlZA==")
+		const encodeToBlob = vi
+			.spyOn(HTMLCanvasElement.prototype, "toBlob")
+			.mockImplementation((callback) => {
+				callback(new Blob(["cropped"], { type: "image/png" }))
+			})
+		const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL")
 		const toCanvas = vi.fn().mockResolvedValue(
 			Object.assign(document.createElement("canvas"), {
 				width: 80,
@@ -261,7 +262,8 @@ describe("ElementInspectorHandler", () => {
 		expect(response.blob).toBeInstanceOf(Blob)
 		expect(toCanvas).toHaveBeenCalledOnce()
 		expect(toBlob).not.toHaveBeenCalled()
-		expect(toDataURL).toHaveBeenCalledWith("image/png")
+		expect(encodeToBlob).toHaveBeenCalledWith(expect.any(Function), "image/png")
+		expect(toDataURL).not.toHaveBeenCalled()
 		expect(snapdom).toHaveBeenCalledWith(
 			container.ownerDocument.body,
 			expect.objectContaining({
@@ -270,5 +272,57 @@ describe("ElementInspectorHandler", () => {
 				clip: { x: 20, y: 10, width: 80, height: 60 },
 			}),
 		)
+	})
+
+	it("stops posting a screenshot after the host cancels the request", async () => {
+		const handler = new ElementInspectorHandler()
+		vi.spyOn(document.body, "getBoundingClientRect").mockReturnValue({
+			top: 0,
+			left: 0,
+			width: 320,
+			height: 240,
+			right: 320,
+			bottom: 240,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect)
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			callback(0)
+			return 1
+		})
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			drawImage: vi.fn(),
+		} as never)
+		vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
+			callback(new Blob(["cropped"], { type: "image/png" }))
+		})
+		let finishSnapdom: (() => void) | undefined
+		vi.mocked(snapdom).mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishSnapdom = () =>
+						resolve({
+							toCanvas: vi.fn().mockResolvedValue(document.createElement("canvas")),
+							toBlob: vi.fn(),
+						} as never)
+				}),
+		)
+
+		const pending = handler.captureScreenshot({
+			requestId: "request-cancel",
+			selection: { top: 10, left: 20, width: 80, height: 60 },
+			outputSize: { width: 80, height: 60 },
+		})
+		handler.cancelScreenshot("request-cancel")
+		finishSnapdom?.()
+		await pending
+
+		expect(
+			postMessageSpy.mock.calls.some(
+				([message]) =>
+					(message as { type?: string }).type === "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+			),
+		).toBe(false)
 	})
 })

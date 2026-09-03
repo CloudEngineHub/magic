@@ -342,6 +342,45 @@ describe("StylePanel", () => {
 		)
 	})
 
+	it("discards a preserved line-height when the same selector changes externally", async () => {
+		mockSelectedElement.current = {
+			selector: "p.copy",
+			tagName: "p",
+			isTextElement: true,
+			hasDirectTextContent: true,
+			computedStyles: {
+				fontSize: "100px",
+				lineHeight: "120px",
+				fontWeight: "400",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "left",
+				color: "#000000",
+				width: "320px",
+				height: "120px",
+			},
+		}
+		const { rerender } = render(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		fireEvent.click(screen.getByTestId("line-height-selector"))
+		await waitFor(() =>
+			expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "1.2"),
+		)
+
+		mockSelectedElement.current = {
+			...mockSelectedElement.current,
+			computedStyles: {
+				...mockSelectedElement.current.computedStyles,
+				lineHeight: "24px",
+			},
+		}
+		rerender(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		await waitFor(() =>
+			expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px"),
+		)
+	})
+
 	it("should animate element actions with the context toolbar open state", async () => {
 		const { rerender } = render(
 			<StylePanel

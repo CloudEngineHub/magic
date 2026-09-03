@@ -82,15 +82,13 @@ interface ScreenRect {
 }
 
 const IFRAME_SCREENSHOT_ACK_TIMEOUT_MS = 500
-// A healthy iframe runtime completes well below one second. Keep the fallback
-// budget bounded so a renderer that acknowledged but never responds cannot
-// leave the inspector blocked for the browser's full media-capture timeout.
-const IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS = 2_000
+// Must cover iframe font wait (1s), two compositor frames (240ms), snapdom
+// clone/raster, and async PNG encode. Progress messages renew this budget.
+const IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS = 8_000
 const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
 const STABLE_RECT_WAIT_TIMEOUT_MS = 240
 const VIDEO_DATA_WAIT_TIMEOUT_MS = 1_000
 const VIDEO_PLAY_TIMEOUT_MS = 1_000
-const DISPLAY_MEDIA_REQUEST_TIMEOUT_MS = 2_000
 
 function getTimingNow(): number {
 	return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -201,15 +199,35 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 			cleanup()
 			resolve(value)
 		}
+		const cancelIframeScreenshot = () => {
+			try {
+				targetWindow.postMessage(
+					{
+						type: INSPECTOR_MSG.SCREENSHOT_CANCEL,
+						requestId,
+					},
+					targetOrigin,
+				)
+			} catch {
+				// The iframe may already be gone.
+			}
+		}
+		const scheduleResultTimeout = () => {
+			window.clearTimeout(timeoutId)
+			timeoutId = window.setTimeout(() => {
+				cancelIframeScreenshot()
+				finish(null)
+			}, IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS)
+		}
 		const handleMessage = (event: MessageEvent) => {
 			if (event.source !== targetWindow || event.origin !== targetOrigin) return
 			const data = event.data
 			if (!data || data.requestId !== requestId) return
-			if (data.type === INSPECTOR_MSG.SCREENSHOT_ACK) {
-				window.clearTimeout(timeoutId)
-				timeoutId = window.setTimeout(() => {
-					finish(null)
-				}, IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS)
+			if (
+				data.type === INSPECTOR_MSG.SCREENSHOT_ACK ||
+				data.type === INSPECTOR_MSG.SCREENSHOT_PROGRESS
+			) {
+				scheduleResultTimeout()
 				return
 			}
 			if (data.type !== INSPECTOR_MSG.SCREENSHOT_RESPONSE) return
@@ -222,7 +240,10 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 				() => finish(null),
 			)
 		}
-		timeoutId = window.setTimeout(() => finish(null), IFRAME_SCREENSHOT_ACK_TIMEOUT_MS)
+		timeoutId = window.setTimeout(() => {
+			cancelIframeScreenshot()
+			finish(null)
+		}, IFRAME_SCREENSHOT_ACK_TIMEOUT_MS)
 		window.addEventListener("message", handleMessage)
 		try {
 			targetWindow.postMessage(
@@ -325,54 +346,19 @@ async function requestCurrentTabStream(): Promise<MediaStream> {
 		)
 	}
 
-	return new Promise((resolve, reject) => {
-		let settled = false
-		const timeoutId = window.setTimeout(() => {
-			settled = true
-			reject(
-				new CurrentTabCaptureError(
-					"cancelled",
-					"Timed out while requesting tab capture permission",
-				),
-			)
-		}, DISPLAY_MEDIA_REQUEST_TIMEOUT_MS)
-		const settle = (callback: () => void) => {
-			if (settled) return false
-			settled = true
-			window.clearTimeout(timeoutId)
-			callback()
-			return true
-		}
-
-		let request: Promise<MediaStream>
-		try {
-			request = navigator.mediaDevices.getDisplayMedia({
-				video: {
-					displaySurface: "browser",
-					cursor: "never",
-				},
-				audio: false,
-				preferCurrentTab: true,
-				selfBrowserSurface: "include",
-				surfaceSwitching: "exclude",
-				monitorTypeSurfaces: "exclude",
-			} as CurrentTabDisplayMediaOptions)
-		} catch (error) {
-			settle(() => reject(error))
-			return
-		}
-
-		void request.then(
-			(stream) => {
-				if (!settle(() => resolve(stream))) {
-					stopMediaStream(stream)
-				}
-			},
-			(error) => {
-				settle(() => reject(error))
-			},
-		)
-	})
+	// Do not time out the native picker. Users need time to read and choose a
+	// tab; a short timer would reject as cancelled while the prompt stays up.
+	return navigator.mediaDevices.getDisplayMedia({
+		video: {
+			displaySurface: "browser",
+			cursor: "never",
+		},
+		audio: false,
+		preferCurrentTab: true,
+		selfBrowserSurface: "include",
+		surfaceSwitching: "exclude",
+		monitorTypeSurfaces: "exclude",
+	} as CurrentTabDisplayMediaOptions)
 }
 
 /** Reuse one display-media permission grant for the lifetime of an inspector session. */

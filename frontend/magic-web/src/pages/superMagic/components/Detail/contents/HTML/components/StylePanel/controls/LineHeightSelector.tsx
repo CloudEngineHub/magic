@@ -9,14 +9,9 @@ import {
 	getMetricInputWidth,
 	METRIC_CONTROL_MAX_WIDTH,
 } from "./metricControlWidth"
+import { getEquivalentLineHeight, splitNumericLineHeight } from "../utils/lineHeight"
 
 const LINE_HEIGHT_PRESETS = ["normal", "1", "1.15", "1.2", "1.5", "1.75", "2", "2.5", "3"]
-
-function splitNumericLineHeight(value: string): { number: string; unit: string } | null {
-	const match = value.trim().match(/^(-?(?:\d+\.?\d*|\.\d+))(.*)$/)
-	if (!match) return null
-	return { number: match[1], unit: match[2] }
-}
 
 interface LineHeightSelectorProps {
 	value: string
@@ -25,42 +20,6 @@ interface LineHeightSelectorProps {
 	onApply: (value: string) => void
 	disabled?: boolean
 	className?: string
-}
-
-function formatMetricValue(value: number): string {
-	return String(Number(value.toFixed(4)))
-}
-
-// Only unitless and pixel values have a deterministic conversion from the
-// selected element's font size; preserving other units avoids showing a false value.
-function getEquivalentLineHeight(value: string, fontSize?: string): string | null {
-	if (!fontSize) return null
-
-	const parsedLineHeight = splitNumericLineHeight(value)
-	const parsedFontSize = splitNumericLineHeight(fontSize)
-	if (!parsedLineHeight || !parsedFontSize) return null
-
-	const lineHeightValue = Number.parseFloat(parsedLineHeight.number)
-	const fontSizeValue = Number.parseFloat(parsedFontSize.number)
-	const lineHeightUnit = parsedLineHeight.unit.toLowerCase()
-	const fontSizeUnit = parsedFontSize.unit.toLowerCase()
-	if (
-		!Number.isFinite(lineHeightValue) ||
-		lineHeightValue < 0 ||
-		!Number.isFinite(fontSizeValue) ||
-		fontSizeValue <= 0 ||
-		(fontSizeUnit && fontSizeUnit !== "px")
-	) {
-		return null
-	}
-
-	if (!lineHeightUnit) {
-		return `${formatMetricValue(lineHeightValue * fontSizeValue)}px`
-	}
-	if (lineHeightUnit === "px") {
-		return formatMetricValue(lineHeightValue / fontSizeValue)
-	}
-	return null
 }
 
 /**

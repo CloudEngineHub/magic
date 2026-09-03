@@ -12,7 +12,11 @@
 
 import { getElementSelector, isInjectedElement } from "../utils/dom"
 import { getParentOrigin } from "../utils/parentOrigin"
-import { snapdom } from "@zumer/snapdom"
+import {
+	captureScreenshotBlob,
+	ScreenshotCancelledError,
+	type ScreenshotRequest,
+} from "./inspectorScreenshot"
 
 // Mirror the constants from the shared types (iframe-runtime is a separate build)
 const INSPECTOR_MSG = {
@@ -28,191 +32,10 @@ const INSPECTOR_MSG = {
 	SCROLL_TO_POSITION: "MAGIC_INSPECTOR_SCROLL_TO_POSITION",
 	SCREENSHOT_REQUEST: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
 	SCREENSHOT_ACK: "MAGIC_INSPECTOR_SCREENSHOT_ACK",
+	SCREENSHOT_PROGRESS: "MAGIC_INSPECTOR_SCREENSHOT_PROGRESS",
+	SCREENSHOT_CANCEL: "MAGIC_INSPECTOR_SCREENSHOT_CANCEL",
 	SCREENSHOT_RESPONSE: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
 } as const
-
-const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
-const FONT_READY_WAIT_TIMEOUT_MS = 1_000
-
-function encodeCanvasToPngBlob(canvas: HTMLCanvasElement): Blob {
-	// The final canvas is already limited to the requested output size. Using
-	// synchronous encoding here avoids Chromium delaying toBlob callbacks after
-	// an iframe misses a compositor frame.
-	const dataUrl = canvas.toDataURL("image/png")
-	const separatorIndex = dataUrl.indexOf(",")
-	if (separatorIndex < 0) throw new Error("Failed to encode iframe screenshot")
-	const binary = atob(dataUrl.slice(separatorIndex + 1))
-	const bytes = new Uint8Array(binary.length)
-	for (let index = 0; index < binary.length; index += 1) {
-		bytes[index] = binary.charCodeAt(index)
-	}
-	return new Blob([bytes], { type: "image/png" })
-}
-
-function waitForAnimationFrameWithTimeout(timeoutMs: number): Promise<boolean> {
-	return new Promise((resolve) => {
-		let settled = false
-		const finish = (presented: boolean) => {
-			if (settled) return
-			settled = true
-			window.clearTimeout(timeoutId)
-			resolve(presented)
-		}
-		const timeoutId = window.setTimeout(() => finish(false), Math.max(timeoutMs, 0))
-		try {
-			requestAnimationFrame(() => finish(true))
-		} catch {
-			finish(false)
-		}
-	})
-}
-
-interface ScreenshotRequest {
-	requestId: string
-	selection: { top: number; left: number; width: number; height: number }
-	outputSize: { width: number; height: number }
-}
-
-function isFiniteRect(rect: ScreenshotRequest["selection"]): boolean {
-	return Object.values(rect).every((value) => Number.isFinite(value) && value >= 0)
-}
-
-function isFiniteSize(size: ScreenshotRequest["outputSize"]): boolean {
-	return Object.values(size).every((value) => Number.isFinite(value) && value > 0)
-}
-
-function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): HTMLElement {
-	const explicitRoot = document.querySelector<HTMLElement>("[data-magic-capture-root]")
-	if (explicitRoot) return explicitRoot
-
-	const roots = Array.from(
-		document.querySelectorAll<HTMLElement>(".slide-container, main.ft-canvas, main.slide"),
-	)
-	const centerX = selection.left + selection.width / 2
-	const centerY = selection.top + selection.height / 2
-	const containingRoot = roots
-		.map((root) => ({ root, rect: root.getBoundingClientRect() }))
-		.filter(
-			({ rect }) =>
-				centerX >= rect.left &&
-				centerX <= rect.right &&
-				centerY >= rect.top &&
-				centerY <= rect.bottom,
-		)
-		.sort((a, b) => a.rect.width * a.rect.height - b.rect.width * b.rect.height)[0]
-
-	return containingRoot?.root ?? document.body
-}
-
-async function waitForCaptureFrame(): Promise<{
-	fontsReadyTimedOut: boolean
-	animationFramePresented: boolean
-}> {
-	const fontsReady = document.fonts?.ready
-	let fontsReadyTimedOut = false
-	if (fontsReady) {
-		await new Promise<void>((resolve) => {
-			let settled = false
-			const finish = () => {
-				if (settled) return
-				settled = true
-				window.clearTimeout(timeoutId)
-				resolve()
-			}
-			const timeoutId = window.setTimeout(() => {
-				fontsReadyTimedOut = true
-				finish()
-			}, FONT_READY_WAIT_TIMEOUT_MS)
-			fontsReady.then(finish, finish)
-		})
-	}
-	let animationFramePresented = await waitForAnimationFrameWithTimeout(
-		CAPTURE_FRAME_WAIT_TIMEOUT_MS,
-	)
-	if (!animationFramePresented) {
-		// A freshly injected document can miss the first compositor tick. Give it
-		// one more bounded opportunity before rasterizing, otherwise canvas PNG
-		// encoding may wait for the compositor and block the inspector.
-		animationFramePresented = await waitForAnimationFrameWithTimeout(
-			CAPTURE_FRAME_WAIT_TIMEOUT_MS,
-		)
-	}
-	return { fontsReadyTimedOut, animationFramePresented }
-}
-
-async function captureScreenshotBlob(request: ScreenshotRequest): Promise<Blob> {
-	if (
-		!request.requestId ||
-		!isFiniteRect(request.selection) ||
-		!isFiniteSize(request.outputSize)
-	) {
-		throw new Error("Invalid iframe screenshot request")
-	}
-	const outputWidth = Math.min(Math.max(Math.round(request.outputSize.width), 1), 4096)
-	const outputHeight = Math.min(Math.max(Math.round(request.outputSize.height), 1), 4096)
-	const root = resolveCaptureRoot(request.selection)
-	const rootRect = root.getBoundingClientRect()
-	if (rootRect.width <= 0 || rootRect.height <= 0) {
-		throw new Error("Capture root has no size")
-	}
-	const selectionLeft = Math.max(0, request.selection.left - rootRect.left)
-	const selectionTop = Math.max(0, request.selection.top - rootRect.top)
-	const selectionRight = Math.min(
-		rootRect.width,
-		request.selection.left - rootRect.left + request.selection.width,
-	)
-	const selectionBottom = Math.min(
-		rootRect.height,
-		request.selection.top - rootRect.top + request.selection.height,
-	)
-	const clip = {
-		x: selectionLeft,
-		y: selectionTop,
-		width: Math.max(1, selectionRight - selectionLeft),
-		height: Math.max(1, selectionBottom - selectionTop),
-	}
-	const style = document.createElement("style")
-	style.setAttribute("data-magic-inspector-screenshot", "true")
-	style.textContent = `
-		*, *::before, *::after {
-			animation: none !important;
-			transition: none !important;
-			caret-color: transparent !important;
-			cursor: none !important;
-		}
-	`
-	;(document.head ?? document.documentElement).appendChild(style)
-	try {
-		await waitForCaptureFrame()
-		const result = await snapdom(root, {
-			width: clip.width,
-			height: clip.height,
-			dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 3),
-			backgroundColor: "#ffffff",
-			clip,
-		})
-		const canvas = await result.toCanvas()
-		const outputCanvas = document.createElement("canvas")
-		outputCanvas.width = outputWidth
-		outputCanvas.height = outputHeight
-		const context = outputCanvas.getContext("2d")
-		if (!context) throw new Error("Canvas 2D context is unavailable")
-		context.drawImage(
-			canvas,
-			0,
-			0,
-			canvas.width,
-			canvas.height,
-			0,
-			0,
-			outputWidth,
-			outputHeight,
-		)
-		return encodeCanvasToPngBlob(outputCanvas)
-	} finally {
-		style.remove()
-	}
-}
 
 interface BoxModelSides {
 	top: number
@@ -511,6 +334,8 @@ export class ElementInspectorHandler {
 	private rectRefreshScheduled = false
 	private scrollRefreshScheduled = false
 	private trackingListenersAttached = false
+	private screenshotGeneration = 0
+	private activeScreenshotRequestId: string | null = null
 
 	scrollToSelector(selector: string): void {
 		if (!selector.trim()) return
@@ -538,38 +363,66 @@ export class ElementInspectorHandler {
 		}
 	}
 
-	async captureScreenshot(request: ScreenshotRequest): Promise<void> {
-		window.parent.postMessage(
-			{
-				type: INSPECTOR_MSG.SCREENSHOT_ACK,
-				requestId: request.requestId,
-				timestamp: Date.now(),
-			},
-			getParentOrigin(),
-		)
+	private postScreenshotMessage(message: Record<string, unknown>): void {
 		try {
-			const blob = await captureScreenshotBlob(request)
-			window.parent.postMessage(
-				{
-					type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
-					requestId: request.requestId,
-					success: true,
-					blob,
-					timestamp: Date.now(),
+			window.parent.postMessage(message, getParentOrigin())
+		} catch {
+			// ignore disconnected parents
+		}
+	}
+
+	private postScreenshotProgress(requestId: string): void {
+		this.postScreenshotMessage({
+			type: INSPECTOR_MSG.SCREENSHOT_PROGRESS,
+			requestId,
+			timestamp: Date.now(),
+		})
+	}
+
+	cancelScreenshot(requestId: string): void {
+		if (!requestId || this.activeScreenshotRequestId !== requestId) return
+		this.screenshotGeneration += 1
+		this.activeScreenshotRequestId = null
+	}
+
+	async captureScreenshot(request: ScreenshotRequest): Promise<void> {
+		const generation = ++this.screenshotGeneration
+		this.activeScreenshotRequestId = request.requestId
+		this.postScreenshotMessage({
+			type: INSPECTOR_MSG.SCREENSHOT_ACK,
+			requestId: request.requestId,
+			timestamp: Date.now(),
+		})
+		try {
+			const blob = await captureScreenshotBlob(request, {
+				shouldAbort: () => generation !== this.screenshotGeneration,
+				onProgress: () => {
+					if (generation !== this.screenshotGeneration) return
+					this.postScreenshotProgress(request.requestId)
 				},
-				getParentOrigin(),
-			)
+			})
+			if (generation !== this.screenshotGeneration) return
+			this.postScreenshotMessage({
+				type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
+				requestId: request.requestId,
+				success: true,
+				blob,
+				timestamp: Date.now(),
+			})
 		} catch (error) {
-			window.parent.postMessage(
-				{
-					type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
-					requestId: request.requestId,
-					success: false,
-					error: error instanceof Error ? error.message : String(error),
-					timestamp: Date.now(),
-				},
-				getParentOrigin(),
-			)
+			if (generation !== this.screenshotGeneration) return
+			if (error instanceof ScreenshotCancelledError) return
+			this.postScreenshotMessage({
+				type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
+				requestId: request.requestId,
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+				timestamp: Date.now(),
+			})
+		} finally {
+			if (generation === this.screenshotGeneration) {
+				this.activeScreenshotRequestId = null
+			}
 		}
 	}
 

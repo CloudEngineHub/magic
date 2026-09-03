@@ -184,6 +184,10 @@ export const INSPECTOR_MSG = {
 	SCREENSHOT_REQUEST: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
 	/** iframe → parent: confirms that the runtime supports screenshot requests */
 	SCREENSHOT_ACK: "MAGIC_INSPECTOR_SCREENSHOT_ACK",
+	/** iframe → parent: capture is still making progress */
+	SCREENSHOT_PROGRESS: "MAGIC_INSPECTOR_SCREENSHOT_PROGRESS",
+	/** parent → iframe: stop an in-flight screenshot after the host timed out */
+	SCREENSHOT_CANCEL: "MAGIC_INSPECTOR_SCREENSHOT_CANCEL",
 	/** iframe → parent: rendered region capture response */
 	SCREENSHOT_RESPONSE: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
 } as const

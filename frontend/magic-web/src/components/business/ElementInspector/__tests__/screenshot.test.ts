@@ -147,9 +147,64 @@ describe("HTML screenshot geometry", () => {
 			Object.defineProperty(ack, "source", { configurable: true, value: targetWindow })
 			window.dispatchEvent(ack)
 
-			await vi.advanceTimersByTimeAsync(2_000)
+			await vi.advanceTimersByTimeAsync(7_999)
+			expect(targetWindow.postMessage).toHaveBeenCalledTimes(1)
+
+			await vi.advanceTimersByTimeAsync(1)
 
 			await expect(capture).resolves.toBeNull()
+			expect(targetWindow.postMessage).toHaveBeenLastCalledWith(
+				{
+					type: "MAGIC_INSPECTOR_SCREENSHOT_CANCEL",
+					requestId: request.requestId,
+				},
+				"https://husky.example.test",
+			)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("renews the iframe screenshot wait when the runtime reports progress", async () => {
+		vi.useFakeTimers()
+		try {
+			const iframe = document.createElement("iframe")
+			const targetWindow = { postMessage: vi.fn() }
+			Object.defineProperty(iframe, "contentWindow", {
+				configurable: true,
+				value: targetWindow,
+			})
+
+			const capture = captureWithIframeRuntime({
+				iframe,
+				selection: { left: 12, top: 18, width: 80, height: 60 },
+				iframeTargetOrigin: "https://husky.example.test",
+			})
+			const request = targetWindow.postMessage.mock.calls[0]?.[0]
+			const dispatchRuntimeMessage = (type: string) => {
+				const event = new MessageEvent("message", {
+					origin: "https://husky.example.test",
+					data: { type, requestId: request.requestId },
+				})
+				Object.defineProperty(event, "source", { configurable: true, value: targetWindow })
+				window.dispatchEvent(event)
+			}
+
+			dispatchRuntimeMessage("MAGIC_INSPECTOR_SCREENSHOT_ACK")
+			await vi.advanceTimersByTimeAsync(7_000)
+			dispatchRuntimeMessage("MAGIC_INSPECTOR_SCREENSHOT_PROGRESS")
+			await vi.advanceTimersByTimeAsync(7_000)
+			expect(targetWindow.postMessage).toHaveBeenCalledTimes(1)
+
+			await vi.advanceTimersByTimeAsync(1_000)
+			await expect(capture).resolves.toBeNull()
+			expect(targetWindow.postMessage).toHaveBeenLastCalledWith(
+				{
+					type: "MAGIC_INSPECTOR_SCREENSHOT_CANCEL",
+					requestId: request.requestId,
+				},
+				"https://husky.example.test",
+			)
 		} finally {
 			vi.useRealTimers()
 		}
@@ -406,10 +461,28 @@ describe("HTML screenshot geometry", () => {
 		}
 	})
 
-	it("does not block when tab capture permission never settles", async () => {
+	it("waits for the user to finish the tab capture picker", async () => {
 		vi.useFakeTimers()
+		const stop = vi.fn()
+		const stream = {
+			getTracks: () => [{ stop, readyState: "live" }],
+			getVideoTracks: () => [
+				{
+					readyState: "live",
+					stop,
+					addEventListener: vi.fn(),
+					getSettings: () => ({ displaySurface: "browser" }),
+				},
+			],
+		} as unknown as MediaStream
+		let grantPermission: ((nextStream: MediaStream) => void) | undefined
 		const previousMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
-		const getDisplayMedia = vi.fn(() => new Promise<MediaStream>(() => undefined))
+		const getDisplayMedia = vi.fn(
+			() =>
+				new Promise<MediaStream>((resolve) => {
+					grantPermission = resolve
+				}),
+		)
 		Object.defineProperty(navigator, "mediaDevices", {
 			configurable: true,
 			value: { getDisplayMedia },
@@ -419,13 +492,10 @@ describe("HTML screenshot geometry", () => {
 			const session = createCurrentTabCaptureSession()
 			const pending = session.acquire()
 
-			await vi.advanceTimersByTimeAsync(2_000)
-
-			await expect(pending).rejects.toMatchObject({
-				name: "CurrentTabCaptureError",
-				code: "cancelled",
-			})
+			await vi.advanceTimersByTimeAsync(5_000)
 			expect(getDisplayMedia).toHaveBeenCalledOnce()
+			grantPermission?.(stream)
+			await expect(pending).resolves.toBe(stream)
 		} finally {
 			if (previousMediaDevices) {
 				Object.defineProperty(navigator, "mediaDevices", previousMediaDevices)
@@ -433,6 +503,48 @@ describe("HTML screenshot geometry", () => {
 				Reflect.deleteProperty(navigator, "mediaDevices")
 			}
 			vi.useRealTimers()
+		}
+	})
+
+	it("stops a late display-media stream after the session is released", async () => {
+		const stop = vi.fn()
+		const track = {
+			readyState: "live",
+			stop,
+			addEventListener: vi.fn(),
+			getSettings: () => ({ displaySurface: "browser" }),
+		} as unknown as MediaStreamTrack
+		const stream = {
+			getTracks: () => [track],
+			getVideoTracks: () => [track],
+		} as unknown as MediaStream
+		let grantPermission: ((nextStream: MediaStream) => void) | undefined
+		const previousMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
+		const getDisplayMedia = vi.fn(
+			() =>
+				new Promise<MediaStream>((resolve) => {
+					grantPermission = resolve
+				}),
+		)
+		Object.defineProperty(navigator, "mediaDevices", {
+			configurable: true,
+			value: { getDisplayMedia },
+		})
+
+		try {
+			const session = createCurrentTabCaptureSession()
+			const pending = session.acquire()
+			session.release()
+			grantPermission?.(stream)
+
+			await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+			expect(stop).toHaveBeenCalledOnce()
+		} finally {
+			if (previousMediaDevices) {
+				Object.defineProperty(navigator, "mediaDevices", previousMediaDevices)
+			} else {
+				Reflect.deleteProperty(navigator, "mediaDevices")
+			}
 		}
 	})
 

@@ -36,6 +36,7 @@ import {
 } from "./controls"
 import { useShowButtonText } from "@/hooks/useShowButtonText"
 import { getElementCapabilities } from "./capabilities"
+import { areLineHeightsEquivalent } from "./utils/lineHeight"
 
 const CONTEXT_TOOLBAR_STAGGER_MS = 16
 
@@ -128,8 +129,8 @@ export const StylePanel = observer(function StylePanel({
 	const [lineHeight, setLineHeight] = useState("normal")
 	const [fontFamily, setFontFamily] = useState("sans-serif")
 	const [textContent, setTextContent] = useState("")
-	// Computed styles normalize unitless line-height to pixels, so keep the
-	// user's notation while the same element remains selected.
+	// Computed styles normalize unitless line-height to pixels. Keep the user's
+	// notation only while it still matches the latest computed value.
 	const lineHeightDisplayRef = useRef<{ selector: string; value: string } | null>(null)
 
 	const showButtonLabel = useShowButtonText(800)
@@ -203,7 +204,12 @@ export const StylePanel = observer(function StylePanel({
 				setFontFamily(firstFont)
 			}
 			const preservedLineHeight =
-				lineHeightDisplayRef.current?.selector === selectedElement.selector
+				lineHeightDisplayRef.current?.selector === selectedElement.selector &&
+				areLineHeightsEquivalent(
+					lineHeightDisplayRef.current.value,
+					computedLineHeight || "normal",
+					computedFontSize,
+				)
 					? lineHeightDisplayRef.current.value
 					: null
 			if (!preservedLineHeight) lineHeightDisplayRef.current = null
