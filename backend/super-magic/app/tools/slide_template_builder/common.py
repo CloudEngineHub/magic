@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.tools.slide_template_builder import taxonomy_source
 from app.tools.slide_template_builder.canvas import validate_canvas_size
 from app.tools.slide_template_builder.errors import SlideTemplateBuilderError
 from app.tools.slide_template_builder.models import (
@@ -18,7 +19,6 @@ from app.tools.slide_template_builder.models import (
     SLIDE_FILE_PATTERN,
     TemplateCanvas,
 )
-from app.tools.slide_template_builder import taxonomy_source
 from app.tools.slide_template_builder.taxonomy import active_category_codes, tag_records_by_code
 from app.utils.async_file_utils import (
     async_exists,
@@ -29,7 +29,7 @@ from app.utils.async_file_utils import (
     async_scandir,
     async_stat,
 )
-from app.utils.runtime_storage import trigger_opportunistic_cleanup
+from app.utils.runtime_storage import get_runtime_config_int, trigger_opportunistic_cleanup
 
 SCAFFOLD_MARKER = "slide-template-scaffold"
 WORK_DIR_NAME = ".template-work"
@@ -38,8 +38,6 @@ ANALYSIS_DIR_NAME = "source-analysis"
 CONVERTER_DIR_NAME = "converter"
 SOURCE_ANALYSIS_FILE = "source-analysis.json"
 RECONSTRUCTION_MODES = {"high-fidelity", "template-abstraction", "hybrid"}
-TEMPLATE_WORK_MAX_AGE_SECONDS = 3 * 24 * 60 * 60
-TEMPLATE_WORK_MAX_ENTRIES = 16
 # 底色分组容差：同一设计里的同类底色允许存在渲染噪声
 BACKGROUND_VARIANT_STEP = 24
 REVIEW_INDEX_LIMIT = 12
@@ -237,10 +235,25 @@ async def evict_stale_template_working_directories(
     capability_root: Path,
     *,
     protected_paths: frozenset[Path] = frozenset(),
-    max_age_seconds: int = TEMPLATE_WORK_MAX_AGE_SECONDS,
-    max_entries: int = TEMPLATE_WORK_MAX_ENTRIES,
+    max_age_seconds: int | None = None,
+    max_entries: int | None = None,
 ) -> None:
     """Drop abandoned authoring dirs by age, then by oldest-first count."""
+    if max_age_seconds is None:
+        max_age_seconds = (
+            get_runtime_config_int(
+                "runtime_cleanup.slide_template_maker.max_age_days",
+                minimum=1,
+            )
+            * 24
+            * 60
+            * 60
+        )
+    if max_entries is None:
+        max_entries = get_runtime_config_int(
+            "runtime_cleanup.slide_template_maker.max_directory_count",
+            minimum=1,
+        )
     if not await async_exists(capability_root):
         return
     protected = {path.resolve(strict=False) for path in protected_paths}
