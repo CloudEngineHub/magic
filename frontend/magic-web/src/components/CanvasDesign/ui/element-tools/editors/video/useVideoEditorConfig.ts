@@ -957,7 +957,19 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		}
 	}, [generationSwitchConfig.webSearch, selectedWebSearch])
 
-	const resetSelectedResourceSlot = useCallback(() => {
+	const resetSelectedResourceSlot = useCallback((expectedSlot?: VideoInputSlotInfo) => {
+		const currentSlot = selectedResourceSlotRef.current
+		if (
+			expectedSlot &&
+			(!currentSlot ||
+				currentSlot.inputTab !== expectedSlot.inputTab ||
+				currentSlot.slotIndex !== expectedSlot.slotIndex ||
+				currentSlot.slotKey !== expectedSlot.slotKey ||
+				currentSlot.referenceAssetKind !== expectedSlot.referenceAssetKind ||
+				currentSlot.path !== expectedSlot.path)
+		) {
+			return
+		}
 		selectedResourceSlotRef.current = null
 		setSelectedResourceSlot(null)
 	}, [])
@@ -984,6 +996,28 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			}
 		},
 		[resetSelectedResourceSlot],
+	)
+
+	const appendFrameImage = useCallback(
+		(fileInfo: UploadFileResponse): boolean => {
+			const next = [...frameImageInfosRef.current]
+			const firstEmptySlot = next.findIndex((info) => !info?.path)
+			const slotIndex = firstEmptySlot >= 0 ? firstEmptySlot : next.length
+			if (maxFrameImages !== undefined && slotIndex >= maxFrameImages) return false
+
+			next[slotIndex] = {
+				path: fileInfo.path,
+				src: fileInfo.src || fileInfo.path,
+				fileName:
+					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
+			}
+			frameImageInfosRef.current = next
+			setFrameImageInfos(next)
+			activeInputTabRef.current = "frame"
+			setActiveInputTab("frame")
+			return true
+		},
+		[maxFrameImages],
 	)
 
 	const replaceReferenceImageAt = useCallback(
@@ -2479,6 +2513,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			resetSelectedResourceSlot,
 			prepareResourceSlotSelection,
 			replaceFrameImageAt,
+			appendFrameImage,
 			replaceReferenceImageAt,
 			replaceSelectedResource,
 			handleReferenceImageRemove,
@@ -2513,6 +2548,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			resetSelectedResourceSlot,
 			prepareResourceSlotSelection,
 			replaceFrameImageAt,
+			appendFrameImage,
 			replaceReferenceImageAt,
 			replaceSelectedResource,
 			handleReferenceImageRemove,

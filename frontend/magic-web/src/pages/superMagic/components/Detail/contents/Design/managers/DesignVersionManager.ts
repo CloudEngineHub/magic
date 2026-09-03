@@ -36,10 +36,11 @@ export class DesignVersionManager {
 	private getFileVersion: () => number | undefined
 
 	private getBaseAccessMode() {
-		// The state bag is the lifecycle authority after the Design entry has
-		// resolved its access mode. Reading it here prevents rollback/version
-		// operations from reconstructing a stale mode from legacy boolean flags.
-		return this.stateBag.getAccessMode() || getDesignBaseAccessMode(this.options)
+		// `stateBag.getAccessMode()` is the transient effective mode and becomes
+		// `history` while a historical version is displayed. The base mode must
+		// come from the stable Design entry options so returning to latest can
+		// restore edit/readonly/share correctly.
+		return getDesignBaseAccessMode(this.options)
 	}
 
 	constructor(

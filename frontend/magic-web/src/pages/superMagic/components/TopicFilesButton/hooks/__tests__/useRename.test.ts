@@ -140,7 +140,7 @@ describe("useRename", () => {
 		expect(SuperMagicApi.renameFile).not.toHaveBeenCalled()
 	})
 
-	it("目录路径修复完成后才调用重命名接口", async () => {
+	it("目录重命名成功后才提交路径修复", async () => {
 		vi.mocked(detectCanvasProjectOperationRisk).mockResolvedValue({
 			shouldWarn: false,
 			riskTypes: [],
@@ -165,9 +165,15 @@ describe("useRename", () => {
 		expect(
 			vi.mocked(planCanvasProjectsBeforeFileOperation).mock.invocationCallOrder[0],
 		).toBeLessThan(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0])
+		expect(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(commitCanvasProjectPathRepair).mock.invocationCallOrder[0],
+		)
+		expect(
+			vi.mocked(commitCanvasProjectPathRepair).mock.invocationCallOrder[0],
+		).toBeGreaterThan(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0])
 		expect(
 			vi.mocked(syncCanvasProjectNameAfterFileOperation).mock.invocationCallOrder[0],
-		).toBeGreaterThan(vi.mocked(SuperMagicApi.renameFile).mock.invocationCallOrder[0])
+		).toBeGreaterThan(vi.mocked(commitCanvasProjectPathRepair).mock.invocationCallOrder[0])
 	})
 
 	it("文件重命名不触发画布路径修复", async () => {

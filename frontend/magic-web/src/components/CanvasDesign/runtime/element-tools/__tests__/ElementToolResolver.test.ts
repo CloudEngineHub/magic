@@ -159,6 +159,31 @@ describe("ElementToolResolver", () => {
 		])
 	})
 
+	it("hides generation tools when document write is denied", () => {
+		const { bottom } = resolve(createImage(), {
+			canvas: {
+				permissionManager: {
+					getContext: () =>
+						resolveCanvasAccessContext({
+							mode: "edit",
+							capabilities: {
+								"document.write": false,
+								"sideEffect.generate": true,
+							},
+						}),
+				},
+			} as never,
+		})
+
+		expect(bottom.map((tool) => tool.id)).not.toEqual(
+			expect.arrayContaining([
+				ElementToolTypeEnum.GenerationQuickEdit,
+				ElementToolTypeEnum.GenerationReEdit,
+				ElementToolTypeEnum.GenerationGenerateAgain,
+			]),
+		)
+	})
+
 	it("captures the active Content target instead of re-reading it later", () => {
 		const image = createImage({
 			contents: [

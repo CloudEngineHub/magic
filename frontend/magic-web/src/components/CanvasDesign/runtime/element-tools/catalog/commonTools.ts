@@ -106,7 +106,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.FrameStoryboardVideoBatch,
 		scope: "element",
 		execution: "command",
-		effect: "external",
+		effect: "document",
 		requiredCapability: "sideEffect.generate",
 		commandRoute: "storyboard-batch",
 		surfaces: { top: top("frame-content", 22) },
@@ -193,7 +193,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 			mediaContentToolAllowed(context),
 		undefined,
 		{
-			effect: "external",
+			effect: "document",
 			requiredCapability: "sideEffect.generate",
 			commandRoute: "content-interaction",
 		},
@@ -208,7 +208,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 			mediaContentToolAllowed(context),
 		undefined,
 		{
-			effect: "external",
+			effect: "document",
 			requiredCapability: "sideEffect.generate",
 			commandRoute: "registered",
 		},
@@ -223,7 +223,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 			mediaContentToolAllowed(context),
 		undefined,
 		{
-			effect: "external",
+			effect: "document",
 			requiredCapability: "sideEffect.generate",
 			commandRoute: "content-interaction",
 		},
@@ -238,7 +238,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 			mediaContentToolAllowed(context),
 		topCustom("image-edit", 30),
 		{
-			effect: "external",
+			effect: "document",
 			requiredCapability: "sideEffect.generate",
 			commandRoute: "registered",
 		},

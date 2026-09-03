@@ -191,6 +191,22 @@ function createCanvas({
 }
 
 describe("imageGeneration", () => {
+	it("requires document write in addition to generation capability", async () => {
+		const canvas = createCanvas()
+		canvas.permissionManager.can = vi.fn(
+			(capability: string) => capability !== "document.write",
+		)
+
+		await expect(
+			generatePluginImages(canvas as never, {
+				model_id: "model-a",
+				prompt: "Generate",
+			}),
+		).rejects.toThrow("Canvas does not allow document generation.")
+		expect(generateImages).not.toHaveBeenCalled()
+		expect(canvas.__spies.createImageElementsAtPositions).not.toHaveBeenCalled()
+	})
+
 	it("creates one batch task, then fills placeholders from multi-image results", async () => {
 		const canvas = createCanvas({ maxOutputImages: 4 })
 		generateImages.mockReset()

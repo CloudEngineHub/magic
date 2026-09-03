@@ -11,11 +11,11 @@ import {
 export type CanvasFileOperationGuardResult =
 	| {
 			ok: true
-			repairResult: CanvasProjectPathRepairResult | null
+			repairPlan: CanvasProjectPathRepairResult | null
 	  }
 	| {
 			ok: false
-			reason: "cancelled" | "path-repair-save-failed"
+			reason: "cancelled"
 			repairResult?: CanvasProjectPathRepairResult
 	  }
 
@@ -34,7 +34,7 @@ export interface CanvasFileOperationGuardOptions {
 export function useCanvasFileOperationGuard() {
 	const { t } = useTranslation("super")
 
-	return useCallback(
+	const runPreflight = useCallback(
 		async ({
 			repairOptions,
 			requiresConfirmation = false,
@@ -54,17 +54,32 @@ export function useCanvasFileOperationGuard() {
 				return { ok: false, reason: "cancelled" }
 			}
 
-			if (!repairPlan) return { ok: true, repairResult: null }
+			return { ok: true, repairPlan }
+		},
+		[],
+	)
 
-			const repairResult = await commitCanvasProjectPathRepair(repairPlan)
-			if (repairResult.hasSaveFailures) {
-				console.error("画布路径修复保存失败:", repairResult.saveFailures)
+	const commitRepair = useCallback(
+		async (repairPlan: CanvasProjectPathRepairResult | null) => {
+			if (!repairPlan) return null
+			try {
+				const repairResult = await commitCanvasProjectPathRepair(repairPlan)
+				if (repairResult.hasSaveFailures) {
+					console.error("画布路径修复保存失败:", repairResult.saveFailures)
+					magicToast.error(t("topicFiles.canvasOperationRisk.pathRepairSaveFailed"))
+				}
+				return repairResult
+			} catch (error) {
+				console.error("画布路径修复提交失败:", error)
 				magicToast.error(t("topicFiles.canvasOperationRisk.pathRepairSaveFailed"))
-				return { ok: false, reason: "path-repair-save-failed", repairResult }
+				return null
 			}
-
-			return { ok: true, repairResult }
 		},
 		[t],
 	)
+
+	return {
+		runCanvasFileOperationPreflight: runPreflight,
+		commitCanvasFileOperationRepair: commitRepair,
+	}
 }

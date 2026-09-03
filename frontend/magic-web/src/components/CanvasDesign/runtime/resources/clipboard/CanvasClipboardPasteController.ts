@@ -104,6 +104,8 @@ type CanvasClipboardHostReferenceResolver = (input: {
 export interface CanvasClipboardPasteCallbacks {
 	onAsset?: (asset: CanvasClipboardAsset) => void | Promise<void>
 	onComplete?: (result: CanvasClipboardPasteResult) => void | Promise<void>
+	/** Always runs after paste processing, including when the session becomes stale. */
+	onSettled?: (result: CanvasClipboardPasteResult) => void | Promise<void>
 	isSessionCurrent?: (sessionId: string) => boolean
 }
 
@@ -362,8 +364,19 @@ function collectCanvasElementAssets(options: {
 	const assets: InternalCanvasClipboardAsset[] = []
 	let index = 0
 
-	const visit = (element: LayerElement): void => {
-		if ((element as LayerElement & { isTemporary?: boolean }).isTemporary) return
+	const stack = options.elements
+		.filter(asCanvasElement)
+		.slice()
+		.reverse()
+		.map((element) => ({ element }))
+	const visited = new Set<string>()
+	while (stack.length > 0) {
+		const current = stack.pop()
+		if (!current) continue
+		const { element } = current
+		if (visited.has(element.id)) continue
+		visited.add(element.id)
+		if ((element as LayerElement & { isTemporary?: boolean }).isTemporary) continue
 		if (isMediaElement(element)) {
 			const type = mediaTypeFromElement(element)
 			const activeContent = getStrictActiveContent(element)
@@ -413,11 +426,12 @@ function collectCanvasElementAssets(options: {
 		}
 
 		if ("children" in element && Array.isArray(element.children)) {
-			element.children.filter(asCanvasElement).forEach(visit)
+			for (let childIndex = element.children.length - 1; childIndex >= 0; childIndex -= 1) {
+				const child = element.children[childIndex]
+				if (asCanvasElement(child)) stack.push({ element: child })
+			}
 		}
 	}
-
-	options.elements.filter(asCanvasElement).forEach(visit)
 	return assets
 }
 
@@ -785,8 +799,12 @@ export class CanvasClipboardPasteController {
 			skipped,
 			failed,
 		}
-		if (callbacks.isSessionCurrent?.(target.sessionId) !== false) {
-			await callbacks.onComplete?.(result)
+		try {
+			if (callbacks.isSessionCurrent?.(target.sessionId) !== false) {
+				await callbacks.onComplete?.(result)
+			}
+		} finally {
+			await callbacks.onSettled?.(result)
 		}
 		return result
 	}

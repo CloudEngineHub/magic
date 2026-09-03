@@ -480,7 +480,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 								asset.reference.path,
 								asset.reference.fileName,
 							)
-							if (selectedSlotForPaste) {
+							if (selectedSlotForPaste && pastedAssetIndex === 0) {
 								clipboardHandlersRef.current.replaceReferenceFileAt(
 									selectedSlotForPaste.slotIndex,
 									{
@@ -507,9 +507,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						})
 						pastedAssetIndex += 1
 					},
-					onComplete: () => {
+					onSettled: () => {
 						if (selectedSlotForPaste) {
-							clipboardHandlersRef.current.resetSelectedReferenceSlot()
+							clipboardHandlersRef.current.resetSelectedReferenceSlot(
+								selectedSlotForPaste,
+							)
 						}
 					},
 					isSessionCurrent: (sessionId: string) =>

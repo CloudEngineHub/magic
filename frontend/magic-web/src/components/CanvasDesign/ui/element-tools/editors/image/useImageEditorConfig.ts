@@ -178,7 +178,7 @@ export interface ImageEditorConfig {
 			},
 		) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
-		resetSelectedReferenceSlot: () => void
+		resetSelectedReferenceSlot: (expectedSlot?: ImageReferenceSlotInfo) => void
 		/** 从 elementInstance 同步参考文件状态到 config，用于 @ 面板添加后的闭环 */
 		syncReferenceFilesFromElement: () => void
 		/** prompt 中一旦出现显式图片绑定，就把对应 legacy 保护引用升级为普通 prompt 绑定。 */
@@ -256,7 +256,17 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const retainFileUploadSlotSelectionRef = useRef(false)
 	const fileUploadSessionGuardRef = useRef<(() => boolean) | undefined>(undefined)
 
-	const resetSelectedReferenceSlot = useCallback(() => {
+	const resetSelectedReferenceSlot = useCallback((expectedSlot?: ImageReferenceSlotInfo) => {
+		const currentSlot = selectedReferenceSlotRef.current
+		if (
+			expectedSlot &&
+			(!currentSlot ||
+				currentSlot.slotIndex !== expectedSlot.slotIndex ||
+				currentSlot.slotKey !== expectedSlot.slotKey ||
+				currentSlot.path !== expectedSlot.path)
+		) {
+			return
+		}
 		selectedReferenceSlotRef.current = null
 		setSelectedReferenceSlot(null)
 	}, [])

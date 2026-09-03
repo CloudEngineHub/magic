@@ -26,6 +26,7 @@ import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
+import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 interface UseMoveFileOptions {
 	projectId?: string
@@ -52,7 +53,8 @@ const MOVE_TASK_TIMEOUT_MS = 120000
 
 export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const { t } = useTranslation("super")
-	const runCanvasFileOperationPreflight = useCanvasFileOperationGuard()
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 	const {
 		projectId,
 		attachments = [],
@@ -434,6 +436,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			const pathOperationFileIds = effectiveFileIds.filter(
 				(fileId) => !keepBothFileIds.includes(fileId),
 			)
+			let repairPlan: CanvasProjectPathRepairResult | null = null
 			if (sameProjectMove) {
 				const canvasRisk =
 					pathOperationFileIds.length > 0
@@ -462,6 +465,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						),
 				})
 				if (!preflightResult.ok) return
+				repairPlan = preflightResult.repairPlan
 			}
 
 			const moveTaskId = beginMoveTask()
@@ -487,6 +491,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 				// 如果直接完成
 				if (data.status === "success") {
+					await commitCanvasFileOperationRepair(repairPlan)
 					setMoveProgress(100)
 					magicToast.success(t("topicFiles.success.fileMoved"))
 					hideMoveSelector()
@@ -515,6 +520,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 									: 0
 								setMoveProgress(progress)
 							} else if (checkData.status === "success") {
+								await commitCanvasFileOperationRepair(repairPlan)
 								setMoveProgress(100)
 								magicToast.success(t("topicFiles.success.fileMoved"))
 								hideMoveSelector()
@@ -550,6 +556,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			attachmentIndex,
 			attachments,
 			beginMoveTask,
+			commitCanvasFileOperationRepair,
 			confirmCanvasProjectRisk,
 			finishMoveTask,
 			hideMoveSelector,
@@ -781,6 +788,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 							false,
 						)
 						if (success) {
+							await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 							setMoveProgress(100)
 							hideMoveSelector()
 							// 清空选中状态
@@ -802,6 +810,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 							target_parent_id: targetParentId,
 							keep_both_file_ids: keepBothFileIds,
 						})
+						await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 						setMoveProgress(100)
 						magicToast.success(t("topicFiles.success.fileMoved"))
 						hideMoveSelector()
@@ -875,6 +884,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			checkSingleFileConflict,
 			confirmCanvasProjectRisk,
 			currentMoveItem,
+			commitCanvasFileOperationRepair,
 			getTargetFolderPath,
 			handleMoveFile,
 			hideMoveSelector,

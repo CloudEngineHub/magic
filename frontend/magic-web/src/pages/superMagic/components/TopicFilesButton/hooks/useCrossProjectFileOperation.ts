@@ -23,6 +23,7 @@ import {
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
+import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 export interface CrossProjectOperationSuccessResult {
 	operationType: "move" | "copy"
@@ -94,7 +95,8 @@ async function resolveEffectiveOperationFileIds({
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
 	const { projectId, shareCode, sharePassword, onSuccess } = options
 	const { t } = useTranslation("super")
-	const runCanvasFileOperationPreflight = useCanvasFileOperationGuard()
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 
 	const [visible, setVisible] = useState(false)
 	const [operationType, setOperationType] = useState<"move" | "copy">("move")
@@ -137,6 +139,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				targetWorkspaceId?: string
 				targetProjectName?: string
 			},
+			repairPlan: CanvasProjectPathRepairResult | null,
 		) => {
 			const timer = setInterval(async () => {
 				try {
@@ -146,6 +149,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						const progress = checkData.progress ? parseInt(checkData.progress) : 0
 						setOperationProgress(progress)
 					} else if (checkData.status === "success") {
+						await commitCanvasFileOperationRepair(repairPlan)
 						setOperationProgress(100)
 						if (operationType === "move" || !shareCode) {
 							magicToast.success(
@@ -189,7 +193,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				}
 			}, 2000)
 		},
-		[closeModal, onSuccess, shareCode, t],
+		[closeModal, commitCanvasFileOperationRepair, onSuccess, shareCode, t],
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
@@ -379,6 +383,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				}
 
 				if (result.status === "success") {
+					await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 					setOperationProgress(100)
 					magicToast.success(t("topicFiles.success.fileMoved"))
 					setTimeout(() => {
@@ -398,12 +403,18 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "move", effectiveFileIds, {
-						targetProjectId: data.targetProjectId,
-						targetWorkspaceId:
-							data.targetWorkspaceId || data.targetProject?.workspace_id,
-						targetProjectName: data.targetProject?.project_name,
-					})
+					handleOperationPolling(
+						result.batch_key,
+						"move",
+						effectiveFileIds,
+						{
+							targetProjectId: data.targetProjectId,
+							targetWorkspaceId:
+								data.targetWorkspaceId || data.targetProject?.workspace_id,
+							targetProjectName: data.targetProject?.project_name,
+						},
+						preflightResult.repairPlan,
+					)
 				}
 			} catch (error) {
 				console.error("移动文件失败:", error)
@@ -422,6 +433,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			confirmCanvasProjectRisk,
 			duplicateHandler,
 			folderConflictHandler,
+			commitCanvasFileOperationRepair,
 			runCanvasFileOperationPreflight,
 		],
 	)

@@ -510,6 +510,10 @@ function resolveCanvasRelativePath(
 	)
 		return value
 	if (isBareResourceReference) {
+		if (!resourceLookup.isComplete) {
+			issues.unverifiedPaths.add(value)
+			return value
+		}
 		for (const candidate of candidates) {
 			const resolved =
 				resourceLookup.uniqueFilePaths.get(candidate) ??

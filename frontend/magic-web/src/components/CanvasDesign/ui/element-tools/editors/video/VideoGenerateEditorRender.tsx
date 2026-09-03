@@ -1030,7 +1030,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								asset.reference.fileName,
 							)
 							const selected = selectedSlot
-							if (selected) {
+							if (selected && pastedAssetIndex === 0) {
 								clipboardHandlersRef.current.replaceSelectedResource(
 									{
 										path: item.data.file_path,
@@ -1040,7 +1040,16 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 									{ retainResourceSlot: true },
 								)
 							} else {
-								editorRef.current?.insertMentionItems([item])
+								const fileInfo = {
+									path: item.data.file_path,
+									src: item.data.file_path,
+									fileName: item.data.file_name,
+								}
+								if (targetInputTab === "frame") {
+									clipboardHandlersRef.current.appendFrameImage(fileInfo)
+								} else {
+									editorRef.current?.insertMentionItems([item])
+								}
 							}
 							pastedAssetIndex += 1
 							return
@@ -1058,9 +1067,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 						})
 						pastedAssetIndex += 1
 					},
-					onComplete: () => {
+					onSettled: () => {
 						if (selectedSlot) {
-							clipboardHandlersRef.current.resetSelectedResourceSlot()
+							clipboardHandlersRef.current.resetSelectedResourceSlot(selectedSlot)
 						}
 					},
 					isSessionCurrent: (sessionId: string) =>

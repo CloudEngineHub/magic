@@ -498,6 +498,39 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(saved).toContain('"src": "/images/a.png"')
 	})
 
+	it("does not rewrite a locally unique bare resource path in a partial snapshot", async () => {
+		const [root, main] = attachments()
+		const tree = [
+			root,
+			main,
+			{
+				file_id: "external-image",
+				file_name: "a.png",
+				relative_file_path: "images/a.png",
+			},
+		] as any
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "images/a.png" }] }],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+		})
+
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "unverified resource paths: images/a.png",
+			},
+		])
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
 	it("rewrites a unique bare current-canvas resource path to a canvas relative path", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			projectContent("1.0.0", {

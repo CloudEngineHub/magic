@@ -164,7 +164,8 @@ export function useRename(options: UseRenameOptions = {}) {
 		onAttachmentsChange,
 	} = options
 	const { t } = useTranslation("super")
-	const runCanvasFileOperationPreflight = useCanvasFileOperationGuard()
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 	// 重命名相关状态
 	const [renamingItemId, setRenamingItemId] = useState<string | null>(null)
 	const [renameValue, setRenameValue] = useState("")
@@ -409,6 +410,8 @@ export function useRename(options: UseRenameOptions = {}) {
 				file_id: fileId,
 				target_name: trimmedName,
 			})
+
+			await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 
 			if (currentItem.is_directory) {
 				try {

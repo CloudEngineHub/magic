@@ -229,7 +229,7 @@ export interface VideoEditorConfig {
 			context?: MessageEditorMentionChangeContext,
 			metadataCandidates?: readonly ReferenceResourceMetadataCandidate[],
 		) => void
-		resetSelectedResourceSlot: () => void
+		resetSelectedResourceSlot: (expectedSlot?: VideoInputSlotInfo) => void
 		prepareResourceSlotSelection: (
 			inputTab: "frame" | "reference",
 			slotIndex: number,
@@ -245,6 +245,7 @@ export interface VideoEditorConfig {
 			fileInfo: UploadFileResponse,
 			options?: { retainResourceSlot?: boolean },
 		) => void
+		appendFrameImage: (fileInfo: UploadFileResponse) => boolean
 		replaceReferenceImageAt: (
 			slotIndex: number,
 			fileInfo: UploadFileResponse & { assetType?: VideoReferenceAssetKind },

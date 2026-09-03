@@ -333,6 +333,9 @@ describe("useMoveFile", () => {
 		})
 
 		expect(SuperMagicApi.moveFile).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(SuperMagicApi.moveFile).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(commitCanvasProjectPathRepair).mock.invocationCallOrder[0],
+		)
 	})
 
 	it("路径修复失败时取消不会调用移动接口", async () => {

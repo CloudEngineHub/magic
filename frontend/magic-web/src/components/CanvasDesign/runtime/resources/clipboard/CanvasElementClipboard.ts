@@ -7,6 +7,7 @@ import {
 } from "./CanvasDesignClipboard"
 import { getFileExtensionFromMimeType, validateAndFilterCanvasFiles } from "../../shared/ids"
 import { isValidElementData } from "../../document/validateElement"
+import { isCanvasClipboardPayloadWithinLimits } from "./clipboardLimits"
 
 /**
  * CanvasDesign 元素剪贴板主元数据 MIME。
@@ -195,6 +196,15 @@ function normalizePayload(data: unknown): CanvasElementClipboardPayload | null {
 		data.version !== CANVAS_ELEMENT_CLIPBOARD_VERSION ||
 		!Array.isArray(data.elements) ||
 		!Array.isArray(data.files)
+	) {
+		return null
+	}
+	if (
+		!isCanvasClipboardPayloadWithinLimits({
+			elements: data.elements,
+			files: data.files,
+			connections: data.connections,
+		})
 	) {
 		return null
 	}

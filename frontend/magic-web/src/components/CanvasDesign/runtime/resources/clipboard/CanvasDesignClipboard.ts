@@ -4,6 +4,7 @@ import type {
 	CanvasElementClipboardPayload,
 } from "./CanvasElementClipboard"
 import { validateAndFilterCanvasFiles } from "../../shared/ids"
+import { isCanvasClipboardPayloadWithinLimits } from "./clipboardLimits"
 
 export const CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE =
 	"web application/x-canvas-design-clipboard-bundle"
@@ -163,6 +164,11 @@ function isBundlePayload(value: unknown): value is CanvasElementClipboardPayload
 		(value.sourceProjectId === undefined || typeof value.sourceProjectId === "string") &&
 		Array.isArray(value.elements) &&
 		Array.isArray(value.files) &&
+		isCanvasClipboardPayloadWithinLimits({
+			elements: value.elements,
+			files: value.files,
+			connections: value.connections,
+		}) &&
 		value.files.every(isBundleFileMetadata)
 	)
 }

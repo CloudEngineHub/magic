@@ -1143,4 +1143,40 @@ describe("CanvasClipboardPasteController", () => {
 			vi.unstubAllGlobals()
 		}
 	})
+
+	it("runs onSettled when the paste session becomes stale", async () => {
+		const exported = createExportBundle({ filename: "stale.png", mimeType: "image/png" })
+		const controller = new CanvasClipboardPasteController({
+			read: async () => [
+				createClipboardItem(
+					exported.bundle,
+					"web application/x-canvas-design-clipboard-bundle",
+				),
+			],
+		})
+		let isCurrent = true
+		const onComplete = vi.fn()
+		const onSettled = vi.fn()
+
+		const result = await controller.paste(
+			undefined,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				sessionId: "stale-session",
+			},
+			{
+				onAsset: () => {
+					isCurrent = false
+				},
+				onComplete,
+				onSettled,
+				isSessionCurrent: () => isCurrent,
+			},
+		)
+
+		expect(result.accepted).toHaveLength(0)
+		expect(onComplete).not.toHaveBeenCalled()
+		expect(onSettled).toHaveBeenCalledWith(result)
+	})
 })

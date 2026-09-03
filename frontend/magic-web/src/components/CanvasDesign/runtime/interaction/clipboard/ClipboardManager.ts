@@ -177,16 +177,38 @@ export class ClipboardManager {
 	 * group can contain Content previews on its descendants.
 	 */
 	private projectElementTreeForContentView(element: LayerElement): LayerElement {
-		const projected = this.canvas.getElementForContentView?.(element) ?? element
-		if (!isCanvasContainerElement(projected) || !Array.isArray(projected.children)) {
-			return projected
+		const projectedRoot = this.canvas.getElementForContentView?.(element) ?? element
+		if (!isCanvasContainerElement(projectedRoot) || !Array.isArray(projectedRoot.children)) {
+			return projectedRoot
 		}
-		return {
-			...projected,
-			children: projected.children.map((child) =>
-				this.projectElementTreeForContentView(child),
-			),
-		} as LayerElement
+
+		const root = { ...projectedRoot, children: [] as LayerElement[] } as LayerElement
+		const stack: Array<{ source: LayerElement; target: LayerElement[] }> = []
+		for (let index = projectedRoot.children.length - 1; index >= 0; index -= 1) {
+			stack.push({ source: projectedRoot.children[index], target: root.children })
+		}
+		while (stack.length > 0) {
+			const current = stack.pop()
+			if (!current) continue
+			const projected =
+				this.canvas.getElementForContentView?.(current.source) ?? current.source
+			if (!isCanvasContainerElement(projected) || !Array.isArray(projected.children)) {
+				current.target.push(projected)
+				continue
+			}
+			const projectedWithChildren = {
+				...projected,
+				children: [] as LayerElement[],
+			} as LayerElement
+			current.target.push(projectedWithChildren)
+			for (let index = projected.children.length - 1; index >= 0; index -= 1) {
+				stack.push({
+					source: projected.children[index],
+					target: projectedWithChildren.children,
+				})
+			}
+		}
+		return root
 	}
 
 	/**
@@ -1503,21 +1525,26 @@ export class ClipboardManager {
 	}
 
 	private sanitizeElementTreeForClipboard(element: LayerElement): LayerElement {
-		let sanitized = this.cloneLayerElementData(element)
-		if (isCanvasContainerElement(sanitized) && Array.isArray(sanitized.children)) {
-			sanitized = {
-				...sanitized,
-				children: sanitized.children.map((child) =>
-					this.sanitizeElementTreeForClipboard(child),
-				),
+		const root = this.cloneLayerElementData(element)
+		const stack: LayerElement[] = [root]
+		while (stack.length > 0) {
+			const current = stack.pop()
+			if (!current) continue
+			if (CanvasElementClipboard.isCanvasFileElement(current)) {
+				const sanitized = this.stripMediaGenerationTaskIdentity(current, {
+					normalizeUnresumableImageContents: true,
+				})
+				Object.assign(current, sanitized)
+			}
+			if (isCanvasContainerElement(current) && Array.isArray(current.children)) {
+				for (let index = current.children.length - 1; index >= 0; index -= 1) {
+					const clonedChild = this.cloneLayerElementData(current.children[index])
+					current.children[index] = clonedChild
+					stack.push(clonedChild)
+				}
 			}
 		}
-		if (CanvasElementClipboard.isCanvasFileElement(sanitized)) {
-			return this.stripMediaGenerationTaskIdentity(sanitized, {
-				normalizeUnresumableImageContents: true,
-			})
-		}
-		return sanitized
+		return root
 	}
 
 	private primeFileElementResourceCache(

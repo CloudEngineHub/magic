@@ -164,7 +164,7 @@ describe("useCrossProjectFileOperation", () => {
 		expect(SuperMagicApi.moveFile).not.toHaveBeenCalled()
 	})
 
-	it("跨项目移动画布根目录时先计划并在确认后提交路径修复", async () => {
+	it("跨项目移动画布根目录时先计划，移动成功后提交路径修复", async () => {
 		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
@@ -217,9 +217,12 @@ describe("useCrossProjectFileOperation", () => {
 		)
 		expect(commitCanvasProjectPathRepair).toHaveBeenCalledTimes(1)
 		expect(SuperMagicApi.moveFile).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(SuperMagicApi.moveFile).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(commitCanvasProjectPathRepair).mock.invocationCallOrder[0],
+		)
 	})
 
-	it("跨项目移动路径修复保存失败时不执行移动", async () => {
+	it("跨项目移动路径修复保存失败时不阻断已成功的移动", async () => {
 		vi.mocked(planCanvasProjectsBeforeFileOperation).mockResolvedValue({
 			affectedProjects: [],
 			repairedFileIds: [],
@@ -267,7 +270,10 @@ describe("useCrossProjectFileOperation", () => {
 		expect(magicToast.error).toHaveBeenCalledWith(
 			"topicFiles.canvasOperationRisk.pathRepairSaveFailed",
 		)
-		expect(SuperMagicApi.moveFile).not.toHaveBeenCalled()
+		expect(SuperMagicApi.moveFile).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(SuperMagicApi.moveFile).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(commitCanvasProjectPathRepair).mock.invocationCallOrder[0],
+		)
 	})
 
 	it("copies the confirmed single-HTML static dependencies with the HTML file", async () => {

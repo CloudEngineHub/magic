@@ -67,8 +67,11 @@ export async function generatePluginImages(
 		sourceElementByAssetKey?: PluginSourceElementMap
 	} = {},
 ) {
-	if (!canvas.permissionManager.can("sideEffect.generate")) {
-		throw new Error("Canvas does not allow external generation.")
+	if (
+		!canvas.permissionManager.can("sideEffect.generate") ||
+		!canvas.permissionManager.can("document.write")
+	) {
+		throw new Error("Canvas does not allow document generation.")
 	}
 	const methods = canvas.magicConfigManager.config?.methods
 	if (!methods?.generateImages || !methods?.getImageGenerationResults) {

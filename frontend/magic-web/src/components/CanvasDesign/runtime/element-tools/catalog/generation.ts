@@ -16,7 +16,7 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.GenerationQuickEdit,
 		scope: "generation",
 		execution: "command",
-		effect: "external",
+		effect: "document",
 		requiredCapability: "sideEffect.generate",
 		commandRoute: "generation",
 		surfaces: {
@@ -39,7 +39,7 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.GenerationReEdit,
 		scope: "generation",
 		execution: "command",
-		effect: "external",
+		effect: "document",
 		requiredCapability: "sideEffect.generate",
 		commandRoute: "generation",
 		surfaces: {
@@ -73,7 +73,7 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		id: ElementToolTypeEnum.GenerationGenerateAgain,
 		scope: "generation",
 		execution: "command",
-		effect: "external",
+		effect: "document",
 		requiredCapability: "sideEffect.generate",
 		commandRoute: "generation",
 		surfaces: {
