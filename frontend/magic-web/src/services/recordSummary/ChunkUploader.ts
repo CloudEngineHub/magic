@@ -19,6 +19,24 @@ export interface SessionUploadProgress {
 	completed: boolean
 }
 
+export type UploadQueueStallReason =
+	| "healthy"
+	| "pending_not_queued"
+	| "idle_with_pending"
+	| "stale_active_upload"
+	| "has_failed"
+
+export interface UploadQueueHealth {
+	pending: number
+	queuePending: number
+	uploading: number
+	completed: number
+	failed: number
+	totalTasks: number
+	stalled: boolean
+	reason: UploadQueueStallReason
+}
+
 /**
  * Retry configuration for exponential backoff
  * 指数退避重试配置
@@ -202,6 +220,7 @@ export class ChunkUploader {
 	private retryTimers = new Map<string, NodeJS.Timeout>() // chunkId -> timer
 	private sessionCleanupRequested = new Set<string>()
 	private activeUploadCancels = new Map<string, () => void>()
+	private resumeLocks = new Map<string, Promise<UploadQueueHealth>>()
 
 	// Network monitoring
 	private networkMonitor: NetworkMonitor
@@ -1151,6 +1170,122 @@ export class ChunkUploader {
 			failed: 0,
 			totalTasks: totalPending + this.activeUploadIds.size,
 		}
+	}
+
+	async inspectQueueHealth(sessionId: string): Promise<UploadQueueHealth> {
+		const status = await this.getQueueStatus(sessionId)
+		const activeChunkId = this.sessionActiveUploads.get(sessionId) || null
+		const hasRetryTimer = this.hasSessionRetryTimer(sessionId)
+		const isActiveMissing =
+			Boolean(activeChunkId) &&
+			!this.activeUploadIds.has(activeChunkId!) &&
+			!this.activeUploads.has(activeChunkId!)
+
+		let reason: UploadQueueStallReason = "healthy"
+		if (isActiveMissing) reason = "stale_active_upload"
+		else if (
+			status.pending > 0 &&
+			!activeChunkId &&
+			status.queuePending === 0 &&
+			!hasRetryTimer
+		)
+			reason = "pending_not_queued"
+		else if (status.pending > 0 && !activeChunkId && !hasRetryTimer)
+			reason = "idle_with_pending"
+		else if (status.failed > 0 && status.pending === 0 && !activeChunkId && !hasRetryTimer)
+			reason = "has_failed"
+
+		return {
+			pending: status.pending,
+			queuePending: status.queuePending ?? 0,
+			uploading: status.uploading,
+			completed: status.completed,
+			failed: status.failed,
+			totalTasks: status.totalTasks,
+			stalled: reason !== "healthy",
+			reason,
+		}
+	}
+
+	async resumeStalledSessionUploads(
+		sessionId: string,
+		topicId: string,
+		projectId: string = "",
+		options: { force?: boolean } = {},
+	): Promise<UploadQueueHealth> {
+		const pendingResume = this.resumeLocks.get(sessionId)
+		if (pendingResume) return pendingResume
+
+		const resumeTask = this.runResumeStalledSessionUploads(
+			sessionId,
+			topicId,
+			projectId,
+			options,
+		)
+		this.resumeLocks.set(sessionId, resumeTask)
+		try {
+			return await resumeTask
+		} finally {
+			if (this.resumeLocks.get(sessionId) === resumeTask) {
+				this.resumeLocks.delete(sessionId)
+			}
+		}
+	}
+
+	private async runResumeStalledSessionUploads(
+		sessionId: string,
+		topicId: string,
+		projectId: string,
+		options: { force?: boolean },
+	): Promise<UploadQueueHealth> {
+		const health = await this.inspectQueueHealth(sessionId)
+		if (this.sessionCleanupRequested.has(sessionId)) {
+			logger.report("Skip resume for cleaned-up session", { sessionId, ...health })
+			return health
+		}
+
+		const shouldUnblock = Boolean(options.force) || health.stalled
+		if (!shouldUnblock) {
+			await this.uploadSession(sessionId, topicId, projectId)
+			return health
+		}
+
+		logger.report("Resuming stalled session uploads", {
+			sessionId,
+			topicId,
+			projectId,
+			force: Boolean(options.force),
+			...health,
+		})
+
+		// Recheck cleanup after inspect so cancel can win the race.
+		if (this.sessionCleanupRequested.has(sessionId)) {
+			logger.report("Skip resume after cleanup during inspect", { sessionId })
+			return health
+		}
+
+		const activeChunkId = this.sessionActiveUploads.get(sessionId)
+		if (activeChunkId) {
+			this.cancelActiveUpload(activeChunkId, sessionId, "user_retry")
+			this.releaseActiveUpload(activeChunkId, sessionId)
+		}
+		this.clearSessionRetryInfo(sessionId)
+
+		if (this.sessionCleanupRequested.has(sessionId)) return health
+
+		if (health.failed > 0) {
+			await this.retryFailedChunks(sessionId, topicId, projectId)
+		}
+
+		await this.uploadSession(sessionId, topicId, projectId)
+		return health
+	}
+
+	private hasSessionRetryTimer(sessionId: string): boolean {
+		const queue = this.sessionQueues.get(sessionId) ?? []
+		const activeChunkId = this.sessionActiveUploads.get(sessionId)
+		const chunkIds = activeChunkId ? [...queue, activeChunkId] : queue
+		return chunkIds.some((chunkId) => this.retryTimers.has(chunkId))
 	}
 
 	/**

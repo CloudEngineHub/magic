@@ -266,6 +266,25 @@ describe("ChunkUploader", () => {
 		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
 	})
 
+	it("does not resume uploads after a session cleanup request", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.clearSessionChunks("session-1", "cancel:user_cancel")
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1")
+
+		expect(testState.uploadCalls).toHaveLength(0)
+	})
+
 	it("does not restart uploads after a session cleanup request", async () => {
 		const chunk = createChunk(0)
 		testState.chunks.set(chunk.id, chunk)
@@ -559,5 +578,158 @@ describe("ChunkUploader", () => {
 
 		await expectation
 		expect(testState.uploadCalls).toHaveLength(2)
+	})
+
+	it("marks pending IndexedDB chunks as stalled when they are not queued", async () => {
+		testState.chunks.set("chunk-0", createChunk(0))
+		testState.chunks.set("chunk-1", createChunk(1))
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		const health = await uploader.inspectQueueHealth("session-1")
+
+		expect(health).toMatchObject({
+			pending: 2,
+			queuePending: 0,
+			uploading: 0,
+			failed: 0,
+			stalled: true,
+			reason: "pending_not_queued",
+		})
+	})
+
+	it("resumes pending chunks that were left out of the upload queue", async () => {
+		testState.chunks.set("chunk-0", createChunk(0))
+		testState.uploadBehaviors.push("success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1")
+		await vi.waitFor(() =>
+			expect(testState.chunks.get("chunk-0")?.uploadStatus).toBe("uploaded"),
+		)
+
+		expect(testState.uploadCalls).toHaveLength(1)
+	})
+
+	it("unblocks a stale active upload so pending chunks can continue", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+		const internalUploader = uploader as unknown as {
+			sessionActiveUploads: Map<string, string | null>
+		}
+		internalUploader.sessionActiveUploads.set("session-1", "ghost-chunk")
+
+		const health = await uploader.inspectQueueHealth("session-1")
+		expect(health).toMatchObject({
+			stalled: true,
+			reason: "stale_active_upload",
+		})
+
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1")
+		await vi.waitFor(() =>
+			expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("uploaded"),
+		)
+	})
+
+	it("retries failed chunks when resuming a stalled session", async () => {
+		const failedChunk = { ...createChunk(0), uploadStatus: "failed" as const }
+		testState.chunks.set(failedChunk.id, failedChunk)
+		testState.uploadBehaviors.push("success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		const health = await uploader.inspectQueueHealth("session-1")
+		expect(health).toMatchObject({
+			stalled: true,
+			reason: "has_failed",
+		})
+
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1")
+		await vi.waitFor(() =>
+			expect(testState.chunks.get(failedChunk.id)?.uploadStatus).toBe("uploaded"),
+		)
+	})
+
+	it("does not cancel a healthy in-flight upload when resume is not forced", async () => {
+		testState.chunks.set("chunk-0", createChunk(0))
+		testState.uploadBehaviors.push("hang")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls.length).toBeGreaterThan(0))
+
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1")
+
+		expect(testState.uploadCancels[0]).not.toHaveBeenCalled()
+	})
+
+	it("reports a healthy queue while an upload is in flight", async () => {
+		testState.chunks.set("chunk-0", createChunk(0))
+		testState.uploadBehaviors.push("hang")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls.length).toBeGreaterThan(0))
+
+		const health = await uploader.inspectQueueHealth("session-1")
+		expect(health).toMatchObject({
+			stalled: false,
+			reason: "healthy",
+			uploading: 1,
+		})
 	})
 })

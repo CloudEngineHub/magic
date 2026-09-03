@@ -65,6 +65,7 @@ import VoiceTimeoutChecker from "./VoiceTimeoutChecker"
 import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
+import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 
@@ -82,6 +83,8 @@ interface EnsureUploadOptions {
 	projectId?: string
 	allowUserDecision?: boolean
 }
+
+const MAX_UPLOAD_WAIT_TIMEOUTS = 3
 
 class RecordSummaryService {
 	// Duration tracking (using reliable AudioContext-based tracker)
@@ -256,6 +259,10 @@ class RecordSummaryService {
 	private summaryMessageService = getSummaryMessageService()
 	// 分片生产监控定时器，用于检测录音是否正常产出分片
 	private chunkProductionWatchdog: NodeJS.Timeout | null = null
+	private uploadQueueWatchdog: UploadQueueWatchdog | null = null
+	private uploadRetryContext: { sessionId: string; topicId: string; projectId: string } | null =
+		null
+	private uploadRetryInFlight = false
 	// 录音开始后是否已收到第一个分片
 	private hasReceivedFirstChunk = false
 	// 是否已尝试过自动恢复
@@ -654,6 +661,11 @@ class RecordSummaryService {
 
 			// 开始上传任何挂起的分片
 			this.chunkUploader.uploadSession(
+				session.id,
+				session.topic?.id || "",
+				session.project?.id || "",
+			)
+			this.startUploadQueueWatchdog(
 				session.id,
 				session.topic?.id || "",
 				session.project?.id || "",
@@ -1443,6 +1455,11 @@ class RecordSummaryService {
 				session.topic?.id || "",
 				session.project?.id || "",
 			)
+			this.startUploadQueueWatchdog(
+				session.id,
+				session.topic?.id || "",
+				session.project?.id || "",
+			)
 
 			// 恢复 presetFiles 并初始化内容文件管理器
 			await this.restoreContentFileManager(session)
@@ -1563,6 +1580,7 @@ class RecordSummaryService {
 			notifyServer,
 			source,
 		})
+		this.stopUploadQueueWatchdog()
 
 		// Stop duration tracking
 		this.durationTracker.stop()
@@ -1889,6 +1907,7 @@ class RecordSummaryService {
 		try {
 			if (sessionId) {
 				logger.log("等待所有分片上传完成")
+				this.startUploadQueueWatchdog(sessionId, finalTopic.id, finalProject.id)
 				this.summaryMessageService.showStageMessage(SummaryStage.UploadingChunks)
 
 				// 触发上传会话分片
@@ -2292,6 +2311,7 @@ class RecordSummaryService {
 				await this.ensureProjectAndTopic(session)
 
 			// 3. 等待分片上传完成和一致性检查
+			this.startUploadQueueWatchdog(session.id, finalTopic.id, finalProject.id)
 			await this.chunkUploader.uploadSession(session.id, finalTopic.id, finalProject.id)
 			await this.ensureSessionUploadComplete(session, {
 				topicId: finalTopic.id,
@@ -2359,6 +2379,7 @@ class RecordSummaryService {
 	 * Reset recording without clearing persisted data
 	 */
 	private resetRecordingWithoutPersistence = async () => {
+		this.stopUploadQueueWatchdog()
 		// 停止语音服务
 		if (this.voiceToTextService) {
 			await this.voiceToTextService.stopRecording()
@@ -2422,6 +2443,7 @@ class RecordSummaryService {
 
 		// 停止分片生产监控
 		this.stopChunkProductionWatchdog()
+		this.stopUploadQueueWatchdog()
 
 		// 停止语音服务
 		if (this.voiceToTextService) {
@@ -2687,6 +2709,80 @@ class RecordSummaryService {
 		if (this.chunkProductionWatchdog) {
 			clearTimeout(this.chunkProductionWatchdog)
 			this.chunkProductionWatchdog = null
+		}
+	}
+
+	private startUploadQueueWatchdog(sessionId: string, topicId: string, projectId: string) {
+		this.uploadRetryContext = { sessionId, topicId, projectId }
+		this.summaryMessageService.setUploadRetryHandler(this.retryStuckChunkUploads)
+		this.uploadQueueWatchdog?.stop()
+		this.uploadQueueWatchdog = new UploadQueueWatchdog({
+			inspect: () => this.chunkUploader.inspectQueueHealth(sessionId),
+			resume: () => {
+				const ctx = this.uploadRetryContext
+				if (!ctx) return Promise.resolve()
+				return this.chunkUploader.resumeStalledSessionUploads(
+					ctx.sessionId,
+					ctx.topicId,
+					ctx.projectId,
+					{ force: true },
+				)
+			},
+			onRecovered: (health) => {
+				logger.report("Upload queue watchdog recovered stalled uploads", {
+					sessionId,
+					...health,
+				})
+			},
+			onError: (error) => {
+				logger.error({
+					eventKey: "upload_queue_watchdog_failed",
+					errorKind: "unknown",
+					error,
+					message: "Upload queue watchdog check failed",
+					context: { sessionId },
+				})
+			},
+		})
+		this.uploadQueueWatchdog.start()
+	}
+
+	private stopUploadQueueWatchdog() {
+		this.uploadQueueWatchdog?.stop()
+		this.uploadQueueWatchdog = null
+		this.uploadRetryContext = null
+		this.summaryMessageService.setUploadRetryHandler(null)
+	}
+
+	private retryStuckChunkUploads = async () => {
+		const ctx = this.uploadRetryContext
+		if (!ctx || this.uploadRetryInFlight) return
+
+		this.uploadRetryInFlight = true
+		try {
+			const health = await this.chunkUploader.inspectQueueHealth(ctx.sessionId)
+			logger.report("User retried audio chunk uploads", {
+				sessionId: ctx.sessionId,
+				...health,
+			})
+			await this.chunkUploader.resumeStalledSessionUploads(
+				ctx.sessionId,
+				ctx.topicId,
+				ctx.projectId,
+				{ force: true },
+			)
+			const progress = await this.chunkUploader.getSessionUploadProgress(ctx.sessionId)
+			this.summaryMessageService.updateProgress(this.formatUploadProgress(progress))
+		} catch (error) {
+			logger.error({
+				eventKey: "resume_stalled_chunk_upload_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to resume stalled chunk uploads",
+				context: { sessionId: ctx.sessionId },
+			})
+		} finally {
+			this.uploadRetryInFlight = false
 		}
 	}
 
@@ -3127,6 +3223,7 @@ class RecordSummaryService {
 		this.mediaRecorderService.dispose()
 
 		this.sessionManager.clearSession()
+		this.stopUploadQueueWatchdog()
 		this.chunkUploader.pauseAll()
 
 		// Cleanup tab coordinator
@@ -4019,7 +4116,11 @@ class RecordSummaryService {
 			if (session.id) {
 				const topicId = options.topicId ?? session.topic?.id ?? ""
 				const projectId = options.projectId ?? session.project?.id ?? ""
+				this.uploadRetryContext = { sessionId: session.id, topicId, projectId }
+				this.summaryMessageService.setUploadRetryHandler(this.retryStuckChunkUploads)
 				let shouldWaitForUploads = true
+				let stalledTimeouts = 0
+				let lastUploadedCount = -1
 
 				while (shouldWaitForUploads) {
 					logger.log(`${session.id} 等待分片上传结束...`)
@@ -4032,15 +4133,47 @@ class RecordSummaryService {
 						`${session.id} 剩余分片数: ${pendingCount}, 超时时间: ${dynamicTimeout}ms`,
 					)
 
-					const progress = await this.chunkUploader.waitForSessionUploadsSettled(
-						session.id,
-						dynamicTimeout,
-						(uploadProgress) => {
-							this.summaryMessageService.updateProgress(
-								this.formatUploadProgress(uploadProgress),
+					let progress: SessionUploadProgress
+					try {
+						progress = await this.chunkUploader.waitForSessionUploadsSettled(
+							session.id,
+							dynamicTimeout,
+							(uploadProgress) => {
+								this.summaryMessageService.updateProgress(
+									this.formatUploadProgress(uploadProgress),
+								)
+							},
+						)
+					} catch (error) {
+						const isTimeout = error instanceof Error && error.message.includes("超时")
+						if (!isTimeout) throw error
+
+						const health = await this.chunkUploader.inspectQueueHealth(session.id)
+						const timeoutProgress = await this.chunkUploader.getSessionUploadProgress(
+							session.id,
+						)
+						stalledTimeouts =
+							timeoutProgress.uploaded === lastUploadedCount ? stalledTimeouts + 1 : 1
+						lastUploadedCount = timeoutProgress.uploaded
+
+						logger.warn(`${session.id} 等待分片上传超时`, {
+							sessionId: session.id,
+							pendingCount,
+							stalledTimeouts,
+							uploaded: timeoutProgress.uploaded,
+							queueReason: health.reason,
+						})
+
+						if (stalledTimeouts >= MAX_UPLOAD_WAIT_TIMEOUTS) throw error
+						if (health.stalled) {
+							await this.chunkUploader.resumeStalledSessionUploads(
+								session.id,
+								topicId,
+								projectId,
 							)
-						},
-					)
+						}
+						continue
+					}
 
 					this.summaryMessageService.updateProgress(this.formatUploadProgress(progress))
 
@@ -4147,6 +4280,8 @@ class RecordSummaryService {
 			throw new Error(
 				`等待分片上传完成失败: ${error instanceof Error ? error.message : String(error)}`,
 			)
+		} finally {
+			this.stopUploadQueueWatchdog()
 		}
 	}
 
