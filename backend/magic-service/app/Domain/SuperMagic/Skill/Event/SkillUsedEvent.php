@@ -9,8 +9,8 @@ namespace App\Domain\SuperMagic\Skill\Event;
 
 use App\Infrastructure\Core\AbstractEvent;
 
-/** Indicates that a market skill file URL was successfully requested. */
-class SkillMarketUsedEvent extends AbstractEvent
+/** Indicates that a skill was used. */
+class SkillUsedEvent extends AbstractEvent
 {
     public function __construct(
         protected string $organizationCode,
@@ -19,7 +19,7 @@ class SkillMarketUsedEvent extends AbstractEvent
         protected string $userId,
         protected string $userName,
         protected string $requestId,
-        protected string $skillMarketId,
+        protected string $skillCode,
         protected array $businessParams = [],
     ) {
     }
@@ -54,9 +54,9 @@ class SkillMarketUsedEvent extends AbstractEvent
         return $this->requestId;
     }
 
-    public function getSkillMarketId(): string
+    public function getSkillCode(): string
     {
-        return $this->skillMarketId;
+        return $this->skillCode;
     }
 
     public function getBusinessParams(): array

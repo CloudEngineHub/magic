@@ -13,7 +13,7 @@ use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUninstalledEvent;
-use App\Domain\SuperMagic\Skill\Event\SkillMarketUsedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillUsedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Infrastructure\Audit\Listener\ResourceAccessLogListener;
 use App\Infrastructure\Util\Context\CoContext;
@@ -21,7 +21,6 @@ use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 
 /**
  * @internal
@@ -42,7 +41,7 @@ final class SkillMarketAccessLogListenerTest extends TestCase
                 self::assertSame($userName, $entity->getUserName());
                 self::assertSame('skill', $entity->getResourceType());
                 self::assertSame('skill-code-1', $entity->getResourceCode());
-                self::assertSame('技能名称', $entity->getResourceName());
+                self::assertSame($operation === 'use' ? null : '技能名称', $entity->getResourceName());
                 self::assertSame($operation, $entity->getOperation());
                 self::assertSame($source, $entity->getSource());
                 return true;
@@ -52,7 +51,6 @@ final class SkillMarketAccessLogListenerTest extends TestCase
         $market = new SkillMarketEntity();
         $market->setSkillCode('skill-code-1')
             ->setNameI18n(['zh_CN' => '技能名称']);
-
         CoContext::setLanguage('zh_CN');
 
         $logger = $this->createMock(LoggerInterface::class);
@@ -61,13 +59,12 @@ final class SkillMarketAccessLogListenerTest extends TestCase
         $loggerFactory->method('get')->willReturn($logger);
 
         $skillMarketDomainService = $this->createMock(SkillMarketDomainService::class);
-        $skillMarketDomainService->expects(self::once())
-            ->method('findByIds')
+        $skillMarketDomainService->method('findByIds')
             ->with([1])
             ->willReturn([1 => $market]);
 
         $container = $this->createMock(ContainerInterface::class);
-        $container->expects(self::exactly(3))
+        $container
             ->method('get')
             ->willReturnMap([
                 [LoggerFactory::class, $loggerFactory],
@@ -83,14 +80,14 @@ final class SkillMarketAccessLogListenerTest extends TestCase
         return [
             'install' => [new SkillMarketInstalledEvent('1', 'org-1', 'user-1'), 'install', 'api', ''],
             'uninstall' => [new SkillMarketUninstalledEvent('1', 'org-1', 'user-1'), 'uninstall', 'api', ''],
-            'use' => [new SkillMarketUsedEvent(
+            'use' => [new SkillUsedEvent(
                 organizationCode: 'org-1',
                 sourceId: 'super_magic_tool',
                 callTime: 1234567890000,
                 userId: 'user-1',
                 userName: 'User One',
                 requestId: 'request-1',
-                skillMarketId: '1',
+                skillCode: 'skill-code-1',
                 businessParams: ['task_id' => 'task-1'],
             ), 'use', 'super_magic_tool', 'User One'],
         ];
@@ -107,12 +104,6 @@ final class SkillMarketAccessLogListenerTest extends TestCase
             }))
             ->willReturnArgument(0);
 
-        $market = (new SkillMarketEntity())
-            ->setSkillCode('skill-code-1')
-            ->setNameI18n(['zh_CN' => '技能名称']);
-        $skillMarketDomainService = $this->createMock(SkillMarketDomainService::class);
-        $skillMarketDomainService->method('findByIds')->willReturn([1 => $market]);
-
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects(self::once())->method('info');
         $loggerFactory = $this->createMock(LoggerFactory::class);
@@ -121,18 +112,17 @@ final class SkillMarketAccessLogListenerTest extends TestCase
         $container = $this->createMock(ContainerInterface::class);
         $container->method('get')->willReturnMap([
             [LoggerFactory::class, $loggerFactory],
-            [SkillMarketDomainService::class, $skillMarketDomainService],
             [ResourceAccessLogDomainService::class, new ResourceAccessLogDomainService($repository)],
         ]);
 
-        (new ResourceAccessLogListener($container))->process(new SkillMarketUsedEvent(
+        (new ResourceAccessLogListener($container))->process(new SkillUsedEvent(
             organizationCode: 'org-1',
             sourceId: 'super_magic_tool',
             callTime: 1234567890000,
             userId: 'user-1',
             userName: 'User One',
             requestId: 'request-1',
-            skillMarketId: '1',
+            skillCode: 'skill-code-1',
         ));
     }
 
@@ -144,28 +134,24 @@ final class SkillMarketAccessLogListenerTest extends TestCase
             ->method('error')
             ->with(
                 'Resource access log processing failed',
-                self::callback(static fn (array $context): bool => $context['event'] === SkillMarketUsedEvent::class)
+                self::callback(static fn (array $context): bool => $context['event'] === SkillUsedEvent::class)
             );
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn($logger);
 
-        $skillMarketDomainService = $this->createMock(SkillMarketDomainService::class);
-        $skillMarketDomainService->method('findByIds')->willThrowException(new RuntimeException('save failed'));
-
         $container = $this->createMock(ContainerInterface::class);
         $container->method('get')->willReturnMap([
             [LoggerFactory::class, $loggerFactory],
-            [SkillMarketDomainService::class, $skillMarketDomainService],
         ]);
 
-        (new ResourceAccessLogListener($container))->process(new SkillMarketUsedEvent(
+        (new ResourceAccessLogListener($container))->process(new SkillUsedEvent(
             organizationCode: 'org-1',
             sourceId: 'super_magic_tool',
             callTime: 1234567890000,
             userId: 'user-1',
             userName: 'User One',
             requestId: 'request-1',
-            skillMarketId: '1',
+            skillCode: 'skill-code-1',
         ));
     }
 }

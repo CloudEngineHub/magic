@@ -144,10 +144,31 @@ final class SkillMarketSortContractTest extends TestCase
         self::assertStringContainsString('public function getSkillFileUrlsByIds(', $serviceSource);
         self::assertStringNotContainsString('bool $recordUsage', $serviceSource);
         self::assertStringContainsString('getSkillFileUrlsByIds($requestContext, $requestDTO)', $sandboxApiSource);
-        self::assertStringContainsString('new SkillMarketUsedEvent(', $serviceSource);
+        self::assertStringContainsString('new SkillUsedEvent(', $serviceSource);
+        self::assertStringNotContainsString('new SkillMarketUsedEvent(', $serviceSource);
         self::assertStringNotContainsString('if ($recordUsage)', $serviceSource);
         self::assertStringContainsString('getSkillFileUrlsByIds($requestContext, $requestDTO)', $skillApiSource);
         self::assertStringNotContainsString('getSkillFileUrlsByIds($requestContext, $requestDTO,', $skillApiSource);
+    }
+
+    public function testLatestPublishedSkillVersionsUsesRenamedServiceMethodAndTracksUsage(): void
+    {
+        $servicePath = dirname(__DIR__, 5) . '/app/Application/SuperMagic/Skill/Service/SkillAppService.php';
+        $skillApiPath = dirname(__DIR__, 5) . '/app/Interfaces/SuperMagic/Skill/Facade/SkillApi.php';
+        $sandboxApiPath = dirname(__DIR__, 5) . '/app/Interfaces/SuperMagic/Agent/Facade/Sandbox/SkillSandboxApi.php';
+
+        $serviceSource = file_get_contents($servicePath);
+        $skillApiSource = file_get_contents($skillApiPath);
+        $sandboxApiSource = file_get_contents($sandboxApiPath);
+
+        self::assertIsString($serviceSource);
+        self::assertIsString($skillApiSource);
+        self::assertIsString($sandboxApiSource);
+        self::assertStringContainsString('public function getLatestPublishedSkillVersions(', $serviceSource);
+        self::assertStringNotContainsString('public function getLatestPublishedVersionsByCodes(', $serviceSource);
+        self::assertStringContainsString('getLatestPublishedSkillVersions($requestContext, $requestDTO)', $skillApiSource);
+        self::assertStringContainsString('getLatestPublishedSkillVersions($requestContext, $requestDTO)', $sandboxApiSource);
+        self::assertStringContainsString('new SkillUsedEvent(', $serviceSource);
     }
 
     public function testDtoConstructorRemainsCompatibleWithExistingInstallCountArgument(): void

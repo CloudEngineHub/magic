@@ -13,7 +13,7 @@ use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUninstalledEvent;
-use App\Domain\SuperMagic\Skill\Event\SkillMarketUsedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillUsedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Infrastructure\Util\Context\CoContext;
 use DateTime;
@@ -51,7 +51,7 @@ class ResourceAccessLogListener implements ListenerInterface
             SlidesTemplateUsedEvent::class,
             SkillMarketInstalledEvent::class,
             SkillMarketUninstalledEvent::class,
-            SkillMarketUsedEvent::class,
+            SkillUsedEvent::class,
         ];
     }
 
@@ -64,9 +64,9 @@ class ResourceAccessLogListener implements ListenerInterface
 
             $entity = match (true) {
                 $event instanceof SlidesTemplateUsedEvent => $this->buildSlidesTemplateEntity($event),
-                $event instanceof SkillMarketInstalledEvent => $this->buildSkillMarketEntity($event, self::INSTALL_OPERATION),
-                $event instanceof SkillMarketUninstalledEvent => $this->buildSkillMarketEntity($event, self::UNINSTALL_OPERATION),
-                $event instanceof SkillMarketUsedEvent => $this->buildSkillMarketEntity($event, 'use'),
+                $event instanceof SkillMarketInstalledEvent => $this->buildSkillEntity($event, self::INSTALL_OPERATION),
+                $event instanceof SkillMarketUninstalledEvent => $this->buildSkillEntity($event, self::UNINSTALL_OPERATION),
+                $event instanceof SkillUsedEvent => $this->buildSkillEntity($event, 'use'),
                 default => null,
             };
 
@@ -107,23 +107,21 @@ class ResourceAccessLogListener implements ListenerInterface
             ->setContext($this->buildContext($event->getBusinessParams()));
     }
 
-    private function buildSkillMarketEntity(
-        SkillMarketInstalledEvent|SkillMarketUninstalledEvent|SkillMarketUsedEvent $event,
+    private function buildSkillEntity(
+        SkillMarketInstalledEvent|SkillMarketUninstalledEvent|SkillUsedEvent $event,
         string $operation
     ): ?ResourceAccessLogEntity {
-        $skillMarketId = $event instanceof SkillMarketUsedEvent
-            ? $event->getSkillMarketId()
-            : $event->skillMarketId;
-        $market = $this->findSkillMarket($skillMarketId);
-        if ($market === null) {
+        $isUsageEvent = $event instanceof SkillUsedEvent;
+        $market = $isUsageEvent ? null : $this->findSkillMarket($event->skillMarketId);
+        if (! $isUsageEvent && $market === null) {
             return null;
         }
 
-        $organizationCode = $event instanceof SkillMarketUsedEvent ? $event->getOrganizationCode() : $event->organizationCode;
-        $userId = $event instanceof SkillMarketUsedEvent ? $event->getUserId() : $event->operatorId;
-        $userName = $event instanceof SkillMarketUsedEvent ? $event->getUserName() : '';
-        $source = $event instanceof SkillMarketUsedEvent ? $event->getSourceId() : 'api';
-        $requestId = $event instanceof SkillMarketUsedEvent ? $event->getRequestId() : null;
+        $organizationCode = $isUsageEvent ? $event->getOrganizationCode() : $event->organizationCode;
+        $userId = $isUsageEvent ? $event->getUserId() : $event->operatorId;
+        $userName = $isUsageEvent ? $event->getUserName() : '';
+        $source = $isUsageEvent ? $event->getSourceId() : 'api';
+        $requestId = $isUsageEvent ? $event->getRequestId() : null;
 
         return new ResourceAccessLogEntity()
             ->setOrganizationCode($organizationCode)
@@ -131,13 +129,13 @@ class ResourceAccessLogListener implements ListenerInterface
             ->setUserName($userName)
             ->setActorType($this->resolveActorType($source))
             ->setResourceType(self::SKILL_RESOURCE_TYPE)
-            ->setResourceCode($market->getSkillCode())
-            ->setResourceName($market->getI18nName(CoContext::getLanguage()))
+            ->setResourceCode($isUsageEvent ? $event->getSkillCode() : $market->getSkillCode())
+            ->setResourceName($isUsageEvent ? null : $market->getI18nName(CoContext::getLanguage()))
             ->setOperation($operation)
             ->setSource($this->resolveSource($source))
             ->setRequestId($requestId)
-            ->setCreatedAt($event instanceof SkillMarketUsedEvent ? $this->createEventTime($event->getCallTime()) : null)
-            ->setContext($event instanceof SkillMarketUsedEvent ? $event->getBusinessParams() : []);
+            ->setCreatedAt($isUsageEvent ? $this->createEventTime($event->getCallTime()) : null)
+            ->setContext($isUsageEvent ? $event->getBusinessParams() : []);
     }
 
     private function createEventTime(int $callTime): DateTime

@@ -42,7 +42,7 @@ use App\Domain\SuperMagic\Skill\Event\SkillImportedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUninstalledEvent;
-use App\Domain\SuperMagic\Skill\Event\SkillMarketUsedEvent;
+use App\Domain\SuperMagic\Skill\Event\SkillUsedEvent;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
@@ -945,25 +945,22 @@ class SkillAppService extends AbstractSkillAppService
         // 将 file_key 转换为带签名的下载地址
         $this->updateSkillFileUrl($dataIsolation, $accessibleEntities);
 
-        $dispatchedMarketIds = [];
+        $dispatchedSkillCodes = [];
         foreach ($accessibleEntities as $entity) {
-            if (! $entity->getSourceType()->isMarket() || $entity->getSourceId() === null) {
+            $skillCode = $entity->getCode();
+            if (isset($dispatchedSkillCodes[$skillCode])) {
                 continue;
             }
-            $marketId = (string) $entity->getSourceId();
-            if (isset($dispatchedMarketIds[$marketId])) {
-                continue;
-            }
-            AsyncEventUtil::dispatch(new SkillMarketUsedEvent(
+            AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
                 sourceId: 'super_magic_tool',
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),
                 requestId: CoContext::getRequestId(),
-                skillMarketId: $marketId,
+                skillCode: $skillCode,
             ));
-            $dispatchedMarketIds[$marketId] = true;
+            $dispatchedSkillCodes[$skillCode] = true;
         }
 
         return array_values(array_map(
@@ -982,7 +979,7 @@ class SkillAppService extends AbstractSkillAppService
      *
      * @return array{list: SkillVersionEntity[], total: int, page: int, page_size: int}
      */
-    public function getLatestPublishedVersionsByCodes(
+    public function getLatestPublishedSkillVersions(
         RequestContext $requestContext,
         GetLatestPublishedSkillVersionsRequestDTO $requestDTO
     ): array {
@@ -1017,6 +1014,23 @@ class SkillAppService extends AbstractSkillAppService
         );
 
         $this->updateSkillVersionAssetUrls($dataIsolation, $result['list']);
+        $dispatchedSkillCodes = [];
+        foreach ($result['list'] as $version) {
+            $skillCode = $version->getCode();
+            if (isset($dispatchedSkillCodes[$skillCode])) {
+                continue;
+            }
+            AsyncEventUtil::dispatch(new SkillUsedEvent(
+                organizationCode: $userAuthorization->getOrganizationCode(),
+                sourceId: 'super_magic_tool',
+                callTime: (int) round(microtime(true) * 1000),
+                userId: $userAuthorization->getId(),
+                userName: $userAuthorization->getRealName(),
+                requestId: CoContext::getRequestId(),
+                skillCode: $skillCode,
+            ));
+            $dispatchedSkillCodes[$skillCode] = true;
+        }
 
         return [
             'list' => $result['list'],
