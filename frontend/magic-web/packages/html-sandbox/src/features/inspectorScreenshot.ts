@@ -80,7 +80,12 @@ function scaleCanvas(canvas: HTMLCanvasElement, scale: number): HTMLCanvasElemen
 	return next
 }
 
-function encodeCanvasWithToBlob(canvas: HTMLCanvasElement, timeoutMs: number): Promise<Blob> {
+function encodeCanvasWithToBlob(
+	canvas: HTMLCanvasElement,
+	timeoutMs: number,
+	shouldAbort?: () => boolean,
+): Promise<Blob> {
+	throwIfAborted(shouldAbort)
 	return raceWithTimeout(
 		new Promise<Blob>((resolve, reject) => {
 			try {
@@ -97,25 +102,36 @@ function encodeCanvasWithToBlob(canvas: HTMLCanvasElement, timeoutMs: number): P
 	)
 }
 
-async function encodeCanvasWithOffscreen(canvas: HTMLCanvasElement): Promise<Blob | null> {
+async function encodeCanvasWithOffscreen(
+	canvas: HTMLCanvasElement,
+	shouldAbort?: () => boolean,
+): Promise<Blob | null> {
+	throwIfAborted(shouldAbort)
 	if (typeof OffscreenCanvas === "undefined") return null
 	try {
 		const offscreen = new OffscreenCanvas(canvas.width, canvas.height)
 		const context = offscreen.getContext("2d")
 		if (!context) return null
 		context.drawImage(canvas, 0, 0)
-		return await raceWithTimeout(
+		const blob = await raceWithTimeout(
 			offscreen.convertToBlob({ type: "image/png" }),
 			PNG_ENCODE_TIMEOUT_MS,
 			"Timed out while encoding iframe screenshot",
 		)
-	} catch {
+		throwIfAborted(shouldAbort)
+		return blob
+	} catch (error) {
+		if (error instanceof ScreenshotCancelledError) throw error
 		return null
 	}
 }
 
 /** Small-canvas last resort: fetch(data URL) avoids a main-thread byte copy loop. */
-async function encodeSmallCanvasFallback(canvas: HTMLCanvasElement): Promise<Blob> {
+async function encodeSmallCanvasFallback(
+	canvas: HTMLCanvasElement,
+	shouldAbort?: () => boolean,
+): Promise<Blob> {
+	throwIfAborted(shouldAbort)
 	if (getCanvasPixelCount(canvas) > SYNC_PNG_ENCODE_MAX_PIXELS) {
 		throw new Error("Failed to encode iframe screenshot")
 	}
@@ -136,28 +152,46 @@ async function encodeSmallCanvasFallback(canvas: HTMLCanvasElement): Promise<Blo
 	return new Blob([bytes], { type: "image/png" })
 }
 
+function rethrowIfCancelled(error: unknown): void {
+	if (error instanceof ScreenshotCancelledError) throw error
+}
+
 /** Encode PNG asynchronously; retry a smaller canvas if toBlob stalls. */
-export async function encodeCanvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+export async function encodeCanvasToPngBlob(
+	canvas: HTMLCanvasElement,
+	shouldAbort?: () => boolean,
+): Promise<Blob> {
+	throwIfAborted(shouldAbort)
 	try {
-		return await encodeCanvasWithToBlob(canvas, PNG_ENCODE_TIMEOUT_MS)
-	} catch {
+		const blob = await encodeCanvasWithToBlob(canvas, PNG_ENCODE_TIMEOUT_MS, shouldAbort)
+		throwIfAborted(shouldAbort)
+		return blob
+	} catch (error) {
+		rethrowIfCancelled(error)
 		// Chromium can delay toBlob after a missed compositor frame. Prefer
 		// another async encoder before shrinking or touching toDataURL.
 	}
 
-	const offscreenBlob = await encodeCanvasWithOffscreen(canvas)
+	throwIfAborted(shouldAbort)
+	const offscreenBlob = await encodeCanvasWithOffscreen(canvas, shouldAbort)
+	throwIfAborted(shouldAbort)
 	if (offscreenBlob) return offscreenBlob
 
+	throwIfAborted(shouldAbort)
 	if (getCanvasPixelCount(canvas) > SYNC_PNG_ENCODE_MAX_PIXELS) {
 		const reduced = scaleCanvas(canvas, PNG_ENCODE_RETRY_SCALE)
+		throwIfAborted(shouldAbort)
 		try {
-			return await encodeCanvasWithToBlob(reduced, PNG_ENCODE_TIMEOUT_MS)
-		} catch {
-			return encodeSmallCanvasFallback(reduced)
+			const blob = await encodeCanvasWithToBlob(reduced, PNG_ENCODE_TIMEOUT_MS, shouldAbort)
+			throwIfAborted(shouldAbort)
+			return blob
+		} catch (error) {
+			rethrowIfCancelled(error)
+			return encodeSmallCanvasFallback(reduced, shouldAbort)
 		}
 	}
 
-	return encodeSmallCanvasFallback(canvas)
+	return encodeSmallCanvasFallback(canvas, shouldAbort)
 }
 
 export function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): HTMLElement {
@@ -293,7 +327,8 @@ export async function captureScreenshotBlob(
 			outputHeight,
 		)
 		hooks.onProgress?.()
-		return await encodeCanvasToPngBlob(outputCanvas)
+		throwIfAborted(hooks.shouldAbort)
+		return await encodeCanvasToPngBlob(outputCanvas, hooks.shouldAbort)
 	} finally {
 		style.remove()
 	}
