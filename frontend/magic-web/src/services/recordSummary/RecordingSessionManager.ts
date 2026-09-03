@@ -293,6 +293,10 @@ export class RecordingSessionManager {
 	 * 从保存的数据恢复会话
 	 */
 	restoreSession(session: RecordingSession): boolean {
+		if (session.status === "server_cancelled") {
+			logger.warn("服务端结束的会话仅可导出，无法恢复")
+			return false
+		}
 		if (!this.validateSession(session)) {
 			logger.warn("会话验证失败，无法恢复")
 			return false
@@ -374,7 +378,7 @@ export class RecordingSessionManager {
 
 	/**
 	 * Mark a session as ended by the server while retaining its local data.
-	 * 服务端结束任务时保留会话和本地分片，避免误删可恢复数据。
+	 * 服务端结束任务时保留会话和本地分片，供后续导出。
 	 */
 	markServerCancelledSession(
 		code?: number,

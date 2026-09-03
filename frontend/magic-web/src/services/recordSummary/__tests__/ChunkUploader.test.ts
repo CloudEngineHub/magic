@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { StoredAudioChunk, UploadStatus } from "../MediaRecorderService/AudioChunkDB"
 import type { RecordingBatchSaveReporter } from "../RecordingBatchSaveReporter"
 import { ChunkUploader } from "../ChunkUploader"
@@ -15,12 +15,15 @@ const testState = vi.hoisted(() => ({
 	uploadCancels: [] as Array<ReturnType<typeof vi.fn>>,
 	pendingUploads: [] as Array<PendingUpload | null>,
 	uploadFailureError: null as unknown,
+	loggerReports: [] as unknown[],
 }))
 
 vi.mock("@/services/recordSummary/utils/RecordingLogger", () => {
 	const logger = {
 		log: vi.fn(),
-		report: vi.fn(),
+		report: vi.fn((...args: unknown[]) => {
+			testState.loggerReports.push(args)
+		}),
 		warn: vi.fn(),
 		error: vi.fn(),
 		namespace: vi.fn(() => logger),
@@ -178,6 +181,12 @@ describe("ChunkUploader", () => {
 		testState.uploadCancels.length = 0
 		testState.pendingUploads.length = 0
 		testState.uploadFailureError = null
+		testState.loggerReports.length = 0
+	})
+
+	afterEach(() => {
+		vi.clearAllTimers()
+		vi.useRealTimers()
 	})
 
 	it("times out a hung chunk, marks it failed after max retries, and continues the session queue", async () => {
@@ -290,6 +299,158 @@ describe("ChunkUploader", () => {
 
 		expect(testState.uploadCancels[0]).toHaveBeenCalledTimes(1)
 		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
+	})
+
+	it("redacts standalone bearer credentials from upload logs and errors", async () => {
+		const secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret"
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("fail")
+		testState.uploadFailureError = new Error(`Unauthorized Bearer ${secret}`)
+		const onError = vi.fn()
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 1,
+			},
+			createBatchSaveReporter(),
+			{ onError },
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
+
+		const failedRequestLog = testState.loggerReports
+			.map((args) => args[0])
+			.find(
+				(value): value is { namespace: string; data: Record<string, unknown> } =>
+					typeof value === "object" &&
+					value !== null &&
+					(value as { namespace?: unknown }).namespace === "recordingUpload",
+			)
+
+		expect(failedRequestLog).toEqual(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					message: `Unauthorized Bearer [REDACTED]`,
+				}),
+			}),
+		)
+		expect(JSON.stringify(failedRequestLog)).not.toContain(secret)
+		expect(onError.mock.calls[0]?.[1]).toBeInstanceOf(Error)
+		expect((onError.mock.calls[0]?.[1] as Error).message).not.toContain(secret)
+	})
+
+	it("clears stopped upload runtime state before late SDK callbacks arrive", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("hang")
+		const batchSaveReporter = createBatchSaveReporter()
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			batchSaveReporter,
+		)
+		const internalUploader = uploader as unknown as {
+			activeUploads: Map<string, StoredAudioChunk>
+			activeUploadIds: Set<string>
+			activeUploadAttempts: Map<string, string>
+			activeUploadCancels: Map<string, () => void>
+			retryTimers: Map<string, NodeJS.Timeout>
+			sessionActiveUploads: Map<string, string | null>
+		}
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+
+		uploader.stopSessionUploads("session-1", "task_end")
+
+		expect(internalUploader.activeUploads.has(chunk.id)).toBe(false)
+		expect(internalUploader.activeUploadIds.has(chunk.id)).toBe(false)
+		expect(internalUploader.activeUploadAttempts.has(chunk.id)).toBe(false)
+		expect(internalUploader.activeUploadCancels.has(chunk.id)).toBe(false)
+		expect(internalUploader.retryTimers.has(chunk.id)).toBe(false)
+		expect(internalUploader.sessionActiveUploads.has("session-1")).toBe(false)
+
+		testState.pendingUploads[0]?.success("uploaded/stale")
+		testState.pendingUploads[0]?.fail(new Error("stale cancelled upload"))
+		await vi.runAllTicks()
+		await Promise.resolve()
+
+		expect(batchSaveReporter.reportUploadedFileStrict).not.toHaveBeenCalled()
+		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
+	})
+
+	it("does not reset failed chunks after a session has been stopped", async () => {
+		const chunk = { ...createChunk(0), uploadStatus: "failed" as const }
+		testState.chunks.set(chunk.id, chunk)
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+
+		uploader.stopSessionUploads("session-1", "task_end")
+
+		await expect(uploader.retryFailedChunks("session-1", "topic-1", "project-1")).resolves.toBe(
+			0,
+		)
+		await expect(
+			uploader.uploadEmptyPlaceholdersForFailedChunks("session-1", "topic-1", "project-1"),
+		).resolves.toBe(0)
+		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("failed")
+		expect(testState.uploadCalls).toHaveLength(0)
+	})
+
+	it("does not mark a placeholder uploaded when stopping during batch save", async () => {
+		const chunk = { ...createChunk(0), uploadStatus: "failed" as const }
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("success")
+		let resolveBatchSave!: () => void
+		const batchSaveReporter = createBatchSaveReporter({
+			reportUploadedFileStrict: vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						resolveBatchSave = resolve
+					}),
+			),
+		})
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			batchSaveReporter,
+		)
+
+		const uploadPromise = uploader.uploadEmptyPlaceholdersForFailedChunks(
+			"session-1",
+			"topic-1",
+			"project-1",
+		)
+		await vi.waitFor(() =>
+			expect(batchSaveReporter.reportUploadedFileStrict).toHaveBeenCalledTimes(1),
+		)
+
+		uploader.stopSessionUploads("session-1", "task_end")
+		resolveBatchSave()
+
+		await expect(uploadPromise).rejects.toThrow("Session upload stopped")
+		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("failed")
 	})
 
 	it("does not resume uploads after a session cleanup request", async () => {

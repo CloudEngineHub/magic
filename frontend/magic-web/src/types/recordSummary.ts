@@ -85,7 +85,7 @@ export interface RecordingSession {
 	 * Missing means legacy sessions keep the historical default of enabled.
 	 */
 	transcriptionEnabled?: boolean
-	/** Server-side termination metadata for sessions kept for recovery/audit. */
+	/** Server-side termination metadata for sessions kept for export/audit. */
 	termination?: {
 		source: ServerTerminationSource
 		code?: number

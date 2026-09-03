@@ -25,9 +25,9 @@ export function UploadProgressToastContent({
 				<MagicTooltip title={t("recordingSummary.message.retryUploadTooltip")}>
 					<Button
 						type="button"
-						variant="link"
+						variant="outline"
 						size="sm"
-						className="h-auto px-1 py-0 text-xs"
+						className="h-6 shrink-0 border-primary/20 bg-primary/5 px-2 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
 						data-testid="recording-summary-upload-retry-button"
 						onClick={onRetry}
 					>

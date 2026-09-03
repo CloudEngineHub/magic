@@ -3747,7 +3747,7 @@ class RecordSummaryService {
 			this.batchSaveReporter.clearSession(sessionId)
 
 			// 保留本地分片和会话记录。服务端已结束任务，但这里删除数据会让
-			// 上传失败的分片无法恢复，也会丢失后续排查所需的本地记录。
+			// 上传失败的分片无法导出，也会丢失后续排查所需的本地记录。
 			const terminationSource =
 				errorCode === ERROR_CODES.TASK_IS_SUMMARIZING
 					? "server_auto_summary"
@@ -3942,6 +3942,12 @@ class RecordSummaryService {
 			const session = restorationData.currentSession
 			if (!session) {
 				logger.log("finishHistoricalSession: no session found")
+				return
+			}
+			if (session.status === "server_cancelled") {
+				logger.log("finishHistoricalSession: server-cancelled sessions are export-only", {
+					sessionId: session.id,
+				})
 				return
 			}
 

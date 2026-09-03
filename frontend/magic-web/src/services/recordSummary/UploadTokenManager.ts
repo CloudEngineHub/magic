@@ -9,20 +9,27 @@ import {
 	type TaskEndError,
 } from "./RecordingErrorManager"
 import { recordingLogger } from "./utils/RecordingLogger"
+import { redactUploadErrorMessage } from "./utils/sanitizeUploadError"
 
 const logger = recordingLogger.namespace("Upload:Token")
 
 const toSafeTokenError = (error: unknown): Error => {
-	const message = error instanceof Error ? error.message : String(error)
-	const safeMessage = message
-		.replace(/https?:\/\/[^\s]+/gi, "[url]")
-		.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-		.replace(
-			/("|')?(authorization|access[_-]?token|refresh[_-]?token|token)\1\s*[:=]\s*(?:Bearer\s+)?("[^"]*"|'[^']*'|[^,\s}]+)/gi,
-			(_, quote: string | undefined, key: string) =>
-				`${quote ?? ""}${key}${quote ?? ""}=[redacted]`,
-		)
-	return new Error(safeMessage || "Unknown token error")
+	const source = error instanceof Error ? error : undefined
+	const candidate = error && typeof error === "object" ? error : undefined
+	const message = source?.message || (typeof error === "string" ? error : "Unknown token error")
+	const safeError = new Error(redactUploadErrorMessage(message) || "Unknown token error")
+
+	if (source?.name) safeError.name = source.name
+	if (candidate) {
+		for (const key of ["status", "code", "requestId", "request_id", "sessionId"]) {
+			const value = (candidate as Record<string, unknown>)[key]
+			if (typeof value === "string" || typeof value === "number") {
+				;(safeError as Error & Record<string, unknown>)[key] = value
+			}
+		}
+	}
+
+	return safeError
 }
 
 /**
@@ -186,7 +193,7 @@ export class UploadTokenManager {
 				message: "Token请求失败",
 				context: { sessionId },
 			})
-			throw error
+			throw isTaskEndError(error) ? error : toSafeTokenError(error)
 		} finally {
 			this.refreshPromises.delete(cacheKey)
 		}
@@ -447,7 +454,7 @@ export class UploadTokenManager {
 				message: "强制刷新Token失败",
 				context: { sessionId },
 			})
-			throw error
+			throw isTaskEndError(error) ? error : toSafeTokenError(error)
 		}
 	}
 

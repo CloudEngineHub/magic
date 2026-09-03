@@ -46,7 +46,10 @@ describe("UploadProgressToastContent", () => {
 			"recordingSummary.message.retryUploadTooltip",
 		)
 
-		fireEvent.click(screen.getByTestId("recording-summary-upload-retry-button"))
+		const retryButton = screen.getByTestId("recording-summary-upload-retry-button")
+		expect(retryButton).toHaveClass("border-primary/30", "bg-primary/5", "text-primary")
+
+		fireEvent.click(retryButton)
 		expect(onRetry).toHaveBeenCalledTimes(1)
 	})
 

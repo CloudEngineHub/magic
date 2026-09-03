@@ -54,6 +54,10 @@ describe("RecordingSessionManager server cancellation", () => {
 			},
 		})
 		expect(manager.getCurrentSession()).toBeNull()
+		expect(cancelled).not.toBeNull()
+		if (!cancelled) return
+		expect(manager.shouldRestoreSession(cancelled)).toBe(false)
+		expect(manager.restoreSession(cancelled)).toBe(false)
 		expect(historyDB.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				id: "session-1",

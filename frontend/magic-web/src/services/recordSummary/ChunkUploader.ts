@@ -7,6 +7,7 @@ import { recordingLogger } from "./utils/RecordingLogger"
 import { getSnowflakeUploadFileName } from "./utils/getSnowflakeUploadFileName"
 import { isTaskEndError } from "./RecordingErrorManager"
 import { getNetworkMonitor, type NetworkMonitor } from "./NetworkMonitor"
+import { redactUploadErrorMessage } from "./utils/sanitizeUploadError"
 
 const logger = recordingLogger.namespace("Upload:Chunk")
 
@@ -20,11 +21,7 @@ export interface SessionUploadProgress {
 }
 
 export type UploadQueueStallReason =
-	| "healthy"
-	| "pending_not_queued"
-	| "idle_with_pending"
-	| "stale_active_upload"
-	| "has_failed"
+	"healthy" | "pending_not_queued" | "idle_with_pending" | "stale_active_upload" | "has_failed"
 
 export interface UploadQueueHealth {
 	pending: number
@@ -70,15 +67,6 @@ interface UploadErrorDetails {
 	code?: string | number
 	requestId?: string
 }
-
-const redactUploadErrorMessage = (message: string): string =>
-	message
-		.replace(/https?:\/\/[^\s]+/gi, "[url]")
-		.replace(
-			/("|')?(authorization|access[_-]?token|refresh[_-]?token|token)\1\s*[:=]\s*(?:Bearer\s+)?("[^"]*"|'[^']*'|[^,\s}]+)/gi,
-			(_, quote: string | undefined, key: string) =>
-				`${quote ?? ""}${key}${quote ?? ""}=[redacted]`,
-		)
 
 const getUploadErrorDetails = (error: unknown): UploadErrorDetails => {
 	if (error instanceof Error) {
@@ -381,6 +369,14 @@ export class ChunkUploader {
 
 		// Get all pending chunks for the session
 		const pendingChunks = await this.audioChunkDB.getChunksByUploadStatus(sessionId, "pending")
+		// Stop can run while IndexedDB lookup is pending; do not rebuild the queue afterward.
+		if (this.sessionCleanupRequested.has(sessionId)) {
+			logger.report("忽略查询期间已停止会话的上传请求", {
+				sessionId,
+				reason: "session_cleanup_requested",
+			})
+			return
+		}
 
 		// Sort by index to ensure correct order
 		const sortedChunks = pendingChunks.sort((a, b) => a.index - b.index)
@@ -1101,7 +1097,7 @@ export class ChunkUploader {
 		}
 
 		// Emit error event
-		this.events.onError?.(chunkId, error)
+		this.events.onError?.(chunkId, createUploadError(error))
 		this.events.onRetry?.(chunkId, newRetryCount)
 
 		// Schedule retry with exponential backoff
@@ -1440,8 +1436,19 @@ export class ChunkUploader {
 		topicId: string,
 		projectId: string = "",
 	): Promise<number> {
+		if (this.sessionCleanupRequested.has(sessionId)) {
+			logger.report("忽略已停止会话的失败分片重试", {
+				sessionId,
+				reason: "session_cleanup_requested",
+			})
+			return 0
+		}
+
 		const failedChunks = await this.audioChunkDB.getChunksByUploadStatus(sessionId, "failed")
+		// Stop can interleave with the lookup, so check again before changing persisted status.
+		if (this.sessionCleanupRequested.has(sessionId)) return 0
 		for (const chunk of failedChunks) {
+			if (this.sessionCleanupRequested.has(sessionId)) return 0
 			await this.audioChunkDB.updateChunkUploadStatus(chunk.id, "pending")
 			this.clearRetryCount(chunk.id)
 		}
@@ -1459,8 +1466,13 @@ export class ChunkUploader {
 		projectId: string = "",
 		options: PlaceholderUploadOptions = {},
 	): Promise<number> {
-		this.sessionTopicMap.set(sessionId, topicId)
-		this.sessionProjectMap.set(sessionId, projectId)
+		if (this.sessionCleanupRequested.has(sessionId)) {
+			logger.report("忽略已停止会话的占位分片上传", {
+				sessionId,
+				reason: "session_cleanup_requested",
+			})
+			return 0
+		}
 
 		const {
 			maxChunks = PLACEHOLDER_UPLOAD_MAX_FAILED_CHUNKS,
@@ -1473,6 +1485,11 @@ export class ChunkUploader {
 		const failedChunks = (
 			await this.audioChunkDB.getChunksByUploadStatus(sessionId, "failed")
 		).sort((a, b) => a.index - b.index)
+		// Do not restore upload context after a stop that raced with the IndexedDB lookup.
+		if (this.sessionCleanupRequested.has(sessionId)) return 0
+
+		this.sessionTopicMap.set(sessionId, topicId)
+		this.sessionProjectMap.set(sessionId, projectId)
 
 		if (failedChunks.length > maxChunks) {
 			throw new Error(
@@ -1700,10 +1717,16 @@ export class ChunkUploader {
 			this.uploadChunk(placeholderChunk),
 			abortState,
 		)
+		if (this.sessionCleanupRequested.has(chunk.sessionId)) {
+			throw new Error("Session upload stopped")
+		}
 		await this.racePlaceholderUploadWithAbort(
 			this.reportUploadedChunk(placeholderChunk, uploadUrl, { requireBatchSave: true }),
 			abortState,
 		)
+		if (this.sessionCleanupRequested.has(chunk.sessionId)) {
+			throw new Error("Session upload stopped")
+		}
 		await this.racePlaceholderUploadWithAbort(
 			this.audioChunkDB.updateChunkUploadStatus(chunk.id, "uploaded"),
 			abortState,
@@ -1869,7 +1892,7 @@ export class ChunkUploader {
 				error: new Error(getUploadErrorDetails(error).message),
 				message: `刷新会话 ${sessionId} 令牌失败：`,
 			})
-			throw error
+			throw createUploadError(error)
 		}
 	}
 
@@ -1920,8 +1943,8 @@ export class ChunkUploader {
 	}
 
 	/**
-	 * Stop a session's queue while preserving IndexedDB chunks for recovery or export.
-	 * 服务端结束任务时停止后续上传，但保留 IndexedDB 分片供恢复或导出。
+	 * Stop a session's queue while preserving IndexedDB chunks for export.
+	 * 服务端结束任务时停止后续上传，但保留 IndexedDB 分片供导出。
 	 */
 	stopSessionUploads(sessionId: string, reason: string = "session_stop"): void {
 		this.sessionCleanupRequested.add(sessionId)
@@ -1932,8 +1955,11 @@ export class ChunkUploader {
 			this.cancelActiveUpload(activeChunkId, sessionId, reason)
 		}
 		this.clearSessionRetryInfo(sessionId)
+		if (activeChunkId) {
+			// Invalidate and release runtime state before late SDK callbacks can run.
+			this.cleanupChunkRuntimeState(activeChunkId, sessionId)
+		}
 		this.sessionQueues.delete(sessionId)
-		this.sessionActiveUploads.delete(sessionId)
 		this.sessionTopicMap.delete(sessionId)
 		this.sessionProjectMap.delete(sessionId)
 		logger.report("停止会话分片上传但保留本地数据", {
