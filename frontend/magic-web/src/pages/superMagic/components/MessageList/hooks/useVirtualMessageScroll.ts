@@ -21,6 +21,7 @@ import {
 	initialScrollOwnership,
 	type ScrollOwnershipState,
 } from "../scroll-ownership"
+import { useMemoizedFn } from "ahooks";
 
 const DEFAULT_MIN_TOP_DISTANCE = 400
 const MIN_BOTTOM_DISTANCE = 50
@@ -41,6 +42,8 @@ interface UseVirtualMessageScrollOptions {
 	onPullMore?: () => void | Promise<unknown>
 	/** Distance from the top at which a fresh upward gesture may load one history page. */
 	minTopDistance?: number
+	/** Whether measurement growth may follow the latest row; explicit jumps ignore this gate. */
+	allowFollowOutput?: boolean
 }
 
 export interface UseVirtualMessageScrollReturn {
@@ -66,12 +69,15 @@ export function useVirtualMessageScroll({
 	topicKey,
 	onPullMore,
 	minTopDistance = DEFAULT_MIN_TOP_DISTANCE,
+	allowFollowOutput = true,
 }: UseVirtualMessageScrollOptions): UseVirtualMessageScrollReturn {
 	const [showBackToLatest, setShowBackToLatest] = useState(false)
 	const itemsRef = useRef(items)
 	itemsRef.current = items
 	const onPullMoreRef = useRef(onPullMore)
 	onPullMoreRef.current = onPullMore
+	const allowFollowOutputRef = useRef(allowFollowOutput)
+	allowFollowOutputRef.current = allowFollowOutput
 
 	const ownershipRef = useRef<ScrollOwnershipState>(initialScrollOwnership())
 	/**
@@ -422,7 +428,7 @@ export function useVirtualMessageScroll({
 		}
 	}, [clearGuard, containerRef, finishHistoryLoad, minTopDistance])
 
-	const onVirtualizerChange = useCallback((instance: MessageListScrollAdapter) => {
+	const onVirtualizerChange = useMemoizedFn((instance: MessageListScrollAdapter) => {
 		const scrollSize = instance.scrollSize
 		const previousScrollSize = lastScrollSizeRef.current
 		lastScrollSizeRef.current = scrollSize
@@ -443,6 +449,7 @@ export function useVirtualMessageScroll({
 		}
 
 		if (
+			!allowFollowOutputRef.current ||
 			!canFollowOutput(ownershipRef.current, {
 				totalSizeIncreased: scrollSize > previousScrollSize,
 				nearBottom: autoFollowRef.current,
@@ -454,7 +461,7 @@ export function useVirtualMessageScroll({
 		ownershipRef.current = beginFollowOutput(ownershipRef.current)
 		instance.scrollToIndex(lastIndex, { align: "end" })
 		ownershipRef.current = finishCorrection(ownershipRef.current, "follow-output")
-	}, [])
+	})
 
 	useEffect(() => {
 		pubsub.subscribe(

@@ -31,6 +31,53 @@ export interface VirtualMessageProjection {
 	userIndices: Array<number>
 }
 
+function areShallowRecordsEqual(left: Record<string, unknown>, right: Record<string, unknown>) {
+	if (left === right) return true
+	const leftKeys = Object.keys(left)
+	const rightKeys = Object.keys(right)
+	if (leftKeys.length !== rightKeys.length) return false
+	return leftKeys.every((key) => Object.is(left[key], right[key]))
+}
+
+/**
+ * Reuses unchanged rows after a projection pass rebuilt its outer array. The comparison stays
+ * shallow so large message payloads are not deep-cloned or deep-compared in a render path.
+ */
+export function stabilizeVirtualMessageItems(
+	previousItems: ReadonlyArray<VirtualMessageItem>,
+	nextItems: Array<VirtualMessageItem>,
+): Array<VirtualMessageItem> {
+	if (previousItems.length === 0 || nextItems.length === 0) return nextItems
+
+	const previousByIdentity = new Map(
+		previousItems.map((item) => [`${item.key}\u0000${item.sourceIndex}`, item]),
+	)
+	let reusedAny = false
+	const stableItems = nextItems.map((item) => {
+		const previous = previousByIdentity.get(`${item.key}\u0000${item.sourceIndex}`)
+		if (
+			previous &&
+			previous.role === item.role &&
+			previous.turnKey === item.turnKey &&
+			previous.isUser === item.isUser &&
+			previous.isTool === item.isTool &&
+			previous.stickyCandidate === item.stickyCandidate &&
+			previous.renderMode === item.renderMode &&
+			previous.exportSelectable === item.exportSelectable &&
+			areShallowRecordsEqual(
+				previous.node as unknown as Record<string, unknown>,
+				item.node as unknown as Record<string, unknown>,
+			)
+		) {
+			reusedAny = true
+			return previous
+		}
+		return item
+	})
+
+	return reusedAny ? stableItems : nextItems
+}
+
 /**
  * Detects an inverse-pagination update without relying on raw page counts. The previous
  * projection must remain a contiguous sequence after a positive offset; a concurrent tail
@@ -209,10 +256,11 @@ export function composeVirtualMessageItems({
 	items: Array<VirtualMessageItem>
 	userIndices: Array<number>
 } {
-	const composed: Array<VirtualMessageItem> = normalItems.map((item) => ({
-		...item,
-		renderMode: "message",
-	}))
+	// Normal projections already use message mode. Reusing those objects prevents an unrelated
+	// revoked-preview toggle from invalidating every visible normal row.
+	const composed: Array<VirtualMessageItem> = normalItems.map((item) =>
+		item.renderMode === "message" ? item : { ...item, renderMode: "message" },
+	)
 
 	if (includeRevoked) {
 		const editableItem = firstRevokedUserKey
@@ -246,7 +294,7 @@ export function composeVirtualMessageItems({
 	const userIndices: Array<number> = []
 	const items = composed.map((item, index) => {
 		if (item.stickyCandidate) userIndices.push(index)
-		return { ...item, index }
+		return item.index === index ? item : { ...item, index }
 	})
 
 	return { items, userIndices }

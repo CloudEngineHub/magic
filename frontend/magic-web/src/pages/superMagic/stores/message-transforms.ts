@@ -12,12 +12,16 @@ import type {
 // ─── 消息解包 ────────────────────────────────────────────────
 
 export function getRawMessageNode(message?: RawSuperMagicIMMessage): RawSuperMagicMessageNode {
-	if (!message?.type) return {} as RawSuperMagicMessageNode
-	return (
-		((message as unknown as Record<string, unknown>)[
-			message.type
-		] as RawSuperMagicMessageNode) || ({} as RawSuperMagicMessageNode)
-	)
+	if (!message) return {} as RawSuperMagicMessageNode
+	const rawMessage = message as unknown as Record<string, unknown>
+	const typedNode = message.type
+		? (rawMessage[message.type] as RawSuperMagicMessageNode | undefined)
+		: undefined
+	// Some HTTP snapshots carry the node under `general_agent_card` without an
+	// envelope `type`; keep role and super_message_id available to all callers.
+	return (typedNode ||
+		(rawMessage.general_agent_card as RawSuperMagicMessageNode | undefined) ||
+		{}) as RawSuperMagicMessageNode
 }
 
 // ─── 消息转换 ────────────────────────────────────────────────
@@ -268,6 +272,8 @@ export function getDefaultTopicMeta(): TopicMeta {
 		lastSyncedSeqId: "",
 		syncGeneration: 0,
 		syncState: "idle",
+		pendingExecutionCount: 0,
+		pendingExecutionStartedAt: null,
 		renderPolicy: "live",
 	}
 }

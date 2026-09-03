@@ -160,6 +160,7 @@ export function resolveMessageSendContext(
 		selectedProject,
 		selectedTopic,
 		selectedWorkspace,
+		topicStore: context?.topicStore ?? topicStore,
 		workspaceId: selectedWorkspace?.id ?? selectedProject?.workspace_id,
 		updateTopicName,
 		refreshProjectAfterTopicRename: context?.refreshProjectAfterTopicRename,
