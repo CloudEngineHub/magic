@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from agentlang.agent.base import BaseAgent
 from agentlang.agent.loader import AgentLoader
+from agentlang.agent.models import AgentRunRequest
 from agentlang.agent.state import AgentState
 from agentlang.chat_history import AssistantMessage, CompactionConfig, SystemMessage, ToolCall
 from agentlang.chat_history.chat_history import ChatHistory
@@ -97,6 +98,7 @@ from app.core.prompt.personal_preferences_prompt import apply_personal_preferenc
 from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
 from app.core.models.agent_runtime import AgentProviderType
+from app.service.multimodal_message_renderer import LLMMessageRenderer
 
 logger = get_logger(__name__)
 
@@ -267,6 +269,9 @@ class Agent(BaseAgent):
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
+        self._message_renderer = LLMMessageRenderer(
+            workspace_dir=self.agent_context.get_workspace_dir()
+        )
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
         agent_target = self.agent_context.get_agent_target()
@@ -844,8 +849,9 @@ class Agent(BaseAgent):
             return None
         return i18n.translate(i18n_key, category="common.messages")
 
-    async def run_main_agent(self, query: str):
-        """运行主 agent"""
+    async def run_main_agent(self, request: AgentRunRequest):
+        """运行主 agent。"""
+        query = request.query
         try:
             # 触发主 agent 运行前事件
             await self.agent_context.dispatch_event(EventType.BEFORE_MAIN_AGENT_RUN, BeforeMainAgentRunEventData(
@@ -854,7 +860,7 @@ class Agent(BaseAgent):
                 query=query
             ))
 
-            await self.run(query)
+            await self.run(request)
 
             # 触发主 agent 运行后事件
             logger.info(f"run_main_agent: 准备发送 AFTER_MAIN_AGENT_RUN 事件，agent_state = {self.agent_state.value}")
@@ -898,11 +904,11 @@ class Agent(BaseAgent):
         except Exception:
             pass
 
-    async def run(self, query: str):
-        """运行 agent"""
+    async def run(self, request: AgentRunRequest):
+        """运行 agent。"""
         run_task = self._claim_run()
         try:
-            result = await self._run_once(query)
+            result = await self._run_once(request)
         except asyncio.CancelledError:
             self._set_run_terminal_state(run_task, AgentState.SUSPENDED)
             raise
@@ -931,15 +937,16 @@ class Agent(BaseAgent):
             self.agent_context.set_resumption_context(None, None)
             self._release_run(run_task)
 
-    async def _run_once(self, query: str):
+    async def _run_once(self, request: AgentRunRequest):
         """执行单轮 Agent 业务逻辑；run() 统一管理执行身份。"""
+        query = request.query
         self.agent_context.set_final_task_state(None)
         self.agent_context.set_final_response(None)
 
         # 异步加载聊天记录（幂等：首次加载从磁盘读取并修复序列，后续调用跳过）
         await self.chat_history.load()
 
-        session_prep_result = await self._prepare_run_session(query)
+        session_prep_result = await self._prepare_run_session(request)
 
         if session_prep_result.direct_response is not None:
             await self._dispatch_direct_command_response(session_prep_result.direct_response)
@@ -995,7 +1002,10 @@ class Agent(BaseAgent):
             # 任务被用户终止时，agent 协程会被 cancel 异常强制挂掉，需要在这里关闭所有资源
             await self.agent_context.close_all_resources()
 
-    async def _prepare_run_session(self, query: str) -> SessionPrepResult:
+    async def _prepare_run_session(
+        self,
+        request: AgentRunRequest,
+    ) -> SessionPrepResult:
         """准备本轮运行需要的会话状态，并保证 prepare 段完整收尾。"""
         prepare_blocker_acquired = False
         try:
@@ -1025,21 +1035,26 @@ class Agent(BaseAgent):
                 # 因为代码会更新，聊天记录不会更新，需要在 agent 每次运行时更新最新的 system prompt
                 await self.chat_history.update_first_system_prompt(self.system_prompt)
 
-            return await self._prepare_session_for_new_query(query)
+            return await self._prepare_session_for_new_query(request)
         finally:
             if prepare_blocker_acquired:
                 self.agent_context.decrement_cancel_blocker()
 
-    async def _prepare_session_for_new_query(self, query: str) -> SessionPrepResult:
+    async def _prepare_session_for_new_query(
+        self,
+        request: AgentRunRequest,
+    ) -> SessionPrepResult:
         """
         准备会话：处理pending工具调用和用户查询
 
         Args:
-            query: 用户输入的查询
+            request: Agent 运行请求
 
         Returns:
             SessionPrepResult: 会话准备结果
         """
+        query = request.query
+
         # 检测用户命令（/compact、/new 等），命令处理后 query 替换为命令执行结果
         command_match = Commands.get(query)
         is_continue_request = command_match and command_match.command.name == "continue"
@@ -1052,11 +1067,14 @@ class Agent(BaseAgent):
                     user_message_added=False,
                     direct_response=command_result.direct_response or "",
                 )
-            query = command_result.query or ""
+            request = request.with_query(command_result.query or "")
 
         # 如果没有聊天历史，直接添加用户消息
         if not self.chat_history.messages:
-            await self.chat_history.append_user_message(query)
+            await self.chat_history.append_user_query(
+                request,
+                include_native_visual_instruction=True,
+            )
             return SessionPrepResult(user_message_added=True)
 
         # 查找pending工具调用
@@ -1078,7 +1096,10 @@ class Agent(BaseAgent):
                     assistant_with_pending_tools,
                     reason=self._build_pending_tool_interruption_message(assistant_with_pending_tools),
                 )
-                await self.chat_history.append_user_message(query)
+                await self.chat_history.append_user_query(
+                    request,
+                    include_native_visual_instruction=True,
+                )
                 return SessionPrepResult(user_message_added=True)
         else:
             # /resume 是系统内部信号（由 ask_user 等工具的 resume 流程发出）：
@@ -1088,7 +1109,10 @@ class Agent(BaseAgent):
                 return SessionPrepResult(user_message_added=False)
 
             # 没有pending工具调用，正常添加用户消息
-            await self.chat_history.append_user_message(query)
+            await self.chat_history.append_user_query(
+                request,
+                include_native_visual_instruction=True,
+            )
             return SessionPrepResult(user_message_added=True)
 
     async def _handle_agent_loop(self, session_prep_result: SessionPrepResult) -> None:
@@ -2530,15 +2554,20 @@ Since your subsequent output will be merged with pre-interruption content and di
             ),
         )
 
-        # 使用ChatHistory获取格式化后的消息列表
-        messages_for_llm = self.chat_history.get_messages_for_llm()
+        # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
+        text_model_state = self._resolve_current_text_model()
+
+        # 应用层基于聊天消息元组快照渲染多模态消息，再交由 agentlang 修复通用消息序列。
+        message_snapshot = self.chat_history.get_message_snapshot()
+        rendered_messages = await self._message_renderer.render_messages(
+            message_snapshot,
+            supports_multimodal=text_model_state.config.supports_multimodal,
+        )
+        messages_for_llm = self.chat_history.normalize_messages_for_llm(rendered_messages)
         if not messages_for_llm:
             logger.error("无法获取用于LLM调用的消息列表(可能历史记录为空或只有内部消息)")
             self.set_agent_state(AgentState.ERROR)
             raise ValueError("无法准备与LLM的对话。")
-
-        # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
-        text_model_state = self._resolve_current_text_model()
 
         # _call_llm 的异常全部透传给 _call_llm_with_retry 做分类处理
         llm_start_time = time.time()
@@ -2689,6 +2718,7 @@ Since your subsequent output will be merged with pre-interruption content and di
     ) -> Optional[str]:
         """构建 Horizon 注入内容，模型配置错误时静默跳过。"""
         try:
+            await self.agent_context.horizon.flush_pending_user_messages()
             self._sync_horizon_llm_model_info()
             return await self.agent_context.horizon.build_context_update(
                 injection_point=injection_point

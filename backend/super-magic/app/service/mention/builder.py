@@ -1,6 +1,7 @@
 """Mention context builder"""
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from app.service.image_ref_normalizer import ImageRefNormalizer
 from app.service.mention.base import BaseMentionHandler
 from app.service.mention.handlers import (
     AgentHandler,
@@ -115,6 +116,59 @@ class MentionContextBuilder:
             context_lines.append("Before proceeding: " + " ".join(tips))
 
         return "\n".join(context_lines)
+
+    async def extract_image_refs(
+        self,
+        mentions: List[Dict[str, Any]],
+        agent_context: "AgentContext",
+    ) -> List[str]:
+        """提取并规范化可直接传给 Agent 的原生视觉图片引用。
+
+        Args:
+            mentions: mentions 字段中的信息列表
+            agent_context: AgentContext 实例，用于确定当前工作区边界
+
+        Returns:
+            List[str]: 已校验、规范化并按 mention 出现顺序去重的图片路径列表
+        """
+        if not mentions:
+            return []
+
+        handlers = self._create_handlers()
+        raw_image_refs: List[str] = []
+
+        for mention in mentions:
+            if not isinstance(mention, dict):
+                continue
+            mention_type = self._resolve_mention_type(mention)
+            handler = handlers.get(mention_type)
+            if handler is None:
+                continue
+
+            raw_image_refs.extend(await handler.extract_image_refs(mention, agent_context))
+
+        normalized_refs = await ImageRefNormalizer(
+            agent_context.get_workspace_dir()
+        ).normalize(raw_image_refs)
+        return self._deduplicate_image_refs(normalized_refs)
+
+    @staticmethod
+    def _deduplicate_image_refs(image_refs: List[str]) -> List[str]:
+        """对规范化后的图片引用去重，并保留首次出现顺序。"""
+        return list(dict.fromkeys(image_refs))
+
+    @staticmethod
+    def _resolve_mention_type(mention: Dict[str, Any]) -> str:
+        """解析扁平 mention 或 Tiptap mention 节点中的业务类型。"""
+        mention_type = mention.get("type", "unknown")
+        if mention_type != "mention":
+            return mention_type if isinstance(mention_type, str) else "unknown"
+
+        attrs = mention.get("attrs", {})
+        if not isinstance(attrs, dict):
+            return "unknown"
+        nested_type = attrs.get("type", "unknown")
+        return nested_type if isinstance(nested_type, str) else "unknown"
 
     @staticmethod
     def _deduplicate_tips(tip_texts: List[str]) -> List[str]:

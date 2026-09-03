@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.core.entity.message.client_message import SuperMagicProductContext
     from app.utils.file_utils import WorkspaceSnapshot
 
+from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
 from app.core.horizon.models import (
@@ -398,6 +399,10 @@ class AgentHorizon:
         # 用于在 initial_context 里给模型写入单次输出的字符量参考，让模型主动控制输出长度
         self._output_token_budget: Optional[int] = None
 
+        # 任意运行时阶段登记、下一个安全 Horizon 注入点写入的隐藏 user 消息。
+        # 该队列只存在于当前进程，消息对象由 ChatHistory 在注入时持久化。
+        self._pending_user_messages: list[UserMessage] = []
+
         # magiclaw 文件驱动启动状态（纯内存，per-context-window，不持久化）
         self._is_magiclaw: bool = False              # 会话是否为 magiclaw 模式
         self._magiclaw_dir: Optional[Path] = None    # .magic 目录，用于重置时重算文件集合
@@ -453,6 +458,7 @@ class AgentHorizon:
         self._video_model_changed = False
         self._context_used = 0
         self._context_total = 0
+        self._pending_user_messages.clear()
 
         self._workspace_files_current = None
         self._workspace_entries_current = None
@@ -966,6 +972,37 @@ class AgentHorizon:
             content=content,
         )
         self._state.pending_notifications.append(notif)
+
+    def push_user_message(
+        self,
+        message: UserMessage,
+    ) -> None:
+        """登记一条完整的 UserMessage，供后续 Horizon 注入点消费。"""
+        if not isinstance(message, UserMessage):
+            raise TypeError("Horizon user message must be a UserMessage")
+        self._pending_user_messages.append(message)
+
+    async def flush_pending_user_messages(self) -> int:
+        """将待注入 user 消息按顺序写入当前 Agent 的 ChatHistory。
+
+        调用方必须确保当前 ChatHistory 可以追加 user 消息；不要在 assistant
+        tool call 尚未对应 tool result 时调用本方法。
+        """
+        if not self._pending_user_messages or self._agent_context is None:
+            return 0
+
+        chat_history = getattr(self._agent_context, "chat_history", None)
+        if chat_history is None:
+            return 0
+
+        flushed = 0
+        while self._pending_user_messages:
+            await chat_history.add_message(self._pending_user_messages.pop(0))
+            flushed += 1
+
+        if flushed:
+            logger.debug("[AgentHorizon] 已注入待处理 user 消息: count=%s", flushed)
+        return flushed
 
     async def schedule_resumption(
         self,
