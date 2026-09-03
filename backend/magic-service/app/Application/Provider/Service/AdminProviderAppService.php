@@ -386,7 +386,7 @@ readonly class AdminProviderAppService
 
         // 前台场景仅返回火山与通义千问模板
         if ($isFrontend && $category === Category::VLM) {
-            $frontendVlmWhitelist = [ProviderCode::Volcengine, ProviderCode::Qwen];
+            $frontendVlmWhitelist = [ProviderCode::OpenAI, ProviderCode::Google, ProviderCode::Volcengine, ProviderCode::Qwen, ProviderCode::OpenRouter];
             $serviceProviders = array_values(array_filter(
                 $serviceProviders,
                 static fn (ProviderConfigModelsDTO $serviceProvider): bool => in_array($serviceProvider->getProviderCode(), $frontendVlmWhitelist, true)

@@ -66,6 +66,7 @@ readonly class AiAbilityConfigAppService
     public function getAvailability(ProviderDataIsolation $dataIsolation): array
     {
         $abilityMap = [];
+        $dataIsolation->disabled();
         foreach ($this->aiAbilityDomainService->getAll($dataIsolation) as $entity) {
             if (! $entity instanceof AiAbilityEntity) {
                 continue;
