@@ -92,7 +92,7 @@ class ResourceAccessLogListener implements ListenerInterface
     {
         $template = $event->getTemplate();
 
-        return new ResourceAccessLogEntity()
+        return (new ResourceAccessLogEntity())
             ->setOrganizationCode($event->getOrganizationCode())
             ->setUserId($event->getUserId())
             ->setUserName($event->getUserName())
@@ -123,7 +123,7 @@ class ResourceAccessLogListener implements ListenerInterface
         $source = $isUsageEvent ? $event->getSourceId() : 'api';
         $requestId = $isUsageEvent ? $event->getRequestId() : null;
 
-        return new ResourceAccessLogEntity()
+        return (new ResourceAccessLogEntity())
             ->setOrganizationCode($organizationCode)
             ->setUserId($userId)
             ->setUserName($userName)
