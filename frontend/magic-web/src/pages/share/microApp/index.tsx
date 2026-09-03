@@ -227,6 +227,7 @@ export default function MicroAppSharePage() {
 							viewMode={previewMode}
 							onViewModeChange={setPreviewMode}
 							activeFileId={previewFile.file_id}
+							projectId={shareMeta.projectId}
 							virtualStorageMarkerId={defaultEntryFile?.file_id}
 							openFileTab={handleOpenFileTab}
 							onHtmlPermissionManagerChange={setPermissionManager}

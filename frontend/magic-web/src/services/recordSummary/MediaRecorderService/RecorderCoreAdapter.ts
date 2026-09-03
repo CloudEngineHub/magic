@@ -45,6 +45,7 @@ import { AudioSourceStrategyFactory } from "./utils/AudioSourceStrategyFactory"
 
 const logger = recordingLogger.namespace("Audio:RecorderCore")
 const AUDIO_WORKLET_WARNING_COOLDOWN_MS = 60_000
+const AUDIO_CALLBACK_WARNING_COOLDOWN_MS = 60_000
 
 /**
  * Default configuration for RecorderCore adapter
@@ -95,9 +96,9 @@ export class RecorderCoreAdapter {
 	private visibilityChangeHandler: (() => void) | null = null
 	private audioContextStateChangeHandler: ((event: Event) => void) | null = null
 	private previousAudioContextStateChangeHandler:
-		| ((this: AudioContext, event: Event) => void)
-		| null = null
+		((this: AudioContext, event: Event) => void) | null = null
 	private audioContextStateChangeUsesEventListener = false
+	private audioTrackEndedHandlers = new Map<MediaStreamTrack, () => void>()
 	private audioContextDiagnosticsTarget: AudioContext | null = null
 	private lastAudioWorkletMetrics: {
 		processedSamples: number
@@ -108,6 +109,8 @@ export class RecorderCoreAdapter {
 	} | null = null
 	private lastAudioWorkletWarningTimestamp: number | null = null
 	private lastAudioWorkletWarningSignature: string | null = null
+	private lastAudioCallbackWarningTimestamp: number | null = null
+	private lastAudioCallbackWarningMode: AudioProcessingMode | null = null
 
 	constructor(
 		config: Partial<RecorderCoreConfig> = {},
@@ -741,8 +744,11 @@ export class RecorderCoreAdapter {
 			this.visibilityChangeHandler = null
 			this.detachAudioContextDiagnostics()
 			this.audioContext = null // Reference will be cleaned up by resourceManager
+			this.detachAudioTrackDiagnostics()
 			this.lastAudioCallbackTimestamp = null
 			this.audioCallbackCount = 0
+			this.lastAudioCallbackWarningTimestamp = null
+			this.lastAudioCallbackWarningMode = null
 			this.lastAudioWorkletMetrics = null
 			this.lastAudioWorkletWarningTimestamp = null
 			this.lastAudioWorkletWarningSignature = null
@@ -981,6 +987,7 @@ export class RecorderCoreAdapter {
 			// Store AudioContext reference for visualization
 			this.audioContext = audioContext
 			this.attachAudioContextDiagnostics(audioContext)
+			this.attachAudioTrackDiagnostics(mediaStream)
 
 			this.dependencies.logger.log("AudioContext created for AudioWorklet", {
 				requestedSampleRate: this.config.sampleRate,
@@ -1056,9 +1063,14 @@ export class RecorderCoreAdapter {
 								AUDIO_WORKLET_WARNING_COOLDOWN_MS
 
 						if (shouldLogWarning) {
-							this.dependencies.logger.warn("AudioWorklet health anomaly", {
-								...metrics,
-								warningSignature,
+							this.dependencies.logger.report({
+								namespace: "recordingAudioWorklet",
+								data: {
+									event: "health_anomaly",
+									sessionId: this.sessionId,
+									...metrics,
+									warningSignature,
+								},
 							})
 							this.lastAudioWorkletWarningTimestamp = now
 							this.lastAudioWorkletWarningSignature = warningSignature
@@ -1161,6 +1173,7 @@ export class RecorderCoreAdapter {
 				this.dependencies.logger.warn("No media stream available for script processor")
 				return
 			}
+			this.attachAudioTrackDiagnostics(mediaStream)
 
 			try {
 				// Create AudioContext
@@ -1285,31 +1298,52 @@ export class RecorderCoreAdapter {
 		this.lastAudioCallbackTimestamp = now
 		this.audioCallbackCount++
 
-		// 仅记录首个回调和间隔异常的回调，避免在热路径持续刷日志。
+		// 仅记录首个回调和节流后的间隔异常，避免在热路径持续刷日志。
 		if (this.audioCallbackCount === 1) {
-			this.dependencies.logger.log("Audio callback started", {
-				processingMode,
-				sampleCount,
-				sampleRate,
-				callbackTimestamp: this.lastAudioCallbackTimestamp,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				streamState: this.getAudioStreamDiagnostics(),
-				browserVisibilityState:
-					typeof document !== "undefined" ? document.visibilityState : "unavailable",
+			this.dependencies.logger.report({
+				namespace: "recordingAudioCallback",
+				data: {
+					event: "started",
+					sessionId: this.sessionId,
+					processingMode,
+					sampleCount,
+					sampleRate,
+					callbackTimestamp: this.lastAudioCallbackTimestamp,
+					audioContextState: this.audioContext?.state ?? "unavailable",
+					streamState: this.getAudioStreamDiagnostics(),
+					browserVisibilityState:
+						typeof document !== "undefined" ? document.visibilityState : "unavailable",
+				},
 			})
 		} else if (callbackInterval !== null && callbackInterval > 1000) {
-			this.dependencies.logger.warn("Audio callback cadence anomaly", {
-				processingMode,
-				sampleCount,
-				sampleRate,
-				callbackInterval,
-				callbackTimestamp: this.lastAudioCallbackTimestamp,
-				audioCallbackCount: this.audioCallbackCount,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				streamState: this.getAudioStreamDiagnostics(),
-				browserVisibilityState:
-					typeof document !== "undefined" ? document.visibilityState : "unavailable",
-			})
+			const now = Date.now()
+			const shouldReport =
+				this.lastAudioCallbackWarningMode !== processingMode ||
+				this.lastAudioCallbackWarningTimestamp === null ||
+				now - this.lastAudioCallbackWarningTimestamp >= AUDIO_CALLBACK_WARNING_COOLDOWN_MS
+			if (shouldReport) {
+				const data = {
+					event: "cadence_anomaly",
+					sessionId: this.sessionId,
+					processingMode,
+					sampleCount,
+					sampleRate,
+					callbackInterval,
+					callbackTimestamp: this.lastAudioCallbackTimestamp,
+					audioCallbackCount: this.audioCallbackCount,
+					audioContextState: this.audioContext?.state ?? "unavailable",
+					streamState: this.getAudioStreamDiagnostics(),
+					browserVisibilityState:
+						typeof document !== "undefined" ? document.visibilityState : "unavailable",
+				}
+				this.dependencies.logger.warn("Audio callback cadence anomaly", data)
+				this.dependencies.logger.report({
+					namespace: "recordingAudioCallback",
+					data,
+				})
+				this.lastAudioCallbackWarningTimestamp = now
+				this.lastAudioCallbackWarningMode = processingMode
+			}
 		}
 	}
 
@@ -1319,13 +1353,18 @@ export class RecorderCoreAdapter {
 			if (!this.audioContextStateChangeUsesEventListener) {
 				this.previousAudioContextStateChangeHandler?.call(audioContext, event)
 			}
-			this.dependencies.logger.warn("AudioContext state changed", {
-				state: audioContext.state,
-				currentTime: audioContext.currentTime,
-				processingMode: this.audioRecorder?.processingMode,
-				streamState: this.getAudioStreamDiagnostics(),
-				browserVisibilityState:
-					typeof document !== "undefined" ? document.visibilityState : "unavailable",
+			this.dependencies.logger.report({
+				namespace: "recordingAudioContext",
+				data: {
+					event: "state_changed",
+					sessionId: this.sessionId,
+					state: audioContext.state,
+					currentTime: audioContext.currentTime,
+					processingMode: this.audioRecorder?.processingMode,
+					streamState: this.getAudioStreamDiagnostics(),
+					browserVisibilityState:
+						typeof document !== "undefined" ? document.visibilityState : "unavailable",
+				},
 			})
 		}
 		this.audioContextDiagnosticsTarget = audioContext
@@ -1339,9 +1378,14 @@ export class RecorderCoreAdapter {
 			this.audioContextStateChangeUsesEventListener = false
 		}
 
-		this.dependencies.logger.log("AudioContext diagnostics attached", {
-			state: audioContext.state,
-			currentTime: audioContext.currentTime,
+		this.dependencies.logger.report({
+			namespace: "recordingAudioContext",
+			data: {
+				event: "diagnostics_attached",
+				sessionId: this.sessionId,
+				state: audioContext.state,
+				currentTime: audioContext.currentTime,
+			},
 		})
 	}
 
@@ -1377,13 +1421,18 @@ export class RecorderCoreAdapter {
 		}
 
 		this.visibilityChangeHandler = () => {
-			this.dependencies.logger.warn("Recording page visibility changed", {
-				visibilityState: document.visibilityState,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				audioContextTime: this.audioContext?.currentTime ?? null,
-				processingMode: this.audioRecorder?.processingMode,
-				bufferDiagnostics: this.bufferManager?.getDiagnostics(),
-				streamState: this.getAudioStreamDiagnostics(),
+			this.dependencies.logger.report({
+				namespace: "recordingPageVisibility",
+				data: {
+					event: "changed",
+					sessionId: this.sessionId,
+					visibilityState: document.visibilityState,
+					audioContextState: this.audioContext?.state ?? "unavailable",
+					audioContextTime: this.audioContext?.currentTime ?? null,
+					processingMode: this.audioRecorder?.processingMode,
+					bufferDiagnostics: this.bufferManager?.getDiagnostics(),
+					streamState: this.getAudioStreamDiagnostics(),
+				},
 			})
 		}
 
@@ -1413,6 +1462,37 @@ export class RecorderCoreAdapter {
 				streamDiagnosticsError: error instanceof Error ? error.message : String(error),
 			}
 		}
+	}
+
+	private attachAudioTrackDiagnostics(stream: MediaStream): void {
+		const tracks = typeof stream.getAudioTracks === "function" ? stream.getAudioTracks() : []
+		for (const track of tracks) {
+			if (this.audioTrackEndedHandlers.has(track)) continue
+			const handler = () => {
+				this.dependencies.logger.report({
+					namespace: "recordingAudioTrack",
+					data: {
+						event: "ended",
+						sessionId: this.sessionId,
+						readyState: track.readyState,
+						muted: track.muted,
+						enabled: track.enabled,
+					},
+				})
+			}
+			if (typeof track.addEventListener !== "function") continue
+			track.addEventListener("ended", handler)
+			this.audioTrackEndedHandlers.set(track, handler)
+		}
+	}
+
+	private detachAudioTrackDiagnostics(): void {
+		for (const [track, handler] of this.audioTrackEndedHandlers) {
+			if (typeof track.removeEventListener === "function") {
+				track.removeEventListener("ended", handler)
+			}
+		}
+		this.audioTrackEndedHandlers.clear()
 	}
 
 	private connectSourceToNode(
