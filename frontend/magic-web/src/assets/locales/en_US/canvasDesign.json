@@ -636,6 +636,13 @@
 		"loadError": "Failed to load video",
 		"loading": "Loading...",
 		"merging": "Merging...",
+		"nameSuffix": {
+			"composing": "(Merging)",
+			"failed": "(Failed)",
+			"generating": "(Generating)",
+			"loading": "(Loading)",
+			"uploading": "(Uploading)"
+		},
 		"replaceFailed": "Failed to replace video. Please try again.",
 		"replaceUnsupported": "Unsupported video format",
 		"retryEditing": "Please edit your video generation request again",

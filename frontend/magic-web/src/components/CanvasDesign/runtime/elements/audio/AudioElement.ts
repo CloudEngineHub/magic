@@ -204,6 +204,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private resourceFailureUnsubscribe: () => void
 	private mediaReplaceStateUnsubscribe: () => void
 	private contentPreviewUnsubscribe: () => void = () => undefined
+	private effectiveContentSrc?: string
 	private resourceError = false
 	private interactionEventUnsubscribers: Array<() => void> = []
 	private lastTouchActionAt = 0
@@ -239,14 +240,15 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				this.syncRenderState()
 			},
 		)
-		this.subscribeWaveform(this.getAudioContent()?.src)
+		this.effectiveContentSrc = this.getAudioSrc()
+		this.subscribeWaveform(this.effectiveContentSrc)
 		this.contentPreviewUnsubscribe = canvas.eventEmitter.on(
 			"content:previewChanged",
 			({ data: eventData }) => {
 				if (eventData.elementId && eventData.elementId !== normalizedData.id) return
-				this.resourceError = false
-				this.subscribeWaveform(this.getAudioSrc())
-				this.syncRenderState()
+				if (this.syncEffectiveContentSource(this.getAudioSrc())) {
+					this.syncRenderState()
+				}
 			},
 		)
 		this.resourceFailureUnsubscribe = canvas.eventEmitter.on(
@@ -363,6 +365,26 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	private getAudioSrc(): string | undefined {
 		return this.getAudioContent()?.src
+	}
+
+	/**
+	 * Content 预览只改变会话内的 effective Content。音频播放、波形和资源错误均为
+	 * 元素级运行时状态，切换到不同资源时必须一起重绑，避免短暂沿用上一版本状态。
+	 */
+	private syncEffectiveContentSource(nextSrc: string | undefined): boolean {
+		if (this.effectiveContentSrc === nextSrc) return false
+		this.effectiveContentSrc = nextSrc
+		this.canvas.audioPlaybackManager.release(this.data.id)
+		this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
+		this.resourceError = false
+		this.retryingPreparation = false
+		this.subscribeWaveform(nextSrc)
+		if (nextSrc) {
+			this.canvas.visibilityManager.updateAudioElement(this.data.id, nextSrc)
+		} else {
+			this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
+		}
+		return true
 	}
 
 	public render(): Konva.Group {
@@ -575,16 +597,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			previousData.height !== normalizedData.height
 
 		if (resourceChanged) {
-			this.canvas.audioPlaybackManager.release(this.data.id)
-			this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
-			this.resourceError = false
-			this.retryingPreparation = false
-			this.subscribeWaveform(nextContent?.src)
-			if (nextContent?.src) {
-				this.canvas.visibilityManager.updateAudioElement(this.data.id, nextContent.src)
-			} else {
-				this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
-			}
+			this.syncEffectiveContentSource(nextContent?.src)
 		}
 
 		if (!needsRerender && this.node) {

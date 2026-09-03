@@ -34,6 +34,7 @@ import {
 } from "../../../runtime/document/types"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasData, useCanvasEvent } from "../../../app/hooks/canvas"
+import type { CanvasEvent } from "../../../runtime/core/EventEmitter"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useLayersUI } from "../../../app/providers/LayersUIProvider"
 import { useElementMenu } from "../../panels/menu/ElementMenuContext"
@@ -55,6 +56,7 @@ import {
 	normalizeLayersFilter,
 } from "../layerFilters"
 import LayersFilterPopover, { LayersFilterForm } from "./LayersFilterPopover"
+import { createLayerRefreshScheduler } from "./layerRefreshScheduler"
 
 const LAYER_TREE_VIRTUAL_THRESHOLD = 80
 const LAYER_TREE_ROW_HEIGHT = 34
@@ -107,11 +109,39 @@ export default function LayersDrawer() {
 		}
 		return { ...DEFAULT_LAYERS_FILTER }
 	})
+	const layerRefreshScheduler = useMemo(() => createLayerRefreshScheduler(), [])
+
+	useEffect(() => {
+		return () => layerRefreshScheduler.dispose()
+	}, [layerRefreshScheduler])
 
 	// 订阅并获取画布数据
-	const elements = useCanvasData((manager) => manager.getAllElements(), ["element:change"], {
-		shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
-	})
+	const elements = useCanvasData(
+		(manager) => manager.getAllElements(),
+		[
+			"element:change",
+			"element:rerendered",
+			"element:image:generate-submit-started",
+			"element:image:generate-submit-failed",
+			"element:image:resultUpdated",
+			"element:video:generate-submit-started",
+			"element:video:generate-submit-failed",
+			"element:media:replaceStateChanged",
+			"element:image:ossSrcReady",
+		],
+		{
+			shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
+			scheduleUpdate: layerRefreshScheduler.schedule,
+			shouldUpdateOnEvent: (event) => {
+				if (event.type !== "element:rerendered") return true
+				const rerenderedEvent = event as CanvasEvent<"element:rerendered">
+				return (
+					rerenderedEvent.data.data.type === ElementTypeEnum.Image ||
+					rerenderedEvent.data.data.type === ElementTypeEnum.Video
+				)
+			},
+		},
+	)
 
 	// 获取操作方法
 	const { canvas } = useCanvas()
