@@ -18,5 +18,9 @@ return [
             'collection' => (string) env('SKILL_MARKET_VECTOR_COLLECTION', 'skill_markets'),
             'score_threshold' => (float) env('SKILL_MARKET_VECTOR_SCORE_THRESHOLD', 0.4),
         ],
+        'agent_market' => [
+            'collection' => (string) env('AGENT_MARKET_VECTOR_COLLECTION', 'agent_markets'),
+            'score_threshold' => (float) env('AGENT_MARKET_VECTOR_SCORE_THRESHOLD', 0.4),
+        ],
     ],
 ];

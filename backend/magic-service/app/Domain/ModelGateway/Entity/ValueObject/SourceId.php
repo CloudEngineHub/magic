@@ -55,6 +55,9 @@ final class SourceId
     /** Internal system-account embedding calls used to build the SkillMarket index. */
     public const string SKILL_MARKET_VECTOR_SYNC = 'skill_market_vector_sync';
 
+    /** Internal system-account embedding calls used to build the Agent Market index. */
+    public const string AGENT_MARKET_VECTOR_SYNC = 'agent_market_vector_sync';
+
     public const array NON_BILLING_SOURCE_IDS = [
         self::RENAME_TOPIC,
         self::SUMMARY_CONTENT,
@@ -71,6 +74,7 @@ final class SourceId
         self::AI_ABILITY_CONNECTIVITY_TEST,
         self::SLIDES_TEMPLATE_VECTOR_SYNC,
         self::SKILL_MARKET_VECTOR_SYNC,
+        self::AGENT_MARKET_VECTOR_SYNC,
     ];
 
     public static function isNonBilling(string $sourceId): bool

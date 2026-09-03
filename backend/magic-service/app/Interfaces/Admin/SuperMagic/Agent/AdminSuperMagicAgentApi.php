@@ -53,6 +53,13 @@ class AdminSuperMagicAgentApi extends AbstractSuperMagicApi
         return $this->adminAgentAppService->queryMarkets($authorization, $requestDTO)->toArray();
     }
 
+    /** Reconcile all Agent Market vector points. */
+    #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_MARKET], MagicOperationEnum::EDIT)]
+    public function reindexMarketVectors(): array
+    {
+        return $this->adminAgentAppService->reindexMarketVectors($this->getAuthorization());
+    }
+
     /**
      * 审核员工版本.
      */
