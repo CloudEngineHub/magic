@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { useRecordingAudioPlayer } from "../../hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "../../hooks/useRecordingColorSegments"
 import { useRecordingPlayerCurrentSec } from "../../hooks/useRecordingPlayerCurrentSec"
@@ -38,12 +39,21 @@ export function RecordingDetailShareDesktop({
 	allowDownloadProjectFile,
 	attachments,
 }: RecordingDetailShareDesktopProps) {
-	const { loading, error, projectItem, fileMap, texts, audioUrl, title, attachmentList } =
-		useShareRecordingDetailData({
-			projectId,
-			resourceName,
-			attachments,
-		})
+	const {
+		loading,
+		error,
+		projectItem,
+		fileMap,
+		texts,
+		audioUrl,
+		title,
+		attachmentTree,
+		attachmentList,
+	} = useShareRecordingDetailData({
+		projectId,
+		resourceName,
+		attachments,
+	})
 	const capabilities = useMemo(
 		() => buildShareRecordingCapabilities(allowDownloadProjectFile),
 		[allowDownloadProjectFile],
@@ -201,6 +211,7 @@ export function RecordingDetailShareDesktop({
 					<RecordingDetailWorkbench
 						left={
 							<RecordingDetailLeftColumn
+								searchScopeKey={projectId}
 								audioRef={player.audioRef}
 								audioUrl={audioUrl}
 								transcriptMarkdown={texts.transcript?.content}
@@ -228,6 +239,10 @@ export function RecordingDetailShareDesktop({
 								fileMap={fileMap}
 								summaryContent={summaryContent}
 								notesContent={texts.notes?.content}
+								attachmentTree={attachmentTree as unknown as AttachmentFile[]}
+								notesFilePath={
+									fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path
+								}
 								attachmentList={attachmentList}
 								summaryReady={summaryReady}
 								summarizing={false}

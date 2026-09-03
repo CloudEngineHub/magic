@@ -382,7 +382,7 @@ class UserToolCallService:
     async def _restore_ask_user_pending_from_latest_history(self, tool_call_id: str) -> Optional[PendingToolCall]:
         """从最新聊天历史里的 ask_user tool_call 重建 pending。
 
-        仅当 `.chat_history` 最后一条消息就是同一个 ask_user 调用时才恢复，
+        仅当 `.topic/chat_history` 最后一条消息就是同一个 ask_user 调用时才恢复，
         避免旧问题在用户已经发送新消息后再次生效。
         """
         try:

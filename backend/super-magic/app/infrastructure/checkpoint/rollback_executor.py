@@ -3,23 +3,26 @@
 回滚执行器 - 基础设施层
 
 统一处理checkpoint的完整回滚，包括：
-- 工作区文件回滚
-- 确保回滚操作的原子性和一致性
+- 工作区文件回滚（重放 magicfs checkpoint hook 记录的 project/topic 空间帧）
+- 聊天历史回滚（恢复 checkpoint 里的整目录快照）
+
+magicfs 把所有挂载的变更记入同一份操作流水，file_path 是 agent 可见
+绝对路径（挂载配置下发 path_prefix），space 字段标记来源空间。重放时
+直接按记录路径恢复，无需按子树猜测根目录；文件版本创建只针对非 topic
+条目。聊天历史运行期在本地普通目录（.chat_history/），不在挂载内、
+无帧可重放，改由 checkpoint 里的 initial/latest 整目录快照按回滚方向
+恢复，尽力而为、失败不阻塞工作区回滚结果。
 """
 
-import shutil
-import json
-import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
-from app.core.entity.checkpoint import FileSnapshot, FileOperation, CheckpointInfo, FileType
+from app.core.entity.checkpoint import FileSnapshot, FileOperation, FileType
+from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.infrastructure.checkpoint.storage import CheckpointStorage
-from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.utils.async_file_utils import (
-    async_copy2, async_rmtree, async_mkdir, async_unlink, async_rmdir, async_write_json,
-    async_rename, get_file_id_from_xattr
+    async_copy2, async_exists, async_rmtree, async_mkdir, async_unlink,
+    async_rmdir, async_rename, get_file_id_from_xattr
 )
 from app.core.exceptions import RollbackException, ErrorCode
 from app.path_manager import PathManager
@@ -28,9 +31,29 @@ from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
 
+# topic 空间条目的 space 标记（由 magicfs checkpoint hook 按挂载配置盖章）。
+# chat history 属于话题内部状态：随 checkpoint 重放恢复，但不进入
+# 用户文件版本链路。
+TOPIC_SPACE = "topic"
+
+
+def _is_topic_entry(file_snapshot: FileSnapshot) -> bool:
+    """判断流水条目是否来自 topic 挂载。
+
+    magicfs 从挂载配置把 space_type 盖章进每条流水；空 space 视为旧数据
+    的工作区条目（历史行为：仅工作区有帧）。
+    """
+    return file_snapshot.space == TOPIC_SPACE
+
 
 class RollbackExecutor:
-    """回滚执行器 - 处理工作区文件回滚"""
+    """回滚执行器 - 处理工作区文件回滚
+
+    挂载内文件与工作区共用同一套重放链路：magicfs 记录的 file_path 是
+    agent 可见绝对路径（网关为每个挂载下发 path_prefix），恢复目标就是
+    路径本身，不需要按子树猜测根目录；两者只差 policy——文件版本创建
+    仅针对非 topic 条目。聊天历史不在挂载内，走整目录快照恢复。
+    """
 
     def __init__(self):
         """初始化回滚执行器（启用文件快照合并优化）"""
@@ -43,6 +66,11 @@ class RollbackExecutor:
     async def start_rollback(self, target_checkpoint_id: str) -> Tuple[bool, List[Dict[str, str]]]:
         """
         开始回滚操作，只恢复文件状态
+
+        聊天历史与工作区共用同一份 magicfs 操作流水：这里只查询一次
+        回滚范围、合并一次操作流，然后按 space 切分为两个分区重放。
+        工作区失败会中止整体回滚；聊天历史失败仅告警继续（产品语义：
+        不阻塞用户继续会话）。
 
         Args:
             target_checkpoint_id: 目标检查点ID，不能为None
@@ -74,19 +102,43 @@ class RollbackExecutor:
                 logger.info(f"当前checkpoint与目标checkpoint相同，无需回滚: {target_checkpoint_id}")
                 return True, []
 
-            # 执行工作区文件回滚
-            workspace_rollback_success, affected_files = await self._execute_workspace_rollback(current_checkpoint_id, target_checkpoint_id)
-            if not workspace_rollback_success:
+            # 查询一次回滚范围并合并一次操作流（方向感知的排序去重）
+            direction, checkpoints_to_process = await self.metadata_manager.get_checkpoints_between_in_checkpoint_manifest(
+                current_checkpoint_id, target_checkpoint_id
+            )
+            logger.info(f"回滚方向: {direction}, 需要处理的checkpoint: {checkpoints_to_process}")
+
+            is_forward = direction == "forward"
+            merged_operations = await self._merge_file_snapshots_for_rollback(
+                checkpoints_to_process, is_forward=is_forward,
+            )
+
+            # 按 space 一次切分；两分区路径互不相交，跨分区顺序无语义
+            topic_entries = [entry for entry in merged_operations if _is_topic_entry(entry[1])]
+            workspace_entries = [entry for entry in merged_operations if not _is_topic_entry(entry[1])]
+
+            # 工作区重放：任何一条失败即中止整体回滚
+            workspace_ok, affected_files = await self._replay_file_operations(
+                workspace_entries, is_forward=is_forward, collect_affected=True,
+            )
+            if not workspace_ok:
                 logger.error("工作区文件回滚失败")
                 return False, []
 
-            # 执行聊天历史回滚
-            history_rollback_success = await self._execute_chat_history_rollback(current_checkpoint_id, target_checkpoint_id)
-            if not history_rollback_success:
-                logger.error("聊天历史回滚失败，但工作区回滚已成功")
-                # 注意：这里可以根据需求决定是否要回滚工作区更改
-                # 为了保持原子性，可能需要撤销工作区更改，但这里选择继续
-                logger.warning("继续完成回滚，但聊天历史可能不一致")
+            # topic（聊天历史）重放：尽力而为。空分区是旧版本沙箱创建的
+            # checkpoint（没有 topic 帧），跳过即可。
+            if not topic_entries:
+                logger.warning("checkpoint 范围内没有 topic 帧，跳过挂载内 topic 文件恢复（可能由旧版本沙箱创建）")
+            else:
+                topic_ok, _ = await self._replay_file_operations(topic_entries, is_forward=is_forward)
+                if not topic_ok:
+                    logger.error("topic 文件回滚失败，但工作区回滚已成功")
+                    logger.warning("继续完成回滚，但 topic 挂载内文件可能不一致")
+
+            # 聊天历史（.chat_history 本地目录）回滚：同样尽力而为。它不在
+            # magicfs 挂载内、没有帧可重放，用 checkpoint 里的整目录快照
+            # 按回滚方向恢复；快照缺失（旧版本 checkpoint）时跳过。
+            await self._execute_chat_history_rollback(direction, checkpoints_to_process)
 
             # 更新当前checkpoint状态
             await self.metadata_manager.update_current_checkpoint(target_checkpoint_id)
@@ -97,43 +149,6 @@ class RollbackExecutor:
 
         except Exception as e:
             logger.error(f"开始回滚时发生错误: {e}")
-            return False, []
-
-    async def _execute_workspace_rollback(
-        self,
-        current_checkpoint_id: Optional[str],
-        target_checkpoint_id: str
-    ) -> Tuple[bool, List[Dict[str, str]]]:
-        """执行工作区文件回滚
-
-        Args:
-            current_checkpoint_id: 当前checkpoint ID
-            target_checkpoint_id: 目标checkpoint ID，不能为None
-
-        Returns:
-            Tuple[bool, List[Dict[str, str]]]: 回滚是否成功、受影响文件列表
-        """
-        try:
-            # 使用metadata_manager获取checkpoint范围和方向
-            direction, checkpoints_to_process = await self.metadata_manager.get_checkpoints_between_in_checkpoint_manifest(
-                current_checkpoint_id, target_checkpoint_id
-            )
-
-            logger.info(f"回滚方向: {direction}, 需要处理的checkpoint: {checkpoints_to_process}")
-
-            if direction == "none":
-                logger.info("当前checkpoint与目标checkpoint相同，无需回滚")
-                return True, []
-            elif direction == "backward":
-                return await self._execute_backward_workspace_rollback(checkpoints_to_process)
-            elif direction == "forward":
-                return await self._execute_forward_workspace_rollback(checkpoints_to_process)
-            else:
-                logger.error(f"未知的回滚方向: {direction}")
-                return False, []
-
-        except Exception as e:
-            logger.error(f"执行工作区回滚失败: {e}")
             return False, []
 
     async def _merge_file_snapshots_for_rollback(self, checkpoint_ids: List[str], is_forward: bool) -> List[Tuple[str, FileSnapshot]]:
@@ -231,84 +246,17 @@ class RollbackExecutor:
             logger.error(f"合并逻辑验证失败: {e}")
             return False
 
-    async def _execute_backward_workspace_rollback(self, checkpoint_ids: List[str]) -> Tuple[bool, List[Dict[str, str]]]:
-        """执行反向工作区回滚（带合并优化）
-
-        Args:
-            checkpoint_ids: 需要回滚的checkpoint ID列表
-
-        Returns:
-            Tuple[bool, List[Dict[str, str]]]: 回滚是否成功、受影响文件列表
-        """
-        try:
-            logger.info(f"开始执行反向回滚（带合并优化），checkpoint数量: {len(checkpoint_ids)}")
-
-            # 使用合并优化
-            merged_operations = await self._merge_file_snapshots_for_rollback(checkpoint_ids, is_forward=False)
-
-            # 处理合并后的文件操作
-            success_count = 0
-            affected_files: Dict[str, Dict[str, str]] = {}
-            for checkpoint_id, file_snapshot in merged_operations:
-                affected_file_before = await self._build_affected_file(file_snapshot, is_forward=False)
-                success = await self._restore_from_initial_content(checkpoint_id, file_snapshot)
-                if success:
-                    success_count += 1
-                    affected_file_after = await self._build_affected_file(file_snapshot, is_forward=False)
-                    self._merge_affected_file(affected_files, affected_file_after or affected_file_before)
-                else:
-                    logger.error(f"从initial_content恢复文件失败: {file_snapshot.file_path}")
-                    return False, []
-
-            logger.info(f"反向回滚完成（合并优化），成功处理了{success_count}个文件操作")
-            return True, list(affected_files.values())
-
-        except Exception as e:
-            logger.error(f"执行反向工作区回滚失败: {e}")
-            return False, []
-
-    async def _execute_forward_workspace_rollback(self, checkpoint_ids: List[str]) -> Tuple[bool, List[Dict[str, str]]]:
-        """执行正向工作区回滚（带合并优化）
-
-        Args:
-            checkpoint_ids: 需要应用的checkpoint ID列表
-
-        Returns:
-            Tuple[bool, List[Dict[str, str]]]: 回滚是否成功、受影响文件列表
-        """
-        try:
-            logger.info(f"开始执行正向回滚（带合并优化），checkpoint数量: {len(checkpoint_ids)}")
-
-            # 使用合并优化
-            merged_operations = await self._merge_file_snapshots_for_rollback(checkpoint_ids, is_forward=True)
-
-            # 处理合并后的文件操作
-            success_count = 0
-            affected_files: Dict[str, Dict[str, str]] = {}
-            for checkpoint_id, file_snapshot in merged_operations:
-                affected_file_before = await self._build_affected_file(file_snapshot, is_forward=True)
-                success = await self._restore_from_latest_content(checkpoint_id, file_snapshot)
-                if success:
-                    success_count += 1
-                    affected_file_after = await self._build_affected_file(file_snapshot, is_forward=True)
-                    self._merge_affected_file(affected_files, affected_file_after or affected_file_before)
-                else:
-                    logger.error(f"从latest_content恢复文件失败: {file_snapshot.file_path}")
-                    return False, []
-
-            logger.info(f"正向回滚完成（合并优化），成功处理了{success_count}个文件操作")
-            return True, list(affected_files.values())
-
-        except Exception as e:
-            logger.error(f"执行正向工作区回滚失败: {e}")
-            return False, []
-
     async def _build_affected_file(
         self,
         file_snapshot: FileSnapshot,
         is_forward: bool
     ) -> Optional[Dict[str, str]]:
-        file_id = await get_file_id_from_xattr(self._resolve_workspace_path(file_snapshot.file_path))
+        # 删除类回滚会先 unlink 文件，再收集 affected_files；此时目标路径上的
+        # xattr 已经不存在。checkpoint 中的 file_id 是稳定身份，作为兜底可以
+        # 保证 CREATED -> delete、DELETED -> add 等操作仍能生成通知。
+        file_id = await get_file_id_from_xattr(self._resolve_restore_path(file_snapshot.file_path))
+        if not file_id:
+            file_id = file_snapshot.file_id
         if not file_id:
             return None
 
@@ -375,41 +323,67 @@ class RollbackExecutor:
             logger.error(f"从latest_content恢复文件失败: {e}")
             return False
 
-    def _resolve_workspace_path(self, file_path: str) -> Path:
-        """将 snapshot 中记录的 file_path 解析为绝对路径。
+    def _resolve_restore_path(self, file_path: str) -> Path:
+        """将流水记录的 file_path 解析为恢复目标绝对路径。
 
-        外部文件系统（magicfs）维护的 checkpoint 里 file_path 使用的是
-        相对于 workspace 根目录的相对路径（例如 "2.txt"），回滚时需要
-        拼接 workspace 目录才能落到真实工作区。为了兼容可能存在的历史
-        绝对路径数据，这里对已是绝对路径的输入保持原样。
+        新格式条目的 file_path 是 agent 可见绝对路径（如
+        /mnt/agfs/magicfs/project/a.txt），直接使用。旧沙箱镜像产生的
+        相对路径条目没有可靠的根信息，无法安全恢复——交由调用方跳过。
         """
         p = Path(file_path)
         if p.is_absolute():
             return p
+        # 兼容历史数据：相对路径按 workspace 根解析（旧行为）
         return PathManager.get_workspace_dir() / p
 
-    async def _execute_chat_history_rollback(self, current_checkpoint_id: str, target_checkpoint_id: str) -> bool:
-        """
-        执行聊天历史回滚
-
-        与 _execute_workspace_rollback 保持一致的结构：
-        - 获取 checkpoints_between 确定回滚方向和需要处理的 checkpoint 列表
-        - backward: 使用 checkpoints_to_process[0] 的 initial 快照
-        - forward: 使用 checkpoints_to_process[-1] 的 latest 快照
+    async def _replay_file_operations(
+        self,
+        entries: List[Tuple[str, FileSnapshot]],
+        *,
+        is_forward: bool,
+        collect_affected: bool = False,
+    ) -> Tuple[bool, List[Dict[str, str]]]:
+        """重放引擎：按 operation 语义逐条恢复合并后的文件操作。
 
         Args:
-            current_checkpoint_id: 当前checkpoint ID
-            target_checkpoint_id: 目标checkpoint ID，不能为None
+            entries: [(checkpoint_id, file_snapshot), ...]，已由调用方过滤分区
+            is_forward: True=正向回滚(应用 latest), False=反向回滚(撤销到 initial)
+            collect_affected: True 时读取 xattr 构建受影响文件列表（工作区分区用）
 
         Returns:
-            bool: 回滚是否成功
+            Tuple[bool, List[Dict[str, str]]]: 重放是否全部成功、受影响文件列表
+        """
+        success_count = 0
+        affected_files: Dict[str, Dict[str, str]] = {}
+        for checkpoint_id, file_snapshot in entries:
+            success = await self._restore_file_by_operation(
+                checkpoint_id, file_snapshot, is_forward=is_forward,
+            )
+            if not success:
+                logger.error(f"帧重放失败: {file_snapshot.file_path}")
+                return False, []
+            success_count += 1
+            if collect_affected:
+                affected_file = await self._build_affected_file(file_snapshot, is_forward)
+                if affected_file is not None:
+                    self._merge_affected_file(affected_files, affected_file)
+
+        logger.info(f"帧重放完成，成功处理了{success_count}/{len(entries)}个文件操作")
+        return True, list(affected_files.values())
+
+    async def _execute_chat_history_rollback(self, direction: str, checkpoints_to_process: List[str]) -> bool:
+        """执行聊天历史回滚：按回滚方向恢复 checkpoint 里的整目录快照。
+
+        与帧重放共用同一次查询得到的回滚方向和 checkpoint 范围：
+        - backward: checkpoints_to_process[0] 的 initial 快照（代表 target
+          执行后的状态）
+        - forward: checkpoints_to_process[-1] 的 latest 快照（就是 target
+          最后一次保存后的状态）
+
+        尽力而为：快照缺失（旧版本 checkpoint）或恢复失败只记日志，
+        不改变工作区回滚的结果。
         """
         try:
-            # 使用 metadata_manager 获取 checkpoint 范围和方向
-            direction, checkpoints_to_process = await self.metadata_manager.get_checkpoints_between_in_checkpoint_manifest(
-                current_checkpoint_id, target_checkpoint_id
-            )
-
             logger.info(f"聊天历史回滚方向: {direction}, 需要处理的checkpoint: {checkpoints_to_process}")
 
             if direction == "none":
@@ -428,30 +402,18 @@ class RollbackExecutor:
             return False
 
     async def _execute_backward_chat_history_rollback(self, checkpoints_to_process: List[str]) -> bool:
-        """
-        执行反向聊天历史回滚
-
-        使用 checkpoints_to_process[0] 的 initial 快照恢复到目标状态
-        （checkpoints_to_process[0] 的 initial 代表 target 执行后的状态）
-
-        Args:
-            checkpoints_to_process: 需要处理的 checkpoint ID 列表
-
-        Returns:
-            bool: 恢复是否成功
-        """
+        """反向回滚聊天历史：恢复 checkpoints_to_process[0] 的 initial 快照。"""
         try:
             if not checkpoints_to_process:
                 logger.warning("没有需要处理的checkpoint，跳过聊天历史回滚")
                 return True
 
-            # 使用第一个 checkpoint 的 initial 快照（代表 target 执行后的状态）
             first_checkpoint_id = checkpoints_to_process[0]
             logger.info(f"执行反向聊天历史回滚，使用 checkpoint {first_checkpoint_id} 的 initial 快照")
 
             snapshot_dir = self.storage.get_initial_chat_history_snapshots_dir(first_checkpoint_id)
 
-            if not snapshot_dir.exists():
+            if not await async_exists(snapshot_dir):
                 logger.warning(f"checkpoint {first_checkpoint_id} 没有 initial 聊天历史快照，跳过历史回滚")
                 return True
 
@@ -467,30 +429,18 @@ class RollbackExecutor:
             return False
 
     async def _execute_forward_chat_history_rollback(self, checkpoints_to_process: List[str]) -> bool:
-        """
-        执行正向聊天历史回滚
-
-        使用 checkpoints_to_process[-1] 的 latest 快照恢复到目标状态
-        （checkpoints_to_process[-1] 就是 target，其 latest 代表 target 执行后的状态）
-
-        Args:
-            checkpoints_to_process: 需要处理的 checkpoint ID 列表
-
-        Returns:
-            bool: 恢复是否成功
-        """
+        """正向回滚聊天历史：恢复 checkpoints_to_process[-1] 的 latest 快照。"""
         try:
             if not checkpoints_to_process:
                 logger.warning("没有需要处理的checkpoint，跳过聊天历史回滚")
                 return True
 
-            # 使用最后一个 checkpoint 的 latest 快照（就是 target 的 latest）
             last_checkpoint_id = checkpoints_to_process[-1]
             logger.info(f"执行正向聊天历史回滚，使用 checkpoint {last_checkpoint_id} 的 latest 快照")
 
             snapshot_dir = self.storage.get_latest_chat_history_snapshots_dir(last_checkpoint_id)
 
-            if not snapshot_dir.exists():
+            if not await async_exists(snapshot_dir):
                 logger.warning(f"checkpoint {last_checkpoint_id} 没有 latest 聊天历史快照，跳过历史回滚")
                 return True
 
@@ -503,76 +453,6 @@ class RollbackExecutor:
 
         except Exception as e:
             logger.error(f"正向聊天历史回滚失败: {e}")
-            return False
-
-    async def commit_rollback(self) -> bool:
-        """
-        提交回滚操作，清理当前checkpoint之后的所有checkpoint
-
-        Returns:
-            bool: 提交是否成功
-        """
-        try:
-            # 获取当前checkpoint
-            current_checkpoint_id = await self.metadata_manager.get_current_checkpoint()
-            if current_checkpoint_id is None:
-                logger.warning("无法获取当前checkpoint，跳过清理操作")
-                return True
-
-            logger.info(f"开始清理checkpoint {current_checkpoint_id} 之后的所有checkpoint")
-
-            # 获取需要清理的checkpoint列表
-            manifest = await self.metadata_manager.load_checkpoint_manifest()
-            if not manifest:
-                logger.warning("无法加载checkpoint清单，跳过清理操作")
-                return True
-
-            # 找到当前checkpoint在清单中的位置
-            checkpoint_ids = list(manifest.checkpoints.keys()) if hasattr(manifest.checkpoints, 'keys') else manifest.checkpoints
-            try:
-                current_index = checkpoint_ids.index(current_checkpoint_id)
-            except ValueError:
-                logger.error(f"当前checkpoint {current_checkpoint_id} 不在清单中")
-                return False
-
-            # 获取需要删除的checkpoint（当前checkpoint之后的所有checkpoint）
-            checkpoints_to_delete = checkpoint_ids[current_index + 1:]
-
-            if not checkpoints_to_delete:
-                logger.info("没有需要清理的checkpoint")
-                return True
-
-            logger.info(f"将删除以下checkpoint: {checkpoints_to_delete}")
-
-            # 删除checkpoint数据和元数据
-            for checkpoint_id in checkpoints_to_delete:
-                # 删除checkpoint存储数据
-                checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
-                if checkpoint_dir.exists():
-                    await async_rmtree(checkpoint_dir)
-                    logger.info(f"已删除checkpoint存储目录: {checkpoint_id}")
-
-                # 从清单中移除
-                if hasattr(manifest.checkpoints, 'keys'):
-                    if checkpoint_id in manifest.checkpoints:
-                        del manifest.checkpoints[checkpoint_id]
-                        logger.info(f"已从清单中移除checkpoint: {checkpoint_id}")
-                else:
-                    if checkpoint_id in manifest.checkpoints:
-                        manifest.checkpoints.remove(checkpoint_id)
-                        logger.info(f"已从清单中移除checkpoint: {checkpoint_id}")
-
-            # 保存更新后的清单
-            manifest.updated_time = datetime.now()
-            manifest_file = self.storage.get_checkpoint_manifest_file_path()
-            await async_write_json(manifest_file, manifest.model_dump(), ensure_ascii=False, indent=2, default=str)
-
-            logger.info(f"成功清理了 {len(checkpoints_to_delete)} 个checkpoint")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"提交回滚操作失败: {e}")
             return False
 
     async def undo_rollback(self, latest_checkpoint_id: str) -> Tuple[bool, List[Dict[str, str]]]:
@@ -705,12 +585,12 @@ class RollbackExecutor:
     async def _restore_created_file_forward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
         """CREATED操作的正向回滚：创建文件（应用创建操作）"""
         try:
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             # 根据文件类型选择创建方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从latest_content恢复
-                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id)
+                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not latest_content_path.exists():
                     logger.warning(f"CREATED操作的latest_content不存在，跳过文件恢复: {file_snapshot.file_path}")
@@ -741,7 +621,7 @@ class RollbackExecutor:
     async def _restore_created_file_backward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
         """CREATED操作的反向回滚：删除文件（撤销创建操作）"""
         try:
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             if target_path.exists():
                 # 根据文件类型选择删除方法
@@ -773,12 +653,12 @@ class RollbackExecutor:
     async def _restore_updated_file_forward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
         """UPDATED操作的正向回滚：恢复到更新后状态"""
         try:
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从latest_content恢复
-                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id)
+                latest_content_path = self.storage.get_latest_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not latest_content_path.exists():
                     logger.warning(f"UPDATED操作的latest_content不存在，跳过文件恢复: {file_snapshot.file_path}")
@@ -809,12 +689,12 @@ class RollbackExecutor:
     async def _restore_updated_file_backward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
         """UPDATED操作的反向回滚：恢复到更新前状态"""
         try:
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从initial_content恢复
-                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id)
+                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not initial_content_path.exists():
                     logger.error(f"UPDATED操作的initial_content不存在: {file_snapshot.file_path}")
@@ -845,7 +725,7 @@ class RollbackExecutor:
     async def _restore_deleted_file_forward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
         """DELETED操作的正向回滚：删除文件（应用删除操作）"""
         try:
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             if target_path.exists():
                 # 根据文件类型选择删除方法
@@ -877,12 +757,12 @@ class RollbackExecutor:
     async def _restore_deleted_file_backward(self, checkpoint_id: str, file_snapshot: FileSnapshot) -> bool:
         """DELETED操作的反向回滚：恢复文件（撤销删除操作）"""
         try:
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             # 根据文件类型选择恢复方法
             if file_snapshot.file_type == FileType.FILE:
                 # 文件：从initial_content恢复
-                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id)
+                initial_content_path = self.storage.get_initial_content_file_path(checkpoint_id, file_snapshot.file_id, space=file_snapshot.space)
 
                 if not initial_content_path.exists():
                     logger.error(f"DELETED操作的initial_content不存在: {file_snapshot.file_path}")
@@ -916,8 +796,8 @@ class RollbackExecutor:
         rename 不改内容，无需读取 initial_content / latest_content 快照。
         """
         try:
-            source_path = self._resolve_workspace_path(file_snapshot.old_file_path)
-            target_path = self._resolve_workspace_path(file_snapshot.file_path)
+            source_path = self._resolve_restore_path(file_snapshot.old_file_path)
+            target_path = self._resolve_restore_path(file_snapshot.file_path)
 
             if not source_path.exists():
                 logger.info(f"RENAMED操作正向回滚，源路径已不存在，跳过: {file_snapshot.old_file_path}")
@@ -938,8 +818,8 @@ class RollbackExecutor:
         rename 不改内容，无需读取 initial_content / latest_content 快照。
         """
         try:
-            source_path = self._resolve_workspace_path(file_snapshot.file_path)
-            target_path = self._resolve_workspace_path(file_snapshot.old_file_path)
+            source_path = self._resolve_restore_path(file_snapshot.file_path)
+            target_path = self._resolve_restore_path(file_snapshot.old_file_path)
 
             if not source_path.exists():
                 logger.info(f"RENAMED操作反向回滚，源路径已不存在，跳过: {file_snapshot.file_path}")
@@ -986,6 +866,11 @@ class RollbackExecutor:
             )
 
             # 根据回滚方向和操作类型过滤文件
+            # 文件版本只针对用户可见的项目文件；topic 空间（聊天历史）
+            # 条目随 checkpoint 恢复，不进入版本链路。
+            merged_operations = [
+                entry for entry in merged_operations if not _is_topic_entry(entry[1])
+            ]
             files_for_version = []
             for checkpoint_id, file_snapshot in merged_operations:
                 # 跳过目录快照：file version 只针对文件，服务端对目录型 file_key 会

@@ -22,6 +22,7 @@ use App\Infrastructure\Util\Context\RequestContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
+use Dtyq\SuperMagic\Application\Contract\PromptContentValidatorInterface;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\StopRunningTaskPublisher;
 use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
 use Dtyq\SuperMagic\Domain\RecycleBin\Service\RecycleBinDomainService;
@@ -101,6 +102,7 @@ class TopicAppService extends AbstractAppService
         protected TopicDomainService $topicDomainService,
         protected ResourceShareDomainService $resourceShareDomainService,
         protected MagicChatMessageAppService $magicChatMessageAppService,
+        protected PromptContentValidatorInterface $promptContentValidator,
         protected FileAppService $fileAppService,
         protected ChatAppService $chatAppService,
         protected Producer $producer,
@@ -131,6 +133,32 @@ class TopicAppService extends AbstractAppService
         }
 
         // 判断话题是否是本人
+        if ($topicEntity->getUserId() !== $userAuthorization->getId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.access_denied');
+        }
+
+        return TopicItemDTO::fromEntity($topicEntity);
+    }
+
+    public function getTopicBySandboxId(RequestContext $requestContext, string $sandboxId): TopicItemDTO
+    {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $topicEntity = $this->topicDomainService->getTopicBySandboxId($sandboxId);
+
+        if (! $topicEntity && preg_match('/^[1-9][0-9]*$/D', $sandboxId) === 1) {
+            $topicId = (int) $sandboxId;
+            if ((string) $topicId === $sandboxId) {
+                $legacyTopicEntity = $this->topicDomainService->getTopicById($topicId);
+                if ($legacyTopicEntity && $legacyTopicEntity->getSandboxId() === '') {
+                    $topicEntity = $legacyTopicEntity;
+                }
+            }
+        }
+
+        if (! $topicEntity) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
         if ($topicEntity->getUserId() !== $userAuthorization->getId()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.access_denied');
         }
@@ -379,21 +407,28 @@ class TopicAppService extends AbstractAppService
 
     public function renameTopic(MagicUserAuthorization $authorization, int $topicId, string $userQuestion, string $language = 'zh_CN'): array
     {
+        if (trim($userQuestion) === '') {
+            return ['topic_name' => ''];
+        }
+
         // 获取话题内容
         $topicEntity = $this->workspaceDomainService->getTopicById($topicId);
         if (! $topicEntity) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
         }
 
-        // Authorization check: ensure the topic belongs to the current user before any data is returned.
-        // This must happen before the try/catch so that access-denied exceptions are never swallowed
-        // and the original topic name is never exposed to an unauthorized caller.
+        // 权限校验：确保话题属于当前用户后再返回任何数据。
+        // 校验必须放在异常捕获之前，避免权限异常被吞掉并向无权限用户暴露原话题名称。
         if ($topicEntity->getUserId() !== $authorization->getId()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.access_denied');
         }
 
-        // Summarize and rename (these steps may fail for non-auth reasons, e.g. AI service errors)
+        // 内容校验、内容总结和话题重命名可能因模型服务等非权限原因失败。
         try {
+            if (! $this->promptContentValidator->isValid($userQuestion)) {
+                return ['topic_name' => $topicEntity->getTopicName()];
+            }
+
             $text = $this->magicChatMessageAppService->summarizeText($authorization, $userQuestion, $language, '', 60);
             // Update topic name
             $dataIsolation = $this->createDataIsolation($authorization);
@@ -407,8 +442,7 @@ class TopicAppService extends AbstractAppService
             }
         } catch (Exception $e) {
             $this->logger->error('rename topic error: ' . $e->getMessage());
-            // Fallback to the original name only after ownership has been verified above,
-            // so this path can never leak another user's topic name.
+            // 所有权已在上方校验，异常时可以安全回退到原话题名称。
             $text = $topicEntity->getTopicName();
         }
 

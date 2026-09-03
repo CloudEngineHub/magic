@@ -7,10 +7,10 @@ from app.tools.grep_search import GrepSearch, GrepSearchParams
 def _grep_search_tool(tmp_path):
     tool = GrepSearch(base_dir=tmp_path)
 
-    async def noop_update_file_timestamps(*args, **kwargs):
+    async def noop_record_matched_file_observations(*args, **kwargs):
         return None
 
-    tool._update_file_timestamps = noop_update_file_timestamps
+    tool._record_matched_file_observations = noop_record_matched_file_observations
     return tool
 
 

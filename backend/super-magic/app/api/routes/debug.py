@@ -24,7 +24,7 @@ async def clear_debug_chat_history() -> BaseResponse:
     chat_history_dir = PathManager.get_chat_history_dir()
     ok = await clear_directory_contents(chat_history_dir)
     if not ok:
-        logger.error(f"清理 .chat_history 失败: {chat_history_dir}")
+        logger.error(f"清理本地 .chat_history 失败: {chat_history_dir}")
         return create_error_response(message="清理历史对话记录失败")
 
     result_data = {"contexts": [item.to_dict() for item in reset_results]}

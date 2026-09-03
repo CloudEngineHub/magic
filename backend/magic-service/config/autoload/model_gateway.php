@@ -26,6 +26,10 @@ return [
         // ffprobe 用于读取参考视频真实时长和宽高；本地路径不在 PATH 时可配置绝对路径。
         'ffprobe_binary' => env('MODEL_GATEWAY_FFPROBE_BINARY', 'ffprobe'),
     ],
+    'video_file_cleanup' => [
+        // Magic 上传的临时生成视频默认保留 7 天，非正数表示关闭清理登记。
+        'expire_seconds' => (int) env('VIDEO_GENERATE_FILE_CLEANUP_EXPIRE_SECONDS', 604800),
+    ],
     // 视频 provider 运行时配置列表，包含 provider、模型、鉴权和网关地址等信息。
     'video_providers' => parse_json_config(env('MODEL_GATEWAY_VIDEO_PROVIDERS', '[]')) ?: [],
 ];

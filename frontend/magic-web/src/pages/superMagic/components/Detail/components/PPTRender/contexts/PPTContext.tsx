@@ -9,6 +9,8 @@ import {
 } from "react"
 import { createPPTEventBus, type PPTEventBus } from "../events/PPTEventBus"
 import { createPPTStore, type PPTStore, type PPTStoreConfig } from "../stores"
+import { getFolderScopedAttachmentSignature } from "./attachmentListSignature"
+import { usePPTStoreDisposal } from "./usePPTStoreDisposal"
 
 interface PPTContextValue {
 	eventBus: PPTEventBus
@@ -28,24 +30,6 @@ function getJsonSignature(value: unknown): string {
 	} catch {
 		return String(value)
 	}
-}
-
-function getAttachmentListSignature(attachmentList: any[] | undefined): string {
-	if (!Array.isArray(attachmentList)) return ""
-
-	const normalize = (items: any[]): any[] =>
-		items.map((item) => ({
-			file_id: item?.file_id,
-			file_name: item?.file_name,
-			parent_id: item?.parent_id,
-			relative_file_path: item?.relative_file_path,
-			updated_at: item?.updated_at,
-			file_version: item?.file_version,
-			display_config: item?.display_config,
-			children: Array.isArray(item?.children) ? normalize(item.children) : undefined,
-		}))
-
-	return getJsonSignature(normalize(attachmentList))
 }
 
 /**
@@ -71,6 +55,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		attachmentListSignature: string
 		mainFileId: string | undefined
 		mainFileName: string | undefined
+		initialActiveIndex: number | undefined
 	} | null>(null)
 
 	// Single-channel update: sync config to store as early as possible (useLayoutEffect)
@@ -78,7 +63,10 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 	useLayoutEffect(() => {
 		const prev = prevConfigRef.current
 		const displayConfigSlidesSignature = getJsonSignature(storeConfig.displayConfig?.slides)
-		const attachmentListSignature = getAttachmentListSignature(storeConfig.attachmentList)
+		const attachmentListSignature = getFolderScopedAttachmentSignature(
+			storeConfig.attachmentList,
+			storeConfig.mainFileId,
+		)
 		const slidesChanged =
 			!prev || prev.displayConfigSlidesSignature !== displayConfigSlidesSignature
 		const attachmentListChanged =
@@ -88,14 +76,23 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 			prev.mainFileId !== storeConfig.mainFileId ||
 			prev.mainFileName !== storeConfig.mainFileName
 		const displayConfigChanged = !prev || prev.displayConfig !== storeConfig.displayConfig
+		const initialActiveIndexChanged =
+			!prev || prev.initialActiveIndex !== storeConfig.initialActiveIndex
 
-		if (slidesChanged || attachmentListChanged || mainFileChanged || displayConfigChanged) {
+		if (
+			slidesChanged ||
+			attachmentListChanged ||
+			mainFileChanged ||
+			displayConfigChanged ||
+			initialActiveIndexChanged
+		) {
 			prevConfigRef.current = {
 				displayConfig: storeConfig.displayConfig,
 				displayConfigSlidesSignature,
 				attachmentListSignature,
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
+				initialActiveIndex: storeConfig.initialActiveIndex,
 			}
 			void store.updateConfig({
 				attachments: storeConfig.attachments,
@@ -103,6 +100,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
 				displayConfig: storeConfig.displayConfig,
+				initialActiveIndex: storeConfig.initialActiveIndex,
 			})
 		}
 	}, [
@@ -112,7 +110,11 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		storeConfig.displayConfig,
 		storeConfig.mainFileId,
 		storeConfig.mainFileName,
+		storeConfig.initialActiveIndex,
 	])
+
+	// Abort queued/running slide work after a real unmount (StrictMode replays effects in dev).
+	usePPTStoreDisposal(store)
 
 	// Update cache config when organizationCode or selectedProjectId changes
 	useEffect(() => {

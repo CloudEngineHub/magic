@@ -38,17 +38,13 @@ from .path_utils import (
 class InspectDocumentParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要探测的文档绝对路径，不接受相对路径-->
-Absolute document path to inspect. Relative paths are not accepted"""
+        description="Absolute document path to inspect. Relative paths are not accepted."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class InspectDocument(AbstractFileTool[InspectDocumentParams], WorkspaceTool[InspectDocumentParams]):
-    """<!--zh: 低成本探测文档结构，用于大文件提取前规划阅读范围。-->
-    Inspect document structure and scale before extraction."""
-
-    code_mode_only = True
+    """Inspect document structure and scale before extraction."""
 
     async def execute(self, tool_context: ToolContext, params: InspectDocumentParams) -> ToolResult:
         """Return a lightweight document profile for planning later reads."""

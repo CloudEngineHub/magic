@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { useAreaCodes, useGlobalLanguage } from "@/models/config/hooks"
 import MagicSelect, { type OptionType } from "@/components/base/MagicSelect"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface PhoneStateCodeSelectProps {
 	value: string

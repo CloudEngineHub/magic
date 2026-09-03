@@ -24,6 +24,7 @@ from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from agentlang.utils.annotation_remover import remove_developer_annotations
 from app.tools.core import BaseTool
+from app.tools.core.tool_decorator import AutoMount
 from app.tools.core.tool_definition import tool_definition_manager, ToolDefinition
 from app.tools.remote.remote_tool_manager import remote_tool_manager
 
@@ -52,6 +53,8 @@ class ToolInfo:
     lazy_load: bool = False
     # 是否仅允许 Code Mode 调用
     code_mode_only: bool = False
+    # 运行时自动挂载条件；None 表示仅按 Agent 显式配置挂载
+    auto_mount: Optional[AutoMount] = None
 
     def __post_init__(self):
         """验证创建的工具信息对象"""
@@ -85,6 +88,17 @@ class ToolFactory:
         self._definitions_initialized = False
         self._definitions_init_lock: Optional[asyncio.Lock] = None
         self._initialized = True
+
+    @staticmethod
+    def _get_registered_code_mode_only(tool_class: Type[BaseTool]) -> bool:
+        """读取 @tool 写入的注册元数据，不信任工具类体的公开属性。"""
+        return bool(getattr(tool_class, "_tool_code_mode_only", False))
+
+    @staticmethod
+    def _get_registered_auto_mount(tool_class: Type[BaseTool]) -> Optional[AutoMount]:
+        """读取 @tool 写入的自动挂载元数据。"""
+        auto_mount = getattr(tool_class, "_tool_auto_mount", None)
+        return auto_mount if isinstance(auto_mount, AutoMount) else None
 
     async def ensure_definitions_initialized(self) -> None:
         """工具定义初始化的唯一公开入口；幂等、防并发，失败时保留运行时扫描能力。"""
@@ -155,7 +169,8 @@ class ToolFactory:
                 name=tool_name,
                 description=tool_class._tool_description,
                 params_class=params_class,
-                code_mode_only=bool(getattr(tool_class, "code_mode_only", False)),
+                code_mode_only=self._get_registered_code_mode_only(tool_class),
+                auto_mount=self._get_registered_auto_mount(tool_class),
             )
 
             # 存储工具信息
@@ -176,7 +191,8 @@ class ToolFactory:
                 description=getattr(tool_class, '_tool_description', "无法获取描述"),
                 params_class=None,
                 error=str(e),
-                code_mode_only=bool(getattr(tool_class, "code_mode_only", False)),
+                code_mode_only=self._get_registered_code_mode_only(tool_class),
+                auto_mount=self._get_registered_auto_mount(tool_class),
             )
 
     def register_tool_instance(self, tool_name: str, tool_instance: BaseTool) -> None:
@@ -193,7 +209,8 @@ class ToolFactory:
                 name=tool_name,
                 description=tool_instance.get_effective_description(),
                 params_class=getattr(tool_instance, 'get_params_class', lambda: None)(),
-                code_mode_only=bool(getattr(tool_instance, "code_mode_only", False)),
+                code_mode_only=self._get_registered_code_mode_only(tool_instance.__class__),
+                auto_mount=self._get_registered_auto_mount(tool_instance.__class__),
             )
 
             # 存储工具信息
@@ -300,6 +317,7 @@ class ToolFactory:
                         description=definition.description,
                         params_class=None,  # 从 schema 中获取
                         code_mode_only=definition.code_mode_only,
+                        auto_mount=definition.auto_mount,
                     )
 
                     # 保存额外的元数据用于按需加载
@@ -491,9 +509,6 @@ class ToolFactory:
         if not tool_info.definition:
             try:
                 tool_instance = self.get_tool_instance(tool_name)
-                if getattr(tool_instance, "code_mode_only", False):
-                    logger.debug(f"跳过 CodeModeOnly 工具参数: {tool_name}")
-                    return None
                 logger.debug(f"工具 {tool_name} 没有预构建定义，使用实例生成参数")
                 return tool_instance.to_param()
             except Exception as e:
@@ -514,6 +529,17 @@ class ToolFactory:
 
         logger.debug(f"从预构建定义获取工具参数: {tool_name}")
         return tool_param
+
+    def get_llm_direct_tool_param_from_definition(self, tool_name: str) -> Optional[Dict]:
+        """获取 LLM 直接挂载 Schema，并对 Code Mode Only 工具执行致命校验。"""
+        if self.is_code_mode_only_tool(tool_name):
+            raise ValueError(
+                f"Tool '{tool_name}' is Code Mode only and cannot be declared in .agent tools. "
+                "Remove it from the .agent tools list and call it through the corresponding "
+                "Skill with run_sdk_snippet + sdk.tool.call()."
+            )
+
+        return self.get_tool_param_from_definition(tool_name)
 
     async def generate_tool_definitions(self, force: bool = False) -> bool:
         """生成预定义文件
@@ -580,7 +606,8 @@ class ToolFactory:
                         parameters_schema=tool_param_definition.get("function", {}).get("parameters"),
                         created_at=time.strftime("%Y-%m-%d %H:%M:%S"),
                         version="1.0",
-                        code_mode_only=bool(getattr(tool_instance, "code_mode_only", False)),
+                        code_mode_only=tool_info.code_mode_only,
+                        auto_mount=tool_info.auto_mount,
                     )
 
                     # 添加到工具定义管理器
@@ -854,6 +881,14 @@ class ToolFactory:
 
         return bool(tool_info.code_mode_only)
 
+    def get_auto_mount_tool_names(self, auto_mount: AutoMount) -> tuple[str, ...]:
+        """返回声明了指定自动挂载条件的本地工具名称。"""
+        return tuple(
+            tool_name
+            for tool_name, tool_info in self.get_all_tools().items()
+            if tool_info.auto_mount == auto_mount
+        )
+
     def get_all_tools(self) -> Dict[str, ToolInfo]:
         """获取所有工具信息
 
@@ -878,7 +913,9 @@ class ToolFactory:
                     params_class=None,  # 远程工具参数由其内部管理
                     error=None,
                     definition=None,
-                    lazy_load=False
+                    lazy_load=False,
+                    code_mode_only=self._get_registered_code_mode_only(remote_tool.__class__),
+                    auto_mount=None,
                 )
                 all_tools[tool_name] = tool_info
             except Exception as e:
@@ -891,26 +928,41 @@ class ToolFactory:
                     params_class=None,
                     error=str(e),
                     definition=None,
-                    lazy_load=False
+                    lazy_load=False,
+                    code_mode_only=False,
+                    auto_mount=None,
                 )
 
         return all_tools
 
-    def get_tool_names(self) -> List[str]:
-        """获取所有工具名称
+    def get_registered_tool_names(self) -> List[str]:
+        """获取全部已注册工具名称。
 
         Returns:
             List[str]: 工具名称列表
         """
-        if not self._tools:
-            self.initialize()
+        return list(self.get_all_tools().keys())
 
-        # 合并本地工具和远程工具名称；CodeModeOnly 工具只允许 sdk.tool.call 调用，不进入直接挂载列表
-        all_names = [tool_name for tool_name in self._tools.keys() if not self.is_code_mode_only_tool(tool_name)]
-        all_names.extend(remote_tool_manager.get_registered_tool_names())
+    def get_llm_direct_tool_names(self) -> List[str]:
+        """获取可直接挂载给 LLM 的工具名称。"""
+        return [
+            tool_name
+            for tool_name in self.get_registered_tool_names()
+            if not self.is_code_mode_only_tool(tool_name)
+        ]
 
-        # 去重并保持顺序
-        return list(dict.fromkeys(all_names))
+    def get_code_mode_tool_names(self) -> List[str]:
+        """获取可在 Code Mode 中通过 sdk.tool.call() 调用的工具名称。"""
+        tool_names: List[str] = []
+        for tool_name in self.get_registered_tool_names():
+            try:
+                tool_instance = self.get_tool_instance(tool_name)
+                if tool_instance.allow_code_mode():
+                    tool_names.append(tool_name)
+            except Exception as e:
+                logger.warning(f"获取工具 {tool_name} 的 Code Mode 能力时出错: {e}")
+
+        return tool_names
 
     def get_all_tool_instances(self) -> List[BaseTool]:
         """获取所有工具实例
@@ -920,12 +972,10 @@ class ToolFactory:
         """
         instances = []
 
-        # 获取所有工具名称
-        for tool_name in self.get_tool_names():
+        # 只返回可直接挂载的工具实例
+        for tool_name in self.get_llm_direct_tool_names():
             try:
                 instance = self.get_tool_instance(tool_name)
-                if getattr(instance, "code_mode_only", False):
-                    continue
                 instances.append(instance)
             except Exception as e:
                 logger.warning(f"获取工具 {tool_name} 实例时出错: {e}")

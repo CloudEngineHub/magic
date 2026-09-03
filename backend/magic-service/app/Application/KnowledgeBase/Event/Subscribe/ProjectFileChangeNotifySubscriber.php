@@ -7,23 +7,23 @@ declare(strict_types=1);
 
 namespace App\Application\KnowledgeBase\Event\Subscribe;
 
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
+use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
+use App\Domain\SuperMagic\File\Event\FileDeletedEvent;
+use App\Domain\SuperMagic\File\Event\FileMovedEvent;
+use App\Domain\SuperMagic\File\Event\FileRenamedEvent;
+use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
+use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Rpc\JsonRpc\Client\Knowledge\ProjectFileRpcClient;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\DirectoryDeletedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileContentSavedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileDeletedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileMovedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileRenamedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FilesBatchDeletedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 use Throwable;
 
-#[AsyncListener]
+#[AsyncListener(driver: 'coroutine')]
 #[Listener]
 class ProjectFileChangeNotifySubscriber implements ListenerInterface
 {
@@ -66,7 +66,7 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
 
         $fileEntity = $context['file_entity'];
         $projectFileId = $fileEntity->getFileId();
-        if ($projectFileId <= 0 || $fileEntity->getIsDirectory()) {
+        if (! $this->isProjectFile($fileEntity) || $fileEntity->getIsDirectory()) {
             return;
         }
 
@@ -90,7 +90,7 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
         $authorization = $event->getUserAuthorization();
         foreach ($event->getFileEntities() as $fileEntity) {
             $projectFileId = (int) $fileEntity->getFileId();
-            if ($projectFileId <= 0) {
+            if (! $this->isProjectFile($fileEntity)) {
                 continue;
             }
 
@@ -113,7 +113,7 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
     {
         $directoryEntity = $event->getDirectoryEntity();
         $projectFileId = (int) $directoryEntity->getFileId();
-        if ($projectFileId <= 0) {
+        if (! $this->isProjectFile($directoryEntity)) {
             return;
         }
 
@@ -197,5 +197,12 @@ class ProjectFileChangeNotifySubscriber implements ListenerInterface
                 'error' => $throwable->getMessage(),
             ]);
         }
+    }
+
+    private function isProjectFile(TaskFileEntity $fileEntity): bool
+    {
+        return $fileEntity->getFileId() > 0
+            && $fileEntity->getProjectId() > 0
+            && $fileEntity->getSpaceType() === 'project';
     }
 }

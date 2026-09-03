@@ -361,6 +361,13 @@ export class CanvasDesignClipboard {
 		options?: CanvasDesignClipboardOptions,
 	): Promise<CanvasDesignClipboardReadBundleResult | null> {
 		const items = await this.read(options)
+		return this.readBundleFromItems(items)
+	}
+
+	/** 从已读取的 ClipboardItem 快照解析 bundle，避免重复调用 Clipboard API。 */
+	public static async readBundleFromItems(
+		items: ClipboardItem[] | null,
+	): Promise<CanvasDesignClipboardReadBundleResult | null> {
 		const bundleItem = items?.find((item) =>
 			item.types.includes(CANVAS_DESIGN_CLIPBOARD_BUNDLE_MIME_TYPE),
 		)

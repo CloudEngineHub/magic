@@ -71,6 +71,10 @@ export const RequestUrl = {
 	uploadFile: "/api/v1/file/upload-business-file",
 	/** 获取上传凭证 */
 	getUploadCredentials: "/api/v1/file/temporary-credential",
+	/** 获取业务隔离的公有桶上传凭证 */
+	getPublicBusinessUploadToken: "/api/v1/file/public-upload-token",
+	/** 获取业务隔离的私有桶上传凭证 */
+	getPrivateBusinessUploadToken: "/api/v1/file/private-upload-token",
 	/** 删除文件 */
 	deleteFile: "/api/v1/file/delete-business-file",
 	/** 获取文件临时链接 */
@@ -124,6 +128,22 @@ export const RequestUrl = {
 	getDataDashboardMemberSummary: "/api/v1/admin/data-dashboard/member-analysis/summary",
 	/** 数据看板 - 成员分析 Tabs */
 	getDataDashboardMemberTabs: "/api/v1/admin/data-dashboard/member-analysis/tabs",
+	/** 数据看板 - 组织分析 Summary */
+	getDataDashboardOrganizationSummary:
+		"/api/v1/admin/data-dashboard/organization-analysis/summary",
+	/** 数据看板 - 组织分析 Tabs */
+	getDataDashboardOrganizationTabs: "/api/v1/admin/data-dashboard/organization-analysis/tabs",
+	/** 数据看板 - 消耗分析 Summary */
+	getDataDashboardConsumptionSummary: "/api/v1/admin/data-dashboard/consumption-analysis/summary",
+	/** 数据看板 - 创建数字员工分析导出任务 */
+	createDataDashboardAgentExport: "/api/v1/admin/data-dashboard/agent-analysis/export",
+	/** 数据看板 - 创建组织分析导出任务 */
+	createDataDashboardOrganizationExport:
+		"/api/v1/admin/data-dashboard/organization-analysis/export",
+	/** 数据看板 - 创建成员分析导出任务 */
+	createDataDashboardMemberExport: "/api/v1/admin/data-dashboard/member-analysis/export",
+	/** 数据看板 - 查询导出任务 */
+	getDataDashboardExportTask: "/api/v1/admin/export-tasks/${export_id}",
 
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */
@@ -131,6 +151,8 @@ export const RequestUrl = {
 	getModeList: "/api/v1/official/admin/modes",
 	/** 获取默认模式 */
 	getDefaultMode: "/api/v1/official/admin/modes/default",
+	/** 获取、更新平台默认数字员工 */
+	defaultAgentSetting: "/api/v1/official/admin/mode-settings/default-agent",
 	/** 获取模式详情 */
 	getModeDetail: "/api/v1/official/admin/modes/${id}",
 	/** 修改模式状态 */
@@ -174,6 +196,22 @@ export const RequestUrl = {
 	getSkillMarketList: "/api/v1/admin/skills/markets/queries",
 	/** 更新 Skill 市场信息 */
 	updateSkillMarketInfo: "/api/v1/admin/skills/markets/${id}",
+	/** 更新 Skill 市场分类关系（全量替换） */
+	updateSkillMarketCategoryRelation: "/api/v1/admin/skills/markets/${id}/category",
+	/** Skill 市场分类列表 */
+	getSkillMarketCategoryList: "/api/v1/admin/skills/categories/queries",
+	/** Skill 市场分类详情 */
+	getSkillMarketCategoryDetail: "/api/v1/admin/skills/categories/${id}",
+	/** 创建 Skill 市场分类 */
+	createSkillMarketCategory: "/api/v1/admin/skills/categories",
+	/** 更新 Skill 市场分类 */
+	updateSkillMarketCategory: "/api/v1/admin/skills/categories/${id}",
+	/** 删除 Skill 市场分类 */
+	deleteSkillMarketCategory: "/api/v1/admin/skills/categories/${id}",
+	/** 解析官方 Skill 压缩包（导入第一阶段） */
+	parseOfficialSkillFile: "/api/v1/admin/official-skills/import/parse/file",
+	/** 导入官方 Skill（导入第二阶段） */
+	importOfficialSkill: "/api/v1/admin/official-skills/import",
 	/** 审核 Skill 版本 */
 	reviewSkillVersion: "/api/v1/admin/skills/versions/${id}/review",
 	/** —————— 平台管理 - 能力管理 —————— */

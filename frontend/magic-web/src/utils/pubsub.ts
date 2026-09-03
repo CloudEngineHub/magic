@@ -143,10 +143,14 @@ export const PubSubEvents = {
 	Open_Playback_Tab: "super_magic_open_playback_tab",
 	/** 超级麦吉 - 展开话题对话面板 */
 	Expand_Topic_Conversation_Panel: "super_magic_expand_topic_conversation_panel",
+	/** Super Magic - collapse the topic conversation panel. */
+	Collapse_Topic_Conversation_Panel: "super_magic_collapse_topic_conversation_panel",
 	/** 订阅超麦消息队列更新 */
 	SuperMagicMessageQueueConsumed: "PubSub_Super_Magic_Message_Queue",
 	/** 超级麦吉 - WebSocket Intermediate 工程文件变更（订阅方自行处理） */
 	Super_Magic_File_Change_Intermediate: "PubSub_Super_Magic_File_Change_Intermediate",
+	/** 超级麦吉 - WebSocket 检查点撤销/恢复通知（订阅方通过 HTTP 对账） */
+	Super_Magic_Checkpoint_Rollback: "PubSub_Super_Magic_Checkpoint_Rollback",
 	/** 录音总结 - 接收外部消息内容，发送消息 */
 	Send_Message_by_Content: "send_message_by_content",
 	/** 超级麦吉 - 更新附件加载状态 */
@@ -173,6 +177,8 @@ export const PubSubEvents = {
 	Receive_RecordSummary_Audio_File: "receive_record_summary_audio_file",
 	/** 超级麦吉 - 设置输入框消息 */
 	Set_Input_Message: "PubSub_Set_Input_Message",
+	/** Widget-only editor input maintenance command. */
+	Magic_Widget_Editor_Command: "magic_widget_editor_command",
 	/** 超级麦吉 - 设置目标模型 */
 	Set_Target_Model: "PubSub_Set_Target_Model",
 	/** 超级麦吉 - 添加内容到聊天框 */
@@ -199,6 +205,8 @@ export const PubSubEvents = {
 	Super_Magic_Receive_Shared_Project_Mode: "super_magic_receive_shared_project_mode",
 	/** 超级麦吉 - 添加文件到 MessageEditor */
 	Super_Magic_Add_Files_To_MessageEditor: "super_magic_add_files_to_message_editor",
+	/** 超级麦吉 - 画布选中媒体，预添加到 MessageEditor */
+	Super_Magic_Canvas_Selection_Mentions: "super_magic_canvas_selection_mentions",
 	/** 超级麦吉 - 刷新分享列表 */
 	Refresh_Share_List: "PubSub_Refresh_Share_List",
 	/** 超级麦吉 - 详情页刷新 */
@@ -242,4 +250,6 @@ export const PubSubEvents = {
 	Playback_End: "super_magic_playback_end",
 	/** 超级麦吉 - 向编辑器插入拖拽数据（当前由外部/原生层触发，无 TypeScript publish 侧） */
 	Insert_Drag_Data_To_Editor: "super_magic_insert_drag_data_to_editor",
+	/** 当前用户的完整个人偏好已更新 */
+	Personal_Preferences_Updated: "personal_preferences_updated",
 } as const

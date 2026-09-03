@@ -11,6 +11,7 @@ from agentlang.llms.utils.token_adjuster import (
 )
 from agentlang.llms.utils.debug_logger import (
     save_llm_debug_log,
+    prune_llm_request_logs_if_needed,
     LLMDebugInfo,
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "MAX_MAX_TOKENS",
     "DEFAULT_SAFETY_BUFFER",
     "save_llm_debug_log",
+    "prune_llm_request_logs_if_needed",
     "LLMDebugInfo",
 ]

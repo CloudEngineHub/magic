@@ -6,6 +6,7 @@ import {
 	buildWebsiteTab,
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getCommonWebsitePresets,
+	getWebsitePresets,
 	isWebsiteTab,
 	removeCommonWebsitePreset,
 	saveCommonWebsitePreset,
@@ -152,63 +153,31 @@ describe("website tabs", () => {
 		expect(preset?.url).toBe("https://example.com/prompts")
 	})
 
-	it("includes curated prompt and material discovery website presets with translation keys", () => {
-		expect(WEBSITE_PRESETS).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					id: "letsmagic-nano-banana-pro-prompts",
-					titleKey: "fileViewer.website.presets.nanoBananaPro.title",
-					icon: "nano-banana-pro",
-					url: "https://www.letsmagic.cn/nano-banana-pro-prompts",
-				}),
-				expect.objectContaining({
-					id: "letsmagic-gpt-image-2-prompts",
-					titleKey: "fileViewer.website.presets.gptImage2.title",
-					icon: "gpt-image-2",
-					url: "https://www.letsmagic.cn/gpt-image-2-prompts",
-				}),
-				expect.objectContaining({
-					id: "baidu-images",
-					titleKey: "fileViewer.website.presets.baiduImages.title",
-					descriptionKey: "fileViewer.website.presets.baiduImages.description",
-					iconSrc: expect.stringContaining("baidu-images.png"),
-					url: expect.stringContaining("https://image.baidu.com/search/index"),
-				}),
-				expect.objectContaining({
-					id: "bing-images",
-					titleKey: "fileViewer.website.presets.bingImages.title",
-					descriptionKey: "fileViewer.website.presets.bingImages.description",
-					iconSrc: expect.stringMatching(/^data:image\/svg\+xml/),
-					url: "https://www.bing.com/images/search",
-				}),
-				expect.objectContaining({
-					id: "xiaohongshu",
-					titleKey: "fileViewer.website.presets.xiaohongshu.title",
-					iconSrc: expect.stringContaining("xiaohongshu.png"),
-					url: "https://www.xiaohongshu.com/",
-				}),
-				expect.objectContaining({
-					id: "zcool",
-					titleKey: "fileViewer.website.presets.zcool.title",
-					iconSrc: expect.stringContaining("zcool.png"),
-					url: "https://www.zcool.com.cn/",
-				}),
-				expect.objectContaining({
-					id: "pexels",
-					titleKey: "fileViewer.website.presets.pexels.title",
-					iconSrc: expect.stringContaining("pexels.png"),
-					url: "https://www.pexels.com/",
-				}),
-			]),
-		)
+	it("includes the remaining material discovery website presets", () => {
+		expect(WEBSITE_PRESETS.map((preset) => preset.id)).toEqual([
+			"baidu-images",
+			"bing-images",
+			"pexels",
+		])
 
 		const presetIds = WEBSITE_PRESETS.map((preset) => preset.id)
+		expect(presetIds).not.toContain("letsmagic-nano-banana-pro-prompts")
+		expect(presetIds).not.toContain("letsmagic-gpt-image-2-prompts")
+		expect(presetIds).not.toContain("xiaohongshu")
 		expect(presetIds).not.toContain("douyin")
 		expect(presetIds).not.toContain("pixabay")
 		expect(presetIds).not.toContain("google-images")
 		expect(presetIds).not.toContain("magnific")
 		expect(presetIds).not.toContain("unsplash")
 		expect(presetIds).not.toContain("freepik")
+	})
+
+	it("hides Baidu Images in the international environment", () => {
+		expect(getWebsitePresets(true).map((preset) => preset.id)).toEqual([
+			"bing-images",
+			"pexels",
+		])
+		expect(getWebsitePresets(false).map((preset) => preset.id)).toContain("baidu-images")
 	})
 
 	it("builds a stable persisted tab for a website preset", () => {
@@ -456,6 +425,37 @@ describe("website tabs", () => {
 		expect(addWebsiteToCommon).toHaveBeenCalledWith(websiteTab)
 	})
 
+	it("disables close actions that cannot remove protected tabs", () => {
+		const protectedTab = {
+			id: "index",
+			title: "index.html",
+			type: "file" as const,
+			active: true,
+			closeable: false,
+			fileData: { file_id: "index", file_name: "index.html" },
+		}
+		const actions = {
+			closeFileTab: vi.fn(),
+			closeOtherTabs: vi.fn(),
+			closeTabsToRight: vi.fn(),
+			clearAllTabs: vi.fn(),
+			refreshTab: vi.fn(),
+		}
+		const { result } = renderHook(() => useTabContextMenu({ tabs: [protectedTab], actions }))
+		const items = result.current.getContextMenuItems(protectedTab.id) || []
+
+		expect(items.find((item) => item?.key === "close")).toMatchObject({ disabled: true })
+		expect(items.find((item) => item?.key === "closeOthers")).toMatchObject({
+			disabled: true,
+		})
+		expect(items.find((item) => item?.key === "closeToRight")).toMatchObject({
+			disabled: true,
+		})
+		expect(items.find((item) => item?.key === "closeAll")).toMatchObject({
+			disabled: true,
+		})
+	})
+
 	it("renders website tabs through an iframe with an external-open fallback", () => {
 		render(
 			<WebsiteIframeTabContent
@@ -642,23 +642,36 @@ describe("website tabs", () => {
 
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "fileViewer.website.presets.nanoBananaPro.title",
+				name: "fileViewer.website.presets.baiduImages.title",
 			}),
 		)
 
 		expect(onOpenWebsiteTab).toHaveBeenCalledWith({
 			...WEBSITE_PRESETS[0],
-			title: "fileViewer.website.presets.nanoBananaPro.title",
-			description: "fileViewer.website.presets.nanoBananaPro.description",
+			title: "fileViewer.website.presets.baiduImages.title",
+			description: "fileViewer.website.presets.baiduImages.description",
 		})
 	})
 
-	it("renders model icons for the LetsMagic prompt website presets", () => {
+	it("does not render the removed website presets", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
-		expect(screen.getByTestId("website-preset-icon-nano-banana-pro")).toBeInTheDocument()
-		expect(screen.getByTestId("website-preset-icon-gpt-image-2")).toBeInTheDocument()
+		expect(
+			screen.queryByRole("button", {
+				name: "fileViewer.website.presets.nanoBananaPro.title",
+			}),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByRole("button", {
+				name: "fileViewer.website.presets.gptImage2.title",
+			}),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByRole("button", {
+				name: "fileViewer.website.presets.xiaohongshu.title",
+			}),
+		).not.toBeInTheDocument()
 	})
 
 	it("renders website icons for material discovery presets", () => {
@@ -672,14 +685,6 @@ describe("website tabs", () => {
 		expect(screen.getByTestId("website-preset-icon-bing-images")).toHaveAttribute(
 			"src",
 			expect.stringMatching(/^data:image\/svg\+xml/),
-		)
-		expect(screen.getByTestId("website-preset-icon-xiaohongshu")).toHaveAttribute(
-			"src",
-			expect.stringContaining("xiaohongshu.png"),
-		)
-		expect(screen.getByTestId("website-preset-icon-zcool")).toHaveAttribute(
-			"src",
-			expect.stringContaining("zcool.png"),
 		)
 		expect(screen.getByTestId("website-preset-icon-pexels")).toHaveAttribute(
 			"src",

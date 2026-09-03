@@ -2,7 +2,7 @@ import { IconMusicUp, IconX } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import MagicIcon from "@/components/base/MagicIcon"
 import { InterruptButton } from "@/pages/superMagic/components/MessageEditor/components"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
 import LoadingIcon from "@/components/business/RecordingSummary/components/LoadingIcon"
 import StartRecordingButton from "@/components/business/RecordingSummary/components/StartRecordingButton"
@@ -23,6 +23,7 @@ interface IdleStateViewProps {
 	iconSize: number
 	selectedProjectId?: string
 	isStartingRecord: boolean
+	isModelReady: boolean
 	uploading: boolean
 	uploadProgress: number
 	leftToolbar: ReactNode
@@ -33,6 +34,8 @@ interface IdleStateViewProps {
 	onStartRecording: (mode: "new" | "current") => Promise<void>
 	onCancelUpload: () => void
 	onUploadFile: (fileList: FileList) => Promise<void>
+	/** Expand the idle recording surface to the height negotiated by the conversation layout. */
+	fillHeight?: boolean
 }
 
 export function IdleStateView({
@@ -41,6 +44,7 @@ export function IdleStateView({
 	iconSize,
 	selectedProjectId,
 	isStartingRecord,
+	isModelReady,
 	uploading,
 	uploadProgress,
 	leftToolbar,
@@ -51,6 +55,7 @@ export function IdleStateView({
 	onStartRecording,
 	onCancelUpload,
 	onUploadFile,
+	fillHeight = false,
 }: IdleStateViewProps) {
 	const { t } = useTranslation("super")
 	const { handlePermissionDenied, handlePermissionError } = useMicrophonePermission()
@@ -119,6 +124,7 @@ export function IdleStateView({
 				className={cn(
 					"relative flex min-h-[150px] w-full flex-col items-center justify-end gap-2",
 					(size === "small" || size === "mobile") && "items-center gap-2.5",
+					fillHeight && "min-h-0 flex-1",
 				)}
 				data-testid="recording-editor-initial-state"
 			>
@@ -128,7 +134,7 @@ export function IdleStateView({
 				>
 					<StartRecordingButton
 						isLoading={isStartingRecord}
-						disabled={isStartingRecord || uploading}
+						disabled={isStartingRecord || uploading || !isModelReady}
 						allowSelectProject={!selectedProjectId}
 						onClick={handleStartRecording}
 					/>

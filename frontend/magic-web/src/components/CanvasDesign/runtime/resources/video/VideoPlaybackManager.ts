@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { isOssExpired } from "../offline-cache/ossExpiryUtils"
-import { toCanonicalCanvasResourcePath } from "../../shared/path/canvasResourcePath"
+import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
 
 /** 播放会话归属（由 consumerId 前缀推断） */
 export type VideoPlaybackOwnerKind = "inline" | "fullscreen" | "unknown"
@@ -47,6 +47,7 @@ interface AcquirePlaybackOptions {
 }
 
 interface PathPlaybackGroup {
+	identity: string
 	path: string
 	consumers: Map<string, VideoPlaybackSession>
 	activeConsumerIds: Set<string>
@@ -55,6 +56,7 @@ interface PathPlaybackGroup {
 }
 
 interface InternalVideoPlaybackSession extends VideoPlaybackSession {
+	resourceIdentity: string
 	disposeBindings?: () => void
 	resolvedOssSrc: string
 	expiresAt: number | null
@@ -71,13 +73,11 @@ export class VideoPlaybackManager {
 	private sessionsByConsumer = new Map<string, InternalVideoPlaybackSession>()
 	private groupsByPath = new Map<string, PathPlaybackGroup>()
 	private stateListenersByConsumer = new Map<string, Set<VideoPlaybackConsumerStateListener>>()
+	private pendingAcquireControllers = new Map<string, AbortController>()
+	private destroyed = false
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
-	}
-
-	private getResolveAbsolutePath(): ((path: string) => string) | undefined {
-		return this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 	}
 
 	public getSession(consumerId: string): VideoPlaybackSession | undefined {
@@ -119,19 +119,19 @@ export class VideoPlaybackManager {
 	}
 
 	public getGroup(path: string): PathPlaybackGroupSnapshot | undefined {
-		const key = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
+		const key = getCanvasHostResourceReferenceIdentity(this.canvas, path)
 		const group = this.groupsByPath.get(key)
 		return group ? this.buildGroupSnapshot(group) : undefined
 	}
 
 	public getConsumersByPath(path: string): VideoPlaybackSession[] {
-		const key = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
+		const key = getCanvasHostResourceReferenceIdentity(this.canvas, path)
 		const group = this.groupsByPath.get(key)
 		return group ? Array.from(group.consumers.values()) : []
 	}
 
 	public getActiveConsumerCount(path: string): number {
-		const key = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
+		const key = getCanvasHostResourceReferenceIdentity(this.canvas, path)
 		return this.groupsByPath.get(key)?.activeConsumerIds.size ?? 0
 	}
 
@@ -140,9 +140,12 @@ export class VideoPlaybackManager {
 		consumerId: string,
 		options?: AcquirePlaybackOptions,
 	): Promise<VideoPlaybackSession | null> {
-		const normalizedPath = toCanonicalCanvasResourcePath(path, this.getResolveAbsolutePath())
+		if (this.destroyed) {
+			return null
+		}
+		const resourceIdentity = getCanvasHostResourceReferenceIdentity(this.canvas, path)
 		const existing = this.sessionsByConsumer.get(consumerId)
-		if (existing && existing.path === normalizedPath) {
+		if (existing && existing.resourceIdentity === resourceIdentity) {
 			existing.ownerKind = this.inferOwnerKind(consumerId)
 			existing.lastActiveAt = Date.now()
 			if (existing.refreshPromise) {
@@ -162,88 +165,114 @@ export class VideoPlaybackManager {
 			this.release(consumerId)
 		}
 
-		const ossInfo = await this.canvas.videoResourceManager.ensureFreshOssInfo(path, {
-			allowCachedFallback: true,
-			priority: options?.autoPlay ? "critical" : "visible",
-		})
-		if (!ossInfo) {
-			return null
-		}
+		this.pendingAcquireControllers.get(consumerId)?.abort()
+		const acquireController = new AbortController()
+		this.pendingAcquireControllers.set(consumerId, acquireController)
 
-		return this.canvas.resourceScheduler.run(
-			"video:playback-acquire",
-			async () => {
-				let currentOssInfo = ossInfo
-				const video = document.createElement("video")
-				video.crossOrigin = "anonymous"
-				video.preload = "auto"
-				video.playsInline = true
-				video.src = currentOssInfo.ossSrc
-				this.applyPlaybackOptions(video, options)
-
-				let isReady = await this.waitUntilReady(video, options?.currentTime)
-				if (!isReady && this.isCanvasVirtualResourceUrl(currentOssInfo.ossSrc)) {
-					const fallbackOssInfo =
-						await this.canvas.videoResourceManager.resolveVirtualPlaybackFallbackOssInfo(
-							path,
-							currentOssInfo.ossSrc,
-						)
-					if (fallbackOssInfo) {
-						currentOssInfo = fallbackOssInfo
-						video.src = currentOssInfo.ossSrc
-						isReady = await this.waitUntilReady(video, options?.currentTime)
-					}
-				}
-				if (!isReady) {
-					this.disposeVideo(video)
-					return null
-				}
-
-				const group = this.getOrCreateGroup(normalizedPath)
-				group.lastResolvedOssSrc = currentOssInfo.ossSrc
-				group.lastWarmupAt = Date.now()
-				await this.cachePlaybackResource(
-					normalizedPath,
-					currentOssInfo.ossSrc,
-					currentOssInfo.expiresAt,
-				)
-
-				const now = Date.now()
-				const session: InternalVideoPlaybackSession = {
-					consumerId,
-					path: normalizedPath,
-					video,
-					createdAt: now,
-					lastActiveAt: now,
-					ownerKind: this.inferOwnerKind(consumerId),
-					isActive: !video.paused && !video.ended,
-					resolvedOssSrc: currentOssInfo.ossSrc,
-					expiresAt: currentOssInfo.expiresAt,
-					isRefreshing: false,
-					refreshTimer: null,
-					refreshPromise: null,
-				}
-				session.disposeBindings = this.bindSessionActivity(session)
-				this.sessionsByConsumer.set(consumerId, session)
-				group.consumers.set(consumerId, session)
-				this.syncSessionActiveState(session, session.isActive)
-				this.scheduleSessionRefresh(session)
-
-				if (options?.autoPlay) {
-					await video.play().catch(() => undefined)
-				}
-
-				return session
-			},
-			{
-				source: "video-playback:acquire",
-				canvasId: this.canvas.id,
-				ownerId: consumerId,
-				path: normalizedPath,
-				url: ossInfo.ossSrc,
+		try {
+			const ossInfo = await this.canvas.videoResourceManager.ensureFreshOssInfo(path, {
+				allowCachedFallback: true,
 				priority: options?.autoPlay ? "critical" : "visible",
-			},
-		)
+				signal: acquireController.signal,
+			})
+			if (!ossInfo || this.destroyed || acquireController.signal.aborted) {
+				return null
+			}
+
+			return await this.canvas.resourceScheduler.run(
+				"video:playback-acquire",
+				async (signal) => {
+					let currentOssInfo = ossInfo
+					const video = document.createElement("video")
+					video.crossOrigin = "anonymous"
+					video.preload = "auto"
+					video.playsInline = true
+					video.src = currentOssInfo.ossSrc
+					this.applyPlaybackOptions(video, options)
+
+					let isReady = await this.waitUntilReady(video, options?.currentTime, signal)
+					if (!isReady && (this.destroyed || signal.aborted)) {
+						this.disposeVideo(video)
+						return null
+					}
+					if (!isReady && this.isCanvasVirtualResourceUrl(currentOssInfo.ossSrc)) {
+						const fallbackOssInfo =
+							await this.canvas.videoResourceManager.resolveVirtualPlaybackFallbackOssInfo(
+								path,
+								currentOssInfo.ossSrc,
+							)
+						if (fallbackOssInfo && !this.destroyed && !signal.aborted) {
+							currentOssInfo = fallbackOssInfo
+							video.src = currentOssInfo.ossSrc
+							isReady = await this.waitUntilReady(video, options?.currentTime, signal)
+						}
+					}
+					if (!isReady || this.destroyed || signal.aborted) {
+						this.disposeVideo(video)
+						return null
+					}
+
+					const group = this.getOrCreateGroup(resourceIdentity, path)
+					group.lastResolvedOssSrc = currentOssInfo.ossSrc
+					group.lastWarmupAt = Date.now()
+					await this.cachePlaybackResource(
+						path,
+						currentOssInfo.ossSrc,
+						currentOssInfo.expiresAt,
+					)
+
+					const now = Date.now()
+					const session: InternalVideoPlaybackSession = {
+						consumerId,
+						path,
+						resourceIdentity,
+						video,
+						createdAt: now,
+						lastActiveAt: now,
+						ownerKind: this.inferOwnerKind(consumerId),
+						isActive: !video.paused && !video.ended,
+						resolvedOssSrc: currentOssInfo.ossSrc,
+						expiresAt: currentOssInfo.expiresAt,
+						isRefreshing: false,
+						refreshTimer: null,
+						refreshPromise: null,
+					}
+					session.disposeBindings = this.bindSessionActivity(session)
+					this.sessionsByConsumer.set(consumerId, session)
+					group.consumers.set(consumerId, session)
+					this.syncSessionActiveState(session, session.isActive)
+					this.scheduleSessionRefresh(session)
+
+					if (options?.autoPlay) {
+						await video.play().catch(() => undefined)
+					}
+
+					return session
+				},
+				{
+					source: "video-playback:acquire",
+					canvasId: this.canvas.id,
+					ownerId: consumerId,
+					path,
+					url: ossInfo.ossSrc,
+					priority: options?.autoPlay ? "critical" : "visible",
+					signal: acquireController.signal,
+				},
+			)
+		} catch (error) {
+			if (
+				this.destroyed ||
+				acquireController.signal.aborted ||
+				(error instanceof Error && error.name === "AbortError")
+			) {
+				return null
+			}
+			throw error
+		} finally {
+			if (this.pendingAcquireControllers.get(consumerId) === acquireController) {
+				this.pendingAcquireControllers.delete(consumerId)
+			}
+		}
 	}
 
 	public handoff(fromConsumerId: string, toConsumerId: string): VideoPlaybackSession | null {
@@ -257,7 +286,7 @@ export class VideoPlaybackManager {
 		}
 
 		this.release(toConsumerId)
-		const group = this.groupsByPath.get(session.path)
+		const group = this.groupsByPath.get(session.resourceIdentity)
 		this.sessionsByConsumer.delete(fromConsumerId)
 		this.sessionsByConsumer.set(toConsumerId, session)
 		session.consumerId = toConsumerId
@@ -276,18 +305,23 @@ export class VideoPlaybackManager {
 	}
 
 	public release(consumerId: string): void {
+		const pendingAcquireController = this.pendingAcquireControllers.get(consumerId)
+		if (pendingAcquireController) {
+			pendingAcquireController.abort()
+			this.pendingAcquireControllers.delete(consumerId)
+		}
 		const session = this.sessionsByConsumer.get(consumerId)
 		if (!session) {
 			return
 		}
 
 		this.sessionsByConsumer.delete(consumerId)
-		const group = this.groupsByPath.get(session.path)
+		const group = this.groupsByPath.get(session.resourceIdentity)
 		if (group) {
 			group.consumers.delete(consumerId)
 			group.activeConsumerIds.delete(consumerId)
 			if (group.consumers.size === 0) {
-				this.groupsByPath.delete(session.path)
+				this.groupsByPath.delete(session.resourceIdentity)
 			}
 		}
 		session.disposeBindings?.()
@@ -298,6 +332,10 @@ export class VideoPlaybackManager {
 	}
 
 	public destroy(): void {
+		if (this.destroyed) return
+		this.destroyed = true
+		this.pendingAcquireControllers.forEach((controller) => controller.abort())
+		this.pendingAcquireControllers.clear()
 		this.sessionsByConsumer.forEach((session) => {
 			session.disposeBindings?.()
 			session.disposeBindings = undefined
@@ -326,7 +364,11 @@ export class VideoPlaybackManager {
 		}
 	}
 
-	private waitUntilReady(video: HTMLVideoElement, currentTime?: number): Promise<boolean> {
+	private waitUntilReady(
+		video: HTMLVideoElement,
+		currentTime?: number,
+		signal?: AbortSignal,
+	): Promise<boolean> {
 		return new Promise((resolve) => {
 			let settled = false
 			let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -335,6 +377,7 @@ export class VideoPlaybackManager {
 				video.removeEventListener("loadeddata", handleLoadedData)
 				video.removeEventListener("loadedmetadata", handleLoadedMetadata)
 				video.removeEventListener("error", handleError)
+				signal?.removeEventListener("abort", handleAbort)
 				if (timeoutId) {
 					clearTimeout(timeoutId)
 					timeoutId = null
@@ -351,6 +394,10 @@ export class VideoPlaybackManager {
 			}
 
 			const handleError = () => {
+				finish(false)
+			}
+
+			const handleAbort = () => {
 				finish(false)
 			}
 
@@ -377,9 +424,14 @@ export class VideoPlaybackManager {
 			video.addEventListener("loadedmetadata", handleLoadedMetadata)
 			video.addEventListener("loadeddata", handleLoadedData)
 			video.addEventListener("error", handleError)
+			signal?.addEventListener("abort", handleAbort, { once: true })
 			timeoutId = setTimeout(() => {
 				finish(false)
 			}, VIDEO_PLAYBACK_READY_TIMEOUT_MS)
+			if (signal?.aborted) {
+				handleAbort()
+				return
+			}
 			video.load()
 
 			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -388,17 +440,18 @@ export class VideoPlaybackManager {
 		})
 	}
 
-	private getOrCreateGroup(path: string): PathPlaybackGroup {
-		let group = this.groupsByPath.get(path)
+	private getOrCreateGroup(identity: string, path: string): PathPlaybackGroup {
+		let group = this.groupsByPath.get(identity)
 		if (!group) {
 			group = {
+				identity,
 				path,
 				consumers: new Map(),
 				activeConsumerIds: new Set(),
 				lastResolvedOssSrc: null,
 				lastWarmupAt: null,
 			}
-			this.groupsByPath.set(path, group)
+			this.groupsByPath.set(identity, group)
 		}
 		return group
 	}
@@ -492,7 +545,7 @@ export class VideoPlaybackManager {
 
 	private syncSessionActiveState(session: InternalVideoPlaybackSession, isActive: boolean): void {
 		session.isActive = isActive
-		const group = this.groupsByPath.get(session.path)
+		const group = this.groupsByPath.get(session.resourceIdentity)
 		if (!group) {
 			return
 		}
@@ -614,7 +667,7 @@ export class VideoPlaybackManager {
 
 			session.resolvedOssSrc = ossInfo.ossSrc
 			session.expiresAt = ossInfo.expiresAt
-			const group = this.groupsByPath.get(session.path)
+			const group = this.groupsByPath.get(session.resourceIdentity)
 			if (group) {
 				group.lastResolvedOssSrc = ossInfo.ossSrc
 				group.lastWarmupAt = Date.now()

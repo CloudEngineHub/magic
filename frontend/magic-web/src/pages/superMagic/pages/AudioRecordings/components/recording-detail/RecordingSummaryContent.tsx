@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
 import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../../types/recording-detail"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { parseTopicsMarkdown } from "../../utils/topics-parser"
 import { formatRecordingTime } from "../../utils/time"
 import { resolveMarkdownSpeakerLabels } from "../../utils/markdownTimeLinks"
@@ -17,13 +18,17 @@ import { RecordingMarkdownContent } from "./RecordingMarkdownContent"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
 import { RecordingDetailRegionEmptySlot } from "./RecordingDetailRegionEmptySlot"
-import { useHorizontalScrollWithFade } from "../../hooks/useHorizontalScrollWithFade"
+import {
+	centerHorizontalItemInContainer,
+	useHorizontalScrollWithFade,
+} from "../../hooks/useHorizontalScrollWithFade"
 import { RecordingTokenText } from "./RecordingTokenText"
 
 export interface RecordingSummaryContentProps {
 	file: RecordingDetailFileRef
 	content?: string
 	attachmentList: AttachmentItem[]
+	attachmentTree?: AttachmentFile[]
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
@@ -36,6 +41,7 @@ export function RecordingSummaryContent({
 	file,
 	content,
 	attachmentList,
+	attachmentTree = [],
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
@@ -70,6 +76,8 @@ export function RecordingSummaryContent({
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 				onTimeClick={onTimeClick}
 				layout={layout}
+				attachments={attachmentTree}
+				relativeFilePath={file.file.relative_file_path ?? file.file.path}
 			/>
 		)
 	}
@@ -79,6 +87,8 @@ export function RecordingSummaryContent({
 			<RecordingMarkdownContent
 				content={content}
 				layout={layout}
+				attachments={attachmentTree}
+				relativeFilePath={file.file.relative_file_path ?? file.file.path}
 				speakerNameMap={speakerNameMap}
 				onSpeakerClick={onOpenSpeakerSettings}
 				onTimeClick={(time) => onTimeClick(time)}
@@ -152,6 +162,8 @@ function MindmapContent({
 	onOpenSpeakerSettings,
 	onTimeClick,
 	layout,
+	attachments,
+	relativeFilePath,
 }: {
 	content: string
 	scrollPaddingBottom: number
@@ -159,6 +171,8 @@ function MindmapContent({
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 	layout: "desktop" | "mobile"
+	attachments?: AttachmentFile[]
+	relativeFilePath?: string
 }) {
 	const [viewMode, setViewMode] = useState<"map" | "markdown">("map")
 	const isDesktop = layout === "desktop"
@@ -191,6 +205,8 @@ function MindmapContent({
 							speakerNameMap={speakerNameMap}
 							onSpeakerClick={onOpenSpeakerSettings}
 							onTimeClick={(time) => onTimeClick(time)}
+							attachments={attachments}
+							relativeFilePath={relativeFilePath}
 						/>
 					</div>
 				)}
@@ -225,6 +241,8 @@ function MindmapContent({
 						speakerNameMap={speakerNameMap}
 						onSpeakerClick={onOpenSpeakerSettings}
 						onTimeClick={(time) => onTimeClick(time)}
+						attachments={attachments}
+						relativeFilePath={relativeFilePath}
 					/>
 					<MindmapViewSwitch
 						value={viewMode}
@@ -316,10 +334,10 @@ function TopicsContent({
 	// Keep the active topic pill visible when the strip overflows horizontally.
 	useEffect(() => {
 		const activeButton = topicRefs.current[activeTopicId]
-		if (typeof activeButton?.scrollIntoView === "function") {
-			activeButton.scrollIntoView({ block: "nearest", inline: "center" })
-		}
-	}, [activeTopicId])
+		const bar = scrollRef.current
+		if (!activeButton || !bar) return
+		centerHorizontalItemInContainer(bar, activeButton)
+	}, [activeTopicId, scrollRef])
 
 	if (topics.length === 0 || !activeTopic) {
 		return <SummaryTabEmptyState />

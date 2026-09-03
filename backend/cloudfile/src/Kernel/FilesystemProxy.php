@@ -33,6 +33,7 @@ use Dtyq\SdkBase\SdkBase;
 use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\PathNormalizer;
+use Throwable;
 
 class FilesystemProxy extends Filesystem
 {
@@ -164,7 +165,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('list_objects');
+        $credentialPolicy->addStsType('list_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->listObjectsByCredential($credential, $prefix, $options);
     }
@@ -180,7 +181,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('del_objects');
+        $credentialPolicy->addStsType('del_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         $object = $this->getSimpleUploadInstance($this->adapterName);
         $object->deleteObjectByCredential($credential, $objectKey, $options);
@@ -405,7 +406,7 @@ class FilesystemProxy extends Filesystem
      *
      * @param CredentialPolicy $credentialPolicy 凭证策略
      * @param string $objectKey 对象键
-     * @param array $options 额外选项 (method, expires, filename等)
+     * @param array $options 额外选项 (method, expires, filename, download等)，download 默认为 true
      * @return string 预签名URL
      */
     public function getPreSignedUrlByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $options = []): string
@@ -414,6 +415,42 @@ class FilesystemProxy extends Filesystem
         $credentialPolicy->setSts(true);
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->getPreSignedUrlByCredential($credential, $objectKey, $options);
+    }
+
+    /**
+     * Generate multiple pre-signed URLs with one temporary credential request.
+     *
+     * @param CredentialPolicy $credentialPolicy Credential policy used once for the whole batch
+     * @param array<int, array{object_key:string, options?:array}> $items Per-object signing options
+     * @param array $options Common credential and signing options
+     * @return array<string, string> URLs indexed by object key; failed items are omitted
+     */
+    public function getPreSignedUrlsByCredential(CredentialPolicy $credentialPolicy, array $items, array $options = []): array
+    {
+        $options = array_replace($this->getOptions(), $options);
+        $credentialPolicy->setSts(true);
+        $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
+        $simpleUpload = $this->getSimpleUploadInstance($this->adapterName);
+        $urls = [];
+
+        foreach ($items as $item) {
+            $objectKey = $item['object_key'] ?? '';
+            if (! is_string($objectKey) || $objectKey === '') {
+                continue;
+            }
+
+            try {
+                $itemOptions = array_replace($options, $item['options'] ?? []);
+                $urls[$objectKey] = $simpleUpload->getPreSignedUrlByCredential($credential, $objectKey, $itemOptions);
+            } catch (Throwable $throwable) {
+                $this->container->getLogger()->error('get_presigned_url_by_credential_batch_item_failed', [
+                    'object_key' => $objectKey,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
+        }
+
+        return $urls;
     }
 
     /**
@@ -428,7 +465,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('del_objects');
+        $credentialPolicy->addStsType('del_objects');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         return $this->getSimpleUploadInstance($this->adapterName)->deleteObjectsByCredential($credential, $objectKeys, $options);
     }
@@ -445,7 +482,7 @@ class FilesystemProxy extends Filesystem
     {
         $options = $this->mergeOptions($options);
         $credentialPolicy->setSts(true);
-        $credentialPolicy->setStsType('set_object_meta');
+        $credentialPolicy->addStsType('set_object_meta');
         $credential = $this->getUploadTemporaryCredential($credentialPolicy, $options);
         $this->getSimpleUploadInstance($this->adapterName)->setHeadObjectByCredential($credential, $objectKey, $metadata, $options);
     }
@@ -491,14 +528,6 @@ class FilesystemProxy extends Filesystem
         return $this->options;
     }
 
-    /**
-     * 合并存储默认 options 与本次调用 options.
-     */
-    private function mergeOptions(array $options = []): array
-    {
-        return array_replace($this->options, $options);
-    }
-
     protected function initSimpleUpload(): void
     {
         foreach ($this->simpleUploadsMap as $platform => $simpleUploadClass) {
@@ -533,6 +562,14 @@ class FilesystemProxy extends Filesystem
             throw new CloudFileException("adapter not found | [{$this->adapterName}]");
         }
         return $this->simpleUploadInstances[$platform];
+    }
+
+    /**
+     * 合并存储默认 options 与本次调用 options.
+     */
+    private function mergeOptions(array $options = []): array
+    {
+        return array_replace($this->options, $options);
     }
 
     /**

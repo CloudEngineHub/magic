@@ -17,16 +17,16 @@ from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
 from app.infrastructure.sdk.magic_service.magic_service import MagicService
 from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter import TimeConfig
-from app.tools.core import BaseTool, BaseToolParams
+from app.tools.core import BaseTool, BaseToolParams, tool
 from app.utils.init_client_message_util import InitClientMessageUtil
 
 P = TypeVar("P", bound=BaseToolParams)
 
 
+@tool(code_mode_only=True)
 class BaseScheduledTaskTool(BaseTool[P], Generic[P], ABC):
     """仅允许从 Code Mode 调用的定时任务工具基类。"""
 
-    code_mode_only: ClassVar[bool] = True
     default_agent_mode: ClassVar[str] = AgentMode.MAGIC.value
     agent_mode_to_topic_pattern: ClassVar[dict[AgentMode, str]] = {
         AgentMode.GENERAL: AgentMode.GENERAL.value,
@@ -37,6 +37,7 @@ class BaseScheduledTaskTool(BaseTool[P], Generic[P], ABC):
         AgentMode.SUMMARY_CHAT: AgentMode.SUMMARY_CHAT.value,
         AgentMode.SUMMARY_VIDEO: AgentMode.SUMMARY_VIDEO.value,
         AgentMode.DESIGN: AgentMode.DESIGN.value,
+        AgentMode.VIDEO_PRODUCTION: AgentMode.VIDEO_PRODUCTION.value,
         AgentMode.TEST: AgentMode.TEST.value,
         AgentMode.CREW_CREATOR: AgentMode.CREW_CREATOR.value,
         AgentMode.SKILL_CREATOR: AgentMode.SKILL_CREATOR.value,
@@ -50,6 +51,7 @@ class BaseScheduledTaskTool(BaseTool[P], Generic[P], ABC):
         "audio-chat": AgentMode.SUMMARY_CHAT.value,
         "video": AgentMode.SUMMARY_VIDEO.value,
         "design": AgentMode.DESIGN.value,
+        "video-production": AgentMode.VIDEO_PRODUCTION.value,
         "test": AgentMode.TEST.value,
         "crew-creator": AgentMode.CREW_CREATOR.value,
         "skill-creator": AgentMode.SKILL_CREATOR.value,

@@ -1,14 +1,17 @@
 import {
-	toCanonicalCanvasResourcePath,
-	toWeakCanvasResourcePath,
+	normalizePathSeparators,
+	resolveCanvasStorageResourceReference,
 } from "../../shared/path/canvasResourcePath"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import {
 	CANVAS_MEDIA_CACHE_NAME,
 	CANVAS_MEDIA_DB_NAME,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	getCacheKey,
-	normalizeResourceNamespace,
+	encodeResourcePathForUrl,
+	normalizeResourceNamespaceForStorage,
 	normalizeResourcePathForLookup,
+	normalizeResourcePathForStorage,
 } from "@/workers/service-worker/canvasMediaShared"
 import { isAppServiceWorkerFeatureEnabled } from "@/workers/service-worker/register"
 
@@ -16,13 +19,12 @@ import { isAppServiceWorkerFeatureEnabled } from "@/workers/service-worker/regis
  * 画布媒体离线缓存（主线程 IndexedDB + 主 SW Canvas 虚拟资源通道）。
  *
  * 与 SW 配合时的根因备忘：
- * - 虚拟 URL 命中 SW 后，IDB 查找键须与 SW 内 `normalizeResourcePathForLookup` 一致（见 SW 文件头注释：fetch
- *   pathname 可能为 percent-encoded，主线程写入为 Unicode 明文）。
+ * - 虚拟 URL 的每个路径段必须单独编码；SW 从 pathname 解码一次后，再与主线程使用相同的存储路径规范化。
  * - `resolveResourceUrl` / `rememberResolvedResource` / `ensureServiceWorker` 使用 `isOfflineCacheFeatureOn`，
  *   勿仅用 `isEnabled()`（后者含 `isActiveConsumer`），否则 Canvas 销毁后仍在飞行的换链会退回 OSS 直链。
  */
 
-export type MediaResourceOfflineCacheMediaType = "image" | "video"
+export type MediaResourceOfflineCacheMediaType = "image" | "video" | "audio"
 
 export interface MediaResourceOfflineCacheOptions {
 	/** 离线缓存总容量上限，默认 1GB */
@@ -33,8 +35,8 @@ export type MediaResourceOfflineCacheConfig = boolean | MediaResourceOfflineCach
 
 /** 与 {@link Canvas} 构造时注入的宿主能力对齐，用于离线缓存条目的 path 与换链层一致 */
 export interface MediaResourceOfflineCacheManagerOptions {
-	/** 将画布 path 解析为宿主工作区绝对路径，再与换链/资源管理器使用同一规范键 */
-	getResolveAbsolutePath?: () => ((path: string) => string) | undefined
+	/** 将 Canvas storage path 解析为宿主工作区路径，作为跨刷新稳定的离线缓存键。 */
+	getResolveResourceReference?: () => ResolveCanvasResourceReference | undefined
 	/** 获取宿主注入的虚拟媒体资源 scope，用于隔离工作区/项目上下文 */
 	getVirtualResourceScope?: () => string | undefined
 }
@@ -129,6 +131,8 @@ const VIRTUAL_RESOURCE_FALLBACK_COOLDOWN_MS = 60_000
 const VIRTUAL_RESOURCE_REPAIR_THROTTLE_MS = 30_000
 const SERVICE_WORKER_READY_TIMEOUT_MS = 1500
 const BACKGROUND_CACHE_WARM_CONCURRENCY = 2
+const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const TOUCH_FLUSH_IDLE_DELAY_MS = 1000
 
 function readServiceWorkerController(): ServiceWorker | null {
 	if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null
@@ -163,9 +167,9 @@ function buildResourceId(
 	resourcePath: string,
 ): string {
 	return joinUrlPathSegments(
-		normalizeResourceNamespace(namespace),
+		normalizeResourceNamespaceForStorage(namespace),
 		mediaType,
-		normalizeResourcePathForLookup(resourcePath),
+		normalizeResourcePathForStorage(resourcePath),
 	)
 }
 
@@ -202,14 +206,16 @@ function getVirtualResourceUrlForResourcePath(
 	mediaType: MediaResourceOfflineCacheMediaType,
 	namespacePath?: string,
 ): string {
+	const resolvedNamespacePath =
+		namespacePath ?? normalizeResourcePathForLookup(window.location.pathname)
 	return joinUrlPathSegments(
 		window.location.origin,
 		VIRTUAL_RESOURCE_ROUTE_PREFIX,
 		VIRTUAL_RESOURCE_PATH_SEGMENT,
-		namespacePath || window.location.pathname,
+		encodeResourcePathForUrl(resolvedNamespacePath),
 		mediaType,
 		VIRTUAL_RESOURCE_DESIGN_RESOURCE_SEGMENT,
-		resourcePath,
+		encodeResourcePathForUrl(resourcePath),
 	)
 }
 
@@ -261,33 +267,32 @@ export class MediaResourceOfflineCacheManager {
 		backgroundWarmFailedCount: 0,
 	}
 	private registerPromises = new Map<string, Promise<void>>()
+	private pendingTouches = new Map<string, { id: string; lastAccessedAt: number }>()
+	private lastTouchWriteAt = new Map<string, number>()
+	private touchTimerId: ReturnType<typeof setTimeout> | null = null
 
-	private readonly getResolveAbsolutePath?: () => ((path: string) => string) | undefined
+	private readonly getResolveResourceReference?: () => ResolveCanvasResourceReference | undefined
 	private readonly getVirtualResourceScope?: () => string | undefined
 
 	constructor(options?: MediaResourceOfflineCacheManagerOptions) {
 		this.options = normalizeConfig(MEDIA_RESOURCE_OFFLINE_CACHE_CONFIG)
-		this.getResolveAbsolutePath = options?.getResolveAbsolutePath
+		this.getResolveResourceReference = options?.getResolveResourceReference
 		this.getVirtualResourceScope = options?.getVirtualResourceScope
 		this.syncActiveConsumer()
 	}
 
-	private resolveStoredCanonicalPath(path: string): string {
-		return toCanonicalCanvasResourcePath(
-			coerceToPathString(path),
-			this.getResolveAbsolutePath?.(),
-		)
-	}
+	private resolveStoredResourcePath(path: string): string | undefined {
+		const rawPath = normalizePathSeparators(coerceToPathString(path).trim())
+		const resolveResourceReference = this.getResolveResourceReference?.()
+		if (!resolveResourceReference) return undefined
 
-	private resolveStoredResourcePath(path: string): string {
-		const canonicalPath = this.resolveStoredCanonicalPath(path)
-		const resolveAbsolutePath = this.getResolveAbsolutePath?.()
-		if (!resolveAbsolutePath) return canonicalPath
-		return toWeakCanvasResourcePath(coerceToPathString(resolveAbsolutePath(canonicalPath)))
+		const resolution = resolveCanvasStorageResourceReference(rawPath, resolveResourceReference)
+		if (resolution.status !== "resolved") return undefined
+		return resolution.workspacePath ?? resolution.storagePath
 	}
 
 	private getResourceNamespace(): string {
-		return normalizeResourceNamespace(this.getVirtualResourceScope?.())
+		return normalizeResourceNamespaceForStorage(this.getVirtualResourceScope?.())
 	}
 
 	private getVirtualResourceUrl(
@@ -309,7 +314,7 @@ export class MediaResourceOfflineCacheManager {
 		return getVirtualResourceUrlForResourcePath(
 			resourcePath,
 			mediaType,
-			normalizeResourceNamespace(namespace),
+			normalizeResourceNamespaceForStorage(namespace),
 		)
 	}
 
@@ -320,11 +325,44 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	public destroy(): void {
+		if (this.touchTimerId !== null) {
+			clearTimeout(this.touchTimerId)
+			this.touchTimerId = null
+		}
+		void this.flushPendingTouches()
 		this.deactivateConsumer()
 		this.registerPromises.clear()
 		this.cachePromises.clear()
 		this.backgroundCacheWarmQueue = []
 		this.activeBackgroundCacheWarmCount = 0
+	}
+
+	private queueTouch(entry: CachedMediaResource): void {
+		const now = Date.now()
+		const id = buildResourceId(entry.namespace, entry.mediaType, entry.path)
+		const lastWrittenAt = this.lastTouchWriteAt.get(id) ?? entry.lastAccessedAt
+		if (now - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+		this.pendingTouches.set(id, { id, lastAccessedAt: now })
+		if (this.touchTimerId !== null) return
+		this.touchTimerId = setTimeout(() => {
+			this.touchTimerId = null
+			void this.flushPendingTouches()
+		}, TOUCH_FLUSH_IDLE_DELAY_MS)
+	}
+
+	private async flushPendingTouches(): Promise<void> {
+		const touches = Array.from(this.pendingTouches.values())
+		this.pendingTouches.clear()
+		if (touches.length === 0 || !this.canUseServiceWorkerCache()) return
+		try {
+			await this.postMessageToServiceWorker({
+				type: "CANVAS_MEDIA_CACHE_TOUCH_BATCH",
+				touches,
+			})
+		} catch {
+			return
+		}
+		touches.forEach(({ id, lastAccessedAt }) => this.lastTouchWriteAt.set(id, lastAccessedAt))
 	}
 
 	public isEnabled(): boolean {
@@ -367,6 +405,7 @@ export class MediaResourceOfflineCacheManager {
 			const now = Date.now()
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
+			if (!resourcePath) return null
 			const existing = await this.getEntry(params.path, params.mediaType)
 			const resourceUrl = this.getVirtualResourceUrl(resourcePath, params.mediaType)
 			const entry: CachedMediaResource = {
@@ -515,15 +554,7 @@ export class MediaResourceOfflineCacheManager {
 		}
 		this.stats.cacheHitCount += 1
 
-		await this.touchEntry(entry)
-		await this.postMessageToServiceWorker({
-			type: "CANVAS_MEDIA_CACHE_REGISTER",
-			entry: {
-				...entry,
-				lastAccessedAt: Date.now(),
-			},
-			maxBytes: this.getMaxBytes(),
-		})
+		this.queueTouch(entry)
 		return entry
 	}
 
@@ -536,6 +567,7 @@ export class MediaResourceOfflineCacheManager {
 		void (async () => {
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
+			if (!resourcePath) return
 			const key = buildResourceId(namespace, params.mediaType, resourcePath)
 			if (!params.force && this.cachePromises.has(key)) return
 
@@ -575,6 +607,7 @@ export class MediaResourceOfflineCacheManager {
 		void (async () => {
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
+			if (!resourcePath) return
 			const key = buildResourceId(namespace, params.mediaType, resourcePath)
 			if (this.registerPromises.has(key)) return
 
@@ -766,7 +799,7 @@ export class MediaResourceOfflineCacheManager {
 		const db = await this.openDb()
 		const transaction = db.transaction(STORE_NAME, "readwrite")
 		const store = transaction.objectStore(STORE_NAME)
-		const namespace = normalizeResourceNamespace(entry.namespace)
+		const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
 		const derivedCacheKey = this.getVirtualResourceUrlForNamespace(
 			entry.path,
 			namespace,
@@ -801,6 +834,7 @@ export class MediaResourceOfflineCacheManager {
 	): Promise<CachedMediaResource | null> {
 		const namespace = this.getResourceNamespace()
 		const resourcePath = this.resolveStoredResourcePath(path)
+		if (!resourcePath) return null
 		const db = await this.openDb()
 		const transaction = db.transaction(STORE_NAME, "readonly")
 		const store = transaction.objectStore(STORE_NAME)
@@ -813,7 +847,7 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	private toCachedMediaResource(entry: StoredCachedMediaResource): CachedMediaResource {
-		const namespace = normalizeResourceNamespace(entry.namespace)
+		const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
 		const url =
 			entry.url ||
 			this.getVirtualResourceUrlForNamespace(entry.path, namespace, entry.mediaType)
@@ -837,17 +871,11 @@ export class MediaResourceOfflineCacheManager {
 		}
 	}
 
-	private async touchEntry(entry: CachedMediaResource): Promise<void> {
-		await this.saveEntry({
-			...entry,
-			lastAccessedAt: Date.now(),
-		})
-	}
-
 	private async deleteCachedResource(params: RemoveCachedResourceParams): Promise<void> {
 		const namespace = this.getResourceNamespace()
 		const entry = await this.getEntry(params.path, params.mediaType)
 		const resourcePathForDelete = entry?.path ?? this.resolveStoredResourcePath(params.path)
+		if (!resourcePathForDelete) return
 		const cacheKey = entry
 			? this.getCacheKey(entry)
 			: this.getVirtualResourceUrl(resourcePathForDelete, params.mediaType)

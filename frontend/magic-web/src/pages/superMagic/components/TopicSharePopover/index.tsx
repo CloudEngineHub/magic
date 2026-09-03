@@ -1,8 +1,8 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import { SuperMagicApi } from "@/apis"
 import { clipboard } from "@/utils/clipboard-helpers"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -17,7 +17,7 @@ import { ResourceType, ShareType } from "../Share/types"
 import { generateSharePassword, generateTopicShareMessageText } from "../Share/utils"
 import { SharePasswordField } from "../Share/ShareFields"
 import { useStyles } from "./styles"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ShareListRefreshType } from "@/pages/superMagic/components/ShareManagement/types"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -40,6 +40,27 @@ interface TopicShareSettings {
 	showOriginalInfo: boolean
 	showFileList: boolean
 	shareType?: ShareType // 保存当前的分享类型
+}
+
+/**
+ * Automatic clipboard writes run outside a user gesture when the popover loads.
+ * Safari blocks that flow even on HTTPS, so keep auto-copy limited to browsers
+ * where it is safe and leave the explicit copy buttons available everywhere.
+ */
+function canAutoCopy(): boolean {
+	if (typeof window === "undefined" || typeof navigator === "undefined") return false
+
+	const userAgent = navigator.userAgent
+	const isSafari =
+		/Safari/i.test(userAgent) && !/Chrome|Chromium|CriOS|FxiOS|Edg|OPR/i.test(userAgent)
+
+	return (
+		window.location.protocol === "https:" &&
+		!isSafari &&
+		document.visibilityState === "visible" &&
+		document.hasFocus() &&
+		Boolean(navigator.clipboard?.writeText)
+	)
 }
 
 function TopicSharePopoverContent({
@@ -72,41 +93,28 @@ function TopicSharePopoverContent({
 	const [isCopied, setIsCopied] = useState(false)
 	const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-	// Auto copy share message and show visual feedback
-	// Only enable auto-copy in HTTPS environments to avoid clipboard permission issues
+	// Auto copy share message and show visual feedback when the environment allows it.
 	const autoCopyShareMessage = useCallback(
 		(shareUrl: string) => {
-			// Skip auto-copy in HTTP environments to prevent popover from closing unexpectedly
-			// Note: window.isSecureContext returns true for localhost/127.0.0.1, so we check protocol directly
-			if (window.location.protocol !== "https:") {
-				console.log("Auto-copy disabled in HTTP environment")
+			if (!canAutoCopy()) {
+				console.log("Auto-copy skipped: unsupported environment")
 				return
 			}
 
-			try {
-				const shareMessage = generateTopicShareMessageText({
-					topicTitle,
-					shareUrl,
-					t,
+			const shareMessage = generateTopicShareMessageText({ topicTitle, shareUrl, t })
+			void clipboard
+				.writeText(shareMessage)
+				.then(() => {
+					if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+					setIsCopied(true)
+					copyTimeoutRef.current = setTimeout(() => {
+						setIsCopied(false)
+						copyTimeoutRef.current = null
+					}, 2000)
 				})
-				clipboard.writeText(shareMessage)
-
-				// Clear existing timeout
-				if (copyTimeoutRef.current) {
-					clearTimeout(copyTimeoutRef.current)
-				}
-
-				// Show check icon
-				setIsCopied(true)
-
-				// Reset to copy icon after 2 seconds
-				copyTimeoutRef.current = setTimeout(() => {
-					setIsCopied(false)
-					copyTimeoutRef.current = null
-				}, 2000)
-			} catch (error) {
-				console.error("Failed to auto copy share message:", error)
-			}
+				.catch((error) => {
+					console.warn("Auto-copy unavailable:", error)
+				})
 		},
 		[topicTitle, t],
 	)
@@ -592,8 +600,7 @@ function TopicSharePopover({
 	children,
 	onSaveSuccess,
 }: TopicSharePopoverProps) {
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const hasDataChangedRef = useRef(false)
 
 	// 处理数据变更标记
@@ -701,9 +708,9 @@ function TopicSharePopover({
 					}
 				}}
 				onFocusOutside={(e) => {
-					// Touch-first desktop layouts can move focus outside during a tap without
-					// expressing a user dismissal intent, so keep the PC popover open.
-					if (isMagicApp || isNoHoverCoarsePointer()) {
+					// Embedded SDK iframes can move focus to the host document during a tap,
+					// which is not an intentional dismissal of the desktop popover.
+					if (isMagicApp || isNoHoverCoarsePointer() || window.parent !== window) {
 						e.preventDefault()
 					}
 				}}

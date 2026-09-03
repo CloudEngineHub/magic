@@ -58,6 +58,8 @@ const IGNORE_PATTERNS = [
     '*.spec.ts',
     '*.spec.tsx',
     'src/pages/superMagic/services/pptFont/config/manifest.json',
+    'frontend/magic-web/packages/magic-admin/src/types/aiManage.ts',
+    'backend/magic-service/docs/migration/super-magic/registration-before.json'
 ]
 
 // Whitelist: files that are known to contain test data or examples

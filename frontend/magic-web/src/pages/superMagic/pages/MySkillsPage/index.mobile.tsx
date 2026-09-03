@@ -20,7 +20,11 @@ import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import MySkillCardMobile from "./components/MySkillCardMobile"
-import { resolveTeamSharedSkillPermissions } from "./components/MySkillCardShared"
+import {
+	resolveTeamSharedSkillPermissions,
+	shouldOpenMySkillEditor,
+	type MySkillCardVariant,
+} from "./components/MySkillCardShared"
 import { UserSkillsStore } from "./stores/user-skills"
 import { useMySkillsTabs } from "./hooks/useMySkillsTabs"
 
@@ -42,9 +46,14 @@ function MySkillsPageMobile() {
 		handleTabValueChange,
 		tabCount,
 		isCreatedByMeTab,
+		isCollaboratedTab,
 		isFromSkillsLibraryTab,
 	} = useMySkillsTabs({ variant: "mobile" })
-	const isTeamSharedTab = !isCreatedByMeTab && !isFromSkillsLibraryTab
+	const cardVariant: MySkillCardVariant = isCreatedByMeTab
+		? "created"
+		: isFromSkillsLibraryTab
+			? "library"
+			: "team"
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
 	)
@@ -131,23 +140,20 @@ function MySkillsPageMobile() {
 		setSelectedSkill(skill)
 	}
 
-	function handleOpenDetail(skill: UserSkillView) {
+	const handleOpenDetail = useCallback((skill: UserSkillView) => {
 		setDetailSkill(skill)
-	}
+	}, [])
 
 	const handleCardOpen = useCallback(
 		(skill: UserSkillView) => {
-			if (
-				isCreatedByMeTab ||
-				(isTeamSharedTab && resolveTeamSharedSkillPermissions(skill.userRole).canEdit)
-			) {
+			if (shouldOpenMySkillEditor(cardVariant, skill.userRole)) {
 				handleEdit(skill.skillCode)
 				return
 			}
 
 			handleOpenDetail(skill)
 		},
-		[handleEdit, isCreatedByMeTab, isTeamSharedTab],
+		[cardVariant, handleEdit, handleOpenDetail],
 	)
 
 	const handleEditAction = useCallback(() => {
@@ -161,7 +167,7 @@ function MySkillsPageMobile() {
 		const actions: ActionsPopup.ActionButtonConfig[] = []
 		const teamPermissions = resolveTeamSharedSkillPermissions(selectedSkill.userRole)
 
-		if (isCreatedByMeTab || (isTeamSharedTab && teamPermissions.canEdit)) {
+		if (isCreatedByMeTab || (isCollaboratedTab && teamPermissions.canEdit)) {
 			actions.push({
 				key: "edit",
 				label: t("mySkills.edit"),
@@ -170,7 +176,7 @@ function MySkillsPageMobile() {
 			})
 		}
 
-		if (isCreatedByMeTab || (isTeamSharedTab && teamPermissions.canDelete)) {
+		if (isCreatedByMeTab || (isCollaboratedTab && teamPermissions.canDelete)) {
 			actions.push({
 				key: "delete",
 				label: t("mySkills.delete"),
@@ -201,7 +207,7 @@ function MySkillsPageMobile() {
 		handleRemoveInstalledSkill,
 		isCreatedByMeTab,
 		isFromSkillsLibraryTab,
-		isTeamSharedTab,
+		isCollaboratedTab,
 		selectedSkill,
 		t,
 	])
@@ -294,7 +300,11 @@ function MySkillsPageMobile() {
 						>
 							<TabsList
 								className={`grid h-9 w-full max-w-[440px] ${
-									tabCount === 2 ? "grid-cols-2" : "grid-cols-3"
+									tabCount === 2
+										? "grid-cols-2"
+										: tabCount === 4
+											? "grid-cols-4"
+											: "grid-cols-3"
 								}`}
 								data-testid="my-skills-mobile-tabs-list"
 							>
@@ -340,25 +350,19 @@ function MySkillsPageMobile() {
 									const teamPermissions = resolveTeamSharedSkillPermissions(
 										skill.userRole,
 									)
-									const canOpenTeamSharedMenu =
-										isTeamSharedTab &&
+									const canOpenCollaboratedMenu =
+										isCollaboratedTab &&
 										(teamPermissions.canEdit || teamPermissions.canDelete)
 									const canOpenMoreMenu =
 										isCreatedByMeTab ||
 										isFromSkillsLibraryTab ||
-										canOpenTeamSharedMenu
+										canOpenCollaboratedMenu
 
 									return (
 										<MySkillCardMobile
 											key={skill.id}
 											skill={skill}
-											cardVariant={
-												isCreatedByMeTab
-													? "created"
-													: isFromSkillsLibraryTab
-														? "library"
-														: "team"
-											}
+											cardVariant={cardVariant}
 											onOpenDetail={handleCardOpen}
 											onMoreClick={
 												skill.publisherType === "OFFICIAL_BUILTIN"

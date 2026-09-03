@@ -5,7 +5,7 @@ import { MobileShellSidebarToggleButton } from "@/pages/superMagicMobile/compone
 import { InfiniteScroll } from "antd-mobile"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { ChatConversationListItem } from "./ChatConversationListItem"

@@ -71,6 +71,11 @@
 			"zoomScale": "Zoom Scale"
 		}
 	},
+	"magicMarpit": {
+		"firstPage": "First slide",
+		"nextPage": "Next slide",
+		"prevPage": "Previous slide"
+	},
 	"magicPdfRender": {
 		"dropdown": {
 			"download": "Download",

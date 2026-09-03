@@ -14,11 +14,13 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from app.service.checkpoint_service import CheckpointService
 from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor
+from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
 from app.core.entity.checkpoint import CheckpointInfo, FileOperation, VirtualCheckpoint
 from app.service.file_version_service import FileVersionService
 from app.infrastructure.magic_service.constants import FileEditType
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfigLoader, ConfigurationError
+from app.infrastructure.storage.factory import StorageFactory
 from app.path_manager import PathManager
 from app.utils.async_file_utils import async_exists, get_s3_key_from_xattr
 from agentlang.logger import get_logger
@@ -36,15 +38,12 @@ class RollbackService:
         # 添加文件版本服务
         self.file_version_service = FileVersionService()
 
-    async def _reload_main_agent_chat_history(self) -> None:
-        """将磁盘上刚被回滚覆盖的聊天历史重新加载进主 Agent 的内存。
+    async def _reload_main_agent_persistent_state(self) -> None:
+        """将磁盘上刚被回滚覆盖的 ChatHistory 和 Horizon 重新加载到内存。
 
-        checkpoint 回滚只能直接覆盖磁盘上的聊天历史文件；主 Agent 进程内
-        常驻的 ChatHistory 实例因 load() 幂等保护不会主动重读磁盘，这会
-        造成"内存中的历史仍是回滚前旧状态、但文件已是回滚后新状态"的
-        错位。只要此后再追加一条新消息并落盘，旧的内存状态就会覆盖回
-        滚结果（即用户看到的 revoke + commit + 新消息后，被撤回的那轮对
-        话又复活）。
+        checkpoint 会覆盖整个持久目录，但主 Agent 进程内常驻的 ChatHistory
+        和 Horizon 都不会主动重读。只刷新其中一个，另一个后续保存时仍可能
+        用回滚前的内存状态覆盖目标 checkpoint。
 
         仅在 commit_rollback 的成功路径上调用：
         - start_rollback 之后必然走 commit 或 undo，中间不会触发 agent.run，
@@ -52,31 +51,34 @@ class RollbackService:
         - undo_rollback 的语义本身就是把磁盘恢复成内存当前所在的 latest
           状态，内存与磁盘天然一致，不需要 reload。
 
-        主 Agent 尚未创建（例如回滚发生在会话首次启动前）时，agents 为
-        空，直接跳过即可；reload 过程中任何单个 Agent 失败都不应影响
+        主 Agent 尚未创建（例如回滚发生在会话首次启动前）时，Runtime
+        没有缓存实例，直接跳过即可；reload 失败不应影响
         回滚主流程成功的语义，因此这里只记日志不抛错。
         """
         # 局部 import 避免与 agent_dispatcher 的模块级循环依赖
         from app.service.agent_dispatcher import AgentDispatcher
+        from app.service.agent_runtime import AgentRuntime
 
         dispatcher = AgentDispatcher.get_instance()
-        agents = getattr(dispatcher, "agents", None) or {}
-        if not agents:
-            logger.debug("主 Agent 尚未创建，跳过聊天历史内存重载")
+        agent_context = dispatcher.agent_context
+        if agent_context is None:
+            logger.debug("主 Agent 尚未创建，跳过持久状态内存重载")
             return
 
-        for agent_type, agent in agents.items():
-            chat_history = getattr(agent, "chat_history", None)
-            if chat_history is None:
-                continue
-            try:
-                await chat_history.reload_from_disk()
-                logger.info(f"已从磁盘重新加载聊天历史: agent_type={agent_type}")
-            except Exception as e:
-                logger.error(
-                    f"从磁盘重新加载聊天历史失败 (agent_type={agent_type}): {e}",
-                    exc_info=True,
-                )
+        agent = AgentRuntime.get_instance().get_cached_agent(agent_context.context_id)
+        if agent is None:
+            logger.debug("主 Agent 尚未创建，跳过持久状态内存重载")
+            return
+
+        try:
+            await agent.chat_history.reload_from_disk()
+            await agent_context.horizon.reload_from_store()
+            logger.info(f"已从磁盘重新加载 ChatHistory 和 Horizon: agent_type={agent.agent_name}")
+        except Exception as e:
+            logger.error(
+                f"从磁盘重新加载持久状态失败 (agent_type={agent.agent_name}): {e}",
+                exc_info=True,
+            )
 
     async def _get_previous_checkpoint(self, checkpoint_id: str) -> Optional[str]:
         """获取指定checkpoint的前一个checkpoint（支持虚拟checkpoint）
@@ -94,6 +96,80 @@ class RollbackService:
         except Exception as e:
             logger.error(f"获取前一个checkpoint失败: {e}")
             return None
+
+    async def _build_remote_sync_context(self):
+        """从主 Agent 上下文构造 (storage_service, topic_id)。
+
+        沙箱重启后本地可能只有 manifest，回滚前需要按需拉取远端 checkpoint 归档，
+        提交/撤回回滚后需要同步远端 manifest。主 Agent 未创建或缺少 topic_id 时
+        返回 (None, None)，调用方应跳过远端操作。
+
+        Returns:
+            Tuple[Optional[Any], Optional[str]]: (storage_service, topic_id)
+        """
+        try:
+            from app.service.agent_dispatcher import AgentDispatcher
+
+            dispatcher = AgentDispatcher.get_instance()
+            agent_context = dispatcher.agent_context
+            if agent_context is None:
+                logger.debug("主 Agent 尚未创建，跳过远端 checkpoint 同步")
+                return None, None
+
+            metadata = agent_context.get_metadata()
+            topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
+            if not topic_id:
+                logger.warning("无法获取 topic_id，跳过远端 checkpoint 同步")
+                return None, None
+
+            sts_token_refresh = agent_context.get_init_client_message_sts_token_refresh()
+            platform_type = agent_context.get_init_client_message_platform_type()
+            storage_service = await StorageFactory.get_storage(
+                sts_token_refresh=sts_token_refresh,
+                metadata=metadata,
+                platform=platform_type,
+            )
+            return storage_service, topic_id
+        except Exception as e:
+            logger.error(f"构造远端 checkpoint 同步上下文失败: {e}")
+            return None, None
+
+    async def _sync_remote_manifest(self) -> None:
+        """提交/撤回回滚后同步远端 manifest，让被丢弃的未来分支立即从远端移除。
+
+        回滚本身只改本地磁盘与本地 manifest；不主动同步的话，远端会停留在
+        「回滚未提交」的状态，直到下一次消息轮次上传才被纠正。
+        """
+        try:
+            storage_service, topic_id = await self._build_remote_sync_context()
+            if storage_service is None or not topic_id:
+                return
+            await CheckpointRemoteSync(storage_service, topic_id).sync_manifest_and_evicted()
+        except Exception as e:
+            logger.error(f"同步远端 checkpoint manifest 失败: {e}")
+
+    async def _ensure_rollback_checkpoints_available(
+        self,
+        storage_service,
+        topic_id: Optional[str],
+        current_checkpoint_id: Optional[str],
+        target_checkpoint_id: str,
+    ) -> None:
+        """回滚前确保「当前位与目标之间」的 checkpoint 在本地可用。
+
+        沙箱重启后本地可能只有 manifest，checkpoint 数据在需要回滚时按需
+        从远端拉取对应归档。topic_id 是回滚定位远端归档的必需字段，只在
+        上下文缺失（主 Agent 未创建）时跳过拉取。
+        """
+        if storage_service is None or not topic_id:
+            return
+        _, checkpoints_to_process = await self.checkpoint_service.metadata_manager.get_checkpoints_between_in_checkpoint_manifest(
+            current_checkpoint_id, target_checkpoint_id
+        )
+        if checkpoints_to_process:
+            await CheckpointRemoteSync(storage_service, topic_id).ensure_checkpoints_available(
+                checkpoints_to_process
+            )
 
     async def start_rollback(self, target_message_id: str) -> List[Dict[str, str]]:
         """开始回滚到指定消息的执行前状态
@@ -126,6 +202,12 @@ class RollbackService:
             # 获取当前checkpoint状态（用于版本创建）
             current_checkpoint_id = await self.checkpoint_service.metadata_manager.get_current_checkpoint()
 
+            # 沙箱重启后本地可能只有 manifest，回滚前按需拉取范围内缺失的 checkpoint 数据
+            storage_service, topic_id = await self._build_remote_sync_context()
+            await self._ensure_rollback_checkpoints_available(
+                storage_service, topic_id, current_checkpoint_id, actual_target_checkpoint_id
+            )
+
             # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
             await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
             try:
@@ -136,6 +218,10 @@ class RollbackService:
             if not success:
                 raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "回滚执行失败")
             logger.info(f"开始回滚成功完成: {target_message_id}")
+
+            # 回滚位置必须同步到远端，否则沙箱重启后恢复的是过期 manifest，
+            # 会让后续「撤回回滚」被误判为已是最新状态而空转。
+            await self._sync_remote_manifest()
 
             # 注意：这里不需要 reload 主 Agent 的内存 chat_history。
             # start_rollback 之后产品上必然走 commit_rollback 或 undo_rollback，
@@ -168,20 +254,18 @@ class RollbackService:
         try:
             logger.info("开始提交回滚操作，清理后续checkpoint")
 
-            success = await self.rollback_executor.commit_rollback()
-            if not success:
-                raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "提交回滚操作失败")
+            await self.checkpoint_service.discard_future_checkpoints()
 
             logger.info("回滚提交成功完成")
 
-            # 在这里重新加载主 Agent 的内存 chat_history。
-            # start_rollback 已经把磁盘上的聊天历史覆盖为目标状态，但内存
-            # 中的 ChatHistory 因 load() 幂等保护未被刷新；若不在此处 reload，
-            # 后续新消息会以陈旧内存为基线再写回磁盘，把刚回滚掉的那轮
-            # 对话又"复活"到历史记录里。
+            # start_rollback 已经用目标 checkpoint 覆盖持久目录，但内存中的
+            # ChatHistory 和 Horizon 都需要切换到同一代状态。
             # 另一条终态路径 undo_rollback 天然一致（内存=磁盘=latest），
             # 因此只需要在 commit 这一个点 reload。
-            await self._reload_main_agent_chat_history()
+            await self._reload_main_agent_persistent_state()
+
+            # 同步远端 manifest，让被丢弃的未来分支立即从远端移除
+            await self._sync_remote_manifest()
 
         except RollbackException:
             raise
@@ -228,6 +312,11 @@ class RollbackService:
 
             # 4. 执行撤回回滚到最新 checkpoint
             logger.info(f"开始撤回回滚到最新checkpoint: {latest_checkpoint_id}")
+            # 沙箱重启后本地可能只有 manifest，回滚前按需拉取范围内缺失的 checkpoint 数据
+            storage_service, topic_id = await self._build_remote_sync_context()
+            await self._ensure_rollback_checkpoints_available(
+                storage_service, topic_id, current_checkpoint_id, latest_checkpoint_id
+            )
             # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
             await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
             try:
@@ -248,6 +337,9 @@ class RollbackService:
             except Exception as version_error:
                 # 版本创建失败不应该影响回滚操作
                 logger.error(f"文件版本创建失败，但撤回回滚操作已成功: {version_error}")
+
+            # 同步远端 manifest，让被丢弃的未来分支立即从远端移除
+            await self._sync_remote_manifest()
 
             logger.info(f"撤回回滚成功完成，当前checkpoint: {latest_checkpoint_id}")
             return affected_files
@@ -329,4 +421,3 @@ class RollbackService:
 
         except Exception as e:
             logger.error(f"异步创建文件版本失败: {e}")
-

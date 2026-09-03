@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ChevronUp, Loader2 } from "lucide-react"
 import type { ReactNode } from "react"
 import { ToolIconBadge } from "../../../shared/ToolIconConfig"

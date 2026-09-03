@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Domain\Skill\Entity;
 
-use Dtyq\SuperMagic\Domain\Skill\Entity\SkillVersionEntity;
-use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\PublishTargetValue;
+use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetValue;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use PHPUnit\Framework\TestCase;
@@ -74,5 +74,20 @@ class SkillVersionEntityTest extends TestCase
             'user_ids' => ['user-1'],
             'department_ids' => ['dept-1'],
         ], $entity->toArray()['publish_target_value']);
+    }
+
+    public function testVersionDescriptionUsesCurrentLanguageThenDefault(): void
+    {
+        $entity = new SkillVersionEntity();
+        $entity->setVersionDescriptionI18n([
+            'zh_CN' => '中文描述',
+            'default' => '默认描述',
+        ]);
+
+        $this->assertSame('中文描述', $entity->getI18nVersionDescription('zh_CN'));
+        $this->assertSame('默认描述', $entity->getI18nVersionDescription('en_US'));
+
+        $entity->setVersionDescriptionI18n([]);
+        $this->assertSame('', $entity->getI18nVersionDescription('zh_CN'));
     }
 }

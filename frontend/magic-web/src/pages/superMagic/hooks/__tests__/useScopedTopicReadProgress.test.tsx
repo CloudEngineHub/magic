@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react"
+import { act, renderHook } from "@testing-library/react"
 import { StrictMode, type PropsWithChildren } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -8,7 +8,23 @@ import { useScopedTopicReadProgress } from "../useScopedTopicReadProgress"
 const mockState = vi.hoisted(() => ({
 	activeSubscriptions: 0,
 	cleanupFunctions: [] as Array<ReturnType<typeof vi.fn>>,
+	messageCommittedCallback: undefined as
+		| ((event: {
+				payload: {
+					message: {
+						appMessageId?: string
+						role: string
+						sendTime?: unknown
+						superStatus?: TaskStatus
+					}
+				}
+		  }) => void)
+		| undefined,
 	subscribe: vi.fn(),
+}))
+
+const statusSyncMocks = vi.hoisted(() => ({
+	handleArrivedTopicStatusChange: vi.fn(),
 }))
 
 vi.mock("@/pages/superMagic/stores", () => ({
@@ -29,7 +45,8 @@ vi.mock("@/pages/superMagic/services/topicReadProgressService", () => ({
 }))
 
 vi.mock("@/pages/superMagic/services/topicStatusSyncService", () => ({
-	handleArrivedTopicStatusChange: vi.fn(),
+	handleArrivedTopicStatusChange: statusSyncMocks.handleArrivedTopicStatusChange,
+	shouldCheckAttachmentsOnTaskStatus: vi.fn(() => false),
 	syncTopicStatusPatch: vi.fn(() => Promise.resolve()),
 }))
 
@@ -58,8 +75,11 @@ describe("useScopedTopicReadProgress / topic listener lifecycle", () => {
 	beforeEach(() => {
 		mockState.activeSubscriptions = 0
 		mockState.cleanupFunctions = []
+		mockState.messageCommittedCallback = undefined
 		mockState.subscribe.mockReset()
-		mockState.subscribe.mockImplementation(() => {
+		statusSyncMocks.handleArrivedTopicStatusChange.mockReset()
+		mockState.subscribe.mockImplementation((_eventType, callback) => {
+			mockState.messageCommittedCallback = callback
 			mockState.activeSubscriptions += 1
 			let active = true
 			const unsubscribe = vi.fn(() => {
@@ -100,6 +120,69 @@ describe("useScopedTopicReadProgress / topic listener lifecycle", () => {
 		expect(mockState.activeSubscriptions).toBe(0)
 		expect(mockState.cleanupFunctions.every((cleanup) => cleanup.mock.calls.length === 1)).toBe(
 			true,
+		)
+	})
+
+	it("ignores committed user messages when synchronizing scoped topic status", () => {
+		renderHook(() =>
+			useScopedTopicReadProgress({
+				scopeName: "mock-recording-detail",
+				topicStore: {} as never,
+				selectedTopic: createTopic(),
+				isSelectedTopicMessagesReady: false,
+			}),
+		)
+
+		act(() => {
+			mockState.messageCommittedCallback?.({
+				payload: {
+					message: {
+						appMessageId: "mock-message-user-001",
+						role: "user",
+						superStatus: TaskStatus.RUNNING,
+					},
+				},
+			})
+		})
+
+		expect(statusSyncMocks.handleArrivedTopicStatusChange).not.toHaveBeenCalled()
+	})
+
+	it("forwards committed assistant status to the scoped topic convergence service", () => {
+		const topicStore = {} as never
+		const selectedTopic = createTopic()
+
+		renderHook(() =>
+			useScopedTopicReadProgress({
+				scopeName: "mock-recording-detail",
+				topicStore,
+				selectedTopic,
+				isSelectedTopicMessagesReady: false,
+			}),
+		)
+
+		act(() => {
+			mockState.messageCommittedCallback?.({
+				payload: {
+					message: {
+						appMessageId: "mock-message-assistant-001",
+						role: "assistant",
+						sendTime: "2026-01-01T00:00:00Z",
+						superStatus: TaskStatus.FINISHED,
+					},
+				},
+			})
+		})
+
+		expect(statusSyncMocks.handleArrivedTopicStatusChange).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scopeName: "mock-recording-detail",
+				topicStore,
+				nextStatus: TaskStatus.FINISHED,
+				topicId: selectedTopic.id,
+				lastReadAt: expect.any(String),
+				lastReadMessageId: "mock-message-assistant-001",
+			}),
 		)
 	})
 })

@@ -18,6 +18,7 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OAuth2CallbackRelayPublicApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenFileApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMessageScheduleApi;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenMicroAppApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenProjectApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenTaskApi;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\Facade\OpenApi\OpenWorkspaceApi;
@@ -46,6 +47,10 @@ Router::addGroup(
 Router::addGroup(
     '/api/v1/open-api/sandbox',
     static function () {
+        // 获取当前沙箱状态及镜像版本信息
+        Router::get('/info', [InternalSandboxApi::class, 'getSandboxInfo']);
+        // 无条件重启当前沙箱
+        Router::put('/restart', [InternalSandboxApi::class, 'restartSandbox']);
         // 沙箱自我升级
         Router::put('/upgrade', [InternalSandboxApi::class, 'upgradeSandbox']);
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
@@ -84,6 +89,10 @@ Router::addGroup(
             Router::post('/create', [ShareApi::class, 'createShare']);
             // 查找相似分享（避免重复创建）
             Router::post('/find-similar', [ShareApi::class, 'findSimilarShare']);
+            // 获取当前用户的分享列表
+            Router::post('/list', [ShareApi::class, 'getShareListByStatusFilter']);
+            // 按资源 ID 获取当前用户的有效分享
+            Router::get('/{id}', [ShareApi::class, 'getShareByResourceId']);
             // 取消分享
             Router::post('/{id}/cancel', [ShareApi::class, 'cancelShareByResourceId']);
         });
@@ -217,3 +226,6 @@ Router::addGroup(
 
 // 获取项目基本信息（公开接口，无需鉴权；放在 super-magic 鉴权分组之后，确保 /queries 静态路由先于 {id} 动态路由注册，避免 FastRoute 路由遮蔽冲突）
 Router::get('/api/v1/open-api/super-magic/projects/{id}', [OpenProjectApi::class, 'show']);
+
+// 获取已发布微应用的项目名称（公开接口，仅用于 Web Node 服务生成页面标题）
+Router::get('/api/v1/open-api/super-magic/micro-apps/{appId}/title', [OpenMicroAppApi::class, 'showTitle']);

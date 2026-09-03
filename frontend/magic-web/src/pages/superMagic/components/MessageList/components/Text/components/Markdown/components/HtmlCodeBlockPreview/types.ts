@@ -11,6 +11,8 @@ export interface HtmlCodeBlockPreviewStreamingScrollState {
 // HTML 代码块预览组件的 props。
 // 它本质上是作为 `pre` 的增强渲染器，因此复用了 `HTMLPreElement` 的属性。
 export interface HtmlCodeBlockPreviewProps extends HTMLAttributes<HTMLPreElement> {
+	// Stable position-derived key used to preserve semantic UI choices across virtual unmounts.
+	viewStateKey: string
 	// 当前代码块是否仍处于流式生成阶段。
 	isStreaming?: boolean
 	// 当前消息是否已经收到服务端暂停终态。
@@ -23,6 +25,10 @@ export interface HtmlCodeBlockPreviewProps extends HTMLAttributes<HTMLPreElement
 	fullCode?: string
 	// 多个预览实例之间共享的滚动状态 ref（hook 会更新 .current.hasUserInteracted）。
 	streamingScrollStateRef: MutableRefObject<HtmlCodeBlockPreviewStreamingScrollState>
+	// Markdown 代码块的统一换行偏好。
+	isCodeWrapped: boolean
+	// 切换 Markdown 代码块的换行偏好。
+	onToggleCodeWrap: () => void
 }
 
 // 从标准的 `<pre><code /></pre>` 结构中抽出的代码块信息。

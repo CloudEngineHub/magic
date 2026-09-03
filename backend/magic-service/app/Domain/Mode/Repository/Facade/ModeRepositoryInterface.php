@@ -30,6 +30,16 @@ interface ModeRepositoryInterface
     public function findDefaultMode(ModeDataIsolation $dataIsolation): ?ModeEntity;
 
     /**
+     * 获取系统默认数字员工对应的模式.
+     */
+    public function findSystemDefaultAgent(ModeDataIsolation $dataIsolation): ?ModeEntity;
+
+    /**
+     * 将指定模式设置为系统默认数字员工，并清除当前组织原有配置.
+     */
+    public function setSystemDefaultAgent(ModeDataIsolation $dataIsolation, int|string $id): void;
+
+    /**
      * @return array{total: int, list: ModeEntity[]}
      */
     public function queries(ModeDataIsolation $dataIsolation, ModeQuery $query, Page $page): array;

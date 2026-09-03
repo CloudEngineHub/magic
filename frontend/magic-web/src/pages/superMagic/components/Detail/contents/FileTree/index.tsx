@@ -7,9 +7,9 @@ import {
 	IconCornerLeftUp,
 	IconCornerRightDown,
 } from "@tabler/icons-react"
-import { useResponsive } from "ahooks"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicIcon from "@/components/base/MagicIcon"
 import { formatFileSize, formatTime } from "@/utils/string"
 import { useStyles } from "./styles"
@@ -17,6 +17,8 @@ import { ActionButton } from "../../components/CommonHeader/components"
 import type { DetailFileTreeData, FileTreeNode } from "../../types"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFiles from "@/pages/superMagic/assets/svg/empty-files.svg"
+import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
+import { resolveProjectInstructionsFileKind } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import { cx } from "antd-style"
 
 interface FileTreeProps {
@@ -113,6 +115,7 @@ function FileTreeItem({
 	const isExpanded = expandedNodes.has(node.relative_file_path)
 	const isDirectory = !!node.is_directory
 	const hasChildren = !!node.children && node.children.length > 0
+	const projectInstructionsFileKind = resolveProjectInstructionsFileKind(node)
 
 	// 计算显示的文件大小
 	const displaySize = useMemo(() => {
@@ -206,7 +209,18 @@ function FileTreeItem({
 						)}
 						<div className={styles.fileIconWrapper}>
 							{isDirectory ? (
-								<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="file-tree-image"/>
+								<img
+									src={FoldIcon}
+									alt="folder"
+									width={18}
+									height={18}
+									data-testid="file-tree-image"
+								/>
+							) : projectInstructionsFileKind ? (
+								<TopicFileIcon
+									magicVariant="magic-file-agent"
+									size={isMobile ? 14 : 18}
+								/>
 							) : (
 								<MagicFileIcon
 									type={getFileExtension(node.file_name)}
@@ -275,8 +289,7 @@ export default memo(function FileTree(props: FileTreeProps) {
 
 	const { styles, cx } = useStyles({ isAllFileType: false })
 	const { t } = useTranslation("super")
-	const responsive = useResponsive()
-	const isMobile = responsive.mobile
+	const isMobile = useIsMobile()
 
 	// 获取所有目录路径
 	const allDirectoryPaths = useMemo(() => {
@@ -450,7 +463,11 @@ export default memo(function FileTree(props: FileTreeProps) {
 									justify="center"
 									vertical
 								>
-									<img src={EmptyFiles} alt="empty"  data-testid="file-tree-image-2"/>
+									<img
+										src={EmptyFiles}
+										alt="empty"
+										data-testid="file-tree-image-2"
+									/>
 									<span>{t("fileTree.empty")}</span>
 								</Flex>
 							)}

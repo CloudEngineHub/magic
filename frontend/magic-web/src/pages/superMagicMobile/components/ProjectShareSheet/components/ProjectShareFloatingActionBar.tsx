@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 /** Tailwind arbitrary value: single primary button (48px) + top padding (8px) + safe bottom. */
 const SINGLE_ACTION_SCROLL_SPACER = "calc(3.5rem+max(var(--safe-area-inset-bottom),16px))"
@@ -9,8 +9,10 @@ const DUAL_ACTION_SCROLL_SPACER = "calc(6.75rem+max(var(--safe-area-inset-bottom
 
 /** Tailwind arbitrary value: three stacked buttons (~160px) + gaps + safe bottom. */
 const TRIPLE_ACTION_SCROLL_SPACER = "calc(10.25rem+max(var(--safe-area-inset-bottom),16px))"
+/** Tailwind arbitrary value: four stacked buttons (~216px) + gaps + safe bottom. */
+const QUADRUPLE_ACTION_SCROLL_SPACER = "calc(13.75rem+max(var(--safe-area-inset-bottom),16px))"
 
-export type ProjectShareActionBarVariant = "single" | "dual" | "triple"
+export type ProjectShareActionBarVariant = "single" | "dual" | "triple" | "quadruple"
 
 interface ProjectShareScrollSpacerProps {
 	/** Matches the fixed footer height so the last form row stays visible above the bar. */
@@ -26,11 +28,13 @@ export function ProjectShareScrollSpacer({
 	testId,
 }: ProjectShareScrollSpacerProps) {
 	const scrollSpacerHeight =
-		variant === "triple"
-			? TRIPLE_ACTION_SCROLL_SPACER
-			: variant === "dual"
-				? DUAL_ACTION_SCROLL_SPACER
-				: SINGLE_ACTION_SCROLL_SPACER
+		variant === "quadruple"
+			? QUADRUPLE_ACTION_SCROLL_SPACER
+			: variant === "triple"
+				? TRIPLE_ACTION_SCROLL_SPACER
+				: variant === "dual"
+					? DUAL_ACTION_SCROLL_SPACER
+					: SINGLE_ACTION_SCROLL_SPACER
 
 	return (
 		<div

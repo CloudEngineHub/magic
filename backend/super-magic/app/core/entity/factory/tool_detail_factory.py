@@ -1,13 +1,11 @@
 """工具详情工厂模块"""
 
-import json
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from app.core.entity.message.server_message import (
     BrowserContent,
-    DisplayType,
-    FileContent,
     DeepWriteContent,
+    DisplayType,
     SearchContent,
     SearchGroupItem,
     SearchResultItem,
@@ -67,18 +65,12 @@ class ToolDetailFactory:
         )
 
     @staticmethod
-    def create_use_browser_detail(oss_key: str, title: str, url: str = "") -> ToolDetail:
-        """创建浏览器截图类型的工具详情
-
-        Args:
-            oss_key: 图片在对象存储中的键值
-            title: 截图标题
-            url: 网页URL (可选)
-
-        Returns:
-            ToolDetail: 浏览器类型的工具详情，包含截图
-        """
-        return ToolDetail(type=DisplayType.BROWSER, data=BrowserContent(url=url, title=title, file_key=oss_key))
+    def create_browser_detail(content: BrowserContent) -> ToolDetail:
+        """创建统一 Browser 截图回放详情。"""
+        return ToolDetail(
+            type=DisplayType.BROWSER,
+            data=content,
+        )
 
     @staticmethod
     def create_deep_write_detail(title: str, reasoning_content: str, content: str) -> ToolDetail:

@@ -4,7 +4,12 @@ import type {
 	CanvasFileElement,
 	MarkerTypeEnum,
 	CropConfig,
+	ElementType,
 } from "../runtime/document/types"
+import type {
+	CanvasResourceReferenceResolverSnapshot,
+	ResolveCanvasResourceReference,
+} from "./resource-reference"
 
 // 附件来源
 export const AttachmentSource = {
@@ -292,10 +297,26 @@ export interface VideoGenerationSizeOption {
 	resolution: string
 }
 
+/** 视频生成时长范围（秒） */
+export interface VideoGenerationDurationRange {
+	min: number
+	max: number
+	step: number
+}
+
+export type VideoGenerationDurations = number[] | VideoGenerationDurationRange
+export interface VideoGenerationSwitchConfig {
+	type: "switch"
+	default: boolean
+	name: string
+	description?: string
+}
 /**
  * 视频模型元数据：能力、可选生成参数与约束
  */
 export interface VideoGenerationConfig {
+	/** 模型支持的原始输入能力标识（用于保留后端元数据） */
+	supported_inputs?: string[]
 	/** 后端下发的输入模式与每模式下的字段约束 */
 	input_modes?: VideoInputModesMap
 	/** 参考图能力与限制 */
@@ -304,10 +325,16 @@ export interface VideoGenerationConfig {
 	generation?: {
 		/** 可选宽高比列表，如 16:9 */
 		aspect_ratios?: string[]
-		/** 可选时长（秒） */
-		durations?: number[]
+		/** 可选时长（秒）；离散选项或范围 */
+		durations?: VideoGenerationDurations
+		/** 时长选择模式；未下发时由 durations 结构推导 */
+		duration_type?: "options" | "range"
 		/** 默认时长（秒） */
 		default_duration_seconds?: number
+		/** 是否生成音频 */
+		generate_audio?: VideoGenerationSwitchConfig
+		/** 是否启用网络搜索 */
+		web_search?: VideoGenerationSwitchConfig
 		/** 可选分辨率列表，如 1080p */
 		resolutions?: string[]
 		/** 可选输出尺寸（与 aspect_ratios、resolutions 组合一一对应时可优先使用） */
@@ -358,7 +385,7 @@ export interface GenerateVideoFrameInput {
 
 /** 参考图输入项 */
 export interface GenerateVideoReferenceImageInput {
-	/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
+	/** 资源 URI；工作区路径发请求时还原为绝对路径，opaque asset URI 原样透传 */
 	uri: string
 	/** 参考图类型，如 asset / style */
 	reference_type?: VideoReferenceImageType
@@ -417,6 +444,8 @@ export interface GenerateVideoGeneration {
 	negative_prompt?: string
 	/** 是否生成音频 */
 	generate_audio?: boolean
+	/** 是否启用网络搜索 */
+	web_search?: boolean
 	/** 人物生成策略 */
 	person_generation?: string
 	/** 是否增强提示词 */
@@ -802,8 +831,29 @@ export interface GenerateVideoRequest {
 	callbacks?: Record<string, unknown>
 	/** 执行配置 */
 	execution?: Record<string, unknown>
+	/** 画布合成输入快照；数组顺序即合并顺序 */
+	composition?: GenerateVideoComposition
 	/** 扩展配置 */
-	extensions?: Record<string, unknown>
+	extensions?: {
+		output_file_name?: string
+		[key: string]: unknown
+	}
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
+	/** 当前话题 id（画布合成任务使用） */
+	topic_id?: string
+}
+
+export interface GenerateVideoCompositionInput {
+	/** 项目文件根目录下的规范化绝对路径 */
+	path: string
+}
+
+export interface GenerateVideoComposition {
+	/** 按合并顺序排列的视频 */
+	videos: GenerateVideoCompositionInput[]
+	/** 按处理顺序排列的音频 */
+	audios?: GenerateVideoCompositionInput[]
 }
 
 /**
@@ -815,17 +865,17 @@ export interface GenerateVideoResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 输入模式 */
 	input_mode?: VideoInputMode
 	/** 任务类型 */
 	task?: GenerateVideoTask
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 输入素材 */
 	inputs?: GenerateVideoInputs
 	/** 生成参数 */
@@ -840,6 +890,8 @@ export interface GenerateVideoResponse {
 	updated_at: string
 	/** 文件 URL */
 	file_url: string | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 	/** ID */
 	id: string
 }
@@ -886,8 +938,8 @@ export interface DownloadImageOptions {
  * 获取高清图片生成配置响应数据
  */
 export interface GetConvertHightConfigResponse {
-	/** 是否支持转高清，如果没有配置则不支持转高清 */
-	supported: boolean
+	/** 后台是否开启转高清能力 */
+	enabled: boolean
 	/** 支持的尺寸配置列表 */
 	image_size_config?: {
 		sizes: {
@@ -896,8 +948,24 @@ export interface GetConvertHightConfigResponse {
 			/** 尺寸值，格式为 "宽度x高度"，如 "1024x1024" */
 			value: string
 			/** 分辨率等级，如 "1K", "2K", "4K" */
-			scale: string
+			scale: string | null
 		}[]
+	}
+}
+
+/** 获取 AI 能力可用性响应数据 */
+export interface AiAbilityAvailability {
+	abilities: {
+		image_convert_high: GetConvertHightConfigResponse
+		image_remove_background: {
+			enabled: boolean
+		}
+		image_eraser: {
+			enabled: boolean
+		}
+		image_expand: {
+			enabled: boolean
+		}
 	}
 }
 
@@ -1002,15 +1070,15 @@ export interface VideoGenerationResultResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 任务类型 */
 	task?: GenerateVideoTask
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 输入素材 */
 	inputs?: GenerateVideoInputs
 	/** 生成参数 */
@@ -1026,7 +1094,7 @@ export interface VideoGenerationResultResponse {
 	/** 更新时间 */
 	updated_at: string
 	/** 文件 URL */
-	file_url: string
+	file_url: string | null
 	/** ID */
 	file_id: string
 	/** 海报文件 ID */
@@ -1039,6 +1107,8 @@ export interface VideoGenerationResultResponse {
 	generation_info?: VideoGenerationInfo | null
 	/** 运行时间信息 */
 	runtime?: VideoGenerationRuntimeInfo | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**
@@ -1248,35 +1318,67 @@ export type IdentifyImageMarkResponse =
  */
 export interface CanvasDesignStorageData {
 	viewport?: ViewportState
+	/** 当前设计项目的小地图面板是否展开 */
+	minimapOpen?: boolean
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
+	layersFilter?: CanvasLayersFilterState
 	markers?: Marker[]
-	/** 图片元素临时配置（未发送前的配置） */
-	tempImageConfigs?: Record<string, Partial<GenerateImageRequest>>
-	/** 视频元素临时配置（未发送前的配置） */
-	tempVideoConfigs?: Record<string, Partial<GenerateVideoRequest>>
-	/**
-	 * 视频元素各 input_mode 互斥区暂存（不入生成 API，仅编辑器与本地缓存）
-	 * key 为画布元素 id
-	 */
-	tempVideoModeDrafts?: Record<string, StoredVideoModeDraftsMap>
+	/** 关联文本的用户选择与顺序（不进入生成 API） */
+	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraftV1 | StoredLinkedEditorDraft>
 }
 
-/** 与 VideoGenerateEditor 中单模式草稿结构一致，用于 localStorage 持久化 */
+/** 图层列表的持久化筛选条件。 */
+export interface CanvasLayersFilterState {
+	visibility: "all" | "visible" | "hidden"
+	locked: "all" | "locked" | "unlocked"
+	types: ElementType[]
+}
+
+/** v1 草稿兼容读取类型；媒体 selected ID 仅为历史字段，不再参与业务状态。 */
+export interface StoredLinkedEditorDraftV1 {
+	version: 1
+	selectedTextConnectionIds: string[]
+	orderedTextConnectionIds: string[]
+	selectedMediaConnectionIds?: string[]
+}
+
+/** 当前草稿格式；媒体关联状态由编辑器 mention 派生，不持久化 selected ID。 */
+export interface StoredLinkedEditorDraft {
+	version: 2
+	selectedTextConnectionIds: string[]
+	orderedTextConnectionIds: string[]
+}
+
+export interface StoredLinkedFrameBinding {
+	framePath: string
+	sourceConnectionId: string
+	sourcePath: string
+	sourceKind: "image"
+	sourceFileName: string
+	frameRole: "start" | "end"
+}
+
+/** 视频编辑器按输入模式保存的可恢复配置。 */
 export interface StoredVideoModeInputDraft {
 	prompt?: string
 	activeInputTab?: "frame" | "reference"
-	frameImageInfos: Array<UploadFileResponse | undefined>
-	referenceImageInfos: Array<UploadFileResponse & { assetType: "image" | "video" | "audio" }>
+	frameImageInfos?: Array<UploadFileResponse | undefined>
+	linkedFrameBindings?: Array<StoredLinkedFrameBinding | undefined>
+	referenceAssetInfos?: Array<UploadFileResponse & { assetType: "image" | "video" | "audio" }>
 }
 
-export type StoredVideoModeDraftsMap = Partial<
-	Record<
-		"standard" | "keyframe_guided" | "image_reference" | "omni_reference" | "video_edit",
-		StoredVideoModeInputDraft
-	>
->
+/**
+ * 未提交的视频编辑草稿。
+ * 与 generateVideoRequest 分离，避免刷新恢复草稿时被误判为已创建的生成任务。
+ */
+export interface StoredVideoEditorDraft {
+	version: 1
+	request: Partial<GenerateVideoRequest>
+	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	updatedAt: number
+}
 
 export interface CanvasMediaPlacementConfig {
 	/** 新建媒体元素之间的最小间距 */
@@ -1415,6 +1517,11 @@ export interface CanvasDesignMethods {
 	 */
 	getConvertHightConfig: () => Promise<GetConvertHightConfigResponse>
 	/**
+	 * 获取画布 AI 能力可用性
+	 * @returns Promise<AI 能力可用性响应数据>
+	 */
+	getAiAbilityAvailability?: () => Promise<AiAbilityAvailability>
+	/**
 	 * 查询图片生成结果
 	 * @param params 查询参数
 	 * @returns Promise<图片生成结果响应数据>
@@ -1485,21 +1592,14 @@ export interface CanvasDesignMethods {
 		options?: { useImageProcess?: boolean },
 	) => Promise<CanvasFileResourceMeta>
 	/**
-	 * 将画布中记录的资源路径（如 ./xxx/xx）解析为宿主可识别的绝对路径（必选；画布资源同一性与此对齐）
-	 * @param path 原始资源路径（相对或绝对）
-	 * @returns 解析后的绝对路径，例如：/workspace/xxx/xx
+	 * Resolve paths, attachment nodes, storage values, and resource identities through the
+	 * host's authoritative namespace-aware resource model.
 	 */
-	resolveAbsolutePath: (path: string) => string
-	/**
-	 * 返回与原始资源路径指向同一文件的宿主安全候选路径。
-	 * 宿主必须避免返回可能跨画布串线的 suffix 猜测。
-	 */
-	resolveResourcePathCandidates?: (path: string) => string[]
-	/**
-	 * 将宿主工作区路径转换为画布持久化路径。
-	 * 当前画布资源应返回 `./...`，其他工作区资源应返回 `/...`。
-	 */
-	normalizeResourcePathForStorage?: (path: string) => string
+	resolveResourceReference: ResolveCanvasResourceReference
+	/** Resolver 与语义 revision 的原子快照；Canvas 运行时优先使用此入口。 */
+	resourceReferenceResolverSnapshot?: CanvasResourceReferenceResolverSnapshot
+	/** @deprecated 兼容旧宿主；新实现应通过 resourceReferenceResolverSnapshot 提供 revision。 */
+	resourceReferenceResolverVersion?: string
 	/**
 	 * 获取画布虚拟媒体资源的宿主 scope，用于在同源虚拟链接中隔离工作区/项目上下文。
 	 * @returns 例如：/global/super/{workspaceId}/{projectId}

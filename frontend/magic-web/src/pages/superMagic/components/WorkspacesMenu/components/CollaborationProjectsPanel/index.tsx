@@ -32,7 +32,7 @@ import { userStore } from "@/models/user"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Dialog, DialogContent } from "@/components/shadcn-ui/dialog"
 import { MagicModalProps } from "@/components/base/MagicModal"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface CollaborationProjectsPanelProps extends MagicModalProps {
 	onClose?: () => void

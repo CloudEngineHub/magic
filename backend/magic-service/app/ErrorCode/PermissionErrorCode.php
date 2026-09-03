@@ -11,7 +11,7 @@ use App\Infrastructure\Core\Exception\Annotation\ErrorMessage;
 
 enum PermissionErrorCode: int
 {
-    #[ErrorMessage(message: 'permission.error')]
+    #[ErrorMessage(message: 'permission.generic_error')]
     case Error = 42000;
 
     #[ErrorMessage(message: 'permission.validate_failed')]

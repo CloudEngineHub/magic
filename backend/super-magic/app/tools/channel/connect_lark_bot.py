@@ -21,25 +21,22 @@ logger = get_logger(__name__)
 class ConnectLarkBotParams(BaseToolParams):
     app_id: str = Field(
         ...,
-        description="""<!--zh: 飞书开放平台企业自建应用的 App ID-->
-The Lark self-built app ID from the Lark developer console.""",
+        description="Lark custom app ID from the Lark developer console.",
     )
     app_secret: str = Field(
         ...,
-        description="""<!--zh: 飞书开放平台企业自建应用的 App Secret-->
-The Lark self-built app secret from the Lark developer console.""",
+        description="Lark custom app secret from the Lark developer console.",
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ConnectLarkBot(BaseTool[ConnectLarkBotParams]):
-    """<!--zh
-    建立飞书 WebSocket 长连接。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Start the Lark WebSocket connection. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Start the Lark bot WebSocket connection from an SDK snippet."""
 
     async def execute(self, tool_context: ToolContext, params: ConnectLarkBotParams) -> ToolResult:
+        if not tool_context.topic_id:
+            return ToolResult.error("The current topic ID is missing, so the Lark channel cannot be bound.")
+
         try:
             manager = LarkChannel.get_instance()
             await manager.connect(params.app_id, params.app_secret)
@@ -57,7 +54,7 @@ class ConnectLarkBot(BaseTool[ConnectLarkBotParams]):
             config.lark = LarkCredential(
                 app_id=params.app_id,
                 app_secret=params.app_secret,
-                sandbox_id=tool_context.sandbox_id,
+                topic_id=tool_context.topic_id,
             )
             await save_config(config)
 

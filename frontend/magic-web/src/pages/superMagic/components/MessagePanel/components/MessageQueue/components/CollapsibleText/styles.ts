@@ -19,7 +19,7 @@ export const useStyles = createStyles(() => {
 		},
 
 		collapsed: {
-			display: "-webkit-box",
+			display: "block",
 			WebkitBoxOrient: "vertical",
 			overflow: "hidden",
 			position: "relative",

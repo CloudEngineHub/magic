@@ -1,9 +1,9 @@
-import { Editor, Extension, isNodeEmpty } from "@tiptap/core"
-import { Node as ProsemirrorNode } from "@tiptap/pm/model"
-import { Plugin, PluginKey } from "@tiptap/pm/state"
-import { Decoration, DecorationSet } from "@tiptap/pm/view"
+import { Editor, Extension, isNodeEmpty } from "@/infrastructure/editors/tiptap/core"
+import { Node as ProsemirrorNode } from "@/infrastructure/editors/tiptap/pm-model"
+import { Plugin, PluginKey } from "@/infrastructure/editors/tiptap/pm-state"
+import { Decoration, DecorationSet } from "@/infrastructure/editors/tiptap/pm-view"
 
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface Commands<ReturnType> {
 		placeholder: {
 			/**

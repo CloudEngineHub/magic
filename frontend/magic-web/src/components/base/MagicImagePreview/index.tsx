@@ -18,12 +18,18 @@ import { useTranslation } from "react-i18next"
 import MagicSegmented from "@/components/base/MagicSegmented"
 import MagicButton from "../MagicButton"
 import MagicIcon from "../MagicIcon"
-import useScale from "./hooks/useScale"
+import useScale, {
+	scaleToSliderValue,
+	sliderValueToScale,
+	type WheelZoomChange,
+} from "./hooks/useScale"
 import useContentFitScale from "./hooks/useContentFitScale"
+import useVectorContentLayout from "./hooks/useVectorContentLayout"
 import useRotate from "./hooks/useRotate"
-import useOffset from "./hooks/useOffset"
+import useOffset, { calculateZoomAnchoredOffset } from "./hooks/useOffset"
 import useStyles from "./styles"
 import { CompareViewType } from "./constants"
+import getPreviewContentKey from "./utils/getPreviewContentKey"
 import { useDownloadImageMenu } from "@/pages/superMagic/components/Detail/contents/Image/hooks/useDownloadImageMenu"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
@@ -47,6 +53,8 @@ interface Props extends HTMLAttributes<HTMLImageElement> {
 	toolContainerClassName?: string
 	onDownload?: (mode?: DownloadImageMode) => void
 	isAIImage?: boolean
+	/** Vector content is resized at layout time to remain sharp while zooming. */
+	contentType?: "raster" | "vector"
 }
 
 /**
@@ -64,12 +72,14 @@ const MagicImagePreview = (props: Props) => {
 		nextDisabled,
 		prevDisabled,
 		children,
+		src,
 		rootClassName,
 		className,
 		iconSize = 24,
 		toolContainerClassName,
 		onDownload,
 		isAIImage = false,
+		contentType = "raster",
 		...rest
 	} = props
 	const { styles, cx } = useStyles()
@@ -78,16 +88,43 @@ const MagicImagePreview = (props: Props) => {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const contentRef = useRef<HTMLDivElement>(null)
 	const fitScale = useContentFitScale(contentRef)
+	const { offset, getOffset, setOffset } = useOffset(containerRef)
+
+	const handleWheelZoom = useMemoizedFn(
+		({ previousScale, nextScale, clientX, clientY }: WheelZoomChange) => {
+			const container = containerRef.current
+			if (!container || previousScale <= 0) return
+
+			const rect = container.getBoundingClientRect()
+			const hasClientPoint = clientX !== 0 || clientY !== 0
+			const anchorX = hasClientPoint ? clientX - rect.left - rect.width / 2 : 0
+			const anchorY = hasClientPoint ? clientY - rect.top - rect.height / 2 : 0
+			const scaleRatio = nextScale / previousScale
+			const currentOffset = getOffset()
+
+			// Keep the content below the gesture centroid stationary while scaling,
+			// matching the anchored feel of macOS Preview/Photos.
+			setOffset(
+				calculateZoomAnchoredOffset(currentOffset, { x: anchorX, y: anchorY }, scaleRatio),
+			)
+		},
+	)
 
 	const { scale, transformScale, minScale, addTenPercent, subTenPercent, setScale, resetScale } =
 		useScale(containerRef, {
 			step: SCALE_STEP,
 			maxScale: MAX_SCALE,
 			fitScale,
+			onWheelZoom: handleWheelZoom,
 		})
 	const { rotate, rotateImage } = useRotate()
-
-	const { offset, setOffset } = useOffset(containerRef)
+	const previewContentKey = useMemo(() => src ?? getPreviewContentKey(children), [children, src])
+	const isVectorContent = contentType === "vector"
+	useVectorContentLayout(contentRef, isVectorContent, scale, previewContentKey)
+	const sliderValue = useMemo(
+		() => scaleToSliderValue(scale, minScale, MAX_SCALE),
+		[minScale, scale],
+	)
 
 	const resetPosition = useMemoizedFn(() => {
 		setOffset({
@@ -113,7 +150,11 @@ const MagicImagePreview = (props: Props) => {
 		// 如果存在对比模式, 则不重置图片
 		if (hasCompare) return
 		resetImage()
-	}, [children])
+	}, [previewContentKey])
+
+	const handleSliderChange = useMemoizedFn((value: number) => {
+		setScale(sliderValueToScale(value, minScale, MAX_SCALE))
+	})
 
 	const segmentedOptions = useMemo(() => {
 		return [
@@ -140,7 +181,11 @@ const MagicImagePreview = (props: Props) => {
 					className={cx(styles.imageWrapper, className)}
 					draggable={false}
 					style={{
-						transform: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${transformScale})`,
+						transform: isVectorContent
+							? `translate(${offset.x}px, ${offset.y}px) rotate(${rotate}deg)`
+							: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${transformScale})`,
+						willChange: isVectorContent ? "auto" : undefined,
+						backfaceVisibility: isVectorContent ? "visible" : undefined,
 					}}
 					{...rest}
 				>
@@ -187,15 +232,14 @@ const MagicImagePreview = (props: Props) => {
 					</MagicButton>
 					<Slider
 						className={styles.slider}
-						min={minScale}
-						max={MAX_SCALE}
-						defaultValue={1}
-						value={scale}
-						step={SCALE_STEP}
+						min={0}
+						max={100}
+						value={sliderValue}
+						step={0.5}
 						tooltip={{
 							open: false,
 						}}
-						onChange={setScale}
+						onChange={handleSliderChange}
 					/>
 					<span className={styles.sliderText}>{Math.round(scale * 100)}%</span>
 					<MagicButton type="link" className={styles.toolButton} onClick={addTenPercent}>

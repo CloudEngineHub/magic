@@ -2,12 +2,11 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useMessageChanges } from "../../hooks/useMessageChanges"
 import Detail, { type DetailRef } from "../../components/Detail"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
 import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import projectFilesStore from "@/stores/projectFiles"
 import { filterClickableMessageWithoutRevoked } from "../../utils/handleMessage"
@@ -33,11 +32,10 @@ import { isCollaborationWorkspace } from "../../constants"
 import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermissionCollaborationProject"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
-import { LongMemoryApi, SuperMagicApi } from "@/apis"
+import { SuperMagicApi } from "@/apis"
 import { workspaceStore, projectStore, topicStore } from "../../stores/core"
 import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
-import { LongMemory } from "@/types/longMemory"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"
 import { useTopicConversationLoading } from "../../hooks/useTopicConversationLoading"
 import { useTopicMessages } from "../../hooks/useTopicMessages"
@@ -62,9 +60,10 @@ import { messageSendService } from "../../services/messageSendFlowService"
 import { isReadOnlyProject } from "../../utils/permission"
 import { MessageHeaderTopicHistoryPanel } from "../../components/MessageHeader"
 import topicReadProgressService from "../../services/topicReadProgressService"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
+import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
 
 /** 任务消息状态变化后延迟拉工作区/项目详情，减轻后端尚未落库时单次请求仍返回 running 的问题 */
 const WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS = 1000
@@ -267,6 +266,14 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		resetAutoOpenFile()
 	}, [selectedProject?.id])
 
+	useSlidesTemplateNavigation({
+		selectedProjectId: selectedProject?.id,
+		attachments,
+		openTemplateFile: handleFileClickWithPanel,
+		setUserSelectDetail,
+		openDelay: 0,
+	})
+
 	const updateDetail = useMemoizedFn(
 		({
 			latestMessageDetail,
@@ -448,7 +455,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					app_message_id: message.appMessageId,
 				})
 				handleArrivedTopicStatusChange({
-					nextStatus: message.status as TaskStatus | undefined,
+					nextStatus: message.superStatus as TaskStatus | undefined,
 					topicId: selectedTopic.id,
 					lastReadAt: readProgressPayload.lastReadAt,
 					lastReadMessageId: readProgressPayload.lastReadMessageId,
@@ -475,12 +482,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			const targetTopicId = currentTopic?.id || selectedTopic?.id
 
 			const lastDetailMessage = topicMessages.findLast((message) => {
-				const node = superMagicStore.getMessageNode(message?.app_message_id)
-				return filterClickableMessageWithoutRevoked(node)
+				const node = superMagicStore.getMessageNode(message?.super_message_id)
+				return filterClickableMessageWithoutRevoked(node, message)
 			})
 
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
-				lastDetailMessage?.app_message_id,
+				lastDetailMessage?.super_message_id,
 			) as
 				| {
 						tool?: {
@@ -490,7 +497,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						}
 				  }
 				| undefined
-			if (filterClickableMessageWithoutRevoked(lastDetailMessageNode)) {
+			if (filterClickableMessageWithoutRevoked(lastDetailMessageNode, lastDetailMessage)) {
 				updateDetail({
 					latestMessageDetail: lastDetailMessageNode?.tool?.detail,
 					isLoading,
@@ -501,10 +508,17 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					checkAndOpenFileByMessages({
 						lastMessageNode,
 						lastDetailMessageNode,
-						lastDetailMessage,
+						lastDetailMessage: lastDetailMessage?.app_message_id
+							? {
+									...lastDetailMessage,
+									app_message_id: lastDetailMessage.app_message_id,
+								}
+							: undefined,
 						hasStatusChanged,
 						activeFileId,
 						getActiveFileId: () => activeFileIdRef.current,
+						workspaceFileTree: attachments,
+						workspaceFilesList: attachmentList,
 					})
 				})
 			}
@@ -519,25 +533,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			}
 		},
 	})
-
-	const { hasMemoryUpdateMessage } = useMessageChanges(messages)
-
-	useEffect(() => {
-		if (!hasMemoryUpdateMessage) return
-		// 更新长期记忆
-		try {
-			LongMemoryApi.getMemories({
-				status: [LongMemory.MemoryStatus.Pending, LongMemory.MemoryStatus.PENDING_REVISION],
-				page_size: 99,
-			}).then((res) => {
-				if (res?.success) {
-					userStore.user.setPendingMemoryList(res.data || [])
-				}
-			})
-		} catch (error) {
-			console.error(error)
-		}
-	}, [hasMemoryUpdateMessage])
 
 	// Handle interrupt and undo message functionality
 	useInterruptAndUndoMessage({
@@ -591,10 +586,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			checkAndOpenFileByTopicChanged({
 				activeFileId,
 				getActiveFileId: () => activeFileIdRef.current,
+				workspaceFileTree: attachments,
+				workspaceFilesList: attachmentList,
 			})
 		})
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在话题 id / 消息首轮就绪变化时调度；回调内通过 ref 取最新 activeFileId
-	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
+	}, [selectedTopic?.id, isSelectedTopicMessagesReady, attachments, attachmentList])
 
 	const updateAttachments = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {
@@ -756,6 +752,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					selectedProject,
 					selectedTopic,
 					selectedWorkspace,
+					topicStore,
 					setSelectedTopic: topicStore.setSelectedTopic,
 				}),
 			})

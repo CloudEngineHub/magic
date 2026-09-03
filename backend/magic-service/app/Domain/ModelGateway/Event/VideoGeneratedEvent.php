@@ -39,6 +39,8 @@ class VideoGeneratedEvent extends AbstractEvent
 
     protected ?string $videoId = null;
 
+    protected ?string $generatedFileKey = null;
+
     protected DateTime $createdAt;
 
     protected ?string $sourceId = null;
@@ -62,7 +64,8 @@ class VideoGeneratedEvent extends AbstractEvent
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * }
      */
     protected array $videoReferenceMaterial = [
@@ -70,6 +73,7 @@ class VideoGeneratedEvent extends AbstractEvent
         'reference_image_count' => 0,
         'reference_video_count' => 0,
         'reference_audio_count' => 0,
+        'input_video_duration_seconds' => 0,
     ];
 
     protected array $businessParams = [];
@@ -205,6 +209,17 @@ class VideoGeneratedEvent extends AbstractEvent
         $this->videoId = $videoId === '' ? null : $videoId;
     }
 
+    public function getGeneratedFileKey(): ?string
+    {
+        return $this->generatedFileKey;
+    }
+
+    public function setGeneratedFileKey(?string $generatedFileKey): void
+    {
+        $generatedFileKey = trim((string) $generatedFileKey, '/');
+        $this->generatedFileKey = $generatedFileKey === '' ? null : $generatedFileKey;
+    }
+
     public function getCreatedAt(): DateTime
     {
         return $this->createdAt;
@@ -280,7 +295,8 @@ class VideoGeneratedEvent extends AbstractEvent
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * }
      */
     public function getVideoReferenceMaterial(): array
@@ -293,7 +309,8 @@ class VideoGeneratedEvent extends AbstractEvent
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * } $videoReferenceMaterial
      */
     public function setVideoReferenceMaterial(array $videoReferenceMaterial): void

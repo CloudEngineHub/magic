@@ -11,7 +11,7 @@ import {
 } from "@/components/shadcn-ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avatar"
 import { RadioGroup, RadioGroupItem } from "@/components/shadcn-ui/radio-group"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type {
 	ThirdPartyAccountConflictContext,
 	ThirdPartyAccountConflictDecision,

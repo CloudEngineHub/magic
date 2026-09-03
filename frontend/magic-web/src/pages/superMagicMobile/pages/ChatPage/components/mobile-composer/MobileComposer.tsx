@@ -1,10 +1,10 @@
-import { EditorContent } from "@tiptap/react"
+import { EditorContent } from "@/infrastructure/editors/tiptap/react"
 import { ArrowUp, Check, Loader2, Plus, Square, X } from "lucide-react"
 import { useDebounceFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { VoiceInputStatus } from "@/components/business/VoiceInput"
 import type {
 	SceneEditorContext,
@@ -17,6 +17,7 @@ import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/co
 import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { SceneItem } from "@/pages/superMagic/types/skill"
+import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import MobileComposerAddSheet from "./MobileComposerAddSheet"
 import MobileComposerAttachments from "./MobileComposerAttachments"
@@ -24,6 +25,7 @@ import MobileComposerHeader from "./MobileComposerHeader"
 import MobileVoiceEdgeGlow from "./MobileVoiceEdgeGlow"
 import MobileScenePanels from "./MobileScenePanels"
 import useMobileComposerLogic from "./useMobileComposerLogic"
+import { useInvalidTopicModeFallback } from "@/pages/superMagic/components/MessageEditor/hooks/useInvalidTopicModeFallback"
 
 interface MobileComposerProps {
 	editorContext: SceneEditorContext
@@ -33,7 +35,7 @@ interface MobileComposerProps {
 }
 
 const mobileComposerEditorClassName = cn(
-	"text-foreground max-h-[100px] min-h-0 overflow-hidden text-sm",
+	"max-h-[100px] min-h-0 overflow-hidden text-sm text-foreground",
 	"[&_.ProseMirror]:m-0 [&_.ProseMirror]:max-h-[100px] [&_.ProseMirror]:overflow-y-auto",
 	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
 	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
@@ -133,7 +135,7 @@ function MobileVoiceRecordingWaveform({ levels }: { levels: number[] }) {
 			stateRef.current.lastFrameTime = timestamp
 			stateRef.current.scrollOffset += pixelsPerMs * deltaTime
 
-			const maxBars = Math.ceil(width / ((barPitch * dpr))) + 2
+			const maxBars = Math.ceil(width / (barPitch * dpr)) + 2
 			while (stateRef.current.scrollOffset >= barPitch) {
 				stateRef.current.scrollOffset -= barPitch
 				stateRef.current.amplitudes.unshift(stateRef.current.latestLevel)
@@ -187,7 +189,11 @@ function MobileVoiceRecordingWaveform({ levels }: { levels: number[] }) {
 			data-testid="mobile-composer-voice-waveform"
 			aria-hidden
 		>
-			<canvas ref={canvasRef} className="block text-inherit"  data-testid="mobile-composer-canvas"/>
+			<canvas
+				ref={canvasRef}
+				className="block text-inherit"
+				data-testid="mobile-composer-canvas"
+			/>
 
 			<div
 				className="pointer-events-none absolute inset-y-0 left-0 bg-gradient-to-r from-card to-transparent"
@@ -209,6 +215,8 @@ function MobileComposerComponent({
 	scenes,
 	enableReEditMessageFromPubSub = false,
 }: MobileComposerProps) {
+	const { isActive, InvalidModeFallback, onCreateTopic } =
+		useInvalidTopicModeFallback(editorContext)
 	const [isAddSheetOpen, setIsAddSheetOpen] = useState(false)
 	const [isVoicePanelActive, setIsVoicePanelActive] = useState(false)
 	const [isVoiceRecording, setIsVoiceRecording] = useState(false)
@@ -480,16 +488,27 @@ function MobileComposerComponent({
 			</Button>
 		</div>
 	)
-	const headerScenePanelsNode = shouldRenderPanelsInHeader ? (
-		<MobileScenePanels editorContext={editorContext} compact />
-	) : null
+	const shouldShowVideoProductionConfigInHeader = isVideoProductionContext({
+		topicMode: editorContext.topicMode,
+		agentCode: editorContext.agentCode,
+		selectedTopic: editorContext.selectedTopic,
+	})
+	const headerScenePanelsNode =
+		shouldRenderPanelsInHeader || shouldShowVideoProductionConfigInHeader ? (
+			<MobileScenePanels
+				editorContext={editorContext}
+				compact
+				renderScenePanels={shouldRenderPanelsInHeader}
+				includeVideoProductionConfig
+			/>
+		) : null
 
 	const composerInnerContent = (
 		<div className="relative">
 			<div
 				className={cn(
 					shouldShowVoiceRecordingUi &&
-					"pointer-events-none absolute inset-x-0 top-0 opacity-0",
+						"pointer-events-none absolute inset-x-0 top-0 opacity-0",
 				)}
 				aria-hidden={shouldShowVoiceRecordingUi}
 			>
@@ -514,7 +533,7 @@ function MobileComposerComponent({
 					</div>
 				</div>
 
-				<div className="flex items-center justify-between gap-2 pl-1.5 pr-2 pb-2">
+				<div className="flex items-center justify-between gap-2 pb-2 pl-1.5 pr-2">
 					<div className="flex items-center">
 						<Button
 							type="button"
@@ -530,7 +549,7 @@ function MobileComposerComponent({
 						{logic.selectedPluginCount > 0 && (
 							<span
 								className={cn(
-									"bg-foreground text-background flex h-6 shrink-0 items-center justify-center rounded-full px-2 text-sm font-semibold leading-none",
+									"flex h-6 shrink-0 items-center justify-center rounded-full bg-foreground px-2 text-sm font-semibold leading-none text-background",
 									logic.selectedPluginCount < 10 && "w-6 px-0",
 								)}
 								data-testid="mobile-composer-open-sheet-plugin-count"
@@ -548,7 +567,7 @@ function MobileComposerComponent({
 							type="button"
 							size="icon"
 							className={cn(
-								"bg-primary text-background size-10 rounded-full shadow-none",
+								"size-10 rounded-full bg-primary text-background shadow-none",
 								sendButtonDisabled && "disabled:opacity-40",
 							)}
 							disabled={sendButtonDisabled}
@@ -595,7 +614,7 @@ function MobileComposerComponent({
 		</>
 	) : (
 		<div
-			className="bg-mobile-background flex w-full shrink-0 flex-col gap-1.5 px-2 pb-3 pt-1.5"
+			className="flex w-full shrink-0 flex-col gap-1.5 bg-mobile-background px-2 pb-3 pt-1.5"
 			data-testid="mobile-composer"
 		>
 			{taskAndQueueNodes}
@@ -604,9 +623,11 @@ function MobileComposerComponent({
 				scenes={effectiveScenes}
 				selectedTopic={logic.selectedTopic}
 				selectedProject={logic.selectedProject}
-				topicMode={logic.effectiveTopicMode}
+				topicMode={editorContext.modelTopicMode ?? logic.effectiveTopicMode}
 				agentCode={editorContext.agentCode ?? logic.selectedTopic?.agent_code}
 				selectorVariant={editorContext.mobileModeSelectorVariant}
+				showModeSelector={editorContext.showModeToggle ?? true}
+				showModelSelector={editorContext.showModelSelector ?? false}
 				messagesLength={editorContext.messagesLength}
 				useChatTerminology={editorContext.useChatTerminology}
 				sceneControlNode={headerScenePanelsNode}
@@ -615,15 +636,16 @@ function MobileComposerComponent({
 
 			<div
 				className={cn(
-					"bg-card shadow-mobile-dock-surface overflow-hidden rounded-3xl transition-colors",
-					logic.isComposerFocused && "ring-primary/20 ring-1",
+					"overflow-hidden rounded-3xl bg-card shadow-mobile-dock-surface transition-colors",
+					logic.isComposerFocused && "ring-1 ring-primary/20",
 				)}
 				data-testid="mobile-composer-card"
 			>
-				<div className="border-border border-b px-3 pb-2 pt-2 [&:empty]:hidden">
-					{shouldRenderPanelsInHeader ? null : (
-						<MobileScenePanels editorContext={editorContext} />
-					)}
+				<div className="border-b border-border px-3 pb-2 pt-2 [&:empty]:hidden">
+					<MobileScenePanels
+						editorContext={editorContext}
+						renderScenePanels={!shouldRenderPanelsInHeader}
+					/>
 				</div>
 				{composerInnerContent}
 			</div>
@@ -645,6 +667,20 @@ function MobileComposerComponent({
 			{logic.uploadModal}
 		</div>
 	)
+
+	if (isActive && InvalidModeFallback) {
+		return (
+			<div
+				className="flex w-full shrink-0 flex-col gap-1.5 bg-mobile-background px-2 pb-3 pt-1.5"
+				data-testid="mobile-composer"
+			>
+				{taskAndQueueNodes}
+				<div className="overflow-hidden rounded-3xl bg-card px-4 py-6 shadow-mobile-dock-surface">
+					<InvalidModeFallback onCreateTopic={onCreateTopic} />
+				</div>
+			</div>
+		)
+	}
 
 	return (
 		<MessageEditorStoreProvider store={logic.store}>

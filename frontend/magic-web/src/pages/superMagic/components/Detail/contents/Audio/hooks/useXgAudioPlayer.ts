@@ -1,10 +1,13 @@
 import { useRef, useEffect, useState, useCallback } from "react"
-import type Player from "xgplayer"
-import { loadXGPlayerModules } from "@/lib/xgplayer"
+import type Player from "@/infrastructure/vendors/xgplayer"
+import { loadXGPlayer, loadXGPlayerModules } from "@/infrastructure/vendors/xgplayer"
+
+export type UseXgAudioPlayerMode = "music" | "core"
 
 interface UseXgAudioPlayerProps {
 	fileUrl?: string
 	fileName?: string
+	audioPlayerMode?: UseXgAudioPlayerMode
 	onPlay?: () => void
 	onPause?: () => void
 	onTimeUpdate?: (current: number, duration: number) => void
@@ -23,6 +26,7 @@ interface AudioPlayerState {
 export function useXgAudioPlayer({
 	fileUrl,
 	fileName,
+	audioPlayerMode = "music",
 	onPlay,
 	onPause,
 	onTimeUpdate,
@@ -49,10 +53,22 @@ export function useXgAudioPlayer({
 		try {
 			setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
-			// Load XGPlayer modules on demand
-			const { Player, MusicPreset } = await loadXGPlayerModules()
+			// Keep the historical music preset as the default. Native iOS can opt into
+			// the core-only path because the preset is unnecessary for a single WAV.
+			let LoadedPlayer: typeof import("xgplayer").default
+			let MusicPreset: typeof import("xgplayer-music").default | undefined
+			if (audioPlayerMode === "core") {
+				LoadedPlayer = await loadXGPlayer()
+			} else {
+				const modules = await loadXGPlayerModules()
+				LoadedPlayer = modules.Player
+				MusicPreset = modules.MusicPreset
+			}
+			if (audioPlayerMode === "music" && !MusicPreset) {
+				throw new Error("MusicPreset failed to load")
+			}
 
-			const player = new Player({
+			const player = new LoadedPlayer({
 				el: containerRef.current,
 				mediaType: "audio",
 				url: fileUrl,
@@ -60,17 +76,21 @@ export function useXgAudioPlayer({
 				volume: volumeRef.current,
 				width: 0,
 				height: 0,
-				music: {
-					list: [
-						{
-							src: fileUrl,
-							title: fileName || "Unknown",
-							vid: "audio-player",
-						},
-					],
-					switchKeepProgress: false,
-				},
-				presets: [MusicPreset],
+				...(audioPlayerMode === "music"
+					? {
+							music: {
+								list: [
+									{
+										src: fileUrl,
+										title: fileName || "Unknown",
+										vid: "audio-player",
+									},
+								],
+								switchKeepProgress: false,
+							},
+							presets: [MusicPreset],
+						}
+					: {}),
 				// Hide default controls since we use custom UI
 				controls: false,
 				playsinline: true,
@@ -138,7 +158,7 @@ export function useXgAudioPlayer({
 				isLoading: false,
 			}))
 		}
-	}, [fileUrl, fileName, onPlay, onPause, onTimeUpdate])
+	}, [fileUrl, fileName, audioPlayerMode, onPlay, onPause, onTimeUpdate])
 
 	// Cleanup player
 	const destroyPlayer = useCallback(() => {

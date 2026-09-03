@@ -17,11 +17,12 @@ import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { RoutePath } from "@/constants/routes"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import BaseModal from "../BaseModal"
+import MagicModal from "@/components/base/MagicModal"
 import MobileFilesMoveSheet from "../SelectDirectoryModal/MobileFilesMoveSheet"
 import MagicSpin from "@/components/base/MagicSpin"
 import { SuperMagicApi } from "@/apis"
@@ -51,6 +52,7 @@ import {
 	SHARE_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
+	isCollaborationWorkspace,
 } from "../../../../constants"
 import { MagicClawApi, type MagicClawItem } from "@/apis"
 import { MagiClaw } from "@/enhance/lucide-react"
@@ -70,7 +72,7 @@ import { useCreateWorkspace } from "../../hooks/useCreateWorkspace"
 import { useCreateProject } from "../../hooks/useCreateProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
-import { useSingleHtmlStaticDependencies } from "@/pages/superMagic/hooks/useSingleHtmlStaticDependencies"
+import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 
@@ -104,6 +106,7 @@ function ProjectResourceSelectorModal({
 	workspaces,
 	fileIds,
 	sourceAttachments,
+	sourceAttachmentsLoading = false,
 	initialPath = [],
 	includeFixedWorkspaces = true,
 	closeOnSubmit = true,
@@ -118,8 +121,8 @@ function ProjectResourceSelectorModal({
 }: ProjectResourceSelectorModalProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
-	const [includeHtmlDependencies, setIncludeHtmlDependencies] = useState(true)
-	const htmlStaticDependencies = useSingleHtmlStaticDependencies({
+	const [includeDocumentDependencies, setIncludeDocumentDependencies] = useState(true)
+	const documentStaticDependencies = useSingleDocumentStaticDependencies({
 		active: visible,
 		fileIds,
 		attachments: sourceAttachments,
@@ -127,7 +130,7 @@ function ProjectResourceSelectorModal({
 	const selectedFileIdForDependencyReset = fileIds.length === 1 ? fileIds[0] : ""
 
 	useEffect(() => {
-		if (visible) setIncludeHtmlDependencies(true)
+		if (visible) setIncludeDocumentDependencies(true)
 	}, [visible, selectedFileIdForDependencyReset])
 
 	// 判断是否为龙虾场景
@@ -161,12 +164,68 @@ function ProjectResourceSelectorModal({
 	const [directories, setDirectories] = useState<AttachmentItem[]>([])
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
+	// This option only applies to multi-file transfers into another project; same-project
+	// operations retain their existing flat target-directory semantics.
+	const showPreserveParentPathOption =
+		!isMentionMode &&
+		fileIds.length > 1 &&
+		currentProject !== null &&
+		currentProject.id !== (selectedProject?.id || sourceAttachments[0]?.project_id)
+	const confirmPreserveParentPath = useMemoizedFn(
+		() =>
+			new Promise<boolean | null>((resolve) => {
+				let shouldPreserveParentPath = false
+				MagicModal.confirm({
+					title: t("selectPathModal.preserveParentPathConfirmTitle"),
+					content: (
+						<div className="flex flex-col gap-3">
+							<div className="text-sm leading-5 text-muted-foreground">
+								{t("selectPathModal.preserveParentPathDescription")}
+							</div>
+							<label
+								className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+								data-testid="cross-project-file-preserve-parent-path-option"
+							>
+								<Checkbox
+									onChange={(event) => {
+										shouldPreserveParentPath = event.target.checked
+									}}
+								/>
+								<span>{t("selectPathModal.preserveParentPath")}</span>
+							</label>
+						</div>
+					),
+					okText: t("selectPathModal.confirm"),
+					cancelText: t("common.cancel"),
+					maskClosable: false,
+					onOk: () => resolve(shouldPreserveParentPath),
+					onCancel: () => resolve(null),
+				})
+			}),
+	)
 	const [isSearch, setIsSearch] = useState(false)
 	const [fileName, setFileName] = useState("")
 	const [isSearchOpen, setIsSearchOpen] = useState(false)
 	const searchInputRef = useRef<HTMLInputElement>(null)
+	const pathRef = useRef<AttachmentItem[]>(initialPath)
+	pathRef.current = path
 	// 用于跟踪是否已经初始化，避免重复加载
 	const initializedRef = useRef(false)
+	const attachmentRequestRef = useRef<{
+		controller: AbortController
+		requestId: number
+	} | null>(null)
+	const attachmentRequestIdRef = useRef(0)
+	const beginAttachmentRequest = useMemoizedFn(() => {
+		attachmentRequestRef.current?.controller.abort()
+		const controller = new AbortController()
+		const requestId = ++attachmentRequestIdRef.current
+		attachmentRequestRef.current = { controller, requestId }
+		return { controller, requestId }
+	})
+	const isCurrentProjectTarget = Boolean(
+		selectedProject?.id && currentProject?.id === selectedProject.id,
+	)
 	// 面包屑容器宽度，用于动态计算可显示的项
 	const breadcrumbRef = useRef<HTMLDivElement>(null)
 	const [breadcrumbContainerWidth, setBreadcrumbContainerWidth] = useState(0)
@@ -211,16 +270,19 @@ function ProjectResourceSelectorModal({
 		return [] // 复制操作不限制
 	}, [sourceAttachments, fileIds, operationType])
 
-	// 检查当前项目是否有编辑权限
+	// Check whether creation is allowed at the current location.
 	const canEdit = useMemo(() => {
 		if (effectiveViewMode === "directory" && currentProject) {
-			// 目录视图：检查项目权限
-			return hasEditPermission(currentProject.user_role)
+			// Shared workspaces are read-only in this selector.
+			return (
+				!isCollaborationWorkspace(currentWorkspace) &&
+				hasEditPermission(currentProject.user_role)
+			)
 		} else if (effectiveViewMode === "project" && currentWorkspace) {
-			// 项目视图：只要有工作区就可以创建项目（假设工作区创建者可以创建项目）
-			return true
+			// Only regular workspaces allow creating projects.
+			return !isCollaborationWorkspace(currentWorkspace)
 		} else if (effectiveViewMode === "workspace") {
-			// 工作区视图：可以创建工作区
+			// Workspace view allows creating workspaces.
 			return true
 		}
 		return false
@@ -234,6 +296,11 @@ function ProjectResourceSelectorModal({
 				(isMentionMode || hasEditPermission(project.user_role)),
 		)
 	}, [availableProjects, excludeProjectIds, isMentionMode])
+	const shouldBlockPanelForLoading =
+		loading &&
+		((effectiveViewMode === "workspace" && availableWorkspaces.length === 0) ||
+			(effectiveViewMode === "project" && editableProjects.length === 0) ||
+			(effectiveViewMode === "directory" && directories.length === 0))
 
 	// 获取工作区的显示名称（用于搜索匹配）
 	const getWorkspaceDisplayName = useMemoizedFn((workspace: Workspace) => {
@@ -538,8 +605,10 @@ function ProjectResourceSelectorModal({
 			}
 
 			if (isProjectOnly) {
+				attachmentRequestRef.current?.controller.abort()
 				setCurrentProject(project)
 				setViewMode("project")
+				pathRef.current = []
 				setAttachments([])
 				setPath([])
 				setDirectories([])
@@ -551,6 +620,30 @@ function ProjectResourceSelectorModal({
 				setLoading(false)
 				return
 			}
+
+			// The source page owns the current project's attachment request. Reuse its
+			// streamed snapshots instead of starting a second full-tree request.
+			if (project.id === selectedProject?.id) {
+				attachmentRequestRef.current?.controller.abort()
+				setCurrentProject(project)
+				setViewMode("directory")
+				pathRef.current = []
+				setPath([])
+				setAttachments(sourceAttachments)
+				setDirectories(filesSort(getDirectoriesFromPath(sourceAttachments, [])))
+				setLoading(sourceAttachmentsLoading)
+				return
+			}
+
+			const request = beginAttachmentRequest()
+			setCurrentProject(project)
+			setViewMode("directory")
+			pathRef.current = []
+			setPath([])
+			// Do not keep rendering the previous project's tree while the new
+			// project's first attachment snapshot is still pending.
+			setAttachments([])
+			setDirectories([])
 			setLoading(true)
 			setIsSearch(false)
 			setIsSearchOpen(false)
@@ -560,20 +653,43 @@ function ProjectResourceSelectorModal({
 			try {
 				const res = await loadProjectAttachments({
 					projectId: project.id,
-					temporaryToken:
-						(window as Window & { temporary_token?: string }).temporary_token || "",
+					// This selector is loading the signed-in user's target project. Do not
+					// inherit the source share token, which rewrites the project ID to 0.
+					temporaryToken: null,
+					signal: request.controller.signal,
+					onBatchSnapshot: (snapshot) => {
+						if (
+							request.controller.signal.aborted ||
+							request.requestId !== attachmentRequestIdRef.current
+						) {
+							return
+						}
+						setAttachments(snapshot.tree)
+						setDirectories(
+							filesSort(getDirectoriesFromPath(snapshot.tree, pathRef.current)),
+						)
+					},
 				})
-				setCurrentProject(project)
-				setViewMode("directory")
+				if (
+					request.controller.signal.aborted ||
+					request.requestId !== attachmentRequestIdRef.current
+				) {
+					return
+				}
 				setAttachments(res?.tree || [])
-				setPath([])
-				const dirs = getDirectoriesFromPath(res?.tree || [], [])
+				const dirs = getDirectoriesFromPath(res?.tree || [], pathRef.current)
 				setDirectories(filesSort(dirs))
 			} catch (error) {
+				if (request.controller.signal.aborted) return
 				console.error("Failed to fetch attachments:", error)
 				magicToast.error(t("selectPathModal.fetchAttachmentsFailed"))
 			}
-			setLoading(false)
+			if (
+				!request.controller.signal.aborted &&
+				request.requestId === attachmentRequestIdRef.current
+			) {
+				setLoading(false)
+			}
 		},
 	)
 
@@ -615,8 +731,8 @@ function ProjectResourceSelectorModal({
 				// 5. 获取项目文件树
 				const res = await loadProjectAttachments({
 					projectId: project.id,
-					temporaryToken:
-						(window as Window & { temporary_token?: string }).temporary_token || "",
+					// Claw projects selected as a destination use the current user's auth.
+					temporaryToken: null,
 				})
 
 				setAttachments(res?.tree || [])
@@ -712,6 +828,12 @@ function ProjectResourceSelectorModal({
 	}, [breadcrumbItemsRaw, breadcrumbContainerWidth])
 
 	// 测量面包屑容器宽度
+	useEffect(() => {
+		return () => {
+			attachmentRequestRef.current?.controller.abort()
+		}
+	}, [])
+
 	useEffect(() => {
 		if (!visible) {
 			setBreadcrumbContainerWidth(0)
@@ -828,7 +950,7 @@ function ProjectResourceSelectorModal({
 	})
 
 	const onBreadcrumbClick = useMemoizedFn(async (item: BreadcrumbItem) => {
-		if (loading) return
+		if (shouldBlockPanelForLoading) return
 
 		// 点击"工作空间"回到最初
 		if (item.id === "workspace-root") {
@@ -847,6 +969,7 @@ function ProjectResourceSelectorModal({
 			if (isProjectOnly) {
 				return
 			}
+			pathRef.current = []
 			setPath([])
 			await fetchDirectories({
 				projectId: currentProject.id,
@@ -863,6 +986,7 @@ function ProjectResourceSelectorModal({
 		if (currentProject && effectiveViewMode === "directory") {
 			const index = path.findIndex((o) => getItemId(o) === item.id)
 			const newPath = index >= 0 ? path.slice(0, index + 1) : []
+			pathRef.current = newPath
 			setPath(newPath)
 			await fetchDirectories({
 				projectId: currentProject.id,
@@ -896,9 +1020,16 @@ function ProjectResourceSelectorModal({
 				return
 			}
 
+			const itemId = getItemId(item)
+			// A directory row can remain visible while its children are being
+			// resolved. Ignore repeated clicks on a directory already in the path so
+			// the same node cannot be appended multiple times before the next render.
+			if (path.some((pathItem) => getItemId(pathItem) === itemId)) {
+				return
+			}
+
 			// 仅移动操作时检查是否为禁用的文件夹（复制操作允许复制到自己或子级）
 			if (operationType === "move") {
-				const itemId = getItemId(item)
 				if (disabledFolderIds.includes(itemId)) {
 					magicToast.info(t("selectPathModal.cannotSelectCurrentFolder"))
 					return
@@ -906,6 +1037,7 @@ function ProjectResourceSelectorModal({
 			}
 
 			const newPath = [...path, item]
+			pathRef.current = newPath
 			setPath(newPath)
 			await fetchDirectories({
 				projectId: currentProject.id,
@@ -918,7 +1050,7 @@ function ProjectResourceSelectorModal({
 		},
 	)
 
-	const submit = useMemoizedFn(() => {
+	const submit = useMemoizedFn(async () => {
 		if (isMentionMode) {
 			const firstSelection = selectedResources[0]
 			if (!firstSelection) return
@@ -931,8 +1063,9 @@ function ProjectResourceSelectorModal({
 				sourceAttachments,
 				selection: firstSelection,
 				selections: selectedResources,
-				includeHtmlDependencies,
-				htmlDependencyFileIds: htmlStaticDependencies.dependencyTransferFileIds,
+				includeDocumentDependencies,
+				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+				preserveParentPath: false,
 			})
 			if (closeOnSubmit) onClose?.()
 			return
@@ -943,6 +1076,13 @@ function ProjectResourceSelectorModal({
 
 		// Some flows, such as recording copy, let users save at workspace level so
 		// the submit handler can create a normal target project before copying.
+		let preserveParentPath = false
+		if (showPreserveParentPathOption) {
+			const preserveParentPathChoice = await confirmPreserveParentPath()
+			if (preserveParentPathChoice === null) return
+			preserveParentPath = preserveParentPathChoice
+		}
+
 		const targetPath = currentProject ? path : []
 		const targetAttachments = currentProject ? attachments : []
 		onSubmit &&
@@ -953,6 +1093,9 @@ function ProjectResourceSelectorModal({
 				targetPath,
 				targetAttachments,
 				sourceAttachments: sourceAttachments,
+				includeDocumentDependencies,
+				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+				preserveParentPath,
 			})
 		if (closeOnSubmit) onClose && onClose()
 	})
@@ -1021,6 +1164,7 @@ function ProjectResourceSelectorModal({
 			setCurrentWorkspace(selectedWorkspace)
 			setCurrentProject(selectedProject)
 			setViewMode(isProjectOnly ? "project" : "directory")
+			pathRef.current = isProjectOnly ? [] : initialPath
 			setPath(isProjectOnly ? [] : initialPath)
 			setFileName("")
 			setIsSearch(false)
@@ -1036,26 +1180,12 @@ function ProjectResourceSelectorModal({
 				return
 			}
 
-			const loadAttachments = async () => {
-				setLoading(true)
-				try {
-					const res = await loadProjectAttachments({
-						projectId: selectedProject.id,
-						temporaryToken:
-							(window as Window & { temporary_token?: string }).temporary_token || "",
-					})
-					setAttachments(res?.tree || [])
-					const dirs = getDirectoriesFromPath(res?.tree || [], initialPath)
-					setDirectories(filesSort(dirs))
-				} catch (error) {
-					console.error("Failed to fetch attachments:", error)
-					setAttachments([])
-					setDirectories([])
-				}
-				setLoading(false)
-			}
-
-			loadAttachments()
+			// The current project's file tree is already owned by the page and may
+			// still be in first/middle batch snapshot delivery. Render what exists now;
+			// the snapshot-sync effect below will fill in later batches.
+			setAttachments(sourceAttachments)
+			setDirectories(filesSort(getDirectoriesFromPath(sourceAttachments, initialPath)))
+			setLoading(sourceAttachmentsLoading)
 		} else {
 			// 否则重置到工作区选择视图
 			setViewMode("workspace")
@@ -1075,6 +1205,22 @@ function ProjectResourceSelectorModal({
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [visible, isClawContext, clawProjectId])
+
+	useEffect(() => {
+		if (!visible || !isCurrentProjectTarget || isSearch) return
+
+		setAttachments(sourceAttachments)
+		setDirectories(filesSort(getDirectoriesFromPath(sourceAttachments, path)))
+		setLoading(sourceAttachmentsLoading)
+	}, [
+		visible,
+		isCurrentProjectTarget,
+		isSearch,
+		sourceAttachments,
+		sourceAttachmentsLoading,
+		path,
+		filesSort,
+	])
 
 	// 根据 viewMode 动态设置搜索 placeholder
 	const searchPlaceholder = useMemo(() => {
@@ -1140,7 +1286,9 @@ function ProjectResourceSelectorModal({
 		onOk: submit,
 		onCancel: handleCancel,
 		okDisabled:
-			(isMentionMode ? false : isSearch) || !canSubmit || htmlStaticDependencies.isLoading,
+			(isMentionMode ? false : isSearch) ||
+			!canSubmit ||
+			documentStaticDependencies.isLoading,
 	}
 
 	const handleKeyDown = useMemoizedFn((event: KeyboardEvent) => {
@@ -1331,7 +1479,7 @@ function ProjectResourceSelectorModal({
 
 		return (
 			<>
-				{createProjectHook.createProjectShown && (
+				{canEdit && createProjectHook.createProjectShown && (
 					<div className={textFolderItemClass}>
 						<div className={folderIconClass}>
 							<IconProject />
@@ -1527,7 +1675,7 @@ function ProjectResourceSelectorModal({
 			"max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap leading-6 text-foreground md:max-w-[400px]"
 		return (
 			<>
-				{createDirectoryHook.createDirectoryShown && (
+				{canEdit && createDirectoryHook.createDirectoryShown && (
 					<div
 						className={cn(textFolderItemClass, "gap-2")}
 						data-testid="cross-project-file-modal-create-directory-row"
@@ -1722,24 +1870,31 @@ function ProjectResourceSelectorModal({
 				isMobile && "h-[calc(100%-141px)]",
 			)}
 		>
-			{htmlStaticDependencies.isHtml &&
-				htmlStaticDependencies.dependencyFileIds.length > 0 && (
+			{documentStaticDependencies.fileType &&
+				documentStaticDependencies.dependencyFileIds.length > 0 && (
 					<label
 						className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
-						data-testid="cross-project-file-html-dependencies-option"
+						data-testid="cross-project-file-document-dependencies-option"
 					>
 						<Checkbox
-							checked={includeHtmlDependencies}
-							onChange={(event) => setIncludeHtmlDependencies(event.target.checked)}
+							checked={includeDocumentDependencies}
+							onChange={(event) =>
+								setIncludeDocumentDependencies(event.target.checked)
+							}
 						/>
 						<span className="flex flex-col gap-1 text-left">
 							<span className="text-sm font-medium leading-5 text-foreground">
-								{t("share.includeHtmlDependencies", {
-									count: htmlStaticDependencies.dependencyFileIds.length,
+								{t("share.includeDocumentDependencies", {
+									count: documentStaticDependencies.dependencyFileIds.length,
 								})}
 							</span>
 							<span className="text-xs leading-4 text-muted-foreground">
-								{t("share.includeHtmlDependenciesDescription")}
+								{t("share.includeDocumentDependenciesDescription", {
+									type:
+										documentStaticDependencies.fileType === "markdown"
+											? "Markdown"
+											: "HTML",
+								})}
 							</span>
 						</span>
 					</label>
@@ -1796,7 +1951,9 @@ function ProjectResourceSelectorModal({
 											<div
 												className={cn(
 													breadcrumbItemBase,
-													(loading || !item.operation) && "disable",
+													(shouldBlockPanelForLoading ||
+														!item.operation) &&
+														"disable",
 												)}
 												style={{
 													maxWidth:
@@ -1951,7 +2108,7 @@ function ProjectResourceSelectorModal({
 			>
 				{/* MagicSpin 会额外生成一层内容容器；工作区视图必须把高度和 min-h-0 传递到该层，内部滚动区才不会按内容撑开。 */}
 				<MagicSpin
-					spinning={loading}
+					spinning={shouldBlockPanelForLoading}
 					className="h-full min-h-0 w-full"
 					innerClassName={
 						effectiveViewMode === "workspace"
@@ -1959,11 +2116,24 @@ function ProjectResourceSelectorModal({
 							: undefined
 					}
 				>
-					{effectiveViewMode === "workspace" && renderWorkspaceList()}
-					{effectiveViewMode === "project" && renderProjectList()}
+					{effectiveViewMode === "workspace" &&
+						(!shouldBlockPanelForLoading ? (
+							renderWorkspaceList()
+						) : (
+							<div className="h-full min-h-[320px] w-full" />
+						))}
+					{effectiveViewMode === "project" &&
+						(!shouldBlockPanelForLoading ? (
+							renderProjectList()
+						) : (
+							<div className="h-full min-h-[320px] w-full" />
+						))}
 					{effectiveViewMode === "directory" && (
 						<>
-							{!isEmpty(directories) || createDirectoryHook.createDirectoryShown ? (
+							{shouldBlockPanelForLoading ? (
+								<div className="h-full min-h-[320px] w-full" />
+							) : !isEmpty(directories) ||
+							  createDirectoryHook.createDirectoryShown ? (
 								renderDirectoryTree()
 							) : isSearch ? (
 								<EmptyStateBox>
@@ -1987,12 +2157,11 @@ function ProjectResourceSelectorModal({
 									<div className="flex flex-col items-center gap-2 text-center">
 										<div className="flex flex-col gap-1.5 text-center text-sm font-normal leading-5 text-foreground/35">
 											<span>{emptyStorageDescription}</span>
-											{emptyStorageAction && (
+											{emptyStorageAction && createAction && (
 												<Button
 													variant="link"
-													className="h-auto p-0 leading-5 text-foreground disabled:pointer-events-none disabled:opacity-50"
-													onClick={createAction?.onClick}
-													disabled={!createAction}
+													className="h-auto p-0 leading-5 text-foreground"
+													onClick={createAction.onClick}
 													data-testid="cross-project-file-modal-empty-create-folder"
 												>
 													{emptyStorageAction}

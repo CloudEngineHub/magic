@@ -163,7 +163,7 @@ class Wan27VideoAdapter implements VideoGenerationProviderAdapterInterface
             $response['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException('dashscope submit succeeded but task id missing');
+            throw ProviderVideoException::nonRetriable('dashscope submit succeeded but task id missing');
         }
 
         return $taskId;

@@ -37,7 +37,12 @@ function MagicPlatformLayoutContent() {
 	useChatWebSocketConnection({
 		autoConnect: true,
 		onError: (error) => {
-			logger.error("WebSocket 连接或登录失败", error)
+			logger.error({
+				eventKey: "web_socket_connect_failed",
+				errorKind: "network",
+				error: error,
+				message: "WebSocket 连接或登录失败",
+			})
 		},
 	})
 

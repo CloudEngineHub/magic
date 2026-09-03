@@ -23,6 +23,7 @@ export interface IncrementalUpdateContext {
 	clearManualSaveMark?: (fileId: string) => void
 	getSlideEditingState?: (fileId: string) => boolean
 	notifyServerUpdate?: (fileId: string, content: string) => void
+	isCurrent?: () => boolean
 }
 
 /**
@@ -36,17 +37,8 @@ export class PPTIncrementalUpdateService {
 		private logger: PPTLoggerService,
 	) {}
 
-	private flattenAttachmentItems(list: AttachmentItem[] | undefined): AttachmentItem[] {
-		if (!Array.isArray(list)) return []
-		const result: AttachmentItem[] = []
-		for (const item of list) {
-			result.push(item)
-			const children = (item as AttachmentItem & { children?: AttachmentItem[] }).children
-			if (Array.isArray(children) && children.length > 0) {
-				result.push(...this.flattenAttachmentItems(children))
-			}
-		}
-		return result
+	private isContextCurrent(context: IncrementalUpdateContext): boolean {
+		return context.isCurrent?.() !== false
 	}
 
 	private collectAttachmentItemsByFileIds(
@@ -76,7 +68,8 @@ export class PPTIncrementalUpdateService {
 	private getScopedAttachmentItems(list: AttachmentItem[] | undefined): AttachmentItem[] {
 		const pptFolderFileIds = this.pathMappingService.getPPTFolderFileIds()
 		if (pptFolderFileIds.size === 0) {
-			return this.flattenAttachmentItems(list)
+			// An empty folder index must not watch the whole project tree.
+			return []
 		}
 		return this.collectAttachmentItemsByFileIds(list, pptFolderFileIds)
 	}
@@ -194,6 +187,7 @@ export class PPTIncrementalUpdateService {
 		newSlidePaths: string[],
 		context: IncrementalUpdateContext,
 	): Promise<void> {
+		if (!this.isContextCurrent(context)) return
 		this.logger.info("应用增量更新", {
 			operation: "applyIncrementalUpdates",
 			metadata: {
@@ -213,11 +207,19 @@ export class PPTIncrementalUpdateService {
 		// Handle removals first
 		if (changes.removed.length > 0) {
 			this.handleRemovals(changes.removed, context)
+			if (!this.isContextCurrent(context)) return
 		}
 
 		// Handle additions
 		if (changes.added.length > 0) {
 			await this.handleAdditions(changes.added, context)
+			if (!this.isContextCurrent(context)) return
+		}
+
+		// Add/remove combinations can also change the relative order of surviving slides.
+		if (changes.added.length > 0 || changes.removed.length > 0) {
+			await this.handleReorder(newSlidePaths, context)
+			if (!this.isContextCurrent(context)) return
 		}
 
 		// Handle file updates
@@ -233,6 +235,7 @@ export class PPTIncrementalUpdateService {
 		newSlidePaths: string[],
 		context: IncrementalUpdateContext,
 	): Promise<void> {
+		if (!this.isContextCurrent(context)) return
 		this.logger.info("处理幻灯片重排序", {
 			operation: "handleReorder",
 			metadata: { newPathCount: newSlidePaths.length },
@@ -256,10 +259,12 @@ export class PPTIncrementalUpdateService {
 				path,
 				url: "",
 				index,
+				loadingState: "idle",
 			}
 		})
 
 		runInAction(() => {
+			if (!this.isContextCurrent(context)) return
 			context.setSlides(reorderedSlides)
 			context.slides = reorderedSlides
 		})
@@ -269,12 +274,14 @@ export class PPTIncrementalUpdateService {
 	 * Handle slide removals
 	 */
 	private handleRemovals(removedIndices: number[], context: IncrementalUpdateContext): void {
+		if (!this.isContextCurrent(context)) return
 		this.logger.info("处理幻灯片删除", {
 			operation: "handleRemovals",
 			metadata: { removedCount: removedIndices.length },
 		})
 
 		runInAction(() => {
+			if (!this.isContextCurrent(context)) return
 			const slides = [...context.slides]
 
 			// Sort indices in descending order to avoid index shifting issues
@@ -313,6 +320,7 @@ export class PPTIncrementalUpdateService {
 		added: Array<{ path: string; index: number }>,
 		context: IncrementalUpdateContext,
 	): Promise<void> {
+		if (!this.isContextCurrent(context)) return
 		this.logger.info("处理新增幻灯片", {
 			operation: "handleAdditions",
 			metadata: { addedCount: added.length },
@@ -332,10 +340,14 @@ export class PPTIncrementalUpdateService {
 		})
 
 		// Fetch temporary URLs for new slides
-		const urlMap = await this.pathMappingService.fetchUrlsForFileIds(fileIds)
+		const urlMap = await this.pathMappingService.fetchUrlsForFileIds(fileIds, {
+			shouldCommit: context.isCurrent,
+		})
+		if (!this.isContextCurrent(context)) return
 
 		// Insert new slides at appropriate positions
 		runInAction(() => {
+			if (!this.isContextCurrent(context)) return
 			const slides = [...context.slides]
 
 			added.forEach(({ path, index }) => {
@@ -347,6 +359,7 @@ export class PPTIncrementalUpdateService {
 					path,
 					url,
 					index,
+					loadingState: "idle",
 				}
 				slides.splice(index, 0, newSlide)
 			})
@@ -360,18 +373,7 @@ export class PPTIncrementalUpdateService {
 			context.slides = slides
 		})
 
-		// Load new slides if autoLoadAndGenerate is enabled
-		if (context.autoLoadAndGenerate) {
-			await this.loadSpecificSlides(
-				added.map(({ path, index }) => ({
-					index,
-					path,
-					fileId: this.pathMappingService.getFileIdByPath(path),
-					url: context.slides[index]?.url,
-				})),
-				context,
-			)
-		}
+		// New slides stay idle until they become active or enter the sidebar's virtual range.
 	}
 
 	/**
@@ -381,6 +383,7 @@ export class PPTIncrementalUpdateService {
 		updatedFileIds: Set<string>,
 		context: IncrementalUpdateContext,
 	): Promise<void> {
+		if (!this.isContextCurrent(context)) return
 		this.logger.info("处理文件更新", {
 			operation: "handleFileUpdates",
 			metadata: { updatedFileCount: updatedFileIds.size },
@@ -393,7 +396,12 @@ export class PPTIncrementalUpdateService {
 		const editingSlides: Array<{ fileId: string; index: number; isManuallySaved: boolean }> = []
 
 		context.slides.forEach((slide, index) => {
-			const fileId = this.pathMappingService.getFileIdByPath(slide.path)
+			const fileId =
+				this.pathMappingService.getFileIdByPath(slide.path) ||
+				this.pathMappingService.extractFileIdFromPath(slide.path)
+			if (fileId && !this.pathMappingService.getFileIdByPath(slide.path)) {
+				this.pathMappingService.setPathFileIdMapping(slide.path, fileId)
+			}
 			if (fileId && updatedFileIds.has(fileId)) {
 				const isManuallySaved = context.isSlideManuallySaved?.(fileId) || false
 				const isEditing = context.getSlideEditingState?.(fileId) || false
@@ -426,10 +434,14 @@ export class PPTIncrementalUpdateService {
 			return
 		}
 
-		const urlMap = await this.pathMappingService.fetchUrlsForFileIds(allFileIdsToFetch)
+		const urlMap = await this.pathMappingService.fetchUrlsForFileIds(allFileIdsToFetch, {
+			shouldCommit: context.isCurrent,
+		})
+		if (!this.isContextCurrent(context)) return
 
 		// Handle editing slides - load content silently without affecting UI state
 		for (const { fileId, index, isManuallySaved } of editingSlides) {
+			if (!this.isContextCurrent(context)) return
 			const currentIndex = context.slides.findIndex(
 				(slide) => this.pathMappingService.getFileIdByPath(slide.path) === fileId,
 			)
@@ -440,6 +452,7 @@ export class PPTIncrementalUpdateService {
 					// Use silent loading method to avoid triggering UI updates
 					const loadMethod = context.loadSlideContentSilently || context.loadSlideContent
 					const newContent = await loadMethod(newUrl, currentIndex)
+					if (!this.isContextCurrent(context)) return
 					const isManualSaveEcho =
 						isManuallySaved &&
 						typeof newContent === "string" &&
@@ -476,9 +489,12 @@ export class PPTIncrementalUpdateService {
 						newContent,
 					)
 				} catch (error) {
-					this.logger.error("加载正在编辑的幻灯片的新内容失败", error, {
-						operation: "handleFileUpdates",
-						metadata: { fileId, index },
+					this.logger.error({
+						eventKey: "load_slide_content_failed",
+						errorKind: "render",
+						error: error,
+						message: "加载正在编辑的幻灯片的新内容失败",
+						context: { operation: "handleFileUpdates", metadata: { fileId, index } },
 					})
 				}
 			}
@@ -486,6 +502,7 @@ export class PPTIncrementalUpdateService {
 
 		// Update slide URLs and reset loading state for non-editing slides
 		runInAction(() => {
+			if (!this.isContextCurrent(context)) return
 			affectedSlides.forEach(({ fileId, path, index }) => {
 				const currentIndex = context.slides.findIndex(
 					(slide) => this.pathMappingService.getFileIdByPath(slide.path) === fileId,
@@ -502,11 +519,7 @@ export class PPTIncrementalUpdateService {
 
 				if (newUrl) {
 					slide.url = newUrl
-					slide.loadingState = "idle"
-					slide.rawContent = undefined
-					slide.content = undefined
-
-					// Clear cache for slides that need reload
+					// Keep current HTML visible while the new file downloads.
 					const cacheKey = slide.url || `slide-${index}`
 					this.screenshotService.clearCache(cacheKey)
 					slide.thumbnailUrl = undefined
@@ -516,7 +529,7 @@ export class PPTIncrementalUpdateService {
 		})
 
 		// Reload affected slides (only non-editing ones)
-		if (affectedSlides.length > 0) {
+		if (affectedSlides.length > 0 && this.isContextCurrent(context)) {
 			await this.loadSpecificSlides(
 				affectedSlides.map(({ fileId, index, path }) => {
 					const currentIndex = context.slides.findIndex(
@@ -543,6 +556,7 @@ export class PPTIncrementalUpdateService {
 				context,
 			)
 		}
+		if (!this.isContextCurrent(context)) return
 
 		// Clear manual save marks for skipped slides
 		if (context.clearManualSaveMark && manuallySavedFileIds.size > 0) {
@@ -563,7 +577,7 @@ export class PPTIncrementalUpdateService {
 		targets: Array<{ index: number; path?: string; fileId?: string; url?: string }>,
 		context: IncrementalUpdateContext,
 	): Promise<void> {
-		if (targets.length === 0) return
+		if (targets.length === 0 || !this.isContextCurrent(context)) return
 
 		this.logger.info("加载指定幻灯片", {
 			operation: "loadSpecificSlides",
@@ -572,6 +586,7 @@ export class PPTIncrementalUpdateService {
 
 		await Promise.all(
 			targets.map(async ({ index, path, fileId, url }) => {
+				if (!this.isContextCurrent(context)) return
 				const slide = context.slides[index]
 				const targetFileId =
 					fileId ||
@@ -590,6 +605,7 @@ export class PPTIncrementalUpdateService {
 					} else if (targetUrl) {
 						await context.loadSlideContent(targetUrl, index)
 					}
+					if (!this.isContextCurrent(context)) return
 
 					// Generate screenshot if needed
 					if (context.autoLoadAndGenerate) {
@@ -609,9 +625,12 @@ export class PPTIncrementalUpdateService {
 						}
 					}
 				} catch (error) {
-					this.logger.error("加载幻灯片失败", error, {
-						operation: "loadSpecificSlides",
-						slideIndex: index,
+					this.logger.error({
+						eventKey: "load_slide_failed",
+						errorKind: "render",
+						error: error,
+						message: "加载幻灯片失败",
+						context: { operation: "loadSpecificSlides", slideIndex: index },
 					})
 				}
 			}),

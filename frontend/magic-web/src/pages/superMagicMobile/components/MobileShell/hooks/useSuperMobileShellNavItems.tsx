@@ -5,6 +5,7 @@ import { FUNCTION_PERMISSION_CODE } from "@/apis/modules/function-permission"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { hasOrganizationAppsShortcuts } from "@/layouts/BaseLayoutMobile/components/MobileTabBar/constants/tabsConfig.shared"
 import { userStore } from "@/models/user"
+import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { isPrivateDeployment } from "@/utils/env"
 
 import { BASE_SUPER_MOBILE_SHELL_NAV_ITEMS } from "./baseSuperMobileShellNavItems"
@@ -16,6 +17,7 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 	const { isAllowed: canAccessMagicClaw, isLoading: isMagicClawAccessLoading } =
 		useFunctionPermission(FUNCTION_PERMISSION_CODE.MagicClawAccess)
 	const isPrivateDeploymentEnv = isPrivateDeployment()
+	const clawBrandValues = getClawBrandTranslationValues()
 	const shouldShowAppsEntry = hasOrganizationAppsShortcuts({
 		isPersonalOrganization: userStore.user.isPersonalOrganization,
 	})
@@ -24,6 +26,7 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 		return BASE_SUPER_MOBILE_SHELL_NAV_ITEMS.filter((item) => {
 			if (item.key === "apps" && !shouldShowAppsEntry) return false
 			if (item.key === "recording" && isPrivateDeploymentEnv) return false
+			if (item.key === "microApps" && isPrivateDeploymentEnv) return false
 			if (item.requiredPermissionCode === FUNCTION_PERMISSION_CODE.MagicClawAccess) {
 				// Keep permission-gated entries fail-closed while loading to match desktop and legacy mobile entry policy.
 				return !isMagicClawAccessLoading && canAccessMagicClaw
@@ -32,13 +35,14 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 		}).map(({ labelKey, ...item }) => ({
 			...item,
 			// Config-driven overlay items need variable label keys; keep keys static in config modules.
-			label: t(labelKey),
+			label: item.key === "magiClaw" ? t(labelKey, clawBrandValues) : t(labelKey),
 		}))
 	}, [
 		canAccessMagicClaw,
 		isMagicClawAccessLoading,
 		isPrivateDeploymentEnv,
 		shouldShowAppsEntry,
+		clawBrandValues,
 		t,
 	])
 }

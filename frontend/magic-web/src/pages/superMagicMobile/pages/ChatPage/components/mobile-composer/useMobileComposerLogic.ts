@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
-import type { JSONContent } from "@tiptap/core"
-import type { Editor } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import { useAsyncEffect, useCreation, useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type {
@@ -54,6 +54,7 @@ import {
 import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
+import { buildQueueMessageInput } from "@/pages/superMagic/components/MainInputContainer/components/editors/messageParams"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { resetDocumentScrollPosition } from "@/utils/scroll"
@@ -155,6 +156,9 @@ export default function useMobileComposerLogic({
 
 	const selectedProject = editorContext.selectedProject ?? projectStore.selectedProject
 	const selectedTopic = editorContext.selectedTopic ?? topicStore.selectedTopic
+	const draftKey = editorContext.draftKey
+	const onReady = editorContext.onReady
+	const skipInitialDraftRestore = editorContext.skipInitialDraftRestore
 	const effectiveTopicMode = editorContext.topicMode ?? roleStore.currentRole
 	const currentAgentCode = editorContext.agentCode ?? selectedTopic?.agent_code
 	const effectiveSetSelectedWorkspace =
@@ -403,28 +407,6 @@ export default function useMobileComposerLogic({
 		try {
 			const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 			const showLoading = editorContext.showLoading ?? false
-			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
-				queueContext.addToQueue({
-					content: nextValue ?? params.value,
-					mentionItems: params.mentionItems,
-					selectedModel: params.selectedModel,
-					selectedImageModel: params.selectedImageModel,
-					selectedVideoModel: params.selectedVideoModel,
-					topicMode: params.topicMode,
-				})
-				clearContentAfterSend()
-				setIsComposerFocused(false)
-				return
-			}
-
-			if (
-				!editorContext.selectedWorkspace &&
-				!workspaceStore.selectedWorkspace &&
-				selectedWorkspace
-			) {
-				effectiveSetSelectedWorkspace(selectedWorkspace)
-			}
-
 			const defaultParams: HandleSendParams = {
 				...params,
 				value: nextValue ?? params.value,
@@ -442,6 +424,24 @@ export default function useMobileComposerLogic({
 			const finalParams = customParamsPatch
 				? { ...defaultParams, ...customParamsPatch }
 				: defaultParams
+			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
+				const queueId = await queueContext.addToQueue(
+					buildQueueMessageInput(finalParams, params.value),
+				)
+				if (!queueId) return
+				sceneStateStore?.incrementSendCount()
+				clearContentAfterSend()
+				setIsComposerFocused(false)
+				return
+			}
+
+			if (
+				!editorContext.selectedWorkspace &&
+				!workspaceStore.selectedWorkspace &&
+				selectedWorkspace
+			) {
+				effectiveSetSelectedWorkspace(selectedWorkspace)
+			}
 
 			const preparedSend = await preparePanelSend({
 				params: finalParams,
@@ -479,6 +479,7 @@ export default function useMobileComposerLogic({
 				messagesLength: editorContext.messagesLength ?? 0,
 			})
 
+			if (sendResult) sceneStateStore?.incrementSendCount()
 			editorContext.onSendSuccess?.({
 				currentProject: sendResult?.currentProject ?? null,
 				currentTopic: sendResult?.currentTopic ?? null,
@@ -707,18 +708,29 @@ export default function useMobileComposerLogic({
 		store.draftStore.resetSendingGuard()
 		pubsub.publish(PubSubEvents.Super_Magic_Clear_Canvas_Markers, {})
 
-		if (!editorContext.draftKey) return
-		if (editorContext.skipInitialDraftRestore) return
+		try {
+			if (!draftKey || skipInitialDraftRestore) {
+				store.draftStore.markDraftReady()
+				return
+			}
 
-		await store.draftStore.loadLatestDraft({
-			isClearContent: true,
-			replaceDirectly: true,
-		})
+			await store.draftStore.loadLatestDraft({
+				isClearContent: true,
+				replaceDirectly: true,
+			})
+		} catch (error) {
+			store.draftStore.markDraftReady()
+			console.error("Failed to restore latest draft:", error)
+		} finally {
+			// Report readiness after the existing mobile draft phase has settled.
+			onReady?.()
+		}
 	}, [
-		editorContext.draftKey?.topicId,
-		editorContext.draftKey?.projectId,
-		editorContext.draftKey?.workspaceId,
-		editorContext.skipInitialDraftRestore,
+		draftKey?.topicId,
+		draftKey?.projectId,
+		draftKey?.workspaceId,
+		onReady,
+		skipInitialDraftRestore,
 		store.draftStore,
 	])
 

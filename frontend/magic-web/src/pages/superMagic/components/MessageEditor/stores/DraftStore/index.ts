@@ -1,10 +1,14 @@
 import { makeAutoObservable, runInAction } from "mobx"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { DraftData, DraftKey } from "../../types"
 import type { DataService } from "@/components/business/MentionPanel/types"
 import { draftManager } from "../../services/draftService"
 import { hasMeaningfulData } from "../../services/draftService/utils"
-import { filterUploadFileMentionsFromContent, hasLoadingMarkerInContent } from "../../utils/mention"
+import {
+	filterPendingCanvasMentionsFromContent,
+	filterUploadFileMentionsFromContent,
+	hasLoadingMarkerInContent,
+} from "../../utils/mention"
 import { EditorStore } from "../EditorStore"
 import { syncDraftMarkersToSuperMagicManager } from "./lazy-super-magic-marker-manager"
 
@@ -63,6 +67,11 @@ export class DraftStore {
 		this.draftKey = draftKey
 	}
 
+	/** Enables normal draft saving when the initial restore is skipped or fails. */
+	markDraftReady() {
+		this.isDraftReady = true
+	}
+
 	setClearContentHandler(handler: () => void) {
 		this.clearContentHandler = handler
 	}
@@ -99,8 +108,13 @@ export class DraftStore {
 		if (!draftKey) return
 
 		const dataService = mentionPanelStore ?? this.mentionPanelStore ?? undefined
+		const valueWithoutPending = filterPendingCanvasMentionsFromContent(value)
 		const filteredValue =
-			value && dataService ? filterUploadFileMentionsFromContent(value, dataService) : value
+			valueWithoutPending && dataService
+				? filterUploadFileMentionsFromContent(valueWithoutPending, dataService, {
+						preserveMentionValidation: this.editorStore.preserveMentionContent,
+					})
+				: valueWithoutPending
 
 		draftManager.saveDraft({
 			...draftKey,
@@ -120,8 +134,13 @@ export class DraftStore {
 		if (!draftKey) return
 
 		const dataService = mentionPanelStore ?? this.mentionPanelStore ?? undefined
+		const valueWithoutPending = filterPendingCanvasMentionsFromContent(value)
 		const filteredValue =
-			value && dataService ? filterUploadFileMentionsFromContent(value, dataService) : value
+			valueWithoutPending && dataService
+				? filterUploadFileMentionsFromContent(valueWithoutPending, dataService, {
+						preserveMentionValidation: this.editorStore.preserveMentionContent,
+					})
+				: valueWithoutPending
 
 		try {
 			await draftManager.saveDraft({
@@ -141,9 +160,10 @@ export class DraftStore {
 		}
 
 		try {
+			const valueWithoutPending = filterPendingCanvasMentionsFromContent(value)
 			await draftManager.createSentDraft({
 				...draftKey,
-				value,
+				value: valueWithoutPending,
 			})
 			await this.loadDraftVersions({ loading: false })
 		} catch (error) {
@@ -292,15 +312,17 @@ export class DraftStore {
 		} catch (error) {
 			console.error("Failed to preload mention list:", error)
 		}
-
 		if (replaceDirectly ? draft.value : true) {
 			await syncDraftMarkersToSuperMagicManager(draft)
 
+			const valueWithoutPending = filterPendingCanvasMentionsFromContent(draft.value)
 			const filteredContent =
-				draft.value && dataService
-					? filterUploadFileMentionsFromContent(draft.value, dataService)
-					: draft.value
-			this.editorStore.updateContent(filteredContent)
+				valueWithoutPending && dataService
+					? filterUploadFileMentionsFromContent(valueWithoutPending, dataService, {
+							preserveMentionValidation: true,
+						})
+					: valueWithoutPending
+			this.editorStore.updateContent(filteredContent, { preserveMentionValidation: true })
 		}
 
 		runInAction(() => {

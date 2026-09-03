@@ -3,13 +3,23 @@ import type {
 	CanvasConnection,
 	CanvasDocumentMergeConnectionConflictReason,
 	CanvasDocumentMergeElementConflictReason,
+	ElementDetailsProvenance,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
+import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
 
 export type DesignRemoteUpdateListenerMode = "message" | "file-change"
+
+export interface PendingDesignUpgrade {
+	reason: "legacy-dsl" | "sidecar-retry"
+	fileId: string
+	sourceVersion: string
+	targetVersion: string
+	createdAt: number
+}
 
 export type DesignConflictReason =
 	| "remote-update-with-local-dirty"
@@ -72,6 +82,8 @@ export interface DesignProjectManagerOptions {
 	currentFile?: { id: string; name: string }
 	attachments?: FileItem[]
 	flatAttachments?: FileItem[]
+	/** 已拿到附件快照，可开始解析 magic.project.js */
+	attachmentsReady?: boolean
 	projectPath?: string
 	projectId?: string
 	allowEdit: boolean
@@ -98,6 +110,10 @@ export interface DesignProjectManagerOptions {
 export interface DesignProjectStateBagSetters {
 	setMagicProjectJsFileId: (v: string | null) => void
 	setDesignData: (data: DesignData) => void
+	setElementDetailsProvenance?: (provenance: ElementDetailsProvenance) => void
+	setPendingDesignUpgrade?: (upgrade: PendingDesignUpgrade | null) => void
+	setDesignLoadIssue?: (issue: DesignLoadIssue | undefined) => void
+	setSidecarStatus?: (status: DesignSidecarStatus) => void
 	setIsInitialLoading: (v: boolean) => void
 	setIsSaving: (v: boolean) => void
 	setIsReadOnly: (v: boolean) => void
@@ -110,6 +126,10 @@ export interface DesignProjectStateBagSetters {
 
 export interface DesignProjectStateBag {
 	getDesignData: () => DesignData
+	getElementDetailsProvenance?: () => ElementDetailsProvenance
+	getPendingDesignUpgrade?: () => PendingDesignUpgrade | null
+	getDesignLoadIssue?: () => DesignLoadIssue | undefined
+	getSidecarStatus?: () => DesignSidecarStatus
 	getConflictState: () => DesignConflict | null
 	getMagicProjectJsFileId: () => string | null
 	getMagicProjectJsVersion: () => number | null

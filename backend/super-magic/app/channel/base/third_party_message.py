@@ -66,7 +66,7 @@ async def _resolve_agent_name(agent_context: Any) -> str:
 async def _load_runtime_config_from_session(agent_context: Any) -> dict[str, Any]:
     """从持久化 session.json 读取上次会话的运行配置。
 
-    session.json 保存在 .chat_history/ 目录下，项目重启后仍然存在。
+    session.json 保存在本地 .chat_history/ 目录下，项目重启时由启动恢复流程准备。
     优先使用 current 块，null 字段回落到 last 块。
     """
     try:
@@ -158,6 +158,8 @@ class ThirdPartyMessagePayloadBuilder:
 
         session_config = await _load_runtime_config_from_session(agent_context)
         model_id = _normalize_text(session_config.get("model_id"))
+        if model_id and not chat_message.model_id:
+            chat_message.model_id = model_id
         image_model_id = _normalize_text(session_config.get("image_model_id")) or "doubao-seedream-5.0-lite"
         enable_web_search = True
 

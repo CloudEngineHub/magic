@@ -98,6 +98,30 @@ const ConfigForm = memo(({ category, code, name, descPosition = "left" }: Config
 		]
 	}, [])
 
+	const referenceImageTransportOptions = useMemo(
+		() => [
+			{
+				label: t("form.referenceImageTransportBase64"),
+				value: AiManage.ReferenceImageTransport.BASE64,
+			},
+			{
+				label: t("form.referenceImageTransportUrl"),
+				value: AiManage.ReferenceImageTransport.URL,
+			},
+			{
+				label: t("form.referenceImageTransportUrlFallbackBase64"),
+				value: AiManage.ReferenceImageTransport.URL_FALLBACK_BASE64,
+			},
+			{
+				label: t("form.referenceImageTransportBase64FallbackUrl"),
+				value: AiManage.ReferenceImageTransport.BASE64_FALLBACK_URL,
+			},
+		],
+		[t],
+	)
+
+	const showReferenceImageTransport = isGoogle && category === AiModel.ServiceProviderCategory.VLM
+
 	/* 构建字段配置 */
 	const fieldConfigs = useMemo((): FieldConfig[] => {
 		const configs: FieldConfig[] = []
@@ -392,6 +416,32 @@ const ConfigForm = memo(({ category, code, name, descPosition = "left" }: Config
 						))
 				}}
 			</Form.Item>
+
+			{/* Google 生图参考图传输方式 */}
+			{showReferenceImageTransport && (
+				<Flex
+					justify="space-between"
+					gap={isMobile ? 12 : isLeftDesc ? 50 : 0}
+					align={isMobile ? "stretch" : "flex-start"}
+					vertical={isMobile}
+				>
+					<div className={cx(styles.label, styles.labelText, styles.required)}>
+						{t("form.referenceImageTransport")}
+					</div>
+					<Flex flex={60}>
+						<Form.Item
+							name={["config", "reference_image_transport"]}
+							noStyle
+							initialValue={AiManage.ReferenceImageTransport.URL_FALLBACK_BASE64}
+						>
+							<MagicSelect
+								options={referenceImageTransportOptions}
+								placeholder={t("form.referenceImageTransport")}
+							/>
+						</Form.Item>
+					</Flex>
+				</Flex>
+			)}
 		</>
 	)
 })

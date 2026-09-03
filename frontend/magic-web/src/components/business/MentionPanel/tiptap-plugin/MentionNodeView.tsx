@@ -1,4 +1,4 @@
-import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react"
+import { NodeViewWrapper, type ReactNodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import {
 	Component,
 	memo,
@@ -42,7 +42,12 @@ class MentionNodeViewErrorBoundary extends Component<
 	}
 
 	componentDidCatch(error: unknown) {
-		logger.error("render error", error)
+		logger.error({
+			eventKey: "mention_node_render_failed",
+			errorKind: "render",
+			error: error,
+			message: "render error",
+		})
 	}
 
 	render() {
@@ -92,7 +97,11 @@ function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: L
 }
 
 const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
-	if (type === MentionItemType.PROJECT_FILE || type === MentionItemType.UPLOAD_FILE)
+	if (
+		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.UPLOAD_FILE ||
+		type === MentionItemType.MEMORY_FILE
+	)
 		return <MagicFileIcon type={icon} size={16} />
 
 	const imageClassName = mentionIconImageClassNameMap[type]
@@ -164,7 +173,7 @@ function MentionNodeViewFallback({
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention inline-flex px-0.5 align-middle"
+			className={`magic-mention inline-flex px-0.5 align-middle${attrs?.pending ? " opacity-50" : ""}`}
 			contentEditable={false}
 		>
 			{displayName}
@@ -193,7 +202,7 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention inline-flex px-0.5 align-middle"
+			className={`magic-mention inline-flex px-0.5 align-middle${attrs.pending ? " opacity-50" : ""}`}
 			data-mention-suggestion-char={attrs.mentionSuggestionChar || "@"}
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}
@@ -207,7 +216,10 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 				/>
 			) : (
 				`@${getMentionNodeDisplayName(attrs, options.language)}` +
-				(attrs.type === MentionItemType.FOLDER ? "/" : "")
+				(attrs.type === MentionItemType.FOLDER ||
+				attrs.type === MentionItemType.MEMORY_DIRECTORY
+					? "/"
+					: "")
 			)}
 		</NodeViewWrapper>
 	)

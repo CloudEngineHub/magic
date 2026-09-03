@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import IconButton from "../../primitives/custom/IconButton/index"
+import { Minus, Plus } from "lucide-react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasEvent } from "../../../app/hooks/canvas"
-import { Minus, Plus } from "lucide-react"
+import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { Divider, type ShortcutDisplay } from "../../../public/props"
+import {
+	fromAbsolutePercent,
+	getZoomView,
+} from "../../../runtime/interaction/viewport/viewport-zoom"
+import { formatShortcut, getShortcutDisplay } from "../../../runtime/shared/lib/index"
+import IconButton from "../../primitives/custom/IconButton/index"
 import {
 	Select,
 	SelectContent,
@@ -10,19 +17,8 @@ import {
 	SelectSeparator,
 	SelectTrigger,
 } from "../../primitives/shadcn/select"
-import { Divider, type ShortcutDisplay } from "../../../public/props"
-import styles from "./index.module.css"
-import { formatShortcut, getShortcutDisplay } from "../../../runtime/shared/lib/index"
-import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import {
-	fromAbsolutePercent,
-	getZoomView,
-} from "../../../runtime/interaction/viewport/viewport-zoom"
 
-interface ZoomProps {
-	/** 与 CanvasDesignProps.shareHostBottomChrome 一致，由宿主注入 */
-	shareHostBottomChrome?: boolean
-}
+import styles from "./index.module.css"
 
 type ZoomOption = {
 	value: string
@@ -31,10 +27,10 @@ type ZoomOption = {
 	onSelect: () => void
 }
 
-export default function Zoom({ shareHostBottomChrome = false }: ZoomProps) {
+/** 只负责缩放操作和缩放比例展示；右下角定位由 ViewportControls 统一管理。 */
+export default function Zoom() {
 	const { t } = useCanvasDesignI18n()
 	const { canvas } = useCanvas()
-
 	const [displayZoom, setDisplayZoom] = useState(100)
 
 	const syncDisplayZoom = useCallback(() => {
@@ -58,8 +54,7 @@ export default function Zoom({ shareHostBottomChrome = false }: ZoomProps) {
 		[syncDisplayZoom],
 	)
 
-	// 当 canvas 初始化时，同步当前的 scale 值
-	// 解决刷新页面时，loadViewport 触发的事件在订阅之前就已经触发的问题
+	// 当 canvas 初始化时，同步当前的 scale 值，避免错过 loadViewport 的早期事件。
 	useEffect(() => {
 		syncDisplayZoom()
 	}, [syncDisplayZoom])
@@ -137,20 +132,13 @@ export default function Zoom({ shareHostBottomChrome = false }: ZoomProps) {
 				(opt): opt is ZoomOption =>
 					typeof opt === "object" && "value" in opt && opt.value === value,
 			)
-			if (option) {
-				option.onSelect()
-			}
+			option?.onSelect()
 		},
 		[options],
 	)
 
 	return (
-		<div
-			className={
-				shareHostBottomChrome ? `${styles.zoom} ${styles.zoomShareHost}` : styles.zoom
-			}
-			data-canvas-ui-component
-		>
+		<div className={styles.zoom} data-canvas-ui-component>
 			<IconButton className={styles.zoomOut} onClick={handleZoomOut}>
 				<Minus size={16} />
 			</IconButton>
@@ -163,27 +151,24 @@ export default function Zoom({ shareHostBottomChrome = false }: ZoomProps) {
 						if (option === Divider) {
 							return <SelectSeparator key={`separator-${index}`} />
 						}
-						const opt = option as ZoomOption
 						return (
 							<SelectItem
-								key={opt.value}
-								value={opt.value}
+								key={option.value}
+								value={option.value}
 								className={styles.selectItem}
 							>
 								<div className={styles.selectItemContent}>
-									<span className={styles.label}>{opt.label}</span>
-									{opt.shortcut && (
+									<span className={styles.label}>{option.label}</span>
+									{option.shortcut ? (
 										<div className={styles.shortcut}>
-											{opt.shortcut.modifiers?.map((modifier) => {
-												return (
-													<div key={modifier} className={styles.key}>
-														{formatShortcut(modifier)}
-													</div>
-												)
-											})}
-											<div className={styles.key}>{opt.shortcut.key}</div>
+											{option.shortcut.modifiers?.map((modifier) => (
+												<div key={modifier} className={styles.key}>
+													{formatShortcut(modifier)}
+												</div>
+											))}
+											<div className={styles.key}>{option.shortcut.key}</div>
 										</div>
-									)}
+									) : null}
 								</div>
 							</SelectItem>
 						)

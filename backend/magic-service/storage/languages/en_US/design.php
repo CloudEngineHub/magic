@@ -57,6 +57,8 @@ return [
         'timeout' => 'Video generation timed out',
         'invalid_status' => 'Video generation status is abnormal',
         'first_poll_dispatch_failed' => 'Video task dispatch failed',
+        'composition_videos_required' => 'Canvas composition requires at least one video file',
+        'estimate_failed' => 'Operation failed',
     ],
     'third_party_service_error' => 'Third party service error',
     'attributes' => [
@@ -77,6 +79,12 @@ return [
         'canvas_path' => 'Expanded Canvas Image Path',
         'mark' => 'Mark Position',
         'mark_coordinate' => 'Mark Coordinate',
+        'area' => 'Area',
+        'area_coordinate' => 'Area coordinate',
+        'image_generation_config' => 'Image generation config',
+        'number' => 'Number',
+        'resolution' => 'Resolution',
+        'type' => 'Type',
     ],
     'validation' => [
         'reference_images_max' => 'You can upload up to 20 reference images',
@@ -84,5 +92,8 @@ return [
         'reference_image_options_max_10' => 'You can provide up to 10 reference image option items',
         'mark_size' => 'Mark position must contain exactly 2 coordinates (x, y)',
         'mark_coordinate_range' => 'Mark coordinate must be between 0 and 1',
+        'area_coordinate_range' => 'Area coordinate range',
+        'area_size' => 'Area size',
+        'type_invalid' => 'Invalid value',
     ],
 ];

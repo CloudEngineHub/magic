@@ -3,10 +3,13 @@ import type {
 	CanvasConfig,
 	CanvasDeviceInfo,
 	CanvasDocument,
+	LayerElement,
 	ViewportState,
 	ToolType,
 } from "../document/types"
-import { ToolTypeEnum } from "../document/types"
+import type { ElementDetailsProvenance } from "../document/elementDetailsProvenance"
+import { ElementTypeEnum, ToolTypeEnum } from "../document/types"
+import { getActiveContent, getActiveImageContent } from "../document/elementContent"
 import { ViewportController } from "../interaction/viewport/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
 import { ElementManager } from "../elements/core/ElementManager"
@@ -42,6 +45,14 @@ import { ImageBatchPollingRegistry } from "../resources/polling/ImageBatchPollin
 import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
+import { VideoCompositionManager } from "../resources/video-composition/VideoCompositionManager"
+import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
+import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
+import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
+import { AudioReplaceController } from "../interaction/audio/AudioReplaceController"
+import { ImageReplaceController } from "../interaction/image/ImageReplaceController"
+import { MediaReplaceController } from "../interaction/media/MediaReplaceController"
+import { MediaPlaybackCoordinator } from "../interaction/media-playback/MediaPlaybackCoordinator"
 import { MediaResourceOfflineCacheManager } from "../resources/offline-cache/MediaResourceOfflineCacheManager"
 import { CanvasVisibilityManager } from "../resources/visibility/CanvasVisibilityManager"
 import { CanvasResourceScheduler } from "../resources/scheduler/CanvasResourceScheduler"
@@ -51,15 +62,31 @@ import { CropManager } from "../interaction/crop/CropManager"
 import { ExtendManager } from "../interaction/extend/ExtendManager"
 import { EraserManager } from "../interaction/eraser/EraserManager"
 import { PluginManager } from "../plugins/PluginManager"
+import { GenerationRuntimeManager } from "../generation/GenerationRuntimeManager"
+import { ElementDetailsRuntimeManager } from "../generation/ElementDetailsRuntimeManager"
+import { GenerationAttemptCoordinator } from "../generation/GenerationAttemptCoordinator"
+import { CanvasElementToolCommandBus } from "../element-tools/commands/ElementToolCommandBus"
 import { ElementRenameManager } from "../interaction/rename/ElementRenameManager"
 import { TextEditingManager } from "../interaction/text-editing/TextEditingManager"
 import { TextFormattingManager } from "../interaction/text-editing/TextFormattingManager"
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
-import { buildVirtualResourceScope } from "../shared/path/canvasResourcePath"
+import {
+	buildVirtualResourceScope,
+	getCanvasHostResourceReferenceResolver,
+	resolveCanvasStorageResourceReference,
+	type CanvasResourceReferenceResolverChangeOptions,
+} from "../shared/path/canvasResourcePath"
 import { ConnectionManager } from "../interaction/connection/ConnectionManager"
 import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
+import { ConnectionAssociationSeedManager } from "../interaction/connection/ConnectionAssociationSeedManager"
+import { StoryboardInteractionManager } from "../interaction/storyboard/StoryboardInteractionManager"
+import { VideoEditInteractionManager } from "../interaction/video-edit/VideoEditInteractionManager"
+import { VideoEditPlaybackManager } from "../interaction/video-edit/VideoEditPlaybackManager"
+import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
+import { VideoContinuationManager } from "../interaction/video-continuation/VideoContinuationManager"
+import { MediaEditRecoveryManager } from "../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import {
 	editActions,
 	layerActions,
@@ -72,6 +99,9 @@ import {
 	conversationActions,
 	downloadActions,
 } from "../actions/index"
+import { normalizeStoryboardDocument } from "../document/storyboardMigration"
+
+const CANVAS_DOUBLE_CLICK_DISTANCE = 8
 
 function areCanvasDeviceInfoEqual(a: CanvasDeviceInfo, b: CanvasDeviceInfo): boolean {
 	return (
@@ -93,10 +123,21 @@ function getCanvasConnectionComparable(connections: CanvasDocument["connections"
 	)
 }
 
+function getElementResourceReferencePath(element: LayerElement | undefined): string | undefined {
+	if (!element) return undefined
+	if (element.type === ElementTypeEnum.Image) return getActiveImageContent(element).src
+	if (element.type === ElementTypeEnum.Video || element.type === ElementTypeEnum.Audio) {
+		return getActiveContent(element)?.src as string | undefined
+	}
+	return undefined
+}
+
 /**
  * Canvas类 - 封装Konva画布的初始化和管理
  */
 export class Canvas {
+	private destroyed = false
+
 	public container: HTMLDivElement
 	public stage: Konva.Stage
 
@@ -112,6 +153,8 @@ export class Canvas {
 	public eventEmitter: EventEmitter<CanvasEventMap>
 
 	public permissionManager: PermissionManager
+	public imageEditingCoordinator: ImageEditingCoordinator
+	public mediaEditRecoveryManager: MediaEditRecoveryManager
 	public elementManager: ElementManager
 	public selectionManager: SelectionManager
 	public transformManager: TransformManager
@@ -121,8 +164,13 @@ export class Canvas {
 	public videoPlaybackInteractionManager: VideoPlaybackInteractionManager
 	public inputManager: CanvasInputManager
 	public connectionManager: ConnectionManager
+	public connectionAssociationSeedManager: ConnectionAssociationSeedManager
 	public connectionDragManager: ConnectionDragManager
 	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
+	public storyboardInteractionManager: StoryboardInteractionManager
+	public videoEditInteractionManager: VideoEditInteractionManager
+	public videoEditPlaybackManager: VideoEditPlaybackManager
+	public videoContinuationManager: VideoContinuationManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
 	public alignmentManager: AlignmentManager
@@ -138,6 +186,7 @@ export class Canvas {
 	public dropOverlayManager: DropOverlayManager
 	public cursorManager: CursorManager
 	public userActionRegistry: UserActionRegistry
+	public elementToolCommandBus: CanvasElementToolCommandBus
 	public backgroundManager: BackgroundManager
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
@@ -146,7 +195,15 @@ export class Canvas {
 	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
+	public videoCompositionManager: VideoCompositionManager
 	public videoPlaybackManager: VideoPlaybackManager
+	public audioResourceManager: AudioResourceManager
+	public audioPlaybackManager: AudioPlaybackManager
+	public audioWaveformManager: AudioWaveformManager
+	public audioReplaceController: AudioReplaceController
+	public imageReplaceController: ImageReplaceController
+	public mediaReplaceController: MediaReplaceController
+	public mediaPlaybackCoordinator: MediaPlaybackCoordinator
 	public mediaResourceOfflineCacheManager: MediaResourceOfflineCacheManager
 	public visibilityManager: CanvasVisibilityManager
 	public resourceScheduler: CanvasResourceScheduler
@@ -158,10 +215,17 @@ export class Canvas {
 	public textEditingManager: TextEditingManager
 	public textFormattingManager: TextFormattingManager
 	public pluginManager: PluginManager
+	public generationRuntimeManager: GenerationRuntimeManager
+	public generationAttemptCoordinator: GenerationAttemptCoordinator
+	public elementDetailsRuntimeManager: ElementDetailsRuntimeManager
 
 	public readonly: boolean
 	public deviceInfo: CanvasDeviceInfo
 	public id: string
+
+	public get isDestroyed(): boolean {
+		return this.destroyed
+	}
 
 	public t?: TFunction
 	private scopeElement: HTMLElement
@@ -174,6 +238,10 @@ export class Canvas {
 	private resizeObserver: ResizeObserver | null = null
 	private containerContextMenuHandler: ((e: MouseEvent) => void) | null = null
 	private stageContextMenuHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private stageBlankClickHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private stageDoubleClickHandler: ((e: Konva.KonvaEventObject<MouseEvent>) => void) | null = null
+	private previousBlankClickPoint: { x: number; y: number } | null = null
+	private lastBlankClickPoint: { x: number; y: number } | null = null
 
 	/**
 	 * 构造函数
@@ -207,6 +275,10 @@ export class Canvas {
 			height: height,
 		})
 
+		// Register before the shared input layer so Canvas takes focus before
+		// selection handlers publish the new selection.
+		this.setupCanvasFocusHandler()
+
 		// 创建五层架构的 Layer
 		this.contentLayer = new Konva.Layer({ name: "content", listening: true })
 		this.connectionGroup = new Konva.Group({ name: "canvas-connections", listening: true })
@@ -225,6 +297,35 @@ export class Canvas {
 
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
+		this.mediaEditRecoveryManager = new MediaEditRecoveryManager()
+		this.eventEmitter.on("element:deleted", ({ data }) => {
+			this.mediaEditRecoveryManager.clearElement(data.elementId)
+		})
+		this.eventEmitter.on("element:batchdeleted", ({ data }) => {
+			data.elementIds.forEach((elementId) =>
+				this.mediaEditRecoveryManager.clearElement(elementId),
+			)
+		})
+		this.eventEmitter.on("element:updated", ({ data }) => {
+			if (!data.previousData) return
+			const previousContent = getActiveContent(data.previousData)
+			const nextContent = getActiveContent(data.data)
+			const previousSource =
+				previousContent && "src" in previousContent ? previousContent.src : undefined
+			const nextSource = nextContent && "src" in nextContent ? nextContent.src : undefined
+			if (
+				previousContent?.contentId === nextContent?.contentId &&
+				previousContent?.contentId &&
+				previousSource !== nextSource
+			) {
+				this.mediaEditRecoveryManager.clearContent(
+					data.elementId,
+					previousContent.contentId,
+				)
+			}
+		})
+		this.generationRuntimeManager = new GenerationRuntimeManager({ canvas: this })
+		this.elementDetailsRuntimeManager = new ElementDetailsRuntimeManager()
 
 		this.pluginManager = new PluginManager()
 		this.pluginManager.registerMany(options.plugins?.builtin ?? [])
@@ -232,7 +333,7 @@ export class Canvas {
 			rootPath: options.plugins?.user?.rootPath,
 			directories: options.plugins?.user?.directories,
 			getFileInfo: options.magic?.methods?.getFileInfo,
-			resolveAbsolutePath: options.magic?.methods?.resolveAbsolutePath,
+			resolveResourceReference: options.magic?.methods?.resolveResourceReference,
 		})
 
 		// 初始化 MagicConfigManager
@@ -247,8 +348,8 @@ export class Canvas {
 		})
 
 		this.mediaResourceOfflineCacheManager = new MediaResourceOfflineCacheManager({
-			getResolveAbsolutePath: () =>
-				this.magicConfigManager.config?.methods?.resolveAbsolutePath,
+			getResolveResourceReference: () =>
+				this.magicConfigManager.config?.methods?.resolveResourceReference,
 			getVirtualResourceScope: () =>
 				buildVirtualResourceScope(
 					this.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
@@ -276,10 +377,19 @@ export class Canvas {
 		this.videoResourceManager = new VideoResourceManager({
 			canvas: this,
 		})
+		this.videoCompositionManager = new VideoCompositionManager({ canvas: this })
 
 		this.videoPlaybackManager = new VideoPlaybackManager({
 			canvas: this,
 		})
+
+		this.audioResourceManager = new AudioResourceManager({ canvas: this })
+		this.audioPlaybackManager = new AudioPlaybackManager({ canvas: this })
+		this.videoEditPlaybackManager = new VideoEditPlaybackManager({ canvas: this })
+		this.audioWaveformManager = new AudioWaveformManager({ canvas: this })
+		this.audioReplaceController = new AudioReplaceController({ canvas: this })
+		this.imageReplaceController = new ImageReplaceController({ canvas: this })
+		this.mediaReplaceController = new MediaReplaceController({ canvas: this })
 
 		// 初始化 ClipboardManager
 		this.clipboardManager = new ClipboardManager({
@@ -296,6 +406,10 @@ export class Canvas {
 			canvas: this,
 		})
 
+		this.imageEditingCoordinator = new ImageEditingCoordinator({
+			canvas: this,
+		})
+
 		// 初始化 PermissionManager（需要最早初始化，其他管理器依赖它）
 		this.permissionManager = new PermissionManager({
 			canvas: this,
@@ -305,6 +419,7 @@ export class Canvas {
 		this.elementManager = new ElementManager({
 			canvas: this,
 		})
+		this.generationAttemptCoordinator = new GenerationAttemptCoordinator(this)
 
 		this.imagePresentationScheduler = new CanvasImagePresentationScheduler({
 			canvas: this,
@@ -319,11 +434,16 @@ export class Canvas {
 		this.connectionManager = new ConnectionManager({
 			canvas: this,
 		})
+		this.connectionAssociationSeedManager = new ConnectionAssociationSeedManager({
+			canvas: this,
+		})
 
 		// 初始化 SelectionManager（使用 Content Layer 用于查询节点）
 		this.selectionManager = new SelectionManager({
 			canvas: this,
 		})
+
+		this.mediaPlaybackCoordinator = new MediaPlaybackCoordinator({ canvas: this })
 
 		// 初始化 TransformManager（使用 Controls Layer）
 		this.transformManager = new TransformManager({
@@ -412,6 +532,17 @@ export class Canvas {
 			canvas: this,
 		})
 
+		this.videoContinuationManager = new VideoContinuationManager(this)
+
+		// 分镜内部控件依赖选择工具、权限与 CursorManager，统一在工具初始化后接入。
+		this.storyboardInteractionManager = new StoryboardInteractionManager({
+			canvas: this,
+		})
+
+		this.videoEditInteractionManager = new VideoEditInteractionManager({
+			canvas: this,
+		})
+
 		// 初始化视频播放交互协调器
 		this.videoPlaybackInteractionManager = new VideoPlaybackInteractionManager({
 			canvas: this,
@@ -437,6 +568,7 @@ export class Canvas {
 			...conversationActions,
 			...downloadActions,
 		])
+		this.elementToolCommandBus = new CanvasElementToolCommandBus(this)
 
 		// 初始化背景管理器（使用 Content Layer 的最底层）
 		this.backgroundManager = new BackgroundManager({
@@ -480,11 +612,11 @@ export class Canvas {
 		// 设置 window 点击监听（点击窗口其他地方取消选中）
 		this.setupWindowClickHandler()
 
-		// 设置画布点击时获得焦点
-		this.setupCanvasFocusHandler()
-
 		// 禁用右键菜单
 		this.setupContextMenuHandler()
+
+		// 设置画布空白区域双击监听
+		this.setupCanvasDoubleClickHandler()
 
 		// 发布画布就绪事件
 		this.eventEmitter.emit({ type: "canvas:ready", data: undefined })
@@ -521,7 +653,7 @@ export class Canvas {
 	 * 设置画布点击时获得焦点
 	 */
 	private setupCanvasFocusHandler(): void {
-		this.stage.on("mousedown", () => {
+		this.stage.on("pointerdown mousedown", () => {
 			this.container.focus()
 		})
 	}
@@ -562,6 +694,60 @@ export class Canvas {
 			}
 		}
 		this.stage.on("contextmenu", this.stageContextMenuHandler)
+	}
+
+	/**
+	 * 设置画布空白区域双击监听
+	 */
+	private setupCanvasDoubleClickHandler(): void {
+		this.stageBlankClickHandler = (e) => {
+			if (e.target !== this.stage) {
+				this.previousBlankClickPoint = null
+				this.lastBlankClickPoint = null
+				return
+			}
+
+			this.previousBlankClickPoint = this.lastBlankClickPoint
+			this.lastBlankClickPoint = {
+				x: e.evt.clientX,
+				y: e.evt.clientY,
+			}
+		}
+
+		this.stageDoubleClickHandler = (e) => {
+			if (e.target !== this.stage) return
+
+			const previousPoint = this.previousBlankClickPoint
+			const lastPoint = this.lastBlankClickPoint
+			if (!previousPoint || !lastPoint) return
+
+			const distance = Math.max(
+				Math.abs(lastPoint.x - previousPoint.x),
+				Math.abs(lastPoint.y - previousPoint.y),
+			)
+			if (distance > CANVAS_DOUBLE_CLICK_DISTANCE) return
+
+			const pos = this.stage.getPointerPosition()
+			if (!pos) return
+
+			const transform = this.stage.getAbsoluteTransform().copy().invert()
+			const canvasPos = transform.point(pos)
+			this.previousBlankClickPoint = null
+			this.lastBlankClickPoint = null
+
+			this.eventEmitter.emit({
+				type: "canvas:dblclick",
+				data: {
+					x: e.evt.clientX,
+					y: e.evt.clientY,
+					canvasX: canvasPos.x,
+					canvasY: canvasPos.y,
+				},
+			})
+		}
+
+		this.stage.on("mousedown", this.stageBlankClickHandler)
+		this.stage.on("dblclick", this.stageDoubleClickHandler)
 	}
 
 	/**
@@ -893,17 +1079,24 @@ export class Canvas {
 	 * 加载文档数据
 	 * @param doc - 画布文档
 	 */
-	public loadDocument(doc: CanvasDocument): void {
-		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocument")
+	public loadDocument(
+		doc: CanvasDocument,
+		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
+	): void {
+		const normalizedDoc = normalizeStoryboardDocument(doc)
+		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
+		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
 
 		// 禁用历史记录，避免在加载时记录
 		this.historyManager.disable()
-
-		this.elementManager.loadDocument(doc)
-		this.connectionManager.loadDocument(doc)
-
-		// 重新启用历史记录
-		this.historyManager.enable()
+		try {
+			this.elementManager.loadDocument(normalizedDoc)
+			this.connectionManager.loadDocument(normalizedDoc)
+			this.connectionManager.normalizeVideoEditInputs?.()
+		} finally {
+			// 即使某个加载阶段出现未预期异常，也不能让历史记录永久保持禁用。
+			this.historyManager.enable()
+		}
 
 		// 记录初始状态
 		this.historyManager.recordHistoryImmediate()
@@ -922,25 +1115,33 @@ export class Canvas {
 	 * 智能加载文档数据
 	 * @param doc - 画布文档
 	 */
-	public loadDocumentSmart(doc: CanvasDocument): void {
-		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocumentSmart")
+	public loadDocumentSmart(
+		doc: CanvasDocument,
+		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
+	): void {
+		const normalizedDoc = normalizeStoryboardDocument(doc)
+		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
+		if (options?.elementDetailsProvenance) {
+			this.elementDetailsRuntimeManager.replace(options.elementDetailsProvenance)
+		}
 		const previousConnections = this.connectionManager.exportConnections()
 		let didEmitDocumentRestored = false
 		const unsubscribeDocumentRestored = this.eventEmitter.on("document:restored", () => {
 			didEmitDocumentRestored = true
 		})
+		let didChangeElements = false
 		try {
-			this.elementManager.loadDocumentSmart(doc)
+			didChangeElements = this.elementManager.loadDocumentSmart(normalizedDoc)
 		} finally {
 			unsubscribeDocumentRestored()
 		}
-		this.connectionManager.loadDocument(doc)
+		this.connectionManager.loadDocument(normalizedDoc)
+		this.connectionManager.normalizeVideoEditInputs?.()
 		const nextConnections = this.connectionManager.exportConnections()
-		if (
-			!didEmitDocumentRestored &&
+		const didChangeConnections =
 			getCanvasConnectionComparable(previousConnections) !==
-				getCanvasConnectionComparable(nextConnections)
-		) {
+			getCanvasConnectionComparable(nextConnections)
+		if (!didEmitDocumentRestored && (didChangeElements || didChangeConnections)) {
 			this.eventEmitter.emit({ type: "document:restored", data: undefined })
 		}
 	}
@@ -948,7 +1149,7 @@ export class Canvas {
 	/**
 	 * 导出文档数据
 	 * @param options 导出选项
-	 * @param options.includeTemporary 是否包含临时元素（默认 false）
+	 * @param options.includeTemporary 是否包含允许进入历史的临时元素（默认 false）
 	 * @returns 画布文档
 	 */
 	public exportDocument(options?: { includeTemporary?: boolean }): CanvasDocument {
@@ -1249,13 +1450,78 @@ export class Canvas {
 		return this.connectionGroup
 	}
 
+	public handleResourceReferenceResolverChanged(options?: {
+		changedWorkspacePaths?: readonly string[]
+	}): void {
+		const changedWorkspacePaths = options?.changedWorkspacePaths
+		let affectedElementIds: Set<string> | undefined
+		let changedResourceIdentities: Set<string> | undefined
+		if (changedWorkspacePaths !== undefined) {
+			const resolver = getCanvasHostResourceReferenceResolver(this)
+			const resolvedResourceIdentities = new Set<string>()
+			let canScopeChange = Boolean(resolver)
+			if (resolver) {
+				for (const path of changedWorkspacePaths) {
+					const resolution = resolver({ namespace: "workspace-path", path })
+					if (resolution.status !== "resolved") {
+						canScopeChange = false
+						break
+					}
+					resolvedResourceIdentities.add(resolution.identity)
+				}
+			}
+
+			if (canScopeChange && resolver) {
+				changedResourceIdentities = resolvedResourceIdentities
+				affectedElementIds = new Set<string>()
+				for (const elementId of this.elementManager.getAllElementIds()) {
+					const path = getElementResourceReferencePath(
+						this.elementManager.getElementData?.(elementId) as LayerElement | undefined,
+					)
+					if (!path) continue
+					const resolution = resolveCanvasStorageResourceReference(path, resolver)
+					if (resolution.status !== "resolved") {
+						// 无法证明元素不受影响时必须回退全量重绑，禁止路径后缀猜测。
+						affectedElementIds = undefined
+						break
+					}
+					if (changedResourceIdentities.has(resolution.identity)) {
+						affectedElementIds.add(elementId)
+					}
+				}
+			}
+		}
+		if (affectedElementIds?.size === 0) {
+			return
+		}
+		const resolverChangeOptions: CanvasResourceReferenceResolverChangeOptions | undefined =
+			changedResourceIdentities ? { changedResourceIdentities } : undefined
+		this.imageResourceManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.audioResourceManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.audioWaveformManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.imagePresentationScheduler.handleResourceReferenceResolverChanged(
+			resolverChangeOptions,
+		)
+		this.visibilityManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.resourceUrlWarmupManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.elementManager.getAllElementIds().forEach((elementId) => {
+			if (affectedElementIds && !affectedElementIds.has(elementId)) return
+			this.elementManager.getElementInstance(elementId)?.onResourceReferenceResolverChanged()
+		})
+	}
+
 	/**
 	 * 销毁画布
 	 */
 	public destroy(): void {
+		if (this.destroyed) return
+		this.destroyed = true
+
+		this.mediaEditRecoveryManager.clearAll()
 		this.visibilityManager.destroy()
 		this.imagePresentationScheduler.destroy()
 		this.resourceUrlWarmupManager.destroy()
+		this.audioWaveformManager.destroy()
 		this.resourceScheduler.destroy()
 		this.runtimeScheduler.destroy()
 
@@ -1271,12 +1537,41 @@ export class Canvas {
 			this.stage.off("contextmenu", this.stageContextMenuHandler)
 			this.stageContextMenuHandler = null
 		}
+		if (this.stageBlankClickHandler) {
+			this.stage.off("mousedown", this.stageBlankClickHandler)
+			this.stageBlankClickHandler = null
+		}
+		if (this.stageDoubleClickHandler) {
+			this.stage.off("dblclick", this.stageDoubleClickHandler)
+			this.stageDoubleClickHandler = null
+		}
+		this.previousBlankClickPoint = null
+		this.lastBlankClickPoint = null
 
 		// 移除 window 点击监听器
 		if (this.handleWindowClick) {
 			window.removeEventListener("click", this.handleWindowClick, true)
 			this.handleWindowClick = null
 		}
+
+		// 图片特殊编辑退出依赖事件系统、元素、选择、Marker 和 Cursor Manager。
+		// 必须在拆除这些依赖前结束会话，否则活动裁剪恢复元素时会访问已清空的 ElementManager。
+		this.cropManager.destroy()
+		this.extendManager.destroy()
+		this.eraserManager.destroy()
+		this.imageEditingCoordinator.destroy()
+		this.videoCompositionManager?.destroy()
+		this.generationRuntimeManager.destroy()
+		this.elementDetailsRuntimeManager?.setOnChange(undefined)
+		this.mediaPlaybackCoordinator.destroy()
+		this.videoEditPlaybackManager.destroy()
+		this.audioPlaybackManager.destroy()
+		this.audioReplaceController.destroy()
+		this.imageReplaceController.destroy()
+		this.mediaReplaceController?.destroy()
+		this.storyboardInteractionManager.destroy()
+		this.videoEditInteractionManager.destroy()
+		this.videoContinuationManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()
@@ -1288,6 +1583,7 @@ export class Canvas {
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.connectionManager.destroy()
+		this.connectionAssociationSeedManager?.destroy()
 		this.connectionDragManager.destroy()
 		this.connectionHandleOverlayManager.destroy()
 		this.viewportController.destroy()
@@ -1311,15 +1607,13 @@ export class Canvas {
 		this.sizeLabelManager.destroy()
 		this.backgroundManager.destroy()
 		this.canvasFileUploadManager.destroy()
-		this.cropManager.destroy()
-		this.extendManager.destroy()
-		this.eraserManager.destroy()
 
 		// 清理图片资源管理器
 		this.imageResourceManager.destroy()
 		this.submitImageWorkerManager.destroy()
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
+		this.audioResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
 		this.pluginManager.destroy()
 		this.stage.destroy()

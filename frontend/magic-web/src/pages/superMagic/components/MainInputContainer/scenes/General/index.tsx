@@ -8,6 +8,9 @@ import DefaultMessageEditorContainer from "../../components/editors/DefaultMessa
 import { ScenePanelComponentBaseProps } from "../../types"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalScenePanelVariant, useSceneStateStore } from "../../stores"
+import VideoProductionConfigPanel from "../../components/VideoProductionConfigPanel"
+import { useConversationInputLayout } from "../../../ConversationInputResize/context"
+import { cn } from "@/utils/cn"
 
 interface GeneralInputContainerProps extends ScenePanelComponentBaseProps {
 	scenes: SceneItem[] | undefined
@@ -16,6 +19,9 @@ interface GeneralInputContainerProps extends ScenePanelComponentBaseProps {
 function GeneralInputContainer({ scenes, editorContext, editorNodes }: GeneralInputContainerProps) {
 	const sceneStateStore = useSceneStateStore()
 	const variant = useOptionalScenePanelVariant()
+	const inputLayout = useConversationInputLayout()
+	// Propagate the resized conversation height through the general scene wrappers.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 	const editorPortalTarget = usePortalTarget({
 		portalId: SCENE_INPUT_IDS.INPUT_CONTAINER,
 	})
@@ -52,15 +58,34 @@ function GeneralInputContainer({ scenes, editorContext, editorNodes }: GeneralIn
 					<AnimatePresence mode="wait">
 						<motion.div
 							key="general-editor"
+							className={cn(shouldFillHeight && "h-full min-h-0")}
 							initial={SCENE_ANIMATION_CONFIG.initial}
 							animate={SCENE_ANIMATION_CONFIG.animate}
 							exit={SCENE_ANIMATION_CONFIG.exit}
 							transition={SCENE_ANIMATION_CONFIG.transition}
 						>
-							<DefaultMessageEditorContainer
-								editorContext={editorContext}
-								editorNodes={editorNodes}
-							/>
+							<div
+								className={cn(
+									"flex flex-col gap-2",
+									shouldFillHeight && "h-full min-h-0",
+								)}
+							>
+								<div
+									className={cn(
+										shouldFillHeight && "min-h-0 flex-1 [&>div]:h-full",
+									)}
+								>
+									<DefaultMessageEditorContainer
+										editorContext={editorContext}
+										editorNodes={editorNodes}
+									/>
+								</div>
+								<VideoProductionConfigPanel
+									topicMode={editorContext?.topicMode}
+									agentCode={editorContext?.agentCode}
+									selectedTopic={editorContext?.selectedTopic}
+								/>
+							</div>
 						</motion.div>
 					</AnimatePresence>,
 					editorPortalTarget,

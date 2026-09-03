@@ -5,7 +5,7 @@
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import type { ElementRect, SelectedInfo } from "./types"
 import { HTML_EDITOR_Z_INDEX } from "../../constants/z-index"

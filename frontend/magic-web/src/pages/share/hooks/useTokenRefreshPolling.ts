@@ -3,13 +3,20 @@ import { SuperMagicApi } from "@/apis"
 import { useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 
+interface TokenRefreshInfo {
+	has_password?: boolean
+	temporary_token?: string
+	[key: string]: unknown
+}
+
 interface useTokenRefreshPollingOptions {
 	resourceId: string
 	password?: string
-	onTokenRefreshed?: (tokenInfo: any) => void
-	onRefreshError?: (error: any) => void
+	scopeKey?: string
+	onTokenRefreshed?: (tokenInfo: TokenRefreshInfo) => void
+	onRefreshError?: (error: unknown) => void
 	interval?: number
-	data: any
+	data: unknown
 }
 
 /**
@@ -19,6 +26,7 @@ interface useTokenRefreshPollingOptions {
 export function useTokenRefreshPolling({
 	resourceId,
 	password,
+	scopeKey,
 	onTokenRefreshed,
 	onRefreshError,
 	interval = 1000 * 60 * 50, // 默认50分钟刷新一次
@@ -26,25 +34,41 @@ export function useTokenRefreshPolling({
 }: useTokenRefreshPollingOptions) {
 	const timerRef = useRef<NodeJS.Timeout | number | null>(null)
 	const lastRefreshedAtRef = useRef<number>(0)
+	const refreshSequenceRef = useRef(0)
+	const currentScopeRef = useRef({ password, resourceId, scopeKey })
+	currentScopeRef.current = { password, resourceId, scopeKey }
 
 	// 创建刷新回调函数
 	const refreshToken = useMemoizedFn(async () => {
+		const requestSequence = ++refreshSequenceRef.current
+		const requestScope = { password, resourceId, scopeKey }
+		const isCurrentRequest = () => {
+			const currentScope = currentScopeRef.current
+			return (
+				requestSequence === refreshSequenceRef.current &&
+				requestScope.password === currentScope.password &&
+				requestScope.resourceId === currentScope.resourceId &&
+				requestScope.scopeKey === currentScope.scopeKey
+			)
+		}
+
 		try {
 			if (!resourceId || isEmpty(data)) return
 
-			const result = await SuperMagicApi.getShareResource({
+			const result = (await SuperMagicApi.getShareResource({
 				resource_id: resourceId,
 				password,
-			})
+			})) as TokenRefreshInfo
+			if (!isCurrentRequest()) return
 
 			// 如果需要密码但没有提供密码，抛出错误
 			if (result?.has_password && !password) throw new Error("Password required for refresh")
-
-			// @ts-ignore
-			window.temporary_token = result.temporary_token
+			;(window as Window & { temporary_token?: string }).temporary_token =
+				result.temporary_token
 			lastRefreshedAtRef.current = Date.now()
 			onTokenRefreshed?.(result)
 		} catch (error) {
+			if (!isCurrentRequest()) return
 			console.error("Token refresh callback failed:", error)
 			onRefreshError?.(error)
 		}
@@ -91,6 +115,9 @@ export function useTokenRefreshPolling({
 	useEffect(() => {
 		// 初始立即刷新一次
 		startPolling()
-		return () => clearTimer()
-	}, [])
+		return () => {
+			refreshSequenceRef.current += 1
+			clearTimer()
+		}
+	}, [clearTimer, startPolling])
 }

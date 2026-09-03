@@ -1,7 +1,7 @@
 import { useRef, useState, type MouseEvent } from "react"
 import { Ellipsis } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { isCollaborationProject, isWorkspaceShortcutProject } from "@/pages/superMagic/constants"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
@@ -13,6 +13,7 @@ import { canManageProject } from "@/pages/superMagic/utils/permission"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import { canDragSidebarProject } from "./projectDndUtils"
 
 type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void>
 
@@ -55,6 +56,7 @@ function CollapsedWorkspaceProjectRow({
 	const suppressProjectItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
+	const canDrag = canDragSidebarProject(project)
 
 	const {
 		isEditing,
@@ -160,9 +162,22 @@ function CollapsedWorkspaceProjectRow({
 		open: boolean,
 		triggerContextMenu?: (e: React.MouseEvent<HTMLElement>) => void,
 	) => (
-		<div className={cn("h-8 w-full rounded-md", isSelected && "bg-sidebar-accent")}>
+		<div
+			className={cn("h-8 w-full rounded-md", isSelected && "bg-sidebar-accent")}
+			draggable={canDrag}
+			data-collapsed-sidebar-dnd-source={canDrag ? "project" : undefined}
+			data-collapsed-sidebar-dnd-workspace-id={workspaceId}
+			data-collapsed-sidebar-dnd-project-id={project.id}
+			data-collapsed-sidebar-dnd-label={
+				canDrag ? project.project_name || t("project.unnamedProject") : undefined
+			}
+			data-collapsed-sidebar-dnd-drop-type="project"
+			onDragStart={blockProjectItemClickTemporarily}
+			onDragEnd={blockProjectItemClickTemporarily}
+		>
 			<a
 				href={getWorkspaceProjectRouteUrl(workspaceId, project.id)}
+				draggable={false}
 				data-testid={`sidebar-collapsed-project-row-${project.id}`}
 				className="inline-flex h-full w-full items-center justify-start gap-2 rounded-md px-2 text-sm font-normal leading-5 text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:outline-none"
 				onMouseEnter={() => setIsHovered(true)}

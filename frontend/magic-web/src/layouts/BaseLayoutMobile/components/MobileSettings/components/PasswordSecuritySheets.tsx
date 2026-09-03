@@ -11,7 +11,7 @@ import VerificationCodeInput from "@/components/business/VerificationCodeInput"
 import { Input } from "@/components/shadcn-ui/input"
 import { VerificationCode } from "@/constants/bussiness"
 import { encryptPhoneWithCountryCode } from "@/utils/phone"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import { MobileSettingsSheetContainer } from "./SheetContainer"
 
@@ -52,6 +52,7 @@ export function MobileSettingsPasswordSheet({
 	countryCode = "+86",
 }: MobileSettingsPasswordSheetProps) {
 	const { t } = useTranslation("interface")
+	const { t: tMessage } = useTranslation("message")
 	const [method, setMethod] = useState<MobileSettingsPasswordMethod>(() =>
 		hasPhone ? "phone" : "email",
 	)
@@ -131,11 +132,11 @@ export function MobileSettingsPasswordSheet({
 		try {
 			setIsSaving(true)
 			await UserApi.changePassword(code, password, password)
-			toast.success(t("setting.changePasswordSuccess", { ns: "message" }))
+			toast.success(tMessage("setting.changePasswordSuccess"))
 			setView("success")
 		} catch (submitError) {
 			console.error("Failed to change password:", submitError)
-			toast.error(t("setting.changePasswordFailed", { ns: "message" }))
+			toast.error(tMessage("setting.changePasswordFailed"))
 		} finally {
 			setIsSaving(false)
 		}

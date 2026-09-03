@@ -38,6 +38,11 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60000
 export const PLACEHOLDER_UPLOAD_MAX_FAILED_CHUNKS = 30
 export const PLACEHOLDER_UPLOAD_TIMEOUT_MS = 120000
+
+const getUploadPathLogData = (uploadPath: string) => ({
+	hasUploadPath: Boolean(uploadPath),
+	isAbsoluteUrl: /^https?:\/\//i.test(uploadPath),
+})
 export const PLACEHOLDER_UPLOAD_CONCURRENCY = 3
 
 export interface PlaceholderUploadProgress {
@@ -226,6 +231,7 @@ export class ChunkUploader {
 	 * 开始上传会话的所有待上传分片
 	 */
 	async uploadSession(sessionId: string, topicId: string, projectId: string = ""): Promise<void> {
+		const startedAt = Date.now()
 		// Store topic ID mapping
 		this.sessionTopicMap.set(sessionId, topicId)
 		this.sessionProjectMap.set(sessionId, projectId)
@@ -237,7 +243,11 @@ export class ChunkUploader {
 		const sortedChunks = pendingChunks.sort((a, b) => a.index - b.index)
 
 		logger.report("开始上传会话分片", {
+			sessionId,
 			pendingCount: sortedChunks.length,
+			topicId,
+			projectId,
+			lookupDurationMs: Date.now() - startedAt,
 		})
 
 		// Initialize session queue if not exists
@@ -327,6 +337,7 @@ export class ChunkUploader {
 	 * 开始上传单个分片
 	 */
 	private async startUpload(chunkId: string, sessionId: string): Promise<void> {
+		const startedAt = Date.now()
 		// Double check network status before starting upload
 		if (this.networkMonitor.isNetworkOffline()) {
 			logger.log("Network is offline, skipping chunk upload", { chunkId })
@@ -347,7 +358,12 @@ export class ChunkUploader {
 			// Get chunk from IndexedDB
 			const chunk = await this.audioChunkDB.get(chunkId)
 			if (!chunk) {
-				logger.error(`在 IndexedDB 中找不到分片 ${chunkId}`)
+				logger.error({
+					eventKey: "indexed_db_chunk_failed",
+					errorKind: "storage",
+					message: `在 IndexedDB 中找不到分片 ${chunkId}`,
+					context: { chunkId, sessionId, stage: "indexeddb_read" },
+				})
 				// Clear session active status to unblock this session
 				this.activeUploadIds.delete(chunkId)
 				this.sessionActiveUploads.delete(sessionId)
@@ -356,6 +372,16 @@ export class ChunkUploader {
 
 			// Add to active uploads
 			this.activeUploads.set(chunkId, chunk)
+			logger.log("Audio chunk upload started", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				size: chunk.size,
+				uploadStatus: chunk.uploadStatus,
+				retryCount: this.getRetryCount(chunk.id),
+				queueRemaining: this.sessionQueues.get(chunk.sessionId)?.length || 0,
+				activeUploads: this.activeUploads.size,
+			})
 
 			// Sampling: log every 10 chunks
 			if (chunk.index % 10 === 0) {
@@ -369,8 +395,21 @@ export class ChunkUploader {
 			}
 
 			const uploadUrl = await this.uploadChunk(chunk)
+			logger.log("Audio chunk object upload succeeded", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				...getUploadPathLogData(uploadUrl),
+				uploadDurationMs: Date.now() - startedAt,
+			})
 			await this.handleUploadSuccess(chunk, uploadUrl)
 		} catch (error) {
+			logger.warn("Audio chunk upload pipeline failed", {
+				sessionId,
+				chunkId,
+				uploadDurationMs: Date.now() - startedAt,
+				retryCount: this.getRetryCount(chunkId),
+			})
 			await this.handleUploadError(chunkId, error as Error)
 		}
 	}
@@ -380,6 +419,7 @@ export class ChunkUploader {
 	 * 使用上传SDK上传单个分片
 	 */
 	public async uploadChunk(chunk: StoredAudioChunk): Promise<string> {
+		const uploadStartedAt = Date.now()
 		// Auto-detect audio format based on data header or use default WebM
 		const { mimeType, extension } = this.detectAudioFormat(chunk.chunk)
 
@@ -396,6 +436,16 @@ export class ChunkUploader {
 
 		// Get upload credentials
 		const customCredentials = await this.getUploadCredentials(chunk.sessionId)
+		logger.log("Audio chunk upload request started", {
+			sessionId: chunk.sessionId,
+			chunkId: chunk.id,
+			chunkIndex: chunk.index,
+			size: chunk.size,
+			mimeType,
+			fileName: originalFileName,
+			uploadFileName,
+			credentialDurationMs: Date.now() - uploadStartedAt,
+		})
 
 		return new Promise((resolve, reject) => {
 			let settled = false
@@ -404,6 +454,13 @@ export class ChunkUploader {
 			const timeout = setTimeout(() => {
 				if (settled) return
 				settled = true
+				logger.warn("Audio chunk upload request timed out", {
+					sessionId: chunk.sessionId,
+					chunkId: chunk.id,
+					chunkIndex: chunk.index,
+					timeoutMs: DEFAULT_UPLOAD_TIMEOUT_MS,
+					uploadDurationMs: Date.now() - uploadStartedAt,
+				})
 				reject(new Error(`Upload timed out after ${DEFAULT_UPLOAD_TIMEOUT_MS}ms`))
 			}, DEFAULT_UPLOAD_TIMEOUT_MS)
 			const settle = (callback: () => void) => {
@@ -427,10 +484,22 @@ export class ChunkUploader {
 			success?.((res) => {
 				if (res?.data?.path) {
 					settle(() => {
+						logger.log("Audio chunk upload request completed", {
+							sessionId: chunk.sessionId,
+							chunkId: chunk.id,
+							chunkIndex: chunk.index,
+							uploadDurationMs: Date.now() - uploadStartedAt,
+						})
 						resolve(res.data.path)
 					})
 				} else {
 					settle(() => {
+						logger.warn("Audio chunk upload request returned no path", {
+							sessionId: chunk.sessionId,
+							chunkId: chunk.id,
+							chunkIndex: chunk.index,
+							uploadDurationMs: Date.now() - uploadStartedAt,
+						})
 						reject(new Error("Upload failed: No path returned"))
 					})
 				}
@@ -438,6 +507,12 @@ export class ChunkUploader {
 
 			fail?.((error) => {
 				settle(() => {
+					logger.warn("Audio chunk upload request failed", {
+						sessionId: chunk.sessionId,
+						chunkId: chunk.id,
+						chunkIndex: chunk.index,
+						uploadDurationMs: Date.now() - uploadStartedAt,
+					})
 					reject(new Error(`Upload failed: ${error || "Unknown error"}`))
 				})
 			})
@@ -489,8 +564,20 @@ export class ChunkUploader {
 		// Mark chunk as uploaded (keep data in IndexedDB for export)
 		try {
 			await this.audioChunkDB.updateChunkUploadStatus(chunk.id, "uploaded")
+			logger.log("Audio chunk upload status completed", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				uploadStatus: "uploaded",
+				...getUploadPathLogData(uploadUrl),
+			})
 		} catch (error) {
-			logger.error(`Failed to update chunk status ${chunk.id}:`, error)
+			logger.error({
+				eventKey: "update_chunk_status_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `Failed to update chunk status ${chunk.id}:`,
+			})
 		}
 
 		// Remove from active uploads
@@ -510,7 +597,7 @@ export class ChunkUploader {
 				chunkId: chunk.id,
 				chunkIndex: chunk.index,
 				chunkSize: chunk.size,
-				uploadUrl,
+				...getUploadPathLogData(uploadUrl),
 				sessionId: chunk.sessionId,
 			})
 		}
@@ -534,6 +621,19 @@ export class ChunkUploader {
 
 		if (!projectId || !topicId || !hiddenDirectory?.directory_id) {
 			if (options.requireBatchSave) {
+				logger.error({
+					eventKey: "audio_chunk_batch_save_context_missing",
+					errorKind: "invalid_state",
+					message: "Audio chunk batch save context is missing",
+					context: {
+						sessionId: chunk.sessionId,
+						chunkId: chunk.id,
+						chunkIndex: chunk.index,
+						projectId,
+						topicId,
+						parentId: hiddenDirectory?.directory_id,
+					},
+				})
 				throw new Error(
 					`Missing batch save context for chunk ${chunk.id}: projectId=${projectId}, topicId=${topicId}, parentId=${hiddenDirectory?.directory_id}`,
 				)
@@ -558,7 +658,23 @@ export class ChunkUploader {
 		}
 
 		if (options.requireBatchSave) {
+			logger.log("Audio chunk batch save started", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				...getUploadPathLogData(uploadUrl),
+				fileName,
+				fileSize: chunk.size,
+			})
 			await this.batchSaveReporter.reportUploadedFileStrict(reportFile)
+			logger.log("Audio chunk batch save completed", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				...getUploadPathLogData(uploadUrl),
+				fileName,
+				fileSize: chunk.size,
+			})
 			return
 		}
 
@@ -580,11 +696,12 @@ export class ChunkUploader {
 
 		const retryCount = this.getRetryCount(chunkId)
 
-		logger.error("分片上传失败", {
-			chunkId,
-			chunkIndex: chunk?.index,
-			retryCount,
-			error: error.message,
+		logger.error({
+			eventKey: "chunk_upload_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "分片上传失败",
+			context: { chunkId, chunkIndex: chunk?.index, retryCount },
 		})
 
 		// Check if error is task end error (code 43200)
@@ -610,8 +727,11 @@ export class ChunkUploader {
 		}
 
 		if (!chunk) {
-			logger.error("错误处理过程中找不到分片", {
-				chunkId,
+			logger.error({
+				eventKey: "process_chunk_failed",
+				errorKind: "unknown",
+				message: "错误处理过程中找不到分片",
+				context: { chunkId },
 			})
 			this.activeUploads.delete(chunkId)
 			this.activeUploadIds.delete(chunkId)
@@ -630,9 +750,11 @@ export class ChunkUploader {
 
 		// Check if max retries exceeded
 		if (this.hasExceededMaxRetries(chunkId)) {
-			logger.error(`分片 ${chunkId} 已达到最大重试次数 ${this.config.maxRetryCount}`, {
-				chunkIndex: chunk.index,
-				sessionId: chunk.sessionId,
+			logger.error({
+				eventKey: "chunk_retry_failed",
+				errorKind: "unknown",
+				message: `分片 ${chunkId} 已达到最大重试次数 ${this.config.maxRetryCount}`,
+				context: { chunkIndex: chunk.index, sessionId: chunk.sessionId },
 			})
 
 			// Remove from active uploads
@@ -643,7 +765,12 @@ export class ChunkUploader {
 			try {
 				await this.audioChunkDB.updateChunkUploadStatus(chunkId, "failed")
 			} catch (error) {
-				logger.error(`Failed to mark chunk ${chunkId} as failed:`, error)
+				logger.error({
+					eventKey: "mark_chunk_as_failed",
+					errorKind: "unknown",
+					error: error,
+					message: `Failed to mark chunk ${chunkId} as failed:`,
+				})
 			}
 
 			// Clear session active status
@@ -670,10 +797,20 @@ export class ChunkUploader {
 					})
 				})
 				.catch((refreshError) => {
-					logger.error(`认证错误后刷新令牌失败：`, refreshError)
+					logger.error({
+						eventKey: "refresh_token_failed",
+						errorKind: "permission",
+						error: refreshError,
+						message: `认证错误后刷新令牌失败：`,
+					})
 				})
 		} else {
-			logger.error(`不是认证错误，分片 ${chunkId} 上传失败，错误：`, error)
+			logger.error({
+				eventKey: "chunk_upload_failed",
+				errorKind: "permission",
+				error: error,
+				message: `不是认证错误，分片 ${chunkId} 上传失败，错误：`,
+			})
 		}
 
 		// Increment retry count
@@ -758,7 +895,12 @@ export class ChunkUploader {
 			return await this.tokenManager.getToken(sessionId, topicId)
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
-			logger.error(`获取会话 ${sessionId} 上传凭证失败：`, error)
+			logger.error({
+				eventKey: "get_session_upload_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `获取会话 ${sessionId} 上传凭证失败：`,
+			})
 			throw new Error(`Failed to get upload credentials: ${errorMessage}`)
 		}
 	}
@@ -827,7 +969,12 @@ export class ChunkUploader {
 						resolve(true)
 					}
 				} catch (error) {
-					logger.error(`检查上传进度时出错：`, error)
+					logger.error({
+						eventKey: "check_upload_failed",
+						errorKind: "unknown",
+						error: error,
+						message: `检查上传进度时出错：`,
+					})
 					cleanup()
 					reject(error)
 				}
@@ -867,7 +1014,12 @@ export class ChunkUploader {
 						resolve(progress)
 					}
 				} catch (error) {
-					logger.error(`检查上传终态进度时出错：`, error)
+					logger.error({
+						eventKey: "check_upload_failed",
+						errorKind: "unknown",
+						error: error,
+						message: `检查上传终态进度时出错：`,
+					})
 					cleanup()
 					reject(error)
 				}
@@ -990,7 +1142,16 @@ export class ChunkUploader {
 	 * 清除会话的所有分片
 	 * @param sessionId 会话ID
 	 */
-	clearSessionChunks(sessionId: string) {
+	clearSessionChunks(sessionId: string, reason: string = "session_cleanup"): Promise<void> {
+		const queueLength = this.sessionQueues.get(sessionId)?.length || 0
+		const activeChunkId = this.sessionActiveUploads.get(sessionId) || null
+		logger.log("Audio chunk cleanup requested", {
+			sessionId,
+			queueLength,
+			activeChunkId,
+			reason,
+		})
+
 		// Clear retry info for this session
 		this.clearSessionRetryInfo(sessionId)
 		// Clear session queue
@@ -1000,7 +1161,29 @@ export class ChunkUploader {
 		// Clear topic mapping
 		this.sessionTopicMap.delete(sessionId)
 		this.sessionProjectMap.delete(sessionId)
-		return this.audioChunkDB.deletePendingSessionChunks(sessionId)
+
+		return this.audioChunkDB
+			.deletePendingSessionChunks(sessionId)
+			.then(async () => {
+				const progress = await this.audioChunkDB.getSessionUploadProgress(sessionId)
+				logger.log("Audio chunk cleanup completed", {
+					sessionId,
+					queueLength,
+					activeChunkId,
+					remainingChunks: progress.total,
+					remainingPending: progress.pending,
+				})
+			})
+			.catch((error) => {
+				logger.error({
+					eventKey: "audio_chunk_cleanup_failed",
+					errorKind: "storage",
+					error,
+					message: "Failed to clear pending audio chunks",
+					context: { sessionId, queueLength, activeChunkId },
+				})
+				throw error
+			})
 	}
 
 	/**
@@ -1220,7 +1403,12 @@ export class ChunkUploader {
 		try {
 			await this.tokenManager.forceRefreshToken(sessionId)
 		} catch (error) {
-			logger.error(`刷新会话 ${sessionId} 令牌失败：`, error)
+			logger.error({
+				eventKey: "refresh_session_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: `刷新会话 ${sessionId} 令牌失败：`,
+			})
 			throw error
 		}
 	}

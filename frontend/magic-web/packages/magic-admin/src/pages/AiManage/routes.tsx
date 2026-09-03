@@ -6,7 +6,10 @@ import {
 	PERMISSION_KEY_MAP,
 	AI_CUSTOM_MODEL,
 	AI_INTERNAL_EMPLOYEE_SKILL,
+	AI_EMPLOYEE_REVIEW,
+	AI_SKILL_REVIEW,
 	AI_APP_MENU,
+	AI_DATA_DASHBOARD,
 } from "@admin/const/common"
 import { useAdminStore } from "@admin/stores/admin"
 import { DataDashboardView } from "./DataDashboard/consts"
@@ -43,8 +46,8 @@ const canAccessAIDrawing = (permissions: string[], isSuperAdmin?: boolean) =>
 
 const canAccessAIVideo = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin ||
-	permissions.includes(PERMISSION_KEY_MAP.INTELLIGENT_DRAWING_QUERY) ||
-	permissions.includes(PERMISSION_KEY_MAP.INTELLIGENT_DRAWING_EDIT)
+	permissions.includes(PERMISSION_KEY_MAP.VIDEO_MODEL_QUERY) ||
+	permissions.includes(PERMISSION_KEY_MAP.VIDEO_MODEL_EDIT)
 
 const canAccessAICustomModel = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin || AI_CUSTOM_MODEL.some((permission) => permissions.includes(permission))
@@ -53,11 +56,29 @@ const canAccessAIInternalEmployeeSkill = (permissions: string[], isSuperAdmin?: 
 	isSuperAdmin ||
 	AI_INTERNAL_EMPLOYEE_SKILL.some((permission) => permissions.includes(permission))
 
+const canAccessAIEmployeeReview = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || AI_EMPLOYEE_REVIEW.some((permission) => permissions.includes(permission))
+
+const canAccessAISkillReview = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || AI_SKILL_REVIEW.some((permission) => permissions.includes(permission))
+
 const canAccessAIAppMenu = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin || AI_APP_MENU.some((permission) => permissions.includes(permission))
 
 const canAccessAIDataStatistics = (permissions: string[], isSuperAdmin?: boolean) =>
-	isSuperAdmin || AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+	isSuperAdmin || AI_DATA_DASHBOARD.some((permission) => permissions.includes(permission))
+
+const canAccessMemberAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_MEMBER_QUERY)
+
+const canAccessOrganizationAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_ORGANIZATION_QUERY)
+
+const canAccessDigitalEmployeeAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_AGENT_QUERY)
+
+const canAccessConsumptionAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_CONSUMPTION_QUERY)
 
 // 首页重定向
 function AIIndexRedirect() {
@@ -71,14 +92,64 @@ function AIIndexRedirect() {
 		!isOfficialOrg && canAccessAICustomModel(userPermissions, isSuperAdmin)
 			? RoutePath.AIModel
 			: null,
-		canAccessAIInternalEmployeeSkill(userPermissions, isSuperAdmin)
+		canAccessAIEmployeeReview(userPermissions, isSuperAdmin)
 			? RoutePath.AIEmployeeReview
 			: null,
-		!isPersonalOrganization && canAccessAIDataStatistics(userPermissions, isSuperAdmin)
+		canAccessAISkillReview(userPermissions, isSuperAdmin) ? RoutePath.AISkillReview : null,
+		!isPersonalOrganization && canAccessMemberAnalysis(userPermissions, isSuperAdmin)
 			? RoutePath.AIDataDashboardMemberAnalysis
+			: null,
+		!isPersonalOrganization && canAccessOrganizationAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardOrganizationAnalysis
+			: null,
+		!isPersonalOrganization && canAccessDigitalEmployeeAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardDigitalEmployeeAnalysis
+			: null,
+		!isPersonalOrganization && canAccessConsumptionAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardConsumptionAnalysis
 			: null,
 		!isOfficialOrg && canAccessAIAppMenu(userPermissions, isSuperAdmin)
 			? RoutePath.AIAppMenu
+			: null,
+	].find(Boolean)
+
+	return <Navigate to={targetPath ?? RoutePath.AdminNoAuthorized} replace />
+}
+
+function InternalEmployeeSkillIndexRedirect() {
+	const { isPermissionInitialized, userPermissions } = useAdminStore()
+
+	if (!isPermissionInitialized) return null
+
+	const isSuperAdmin = hasAdminAllPermissions(userPermissions)
+	const targetPath = [
+		canAccessAIEmployeeReview(userPermissions, isSuperAdmin)
+			? RoutePath.AIEmployeeReview
+			: null,
+		canAccessAISkillReview(userPermissions, isSuperAdmin) ? RoutePath.AISkillReview : null,
+	].find(Boolean)
+
+	return <Navigate to={targetPath ?? RoutePath.AdminNoAuthorized} replace />
+}
+
+function DataStatisticsIndexRedirect() {
+	const { isPermissionInitialized, userPermissions } = useAdminStore()
+
+	if (!isPermissionInitialized) return null
+
+	const isSuperAdmin = hasAdminAllPermissions(userPermissions)
+	const targetPath = [
+		canAccessMemberAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardMemberAnalysis
+			: null,
+		canAccessOrganizationAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardOrganizationAnalysis
+			: null,
+		canAccessDigitalEmployeeAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardDigitalEmployeeAnalysis
+			: null,
+		canAccessConsumptionAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardConsumptionAnalysis
 			: null,
 	].find(Boolean)
 
@@ -157,21 +228,21 @@ export default {
 			children: [
 				{
 					index: true,
-					element: <Navigate to={RoutePath.AIEmployeeReview} replace />,
+					element: <InternalEmployeeSkillIndexRedirect />,
 				},
 				{
 					name: RouteName.AdminAIEmployeeReview,
 					path: RoutePath.AIEmployeeReview,
 					element: <EmployeeReviewPage />,
 					title: "nav.aiSubMenu.employeePublishReview",
-					validate: canAccessAIInternalEmployeeSkill,
+					validate: canAccessAIEmployeeReview,
 				},
 				{
 					name: RouteName.AdminAISkillReview,
 					path: RoutePath.AISkillReview,
 					element: <SkillReviewPage />,
 					title: "nav.aiSubMenu.skillPublishReview",
-					validate: canAccessAIInternalEmployeeSkill,
+					validate: canAccessAISkillReview,
 				},
 			],
 		},
@@ -183,21 +254,35 @@ export default {
 			children: [
 				{
 					index: true,
-					element: <Navigate to={RoutePath.AIDataDashboardMemberAnalysis} replace />,
+					element: <DataStatisticsIndexRedirect />,
 				},
 				{
 					name: RouteName.AdminAIDataDashboardMemberAnalysis,
 					path: RoutePath.AIDataDashboardMemberAnalysis,
 					element: <DataDashboardPage view={DataDashboardView.MemberAnalysis} />,
 					title: "nav.aiSubMenu.memberAnalysis",
-					validate: canAccessAIDataStatistics,
+					validate: canAccessMemberAnalysis,
+				},
+				{
+					name: RouteName.AdminAIDataDashboardOrganizationAnalysis,
+					path: RoutePath.AIDataDashboardOrganizationAnalysis,
+					element: <DataDashboardPage view={DataDashboardView.OrganizationAnalysis} />,
+					title: "nav.aiSubMenu.organizationAnalysis",
+					validate: canAccessOrganizationAnalysis,
 				},
 				{
 					name: RouteName.AdminAIDataDashboardDigitalEmployeeAnalysis,
 					path: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
 					element: <DataDashboardPage view={DataDashboardView.DigitalEmployeeAnalysis} />,
 					title: "nav.aiSubMenu.digitalEmployeeAnalysis",
-					validate: canAccessAIDataStatistics,
+					validate: canAccessDigitalEmployeeAnalysis,
+				},
+				{
+					name: RouteName.AdminAIDataDashboardConsumptionAnalysis,
+					path: RoutePath.AIDataDashboardConsumptionAnalysis,
+					element: <DataDashboardPage view={DataDashboardView.ConsumptionAnalysis} />,
+					title: "nav.aiSubMenu.consumptionAnalysis",
+					validate: canAccessConsumptionAnalysis,
 				},
 			],
 		},

@@ -10,10 +10,9 @@ logger = get_logger(__name__)
 
 
 async def is_magiclaw_sandbox() -> bool:
-    """根据初始化消息声明的 Agent 类型判断当前沙箱是否为 MagicClaw。"""
+    """根据初始化消息顶层的 agent_mode 判断当前沙箱是否为 MagicClaw。"""
     data = await async_try_read_json(PathManager.get_init_client_message_file())
     if not isinstance(data, dict):
         return False
 
-    agent = data.get("agent")
-    return isinstance(agent, dict) and agent.get("type") == AgentMode.MAGICLAW.value
+    return data.get("agent_mode") == AgentMode.MAGICLAW.value

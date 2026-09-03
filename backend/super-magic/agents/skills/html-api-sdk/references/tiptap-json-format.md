@@ -54,9 +54,9 @@ interface TiptapJSONContent {
 ```javascript
 {type: "mention", attrs: {type: "skill", data: {
   id: "skill_unique_id",
-  name: "网页搜索",
+  name: "Web Search",
   icon: "https://...",
-  description: "搜索互联网获取信息",
+  description: "Search the internet for information",
   mention_source: "system",  // optional: "system"|"agent"|"mine"
 }}}
 ```

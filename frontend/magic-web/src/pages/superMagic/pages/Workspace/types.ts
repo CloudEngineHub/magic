@@ -42,6 +42,8 @@ export interface ModeItem {
 	agent: {
 		type: AgentType
 		category: "all" | "frequent"
+		/** 当前用户是否可见；旧接口未返回时按可见处理 */
+		is_visible?: boolean
 	}
 	mode: {
 		id: string
@@ -62,6 +64,8 @@ export interface CrewItem {
 	agent: {
 		type: AgentType
 		category: "all" | "frequent"
+		/** 当前用户是否可见；隐藏员工仍会保留在 featured 列表中 */
+		is_visible?: boolean
 	}
 	mode: {
 		id: string
@@ -89,6 +93,8 @@ export interface CrewItemResponse {
 	agent: {
 		type: AgentType
 		category: "all" | "frequent"
+		/** 当前用户是否可见；隐藏员工仍会保留在 featured 列表中 */
+		is_visible?: boolean
 	}
 	mode: {
 		id: string
@@ -149,6 +155,8 @@ export enum ProjectStatus {
 export interface Workspace {
 	id: string
 	name: string
+	/** 用户自定义侧栏排序，数值越小越靠前。 */
+	sort_order?: number
 	is_archived: 0 | 1 // 0: 未归档，1: 已归档
 	is_pinned?: boolean
 	pinned_at?: string | null
@@ -187,6 +195,11 @@ export interface Topic {
 	 * 自定义 agent 对应的 code
 	 */
 	agent_code?: string
+}
+
+/** Whether a topic is paused while the agent waits for a user response. */
+export function isTopicWaitingForUser(topic?: Pick<Topic, "task_status"> | null): boolean {
+	return topic?.task_status === TaskStatus.WAITING_FOR_USER
 }
 
 // 消息相关类型
@@ -269,6 +282,8 @@ export interface TaskData {
 // 项目列表Item
 export interface ProjectListItem {
 	id: string
+	/** 工作区内用户自定义侧栏排序，数值越小越靠前。 */
+	sort_order?: number
 	project_status: ProjectStatus
 	project_mode: TopicMode | ""
 	project_description?: string // 协作项目才有

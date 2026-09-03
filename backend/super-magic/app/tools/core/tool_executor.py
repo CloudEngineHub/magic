@@ -11,6 +11,7 @@
 
 import time
 import traceback
+from collections.abc import Mapping
 from typing import Any, Dict, List
 
 from pydantic import ValidationError
@@ -18,6 +19,7 @@ from pydantic import ValidationError
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
+from app.tools.core.base_tool_params import BaseToolParams
 from app.tools.core.tool_factory import tool_factory
 
 logger = get_logger(__name__)
@@ -105,7 +107,7 @@ class ToolExecutor:
                 return result
 
             # CodeModeOnly 工具只作为 sdk.tool.call 的执行底座；误挂到 agent tools 时在执行层兜底拦截
-            if getattr(tool_instance, "code_mode_only", False) and not tool_context.get_extension("is_code_mode"):
+            if tool_factory.is_code_mode_only_tool(tool_name) and not tool_context.get_extension("is_code_mode"):
                 result = ToolResult.error(
                     f"Tool '{tool_name}' is Code Mode only. "
                     f"Call it from Code Mode via sdk.tool.call().",
@@ -262,6 +264,23 @@ class ToolExecutor:
             logger.error(f"获取工具 {tool_name} 实例失败: {e}")
             return None
 
+    @staticmethod
+    def get_tool_parameter_names(arguments: Mapping[str, object]) -> tuple[str, ...]:
+        """返回稳定排序后的参数字段名，避免日志记录参数值。"""
+        return tuple(sorted(str(key) for key in arguments))
+
+    def sanitize_tool_arguments_for_log(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, object],
+    ) -> dict[str, object]:
+        """按工具参数模型生成日志/遥测副本，失败时只保留脱敏占位符。"""
+        tool_info = tool_factory.get_tool(tool_name)
+        params_class = tool_info.params_class if tool_info is not None else None
+        if isinstance(params_class, type) and issubclass(params_class, BaseToolParams):
+            return params_class.sanitize_log_arguments(arguments)
+        return {str(key): "<redacted>" for key in arguments}
+
     def get_all_tools(self):
         """获取所有工具实例
 
@@ -290,16 +309,12 @@ class ToolExecutor:
             # 如果设置了特定工具列表，使用工具实例的名称
             tool_names = [tool.get_effective_name() for tool in self._tools]
         else:
-            # 否则获取所有已注册的工具名称
-            tool_names = tool_factory.get_tool_names()
+            # 否则获取所有可直接挂载的工具名称
+            tool_names = tool_factory.get_llm_direct_tool_names()
 
         for tool_name in tool_names:
-            if tool_factory.is_code_mode_only_tool(tool_name):
-                logger.debug(f"跳过 CodeModeOnly 工具参数: {tool_name}")
-                continue
-
             # 优先从预构建定义获取参数，必要时由工具工厂回退到运行时实例
-            tool_param = tool_factory.get_tool_param_from_definition(tool_name)
+            tool_param = tool_factory.get_llm_direct_tool_param_from_definition(tool_name)
 
             if tool_param:
                 schemas.append(tool_param)

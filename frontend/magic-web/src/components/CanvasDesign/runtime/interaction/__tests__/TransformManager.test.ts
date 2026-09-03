@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import Konva from "konva"
-import type { LayerElement } from "../../document/types"
+import type { Canvas } from "../../core/Canvas"
+import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import { TransformManager } from "../transform/TransformManager"
 
 interface TransformElementStub {
@@ -94,6 +95,77 @@ interface TransformManagerPrivate {
 	rebaseActiveDragNodePositions: (elementIds: readonly string[]) => void
 	isTransforming: (elementId: string) => boolean
 	isElementInActiveTransformInteraction: (elementId: string) => boolean
+}
+
+interface TransformManagerModifierClickPrivate {
+	handleMultiSelectionProxyModifierClick: (e: Konva.KonvaEventObject<MouseEvent>) => void
+}
+
+beforeEach(() => {
+	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+		clearRect: vi.fn(),
+		fillRect: vi.fn(),
+		scale: vi.fn(),
+		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+	} as unknown as CanvasRenderingContext2D)
+})
+
+afterEach(() => {
+	vi.restoreAllMocks()
+})
+
+function createModifierClickManager(options?: { canSelect?: boolean; isSelected?: boolean }) {
+	const elementId = "element-under-proxy"
+	const elementNode = {
+		id: () => elementId,
+		getParent: () => null,
+	} as unknown as Konva.Node
+	const hitNode = {
+		id: () => "",
+		getParent: () => elementNode,
+	} as unknown as Konva.Node
+
+	const pointer = { x: 40, y: 60 }
+	const getIntersection = vi.fn(() => hitNode)
+	const toggle = vi.fn()
+	const canSelect = vi.fn(() => options?.canSelect ?? true)
+	const isSelected = vi.fn(() => options?.isSelected ?? false)
+	const canvas = {
+		readonly: false,
+		stage: {
+			getPointerPosition: vi.fn(() => pointer),
+		},
+		contentLayer: {
+			getIntersection,
+		},
+		elementManager: {
+			hasElement: vi.fn((id: string) => id === elementId),
+			getElementData: vi.fn(() => ({ id: elementId, type: "rectangle" })),
+		},
+		selectionManager: {
+			isSelected,
+			toggle,
+		},
+		permissionManager: {
+			canSelect,
+		},
+		eventEmitter: {
+			on: vi.fn(),
+		},
+	} as unknown as Canvas
+	const manager = new TransformManager({
+		canvas,
+	}) as unknown as TransformManagerModifierClickPrivate
+
+	return { canSelect, getIntersection, manager, pointer, toggle }
+}
+
+function createProxyClickEvent(
+	modifiers: MouseEventInit = { shiftKey: true },
+): Konva.KonvaEventObject<MouseEvent> {
+	return {
+		evt: new MouseEvent("click", modifiers),
+	} as Konva.KonvaEventObject<MouseEvent>
 }
 
 function createSingleDragMoveManager() {
@@ -197,6 +269,195 @@ function createProxySyncManager() {
 
 	return { applyTransform, element, emit, manager, node, requestLayerDraw, update }
 }
+
+function createConstraintManager(elementTypes: Record<string, LayerElement["type"]>) {
+	const elementIds = Object.keys(elementTypes)
+	const nodes = new Map(
+		elementIds.map((elementId, index) => [
+			elementId,
+			new Konva.Group({
+				id: elementId,
+				x: index * 500,
+				y: 0,
+				width: 480,
+				height: 120,
+			}),
+		]),
+	)
+	const getElementData = vi.fn((elementId: string) => ({
+		id: elementId,
+		type: elementTypes[elementId],
+		x: 0,
+		y: 0,
+		width: 480,
+		height: 120,
+	}))
+	const getElementInstance = vi.fn((elementId: string) => ({
+		getSize: () => ({ width: 480, height: 120 }),
+		getTransformConstraints: () => {
+			if (elementTypes[elementId] === ElementTypeEnum.Audio) {
+				return {
+					enabledAnchors: ["middle-left", "middle-right"],
+					minWidth: 240,
+					fixedHeight: 120,
+				}
+			}
+			if (elementTypes[elementId] === ElementTypeEnum.Storyboard) {
+				return { enabledAnchors: [] }
+			}
+			return undefined
+		},
+		shouldKeepRatio: () => false,
+	}))
+	const getSnappedBox = vi.fn((_oldBox, newBox) => newBox)
+	const canvas = {
+		readonly: false,
+		eventEmitter: { on: vi.fn(), emit: vi.fn() },
+		runtimeScheduler: { requestLayerDraw: vi.fn() },
+		isKeepRatioModifierPressed: () => false,
+		elementManager: {
+			getElementData,
+			getElementInstance,
+			getNodeAdapter: () => ({
+				getNodesForTransform: (ids: string[]) => ids.map((id) => nodes.get(id)),
+				getElementsBounds: () => ({
+					x: 0,
+					y: 0,
+					width: elementIds.length * 480,
+					height: 120,
+				}),
+			}),
+		},
+		permissionManager: { canTransform: () => true },
+		controlsLayer: { add: vi.fn() },
+		selectionManager: { getSelectedIds: () => elementIds },
+		snapGuideManager: { getSnappedBox },
+	} as unknown as Canvas
+
+	return {
+		getSnappedBox,
+		manager: new TransformManager({ canvas }),
+	}
+}
+
+describe("TransformManager multi-selection proxy modifier click", () => {
+	it("toggles the top content element beneath the proxy", () => {
+		const { getIntersection, manager, pointer, toggle } = createModifierClickManager()
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent())
+
+		expect(getIntersection).toHaveBeenCalledWith(pointer)
+		expect(toggle).toHaveBeenCalledWith("element-under-proxy")
+	})
+
+	it("does not add an unselected element that cannot be selected", () => {
+		const { canSelect, manager, toggle } = createModifierClickManager({ canSelect: false })
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent({ ctrlKey: true }))
+
+		expect(canSelect).toHaveBeenCalledTimes(1)
+		expect(toggle).not.toHaveBeenCalled()
+	})
+
+	it("still allows modifier deselection for an already selected element", () => {
+		const { canSelect, manager, toggle } = createModifierClickManager({
+			canSelect: false,
+			isSelected: true,
+		})
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent({ metaKey: true }))
+
+		expect(canSelect).not.toHaveBeenCalled()
+		expect(toggle).toHaveBeenCalledWith("element-under-proxy")
+	})
+
+	it("keeps ordinary proxy clicks out of selection toggling", () => {
+		const { getIntersection, manager, toggle } = createModifierClickManager()
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent({}))
+
+		expect(getIntersection).not.toHaveBeenCalled()
+		expect(toggle).not.toHaveBeenCalled()
+	})
+})
+
+describe("TransformManager element constraints", () => {
+	it("uses horizontal anchors and preserves the audio minimum width and fixed height", () => {
+		const { getSnappedBox, manager } = createConstraintManager({
+			"audio-1": ElementTypeEnum.Audio,
+		})
+
+		manager.showTransformer(["audio-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+		expect(transformer.enabledAnchors()).toEqual(["middle-left", "middle-right"])
+
+		vi.spyOn(transformer, "getActiveAnchor").mockReturnValue("middle-right")
+		const boundBoxFunc = transformer.boundBoxFunc()
+		const oldBox = { x: 0, y: 0, width: 480, height: 120, rotation: 0 }
+		getSnappedBox.mockReturnValueOnce({
+			x: 0,
+			y: 20,
+			width: 300,
+			height: 80,
+			rotation: 0,
+		})
+		expect(boundBoxFunc(oldBox, { x: 0, y: 10, width: 300, height: 90, rotation: 0 })).toEqual({
+			x: 0,
+			y: 0,
+			width: 300,
+			height: 120,
+			rotation: 0,
+		})
+
+		getSnappedBox.mockReturnValueOnce({
+			x: 0,
+			y: 0,
+			width: 239,
+			height: 120,
+			rotation: 0,
+		})
+		expect(boundBoxFunc(oldBox, { x: 0, y: 0, width: 260, height: 120, rotation: 0 })).toEqual(
+			oldBox,
+		)
+	})
+
+	it("does not expose resize anchors for a storyboard", () => {
+		const { manager } = createConstraintManager({
+			"storyboard-1": ElementTypeEnum.Storyboard,
+		})
+
+		manager.showTransformer(["storyboard-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+
+		expect(transformer.enabledAnchors()).toEqual([])
+	})
+
+	it("disables resize anchors when a multi-selection contains audio", () => {
+		const { manager } = createConstraintManager({
+			"audio-1": ElementTypeEnum.Audio,
+			"rectangle-1": ElementTypeEnum.Rectangle,
+		})
+
+		manager.showTransformer(["audio-1", "rectangle-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+
+		expect(transformer.enabledAnchors()).toEqual([])
+		expect(transformer.nodes()).toHaveLength(1)
+	})
+
+	it("disables resize anchors when a multi-selection contains a storyboard", () => {
+		const { manager } = createConstraintManager({
+			"storyboard-1": ElementTypeEnum.Storyboard,
+			"rectangle-1": ElementTypeEnum.Rectangle,
+		})
+
+		manager.showTransformer(["storyboard-1", "rectangle-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+
+		expect(transformer.enabledAnchors()).toEqual([])
+		expect(transformer.nodes()).toHaveLength(1)
+	})
+})
 
 describe("TransformManager multi-selection proxy sync", () => {
 	it("rebases proxy node coordinates after nodes move to the content layer", () => {
@@ -348,6 +609,71 @@ describe("TransformManager multi-selection proxy sync", () => {
 			expect.any(Object),
 			expect.objectContaining({ mode: "node-only" }),
 		)
+	})
+
+	it("converts mixed Frame and root elements back to their parent coordinates", () => {
+		const contentLayer = new Konva.Layer()
+		const frame = new Konva.Group({ x: 100, y: 50 })
+		const insideNode = new Konva.Group({
+			id: "inside",
+			x: 30,
+			y: 10,
+			width: 20,
+			height: 20,
+		})
+		const outsideNode = new Konva.Group({
+			id: "outside",
+			x: 180,
+			y: 60,
+			width: 20,
+			height: 20,
+		})
+		frame.add(insideNode)
+		contentLayer.add(frame)
+		contentLayer.add(outsideNode)
+
+		const applyTransform = vi.fn((updates: Partial<LayerElement>) => updates)
+		const update = vi.fn()
+		const elementInstance = {
+			applyTransform,
+			shouldKeepRatio: () => false,
+			shouldSyncTransformDataInRealtime: () => false,
+		}
+		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
+		manager.canvas = {
+			contentLayer,
+			isKeepRatioModifierPressed: () => false,
+			elementManager: {
+				getNodeAdapter: () => ({
+					getElementsBounds: vi.fn(() => ({ x: 130, y: 60, width: 70, height: 20 })),
+					getNodesForTransform: () => [insideNode, outsideNode],
+				}),
+				getElementData: () => ({ width: 20, height: 20 }),
+				getElementInstance: () => elementInstance,
+				update,
+			},
+		} as unknown as TransformManagerPrivate["canvas"]
+		manager.multiSelectionProxy = {
+			x: () => 130,
+			y: () => 60,
+			width: () => 140,
+			height: () => 20,
+			scaleX: () => 1,
+			scaleY: () => 1,
+		}
+		manager.proxyInitialNodeStates = new Map()
+		manager.transformSessionElementStates = new Map()
+		manager.initialElementAspectRatios = new Map()
+		manager.initialAspectRatio = null
+		manager.proxyInitialBounds = { x: 130, y: 60, width: 70, height: 20 }
+
+		manager.captureProxyState(["inside", "outside"])
+		manager.syncSelectionProxyToElements({ isRealtime: true, isScaling: true })
+
+		const insideUpdate = update.mock.calls.find(([id]) => id === "inside")?.[1]
+		const outsideUpdate = update.mock.calls.find(([id]) => id === "outside")?.[1]
+		expect(insideUpdate).toEqual(expect.objectContaining({ x: 30, y: 10, scaleX: 2 }))
+		expect(outsideUpdate).toEqual(expect.objectContaining({ x: 230, y: 60, scaleX: 2 }))
 	})
 
 	it("emits one batched dragmove with proxy bounds during realtime proxy movement", () => {

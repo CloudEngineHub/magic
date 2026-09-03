@@ -17,6 +17,8 @@ use App\Domain\LongTermMemory\Entity\LongTermMemoryEntity;
 use App\Domain\LongTermMemory\Entity\ValueObject\MemoryCategory;
 use App\Domain\LongTermMemory\Entity\ValueObject\MemoryStatus;
 use App\Domain\LongTermMemory\Repository\LongTermMemoryRepositoryInterface;
+use App\Domain\SuperMagic\Message\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationAction;
+use App\Domain\SuperMagic\Message\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationScenario;
 use App\ErrorCode\LongTermMemoryErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -24,8 +26,6 @@ use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use DateTime;
-use Dtyq\SuperMagic\Domain\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationAction;
-use Dtyq\SuperMagic\Domain\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationScenario;
 use InvalidArgumentException;
 use Throwable;
 

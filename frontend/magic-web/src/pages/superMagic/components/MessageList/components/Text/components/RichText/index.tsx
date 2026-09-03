@@ -4,11 +4,11 @@ import { EditorView } from "prosemirror-view"
 import { Schema, Node, DOMSerializer, type SchemaSpec } from "prosemirror-model"
 import { EditorState, TextSelection } from "prosemirror-state"
 import { useMemoizedFn } from "ahooks"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import schemaConfig from "./schemaConfig"
 import { parseContent } from "./utils"
 import type { RichTextProps } from "./types"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { getMentionDisplayName } from "@/components/business/MentionPanel/tiptap-plugin/types"
@@ -31,7 +31,14 @@ const scheduleMicrotask =
 
 const RichText = memo(
 	function RichText(props: RichTextProps) {
-		const { content, className, style, onFileClick, markerClickScene = "messageList" } = props
+		const {
+			content,
+			className,
+			style,
+			onFileClick,
+			markerClickScene = "messageList",
+			fileMentionRenderConfig,
+		} = props
 		const { projectFilesStore } = useMessageListContext()
 
 		const scene = markerClickScene
@@ -54,6 +61,7 @@ const RichText = memo(
 							markerClickScene={scene}
 							messageContent={content}
 							projectFilesStore={projectFilesStore}
+							fileMentionRenderConfig={fileMentionRenderConfig}
 						/>,
 					)
 
@@ -337,7 +345,8 @@ const RichText = memo(
 			prev.content === next.content &&
 			prev.className === next.className &&
 			prev.onFileClick === next.onFileClick &&
-			prev.markerClickScene === next.markerClickScene
+			prev.markerClickScene === next.markerClickScene &&
+			prev.fileMentionRenderConfig === next.fileMentionRenderConfig
 		)
 	},
 )

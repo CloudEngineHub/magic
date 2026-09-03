@@ -1,21 +1,25 @@
-import dayjs from "dayjs"
-import i18n from "i18next"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { SkillsApi } from "@/apis"
+import { SupportLocales } from "@/constants/locale"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
-import { resolveLocalizedText } from "@/utils/locale"
 import type {
 	CreateSkillResponse,
+	GetSkillMarketCategoriesParams,
 	GetSkillVersionsParams,
 	GetSkillLastVersionsParams,
 	GetSkillsParams,
 	GetStoreSkillsParams,
+	ImportOfficialSkillParams,
+	ImportOfficialSkillResponse,
 	ImportSkillParams,
 	ImportSkillResponse,
+	ParseOfficialSkillResponse,
 	ParseSkillResponse,
 	PublishSkillParams,
 	PublishSkillPrefillResponse,
 	PublishSkillResponse,
 	SkillDetailResponse,
+	SkillMarketCategoryItem,
 	SkillMarketDetailResponse,
 	SkillI18nText,
 	SkillItem,
@@ -36,6 +40,21 @@ export interface PagedSkills<T> {
 	total: number
 }
 
+/** Paginated response for the public Skill market list. */
+export interface StoreSkillsPage<T> {
+	list: T[]
+	page: number
+	pageSize: number
+}
+
+export interface SkillMarketCategoryView {
+	id: string
+	name: string
+	logo?: string
+	sortOrder: number
+	skillCount: number
+}
+
 export interface StoreSkillView {
 	id: string
 	storeSkillId: string
@@ -44,8 +63,10 @@ export interface StoreSkillView {
 	packageName?: string
 	name: string
 	description: string
+	source?: string
 	thumbnail?: string
 	isFeatured: boolean
+	installCount?: number
 	latestVersion?: string
 	status: "added" | "not-added"
 	authorName?: string
@@ -62,6 +83,7 @@ export interface UserSkillView {
 	packageName?: string
 	name: string
 	description: string
+	source?: string
 	thumbnail?: string
 	/** Raw i18n fields for update/import operations */
 	nameI18n: SkillI18nText
@@ -92,20 +114,29 @@ export interface SkillDetailView {
 	publisherName?: string | null
 	skillFileUrl?: string | null
 	isFeatured: boolean
+	categoryIds?: string[]
 	isAdded?: boolean
 	isCreator?: boolean
 }
 
-export type UserSkillsListScope = "created" | "team-shared" | "market-installed"
+export type UserSkillsListScope = "created" | "team-shared" | "collaborated" | "market-installed"
 
 export class SkillsService {
-	async getStoreSkills(params: GetStoreSkillsParams = {}): Promise<PagedSkills<StoreSkillView>> {
+	async getSkillMarketCategories(
+		params: GetSkillMarketCategoriesParams = {},
+	): Promise<SkillMarketCategoryView[]> {
+		const data = await SkillsApi.getSkillMarketCategories(params)
+		return data.list.map((item) => this.mapSkillMarketCategory(item))
+	}
+
+	async getStoreSkills(
+		params: GetStoreSkillsParams = {},
+	): Promise<StoreSkillsPage<StoreSkillView>> {
 		const data = await SkillsApi.getStoreSkills(params)
 		return {
 			list: data.list.map((item) => this.mapStoreSkill(item)),
 			page: data.page,
 			pageSize: data.page_size,
-			total: data.total,
 		}
 	}
 
@@ -115,6 +146,10 @@ export class SkillsService {
 
 	async getTeamSharedSkills(params: GetSkillsParams = {}): Promise<PagedSkills<UserSkillView>> {
 		return this.getUserSkillsByScope("team-shared", params)
+	}
+
+	async getCollaboratedSkills(params: GetSkillsParams = {}): Promise<PagedSkills<UserSkillView>> {
+		return this.getUserSkillsByScope("collaborated", params)
 	}
 
 	async getMarketInstalledSkills(
@@ -161,8 +196,16 @@ export class SkillsService {
 		return SkillsApi.parseSkillFile({ file_key })
 	}
 
+	parseOfficialSkillFile(file_key: string): Promise<ParseOfficialSkillResponse> {
+		return SkillsApi.parseOfficialSkillFile({ file_key })
+	}
+
 	importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
 		return SkillsApi.importSkill(params)
+	}
+
+	importOfficialSkill(params: ImportOfficialSkillParams): Promise<ImportOfficialSkillResponse> {
+		return SkillsApi.importOfficialSkill(params)
 	}
 
 	getSkillDetail(code: string): Promise<SkillDetailResponse> {
@@ -208,16 +251,22 @@ export class SkillsService {
 	}
 
 	private mapStoreSkill(item: StoreSkillItem): StoreSkillView {
+		const name =
+			item.name?.trim() || item.package_name?.trim() || item.code || item.skill_code || ""
+		const description = item.description?.trim() || ""
+
 		return {
 			id: String(item.id),
 			storeSkillId: item.id,
-			skillCode: item.skill_code,
+			skillCode: item.code || item.skill_code || item.package_name || String(item.id),
 			packageName: item.package_name?.trim() || undefined,
 			userSkillCode: item.user_skill_code,
-			name: this.mapI18nText(item.name_i18n),
-			description: this.mapI18nText(item.description_i18n),
+			name,
+			description,
+			source: item.source?.trim() || undefined,
 			thumbnail: item.logo || undefined,
 			isFeatured: Boolean(item.is_featured),
+			installCount: typeof item.install_count === "number" ? item.install_count : undefined,
 			latestVersion: item.latest_version || undefined,
 			status: item.is_added ? "added" : "not-added",
 			authorName: item.publisher?.name,
@@ -227,18 +276,35 @@ export class SkillsService {
 		}
 	}
 
+	private mapSkillMarketCategory(item: SkillMarketCategoryItem): SkillMarketCategoryView {
+		return {
+			id: String(item.id),
+			name: item.name,
+			logo: item.logo || undefined,
+			sortOrder: item.sort_order,
+			skillCount: item.skill_count,
+		}
+	}
+
 	private mapUserSkill(item: SkillItem): UserSkillView {
+		const name = item.name?.trim() || item.package_name?.trim() || item.code
+		const description = item.description?.trim() || ""
+
 		return {
 			id: String(item.id),
 			userSkillId: item.id,
 			userRole: item.user_role,
 			skillCode: item.code,
 			packageName: item.package_name?.trim() || undefined,
-			name: item.name || this.mapI18nText(item.name_i18n),
-			description: item.description || this.mapI18nText(item.description_i18n),
+			name,
+			description,
+			source: item.source?.trim() || undefined,
 			thumbnail: item.logo || undefined,
-			nameI18n: item.name_i18n,
-			descriptionI18n: item.description_i18n,
+			// Keep edit/import flows supplied with a stable i18n shape while list cards
+			// render the locale-resolved fields above. The API may remove these raw
+			// fields after the migration, so the resolved value seeds missing entries.
+			nameI18n: this.ensureSkillI18nText(item.name_i18n, name),
+			descriptionI18n: this.ensureSkillI18nText(item.description_i18n, description),
 			logo: item.logo,
 			sourceType: item.source_type,
 			creatorName: item.creator_info?.name,
@@ -254,16 +320,22 @@ export class SkillsService {
 	}
 
 	private mapLatestPublishedSkill(item: SkillLastVersionItem): UserSkillView {
+		const name = item.name?.trim() || item.package_name?.trim() || item.code
+		const description = item.description?.trim() || ""
+
 		return {
 			id: item.code,
 			userSkillId: item.code,
 			skillCode: item.code,
 			packageName: item.package_name?.trim() || undefined,
-			name: item.name || this.mapI18nText(item.name_i18n),
-			description: item.description || this.mapI18nText(item.description_i18n),
+			name,
+			description,
+			source: item.source?.trim() || undefined,
 			thumbnail: item.logo || undefined,
-			nameI18n: item.name_i18n,
-			descriptionI18n: item.description_i18n,
+			// Preserve the edit payload contract without using raw i18n values for
+			// display; direct fields are the source of truth for this response.
+			nameI18n: this.ensureSkillI18nText(item.name_i18n, name),
+			descriptionI18n: this.ensureSkillI18nText(item.description_i18n, description),
 			logo: item.logo,
 			sourceType: item.source_type,
 			latestVersion: item.version || undefined,
@@ -277,14 +349,13 @@ export class SkillsService {
 	private mapUserSkillDetail(detail: SkillDetailResponse): SkillDetailView {
 		return {
 			code: detail.code,
-			name: this.mapI18nText(detail.name_i18n) || detail.package_name || detail.code,
-			description:
-				this.mapI18nText(detail.description_i18n) || detail.package_description || "",
+			name: detail.name?.trim() || detail.package_name || detail.code,
+			description: detail.description?.trim() || detail.package_description || "",
 			logo: detail.logo,
 			packageName: detail.package_name?.trim() || undefined,
 			versionCode: detail.version_code?.trim() || undefined,
 			updatedAt: detail.updated_at,
-			sourceLabel: this.mapI18nText(detail.source_i18n) || undefined,
+			sourceLabel: detail.source?.trim() || undefined,
 			skillFileUrl: detail.skill_file_url?.trim() || undefined,
 			isFeatured: Boolean(detail.is_featured),
 		}
@@ -295,21 +366,18 @@ export class SkillsService {
 
 		return {
 			code: detail.code,
-			name:
-				detail.name ||
-				this.mapI18nText(detail.name_i18n) ||
-				detail.package_name ||
-				detail.code,
-			description: detail.description || this.mapI18nText(detail.description_i18n) || "",
+			name: detail.name?.trim() || detail.package_name || detail.code,
+			description: detail.description?.trim() || "",
 			logo: detail.logo,
 			packageName: detail.package_name?.trim() || undefined,
 			versionCode: detail.version_code?.trim() || undefined,
 			updatedAt: detail.version_created_at,
-			sourceLabel: detail.source || this.mapI18nText(detail.source_i18n) || undefined,
+			sourceLabel: detail.source?.trim() || undefined,
 			publisherType: detail.publisher_type,
 			publisherName: publisherName || undefined,
 			skillFileUrl: detail.skill_file_url?.trim() || undefined,
 			isFeatured: Boolean(detail.is_featured),
+			categoryIds: detail.category_ids ?? [],
 			isAdded: detail.is_added,
 			isCreator: detail.is_creator,
 		}
@@ -331,16 +399,29 @@ export class SkillsService {
 	private fetchUserSkillsByScope(scope: UserSkillsListScope, params: GetSkillsParams = {}) {
 		switch (scope) {
 			case "created":
-				return SkillsApi.getCreatedSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "created" })
 			case "team-shared":
-				return SkillsApi.getTeamSharedSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "team_shared" })
+			case "collaborated":
+				return SkillsApi.getUserSkills({ ...params, scope: "collaborated" })
 			case "market-installed":
-				return SkillsApi.getMarketInstalledSkills(params)
+				return SkillsApi.getUserSkills({ ...params, scope: "market_installed" })
 		}
 	}
 
-	private mapI18nText(text: SkillI18nText | Record<string, string> | null | undefined) {
-		return resolveLocalizedText(text as Record<string, string>, i18n.language)
+	/**
+	 * Retains the legacy edit payload shape after display fields become locale-resolved strings.
+	 * Raw i18n values are compatibility data only and must not drive list/detail presentation.
+	 */
+	private ensureSkillI18nText(
+		text: SkillI18nText | Record<string, string> | null | undefined,
+		fallback: string,
+	): SkillI18nText {
+		return {
+			[SupportLocales.fallback]: text?.[SupportLocales.fallback] || fallback,
+			[SupportLocales.enUS]: text?.[SupportLocales.enUS] || fallback,
+			[SupportLocales.zhCN]: text?.[SupportLocales.zhCN] || fallback,
+		}
 	}
 
 	private formatDateTime(value: string) {

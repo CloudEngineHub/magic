@@ -14,7 +14,7 @@ import {
 	getMentionUniqueId,
 	type MentionListItem,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { getMentionItemsMissingFromRichTextContent } from "../RichText/mentionVisibility"
@@ -25,7 +25,7 @@ function Chat(props: NodeProps) {
 
 	const { t } = useTranslation("super")
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const mentions = node?.extra?.super_agent?.mentions || []
 	const mentionItems = getMentionItemsMissingFromRichTextContent(mentions, node?.content)
 

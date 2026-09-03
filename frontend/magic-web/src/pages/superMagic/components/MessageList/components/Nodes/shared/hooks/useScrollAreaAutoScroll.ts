@@ -17,18 +17,55 @@ interface UseScrollAreaAutoScrollOptions {
 export function useScrollAreaAutoScroll({ isStreaming }: UseScrollAreaAutoScrollOptions) {
 	const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
 	const autoFollowRef = useRef(true)
-	const isResizeScrollingRef = useRef(false)
-	const resizeTimerRef = useRef<number>(0)
+	const previousScrollTopRef = useRef(0)
+	const followUpScrollRafRef = useRef<number | null>(null)
 
 	const isAtBottom = useCallback((el: HTMLElement) => {
 		return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD
 	}, [])
 
+	const cancelFollowUpScroll = useCallback(() => {
+		if (followUpScrollRafRef.current === null) return
+		window.cancelAnimationFrame(followUpScrollRafRef.current)
+		followUpScrollRafRef.current = null
+	}, [])
+
+	const scrollToBottom = useCallback(
+		(el: HTMLElement) => {
+			cancelFollowUpScroll()
+
+			const applyScroll = () => {
+				if (!autoFollowRef.current) return false
+				el.scrollTop = el.scrollHeight
+				previousScrollTopRef.current = el.scrollTop
+				return true
+			}
+
+			applyScroll()
+
+			// XMarkdown may update its streaming cache and animated text in later commits.
+			// Two trailing frames keep the viewport pinned to the final rendered height.
+			followUpScrollRafRef.current = window.requestAnimationFrame(() => {
+				if (!applyScroll()) {
+					followUpScrollRafRef.current = null
+					return
+				}
+
+				followUpScrollRafRef.current = window.requestAnimationFrame(() => {
+					followUpScrollRafRef.current = null
+					applyScroll()
+				})
+			})
+		},
+		[cancelFollowUpScroll],
+	)
+
 	useEffect(() => {
 		if (isStreaming) {
 			autoFollowRef.current = true
+			if (viewport) scrollToBottom(viewport)
 		}
-	}, [isStreaming])
+	}, [isStreaming, scrollToBottom, viewport])
 
 	useEffect(() => {
 		if (!viewport) return
@@ -38,35 +75,38 @@ export function useScrollAreaAutoScroll({ isStreaming }: UseScrollAreaAutoScroll
 
 		const observer = new ResizeObserver(() => {
 			if (!autoFollowRef.current) return
-
-			isResizeScrollingRef.current = true
-			window.clearTimeout(resizeTimerRef.current)
-			viewport.scrollTop = viewport.scrollHeight
-			resizeTimerRef.current = window.setTimeout(() => {
-				isResizeScrollingRef.current = false
-			}, 80)
+			scrollToBottom(viewport)
 		})
 
 		observer.observe(contentWrapper)
 
-		return () => observer.disconnect()
-	}, [viewport])
+		return () => {
+			observer.disconnect()
+			cancelFollowUpScroll()
+		}
+	}, [cancelFollowUpScroll, scrollToBottom, viewport])
 
 	useEffect(() => {
 		if (!viewport) return
+		previousScrollTopRef.current = viewport.scrollTop
 
 		const handleScroll = () => {
-			if (isResizeScrollingRef.current) return
-			autoFollowRef.current = isAtBottom(viewport)
+			const currentScrollTop = viewport.scrollTop
+			if (isAtBottom(viewport)) {
+				autoFollowRef.current = true
+			} else if (currentScrollTop < previousScrollTopRef.current) {
+				// Content growth can increase the distance from the bottom without moving scrollTop.
+				// Pause only for a real upward movement, so delayed programmatic events stay harmless.
+				autoFollowRef.current = false
+				cancelFollowUpScroll()
+			}
+			previousScrollTopRef.current = currentScrollTop
 		}
 
 		const handleWheel = (e: WheelEvent) => {
 			if (e.deltaY < 0) {
-				if (isResizeScrollingRef.current) {
-					window.clearTimeout(resizeTimerRef.current)
-					isResizeScrollingRef.current = false
-				}
 				autoFollowRef.current = false
+				cancelFollowUpScroll()
 			}
 		}
 
@@ -77,14 +117,9 @@ export function useScrollAreaAutoScroll({ isStreaming }: UseScrollAreaAutoScroll
 			viewport.removeEventListener("scroll", handleScroll)
 			viewport.removeEventListener("wheel", handleWheel)
 		}
-	}, [viewport, isAtBottom])
+	}, [cancelFollowUpScroll, viewport, isAtBottom])
 
-	useEffect(
-		() => () => {
-			window.clearTimeout(resizeTimerRef.current)
-		},
-		[],
-	)
+	useEffect(() => cancelFollowUpScroll, [cancelFollowUpScroll])
 
 	const viewportRef = useCallback((node: HTMLDivElement | null) => {
 		setViewport(node)

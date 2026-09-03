@@ -15,23 +15,49 @@
  * 路径规范化会参与 IndexedDB id 与 CacheStorage key；语义变化时必须递增此版本。
  * 主线程离线缓存管理器直接复用这些常量，避免它与 SW 升级不一致。
  */
-export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 2
+export const CANVAS_MEDIA_OFFLINE_CACHE_VERSION = 4
 const DB_BASE_NAME = "canvas-media-resource-offline-cache"
 export const CANVAS_MEDIA_DB_NAME = `${DB_BASE_NAME}-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
 export const CANVAS_MEDIA_CACHE_NAME = `canvas-media-resources-v${CANVAS_MEDIA_OFFLINE_CACHE_VERSION}`
+// Every older version is obsolete once the current SW activates. Generate this
+// list from the current version so future bumps cannot accidentally leave a
+// stale Canvas media namespace behind.
+const LEGACY_CANVAS_MEDIA_CACHE_VERSIONS = Array.from(
+	{ length: Math.max(0, CANVAS_MEDIA_OFFLINE_CACHE_VERSION - 1) },
+	(_, index) => index + 1,
+)
 const STORE_NAME = "resources"
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
 const DEFAULT_RESOURCE_NAMESPACE = "__global__"
 const VIRTUAL_RESOURCE_PATH_SEGMENT = "/canvas-design-media/"
 const VIRTUAL_RESOURCE_ROUTE_MARKER = `/sw${VIRTUAL_RESOURCE_PATH_SEGMENT}`
 const VIRTUAL_RESOURCE_DESIGN_RESOURCE_SEGMENT = "/design-resource/"
-const VIRTUAL_RESOURCE_MEDIA_TYPES = new Set(["image", "video"])
+export type CanvasMediaType = "image" | "video" | "audio"
+
+const VIRTUAL_RESOURCE_MEDIA_TYPES = new Set<CanvasMediaType>(["image", "video", "audio"])
+const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const TOUCH_FLUSH_IDLE_DELAY_MS = 1000
+
+type CanvasMediaTouch = { id: string; lastAccessedAt: number }
+const pendingTouches = new Map<string, CanvasMediaTouch>()
+let touchFlushTimer: ReturnType<typeof setTimeout> | null = null
+const lastTouchWriteAt = new Map<string, number>()
+
+type FetchResourceBlobResult =
+	| { response: Response }
+	| {
+			blob: Blob
+			headers: Headers
+			metadata: ReturnType<typeof getResponseMetadata>
+			status: number
+			statusText: string
+	  }
 
 type CanvasMediaEntry = {
 	id?: string
 	namespace?: string
 	path?: string
-	mediaType?: "image" | "video"
+	mediaType?: CanvasMediaType
 	url?: string
 	cacheKey?: string
 	sourceUrl?: string
@@ -53,17 +79,12 @@ type CanvasMediaRefreshResult = {
 }
 
 let maxBytes = DEFAULT_MAX_BYTES
-const inflightResourceMap = new Map<
-	string,
-	Promise<Awaited<ReturnType<typeof fetchResourceBlobOnce>>>
->()
+const inflightResourceMap = new Map<string, Promise<FetchResourceBlobResult>>()
 
-/**
- * 将 `design-resource/` 之后的资源路径规范成与主线程 IndexedDB `entry.path` 可比较的键。
- */
+/** 将 Service Worker URL 中的 percent-encoded 路径还原为业务资源路径。 */
 export function normalizeResourcePathForLookup(path: string | null | undefined): string {
 	if (path == null || path === "") return ""
-	let normalizedPath = String(path).replace(/^\/+/g, "")
+	let normalizedPath = normalizeResourcePathForStorage(path)
 	try {
 		normalizedPath = decodeURIComponent(normalizedPath)
 	} catch {
@@ -72,9 +93,22 @@ export function normalizeResourcePathForLookup(path: string | null | undefined):
 	return normalizedPath
 }
 
+/** 规范化已解析的业务资源路径，不执行 URL decode。 */
+export function normalizeResourcePathForStorage(path: string | null | undefined): string {
+	return String(path || "")
+		.replace(/\\/g, "/")
+		.replace(/^\/+/g, "")
+}
+
 /** 规范化命名空间，保证空值收敛到统一全局命名空间。 */
 export function normalizeResourceNamespace(namespace: string | null | undefined): string {
 	const normalized = normalizeResourcePathForLookup(namespace)
+	return normalized || DEFAULT_RESOURCE_NAMESPACE
+}
+
+/** 规范化已解析的业务命名空间，不执行 URL decode。 */
+export function normalizeResourceNamespaceForStorage(namespace: string | null | undefined): string {
+	const normalized = normalizeResourcePathForStorage(namespace)
 	return normalized || DEFAULT_RESOURCE_NAMESPACE
 }
 
@@ -95,20 +129,37 @@ function joinUrlPathSegments(...segments: Array<string | null | undefined>): str
 		.join("/")
 }
 
-/** 使用固定虚拟资源协议构造缓存键，保持与历史方案兼容。 */
+/**
+ * Encode URL path segments without changing the logical resource path.
+ *
+ * Resource names are user data and may contain URL delimiters such as `#`,
+ * `?`, or `%`. Encoding each segment keeps those characters inside the
+ * pathname so the browser and Service Worker see the same resource key.
+ */
+export function encodeResourcePathForUrl(path: string | null | undefined): string {
+	return String(path || "")
+		.replace(/\\/g, "/")
+		.split("/")
+		.map((segment) => encodeURIComponent(segment))
+		.join("/")
+}
+
+/** 使用固定虚拟资源协议构造缓存键。 */
 function buildVirtualResourceUrl(
 	namespace: string | null | undefined,
-	mediaType: "image" | "video" | null | undefined,
+	mediaType: CanvasMediaType | null | undefined,
 	resourcePath: string | null | undefined,
 ): string {
 	return joinUrlPathSegments(
 		self.location.origin,
 		"sw",
 		"canvas-design-media",
-		stripPathEdgeSlashes(normalizeResourceNamespace(namespace)),
+		encodeResourcePathForUrl(
+			stripPathEdgeSlashes(normalizeResourceNamespaceForStorage(namespace)),
+		),
 		mediaType,
 		"design-resource",
-		normalizeResourcePathForLookup(resourcePath),
+		encodeResourcePathForUrl(normalizeResourcePathForStorage(resourcePath)),
 	)
 }
 
@@ -117,6 +168,61 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 		request.onsuccess = () => resolve(request.result)
 		request.onerror = () => reject(request.error)
 	})
+}
+
+function transactionToPromise(transaction: IDBTransaction): Promise<void> {
+	return new Promise((resolve, reject) => {
+		transaction.oncomplete = () => resolve()
+		transaction.onerror = () => reject(transaction.error)
+		transaction.onabort = () => reject(transaction.error)
+	})
+}
+
+function deleteDatabaseBestEffort(factory: IDBFactory, name: string): Promise<void> {
+	return new Promise((resolve) => {
+		try {
+			const request = factory.deleteDatabase(name)
+			const finish = () => resolve()
+			request.onsuccess = finish
+			request.onerror = finish
+			request.onblocked = finish
+		} catch {
+			resolve()
+		}
+	})
+}
+
+/**
+ * Best-effort cleanup for obsolete Canvas media namespaces.
+ * Every version older than the current one is removed; the current version is
+ * never included and remains available for active Canvas resources.
+ */
+export async function cleanupLegacyCanvasMediaStorage(options?: {
+	indexedDBFactory?: IDBFactory
+	cacheStorage?: CacheStorage
+}): Promise<void> {
+	const indexedDBFactory =
+		options?.indexedDBFactory ?? (typeof indexedDB === "undefined" ? undefined : indexedDB)
+	const cacheStorage =
+		options?.cacheStorage ?? (typeof caches === "undefined" ? undefined : caches)
+	const cleanupTasks: Promise<unknown>[] = []
+
+	for (const version of LEGACY_CANVAS_MEDIA_CACHE_VERSIONS) {
+		if (indexedDBFactory) {
+			cleanupTasks.push(
+				deleteDatabaseBestEffort(indexedDBFactory, `${DB_BASE_NAME}-v${version}`),
+			)
+		}
+		if (cacheStorage) {
+			cleanupTasks.push(
+				Promise.resolve()
+					.then(() => cacheStorage.delete(`canvas-media-resources-v${version}`))
+					.catch(() => false),
+			)
+		}
+	}
+
+	await Promise.allSettled(cleanupTasks)
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -135,9 +241,9 @@ function openDb(): Promise<IDBDatabase> {
 
 function getResourceId(entry: CanvasMediaEntry): string {
 	return joinUrlPathSegments(
-		normalizeResourceNamespace(entry.namespace),
+		normalizeResourceNamespaceForStorage(entry.namespace),
 		entry.mediaType,
-		normalizeResourcePathForLookup(entry.path),
+		normalizeResourcePathForStorage(entry.path),
 	)
 }
 
@@ -187,7 +293,7 @@ function hasResourceChanged(
 /** 从虚拟媒体 URL 解析资源定位信息。 */
 export function parseVirtualResourceRequest(
 	url: string,
-): { namespace: string; mediaType: "image" | "video"; resourcePath: string } | null {
+): { namespace: string; mediaType: CanvasMediaType; resourcePath: string } | null {
 	const parsedUrl = new URL(url)
 	const segmentIndex = parsedUrl.pathname.indexOf(VIRTUAL_RESOURCE_ROUTE_MARKER)
 	if (segmentIndex < 0) return null
@@ -209,21 +315,21 @@ export function parseVirtualResourceRequest(
 	)
 	const rawNamespaceSegments = rawNamespaceWithMediaType.replace(/^\/+|\/+$/g, "").split("/")
 	const mediaType = rawNamespaceSegments.pop()
-	if (!mediaType || !VIRTUAL_RESOURCE_MEDIA_TYPES.has(mediaType)) return null
+	if (!mediaType || !VIRTUAL_RESOURCE_MEDIA_TYPES.has(mediaType as CanvasMediaType)) return null
 
 	const rawNamespace = rawNamespaceSegments.join("/")
 	const namespace = normalizeResourceNamespace(rawNamespace)
 	const resourcePath = normalizeResourcePathForLookup(rawResourcePath)
 	if (!resourcePath) return null
 
-	return { namespace, mediaType, resourcePath }
+	return { namespace, mediaType: mediaType as CanvasMediaType, resourcePath }
 }
 
 async function saveEntry(entry: CanvasMediaEntry): Promise<void> {
 	const db = await openDb()
 	const transaction = db.transaction(STORE_NAME, "readwrite")
 	const store = transaction.objectStore(STORE_NAME)
-	const namespace = normalizeResourceNamespace(entry.namespace)
+	const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
 	const id = getResourceId(entry)
 	const existing = await requestToPromise<CanvasMediaEntry | undefined>(store.get(id))
 
@@ -257,12 +363,12 @@ async function getAllEntries(): Promise<CanvasMediaEntry[]> {
 async function getEntryByPath(
 	resourcePath: string,
 	namespace: string,
-	mediaType: "image" | "video",
+	mediaType: CanvasMediaType,
 ): Promise<CanvasMediaEntry | null> {
-	const normalizedPath = normalizeResourcePathForLookup(resourcePath)
+	const normalizedPath = normalizeResourcePathForStorage(resourcePath)
 	if (!normalizedPath) return null
 
-	const normalizedNamespace = normalizeResourceNamespace(namespace)
+	const normalizedNamespace = normalizeResourceNamespaceForStorage(namespace)
 	const db = await openDb()
 	const transaction = db.transaction(STORE_NAME, "readonly")
 	const store = transaction.objectStore(STORE_NAME)
@@ -291,6 +397,52 @@ async function touchEntry(
 		...updates,
 		lastAccessedAt: Date.now(),
 	})
+}
+
+function queueTouch(entry: CanvasMediaEntry): void {
+	const now = Date.now()
+	const id = String(entry.id || "")
+	if (!id) return
+	const lastWrittenAt = lastTouchWriteAt.get(id) ?? entry.lastAccessedAt ?? 0
+	if (now - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+	pendingTouches.set(id, { id, lastAccessedAt: now })
+	if (touchFlushTimer !== null) return
+	touchFlushTimer = setTimeout(() => {
+		touchFlushTimer = null
+		void flushPendingTouches()
+	}, TOUCH_FLUSH_IDLE_DELAY_MS)
+}
+
+async function flushPendingTouches(touches?: CanvasMediaTouch[]): Promise<void> {
+	const updates = touches ?? Array.from(pendingTouches.values())
+	if (!touches) pendingTouches.clear()
+	if (updates.length === 0) return
+	try {
+		const db = await openDb()
+		const transaction = db.transaction(STORE_NAME, "readwrite")
+		const store = transaction.objectStore(STORE_NAME)
+		const appliedIds = new Set<string>()
+		updates.forEach((update) => {
+			const request = store.get(update.id)
+			request.onsuccess = () => {
+				const current = request.result as CanvasMediaEntry | undefined
+				if (!current) return
+				const lastWrittenAt = Math.max(
+					current.lastAccessedAt || 0,
+					lastTouchWriteAt.get(update.id) || 0,
+				)
+				if (update.lastAccessedAt - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
+				store.put({ ...current, lastAccessedAt: update.lastAccessedAt })
+				appliedIds.add(update.id)
+			}
+		})
+		await transactionToPromise(transaction)
+		updates
+			.filter((update) => appliedIds.has(update.id))
+			.forEach((update) => lastTouchWriteAt.set(update.id, update.lastAccessedAt))
+	} catch {
+		// Touch metadata is best effort and must not affect media reads.
+	}
 }
 
 async function enforceMaxBytes(
@@ -363,22 +515,28 @@ async function buildRangeResponse(response: Response, request: Request): Promise
 	const range = request.headers.get("range")
 	if (!range) return response
 
-	const blob = await response.blob()
-	const parsedRange = parseRange(range, blob.size)
+	// CacheStorage/Response may originate from a different realm (notably SW and test runtimes).
+	// ArrayBuffer slicing avoids Blob-brand mismatches while preserving the existing full-body
+	// cache plus 206 response contract used by video and audio seeking.
+	const bodyBuffer = await response.arrayBuffer()
+	const parsedRange = parseRange(range, bodyBuffer.byteLength)
 	if (!parsedRange) {
 		return new Response(null, {
 			status: 416,
 			headers: {
-				"Content-Range": `bytes */${blob.size}`,
+				"Content-Range": `bytes */${bodyBuffer.byteLength}`,
 			},
 		})
 	}
 
-	const body = blob.slice(parsedRange.start, parsedRange.end + 1)
+	const body = bodyBuffer.slice(parsedRange.start, parsedRange.end + 1)
 	const headers = new Headers(response.headers)
 	headers.set("Accept-Ranges", "bytes")
-	headers.set("Content-Length", String(body.size))
-	headers.set("Content-Range", `bytes ${parsedRange.start}-${parsedRange.end}/${blob.size}`)
+	headers.set("Content-Length", String(body.byteLength))
+	headers.set(
+		"Content-Range",
+		`bytes ${parsedRange.start}-${parsedRange.end}/${bodyBuffer.byteLength}`,
+	)
 
 	return new Response(body, {
 		status: 206,
@@ -408,7 +566,7 @@ async function putResponseInCache(
 	await enforceMaxBytes()
 }
 
-async function fetchResourceBlobOnce(entry: CanvasMediaEntry) {
+async function fetchResourceBlobOnce(entry: CanvasMediaEntry): Promise<FetchResourceBlobResult> {
 	const cacheKey = getCacheKey(entry)
 	const existingPromise = inflightResourceMap.get(cacheKey)
 	if (existingPromise) return existingPromise
@@ -451,8 +609,8 @@ export async function refreshCanvasMediaResource(
 ): Promise<CanvasMediaRefreshResult> {
 	const previousEntry = await getEntryByPath(
 		String(entry.path || "").replace(/^\/+/, ""),
-		normalizeResourceNamespace(entry.namespace),
-		entry.mediaType as "image" | "video",
+		normalizeResourceNamespaceForStorage(entry.namespace),
+		entry.mediaType as CanvasMediaType,
 	)
 	await saveEntry(entry)
 	const result = await fetchResourceBlobOnce(entry)
@@ -489,16 +647,13 @@ export async function handleCanvasMediaRequest(request: Request): Promise<Respon
 		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		const cachedResponse = await cache.match(getCacheKey(entry))
 		if (cachedResponse) {
-			await touchEntry(entry)
+			queueTouch(entry)
 			return buildRangeResponse(cachedResponse, request)
 		}
 
 		const result = await fetchResourceBlobOnce(entry)
-		if ("blob" in result && result.blob) {
-			return buildRangeResponse(createResponseFromBlobResult(result), request)
-		}
-
-		return buildRangeResponse(result.response, request)
+		if ("response" in result) return buildRangeResponse(result.response, request)
+		return buildRangeResponse(createResponseFromBlobResult(result), request)
 	} catch {
 		const entry = await getEntryByPath(
 			virtualRequest.resourcePath,
@@ -548,6 +703,11 @@ export function handleCanvasMediaMessage(event: ExtendableMessageEvent): boolean
 					})
 				}),
 		)
+		return true
+	}
+
+	if (data.type === "CANVAS_MEDIA_CACHE_TOUCH_BATCH" && Array.isArray(data.touches)) {
+		event.waitUntil(flushPendingTouches(data.touches))
 		return true
 	}
 

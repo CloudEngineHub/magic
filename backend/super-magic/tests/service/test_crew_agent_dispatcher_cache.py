@@ -3,8 +3,22 @@ import json
 import pytest
 
 from app.core.skill_utils.manager import GlobalSkillManager
+from app.core.entity.final_task_state import FinalTaskStateCode
+from app.i18n import i18n
+from app.infrastructure.sdk.base.exceptions import HttpRequestError
+from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import (
+    MagicServiceApiError,
+    MagicServiceUnauthorizedException,
+)
 from app.path_manager import PathManager
-from app.service.agent_dispatcher import AgentDispatcher
+from app.service.agent_dispatcher import (
+    AgentDispatcher,
+    AgentLoadFailedError,
+    AgentLoadFailureReason,
+    _build_agent_load_final_task_state,
+    _classify_agent_load_failure,
+)
+from app.service.crew_downloader import CrewPackageFetchError, CrewPackageInvalidError
 
 
 class FakeAgentContext:
@@ -25,7 +39,7 @@ def _write_crew_files(crew_dir, identity_body="Initial identity."):
 
 def _write_template(template_path):
     template_path.write_text(
-        "---\nllm: main_llm\ntools: []\n---\n<identity>\nCREW_ROLE\n</identity>\nCREW_INSTRUCTIONS\nCREW_PERSONALITY\n",
+        "---\ntools: []\n---\n<identity>\nCREW_ROLE\n</identity>\nCREW_INSTRUCTIONS\nCREW_PERSONALITY\n",
         encoding="utf-8",
     )
 
@@ -58,6 +72,50 @@ def _dispatcher():
     dispatcher.agents = {}
     dispatcher.agent_context = FakeAgentContext()
     return dispatcher
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (MagicServiceUnauthorizedException(), AgentLoadFailureReason.ACCESS_DENIED),
+        (CrewPackageInvalidError("invalid"), AgentLoadFailureReason.INVALID_PACKAGE),
+        (CrewPackageFetchError("failed"), AgentLoadFailureReason.FETCH_FAILED),
+        (HttpRequestError("failed"), AgentLoadFailureReason.FETCH_FAILED),
+        (MagicServiceApiError("failed"), AgentLoadFailureReason.FETCH_FAILED),
+        (RuntimeError("unexpected"), AgentLoadFailureReason.UNKNOWN),
+    ],
+)
+def test_classify_agent_load_failure(error, expected):
+    assert _classify_agent_load_failure(error) is expected
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [
+        (
+            "zh_CN",
+            "员工「SMA-test」的配置不完整，暂时无法加载。"
+            "请重新发布后再试；如仍然失败，请联系管理员。",
+        ),
+        (
+            "en_US",
+            'Employee agent "SMA-test" has an incomplete configuration and cannot be loaded. '
+            "Republish it and try again; contact an administrator if the problem persists.",
+        ),
+    ],
+)
+def test_build_agent_load_final_task_state_uses_localized_safe_message(language, expected):
+    try:
+        i18n.set_language(language)
+        state = _build_agent_load_final_task_state(
+            AgentLoadFailedError("SMA-test", AgentLoadFailureReason.INVALID_PACKAGE)
+        )
+    finally:
+        i18n.reset_language()
+
+    assert state.code is FinalTaskStateCode.AGENT_LOAD_FAILED
+    assert state.custom_message == expected
+    assert "IDENTITY.md" not in state.custom_message
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,19 @@ const SUMMARY_TYPE_ORDER: RecordingSummaryType[] = [
 
 const EXCLUDED_DYNAMIC_TYPES = new Set(["audio", "notes", "transcript", "magic_project"])
 
+/** Lists audio extensions accepted by the upload flow and browser player. */
+export const RECORDING_AUDIO_EXTENSIONS = [
+	"raw",
+	"wav",
+	"mp3",
+	"ogg",
+	"webm",
+	"m4a",
+	"aac",
+	"flac",
+	"opus",
+] as const
+
 /** Returns the most stable display filename available on an attachment item. */
 export function getAttachmentFileName(file: AttachmentItem | undefined): string {
 	return file?.file_name || file?.filename || file?.display_filename || file?.name || ""
@@ -54,6 +67,7 @@ export function buildRecordingDetailFileMap(input: {
 	list: AttachmentItem[]
 	magicProjectConfig?: MagicProjectConfig | null
 	bundleRootPath?: string
+	preferredAudioFileId?: string
 }): RecordingDetailFileMap {
 	const files = flattenRecordingAttachments(input.tree, input.list)
 	const scopedFiles = scopeFilesToBundle(files, input.bundleRootPath)
@@ -67,8 +81,13 @@ export function buildRecordingDetailFileMap(input: {
 		return findFileByName(scopedFiles, configuredName)
 	}
 
+	const preferredAudio = input.preferredAudioFileId
+		? files.find((file) => file.file_id === input.preferredAudioFileId && !file.is_directory)
+		: undefined
 	const audio =
-		findByConfiguredName("audio") ?? findFileByExtension(scopedFiles, ["wav", "mp3", "m4a"])
+		preferredAudio ??
+		findByConfiguredName("audio") ??
+		findFileByExtension(scopedFiles, [...RECORDING_AUDIO_EXTENSIONS])
 	const transcript =
 		findByConfiguredName("transcript") ?? findByNameHint(scopedFiles, ["transcript", "文字稿"])
 	const notes =

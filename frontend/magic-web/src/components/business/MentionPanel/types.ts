@@ -40,9 +40,12 @@ export const MentionBusinessItemType = {
 	TOOL: "tool",
 	PROJECT: "project",
 	PROJECT_FILE: "project_file",
+	MEMORY_FILE: "memory_file",
+	MEMORY_DIRECTORY: "memory_directory",
 	UPLOAD_FILE: "upload_file",
 	CLOUD_FILE: "cloud_file",
 	DESIGN_MARKER: "design_marker",
+	TEXT: "text",
 } as const
 
 export type MentionBusinessItemType =
@@ -118,6 +121,21 @@ export interface ProjectFileMentionData {
 	pending_project_copy?: boolean
 }
 
+/** 记忆文件 mention 数据。 */
+export interface MemoryFileMentionData {
+	file_id: string
+	file_name: string
+	file_path: string
+	file_extension: string
+}
+
+/** 记忆目录 mention 数据。 */
+export interface MemoryDirectoryMentionData {
+	directory_id: string
+	directory_name: string
+	directory_path: string
+}
+
 export interface DirectoryMentionData {
 	directory_id: string
 	directory_name: string
@@ -168,6 +186,14 @@ export interface CloudFileMentionData {
 	[key: string]: unknown // 待定字段
 }
 
+/** Stores the SDK-provided display label, send text, and stable business identifier. */
+export interface TextMentionData {
+	label: string
+	text: string
+	id: string
+	[key: string]: unknown
+}
+
 export interface CanvasMarkerMentionSuggestion {
 	label: string
 	kind: "object" | "part" | "custom"
@@ -215,9 +241,12 @@ export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.TOOL]: ToolMentionData
 	[MentionBusinessItemType.PROJECT]: ProjectMentionData
 	[MentionBusinessItemType.PROJECT_FILE]: ProjectFileMentionData
+	[MentionBusinessItemType.MEMORY_FILE]: MemoryFileMentionData
+	[MentionBusinessItemType.MEMORY_DIRECTORY]: MemoryDirectoryMentionData
 	[MentionBusinessItemType.UPLOAD_FILE]: UploadFileMentionData
 	[MentionBusinessItemType.CLOUD_FILE]: CloudFileMentionData
 	[MentionBusinessItemType.DESIGN_MARKER]: CanvasMarkerMentionData
+	[MentionBusinessItemType.TEXT]: TextMentionData
 }
 
 export interface MentionItemDataMap extends MentionCoreItemDataMap, MentionBusinessItemDataMap {}
@@ -245,7 +274,7 @@ export interface CanvasElementMentionSourcePreview {
 	kind: "canvas-element"
 	designProjectId?: string
 	elementId: string
-	mediaType: "image" | "video"
+	mediaType: "image" | "video" | "audio"
 	src: string
 	crop?: MentionImageSourceCrop
 }

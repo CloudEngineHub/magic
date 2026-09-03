@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import superMagicService from "@/pages/superMagic/services"
@@ -31,6 +31,7 @@ export interface CollapsedWorkspaceMenuWorkspaceItemProps {
 	openProjectMenuId: string | null
 	onProjectMenuChange: (workspaceId: string | null) => void
 	onRequestCloseAll: () => void
+	keepPopoverOpen?: boolean
 }
 
 const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspaceMenuWorkspaceItem({
@@ -40,6 +41,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	openProjectMenuId,
 	onProjectMenuChange,
 	onRequestCloseAll,
+	keepPopoverOpen = false,
 }: CollapsedWorkspaceMenuWorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
@@ -62,6 +64,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	const [isWorkspaceHovered, setIsWorkspaceHovered] = useState(false)
 	const projectMenuContentRef = useRef<HTMLDivElement>(null)
 	const projectScrollRef = useRef<HTMLDivElement>(null)
+	const suppressWorkspaceItemClickRef = useRef(false)
 
 	const {
 		projectModals,
@@ -118,6 +121,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	}, [])
 
 	function handleProjectMenuChange(open: boolean) {
+		if (!open && keepPopoverOpen) return
 		if (!open) {
 			handleCancelCreateProject()
 		}
@@ -168,6 +172,16 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 		onRequestCloseAll()
 	}
 
+	function handleWorkspaceDragStart() {
+		suppressWorkspaceItemClickRef.current = true
+	}
+
+	function handleWorkspaceDragEnd() {
+		window.setTimeout(() => {
+			suppressWorkspaceItemClickRef.current = false
+		}, 0)
+	}
+
 	const renderProjectList = () =>
 		projects.map((project) => (
 			<CollapsedWorkspaceProjectRow
@@ -206,8 +220,20 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 				>
 					<PopoverTrigger asChild>
 						<span
-							className="w-full"
+							className="block w-full"
 							data-testid={`sidebar-collapsed-workspace-item-${workspace.id}`}
+							draggable
+							data-collapsed-sidebar-dnd-source="workspace"
+							data-collapsed-sidebar-dnd-workspace-id={workspace.id}
+							data-collapsed-sidebar-dnd-label={workspaceDisplayName}
+							data-collapsed-sidebar-dnd-drop-type="workspace"
+							onDragStart={handleWorkspaceDragStart}
+							onDragEnd={handleWorkspaceDragEnd}
+							onClick={(event) => {
+								if (!suppressWorkspaceItemClickRef.current) return
+								event.preventDefault()
+								event.stopPropagation()
+							}}
 						>
 							<Button
 								variant="ghost"
@@ -386,17 +412,30 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 									ref={projectScrollRef}
 									className="h-[300px] w-full [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
 								>
-									<div className="mr-1 w-full space-y-1">
+									<div
+										className="mr-1 w-full space-y-1"
+										data-collapsed-sidebar-dnd-drop-type="project-list"
+										data-collapsed-sidebar-dnd-workspace-id={workspace.id}
+									>
 										{renderProjectList()}
 									</div>
 								</ScrollArea>
 							) : (
-								<div className="space-y-1">{renderProjectList()}</div>
+								<div
+									className="space-y-1"
+									data-collapsed-sidebar-dnd-drop-type="project-list"
+									data-collapsed-sidebar-dnd-workspace-id={workspace.id}
+								>
+									{renderProjectList()}
+								</div>
 							)
 						) : (
 							<div
 								className="px-2 py-1 text-sm leading-none text-[#a3a3a3]"
 								data-testid={projectEmptyTestId}
+								data-collapsed-sidebar-dnd-drop-type="project-list"
+								data-collapsed-sidebar-dnd-workspace-id={workspace.id}
+								data-collapsed-sidebar-dnd-drop-empty="true"
 							>
 								{t("super:project.noProjects")}
 							</div>

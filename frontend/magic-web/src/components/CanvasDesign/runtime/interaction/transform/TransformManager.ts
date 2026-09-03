@@ -5,7 +5,7 @@ import type { Box } from "konva/lib/shapes/Transformer"
 import { getKeepRatioAspectRatio, isEdgeAnchor, applyAspectRatioToBoundBox } from "./anchorUtils"
 import { STANDARD_TRANSFORMER_STYLE } from "../frame/FrameEditorShared"
 import type { Rect } from "../../shared/ids"
-import { pickSelectedElementIdAtStagePointer } from "./elementNodeUtils"
+import { pickContentElementIdAtStagePointer } from "./elementNodeUtils"
 import { isMultiSelectEvent } from "../shortcuts/modifierUtils"
 
 type TransformElementInstance = NonNullable<
@@ -39,6 +39,7 @@ export const TransformBehavior = {
 interface ProxyTransformNodeState {
 	node: Konva.Node
 	element: TransformElementInstance
+	/** 节点原点在 contentLayer 坐标系中的位置。 */
 	x: number
 	y: number
 	scaleX: number
@@ -95,8 +96,16 @@ export class TransformManager {
 			return
 		}
 
-		const elementId = pickSelectedElementIdAtStagePointer(this.canvas, pos)
+		const elementId = pickContentElementIdAtStagePointer(this.canvas, pos)
 		if (!elementId) {
+			return
+		}
+
+		const elementData = this.canvas.elementManager.getElementData(elementId)
+		const canToggle =
+			this.canvas.selectionManager.isSelected(elementId) ||
+			this.canvas.permissionManager.canSelect(elementData)
+		if (!canToggle) {
 			return
 		}
 
@@ -290,8 +299,9 @@ export class TransformManager {
 		elementIds.forEach((elementId) => {
 			const snapshot = this.proxyInitialNodeStates.get(elementId)
 			if (!snapshot) return
-			snapshot.x = snapshot.node.x()
-			snapshot.y = snapshot.node.y()
+			const contentPosition = this.getNodeContentPosition(snapshot.node)
+			snapshot.x = contentPosition.x
+			snapshot.y = contentPosition.y
 		})
 	}
 
@@ -388,6 +398,43 @@ export class TransformManager {
 		return this.canvas.isKeepRatioModifierPressed() || state.shouldKeepRatio
 	}
 
+	/** 将节点原点转换到 contentLayer 坐标系。 */
+	private getNodeContentPosition(node: Konva.Node): { x: number; y: number } {
+		if (!this.canvas?.contentLayer || typeof node.getAbsoluteTransform !== "function") {
+			return { x: node.x(), y: node.y() }
+		}
+		const stagePosition = node.getAbsoluteTransform().copy().point({ x: 0, y: 0 })
+		return this.canvas.contentLayer.getAbsoluteTransform().copy().invert().point(stagePosition)
+	}
+
+	/** 将 contentLayer 坐标转换为节点父容器的局部坐标。 */
+	private getNodeParentPosition(
+		node: Konva.Node,
+		contentPosition: { x: number; y: number },
+	): {
+		x: number
+		y: number
+	} {
+		if (!this.canvas?.contentLayer || typeof node.getAbsoluteTransform !== "function") {
+			return contentPosition
+		}
+		const stagePosition = this.canvas.contentLayer
+			.getAbsoluteTransform()
+			.copy()
+			.point(contentPosition)
+		const parent = node.getParent() ?? this.canvas.contentLayer
+		return parent.getAbsoluteTransform().copy().invert().point(stagePosition)
+	}
+
+	private applyNodeParentPosition(node: Konva.Node, position: { x: number; y: number }): void {
+		if (typeof node.position === "function") {
+			node.position(position)
+			return
+		}
+		node.x(position.x)
+		node.y(position.y)
+	}
+
 	private clearTransformSessionState(): void {
 		this.transformSessionElementStates.clear()
 	}
@@ -451,8 +498,7 @@ export class TransformManager {
 			this.proxyInitialNodeStates.set(node.id(), {
 				node,
 				element: sessionState.element,
-				x: node.x(),
-				y: node.y(),
+				...this.getNodeContentPosition(node),
 				scaleX: node.scaleX(),
 				scaleY: node.scaleY(),
 				width: node instanceof Konva.Group ? node.width() : undefined,
@@ -490,9 +536,14 @@ export class TransformManager {
 		}
 
 		this.proxyInitialNodeStates.forEach((snapshot, elementId) => {
-			const rawUpdates: Partial<LayerElement> = {
+			const contentPosition = {
 				x: currentBounds.x + (snapshot.x - initialBounds.x) * selectionScaleX,
 				y: currentBounds.y + (snapshot.y - initialBounds.y) * selectionScaleY,
+			}
+			const parentPosition = this.getNodeParentPosition(snapshot.node, contentPosition)
+			const rawUpdates: Partial<LayerElement> = {
+				x: parentPosition.x,
+				y: parentPosition.y,
 				scaleX: snapshot.scaleX * selectionScaleX,
 				scaleY: snapshot.scaleY * selectionScaleY,
 				width: snapshot.width,
@@ -532,8 +583,11 @@ export class TransformManager {
 		const deltaY = currentBounds.y - this.proxyInitialBounds.y
 
 		this.proxyInitialNodeStates.forEach((snapshot) => {
-			snapshot.node.x(snapshot.x + deltaX)
-			snapshot.node.y(snapshot.y + deltaY)
+			const parentPosition = this.getNodeParentPosition(snapshot.node, {
+				x: snapshot.x + deltaX,
+				y: snapshot.y + deltaY,
+			})
+			this.applyNodeParentPosition(snapshot.node, parentPosition)
 		})
 		this.requestContentDraw("selection-proxy-translation")
 	}
@@ -910,18 +964,33 @@ export class TransformManager {
 
 		// 创建新的 Transformer
 		const anchorSize = STANDARD_TRANSFORMER_STYLE.ANCHOR_SIZE
+		const singleElement =
+			transformableElementIds.length === 1
+				? this.canvas.elementManager.getElementInstance(transformableElementIds[0])
+				: undefined
+		const singleElementConstraints = singleElement?.getTransformConstraints()
+		const multiSelectionContainsResizeRestrictedElement =
+			transformableElementIds.length > 1 &&
+			transformableElementIds.some((elementId) => {
+				const constraints = this.canvas.elementManager
+					.getElementInstance(elementId)
+					?.getTransformConstraints()
+				return constraints?.enabledAnchors !== undefined
+			})
 		let enabledAnchors: string[] = []
 		if (!this.canvas.readonly) {
-			enabledAnchors = [
-				"top-left",
-				"top-right",
-				"bottom-left",
-				"bottom-right",
-				"top-center",
-				"bottom-center",
-				"middle-left",
-				"middle-right",
-			]
+			enabledAnchors = multiSelectionContainsResizeRestrictedElement
+				? []
+				: (singleElementConstraints?.enabledAnchors ?? [
+						"top-left",
+						"top-right",
+						"bottom-left",
+						"bottom-right",
+						"top-center",
+						"bottom-center",
+						"middle-left",
+						"middle-right",
+					])
 		}
 		// 限制最小尺寸并防止翻转
 		const boundBoxFunc = (oldBox: Box, newBox: Box): Box => {
@@ -935,6 +1004,35 @@ export class TransformManager {
 			}
 			let resultBox: Box = newBox
 			const activeAnchor = this.transformer?.getActiveAnchor()
+			const applySingleElementConstraints = (box: Box): Box | null => {
+				if (!singleElementConstraints) return box
+
+				const elementWidth = singleElement?.getSize().width ?? oldBox.width
+				const elementHeight = singleElement?.getSize().height ?? oldBox.height
+				const widthScale = elementWidth > 0 ? oldBox.width / elementWidth : 1
+				const heightScale = elementHeight > 0 ? oldBox.height / elementHeight : 1
+				const minWidth = (singleElementConstraints.minWidth ?? 0) * widthScale
+				const minHeight = (singleElementConstraints.minHeight ?? 0) * heightScale
+				const constrainedBox =
+					singleElementConstraints.fixedHeight !== undefined
+						? {
+								...box,
+								y: oldBox.y,
+								height: singleElementConstraints.fixedHeight * heightScale,
+							}
+						: box
+				if (minWidth > 0 && constrainedBox.width < minWidth) {
+					return null
+				}
+				if (minHeight > 0 && constrainedBox.height < minHeight) {
+					return null
+				}
+				return constrainedBox
+			}
+
+			const initiallyConstrainedBox = applySingleElementConstraints(resultBox)
+			if (!initiallyConstrainedBox) return oldBox
+			resultBox = initiallyConstrainedBox
 
 			// 动态检查当前是否需要保持宽高比（支持运行时按下 Shift 键）
 			const currentShouldKeepRatio = this.shouldKeepRatio(transformableElementIds)
@@ -964,7 +1062,7 @@ export class TransformManager {
 					{ keepRatio: currentShouldKeepRatio, aspectRatio },
 				)
 			}
-			return resultBox
+			return applySingleElementConstraints(resultBox) ?? oldBox
 		}
 
 		// 自定义 anchor 形状：中间位置的 anchor 显示为长方形

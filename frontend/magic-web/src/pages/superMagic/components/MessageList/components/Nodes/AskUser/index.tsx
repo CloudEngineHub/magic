@@ -1,10 +1,10 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 import questionIcon from "@/assets/logos/question.svg"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	ASK_USER_CARD_STATUS,
 	ASK_USER_INTERACTION_TYPE,
@@ -18,8 +18,10 @@ import {
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import { AnsweredQuestionContent } from "./components/AnsweredQuestionContent"
 import { renderAskUserPendingQuestion } from "./components/InteractionQuestionRenderers"
+import { AskUserQuestionMarkdownTitle } from "@/pages/superMagic/components/MessageList/utils/AskUserMarkdownText"
 import { useAskUserViewModel } from "./hooks/useAskUserViewModel"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { useMessageViewState } from "../../../view-state/MessageViewStateContext"
 
 /** 题目区：卡片内次级背景（随主题 / 深浅色变化） */
 const askUserQuestionPanelClass = "mt-1.5 min-w-0 rounded-md border border-border bg-muted p-2.5"
@@ -38,7 +40,7 @@ interface AskUserQuestionListItem {
 function AskUser(props: NodeProps) {
 	const { node } = props
 	const { i18n } = useTranslation("super")
-	const [isCollapsed, setIsCollapsed] = useState(false)
+	const [isCollapsed, setIsCollapsed] = useMessageViewState("ask-user-collapsed", false)
 	const {
 		answeredQuestionCount,
 		errorState,
@@ -70,7 +72,7 @@ function AskUser(props: NodeProps) {
 		resolvedAskUser.status === ASK_USER_CARD_STATUS.answered
 			? "askUser.answersTitle"
 			: "askUser.title"
-	const messageNode = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| { tool?: { action?: string } }
 		| undefined
 	const askUserAction = messageNode?.tool?.action
@@ -118,10 +120,6 @@ function AskUser(props: NodeProps) {
 		})
 	}
 
-	function formatQuestionTitle(question: AskUserQuestionData, index: number) {
-		return hasMultipleQuestions ? `${index + 1}. ${question.question}` : question.question
-	}
-
 	function getQuestionContentIndentClass(question: AskUserQuestionData) {
 		return hasMultipleQuestions &&
 			question.interactionType !== ASK_USER_INTERACTION_TYPE.confirm
@@ -152,15 +150,16 @@ function AskUser(props: NodeProps) {
 								className="space-y-1"
 								data-testid={`ask-user-card-question-item-${question.subId}`}
 							>
-								<p
+								<AskUserQuestionMarkdownTitle
+									content={question.question}
+									index={index}
+									total={resolvedAskUser.questions.length}
 									className={cn(
 										"text-xs font-medium leading-4 text-foreground",
 										askUserBreakTextClass,
 									)}
-									data-testid={`ask-user-card-question-text-${question.subId}`}
-								>
-									{formatQuestionTitle(question, index)}
-								</p>
+									testId={`ask-user-card-question-text-${question.subId}`}
+								/>
 								<div className={getQuestionContentIndentClass(question)}>
 									{renderPendingQuestion(question)}
 								</div>
@@ -178,29 +177,7 @@ function AskUser(props: NodeProps) {
 				</div>
 				<div className="shrink-0 pt-0.5" data-testid="ask-user-card-footer">
 					<div className="flex flex-wrap items-center justify-between gap-1.5">
-						<div className="flex min-w-0 items-center gap-1 text-xs font-medium leading-4 text-muted-foreground">
-							<span
-								className={cn(
-									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-								)}
-							>
-								{askUserT("askUser.status.autoSubmitIn", {
-									time: remainingText,
-								})}
-							</span>
-						</div>
 						<div className="flex shrink-0 items-center gap-1">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={shouldDisableInteraction || pendingAction !== null}
-								onClick={handleSkip}
-								data-testid="ask-user-card-skip-button"
-								className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
-							>
-								{askUserT("askUser.actions.skip")}
-							</Button>
 							<Button
 								type="button"
 								size="sm"
@@ -213,6 +190,28 @@ function AskUser(props: NodeProps) {
 							>
 								{askUserT("askUser.actions.submit")}
 							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={shouldDisableInteraction || pendingAction !== null}
+								onClick={handleSkip}
+								data-testid="ask-user-card-skip-button"
+								className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
+							>
+								{askUserT("askUser.actions.skip")}
+							</Button>
+						</div>
+						<div className="ml-auto flex min-w-0 items-center gap-1 text-right text-xs font-medium leading-4 text-muted-foreground">
+							<span
+								className={cn(
+									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+								)}
+							>
+								{askUserT("askUser.status.autoSubmitIn", {
+									time: remainingText,
+								})}
+							</span>
 						</div>
 					</div>
 				</div>
@@ -232,14 +231,15 @@ function AskUser(props: NodeProps) {
 							className="space-y-1"
 							data-testid={`ask-user-card-answer-item-${question.subId}`}
 						>
-							<p
+							<AskUserQuestionMarkdownTitle
+								content={question.question}
+								index={index}
+								total={resolvedAskUser.questions.length}
 								className={cn(
 									"text-xs font-medium leading-4 text-foreground",
 									askUserBreakTextClass,
 								)}
-							>
-								{formatQuestionTitle(question, index)}
-							</p>
+							/>
 							<div className={getQuestionContentIndentClass(question)}>
 								<AnsweredQuestionContent
 									question={question}
@@ -267,16 +267,17 @@ function AskUser(props: NodeProps) {
 		return (
 			<div className="space-y-2.5" data-testid="ask-user-card-readonly-question-list">
 				{questionItems.map(({ question, index }) => (
-					<p
+					<AskUserQuestionMarkdownTitle
 						key={question.subId}
+						content={question.question}
+						index={index}
+						total={questionItems.length}
 						className={cn(
 							"text-xs font-medium leading-4 text-foreground",
 							askUserBreakTextClass,
 						)}
-						data-testid={`ask-user-card-readonly-question-${question.subId}`}
-					>
-						{formatQuestionTitle(question, index)}
-					</p>
+						testId={`ask-user-card-readonly-question-${question.subId}`}
+					/>
 				))}
 			</div>
 		)

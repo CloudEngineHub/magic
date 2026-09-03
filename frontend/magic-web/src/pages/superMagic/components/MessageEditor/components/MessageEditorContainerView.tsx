@@ -1,4 +1,4 @@
-import type { Editor } from "@tiptap/react"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ReactNode } from "react"
 import type { MessageEditorStore } from "../stores"
 import { MessageEditorStoreProvider } from "../stores"
@@ -30,6 +30,7 @@ interface MessageEditorContainerViewProps {
 	outsideBottomContent: ReactNode
 	outsideTopContent: ReactNode
 	uploadModal: ReactNode
+	promptCarouselNode: ReactNode
 	showAiCompletion: boolean
 }
 
@@ -53,6 +54,7 @@ export default function MessageEditorContainerView({
 	outsideBottomContent,
 	outsideTopContent,
 	uploadModal,
+	promptCarouselNode,
 	showAiCompletion,
 }: MessageEditorContainerViewProps) {
 	const editorView = (
@@ -74,6 +76,7 @@ export default function MessageEditorContainerView({
 			outsideBottomContent={outsideBottomContent}
 			outsideTopContent={outsideTopContent}
 			uploadModal={uploadModal}
+			promptCarouselNode={promptCarouselNode}
 			showAiCompletion={showAiCompletion}
 		/>
 	)

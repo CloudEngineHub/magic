@@ -9,6 +9,7 @@ namespace App\Application\ModelGateway\Mapper;
 
 use App\Application\ModelGateway\Service\AggregateModelResolverService;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ModelAccessContext;
 use App\Domain\Provider\Entity\ProviderConfigEntity;
 use App\Domain\Provider\Entity\ProviderEntity;
 use App\Domain\Provider\Entity\ProviderModelEntity;
@@ -174,50 +175,75 @@ class ModelGatewayMapper extends ModelMapper
      * 获取当前组织下的所有可用 chat 模型.
      * @return ModelEntry[]
      */
-    public function getChatModels(BaseDataIsolation $dataIsolation, bool $withDynamicModels = false): array
-    {
+    public function getChatModels(
+        BaseDataIsolation $dataIsolation,
+        bool $withDynamicModels = false,
+        ?ModelAccessContext $accessContext = null
+    ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::LLM], $withDynamicModels);
+        return $this->getModelsByType($dataIsolation, [ModelType::LLM], $withDynamicModels, $accessContext);
     }
 
     /**
      * 获取当前组织下的所有可用 embedding 模型.
      * @return ModelEntry[]
      */
-    public function getEmbeddingModels(BaseDataIsolation $dataIsolation, bool $withDynamicModels = false): array
-    {
+    public function getEmbeddingModels(
+        BaseDataIsolation $dataIsolation,
+        bool $withDynamicModels = false,
+        ?ModelAccessContext $accessContext = null
+    ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::EMBEDDING], $withDynamicModels);
+        return $this->getModelsByType($dataIsolation, [ModelType::EMBEDDING], $withDynamicModels, $accessContext);
     }
 
     /**
      * get all available image models under the current organization.
      * @return ModelEntry[]
      */
-    public function getImageModels(BaseDataIsolation $dataIsolation, bool $withDynamicModels = false): array
-    {
+    public function getImageModels(
+        BaseDataIsolation $dataIsolation,
+        bool $withDynamicModels = false,
+        ?ModelAccessContext $accessContext = null
+    ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::TEXT_TO_IMAGE, ModelType::IMAGE_TO_IMAGE], $withDynamicModels);
+        return $this->getModelsByType(
+            $dataIsolation,
+            [ModelType::TEXT_TO_IMAGE, ModelType::IMAGE_TO_IMAGE],
+            $withDynamicModels,
+            $accessContext
+        );
     }
 
     /**
      * get all available video models under the current organization.
      * @return ModelEntry[]
      */
-    public function getVideoModels(BaseDataIsolation $dataIsolation, bool $withDynamicModels = false): array
-    {
+    public function getVideoModels(
+        BaseDataIsolation $dataIsolation,
+        bool $withDynamicModels = false,
+        ?ModelAccessContext $accessContext = null
+    ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::TEXT_TO_VIDEO], $withDynamicModels);
+        return $this->getModelsByType($dataIsolation, [ModelType::TEXT_TO_VIDEO], $withDynamicModels, $accessContext);
     }
 
     /**
      * 获取当前组织下所有类型的可用模型.
      * @return ModelEntry[]
      */
-    public function getAllModels(BaseDataIsolation $dataIsolation, bool $withDynamicModels = false): array
-    {
+    public function getAllModels(
+        BaseDataIsolation $dataIsolation,
+        bool $withDynamicModels = false,
+        ?ModelAccessContext $accessContext = null
+    ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::LLM, ModelType::EMBEDDING, ModelType::TEXT_TO_IMAGE, ModelType::IMAGE_TO_IMAGE, ModelType::TEXT_TO_VIDEO], $withDynamicModels);
+        return $this->getModelsByType(
+            $dataIsolation,
+            [ModelType::LLM, ModelType::EMBEDDING, ModelType::TEXT_TO_IMAGE, ModelType::IMAGE_TO_IMAGE, ModelType::TEXT_TO_VIDEO],
+            $withDynamicModels,
+            $accessContext
+        );
     }
 
     protected function loadEnvModels(): void
@@ -272,10 +298,15 @@ class ModelGatewayMapper extends ModelMapper
      * 获取当前组织下指定类型的所有可用模型，支持同时查询多种类型.
      *
      * @param ModelType[] $modelTypes 需要查询的模型类型，不可为空
+     * @param null|ModelAccessContext $accessContext 当前用户模型权限上下文
      * @return ModelEntry[]
      */
-    private function getModelsByType(ModelGatewayDataIsolation $dataIsolation, array $modelTypes, bool $withDynamicModels = false): array
-    {
+    private function getModelsByType(
+        ModelGatewayDataIsolation $dataIsolation,
+        array $modelTypes,
+        bool $withDynamicModels = false,
+        ?ModelAccessContext $accessContext = null
+    ): array {
         $list = [];
 
         // 加载 env 模型（仅 LLM/EMBEDDING 有 env 模型，其他类型跳过）
@@ -302,6 +333,9 @@ class ModelGatewayMapper extends ModelMapper
                 }
             }
         }
+
+        // 保留一份包含无权限原子模型的内部集合，供动态模型解析使用；对外列表仍只返回可访问模型。
+        $resolvedAtomList = $list;
 
         // 合并多个类型的可用模型 ID，任意类型返回 null（不限制）则整体不限制
         $availableModelIds = [];
@@ -393,6 +427,11 @@ class ModelGatewayMapper extends ModelMapper
                 $modelLogs['model_disabled_or_invalid'][] = "{$providerLabel}|{$providerModel->getModelId()}";
                 continue;
             }
+            $resolvedAtomList[$model->getKey()] = $model;
+            if (! $this->isModelAccessible($accessContext, $providerModel->getModelId())) {
+                $modelLogs['user_access_denied'][] = "{$providerLabel}|{$providerModel->getModelId()}";
+                continue;
+            }
             $modelLogs['success'][] = "{$providerLabel}|{$providerModel->getModelId()}";
             $list[$model->getKey()] = $model;
         }
@@ -406,7 +445,18 @@ class ModelGatewayMapper extends ModelMapper
         );
 
         foreach ($pendingDynamicModels as $providerModel) {
-            $dynamicModel = $this->createDynamicOdinModel($providerModel, $list, $dataIsolation, $preloadedDynamicLookup);
+            if (! $this->isModelAccessible($accessContext, $providerModel->getModelId())) {
+                $modelLogs['user_access_denied'][] = "dynamic|{$providerModel->getModelId()}";
+                continue;
+            }
+
+            $dynamicModel = $this->createDynamicOdinModel(
+                $providerModel,
+                $resolvedAtomList,
+                $dataIsolation,
+                $accessContext,
+                $preloadedDynamicLookup
+            );
             if (! $dynamicModel) {
                 continue;
             }
@@ -564,6 +614,7 @@ class ModelGatewayMapper extends ModelMapper
         ProviderModelEntity $dynamicModel,
         array $atomList,
         ModelGatewayDataIsolation $dataIsolation,
+        ?ModelAccessContext $accessContext = null,
         array $preloadedLookup = [],
     ): ?ModelEntry {
         $aggregateResolver = di(AggregateModelResolverService::class);
@@ -571,7 +622,7 @@ class ModelGatewayMapper extends ModelMapper
         $resolvedModelId = $aggregateResolver->resolveModel(
             $dynamicModel,
             $dataIsolation,
-            null,
+            $accessContext,
             $visitedModelIds,
             $preloadedLookup,
         );
@@ -628,6 +679,20 @@ class ModelGatewayMapper extends ModelMapper
         };
 
         return new ModelEntry(attributes: $dynamicAttributes, model: $model);
+    }
+
+    /**
+     * 判断模型是否对当前用户可见。
+     *
+     * 未传入权限上下文或组织未启用模型权限控制时，保持原有模型列表行为。
+     */
+    private function isModelAccessible(?ModelAccessContext $accessContext, string $modelId): bool
+    {
+        if ($accessContext === null || ! $accessContext->isRestricted()) {
+            return true;
+        }
+
+        return $accessContext->canAccess($modelId);
     }
 
     private function createModelByProvider(

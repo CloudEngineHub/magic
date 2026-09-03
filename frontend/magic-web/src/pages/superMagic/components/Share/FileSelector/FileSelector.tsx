@@ -6,6 +6,8 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import MagicIcon from "@/components/base/MagicIcon"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
+import { SlidesTemplateFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/SlidesTemplateFolderIcon"
+import { isSlidesTemplateFolder } from "@/pages/superMagic/components/TopicFilesButton/utils/slides-template-folder"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import useStyles from "./style"
 import type { FileSelectorProps } from "./types"
@@ -27,9 +29,9 @@ import {
 	isNodeSelected,
 } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
 import { canSetAsDefault, hasValidFileForShare } from "./utils"
-import { useResponsive } from "ahooks"
 import { useLocateFile } from "./hooks/useLocateFile"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export default memo(function FileSelector(props: FileSelectorProps) {
 	const {
@@ -51,7 +53,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 	const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
 	const [initialized, setInitialized] = useState(false)
 	const [hoveredItemId, setHoveredItemId] = useState<string | null>(null)
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 	const treeAreaRef = useRef<HTMLDivElement>(null)
 
 	// Filter files based on search
@@ -433,6 +435,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 		(node: TreeNodeData) => {
 			const item = node.item || {}
 			const itemId = node.key
+			const isSlidesTemplate = isSlidesTemplateFolder(item)
 			const hasChildren = !node.isLeaf
 			const isExpanded = expandedKeySet.has(String(node.key))
 			const indentWidth = node.level * 10
@@ -614,7 +617,9 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 
 						{/* File/Folder icon */}
 						<div className={cx(styles.iconWrapper, !fileSupported && "opacity-50")}>
-							{item?.is_directory && !item?.display_config?.type ? (
+							{isSlidesTemplate ? (
+								<SlidesTemplateFolderIcon size={16} />
+							) : item?.is_directory && !item?.display_config?.type ? (
 								<img
 									src={FoldIcon as unknown as string}
 									alt="folder"

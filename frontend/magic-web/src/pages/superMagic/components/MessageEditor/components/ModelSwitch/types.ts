@@ -1,5 +1,7 @@
+import type { VideoGenerationConfig } from "@/components/CanvasDesign/public/magic-types"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { MessageEditorSize } from "../../types"
+import type { AddModelType } from "./components/AddModel/store"
 
 export type { MessageEditorSize }
 
@@ -51,6 +53,8 @@ export interface ModelItem {
 	model_status: ModelStatusEnum
 	sort: number
 	tags?: ModelTagEnum[]
+	/** 视频模型下发的生成能力配置。 */
+	video_generation_config?: VideoGenerationConfig
 }
 
 export interface ModelSwitchProps {
@@ -75,7 +79,7 @@ export interface ModelSwitchProps {
 	showLabel?: boolean
 	/** Whether add model button is allowed (hidden on mobile when false) */
 	editable?: boolean
-	onAddModel?: (modelType: "text" | "image") => void | Promise<void>
+	onAddModel?: (modelType: AddModelType) => void | Promise<void>
 	onPreloadAddModel?: () => void
 	defaultTab?: ModelTabType
 	triggerTab?: ModelTabType

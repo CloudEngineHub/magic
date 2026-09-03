@@ -3,12 +3,11 @@
 聚合文件写入和网页分析功能，实现"创建幻灯片 + 自定义分析"的一体化操作
 """
 
-from app.i18n import i18n
-import aiofiles
 import asyncio
 import json
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -19,11 +18,14 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
+from app.service.browser.browser_config_adapter import BrowserConfigAdapter
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
 from app.tools.write_file import WriteFile, WriteFileParams
-from magic_use.magic_browser import MagicBrowser
+from app.utils.async_file_utils import async_exists, async_read_text, async_stat, async_write_text
+from magic_use import BrowserClient, create_browser
 
 logger = get_logger(__name__)
 
@@ -325,10 +327,11 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
         logger.debug(f"本地文件转换为URL: {file_path} -> {file_url}")
         return file_url
 
-    async def _create_browser(self) -> MagicBrowser:
+    async def _create_browser(self) -> BrowserClient:
         """创建浏览器实例"""
         # 创建浏览器实例用于网页分析
-        browser = await MagicBrowser.create_for_scraping()
+        config = await BrowserConfigAdapter.build_playwright(str(self.base_dir))
+        browser = await create_browser(config)
         logger.debug("创建浏览器实例用于网页分析")
         return browser
 
@@ -356,7 +359,7 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
         # 其他类型直接转换为字符串
         return str(js_result)
 
-    async def _check_font_sizes(self, browser: MagicBrowser, page_id: str) -> Optional[str]:
+    async def _check_font_sizes(self, browser: BrowserClient, page_id: str) -> Optional[str]:
         """
         自动检测幻灯片中的小字号文本
 
@@ -387,9 +390,9 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
             }})()
             """
 
-            result = await browser.evaluate_js(page_id=page_id, js_code=script)
+            result = await browser.evaluate(page_id, script)
 
-            if hasattr(result, 'result') and result.result:
+            if result:
                 return "💡 Reminder: Some small font sizes detected. You may want to review whether they meet the specifications."
 
             return None
@@ -415,27 +418,25 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
 
             # 准备目标URL
             local_file_path = self.base_dir / params.file_path
-            if not local_file_path.exists():
+            if not await async_exists(local_file_path):
                 raise FileNotFoundError(f"文件不存在: {params.file_path}")
-            if not local_file_path.is_file():
+            if not stat.S_ISREG((await async_stat(local_file_path)).st_mode):
                 raise ValueError(f"指定路径不是文件: {params.file_path}")
 
             target_url = self._prepare_file_url(str(local_file_path))
             logger.debug(f"加载文件: {params.file_path} -> {target_url}")
 
             # 导航到目标页面
-            goto_result = await browser.goto(page_id=None, url=target_url)
-            if hasattr(goto_result, 'error'):
-                raise Exception(f"页面导航失败: {goto_result.error}")
+            pages = await browser.list_pages()
+            if not pages:
+                raise RuntimeError("无法获取活跃页面ID")
+            page_id = pages[0].id
+            await browser.navigate(page_id, target_url)
 
             # 等待页面加载完成
             await asyncio.sleep(2)
 
             # 获取活跃页面ID
-            page_id = await browser.get_active_page_id()
-            if not page_id:
-                raise Exception("无法获取活跃页面ID")
-
             # 构建立即执行函数
             full_script = f"""
 (function(maxWidth, maxHeight) {{
@@ -444,19 +445,13 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
 """
 
             logger.debug("执行自定义分析脚本")
-            analysis_result = await browser.evaluate_js(
-                page_id=page_id,
-                js_code=full_script
-            )
+            analysis_result = await browser.evaluate(page_id, full_script)
 
-            if hasattr(analysis_result, 'error'):
-                raise Exception(f"执行分析失败: {analysis_result.error}")
-
-            if not hasattr(analysis_result, 'result'):
+            if analysis_result is None:
                 raise Exception("分析结果为空")
 
             # 格式化用户分析结果
-            formatted_result = self._format_js_result(analysis_result.result)
+            formatted_result = self._format_js_result(analysis_result)
 
             # 自动检测字号问题
             font_warning = await self._check_font_sizes(browser, page_id)
@@ -485,11 +480,10 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
             Optional[Dict]: Complete config dict, or None if parsing fails
         """
         try:
-            if not magic_project_js_path.exists():
+            if not await async_exists(magic_project_js_path):
                 return None
 
-            async with aiofiles.open(magic_project_js_path, 'r', encoding='utf-8') as f:
-                js_content = await f.read()
+            js_content = await async_read_text(magic_project_js_path)
 
             # Strategy 1: Try to parse standard format - window.magicProjectConfig
             standard_patterns = [
@@ -604,7 +598,7 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
             magic_project_js_path = project_dir / "magic.project.js"
 
             # If magic.project.js doesn't exist, skip update
-            if not magic_project_js_path.exists():
+            if not await async_exists(magic_project_js_path):
                 logger.debug(f"magic.project.js not found at {magic_project_js_path}, skipping update")
                 return "⚠️ 未找到 magic.project.js，无法自动更新 slides 数组"
 
@@ -640,8 +634,7 @@ window.magicProjectConfigure(window.magicProjectConfig);
 """
 
             # Write updated content
-            async with aiofiles.open(magic_project_js_path, 'w', encoding='utf-8') as f:
-                await f.write(new_content)
+            await async_write_text(magic_project_js_path, new_content)
 
             logger.info(f"Successfully updated slides array in magic.project.js: inserted '{file_name}' at position {insert_position}")
             

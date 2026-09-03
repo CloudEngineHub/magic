@@ -1,21 +1,15 @@
-import { memo, useMemo, Suspense, lazy } from "react"
+import { memo, useMemo, Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import type { NodeProps } from "../../../types"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ChevronUp, ChevronRight } from "lucide-react"
 import { defaultOpen } from "../../config"
 import { useToggleWithScrollPreserve } from "../../../shared/hooks/useToggleWithScrollPreserve"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
 import { customTheme, syntaxCustomStyle, syntaxLineNumberStyle } from "./syntaxConfig"
-
-const loadSyntaxHighlighter = () =>
-	import("react-syntax-highlighter").then((module) => ({
-		default: module.Prism,
-	}))
-
-const SyntaxHighlighter = lazy(loadSyntaxHighlighter)
+import { McpSyntaxHighlighter as SyntaxHighlighter } from "@/infrastructure/vendors/react-syntax-highlighter/mcp"
 
 interface MCPToolResult {
 	name: string
@@ -33,7 +27,7 @@ const mcpToggleButton = cn(
 
 function MCPInitNode(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const plugins = (tool?.detail?.data?.server_results || []) as Array<MCPToolResult>
 
@@ -76,7 +70,11 @@ function MCPInitNode(props: NodeProps) {
 							</div>
 						)}
 					</div>
-					<div className={cn(mcpToggleButton, "mr-1.5")} onClick={toggle} data-testid="toggle">
+					<div
+						className={cn(mcpToggleButton, "mr-1.5")}
+						onClick={toggle}
+						data-testid="toggle"
+					>
 						{open ? (
 							<ChevronUp
 								size={16}

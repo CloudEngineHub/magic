@@ -2,7 +2,7 @@ import { Flex, theme } from "antd"
 import { observer } from "mobx-react-lite"
 import GlobalServiceStatus from "@/layouts/BaseLayout/components/Header/components/GlobalServiceStatus"
 import GlobalVersionStatus from "@/layouts/BaseLayout/components/Header/components/GlobalVersionStatus"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import HeaderExtraSlot from "./HeaderExtraSlot"
 import WorkspaceSwitcher from "./WorkspaceSwitcher"
 

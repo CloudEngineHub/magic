@@ -5,7 +5,7 @@
 /**
  * 追踪平台类型
  */
-export type ProviderType = "Volcengine" | "Aliyun"
+export type ProviderType = "Volcengine" | "Aliyun" | "DataFlux"
 
 /**
  * 日志级别
@@ -84,6 +84,28 @@ export interface IErrorInfo {
 	extra?: Record<string, any>
 }
 
+export const ErrorCaptureSource = {
+	MANUAL: "manual",
+	GLOBAL: "global",
+} as const
+
+export type ErrorCaptureSource = (typeof ErrorCaptureSource)[keyof typeof ErrorCaptureSource]
+
+/** 应用 Logger 与具体 APM Provider 之间的内部异常协议。 */
+export interface ProviderErrorInput {
+	kind: "provider-error-input"
+	value: unknown
+	fallbackMessage: string
+	attributes: {
+		namespace: string
+		eventId: string
+		release: string
+		captureSource: ErrorCaptureSource
+		eventKey?: string
+		errorKind?: string
+	}
+}
+
 /**
  * Provider 基类接口
  */
@@ -96,8 +118,10 @@ export interface IProvider {
 	stop(): void
 	/** 设置实例信息（应用版本、用户ID、设备ID） */
 	setConfig(config: Record<string, string | null | undefined>): void
+	/** 设置用户信息（Provider 可选能力） */
+	setUser?(user: IUserInfo): void
 	/** 异常上报 */
-	error(...error: any[]): void
+	error(...error: unknown[]): void
 	/** 自定义上报方法 */
 	report(event: ICustomEvent): void
 	// /** 捕获错误 */
@@ -131,13 +155,15 @@ export interface ILogger {
 	/** 停止 */
 	stop(): void
 	/** 异常上报 */
-	error(...error: any[]): void
+	error(...error: unknown[]): void
 	/** 上报埋点方法 */
 	report(value: any): void
 	/** 追踪事件 */
 	track(event: ICustomEvent): void
 	/** 设置配置 */
 	setConfig(config: Record<string, string>): void
+	/** 设置用户信息 */
+	setUser(user: IUserInfo): void
 	/** 获取当前 Provider */
 	getProvider(): IProvider | null
 	// /** 设置用户信息 */

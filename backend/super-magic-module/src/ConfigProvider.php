@@ -9,7 +9,9 @@ namespace Dtyq\SuperMagic;
 
 use App\Domain\Chat\DTO\Message\ChatMessage\SuperAgentMessageInterface;
 use App\Domain\Chat\Event\Agent\AgentExecuteInterface;
+use Dtyq\SuperMagic\Application\Contract\AllowAllPromptContentValidator;
 use Dtyq\SuperMagic\Application\Contract\DefaultUserAiWatermarkPolicy;
+use Dtyq\SuperMagic\Application\Contract\PromptContentValidatorInterface;
 use Dtyq\SuperMagic\Application\Contract\UserAiWatermarkPolicyInterface;
 use Dtyq\SuperMagic\Application\RecycleBin\Service\FileRecycleBinSubscriber;
 use Dtyq\SuperMagic\Application\Share\Adapter\SingleFileShareableResource;
@@ -74,6 +76,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\BatchDownloadPackReposit
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MessageQueueRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MessageScheduleLogRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MessageScheduleRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectForkRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberSettingRepositoryInterface;
@@ -94,6 +97,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\AudioProjectReposit
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\MessageQueueRepository;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\MessageScheduleLogRepository;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\MessageScheduleRepository;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\MicroAppRepository;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\ProjectForkRepository;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\ProjectMemberRepository;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\ProjectMemberSettingRepository;
@@ -171,6 +175,7 @@ class ConfigProvider
                 SuperAgentMessageInterface::class => SuperAgentMessage::class,
             ],
             'dependencies' => [
+                PromptContentValidatorInterface::class => AllowAllPromptContentValidator::class,
                 UserAiWatermarkPolicyInterface::class => DefaultUserAiWatermarkPolicy::class,
                 // 添加接口到实现类的映射
                 TaskFileRepositoryInterface::class => TaskFileRepository::class,
@@ -243,6 +248,7 @@ class ConfigProvider
                 // audio marker 音频标记
                 AudioMarkerRepositoryInterface::class => AudioMarkerRepository::class,
                 AudioProjectRepositoryInterface::class => AudioProjectRepository::class,
+                MicroAppRepositoryInterface::class => MicroAppRepository::class,
 
                 // Skill 相关 Repository
                 SkillRepositoryInterface::class => SkillRepository::class,

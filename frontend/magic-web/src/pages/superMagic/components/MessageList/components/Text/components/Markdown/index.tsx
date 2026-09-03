@@ -16,7 +16,7 @@ import { FilePath } from "./parser/FilePath"
 import { Image } from "./parser/Image"
 import { MarkdownLink, type MarkdownLinkProps } from "./parser/MarkdownLink"
 import { normalizeInlineStyle } from "./normalizeInlineStyle"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MarkdownComponentProps } from "./types"
 import {
 	resolveMarkdownRenderSource,
@@ -24,6 +24,8 @@ import {
 } from "./streamingMarkdown"
 import styles from "./index.module.css"
 import { CitationBadge } from "../../../Citations"
+import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
+import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
 	/^(?:(?:https?|ftps?|mailto|tel|callto|sms|cid|xmpp|matrix|oa|oa-view|open-action|openaction):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i
@@ -63,6 +65,16 @@ function isCodeLanguage(className: string | undefined, language: string): boolea
 	)
 }
 
+function resolveCodeLanguage(className: string | undefined): string | undefined {
+	if (!className) return undefined
+
+	const languageToken = className
+		.split(/\s+/)
+		.find((token) => token.startsWith("language-") || token.startsWith("lang-"))
+
+	return languageToken?.replace(/^(?:language-|lang-)/, "") || undefined
+}
+
 function resolveQRCodeValue(props: {
 	codeBlockInfo: ReturnType<typeof extractCodeBlockDomInfoFromDomNode>
 	isStreaming: boolean
@@ -80,6 +92,21 @@ function resolveQRCodeValue(props: {
 
 function escapeHtmlLiteral(raw: string) {
 	return raw.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+function getHtmlPreviewViewStateKey(domNode: unknown, code: string) {
+	const positionOffset = (domNode as { position?: { start?: { offset?: unknown } } })?.position
+		?.start?.offset
+	if (typeof positionOffset === "number") return `html-preview-offset-${positionOffset}`
+
+	// Position is normally present on the markdown AST. This compact fallback avoids retaining the
+	// full HTML string in the view-state key for compatibility inputs without source positions.
+	let hash = 2166136261
+	for (let index = 0; index < code.length; index += 1) {
+		hash ^= code.charCodeAt(index)
+		hash = Math.imul(hash, 16777619)
+	}
+	return `html-preview-content-${hash >>> 0}`
 }
 
 // 只转义 fence 外的裸 HTML，避免 XMarkdown 把普通文本里的 HTML 片段当成原生节点直接渲染。
@@ -168,6 +195,8 @@ export function useMarkdownComponent({
 	citations,
 	highlightedCitation,
 	onCitationClick,
+	isCodeWrapped,
+	onToggleCodeWrap,
 }: {
 	streamingScrollStateRef: MutableRefObject<HtmlCodeBlockPreviewStreamingScrollState>
 	isStreaming: boolean
@@ -175,6 +204,8 @@ export function useMarkdownComponent({
 	citations?: CitationSource[]
 	highlightedCitation?: number | null
 	onCitationClick?: (index: number | null) => void
+	isCodeWrapped: boolean
+	onToggleCodeWrap: () => void
 }): UseMarkdownComponentResult {
 	// 用 ref 持有随每个 chunk 变化的 citation 相关值，避免 components 对象随
 	// 每个 chunk 重建——否则 components.pre 引用变化会导致 XMarkdown 重新挂载
@@ -216,7 +247,7 @@ export function useMarkdownComponent({
 					)
 				}
 
-				if (!codeBlockInfo || !previewCode) {
+				if (!codeBlockInfo) {
 					return (
 						<pre
 							className={typeof preClassName === "string" ? preClassName : undefined}
@@ -228,10 +259,39 @@ export function useMarkdownComponent({
 					)
 				}
 
+				if (!previewCode) {
+					const codeBlockClassName = cn(
+						styles.codeBlockPre,
+						isCodeWrapped ? styles.codeBlockPreWrapped : styles.codeBlockPreUnwrapped,
+					)
+
+					return (
+						<div className={styles.codeBlock}>
+							<MarkdownCodeBlockToolbar
+								language={resolveCodeLanguage(codeBlockInfo.className)}
+								isWrapped={isCodeWrapped}
+								onToggleWrap={onToggleCodeWrap}
+								code={codeBlockInfo.code}
+							/>
+							<pre
+								className={cn(
+									typeof preClassName === "string" ? preClassName : undefined,
+									codeBlockClassName,
+								)}
+								style={normalizedStyle}
+								title={typeof title === "string" ? title : undefined}
+							>
+								{children}
+							</pre>
+						</div>
+					)
+				}
+
 				const isCodeBlockStreaming = isStreaming || codeBlockInfo.streamStatus === "loading"
 
 				return (
 					<HtmlCodeBlockPreview
+						viewStateKey={getHtmlPreviewViewStateKey(domNode, codeBlockInfo.code)}
 						className={typeof preClassName === "string" ? preClassName : undefined}
 						style={normalizedStyle}
 						title={typeof title === "string" ? title : undefined}
@@ -241,12 +301,14 @@ export function useMarkdownComponent({
 						previewCode={previewCode}
 						fullCode={isCodeBlockStreaming ? undefined : previewCode}
 						streamingScrollStateRef={streamingScrollStateRef}
+						isCodeWrapped={isCodeWrapped}
+						onToggleCodeWrap={onToggleCodeWrap}
 					/>
 				)
 			},
 			a: MarkdownLink,
 			img(props: XMarkdownComponentProps) {
-				return <Image alt={props.alt} src={props.src} />
+				return <Image alt={props.alt} src={props.src} title={props.title} />
 			},
 			"file-path"(props: XMarkdownComponentProps) {
 				return <FilePath path={props.path} />
@@ -276,8 +338,13 @@ export function useMarkdownComponent({
 		}),
 		// citation 相关值通过 ref 读取，不加入 deps，保证 streaming 期间 components
 		// 对象引用稳定，防止 HtmlCodeBlockPreview 因 pre 函数引用变化而重新挂载。
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[enableHtmlCodeBlockPreview, isStreaming, streamingScrollStateRef],
+		[
+			enableHtmlCodeBlockPreview,
+			isCodeWrapped,
+			isStreaming,
+			onToggleCodeWrap,
+			streamingScrollStateRef,
+		],
 	)
 }
 
@@ -324,6 +391,7 @@ function MarkdownComponent({
 	const streamingScrollStateRef = useRef<HtmlCodeBlockPreviewStreamingScrollState>({
 		hasUserInteracted: false,
 	})
+	const { isWrapped: isCodeWrapped, toggle: onToggleCodeWrap } = useCodeBlockWrapPreference()
 
 	const components = useMarkdownComponent({
 		enableHtmlCodeBlockPreview,
@@ -332,6 +400,8 @@ function MarkdownComponent({
 		citations,
 		highlightedCitation,
 		onCitationClick,
+		isCodeWrapped,
+		onToggleCodeWrap,
 	})
 
 	return (

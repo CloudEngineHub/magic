@@ -51,7 +51,16 @@ export async function drawMedia(
 		case "video":
 		case "audio":
 			// cover: HTML poster, or the first-frame data URL written by materializeVideoCoverNodes (possibly converted here from transferred bytes)
-			if (cover && mediaType === "video" && cover.startsWith("data:")) options.cover = cover
+			if (cover && mediaType === "video") {
+				try {
+					options.cover = await materializeCover(cover, signal)
+				} catch (error) {
+					throwIfAborted(signal)
+					log(LogLevel.L3, "Failed to materialize video cover", {
+						error: String(error),
+					})
+				}
+			}
 			if (extn) options.extn = extn
 
 			if (data) {
@@ -91,6 +100,24 @@ async function fetchAsDataUrl(url: string, signal?: AbortSignal): Promise<string
 	if (!response.ok) throw new Error(`Failed to fetch media: ${url} (${response.status})`)
 
 	const mimeType = response.headers.get("content-type") ?? "application/octet-stream"
+	return bytesToDataUrl(buffer, mimeType)
+}
+
+async function materializeCover(cover: string, signal?: AbortSignal): Promise<string> {
+	if (cover.startsWith("data:")) {
+		if (!/^data:image\/[\w.+-]+;base64,/i.test(cover)) {
+			throw new Error("Video cover data URL must contain a base64 image")
+		}
+		return cover
+	}
+
+	const { response, buffer } = await fetchArrayBufferWithLimit(cover, signal)
+	if (!response.ok) throw new Error(`Failed to fetch video cover: ${response.status}`)
+
+	const mimeType = (response.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase()
+	if (!mimeType.startsWith("image/")) {
+		throw new Error(`Video cover response is not an image: ${mimeType || "unknown"}`)
+	}
 	return bytesToDataUrl(buffer, mimeType)
 }
 

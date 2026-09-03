@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "type": "micro-app",
+  "id": "document-regulation-workbench",
+  "name": "文电法规科 工作台",
+  "entry": "index.html",
+  "icon": "icon.svg",
+  "anonymous": false,
+  "files": {
+    "appState": "data/app-state.json",
+    "settings": "data/settings.json"
+  },
+  "watch": [
+    "data/app-state.json"
+  ],
+  "permissions": {}
+}

@@ -1,5 +1,5 @@
-import { memo, useState, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { memo, useEffect, useRef } from "react"
+import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
 import { defaultOpen } from "../ToolCall/config"
@@ -12,25 +12,34 @@ import { reaction } from "mobx"
 import { throttle } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { ReasoningPanel } from "../shared/ReasoningPanel"
+import {
+	MessageViewStateScopeProvider,
+	useMessageViewState,
+} from "../../../view-state/MessageViewStateContext"
 
 export default memo(function AgentThink(props: NodeProps) {
 	const { selectedTopic } = props
 	const { t } = useTranslation("super")
 
-	const [open, setOpen] = useState(defaultOpen)
+	const [open, setOpen] = useMessageViewState("agent-think-expanded", defaultOpen)
+	const [hasUserControlledOpen, setHasUserControlledOpen] = useMessageViewState(
+		"agent-think-user-controlled",
+		false,
+	)
 	const scrollAreaRef = useRef<HTMLDivElement>(null)
 	const viewportRef = useRef<HTMLElement | null>(null)
 	const hasUserInteractedRef = useRef(false)
 	const isProgrammaticScrollRef = useRef(false)
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| Record<string, unknown>
 		| undefined
 	const nodeEvent = typeof node?.event === "string" ? node.event : ""
 
 	useEffect(() => {
+		if (hasUserControlledOpen) return
 		setOpen(nodeEvent === "before_agent_think")
-	}, [nodeEvent])
+	}, [hasUserControlledOpen, nodeEvent, setOpen])
 
 	useEffect(() => {
 		if (!open) return
@@ -137,7 +146,10 @@ export default memo(function AgentThink(props: NodeProps) {
 		<ReasoningPanel
 			open={open}
 			title={isThinking ? t("agentThink.thinking") : t("agentThink.thinkDone")}
-			onToggle={() => setOpen((o) => !o)}
+			onToggle={() => {
+				setHasUserControlledOpen(true)
+				setOpen((o) => !o)
+			}}
 		>
 			<div
 				className={cn(
@@ -157,22 +169,27 @@ export default memo(function AgentThink(props: NodeProps) {
 				>
 					<div className="w-full">
 						{props?.node?.childMessages?.map((o: SuperMagicMessageItem) => (
-							<Node
-								role={o?.role || "user"}
+							<MessageViewStateScopeProvider
 								key={getMessageNodeKey(o)}
-								node={o}
-								classNames={{
-									card: "!p-0 after:!hidden after:!border-0",
-									markdown: "text-muted-foreground text-xs font-normal leading-4",
-								}}
-								isFirst={false}
-								checkIsLastMessage={() => false}
-								selectedTopic={null}
-								onSelectDetail={() => undefined}
-								isSelected={false}
-								onFileClick={() => undefined}
-								isShare={false}
-							/>
+								messageKey={getMessageNodeKey(o)}
+							>
+								<Node
+									role={o?.role || "user"}
+									node={o}
+									classNames={{
+										card: "!p-0 after:!hidden after:!border-0",
+										markdown:
+											"text-muted-foreground text-xs font-normal leading-4",
+									}}
+									isFirst={false}
+									checkIsLastMessage={() => false}
+									selectedTopic={null}
+									onSelectDetail={() => undefined}
+									isSelected={false}
+									onFileClick={() => undefined}
+									isShare={false}
+								/>
+							</MessageViewStateScopeProvider>
 						))}
 					</div>
 					<ScrollBar orientation="vertical" />

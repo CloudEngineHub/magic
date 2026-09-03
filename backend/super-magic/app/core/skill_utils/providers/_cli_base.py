@@ -16,7 +16,6 @@ from app.core.skill_utils.providers.base import (
     FetchedSkill,
     SkillCandidate,
     SkillProvider,
-    SkillProviderId,
 )
 from app.utils.async_file_utils import async_copytree
 
@@ -24,10 +23,30 @@ logger = get_logger(__name__)
 
 # CLI 能力探测结果缓存（进程级，避免重复探测）
 _detect_cache: dict[str, bool] = {}
+_PROCESS_TERMINATION_GRACE_SECONDS = 2.0
 
 # provider unavailable 时统一使用此异常
 class ProviderUnavailableError(RuntimeError):
     pass
+
+
+async def _terminate_process(process: asyncio.subprocess.Process | None) -> None:
+    """终止 CLI 子进程并等待退出，避免取消搜索后遗留后台进程。"""
+
+    if process is None or process.returncode is not None:
+        return
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        return
+    try:
+        await asyncio.wait_for(
+            process.wait(),
+            timeout=_PROCESS_TERMINATION_GRACE_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
 
 
 class CliProvider(SkillProvider):
@@ -83,8 +102,9 @@ class CliProvider(SkillProvider):
         """运行 CLI 并解析 JSON 输出；失败时抛异常"""
         cmd = self.cli + list(args) + [self.json_flag]
         logger.debug(f"[{self.id.value}] 执行: {' '.join(cmd)}")
+        process: asyncio.subprocess.Process | None = None
         try:
-            proc = await asyncio.wait_for(
+            process = await asyncio.wait_for(
                 asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
@@ -92,15 +112,22 @@ class CliProvider(SkillProvider):
                 ),
                 timeout=5,  # 进程创建超时
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            raise RuntimeError(f"[{self.id.value}] 命令超时: {' '.join(cmd)}")
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except asyncio.CancelledError:
+            await _terminate_process(process)
+            raise
+        except asyncio.TimeoutError as e:
+            await _terminate_process(process)
+            raise TimeoutError(f"[{self.id.value}] 命令超时: {' '.join(cmd)}") from e
         except Exception as e:
-            raise RuntimeError(f"[{self.id.value}] 命令执行失败: {e}")
+            await _terminate_process(process)
+            raise RuntimeError(f"[{self.id.value}] 命令执行失败: {e}") from e
 
-        if proc.returncode != 0:
+        if process is None:
+            raise RuntimeError(f"[{self.id.value}] CLI 进程未创建")
+        if process.returncode != 0:
             raise RuntimeError(
-                f"[{self.id.value}] CLI 返回非零退出码 {proc.returncode}: "
+                f"[{self.id.value}] CLI 返回非零退出码 {process.returncode}: "
                 f"{stderr.decode(errors='replace')[:500]}"
             )
 
@@ -116,12 +143,8 @@ class CliProvider(SkillProvider):
 
     async def search(self, keyword: str, limit: int | None = 10) -> list[SkillCandidate]:
         self._ensure_enabled()
-        try:
-            raw = await self._run_json(*self.search_subcmd, keyword)
-            return self._parse_search(raw, limit)
-        except Exception as e:
-            logger.warning(f"[{self.id.value}] search 失败: {e}")
-            return []
+        raw = await self._run_json(*self.search_subcmd, keyword)
+        return self._parse_search(raw, limit)
 
     async def fetch(
         self,

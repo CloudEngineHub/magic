@@ -24,7 +24,7 @@ const NAME_LABEL_CONFIG = {
  * 职责：
  * 1. 在独立的 Layer 上渲染所有元素的名称标签
  * 2. 监听元素变化，同步更新名称标签
- * 3. 管理名称标签的可见性（Frame 一直显示，Image 只在 hover 时显示）
+ * 3. 管理名称标签的可见性（Frame/Audio 一直显示，Image 只在 hover 时显示）
  * 4. 处理名称标签的位置和缩放
  */
 export class NameLabelManager extends BaseLabelManager {
@@ -43,15 +43,23 @@ export class NameLabelManager extends BaseLabelManager {
 				offsetLeft: NAME_LABEL_CONFIG.OFFSET_LEFT,
 			},
 			visibilityConfig: {
-				// 只有 Frame、Image 和 Video 元素显示名称标签
+				// 只有业务容器与媒体元素显示名称标签
 				elementTypes: new Set([
 					ElementTypeEnum.Frame,
 					ElementTypeEnum.Image,
 					ElementTypeEnum.Video,
+					ElementTypeEnum.Audio,
+					ElementTypeEnum.Storyboard,
+					ElementTypeEnum.VideoEdit,
 				]),
-				// Frame 元素一直显示
-				alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
-				// Image / Video 元素在选中或 hover 时显示
+				// Frame、Audio 和函数型分镜节点始终显示名称。
+				alwaysVisibleTypes: new Set([
+					ElementTypeEnum.Frame,
+					ElementTypeEnum.Audio,
+					ElementTypeEnum.Storyboard,
+					ElementTypeEnum.VideoEdit,
+				]),
+				// 图片和视频在选中或 hover 时显示
 				hoverOrSelectTypes: new Set([ElementTypeEnum.Image, ElementTypeEnum.Video]),
 			},
 		}

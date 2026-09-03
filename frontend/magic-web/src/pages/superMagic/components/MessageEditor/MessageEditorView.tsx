@@ -1,11 +1,11 @@
-import { EditorContent, type Editor } from "@tiptap/react"
+import { EditorContent, type Editor } from "@/infrastructure/editors/tiptap/react"
 import FlexBox from "@/components/base/FlexBox"
 import DragOverlay from "./components/DragOverlay"
 import { memo } from "react"
 import type { RefObject, DragEvent, ClipboardEvent, ReactNode } from "react"
 import type { MessageEditorSize } from "./types"
 import TabIcon from "./assets/tab.svg"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useEditorPortalSync } from "./hooks/useEditorPortalSync"
 import {
 	messageEditorContainerVariants,
@@ -44,6 +44,7 @@ interface MessageEditorViewProps {
 	outsideBottomContent?: ReactNode
 	outsideTopContent?: ReactNode
 	uploadModal?: ReactNode
+	promptCarouselNode?: ReactNode
 	taskDataNode?: ReactNode
 	messageQueueNode?: ReactNode
 	showAiCompletion: boolean
@@ -67,6 +68,7 @@ function MessageEditorView({
 	outsideBottomContent,
 	outsideTopContent,
 	uploadModal,
+	promptCarouselNode,
 	showAiCompletion,
 }: MessageEditorViewProps) {
 	const isMobile = useIsMobile()
@@ -123,6 +125,7 @@ function MessageEditorView({
 								data-testid="super-message-editor-content"
 								id={SummaryGuideDOMId.MessageEditorContent}
 							/>
+							{promptCarouselNode}
 						</div>
 						{showAiCompletion && <AiCompletionTip icon={TabIcon as string} />}
 						<div

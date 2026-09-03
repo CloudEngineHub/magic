@@ -1,13 +1,13 @@
 ## Watermark
 
-当前水印能力统一从 `src/lib/watermark/index.ts` 导出：
+当前水印能力统一从 `src/utils/watermark/index.ts` 导出：
 
 ```ts
 import {
   WATERMARK_CONFIG,
   blendWatermarkColors,
   watermarkService,
-} from '@/lib/watermark'
+} from '@/utils/watermark'
 ```
 
 ### 生成配置
@@ -88,7 +88,7 @@ watermarkService.destroy()
 三路对每个像素各算一条通道残差，**取最大值** 合并。
 
 ```ts
-import { blendWatermarkColors } from '@/lib/watermark'
+import { blendWatermarkColors } from '@/utils/watermark'
 
 const textColor = 'rgba(0, 0, 0, 0.02)'
 const backgroundColor = 'rgba(255, 255, 255, 0.03)'

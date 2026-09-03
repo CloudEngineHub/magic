@@ -26,7 +26,7 @@ return [
     'task' => [
         'tool_message' => [
             'object_storage_enabled' => \Hyperf\Support\env('TOOL_MESSAGE_OBJECT_STORAGE_ENABLED', true),
-            'min_content_length' => \Hyperf\Support\env('TOOL_MESSAGE_MIN_CONTENT_LENGTH', 200),
+            'min_content_length' => \Hyperf\Support\env('TOOL_MESSAGE_MIN_CONTENT_LENGTH', 1024),
         ],
         'check_task_crontab' => [
             'enabled' => \Hyperf\Support\env('CHECK_TASK_CRONTAB_ENABLED', true),
@@ -35,6 +35,15 @@ return [
     'message' => [
         'process_mode' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_PROCESS_MODE', 'direct'), // direct OR queue
         'enable_compensate' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_ENABLE_COMPENSATE', false),
+    ],
+    'topic' => [
+        'config_fixed' => (bool) \Hyperf\Support\env('SUPER_MAGIC_TOPIC_CONFIG_FIXED', true),
+    ],
+    'visible_ai_watermark' => [
+        'enabled' => filter_var(
+            \Hyperf\Support\env('SUPER_MAGIC_VISIBLE_AI_WATERMARK_ENABLED', false),
+            FILTER_VALIDATE_BOOLEAN
+        ),
     ],
     'user_message_queue' => [
         'enabled' => \Hyperf\Support\env('USER_MESSAGE_QUEUE_ENABLED', true),

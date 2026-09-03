@@ -56,7 +56,9 @@ class ModelConfigManager:
     async def initialize(self, providers: List[ModelProvider]) -> None:
         """从 providers 列表加载全部模型配置
 
-        按 priority 从低到高依次加载，高优先级的同 model_id 条目覆盖低优先级。
+        按 provider priority 从低到高依次加载，具体冲突以 ModelConfig.priority 为准。
+        例如 magic-service(priority=100) 与 config.yaml(priority=2) 出现同 model_id 时，
+        保留 config.yaml 静态入口参与加载，但最终由 magic-service 动态模型覆盖。
 
         Args:
             providers: 要加载的服务商列表
@@ -66,7 +68,7 @@ class ModelConfigManager:
             try:
                 models = await provider.load()
                 for mc in models:
-                    merged[mc.model_id] = mc
+                    self._merge_model_config(merged, mc)
                 self._mark_loaded(provider)
                 logger.info(
                     f"Provider '{provider.provider_type}' loaded {len(models)} models"
@@ -82,8 +84,10 @@ class ModelConfigManager:
     async def refresh_provider(self, provider: ModelProvider) -> None:
         """重新加载单个服务商并将结果合并进当前注册表
 
-        高优先级的同 model_id 会覆盖已有的低优先级条目。
-        如果当前注册表已有相同 model_id 但优先级更高，则不覆盖。
+        高优先级的同 model_id 会覆盖已有的低优先级模型条目。
+        如果当前注册表已有相同 model_id 但 ModelConfig.priority 更高，则不覆盖。
+        这保证了本地 config.yaml 可以保留同 host 静态模型，而 magic-service 刷新成功后
+        仍然以动态模型配置为准。
 
         Args:
             provider: 要重新加载的服务商实例
@@ -96,9 +100,7 @@ class ModelConfigManager:
 
         updated = 0
         for mc in models:
-            existing = self._models.get(mc.model_id)
-            if existing is None or provider.priority >= self._get_source_priority(existing.provider_source):
-                self._models[mc.model_id] = mc
+            if self._merge_model_config(self._models, mc):
                 updated += 1
 
         self._mark_loaded(provider)
@@ -195,6 +197,28 @@ class ModelConfigManager:
     # 内部方法
     # ------------------------------------------------------------------
 
+    def _merge_model_config(self, registry: Dict[str, ModelConfig], model_config: ModelConfig) -> bool:
+        """按 ModelConfig.priority 合并单个模型配置。
+
+        Args:
+            registry: 目标模型注册表
+            model_config: 待合并模型配置
+
+        Returns:
+            bool: True 表示写入或覆盖，False 表示被已有高优先级配置保留
+        """
+        existing = registry.get(model_config.model_id)
+        if existing is not None and existing.priority > model_config.priority:
+            logger.debug(
+                "Skip lower priority model config: "
+                f"model_id={model_config.model_id}, "
+                f"incoming={model_config.provider_id}:{model_config.priority}, "
+                f"existing={existing.provider_id}:{existing.priority}"
+            )
+            return False
+        registry[model_config.model_id] = model_config
+        return True
+
     def _mark_loaded(self, provider: ModelProvider) -> None:
         """标记 provider 已成功加载，更新注册表和时间戳"""
         provider_type = provider.provider_type
@@ -208,7 +232,7 @@ class ModelConfigManager:
         _priority_map = {
             "openai": 1,
             "config.yaml": 2,
-            "magic-service": 3,
+            "magic-service": 100,
         }
         return _priority_map.get(provider_source, 0)
 
@@ -216,11 +240,70 @@ class ModelConfigManager:
         """将当前全部模型的 pricing 信息同步到 LLMFactory.pricing"""
         try:
             from agentlang.llms.factory import LLMFactory
+            models_config = {}
+            pricing_model_count = 0
+            pricing_alias_count = 0
             for mc in self._models.values():
-                if mc.pricing:
-                    LLMFactory.pricing.add_model_pricing(mc.model_id, mc.pricing)  # type: ignore[arg-type]
+                if not mc.pricing:
+                    continue
+                pricing_model_count += 1
+                models_config[mc.model_id] = {"pricing": mc.pricing}
+                # 同一个模型在系统里可能有多个名字。模型配置里保存的是业务入口名，
+                # 但请求上游和统计成本时未必继续使用这个名字。
+                #
+                # 例子：
+                #   model_id = "auto"                         # 业务入口，用户/Agent 选择的是它
+                #   name = "deepseek-v4-flash"                 # 真正发给 OpenAI 兼容接口的模型名
+                #   resolved_model_id = "deepseek-v4-flash-x"  # 动态路由后实际落地的模型名
+                #   metadata.api_model = "deepseek-v4-flash"   # config.yaml provider 里的 api_model
+                #
+                # 如果 pricing 只注册在 "auto" 上，而成本统计拿 "deepseek-v4-flash" 去查，
+                # 就会查不到这份价格，最后退回 default pricing。aliases 的作用就是把这些
+                # “同一个模型的不同名字”都挂到同一份 pricing 上，让以下查询都命中同一价格：
+                #   auto -> 价格 A
+                #   deepseek-v4-flash -> 价格 A
+                #   deepseek-v4-flash-x -> 价格 A
+                #
+                # 注意：这里不是新增模型，也不是改变实际调用模型，只是补齐成本统计的查价入口。
+                aliases = {
+                    mc.name,
+                    mc.resolved_model_id,
+                    mc.metadata.get("api_model") if isinstance(mc.metadata, dict) else None,
+                }
+                for alias in aliases:
+                    if isinstance(alias, str) and alias.strip():
+                        alias_id = alias.strip()
+                        if alias_id not in models_config:
+                            models_config[alias_id] = {"pricing": mc.pricing}
+                            pricing_alias_count += 1
+            LLMFactory.pricing.replace_pricing_from_config(models_config)
+            if self._should_warn_missing_pricing(pricing_model_count):
+                logger.warning(
+                    f"已加载 {len(self._models)} 个模型，但没有任何 pricing 配置，将继续使用默认价格"
+                )
+            elif pricing_model_count > 0:
+                logger.debug(
+                    "模型价格配置已同步: "
+                    f"模型价格={pricing_model_count}, alias={pricing_alias_count}, "
+                    f"总入口={len(models_config)}"
+                )
         except Exception as e:
             logger.warning(f"Pricing sync failed: {e}")
+
+    def _should_warn_missing_pricing(self, pricing_model_count: int) -> bool:
+        """判断 0 pricing 是否值得报警。
+
+        config.yaml 是启动期本地兜底 provider，通常只承载可调用入口和上下文窗口，
+        不一定承载线上定价。只有更高优先级 provider（例如 magic-service）加载完成后，
+        仍然没有任何 pricing，才说明成本统计会长期退回默认价格，需要 warning。
+        """
+        if not self._models or pricing_model_count > 0:
+            return False
+        config_priority = self._get_source_priority("config.yaml")
+        return any(
+            self._get_source_priority(provider_type) > config_priority
+            for provider_type in self._loaded_provider_types
+        )
 
 
 # 全局单例

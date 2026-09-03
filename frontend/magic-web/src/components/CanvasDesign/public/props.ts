@@ -1,8 +1,9 @@
-import type { Node as TiptapNode } from "@tiptap/core"
+import type { Node as TiptapNode } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
 import type { Canvas } from "../runtime/core/Canvas"
 import type { MagicConfig } from "./magic-types"
+import type { ResolveCanvasResourceReference } from "./resource-reference"
 import type {
 	CanvasDeviceInfo,
 	CanvasDesignPluginModuleConfig,
@@ -12,6 +13,7 @@ import type {
 	Marker,
 	PaddingInsetConfig,
 } from "../runtime/document/types"
+import type { ElementDetailsProvenance } from "../runtime/document/elementDetailsProvenance"
 import type { CanvasElementNameChange } from "../runtime/core/EventEmitter"
 import type { TFunction } from "./i18n-types"
 import type {
@@ -117,6 +119,8 @@ export interface ReferenceResourcePanelLimitInfo {
 	}>
 	assetLimits?: ReferenceAssetPerTypeLimits
 	currentAssetCounts?: ReferenceAssetTypeCounts
+	/** 宿主资源解析器，用于区分工作区根路径与当前画布相对路径。 */
+	resolveResourceReference?: ResolveCanvasResourceReference
 	/** 面包屑等展示用文案前缀（如「当前项目文件」） */
 	projectFilesPathPrefix?: string
 	/**
@@ -275,40 +279,55 @@ export interface ShortcutDisplay {
 	modifiers?: ModifierAlias[]
 }
 
-/** 元素工具 */
+/** 稳定的元素工具业务身份。顶部、底部和版本工具共用这一套 ID。 */
 export const ElementToolTypeEnum = {
-	RichTextFillColor: "rich-text-fill-color", // 富文本填充颜色
-	StrokeColor: "stroke-color", // 描边颜色
-	SizeEditButton: "size-edit-button", // 编辑尺寸（Popover 内预设 + 宽高）
-	FrameCreateButton: "frame-create-button", // 创建画框按钮
-	FrameRemoveButton: "frame-remove-button", // 解除画框按钮
-	RichTextFontFamily: "rich-text-font-family", // 富文本字体簇(font-family)
-	RichTextFontStyle: "rich-text-font-style", // 富文本文字粗细(font-weight)
-	RichTextFontSize: "rich-text-font-size", // 富文本字体大小(font-size)
-	RichTextTextAlign: "rich-text-text-align", // 富文本对齐方式(align)
-	ElementAlign: "element-align", // 元素对齐
-	ElementDistribute: "element-distribute", // 元素分布
-	ShapeStyle: "shape-style", // 图形样式配置
-	DownloadButton: "download-button", // 下载按钮
-	RichTextAdvancedButton: "rich-text-advanced-button", // 富文本高级按钮
-	TextContentOptimizationButton: "text-content-optimization-button", // 文本内容优化按钮
-	ImagePromptExtractionButton: "image-prompt-extraction-button", // 图片提炼提示词按钮
-	ImageConvertHightButton: "image-convert-hight-button", // 转高清按钮
-	ImageConvertHight: "image-convert-hight", // 转高清配置
-	ImageCropButton: "image-crop-button", // 裁剪按钮
-	ImageCrop: "image-crop", // 裁剪模式提示
-	ImageExtendButton: "image-extend-button", // 扩展按钮
-	ImageRemoveBackgroundButton: "image-remove-background-button", // 去背景按钮
-	ImageEraserButton: "image-eraser-button", // 橡皮工具按钮
-	VideoOriginalSizeButton: "video-original-size-button", // 视频原始尺寸按钮
+	ElementResize: "element.resize",
+	ElementAlign: "element.align",
+	ElementDistribute: "element.distribute",
+
+	FrameCreate: "frame.create",
+	FrameRemove: "frame.remove",
+	FrameDownload: "frame.download",
+	FrameStoryboardVideoBatch: "frame.storyboard-video-batch",
+
+	TextFillColor: "text.fill-color",
+	TextFontFamily: "text.font-family",
+	TextFontStyle: "text.font-style",
+	TextFontSize: "text.font-size",
+	TextAlign: "text.align",
+	TextAdvanced: "text.advanced",
+	TextDownload: "text.download",
+	TextContentOptimization: "text.content-optimization",
+
+	ShapeStrokeColor: "shape.stroke-color",
+	ShapeStyle: "shape.style",
+
+	ContentReplace: "content.replace",
+	ContentDownload: "content.download",
+	ContentCrop: "content.crop",
+	ContentExtend: "content.extend",
+	ContentRemoveBackground: "content.remove-background",
+	ContentEraser: "content.eraser",
+	ContentEnhance: "content.enhance",
+	ContentPromptExtraction: "content.prompt-extraction",
+	ContentMediaOriginalSize: "content.media-original-size",
+
+	GenerationQuickEdit: "generation.quick-edit",
+	GenerationReEdit: "generation.re-edit",
+	GenerationGenerateAgain: "generation.generate-again",
+
+	VersionPrevious: "version.previous",
+	VersionNext: "version.next",
+	VersionCount: "version.count",
+	VersionSetMain: "version.set-main",
+	VersionDelete: "version.delete",
 } as const
 
-/** 元素工具类型 */
 export type ElementToolType = (typeof ElementToolTypeEnum)[keyof typeof ElementToolTypeEnum]
 
 export interface CanvasResourceRefreshItem {
 	path: string
-	mediaType: "image" | "video"
+	mediaType: "image" | "video" | "audio"
 }
 
 export interface CanvasDesignRef {
@@ -339,12 +358,19 @@ export interface CanvasDesignRef {
 	/** 适配屏幕 */
 	fitToScreen: () => void
 	/** 热更新画布数据，远端快照可使用 replace 模式确保嵌套元素完整同步 */
-	updateData: (data: CanvasDocument, options?: { mode?: "smart" | "replace" }) => void
+	updateData: (
+		data: CanvasDocument,
+		options?: {
+			mode?: "smart" | "replace"
+			/** sidecar 解析出的运行时来源；不会写入画布 DSL */
+			elementDetailsProvenance?: ElementDetailsProvenance
+		},
+	) => void
 	/** 导出当前画布文档；用于宿主在页面卸载前保存本地草稿 */
 	exportCurrentDocument: () => CanvasDocument | null
 	/** 获取当前 Canvas 实例；用于跨 React 树的画布资源预览 */
 	getCanvasInstance: () => Canvas | null
-	/** 按资源路径强制刷新画布内已缓存的图片/视频资源 */
+	/** 按资源路径强制刷新画布内已缓存的图片/视频/音频资源 */
 	refreshResources: (resources: CanvasResourceRefreshItem[]) => Promise<void>
 	/** 如果元素不在可视区域，则移动到可视区域 */
 	ensureElementVisible: (
@@ -405,6 +431,10 @@ export interface CanvasDesignProps {
 	data?: {
 		/** 默认画布数据，用于初始化画布 */
 		defaultData?: CanvasDocument
+		/** sidecar 解析出的运行时来源；不会写入画布 DSL */
+		elementDetailsProvenance?: ElementDetailsProvenance
+		/** 当前会话成功提交新任务后同步运行时来源，供宿主在 Canvas 重建时继续使用 */
+		onElementDetailsProvenanceChange?: (provenance: ElementDetailsProvenance) => void
 		/** 画布数据变化回调 */
 		onCanvasDesignDataChange?: (
 			canvasData: CanvasDocument,
@@ -415,6 +445,8 @@ export interface CanvasDesignProps {
 			patch: CanvasDesignDataPatch,
 			meta?: CanvasDesignDataChangeMeta,
 		) => void
+		/** 当前画布选中元素变化；宿主可将选中元素映射为业务引用。 */
+		onSelectionChange?: (elementIds: string[]) => void
 		/** 项目附件树根节点列表，用于 @ / 参考资源面板（保留目录层级） */
 		projectAttachmentMentionTree?: ProjectAttachmentMentionNode[]
 		/** `@文件` 默认进入的项目目录 id，通常为当前设计项目目录 */
@@ -453,6 +485,11 @@ export interface CanvasDesignProps {
 	viewport?: {
 		/** 自动加载缓存的 viewport */
 		autoLoadCacheViewport?: boolean
+		/**
+		 * 浮层碰撞边界；Popover 等悬浮面板会以该元素作为可用区域，
+		 * 但 Portal 仍挂载在 CanvasDesign 自身的 UI 容器中。
+		 */
+		floatingBoundary?: HTMLElement | null
 	}
 	/** 翻译函数 */
 	t?: TFunction
@@ -470,6 +507,7 @@ export type CanvasDesignDataChangeSource =
 	| "canvas:clear"
 	| "element:temporary:converted"
 	| "connection:change"
+	| "document:restored"
 
 export interface CanvasDesignDataChangeMeta {
 	source: CanvasDesignDataChangeSource

@@ -35,6 +35,8 @@ export interface UseIframeFSOptions {
 	appConfig: HTMLAppConfig | null
 	/** 项目 ID，用于删除等需要 project_id 的操作 */
 	projectId?: string
+	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
+	projectContextUnavailableError?: string
 	/** 创建新文件时的上传函数，复用现有上传链路 */
 	uploadFn: UploadFn
 	/** 更新已存在文件内容的函数（不重新上传 OSS） */
@@ -86,6 +88,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		fileList,
 		appConfig,
 		projectId,
+		projectContextUnavailableError,
 		uploadFn,
 		saveContentFn,
 		mkdirFn,
@@ -99,6 +102,8 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 	} = options
 
 	const serviceRef = useRef<IframeFSService | null>(null)
+	// 调用方可能在渲染时创建新的保存函数；稳定代理避免重建 Service 丢失 watch 注册，同时调用最新实现。
+	const stableSaveContentFn = useMemoizedFn(saveContentFn)
 
 	// postToIframe 是稳定引用，内部每次通过 ref 取最新的 iframe window
 	const postToIframe = useMemoizedFn((message: object) => {
@@ -114,8 +119,9 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 			fileList,
 			appConfig,
 			projectId,
+			projectContextUnavailableError,
 			uploadFn,
-			saveContentFn,
+			saveContentFn: stableSaveContentFn,
 			mkdirFn,
 			deleteFn,
 			deleteFilesFn,
@@ -134,8 +140,9 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		entryPath,
 		appConfig,
 		projectId,
+		projectContextUnavailableError,
 		uploadFn,
-		saveContentFn,
+		stableSaveContentFn,
 		mkdirFn,
 		deleteFn,
 		deleteFilesFn,

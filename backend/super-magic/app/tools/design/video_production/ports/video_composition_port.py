@@ -1,0 +1,58 @@
+"""基础视频合成端口。"""
+
+import asyncio
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Protocol
+
+
+@dataclass(frozen=True)
+class VideoSourceInfo:
+    """描述一个待合成视频的媒体规格。"""
+
+    width: int
+    height: int
+    duration_seconds: float
+    has_audio: bool
+
+
+@dataclass(frozen=True)
+class VideoCompositionRequest:
+    """描述一次与 Canvas DSL 解耦的基础 MP4 合成请求。"""
+
+    video_paths: list[Path]
+    audio_path: Optional[Path]
+    output_path: Path
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class VideoCompositionResult:
+    """描述完成后的 MP4 文件事实。"""
+
+    output_path: Path
+    width: int
+    height: int
+    duration_seconds: float
+    has_audio: bool
+
+
+class VideoCompositionPort(Protocol):
+    """定义视频制作服务可依赖的基础合成能力。"""
+
+    async def compose(
+        self,
+        request: VideoCompositionRequest,
+        *,
+        interruption_event: Optional[asyncio.Event] = None,
+    ) -> VideoCompositionResult:
+        """顺序合并视频，并按优先级选择外部音频或源视频音频。"""
+
+    async def inspect_video(
+        self,
+        video_path: Path,
+        *,
+        interruption_event: Optional[asyncio.Event] = None,
+    ) -> VideoSourceInfo:
+        """读取视频尺寸、时长和音频流信息。"""

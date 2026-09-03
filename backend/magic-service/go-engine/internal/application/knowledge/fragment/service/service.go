@@ -137,11 +137,11 @@ type fragmentAppParseService interface {
 }
 
 type fragmentAppKnowledgeBaseBindingReader interface {
-	ListBindIDsByKnowledgeBase(
+	ListBindIDsByKnowledgeBases(
 		ctx context.Context,
-		knowledgeBaseCode string,
+		knowledgeBaseCodes []string,
 		bindType kbentity.BindingType,
-	) ([]string, error)
+	) (map[string][]string, error)
 	ListBindIDsByKnowledgeBaseInOrg(
 		ctx context.Context,
 		organizationCode string,

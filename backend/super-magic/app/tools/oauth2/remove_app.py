@@ -13,10 +13,12 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 
 
 class OAuth2RemoveAppParams(BaseToolParams):
-    """删除 OAuth2 app 的参数。"""
+    """Parameters for removing OAuth2 apps."""
 
-    app_names: list[str] = Field(..., description="""<!--zh: 要删除的 OAuth2 app_name 列表。删除单个 app 时也传单元素数组。-->
-OAuth2 app_name list to remove. Use a single-item array when removing one app.""")
+    app_names: list[str] = Field(
+        ...,
+        description="OAuth2 app names to remove. Use a one-item list for one app.",
+    )
 
     def target_app_names(self) -> list[str]:
         """返回归一化后的待删除 app_name 列表。"""
@@ -25,8 +27,7 @@ OAuth2 app_name list to remove. Use a single-item array when removing one app.""
 
 @tool(name="oauth2_remove_app")
 class OAuth2RemoveApp(BaseOAuth2Tool[OAuth2RemoveAppParams]):
-    """<!--zh: 删除一个 OAuth2 app 及其本地授权数据。-->
-    Remove an OAuth2 app registration and its local authorization data."""
+    """Remove OAuth2 app registrations and their local authorization data."""
 
     name = "oauth2_remove_app"
 

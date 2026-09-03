@@ -9,16 +9,17 @@ import {
 	isVideoFile,
 	validateFile,
 	generateElementId,
-	generateUniqueElementName,
-	calculateGridImageLayout,
 	validateCanvasFilePath,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../shared/ids"
-import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
-import type { ImageElement, VideoElement } from "../../document/types"
+import type { AudioElement, ImageElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { updateContent } from "../../document/elementContent"
+import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
+import { ElementFactory } from "../../elements/core/ElementFactory"
 import { toast } from "sonner"
+import { resolveGridPlacements } from "../../shared/placement/placementEngine"
 
 /**
  * 拖拽类型
@@ -27,11 +28,17 @@ type DragType = "Files" | "text/plain"
 
 const DEFAULT_IMAGE_DROP_DIMENSIONS = { width: 1024, height: 1024 } as const
 const DEFAULT_VIDEO_DROP_DIMENSIONS = { width: 1280, height: 720 } as const
+const DEFAULT_AUDIO_DROP_DIMENSIONS = {
+	width: AUDIO_CONFIG.DEFAULT_WIDTH,
+	height: AUDIO_CONFIG.DEFAULT_HEIGHT,
+} as const
+
+type CustomDropMediaType = "image" | "video" | "audio"
 
 interface PreparedCustomDropResource {
 	filePath: string
 	fileInfo: CustomDropFileInfo
-	isVideo: boolean
+	mediaType: CustomDropMediaType
 	dimensions: { width: number; height: number }
 }
 
@@ -363,11 +370,9 @@ export class DropOverlayManager {
 
 			try {
 				const filePaths = await getDataTransferFileInfo(e.dataTransfer)
-				// 过滤有效的图片/视频文件路径
+				// 过滤有效的图片/视频/音频文件路径
 				const validFilePaths = filePaths.filter(
-					(filePath) =>
-						validateCanvasFilePath(filePath).valid &&
-						getMediaResourcePathKind(filePath) !== "audio",
+					(filePath) => validateCanvasFilePath(filePath).valid,
 				)
 				if (validFilePaths.length > 0) {
 					await this.handleCustomDragData(validFilePaths, canvasPos, loadingToastId)
@@ -798,9 +803,8 @@ export class DropOverlayManager {
 		}
 
 		const canvasElementFiles = validFiles.filter(
-			(file) => isImageFile(file) || isVideoFile(file),
+			(file) => isImageFile(file) || isVideoFile(file) || isAudioFile(file),
 		)
-		const audioFiles = validFiles.filter((file) => isAudioFile(file))
 
 		if (canvasElementFiles.length > 0) {
 			const total = canvasElementFiles.length
@@ -826,16 +830,6 @@ export class DropOverlayManager {
 					canvasPos,
 				)
 			}
-		}
-
-		if (audioFiles.length === 0) {
-			return
-		}
-
-		try {
-			await this.canvas.canvasFileUploadManager.uploadDirect(audioFiles)
-		} catch (error) {
-			console.error("[DropOverlayManager] 上传音频文件失败:", error)
 		}
 	}
 
@@ -892,14 +886,23 @@ export class DropOverlayManager {
 		return SUPPORTED_VIDEO_EXTENSIONS.some((ext) => lowerCasePath.endsWith(ext))
 	}
 
+	private getCustomDropMediaType(filePath: string): CustomDropMediaType {
+		const mediaType = getMediaResourcePathKind(filePath)
+		if (mediaType === "audio" || mediaType === "video" || mediaType === "image") {
+			return mediaType
+		}
+		return this.isVideoFilePath(filePath) ? "video" : "image"
+	}
+
 	private async getCustomDropFileInfo(filePath: string): Promise<CustomDropFileInfo> {
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
 		if (!getFileInfo) {
 			throw new Error("File info provider is unavailable")
 		}
 
+		const mediaType = this.getCustomDropMediaType(filePath)
 		const fileInfo = await getFileInfo(filePath, {
-			useImageProcess: !this.isVideoFilePath(filePath),
+			useImageProcess: mediaType === "image",
 		})
 		if (!fileInfo || !fileInfo.src) {
 			throw new Error("File info does not contain a resource URL")
@@ -911,18 +914,25 @@ export class DropOverlayManager {
 		width: number
 		height: number
 	} {
-		return this.isVideoFilePath(filePath)
-			? { ...DEFAULT_VIDEO_DROP_DIMENSIONS }
-			: { ...DEFAULT_IMAGE_DROP_DIMENSIONS }
+		switch (this.getCustomDropMediaType(filePath)) {
+			case "audio":
+				return { ...DEFAULT_AUDIO_DROP_DIMENSIONS }
+			case "video":
+				return { ...DEFAULT_VIDEO_DROP_DIMENSIONS }
+			default:
+				return { ...DEFAULT_IMAGE_DROP_DIMENSIONS }
+		}
 	}
 
 	private async getCustomDropMediaDimensions(
 		filePath: string,
-		isVideo: boolean,
+		mediaType: CustomDropMediaType,
 		fileInfo: CustomDropFileInfo,
 	): Promise<{ width: number; height: number }> {
+		if (mediaType === "audio") return { ...DEFAULT_AUDIO_DROP_DIMENSIONS }
+
 		try {
-			return isVideo
+			return mediaType === "video"
 				? await this.getVideoDimensionsFromUrl(fileInfo.src)
 				: await this.getImageDimensionsFromUrl(filePath)
 		} catch (error) {
@@ -932,19 +942,24 @@ export class DropOverlayManager {
 	}
 
 	private async prepareCustomDropResource(filePath: string): Promise<PreparedCustomDropResource> {
-		const isVideo = this.isVideoFilePath(filePath)
+		const mediaType = this.getCustomDropMediaType(filePath)
 		const fileInfo = await this.getCustomDropFileInfo(filePath)
 
-		if (isVideo) {
-			this.canvas.videoResourceManager.primeCache(filePath, fileInfo)
-			this.canvas.videoResourceManager.loadResource(filePath)
-		} else {
-			this.canvas.imageResourceManager.primeCache(filePath, fileInfo)
-			this.canvas.imageResourceManager.loadResource(filePath)
+		switch (mediaType) {
+			case "audio":
+				this.canvas.audioResourceManager.primeCache(filePath, fileInfo)
+				break
+			case "video":
+				this.canvas.videoResourceManager.primeCache(filePath, fileInfo)
+				this.canvas.videoResourceManager.loadResource(filePath)
+				break
+			default:
+				this.canvas.imageResourceManager.primeCache(filePath, fileInfo)
+				this.canvas.imageResourceManager.loadResource(filePath)
 		}
 
-		const dimensions = await this.getCustomDropMediaDimensions(filePath, isVideo, fileInfo)
-		return { filePath, fileInfo, isVideo, dimensions }
+		const dimensions = await this.getCustomDropMediaDimensions(filePath, mediaType, fileInfo)
+		return { filePath, fileInfo, mediaType, dimensions }
 	}
 
 	/**
@@ -954,7 +969,6 @@ export class DropOverlayManager {
 	 * @param dimensions 图片尺寸
 	 * @param position 位置
 	 * @param zIndex z-index
-	 * @param existingNames 已存在的名称集合
 	 * @returns 创建的元素 ID
 	 */
 	private createImageElement(
@@ -963,13 +977,10 @@ export class DropOverlayManager {
 		dimensions: { width: number; height: number },
 		position: { x: number; y: number },
 		zIndex: number,
-		existingNames: Set<string>,
 	): string {
 		// 从文件路径提取文件名（去掉扩展名）
 		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "image"
 		const baseName = fileName.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
-		existingNames.add(uniqueName)
 
 		// 计算元素位置（图片中心对齐到 position）
 		const targetX = position.x - dimensions.width / 2
@@ -977,17 +988,20 @@ export class DropOverlayManager {
 
 		// 创建图片元素数据
 		const elementId = generateElementId()
-		const imageElement: ImageElement = {
-			type: ElementTypeEnum.Image,
-			id: elementId,
-			x: targetX,
-			y: targetY,
-			width: dimensions.width,
-			height: dimensions.height,
-			src: filePath, // 使用文件路径作为 src，ImageElement 会自动通过轮询换取 ossSrc
-			name: uniqueName,
+		const baseElement = ElementFactory.createElementData(
+			ElementTypeEnum.Image,
+			elementId,
+			targetX,
+			targetY,
+			dimensions.width,
+			dimensions.height,
 			zIndex,
-		}
+		) as ImageElement
+		const imageElement = updateContent(
+			{ ...baseElement, name: baseName },
+			baseElement.activeContentId ?? undefined,
+			{ src: filePath },
+		)
 
 		this.canvas.elementManager.create(imageElement)
 		return elementId
@@ -1000,7 +1014,6 @@ export class DropOverlayManager {
 	 * @param dimensions 视频尺寸
 	 * @param position 位置
 	 * @param zIndex z-index
-	 * @param existingNames 已存在的名称集合
 	 * @returns 创建的元素 ID
 	 */
 	private createVideoElement(
@@ -1009,30 +1022,54 @@ export class DropOverlayManager {
 		dimensions: { width: number; height: number },
 		position: { x: number; y: number },
 		zIndex: number,
-		existingNames: Set<string>,
 	): string {
 		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "video"
 		const baseName = fileName.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
-		existingNames.add(uniqueName)
 
 		const targetX = position.x - dimensions.width / 2
 		const targetY = position.y - dimensions.height / 2
 
 		const elementId = generateElementId()
-		const videoElement: VideoElement = {
-			type: ElementTypeEnum.Video,
-			id: elementId,
-			x: targetX,
-			y: targetY,
-			width: dimensions.width,
-			height: dimensions.height,
-			src: filePath,
-			name: uniqueName,
+		const baseElement = ElementFactory.createElementData(
+			ElementTypeEnum.Video,
+			elementId,
+			targetX,
+			targetY,
+			dimensions.width,
+			dimensions.height,
 			zIndex,
-		}
+		) as VideoElement
+		const videoElement = updateContent(
+			{ ...baseElement, name: baseName },
+			baseElement.activeContentId ?? undefined,
+			{ src: filePath },
+		)
 
 		this.canvas.elementManager.create(videoElement)
+		return elementId
+	}
+
+	private createAudioElement(
+		filePath: string,
+		dimensions: { width: number; height: number },
+		position: { x: number; y: number },
+		zIndex: number,
+	): string {
+		const elementId = generateElementId()
+		const baseElement = ElementFactory.createElementData(
+			ElementTypeEnum.Audio,
+			elementId,
+			position.x - dimensions.width / 2,
+			position.y - dimensions.height / 2,
+			dimensions.width,
+			dimensions.height,
+			zIndex,
+		) as AudioElement
+		const audioElement = updateContent(baseElement, baseElement.activeContentId ?? undefined, {
+			src: filePath,
+		})
+
+		this.canvas.elementManager.create(audioElement)
 		return elementId
 	}
 
@@ -1072,38 +1109,40 @@ export class DropOverlayManager {
 			return
 		}
 
-		const positions = calculateGridImageLayout(
+		const positions = resolveGridPlacements(
 			preparedResources.map(({ dimensions }) => dimensions),
 			anchorPosition,
 		)
-		const existingNames = getAllExistingNames(this.canvas.elementManager)
 		const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
 		const createdElementIds: string[] = []
 
 		this.canvas.historyManager.disable()
 		try {
 			for (let i = 0; i < preparedResources.length; i++) {
-				const { filePath, fileInfo, isVideo, dimensions } = preparedResources[i]
+				const { filePath, fileInfo, mediaType, dimensions } = preparedResources[i]
 				const position = positions[i]
 				const zIndex = maxZIndex + 1 + i
 				try {
-					const elementId = isVideo
-						? this.createVideoElement(
-								filePath,
-								fileInfo,
-								dimensions,
-								position,
-								zIndex,
-								existingNames,
-							)
-						: this.createImageElement(
-								filePath,
-								fileInfo,
-								dimensions,
-								position,
-								zIndex,
-								existingNames,
-							)
+					let elementId: string
+					if (mediaType === "video") {
+						elementId = this.createVideoElement(
+							filePath,
+							fileInfo,
+							dimensions,
+							position,
+							zIndex,
+						)
+					} else if (mediaType === "audio") {
+						elementId = this.createAudioElement(filePath, dimensions, position, zIndex)
+					} else {
+						elementId = this.createImageElement(
+							filePath,
+							fileInfo,
+							dimensions,
+							position,
+							zIndex,
+						)
+					}
 					createdElementIds.push(elementId)
 				} catch (error) {
 					failedCount++

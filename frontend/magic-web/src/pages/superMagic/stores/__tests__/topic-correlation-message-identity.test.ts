@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SeqRecordType, type SeqRecord } from "@/apis/modules/chat/types"
+import { messagesConverter } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
 import type {
@@ -20,7 +21,22 @@ import {
 const TOPIC_A = "topic-a"
 const TOPIC_B = "topic-b"
 const CORRELATION_ID = "correlation-shared"
+const SUPER_MESSAGE_ID = "super-message-shared"
 const RENDER_SETTLE_MS = 2_000
+
+function toAssistantSuperMessageId(topicId: string, correlationId: string): string {
+	if (topicId === TOPIC_A && correlationId === CORRELATION_ID) return SUPER_MESSAGE_ID
+	if (correlationId === CORRELATION_ID) return `${SUPER_MESSAGE_ID}-${topicId}`
+	return `super-${correlationId}`
+}
+
+function toToolSuperMessageId(appMessageId: string): string {
+	return `super-${appMessageId}`
+}
+
+function toNonAssistantSuperMessageId(role: "tool" | "user", appMessageId: string): string {
+	return role === "user" ? appMessageId : toToolSuperMessageId(appMessageId)
+}
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
 type ChunkToolCall = ChunkChoice["delta"]["tool_calls"][number]
@@ -40,6 +56,8 @@ interface ProjectedToolCall {
 }
 
 interface ProjectedNode {
+	app_message_id?: string
+	super_message_id?: string
 	role?: string
 	topic_id?: string
 	correlation_id?: string
@@ -56,6 +74,7 @@ interface ChunkOptions {
 	topicId?: string
 	chatTopicId?: string
 	correlationId?: string
+	superMessageId?: string
 	i?: number
 	content?: string
 	finishReason?: ChunkChoice["finish_reason"]
@@ -67,6 +86,7 @@ interface EnvelopeOptions {
 	nodeTopicId?: string
 	appMessageId?: string
 	correlationId?: string
+	superMessageId?: string
 	includeCorrelationId?: boolean
 	seqId?: string
 	role?: "assistant" | "tool" | "user"
@@ -89,6 +109,7 @@ function createChunk({
 	topicId = TOPIC_A,
 	chatTopicId = topicId,
 	correlationId = CORRELATION_ID,
+	superMessageId = toAssistantSuperMessageId(topicId, correlationId),
 	i = 0,
 	content = "",
 	finishReason = null,
@@ -103,11 +124,14 @@ function createChunk({
 		chat_topic_id: chatTopicId,
 		message_id: `completion-${topicId}`,
 		super_magic_chunk: {
+			super_message_id: superMessageId,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content,
@@ -159,6 +183,7 @@ function createEnvelope({
 	nodeTopicId = topicId,
 	appMessageId = "assistant-app-1",
 	correlationId = CORRELATION_ID,
+	superMessageId,
 	includeCorrelationId = true,
 	seqId = "100",
 	role = "assistant",
@@ -168,10 +193,20 @@ function createEnvelope({
 	tool = null,
 	toolCallId,
 }: EnvelopeOptions = {}): RawSuperMagicMessageEnvelope {
+	const resolvedSuperMessageId =
+		role === "user"
+			? appMessageId
+			: String(
+					superMessageId ||
+						(role === "assistant"
+							? toAssistantSuperMessageId(topicId, correlationId)
+							: toToolSuperMessageId(appMessageId)),
+				)
 	const node: SuperMagicNode = {
 		role,
 		topic_id: nodeTopicId,
 		message_id: `node-${appMessageId}`,
+		super_message_id: resolvedSuperMessageId,
 		content,
 		reasoning_content: null,
 		tool_calls: toolCalls,
@@ -217,9 +252,28 @@ function createStore(activeTopicId: string | null = TOPIC_A): SuperMagicStore {
 	return store
 }
 
-function getNode(store: SuperMagicStore, id: string): ProjectedNode | undefined {
-	const node = store.getMessageNode(id)
+function getCanonicalNode(
+	store: SuperMagicStore,
+	superMessageId: string,
+): ProjectedNode | undefined {
+	// Canonical assertions must stay on the messageMap observation layer. Falling back to
+	// a topic-list projection would let a missing canonical write pass by accident.
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
+}
+
+function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
+	return getCanonicalNode(store, superMessageId)
+}
+
+function getTopicAssistantNode(
+	store: SuperMagicStore,
+	topicId: string,
+	superMessageId: string,
+): ProjectedNode | undefined {
+	return (store.messages.get(topicId) ?? []).find(
+		(message) => message.role === "assistant" && message.super_message_id === superMessageId,
+	) as ProjectedNode | undefined
 }
 
 function advanceRendering(milliseconds = RENDER_SETTLE_MS): void {
@@ -269,7 +323,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		store.receiveChunk(chunk)
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
-		expect(getNode(store, CORRELATION_ID)).toBeUndefined()
+		expect(getNode(store, SUPER_MESSAGE_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect(recovery.events).toHaveLength(0)
 		recovery.unsubscribe()
@@ -284,7 +338,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		store.receiveChunk(chunk)
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
-		expect(getNode(store, CORRELATION_ID)).toBeUndefined()
+		expect(getNode(store, SUPER_MESSAGE_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
@@ -312,11 +366,11 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)?.content).toBe("must-not-be-routed")
 		expect(store.getStreamState(TOPIC_B, CORRELATION_ID)).toBeUndefined()
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 			topic_id: TOPIC_A,
 			correlation_id: CORRELATION_ID,
 		})
-		expect(getNode(store, CORRELATION_ID)?.content).toMatch(/^m/)
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toMatch(/^m/)
 	})
 
 	it("同一个 correlationId 被不同 topic 使用。", () => {
@@ -384,10 +438,14 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		])
 
 		expect(
-			getNode(store, "cross-topic-assistant-a")?.tool_calls?.map((tool) => tool.id),
+			getTopicAssistantNode(store, TOPIC_A, `super-${topicACorrelation}`)?.tool_calls?.map(
+				(tool) => tool.id,
+			),
 		).toEqual([sharedToolId])
 		expect(
-			getNode(store, "cross-topic-assistant-b")?.tool_calls?.map((tool) => tool.id),
+			getTopicAssistantNode(store, TOPIC_B, `super-${topicBCorrelation}`)?.tool_calls?.map(
+				(tool) => tool.id,
+			),
 		).toEqual([sharedToolId])
 		expect(store.toolResponseMap.get(TOPIC_A)?.get(sharedToolId)?.status).toBe("finished")
 		expect(store.toolResponseMap.get(TOPIC_B)?.get(sharedToolId)?.status).toBe("error")
@@ -429,7 +487,11 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 				}),
 			).toBe(true)
 
-			const topicBNode = getNode(store, "assistant-topic-b")
+			const topicBNode = getTopicAssistantNode(
+				store,
+				TOPIC_B,
+				toAssistantSuperMessageId(TOPIC_B, CORRELATION_ID),
+			)
 			const topicBArguments = topicBNode?.tool_calls?.[0]?.function?.arguments
 			expect(topicBNode).toMatchObject({
 				role: "assistant",
@@ -441,22 +503,13 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			expect(
 				store.getStreamState(TOPIC_A, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments,
 			).toBe(streamedArguments)
-			expect(consoleWarn).toHaveBeenCalledWith(
-				"[SuperMagicStore] assistant correlation alias conflict",
-				expect.objectContaining({
-					topicId: TOPIC_B,
-					correlationId: CORRELATION_ID,
-					conflictingTopicId: TOPIC_A,
-					resolution: "preserve-existing-correlation-canonical",
-				}),
-			)
-			expect(consoleWarn).toHaveBeenCalledTimes(1)
+			expect(consoleWarn).not.toHaveBeenCalled()
 		} finally {
 			consoleWarn.mockRestore()
 		}
 	})
 
-	it("IM Final 不从另一 topic 的同 correlation Assistant 继承或覆盖 alias。", () => {
+	it("IM Final 不从另一 topic 的同 correlation Assistant 继承。", () => {
 		const store = createStore(TOPIC_A)
 		const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const streamedArguments = '{"path":"topic-a-im-only.md"}'
@@ -486,8 +539,12 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			)
 			advanceRendering()
 
-			const topicANode = getNode(store, CORRELATION_ID)
-			const topicBNode = getNode(store, "assistant-topic-b-im")
+			const topicANode = getNode(store, SUPER_MESSAGE_ID)
+			const topicBNode = getTopicAssistantNode(
+				store,
+				TOPIC_B,
+				toAssistantSuperMessageId(TOPIC_B, CORRELATION_ID),
+			)
 			expect(topicANode).toMatchObject({
 				role: "assistant",
 				topic_id: TOPIC_A,
@@ -501,16 +558,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			})
 			expect(topicBNode?.tool_calls?.[0]?.function?.arguments ?? "").toBe("")
 			expect(topicBNode).not.toBe(topicANode)
-			expect(consoleWarn).toHaveBeenCalledWith(
-				"[SuperMagicStore] assistant correlation alias conflict",
-				expect.objectContaining({
-					topicId: TOPIC_B,
-					correlationId: CORRELATION_ID,
-					conflictingTopicId: TOPIC_A,
-					resolution: "preserve-existing-correlation-canonical",
-				}),
-			)
-			expect(consoleWarn).toHaveBeenCalledTimes(1)
+			expect(consoleWarn).not.toHaveBeenCalled()
 		} finally {
 			consoleWarn.mockRestore()
 		}
@@ -573,12 +621,15 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 				}),
 			).toBe(true)
 
-			expect(getNode(store, CORRELATION_ID)?.topic_id).toBe(TOPIC_A)
+			expect(getNode(store, SUPER_MESSAGE_ID)?.topic_id).toBe(TOPIC_A)
 			expect(
-				getNode(store, "assistant-topic-b-http-active")?.tool_calls?.[0]?.function
-					?.arguments,
+				getTopicAssistantNode(
+					store,
+					TOPIC_B,
+					toAssistantSuperMessageId(TOPIC_B, CORRELATION_ID),
+				)?.tool_calls?.[0]?.function?.arguments,
 			).toBe(topicBArguments)
-			expect(consoleWarn).toHaveBeenCalledTimes(1)
+			expect(consoleWarn).not.toHaveBeenCalled()
 		} finally {
 			consoleWarn.mockRestore()
 		}
@@ -635,17 +686,21 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			)
 			advanceRendering()
 
-			expect(getNode(store, CORRELATION_ID)?.topic_id).toBe(TOPIC_A)
+			expect(getNode(store, SUPER_MESSAGE_ID)?.topic_id).toBe(TOPIC_A)
 			expect(
-				getNode(store, "assistant-topic-b-im-active")?.tool_calls?.[0]?.function?.arguments,
+				getTopicAssistantNode(
+					store,
+					TOPIC_B,
+					toAssistantSuperMessageId(TOPIC_B, CORRELATION_ID),
+				)?.tool_calls?.[0]?.function?.arguments,
 			).toBe(topicBArguments)
-			expect(consoleWarn).toHaveBeenCalledTimes(1)
+			expect(consoleWarn).not.toHaveBeenCalled()
 		} finally {
 			consoleWarn.mockRestore()
 		}
 	})
 
-	it("IM Final 不覆盖 correlation key 已被 Tool 占用的 canonical。", () => {
+	it("IM Final 与同 correlation 的 Tool 按各自 super_message_id 独立保存。", () => {
 		const store = createStore(TOPIC_A)
 		const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
@@ -689,32 +744,22 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			)
 			advanceRendering()
 
-			expect(getNode(store, CORRELATION_ID)).toMatchObject({
+			expect(getNode(store, toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
 				role: "tool",
 				tool: { id: "tool-1", status: "finished" },
 			})
-			expect(getNode(store, "assistant-role-key")).toMatchObject({
+			expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 				role: "assistant",
 				content: "assistant final",
 				tool_calls: [expect.objectContaining({ id: "tool-1" })],
 			})
-			expect(consoleWarn).toHaveBeenCalledWith(
-				"[SuperMagicStore] assistant correlation alias conflict",
-				expect.objectContaining({
-					topicId: TOPIC_A,
-					correlationId: CORRELATION_ID,
-					conflictingAppMessageId: CORRELATION_ID,
-					conflictingRole: "tool",
-					resolution: "preserve-existing-correlation-canonical",
-				}),
-			)
-			expect(consoleWarn).toHaveBeenCalledTimes(1)
+			expect(consoleWarn).not.toHaveBeenCalled()
 		} finally {
 			consoleWarn.mockRestore()
 		}
 	})
 
-	it("同 correlation 的流重启不得清空已占用 key 的 Tool canonical。", () => {
+	it("同 correlation 的流重启不得清空不同 super_message_id 的 Tool canonical。", () => {
 		const store = createStore(TOPIC_A)
 
 		store.enqueueMessage(
@@ -731,15 +776,28 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		store.receiveChunk(createChunk({ i: 1, content: "second" }))
 		store.receiveChunk(createChunk({ i: 0, content: "restart" }))
 
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		// Keep canonical tool state and the projected list as separate observations;
+		// the helper fallback would otherwise hide a missing messageMap write.
+		expect(store.getMessageNode(toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
 			role: "tool",
 			content: "tool audit payload",
 			tool: { id: "tool-1", status: "finished" },
 		})
+		const topicMessages = store.messages.get(TOPIC_A) ?? []
+		expect(topicMessages.filter((message) => message.role === "tool")).toHaveLength(1)
+		expect(topicMessages).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					role: "tool",
+					app_message_id: CORRELATION_ID,
+					super_message_id: toToolSuperMessageId(CORRELATION_ID),
+				}),
+			]),
+		)
 	})
 
 	it.each(["tool", "user"] as const)(
-		"HTTP Final 不覆盖 correlation key 已被 %s 占用的 canonical。",
+		"HTTP Final 与同 correlation 的 %s 按各自 super_message_id 独立保存。",
 		(role) => {
 			const store = createStore(TOPIC_A)
 			const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
@@ -779,11 +837,13 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 					}),
 				).toBe(true)
 
-				expect(getNode(store, CORRELATION_ID)).toMatchObject({
+				expect(
+					getNode(store, toNonAssistantSuperMessageId(role, nonAssistantAppMessageId)),
+				).toMatchObject({
 					role,
 					content: role === "user" ? "user audit payload" : null,
 				})
-				expect(getNode(store, "assistant-http-role-key")).toMatchObject({
+				expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 					role: "assistant",
 					content: "assistant HTTP final",
 				})
@@ -791,24 +851,14 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 					(store.messages.get(TOPIC_A) ?? []).map((message) => message.app_message_id),
 				).toEqual(expect.arrayContaining([CORRELATION_ID, "assistant-http-role-key"]))
 				expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("101")
-				expect(consoleWarn).toHaveBeenCalledWith(
-					"[SuperMagicStore] assistant correlation alias conflict",
-					expect.objectContaining({
-						topicId: TOPIC_A,
-						correlationId: CORRELATION_ID,
-						conflictingAppMessageId: CORRELATION_ID,
-						conflictingRole: role,
-						resolution: "preserve-existing-correlation-canonical",
-					}),
-				)
-				expect(consoleWarn).toHaveBeenCalledTimes(1)
+				expect(consoleWarn).not.toHaveBeenCalled()
 			} finally {
 				consoleWarn.mockRestore()
 			}
 		},
 	)
 
-	it("suspended 结算不得把 Assistant 流式工具写入已占用 key 的 Tool canonical。", () => {
+	it("suspended 结算不得把 Assistant 流式工具写入不同 super_message_id 的 Tool。", () => {
 		const store = createStore(TOPIC_A)
 
 		store.enqueueMessage(
@@ -844,14 +894,14 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			}),
 		).toBe(true)
 
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect(getNode(store, toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
 			role: "tool",
 			tool_calls: null,
 			tool: { id: "tool-1", status: "running" },
 		})
 	})
 
-	it("suspended 完成不得用共享 correlation 的 Tool node 覆盖已有 Assistant appMessageId。", () => {
+	it("suspended 完成不得用同 correlation 的 Tool 覆盖 Assistant super_message_id。", () => {
 		const store = createStore(TOPIC_A)
 
 		store.enqueueMessage(
@@ -897,14 +947,14 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			}),
 		).toBe(true)
 
-		expect(getNode(store, CORRELATION_ID)?.role).toBe("tool")
-		expect(getNode(store, "assistant-before-role-collision")).toMatchObject({
+		expect(getNode(store, toToolSuperMessageId(CORRELATION_ID))?.role).toBe("tool")
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 			role: "assistant",
 			correlation_id: CORRELATION_ID,
 		})
 	})
 
-	it("终态快照结算不得把 Assistant 流式内容写入已占用 key 的 Tool canonical。", () => {
+	it("终态快照结算不得把 Assistant 流式内容写入不同 super_message_id 的 Tool。", () => {
 		const store = createStore(TOPIC_A)
 
 		store.enqueueMessage(
@@ -928,14 +978,14 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			}),
 		).toBe(true)
 
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect(getNode(store, toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
 			role: "tool",
 			content: "tool audit payload",
 			tool: { id: "tool-1", status: "finished" },
 		})
 	})
 
-	it("不可见话题的完成流刷写不得覆盖已占用 key 的 Tool canonical。", () => {
+	it("不可见话题的完成流刷写不得覆盖不同 super_message_id 的 Tool。", () => {
 		const store = createStore(TOPIC_B)
 
 		store.enqueueMessage(
@@ -953,14 +1003,14 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		store.receiveChunk(createChunk({ topicId: TOPIC_A, i: 0, content: "assistant draft" }))
 		store.receiveChunk(createChunk({ topicId: TOPIC_A, i: 1, finishReason: "stop" }))
 
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect(getNode(store, toToolSuperMessageId(CORRELATION_ID))).toMatchObject({
 			role: "tool",
 			content: "tool audit payload",
 			tool: { id: "tool-1", status: "finished" },
 		})
 	})
 
-	it("同一个 topic 中 correlationId 被不同 assistant 消息复用。", () => {
+	it("同一个 topic 中相同 super_message_id 的 Assistant revision 按高 seq 收敛。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -973,17 +1023,17 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		const canonical = getNode(store, CORRELATION_ID)
-		expect(canonical).toMatchObject({ content: "new", correlation_id: CORRELATION_ID })
-		expect(getNode(store, "assistant-old")).toBeUndefined()
-		expect(getNode(store, "assistant-new")).toMatchObject({
+		const canonical = getNode(store, SUPER_MESSAGE_ID)
+		expect(canonical).toMatchObject({
+			app_message_id: "assistant-new",
+			super_message_id: SUPER_MESSAGE_ID,
 			content: "new",
 			correlation_id: CORRELATION_ID,
 		})
 		expect(
 			(store.messages.get(TOPIC_A) || []).filter(
 				(message) =>
-					message.role === "assistant" && message.correlation_id === CORRELATION_ID,
+					message.role === "assistant" && message.super_message_id === SUPER_MESSAGE_ID,
 			),
 		).toEqual([expect.objectContaining({ app_message_id: "assistant-new", seq_id: "101" })])
 	})
@@ -1005,7 +1055,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			createChunk({ correlationId: "identity-collision", content: "unrelated stream" }),
 		)
 
-		expect(getNode(store, "identity-collision")?.content).toBe("existing message")
+		expect(getNode(store, "super-original-correlation")?.content).toBe("existing message")
 		expect(store.getStreamState(TOPIC_A, "identity-collision")?.content).toBe(
 			"unrelated stream",
 		)
@@ -1032,12 +1082,12 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			}),
 		)
 
-		expect(getNode(store, "topic-a-correlation")?.content).toBe("topic A final")
+		expect(getNode(store, "super-topic-a-correlation")?.content).toBe("topic A final")
 		expect(store.getStreamState(TOPIC_B, "cross-topic-id")?.content).toBe("topic B draft")
 		expect(store.getStreamState(TOPIC_A, "cross-topic-id")).toBeUndefined()
 	})
 
-	it("chunk 使用 correlationId，最终 message 使用另一个 correlationId。", () => {
+	it("不同 correlation 与不同 super_message_id 的 chunk 与 Final 保持为两条逻辑消息。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ correlationId: "stream-correlation", content: "draft" }))
@@ -1051,11 +1101,41 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "final-correlation")?.content).toBe("final")
-		expect(getNode(store, "final-app")).toMatchObject({
+		expect(store.getMessageNode("super-final-correlation")).toMatchObject({
+			app_message_id: "final-app",
+			super_message_id: "super-final-correlation",
 			content: "final",
 			correlation_id: "final-correlation",
 		})
+		const messages = store.messages.get(TOPIC_A) ?? []
+		expect(messages).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				super_message_id: toAssistantSuperMessageId(TOPIC_A, "stream-correlation"),
+				correlation_id: "stream-correlation",
+				content: "draft",
+			}),
+			expect.objectContaining({
+				role: "assistant",
+				app_message_id: "final-app",
+				super_message_id: "super-final-correlation",
+				correlation_id: "final-correlation",
+				content: "final",
+			}),
+		])
+		expect(messagesConverter(messages)).toEqual([
+			expect.objectContaining({
+				super_message_id: toAssistantSuperMessageId(TOPIC_A, "stream-correlation"),
+				correlation_id: "stream-correlation",
+				content: "draft",
+			}),
+			expect.objectContaining({
+				app_message_id: "final-app",
+				super_message_id: "super-final-correlation",
+				correlation_id: "final-correlation",
+				content: "final",
+			}),
+		])
 		expect(store.getStreamState(TOPIC_A, "stream-correlation")?.content).toBe("draft")
 	})
 
@@ -1093,10 +1173,13 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		}
 		advanceRendering()
 
-		const embeddedState = getNode(store, ownerCorrelationId)?.tool_calls?.[0]?.tool
+		const embeddedState = getNode(store, toAssistantSuperMessageId(TOPIC_A, ownerCorrelationId))
+			?.tool_calls?.[0]?.tool
 		const effectiveState = store.toolResponseMap.get(TOPIC_A)?.get("tool-1") ?? embeddedState
-		expect(getNode(store, "tool-response")?.tool?.status).toBe("finished")
-		expect(getNode(store, "tool-response-retry")?.tool?.status).toBe("finished")
+		expect(getNode(store, toToolSuperMessageId("tool-response"))?.tool?.status).toBe("finished")
+		expect(getNode(store, toToolSuperMessageId("tool-response-retry"))?.tool?.status).toBe(
+			"finished",
+		)
 		expect(store.toolResponseMap.get(TOPIC_A)?.get("tool-1")).toBeUndefined()
 		expect(effectiveState?.status).toBe("running")
 	})
@@ -1124,7 +1207,10 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		advanceRendering()
 
 		expect
-			.soft(getNode(store, "orphan-before-assistant-response")?.tool?.status)
+			.soft(
+				getNode(store, toToolSuperMessageId("orphan-before-assistant-response"))?.tool
+					?.status,
+			)
 			.toBe("finished")
 		expect.soft(store.toolResponseMap.get(TOPIC_A)?.get(toolId)).toBeUndefined()
 
@@ -1185,20 +1271,27 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			)
 			advanceRendering()
 
-			expect(getNode(store, nonAssistantAppMessageId)?.role).toBe(role)
+			const nonAssistantSuperMessageId = toNonAssistantSuperMessageId(
+				role,
+				nonAssistantAppMessageId,
+			)
+			expect(getNode(store, nonAssistantSuperMessageId)?.role).toBe(role)
 			if (role === "tool") {
-				expect(getNode(store, nonAssistantAppMessageId)?.tool).toMatchObject({
+				expect(getNode(store, nonAssistantSuperMessageId)?.tool).toMatchObject({
 					id: "tool-1",
 					status: "finished",
 				})
 			} else {
-				expect(getNode(store, nonAssistantAppMessageId)?.content).toBe("user fact")
+				expect(getNode(store, nonAssistantSuperMessageId)?.content).toBe("user fact")
 			}
-			expect(getNode(store, CORRELATION_ID)).toMatchObject({
+			expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 				role: "assistant",
 				content: "assistant canonical",
 			})
-			expect(getNode(store, "assistant-final")).toEqual(getNode(store, CORRELATION_ID))
+			expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+				app_message_id: "assistant-final",
+				content: "assistant canonical",
+			})
 			expect(
 				(store.messages.get(TOPIC_A) ?? []).filter(
 					(message) => message.role === "assistant",
@@ -1208,7 +1301,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 	)
 
 	it.each(["tool", "user"] as const)(
-		"找不到 Assistant 目标时保留 correlation canonical，不向共享 correlation 的 %s 回退。",
+		"流式 Assistant 与同 correlation 的 %s 只按各自 super_message_id 结算。",
 		(role) => {
 			const store = createStore()
 			const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
@@ -1248,30 +1341,24 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 					}),
 				).toBe(true)
 
-				expect(getNode(store, CORRELATION_ID)).toMatchObject({
+				expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 					role: "assistant",
 					correlation_id: CORRELATION_ID,
 				})
-				expect(getNode(store, nonAssistantAppMessageId)?.role).toBe(role)
+				const nonAssistantSuperMessageId = toNonAssistantSuperMessageId(
+					role,
+					nonAssistantAppMessageId,
+				)
+				expect(getNode(store, nonAssistantSuperMessageId)?.role).toBe(role)
 				if (role === "tool") {
-					expect(getNode(store, nonAssistantAppMessageId)?.tool).toMatchObject({
+					expect(getNode(store, nonAssistantSuperMessageId)?.tool).toMatchObject({
 						id: "tool-1",
 						status: "finished",
 					})
 				} else {
-					expect(getNode(store, nonAssistantAppMessageId)?.content).toBe("user fact")
+					expect(getNode(store, nonAssistantSuperMessageId)?.content).toBe("user fact")
 				}
-				expect(consoleWarn).toHaveBeenCalledWith(
-					"[SuperMagicStore] assistant alias target missing",
-					expect.objectContaining({
-						topicId: TOPIC_A,
-						correlationId: CORRELATION_ID,
-						conflictingAppMessageId: nonAssistantAppMessageId,
-						conflictingRole: role,
-						resolution: "preserve-correlation-canonical",
-					}),
-				)
-				expect(consoleWarn).toHaveBeenCalledTimes(1)
+				expect(consoleWarn).not.toHaveBeenCalled()
 			} finally {
 				consoleWarn.mockRestore()
 			}
@@ -1291,14 +1378,16 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "final-without-correlation")).toMatchObject({
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "final-without-correlation",
+			super_message_id: SUPER_MESSAGE_ID,
 			content: "still addressable",
 			role: "assistant",
 		})
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
-	it("最终 message 的 appMessageId 在列表中已经存在。", () => {
+	it("最终 message 的 super_message_id 在列表中已经存在。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -1311,8 +1400,9 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "same-app")?.content).toBe("updated")
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "same-app",
+			super_message_id: SUPER_MESSAGE_ID,
 			content: "updated",
 			correlation_id: CORRELATION_ID,
 		})
@@ -1342,11 +1432,9 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 				.filter((event) => event.payload.message.appMessageId === "duplicate-final")
 				.map((event) => event.payload.message.seqId),
 		).toEqual(["100", "101"])
-		expect(getNode(store, "duplicate-final")).toMatchObject({
-			content: "canonical",
-			correlation_id: CORRELATION_ID,
-		})
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "duplicate-final",
+			super_message_id: SUPER_MESSAGE_ID,
 			content: "canonical",
 			correlation_id: CORRELATION_ID,
 		})
@@ -1377,8 +1465,8 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "seq-owner")?.content).toBe("first")
-		expect(getNode(store, "seq-conflict")?.content).toBe("second")
+		expect(getNode(store, "super-correlation-owner")?.content).toBe("first")
+		expect(getNode(store, "super-correlation-conflict")?.content).toBe("second")
 		expect(
 			(store.messages.get(TOPIC_A) || [])
 				.filter((message) => message.seq_id === "100")
@@ -1387,7 +1475,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
 	})
 
-	it("`messageMap` 的全局 key 在不同 topic 之间发生冲突。", () => {
+	it("`messageMap` 用不同 super_message_id 保存跨 Topic Assistant。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -1410,9 +1498,32 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "correlation-a")?.content).toBe("A")
-		expect(getNode(store, "correlation-b")?.content).toBe("B")
-		expect(getNode(store, "correlation-a")).not.toBe(getNode(store, "correlation-b"))
+		const topicASuperMessageId = toAssistantSuperMessageId(TOPIC_A, "correlation-a")
+		const topicBSuperMessageId = toAssistantSuperMessageId(TOPIC_B, "correlation-b")
+		expect(store.getMessageNode(topicASuperMessageId)).toMatchObject({
+			app_message_id: "same-global-app",
+			super_message_id: topicASuperMessageId,
+			content: "A",
+		})
+		expect(store.getMessageNode(topicBSuperMessageId)).toMatchObject({
+			app_message_id: "same-global-app",
+			super_message_id: topicBSuperMessageId,
+			content: "B",
+		})
+		expect(store.messages.get(TOPIC_A)).toEqual([
+			expect.objectContaining({
+				app_message_id: "same-global-app",
+				super_message_id: topicASuperMessageId,
+				content: "A",
+			}),
+		])
+		expect(store.messages.get(TOPIC_B)).toEqual([
+			expect.objectContaining({
+				app_message_id: "same-global-app",
+				super_message_id: topicBSuperMessageId,
+				content: "B",
+			}),
+		])
 	})
 
 	it("`topicMap` 尚未建立时 chunk 已经到达。", () => {
@@ -1422,7 +1533,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		store.receiveChunk(createChunk({ i: 1, content: " complete", finishReason: "stop" }))
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("before map complete")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("before map complete")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 	})
 
@@ -1436,7 +1547,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("AB")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("AB")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_B)).toBe(false)
 	})
@@ -1465,7 +1576,9 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 				topic_id: TOPIC_A,
 			}),
 		])
-		expect(getNode(store, "rewritten-topic-message")?.topic_id).toBe(TOPIC_B)
+		expect(getNode(store, toAssistantSuperMessageId(TOPIC_B, CORRELATION_ID))?.topic_id).toBe(
+			TOPIC_B,
+		)
 		arrivalsA.unsubscribe()
 		arrivalsB.unsubscribe()
 	})
@@ -1490,7 +1603,9 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			}),
 		)
 
-		expect(getNode(store, "message-2-correlation")?.content).toBe("message 2 final")
+		const message2SuperMessageId = toAssistantSuperMessageId(TOPIC_A, "message-2-correlation")
+		const message3SuperMessageId = toAssistantSuperMessageId(TOPIC_A, "message-3-correlation")
+		expect(getNode(store, message2SuperMessageId)?.content).toBe("message 2 final")
 		expect(store.getStreamState(TOPIC_A, "message-2-correlation")).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, "message-3-correlation")).toBeDefined()
 		expect(
@@ -1504,7 +1619,7 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 			}),
 		)
 
-		expect(getNode(store, "message-2-correlation")?.content).toBe("message 2 final")
+		expect(getNode(store, message2SuperMessageId)?.content).toBe("message 2 final")
 		expect(store.getStreamState(TOPIC_A, "message-2-correlation")).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, "message-3-correlation")).toBeDefined()
 		expect(
@@ -1524,8 +1639,8 @@ describe("SuperMagicStore / Topic、Correlation 和消息身份", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "message-2-correlation")?.content).toBe("message 2 final")
-		expect(getNode(store, "message-3-correlation")?.content).toBe("message 3 final")
+		expect(getNode(store, message2SuperMessageId)?.content).toBe("message 2 final")
+		expect(getNode(store, message3SuperMessageId)?.content).toBe("message 3 final")
 		expect(store.getStreamState(TOPIC_A, "message-2-correlation")).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, "message-3-correlation")).toBeUndefined()
 		arrivals.unsubscribe()

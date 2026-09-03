@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useLayoutEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import classNames from "classnames"
+import { cn } from "../../../../runtime/shared/lib/utils"
 import styles from "./index.module.css"
 import TreeNodeItem from "./TreeNodeItem"
 import type { TreeProps, TreeNode, TreeData } from "./types"
@@ -183,7 +183,7 @@ export default function Tree<T extends TreeData = TreeData>(props: TreeProps<T>)
 	)
 
 	return (
-		<div ref={scrollRef} className={classNames(styles.tree, className)} onScroll={handleScroll}>
+		<div ref={scrollRef} className={cn(styles.tree, className)} onScroll={handleScroll}>
 			{shouldVirtualize ? (
 				<div
 					style={{

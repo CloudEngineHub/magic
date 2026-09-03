@@ -1,9 +1,6 @@
 ---
 name: dingtalk-cli
-description: "Use when the user wants to interact with DingTalk/钉钉 in any way — including but not limited to: reading, querying, searching, sending, replying to, forwarding, or recalling DingTalk/钉钉 chat messages and chat history; managing group chats and conversations; sending DING alerts; querying contacts, org structure, AI search, or coworkers; reading, searching, creating, or editing DingTalk/钉钉 docs, drive files, sheets, AI tables, wiki, mail, calendar events, meeting rooms, AI meeting minutes, attendance, OA approvals, todos, reports/logs, live sessions, AI apps, permissions, or open-platform docs."
-
-name-cn: 钉钉能力入口
-description-cn: 当用户需要以任何方式操作钉钉时——包括但不限于：读取/查询/搜索/发送/回复/转发/撤回钉钉聊天消息和聊天记录、管理群聊和会话、DING、查通讯录/组织架构/AI搜问/同事、读写和搜索钉钉文档/云盘/表格/AI表格/知识库/邮件/日历/会议室/AI听记/考勤/OA审批/待办/日志/直播/AI应用/权限/开放平台文档等。
+description: "Use when the user wants to interact with DingTalk in any way — including but not limited to: reading, querying, searching, sending, replying to, forwarding, or recalling DingTalk chat messages and chat history; managing group chats and conversations; sending DING alerts; querying contacts, org structure, AI search, or coworkers; reading, searching, creating, or editing DingTalk docs, drive files, sheets, AI tables, wiki, mail, calendar events, meeting rooms, AI meeting minutes, attendance, OA approvals, todos, reports/logs, live sessions, AI apps, permissions, or open-platform docs."
 ---
 
 # DingTalk CLI Skill Index
@@ -45,19 +42,23 @@ read_skills(skill_names=["dws"])
 
 ## Authentication
 
+Super Magic runs in an online sandbox. The sandbox does not provide a browser
+that can reach an OAuth loopback callback on `127.0.0.1`, so do not use the
+default interactive login flow. Always use the device flow for DingTalk:
+
+```bash
+dws auth login --device
+```
+
 Before any DingTalk operation, verify auth status first:
 
 ```bash
 dws auth status --format json
 ```
 
-If `authenticated` is `false`, start the login flow. This environment has no browser (Docker/SSH), so always use the device flow:
-
-```bash
-dws auth login --device
-```
-
-The command outputs an authorization URL, then waits with the prompt `Waiting for user authorization`. At this point:
+If `authenticated` is `false`, run the device-flow command above. It outputs an
+authorization URL and waits with the prompt `Waiting for user authorization`.
+At this point:
 1. Show the authorization URL to the user
 2. Ask the user to open the URL in a browser or DingTalk mobile app to complete authorization
 3. The command will automatically detect the authorization and proceed
@@ -67,6 +68,10 @@ To force re-login (e.g. token expired):
 ```bash
 dws auth login --device --force
 ```
+
+Do not replace `--device` with plain `dws auth login` in the online sandbox;
+that starts the loopback flow and can leave authorization unable to return to
+the sandbox.
 
 ---
 

@@ -73,6 +73,8 @@ export interface CrossProjectFileOperationModalProps {
 	workspaces: Workspace[]
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
+	/** Whether the source page is still streaming the current project's attachment tree. */
+	sourceAttachmentsLoading?: boolean
 	initialPath?: AttachmentItem[]
 	includeFixedWorkspaces?: boolean
 	closeOnSubmit?: boolean
@@ -86,8 +88,9 @@ export interface CrossProjectFileOperationModalProps {
 		targetPath: AttachmentItem[]
 		targetAttachments: AttachmentItem[]
 		sourceAttachments: AttachmentItem[]
-		includeHtmlDependencies?: boolean
-		htmlDependencyFileIds?: string[]
+		includeDocumentDependencies?: boolean
+		documentDependencyFileIds?: string[]
+		preserveParentPath?: boolean
 	}) => void
 }
 
@@ -115,6 +118,9 @@ export interface ProjectResourceSelectorSubmitData {
 	sourceAttachments: AttachmentItem[]
 	selection?: ProjectResourceSelection
 	selections?: ProjectResourceSelection[]
+	includeDocumentDependencies?: boolean
+	documentDependencyFileIds?: string[]
+	preserveParentPath?: boolean
 }
 
 export interface ProjectResourceSelectorModalProps extends Omit<

@@ -30,7 +30,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
-from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field
 
 from app.command.storage_uploader_tool import StorageUploaderTool
@@ -39,11 +38,14 @@ from app.core.entity.aigc_metadata import AigcMetadataParams
 from app.core.entity.message.client_message import InitClientMessage
 from app.infrastructure.magic_service.config import MagicServiceConfigLoader
 from app.path_manager import PathManager
+from app.service.browser.browser_playwright_runtime import (
+    SharedBrowserRuntime,
+    close_shared_browser_runtime,
+    create_shared_browser_runtime,
+)
 from app.service.convert_task_manager import task_manager
 from app.utils.metadata_utils import AigcMetadataUtil
 from app.utils.path_utils import get_workspace_dir
-from magic_use.magic_browser_config import MagicBrowserConfig
-from magic_use.server_health_checker import wait_for_browser_server
 
 
 @dataclass
@@ -861,16 +863,14 @@ class BaseConvertService(ABC):
         Returns:
             (是否检测到slides, slides列表)
         """
-        playwright_instance = None
-        browser = None
-        context = None
+        browser_runtime: SharedBrowserRuntime | None = None
         page = None
 
         try:
             logger.debug(f"启动浏览器运行时检测: {html_file_path}")
 
             # 启动轻量级浏览器实例（支持服务端模式）
-            playwright_instance, browser, context = await self._create_shared_browser_context(
+            browser_runtime = await self._create_shared_browser_context(
                 browser_type="pdf",
                 viewport=ViewportSize(width=1280, height=720),
                 device_scale_factor=1.0,
@@ -883,7 +883,7 @@ class BaseConvertService(ABC):
                     },
                 },
             )
-            page = await context.new_page()
+            page = await browser_runtime.context.new_page()
             self._bind_page_console_logger(page, debug_info="运行时检测slides")
 
             # 设置较短的超时时间（5秒），避免影响性能
@@ -982,9 +982,7 @@ class BaseConvertService(ABC):
                 if page:
                     await page.close()
             finally:
-                await self._close_shared_browser_context(
-                    playwright_instance, browser, context, log_prefix="运行时检测slides"
-                )
+                await self._close_shared_browser_context(browser_runtime, log_prefix="运行时检测slides")
 
     async def _check_magic_project_config(self, magic_project_js_path: Path) -> tuple[bool, List[str]]:
         """
@@ -1673,7 +1671,7 @@ class BaseConvertService(ABC):
         device_scale_factor: float = 1.0,
         user_agent: Optional[str] = None,
         context_options: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> SharedBrowserRuntime:
         """
         创建共享浏览器实例和上下文
 
@@ -1685,103 +1683,46 @@ class BaseConvertService(ABC):
             context_options: 额外的上下文配置
 
         Returns:
-            (playwright_instance, browser, context)
+            共享浏览器运行时
         """
-        playwright_instance = None
-        browser = None
-        try:
-            playwright_instance = await async_playwright().start()
+        args = self.PDF_BROWSER_ARGS if browser_type == "pdf" else self.SCREENSHOT_BROWSER_ARGS
+        default_user_agent = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            if browser_type == "pdf"
+            else None
+        )
+        runtime = await create_shared_browser_runtime(
+            str(get_workspace_dir()),
+            browser_args=args,
+            viewport=viewport or {"width": 1920, "height": 1080},
+            device_scale_factor=device_scale_factor,
+            user_agent=user_agent or default_user_agent,
+            context_options=context_options,
+        )
+        logger.info(f"{self.service_name}转换：共享浏览器和上下文创建完成")
+        return runtime
 
-            # 读取浏览器配置（复用 magic_use 的服务端模式逻辑）
-            config = MagicBrowserConfig.create_for_scraping()
-
-            # PDF/PPTX 转换仅支持 Chromium
-            if config.browser_type and config.browser_type.lower() != "chromium":
-                logger.info(
-                    f"{self.service_name}转换：检测到浏览器类型配置为 {config.browser_type}，已强制使用 chromium"
-                )
-            browser_type_obj = playwright_instance.chromium
-
-            # 根据类型选择启动参数
-            if browser_type == "pdf":
-                args = self.PDF_BROWSER_ARGS
-                default_viewport = {"width": 1920, "height": 1080}
-                default_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            else:  # screenshot
-                args = self.SCREENSHOT_BROWSER_ARGS
-                default_viewport = {"width": 1920, "height": 1080}
-                default_user_agent = None
-
-            # 根据配置选择服务端/本地模式
-            if config.use_server_mode:
-                ws_url = config.browser_server_url
-                if not ws_url:
-                    raise RuntimeError("启用浏览器服务端模式但未配置 browser_server_url")
-                if not ws_url.startswith(("ws://", "wss://")):
-                    raise RuntimeError(f"browser_server_url 必须以 ws:// 或 wss:// 开头，当前值: {ws_url}")
-
-                logger.info(f"{self.service_name}转换：使用服务端模式连接浏览器 {ws_url}")
-                await wait_for_browser_server(
-                    ws_url=ws_url,
-                    timeout=config.server_health_check_timeout,
-                    check_interval=config.server_health_check_interval,
-                )
-                browser = await browser_type_obj.connect(ws_url, timeout=config.server_connect_timeout)
-            else:
-                logger.info(f"{self.service_name}转换：使用本地模式启动浏览器 ({browser_type}模式)")
-                browser = await browser_type_obj.launch(headless=True, args=args)
-
-            # 构建上下文配置
-            context_config: Dict[str, Any] = {
-                "viewport": viewport or default_viewport,
-                "device_scale_factor": device_scale_factor,
-            }
-
-            if default_user_agent:
-                context_config["user_agent"] = user_agent or default_user_agent
-
-            if context_options:
-                context_config.update(context_options)
-
-            context = await browser.new_context(**context_config)
-
-            logger.info(f"{self.service_name}转换：共享浏览器和上下文创建完成")
-            return playwright_instance, browser, context
-
-        except Exception:
-            if browser:
-                try:
-                    await browser.close()
-                except Exception:
-                    pass
-            if playwright_instance:
-                try:
-                    await playwright_instance.stop()
-                except Exception:
-                    pass
-            raise
-
-    async def _close_shared_browser_context(self, playwright_instance, browser, context, log_prefix: str = "") -> None:
+    async def _close_shared_browser_context(
+        self,
+        runtime: SharedBrowserRuntime | None,
+        log_prefix: str = "",
+    ) -> None:
         """
         关闭浏览器实例和上下文
 
         Args:
-            playwright_instance: Playwright实例
-            browser: 浏览器实例
-            context: 浏览器上下文
+            runtime: 共享浏览器运行时
             log_prefix: 日志前缀
         """
         prefix = log_prefix or f"{self.service_name}转换"
-        try:
-            if context:
-                await context.close()
-            if browser:
-                await browser.close()
-            if playwright_instance:
-                await playwright_instance.stop()
+        if runtime is None:
+            return
+        cleanup_errors = await close_shared_browser_runtime(runtime)
+        if cleanup_errors:
+            logger.warning(f"{prefix}清理浏览器资源时发生错误: {'; '.join(cleanup_errors)}")
+        else:
             logger.info(f"{prefix}共享浏览器资源已清理完成")
-        except Exception as cleanup_error:
-            logger.warning(f"{prefix}清理浏览器资源时发生错误: {cleanup_error}")
 
     @staticmethod
     async def _scroll_to_trigger_lazy_loading(page, debug_info: str = "") -> bool:

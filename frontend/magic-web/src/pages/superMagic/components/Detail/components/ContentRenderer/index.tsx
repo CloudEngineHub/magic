@@ -1,7 +1,7 @@
 import { lazy } from "react"
 import type { DetailHTMLData, DetailTerminalData, DetailUniverData } from "../../types"
 import { DetailType } from "../../types"
-import { hasPPTMetadata, isFileInPPTMode } from "../../utils/file"
+import { isFileInSlideCanvasMode, shouldUsePPTRootRender } from "../../utils/file"
 import type { CodeViewerExtensionContext } from "../../contents/Code"
 import { isDesignMagicProjectFile } from "../../contents/Design/utils/isDesignMagicProjectFile"
 
@@ -29,6 +29,7 @@ const Video = lazy(() => import("../../contents/Video"))
 const Audio = lazy(() => import("../../contents/Audio"))
 const Design = lazy(() => import("../../contents/Design"))
 const PPTRootRender = lazy(() => import("../PPTRootRender"))
+const SlidesTemplateRootRender = lazy(() => import("../SlidesTemplateRootRender"))
 const SelfMediaRootRender = lazy(() => import("../SelfMediaRootRender"))
 const AICardRootRender = lazy(() => import("../AICardRootRender"))
 
@@ -64,13 +65,17 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 		case DetailType.Browser:
 			return <Browser data={data} {...commonProps} />
 		case DetailType.Html:
-			if (hasPPTMetadata(data)) {
+			if (shouldUsePPTRootRender(type, data)) {
 				return <PPTRootRender data={data} {...commonProps} />
 			}
 
-			const isInPPTMode = isFileInPPTMode(data.file_id, commonProps.attachmentList)
+			const isInPPTMode =
+				commonProps.isHtmlSlideCanvasMode ??
+				isFileInSlideCanvasMode(data.file_id, commonProps.attachmentList)
 
 			return <HTML data={data as DetailHTMLData} isInPPTMode={isInPPTMode} {...commonProps} />
+		case DetailType.SlidesTemplate:
+			return <SlidesTemplateRootRender data={data} {...commonProps} />
 		case DetailType.Search:
 			return <Search data={data} {...commonProps} />
 		case DetailType.KnowledgeSearch:

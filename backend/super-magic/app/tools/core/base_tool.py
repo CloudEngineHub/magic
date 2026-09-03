@@ -10,6 +10,7 @@ import inspect
 import re
 import difflib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, ClassVar, get_args, get_origin, List, Tuple
 
 from pydantic import ConfigDict, ValidationError
@@ -32,7 +33,12 @@ try:
         LogLevel,
         OpenTelemetryAttributes,
     )
-    from app.infrastructure.observability.span_utils import set_observation_io, set_span_name
+    from app.infrastructure.observability.span_utils import (
+        set_observation_io,
+        set_span_name,
+        enrich_span_with_user_context,
+        enrich_span_with_trace_correlation,
+    )
 except ImportError:
     # If OpenTelemetry is not installed, set to None
     # is_telemetry_enabled() will handle the check
@@ -45,9 +51,20 @@ except ImportError:
     LogLevel = None
     OpenTelemetryAttributes = None
     set_observation_io = lambda *a, **k: None
+    enrich_span_with_user_context = lambda *a, **k: None
+    enrich_span_with_trace_correlation = lambda *a, **k: None
 
 # 定义参数类型变量
 T = TypeVar('T', bound=BaseToolParams)
+
+
+@dataclass(frozen=True)
+class ToolForwardRequest:
+    """工具在用户事件触发前请求改派到另一个强类型工具。"""
+
+    target_tool: Type["BaseTool"]
+    params: BaseToolParams
+    warning: str
 
 
 class BaseTool(Generic[T], ABC):
@@ -59,6 +76,7 @@ class BaseTool(Generic[T], ABC):
     name: ClassVar[str] = ""
     description: ClassVar[str] = ""
     params_class: ClassVar[Type[T]] = None
+    # 实例运行时默认值；工具注册策略由 @tool 写入私有注册元数据。
     code_mode_only: ClassVar[bool] = False
 
     # 配置项
@@ -100,6 +118,14 @@ class BaseTool(Generic[T], ABC):
         """执行前权限检查。返回 None 表示允许；返回 ToolResult 表示拦截并直接回给模型。"""
         return None
 
+    async def resolve_forwarded_tool(
+        self,
+        tool_context: ToolContext,
+        arguments: Dict[str, Any],
+    ) -> Optional[ToolForwardRequest]:
+        """在展示工具调用前判断是否需要改派到其他工具。"""
+        return None
+
     def get_horizon(self, tool_context: "ToolContext") -> "AgentHorizon":
         """从 tool_context 获取当前 agent 的 AgentHorizon 实例。"""
         from app.core.context.agent_context import AgentContext
@@ -113,6 +139,18 @@ class BaseTool(Generic[T], ABC):
         在子类定义时自动执行，确定最终的类级别元数据
         """
         super().__init_subclass__(**kwargs)
+
+        if "code_mode_only" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'code_mode_only' in the class body. "
+                "Use @tool(code_mode_only=True) instead."
+            )
+        if "auto_mount" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'auto_mount' in the class body. "
+                "Use @tool(auto_mount=AutoMount.<TYPE>) instead."
+            )
+
         logger = get_logger(__name__)
 
         # 确保子类被标记为未注册
@@ -304,6 +342,11 @@ class BaseTool(Generic[T], ABC):
             span = tracer.start_span(span_name)
             set_span_name(span, span_name)
 
+            # Enrich with user context and trace correlation, matching the FastAPI
+            # root span so this child span can be correlated across systems in Langfuse.
+            enrich_span_with_user_context(span)
+            enrich_span_with_trace_correlation(span)
+
             # Langfuse-specific: Mark as tool observation type
             span.set_attribute("observation.type", "tool")
             span.set_attribute("langfuse.observation.type", "tool")
@@ -327,10 +370,15 @@ class BaseTool(Generic[T], ABC):
             span._otel_tool_description = tool_description[:500] if tool_description else ""
             span._otel_tool_class = self.__class__.__name__
             span._otel_tool_module = self.__module__
-            span._otel_pending_params = dict(kwargs) if kwargs else {}
+            params_class = self.get_params_class()
+            if isinstance(params_class, type) and issubclass(params_class, BaseToolParams):
+                safe_kwargs = params_class.sanitize_log_arguments(kwargs or {})
+            else:
+                safe_kwargs = {str(key): "<redacted>" for key in (kwargs or {})}
+            span._otel_pending_params = safe_kwargs
 
             # Fill the observation Input column with the tool parameters (Langfuse).
-            set_observation_io(span, input_value=dict(kwargs) if kwargs else {})
+            set_observation_io(span, input_value=safe_kwargs)
 
             return span
         except Exception as e:
@@ -837,7 +885,6 @@ class BaseTool(Generic[T], ABC):
         """
         logger = get_logger(__name__)
 
-        # 注意：移除了这里的 "additionalProperties": False
         parameters = {
             "type": "object",
             "properties": {},
@@ -854,12 +901,15 @@ class BaseTool(Generic[T], ABC):
                 if 'properties' in schema:
                     parameters['properties'] = schema['properties']
 
+                if 'additionalProperties' in schema:
+                    # 保留参数模型的 extra 策略，使提供给模型的 Schema 与运行时校验一致。
+                    parameters['additionalProperties'] = schema['additionalProperties']
+
                 if 'required' in schema:
                     parameters['required'] = schema['required']
                 else:
-                    # 如果原始 schema 没有 required，则默认所有非 Optional 字段为必填
-                    if 'properties' in parameters:
-                         parameters['required'] = list(parameters['properties'].keys())
+                    # Pydantic 在没有必填字段时会省略 required，不能把所有默认字段误标为必填。
+                    parameters['required'] = self._get_required_param_names(params_class)
 
                 # 全局参数已删除，不再需要强制必填验证
 
@@ -894,6 +944,26 @@ class BaseTool(Generic[T], ABC):
         # 递归移除人类注解（唯一过滤出口）
         self._remove_annotations_recursive(result)
         return result
+
+    @staticmethod
+    def _get_required_param_names(params_class: type[BaseToolParams]) -> list[str]:
+        """按 Pydantic 字段定义恢复真正的必填参数名称。"""
+        model_fields = getattr(params_class, "model_fields", None)
+        if isinstance(model_fields, dict):
+            return [
+                name
+                for name, field in model_fields.items()
+                if field.is_required()
+            ]
+
+        legacy_fields = getattr(params_class, "__fields__", None)
+        if isinstance(legacy_fields, dict):
+            return [
+                name
+                for name, field in legacy_fields.items()
+                if bool(getattr(field, "required", False))
+            ]
+        return []
 
     @staticmethod
     def _remove_annotations_recursive(obj):

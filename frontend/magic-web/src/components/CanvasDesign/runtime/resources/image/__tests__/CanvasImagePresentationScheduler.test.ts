@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { EventEmitter } from "../../../core/EventEmitter"
+import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import type { ImageResourceVariant, LoadedResource } from "../ImageResourceManager"
 import {
 	CanvasImagePresentationScheduler,
@@ -107,6 +109,7 @@ describe("CanvasImagePresentationScheduler", () => {
 	function createScheduler(options?: {
 		consumers?: Map<string, TestConsumer>
 		cachedResources?: Map<string, LoadedResource>
+		resolveResourceReference?: ResolveCanvasResourceReference
 	}) {
 		const eventEmitter = new EventEmitter()
 		const consumers = options?.consumers ?? new Map<string, TestConsumer>()
@@ -117,7 +120,11 @@ describe("CanvasImagePresentationScheduler", () => {
 		)
 		const canvas = {
 			eventEmitter,
-			magicConfigManager: { config: { methods: {} } },
+			magicConfigManager: {
+				config: {
+					methods: { resolveResourceReference: options?.resolveResourceReference },
+				},
+			},
 			elementManager: {
 				getElementInstance: (elementId: string) => consumers.get(elementId),
 			},
@@ -130,6 +137,7 @@ describe("CanvasImagePresentationScheduler", () => {
 			>[0]["canvas"],
 		})
 		return {
+			canvas,
 			cachedResources,
 			consumers,
 			eventEmitter,
@@ -169,6 +177,84 @@ describe("CanvasImagePresentationScheduler", () => {
 				pendingCount: 0,
 			}),
 		)
+	})
+
+	it("drops a pending presentation when its image source is about to close", () => {
+		const consumer = createConsumer()
+		const { eventEmitter, scheduler } = createScheduler({
+			consumers: new Map([["image-1", consumer]]),
+		})
+		const resource = createResource("preview")
+		scheduler.replaceTargets([createTarget("image-1")], "idle")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/image-1.png", resource },
+		})
+
+		eventEmitter.emit({
+			type: "resource:image:will-close",
+			data: {
+				path: "./images/image-1.png",
+				variant: "preview",
+				image: resource.image,
+				reason: "display-slot-replaced",
+			},
+		})
+		runNextFrame()
+
+		expect(consumer.applyPresentedResource).not.toHaveBeenCalled()
+		expect(scheduler.getSnapshot()).toEqual(
+			expect.objectContaining({ pendingCount: 0, staleDropCount: 1 }),
+		)
+
+		const replacement = createResource("preview")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/image-1.png", resource: replacement },
+		})
+		runNextFrame()
+		expect(consumer.applyPresentedResource).toHaveBeenCalledWith(replacement, "preview")
+	})
+
+	it("applies a loaded alias immediately with the host resolver", () => {
+		const consumer = createConsumer()
+		const { eventEmitter, scheduler } = createScheduler({
+			consumers: new Map([["image-1", consumer]]),
+			resolveResourceReference: createTestResourceReferenceResolver(),
+		})
+		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/a.png")], "idle")
+		const preview = createResource("preview")
+
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "/画布A/images/a.png", resource: preview },
+		})
+		runNextFrame()
+
+		expect(consumer.applyPresentedResource).toHaveBeenCalledWith(preview, "preview")
+	})
+
+	it("rebuilds the path index when the host resolver semantics change", () => {
+		let currentCanvasWorkspacePath = "/画布A"
+		const resolveResourceReference: ResolveCanvasResourceReference = (input, options) =>
+			createTestResourceReferenceResolver({ currentCanvasWorkspacePath })(input, options)
+		const consumer = createConsumer()
+		const { eventEmitter, scheduler } = createScheduler({
+			consumers: new Map([["image-1", consumer]]),
+			resolveResourceReference,
+		})
+		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/a.png")], "idle")
+
+		currentCanvasWorkspacePath = "/画布B"
+		scheduler.handleResourceReferenceResolverChanged()
+		const preview = createResource("preview")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "/画布B/images/a.png", resource: preview },
+		})
+		runNextFrame()
+
+		expect(consumer.applyPresentedResource).toHaveBeenCalledWith(preview, "preview")
 	})
 
 	it("accepts directed full completions only for the matching target", () => {
@@ -214,6 +300,10 @@ describe("CanvasImagePresentationScheduler", () => {
 			data: { path: "./images/a.png", resource: createResource("preview") },
 		})
 		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/b.png")], "idle")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/a.png", resource: createResource("preview") },
+		})
 		runNextFrame()
 
 		expect(firstConsumer.applyPresentedResource).not.toHaveBeenCalled()

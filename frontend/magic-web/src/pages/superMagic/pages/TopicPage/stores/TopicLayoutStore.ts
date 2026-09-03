@@ -3,6 +3,7 @@ import {
 	DEFAULT_MAX_WIDTH,
 	DEFAULT_MIN_WIDTH,
 	DEFAULT_WIDTH,
+	LOW_RESOLUTION_VIEWPORT_WIDTH_PX,
 	MESSAGE_PANEL_WIDTH_STORAGE_KEY,
 	PROJECT_SIDER_WIDTH_STORAGE_KEY,
 } from "../../../constants/resizablePanel"
@@ -12,6 +13,11 @@ type DragType = "project" | "message" | null
 interface ConversationPanelState {
 	collapsed?: boolean
 	lastExpandedSize?: number | null
+}
+
+interface TopicLayoutStoreOptions {
+	/** Controls whether the conversation collapse state is shared across page mounts. */
+	persistConversationPanelState?: boolean
 }
 
 const CONVERSATION_PANEL_STORAGE_KEY = "supermagic-topic-conversation-panel"
@@ -35,8 +41,11 @@ export class TopicLayoutStore {
 	private dragStartMessagePanelWidthPx = 0
 	private minSizeReachedPointerX: number | null = null
 	private minSizeReachedPanelWidthPx: number | null = null
+	private readonly persistConversationPanelState: boolean
 
-	constructor() {
+	/** Creates one layout state container with optional conversation-state persistence. */
+	constructor({ persistConversationPanelState = true }: TopicLayoutStoreOptions = {}) {
+		this.persistConversationPanelState = persistConversationPanelState
 		makeAutoObservable(this, {}, { autoBind: true })
 		this.initFromStorage()
 	}
@@ -44,17 +53,25 @@ export class TopicLayoutStore {
 	initFromStorage() {
 		this.projectSiderWidthPx = this.loadValidPixelWidth({
 			storageKey: PROJECT_SIDER_WIDTH_STORAGE_KEY,
-			defaultWidth: DEFAULT_WIDTH.PROJECT_SIDER,
+			defaultWidth: this.getInitialPanelWidth({
+				defaultWidth: DEFAULT_WIDTH.PROJECT_SIDER,
+				minWidth: DEFAULT_MIN_WIDTH.PROJECT_SIDER,
+			}),
 			minWidth: DEFAULT_MIN_WIDTH.PROJECT_SIDER,
 			maxWidth: DEFAULT_MAX_WIDTH.PROJECT_SIDER,
 		})
 		this.messagePanelWidthPx = this.loadValidPixelWidth({
 			storageKey: MESSAGE_PANEL_WIDTH_STORAGE_KEY,
-			defaultWidth: DEFAULT_WIDTH.MESSAGE_PANEL,
+			defaultWidth: this.getInitialPanelWidth({
+				defaultWidth: DEFAULT_WIDTH.MESSAGE_PANEL,
+				minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
+			}),
 			minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
 			maxWidth: DEFAULT_MAX_WIDTH.MESSAGE_PANEL,
 		})
-		this.loadConversationPanelState()
+		if (this.persistConversationPanelState) {
+			this.loadConversationPanelState()
+		}
 	}
 
 	setContainerWidth(width: number) {
@@ -208,6 +225,21 @@ export class TopicLayoutStore {
 		}
 	}
 
+	/**
+	 * Apply compact defaults only for first-time layouts. Persisted widths remain the
+	 * user's explicit preference and are restored by loadValidPixelWidth above.
+	 */
+	private getInitialPanelWidth({
+		defaultWidth,
+		minWidth,
+	}: {
+		defaultWidth: number
+		minWidth: number
+	}) {
+		if (typeof window === "undefined") return defaultWidth
+		return window.innerWidth <= LOW_RESOLUTION_VIEWPORT_WIDTH_PX ? minWidth : defaultWidth
+	}
+
 	private saveWidth(storageKey: string, width: number) {
 		try {
 			localStorage.setItem(storageKey, String(Math.round(width)))
@@ -237,6 +269,7 @@ export class TopicLayoutStore {
 	}
 
 	private saveConversationPanelState() {
+		if (!this.persistConversationPanelState) return
 		try {
 			localStorage.setItem(
 				CONVERSATION_PANEL_STORAGE_KEY,

@@ -8,16 +8,16 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\KnowledgeBase\Event\Subscribe;
 
 use App\Application\KnowledgeBase\Event\Subscribe\ProjectFileChangeNotifySubscriber;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
+use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
+use App\Domain\SuperMagic\File\Event\FileDeletedEvent;
+use App\Domain\SuperMagic\File\Event\FileMovedEvent;
+use App\Domain\SuperMagic\File\Event\FileRenamedEvent;
+use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
+use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
 use App\Infrastructure\Rpc\JsonRpc\Client\Knowledge\ProjectFileRpcClient;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\DirectoryDeletedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileContentSavedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileDeletedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileMovedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileRenamedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FilesBatchDeletedEvent;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -140,6 +140,55 @@ class ProjectFileChangeNotifySubscriberTest extends TestCase
         $subscriber->process(new FileContentSavedEvent(self::createTaskFileEntity(0, false), 'U1', 'ORG1'));
     }
 
+    public function testProcessSkipsNonProjectSpaceFile(): void
+    {
+        $client = $this->createMock(ProjectFileRpcClient::class);
+        $client->expects($this->never())
+            ->method('notifyChange');
+
+        $subscriber = new ProjectFileChangeNotifySubscriber($client);
+        $subscriber->process(new FileUploadedEvent(
+            self::createTaskFileEntity(504, false, 'user'),
+            'U1',
+            'ORG1'
+        ));
+    }
+
+    public function testProcessSkipsNonProjectSpaceDirectoryDeletion(): void
+    {
+        $client = $this->createMock(ProjectFileRpcClient::class);
+        $client->expects($this->never())
+            ->method('notifyChange');
+
+        $subscriber = new ProjectFileChangeNotifySubscriber($client);
+        $subscriber->process(new DirectoryDeletedEvent(
+            self::createTaskFileEntity(505, true, 'user'),
+            self::createAuthorization('U1', 'ORG1'),
+        ));
+    }
+
+    public function testProcessBatchDeletedSkipsNonProjectSpaceFiles(): void
+    {
+        $client = $this->createMock(ProjectFileRpcClient::class);
+        $client->expects($this->once())
+            ->method('notifyChange')
+            ->with(501, 'ORG1', 900, 'deleted')
+            ->willReturn(true);
+
+        $subscriber = new ProjectFileChangeNotifySubscriber($client);
+        $subscriber->process(new FilesBatchDeletedEvent(
+            [
+                self::createTaskFileEntity(501, false),
+                self::createTaskFileEntity(506, false, 'user'),
+            ],
+            [],
+            'U1',
+            'ORG1',
+            900,
+            self::createAuthorization('U1', 'ORG1')
+        ));
+    }
+
     public function testProcessIgnoresUnsupportedEvent(): void
     {
         $client = $this->createMock(ProjectFileRpcClient::class);
@@ -192,7 +241,7 @@ class ProjectFileChangeNotifySubscriberTest extends TestCase
             ->setOrganizationCode($organizationCode);
     }
 
-    private static function createTaskFileEntity(int $fileId, bool $isDirectory): TaskFileEntity
+    private static function createTaskFileEntity(int $fileId, bool $isDirectory, string $spaceType = 'project'): TaskFileEntity
     {
         $entity = new TaskFileEntity();
         $entity->setFileId($fileId);
@@ -213,6 +262,7 @@ class ProjectFileChangeNotifySubscriberTest extends TestCase
         $entity->setParentId(1);
         $entity->setSource(0);
         $entity->setUpdatedAt('2026-04-23 12:00:00');
+        $entity->setSpaceType($spaceType);
 
         return $entity;
     }

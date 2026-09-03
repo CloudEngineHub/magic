@@ -6,6 +6,9 @@
 // 核心导出
 export { createLogger, getLogger } from "./core/logger"
 export { BaseProvider } from "./core/base-provider"
+export { MagicLoggerSyntheticError, normalizeError } from "./core/error"
+export { ErrorCaptureSource } from "./core/types"
+export type { NormalizedError } from "./core/error"
 
 // 类型导出
 export type {
@@ -17,13 +20,16 @@ export type {
 	IUserInfo,
 	ICustomEvent,
 	IErrorInfo,
+	ProviderErrorInput,
 	ProviderType,
 	LogLevel,
 } from "./core/types"
 
-export type { IVolcengineConfig, IAliyunConfig, ProviderConfig } from "./config/types"
+export type {
+	IVolcengineConfig,
+	IAliyunConfig,
+	IDataFluxConfig,
+	ProviderConfig,
+} from "./config/types"
 
-// Provider 导出
-// 会导致动态导入失效
-// export { VolcengineProvider } from "./providers/volcengine"
-// export { AliyunProvider } from "./providers/aliyun"
+// Provider 通过 Logger 动态加载，避免把可选的 SDK 依赖提升为主入口依赖。

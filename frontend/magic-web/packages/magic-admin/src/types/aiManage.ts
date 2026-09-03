@@ -79,6 +79,13 @@ export namespace AiManage {
 		SERVICE_ACCOUNT = "service_account",
 	}
 
+	export enum ReferenceImageTransport {
+		BASE64 = "base64",
+		URL = "url",
+		URL_FALLBACK_BASE64 = "url_fallback_base64",
+		BASE64_FALLBACK_URL = "base64_fallback_url",
+	}
+
 	/* API key 配置信息 */
 	export interface ApiKeyConfig {
 		ak: string
@@ -103,6 +110,8 @@ export namespace AiManage {
 		client_id?: string
 		location?: string
 		gcs_bucket?: string
+		/* Google 生图参考图传输方式 */
+		reference_image_transport?: ReferenceImageTransport
 	}
 
 	/* 计费货币单位 */
@@ -487,6 +496,17 @@ export namespace AiManage {
 		nickname?: string
 	}
 
+	export interface PublishTargetItem {
+		id?: string
+		name?: string
+		nickname?: string
+	}
+
+	export interface PublishTargetValue {
+		users?: PublishTargetItem[]
+		departments?: PublishTargetItem[]
+	}
+
 	export interface OrganizationAgentVersionReview {
 		id: string
 		organization?: OrganizationInfo
@@ -499,6 +519,7 @@ export namespace AiManage {
 		review_status: ReviewStatus
 		review_remark?: string | null
 		publish_target_type: PublishTargetType
+		publish_target_value?: PublishTargetValue | null
 		type: number
 		is_current_version: boolean
 		publisher?: PublisherInfo
@@ -518,6 +539,7 @@ export namespace AiManage {
 		review_status: ReviewStatus
 		review_remark?: string | null
 		publish_target_type: PublishTargetType
+		publish_target_value?: PublishTargetValue | null
 		source_type?: string
 		publisher?: PublisherInfo
 		created_at: string

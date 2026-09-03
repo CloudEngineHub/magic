@@ -3,7 +3,11 @@
  * Register new capabilities (push, background sync, etc.) via ServiceWorkerFeature.
  */
 
-import { handleCanvasMediaMessage, handleCanvasMediaRequest } from "./canvasMediaShared"
+import {
+	cleanupLegacyCanvasMediaStorage,
+	handleCanvasMediaMessage,
+	handleCanvasMediaRequest,
+} from "./canvasMediaShared"
 import type { CacheRuntimeRegistration } from "./cache-runtime"
 import {
 	enforceAppStaticExpirationAfterPrecache,
@@ -92,6 +96,9 @@ function createAppCacheFeature(
 function createCanvasMediaFeature(): ServiceWorkerFeature {
 	return {
 		id: "canvas-media",
+		async onActivate() {
+			await cleanupLegacyCanvasMediaStorage()
+		},
 		onMessage(event) {
 			handleCanvasMediaMessage(event)
 			return false

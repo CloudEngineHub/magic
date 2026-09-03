@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react"
-import { MessageCircle, MessageSquare } from "lucide-react"
+import { AppWindow, MessageCircle, MessageSquare } from "lucide-react"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -46,6 +46,12 @@ describe("MOBILE_RESOURCE_TYPE_ICON_CONFIG", () => {
 		const config = MOBILE_RESOURCE_TYPE_ICON_CONFIG.file
 		expect(config.boxClass).toBe("bg-icon-app-cloud/8")
 		expect(config.iconClass).toBe("text-icon-app-cloud")
+	})
+
+	it("uses AppWindow for micro app recycle-bin rows", () => {
+		const config = MOBILE_RESOURCE_TYPE_ICON_CONFIG.microApp
+		expect(config.Icon).toBe(AppWindow)
+		expect(config.boxClass).toBe("bg-icon-app-cloud/8")
 	})
 })
 

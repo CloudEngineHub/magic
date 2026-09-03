@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\File\Service;
 
 use App\Domain\File\DTO\CloudFileInfoDTO;
+use App\Domain\File\Entity\ValueObject\FileDataIsolation;
 use App\Domain\File\Repository\Persistence\CloudFileRepository;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
@@ -62,7 +63,8 @@ readonly class FileDomainService
 
     public function uploadByCredential(string $organizationCode, UploadFile $uploadFile, StorageBucketType $storage = StorageBucketType::Private, bool $autoDir = true, ?string $contentType = null): void
     {
-        $this->cloudFileRepository->uploadByCredential($organizationCode, $uploadFile, $storage, $autoDir, $contentType, ['internal_endpoint' => true]);
+        $internalEndpoint = (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
+        $this->cloudFileRepository->uploadByCredential($organizationCode, $uploadFile, $storage, $autoDir, $contentType, ['internal_endpoint' => $internalEndpoint]);
     }
 
     public function upload(string $organizationCode, UploadFile $uploadFile, StorageBucketType $storage = StorageBucketType::Private): void
@@ -83,9 +85,9 @@ readonly class FileDomainService
         $this->cloudFileRepository->uploadByChunks($organizationCode, $chunkUploadFile, $storage, $autoDir);
     }
 
-    public function getSimpleUploadTemporaryCredential(string $organizationCode, StorageBucketType $storage = StorageBucketType::Private, ?string $contentType = null, bool $sts = false): array
+    public function getSimpleUploadTemporaryCredential(FileDataIsolation $dataIsolation, StorageBucketType $storage = StorageBucketType::Private, ?string $contentType = null, bool $sts = false): array
     {
-        return $this->cloudFileRepository->getSimpleUploadTemporaryCredential($organizationCode, $storage, contentType: $contentType, sts: $sts);
+        return $this->cloudFileRepository->getSimpleUploadTemporaryCredential($dataIsolation, $storage, contentType: $contentType, sts: $sts);
     }
 
     /**
@@ -149,6 +151,7 @@ readonly class FileDomainService
      */
     public function downloadByChunks(string $organizationCode, string $filePath, string $localPath, ?StorageBucketType $bucketType = null, array $options = []): void
     {
+        $options['internal_endpoint'] = (bool) \Hyperf\Support\env('FILE_INTERNAL_ENDPOINT', true);
         $this->cloudFileRepository->downloadByChunks($organizationCode, $filePath, $localPath, $bucketType, $options);
     }
 

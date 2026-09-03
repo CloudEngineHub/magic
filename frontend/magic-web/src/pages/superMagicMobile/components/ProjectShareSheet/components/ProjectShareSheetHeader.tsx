@@ -59,6 +59,7 @@ export default function ProjectShareSheetHeader({
 				: t("projectShare.createTitle"),
 		manage: t("projectShare.manageTitle"),
 		linkDetail: linkDetailTitle,
+		edit: t("share.editShare"),
 		expiry: t("projectShare.expiryTitle"),
 		deleteConfirm: t("projectShare.deleteConfirmTitle"),
 	}
@@ -82,7 +83,9 @@ export default function ProjectShareSheetHeader({
 					{titleMap[controller.view]}
 				</div>
 				{projectName &&
-				(controller.view === "create" || controller.view === "linkDetail") ? (
+				(controller.view === "create" ||
+					controller.view === "linkDetail" ||
+					controller.view === "edit") ? (
 					<div className="mt-0.5 max-w-[247px] truncate text-center text-[12px] leading-4 text-muted-foreground">
 						{projectName}
 					</div>
