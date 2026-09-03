@@ -147,6 +147,14 @@ export class ClipboardManager {
 		this.canvas = canvas
 	}
 
+	private getClipboardContext(): { projectId?: string; canvasId?: string } {
+		return (
+			this.canvas.magicConfigManager?.config?.methods?.getCanvasClipboardContext?.() ?? {
+				canvasId: this.canvas.id,
+			}
+		)
+	}
+
 	private getEffectiveContent(element: CanvasFileElement) {
 		return (
 			(this.canvas.getEffectiveContent(element.id) as
@@ -819,11 +827,13 @@ export class ClipboardManager {
 				fileSize: file.size,
 				sourceElements,
 				sourceRef: sourceFile?.sourceRef,
+				sourceProjectId: this.getClipboardContext().projectId,
 			})
 			const files: CanvasElementClipboardWriteFile[] = [{ blob: file, metadata }]
 			const payload = CanvasElementClipboard.createPayload({
 				elements: [],
 				canvasId: this.canvas.id,
+				projectId: this.getClipboardContext().projectId,
 				files: [metadata],
 				operation: "copy-as-png",
 			})
@@ -1079,6 +1089,7 @@ export class ClipboardManager {
 					resourcePath: ref.path,
 					resourceIdentity: ref.identity,
 					resourceAliases: ref.aliases,
+					sourceProjectId: this.getClipboardContext().projectId,
 					filename: result.filename,
 					mimeType: result.mimeType,
 					fileSize: result.fileSize,
@@ -1121,7 +1132,10 @@ export class ClipboardManager {
 	private getElementResourceMetadata(
 		element: CanvasFileElement,
 		resourceRefByIdentity: ReadonlyMap<string, ClipboardResourceReference>,
-	): Pick<CanvasElementClipboardFileMetadata, "resourceIdentity" | "resourceAliases"> {
+	): Pick<
+		CanvasElementClipboardFileMetadata,
+		"resourceIdentity" | "resourceAliases" | "sourceProjectId" | "sourceFileId" | "projectPath"
+	> {
 		const elementSrc =
 			element.type === ElementTypeEnum.Image
 				? this.getEffectiveImageContent(element).src
@@ -1131,11 +1145,26 @@ export class ClipboardManager {
 			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference,
 		)
 		if (!resourceIdentity || !elementSrc) return {}
+		const resolution =
+			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference?.(
+				{ namespace: "canvas-storage", path: elementSrc, mode: "strict-current-canvas" },
+				{ requireAttachment: true },
+			)
+		const projectPath =
+			resolution?.status === "resolved" && resolution.workspacePath
+				? `/${resolution.workspacePath.replace(/^\/+/, "")}`
+				: undefined
 
 		const resourceAliases = Array.from(
 			new Set([elementSrc, ...(resourceRefByIdentity.get(resourceIdentity)?.aliases ?? [])]),
 		)
-		return { resourceIdentity, resourceAliases }
+		return {
+			resourceIdentity,
+			resourceAliases,
+			sourceProjectId: this.getClipboardContext().projectId,
+			sourceFileId: resolution?.status === "resolved" ? resolution.attachmentId : undefined,
+			projectPath,
+		}
 	}
 
 	private getClipboardMediaElements(elements: LayerElement[]): CanvasFileElement[] {
@@ -1232,6 +1261,7 @@ export class ClipboardManager {
 				const payload = CanvasElementClipboard.createPayload({
 					elements,
 					canvasId: this.canvas.id,
+					projectId: this.getClipboardContext().projectId,
 					files: metadata,
 					operation: "copy-elements",
 					connections,

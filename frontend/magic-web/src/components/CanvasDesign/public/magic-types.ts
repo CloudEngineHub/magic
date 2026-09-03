@@ -1679,6 +1679,45 @@ export interface CanvasDesignMethods {
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard
 	 */
 	clipboard?: CanvasDesignClipboard
+	/**
+	 * 将画布剪贴板中的源资源物化为目标控件可上传的 File。
+	 * 宿主可在此处执行跨项目权限校验、过期 URL 刷新和资源转移。
+	 */
+	materializeCanvasClipboardAsset?: (input: {
+		sourceCanvasId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		sourceRef?: {
+			src?: string
+			ossUrl?: string
+			expiresAt?: string
+		}
+		fileName: string
+		mimeType: string
+	}) => Promise<File | null>
+	/** 将画布剪贴板资源解析为目标控件可直接引用的规范路径。 */
+	resolveCanvasClipboardReference?: (input: {
+		sourceProjectId?: string
+		sourceCanvasId?: string
+		sourceFileId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		projectPath?: string
+		targetProjectId?: string
+		targetCanvasId?: string
+		target: "canvas-editor" | "message-editor"
+	}) => Promise<{
+		kind: "current-canvas" | "project"
+		path: string
+		fileId?: string
+		projectPath?: string
+		resourceIdentity: string
+		fileName: string
+		/** 服务端复制已成功，但目标画布附件快照尚未确认该路径。 */
+		awaitingAttachmentConfirmation?: boolean
+	} | null>
+	/** 当前画布所属项目/画布上下文，供剪贴板协议写入来源身份。 */
+	getCanvasClipboardContext?: () => { projectId?: string; canvasId?: string }
 }
 
 /**

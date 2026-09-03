@@ -23,6 +23,7 @@ interface UseMessageSendHandlerParams {
 	topicMode?: MessageEditorProps["topicMode"]
 	collectMentionItemsFromEditor: () => MentionListItem[]
 	promoteCanvasPendingMentions?: () => void
+	onSendStart?: () => void
 	isMountedRef: MutableRefObject<boolean>
 }
 
@@ -38,6 +39,7 @@ export default function useMessageSendHandler({
 	topicMode,
 	collectMentionItemsFromEditor,
 	promoteCanvasPendingMentions,
+	onSendStart,
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
@@ -108,6 +110,7 @@ export default function useMessageSendHandler({
 			return
 		}
 
+		onSendStart?.()
 		store.draftStore.startSendingGuard()
 		const mentionItems = collectMentionItemsFromEditor()
 

@@ -229,6 +229,7 @@ export interface VideoEditorConfig {
 			context?: MessageEditorMentionChangeContext,
 			metadataCandidates?: readonly ReferenceResourceMetadataCandidate[],
 		) => void
+		resetSelectedResourceSlot: () => void
 		prepareResourceSlotSelection: (
 			inputTab: "frame" | "reference",
 			slotIndex: number,
@@ -271,7 +272,15 @@ export interface VideoEditorConfig {
 		buildSessionSnapshot: () => VideoEditSessionSnapshot
 		restoreSessionSnapshotToUi: (snapshot: VideoEditSessionSnapshot) => void
 		triggerFileSelect: () => void
-		uploadReferenceFiles: (files: File[]) => Promise<void>
+		uploadReferenceFiles: (
+			files: File[],
+			options?: {
+				ignoreSelectedResourceSlot?: boolean
+				retainSelectedResourceSlot?: boolean
+				suppressPartialSkippedToast?: boolean
+				isCurrent?: () => boolean
+			},
+		) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
 		syncReferenceImagesFromElement: () => void
 	}

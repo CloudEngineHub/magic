@@ -50,6 +50,7 @@ export function createUploadFileMentionData(fileData: FileData): UploadFileMenti
 		upload_progress: fileData.progress,
 		upload_status: fileData.status,
 		upload_error: fileData.error,
+		is_canvas_clipboard: fileData.isCanvasClipboard,
 	}
 }
 
@@ -125,6 +126,7 @@ export function transformMentionItemToProjectFile(
 	}
 
 	const uploadFile = item.attrs.data as UploadFileMentionData
+	if (uploadFile.is_canvas_clipboard) return item
 
 	return {
 		...item,
@@ -159,6 +161,7 @@ function transformContentByMentionItems(
 		// Check if it's an upload_file mention
 		if (mentionAttrs.type === MentionItemType.UPLOAD_FILE && mentionAttrs.data) {
 			const uploadFile = mentionAttrs.data as UploadFileMentionData
+			if (uploadFile.is_canvas_clipboard) return transformedContent
 
 			// Find corresponding save result
 			if (uploadFile.file_path && saveResultMap[uploadFile.file_path]) {
@@ -202,6 +205,7 @@ export function transformMentionItemsToProjectFiles(
 	const transformedItems = mentionItems.map((item) => {
 		if (item.attrs.type === MentionItemType.UPLOAD_FILE && hasValidFilePath(item)) {
 			const uploadFile = item.attrs.data as UploadFileMentionData
+			if (uploadFile.is_canvas_clipboard) return item
 
 			if (uploadFile.file_path) {
 				const saveResult = saveResultMap[uploadFile.file_path]

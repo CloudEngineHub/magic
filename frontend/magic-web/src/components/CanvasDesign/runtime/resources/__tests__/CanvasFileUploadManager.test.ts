@@ -88,6 +88,61 @@ describe("CanvasFileUploadManager upload sub directories", () => {
 	})
 })
 
+describe("CanvasFileUploadManager pending resource confirmation", () => {
+	it("keeps an uploaded resource pending until the resolver confirms its attachment", async () => {
+		let attachmentConfirmed = false
+		const resolveResourceReference = (
+			input: Parameters<ResolveCanvasResourceReference>[0],
+			options?: Parameters<ResolveCanvasResourceReference>[1],
+		) =>
+			createTestResourceReferenceResolver({
+				attachmentPathsByFileId: attachmentConfirmed ? { newFile: "./images/new.png" } : {},
+				attachmentsReady: true,
+			})(input, options)
+		const emit = vi.fn()
+		const uploadResult: UploadFileResponse = {
+			path: "./images/new.png",
+			src: "https://example.test/new.png",
+			fileName: "new.png",
+		}
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			pendingResourcePaths: new Set<string>(),
+			canvas: {
+				eventEmitter: { emit },
+				magicConfigManager: {
+					config: {
+						methods: {
+							resolveResourceReference,
+							uploadFiles: vi.fn(async (files: UploadFile[]) => {
+								files[0]?.onUploadComplete?.(uploadResult)
+								return [uploadResult]
+							}),
+						},
+					},
+				},
+			},
+		})
+
+		await manager.uploadDirect([new File(["new"], "new.png", { type: "image/png" })])
+
+		expect(manager.isPendingResourcePath("./images/new.png")).toBe(true)
+		manager.reconcilePendingResourcePaths(["/画布A/images/other.png"])
+		expect(manager.isPendingResourcePath("./images/new.png")).toBe(true)
+		manager.reconcilePendingResourcePaths(["/画布A/images/new.png"])
+		expect(manager.isPendingResourcePath("./images/new.png")).toBe(true)
+
+		attachmentConfirmed = true
+		manager.reconcilePendingResourcePaths(["/画布A/images/new.png"])
+
+		expect(manager.isPendingResourcePath("./images/new.png")).toBe(false)
+		expect(emit).toHaveBeenCalledWith({
+			type: "upload:resource-pending-change",
+			data: { paths: ["./images/new.png"] },
+		})
+	})
+})
+
 describe("CanvasFileUploadManager image replacement", () => {
 	function createImageInstance(status = GenerationStatus.Completed) {
 		const instance = Object.create(ImageElement.prototype) as ImageElement

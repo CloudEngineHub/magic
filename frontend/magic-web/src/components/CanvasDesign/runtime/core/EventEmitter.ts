@@ -428,6 +428,9 @@ export interface CanvasEventMap {
 	"upload:pending-change": {
 		pendingUndoCount: number
 	}
+	"upload:resource-pending-change": {
+		paths: string[]
+	}
 
 	// 历史记录事件
 	"history:statechange": {

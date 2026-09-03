@@ -29,6 +29,7 @@ import {
 	getCanvasHostResourceReferenceIdentity,
 	isRemoteOrSpecialPath,
 	normalizeCanvasUploadFileResponsePath,
+	resolveCanvasStorageResourceReference,
 } from "../../shared/path/canvasResourcePath"
 import {
 	getActiveContent,
@@ -297,6 +298,9 @@ export class CanvasFileUploadManager {
 
 	/** 当前批量上传对应的批次 ID */
 	private currentPendingBatchId: string | null = null
+
+	/** 上传完成但宿主附件快照尚未确认的资源路径。 */
+	private pendingResourcePaths = new Set<string>()
 
 	/**
 	 * 目标画布级远程资源迁移缓存。
@@ -653,7 +657,9 @@ export class CanvasFileUploadManager {
 			uploadSubDir: this.getUploadSubDir(file),
 			overwrite: options?.overwrite ?? this.getUploadFileOverwrite(file, files),
 			onUploadComplete: (result) => {
-				callbacks?.onUploadComplete?.(normalizeCanvasUploadFileResponsePath(result), index)
+				const normalizedResult = normalizeCanvasUploadFileResponsePath(result)
+				this.registerPendingResourcePath(normalizedResult.path)
+				callbacks?.onUploadComplete?.(normalizedResult, index)
 			},
 			onUploadFailed: (error) => {
 				callbacks?.onUploadFailed?.(error, index)
@@ -668,6 +674,54 @@ export class CanvasFileUploadManager {
 		}
 
 		return uploadResults.map((r) => normalizeCanvasUploadFileResponsePath(r))
+	}
+
+	/**
+	 * 上传回调可能早于宿主附件树刷新；在这段窗口内，mention 不能把旧快照的 not-found 当成删除。
+	 */
+	public isPendingResourcePath(path: string | undefined): boolean {
+		if (!path || this.pendingResourcePaths.size === 0) return false
+
+		const identity = getCanvasHostResourceReferenceIdentity(this.canvas, path)
+		return Array.from(this.pendingResourcePaths).some(
+			(pendingPath) =>
+				pendingPath === path ||
+				getCanvasHostResourceReferenceIdentity(this.canvas, pendingPath) === identity,
+		)
+	}
+
+	/** 在 resolver 快照变化后确认已进入附件树的上传资源。 */
+	public reconcilePendingResourcePaths(changedWorkspacePaths?: readonly string[]): void {
+		if (this.pendingResourcePaths.size === 0) return
+		const resolver = this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
+		if (!resolver) return
+
+		const changedIdentities =
+			changedWorkspacePaths === undefined
+				? undefined
+				: new Set(
+						changedWorkspacePaths.map((path) =>
+							getCanvasHostResourceReferenceIdentity(this.canvas, path),
+						),
+					)
+		const resolvedPaths: string[] = []
+
+		for (const pendingPath of this.pendingResourcePaths) {
+			const resolution = resolveCanvasStorageResourceReference(pendingPath, resolver, {
+				requireAttachment: true,
+			})
+			if (resolution.status !== "resolved") continue
+			if (changedIdentities && !changedIdentities.has(resolution.identity)) continue
+			this.pendingResourcePaths.delete(pendingPath)
+			resolvedPaths.push(pendingPath)
+		}
+
+		if (resolvedPaths.length > 0) {
+			this.canvas.eventEmitter.emit({
+				type: "upload:resource-pending-change",
+				data: { paths: resolvedPaths },
+			})
+		}
 	}
 
 	/**
@@ -2198,11 +2252,25 @@ export class CanvasFileUploadManager {
 	}
 
 	/**
+	 * 标记一个已写入目标画布、但附件快照尚未确认的资源。
+	 * 除直接上传外，跨画布服务端复制也会经历这一窗口。
+	 */
+	public registerPendingResourcePath(path: string): void {
+		if (!path) return
+		this.pendingResourcePaths.add(path)
+		this.canvas.eventEmitter.emit({
+			type: "upload:resource-pending-change",
+			data: { paths: [path] },
+		})
+	}
+
+	/**
 	 * 销毁管理器
 	 */
 	public destroy(): void {
 		this.canvas.eventEmitter.off("element:temporary:deleted", this.handleTemporaryDeleted)
 		this.pendingUploadBatches = []
 		this.currentPendingBatchId = null
+		this.pendingResourcePaths.clear()
 	}
 }

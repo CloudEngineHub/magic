@@ -19,6 +19,19 @@ describe("CanvasElementClipboard", () => {
 		expect(file?.type).toBe("audio/mpeg")
 	})
 
+	it("preserves ordinary document files for message-editor fallback", () => {
+		const documentFile = new File(["document"], "notes.pdf", { type: "application/pdf" })
+		const event = {
+			clipboardData: {
+				types: ["Files"],
+				files: [documentFile],
+				items: [],
+			},
+		} as unknown as ClipboardEvent
+
+		expect(CanvasDesignClipboard.readAllEventFilesSnapshot(event)).toEqual([documentFile])
+	})
+
 	it("ignores generation resource metadata when restoring event files", () => {
 		const generationResourceMetadata: CanvasElementClipboardFileMetadata = {
 			id: "generation-resource:0",

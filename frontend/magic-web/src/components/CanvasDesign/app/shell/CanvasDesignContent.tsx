@@ -1,4 +1,4 @@
-import { useRef, forwardRef, useCallback, useReducer } from "react"
+import { useRef, forwardRef, useCallback, useEffect, useReducer } from "react"
 import { useMount, useUnmount, useUpdateEffect } from "ahooks"
 import ViewportControls from "../../ui/canvas-editor/viewport-controls"
 import Tools from "../../ui/toolbar/index"
@@ -32,6 +32,10 @@ import ElementRenameOverlay from "../../ui/panels/rename/index"
 import ElementActionHints from "../../ui/panels/action-hints/index"
 import PluginPanel from "../../ui/panels/plugin/window/index"
 import ElementBottomToolbarHost from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarHost"
+import {
+	configureCanvasClipboardPasteHost,
+	releaseCanvasClipboardPasteHost,
+} from "../../runtime/resources/clipboard/CanvasClipboardPasteController"
 
 import styles from "./index.module.css"
 
@@ -82,6 +86,11 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	const resolvedAccessMode = accessMode ?? "edit"
 	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
 	const canGenerate = canvas?.permissionManager?.can("sideEffect.generate") ?? false
+
+	useEffect(() => {
+		const controller = configureCanvasClipboardPasteHost(methods)
+		return () => releaseCanvasClipboardPasteHost(controller)
+	}, [methods])
 
 	const {
 		fullscreenMediaElement,

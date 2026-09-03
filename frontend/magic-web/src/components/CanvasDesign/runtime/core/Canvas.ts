@@ -1557,6 +1557,7 @@ export class Canvas {
 		changedWorkspacePaths?: readonly string[]
 	}): void {
 		const changedWorkspacePaths = options?.changedWorkspacePaths
+		this.canvasFileUploadManager?.reconcilePendingResourcePaths(changedWorkspacePaths)
 		let affectedElementIds: Set<string> | undefined
 		let changedResourceIdentities: Set<string> | undefined
 		if (changedWorkspacePaths !== undefined) {

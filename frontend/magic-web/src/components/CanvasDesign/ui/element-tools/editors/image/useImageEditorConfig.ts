@@ -169,8 +169,16 @@ export interface ImageEditorConfig {
 			options?: { retainReferenceSlot?: boolean },
 		) => void
 		triggerFileSelect: () => void
-		uploadFiles: (files: File[]) => Promise<void>
+		uploadFiles: (
+			files: File[],
+			options?: {
+				ignoreSelectedReferenceSlot?: boolean
+				retainSelectedReferenceSlot?: boolean
+				isCurrent?: () => boolean
+			},
+		) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+		resetSelectedReferenceSlot: () => void
 		/** 从 elementInstance 同步参考文件状态到 config，用于 @ 面板添加后的闭环 */
 		syncReferenceFilesFromElement: () => void
 		/** prompt 中一旦出现显式图片绑定，就把对应 legacy 保护引用升级为普通 prompt 绑定。 */
@@ -245,6 +253,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const isRemovingReferenceImageRef = useRef<boolean>(false)
 	const selectedReferenceSlotRef = useRef<ImageReferenceSlotInfo | null>(null)
 	const fileUploadSlotRef = useRef<ImageReferenceSlotInfo | null>(null)
+	const retainFileUploadSlotSelectionRef = useRef(false)
+	const fileUploadSessionGuardRef = useRef<(() => boolean) | undefined>(undefined)
 
 	const resetSelectedReferenceSlot = useCallback(() => {
 		selectedReferenceSlotRef.current = null
@@ -656,10 +666,26 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		accept: fileInputAccept,
 		shouldSaveToElement: false,
 		onFileUploaded: useCallback(
-			(result: UploadFileResponse) => {
+			(result: UploadFileResponse, fileIndexInBatch = 0) => {
+				if (fileUploadSessionGuardRef.current?.() === false) return
 				const selectedUploadSlot = fileUploadSlotRef.current
-				if (selectedUploadSlot?.path) {
-					replaceReferenceFileAt(selectedUploadSlot.slotIndex, result)
+				// An empty selected slot receives only the first file. Remaining files
+				// append in order; otherwise a multi-file paste would overwrite the
+				// same empty slot repeatedly because the upload session ref survives
+				// until the whole batch settles.
+				if (selectedUploadSlot && (selectedUploadSlot.path || fileIndexInBatch === 0)) {
+					replaceReferenceFileAt(selectedUploadSlot.slotIndex, result, {
+						retainReferenceSlot: retainFileUploadSlotSelectionRef.current,
+					})
+					if (!selectedUploadSlot.path) {
+						const fileName = result.fileName || getCanvasResourceFileName(result.path)
+						if (fileName) {
+							pendingUploadReferenceRef.current = {
+								path: result.path,
+								fileName,
+							}
+						}
+					}
 					return
 				}
 
@@ -679,6 +705,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		),
 		onUploadSessionEnd: useCallback(() => {
 			fileUploadSlotRef.current = null
+			retainFileUploadSlotSelectionRef.current = false
+			fileUploadSessionGuardRef.current = undefined
 		}, []),
 	})
 
@@ -692,11 +720,23 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	}, [rawTriggerFileSelect])
 
 	const uploadFiles = useCallback(
-		async (files: File[]) => {
-			fileUploadSlotRef.current = null
+		async (
+			files: File[],
+			options?: {
+				ignoreSelectedReferenceSlot?: boolean
+				retainSelectedReferenceSlot?: boolean
+				isCurrent?: () => boolean
+			},
+		) => {
+			const selectedSlot = options?.ignoreSelectedReferenceSlot
+				? null
+				: selectedReferenceSlotRef.current
+			fileUploadSlotRef.current = selectedSlot
+			retainFileUploadSlotSelectionRef.current = options?.retainSelectedReferenceSlot === true
+			fileUploadSessionGuardRef.current = options?.isCurrent
 			await rawUploadFiles(files, {
-				maxSelectedFiles: files.length,
-				ignoreReferenceFileCapacity: false,
+				maxSelectedFiles: selectedSlot?.path ? 1 : files.length,
+				ignoreReferenceFileCapacity: Boolean(selectedSlot?.path),
 			})
 		},
 		[rawUploadFiles],
@@ -1547,6 +1587,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			triggerFileSelect,
 			uploadFiles,
 			handleFileChange,
+			resetSelectedReferenceSlot,
 			syncReferenceFilesFromElement,
 			handlePromptReferencePathsChange,
 		},
